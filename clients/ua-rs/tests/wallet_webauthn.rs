@@ -11,8 +11,8 @@ use p256::elliptic_curve::sec1::ToSec1Point;
 use p256::{FieldBytes, ProjectivePoint, Scalar};
 use scaas_ua::verify::verify;
 use scaas_ua::wallet::{
-    msig_sig, ua_sig, webauthn_assertion, webauthn_challenge, Error, KeyRef, SignRequest, Signer,
-    Slot,
+    msig_sig, seal_container, ua_sig, ua_sig_app, webauthn_assertion, webauthn_challenge,
+    ContainerSigner, Error, KeyRef, LinkSession, Recipient, SignRequest, Signer, Slot,
 };
 use scaas_ua::{derive_ua, encode_msig, member_digest, purpose_tag, ua_message, UAError};
 use serde_json::Value;
@@ -646,4 +646,106 @@ fn unclosed_client_data_refused() {
         n += 1;
     }
     assert_eq!(n, 2);
+}
+
+/// A third party's `Signer` that answers every `WebAuthn` request with `blob` as is, never through [`webauthn_assertion`].
+struct Raw {
+    key_data: Vec<u8>,
+    blob: Vec<u8>,
+}
+impl Signer for Raw {
+    fn key_ref(&self) -> KeyRef {
+        KeyRef::Ua {
+            kind: 0x0100,
+            key_data: self.key_data.clone(),
+        }
+    }
+    fn sign_request(&self, req: &SignRequest) -> scaas_ua::wallet::Result<Vec<u8>> {
+        match req {
+            SignRequest::WebAuthn { .. } => Ok(self.blob.clone()),
+            _ => Err(Error::Argument),
+        }
+    }
+}
+
+/// The four `UASig` builders on `key`'s answer: `ua_sig`, `ua_sig_app`, an `msig` member slot, a sealed container's sender.
+fn builders(key: &Raw) -> [Result<(), Error>; 4] {
+    let (purpose, digest) = (purpose_tag("metatx").unwrap(), [6u8; 32]);
+    let id = derive_ua(0x0100, &key.key_data, false).unwrap();
+    let kd = encode_msig(1, &[(0x0100, id, 1)]);
+    let rec = Recipient::ephemeral(&LinkSession::new().unwrap().kem_pk());
+    [
+        ua_sig(key, None, &purpose, &digest).map(drop),
+        ua_sig_app(key, &[5; 32], &digest).map(drop),
+        msig_sig(
+            &kd,
+            &|_| None,
+            &purpose,
+            &digest,
+            None,
+            None,
+            &[Slot::Member { index: 0, key }],
+        )
+        .map(drop),
+        seal_container(
+            &rec,
+            "scaas/backup/v1",
+            &ContainerSigner::Key(key),
+            1,
+            b"pt",
+            None,
+        )
+        .map(drop),
+    ]
+}
+
+/// Owner 2026-11-19, Q3: the cap holds in every `UASig` builder, for a `Signer` that returns WebAuthn bytes itself. sign.json's
+/// row at the cap passes each builder (control); its row a byte above (valid on the chains) is `WebAuthnTooLong` in each, and
+/// a non-canonical answer (a trailing zero word) `WebAuthnAssertion`: nothing built.
+#[test]
+fn a_signer_cannot_bypass_the_cap() {
+    let v = load("sign.json");
+    let at = v["webauthn"]["accepted"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| bytes(&r["authData"]).len() + bytes(&r["clientDataJSON"]).len() == 1_024)
+        .unwrap();
+    let ok = Raw {
+        key_data: bytes(&at["keyData"]),
+        blob: bytes(&at["assertion"]),
+    };
+    assert_eq!(builders(&ok), [Ok(()), Ok(()), Ok(()), Ok(())], "control");
+    let above = v["webauthn"]["refusals"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["case"] == "above-the-cap")
+        .unwrap();
+    let (a, c) = (bytes(&above["authData"]), bytes(&above["clientDataJSON"]));
+    assert_eq!(a.len() + c.len(), 1_025);
+    let blob = encode(&a, &c, &b32(&above["r"]), &b32(&above["s"]));
+    assert!(verify(
+        0x0100,
+        &bytes(&above["keyData"]),
+        &b32(&above["expectedChallenge"]),
+        &blob,
+        false
+    ));
+    let long = Raw {
+        key_data: bytes(&above["keyData"]),
+        blob,
+    };
+    assert_eq!(
+        builders(&long),
+        [(); 4].map(|_| Err(Error::WebAuthnTooLong))
+    );
+    let odd = Raw {
+        key_data: ok.key_data.clone(),
+        blob: [ok.blob.clone(), vec![0; 32]].concat(),
+    };
+    assert_eq!(
+        builders(&odd),
+        [(); 4].map(|_| Err(Error::WebAuthnAssertion))
+    );
 }

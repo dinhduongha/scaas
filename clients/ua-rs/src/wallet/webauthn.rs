@@ -5,7 +5,7 @@
 //! A passkey behind the [`super::Signer`] trait (phase 2) is asked [`super::SignRequest::WebAuthn`] by the `UASig` builder.
 //! UNAUDITED.
 use super::sign::ua_request;
-use super::{Error, Result, SignRequest};
+use super::{Error, Result, SignRequest, Signer};
 use crate::verify::{client_data_ok, verify};
 
 /// The longest assertion `ua-rs` encodes or accepts from an authenticator: `authData` and `clientDataJSON` together, 1,024
@@ -24,6 +24,19 @@ pub(crate) fn capped(auth_data: usize, client_data_json: usize) -> Result<()> {
         Some(n) if n <= WEBAUTHN_MAX_ASSERTION => Ok(()),
         _ => Err(Error::WebAuthnTooLong),
     }
+}
+
+/// `key`'s answer to `req` for a `UASig` builder (owner 2026-11-19, Q3): a [`SignRequest::WebAuthn`] answer, from any
+/// [`Signer`] (a third party's too, which may skip [`webauthn_assertion`]), must be the canonical encoding with `authData` and
+/// `clientDataJSON` at most [`WEBAUTHN_MAX_ASSERTION`] together: above, `WebAuthnTooLong`; not canonical (its length cannot be
+/// read), `WebAuthnAssertion`; nothing returned. Any other request: the answer as given.
+pub(crate) fn answer(key: &dyn Signer, req: &SignRequest) -> Result<Vec<u8>> {
+    let sig = key.sign_request(req)?;
+    if let SignRequest::WebAuthn { .. } = req {
+        let (a, c) = crate::verify::webauthn_fields(&sig).ok_or(Error::WebAuthnAssertion)?;
+        capped(a.len(), c.len())?;
+    }
+    Ok(sig)
 }
 
 /// The authenticator's challenge for `purpose` (a tag of `PURPOSES` or `pop` v2, else `UAPurposeUnknown`) and `digest`:

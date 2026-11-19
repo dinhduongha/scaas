@@ -539,7 +539,7 @@ fn container_sig(sender: &ContainerSigner, key_data: Vec<u8>, digest: &[u8; 32])
             let KeyRef::Ua { kind, .. } = k.key_ref() else {
                 return Err(Error::Argument);
             };
-            let signature = k.sign_request(&seal_request(kind, digest)?)?;
+            let signature = super::webauthn::answer(*k, &seal_request(kind, digest)?)?;
             Ok(UASig {
                 key_data,
                 signature,

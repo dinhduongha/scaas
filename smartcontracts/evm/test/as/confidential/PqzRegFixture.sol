@@ -23,7 +23,7 @@ import {typedDigest} from "../../zether/ZetherTyped.t.sol";
 import {Holder} from "../helpers/RegFixture.sol";
 import {GasProbe} from "./ZetherRegFixture.sol";
 import {MockERC20} from "../../helpers/Mocks.sol";
-import {Catalogue, pqzEnv, regArgs} from "../../helpers/Catalogue.sol";
+import {Catalogue, regArgs} from "../../helpers/Catalogue.sol";
 import {nid} from "../../helpers/Ids.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
@@ -155,7 +155,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
         for (uint256 j = 2; j < 8; ++j) {
             more[j] = _pqzUA(_pk(uint8(60 + j)), uint8(60 + j));
         }
-        IFactoryToken.Env memory e = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
+        IFactoryToken.Env memory e = _penv();
         Catalogue.release(
             factory,
             IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED,

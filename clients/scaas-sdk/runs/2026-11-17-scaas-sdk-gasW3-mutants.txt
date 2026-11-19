@@ -1,0 +1,6 @@
+# gasW3 mutants at commit 9568214c3 (name | outcome | test)
+the old 256 KiB bound | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+the bound off by one | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+no bound | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+one byte more allowed | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+4 mutants, 4 killed, 0 survived, 0 not loaded

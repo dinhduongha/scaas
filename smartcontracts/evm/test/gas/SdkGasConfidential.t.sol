@@ -13,16 +13,16 @@ import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {nid} from "../helpers/Ids.sol";
-import {ZetherRegFixture} from "../as/confidential/ZetherRegFixture.sol";
-import {PqzRegFixture} from "../as/confidential/PqzRegFixture.sol";
-import {SdkGasOps} from "./SdkGasOps.sol";
+import {SdkGasZetherFix, SdkGasPqzFix} from "./SdkGasFixtures.sol";
+import {SdkGasOps, SdkGasRows} from "./SdkGasOps.sol";
 
 /// The `zether` and `pqz` domain kinds' base rows (owner 2026-11-19: the token kinds' entry set; ruling A: the regulated
 /// variants count): each entry on the kind's Normal, Wrapped and regulated Normal / Wrapped tokens, public balances, the
 /// reference signer a native key. A regulated token has the registry check (`KYC` with the deny mask, every party read
 /// there, none denied) and `TAX` at 10 %.
-abstract contract SdkGasKind is SdkGasOps {
+abstract contract SdkGasKindBase is SdkGasOps {
     address internal constant SG_TAX_TO = address(0x7A0);
     uint64 internal constant SG_KYC = 1;
     uint64 internal constant SG_DENIED = 1 << 16;
@@ -79,6 +79,8 @@ abstract contract SdkGasKind is SdkGasOps {
                 _sgAttest(nid(parties[i]));
             }
             _sgAttest(sgUaTo);
+            _sgAttest(UAKinds.uaOf(sgUaKind, sgUaKey));
+            _sgAttest(_sgPayeeUa());
         }
         address tn = _sgCreate(false, reg, address(0), reg ? bytes32("sgnr") : bytes32("sgn"));
         NormalToken(tn).mint(alice_, 1_000_000, EnvKit.codeUidOf(tn));
@@ -142,7 +144,10 @@ abstract contract SdkGasKind is SdkGasOps {
         WrappedToken(payable(t)).wrap(address(sgUnd), amount);
         WrappedToken(payable(t)).transfer(to, amount);
     }
+}
 
+/// The base rows' runs of a kind (`inputs.json` `runs`).
+abstract contract SdkGasKind is SdkGasKindBase {
     function test_sdkGas_kind() public {
         _sgRows(false);
     }
@@ -160,21 +165,28 @@ abstract contract SdkGasKind is SdkGasOps {
     }
 }
 
-contract SdkGasZetherTest is SdkGasKind, ZetherRegFixture {
+/// The `zether` kind's fixture: `ZetherRegFixture` with the `WRAPPED_ZETHER` release.
+abstract contract SdkGasZetherBase is SdkGasKindBase, SdkGasZetherFix {
     function _isWrapped() internal pure override returns (bool) {
         return false;
     }
 
-    function setUp() public override {
+    function setUp() public virtual override {
         super.setUp();
         Catalogue.release(
             factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
         );
         (sgPk, sgUaTo) = (0xA11CE5EED, ZetherTypes.UA.unwrap(bob.ua));
+        _sgUaSignerOn(address(reg)); // G2: the derived reference signer and Q1's derived payee
     }
 
     function _sgKind() internal pure override returns (string memory) {
         return "zether";
+    }
+
+    /// G2: the derived signer holds the native signer's units of the token `c` (every one), in its run only.
+    function _sgUaPrep(address c) internal virtual override {
+        _sgUaFund(c, vm.addr(sgPk), type(uint256).max);
     }
 
     function _sgCfg(bool reg) internal view override returns (IFactoryToken.TokenConfig memory) {
@@ -200,19 +212,32 @@ contract SdkGasZetherTest is SdkGasKind, ZetherRegFixture {
     }
 }
 
-contract SdkGasPqzTest is SdkGasKind, PqzRegFixture {
+contract SdkGasZetherTest is SdkGasKind, SdkGasZetherBase {
+    function _sgUaPrep(address c) internal override(SdkGasRows, SdkGasZetherBase) {
+        super._sgUaPrep(c);
+    }
+}
+
+/// The `pqz` kind's fixture: `PqzRegFixture` with the `WRAPPED_PQZ` release.
+abstract contract SdkGasPqzBase is SdkGasKindBase, SdkGasPqzFix {
     function _isWrapped() internal pure override returns (bool) {
         return false;
     }
 
-    function setUp() public override {
+    function setUp() public virtual override {
         super.setUp();
         _releaseWrapped();
         (sgPk, sgUaTo) = (0xA11CE5EED, more[2]);
+        _sgUaSignerOn(address(reg)); // G2: the derived reference signer and Q1's derived payee
     }
 
     function _sgKind() internal pure override returns (string memory) {
         return "pqz";
+    }
+
+    /// G2: the derived signer holds the native signer's units of the token `c` (every one), in its run only.
+    function _sgUaPrep(address c) internal virtual override {
+        _sgUaFund(c, vm.addr(sgPk), type(uint256).max);
     }
 
     function _sgCfg(bool reg) internal view override returns (IFactoryToken.TokenConfig memory) {
@@ -232,5 +257,11 @@ contract SdkGasPqzTest is SdkGasKind, PqzRegFixture {
 
     function _sgReg() internal view override returns (ComplianceRegistry, address, address) {
         return (creg, attester, issuer);
+    }
+}
+
+contract SdkGasPqzTest is SdkGasKind, SdkGasPqzBase {
+    function _sgUaPrep(address c) internal override(SdkGasRows, SdkGasPqzBase) {
+        super._sgUaPrep(c);
     }
 }

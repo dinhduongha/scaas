@@ -6,5 +6,6 @@ pqz-core/pqzl/params/**
 pqz-core/pqzl/rust/src/params/mod.rs
 pqz-core/stmt/src/sets.rs
 clients/ua-dart-frb/rust/src/frb_generated.rs
+clients/scaas-sdk/ffi/src/frb_generated.rs
 # left unformatted by the pqz-core round (71a974bc9); formatted with the pqz-core wasm steps
 pqz-core/pqzl/rust/wasm/lib.rs

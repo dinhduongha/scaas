@@ -1,17 +1,19 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Test, Vm} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Test.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {MtxHash} from "../helpers/MtxHash.sol";
+import {SdkGasDeploy} from "./SdkGasDeploy.sol";
 
 interface ISdkGasNonce {
     function mtxNonce(bytes32 from, uint256 batch) external view returns (uint256);
@@ -40,7 +42,7 @@ interface ISdkGasCancel {
 ///         (default the pin file) instead; run it with `--threads 1`. Keys: `<kind>_<entry>_<fresh|used>_<variant>`, and for
 ///         the `PayMeta` body's per-byte coefficient (owner 2026-11-19, ruling B) `<kind>_<entry>_body<bytes>_<variant>` (a
 ///         saved record, `payNo` set, on a fresh lane) and `<kind>_<entry>_saved_<variant>` (the same, empty body).
-abstract contract SdkGasRows is Test {
+abstract contract SdkGasRows is SdkGasDeploy {
     string internal constant SDK_GAS = "test/vectors/sdk_gas.json";
     address internal constant SG_RELAYER = address(0x5EAD);
     address internal constant SG_PAYEE = address(0xFA11);
@@ -131,32 +133,257 @@ abstract contract SdkGasRows is Test {
         bytes32 from,
         function(address, uint256) internal view returns (bytes memory) build
     ) internal {
+        if (sgUaRun) return _bothUaRun(kind, entry, variant, c, build);
         uint256 s = vm.snapshotState();
-        _measure(string.concat(kind, "_", entry, "_fresh_", variant), c, build(c, 0));
+        _measure(_k(kind, entry, "fresh", variant), c, build(c, 0));
         vm.revertToState(s);
         _setNonce(c, from, SG_LANE, 1);
-        _measure(string.concat(kind, "_", entry, "_used_", variant), c, build(c, 1));
+        _measure(_k(kind, entry, "used", variant), c, build(c, 1));
         vm.revertToState(s);
         if (_feeable(kind, entry)) {
             sgFee = 1; // a revert restores this contract's storage too: back to 0 after it
-            _measure(string.concat(kind, "_", entry, "_fee_", variant), c, build(c, 0));
+            _measure(_k(kind, entry, "fee", variant), c, build(c, 0));
             vm.revertToState(s);
         } else if (_wrapIn(entry)) {
             _sgHold(c);
-            _measure(string.concat(kind, "_", entry, "_held_", variant), c, build(c, 0));
+            _measure(_k(kind, entry, "held", variant), c, build(c, 0));
             vm.revertToState(s);
             _sgHold(c);
             sgFee = 1;
-            _measure(string.concat(kind, "_", entry, "_fee_", variant), c, build(c, 0));
+            _measure(_k(kind, entry, "fee", variant), c, build(c, 0));
             vm.revertToState(s);
         }
-        if (sgUaKind != 0 && !_wrapIn(entry)) {
+        if (sgUaKind != 0 && !_uaNative(entry)) {
             address cu = sgUaAt[c] == address(0) ? c : sgUaAt[c];
             _sgUaPrep(cu);
             (sgKind, sgKeyData, sgSk) = (sgUaKind, sgUaKey, sgUaSk); // the revert below restores the native signer
-            _measure(string.concat(kind, "_", entry, "_ua_", variant), cu, build(cu, 0));
+            _measure(_k(kind, entry, "ua", variant), cu, build(cu, 0));
             vm.revertToState(s);
+            if (sgPayeeKey.length != 0 && keccak256(bytes(entry)) == keccak256("mtxPayWithPayeeFee")) {
+                // Q1 (owner 2026-11-19): the payer and the payee both derived, both debited
+                _sgUaPrep(cu);
+                (sgKind, sgKeyData, sgSk, sgPayeeUa) = (sgUaKind, sgUaKey, sgUaSk, true);
+                _measure(_k(kind, entry, "ua2", variant), cu, build(cu, 0));
+                vm.revertToState(s);
+            }
         }
+    }
+
+    /// I1 part 2 (owner 2026-11-19): the point of a counted row being measured: its count (`sgCount`, what the builders
+    /// read through `_sgN`), its index (`sgPoint`) and its key infix (`sgCountTag`, `n<count>_` or a fixture's own; empty
+    /// outside a counted row, so every other key is as before).
+    uint256 internal sgCount;
+    /// The line's upper check waived, by the owner's rulings of 2026-11-19 ("approved") that accept a line above the points:
+    /// P1, the env publishes' `env_items` at the worst array's per-element slope (the other arrays, and an array's elements
+    /// past its first, below it); P2, PQZ `mtxConfidentialTransfer` / `…Compact` (the precompile's price steps with the
+    /// auditor groups). P4 ("approved"): a row whose chord is not at or above every point keeps the worst slope's line (Zether `mtxConfidentialTransferCompact`, PQZ `mtxRollOver`). The excess is refunded.
+    bool internal sgLineLoose;
+    uint256 internal sgPoint;
+    string internal sgCountTag;
+
+    /// The key `<kind>_<entry>_[<tag>]<what>_<variant>`.
+    function _k(string memory kind, string memory entry, string memory what, string memory variant)
+        internal
+        view
+        returns (string memory)
+    {
+        return string.concat(kind, "_", entry, "_", sgCountTag, what, "_", variant);
+    }
+
+    /// The count a builder uses: the counted row's point, else the fixture's own `dflt`.
+    function _sgN(uint256 dflt) internal view returns (uint256) {
+        return bytes(sgCountTag).length == 0 ? dflt : sgCount;
+    }
+
+    /// I1 part 2: a row whose cost grows with a count, measured by `_both` at each point (`counts[i]`, key infix
+    /// `n<counts[i]>_`), then fitted (`_sgLine`).
+    function _bothN(
+        string memory kind,
+        string memory entry,
+        string memory variant,
+        address c,
+        bytes32 from,
+        function(address, uint256) internal view returns (bytes memory) build,
+        uint256[] memory counts
+    ) internal {
+        string[] memory tags = new string[](counts.length);
+        for (uint256 i; i < counts.length; ++i) {
+            tags[i] = string.concat("n", vm.toString(counts[i]), "_");
+        }
+        _bothTagged(kind, entry, variant, c, from, build, counts, tags);
+    }
+
+    /// `_bothN` with the fixture's own key infixes (`tags[i]`, a point's shape where one count has several: the env's
+    /// arrays).
+    function _bothTagged(
+        string memory kind,
+        string memory entry,
+        string memory variant,
+        address c,
+        bytes32 from,
+        function(address, uint256) internal view returns (bytes memory) build,
+        uint256[] memory counts,
+        string[] memory tags
+    ) internal {
+        for (uint256 i; i < counts.length; ++i) {
+            (sgCount, sgPoint, sgCountTag) = (counts[i], i, tags[i]);
+            _both(kind, entry, variant, c, from, build);
+        }
+        (sgCount, sgPoint, sgCountTag) = (0, 0, "");
+        _sgLine(kind, entry, variant, counts, tags);
+    }
+
+    /// `key` as measured: the pin file's value (written by this run under `SDK_GAS_WRITE`, else asserted equal to it), in a
+    /// frame of its own as `sgPin`; `false` when the key is absent.
+    function sgRead(string calldata key) external view returns (bool, uint256) {
+        string memory f = vm.envOr("SDK_GAS_WRITE", false) ? vm.envOr("SDK_GAS_OUT", SDK_GAS) : SDK_GAS;
+        string memory j = vm.readFile(f);
+        string memory k = string.concat(".", key);
+        if (!vm.keyExistsJson(j, k)) return (false, 0);
+        return (true, vm.parseJsonUint(j, k));
+    }
+
+    /// The measured gas `<head><tags[i]><tail>` at each point.
+    function _sgPoints(string memory head, string memory tail, string[] memory tags)
+        internal
+        view
+        returns (uint256[] memory g)
+    {
+        g = new uint256[](tags.length);
+        for (uint256 i; i < tags.length; ++i) {
+            bool ok;
+            (ok, g[i]) = this.sgRead(string.concat(head, tags[i], tail));
+            assertTrue(ok, "a counted key measured at every point");
+        }
+    }
+
+    /// Whether this run measures the key `what` (`_sgLine`'s `ws[w]`) of `entry` on `kind`: `_both`'s choice, so a key
+    /// another run wrote (the derived run's `ua`) never enters this run's line.
+    function _sgMeasured(string memory kind, string memory entry, uint256 w) internal view returns (bool) {
+        if (sgUaRun) return w == 4;
+        if (w < 2) return true;
+        if (w == 2) return _feeable(kind, entry) || _wrapIn(entry);
+        if (w == 3) return _wrapIn(entry);
+        bool ua = sgUaKind != 0 && !_uaNative(entry);
+        if (w == 4) return ua;
+        return ua && sgPayeeKey.length != 0 && keccak256(bytes(entry)) == keccak256("mtxPayWithPayeeFee");
+    }
+
+    /// I1 part 2: the line of a counted row over its points (`counts`, `tags`; a point whose count does not exceed the one
+    /// before it starts a new sequence). For every key the run measured (`fresh`, `used`, `fee`, `held`, `ua`, `ua2`; a
+    /// derived run `ua` only) the run's slope `s` is, on one rising sequence whose chord is at or above every point (P4,
+    /// owner 2026-11-19, "approved": tight where the cost rises faster at higher counts), the chord's: the worst over those
+    /// keys of the whole-gas rise a count from the first point to the last (rounded up), each key's intercept its line
+    /// through its first point; else the worst over the keys and sequences of the whole-gas rise a count between two
+    /// points, each key's intercept the largest `g(c) - s * c` over its points. `s` is pinned as
+    /// `<kind>_<entry>_per_item_<variant>` (a derived run `..._per_item_ua_<variant>`), the intercept, the gas at a count
+    /// of 0, under the key without a tag. The check (owner 2026-11-19): the line `intercept + s * c` is at least the
+    /// measured gas at every point, and less than it + 1,000 at the largest count (asserted), unless `sgLineLoose` (P1, P2,
+    /// P4 where the chord does not hold): then the
+    /// worst excess there over the keys is pinned as `<kind>_<entry>_overshoot_<variant>` (a derived run
+    /// `..._overshoot_ua_<variant>`), stated with the row.
+    function _sgLine(
+        string memory kind,
+        string memory entry,
+        string memory variant,
+        uint256[] memory counts,
+        string[] memory tags
+    ) internal {
+        string[6] memory ws = ["fresh", "used", "fee", "held", "ua", "ua2"];
+        uint256[][6] memory g;
+        uint256 s;
+        uint256 last;
+        for (uint256 i; i < counts.length; ++i) {
+            if (counts[i] >= counts[last]) last = i;
+        }
+        for (uint256 w; w < 6; ++w) {
+            if (!_sgMeasured(kind, entry, w)) continue;
+            g[w] = _sgPoints(string.concat(kind, "_", entry, "_"), string.concat(ws[w], "_", variant), tags);
+            for (uint256 i = 1; i < g[w].length; ++i) {
+                if (counts[i] > counts[i - 1]) {
+                    assertGe(g[w][i], g[w][i - 1], "the cost grows with the count");
+                    uint256 d = counts[i] - counts[i - 1];
+                    uint256 r = (g[w][i] - g[w][i - 1] + d - 1) / d;
+                    if (r > s) s = r;
+                }
+            }
+        }
+        assertGt(s, 0, "a counted row's slope");
+        (uint256 c, bool chord) = _sgChord(counts, g);
+        if (chord) s = c;
+        uint256[6] memory bs;
+        uint256 over;
+        for (uint256 w; w < 6; ++w) {
+            if (g[w].length == 0) continue;
+            assertGe(g[w][0], s * counts[0], "a positive intercept");
+            uint256 b = g[w][0] - s * counts[0]; // P4: the chord's line through the first point
+            for (uint256 i; i < counts.length && !chord; ++i) {
+                assertGe(g[w][i], s * counts[i], "a positive intercept");
+                if (g[w][i] - s * counts[i] > b) b = g[w][i] - s * counts[i];
+            }
+            for (uint256 i; i < counts.length; ++i) {
+                assertGe(b + s * counts[i], g[w][i], "the line at or above every point");
+            }
+            uint256 o = b + s * counts[last] - g[w][last];
+            if (!sgLineLoose) assertLt(o, 1_000, "the line within 1,000 of the largest count");
+            if (o > over) over = o;
+            bs[w] = b;
+        }
+        _pin(string.concat(kind, "_", entry, sgUaRun ? "_per_item_ua_" : "_per_item_", variant), s);
+        for (uint256 w; w < 6; ++w) {
+            if (g[w].length != 0) _pin(string.concat(kind, "_", entry, "_", ws[w], "_", variant), bs[w]);
+        }
+        if (sgLineLoose) {
+            _pin(string.concat(kind, "_", entry, sgUaRun ? "_overshoot_ua_" : "_overshoot_", variant), over);
+        }
+    }
+
+    /// P4 (owner 2026-11-19, "approved"): on one rising sequence (`counts` strictly increasing), the chord's slope `c`, the
+    /// worst over the measured keys `g[w]` of the whole-gas rise a count from the first point to the last (rounded up), and
+    /// whether each key's line through its first point at `c` is at or above every one of its points.
+    function _sgChord(uint256[] memory counts, uint256[][6] memory g) internal pure returns (uint256 c, bool ok) {
+        uint256 n = counts.length;
+        for (uint256 i = 1; i < n; ++i) {
+            if (counts[i] <= counts[i - 1]) return (0, false);
+        }
+        uint256 span = counts[n - 1] - counts[0];
+        for (uint256 w; w < 6; ++w) {
+            if (g[w].length == 0) continue;
+            uint256 r = (g[w][n - 1] - g[w][0] + span - 1) / span;
+            if (r > c) c = r;
+        }
+        ok = c != 0;
+        for (uint256 w; w < 6 && ok; ++w) {
+            for (uint256 i; i < g[w].length && ok; ++i) {
+                ok = g[w][0] + c * (counts[i] - counts[0]) >= g[w][i];
+            }
+        }
+    }
+
+    /// G2 (owner 2026-11-19): a run of the fixture's whole sequence with derived identities (`sgUaRun`, the router's): each
+    /// row measured once, on the fresh lane, as `<kind>_<entry>_ua_<variant>`; the native rows come from the native run.
+    function _bothUaRun(
+        string memory kind,
+        string memory entry,
+        string memory variant,
+        address c,
+        function(address, uint256) internal view returns (bytes memory) build
+    ) internal {
+        uint256 s = vm.snapshotState();
+        _measure(_k(kind, entry, "ua", variant), c, build(c, 0));
+        vm.revertToState(s);
+    }
+
+    /// The entries a derived signer cannot sign (A1, G2): the wrap-in entries and `mtxWrapShield`, signed by a native address.
+    function _uaNative(string memory entry) internal pure returns (bool) {
+        return _wrapIn(entry) || keccak256(bytes(entry)) == keccak256("mtxWrapShield");
+    }
+
+    /// A1: `amount` (at most what `holder` has) of the token `t`, from `holder` to the derived reference signer.
+    function _sgUaFund(address t, address holder, uint256 amount) internal {
+        uint256 b = IERC20MetaTx(t).balanceOf(holder);
+        vm.prank(holder);
+        IUALedger(t).transferToUA(UAKinds.uaOf(sgUaKind, sgUaKey), b < amount ? b : amount);
     }
 
     /// A1: what the derived signer needs on `c` before its run, given inside the run's snapshot only (the native rows keep the
@@ -184,6 +411,11 @@ abstract contract SdkGasRows is Test {
     bytes internal sgUaKey;
     uint256 internal sgUaSk;
     mapping(address => address) internal sgUaAt;
+    /// G2: the run's identities are derived (the router's sequences, `_bothUaRun`)
+    bool internal sgUaRun;
+    /// Q1: a second derived UA (secp256k1 `SG_UA_SK2`), the payee of `mtxPayWithPayeeFee` when `sgPayeeUa`
+    bytes internal sgPayeeKey;
+    bool internal sgPayeeUa;
 
     /// Ruling 3 (owner 2026-11-19): the entries whose envelope carries a fee, measured once more on a fresh lane with a fee
     /// of 1 (`<kind>_<entry>_fee_<variant>`; the generator's `fee_extra` is the worst difference to the fresh row): the
@@ -242,6 +474,43 @@ abstract contract SdkGasOps is SdkGasRows {
 
     function _sgFrom() internal view returns (bytes32) {
         return sgKind == 0 ? MetaTxLib.pad(vm.addr(sgPk)) : UAKinds.uaOf(sgKind, sgKeyData);
+    }
+
+    /// A1's derived reference signer: secp256k1 (0x0108), forge-signable by `vm.sign`; Q1's derived payee.
+    uint256 internal constant SG_UA_SK = 0x5A3B10;
+    uint256 internal constant SG_UA_SK2 = 0x5A3B11;
+
+    /// The UA of `kind` (P-256, ed25519, secp256k1) from secret `sk`, registered on the registry `r` with its PoP, no
+    /// attributes: its id and key data.
+    function _sgRegisterOn(address r, uint16 kind, uint256 sk) internal returns (bytes32 ua, bytes memory k) {
+        if (kind == UAKinds.P256) {
+            (uint256 x, uint256 y) = vm.publicKeyP256(sk);
+            k = abi.encodePacked(x, y);
+        } else if (kind == UAKinds.ED25519) {
+            k = abi.encodePacked(vm.publicKeyEd25519(bytes32(sk)));
+        } else {
+            Vm.Wallet memory w = vm.createWallet(sk);
+            k = abi.encodePacked(w.publicKeyX, w.publicKeyY);
+        }
+        ua = UAKinds.uaOf(kind, k);
+        IUARegistry.UAAttrs memory none;
+        bytes32 d = UAKinds.registrationDigest(ua, kind, 0, UAKinds.kemRecordHash(ua, 0, UAKinds.kemPk(none.kem)), 0);
+        bytes memory pop = _sgUaSign(kind, sk, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, d));
+        assertEq(IUARegistry(r).register(kind, k, none, pop, ""), ua, "the UA registered");
+    }
+
+    /// A1: the derived reference signer (secp256k1 `SG_UA_SK`) registered on `r`; the fixture gives it what the native
+    /// signer holds.
+    function _sgUaSignerOn(address r) internal returns (bytes32 ua) {
+        bytes memory k;
+        (ua, k) = _sgRegisterOn(r, UAKinds.SECP256K1, SG_UA_SK);
+        (sgUaKind, sgUaKey, sgUaSk) = (UAKinds.SECP256K1, k, SG_UA_SK);
+        (, sgPayeeKey) = _sgRegisterOn(r, UAKinds.SECP256K1, SG_UA_SK2);
+    }
+
+    /// Q1's derived payee.
+    function _sgPayeeUa() internal view returns (bytes32) {
+        return UAKinds.uaOf(UAKinds.SECP256K1, sgPayeeKey);
     }
 
     /// The signature of UA kind `kind` (P-256 low-s over sha256, ed25519, secp256k1 `r ‖ s ‖ v`) by `sk` over `m`.
@@ -336,18 +605,32 @@ abstract contract SdkGasOps is SdkGasRows {
     /// The payer pays the payee (`SG_PAYEE_PK`), who gives 1 to `SG_FEE_TO`; the relayer bound (the entry's shape).
     function _payeeFee(address c, uint256 nonce) internal view returns (bytes memory) {
         MetaTxLib.PayMeta memory m = _sgMeta();
-        MetaTxLib.UAMetaTransfer memory x = _sgT(nonce, MetaTxLib.pad(vm.addr(SG_PAYEE_PK)), 10, PayMetaKit.id(m));
+        bytes32 payee = sgPayeeUa ? UAKinds.uaOf(UAKinds.SECP256K1, sgPayeeKey) : MetaTxLib.pad(vm.addr(SG_PAYEE_PK));
+        MetaTxLib.UAMetaTransfer memory x = _sgT(nonce, payee, 10, PayMetaKit.id(m));
         (x.mode, x.relayer) = (x.mode | MetaTxLib.MODE_RESTRICT_RELAYER, SG_RELAYER); // the entry binds the relayer
         uint256 until = block.timestamp + 600;
         bytes32 rf = MtxDigest.typed(
             c, keccak256(abi.encode(UA_PAYEE_FEE, MtxHash.hashStruct(x), uint256(1), SG_FEE_TO, until))
         );
-        IUARegistry.UASig memory payee;
-        payee.signature = _sgSign(SG_PAYEE_PK, rf);
         return abi.encodeCall(
             IMetaTokenV2.mtxPayWithPayeeFee,
-            (x, _sgUaSig(MtxDigest.typed(c, MtxHash.hashStruct(x))), 1, SG_FEE_TO, until, payee, m)
+            (x, _sgUaSig(MtxDigest.typed(c, MtxHash.hashStruct(x))), 1, SG_FEE_TO, until, _sgPayeeSig(rf), m)
         );
+    }
+
+    /// The payee's signature of its fee `rf`: the native `SG_PAYEE_PK`, or (Q1, `sgPayeeUa`) the derived `SG_UA_SK2`.
+    function _sgPayeeSig(bytes32 rf) internal view returns (IUARegistry.UASig memory a) {
+        if (!sgPayeeUa) {
+            a.signature = _sgSign(SG_PAYEE_PK, rf);
+        } else {
+            (a.keyData, a.signature) =
+            (
+                sgPayeeKey,
+                _sgUaSign(
+                    UAKinds.SECP256K1, SG_UA_SK2, UAKinds.uaMessage(UAKinds.SECP256K1, UAKinds.PURPOSE_PAYEE_FEE, rf)
+                )
+            );
+        }
     }
 
     function _payWithTax(address c, uint256 nonce) internal view returns (bytes memory) {

@@ -117,9 +117,13 @@ abstract contract ZetherFixture is Test {
         vm.stopPrank();
     }
 
+    /// The chain's `SmartKeyAccount` implementation the fixture's releases name (0 = none, this fixture's own setting); the SDK
+    /// gas harness (`test/gas/SdkGasDeploy.sol`, G4) names the one a real deploy names.
+    function _fixtureSka() internal view virtual returns (address) {}
+
     /// The release env of this stack's curve (`deps`: transfer, burn, inner-product verifier, disclosure).
-    function _zenv() internal view returns (IFactoryToken.Env memory) {
-        return zetherEnv(
+    function _zenv() internal view returns (IFactoryToken.Env memory e) {
+        e = zetherEnv(
             address(factory),
             ZUID,
             address(reg),
@@ -128,6 +132,7 @@ abstract contract ZetherFixture is Test {
             address(ZetherVerifierBase(address(ver)).innerProduct()),
             address(dis)
         );
+        e.smartKeyAccountImpl = _fixtureSka();
     }
 
     /// Gen 1 with `zether-bls12381` and `schnorr-bn254` (caps as accounts.md §1.15), budget 12 M, no msig.

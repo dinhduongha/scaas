@@ -208,6 +208,10 @@ abstract contract UARegistryBase is Test {
         assertEq(n == 0 ? bytes("") : abi.encodePacked(keccak256(pop)), from.popOf(ua), "popOf: the whole pop's hash");
     }
 
+    /// The chain's `SmartKeyAccount` implementation the fixture's token envs and router name (0 = none, this fixture's own
+    /// setting); the SDK gas harness (`test/gas/SdkGasDeploy.sol`, G4) names the one a real deploy names.
+    function _fixtureSka() internal view virtual returns (address) {}
+
     function setUp() public virtual {
         // `UA_REGISTRY_ARTIFACT=UARegistryPreSplit.sol:UARegistryPreSplit` runs a suite's `_deploy`s on the pre-split source
         registryArtifact = vm.envOr("UA_REGISTRY_ARTIFACT", registryArtifact);

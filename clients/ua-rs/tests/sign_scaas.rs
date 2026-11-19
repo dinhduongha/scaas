@@ -383,3 +383,30 @@ fn fee_due_is_the_amount_the_check_charges() {
     (none["mode"], none["fee"]) = (0.into(), "0".into());
     assert_eq!(fee_due("UABurn", &none).unwrap(), "0");
 }
+
+/// Owner ruling G6 (2026-11-19): a struct without the envelope (`UAWrapOrder`, its `fee` the DEX fee rate the order caps, no
+/// fee mode) pays its relayer no envelope fee: `fee_due` is 0 at any `fee`, never `PolicyRefused` for the missing mode (the
+/// SDK's prepare and quote call it on every struct with a lane). An enveloped struct without its mode is still refused.
+#[test]
+fn fee_due_of_a_struct_without_the_envelope_is_zero() {
+    use scaas_ua::wallet::fee_due;
+    let order = |fee: &str| {
+        serde_json::json!({"from": format!("0x{}", "11".repeat(32)), "wrappedToken": format!("0x{}", "22".repeat(20)),
+            "amount": "1000", "minMinted": "1", "minFill": "1000", "fee": fee, "relayer": format!("0x{}", "00".repeat(20)),
+            "destination": format!("0x{}", "00".repeat(32)), "flags": 0, "batch": "1", "nonce": "1", "validUntil": "9999999999"})
+    };
+    for fee in ["0", "5", "10000"] {
+        assert_eq!(
+            fee_due("UAWrapOrder", &order(fee)).unwrap(),
+            "0",
+            "fee {fee}"
+        );
+    }
+    let mut burn = row("UABurn", "token").message;
+    burn.as_object_mut().unwrap().remove("mode");
+    assert_eq!(
+        fee_due("UABurn", &burn).unwrap_err(),
+        Error::PolicyRefused,
+        "an envelope without its mode"
+    );
+}

@@ -391,7 +391,10 @@ is returned.** `webauthn_assertion(key_data, expected_challenge, authData, clien
 low-s; `clientDataJSON` kept as the exact signed bytes, UTF-8, accepted only by the chains' rule (`client_data_ok`) against
 `expected_challenge`, never the JSON's own; the whole encoding through `verify(0x0100, …)`. Any failure: `WebAuthnAssertion`, nothing
 returned. First, `authData` and `clientDataJSON` above 1,024 bytes together (`WEBAUTHN_MAX_ASSERTION`): `WebAuthnTooLong`, nothing
-returned, for the builder and for an external device's answer alike (owner 2026-11-19, G3; the basis in `webauthn.rs`: real
+returned, for the builder and for an external device's answer alike (owner 2026-11-19, G3), and in every `UASig` builder (`ua_sig`,
+`ua_sig_app`, an `msig` member slot, a sealed container's sender) on any `Signer`'s answer to a `WebAuthn` request, a non-canonical
+answer `WebAuthnAssertion` (Q3; clientkeys `msigMemberSigs` alike; its `encodeAssertion` and `metaop.js` `passkeyAssertion`, the
+`SmartKeyAccount` and NEAR / Algorand passkey paths, take the same cap, Q4; the basis in `webauthn.rs`: real
 assertions reach about 770 bytes; the chains take any length; `sign.json` rows at the cap and one above). BUILT, clientkeys and `ua-rs`.
 
 <a id="CLI-UAL-17"></a>**CLI-UAL-17** — **The signature role is set inside `ua-rs`.** `SigRole::{Authorization, Pop}` picks the BLS domain

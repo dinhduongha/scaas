@@ -1,0 +1,12 @@
+# gasI1b mutants at commit 425aad1cc (name | outcome | test)
+TokenConfig.legs not read from extra | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib item_count_reads_the_operations_counts
+skip marks not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib item_count_reads_the_operations_counts
+an env array left out | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib item_count_reads_the_operations_counts
+the one order counted 0 | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib item_count_reads_the_operations_counts
+env_items not an item | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib gas_table_per_item_parse
+the old per-item bound | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib gas_table_per_item_parse
+the per-item bound one above | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib gas_table_per_item_parse
+per-item keys not kind-qualified | killed | python3 clients/scaas-sdk/gas/test_generate.py
+orders not an item | killed | python3 clients/scaas-sdk/gas/test_generate.py
+the overshoot not stated | killed | python3 clients/scaas-sdk/gas/test_generate.py
+10 mutants, 10 killed, 0 survived, 0 not loaded

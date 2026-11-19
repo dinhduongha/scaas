@@ -170,6 +170,14 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   `2.2.0-pqz3` served P6f D3's `0x5caa5000…0f01` / `…0012` / `…0013`. A stock Nethermind image ignores
   that section and the addresses stay empty accounts (shown on the copy), so contracts self-test and nodes probe.
   Runbook: `pqz-core/nethermind/chain/RUNBOOK.md`.
+- <a id="NET-EVM-15"></a>**NET-EVM-15** — **The SCaaS chains keep their PQ precompiles in the `0x…5caa` range; a Draft EIP's
+  address is never taken.** The SCaaS testnet and mainnet 22776 serve `PQZ`, `MLDSA44`, `MLDSA65`, `MLDSA87` at the
+  `0x000000000000000000000000000000005caa….` addresses above, not at a Draft EIP's (EIP-8355's `0x12` / `0x13` / `0x14`,
+  claimed by EIP-8051 and EIP-7932 too): a Draft's address may end up assigned to another function, and a contract
+  written for Ethereum would then call a different function on our chain. Once an EIP is Final, the SCaaS chains add its
+  precompile at the Final address by a fork, with the same verify, and keep the `0x…5caa` address, so verifiers already
+  deployed keep working. Contracts never assume an address: verifiers take it by probe at deploy
+  ([accounts.md](../contracts/accounts.md), MD-6). Status: current rule (owner 2026-11-19).
 - **P-256** (RIP-7212 / EIP-7951 at `0x100`): present on the SCaaS testnet; probed per chain (`has_p256_precompile`); without it
   OpenZeppelin's Solidity verifier costs ~200–330 k gas ([passkeys](README.md#webauthn)).
 

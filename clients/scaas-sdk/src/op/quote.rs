@@ -173,27 +173,31 @@ pub(crate) fn signer_kind(p: &Prepared) -> u16 {
     }
 }
 
-/// A self-relay quote `q` of `p` once `p` is signed into `signed` calldata bytes (owner 2026-11-19, G3): its gas recomputed
-/// from the real signature's length, never below `q`'s (`q` itself when nothing grew); above `Limits::max_gas`
-/// `SignedGasAboveCap`, above the profile's per-transaction cap `GasAboveTxCap`, a cost above the caps `FeeAboveCap`.
+/// A self-relay quote `q` of an operation on `chain` by a signer of kind `signer`, whose unsigned calldata is `unsigned` bytes,
+/// once signed into `signed` calldata bytes (owner 2026-11-19, G3 at `submit`, Q5 at a gateway operation's self-relay
+/// `resend`, from the row's stored signed calldata): its gas recomputed from the real signature's length, never below `q`'s
+/// (`q` itself when nothing grew); above `Limits::max_gas` `SignedGasAboveCap`, above the profile's per-transaction cap
+/// `GasAboveTxCap`, a cost above the caps `FeeAboveCap`.
 pub(crate) fn signed_quote(
     sdk: &Sdk,
-    p: &Prepared,
+    chain: &str,
+    signer: u16,
+    unsigned: usize,
     q: &SubmitQuote,
     signed: usize,
 ) -> Result<SubmitQuote, SdkError> {
     let chain = sdk
         .chains
         .iter()
-        .find(|c| c.profile.key == p.chain())
+        .find(|c| c.profile.key == chain)
         .ok_or(SdkError::ChainUnknown)?;
     let counted = super::gas::counted_bytes(
         &chain.profile.gas,
         &chain.profile.gas_opt_in,
         &sdk.gas_tables,
-        signer_kind(p),
+        signer,
         q.gas_from.as_ref(),
-        super::submit::unsigned(p)?.calldata.len(),
+        unsigned,
     );
     let gas = super::gas::signed_gas(q.gas_limit, counted, signed);
     if gas == q.gas_limit {
@@ -253,7 +257,8 @@ pub(crate) async fn check_gateways(sdk: &Sdk, chain: &str) -> Result<(), SdkErro
 impl Op {
     /// The quote of `prepared` on `path` (spec §13.3). `PreparedUnknown`, `PreparedStale` (expired or its lane nonce moved),
     /// `SubmitPathNone`, `PayerDelegated`, `GasUnquoted` (a self-relay with no gas figure for the operation's key; a gateway
-    /// quote reports `gas: None` instead), `GasAboveTxCap`, `FeeAboveCap`.
+    /// quote reports `gas: None` instead), `GasCountUnknown` (a row of the operation's key grows with a count the SDK cannot
+    /// read from it, on every path; owner 2026-11-19, I1), `GasAboveTxCap`, `FeeAboveCap`.
     pub async fn quote(
         &self,
         prepared: Arc<Prepared>,
@@ -315,6 +320,8 @@ impl Op {
                     let (extra, message) = (&prepared.t.extra, &prepared.t.message);
                     let op = super::gas::OpGas {
                         len: &|input| super::gas::input_len(extra, message, input),
+                        // I1: the count a per-item part names
+                        count: &|item| super::gas::item_count(extra, message, item),
                         // ruling 1: the record saved (`PayMeta.save`)
                         saves: extra.get("meta").is_some_and(|m| {
                             scaas_ua::wallet::entries::pay_meta_of(m).is_ok_and(|m| m.save)
@@ -332,7 +339,7 @@ impl Op {
                         (&entry, prepared.t.kind, signer, fresh),
                         unsigned.calldata.len(),
                         &op,
-                    )
+                    )?
                 }; // `op` borrows a closure that is not `Send`: dropped before any await
                 let gateway = || SubmitQuote {
                     path: SubmitPath::Gateway,

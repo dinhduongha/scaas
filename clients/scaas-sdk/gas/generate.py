@@ -17,9 +17,19 @@ the worst `<kind>_<entry>_saved_<variant>` less `..._fresh_<variant>`, its `fee_
 `..._fee_<variant>` less `..._fresh_<variant>` (a wrap-in entry: less `..._held_<variant>`, the signer holding units, A6),
 its `ua_extra` (A1) the worst `..._ua_<variant>` (the derived reference signer `ua_signer` of the input list) less
 `..._fresh_<variant>` less that signer's verify delta, absent when not positive (a source item `a-b[-c]` is the first key less
-the others); a verify row `verify_<kind>_delta`, its `sig_bytes` (ruling 2, A4: every row) `verify_<kind>_sig_bytes`, its
+the others), the variants measured without that signer listed `unmeasured` (G2: theirs is the largest measured on another
+variant), none on an entry a derived signer cannot sign (`ua_native`), and a row no variant of which was measured so takes the
+largest measured for the same entry and lane state on another kind (`from_kind`, every variant `unmeasured`; none anywhere is refused),
+and (Q1) where a second derived party was measured (`..._ua2_<variant>`) its `second_party`, the worst of that less the one
+derived party less the verify delta; a verify row `verify_<kind>_delta`, its `sig_bytes` (ruling 2, A4: every row) `verify_<kind>_sig_bytes`, its
 `margin` (ruling 2 (b) of the sampled check: a kind whose worst case cannot be determined) and `stand_in` from the input
-list. Prints its run time.
+list (a base row's: `base_stand_in`, keyed `<kind>:<entry>`, owner 2026-11-19, I2). A base or verify row whose cost grows with a count (owner 2026-11-19, I1; optional `per_item` of the input list:
+`<kind>:<entry>` (kind-qualified, I1 part 2: Zether's `mtxRollOver` has no count, PQZ's has) or a signer kind's number →
+the item counted, one of ITEMS) gets `item` and `per_item` {gas, base_count 0, source}: its gas the worst whole-gas slope
+`<kind>_<entry>_per_item_<variant>` (a verify row: `verify_<kind>_per_item`), and its figure keys then hold the gas at a
+count of 0 (the line's intercept, fitted by the forge harness); where the harness pinned the line's excess at the largest
+count (`<kind>_<entry>_overshoot_<variant>`: owner rulings P1, P2; proposal P4) an assumption states the worst. Prints its
+run time.
 """
 
 import argparse
@@ -29,6 +39,9 @@ import re
 import subprocess
 import sys
 import time
+
+# The counts a row's `item` may name: the SDK's `GAS_ITEMS` (src/config.rs), which reads each from the operation.
+ITEMS = ("legs", "accounts", "entries", "members", "env_items", "orders")
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 
@@ -70,9 +83,95 @@ def extra(m, src, kind, entry, what, less=None):
     }
 
 
+def ua_row(inputs, m, src, row, pending):
+    """A1 and G2 (owner 2026-11-19): the row's `ua_extra`, the worst of the variants measured with the derived reference signer
+    (`<kind>_<entry>_ua_<variant>`), the variants measured without it listed `unmeasured` (theirs is that largest measured on
+    another variant); none on an entry a derived signer cannot sign (`ua_native`: its kind or entry); a row with no variant
+    measured is left to `ua_fallback` (`pending`)."""
+    kind, entry = row["kind"], row["entry"]
+    pre = f"{kind}_{entry}_"
+    fresh = {k[len(pre) + 6 :] for k in variants(m, pre + "fresh_")}
+    ua = {k[len(pre) + 3 :] for k in variants(m, pre + "ua_")}
+    if kind in inputs["ua_native"]["kinds"] or entry in inputs["ua_native"]["entries"]:
+        if ua:
+            raise SystemExit(f"{kind} {entry}: listed native-only (ua_native) but measured with a derived signer")
+        return
+    if not ua:
+        pending.append((row, sorted(fresh)))
+        return
+    x = extra(m, src, kind, entry, "ua", f"verify_0x{inputs['ua_signer']:04x}_delta")
+    if x is not None:
+        if fresh - ua:
+            x["unmeasured"] = sorted(fresh - ua)
+        row["ua_extra"] = x
+    two = variants(m, pre + "ua2_")
+    if two:
+        # Q1 (owner 2026-11-19): a second derived party debited (the payee beside the payer), over the first and its verify
+        less = f"verify_0x{inputs['ua_signer']:04x}_delta"
+        items = [(k, pre + "ua_" + k[len(pre) + 4 :]) for k in two]
+        worst = max(m[a] - m[b] - m[less] for a, b in items)
+        if x is None:
+            raise SystemExit(f"{kind} {entry}: a second derived party measured without the first")
+        x["second_party"] = {"measured": worst, "source": f"{src}#{','.join(f'{a}-{b}-{less}' for a, b in items)}"}
+
+
+def ua_fallback(base, pending):
+    """G2: a row whose variants none was measured with the derived signer takes the largest `ua_extra` measured for the same
+    entry and lane state on another kind (`from_kind`, every variant `unmeasured`); none measured anywhere is refused."""
+    for row, unmeasured in pending:
+        donors = [
+            r
+            for r in base
+            if r["entry"] == row["entry"]
+            and r["fresh"] == row["fresh"]
+            and r["kind"] != row["kind"]
+            and "ua_extra" in r
+            and "from_kind" not in r["ua_extra"]
+        ]
+        if not donors:
+            raise SystemExit(f"{row['kind']} {row['entry']}: no ua_extra measured for the entry on any kind (G2)")
+        d = max(donors, key=lambda r: r["ua_extra"]["measured"])
+        x = {k: d["ua_extra"][k] for k in ("gas", "measured", "source")}
+        x["from_kind"] = d["kind"]
+        x["unmeasured"] = unmeasured
+        row["ua_extra"] = x
+
+
+def per_item(inputs, m, src, name, prefix):
+    """The row's `item` and `per_item` (I1) when the input list counts `name`: the worst slope of the keys `prefix*`."""
+    item = inputs.get("per_item", {}).get(name)
+    if item is None:
+        return {}
+    if item not in ITEMS:
+        raise SystemExit(f"{name}: item {item!r} is not one of {ITEMS}")
+    keys = sorted(k for k in m if k.startswith(prefix))
+    if not keys:
+        raise SystemExit(f"no per-item measurement {prefix}")
+    return {
+        "item": item,
+        "per_item": {"gas": max(m[k] for k in keys), "base_count": 0, "source": f"{src}#{','.join(keys)}"},
+    }
+
+
+def overshoots(m, base):
+    """The counted rows whose line the harness let sit above the largest count (owner 2026-11-19, P1, P2; proposal P4):
+    one assumption each, its worst excess over the variants and signers."""
+    out = []
+    for kind, entry in sorted({(r["kind"], r["entry"]) for r in base if "per_item" in r}):
+        keys = sorted(k for k in m if k.startswith(f"{kind}_{entry}_overshoot_"))
+        if keys:
+            src = ", ".join(keys)
+            out.append(
+                f"{kind} {entry}: the per-item line (worst slope) is above the measured figure at every measured count, "
+                f"by up to {max(m[k] for k in keys):,} gas at the largest ({src}); the excess is refunded."
+            )
+    return out
+
+
 def table(inputs, m):
     src = inputs["measurements"]
     base = []
+    pending = []
     for group in inputs["base"]:
         for kind in group["kinds"]:
             for entry in group["entries"]:
@@ -105,10 +204,12 @@ def table(inputs, m):
                     fee = extra(m, src, kind, entry, "fee")
                     if fee is not None:
                         row["fee_extra"] = fee
-                    ua = extra(m, src, kind, entry, "ua", f"verify_0x{inputs['ua_signer']:04x}_delta")
-                    if ua is not None:
-                        row["ua_extra"] = ua
+                    ua_row(inputs, m, src, row, pending)
+                    row.update(per_item(inputs, m, src, f"{kind}:{entry}", f"{kind}_{entry}_per_item_"))
+                    if f"{kind}:{entry}" in inputs.get("base_stand_in", {}):  # I2: a stand-in priced the row
+                        row["stand_in"] = inputs["base_stand_in"][f"{kind}:{entry}"]
                     base.append(row)
+    ua_fallback(base, pending)
     verify = [
         {
             "signer": 0,
@@ -126,6 +227,7 @@ def table(inputs, m):
         row["sig_bytes"] = m[f"verify_0x{signer:04x}_sig_bytes"]
         if str(signer) in inputs["margin"]:
             row["margin"] = inputs["margin"][str(signer)]
+        row.update(per_item(inputs, m, src, str(signer), f"verify_0x{signer:04x}_per_item"))
         if str(signer) in inputs["stand_in"]:
             row["stand_in"] = inputs["stand_in"][str(signer)]
         verify.append(row)
@@ -134,7 +236,7 @@ def table(inputs, m):
         "v": 2,
         "name": inputs["name"],
         "family": inputs["family"],
-        "assumptions": inputs["assumptions"],
+        "assumptions": inputs["assumptions"] + overshoots(m, base),
         "base": base,
         "verify": verify,
     }

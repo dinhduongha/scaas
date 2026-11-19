@@ -339,6 +339,7 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     function _auth(MetaTxLib.UAEnvelope memory e, bytes32 d, bool bad)
         internal
         view
+        virtual
         returns (IUARegistry.UASig memory)
     {
         if (bad) d = keccak256(abi.encode(d));

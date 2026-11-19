@@ -1,0 +1,4 @@
+# gasI2 mutants at commit 16cb7c47d (name | outcome | test)
+no base stand_in | killed | python3 clients/scaas-sdk/gas/test_generate.py
+stand_in keyed by entry only | killed | python3 clients/scaas-sdk/gas/test_generate.py
+2 mutants, 2 killed, 0 survived, 0 not loaded

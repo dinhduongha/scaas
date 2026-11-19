@@ -98,6 +98,13 @@ own_codes! {
     /// A self-relay whose gas, recomputed after signing from the signed calldata (the real signature's length; owner
     /// 2026-11-19, G3), exceeds `Limits::max_gas`: nothing written or sent.
     SignedGasAboveCap,
+    /// A gas table's row with `per_item` but no `item`, or the reverse (owner 2026-11-19, I1).
+    GasItemUnpaired,
+    /// A gas table's row whose `item` names no count the SDK reads (owner 2026-11-19, I1).
+    GasItemUnknown,
+    /// An operation whose gas row grows with a count (`per_item`) that the SDK cannot read from the operation, or above
+    /// 65,536 (owner 2026-11-19, I1): refused, never quoted without it.
+    GasCountUnknown,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).
