@@ -693,6 +693,9 @@ library UARegistryRegLib {
             return (cap, held);
         }
         cap = self.verifyCap(kind); // 0: this generation does not enable the kind (an enabled cap is ≠ 0)
+        // a surplus-form kind (`bls12381-multi`) this generation does not verify: its stored paths are `false` here (no
+        // hand-off), so the slot could never accept or sign; refused at registration and update (Fable build review B1)
+        if (cap == 0 && UAKinds.hasSurplusForm(kind)) revert IUARegistry.UAMemberUnknown(id);
         if (cap == 0) {
             // handed to gen 1, which holds cap / 63 + GAS_MARGIN again inside the 63/64 gen 2 gives it; gen 2 holds for it too
             cap = IUARegistry(self.predecessor()).verifyCap(kind);

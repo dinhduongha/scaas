@@ -5029,6 +5029,16 @@ mechanism "approved" (direct call, no new registry entry), the plan's choices 2 
 (`UASafeVerifier` `enum Mode { Verify, Minimal, Pop }`), the seven choices 3 (Fp negation, not a third pairing pair or a G2MSM by
 `r − 1`) and 4 (the fourth word `_lib` appends, not a getter).
 
+Change (controller call, owner auto-run 2026-11-20; the Fable build review of 2026-11-19, findings B1–B3, kept outside the
+tracked files; status: BUILT on EVM and the node, UNAUDITED): (B1) old, a gen-2 `msig` could list a gen-1 `0x0121` member
+whose slot can never sign there (every stored path `false`, the hot path counting accepted slots only); new,
+`UARegistryRegLib._slotCap` refuses a surplus-form member of a kind the generation does not verify (`UAMemberUnknown`), at
+registration and update. (B2) old, the node refused the packed 160 bytes as `HEX_ARGS_REFUSED` (spec §5.1) without saying it
+can only do so beside `signers`; new, the rule as enforced: refused beside `signers`; a `UASig` without `signers` is every
+other kind's (no kind without a chain read; `schnorr-bls12381` is 160 bytes too) and reaches the chain; an `msig` slot of a
+group is named `{index, members, sig: σ, signers}` (`InnerSig` `{index, sig: σ, signers}`), the node packing `sig`. (B3) a
+test row for `updateMsig` with a group member (the route through `UARegistryAuxLib._core`): surplus refused, minimal accepted.
+
 ### CTR-UA-51 — `bls12381-multi`: typed `registerBlsMulti`, no KEM or PQZ key, in SIGNING and MEMBER, no update path
 - old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-51 · superseded-by: —
 

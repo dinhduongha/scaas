@@ -922,6 +922,23 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
     if ty == "UASig" && j.get("signers").is_some() {
         return bls_multi_sig(j, path);
     }
+    // a `bls12381-multi` group as an `msig` member (Fable build review B2): its slot `{index, [members,] sig: σ, signers}`, the
+    // node packing `sig = σ ‖ bitmap`; an `InnerSig` `{index, sig: σ, signers}` likewise
+    if (ty == "MemberSig" || ty == "InnerSig") && j.get("signers").is_some() {
+        let allowed: &[&str] = if ty == "MemberSig" {
+            &["index", "members", "sig", "signers"]
+        } else {
+            &["index", "sig", "signers"]
+        };
+        let packed = bls_multi_packed(j, path, "sig", allowed)?;
+        let mut o = j.as_object().cloned().unwrap_or_default();
+        o.remove("signers");
+        o.insert(
+            "sig".into(),
+            Value::String(format!("0x{}", alloy::hex::encode(&packed))),
+        );
+        return parse(ty, &Value::Object(o), path);
+    }
     if let Some(f) = nested(ty) {
         let o = j.as_object().ok_or_else(|| bad("not an object"))?;
         let t = take(f, o, path)?;
@@ -991,6 +1008,18 @@ const BLS_MULTI_MAX: usize = 64;
 /// kind's: the node cannot tell a 0x0121 signer from its id, so a packed 160-byte `signature` there reaches the chain, which refuses
 /// what does not verify.
 fn bls_multi_sig(j: &Value, path: &str) -> Result<Val> {
+    let full = bls_multi_packed(j, path, "signature", &["signers", "signature"])?;
+    Ok(Val::Tuple(vec![
+        Val::Bytes(vec![]),
+        Val::Bytes(full),
+        Val::Array(vec![]),
+    ]))
+}
+
+/// The packed `σ ‖ uint256(bitmap)` of a `bls12381-multi` signature by name (spec 2026-11-19-bls12381-multi §5.1, N7): `signers`
+/// first (1 to 64 JSON integers, strictly increasing, each `< 64`), then the 128-byte σ under `sig_field` (the packed 160 bytes
+/// `HEX_ARGS_REFUSED`, another length `BAD_PAYLOAD`); a key outside `allowed` is `BAD_PAYLOAD`.
+fn bls_multi_packed(j: &Value, path: &str, sig_field: &str, allowed: &[&str]) -> Result<Vec<u8>> {
     let o = j
         .as_object()
         .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}: not an object"))?;
@@ -1013,33 +1042,32 @@ fn bls_multi_sig(j: &Value, path: &str) -> Result<Val> {
         last = Some(i);
         bitmap |= U256::from(1u8) << i as usize;
     }
-    if let Some(k) = o.keys().find(|k| *k != "signers" && *k != "signature") {
-        bail!("BAD_PAYLOAD: {path}.{k}: a bls12381-multi UASig names only signature and signers");
+    if let Some(k) = o.keys().find(|k| !allowed.contains(&k.as_str())) {
+        bail!(
+            "BAD_PAYLOAD: {path}.{k}: a bls12381-multi signature names only {}",
+            allowed.join(", ")
+        );
     }
     let sig = match parse(
         "bytes",
-        o.get("signature").unwrap_or(&Value::Null),
-        &format!("{path}.signature"),
+        o.get(sig_field).unwrap_or(&Value::Null),
+        &format!("{path}.{sig_field}"),
     )? {
         Val::Bytes(b) => b,
         _ => unreachable!("bytes"),
     };
     if sig.len() == 160 {
-        bail!("HEX_ARGS_REFUSED: {path}.signature: σ alone (128 B); the signers by name, the node builds σ ‖ bitmap");
+        bail!("HEX_ARGS_REFUSED: {path}.{sig_field}: σ alone (128 B); the signers by name, the node builds σ ‖ bitmap");
     }
     if sig.len() != 128 {
         bail!(
-            "BAD_PAYLOAD: {path}.signature: {} bytes, σ is 128 (G1, EIP-2537)",
+            "BAD_PAYLOAD: {path}.{sig_field}: {} bytes, σ is 128 (G1, EIP-2537)",
             sig.len()
         );
     }
     let mut full = sig;
     full.extend_from_slice(&bitmap.to_be_bytes::<32>());
-    Ok(Val::Tuple(vec![
-        Val::Bytes(vec![]),
-        Val::Bytes(full),
-        Val::Array(vec![]),
-    ]))
+    Ok(full)
 }
 
 /// A `LiquidityPlan`'s own shape (spec 2026-11-10-dex-liquidity.md §11): at most eight extra tokens, one `pull` per input
@@ -3812,6 +3840,47 @@ mod tests {
 
     /// The packed 160 bytes beside `signers` are `HEX_ARGS_REFUSED`; a `UASig` naming `keyData` or `members` with `signers` is
     /// refused; one without `signers` is every other kind's, unchanged.
+    /// Fable build review B2: a `bls12381-multi` group as an `msig` member names its slot `{index, members, sig: σ, signers}`
+    /// (an `InnerSig` `{index, sig: σ, signers}`); the node packs `sig = σ ‖ bitmap`; the packed 160 bytes beside `signers`
+    /// are `HEX_ARGS_REFUSED`, an unknown field or a bad list `BAD_PAYLOAD`. A slot without `signers` is unchanged.
+    #[test]
+    fn bls_multi_member_slot_named() {
+        let sigma = format!("0x{}", "11".repeat(128));
+        let mut want = vec![0x11u8; 128];
+        want.extend_from_slice(&(U256::from(0b101u8)).to_be_bytes::<32>());
+        let slot = json!({"index": 1, "members": [], "sig": sigma, "signers": [0, 2]});
+        let v = parse("MemberSig", &slot, "pop[0]").unwrap();
+        let Val::Tuple(t) = v else { panic!("tuple") };
+        assert_eq!(t[2], Val::Bytes(want.clone()));
+        let inner = json!({"index": 0, "sig": sigma, "signers": [0, 2]});
+        let Val::Tuple(t) = parse("InnerSig", &inner, "m").unwrap() else {
+            panic!("tuple")
+        };
+        assert_eq!(t[1], Val::Bytes(want));
+        let packed = json!({"index": 1, "members": [], "sig": format!("0x{}", "11".repeat(160)), "signers": [0, 2]});
+        assert!(parse("MemberSig", &packed, "p")
+            .unwrap_err()
+            .to_string()
+            .starts_with("HEX_ARGS_REFUSED"));
+        let extra =
+            json!({"index": 1, "members": [], "sig": sigma, "signers": [0, 2], "keyData": "0x"});
+        assert!(parse("MemberSig", &extra, "p")
+            .unwrap_err()
+            .to_string()
+            .starts_with("BAD_PAYLOAD"));
+        let unsorted = json!({"index": 1, "members": [], "sig": sigma, "signers": [2, 0]});
+        assert!(parse("MemberSig", &unsorted, "p")
+            .unwrap_err()
+            .to_string()
+            .starts_with("BAD_PAYLOAD"));
+        // the control: a slot without `signers` keeps its bytes
+        let plain = json!({"index": 1, "members": [], "sig": sigma});
+        let Val::Tuple(t) = parse("MemberSig", &plain, "p").unwrap() else {
+            panic!("tuple")
+        };
+        assert_eq!(t[2], Val::Bytes(vec![0x11u8; 128]));
+    }
+
     #[test]
     fn bls_multi_hex_blob_refused() {
         let s128 = format!("0x{}", "22".repeat(128));

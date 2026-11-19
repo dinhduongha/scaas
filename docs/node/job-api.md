@@ -301,7 +301,10 @@ it from a named job. Soroban jobs keep `{index, key_data, sig}` until that famil
 integers, strictly increasing, each `< 64`; `< n` is the chain's check), then `signature`, and builds `UASig{keyData: "", signature:
 σ ‖ uint256(bitmap), members: []}` itself. The packed 160 bytes beside `signers` are `HEX_ARGS_REFUSED`; another length, a missing
 or unknown field, an unsorted, duplicate, empty or too long list, or an index ≥ 64 is `BAD_PAYLOAD` naming the path; each before
-any send. A `UASig` without `signers` is every other kind's, unchanged. The registry row `registerBlsMulti` takes the group by name:
+any send. A `UASig` without `signers` is every other kind's, unchanged (the node cannot tell a group's id without a chain
+read; a packed 160-byte object there reaches the chain, which verifies it). A group as an `msig` member names its slot the
+same way: `MemberSig` `{index, members, sig: σ, signers}`, `InnerSig` `{index, sig: σ, signers}`, the node packing `sig`
+(Fable build review B2). The registry row `registerBlsMulti` takes the group by name:
 `key: {aggKey, threshold, members: [{key, weight}]}` (at most 64 members), `attrs`, `pop`, `pqzPop`. Soroban refuses `0x0121` until
 the `ua-soroban` round (`UAKindUnknown`, nothing sent).
 

@@ -405,15 +405,18 @@ contract UARegistryBlsMultiTest is Test {
         reg.requirePortableApp(mu, bytes32("app"), digest, b);
     }
 
-    /// N1: a generation without a `0x0121` verifier (`_cfg(0x0121)` = 0) refuses a stored path of a `0x0121` member, a valid minimal
-    /// signature included, and never hands it to the predecessor (which would check `verify`): gen 2 without the kind hosts an
-    /// `msig` whose member is a gen-1 record. The control: the same structure and signature on gen 1 accept.
+    /// N1 and the Fable build review B1: a generation without a `0x0121` verifier (`_cfg(0x0121)` = 0) cannot verify a stored path
+    /// of a `0x0121` member (`_multi` is `false` there, never a hand-off to the predecessor's `verify`), so it refuses to list a
+    /// gen-1 group in an `msig` at all (`UAMemberUnknown`, `UARegistryRegLib._slotCap`): such a slot could never sign. Since B1
+    /// no `msig` on such a generation reaches that `false`. The control: the same structure and signature on gen 1 accept.
     function test_storedPath_noMultiVerifier_false() public {
         BlsMultiKit.Group memory g = _kit(3, 2, 41);
         reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
-        _acceptRefused(
-            new UARegistry(UID, address(reg), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)), g
-        );
+        UARegistry gen2 =
+            new UARegistry(UID, address(reg), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        // Fable build review B1: a gen-2 `msig` cannot list the gen-1 group at all (its slot could never sign there)
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAMemberUnknown.selector, g.ua));
+        this.msigOn(gen2, g);
         (bytes32 mu1, uint16 gi1) = _msig(reg, g, 1); // the control on gen 1
         reg.acceptMembership(mu1, _memberSig(g, gi1, _membershipMd(mu1, g.ua), 3));
         assertTrue(reg.memberAccepted(mu1, gi1));
@@ -447,6 +450,42 @@ contract UARegistryBlsMultiTest is Test {
         reg.registerMsig(st, _none(), pop, "");
     }
 
+    /// Fable build review B3: `updateMsig` of an `msig` with a `0x0121` member, the route through `UARegistryAuxLib._core` (the fourth
+    /// word forwarded) to `_memberOk`: the group's slot signature is the minimal form (`verifyMinimal`): a surplus set (3 of a
+    /// 2-of-3) is `UAUnauthorized`, a minimal one updates (the version moves).
+    function test_updateMsig_blsMultiMember_minimalOnly() public {
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
+        k[0] = UARegistry.KindConfig(K, address(verifier), CAP);
+        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000);
+        reg = new UARegistry(UID, address(0), false, BUDGET, address(0), true, k);
+        BlsMultiKit.Group memory g = _kit(3, 2, 53);
+        reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+        bytes32 slh = reg.register(0x0133, abi.encodePacked(keccak256("slh-up")), _none(), hex"01", "");
+        IUARegistry.MsigStructure memory st;
+        st.threshold = 2;
+        st.members = new IUARegistry.MsigMember[](2);
+        uint16 gi = uint256(g.ua) < uint256(slh) ? 0 : 1;
+        st.members[gi] = IUARegistry.MsigMember(K, g.ua, 1);
+        st.members[1 - gi] = IUARegistry.MsigMember(0x0133, slh, 1);
+        IUARegistry.MemberSig[] memory pop = new IUARegistry.MemberSig[](2);
+        pop[1 - gi].index = 1 - gi;
+        pop[1 - gi].sig = hex"01";
+        pop[gi] = _memberSig(g, gi, _msigPopMd(st), 5);
+        bytes32 mu = reg.registerMsig(st, _none(), pop, "");
+        (uint64 v, uint256 en,) = reg.msigStateOf(mu);
+        uint64 until = uint64(block.number + 100);
+        bytes32 typed = UAKinds.msigUpdateDigest(mu, reg.chainUid(), address(reg), v + 1, st, en, until);
+        bytes32 md = UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MSIG_UPDATE, typed));
+        pop[gi] = _memberSig(g, gi, md, 7); // surplus
+        bytes32 cu = reg.chainUid();
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, mu));
+        reg.updateMsig(mu, v + 1, st, en, until, pop, cu);
+        pop[gi] = _memberSig(g, gi, md, 5); // minimal
+        reg.updateMsig(mu, v + 1, st, en, until, pop, cu);
+        (uint64 v2,,) = reg.msigStateOf(mu);
+        assertEq(v2, v + 1);
+    }
+
     /// The `member` digest of an `msig`'s registration `pop` (no attributes): `memberDigest(mu, uaMessage(msig, pop v2, rd))`.
     function _msigPopMd(IUARegistry.MsigStructure memory st) internal pure returns (bytes32) {
         bytes memory d = abi.encodePacked(st.threshold, uint16(st.members.length));
@@ -460,11 +499,9 @@ contract UARegistryBlsMultiTest is Test {
     }
 
     /// `acceptMembership` of `g`'s slot by a minimal set, on the gen 2 `r`: `UAUnauthorized`.
-    function _acceptRefused(UARegistry r, BlsMultiKit.Group memory g) internal {
-        (bytes32 mu, uint16 gi) = _msig(r, g, 1);
-        IUARegistry.MemberSig memory s = _memberSig(g, gi, _membershipMd(mu, g.ua), 3);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, mu));
-        r.acceptMembership(mu, s);
+    /// `_msig` as an external call, so `vm.expectRevert` meets the registration's revert.
+    function msigOn(UARegistry r, BlsMultiKit.Group memory g) external returns (bytes32 mu) {
+        (mu,) = _msig(r, g, 1);
     }
 
     /// The fourth appended word (N1): `_lib` appends `_cfg(kind)`, `_cfg(0x0142)`, the clone codehash, then `_cfg(0x0121)`, after the
