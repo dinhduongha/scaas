@@ -506,7 +506,7 @@ mod vectors {
             .map(|n| tag(n))
             .collect();
         assert_eq!(names.len(), 5, "{names:?}");
-        let mut ours = scaas_ua::ua8::portable_record_purposes().to_vec();
+        let mut ours = scaas_ua::ua_portable::portable_record_purposes().to_vec();
         let mut theirs = contract.clone();
         ours.sort();
         theirs.sort();
@@ -650,7 +650,7 @@ mod vectors {
 /// `name, version, salt = app_id`.
 #[test]
 fn portable_app_rows() {
-    use scaas_ua::ua8::{app_purpose, app_purpose_ns, MsigMember, MsigStructure};
+    use scaas_ua::ua_portable::{app_purpose, app_purpose_ns, MsigMember, MsigStructure};
     use scaas_ua::wallet::{msig_sig_app, ua_sig_app, Slot, TypedData};
     let p = &load("sign.json")["portableApp"];
     let w = wallet("pq_kat");

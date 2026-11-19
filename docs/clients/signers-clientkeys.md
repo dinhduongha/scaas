@@ -880,7 +880,7 @@ under two sources is two entries of one `ua`; a present empty list or any mismat
 accepted members ([CTR-UA-37](../contracts/accounts.md#CTR-UA-37)), two levels ([CTR-UA-38](../contracts/accounts.md#CTR-UA-38)), each a single-key UA with
 its own KEM key. The caller reads `msigOf` and `memberAccepted` and expands before `seal`, skipping and reporting a member without a key. BUILT for `kem_key` (it takes a single-key handle; a wallet has
 no `0x0120` handle) and the seal callers (`Recipient::ua` refuses an `msig`, `KemHolder`). PLANNED for the record builders (clientkeys `ua.js` `holds`,
-`registrationArgs`, `kemRecordMessage`; `ua-rs` `ua8.rs`): they refuse together with the registry's own refusal
+`registrationArgs`, `kemRecordMessage`; `ua-rs` `ua_portable.rs`): they refuse together with the registry's own refusal
 ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)) in one step, plan task T66b on branch `ua-mtx-merge`, where the contract e2e, the `portable.json` `msig-pq` and `kemRecords` rows
 and the binding tests move to refusal rows (owner 2026-11-07, who moved it there and confirmed the rule). Until then those builders still build the rows that harnesses read,
 and a registry can still store an `msig` KEM key.

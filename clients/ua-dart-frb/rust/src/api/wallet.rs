@@ -276,8 +276,8 @@ impl Opening {
         &self,
         f: impl FnOnce(
             &uw::ContainerExpect,
-            &scaas_ua::ua8::Members,
-            Option<&scaas_ua::ua8::Accepted>,
+            &scaas_ua::ua_portable::Members,
+            Option<&scaas_ua::ua_portable::Accepted>,
         ) -> T,
     ) -> T {
         let members = |id: [u8; 32]| self.members.lookup(id);
@@ -288,7 +288,7 @@ impl Opening {
             &members,
             self.accepted
                 .as_ref()
-                .map(|_| &accepted as &scaas_ua::ua8::Accepted),
+                .map(|_| &accepted as &scaas_ua::ua_portable::Accepted),
         )
     }
 }

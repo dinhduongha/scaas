@@ -6,8 +6,8 @@
 //! unbound `relayer` / `feeRecipient`, owner 2026-11-05, spec §5.4), against smartcontracts/vectors/{typed/typed_ops.json,
 //! ua/portable.json, ua/nested.json, ua/sign.json} (written by clientkeys). UNAUDITED.
 use scaas_ua::pay::{meta_pay_id_v3, PayMeta};
-use scaas_ua::ua8::is_portable_purpose;
-use scaas_ua::ua8::PORTABLE_DOMAIN_SEPARATOR;
+use scaas_ua::ua_portable::is_portable_purpose;
+use scaas_ua::ua_portable::PORTABLE_DOMAIN_SEPARATOR;
 use scaas_ua::verify::native_ecdsa;
 use scaas_ua::wallet::{
     pqz_verdict_typed_data, scaas_typed_data, ua_sig, Error, Expect, Network, TypedData, Wallet,

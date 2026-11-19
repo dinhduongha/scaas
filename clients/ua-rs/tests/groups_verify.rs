@@ -27,14 +27,14 @@ fn arr(v: &Value) -> &Vec<Value> {
 /// the zero KEM record).
 fn pop_message(_v: &Value, kind: u16, kd: &[u8]) -> ([u8; 32], [u8; 32]) {
     let ua = ua_of(kind, kd).unwrap();
-    let no_kem = ua8::kem_record_hash(&ua, 0, &[]).unwrap();
-    let pd = ua8::portable_record_digest(&ua, kind, &[0; 32], &no_kem);
+    let no_kem = ua_portable::kem_record_hash(&ua, 0, &[]).unwrap();
+    let pd = ua_portable::portable_record_digest(&ua, kind, &[0; 32], &no_kem);
     (
         pd,
         ua_message(
             kind,
-            &ua8::pop_v2_tag(),
-            &ua8::registration_digest(&ua, kind, &[0; 32], &no_kem, &[0; 32]),
+            &ua_portable::pop_v2_tag(),
+            &ua_portable::registration_digest(&ua, kind, &[0; 32], &no_kem, &[0; 32]),
         )
         .unwrap(),
     )

@@ -3744,22 +3744,22 @@ mod tests {
         let auth =
             crate::abi::UASig::abi_decode(&parse("UASig", &sig, "auth").unwrap().abi_encode())
                 .unwrap();
-        let ours = scaas_ua::ua8::encode_member_sigs(&[
-            scaas_ua::ua8::MemberSig {
+        let ours = scaas_ua::ua_portable::encode_member_sigs(&[
+            scaas_ua::ua_portable::MemberSig {
                 index: 0,
                 members: vec![
-                    scaas_ua::ua8::InnerSig {
+                    scaas_ua::ua_portable::InnerSig {
                         index: 1,
                         sig: vec![1],
                     },
-                    scaas_ua::ua8::InnerSig {
+                    scaas_ua::ua_portable::InnerSig {
                         index: 2,
                         sig: vec![2],
                     },
                 ],
                 sig: vec![],
             },
-            scaas_ua::ua8::MemberSig {
+            scaas_ua::ua_portable::MemberSig {
                 index: 3,
                 members: vec![],
                 sig: vec![0xab],

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! UA-8 on Soroban (plan ua8-soroban B7, C15): a UA record copied EVM → Soroban → EVM byte for byte on a real Protocol 30
 //! host and two anvil chains, and what only a real host can answer. `smartcontracts/soroban/scripts/e2e-ua-portable-local.sh` runs it
-//! (env: see `soroban_common`, `UA8_EVM_A` / `UA8_EVM_B` = `<chain id>,<rpc url>`); `#[ignore]`, one test at a time.
+//! (env: see `soroban_common`, `UA_PORTABLE_EVM_A` / `UA_PORTABLE_EVM_B` = `<chain id>,<rpc url>`); `#[ignore]`, one test at a time.
 //!
 //! Every comparison is between independent sources: a chain's read against the vector or against the other chain's read,
 //! never a value against its own copy. The registry writes go through the node's `call` jobs (`lane_step` on Soroban, the
@@ -25,14 +25,16 @@ use ml_dsa::{MlDsa65, Seed, SigningKey};
 use pqcrypto_falcon::falconpadded512 as falcon;
 use pqcrypto_traits::sign::{DetachedSignature as _, PublicKey as _};
 use scaas_node::adapter::{lane_step, lane_step_metered, Built, ChainAdapter};
-use scaas_node::adapters::soroban::{ua8_call_job, ua_metatx_job, RelayFeePolicy, SorobanAdapter};
+use scaas_node::adapters::soroban::{
+    ua_metatx_job, ua_portable_call_job, RelayFeePolicy, SorobanAdapter,
+};
 use scaas_node::breaker::Breaker;
 use scaas_node::chain::Chain;
 use scaas_node::config::{BreakerCfg, ChainCfg, FinalityCfg};
 use scaas_node::external_pull::ExternalPull;
 use scaas_node::signer::Signer;
 use scaas_node::submit::Submitter;
-use scaas_ua::ua8::{
+use scaas_ua::ua_portable::{
     self, decode_member_sigs, encode_member_sigs, KemKey, MemberSig, MsigStructure, UAAttrs,
 };
 use serde_json::{json, Value};
@@ -52,7 +54,7 @@ const PORTABLE: &str = include_str!(concat!(
 ));
 const ROUND_TRIP: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../smartcontracts/soroban/vectors/ua8-roundtrip.json"
+    "/../smartcontracts/soroban/vectors/ua-portable-roundtrip.json"
 ));
 const EVM_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm");
 /// anvil's first two accounts: the deployer and client of chain A, the node's EVM lane on chain B.
@@ -128,7 +130,7 @@ fn row(list: &str, name: &str) -> Value {
         .unwrap()
 }
 
-/// `ua8-roundtrip.json`'s line of a row: what the unit host answered, in the order it wrote.
+/// `ua-portable-roundtrip.json`'s line of a row: what the unit host answered, in the order it wrote.
 fn round_trip(name: &str) -> Value {
     let v: Value = serde_json::from_str(ROUND_TRIP).unwrap();
     v["rows"]
@@ -770,7 +772,7 @@ impl Node {
             &self.adapter,
             &self.external_pull,
             lane,
-            &format!("ua8#{lane}")
+            &format!("ua-portable#{lane}")
         )
         .await
         .unwrap());
@@ -815,7 +817,7 @@ impl Node {
         self.adapter.sequence(lane).await.unwrap()
     }
 
-    /// A transaction the node's checks do not see: `ua8_call_job`'s XDR, simulated as `build` does, sent if it simulates.
+    /// A transaction the node's checks do not see: `ua_portable_call_job`'s XDR, simulated as `build` does, sent if it simulates.
     /// `Err` is the refusal, at simulation or on chain.
     async fn raw_send(
         &self,
@@ -1106,9 +1108,11 @@ impl Evm {
                 "slot {} of an msig: the event's bytes are the kept hash's",
                 e.index
             );
-            slots.push(scaas_ua::ua8::replayed_member_sig(key_data, e.index, &e.sig).unwrap());
+            slots.push(
+                scaas_ua::ua_portable::replayed_member_sig(key_data, e.index, &e.sig).unwrap(),
+            );
         }
-        let pop = scaas_ua::ua8::encode_member_sigs(&slots);
+        let pop = scaas_ua::ua_portable::encode_member_sigs(&slots);
         assert_eq!(
             alloy::primitives::keccak256(&pop).as_slice(),
             hash,
@@ -1190,7 +1194,7 @@ impl EvmLane {
             Chain::with_signer(&cfg, lane).unwrap(),
             external_pull,
             cfg,
-            "ua8-b".into(),
+            "ua-portable-b".into(),
             Default::default(),
         )
         .await
@@ -1288,11 +1292,11 @@ fn no_attrs() -> UAAttrs {
 fn register_digest(kind: u16, ua: &[u8; 32], attrs: &UAAttrs, pqz_key_hash: &[u8; 32]) -> [u8; 32] {
     let pk = attrs.kem.kem_pk();
     let pk = if attrs.kem.scheme == 0 { &[][..] } else { &pk };
-    ua8::registration_digest(
+    ua_portable::registration_digest(
         ua,
         kind,
         pqz_key_hash,
-        &ua8::kem_record_hash(ua, 0, pk).unwrap(),
+        &ua_portable::kem_record_hash(ua, 0, pk).unwrap(),
         &attrs.pqz_pop_hash,
     )
 }
@@ -1319,7 +1323,7 @@ fn pqz_only(a: &UAAttrs) -> UAAttrs {
 /// A single `mldsa65` registration with `attrs`.
 fn ml_rec(m: &Ml, attrs: &UAAttrs, pqz_key_hash: &[u8; 32], pqz_pop: Vec<u8>) -> Rec {
     let d = register_digest(MLDSA65, &m.ua, attrs, pqz_key_hash);
-    let pop = m.sign(&scaas_ua::ua_message(MLDSA65, &ua8::pop_v2_tag(), &d).unwrap());
+    let pop = m.sign(&scaas_ua::ua_message(MLDSA65, &ua_portable::pop_v2_tag(), &d).unwrap());
     Rec {
         kind: MLDSA65,
         key_data: m.key.clone(),
@@ -1370,7 +1374,7 @@ impl<'a> Ms<'a> {
         pqz_pop: Vec<u8>,
     ) -> Rec {
         let d = register_digest(MSIG, &self.ua, attrs, pqz_key_hash);
-        let pop = encode_member_sigs(&self.slots(signers, &ua8::pop_v2_tag(), &d));
+        let pop = encode_member_sigs(&self.slots(signers, &ua_portable::pop_v2_tag(), &d));
         Rec {
             kind: MSIG,
             key_data: self.key_data.clone(),
@@ -1407,7 +1411,10 @@ static COPY: OnceCell<Copy> = OnceCell::const_new();
 
 async fn copy_stack() -> &'static Copy {
     COPY.get_or_init(|| async {
-        let (a, b) = (Evm::up("UA8_EVM_A").await, Evm::up("UA8_EVM_B").await);
+        let (a, b) = (
+            Evm::up("UA_PORTABLE_EVM_A").await,
+            Evm::up("UA_PORTABLE_EVM_B").await,
+        );
         assert_ne!(a.id, b.id);
         let lane_b = EvmLane::start(&b).await;
         Copy {
@@ -1483,7 +1490,7 @@ async fn copy_registration(c: &Copy, name: &str, relayer: &Value) -> Rec {
     on_b
 }
 
-/// `checked_of` against `ua8-roundtrip.json`: the same code on the real host as on the unit host.
+/// `checked_of` against `ua-portable-roundtrip.json`: the same code on the real host as on the unit host.
 async fn check_marks(c: &Copy, name: &str, ua: &[u8; 32]) {
     let want = round_trip(name);
     let got = c.s.checked_of(ua).await;
@@ -1496,7 +1503,7 @@ async fn check_marks(c: &Copy, name: &str, ua: &[u8; 32]) {
 }
 
 /// The KEM records of `name` in the vector's order, each from the row to A, from A's read to Soroban, from Soroban's read to B.
-/// `kem_key_of` after each write must be `ua8-roundtrip.json`'s, on each chain: a later, lower version never lowers it.
+/// `kem_key_of` after each write must be `ua-portable-roundtrip.json`'s, on each chain: a later, lower version never lowers it.
 async fn copy_kem(c: &Copy, name: &str, rec: &Rec, relayer: &Value) {
     let (ua, want) = (rec.ua(), round_trip(name));
     let (order, max_after) = (
@@ -1773,7 +1780,12 @@ async fn g_member_job(n: &Node, ml: &Ml, signer: u32, relayer: &Value) -> Value 
             index: i as u16,
             members: vec![],
             sig: if m.0 == MLDSA65 {
-                ml.sign(&member_message(MLDSA65, &ua, &ua8::pop_v2_tag(), &d))
+                ml.sign(&member_message(
+                    MLDSA65,
+                    &ua,
+                    &ua_portable::pop_v2_tag(),
+                    &d,
+                ))
             } else {
                 vec![]
             },
@@ -1817,7 +1829,8 @@ async fn ua_portable_simulation_auth_mode() {
     // a part the host asks of nobody: what comes back for an entry nothing uses, and for none
     let op_of = |job: &Value| job["op"].clone();
     let j = g_member_job(&n, &ml, BYSTANDER, &me).await;
-    let (call, auth) = ua8_call_job(&network(), &op_of(&j), &lane, &registry, true).unwrap();
+    let (call, auth) =
+        ua_portable_call_job(&network(), &op_of(&j), &lane, &registry, true).unwrap();
     assert_eq!(auth.len(), 1);
     let enforced = simulate(0, call.clone(), auth.clone()).await;
     println!(
@@ -1857,7 +1870,7 @@ async fn ua_portable_simulation_auth_mode() {
     let row_f = Rec::of_row(&row("registrations", "fndsa512"));
     let (f, args) = row_f.job_args(&me);
     let j = call_job(&n.registry, f, args);
-    let (call, auth) = ua8_call_job(&network(), &j["op"], &lane, &registry, true).unwrap();
+    let (call, auth) = ua_portable_call_job(&network(), &j["op"], &lane, &registry, true).unwrap();
     let ok = simulate(0, call, auth.clone()).await;
     let back = ok["results"][0]["auth"]
         .as_array()
@@ -2043,7 +2056,7 @@ async fn ua_portable_network_fit() {
         n.rec(&b.ua)
             .await
             .eq(&format!("mldsa65 {set} split, read back"), &parted);
-        let d = ua8::kem_record_digest(&a.ua, 1, &kem1.kem_pk()).unwrap();
+        let d = ua_portable::kem_record_digest(&a.ua, 1, &kem1.kem_pk()).unwrap();
         let sig = a.sign(&scaas_ua::ua_message(MLDSA65, &pk, &d).unwrap());
         n.mined(
             &format!("GATE set_kem_key mldsa65 {set}"),
@@ -2059,7 +2072,7 @@ async fn ua_portable_network_fit() {
         let (f, args) = ml_rec(&c, &no_attrs(), &[0; 32], vec![]).job_args(&none);
         n.mined(&format!("register mldsa65 {set} no attributes"), f, args)
             .await;
-        let d = ua8::pqz_key_record_digest(&c.ua, &pqz_hash, &attrs.pqz_pop_hash);
+        let d = ua_portable::pqz_key_record_digest(&c.ua, &pqz_hash, &attrs.pqz_pop_hash);
         let sig = c.sign(&scaas_ua::ua_message(MLDSA65, &pqz_tag, &d).unwrap());
         n.mined(
             &format!("GATE set_pqz_key mldsa65 {set}"),
@@ -2107,7 +2120,7 @@ async fn ua_portable_network_fit() {
         n.rec(&n16.ua)
             .await
             .eq(&format!("msig n=16 {set} split, read back"), &parted);
-        let d = ua8::kem_record_digest(&n16.ua, 1, &kem1.kem_pk()).unwrap();
+        let d = ua_portable::kem_record_digest(&n16.ua, 1, &kem1.kem_pk()).unwrap();
         let (state, last, tx) = n
             .run(
                 0,
@@ -2159,7 +2172,7 @@ async fn ua_portable_network_fit() {
             MLDSA65,
             &heavy.ua,
             &scaas_ua::purpose_tag("membership").unwrap(),
-            &ua8::membership_digest(&heavy.ua, &heavy_id),
+            &ua_portable::membership_digest(&heavy.ua, &heavy_id),
         );
         let slot = MemberSig {
             index: at as u16,
@@ -2175,7 +2188,7 @@ async fn ua_portable_network_fit() {
             &tx.unwrap(),
         )
         .await;
-        let d = ua8::pqz_key_record_digest(&heavy.ua, &pqz_hash, &attrs.pqz_pop_hash);
+        let d = ua_portable::pqz_key_record_digest(&heavy.ua, &pqz_hash, &attrs.pqz_pop_hash);
         n.mined(
             &format!("set_pqz_key msig Ua(ua) of 15 slots {set}, 1 slot"),
             "set_pqz_key",
@@ -2195,7 +2208,7 @@ async fn ua_portable_network_fit() {
             .job_args(&none);
         n.mined(&format!("register_msig {limit} slots {set}"), f, args)
             .await;
-        let d = ua8::pqz_key_record_digest(&at_edge.ua, &pqz_hash, &attrs.pqz_pop_hash);
+        let d = ua_portable::pqz_key_record_digest(&at_edge.ua, &pqz_hash, &attrs.pqz_pop_hash);
         n.mined(
             &format!("EDGE set_pqz_key {limit} slots {set}"),
             "set_pqz_key",
@@ -2217,7 +2230,7 @@ async fn ua_portable_network_fit() {
             .job_args(&none);
         n.mined(&format!("register_msig {} slots {set}", limit + 1), f, args)
             .await;
-        let d = ua8::pqz_key_record_digest(&over.ua, &pqz_hash, &attrs.pqz_pop_hash);
+        let d = ua_portable::pqz_key_record_digest(&over.ua, &pqz_hash, &attrs.pqz_pop_hash);
         let (state, last, tx) = n
             .run(
                 0,
@@ -2261,7 +2274,7 @@ async fn ua_portable_network_fit() {
             pqz_pop: vec![],
         };
         let (f, args) = rec.job_args(&me);
-        let (call, auth) = ua8_call_job(
+        let (call, auth) = ua_portable_call_job(
             &network(),
             &call_job(&n.registry, f, args)["op"],
             &lane,
@@ -2294,7 +2307,7 @@ async fn ua_portable_network_fit() {
     };
     let relayed = |rec: &Rec| {
         let (f, args) = rec.job_args(&me);
-        ua8_call_job(
+        ua_portable_call_job(
             &network(),
             &call_job(&n.registry, f, args)["op"],
             &lane,
@@ -2339,7 +2352,7 @@ async fn ua_portable_network_fit() {
         .await
         .unwrap();
         let args = json!({"ua": h(&rec.ua()), "pqz_key": h(&attrs.pqz_key), "pqz_pop_hash": h(&attrs.pqz_pop_hash), "sig": sig_json(MSIG, &rec.pop), "relayer": me});
-        let (call, auth) = ua8_call_job(
+        let (call, auth) = ua_portable_call_job(
             &network(),
             &call_job(&n.registry, "set_pqz_key", args)["op"],
             &lane,
@@ -2490,7 +2503,7 @@ async fn ua_portable_tx_size_limit() {
         pqz_pop: vec![],
     };
     let (fun, args) = rec.job_args(&me);
-    let (call, auth) = ua8_call_job(
+    let (call, auth) = ua_portable_call_job(
         &network(),
         &call_job(&s.registry, fun, args)["op"],
         &lane,
@@ -2506,7 +2519,8 @@ async fn ua_portable_tx_size_limit() {
         "store_pqz_pop",
         json!({"ua": h(&rec.ua()), "pqz_pop": h(&proof)}),
     );
-    let (call, auth) = ua8_call_job(&network(), &job["op"], &lane, &registry, false).unwrap();
+    let (call, auth) =
+        ua_portable_call_job(&network(), &job["op"], &lane, &registry, false).unwrap();
     let sim = simulate(0, call, auth).await;
     let data = SorobanTransactionData::from_xdr_base64(
         sim["transactionData"].as_str().unwrap_or_default(),
@@ -2599,7 +2613,7 @@ async fn ua_portable_spend_stop() {
         for (want, size) in [("SUCCESS", 1_000), ("FAILED", 70_000)] {
             seed += 1;
             let job = pop_job(&s, seed, size).await;
-            let (call, auth) = ua8_call_job(
+            let (call, auth) = ua_portable_call_job(
                 &network(),
                 &job["op"],
                 &sc(&g(&key(sender))),
@@ -2627,7 +2641,8 @@ async fn ua_portable_spend_stop() {
     for size in (65_392..=65_424).step_by(4) {
         seed += 1;
         let job = pop_job(&s, seed, size).await;
-        let (call, auth) = ua8_call_job(&network(), &job["op"], &lane, &registry, false).unwrap();
+        let (call, auth) =
+            ua_portable_call_job(&network(), &job["op"], &lane, &registry, false).unwrap();
         let sim = simulate(0, call.clone(), auth.clone()).await;
         let largest = sim["stateChanges"]
             .as_array()
@@ -2703,7 +2718,7 @@ async fn ua_portable_spend_stop() {
     }));
     let before = native_balance(0).await;
     assert!(
-        lane_step_metered(&s.adapter, &s.external_pull, 0, "ua8#0", Some(&k))
+        lane_step_metered(&s.adapter, &s.external_pull, 0, "ua-portable#0", Some(&k))
             .await
             .unwrap()
     );
@@ -2759,7 +2774,7 @@ async fn ua_portable_spend_stop() {
 /// comparable across the two logs in `runs/`.
 async fn table_row(n: &Node, name: &str, f: &str, args: Value) -> bool {
     let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
-    let (call, auth) = ua8_call_job(
+    let (call, auth) = ua_portable_call_job(
         &network(),
         &call_job(&n.registry, f, args)["op"],
         &lane,
@@ -2782,7 +2797,7 @@ async fn table_row(n: &Node, name: &str, f: &str, args: Value) -> bool {
 /// A `table_row` the host refuses with the registry's `Error(Contract, #code)`, past the node's checks, nothing landed.
 async fn host_refuses(n: &Node, name: &str, f: &str, args: Value, code: u32) {
     let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
-    let (call, auth) = ua8_call_job(
+    let (call, auth) = ua_portable_call_job(
         &network(),
         &call_job(&n.registry, f, args)["op"],
         &lane,
@@ -3166,8 +3181,8 @@ async fn ua_portable_relayer_table() {
 /// Simulated on the real host: the node's entry for `a` under the call of `b`.
 async fn entry_for_other_args(n: &Node, a: &Value, b: &Value) -> Value {
     let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
-    let (_, auth) = ua8_call_job(&network(), a, &lane, &registry, true).unwrap();
-    let (call, _) = ua8_call_job(&network(), b, &lane, &registry, true).unwrap();
+    let (_, auth) = ua_portable_call_job(&network(), a, &lane, &registry, true).unwrap();
+    let (call, _) = ua_portable_call_job(&network(), b, &lane, &registry, true).unwrap();
     simulate(0, call, auth).await
 }
 
@@ -3268,10 +3283,11 @@ async fn ua_portable_attestation_binds() {
     .await;
 
     // refused for what it is, not for what it asks: `None` on the same record, the other lane's name, no entry at all
-    let (call, _) = ua8_call_job(&network(), &base, &lane, &registry, true).unwrap();
+    let (call, _) = ua_portable_call_job(&network(), &base, &lane, &registry, true).unwrap();
     let mut none = base.clone();
     none["args"]["relayer"] = Value::Null;
-    let (no_relayer, no_entry) = ua8_call_job(&network(), &none, &lane, &registry, true).unwrap();
+    let (no_relayer, no_entry) =
+        ua_portable_call_job(&network(), &none, &lane, &registry, true).unwrap();
     assert!(no_entry.is_empty());
     let r = simulate(0, no_relayer, vec![]).await;
     println!("BIND relayer = None: {}", sim_answer(&r));
@@ -3279,7 +3295,7 @@ async fn ua_portable_attestation_binds() {
         r["error"].as_str().unwrap_or_default().contains("#11"),
         "NotVerifiable"
     );
-    let (_, auth) = ua8_call_job(&network(), &base, &lane, &registry, true).unwrap();
+    let (_, auth) = ua_portable_call_job(&network(), &base, &lane, &registry, true).unwrap();
     let r = simulate(1, call.clone(), auth.clone()).await;
     println!(
         "BIND the entry sent by another source than the named relayer: {}",
@@ -3556,7 +3572,7 @@ async fn ua_portable_frost_every_size() {
                 "register_frost bn254 {t} of {count}, key_data {} B",
                 kd.len()
             );
-            let (call, auth) = ua8_call_job(
+            let (call, auth) = ua_portable_call_job(
                 &network(),
                 &call_job(&n.registry, "register_frost", args)["op"],
                 &lane,
@@ -3592,7 +3608,7 @@ async fn ua_portable_frost_every_size() {
     assert_eq!(carried, 116);
     for (t, count) in [(1, 1), (1, 2), (1, 16)] {
         let (args, _) = frost(t, count);
-        let (call, auth) = ua8_call_job(
+        let (call, auth) = ua_portable_call_job(
             &network(),
             &call_job(&n.registry, "register_frost", args)["op"],
             &lane,
@@ -3669,7 +3685,7 @@ impl Slh {
 }
 
 /// P5: a mixed `msig`, one `fndsa512` slot, one `mldsa65` slot and one `slhdsa128s` slot, all signing, end to end: `register` of the `fndsa512` member by
-/// its real `pop`, `ua8_precheck` reading the members from the chain and running `check_registration` over the real signature
+/// its real `pop`, `ua_portable_precheck` reading the members from the chain and running `check_registration` over the real signature
 /// (the group `vk` slice of `signature_ok` and a BLS slot with `pop = false` have no positive on a host). The same record is also
 /// accepted by EVM, which verifies both slots itself, so the node's positive is not its own opinion.
 #[tokio::test]
@@ -3685,7 +3701,7 @@ async fn ua_portable_relayer_checked_msig_slot() {
         kind: FNDSA512,
         key_data: fk.key.clone(),
         attrs: no_attrs(),
-        pop: fk.sign(&scaas_ua::ua_message(FNDSA512, &ua8::pop_v2_tag(), &d).unwrap()),
+        pop: fk.sign(&scaas_ua::ua_message(FNDSA512, &ua_portable::pop_v2_tag(), &d).unwrap()),
         pqz_pop: vec![],
     };
     let (f, args) = member.job_args(&me);
@@ -3699,7 +3715,7 @@ async fn ua_portable_relayer_checked_msig_slot() {
         kind: SLHDSA128S,
         key_data: sl.key.clone(),
         attrs: no_attrs(),
-        pop: sl.sign(&scaas_ua::ua_message(SLHDSA128S, &ua8::pop_v2_tag(), &d).unwrap()),
+        pop: sl.sign(&scaas_ua::ua_message(SLHDSA128S, &ua_portable::pop_v2_tag(), &d).unwrap()),
         pqz_pop: vec![],
     };
     let (f, args) = slh_member.job_args(&me);
@@ -3719,7 +3735,7 @@ async fn ua_portable_relayer_checked_msig_slot() {
         .iter()
         .enumerate()
         .map(|(i, m)| {
-            let msg = member_message(m.0, &ua, &ua8::pop_v2_tag(), &d);
+            let msg = member_message(m.0, &ua, &ua_portable::pop_v2_tag(), &d);
             MemberSig {
                 index: i as u16,
                 members: vec![],

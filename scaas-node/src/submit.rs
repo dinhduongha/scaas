@@ -5454,7 +5454,7 @@ pub(crate) mod tests {
 
     /// The UA-8 registry writes for `ua_registry` (typed-signing R1's explicit ABI, R1b's typed single-key entries), with these sizes (a `register`
     /// with or without its proof).
-    fn ua8_writes(pqz_pop: usize) -> Vec<Vec<u8>> {
+    fn ua_portable_writes(pqz_pop: usize) -> Vec<Vec<u8>> {
         use crate::abi::IUARegistry::*;
         let ua = B256::repeat_byte(0x11);
         let b = |n: usize, v: u8| Bytes::from(vec![v; n]);
@@ -5629,9 +5629,9 @@ pub(crate) mod tests {
     /// `setPqzKey`) are `call` jobs on the configured `ua_registry`: the guard's call table takes each there (bound to
     /// this chain) and the lane sends it byte for byte (no meta-tx, no fee); on another target, without `ua_registry`, or
     /// on a registry of another chain each is refused `CALL_TARGET_REFUSED` and nothing is sent. The selectors are
-    /// pinned as literals here and in forge `test_ua8_writeSelectorsPinned`, so an ABI change fails on both sides.
+    /// pinned as literals here and in forge `test_ua_portable_writeSelectorsPinned`, so an ABI change fails on both sides.
     #[tokio::test]
-    async fn ua8_registry_writes_are_call_jobs() {
+    async fn ua_portable_registry_writes_are_call_jobs() {
         use crate::abi::IUARegistry::*;
         assert_eq!(
             registerCall::SIGNATURE,
@@ -5643,7 +5643,7 @@ pub(crate) mod tests {
         assert_eq!(registerMuSig2Call::SELECTOR, [0xe1, 0xed, 0xdc, 0xdf]);
         assert_eq!(registerFrostCall::SELECTOR, [0x7b, 0xd6, 0x34, 0x10]);
         assert_eq!(setKemKeyCall::SELECTOR, [0x6a, 0x33, 0x18, 0xf9]);
-        // group 3g (KV-1): the versioned entries, the contract's pins (test_ua8_writeSelectorsPinned): 0x7fac161a -> 0x9f7be2a3,
+        // group 3g (KV-1): the versioned entries, the contract's pins (test_ua_portable_writeSelectorsPinned): 0x7fac161a -> 0x9f7be2a3,
         // 0x0052c1b5 -> 0xbd97b6a1
         assert_eq!(storePqzPopCall::SELECTOR, [0x9f, 0x7b, 0xe2, 0xa3]);
         assert_eq!(setPqzKeyCall::SELECTOR, [0xbd, 0x97, 0xb6, 0xa1]);
@@ -5665,7 +5665,7 @@ pub(crate) mod tests {
         let refused = |r: &[(String, String)]| {
             r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("CALL_TARGET_REFUSED")
         };
-        for (i, data) in ua8_writes(30_381).into_iter().enumerate() {
+        for (i, data) in ua_portable_writes(30_381).into_iter().enumerate() {
             let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, data.clone())], cfg).await;
             assert_eq!(states_of(&r), ["signed", "broadcast"], "write {i}: {r:?}");
             let sent = rpc.lock().unwrap().sent.clone();
@@ -5706,7 +5706,7 @@ pub(crate) mod tests {
     /// refuses for gas is refused `UA_REGISTER_SPLIT`, nothing sent: the client sends `register` without the proof, then
     /// `storePqzPop`. Those halves, and a full registration under the cap, follow the ordinary gas rules.
     #[tokio::test]
-    async fn ua8_relayed_pq_register_over_the_cap_is_split() {
+    async fn ua_portable_relayed_pq_register_over_the_cap_is_split() {
         let ok = || Evm {
             mtx_nonce: Some(0),
             ..Default::default()
@@ -5716,7 +5716,10 @@ pub(crate) mod tests {
             c.ua_registry = Some(reg);
             c.max_gas_per_tx = 64_000_000;
         };
-        let (full, bare) = (ua8_writes(30_381).remove(0), ua8_writes(0).remove(0));
+        let (full, bare) = (
+            ua_portable_writes(30_381).remove(0),
+            ua_portable_writes(0).remove(0),
+        );
         let split = |r: &[(String, String)], why: &str| {
             r.len() == 1
                 && r[0].0 == "dead"
@@ -5802,7 +5805,7 @@ pub(crate) mod tests {
                 && !r[0].1.contains("UA_REGISTER_SPLIT"),
             "{r:?}"
         );
-        let store = ua8_writes(0).remove(2);
+        let store = ua_portable_writes(0).remove(2);
         let (r, _) = outcomes(
             Evm {
                 estimate: Some(64_000_001),
@@ -6070,7 +6073,7 @@ pub(crate) mod tests {
         .abi_encode()
     }
 
-    /// NODE-JOB-29 (owner O7, 2026-11-16): before the first part the lane checks the register's `pop` off chain (`ua8::check_registration`,
+    /// NODE-JOB-29 (owner O7, 2026-11-16): before the first part the lane checks the register's `pop` off chain (`ua_portable::check_registration`,
     /// the registry's own check once the key is cached); a `pop` that does not verify is `dead` by name and no part is sent. The positive:
     /// the same register with its valid `pop` gets its parts.
     #[tokio::test]
@@ -6111,8 +6114,13 @@ pub(crate) mod tests {
             rpc.lock().unwrap().sent.is_empty(),
             "no part for a pop that cannot pass"
         );
-        // `ua8_writes`' register: a pop of filler bytes
-        let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, ua8_writes(0).remove(0))], tn).await;
+        // `ua_portable_writes`' register: a pop of filler bytes
+        let (r, rpc) = outcomes(
+            ok(),
+            vec![call_job(9, reg, ua_portable_writes(0).remove(0))],
+            tn,
+        )
+        .await;
         assert!(
             r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("UA_REGISTER_POP_REFUSED: "),
             "{r:?}"
@@ -6861,7 +6869,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn mldsa_register_reverted_for_its_cache_waits() {
         let reg = Address::repeat_byte(0x5e);
-        let bare = ua8_writes(0).remove(0);
+        let bare = ua_portable_writes(0).remove(0);
         let done = [true, true, false];
         for (ek, sim, want, why) in [
             ([false, true, false], None, "queued", "; UAKeyNotCached"),

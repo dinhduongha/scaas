@@ -38,7 +38,7 @@ import {UACall} from "./UACall.sol";
 
 /// The PQZ tokens' key gate (`PqzCore._keyPtr`) against a given registry.
 /// A gen 1 from before UA-8: the constructor's checks pass, but no UA-8 view (review n3).
-contract PreUa8Gen1 {
+contract PreUaPortableGen1 {
     bytes32 public immutable chainUid;
 
     constructor(bytes32 chainUid_) {
@@ -113,7 +113,7 @@ contract ChunkHarness {
 /// `mldsa65` members fits the PQZ holder bound, and `mldsa87`, on a stand-in EIP-8355 precompile that answers the vectors' exact inputs
 /// (CTR-UA-39: no verifier without one); the `0x0142` slot is empty (PQZ keys unproven) unless a test sets the
 /// stand-in, which accepts exactly the row's `R_REG` message.
-contract UARegistryUA8Test is UARegistryBase {
+contract UARegistryUaPortableTest is UARegistryBase {
     struct Row {
         string name;
         string set;
@@ -532,11 +532,11 @@ contract UARegistryUA8Test is UARegistryBase {
 
     // ----- Step 1 tests -----
 
-    /// A11 / UA8-D16: the four UA-8 registry writes keep these selectors; scaas-node's `ua8_registry_writes_are_call_jobs`
+    /// A11 / UA8-D16: the four UA-8 registry writes keep these selectors; scaas-node's `ua_portable_registry_writes_are_call_jobs`
     /// pins the same literals, so an ABI change fails a test on both sides. typed-signing R1 (TS-D10 … TS-D12): the
     /// explicit ABI moved `register`, `setKemKey`, `setPqzKey` and added `registerMsig`; R1b (TS-D13) added
     /// `registerWebAuthn`, `registerMuSig2`, `registerFrost`.
-    function test_ua8_writeSelectorsPinned() public pure {
+    function test_ua_portable_writeSelectorsPinned() public pure {
         assert(IUARegistry.register.selector == bytes4(0x4e229efb));
         assert(IUARegistry.registerMsig.selector == bytes4(0x61947129));
         assert(IUARegistry.registerWebAuthn.selector == bytes4(0xee03a1fe));
@@ -577,7 +577,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// P1 / P10: the same arguments register on two registries with different chain ids, chain uids and addresses.
-    function test_ua8_copyBetweenRegistries() public {
+    function test_ua_portable_copyBetweenRegistries() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);
@@ -597,7 +597,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// P2: a record rebuilt from A's state (`registrationOf`), an `msig`'s `pop` from A's `UAMemberSig` events checked against that state
     /// (owner 2026-11-03), is submitted to B by a third party; B's record and its `registrationOf` bytes equal A's.
-    function test_ua8_copyFromState() public {
+    function test_ua_portable_copyFromState() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);
@@ -633,7 +633,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// Every portable.json registration row registers with its own arguments (msig members first; the four parameter
     /// sets' rows each in a state of their own: they share their UA ids).
-    /// `msigOf` and `webAuthnKeyOf` are their rows' typed `args`: Soroban's `ua8_typed_views_match_the_rows` reads the same bytes.
+    /// `msigOf` and `webAuthnKeyOf` are their rows' typed `args`: Soroban's `ua_portable_typed_views_match_the_rows` reads the same bytes.
     function test_typedViewsMatchTheRows() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
@@ -662,7 +662,7 @@ contract UARegistryUA8Test is UARegistryBase {
         while (keccak256(bytes(rows[i].name)) != keccak256(bytes(name))) ++i;
     }
 
-    function test_ua8_everyKindFromVectors() public {
+    function test_ua_portable_everyKindFromVectors() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);
@@ -690,7 +690,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// P3: a kind whose slot is empty in the target registry is refused like any registration of a disabled kind.
-    function test_ua8_disabledKindReverts() public {
+    function test_ua_portable_disabledKindReverts() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         uint16[3] memory off = [uint16(0x0132), 0x0133, 0x0108];
@@ -719,7 +719,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// UA8-D2: a PQ-eligible `msig`'s m-of-n PoP (derived members under `member`) is portable: the same bytes register
     /// on both registries.
-    function test_ua8_msigPqEligibleCopy() public {
+    function test_ua_portable_msigPqEligibleCopy() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);
@@ -832,7 +832,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// A native member with code (a contract wallet; not an EIP-7702 designator, which is an EOA: own key only, ruling
-    /// D1, `test_ua8_msigNativeMember7702Portable`) answers ERC-1271 `isValidSignature(typedDigest, sig)` in a portable
+    /// D1, `test_ua_portable_msigNativeMember7702Portable`) answers ERC-1271 `isValidSignature(typedDigest, sig)` in a portable
     /// pop (TS-D4); its key's signature is not asked, and a wallet signature over `memberDigest` is refused.
     function test_msigContractMember1271OverTypedDigest() public {
         Row[] memory rows = _rows();
@@ -1068,7 +1068,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// Review focus 2: stripping or swapping `pqzKey`, `pqzPopHash`, `kemVersion` or `kemPk` (portable.json negatives
     /// with error `UAPoP`) is `UAPoP`.
-    function test_ua8_popCoversAttrs() public {
+    function test_ua_portable_popCoversAttrs() public {
         // + native-member-personal-sign, record-kind-mismatch, kem-record-as-registration (typed-signing P1)
         // T66a: msig-swapped-kem-pk at four sets left (an msig KEM key is msig-with-kem, UAKemHolder)
         assertEq(_runNegatives(_errs("UAPoP", "", "", "")), 18, "UAPoP negatives");
@@ -1076,7 +1076,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// The attribute shape: a PQZ key with its proof hash and only with it, proof bytes hashing to it, a PQZ key of a
     /// set's length, a 1,601-byte scheme-1 KEM key — before the PoP. Also: proof bytes without a key.
-    function test_ua8_attrsShapeRefused() public {
+    function test_ua_portable_attrsShapeRefused() public {
         assertEq(_runNegatives(_errs("UAPqzPopHash", "UAKeyData", "UAKemKeyLength", "")), 16);
         Row[] memory rows = _rows();
         UARegistry a =
@@ -1087,13 +1087,13 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// CTR-UA-32: portable.json's scheme negatives (no scheme byte, reserved scheme 2, unknown id) are `UAKemScheme`.
-    function test_ua8_kemSchemeRefused() public {
+    function test_ua_portable_kemSchemeRefused() public {
         assertEq(_runNegatives(_errs("UAKemScheme", "", "", "")), 3);
     }
 
     /// Only the PQ holders carry a PQZ key or a KEM record (UA-6 U3, UA8-D12): portable.json's holder negatives, and
     /// `slhdsa128s` with a KEM record.
-    function test_ua8_nonHolderAttrsRefused() public {
+    function test_ua_portable_nonHolderAttrsRefused() public {
         assertEq(_runNegatives(_errs("UAPqzHolder", "UAKemHolder", "", "")), 10); // + msig-with-kem at four sets (CTR-UA-32, T66a)
         Row[] memory rows = _rows();
         UARegistry a =
@@ -1107,7 +1107,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// The registration is the UA's: a front-runner submitting the same arguments first gets exactly the record the
     /// UA signed (nothing is taken from `msg.sender` / `tx.origin`), and the UA's own submission then reverts
     /// `UAAlreadyRegistered`.
-    function test_ua8_frontRunnerGetsIdenticalRecord() public {
+    function test_ua_portable_frontRunnerGetsIdenticalRecord() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);
@@ -1126,7 +1126,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// P2 / UA8-D7: every field in state and in the event; `keyData` stored once: the code `register` creates is the
     /// stored kinds' `keyPtr`, the PQZ key, the proof chunks, the KEM record and the registration blob
     /// `abi.encode(keyRest, pop)` (typed-signing R1: no KEM version word), nothing else.
-    function test_ua8_storesEveryField() public {
+    function test_ua_portable_storesEveryField() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);
@@ -1177,7 +1177,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// id. With the 0x0142 verifier the row's proof is checked over its portable `R_REG` message (only that message is
     /// accepted): proven, the key's owner and the `0x0142` list set; without the proof bytes, or without the verifier,
     /// the key is stored unproven and claims nothing (UA8-D8).
-    function test_ua8_checkedIsChain() public {
+    function test_ua_portable_checkedIsChain() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _find(rows, string.concat("mldsa65/", _setName()));
@@ -1224,7 +1224,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// UA8-D11: gen 2 forwards every UA-8 read of a record gen 1 holds.
-    function test_ua8_gen2ForwardsReads() public {
+    function test_ua_portable_gen2ForwardsReads() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry g1 = _regA(false);
@@ -1248,7 +1248,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// UA8-D7: `writeChunks` / `readChunks` round trip at the chunk edges.
-    function test_ua8_blobChunksRoundTrip() public {
+    function test_ua_portable_blobChunksRoundTrip() public {
         ChunkHarness c = new ChunkHarness();
         uint256[5] memory lens = [uint256(0), 1, 32_768, 32_769, 100_000];
         uint256[5] memory n = [uint256(0), 1, 1, 2, 4];
@@ -1273,7 +1273,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// UA8-D7: the largest `msig` PoP the gas bound admits registers: `UAGas.t.sol`'s 8 × `slhdsa128s` + 1 `SmartKeyAccount` clone at
     /// `verifyBudget` (the clone answers ERC-1271 over `memberDigest`), and 12 × `slhdsa128s` on a registry with a larger budget (over
     /// 64 KiB). Owner 2026-11-03: state keeps `keccak256(pop)`, the bytes are in the `UAMemberSig` events, rebuilt from them.
-    function test_ua8_largestMsigPopStored() public {
+    function test_ua_portable_largestMsigPopStored() public {
         BurnAll impl = new BurnAll();
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(0x0133, address(new BurnAll()), 1_400_000);
@@ -1336,7 +1336,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// m1: a front-runner may drop the optional `pqzPop` (P8): on a registry with the verifier the record is the UA's
     /// signed one with the key unproven (no owner, not listed) until `storePqzPop` (A6) adds the proof that hashes to
     /// the signed `pqzPopHash`; the UA's full submission is then `UAAlreadyRegistered`.
-    function test_ua8_frontRunnerDropsPqzPop() public {
+    function test_ua_portable_frontRunnerDropsPqzPop() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _find(rows, string.concat("mldsa65/", _setName()));
@@ -1361,7 +1361,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// with an EIP-7702 designator (an EOA delegated to a wallet) in a portable pop is an EOA: only its own key's
     /// signature over the typed digest (the vector's pop, TS-D4) is accepted; ERC-1271 through the delegate is never
     /// asked, even for a signature the delegate itself accepts, and the own key over `memberDigest` is refused (`UAPoP`).
-    function test_ua8_msigNativeMember7702Portable() public {
+    function test_ua_portable_msigNativeMember7702Portable() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory m = rows[MSIG_NATIVE_ROW];
@@ -1402,7 +1402,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// m3: `_sigOk`, the chain-free signature path (native members over the typed digest), accepts only the portable purposes
     /// POP_V2, KEM and PQZ_KEY; any other purpose reverts `UAUnauthorized`, for every kind.
-    function test_ua8_sigOkPortablePurposesOnly() public {
+    function test_ua_portable_sigOkPortablePurposesOnly() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);
         SigOkHarness h = new SigOkHarness(chainUidA, BUDGET, k);
@@ -1517,7 +1517,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// P8 / UA8-D8: slot 0x0142 empty: the key and the proof are stored, unproven: no owner, not listed, `checkedOf`
     /// pqzPop NONE (C8); `storePqzPop` with the same bytes is a no-op (this registry can never prove them).
-    function test_ua8_pqzUnprovenWithoutVerifier() public {
+    function test_ua_portable_pqzUnprovenWithoutVerifier() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -1537,7 +1537,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// NONE, C8); a third party's `storePqzPop` with the proof from the source's state proves it (owner, list, CHAIN).
     /// Ruling A5-c2: `registrationOf` then returns the stored proof (exactly the row's `register` arguments), so a copy
     /// from that state alone registers proven on a third registry.
-    function test_ua8_pqzProveLaterOnVerifierChain() public {
+    function test_ua_portable_pqzProveLaterOnVerifierChain() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -1566,7 +1566,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// The proof given in `register` on a registry with the verifier: proven at once; `storePqzPop` is then a no-op.
-    function test_ua8_pqzPopInRegisterProven() public {
+    function test_ua_portable_pqzPopInRegisterProven() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -1582,7 +1582,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// portable.json `store-pqz-pop-other-bytes` (four sets): bytes that do not hash to the stored `pqzPopHash` are
     /// `UAPqzPopHash`; so is any proof for a UA without a PQZ key; an id this registry does not hold is `UAUnauthorized`.
-    function test_ua8_storePqzPopWrongBytesRefused() public {
+    function test_ua_portable_storePqzPopWrongBytesRefused() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Neg[] memory negs = this.loadNegs();
@@ -1616,7 +1616,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// `storePqzPop` twice with the same bytes: the second call is a no-op (no event), with and without the verifier.
-    function test_ua8_storePqzPopIdempotent() public {
+    function test_ua_portable_storePqzPopIdempotent() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -1638,7 +1638,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// The hash matches but the verifier refuses the proof (returns 0): `UAPoP`, nothing stored.
-    function test_ua8_storePqzPopBadProofReverts() public {
+    function test_ua_portable_storePqzPopBadProofReverts() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -1677,7 +1677,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// UA8-D8: an attacker lists the victim's PQZ key unproven first; the victim still registers proven (owner,
     /// list); the attacker's `storePqzPop` with the victim's proof cannot prove (it proves over the victim's message).
-    function test_ua8_unprovenListingDoesNotBlockOwner() public {
+    function test_ua_portable_unprovenListingDoesNotBlockOwner() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -1698,7 +1698,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// UA8-D8: a proven key is still one UA's: a second UA whose proof the verifier accepts is `UAKeyInUse`, in
     /// `register` and in `storePqzPop`.
-    function test_ua8_provenKeyStillUnique() public {
+    function test_ua_portable_provenKeyStillUnique() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -1719,7 +1719,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// UA8-D11: gen 2 refuses `storePqzPop` and `setPqzKey` for a record gen 1 holds (`UAUnauthorized`: they go to gen
     /// 1); gen 1 takes them and gen 2 forwards the reads.
-    function test_ua8_gen2RefusesWritesForGen1() public {
+    function test_ua_portable_gen2RefusesWritesForGen1() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -1745,7 +1745,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// A5 n1: a gen 2 in front of a gen 1 without 0x0142 takes a PQZ key (a PQ-eligible `msig` of gen-1 members):
     /// unproven where gen 2 has no verifier either, proven where gen 2 enables 0x0142 itself (owner on gen 2).
-    function test_ua8_gen2PqzKeyWhenGen1HasNone() public {
+    function test_ua_portable_gen2PqzKeyWhenGen1HasNone() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry g1 = _regA(false);
@@ -1819,7 +1819,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// the typed digest; four sets) adds its key to a registration without one: unproven, `pqzKeySigOf` the record's
     /// signature, `registrationOf` unchanged (A4-c3). The set's proof (`storePqzPop`) is stored unproven without the
     /// verifier and proves over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest)` with it.
-    function test_ua8_setPqzKeyFromVectors() public {
+    function test_ua_portable_setPqzKeyFromVectors() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         KeyRec[] memory ks = _keyRecs();
@@ -1932,7 +1932,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// Every portable.json `pqzKeyVersions` row, on a registry with the `0x0142` verifier, after its UA's version 0 (four sets): the
     /// registry's own digests equal the row's; v1, then v2, stored by a third party, not current until proven, proven over the row's
     /// `pqzRegMessage`; `keyOwner` per version, the list once.
-    function test_ua8_pqzKeyVersionsFromVectors() public {
+    function test_ua_portable_pqzKeyVersionsFromVectors() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         KeyRec[] memory ks = _keyRecs();
@@ -1993,8 +1993,8 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// portable.json `pqzKeyVersionNegatives` (seven per set), on the state each row names: one field changed, one refusal. The
-    /// control of each is the row itself, applied as named (`test_ua8_pqzKeyVersionsFromVectors`).
-    function test_ua8_pqzKeyVersionNegatives() public {
+    /// control of each is the row itself, applied as named (`test_ua_portable_pqzKeyVersionsFromVectors`).
+    function test_ua_portable_pqzKeyVersionNegatives() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         KeyRec[] memory ks = _keyRecs();
@@ -2061,7 +2061,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// an unregistered id (`UAUnauthorized`), a key of no set's length (`UAKeyData(0x0142)`, before the signature), a
     /// zero proof hash (`UAPqzPopHash`), a second record (`UAPqzKeySet`), and on a gen 2 whose gen 1 enables 0x0142
     /// `UAKindDisabled(0x0142)` (ruling A5-I1, as in `register`).
-    function test_ua8_setPqzKeyRefused() public {
+    function test_ua_portable_setPqzKeyRefused() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         KeyRec[] memory ks = _keyRecs();
@@ -2128,7 +2128,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// Rulings A5-c2 / A4-c3: a key added by `setPqzKey` is copied from state alone — `registrationOf` (no key) into
     /// `register`, `pqzKeyOf` + `pqzKeySigOf` into `setPqzKey`, `pqzPopOf` into `storePqzPop` — and proves on the
     /// copy's registry.
-    function test_ua8_setPqzKeyCopyFromState() public {
+    function test_ua_portable_setPqzKeyCopyFromState() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         KeyRec memory k = _keyRec(_keyRecs(), string.concat("fndsa512/", _setName()));
@@ -2155,7 +2155,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// m2: `storePqzPop` for a key from `register` without a KEM record proves over exactly
     /// `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, keyHash, zero KEM record))` (the stand-in
     /// accepts only that input).
-    function test_ua8_storePqzPopNoKemExactMessage() public {
+    function test_ua_portable_storePqzPopNoKemExactMessage() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory s = _squatter(rows, _pqzRow(rows));
@@ -2188,7 +2188,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// the oldest generation enabling 0x0142, proves the gen-1 key by `storePqzPop` (over the `register` message, the
     /// KEM record read from gen 1) and holds the attachment: owner, list, `proven`, the proof. A PQZ token bound to gen 2
     /// (`PqzCore._keyPtr`) takes the UA; gen 1 still reads it unproven.
-    function test_ua8_gen2ProvesGen1RegisterKey() public {
+    function test_ua_portable_gen2ProvesGen1RegisterKey() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry g1 = _regA(false);
@@ -2271,7 +2271,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// Ruling A6-I1, the other key origin: `setPqzKey` on gen 2 for a gen-1 record without a PQZ key (fndsa512: the
     /// signature checked by gen 1; msig-pq-native: members on gen 1, the native one over the typed digest), then its proof
     /// over the PURPOSE_PQZ_KEY message; the attachment is gen 2's, gen 1 has no key. A token bound to gen 2 takes it.
-    function test_ua8_gen2SetPqzKeyForGen1Record() public {
+    function test_ua_portable_gen2SetPqzKeyForGen1Record() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         KeyRec[] memory ks = _keyRecs();
@@ -2331,7 +2331,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// Ruling A6-I1 from the other side (A5-I1): where gen 1 enables 0x0142, gen 2 holds no PQZ attachment —
     /// `storePqzPop` / `setPqzKey` for gen-1 records stay `UAUnauthorized` (D11), a PQZ key in gen 2's `register` is
     /// `UAKindDisabled(0x0142)`.
-    function test_ua8_gen2RefusesWhenGen1HasPqz() public {
+    function test_ua_portable_gen2RefusesWhenGen1HasPqz() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -2368,11 +2368,11 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// R2 (owner 2026-11-06) retires ruling R-cross-set's replacement; meaning old -> new (group 3g, T51): the replacement
-    /// test `test_ua8_crossSetKeyReplaced` (in `legacy/ua-mtx-merge/3g/`) becomes this refusal. A registration copied from a
+    /// test `test_ua_portable_crossSetKeyReplaced` (in `legacy/ua-mtx-merge/3g/`) becomes this refusal. A registration copied from a
     /// chain of another parameter set keeps its version-0 key, never provable here; `setPqzKey` of version 0 with this
     /// chain's key is `UAPqzKeySet` (before the signature), also over a version 0 added by `setPqzKey`; this chain's set
     /// gets version 1 (`test/ua/PqzKeyVersions.t.sol`). `registrationOf` stays exactly the `register` arguments.
-    function test_ua8_crossSetKeyNotReplaced() public {
+    function test_ua_portable_crossSetKeyNotReplaced() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -2400,7 +2400,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// Ruling R-cross-set, the refusals: a key of this chain's set stays write-once, proven or not (`UAPqzKeySet`, also
     /// for a key of another set offered in its place); a registry without the 0x0142 verifier replaces nothing (nothing
     /// is provable there either way).
-    function test_ua8_crossSetRightSetKeyStays() public {
+    function test_ua_portable_crossSetRightSetKeyStays() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -2426,11 +2426,11 @@ contract UARegistryUA8Test is UARegistryBase {
         a.setPqzKey(k.ua, 0, k.pqzKey, k.pqzPopHash, UACall.sig(k.sig));
     }
 
-    /// R2 on generations; meaning old -> new (group 3g, T51): `test_ua8_crossSetGen2ReplacesGen1Key` (in
+    /// R2 on generations; meaning old -> new (group 3g, T51): `test_ua_portable_crossSetGen2ReplacesGen1Key` (in
     /// `legacy/ua-mtx-merge/3g/`) becomes this refusal. Gen 1 (no 0x0142) holds a copied other-set key; gen 2 (the verifier,
     /// the host) counts gen 1's version 0 (`UAPqzKeySet`, host rule 1) and reads it (host rule 2); a token bound to gen 2
     /// still refuses the UA (not proven); gen 1 replaces nothing either.
-    function test_ua8_crossSetGen2KeepsGen1Key() public {
+    function test_ua_portable_crossSetGen2KeepsGen1Key() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = _pqzRow(rows);
@@ -2459,7 +2459,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// Review m3 under the typed ABI (TS-D12): an `msig`'s portable signature comes as `MemberSig[]`, so no other
     /// encoding reaches the registry; what it stores and returns (`popOf`, `pqzKeySigOf`) is exactly the canonical
     /// `abi.encode(MemberSig[])` of the vectors. A portable `UASig` with `keyData` is `UAUnauthorized`.
-    function test_ua8_msigPopCanonical() public {
+    function test_ua_portable_msigPopCanonical() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory m = rows[MSIG_NATIVE_ROW];
@@ -2481,8 +2481,8 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// Review n3: a gen 2 over a gen 1 without the UA-8 views (its `pqzKeyOf` / `registrationOf` / `checkedOf` forwards
     /// would revert) is refused at deploy, `UAConfig(0)`.
-    function test_ua8_gen2RefusesPreUa8Gen1() public {
-        PreUa8Gen1 old = new PreUa8Gen1(chainUidA);
+    function test_ua_portable_gen2RefusesPreUaPortableGen1() public {
+        PreUaPortableGen1 old = new PreUaPortableGen1(chainUidA);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
         new UARegistry(chainUidA, address(old), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         UARegistry g1 = _regA(false);
@@ -2614,7 +2614,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// P4 / UA8-D5: anyone submits the UA's signed KEM record (fndsa512, its real verifier); `kemKeyAt` returns the
     /// written bytes, `kemKeyOf` the highest version; the initial record (v0, from `register`) keeps its empty `sig`.
-    function test_ua8_setKemKeyByThirdParty() public {
+    function test_ua_portable_setKemKeyByThirdParty() public {
         Row[] memory rows = _rows();
         KemRec[] memory ks = _kemRecs();
         KemRec memory k2 = _kemRec(ks, "fndsa512/v2");
@@ -2635,7 +2635,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// P1 / P10: every portable.json `kemRecords` row lands on two registries (other chain id, uid, address) with the
     /// same bytes; each UA's initial record from `register` is version 0, so every v1-v3 lands (owner 2026-10-31).
-    function test_ua8_kemCopyBetweenRegistries() public {
+    function test_ua_portable_kemCopyBetweenRegistries() public {
         Row[] memory rows = _rows();
         KemRec[] memory ks = _kemRecs();
         UARegistry a = _regA(false);
@@ -2669,7 +2669,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// UA8-D5: any order — 3, then 1, then 2 on a UA registered without a KEM record: all stored, `kemKeyOf` stays 3.
-    function test_ua8_kemLowerVersionAfterHigher() public {
+    function test_ua_portable_kemLowerVersionAfterHigher() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = rows[ML65_1];
@@ -2695,7 +2695,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// UA8-D5: write-once per `(ua, version)`: the same bytes again and other (validly signed) bytes are `UAKemVersion`.
-    function test_ua8_kemRepeatedVersionRefused() public {
+    function test_ua_portable_kemRepeatedVersionRefused() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = rows[ML65_1];
@@ -2715,7 +2715,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// `setKemKey` never writes version 0 (the `register` key's slot, owner 2026-10-31; R1's hash-commit fill aside): on a
     /// UA registered without a KEM key it is `UAKemVersion(ua, 0)`, even validly signed.
-    function test_ua8_kemVersionZeroRefused() public {
+    function test_ua_portable_kemVersionZeroRefused() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = rows[ML65_1];
@@ -2730,7 +2730,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// P7 / CTR-UA-32: the KEM key is 1,601 bytes (`UAKemKeyLength`, before the signature): 1,600, 1,602 and 0 are
     /// refused; scheme 1 only: scheme 0, the reserved scheme 2 and an unknown id are `UAKemScheme`.
-    function test_ua8_kemLengthRefused() public {
+    function test_ua_portable_kemLengthRefused() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         Row memory x = rows[ML65_1];
@@ -2757,7 +2757,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// P7 / UA8-D12: only the PQ holders (`mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`) hold KEM keys:
     /// `secp256k1`, `slhdsa128s` and a classical `msig` are `UAKemHolder`; an unregistered id is `UAUnauthorized`.
-    function test_ua8_kemNonHolderRefused() public {
+    function test_ua_portable_kemNonHolderRefused() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);
@@ -2777,10 +2777,10 @@ contract UARegistryUA8Test is UARegistryBase {
     /// CTR-UA-32 (owner 2026-11-05, confirmed 2026-11-07; plan T66a): an `msig` holds no KEM key. portable.json's `msig-kem-record`
     /// (the registered 2-of-2 `msig-pq` and its members' valid signature over the record), a 2-of-3 PQ-eligible `msig` with a native
     /// member signing the typed `UAKemRecord` digest, and the hash-commit form at `register` are `UAKemHolder`, nothing stored; both
-    /// `msig`s still hold a PQZ key (the row's `register` stored it). meaning: was `test_ua8_kemMsigMofN`, the m-of-n KEM record landing
+    /// `msig`s still hold a PQZ key (the row's `register` stored it). meaning: was `test_ua_portable_kemMsigMofN`, the m-of-n KEM record landing
     /// (U5); the m-of-n portable signature (subsets, order, the native member's UAAuth refused) is `requirePortable`'s now
     /// (`UARegistryPortable.t.sol`).
-    function test_ua8_kemMsigRefused() public {
+    function test_ua_portable_kemMsigRefused() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);
@@ -2869,7 +2869,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// The record's signature (`UAUnauthorized`): portable.json's `setKemKey` negatives (another version's signature,
     /// another UA's record), and a flipped byte; each record with its own bytes then lands.
-    function test_ua8_kemBadSigRefused() public {
+    function test_ua_portable_kemBadSigRefused() public {
         Row[] memory rows = _rows();
         KemRec[] memory ks = _kemRecs();
         Neg[] memory negs = this.loadNegs();
@@ -2878,7 +2878,7 @@ contract UARegistryUA8Test is UARegistryBase {
         uint256 n;
         for (uint256 i; i < negs.length; ++i) {
             Neg memory g = negs[i];
-            if (!_eq(g.entry, "setKemKey") || _eq(g.err, "UAKemHolder")) continue; // msig-kem-record: test_ua8_kemMsigRefused
+            if (!_eq(g.entry, "setKemKey") || _eq(g.err, "UAKemHolder")) continue; // msig-kem-record: test_ua_portable_kemMsigRefused
             assertEq(g.err, "UAUnauthorized");
             KemRec memory k0 = _kemRec(ks, g.row);
             (bytes32 ua, bytes memory sig) = (k0.ua, k0.sig);
@@ -2908,7 +2908,7 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// P7: no owner check — two UAs list the same KEM key, each under its own signature.
-    function test_ua8_kemNoOwnerCheck() public {
+    function test_ua_portable_kemNoOwnerCheck() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry a = _regA(false);
@@ -2928,7 +2928,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// Ruling A6-m m3 (spec P2): `UAKemKeySet` carries the written bytes (`kemPk`, `sig`) with `keccak256(kemPk)`; the
     /// only log of the call. The gas of each holder kind's record is logged (`mldsa65`: its precompile mocked).
-    function test_ua8_kemEvent() public {
+    function test_ua_portable_kemEvent() public {
         Row[] memory rows = _rows();
         KemRec[] memory ks = _kemRecs();
         UARegistry a = _regA(false);
@@ -2968,7 +2968,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// gen 1), even where `_sigOk` could verify it — a holder kind gen 2 does not enable falls back to gen 1's
     /// `requireAuthorized` (accepted here) — and even on a gen 2 that holds gen-1 records' PQZ attachments (ruling A6-I1). Gen 1 takes
     /// the record; gen 2 forwards `kemKeyOf` / `kemKeyAt`.
-    function test_ua8_kemGen2RecordElsewhereRefused() public {
+    function test_ua_portable_kemGen2RecordElsewhereRefused() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         KemRec[] memory ks = _kemRecs();
@@ -3012,7 +3012,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// (its own bytes, other bytes) is `UAKemVersion(ua, 0)` and leaves it unchanged; `kemKeyAt(ua, 0)` returns it with an
     /// empty `sig` (its consent is the pop), `kemKeyOf` it until a later version lands; a stored v1 is write-once too;
     /// `registrationOf` keeps returning the `register` arguments after later records.
-    function test_ua8_kemInitialVersionFromRegister() public {
+    function test_ua_portable_kemInitialVersionFromRegister() public {
         Row[] memory rows = _rows();
         KemRec[] memory ks = _kemRecs();
         Row memory x = rows[FNDSA_ROW];
@@ -3739,7 +3739,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// `register` of every portable.json row of this build's set (singles first, then the msigs), the PQZ rows with
     /// their `pqzPop` in the call, on a registry with the 0x0142 stand-in; `--isolate`: cold.
-    function test_T_GAS_register_ua8PerKind() public {
+    function test_T_GAS_register_ua_portablePerKind() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
         UARegistry r = _regA(true);
@@ -3749,7 +3749,7 @@ contract UARegistryUA8Test is UARegistryBase {
                 bool here = bytes(x.set).length == 0 || _eq(x.set, _setName());
                 if (!here || (x.kind == UAKinds.MSIG) != (pass == 1)) continue;
                 // mldsa87 / fndsa1024 (CTR-UA-39 / -40): no pin yet; their gas figures are T-GAS's, which waits for the owner's word
-                // (no gas calibration without asking). Their rows register in test_ua8_everyKindFromVectors and the copy tests.
+                // (no gas calibration without asking). Their rows register in test_ua_portable_everyKindFromVectors and the copy tests.
                 if (x.kind == UAKinds.MLDSA87 || x.kind == UAKinds.FNDSA1024) continue;
                 if (x.kind == UAKinds.MLDSA44 && r.expandedKeyOf(x.ua)[0] == address(0)) {
                     r.cacheExpandedKey(UAKinds.MLDSA44, x.keyData, 0);

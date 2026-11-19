@@ -1751,6 +1751,6 @@ mod test;
 #[cfg(test)]
 mod test_membership;
 #[cfg(test)]
-mod test_ua8;
+mod test_ua_portable;
 #[cfg(test)]
 mod test_verify;

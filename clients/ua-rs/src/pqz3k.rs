@@ -316,7 +316,7 @@ bytes32 pqzKeyHash,bytes32 pqzPopHash,bytes32 openKemHash,uint64 validUntilBlock
 fn portable(struct_hash: &[u8; 32]) -> [u8; 32] {
     keccak(&[
         &[0x19, 0x01],
-        &crate::ua8::PORTABLE_DOMAIN_SEPARATOR,
+        &crate::ua_portable::PORTABLE_DOMAIN_SEPARATOR,
         struct_hash,
     ])
 }

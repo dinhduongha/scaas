@@ -10,8 +10,8 @@
 use super::signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 use super::{derive, pairing, pqsign, Error, NativeKey, NativeScheme, Network, Result, UaKey};
 use crate::{
-    keccak256, member_digest, purpose_tag, ua8::portable_record_purposes, ua_message, UAError,
-    PURPOSES,
+    keccak256, member_digest, purpose_tag, ua_message, ua_portable::portable_record_purposes,
+    UAError, PURPOSES,
 };
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
@@ -111,7 +111,7 @@ pub(super) fn os_aux() -> Result<[u8; 32]> {
     Ok(aux)
 }
 
-/// The registry's role of a purpose: `verifyPop` for the portable record purposes (`ua8::portable_record_purposes`).
+/// The registry's role of a purpose: `verifyPop` for the portable record purposes (`ua_portable::portable_record_purposes`).
 fn role_of(purpose: &[u8; 32]) -> SigRole {
     if portable_record_purposes().contains(purpose) {
         SigRole::Pop
@@ -166,7 +166,7 @@ pub(super) fn seal_request(kind: u16, digest: &[u8; 32]) -> Result<SignRequest> 
 pub(super) fn app_request(kind: u16, app_id: &[u8; 32], digest: &[u8; 32]) -> Result<SignRequest> {
     Ok(request(
         kind,
-        ua_message(kind, &crate::ua8::app_purpose(app_id)?, digest)?,
+        ua_message(kind, &crate::ua_portable::app_purpose(app_id)?, digest)?,
         SigRole::Pop,
     ))
 }

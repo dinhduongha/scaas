@@ -4,7 +4,7 @@
 //! The curve code here (k256, p256, curve25519-dalek, arkworks) is independent of the JS generator's (noble): the vectors
 //! are accepted only when both agree. Feature `signers` (UA-2c): the MuSig2 / FROST group signers that generate
 //! `groups.json` (`musig2`, `frost`); the group kinds' registry checks are in the default build (`verify`). Feature `pq`
-//! (UA8-D24): the PQ kinds' verifiers (`pq`) behind `verify` and `ua8::check_*`; without it a PQ signature is refused. Feature
+//! (UA8-D24): the PQ kinds' verifiers (`pq`) behind `verify` and `ua_portable::check_*`; without it a PQ signature is refused. Feature
 //! `wallet` (ua-rs-sign, on by default): the BIP-39 wallet, key derivation and the secret store (`wallet`);
 //! `--no-default-features` keeps this verify-only layer. UNAUDITED.
 use sha3::{Digest, Keccak256};
@@ -19,9 +19,9 @@ mod falcon;
 pub mod json;
 #[cfg(feature = "pq")]
 pub mod pq;
-pub mod ua8;
+pub mod ua_portable;
 pub mod verify;
-pub use ua8::{holder_pop_message, pqz_reg_message};
+pub use ua_portable::{holder_pop_message, pqz_reg_message};
 /// The facades (spec §10; ua-rs-sign T14 `zether`, T15 `pqz`): key custody and the ABI over the prover crates.
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod facade;
@@ -88,9 +88,9 @@ pub enum UAError {
     PqzKeyVersion,
     /// Group 3g (KV-1): a stored version of the UA holds this PQZ key.
     KeyInUse,
-    /// `ua8::check_registration`: the `pop` is not a valid signature of the record.
+    /// `ua_portable::check_registration`: the `pop` is not a valid signature of the record.
     Pop,
-    /// `ua8::check_kem_record`, `ua8::check_pqz_key_record`: the signature is not the UA's over the record.
+    /// `ua_portable::check_kem_record`, `ua_portable::check_pqz_key_record`: the signature is not the UA's over the record.
     Unauthorized,
     /// An `msig` member that is neither native nor a registered key of its stated kind.
     MemberUnknown,
@@ -523,7 +523,7 @@ fn address_word(a: &[u8; 20]) -> [u8; 32] {
     w[12..].copy_from_slice(a);
     w
 }
-/// LEGACY (pre-UA-8, chain-bound; the registry accepts only the typed [`ua8::registration_digest`]). `pop_digest_v1` (CTR-UA-07): `pqz_key_hash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`).
+/// LEGACY (pre-UA-8, chain-bound; the registry accepts only the typed [`ua_portable::registration_digest`]). `pop_digest_v1` (CTR-UA-07): `pqz_key_hash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`).
 pub fn pop_digest_v1(
     chain_id: u64,
     chain_uid: &[u8; 32],

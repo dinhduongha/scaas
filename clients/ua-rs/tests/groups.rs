@@ -113,12 +113,12 @@ fn pop_of(kind: u16, kd: &[u8], _c: &Ctx) -> ([u8; 32], [u8; 32], [u8; 32]) {
     (
         ua,
         pd,
-        ua_message(kind, &scaas_ua::ua8::pop_v2_tag(), &rd).unwrap(),
+        ua_message(kind, &scaas_ua::ua_portable::pop_v2_tag(), &rd).unwrap(),
     )
 }
 /// `(portableRecordDigest, registrationDigest)` of a group UA (no PQZ key, no KEM record).
 fn typed_pop(kind: u16, ua: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
-    use scaas_ua::ua8::{kem_record_hash, portable_record_digest, registration_digest};
+    use scaas_ua::ua_portable::{kem_record_hash, portable_record_digest, registration_digest};
     let no_kem = kem_record_hash(ua, 0, &[]).unwrap();
     (
         portable_record_digest(ua, kind, &[0; 32], &no_kem),
@@ -1125,7 +1125,7 @@ fn msig_domain(a: &Ctx) -> scaas_ua::Domain {
 /// against its stored `vk` (the first 33 / 64 bytes of its key data, `pop` false; `UARegistryCoreLib._memberOk`), the EOA
 /// `UAAuth(id, member, md)` in the domain. `negatives`: one slot's signature changed in its last byte each.
 fn msig_members_section(e: &Env) -> Value {
-    use scaas_ua::ua8::{encode_member_sigs, MemberSig, MsigMember, MsigStructure};
+    use scaas_ua::ua_portable::{encode_member_sigs, MemberSig, MsigMember, MsigStructure};
     let (purpose, digest) = (purpose_tag("metatx").unwrap(), e.digest);
     let mut r = rng("msig-members");
     let ms = Musig::<Secp256k1>::sorted("msig-members/musig2-secp256k1", 2);
@@ -1217,7 +1217,7 @@ fn msig_members_section(e: &Env) -> Value {
 
 #[test]
 fn msig_group_members() {
-    use scaas_ua::ua8::{check_authorization, decode_member_sigs};
+    use scaas_ua::ua_portable::{check_authorization, decode_member_sigs};
     let v = &read_json(OUT)["msigMembers"];
     let s = read_json("../../smartcontracts/vectors/ua/signatures.json");
     let c = &s["contexts"]["A"];
@@ -1398,7 +1398,7 @@ fn portable_pop_rows() {
             g["name"]
         );
         assert_eq!(
-            hx(&ua_message(kind, &scaas_ua::ua8::pop_v2_tag(), &rd).unwrap()),
+            hx(&ua_message(kind, &scaas_ua::ua_portable::pop_v2_tag(), &rd).unwrap()),
             g["pop"]["message"],
             "{}",
             g["name"]
@@ -1414,7 +1414,7 @@ fn portable_pop_rows() {
             let (pd, rd) = typed_pop(kind, &ua);
             assert_eq!(hx(&pd), x["popDigest"], "{} {}", g["name"], x["name"]);
             assert_eq!(
-                hx(&ua_message(kind, &scaas_ua::ua8::pop_v2_tag(), &rd).unwrap()),
+                hx(&ua_message(kind, &scaas_ua::ua_portable::pop_v2_tag(), &rd).unwrap()),
                 x["message"],
                 "{} {}",
                 g["name"],

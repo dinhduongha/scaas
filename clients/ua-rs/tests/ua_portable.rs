@@ -1,11 +1,11 @@
-//! UA-8 A2 / typed-signing P2: the portable registration digests of `scaas_ua::ua8` against
+//! UA-8 A2 / typed-signing P2: the portable registration digests of `scaas_ua::ua_portable` against
 //! smartcontracts/vectors/ua/portable.json (written by the JS reference, clientkeys scripts/ua-portable-vectors.mjs): the
 //! typed EIP-712 records (TS-D1: domain, typehashes; every row's struct hash, digest and `typedData` JSON, hashed here by an
 //! independent EIP-712 encoder), every digest of every registration, KEM record and PQZ key record, the native msig member
 //! over the typed digest (TS-D4), and every holder / length / proof-hash refusal of `negatives[]` that is a digest-layer
 //! rule. Rows that only a signature check or the registry's state can refuse (UAUnauthorized, the chain's PoP verdict) are
 //! counted, not run.
-use scaas_ua::ua8::*;
+use scaas_ua::ua_portable::*;
 use scaas_ua::*;
 use serde_json::Value;
 
@@ -1242,17 +1242,17 @@ fn msig_slots_minimal_cases() {
         (2, &[1, 1], &[0, 2], false),
     ] {
         assert_eq!(
-            ua8::msig_slots_minimal(&kd(t, w), ix),
+            ua_portable::msig_slots_minimal(&kd(t, w), ix),
             Ok(want),
             "{t}-of-{w:?} {ix:?}"
         );
     }
     assert_eq!(
-        ua8::msig_slots_minimal(&[0, 2, 0], &[0]),
+        ua_portable::msig_slots_minimal(&[0, 2, 0], &[0]),
         Err(UAError::KeyData("length"))
     );
     assert_eq!(
-        ua8::msig_slots_minimal(&kd(2, &[1, 1])[..40], &[0]),
+        ua_portable::msig_slots_minimal(&kd(2, &[1, 1])[..40], &[0]),
         Err(UAError::KeyData("length"))
     );
 }
@@ -1267,7 +1267,7 @@ fn portable_msig_rows_minimal() {
         .filter(|r| r["kind"] == 0x0120 && r["pop"] != "0x")
     {
         assert_eq!(
-            ua8::msig_slots_minimal(&bytes(&r["keyData"]), &sig_indexes(&bytes(&r["pop"]))),
+            ua_portable::msig_slots_minimal(&bytes(&r["keyData"]), &sig_indexes(&bytes(&r["pop"]))),
             Ok(true),
             "{}",
             r["name"]
@@ -1280,7 +1280,7 @@ fn portable_msig_rows_minimal() {
         .filter(|k| k["kind"] == 0x0120)
     {
         assert_eq!(
-            ua8::msig_slots_minimal(&kd_of(&k["ua"]), &sig_indexes(&bytes(&k["sig"]))),
+            ua_portable::msig_slots_minimal(&kd_of(&k["ua"]), &sig_indexes(&bytes(&k["sig"]))),
             Ok(true),
             "{}",
             k
@@ -1322,9 +1322,9 @@ fn portable_msig_rows_minimal() {
         r["memberDigest"].as_str().map(String::from)
     );
     assert_eq!(sig_indexes(&bytes(&r["pop"])), [0, 1]);
-    assert_eq!(ua8::msig_slots_minimal(&kd, &[0, 1]), Ok(false));
+    assert_eq!(ua_portable::msig_slots_minimal(&kd, &[0, 1]), Ok(false));
     assert_eq!(
-        ua8::msig_slots_minimal(&kd, &[1]),
+        ua_portable::msig_slots_minimal(&kd, &[1]),
         Ok(true),
         "the weight-2 slot alone is the minimal set"
     );
@@ -1351,8 +1351,11 @@ fn portable_msig_rows_minimal() {
     );
     // the lightest slot is not the first: T - weight(0) = 4 < 5 alone would pass, T - weight(1) = 5 refuses
     let light = bytes(&neg["lightestInMiddle"]["keyData"]);
-    assert_eq!(ua8::msig_slots_minimal(&light, &[0, 1, 2]), Ok(false));
-    assert_eq!(ua8::msig_slots_minimal(&light, &[0, 2]), Ok(true));
+    assert_eq!(
+        ua_portable::msig_slots_minimal(&light, &[0, 1, 2]),
+        Ok(false)
+    );
+    assert_eq!(ua_portable::msig_slots_minimal(&light, &[0, 2]), Ok(true));
 }
 
 // --- typed-signing R1: the registry's explicit arguments (TS-D10 … TS-D12; owner KEM rulings 2026-10-31) ---
@@ -1361,7 +1364,7 @@ fn kem_json(k: &KemKey) -> Value {
     serde_json::json!({ "scheme": k.scheme, "mlkemEk": hx(&k.mlkem_ek), "x25519": hx(&k.x25519) })
 }
 fn member_sigs_json(m: &[MemberSig]) -> Value {
-    let inner = |l: &[ua8::InnerSig]| {
+    let inner = |l: &[ua_portable::InnerSig]| {
         l.iter()
             .map(|x| serde_json::json!({ "index": x.index, "sig": hx(&x.sig) }))
             .collect::<Vec<_>>()
@@ -2415,7 +2418,7 @@ fn check_membership_rows() {
                 &d,
                 &ua,
                 &MemberSig {
-                    members: vec![ua8::InnerSig::default()],
+                    members: vec![ua_portable::InnerSig::default()],
                     ..slot.clone()
                 }
             ),
@@ -2622,7 +2625,7 @@ fn check_fails_closed() {
         "no slots is the empty blob, as the registries and clientkeys"
     );
     let mut with_list = slots.clone();
-    with_list[0].members = vec![ua8::InnerSig::default()];
+    with_list[0].members = vec![ua_portable::InnerSig::default()];
     assert_eq!(
         on(&enc(&with_list)),
         Err(UAError::Pop),

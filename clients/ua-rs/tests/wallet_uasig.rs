@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! ua-rs-sign T3d: the `UASig` builder over `&dyn Signer` handles and the `msig` member sets (spec §5.2, §9.4; CTR-UA-07 minimal form,
 //! CTR-UA-17 key data, CTR-UA-33 member slots, CTR-UA-37 acceptance), against smartcontracts/vectors/ua/{sign,portable,nested,
-//! pq_signatures}.json (written by clientkeys). Every set the builder returns is checked by the off-chain verifier of `ua8.rs`
+//! pq_signatures}.json (written by clientkeys). Every set the builder returns is checked by the off-chain verifier of `ua_portable.rs`
 //! (the registry's rule); byte-equal where every leaf signs deterministically (ML-DSA through the `vectors` hook, rnd = 0, as the
 //! JS `extraEntropy: false`). T4: a native (`evm-eoa`) member signs typed data (the record's typed data in the portable purposes,
 //! `UAAuth` under the registry's domain elsewhere; R17: a native `UASig` is `{"", signature, []}`); the vector files' native member is
 //! the fixed key of typed_ops.json (no wallet key), signed here through a test `Signer` (the phase-2 external-key path). Rows with a
 //! member that is no key here (the fixed-seed classical keys of signatures.json) are counted apart. UNAUDITED.
-use scaas_ua::ua8::{
+use scaas_ua::ua_portable::{
     check_authorization, check_authorization_current, check_kem_record_with,
     check_membership_current, check_membership_with, check_pqz_key_record_with,
     check_registration_with, decode_member_sigs, encode_member_sigs, membership_digest,
@@ -553,7 +553,7 @@ fn slots_sorted() {
     );
 }
 
-/// What a vector file's `msig` rows check: built through the builder from the row's own slot shape, verified by `ua8.rs` (the
+/// What a vector file's `msig` rows check: built through the builder from the row's own slot shape, verified by `ua_portable.rs` (the
 /// registry's rule), byte-equal when every leaf is deterministic in this build.
 struct Tally {
     exact: usize,
@@ -836,7 +836,7 @@ fn nested_json_msig_rows() {
                 let n = MsigStructure::from_key_data(&d).unwrap().members.len() as u16;
                 (1u32..1 << n)
                     .map(|bits| (0..n).filter(|j| bits >> j & 1 == 1).collect::<Vec<u16>>())
-                    .find(|l| scaas_ua::ua8::msig_slots_minimal(&d, l).unwrap())
+                    .find(|l| scaas_ua::ua_portable::msig_slots_minimal(&d, l).unwrap())
                     .unwrap()
             });
             let shape: Shape = vec![(i as u16, list)];

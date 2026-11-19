@@ -10,7 +10,7 @@
 //! `kemRecords[i].args` / `pqzKeyRecords[i].args`.
 //! Every input is read by `bounded` (spec §9.3): [`JSON_MAX`] / [`JSON_DEPTH`], `inner` [`INNER_JSON_MAX`] / depth 1, a service pull
 //! [`SERVICE_PULL_MAX`] / [`SERVICE_PULL_DEPTH`]; past a cap `Argument` before any parse.
-use crate::ua8::{
+use crate::ua_portable::{
     registration_args, replayed_member_sig, InnerSig, KemKey, MemberSig, RegisterArgs,
     RegistrationInput, SetKemKeyArgs, UAAttrs, UASig,
 };
@@ -418,17 +418,17 @@ pub fn msig_update_json(t: &str) -> JsonResult<String> {
         .filter(|a| a.len() <= 256)
         .ok_or(Argument)?;
     let member = |x: &Value| {
-        Ok(crate::ua8::MsigMember {
+        Ok(crate::ua_portable::MsigMember {
             kind: u16_of(&x["kind"])?,
             id: ua_in(&x["id"])?,
             weight: u16_of(&x["weight"])?,
         })
     };
-    let structure = crate::ua8::MsigStructure {
+    let structure = crate::ua_portable::MsigStructure {
         threshold: u16_of(&v["threshold"])?,
         members: m.iter().map(member).collect::<JsonResult<_>>()?,
     };
-    let u = crate::ua8::MsigUpdate {
+    let u = crate::ua_portable::MsigUpdate {
         ua: ua_in(&v["ua"])?,
         chain_uid: ua_in(&v["chainUid"])?,
         registry: addr_in(&v["registry"])?,
@@ -437,7 +437,7 @@ pub fn msig_update_json(t: &str) -> JsonResult<String> {
         enabled: uint_in(&v["enabled"])?,
         valid_until_block: small_in(&v["validUntilBlock"])?,
     };
-    let (digest, message, md) = crate::ua8::msig_update_message(&u)?;
+    let (digest, message, md) = crate::ua_portable::msig_update_message(&u)?;
     let members: Vec<Value> = u
         .structure
         .members

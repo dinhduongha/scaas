@@ -11,7 +11,7 @@ use scaas_ua::facade::pqz::PqzKey;
 use scaas_ua::facade::pqz_backup::{
     seed_backup_warning, PqzSeedBackup, PURPOSE_PQZ_SHARE, SEED_BACKUP_MISSING,
 };
-use scaas_ua::ua8::{MsigMember, MsigStructure};
+use scaas_ua::ua_portable::{MsigMember, MsigStructure};
 use scaas_ua::wallet::{
     ContainerExpect, Error, ExpectedSender, KemKeyPair, Manifest, Recipient, SealedContainer,
     UaKey, Unlock, Vault, Wallet, PURPOSE_BACKUP,

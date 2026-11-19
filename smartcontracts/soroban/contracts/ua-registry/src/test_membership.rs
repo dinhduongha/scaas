@@ -13,7 +13,7 @@ use soroban_sdk::{
 use crate::{
     digest,
     test::{self, err, msig, n, no_attrs, portable, Msig, Sk, PORTABLE},
-    test_ua8::{authorise, classical_members, flipped, relayed, HOST_REFUSED},
+    test_ua_portable::{authorise, classical_members, flipped, relayed, HOST_REFUSED},
     test_verify::{b, hx, json, kind_of, n32},
     Error, Key, UaMembershipAccepted, UaRegistryClient,
 };
@@ -515,7 +515,7 @@ fn records_count_accepted_slots_only() {
         (Checked::Chain, Checked::None)
     );
 
-    let kem = crate::test_ua8::kem_row_key(&env);
+    let kem = crate::test_ua_portable::kem_row_key(&env);
     let kem_pk_ = kem_pk(&env, &kem);
     let kem_sig = |v: u64, s: &Sk| {
         let d = kem_record_digest(&env, &m.ua, v, &kem_pk_).to_bytes();
@@ -1045,7 +1045,7 @@ fn wrong_acceptances_refused() {
         &env,
         &late.ua,
         1,
-        &kem_pk(&env, &crate::test_ua8::kem_row_key(&env)),
+        &kem_pk(&env, &crate::test_ua_portable::kem_row_key(&env)),
     )
     .to_bytes();
     let (ki, _, ks) = late.slot(&env, &p2, PURPOSE_KEM, &kem_d);

@@ -45,8 +45,8 @@ pub fn webauthn_assertion(
     ]
     .concat();
     blob.extend_from_slice(&sig.to_bytes());
-    crate::ua8::abi_bytes(&mut blob, auth_data);
-    crate::ua8::abi_bytes(&mut blob, client_data_json);
+    crate::ua_portable::abi_bytes(&mut blob, auth_data);
+    crate::ua_portable::abi_bytes(&mut blob, client_data_json);
     if !verify(0x0100, key_data, expected_challenge, &blob, false) {
         return Err(Error::WebAuthnAssertion);
     }

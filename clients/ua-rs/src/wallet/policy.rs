@@ -665,12 +665,16 @@ pub fn sign_typed_by(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result
 /// native id signs the digest itself on a named entry, CTR-MTX-28); a UA key: [`super::ua_sig`] over the digest under the entry's
 /// purpose, `payee-fee` for `UAPayeeFee`, `trade` for the orders and their cancels (`TradeLib`), `metatx` for every other
 /// envelope. `Expect::Any` is `Argument` here: a SCaaS entry is always signed under its check.
-pub fn sign_scaas(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result<crate::ua8::UASig> {
+pub fn sign_scaas(
+    key: &dyn Signer,
+    td: &TypedData,
+    expect: Expect,
+) -> Result<crate::ua_portable::UASig> {
     if matches!(expect, Expect::Any(_)) {
         return Err(Error::Argument);
     }
     if let super::signer::KeyRef::Native { .. } = key.key_ref() {
-        return Ok(crate::ua8::UASig {
+        return Ok(crate::ua_portable::UASig {
             key_data: vec![],
             signature: sign_typed_by(key, td, expect)?,
             members: vec![],

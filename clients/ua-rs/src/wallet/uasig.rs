@@ -5,7 +5,7 @@
 //! (CTR-UA-07; the registry stores and copies only that form, `UARegistryLib._msig`), else `UAPoP`, the registry's verdict, before
 //! anything is signed; a minimal set also passes `requireAuthorized`'s stop at the threshold. A derived member signs
 //! `uaMessage(kind, member, memberDigest(msig, ua_msg))`, an `msig` member's leaves `memberDigest` of the inner id over
-//! `uaMessage(msig, member, md)` (`ua8::inner_digest`), as clientkeys `msigMemberSigs`. T4: a native key (`evm-eoa`, an EVM
+//! `uaMessage(msig, member, md)` (`ua_portable::inner_digest`), as clientkeys `msigMemberSigs`. T4: a native key (`evm-eoa`, an EVM
 //! key) signs typed data (CTR-UA-07, CTR-UA-24, TS-D4): as a `UASig` of its own (R17: `{"", signature, []}`) `UAAuth(id, purpose,
 //! digest)` under the registry's domain; as an `msig` member, at either level, the record's typed data itself in the portable
 //! purposes (`pop` v2, `kem`, `pqz-key`, `membership`), else `UAAuth(id, member, md)` of its level's member digest. UNAUDITED.
@@ -13,7 +13,7 @@ use super::eip712::{self, TypedData};
 use super::sign::{app_request, check_purpose, member_request, ua_request};
 use super::signer::{KeyRef, SignRequest, Signer};
 use super::{bounded, Error, Network, Result};
-use crate::ua8::{
+use crate::ua_portable::{
     app_purpose, is_portable_purpose, membership_digest, msig_slots_minimal, msig_update_digest,
     portable_record_purposes, slot_enabled, Current, Inner, InnerSig, MemberSig, MsigMember,
     MsigStructure, MsigUpdate, UASig, PORTABLE_DOMAIN_SEPARATOR,
@@ -234,7 +234,7 @@ pub fn msig_update_typed_data(u: &MsigUpdate) -> Result<TypedData> {
             "UAMsigMember": [f("kind", "uint16"), f("id", "bytes32"), f("weight", "uint16")],
         },
         "primaryType": "UAMsigUpdate",
-        "domain": {"name": crate::ua8::PORTABLE_DOMAIN_NAME, "version": crate::ua8::PORTABLE_DOMAIN_VERSION},
+        "domain": {"name": crate::ua_portable::PORTABLE_DOMAIN_NAME, "version": crate::ua_portable::PORTABLE_DOMAIN_VERSION},
         "message": {"ua": eip712::to_hex(&u.ua), "chainUid": eip712::to_hex(&u.chain_uid), "registry": eip712::to_hex(&u.registry),
             "version": u.version, "threshold": u.structure.threshold, "members": members, "enabled": eip712::to_hex(&u.enabled),
             "validUntilBlock": u.valid_until_block},

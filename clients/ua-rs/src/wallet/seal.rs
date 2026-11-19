@@ -59,7 +59,7 @@ use super::sign::seal_request;
 use super::signer::{KeyRef, Signer};
 use super::uasig::{msig_members, Slot};
 use super::{bounded, Error, Result, Wallet};
-use crate::ua8::{
+use crate::ua_portable::{
     inner_digest, member_keys_current, msig_sig_minimal, Accepted, Inner, InnerSig, MemberSig,
     Members, MsigStructure, UASig,
 };

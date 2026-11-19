@@ -5,19 +5,19 @@
 # Build the Wasm and the EVM deploy (capped), start the quickstart and two anvil chains (taken down on every exit), then
 # the node's `e2e_ua_portable_soroban` (capped, one slot, -j2). Refuses to start under 6 GB available (oomd kills the terminal).
 # env: STELLAR_URL, STELLAR_PASSPHRASE, STELLAR_FRIENDBOT, STELLAR_BIN (as e2e-local.sh); QS_PORT (quickstart.sh);
-# UA8_ANVIL_PORT (first of two, default 31981; each port is its chain id). usage: e2e-ua-portable-local.sh [cargo test filter]
+# UA_PORTABLE_ANVIL_PORT (first of two, default 31981; each port is its chain id). usage: e2e-ua-portable-local.sh [cargo test filter]
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$here/../../.." && pwd)"
 QS="$here/quickstart.sh"
 port="${QS_PORT:-31980}"
-a="${UA8_ANVIL_PORT:-31981}"
+a="${UA_PORTABLE_ANVIL_PORT:-31981}"
 b=$((a + 1))
 export STELLAR_BIN="${STELLAR_BIN:-stellar}"
 export STELLAR_URL="${STELLAR_URL:-http://127.0.0.1:$port/rpc}"
 export STELLAR_PASSPHRASE="${STELLAR_PASSPHRASE:-Standalone Network ; February 2017}"
 export STELLAR_FRIENDBOT="${STELLAR_FRIENDBOT:-http://127.0.0.1:$port/friendbot}"
-export UA8_EVM_A="$a,http://127.0.0.1:$a" UA8_EVM_B="$b,http://127.0.0.1:$b"
+export UA_PORTABLE_EVM_A="$a,http://127.0.0.1:$a" UA_PORTABLE_EVM_B="$b,http://127.0.0.1:$b"
 
 # the node's chain id on $1, empty when nothing answers there
 chain_id() {

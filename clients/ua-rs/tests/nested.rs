@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Nested `msig` (spec 2026-11-02-msig-nested): every row of smartcontracts/vectors/ua/nested.json, the rows forge runs on the registry.
 //! The signature verdicts need the feature `pq` (the rows sign with fndsa512). UNAUDITED.
-use scaas_ua::ua8::*;
+use scaas_ua::ua_portable::*;
 use scaas_ua::*;
 use serde_json::Value;
 

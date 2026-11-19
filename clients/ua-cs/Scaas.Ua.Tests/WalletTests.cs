@@ -368,7 +368,7 @@ public class WalletTests : IDisposable
         return [.. o];
     }
 
-    /// <summary>abi.encode(MemberSig[]) of a UASig JSON's members (ua8.rs encode_member_sigs).</summary>
+    /// <summary>abi.encode(MemberSig[]) of a UASig JSON's members (ua_portable.rs encode_member_sigs).</summary>
     static byte[] MemberSigs(JsonElement ms)
     {
         if (ms.GetArrayLength() == 0) return [];

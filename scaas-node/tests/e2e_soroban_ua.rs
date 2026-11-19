@@ -21,7 +21,7 @@ use scaas_node::adapters::soroban::{holder_addr, op_digest, relay_ref, SorobanAd
 use scaas_node::config::TokenCfg;
 use scaas_node::external_pull::ExternalPull;
 use scaas_node::signer::Signer as _;
-use scaas_ua::ua8::{check_membership, MemberSig};
+use scaas_ua::ua_portable::{check_membership, MemberSig};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soroban_common::*;
@@ -1659,7 +1659,7 @@ async fn e2e_soroban_ua_membership_rows_and_a_g_member() {
         vec![
             bytes(&id),
             bytes(&tag),
-            bytes(&scaas_ua::ua8::membership_digest(&id, &gid)),
+            bytes(&scaas_ua::ua_portable::membership_digest(&id, &gid)),
         ],
         vec![],
     );

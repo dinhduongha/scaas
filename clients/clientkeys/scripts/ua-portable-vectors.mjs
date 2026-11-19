@@ -8,7 +8,7 @@
 // Keys: the fixed seeds of signatures.json (the derived kinds, the native EOA) and pq_kat.json (account 0, index 0;
 // mldsa65 indexes 1 and 2 for the msig members); KEM keys: real ML-KEM-1024 ek ‖ X25519 pk from fixed labels (UA8-D15);
 // PQZ keys and R_REG proofs: deterministic filler of the set's lengths, at every parameter set (UA8-D17, ruling C4).
-// test/ua8.test.js rebuilds every digest by hand and re-verifies every signature.
+// test/ua-portable.test.js rebuilds every digest by hand and re-verifies every signature.
 //   node scripts/ua-portable-vectors.mjs [outDir]
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";

@@ -4,7 +4,7 @@
 //! key's `UASig` over `uaMessage(kind, purpose, digest)` with the entry's purpose (`metatx`, `payee-fee`, `trade`); anything the
 //! check refuses signs nothing. UNAUDITED.
 use scaas_ua::purpose_tag;
-use scaas_ua::ua8::UASig;
+use scaas_ua::ua_portable::UASig;
 use scaas_ua::wallet::{
     scaas_typed_data, sign_scaas, ua_sig, Error, Expect, NativeKey, Network, Signer, Wallet,
 };

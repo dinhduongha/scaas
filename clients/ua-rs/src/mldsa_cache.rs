@@ -4,7 +4,7 @@
 //! `mldsa<x>_path` = `cache`) `register` of an ML-DSA key reverts `UAKeyNotCached(ua)` until every part is stored:
 //! `cacheExpandedKey(kind, pk, part)` per part, a plain call (no signature; the subject or anyone sends it), then the
 //! registration. The registry derives each part from `pk` itself; nothing here is a check of record. UNAUDITED.
-use crate::ua8::{registration_args, Registration, RegistrationInput};
+use crate::ua_portable::{registration_args, Registration, RegistrationInput};
 use crate::{word, UAError};
 
 /// `keccak256("cacheExpandedKey(uint16,bytes,uint256)")[..4]`.

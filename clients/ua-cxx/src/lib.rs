@@ -314,10 +314,10 @@ fn keccak256(data: &[u8]) -> Vec<u8> {
     ua::keccak256(data).to_vec()
 }
 fn portable_domain_separator() -> Vec<u8> {
-    ua::ua8::PORTABLE_DOMAIN_SEPARATOR.to_vec()
+    ua::ua_portable::PORTABLE_DOMAIN_SEPARATOR.to_vec()
 }
 fn kem_record_hash(ua_id: &[u8], version: u64, kem_pk: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::ua8::kem_record_hash(&a(ua_id)?, version, kem_pk)?.to_vec()))
+    guard(|| Ok(ua::ua_portable::kem_record_hash(&a(ua_id)?, version, kem_pk)?.to_vec()))
 }
 fn portable_record_digest(
     ua_id: &[u8],
@@ -326,7 +326,7 @@ fn portable_record_digest(
     kem_record_hash: &[u8],
 ) -> R<Vec<u8>> {
     guard(|| {
-        Ok(ua::ua8::portable_record_digest(
+        Ok(ua::ua_portable::portable_record_digest(
             &a(ua_id)?,
             kind,
             &a(pqz_key_hash)?,
@@ -343,7 +343,7 @@ fn registration_digest(
     pqz_pop_hash: &[u8],
 ) -> R<Vec<u8>> {
     guard(|| {
-        Ok(ua::ua8::registration_digest(
+        Ok(ua::ua_portable::registration_digest(
             &a(ua_id)?,
             kind,
             &a(pqz_key_hash)?,
@@ -354,10 +354,10 @@ fn registration_digest(
     })
 }
 fn kem_record_digest(ua_id: &[u8], version: u64, kem_pk: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::ua8::kem_record_digest(&a(ua_id)?, version, kem_pk)?.to_vec()))
+    guard(|| Ok(ua::ua_portable::kem_record_digest(&a(ua_id)?, version, kem_pk)?.to_vec()))
 }
 fn kem_record_message(kind: u16, ua_id: &[u8], version: u64, kem_pk: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::ua8::kem_record_message(kind, &a(ua_id)?, version, kem_pk)?.to_vec()))
+    guard(|| Ok(ua::ua_portable::kem_record_message(kind, &a(ua_id)?, version, kem_pk)?.to_vec()))
 }
 /// Empty = absent; another length than 32 is `UAPqzPopHash`.
 fn opt_hash(h: &[u8]) -> R<Option<[u8; 32]>> {
@@ -404,7 +404,7 @@ fn holder_pop_message_with(
     guard(|| {
         let (h, i) = (opt_hash(pqz_pop_hash)?, ua::json::inner_json(inner)?);
         let l = ua::json::lookup(&i);
-        let r = ua::ua8::holder_pop_message_with(
+        let r = ua::ua_portable::holder_pop_message_with(
             kind,
             &a(ua_id)?,
             key_data,
@@ -430,16 +430,20 @@ fn pqz_reg_message(kind: u16, ua_id: &[u8], pqz_key: &[u8], kem_pk: &[u8]) -> R<
     guard(|| Ok(ua::pqz_reg_message(kind, &a(ua_id)?, pqz_key, opt(kem_pk))?.to_vec()))
 }
 fn pqz_key_digest(ua_id: &[u8], pqz_key_hash: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::ua8::pqz_key_digest(&a(ua_id)?, &a(pqz_key_hash)?).to_vec()))
+    guard(|| Ok(ua::ua_portable::pqz_key_digest(&a(ua_id)?, &a(pqz_key_hash)?).to_vec()))
 }
 fn membership_digest(ua_id: &[u8], member: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::ua8::membership_digest(&a(ua_id)?, &a(member)?).to_vec()))
+    guard(|| Ok(ua::ua_portable::membership_digest(&a(ua_id)?, &a(member)?).to_vec()))
 }
 fn pqz_key_record_digest(ua_id: &[u8], pqz_key_hash: &[u8], pqz_pop_hash: &[u8]) -> R<Vec<u8>> {
     guard(|| {
         Ok(
-            ua::ua8::pqz_key_record_digest(&a(ua_id)?, &a(pqz_key_hash)?, &a(pqz_pop_hash)?)
-                .to_vec(),
+            ua::ua_portable::pqz_key_record_digest(
+                &a(ua_id)?,
+                &a(pqz_key_hash)?,
+                &a(pqz_pop_hash)?,
+            )
+            .to_vec(),
         )
     })
 }
@@ -477,7 +481,7 @@ fn pqz_key_record_message_with(
     guard(|| {
         let (h, i) = (opt_hash(pqz_pop_hash)?, ua::json::inner_json(inner)?);
         let l = ua::json::lookup(&i);
-        let r = ua::ua8::pqz_key_record_message_with(
+        let r = ua::ua_portable::pqz_key_record_message_with(
             kind,
             &a(ua_id)?,
             key_data,
@@ -503,7 +507,7 @@ fn replayed_member_sig(key_data: &[u8], index: u16, stored: &[u8]) -> R<String> 
     guard(|| Ok(ua::json::replayed_member_sig_json(key_data, index, stored)?))
 }
 fn is_portable_purpose(tag: &[u8]) -> R<bool> {
-    guard(|| Ok(ua::ua8::is_portable_purpose(&a(tag)?)))
+    guard(|| Ok(ua::ua_portable::is_portable_purpose(&a(tag)?)))
 }
 fn domain(generation: u32, chain_id: u64, registry: &[u8], chain_uid: &[u8]) -> R<ua::Domain> {
     Ok(ua::Domain {

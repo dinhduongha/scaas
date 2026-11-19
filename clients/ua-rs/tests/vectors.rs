@@ -65,7 +65,7 @@ fn table_groups_purposes_constants() {
             .map(|x| x.as_u64().unwrap() as usize)
             .collect();
         assert_eq!(SCHEMES[0].lengths, &lengths[..]);
-        assert_eq!(SCHEMES[0].lengths, &ua8::PQZ_KEY_LENGTHS[..]);
+        assert_eq!(SCHEMES[0].lengths, &ua_portable::PQZ_KEY_LENGTHS[..]);
         assert_eq!(kind_tag_string(n).unwrap(), r["tag"]);
         assert_eq!(hx(&tag(n).unwrap()), r["TAG"]);
         assert_eq!(ua_of(n, &[]), Err(UAError::KindNotDerived(n)));
@@ -197,11 +197,11 @@ fn structures() {
         );
         let k = kind(&p["kind"]);
         assert_eq!(
-            hx(&ua8::portable_record_digest(&ua, k, &h, &kr)),
+            hx(&ua_portable::portable_record_digest(&ua, k, &h, &kr)),
             p["portableRecordDigest"]
         );
         assert_eq!(
-            hx(&ua8::registration_digest(&ua, k, &h, &kr, &ph)),
+            hx(&ua_portable::registration_digest(&ua, k, &h, &kr, &ph)),
             p["registrationDigest"]
         );
     }
@@ -212,7 +212,7 @@ fn structures() {
         assert_eq!(hx(&h), p["pqzKeyHash"]);
         let k = kind(&p["kind"]);
         assert_eq!(
-            hx(&ua8::portable_record_digest(
+            hx(&ua_portable::portable_record_digest(
                 &ua,
                 k,
                 &h,
@@ -222,11 +222,11 @@ fn structures() {
         );
         let portable = b32(&p["portableRecordDigest"]);
         assert_eq!(
-            hx(&ua_message(PQZ_SCHEME, &ua8::pop_v2_tag(), &portable).unwrap()),
+            hx(&ua_message(PQZ_SCHEME, &ua_portable::pop_v2_tag(), &portable).unwrap()),
             p["pqzRegMessage"]
         );
-        if b32(&p["kemRecordHash"]) != ua8::kem_record_hash(&ua, 0, &[]).unwrap() {
-            continue; // the row's KEM record hash is opaque (a label); the real records are in portable.json (tests/ua8.rs)
+        if b32(&p["kemRecordHash"]) != ua_portable::kem_record_hash(&ua, 0, &[]).unwrap() {
+            continue; // the row's KEM record hash is opaque (a label); the real records are in portable.json (tests/ua_portable.rs)
         }
         assert_eq!(
             hx(&pqz_reg_message(k, &ua, &pk, None).unwrap()),
@@ -260,11 +260,11 @@ fn structures() {
         };
         let ua = b32(&p["ua"]);
         assert_eq!(
-            hx(&ua8::portable_record_digest(
+            hx(&ua_portable::portable_record_digest(
                 &ua,
                 0x0120,
                 &h,
-                &ua8::kem_record_hash(&ua, 0, &[]).unwrap()
+                &ua_portable::kem_record_hash(&ua, 0, &[]).unwrap()
             )),
             p["portableRecordDigest"],
             "{}",

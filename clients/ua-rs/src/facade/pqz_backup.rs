@@ -38,7 +38,7 @@
 )]
 
 use super::pqz::PqzKey;
-use crate::ua8::{Accepted, Members, MsigStructure};
+use crate::ua_portable::{Accepted, Members, MsigStructure};
 use crate::wallet::{
     bounded, from_hex, seal_container, to_hex, ContainerExpect, ContainerSigner, Error, KemKeyPair,
     Recipient, RecipientId, Result, SealedContainer, SecretStore, UaKey,

@@ -154,7 +154,7 @@ fn open_row(kk: &KemKeyPair, c: &SealedContainer, r: &Value) -> Result<Vec<u8>, 
         acc.as_ref()
             .is_some_and(|a| a.get(&id).is_some_and(|l| l.contains(&i)))
     };
-    let accepted_ref: Option<&scaas_ua::ua8::Accepted> =
+    let accepted_ref: Option<&scaas_ua::ua_portable::Accepted> =
         if acc.is_some() { Some(&accepted) } else { None };
     kk.open_container(c, &e.get(), &members, accepted_ref)
         .map(|p| p.to_vec())

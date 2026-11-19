@@ -527,7 +527,11 @@ impl Opening {
     }
     fn with<T>(
         &self,
-        f: impl FnOnce(&uw::ContainerExpect, &ua::ua8::Members, Option<&ua::ua8::Accepted>) -> T,
+        f: impl FnOnce(
+            &uw::ContainerExpect,
+            &ua::ua_portable::Members,
+            Option<&ua::ua_portable::Accepted>,
+        ) -> T,
     ) -> T {
         let members = |id: [u8; 32]| self.members.lookup(id);
         let accepted =
@@ -537,7 +541,7 @@ impl Opening {
             &members,
             self.accepted
                 .as_ref()
-                .map(|_| &accepted as &ua::ua8::Accepted),
+                .map(|_| &accepted as &ua::ua_portable::Accepted),
         )
     }
 }

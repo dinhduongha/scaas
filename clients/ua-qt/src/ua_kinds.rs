@@ -649,7 +649,7 @@ impl qobject::UaKinds {
         self.hex(|| Ok(ua::keccak256(&bytes(data)?).to_vec()))
     }
     pub fn portable_domain_separator(self: Pin<&mut Self>) -> QString {
-        self.hex(|| Ok(ua::ua8::PORTABLE_DOMAIN_SEPARATOR.to_vec()))
+        self.hex(|| Ok(ua::ua_portable::PORTABLE_DOMAIN_SEPARATOR.to_vec()))
     }
     pub fn kem_record_hash(
         self: Pin<&mut Self>,
@@ -658,7 +658,7 @@ impl qobject::UaKinds {
         kem_pk: &QString,
     ) -> QString {
         self.hex(|| {
-            Ok(from_ua(ua::ua8::kem_record_hash(
+            Ok(from_ua(ua::ua_portable::kem_record_hash(
                 &fixed(ua)?,
                 id(version)?,
                 &bytes(kem_pk)?,
@@ -674,7 +674,7 @@ impl qobject::UaKinds {
         kem_record_hash: &QString,
     ) -> QString {
         self.hex(|| {
-            Ok(ua::ua8::portable_record_digest(
+            Ok(ua::ua_portable::portable_record_digest(
                 &fixed(ua)?,
                 k(kind)?,
                 &fixed(pqz_key_hash)?,
@@ -692,7 +692,7 @@ impl qobject::UaKinds {
         pqz_pop_hash: &QString,
     ) -> QString {
         self.hex(|| {
-            Ok(ua::ua8::registration_digest(
+            Ok(ua::ua_portable::registration_digest(
                 &fixed(ua)?,
                 k(kind)?,
                 &fixed(pqz_key_hash)?,
@@ -709,7 +709,7 @@ impl qobject::UaKinds {
         kem_pk: &QString,
     ) -> QString {
         self.hex(|| {
-            Ok(from_ua(ua::ua8::kem_record_digest(
+            Ok(from_ua(ua::ua_portable::kem_record_digest(
                 &fixed(ua)?,
                 id(version)?,
                 &bytes(kem_pk)?,
@@ -772,7 +772,7 @@ impl qobject::UaKinds {
         QString::from(&self.run(|| {
             let (pk, pop, kpk) = (key(pqz_key)?, bytes(pqz_pop)?, bytes(kem_pk)?);
             let (hash, i) = (optional_hash(pqz_pop_hash)?, inner_of(inner)?);
-            let h = from_ua(ua::ua8::holder_pop_message_with(
+            let h = from_ua(ua::ua_portable::holder_pop_message_with(
                 k(kind)?, &fixed(ua)?, &key(key_data)?, Some(&pk[..]), Some(&pop[..]), hash.as_ref(), Some(&kpk[..]), &ua::json::lookup(&i),
             ))?;
             let mut o = serde_json::json!({
@@ -820,7 +820,7 @@ impl qobject::UaKinds {
     ) -> QString {
         QString::from(&self.run(|| {
             let (pop, hash, i) = (bytes(pqz_pop)?, optional_hash(pqz_pop_hash)?, inner_of(inner)?);
-            let r = from_ua(ua::ua8::pqz_key_record_message_with(
+            let r = from_ua(ua::ua_portable::pqz_key_record_message_with(
                 k(kind)?, &fixed(ua)?, &key(key_data)?, &key(pqz_key)?, Some(&pop[..]), hash.as_ref(), already_set, &ua::json::lookup(&i),
             ))?;
             let mut o = serde_json::json!({
@@ -857,7 +857,7 @@ impl qobject::UaKinds {
     ) -> QString {
         self.hex(|| {
             let kpk = bytes(kem_pk)?;
-            Ok(from_ua(ua::ua8::pqz_reg_message(
+            Ok(from_ua(ua::ua_portable::pqz_reg_message(
                 k(kind)?,
                 &fixed(ua)?,
                 &key(pqz_key)?,
@@ -874,7 +874,7 @@ impl qobject::UaKinds {
         kem_pk: &QString,
     ) -> QString {
         self.hex(|| {
-            Ok(from_ua(ua::ua8::kem_record_message(
+            Ok(from_ua(ua::ua_portable::kem_record_message(
                 k(kind)?,
                 &fixed(ua)?,
                 id(version)?,
@@ -884,7 +884,9 @@ impl qobject::UaKinds {
         })
     }
     pub fn pqz_key_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString) -> QString {
-        self.hex(|| Ok(ua::ua8::pqz_key_digest(&fixed(ua)?, &fixed(pqz_key_hash)?).to_vec()))
+        self.hex(|| {
+            Ok(ua::ua_portable::pqz_key_digest(&fixed(ua)?, &fixed(pqz_key_hash)?).to_vec())
+        })
     }
     pub fn pqz_key_record_digest(
         self: Pin<&mut Self>,
@@ -893,7 +895,7 @@ impl qobject::UaKinds {
         pqz_pop_hash: &QString,
     ) -> QString {
         self.hex(|| {
-            Ok(ua::ua8::pqz_key_record_digest(
+            Ok(ua::ua_portable::pqz_key_record_digest(
                 &fixed(ua)?,
                 &fixed(pqz_key_hash)?,
                 &fixed(pqz_pop_hash)?,
@@ -902,10 +904,10 @@ impl qobject::UaKinds {
         })
     }
     pub fn membership_digest(self: Pin<&mut Self>, ua: &QString, member: &QString) -> QString {
-        self.hex(|| Ok(ua::ua8::membership_digest(&fixed(ua)?, &fixed(member)?).to_vec()))
+        self.hex(|| Ok(ua::ua_portable::membership_digest(&fixed(ua)?, &fixed(member)?).to_vec()))
     }
     pub fn is_portable_purpose(self: Pin<&mut Self>, tag: &QString) -> bool {
-        self.run(|| Ok(ua::ua8::is_portable_purpose(&fixed(tag)?)))
+        self.run(|| Ok(ua::ua_portable::is_portable_purpose(&fixed(tag)?)))
     }
     pub fn ua_auth_domain_separator(
         self: Pin<&mut Self>,

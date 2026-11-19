@@ -1,7 +1,7 @@
 // UNAUDITED. The UA kind verifiers of accounts.md §1.9, written from the spec (not from the generators' signing code):
 // `verify(kind, keyData, msg, sig, pop)` per derived kind (any throw is a refusal), the native EOA rule `nativeOk`, and the
 // client's re-check of a portable record (`verifyRegistration`, `verifyKemRecord`, `verifyPqzKeyRecord`; UA8-D24, C14): the
-// rules of ua-rs `ua8::check_*` on the noble verifiers, the same rows and errors. Not in ua.js, which the signer bundles load:
+// rules of ua-rs `ua_portable::check_*` on the noble verifiers, the same rows and errors. Not in ua.js, which the signer bundles load:
 // nothing here reaches them. The group kinds 0x0110–0x0113 have no verifier here: `UANotVerifiable`, never an acceptance.
 import { p256 } from "@noble/curves/nist.js";
 import { secp256k1, schnorr } from "@noble/curves/secp256k1.js";

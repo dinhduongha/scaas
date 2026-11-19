@@ -651,7 +651,7 @@ explicit gas limit ([NET-EVM-11](../networks/evm.md#NET-EVM-11): the part's esti
 gas limit, else `TX_EXCEEDS_CHAIN_LIMIT`, and within `max_gas_per_tx`; 40–48 M), and puts the `register` back `queued` under
 `UA_KEY_NOT_CACHED` (its status names the parts sent now and the parts in flight, never a part whose send gave up); the `register`
 is sent only once its simulation passes, i.e. after every part landed. Before the first part (T21, owner 2026-11-16, O7): the
-node checks the `register`'s `pop` and attributes off chain (`scaas-ua` `ua8::check_registration`, the registry's own check once the
+node checks the `register`'s `pop` and attributes off chain (`scaas-ua` `ua_portable::check_registration`, the registry's own check once the
 key is cached; an extra check, the contract stays the guard); refused, the registration is `dead` as `UA_REGISTER_POP_REFUSED: …`
 and no part is sent. The parts are the `call` share of the EVM spend breaker: past `breaker.call_budget_pct` of
 `gas_budget_per_hour` no part is sent and the `register` waits `UA_KEY_NOT_CACHED` (payments run to the whole budget). The share counts
@@ -718,7 +718,7 @@ field required and any other field refused at every level (no XDR, `auth`, `extr
 
 Rules at `build`: `relayer` must be null or this lane, and this lane only when it is in the registry's `relayers()` (read once
 and kept: the list is immutable); a part the chain cannot verify needs a `relayer` (refused before simulation otherwise) and is
-checked off chain first (`scaas_ua::ua8::check_*`, feature `pq`), a part the chain verifies is not; the transaction carries one
+checked off chain first (`scaas_ua::ua_portable::check_*`, feature `pq`), a part the chain verifies is not; the transaction carries one
 `SourceAccount` entry (the relayer's attestation over `attest_digest` of the call's arguments) only when a relayer is named; a
 simulation that records any other signer is refused before signing; a finished transaction over `tx_max_size_bytes`, or a largest
 entry over the entry limit, is `Revert`: the job is `dead` on one claim and nothing is signed. A failed `relayers()` read holds
@@ -782,7 +782,7 @@ registry: a `signed_op` still never runs there, and `call` jobs stay the registr
 | `G…` | `0x` | null | the member's entry over `(ua, PURPOSE_MEMBERSHIP, typed)` (`clientkeys`: `membershipInvocation`, `signedAuth`) |
 | a relayer-checked kind | as a `Chain` kind | this lane, listed in `relayers()` | none |
 
-Rules at `build`, as a `call` job's: a slot the chain cannot verify needs a `relayer` and passes `scaas_ua::ua8::check_membership` before
+Rules at `build`, as a `call` job's: a slot the chain cannot verify needs a `relayer` and passes `scaas_ua::ua_portable::check_membership` before
 simulation, a refused one is `dead` and nothing is sent; the lane's one entry is over `attest_digest` of `(ua, member_sig, relayer)`; an
 `evm-contract` slot is `NotVerifiable` here, no off-chain check reaches ERC-1271. With no `op.auth`, a simulation that records another
 signer is refused before signing. The job has no op digest (the job's own id), is free to the client and counts in the call share

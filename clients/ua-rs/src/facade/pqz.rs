@@ -2327,8 +2327,8 @@ impl PqzKey {
                 let tag = crate::purpose_tag("pqz-key")?;
                 // group 3g (KV-1, KV-2): version 0 over `UAPqzKey{ua, pqzKeyHash}`, v ≥ 1 over `UAPqzKeyVersion{ua, v, pqzKeyHash}`
                 let digest = match version {
-                    0 => crate::ua8::pqz_key_digest(ua, &kh),
-                    v => crate::ua8::pqz_key_version_digest(ua, *v, &kh),
+                    0 => crate::ua_portable::pqz_key_digest(ua, &kh),
+                    v => crate::ua_portable::pqz_key_version_digest(ua, *v, &kh),
                 };
                 let message = crate::ua_message(crate::PQZ_SCHEME, &tag, &digest)?;
                 self.register(id, &message, &d.rnd32)?

@@ -828,7 +828,7 @@ pub(crate) fn membership(ua: &[u8; 32], member: &[u8; 32]) -> Result<TypedData> 
     TypedData::from_value(serde_json::json!({
         "types": {"UAMembership": [b32("ua"), b32("member")]},
         "primaryType": "UAMembership",
-        "domain": {"name": crate::ua8::PORTABLE_DOMAIN_NAME, "version": crate::ua8::PORTABLE_DOMAIN_VERSION},
+        "domain": {"name": crate::ua_portable::PORTABLE_DOMAIN_NAME, "version": crate::ua_portable::PORTABLE_DOMAIN_VERSION},
         "message": {"ua": to_hex(ua), "member": to_hex(member)},
     }))
 }

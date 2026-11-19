@@ -570,7 +570,7 @@ fn register_front_run_identical() {
 
 /// Only the kinds outside U8S-D8 stay `KindDisabled`: the natives (they register nothing), the scheme `pqz-mlwe` and ids of
 /// no kind. A listed relayer changes nothing here, and the U8S-D8 kinds beside them do not stop at this rule
-/// (`ua8_relayer_kind_without_relayer_not_verifiable`).
+/// (`ua_portable_relayer_kind_without_relayer_not_verifiable`).
 #[test]
 fn register_disabled_kind_refused() {
     let env = new_env();
@@ -619,7 +619,7 @@ fn register_attrs_accepted() {
     assert_eq!(r.refused(&c), Error::PqzPopHash);
 }
 
-/// Without a relayer an `evm-contract` slot is `NotVerifiable` at the slot; with one, `ua8_relayer_evm_contract_slot`.
+/// Without a relayer an `evm-contract` slot is `NotVerifiable` at the slot; with one, `ua_portable_relayer_evm_contract_slot`.
 #[test]
 fn register_unverifiable_part_refused() {
     let (env, c) = setup();

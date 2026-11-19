@@ -1572,7 +1572,7 @@ def abi_list(items):
 
 
 def member_sigs(members):
-    """`abi.encode(MemberSig[])` of a UASig JSON's members (ua8.rs `encode_member_sigs`)."""
+    """`abi.encode(MemberSig[])` of a UASig JSON's members (ua_portable.rs `encode_member_sigs`)."""
     inner = lambda x: abi_word(x["index"]) + abi_word(64) + abi_bytes(b(x["sig"]))
 
     def slot(m):

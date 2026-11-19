@@ -9,7 +9,7 @@ import {UACall} from "../ua/UACall.sol";
 
 /// UA-8 Task A6 (UA8-D8, D9; ruling A5-c1): a PQZ token holds only proven PQZ keys. `PqzCore._keyPtr` reads
 /// `pqzKeyOf(ua)` and refuses an unproven key with `AccountNotRegistered(ua)`, as for a UA without a key.
-contract PqzUA8Test is PqzFixture {
+contract PqzUaPortableTest is PqzFixture {
     function setUp() public {
         _stack();
         tok = _newToken("pqz");
@@ -39,7 +39,7 @@ contract PqzUA8Test is PqzFixture {
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
     }
 
-    function test_ua8_pqzTokenRefusesUnproven() public {
+    function test_ua_portable_pqzTokenRefusesUnproven() public {
         _assertNoAccount(_unproven(30));
     }
 
@@ -52,7 +52,7 @@ contract PqzUA8Test is PqzFixture {
 
     /// The proof stored later by a third party (`storePqzPop`, `R_REG` accepted by the verifier) makes the key proven:
     /// the token takes it.
-    function test_ua8_pqzTokenAcceptsAfterStorePqzPop() public {
+    function test_ua_portable_pqzTokenAcceptsAfterStorePqzPop() public {
         bytes32 u = _unproven(31);
         vm.prank(address(0x7111D), address(0x7111D));
         reg.storePqzPop(u, 0, hex"aa");
@@ -63,7 +63,7 @@ contract PqzUA8Test is PqzFixture {
 
     /// Ruling A1-I1: a key added after `register` by `setPqzKey` is unproven (no PQZ account) until its proof, over
     /// `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, keyHash))`, is stored by `storePqzPop`.
-    function test_ua8_pqzTokenSetPqzKeyThenProve() public {
+    function test_ua_portable_pqzTokenSetPqzKeyThenProve() public {
         bytes32 u = _mldsaUA(32);
         reg.setPqzKey(u, 0, _pk(32), keccak256(hex"bb"), UACall.sig(new bytes(ML65_SIG)));
         _assertNoAccount(u);

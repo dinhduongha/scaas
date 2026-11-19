@@ -6,7 +6,7 @@
 use scaas_ua::mldsa_cache::{
     cache_then_register, part_call, part_calls, parts, CacheError, CACHE_EXPANDED_KEY_SELECTOR,
 };
-use scaas_ua::ua8::{registration_args, RegistrationInput};
+use scaas_ua::ua_portable::{registration_args, RegistrationInput};
 use serde_json::Value;
 
 fn rows() -> Value {

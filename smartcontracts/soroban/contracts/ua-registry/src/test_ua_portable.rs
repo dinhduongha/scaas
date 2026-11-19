@@ -2,7 +2,7 @@
 //! B2, B3 (U8S-D3–D7): `register` with PQZ / KEM attributes and the later writes against `portable.json` (the authority
 //! for bytes): the bytes stay in contract state, unproven, and `registration_of` returns exactly the `register` arguments,
 //! as EVM `registrationOf`. B4 (U8S-D8, UA8-D18–D20): the relayer-checked mode, a listed relayer's auth mocked. B7 (C15): the
-//! bytes read back against the vector, `ua8-roundtrip.json`.
+//! bytes read back against the vector, `ua-portable-roundtrip.json`.
 extern crate std;
 use std::{format, vec, vec::Vec as StdVec};
 
@@ -84,7 +84,7 @@ fn offchain_rows() -> StdVec<Value> {
         .collect()
 }
 
-/// The `registrations[]` rows of a `Chain` kind (`msig-classical`, on relayer-checked members: `ua8_relayer_classical_msig_row`).
+/// The `registrations[]` rows of a `Chain` kind (`msig-classical`, on relayer-checked members: `ua_portable_relayer_classical_msig_row`).
 fn chain_rows() -> StdVec<Value> {
     let rows = json(PORTABLE)["registrations"].as_array().unwrap().clone();
     rows.into_iter()
@@ -132,7 +132,7 @@ fn commit_of(env: &Env, name: &str) -> Reg {
 /// Every `Chain` row: `registration_of` is the row byte for byte, `kem` against the row's typed `args`; an `msig`'s stored
 /// `pop` is the row's `abi.encode(MemberSig[])`, assembled from the typed slots.
 #[test]
-fn ua8_register_attrs_rows() {
+fn ua_portable_register_attrs_rows() {
     let (mut all, mut pqz, mut kem, mut ms) = (0, 0, 0, 0);
     for row in chain_rows() {
         let name = row["name"].as_str().unwrap();
@@ -180,10 +180,10 @@ fn ua8_register_attrs_rows() {
 }
 
 /// EVM's hash commit (`kemCommit`, the same `pop`): the scheme and hash stay in the record, version 0 stays empty until
-/// `set_kem_key(ua, 0, …)` (`ua8_kem_commit_filled_once`), `registration_of` returns the committed form; the commit's own
-/// rules. An `msig`'s commit is `KemHolder` (`ua8_msig_kem_key_refused`).
+/// `set_kem_key(ua, 0, …)` (`ua_portable_kem_commit_filled_once`), `registration_of` returns the committed form; the commit's own
+/// rules. An `msig`'s commit is `KemHolder` (`ua_portable_msig_kem_key_refused`).
 #[test]
-fn ua8_register_kem_commit() {
+fn ua_portable_register_kem_commit() {
     let (env, c) = setup();
     let r = commit_of(&env, &format!("mldsa65/{SET}"));
     let pk_hash = r.attrs.kem_pk_hash.clone();
@@ -210,7 +210,7 @@ fn ua8_register_kem_commit() {
 }
 
 #[test]
-fn ua8_pqz_bytes_in_state() {
+fn ua_portable_pqz_bytes_in_state() {
     let (env, c, r) = registered(&format!("msig-pq/{SET}"));
     let rec = c.record_of(&r.ua).unwrap();
     assert!(rec.attrs.pqz_key.is_empty(), "the key only in PqzK (C12)");
@@ -243,7 +243,7 @@ fn ua8_pqz_bytes_in_state() {
 }
 
 #[test]
-fn ua8_pqz_attrs_stored_unproven() {
+fn ua_portable_pqz_attrs_stored_unproven() {
     for name in [format!("mldsa65/{SET}"), format!("msig-pq/{SET}")] {
         let (env, c, r) = registered(&name);
         let rec = c.record_of(&r.ua).unwrap();
@@ -261,7 +261,7 @@ fn ua8_pqz_attrs_stored_unproven() {
 }
 
 #[test]
-fn ua8_register_without_pqz_pop() {
+fn ua_portable_register_without_pqz_pop() {
     let (env, c) = setup();
     let mut r = portable(&env, &format!("mldsa65/{SET}"));
     r.pqz_pop = Bytes::new(&env);
@@ -282,7 +282,7 @@ fn ua8_register_without_pqz_pop() {
 /// `attrs.pqz_key` comes from `PqzK` iff `register` carried one: a later key and its proof are no `register` arguments, so
 /// the arguments read back unchanged.
 #[test]
-fn ua8_registration_of_reassembles() {
+fn ua_portable_registration_of_reassembles() {
     let (env, c, r) = registered("msig-pq-native");
     pqz_id(&env, &format!("msig-pq-native/{SET}")).set(&c);
     c.store_pqz_pop(&r.ua, &portable(&env, &format!("mldsa65/{SET}")).pqz_pop);
@@ -344,10 +344,10 @@ fn expect<T: core::fmt::Debug>(name: &str, want: &str, got: Tried<T>) {
 
 /// Every `register` negative on its own row, a listed relayer given, so the row's rule alone refuses: the row itself then
 /// registers (U8S-D8). Three `fndsa512` rows want `UAPoP`, a signature the chain cannot verify: here they are `NotVerifiable`
-/// without a relayer, a listed relayer that signs them stores them (P11.6, `ua8_relayer_bad_record_takes_slot_marked`), and
+/// without a relayer, a listed relayer that signs them stores them (P11.6, `ua_portable_relayer_bad_record_takes_slot_marked`), and
 /// the rule itself runs on `mldsa65/<set>`, a holder with a KEM key the mutation can change.
 #[test]
-fn ua8_negatives_from_portable_json() {
+fn ua_portable_negatives_from_portable_json() {
     let negs = json(PORTABLE)["negatives"].as_array().unwrap().clone();
     let (mut seen, mut offchain) = (0, 0);
     for neg in negs.iter().filter(|x| x["entry"] == "register") {
@@ -401,7 +401,7 @@ fn ua8_negatives_from_portable_json() {
 /// `kem-record-as-registration`, whose `fndsa512` row the chain cannot verify, on a `Chain` kind). Only the right pair
 /// registers.
 #[test]
-fn ua8_pop_purpose_and_record_separated() {
+fn ua_portable_pop_purpose_and_record_separated() {
     let (env, c) = setup();
     let s = test::ml(23);
     let (ua, kind, kd) = (s.ua(&env), s.kind(), s.key_data(&env));
@@ -441,7 +441,7 @@ fn ua8_pop_purpose_and_record_separated() {
 
 /// The typed `ua_of` forms are the packed one's ids (packed-bytes inventory).
 #[test]
-fn ua8_ua_of_typed() {
+fn ua_portable_ua_of_typed() {
     let (env, c) = setup();
     let row = derived(PORTABLE, "registrations", "webauthn-p256");
     let a = &row["args"]["key"];
@@ -465,9 +465,9 @@ fn ua8_ua_of_typed() {
 }
 
 /// EVM `msigOf` and `webAuthnKeyOf` on the bytes EVM's `test_typedViewsMatchTheRows` reads: each view is its row's typed `args`, whatever form
-/// registered it, and the empty form for an id of another kind or no record. `ua8_relayer_group_kinds_typed` has the MuSig2 and FROST views.
+/// registered it, and the empty form for an id of another kind or no record. `ua_portable_relayer_group_kinds_typed` has the MuSig2 and FROST views.
 #[test]
-fn ua8_typed_views_match_the_rows() {
+fn ua_portable_typed_views_match_the_rows() {
     let (env, c) = setup();
     let none = Bytes::new(&env);
     let (no_key, no_msig) = (
@@ -534,7 +534,7 @@ fn ua8_typed_views_match_the_rows() {
 
 /// TS-D13: `register_webauthn` from the row's typed `args.key` is the packed `register`: the same id, the same record.
 #[test]
-fn ua8_register_webauthn_typed() {
+fn ua_portable_register_webauthn_typed() {
     let (env, c) = setup();
     let row = derived(PORTABLE, "registrations", "webauthn-p256");
     let r = portable_row(&env, &row);
@@ -570,10 +570,10 @@ fn ua8_register_webauthn_typed() {
     );
 }
 
-/// `classical-msig-with-kem` (its own row: `ua8_negatives_from_portable_json`) on an in-test classical-dominant `msig` of a
+/// `classical-msig-with-kem` (its own row: `ua_portable_negatives_from_portable_json`) on an in-test classical-dominant `msig` of a
 /// `Chain` member, and the PQZ twin.
 #[test]
-fn ua8_classical_msig_with_kem() {
+fn ua_portable_classical_msig_with_kem() {
     let (env, c) = setup();
     let e = test::ed(21);
     let ua = e.register(&env, &c);
@@ -602,7 +602,7 @@ fn ua8_classical_msig_with_kem() {
 /// hash-committed, are `KemHolder` before the `pop` is read, a relayer given or not, and nothing is stored. Positive control: the
 /// same row without one registers and holds its PQZ key (`msig-pq-native`'s by `set_pqz_key`).
 #[test]
-fn ua8_msig_kem_key_refused() {
+fn ua_portable_msig_kem_key_refused() {
     let neg = derived(PORTABLE, "negatives", &format!("msig-with-kem/{SET}"));
     assert_eq!(
         (
@@ -656,7 +656,7 @@ fn ua8_msig_kem_key_refused() {
 /// members' signature of that record) is `KemHolder`, after `NotRegistered` and before the version, the key and the slots, a
 /// relayer given or not; nothing is stored. Positive control: the same `msig` holds its PQZ key.
 #[test]
-fn ua8_msig_kem_record_refused() {
+fn ua_portable_msig_kem_record_refused() {
     let neg = derived(PORTABLE, "negatives", "msig-kem-record");
     let (m, set) = (&neg["mutation"], &neg["mutation"]["set"]);
     assert_eq!(
@@ -746,7 +746,7 @@ fn ua8_msig_kem_record_refused() {
 
 /// `KemKey.scheme` is a `u32` on Soroban: 0x101 would be scheme 1 in the assembled first byte.
 #[test]
-fn ua8_kem_scheme_above_a_byte_refused() {
+fn ua_portable_kem_scheme_above_a_byte_refused() {
     let (env, c) = setup();
     let mut r = portable(&env, &format!("mldsa65/{SET}"));
     r.attrs.kem.scheme = 0x101;
@@ -754,7 +754,7 @@ fn ua8_kem_scheme_above_a_byte_refused() {
 }
 
 #[test]
-fn ua8_checked_of_shape() {
+fn ua_portable_checked_of_shape() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     assert_eq!(
         c.checked_of(&r.ua),
@@ -776,7 +776,7 @@ fn ua8_checked_of_shape() {
 /// is `mldsa65/n2816-kmax65536`, PQZ and KEM key at once (an `msig` has no KEM key since CTR-UA-32, and its events carry 76 B of key
 /// data against 1,952 B).
 #[test]
-fn ua8_events_fit_and_hash() {
+fn ua_portable_events_fit_and_hash() {
     let (env, c) = setup();
     let r = portable(&env, "mldsa65/n2816-kmax65536");
     r.on(&c);
@@ -844,7 +844,7 @@ fn ua8_events_fit_and_hash() {
 }
 
 #[test]
-fn ua8_entries_extend_ttl() {
+fn ua_portable_entries_extend_ttl() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     let ua = r.ua.clone();
     kem_id(&env, "mldsa65/v1").set(&c);
@@ -872,7 +872,7 @@ fn ua8_entries_extend_ttl() {
 
 /// Every write extends the contract's instance, `relayers()` too, and no other view: the list stays live while the registry is used.
 #[test]
-fn ua8_instance_ttl() {
+fn ua_portable_instance_ttl() {
     let (env, c) = setup();
     let ttl = || env.as_contract(&c.address, || env.storage().instance().get_ttl());
     assert_eq!(ttl(), 60 * DAY, "from the constructor");
@@ -890,7 +890,7 @@ fn ua8_instance_ttl() {
 
 /// `Attrs` keeps its code point, unused: T3's refused cases now register, or are their own error (`register_attrs_accepted`).
 #[test]
-fn ua8_attrs_error_unused() {
+fn ua_portable_attrs_error_unused() {
     assert_eq!(Error::Attrs as u32, 7);
     for name in [format!("mldsa65/{SET}"), format!("msig-pq/{SET}")] {
         registered(&name);
@@ -904,7 +904,7 @@ fn ua8_attrs_error_unused() {
 /// `msig` has one typed form, as EVM: `register` refuses the kind; a value its `u16` cannot hold is `KeyData`, never a
 /// truncated id; the assembled bytes are the row's key data (its id comes back).
 #[test]
-fn ua8_register_msig_typed() {
+fn ua_portable_register_msig_typed() {
     let (env, c, r) = registered(&format!("msig-pq/{SET}"));
     let refused = |s: &MsigStructure| {
         err(c.try_register_msig(
@@ -964,7 +964,7 @@ fn ua8_register_msig_typed() {
 
 /// TS-D12: a single key is `signature` only; `key_data` and `members` set are `Unauthorized` before any verify.
 #[test]
-fn ua8_require_authorized_uasig_fields() {
+fn ua_portable_require_authorized_uasig_fields() {
     let (env, c) = setup();
     let s = test::ed(22);
     let ua = s.register(&env, &c);
@@ -1001,7 +1001,7 @@ fn ua8_require_authorized_uasig_fields() {
 
 /// TS-D5: `kind_name` is EVM's table (`kinds.json`); any other id, one above `u16` too, is `KindUnknown`.
 #[test]
-fn ua8_kind_name_table() {
+fn ua_portable_kind_name_table() {
     let (env, c) = setup();
     let v = json(KINDS);
     let mut known = StdVec::new();
@@ -1187,7 +1187,7 @@ fn msig_1_2(env: &Env, c: &UaRegistryClient) -> (test::Msig, test::Sk, test::Sk)
 /// Versions 3, 1, 2 (P4): `kem_key_of` follows the highest; a repeated version and the `register` version are `KemVersion`,
 /// and version 0 with nothing committed too (a key given in whole at `register` is not refillable, TS-D9).
 #[test]
-fn ua8_kem_any_order_write_once() {
+fn ua_portable_kem_any_order_write_once() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     let [v1, v2, v3] = [1, 2, 3].map(|v| kem_id(&env, &format!("mldsa65/v{v}")));
     let (whole, none) = (r.attrs.kem.clone(), UaSig::none(&env));
@@ -1232,10 +1232,10 @@ fn ua8_kem_any_order_write_once() {
 }
 
 /// Every `kemRecords[]` row of a `Chain` holder from its typed arguments, the stored `sig` the row's signature; the `register`
-/// arguments do not move. `fndsa512` rows: `ua8_relayer_fndsa512_kem_and_pqz`. No row is an `msig`'s (CTR-UA-32:
-/// `ua8_msig_kem_record_refused`).
+/// arguments do not move. `fndsa512` rows: `ua_portable_relayer_fndsa512_kem_and_pqz`. No row is an `msig`'s (CTR-UA-32:
+/// `ua_portable_msig_kem_record_refused`).
 #[test]
-fn ua8_kem_from_vectors() {
+fn ua_portable_kem_from_vectors() {
     let rows = json(PORTABLE)["kemRecords"].as_array().unwrap().clone();
     let mut seen = 0;
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
@@ -1267,7 +1267,7 @@ fn ua8_kem_from_vectors() {
 /// `set_kem_key(ua, 0, …)` fills the `register` commit once: no signature (the `pop` signed it), open to anyone, the key
 /// must hash to the commit (`KemKeyHash`), and `registration_of` keeps the committed form, as EVM.
 #[test]
-fn ua8_kem_commit_filled_once() {
+fn ua_portable_kem_commit_filled_once() {
     let name = format!("mldsa65/{SET}");
     let (env, c) = setup();
     let whole = portable(&env, &name).attrs.kem;
@@ -1314,7 +1314,7 @@ fn ua8_kem_commit_filled_once() {
 
 /// U8S-D5, D7 in EVM's check order: holder → version → key → signature; `portable.json`'s `setKemKey` negatives.
 #[test]
-fn ua8_kem_rules() {
+fn ua_portable_kem_rules() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     let k = kem_id(&env, "mldsa65/v1");
     let refused = |kem: &KemKey| err(c.try_set_kem_key(&r.ua, &1, kem, &k.sig, &None));
@@ -1378,7 +1378,7 @@ fn ua8_kem_rules() {
         Error::KemVersion,
         "version before key"
     );
-    // `msig-kem-record` (`mutation.kind` 288) names an `msig`: `ua8_msig_kem_record_refused`
+    // `msig-kem-record` (`mutation.kind` 288) names an `msig`: `ua_portable_msig_kem_record_refused`
     for neg in negatives("setKemKey")
         .into_iter()
         .filter(|x| x["mutation"].get("kind").is_none())
@@ -1409,7 +1409,7 @@ fn ua8_kem_rules() {
 /// CTR-UA-32: anyone submits, a relayer is accepted and ignored for chain-verified parts (SOR-D6), and there is no owner
 /// check (two UAs may list one key); a signature by another UA is refused.
 #[test]
-fn ua8_kem_by_third_party() {
+fn ua_portable_kem_by_third_party() {
     let (env, c) = setup();
     let kem = kem_id(&env, "mldsa65/v1").kem;
     let pk = kem_pk(&env, &kem);
@@ -1476,7 +1476,7 @@ fn msig_pqz_sig_not_minimal_refused() {
 
 /// TS-D12 on the two writes: a single key only `signature`, an `msig` only `members`, `key_data` never.
 #[test]
-fn ua8_portable_sig_fields() {
+fn ua_portable_portable_sig_fields() {
     let (env, c, _) = registered(&format!("mldsa65/{SET}"));
     let k = kem_id(&env, "mldsa65/v1");
     let slot = || {
@@ -1525,10 +1525,10 @@ fn ua8_portable_sig_fields() {
     }
 }
 
-/// `pqzKeyRecords[]` of a `Chain` holder: `msig-pq-native` (`fndsa512`'s rows: `ua8_relayer_fndsa512_kem_and_pqz`), its `evm-eoa` slot over the typed record
+/// `pqzKeyRecords[]` of a `Chain` holder: `msig-pq-native` (`fndsa512`'s rows: `ua_portable_relayer_fndsa512_kem_and_pqz`), its `evm-eoa` slot over the typed record
 /// digest. The key is in `PqzK`, unproven, no `Key` entry; the `register` arguments do not move.
 #[test]
-fn ua8_set_pqz_key_from_vectors() {
+fn ua_portable_set_pqz_key_from_vectors() {
     let rows = json(PORTABLE)["pqzKeyRecords"].as_array().unwrap().clone();
     let mut seen = 0;
     for row in rows.iter().filter(|x| kind_of(&x["kind"]) == 0x0120) {
@@ -1553,7 +1553,7 @@ fn ua8_set_pqz_key_from_vectors() {
         seen += 1;
     }
     assert_eq!(seen, 4);
-    // the rest: fndsa512's and mldsa87's / fndsa1024's (never registered here, as in ua8_kem_from_vectors)
+    // the rest: fndsa512's and mldsa87's / fndsa1024's (never registered here, as in ua_portable_kem_from_vectors)
     let other = |k: u32| rows.iter().filter(|x| kind_of(&x["kind"]) == k).count();
     assert_eq!((other(0x0134), other(0x0135)), (4, 4));
     assert_eq!(
@@ -1564,7 +1564,7 @@ fn ua8_set_pqz_key_from_vectors() {
 
 /// U8S-D6: without a verifier nothing is ever replaced, a key of another set neither; a `register` key counts.
 #[test]
-fn ua8_set_pqz_key_write_once() {
+fn ua_portable_set_pqz_key_write_once() {
     let (env, c, r) = registered("msig-pq-native");
     let p = pqz_id(&env, &format!("msig-pq-native/{SET}"));
     p.set(&c);
@@ -1599,7 +1599,7 @@ fn ua8_set_pqz_key_write_once() {
 /// relayer. Its rule runs on `mldsa65#2`, the signature being `mldsa65#1`'s: it reaches the host's verify, so the exact
 /// refusal is `HOST_REFUSED`.
 #[test]
-fn ua8_set_pqz_key_negatives() {
+fn ua_portable_set_pqz_key_negatives() {
     let negs = negatives("setPqzKey");
     assert_eq!(negs.len(), 13);
     for neg in &negs {
@@ -1653,7 +1653,7 @@ fn ua8_set_pqz_key_negatives() {
 /// ignored, no owner check (no `Key` entry, U8S-D6: two UAs may list one key). A signature by another UA is refused by the
 /// host's verify (plan finding F1), not by the contract; only the holder's own is stored.
 #[test]
-fn ua8_set_pqz_key_single_key() {
+fn ua_portable_set_pqz_key_single_key() {
     let (env, c) = setup();
     let (key, ph) = (b(&env, &[7; 16_384]), n(&env, [9; 32]));
     let (a, z) = (test::ml(37), test::ml(38));
@@ -1686,7 +1686,7 @@ fn ua8_set_pqz_key_single_key() {
 
 /// EVM's check order: holder → key already there → length → proof hash → signature; every refused bytes leaves no key.
 #[test]
-fn ua8_set_pqz_key_rules() {
+fn ua_portable_set_pqz_key_rules() {
     let (env, c, r) = registered("msig-pq-native");
     let p = pqz_id(&env, &format!("msig-pq-native/{SET}"));
     let unknown = PqzRow {
@@ -1754,7 +1754,7 @@ fn ua8_set_pqz_key_rules() {
 /// A proof given later hashes to the stored `pqz_pop_hash`: it reads back as a `register` argument for a `register` key,
 /// and only from `pqz_pop_of` for a later key (EVM `registrationOf`). Unproven either way.
 #[test]
-fn ua8_store_pqz_pop_hash_checked() {
+fn ua_portable_store_pqz_pop_hash_checked() {
     let (env, c) = setup();
     let mut r = portable(&env, &format!("mldsa65/{SET}"));
     let proof = core::mem::replace(&mut r.pqz_pop, Bytes::new(&env));
@@ -1781,7 +1781,7 @@ fn ua8_store_pqz_pop_hash_checked() {
 
 /// Stored: a no-op without an event, for a proof that came with `register` too; other bytes are still refused.
 #[test]
-fn ua8_store_pqz_pop_idempotent() {
+fn ua_portable_store_pqz_pop_idempotent() {
     let (env, c) = setup();
     let mut r = portable(&env, &format!("mldsa65/{SET}"));
     let proof = core::mem::replace(&mut r.pqz_pop, Bytes::new(&env));
@@ -1802,7 +1802,7 @@ fn ua8_store_pqz_pop_idempotent() {
 }
 
 #[test]
-fn ua8_store_pqz_pop_negatives() {
+fn ua_portable_store_pqz_pop_negatives() {
     let negs = negatives("storePqzPop");
     assert_eq!(negs.len(), 4);
     for neg in &negs {
@@ -1844,7 +1844,7 @@ fn ua8_store_pqz_pop_negatives() {
 /// U8S-D4: the three writes log hashes, the bytes are read from the views; an `msig` signature (`set_pqz_key`'s) fits the events
 /// limit.
 #[test]
-fn ua8_set_events_hash_only() {
+fn ua_portable_set_events_hash_only() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     let k = kem_id(&env, "mldsa65/v1");
     k.set(&c);
@@ -1881,7 +1881,7 @@ fn ua8_set_events_hash_only() {
 
 /// The views: a `register` key's PQZ attributes and KEM key, nothing for an unregistered id.
 #[test]
-fn ua8_views_of_register() {
+fn ua_portable_views_of_register() {
     let (env, c, r) = registered(&format!("mldsa65/{SET}"));
     let want = (
         r.attrs.pqz_key.clone(),
@@ -1905,7 +1905,7 @@ fn ua8_views_of_register() {
 /// B2 review: `register`'s slot refusals are `Pop`: a `G…` slot with bytes, a registered member's slot with `key_data`.
 /// `q` alone meets the threshold, so the `key_data` is all that refuses that slot: the same slot without it registers.
 #[test]
-fn ua8_register_slot_fields_pop() {
+fn ua_portable_register_slot_fields_pop() {
     let (env, c) = setup();
     let q = test::ml(35);
     q.register(&env, &c);
@@ -1987,7 +1987,7 @@ fn pqz_key_by_n_of_n(len: usize, count: u8) {
 /// slots is 13 at n2048-kmax1024 / n2304-kmax4096 and 12 at n2560-kmax16384 / n2816-kmax65536. The SDK's metering enforces
 /// the entry limit in this test env, without Wasm or the transaction envelope.
 #[test]
-fn ua8_set_pqz_key_msig_largest_fits() {
+fn ua_portable_set_pqz_key_msig_largest_fits() {
     for (len, count) in [(16_384, 13), (18_432, 13), (20_480, 12), (22_528, 12)] {
         pqz_key_by_n_of_n(len, count);
     }
@@ -1995,13 +1995,13 @@ fn ua8_set_pqz_key_msig_largest_fits() {
 
 #[test]
 #[should_panic(expected = "contract data entry")]
-fn ua8_set_pqz_key_msig_over_limit_n2816() {
+fn ua_portable_set_pqz_key_msig_over_limit_n2816() {
     pqz_key_by_n_of_n(22_528, 13);
 }
 
 #[test]
 #[should_panic(expected = "contract data entry")]
-fn ua8_set_pqz_key_msig_over_limit_n2048() {
+fn ua_portable_set_pqz_key_msig_over_limit_n2048() {
     pqz_key_by_n_of_n(16_384, 14);
 }
 
@@ -2060,7 +2060,7 @@ fn attested(m: &test::Msig, id: &BytesN<32>, len: usize) -> Slot {
 /// `RelayerNotListed` needs the list to refuse: the outsider's auth is mocked, and the listed relayer stores the same bytes
 /// on all three writes.
 #[test]
-fn ua8_relayer_unlisted_refused() {
+fn ua_portable_relayer_unlisted_refused() {
     let (env, c, by) = relayed();
     let other = Some(Address::generate(&env));
     let r = portable(&env, "fndsa512");
@@ -2106,7 +2106,7 @@ pub(crate) fn authorise(
 /// Listed, no auth: the host refuses. An auth for another call is no auth either; only the relayer's auth of this very call
 /// stores, on each of the three writes.
 #[test]
-fn ua8_relayer_must_authorise() {
+fn ua_portable_relayer_must_authorise() {
     let env = test::new_env();
     let relayer = Address::generate(&env);
     let c = test::deploy(&env, &[relayer.clone()]);
@@ -2174,7 +2174,7 @@ fn ua8_relayer_must_authorise() {
 /// Every `portable.json` row of a `Relayer` kind: the row's bytes, `Relayer(id)` in the record, `checked_of` and the event,
 /// the relayer really asked, never a signer and never receivable. `kind`'s tag and group are real: the row's id comes back.
 #[test]
-fn ua8_relayer_checked_every_offchain_kind() {
+fn ua_portable_relayer_checked_every_offchain_kind() {
     let rows = offchain_rows();
     assert_eq!(rows.len(), 8);
     for row in rows {
@@ -2263,7 +2263,7 @@ fn ua8_relayer_checked_every_offchain_kind() {
 
 /// The same bytes with and without a relayer: `NotVerifiable` is `relayer` alone, on every `Relayer` kind.
 #[test]
-fn ua8_relayer_kind_without_relayer_not_verifiable() {
+fn ua_portable_relayer_kind_without_relayer_not_verifiable() {
     let mut seen = StdVec::new();
     for row in offchain_rows() {
         let (env, c, by) = relayed();
@@ -2297,7 +2297,7 @@ fn ua8_relayer_kind_without_relayer_not_verifiable() {
 /// `relayer` changes nothing for a part the chain verifies, on any of the three writes: a flipped signature with a listed
 /// relayer is refused, by the rule of its kind. The same call unflipped stores `Chain`, and the relayer is not asked.
 #[test]
-fn ua8_relayer_mode_still_verifies_chain_parts() {
+fn ua_portable_relayer_mode_still_verifies_chain_parts() {
     for name in [
         "webauthn-p256",
         "p256",
@@ -2362,7 +2362,7 @@ fn ua8_relayer_mode_still_verifies_chain_parts() {
 /// An `msig` with a `fndsa512` slot is `Relayer`, on `register` and `set_pqz_key`, and its chain slot is still verified; all
 /// `mldsa65` is `Chain` and asks no relayer. `set_kem_key` is `KemHolder`, with a relayer or without (CTR-UA-32).
 #[test]
-fn ua8_relayer_msig_mixed_members() {
+fn ua_portable_relayer_msig_mixed_members() {
     let (env, c, by) = relayed();
     let m_by = marked(&by);
     let f = portable(&env, "fndsa512");
@@ -2465,7 +2465,7 @@ fn ua8_relayer_msig_mixed_members() {
 /// `checked` follows the slots given, `signable` the chain members: a relayer slot alone is `Relayer`, a chain slot alone of
 /// the same structure is `Chain`. A relayer slot never authorises; the chain member of the same `msig` does.
 #[test]
-fn ua8_relayer_msig_signable_counts_chain_members() {
+fn ua_portable_relayer_msig_signable_counts_chain_members() {
     let (env, c, by) = relayed();
     let f = portable(&env, "fndsa512");
     f.on_by(&c, &by);
@@ -2556,7 +2556,7 @@ fn ua8_relayer_msig_signable_counts_chain_members() {
 /// U8S-D8's member rule: a registered relayer-checked UA of the stated kind. Each refused structure differs from the
 /// registered one in that alone.
 #[test]
-fn ua8_relayer_msig_member_rules() {
+fn ua_portable_relayer_msig_member_rules() {
     let (env, c, by) = relayed();
     let f = portable(&env, "fndsa512");
     f.on_by(&c, &by);
@@ -2585,7 +2585,7 @@ fn ua8_relayer_msig_member_rules() {
 
 /// Spec §6: an `evm-contract` slot is `Relayer` with a listed relayer, `NotVerifiable` without, and never authorises.
 #[test]
-fn ua8_relayer_evm_contract_slot() {
+fn ua_portable_relayer_evm_contract_slot() {
     let (env, c, by) = relayed();
     let q = test::ml(66);
     q.register(&env, &c);
@@ -2654,7 +2654,7 @@ fn ua8_relayer_evm_contract_slot() {
 /// `fndsa512`'s own rows: the `register` KEM key takes `pop_checked`, every `kemRecords[]` and `pqzKeyRecords[]` row is
 /// `Relayer(id)` in state and event, their signature bytes kept, and the record does not move.
 #[test]
-fn ua8_relayer_fndsa512_kem_and_pqz() {
+fn ua_portable_relayer_fndsa512_kem_and_pqz() {
     let (env, c, by) = relayed();
     let m = marked(&by);
     let r = portable(&env, "fndsa512");
@@ -2731,7 +2731,7 @@ fn ua8_relayer_fndsa512_kem_and_pqz() {
 /// A `fndsa512` PQZ key given at `register` is `pop_checked` too, and filling a hash commit asks no relayer, the chain
 /// checks the hash, but the key is the one the relayer-checked `pop` committed: it keeps `pop_checked`.
 #[test]
-fn ua8_relayer_register_parts_take_pop_checked() {
+fn ua_portable_relayer_register_parts_take_pop_checked() {
     let (env, c, by) = relayed();
     let m = marked(&by);
     let whole = portable(&env, "fndsa512").attrs.kem;
@@ -2766,7 +2766,7 @@ fn ua8_relayer_register_parts_take_pop_checked() {
 
 /// `register`'s KEM event names the relayer too, with the full key in the call.
 #[test]
-fn ua8_relayer_register_kem_event_names_it() {
+fn ua_portable_relayer_register_kem_event_names_it() {
     let (env, c, by) = relayed();
     let m = marked(&by);
     let r = portable(&env, "fndsa512");
@@ -2787,9 +2787,9 @@ fn ua8_relayer_register_kem_event_names_it() {
 }
 
 /// P11.6: a listed relayer that stores a bad record takes that write-once slot, on all three writes: the bytes it stored stay
-/// readable, its id on them, and the good record is refused here. The good bytes on a fresh registry: `ua8_relayer_fndsa512_kem_and_pqz`.
+/// readable, its id on them, and the good record is refused here. The good bytes on a fresh registry: `ua_portable_relayer_fndsa512_kem_and_pqz`.
 #[test]
-fn ua8_relayer_bad_record_takes_slot_marked() {
+fn ua_portable_relayer_bad_record_takes_slot_marked() {
     let (env, c, by) = relayed();
     let m = marked(&by);
     let good = portable(&env, "fndsa512");
@@ -2832,7 +2832,7 @@ fn ua8_relayer_bad_record_takes_slot_marked() {
 /// P11.5: a relayer-checked record authorises nothing, whatever signature comes; the token half is in the token's tests. The
 /// same call by a `Chain` UA passes.
 #[test]
-fn ua8_relayer_checked_ua_authorises_nothing() {
+fn ua_portable_relayer_checked_ua_authorises_nothing() {
     for row in offchain_rows() {
         let (env, c, by) = relayed();
         let r = portable_row(&env, &row);
@@ -2860,7 +2860,7 @@ fn ua8_relayer_checked_ua_authorises_nothing() {
 /// C11: the list has one writer, the constructor. `check-registry-interface.sh`'s list is the Wasm's exact function list (the
 /// gate), and this test ties that list to the source: no entry beyond it, one write of `Key::Relayers`, in the constructor.
 #[test]
-fn ua8_relayer_list_immutable() {
+fn ua_portable_relayer_list_immutable() {
     const SCRIPT: &str = include_str!("../../../scripts/check-registry-interface.sh");
     const SOURCE: &str = include_str!("lib.rs");
     let want = SCRIPT
@@ -2904,7 +2904,7 @@ fn ua8_relayer_list_immutable() {
 /// `msig-classical`'s own row: relayer-checked members register it; an empty `pop` checks nothing, so `Chain` and no relayer
 /// (U8S-D2), and its `p256` member's weight 1 is under the threshold 3, so never a signer.
 #[test]
-fn ua8_relayer_classical_msig_row() {
+fn ua_portable_relayer_classical_msig_row() {
     let (env, c, by) = relayed();
     let r = portable(&env, "msig-classical");
     assert_eq!(r.refused(&c), Error::MemberUnknown);
@@ -2970,7 +2970,7 @@ fn frost_of(env: &Env, kd: &[u8], size: usize) -> FrostKey {
 /// `register_musig2` / `register_frost` from `kinds.json`'s rows are the packed `register`: the same id, record and key data
 /// (EVM `registerMuSig2`, `registerFrost`, TS-D13), through the relayer mode.
 #[test]
-fn ua8_relayer_group_kinds_typed() {
+fn ua_portable_relayer_group_kinds_typed() {
     let mut seen = 0;
     for row in valid_rows()
         .iter()
@@ -3053,7 +3053,7 @@ fn ua8_relayer_group_kinds_typed() {
 /// registers. All but the kind run on the `ua_of_*` views, which have no layout check: `register_*`'s `check_key_data` would
 /// refuse most of these without the assembly's own rule.
 #[test]
-fn ua8_relayer_group_typed_rules() {
+fn ua_portable_relayer_group_typed_rules() {
     let valid = valid_rows();
     let row = |kind: u32| valid.iter().find(|r| kind_of(&r["kind"]) == kind).unwrap();
     let (env, c, by) = relayed();
@@ -3141,7 +3141,7 @@ fn ua8_relayer_group_typed_rules() {
 /// layout (`KeyData`); curve membership, a canonical coordinate, sorted members and the FN-DSA encoding are the relayer's
 /// (U8S-D8: `scaas_ua::keydata`), so those rows store, marked.
 #[test]
-fn ua8_relayer_key_data_layout() {
+fn ua_portable_relayer_key_data_layout() {
     const LAYOUT: [&str; 17] = [
         "empty",
         "one byte short",
@@ -3199,9 +3199,9 @@ fn ua8_relayer_key_data_layout() {
 }
 
 /// `keyHash` by `kinds.json` group: every valid row of a `Relayer` kind, and a group two relayer kinds share. Against a `Chain`
-/// kind: `ua8_relayer_marked_record_blocks_no_chain_kind`, `ua8_relayer_kind_refused_over_chain_key`.
+/// kind: `ua_portable_relayer_marked_record_blocks_no_chain_kind`, `ua_portable_relayer_kind_refused_over_chain_key`.
 #[test]
-fn ua8_relayer_key_hash_groups() {
+fn ua_portable_relayer_key_hash_groups() {
     let env = Env::default();
     let mut seen = 0;
     for row in valid_rows() {
@@ -3251,7 +3251,7 @@ fn over_x(env: &Env, kind: u32, x: &[u8]) -> Bytes {
 /// relayer kind of the group, the real key still registers, owns its `key_hash`, signs, and an `msig` can name it. The marked
 /// record stays, marked, and a client ignores it.
 #[test]
-fn ua8_relayer_marked_record_blocks_no_chain_kind() {
+fn ua_portable_relayer_marked_record_blocks_no_chain_kind() {
     for kind in SECP_RELAYER {
         let (env, c, by) = relayed();
         let s = test::Sk::K1(test::k1(68));
@@ -3311,7 +3311,7 @@ fn ua8_relayer_marked_record_blocks_no_chain_kind() {
 /// The reverse order: a relayer kind checks `Key` too, so it never stores over a key a `Chain` kind proved, while the same
 /// call over another `x` stores. Two relayer kinds also keep one `x` between them.
 #[test]
-fn ua8_relayer_kind_refused_over_chain_key() {
+fn ua_portable_relayer_kind_refused_over_chain_key() {
     for kind in SECP_RELAYER {
         let (env, c, by) = relayed();
         let s = test::Sk::K1(test::k1(69));
@@ -3405,7 +3405,7 @@ fn pqz_key_by_slhdsa(len: usize, count: u8) {
 /// The Chain figures 13 / 12 are ML-DSA-65's. A `slhdsa128s` slot takes 8,064 B of `abi.encode(MemberSig[])`, so 6 at
 /// n2048-kmax1024 and 5 at the other sets: the limit is bytes, not slots.
 #[test]
-fn ua8_set_pqz_key_relayer_slots_largest_fit() {
+fn ua_portable_set_pqz_key_relayer_slots_largest_fit() {
     for (len, count) in [(16_384, 6), (18_432, 5), (20_480, 5), (22_528, 5)] {
         pqz_key_by_slhdsa(len, count);
     }
@@ -3413,20 +3413,20 @@ fn ua8_set_pqz_key_relayer_slots_largest_fit() {
 
 #[test]
 #[should_panic(expected = "contract data entry")]
-fn ua8_set_pqz_key_relayer_slots_over_limit_n2816() {
+fn ua_portable_set_pqz_key_relayer_slots_over_limit_n2816() {
     pqz_key_by_slhdsa(22_528, 6);
 }
 
 #[test]
 #[should_panic(expected = "contract data entry")]
-fn ua8_set_pqz_key_relayer_slots_over_limit_n2048() {
+fn ua_portable_set_pqz_key_relayer_slots_over_limit_n2048() {
     pqz_key_by_slhdsa(16_384, 7);
 }
 
 /// The stored `pop` of `register` is under the same byte rule: 7 `slhdsa128s` slots fit `Ua(ua)`, 8 do not (56,512 B and
 /// 64,576 B of `pop`, and the record around it).
 #[test]
-fn ua8_register_relayer_slots_largest_fit() {
+fn ua_portable_register_relayer_slots_largest_fit() {
     let (env, c, by, m, slots) = slh_msig(7);
     msig_tried(&env, &c, &m, &slots, &by).unwrap().unwrap();
     assert_eq!(
@@ -3439,7 +3439,7 @@ fn ua8_register_relayer_slots_largest_fit() {
 
 #[test]
 #[should_panic(expected = "contract data entry")]
-fn ua8_register_relayer_slots_over_limit() {
+fn ua_portable_register_relayer_slots_over_limit() {
     let (env, c, by, m, slots) = slh_msig(8);
     msig_tried(&env, &c, &m, &slots, &by).unwrap().unwrap();
 }
@@ -3448,7 +3448,7 @@ fn ua8_register_relayer_slots_over_limit() {
 
 const ROUND_TRIP: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../vectors/ua8-roundtrip.json"
+    "/../../vectors/ua-portable-roundtrip.json"
 );
 
 fn checked_code(c: &Checked) -> u32 {
@@ -3478,7 +3478,7 @@ fn assert_kem(k: &KemKey, row: &Value, what: &str) {
 
 /// A registered `row` read back through `registration_of` / `kem_key_at` / `pqz_key_of`, every byte against the vector's JSON
 /// and not the values given to `register`; then its KEM records in `order`, each read back the same way, `kem_key_of` sampled
-/// after each write. Returns the row's line of `ua8-roundtrip.json`, all of it read from the contract.
+/// after each write. Returns the row's line of `ua-portable-roundtrip.json`, all of it read from the contract.
 fn round_trip(
     env: &Env,
     c: &UaRegistryClient,
@@ -3556,10 +3556,10 @@ fn round_trip(
 }
 
 /// C15: the `Chain` rows with their KEM records, a `fndsa512` through the relayer mode with KEM records 3 then 1, `msig-pq`
-/// with its minimal `pop` and no KEM record among the `Chain` rows. `checked` and the KEM order are pinned in `ua8-roundtrip.json`
-/// (`UA8_WRITE=1` writes it, every other run compares), which `e2e_ua_portable_soroban` also takes its order from.
+/// with its minimal `pop` and no KEM record among the `Chain` rows. `checked` and the KEM order are pinned in `ua-portable-roundtrip.json`
+/// (`UA_PORTABLE_WRITE=1` writes it, every other run compares), which `e2e_ua_portable_soroban` also takes its order from.
 #[test]
-fn ua8_record_bytes_round_trip() {
+fn ua_portable_record_bytes_round_trip() {
     let mut rows = StdVec::new();
     for row in chain_rows() {
         let (env, c, _) = registered(row["name"].as_str().unwrap());
@@ -3589,10 +3589,10 @@ fn ua8_record_bytes_round_trip() {
     );
 
     let got = serde_json::json!({
-        "note": "Generated by ua8_record_bytes_round_trip (UA8_WRITE=1), never edit by hand: what the registry answered for each row of portable.json. checked: 0 none, 1 chain, 2 relayer.",
+        "note": "Generated by ua_portable_record_bytes_round_trip (UA_PORTABLE_WRITE=1), never edit by hand: what the registry answered for each row of portable.json. checked: 0 none, 1 chain, 2 relayer.",
         "rows": rows,
     });
-    if std::env::var("UA8_WRITE").is_ok_and(|v| v == "1") {
+    if std::env::var("UA_PORTABLE_WRITE").is_ok_and(|v| v == "1") {
         std::fs::write(
             ROUND_TRIP,
             serde_json::to_string_pretty(&got).unwrap() + "\n",
@@ -3600,11 +3600,11 @@ fn ua8_record_bytes_round_trip() {
         .unwrap();
     }
     let file = std::fs::read_to_string(ROUND_TRIP)
-        .expect("vectors/ua8-roundtrip.json: run once with UA8_WRITE=1");
+        .expect("vectors/ua-portable-roundtrip.json: run once with UA_PORTABLE_WRITE=1");
     assert_eq!(
         got,
         serde_json::from_str::<Value>(&file).unwrap(),
-        "the answers moved from ua8-roundtrip.json"
+        "the answers moved from ua-portable-roundtrip.json"
     );
 }
 
@@ -3879,7 +3879,7 @@ fn set_by(w: &mut Write, to: &Address) {
 
 /// Every argument class of `register`.
 #[test]
-fn ua8_attest_binds_register() {
+fn ua_portable_attest_binds_register() {
     binds(
         fndsa_write,
         &[
@@ -4009,7 +4009,7 @@ fn msig_write_with_proof(env: &Env, c: &UaRegistryClient, by: &Option<Address>) 
 
 /// Every argument class of `register_msig`, a structure's fields and a slot's among them.
 #[test]
-fn ua8_attest_binds_register_msig() {
+fn ua_portable_attest_binds_register_msig() {
     binds(
         msig_write_with_proof,
         &[
@@ -4059,7 +4059,7 @@ fn ua8_attest_binds_register_msig() {
 }
 
 #[test]
-fn ua8_attest_binds_group_keys() {
+fn ua_portable_attest_binds_group_keys() {
     binds(
         |e, _, by| {
             let mut member_keys = SVec::new(e);
@@ -4260,7 +4260,7 @@ fn other_holder(env: &Env) -> BytesN<32> {
 }
 
 #[test]
-fn ua8_attest_binds_set_kem_key() {
+fn ua_portable_attest_binds_set_kem_key() {
     binds(
         |e, c, by| {
             let ua = holder_of(e, c, by);
@@ -4309,7 +4309,7 @@ fn ua8_attest_binds_set_kem_key() {
 }
 
 #[test]
-fn ua8_attest_binds_set_pqz_key() {
+fn ua_portable_attest_binds_set_pqz_key() {
     binds(
         |e, c, by| {
             let (ua, s) = (holder_of(e, c, by), set_row(e));
@@ -4353,7 +4353,7 @@ fn ua8_attest_binds_set_pqz_key() {
 
 /// A digest of another entry over the same arguments is refused, under either entry's name: one word is not enough to confuse them.
 #[test]
-fn ua8_attest_hash_of_another_entry_refused() {
+fn ua_portable_attest_hash_of_another_entry_refused() {
     let env = test::new_env();
     let r = Address::generate(&env);
     let c = test::deploy(&env, &[r.clone()]);
@@ -4378,7 +4378,7 @@ fn ua8_attest_hash_of_another_entry_refused() {
 
 /// Only the relayer the write names is asked: another listed relayer's auth of the same digest stores nothing.
 #[test]
-fn ua8_attest_needs_the_named_relayer() {
+fn ua_portable_attest_needs_the_named_relayer() {
     let env = test::new_env();
     let (r, other) = (Address::generate(&env), Address::generate(&env));
     let c = test::deploy(&env, &[r.clone(), other.clone()]);
@@ -4417,7 +4417,7 @@ fn ua8_attest_needs_the_named_relayer() {
 /// The digest against the bytes `smartcontracts/soroban/scripts/attest-digest-vector.py` builds by hand, and `scaas-node`'s twin
 /// pins the same two words.
 #[test]
-fn ua8_attest_digest_vector() {
+fn ua_portable_attest_digest_vector() {
     let env = test::new_env();
     env.ledger().set_network_id([0x11; 32]);
     let c = Address::from_str(
@@ -4498,9 +4498,9 @@ fn frost_bn254(env: &Env, t: u32, n_: u32) -> (FrostKey, StdVec<u8>) {
 }
 
 /// The rule, at its edge. No real key has exactly this length, a FROST key's lengths being discrete, so the edge is here and
-/// `ua8_event_frost_sizes` holds the nearest real lengths on each side.
+/// `ua_portable_event_frost_sizes` holds the nearest real lengths on each side.
 #[test]
-fn ua8_event_key_data_limit() {
+fn ua_portable_event_key_data_limit() {
     let env = test::new_env();
     let at = b(&env, &vec![7; crate::EVENT_KEY_DATA_MAX as usize]);
     assert_eq!(
@@ -4519,7 +4519,7 @@ fn ua8_event_key_data_limit() {
 
 /// Below the limit the event is EVM's `keyData`, on every entry: the vector's bytes, not the ones given.
 #[test]
-fn ua8_event_is_evm_key_data_below_the_limit() {
+fn ua_portable_event_is_evm_key_data_below_the_limit() {
     for row in chain_rows()
         .iter()
         .chain(offchain_rows().iter().filter(|r| r["name"] == "fndsa512"))
@@ -4566,7 +4566,7 @@ fn ua8_event_is_evm_key_data_below_the_limit() {
 /// The nearest real lengths on each side of the limit, and threshold 1, which no chain admits. Emptied or not: the record is the
 /// input, byte for byte, and `ua` is the key's.
 #[test]
-fn ua8_event_frost_sizes() {
+fn ua_portable_event_frost_sizes() {
     for (t, count, whole) in [
         (2, 2, true),
         (13, 16, true),

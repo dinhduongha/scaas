@@ -1300,9 +1300,9 @@ fn multi_without_mode_refused() {
     });
 }
 
-/// The `setPqzKey` `R_REG` (`ua_message(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))`, ua8's `pqz_reg_message`
+/// The `setPqzKey` `R_REG` (`ua_message(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))`, ua_portable's `pqz_reg_message`
 /// field) verifies; group 3g (T15o): version v ≥ 1 of the key `pqz_key_version(0, 0, v)` over `UAPqzKeyVersion{ua, v,
-/// pqzKeyHash}` (ua8's version record), a proof of one version is not the other's, and `version` has no default.
+/// pqzKeyHash}` (ua_portable's version record), a proof of one version is not the other's, and `version` has no default.
 #[test]
 fn key_record_register_verifies() {
     unlock();
@@ -1316,7 +1316,7 @@ fn key_record_register_verifies() {
     )
     .unwrap();
     let kd = w.ua_key(0x0131, 0, 0).unwrap().key_data();
-    let rec = scaas_ua::ua8::pqz_key_record_message(
+    let rec = scaas_ua::ua_portable::pqz_key_record_message(
         0x0131,
         &ua,
         &kd,
@@ -1335,7 +1335,7 @@ fn key_record_register_verifies() {
             .unwrap()
             .unwrap(),
     )];
-    let v1 = scaas_ua::ua8::pqz_key_version_record_message(
+    let v1 = scaas_ua::ua_portable::pqz_key_version_record_message(
         0x0131,
         &ua,
         &kd,

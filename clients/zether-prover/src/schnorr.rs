@@ -92,7 +92,7 @@ pub fn ua_message<C: ZCurve>(purpose: &[u8; 32], digest: &[u8; 32]) -> [u8; 32] 
     )
 }
 
-// ---- The portable records as typed EIP-712 structs (typed-signing TS-D1 / TS-D3; ua-rs `ua8`, clientkeys `ua.js`) ----
+// ---- The portable records as typed EIP-712 structs (typed-signing TS-D1 / TS-D3; ua-rs `ua_portable`, clientkeys `ua.js`) ----
 // The raw digests before typed-signing are in legacy/typed-signing/portable_raw.rs.
 
 const DOMAIN_TYPE: &str = "EIP712Domain(string name,string version)";

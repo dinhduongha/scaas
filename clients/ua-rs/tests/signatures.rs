@@ -57,12 +57,12 @@ fn derived_positives_verify() {
             // portable (UA-8): no chain context; message = ua_message(kind, POP_V2, registrationDigest)
             // typed (typed-signing TS-D1): popDigest = typed(UAPortableRecord{ua, kind, 0, UAKemRecord{ua, 0, 0, 0}})
             let ua = b32(&r["ua"]);
-            let no_kem = ua8::kem_record_hash(&ua, 0, &[]).unwrap();
-            let pd = ua8::portable_record_digest(&ua, kind, &[0; 32], &no_kem);
+            let no_kem = ua_portable::kem_record_hash(&ua, 0, &[]).unwrap();
+            let pd = ua_portable::portable_record_digest(&ua, kind, &[0; 32], &no_kem);
             assert_eq!(pd, b32(&p["popDigest"]));
-            let rd = ua8::registration_digest(&ua, kind, &[0; 32], &no_kem, &[0; 32]);
+            let rd = ua_portable::registration_digest(&ua, kind, &[0; 32], &no_kem, &[0; 32]);
             assert_eq!(rd, b32(&p["registrationDigest"]));
-            let m = ua_message(kind, &ua8::pop_v2_tag(), &rd).unwrap();
+            let m = ua_message(kind, &ua_portable::pop_v2_tag(), &rd).unwrap();
             assert_eq!(m, b32(&p["message"]));
             assert!(
                 verify(kind, &kd, &m, &bytes(&p["sig"]), true),

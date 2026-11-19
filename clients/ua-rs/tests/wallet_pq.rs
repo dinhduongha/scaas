@@ -205,7 +205,7 @@ fn rs_signatures_json_rows() {
         let kind = kind_of(&r["kind"]);
         let key = w.ua_key(kind, 0, 0).unwrap();
         assert_eq!(key.key_data(), bytes(&r["keyData"]), "{r}");
-        let purpose = scaas_ua::ua8::app_purpose(&b32(&r["appId"])).unwrap();
+        let purpose = scaas_ua::ua_portable::app_purpose(&b32(&r["appId"])).unwrap();
         assert_eq!(purpose, b32(&r["purposeTag"]), "{r}");
         let ua_msg = ua_message(kind, &purpose, &b32(&r["digest"])).unwrap();
         assert_eq!(ua_msg, b32(&r["uaMsg"]), "{r}");

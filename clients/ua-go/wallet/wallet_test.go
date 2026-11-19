@@ -571,7 +571,7 @@ func abiList(items [][]byte) []byte {
 	return append(append(out, offs...), bytes.Join(items, nil)...)
 }
 
-// memberSigs is abi.encode(MemberSig[]) of a UASig JSON's members (ua8.rs encode_member_sigs).
+// memberSigs is abi.encode(MemberSig[]) of a UASig JSON's members (ua_portable.rs encode_member_sigs).
 func memberSigs(ms []any) []byte {
 	if len(ms) == 0 {
 		return nil

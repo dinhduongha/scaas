@@ -205,8 +205,14 @@ fn sign_json_imported_rows() {
         let purpose = b32(&x["purposeTag"]);
         let digest = match x["what"].as_str().unwrap() {
             "pop" => {
-                let no_kem = scaas_ua::ua8::kem_record_hash(&ua, 0, &[]).unwrap();
-                scaas_ua::ua8::registration_digest(&ua, key.kind(), &[0; 32], &no_kem, &[0; 32])
+                let no_kem = scaas_ua::ua_portable::kem_record_hash(&ua, 0, &[]).unwrap();
+                scaas_ua::ua_portable::registration_digest(
+                    &ua,
+                    key.kind(),
+                    &[0; 32],
+                    &no_kem,
+                    &[0; 32],
+                )
             }
             "metatx" => {
                 let i = &x["input"];

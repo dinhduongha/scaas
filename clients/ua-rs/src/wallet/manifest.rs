@@ -30,7 +30,7 @@ use super::{
     bounded, derive, seed_of, Error, KemKeyPair, KeyId, NativeKey, Network, Result, UaKey, Wallet,
 };
 use crate::derive_ua;
-use crate::ua8::{Accepted, Members};
+use crate::ua_portable::{Accepted, Members};
 use base64ct::{Base64UrlUnpadded, Encoding};
 use serde_json::Value;
 use zeroize::Zeroizing;

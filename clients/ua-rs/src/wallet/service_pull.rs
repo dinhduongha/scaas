@@ -13,7 +13,7 @@ use super::eip712::{
     TypedData, U256,
 };
 use super::{Error, Result};
-use crate::ua8::UASig;
+use crate::ua_portable::UASig;
 use crate::{keccak256, relay_ref, word};
 use serde_json::{json, Value};
 
@@ -85,9 +85,10 @@ fn seq(xs: &[V]) -> Vec<u8> {
     [head, tail].concat()
 }
 fn sig_v(s: &UASig) -> V {
-    let inner =
-        |m: &crate::ua8::InnerSig| V::T(vec![V::W(word(m.index.into())), V::B(m.sig.clone())]);
-    let member = |m: &crate::ua8::MemberSig| {
+    let inner = |m: &crate::ua_portable::InnerSig| {
+        V::T(vec![V::W(word(m.index.into())), V::B(m.sig.clone())])
+    };
+    let member = |m: &crate::ua_portable::MemberSig| {
         V::T(vec![
             V::W(word(m.index.into())),
             V::A(m.members.iter().map(inner).collect()),

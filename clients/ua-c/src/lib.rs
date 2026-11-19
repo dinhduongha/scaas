@@ -171,7 +171,7 @@ impl From<ua::UAError> for Fail {
             MemberUnknown => SCAAS_UA_ERR_MEMBER_UNKNOWN,
             Pop => SCAAS_UA_ERR_POP,
             Unauthorized => SCAAS_UA_ERR_UNAUTHORIZED,
-            NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua8::check_* only, not exported here
+            NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua_portable::check_* only, not exported here
         };
         Fail(status, e.to_string())
     }
@@ -726,7 +726,7 @@ pub extern "C" fn scaas_ua_keccak256(
 /// "1"), no chain id, verifying contract or salt; typed-signing TS-D1). Every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
 #[no_mangle]
 pub extern "C" fn scaas_ua_portable_domain_separator(out32: *mut u8) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua8::PORTABLE_DOMAIN_SEPARATOR))
+    run(|| put(out32.cast(), ua::ua_portable::PORTABLE_DOMAIN_SEPARATOR))
 }
 
 /// `hashStruct(UAKemRecord{ua, version, scheme: kem_pk[0], kemPkHash: keccak256(kem_pk)})`: the `kem` word of a portable
@@ -743,7 +743,7 @@ pub extern "C" fn scaas_ua_kem_record_hash(
     run(|| {
         put(
             out32.cast(),
-            ua::ua8::kem_record_hash(arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?,
+            ua::ua_portable::kem_record_hash(arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?,
         )
     })
 }
@@ -761,7 +761,7 @@ pub extern "C" fn scaas_ua_portable_record_digest(
     run(|| {
         put(
             out32.cast(),
-            ua::ua8::portable_record_digest(
+            ua::ua_portable::portable_record_digest(
                 arr(ua32)?,
                 kind,
                 arr(pqz_key_hash32)?,
@@ -783,7 +783,7 @@ pub extern "C" fn scaas_ua_registration_digest(
     out32: *mut u8,
 ) -> ScaasUaStatus {
     run(|| {
-        let d = ua::ua8::registration_digest(
+        let d = ua::ua_portable::registration_digest(
             arr(ua32)?,
             kind,
             arr(pqz_key_hash32)?,
@@ -807,7 +807,7 @@ pub extern "C" fn scaas_ua_kem_record_digest(
     run(|| {
         put(
             out32.cast(),
-            ua::ua8::kem_record_digest(arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?,
+            ua::ua_portable::kem_record_digest(arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?,
         )
     })
 }
@@ -826,7 +826,12 @@ pub extern "C" fn scaas_ua_kem_record_message(
     run(|| {
         put(
             out32.cast(),
-            ua::ua8::kem_record_message(kind, arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?,
+            ua::ua_portable::kem_record_message(
+                kind,
+                arr(ua32)?,
+                version,
+                bytes(kem_pk, kem_pk_len)?,
+            )?,
         )
     })
 }
@@ -924,7 +929,7 @@ pub extern "C" fn scaas_ua_holder_pop_message_with(
 ) -> ScaasUaStatus {
     run(|| {
         let i = inner_of(inner)?;
-        let h = ua::ua8::holder_pop_message_with(
+        let h = ua::ua_portable::holder_pop_message_with(
             kind,
             arr(ua32)?,
             bytes(key_data, key_data_len)?,
@@ -984,7 +989,7 @@ pub extern "C" fn scaas_ua_pqz_key_digest(
     run(|| {
         put(
             out32.cast(),
-            ua::ua8::pqz_key_digest(arr(ua32)?, arr(pqz_key_hash32)?),
+            ua::ua_portable::pqz_key_digest(arr(ua32)?, arr(pqz_key_hash32)?),
         )
     })
 }
@@ -1001,7 +1006,11 @@ pub extern "C" fn scaas_ua_pqz_key_record_digest(
     run(|| {
         put(
             out32.cast(),
-            ua::ua8::pqz_key_record_digest(arr(ua32)?, arr(pqz_key_hash32)?, arr(pqz_pop_hash32)?),
+            ua::ua_portable::pqz_key_record_digest(
+                arr(ua32)?,
+                arr(pqz_key_hash32)?,
+                arr(pqz_pop_hash32)?,
+            ),
         )
     })
 }
@@ -1017,7 +1026,7 @@ pub extern "C" fn scaas_ua_membership_digest(
     run(|| {
         put(
             out32.cast(),
-            ua::ua8::membership_digest(arr(ua32)?, arr(member32)?),
+            ua::ua_portable::membership_digest(arr(ua32)?, arr(member32)?),
         )
     })
 }
@@ -1093,7 +1102,7 @@ pub extern "C" fn scaas_ua_pqz_key_record_message_with(
 ) -> ScaasUaStatus {
     run(|| {
         let i = inner_of(inner)?;
-        let r = ua::ua8::pqz_key_record_message_with(
+        let r = ua::ua_portable::pqz_key_record_message_with(
             kind,
             arr(ua32)?,
             bytes(key_data, key_data_len)?,
@@ -1148,7 +1157,7 @@ pub extern "C" fn scaas_ua_replayed_member_sig(
 /// native `msig` member signs the record's typed digest itself (`eth_signTypedData_v4`, TS-D4); every other purpose stays UAAuth.
 #[no_mangle]
 pub extern "C" fn scaas_ua_is_portable_purpose(tag32: *const u8, out: *mut bool) -> ScaasUaStatus {
-    run(|| put(out, ua::ua8::is_portable_purpose(arr(tag32)?)))
+    run(|| put(out, ua::ua_portable::is_portable_purpose(arr(tag32)?)))
 }
 
 fn domain(
@@ -1652,7 +1661,11 @@ impl Opening {
     /// `f(expect, members, accepted)` with the lookups as the opener takes them.
     fn with<T>(
         &self,
-        f: impl FnOnce(&uw::ContainerExpect, &ua::ua8::Members, Option<&ua::ua8::Accepted>) -> T,
+        f: impl FnOnce(
+            &uw::ContainerExpect,
+            &ua::ua_portable::Members,
+            Option<&ua::ua_portable::Accepted>,
+        ) -> T,
     ) -> T {
         let members = |id: [u8; 32]| self.members.lookup(id);
         let accepted =
@@ -1662,7 +1675,7 @@ impl Opening {
             &members,
             self.accepted
                 .as_ref()
-                .map(|_| &accepted as &ua::ua8::Accepted),
+                .map(|_| &accepted as &ua::ua_portable::Accepted),
         )
     }
 }

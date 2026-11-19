@@ -215,14 +215,16 @@ pub fn keccak256(data: Vec<u8>) -> [u8; 32] {
 /// chain; typed-signing TS-D1): every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
 #[frb(sync)]
 pub fn portable_domain_separator() -> [u8; 32] {
-    scaas_ua::ua8::PORTABLE_DOMAIN_SEPARATOR
+    scaas_ua::ua_portable::PORTABLE_DOMAIN_SEPARATOR
 }
 /// `hashStruct(UAKemRecord{ua, version, scheme, kemPkHash})`, the `kem` word of a portable record; `(0, [])` is the zero record
 /// `UAKemRecord{ua, 0, 0, 0}` (no KEM record), `(0, key)` the `register` key's record (owner 2026-10-31), otherwise the rules
 /// of [`kem_record_digest`].
 #[frb(sync)]
 pub fn kem_record_hash(ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 32]> {
-    Ok(scaas_ua::ua8::kem_record_hash(&ua, version, &kem_pk)?)
+    Ok(scaas_ua::ua_portable::kem_record_hash(
+        &ua, version, &kem_pk,
+    )?)
 }
 /// typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}`: what `R_REG` proves over at `register`; a hash is 32 zero bytes when absent.
 #[frb(sync)]
@@ -232,7 +234,7 @@ pub fn portable_record_digest(
     pqz_key_hash: [u8; 32],
     kem_record_hash: [u8; 32],
 ) -> R<[u8; 32]> {
-    Ok(scaas_ua::ua8::portable_record_digest(
+    Ok(scaas_ua::ua_portable::portable_record_digest(
         &ua,
         k(kind)?,
         &pqz_key_hash,
@@ -249,7 +251,7 @@ pub fn registration_digest(
     kem_record_hash: [u8; 32],
     pqz_pop_hash: [u8; 32],
 ) -> R<[u8; 32]> {
-    Ok(scaas_ua::ua8::registration_digest(
+    Ok(scaas_ua::ua_portable::registration_digest(
         &ua,
         k(kind)?,
         &pqz_key_hash,
@@ -260,12 +262,14 @@ pub fn registration_digest(
 /// typed `UAKemRecord{ua, version, scheme, kemPkHash}` that `setKemKey` signs (`UAKemVersion` for 0, `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
 #[frb(sync)]
 pub fn kem_record_digest(ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 32]> {
-    Ok(scaas_ua::ua8::kem_record_digest(&ua, version, &kem_pk)?)
+    Ok(scaas_ua::ua_portable::kem_record_digest(
+        &ua, version, &kem_pk,
+    )?)
 }
 /// What the UA signs for a KEM record: `ua_message(kind, PURPOSE_KEM, kem_record_digest)`.
 #[frb(sync)]
 pub fn kem_record_message(kind: i64, ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 32]> {
-    Ok(scaas_ua::ua8::kem_record_message(
+    Ok(scaas_ua::ua_portable::kem_record_message(
         k(kind)?,
         &ua,
         version,
@@ -335,7 +339,7 @@ pub fn holder_pop_message_with(
     let (h, i) = (hash(&pqz_pop_hash)?, scaas_ua::json::inner_json(&inner)?);
     let l = scaas_ua::json::lookup(&i);
     let (key, pop, kem) = (pqz_key.as_deref(), pqz_pop.as_deref(), kem_pk.as_deref());
-    let r = scaas_ua::ua8::holder_pop_message_with(
+    let r = scaas_ua::ua_portable::holder_pop_message_with(
         k(kind)?,
         &ua,
         &key_data,
@@ -374,7 +378,7 @@ pub fn pqz_reg_message(
 /// typed `UAPqzKey{ua, pqzKeyHash}`: what a later PQZ key's `R_REG` proves over.
 #[frb(sync)]
 pub fn pqz_key_digest(ua: [u8; 32], pqz_key_hash: [u8; 32]) -> [u8; 32] {
-    scaas_ua::ua8::pqz_key_digest(&ua, &pqz_key_hash)
+    scaas_ua::ua_portable::pqz_key_digest(&ua, &pqz_key_hash)
 }
 /// typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`: what `setPqzKey`'s signature signs under
 /// `ua_message(kind, PURPOSE_PQZ_KEY, ·)` (and a native `msig` member signs itself, TS-D4).
@@ -384,13 +388,13 @@ pub fn pqz_key_record_digest(
     pqz_key_hash: [u8; 32],
     pqz_pop_hash: [u8; 32],
 ) -> [u8; 32] {
-    scaas_ua::ua8::pqz_key_record_digest(&ua, &pqz_key_hash, &pqz_pop_hash)
+    scaas_ua::ua_portable::pqz_key_record_digest(&ua, &pqz_key_hash, &pqz_pop_hash)
 }
 /// typed `UAMembership{ua, member}`: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native member this
 /// digest itself, a derived member `member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
 #[frb(sync)]
 pub fn membership_digest(ua: [u8; 32], member: [u8; 32]) -> [u8; 32] {
-    scaas_ua::ua8::membership_digest(&ua, &member)
+    scaas_ua::ua_portable::membership_digest(&ua, &member)
 }
 /// The PQZ key record of `setPqzKey` (ruling A1-I1): `message` is what the UA signs, `pqz_reg_message` what the key's `R_REG`
 /// proves over; `member_digest` as in [`HolderPop`].
@@ -441,7 +445,7 @@ pub fn pqz_key_record_message_with(
 ) -> R<PqzKeyRecord> {
     let (h, i) = (hash(&pqz_pop_hash)?, scaas_ua::json::inner_json(&inner)?);
     let l = scaas_ua::json::lookup(&i);
-    let r = scaas_ua::ua8::pqz_key_record_message_with(
+    let r = scaas_ua::ua_portable::pqz_key_record_message_with(
         k(kind)?,
         &ua,
         &key_data,
@@ -477,7 +481,7 @@ pub fn replayed_member_sig(key_data: Vec<u8>, index: i64, stored: Vec<u8>) -> R<
 /// (`eth_signTypedData_v4`, TS-D4); every other purpose stays UAAuth.
 #[frb(sync)]
 pub fn is_portable_purpose(tag: [u8; 32]) -> bool {
-    scaas_ua::ua8::is_portable_purpose(&tag)
+    scaas_ua::ua_portable::is_portable_purpose(&tag)
 }
 #[frb(sync)]
 pub fn ua_auth_domain_separator(domain: UaDomain) -> R<[u8; 32]> {

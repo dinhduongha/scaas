@@ -307,7 +307,7 @@ impl T {
 /// #10; the token's own #10 is about a receiver, and `to` is an address), before any balance; a `Chain` UA with no funds
 /// passes that step and stops at its balance.
 #[test]
-fn ua8_relayer_checked_ua_authorises_nothing() {
+fn ua_portable_relayer_checked_ua_authorises_nothing() {
     let s = setup();
     let env = &s.env;
     let relayer = Address::generate(env);

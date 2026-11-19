@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // Group 3g (spec 2026-11-06-pqz-key-versions §7.2, KV-1, KV-7, KV-8, C8, F-14): the client's rules for PQZ key versions, apart from
-// the vector rows (test/ua8.test.js, test/typed-ops.test.js). UNAUDITED.
+// the vector rows (test/ua-portable.test.js, test/typed-ops.test.js). UNAUDITED.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
