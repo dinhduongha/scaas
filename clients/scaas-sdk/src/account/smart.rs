@@ -6,13 +6,15 @@
 //! `Execute` takes a decoded call only (§13.2): `scaas-ua` builds its bytes and its check `Expect::Execute` rebuilds them; any
 //! other call needs [`AllowOpaqueCall`] (feature `opaque-calls`), else `OpaqueCallRefused`. Guardian recovery: the guardian
 //! `SmartKeyAccount`'s `Execute` of the decoded `initiateRecovery(newKey)` on the account it guards
-//! ([`Account::prepare_initiate_recovery`]); `completeRecovery` is anyone's direct call after `RECOVERY_DELAY`. The account's
+//! ([`Account::prepare_initiate_recovery`]); `completeRecovery` is anyone's direct call after `RECOVERY_DELAY`
+//! ([`Account::prepare_complete_recovery`]), the deploy the factory's `deploy(firstKey, guardian)`
+//! ([`Account::prepare_smart_deploy`]), each a native send of the caller's EVM key (spec §8.5). The account's
 //! key signs as `AccountSig { keyIndex, proof: [], signature }`, `keyIndex` the signing key's index in the account: the
 //! caller's, or read from the account by the signer's key (owner 2026-11-19, S3). UNAUDITED.
 use super::Account;
 use crate::op::{addr20, field, hex, unhex, Draft, KeyRef, Op, Prepared, Source};
 use crate::wallet::ops::{bound, ids, kind_of, put_envelope};
-use crate::wallet::{AllowOpaqueCall, Envelope};
+use crate::wallet::{AllowOpaqueCall, Envelope, NativeQuote, NativeSend};
 use crate::SdkError;
 use alloy::primitives::U256;
 use scaas_ua::wallet::{DecodedCall, Expect, SubjectKey};
@@ -127,6 +129,23 @@ pub fn smart_account_address(
     )))
 }
 
+/// `key` as the ABI's static tuple `(uint8 kind, bytes32 x, bytes32 y, bytes32 rpIdHash, bytes32 originHash)`.
+fn key_words(key: &SubjectKeyArgs) -> Result<Vec<u8>, SdkError> {
+    let k = key.key()?;
+    let mut d = U256::from(k.kind).to_be_bytes::<32>().to_vec();
+    for w in [k.x, k.y, k.rp_id_hash, k.origin_hash] {
+        d.extend_from_slice(&w);
+    }
+    Ok(d)
+}
+
+/// The calldata of `sig` with `args` (static words).
+fn direct_call(sig: &str, args: &[u8]) -> String {
+    let mut d = scaas_ua::keccak256(sig.as_bytes()).get(..4).unwrap_or_default().to_vec();
+    d.extend_from_slice(args);
+    hex(&d)
+}
+
 /// The most key slots [`key_index_of`] reads; past it the caller names the index.
 const KEY_SLOTS_READ: u64 = 64;
 
@@ -144,11 +163,7 @@ async fn key_index_of(sdk: &crate::Sdk, chain: &str, account: [u8; 20], signer: 
     if !matches!(signer, KeyRef::Native { network, .. } | KeyRef::Imported { network, .. } if network == "evm") {
         return Err(SdkError::Argument);
     }
-    let me = SubjectKeyArgs::secp256k1(&k.address().ok_or(SdkError::Argument)?)?.key()?;
-    let mut want = U256::from(me.kind).to_be_bytes::<32>().to_vec();
-    for w in [me.x, me.y, me.rp_id_hash, me.origin_hash] {
-        want.extend_from_slice(&w);
-    }
+    let want = key_words(&SubjectKeyArgs::secp256k1(&k.address().ok_or(SdkError::Argument)?)?)?;
     let call = |sig: &str, arg: Option<u64>| {
         let mut d = scaas_ua::keccak256(sig.as_bytes()).get(..4).unwrap_or_default().to_vec();
         if let Some(a) = arg {
@@ -333,6 +348,51 @@ impl Account {
         let opaque = decoded.is_none();
         self.smart("Execute", op, m, decoded.map(|c| (c, review)), opaque)
             .await
+    }
+
+    /// The deploy of the `SmartKeyAccount` of `first_key` and `guardian` (the zero address: none) by `factory`'s
+    /// `deploy(firstKey, guardian)` (CTR-ACC-01), at [`smart_account_address`]'s address: a native send of `key` (an EVM key)
+    /// quoted for review; `Wallet::submit_native_send` sends it. Errors as `Wallet::prepare_native_send` (a reverting call:
+    /// its simulation's error).
+    pub async fn prepare_smart_deploy(
+        &self,
+        key: KeyRef,
+        chain: String,
+        factory: String,
+        first_key: SubjectKeyArgs,
+        guardian: String,
+    ) -> Result<NativeQuote, SdkError> {
+        let mut args = key_words(&first_key)?;
+        args.extend_from_slice(&[0; 12]);
+        args.extend_from_slice(&addr20(&guardian.to_ascii_lowercase())?);
+        let data = direct_call("deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)", &args);
+        self.direct(key, chain, factory, data).await
+    }
+
+    /// `completeRecovery(new_key)` on `account` (CTR-ACC-03): anyone's call once `RECOVERY_DELAY` (two days) has passed since
+    /// the guardian's `initiateRecovery(new_key)`; a native send of `key` quoted for review (before the delay its simulation
+    /// reverts and the quote fails).
+    pub async fn prepare_complete_recovery(
+        &self,
+        key: KeyRef,
+        chain: String,
+        account: String,
+        new_key: SubjectKeyArgs,
+    ) -> Result<NativeQuote, SdkError> {
+        let data = direct_call("completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32))", &key_words(&new_key)?);
+        self.direct(key, chain, account, data).await
+    }
+
+    async fn direct(&self, key: KeyRef, chain: String, to: String, data: String) -> Result<NativeQuote, SdkError> {
+        let send = NativeSend {
+            key,
+            chain,
+            to,
+            value: "0".into(),
+            data: Some(data),
+            tx_type: None,
+        };
+        self.sdk.wallet().prepare_native_send(send).await
     }
 
     /// The guardian's recovery of `account` (CTR-ACC-03): `op` names the guardian `SmartKeyAccount` and its key; its `Execute`
