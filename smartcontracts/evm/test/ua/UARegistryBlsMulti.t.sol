@@ -8,6 +8,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SSTORE2} from "../../src/common/SSTORE2.sol";
 import {BlsMultiBls12381Verifier} from "../../src/ua/verifiers/BlsMultiBls12381Verifier.sol";
 import {BlsMultiKit} from "./BlsMultiKit.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 
 /// `bls12381-multi` (0x0121) in the registry (spec 2026-11-19-bls12381-multi §2, §4, §6, §7; plan Task 7): `registerBlsMulti` and the
 /// packed `register`, the stored `ua ‖ s`, `registrationOf` / `blsMultiKeyOf` returning `d`, `keyOf` returning `apk`, no keyHash,
@@ -244,27 +245,240 @@ contract UARegistryBlsMultiTest is Test {
         }
     }
 
-    /// Until the stored-path dispatch (spec §5.3, plan Task 8) is built, every portable and app purpose of a `0x0121` signer is
-    /// refused, a valid minimal signature included: `verifyPop` (`DST_MULTI_POP`) runs on the registration PoP only (§4 condition 2).
-    /// On a registry whose 0x0121 cap admits `verifyPop` (a deployer may set any cap up to the budget; 330,000 would refuse it by gas).
-    function test_portablePurposes_failClosed() public {
-        reg = _registry(UID, address(verifier), 11_000_000);
+    // ----- the stored paths take the minimal form (spec §5.3 dispatch, N1; plan Task 8) -----
+
+    /// `requirePortable` / `requirePortableApp`, signer `0x0121` (n = 3, unit weights, t = 2): a minimal set (2 signers) passes, a
+    /// surplus set (all 3, which the hot path accepts) is refused; the purposes do not cross (a KEM signature is not an app one).
+    function test_portable_minimalOnly() public {
         BlsMultiKit.Group memory g = _kit(3, 2, 19);
         reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+        bytes32 app = UAKinds.appPurpose(bytes32("app"));
+        _portable(g, UAKinds.PURPOSE_KEM, 3, true);
+        _portable(g, app, 6, true);
+        bytes32 op = keccak256("op");
+        reg.requireAuthorized( // the hot path: a surplus set is accepted there
+            g.ua,
+            UAKinds.PURPOSE_METATX,
+            op,
+            _sig(BlsMultiKit.sign(g, 7, UAKinds.uaMessage(K, UAKinds.PURPOSE_METATX, op)))
+        );
+        _portable(g, UAKinds.PURPOSE_KEM, 7, false);
+        _portable(g, app, 7, false);
+        // test_appPurposes_doNotCross: a KEM signature is no app signature, nor one app's another's
+        bytes memory kem2 = BlsMultiKit.sign(g, 3, UAKinds.uaMessage(K, UAKinds.PURPOSE_KEM, DIGEST));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
+        reg.requirePortableApp(g.ua, bytes32("app"), DIGEST, _sig(kem2));
+        bytes memory app2 = BlsMultiKit.sign(g, 3, UAKinds.uaMessage(K, app, DIGEST));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
+        reg.requirePortableApp(g.ua, bytes32("other"), DIGEST, _sig(app2));
+    }
+
+    bytes32 internal constant DIGEST = keccak256("kem record");
+
+    /// `requirePortable` (KEM) or `requirePortableApp` ("app") of `g` signed by `signers` over `DIGEST`: passes iff `ok`.
+    function _portable(BlsMultiKit.Group memory g, bytes32 purpose, uint256 signers, bool ok) internal {
+        bytes memory s = BlsMultiKit.sign(g, signers, UAKinds.uaMessage(K, purpose, DIGEST));
+        if (!ok) vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
+        if (purpose == UAKinds.PURPOSE_KEM) reg.requirePortable(g.ua, purpose, DIGEST, _sig(s));
+        else reg.requirePortableApp(g.ua, bytes32("app"), DIGEST, _sig(s));
+    }
+
+    /// Review Focus 1 and spec §5.3's weighted rows: weights {3, 1, 1}, t = 3 (after sorting by key, found by weight): the
+    /// weight-3 member alone is minimal; with one more it is a surplus (W − min = 3 ≥ t); the two weight-1 members do not reach t.
+    function test_weighted_311_rows() public {
+        uint256[] memory sks = new uint256[](3);
+        uint16[] memory w = new uint16[](3);
+        (sks[0], sks[1], sks[2]) = (101, 102, 103);
+        (w[0], w[1], w[2]) = (3, 1, 1);
+        BlsMultiKit.Group memory g = BlsMultiKit.group(sks, w, 3);
+        reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+        uint256 heavy = g.sk[0] == 101 ? 0 : g.sk[1] == 101 ? 1 : 2;
+        uint256 light = 7 ^ (1 << heavy); // the two weight-1 members
+        _portable(g, UAKinds.PURPOSE_KEM, 1 << heavy, true);
+        _portable(g, UAKinds.PURPOSE_KEM, (1 << heavy) | (light & (light - 1)), false);
+        _portable(g, UAKinds.PURPOSE_KEM, light, false);
+    }
+
+    /// N1: a valid t-of-n signature over `popMsg` under `DST_MULTI_SIG` is no registration PoP (`UAPoP`): `pop` v2 goes to
+    /// `verifyPop` (all n, `DST_MULTI_POP`) only.
+    function test_register_popUnderMultiSig_UAPoP() public {
+        BlsMultiKit.Group memory g = _kit(3, 2, 23);
+        bytes32 pm = BlsMultiKit.popMsg(g.ua);
+        (bytes memory sigAll, bytes memory pop) = (BlsMultiKit.sign(g, 7, pm), BlsMultiKit.pop(g, pm));
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        reg.register(K, g.d, _none(), sigAll, "");
+        reg.register(K, g.d, _none(), pop, ""); // positive control
+    }
+
+    /// N1: every member's distinct-message aggregate under `DST_MULTI_POP` over an app or KEM message (a "PoP" of that message) is
+    /// refused on a stored path (`verifyMinimal`, never `verifyPop`), on a registry whose 0x0121 cap admits `verifyPop` (a deployer may
+    /// set any cap up to the budget; 330,000 would refuse it by gas).
+    function test_portableApp_popAggregateUnderMultiPop_UAUnauthorized() public {
+        reg = _registry(UID, address(verifier), 11_000_000);
+        BlsMultiKit.Group memory g = _kit(3, 2, 29);
+        reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
         bytes32 digest = keccak256("kem record");
-        bytes memory s = BlsMultiKit.sign(g, 3, UAKinds.uaMessage(K, UAKinds.PURPOSE_KEM, digest));
-        bytes memory app = BlsMultiKit.sign(g, 3, UAKinds.uaMessage(K, UAKinds.appPurpose(bytes32("app")), digest));
-        // N1's row: every member's distinct-message aggregate under DST_MULTI_POP over the app / KEM message (a "PoP" of that message)
         bytes memory popLikeApp = BlsMultiKit.pop(g, UAKinds.uaMessage(K, UAKinds.appPurpose(bytes32("app")), digest));
         bytes memory popLikeKem = BlsMultiKit.pop(g, UAKinds.uaMessage(K, UAKinds.PURPOSE_KEM, digest));
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
-        reg.requirePortable(g.ua, UAKinds.PURPOSE_KEM, digest, _sig(s));
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
-        reg.requirePortableApp(g.ua, bytes32("app"), digest, _sig(app));
+        bytes memory ok = BlsMultiKit.sign(g, 3, UAKinds.uaMessage(K, UAKinds.appPurpose(bytes32("app")), digest));
+        reg.requirePortableApp(g.ua, bytes32("app"), digest, _sig(ok)); // positive control
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
         reg.requirePortableApp(g.ua, bytes32("app"), digest, _sig(popLikeApp));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
         reg.requirePortable(g.ua, UAKinds.PURPOSE_KEM, digest, _sig(popLikeKem));
+    }
+
+    // ----- `0x0121` as an `msig` member on a stored path (`_memberOk`, a direct `verifyMinimal`) -----
+
+    uint256 internal constant ALICE = 0xA11CE;
+
+    /// A classical `msig` {0x0121 group `g` (weight 1), the EOA of ALICE (weight 1)}, threshold `t`, on `r`.
+    function _msig(UARegistry r, BlsMultiKit.Group memory g, uint16 t) internal returns (bytes32 mu, uint16 gi) {
+        IUARegistry.MsigStructure memory st;
+        st.threshold = t;
+        st.members = new IUARegistry.MsigMember[](2);
+        bytes32 alice = bytes32(uint256(uint160(vm.addr(ALICE))));
+        // the members in ascending id order
+        (IUARegistry.MsigMember memory a, IUARegistry.MsigMember memory b) =
+            (IUARegistry.MsigMember(K, g.ua, 1), IUARegistry.MsigMember(UAKinds.EVM_EOA, alice, 1));
+        if (uint256(g.ua) < uint256(alice)) (st.members[0], st.members[1], gi) = (a, b, 0);
+        else (st.members[0], st.members[1], gi) = (b, a, 1);
+        mu = r.registerMsig(st, _none(), new IUARegistry.MemberSig[](0), "");
+    }
+
+    /// The member `g`'s slot signature over `md` (`uaMessage(0x0121, member, md)`) by `signers`.
+    function _memberSig(BlsMultiKit.Group memory g, uint16 gi, bytes32 md, uint256 signers)
+        internal
+        view
+        returns (IUARegistry.MemberSig memory s)
+    {
+        s.index = gi;
+        s.sig = BlsMultiKit.sign(g, signers, UAKinds.uaMessage(K, UAKinds.PURPOSE_MEMBER, md));
+    }
+
+    function _one(IUARegistry.MemberSig memory m) internal pure returns (IUARegistry.UASig memory a) {
+        a.members = new IUARegistry.MemberSig[](1);
+        a.members[0] = m;
+    }
+
+    function _membershipMd(bytes32 mu, bytes32 member) internal pure returns (bytes32) {
+        return UAKinds.memberDigest(
+            mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(mu, member))
+        );
+    }
+
+    /// `acceptMembership` of a `0x0121` slot (n = 3, t = 2): a surplus set (3 signers) is refused, a minimal one accepts.
+    function test_acceptMembership_minimalOnly() public {
+        BlsMultiKit.Group memory g = _kit(3, 2, 31);
+        reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+        (bytes32 mu, uint16 gi) = _msig(reg, g, 1);
+        bytes32 md = _membershipMd(mu, g.ua);
+        (IUARegistry.MemberSig memory three, IUARegistry.MemberSig memory two) =
+            (_memberSig(g, gi, md, 7), _memberSig(g, gi, md, 5));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, mu));
+        reg.acceptMembership(mu, three);
+        reg.acceptMembership(mu, two);
+        emit log_named_uint("GAS acceptMembership 0x0121 member n3 k2", vm.lastCallGas().gasTotalUsed);
+        assertTrue(reg.memberAccepted(mu, gi));
+    }
+
+    /// `requirePortableApp` of an `msig` with an accepted `0x0121` slot (threshold 1): the slot's minimal signature passes, a
+    /// surplus one is refused; and without the outer member digest (signed over the app message itself) it fails.
+    function test_msigPortableApp_minimalOnly() public {
+        BlsMultiKit.Group memory g = _kit(3, 2, 37);
+        reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+        (bytes32 mu, uint16 gi) = _msig(reg, g, 1);
+        reg.acceptMembership(mu, _memberSig(g, gi, _membershipMd(mu, g.ua), 3));
+        bytes32 digest = keccak256("app record");
+        bytes32 md =
+            UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.appPurpose(bytes32("app")), digest));
+        reg.requirePortableApp(mu, bytes32("app"), digest, _one(_memberSig(g, gi, md, 6)));
+        IUARegistry.UASig memory surplus = _one(_memberSig(g, gi, md, 7));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, mu));
+        reg.requirePortableApp(mu, bytes32("app"), digest, surplus);
+        // test_missingOuterMemberDigest_fails: the slot signed over the app message itself, not under `member` over `md`
+        IUARegistry.MemberSig memory bare;
+        bare.index = gi;
+        bare.sig = BlsMultiKit.sign(g, 6, UAKinds.uaMessage(K, UAKinds.appPurpose(bytes32("app")), digest));
+        IUARegistry.UASig memory b = _one(bare);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, mu));
+        reg.requirePortableApp(mu, bytes32("app"), digest, b);
+    }
+
+    /// N1: a generation without a `0x0121` verifier (`_cfg(0x0121)` = 0) refuses a stored path of a `0x0121` member, a valid minimal
+    /// signature included, and never hands it to the predecessor (which would check `verify`): gen 2 without the kind hosts an
+    /// `msig` whose member is a gen-1 record. The control: the same structure and signature on gen 1 accept.
+    function test_storedPath_noMultiVerifier_false() public {
+        BlsMultiKit.Group memory g = _kit(3, 2, 41);
+        reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+        _acceptRefused(
+            new UARegistry(UID, address(reg), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)), g
+        );
+        (bytes32 mu1, uint16 gi1) = _msig(reg, g, 1); // the control on gen 1
+        reg.acceptMembership(mu1, _memberSig(g, gi1, _membershipMd(mu1, g.ua), 3));
+        assertTrue(reg.memberAccepted(mu1, gi1));
+    }
+
+    /// The registration `pop` of a PQ-eligible `msig` {0x0121 group (weight 1), an `slhdsa128s` key (weight 1, an accept-all
+    /// stand-in verifier)}, threshold 2: the `0x0121` slot's signature is the minimal form (`_memberOk`, `verifyMinimal`): a surplus
+    /// set (3 of a 2-of-3) is `UAPoP`, a minimal one registers.
+    function test_msigPop_blsMultiMember_minimalOnly() public {
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
+        k[0] = UARegistry.KindConfig(K, address(verifier), CAP);
+        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000);
+        reg = new UARegistry(UID, address(0), false, BUDGET, address(0), true, k);
+        BlsMultiKit.Group memory g = _kit(3, 2, 47);
+        reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+        bytes32 slh = reg.register(0x0133, abi.encodePacked(keccak256("slh")), _none(), hex"01", "");
+        IUARegistry.MsigStructure memory st;
+        st.threshold = 2;
+        st.members = new IUARegistry.MsigMember[](2);
+        uint16 gi = uint256(g.ua) < uint256(slh) ? 0 : 1;
+        st.members[gi] = IUARegistry.MsigMember(K, g.ua, 1);
+        st.members[1 - gi] = IUARegistry.MsigMember(0x0133, slh, 1);
+        bytes32 md = _msigPopMd(st);
+        IUARegistry.MemberSig[] memory pop = new IUARegistry.MemberSig[](2);
+        pop[1 - gi].index = 1 - gi;
+        pop[1 - gi].sig = hex"01";
+        pop[gi] = _memberSig(g, gi, md, 7); // surplus
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        reg.registerMsig(st, _none(), pop, "");
+        pop[gi] = _memberSig(g, gi, md, 5); // minimal
+        reg.registerMsig(st, _none(), pop, "");
+    }
+
+    /// The `member` digest of an `msig`'s registration `pop` (no attributes): `memberDigest(mu, uaMessage(msig, pop v2, rd))`.
+    function _msigPopMd(IUARegistry.MsigStructure memory st) internal pure returns (bytes32) {
+        bytes memory d = abi.encodePacked(st.threshold, uint16(st.members.length));
+        for (uint256 i; i < st.members.length; ++i) {
+            d = bytes.concat(d, abi.encodePacked(st.members[i].kind, st.members[i].id, st.members[i].weight));
+        }
+        bytes32 mu = UAKinds.uaOf(UAKinds.MSIG, d);
+        bytes32 rec = UAKinds.portableRecordHash(mu, UAKinds.MSIG, 0, UAKinds.kemRecordHash(mu, 0, bytes("")));
+        bytes32 rd = UAKinds.portableDigest(UAKinds.registrationHash(rec, 0));
+        return UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_POP_V2, rd));
+    }
+
+    /// `acceptMembership` of `g`'s slot by a minimal set, on the gen 2 `r`: `UAUnauthorized`.
+    function _acceptRefused(UARegistry r, BlsMultiKit.Group memory g) internal {
+        (bytes32 mu, uint16 gi) = _msig(r, g, 1);
+        IUARegistry.MemberSig memory s = _memberSig(g, gi, _membershipMd(mu, g.ua), 3);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, mu));
+        r.acceptMembership(mu, s);
+    }
+
+    /// The fourth appended word (N1): `_lib` appends `_cfg(kind)`, `_cfg(0x0142)`, the clone codehash, then `_cfg(0x0121)`, after the
+    /// caller's calldata, unchanged (the library reads each at its offset from the end): a stand-in at the library's address
+    /// answers the calldata it was given as its revert data, which the registry passes verbatim.
+    function test_libWords_fourth_isMultiCfg() public {
+        bytes memory call = abi.encodeCall(UARegistry.register, (K, hex"01", _none(), hex"02", bytes("")));
+        vm.etch(address(UARegistryRegLib), address(new CalldataEcho()).code);
+        (bool ok, bytes memory seen) = address(reg).call(call);
+        assertFalse(ok);
+        uint256 cfg = uint256(uint160(address(verifier))) | uint256(CAP) << 160;
+        bytes memory args = BlsMultiKit._cut(call, 4, call.length - 4); // under the library's selector (its ABI names the structs)
+        bytes memory want = bytes.concat(UARegistryRegLib.register.selector, args);
+        assertEq(seen, bytes.concat(want, bytes32(cfg), bytes32(0), bytes32(0), bytes32(cfg)));
     }
 
     /// A registry that does not enable 0x0121 refuses both entries `UAKindDisabled` (Hedera's profile, a chain without EIP-2537).
@@ -276,5 +490,26 @@ contract UARegistryBlsMultiTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, K));
         off.registerBlsMulti(_typed(d), _none(), pop, "");
         assertFalse(off.kindEnabled(K));
+    }
+}
+
+/// Reverts with the calldata it was given (`test_libWords_fourth_isMultiCfg`).
+contract CalldataEcho {
+    fallback() external {
+        bytes memory d = msg.data;
+        assembly ("memory-safe") {
+            revert(add(d, 32), mload(d))
+        }
+    }
+}
+
+/// An accept-all stand-in for a PQ kind's verifier (`test_msigPop_blsMultiMember_minimalOnly`).
+contract AcceptAllPq {
+    function verify(bytes calldata, bytes32, bytes calldata) external pure returns (bool) {
+        return true;
+    }
+
+    function verifyPop(bytes calldata, bytes32, bytes calldata) external pure returns (bool) {
+        return true;
     }
 }

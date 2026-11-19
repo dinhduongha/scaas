@@ -2,7 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {IUARegistry} from "./IUARegistry.sol";
-import {IUAPopVerifier} from "./IUAVerifier.sol";
+import {IUAPopVerifier, IUAMinimalVerifier} from "./IUAVerifier.sol";
+import {SSTORE2} from "../common/SSTORE2.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
@@ -19,15 +20,17 @@ import {MldsaVerifier} from "./MlDsa.sol";
 ///        `UAStore.Layout`. Same check order, same stored bytes, same events and errors as when this code was in the registry
 ///        (`legacy/typed-signing/UARegistryPreSplit.sol`; `test/ua/UARegistrySplit.t.sol`).
 /// @notice What a library cannot read, the registry's immutables, reaches it two ways (no new selector):
-///         - 3 words the entry appends after the forwarded calldata: `_cfg(kind)` of the kind the entry knows (its
-///           parameter, or the record's), `_cfg(0x0142)`, the clone codehash. They are read from the end of the calldata,
+///         - 4 words the entry appends after the forwarded calldata: `_cfg(kind)` of the kind the entry knows (its
+///           parameter, or the record's), `_cfg(0x0142)`, the clone codehash, `_cfg(0x0121)` (spec 2026-11-19-bls12381-multi
+///           §5.3, N1). They are read from the end of the calldata,
 ///           so nothing a caller sends can stand in their place, however long its calldata; a nested ABI offset may point
 ///           into them, which only reads public values as that caller's own argument.
 ///         - everything with a getter is called back on `address(this)`: `predecessor`, `hederaNative`, `verifyBudget`,
 ///           `verifyCap` (an `msig` member's cap and whether its kind is enabled), `kindOf`, `keyOwner`.
 ///         A derived `msig` member's signature goes through `requireAuthorized` on `address(this)` under `member`: the
 ///         same `_derived`, its kind was checked against its record at registration (`UARegistryRegLib._membersWorst`); the
-///         verifier call stays in the one place, and this library needs no member's verifier address.
+///         verifier call stays in the one place, and this library needs no member's verifier address, but one: a `0x0121`
+///         member on a stored path is checked here, by `verifyMinimal` on the verifier of the fourth word (`_multi`, §5.3).
 ///         Called directly every writer reverts: solc's library call protection covers each one, none is `view`; the two
 ///         `pure` views answer a direct call with their pure result.
 ///         `acceptMembership` (CTR-UA-37) runs here too; its member check is `_memberOk`, as a stored record's.
@@ -53,17 +56,24 @@ library UARegistryCoreLib {
 
     function _cfgKind() internal pure returns (uint256 w) {
         assembly ("memory-safe") {
-            w := calldataload(sub(calldatasize(), 96))
+            w := calldataload(sub(calldatasize(), 128))
         }
     }
 
     function _cfgPqz() internal pure returns (uint256 w) {
         assembly ("memory-safe") {
-            w := calldataload(sub(calldatasize(), 64))
+            w := calldataload(sub(calldatasize(), 96))
         }
     }
 
     function _cloneHash() internal pure returns (bytes32 w) {
+        assembly ("memory-safe") {
+            w := calldataload(sub(calldatasize(), 64))
+        }
+    }
+
+    /// The fourth word (spec 2026-11-19-bls12381-multi §5.3, N1): `_cfg(0x0121)`, the verifier and cap of a `0x0121` `msig` member.
+    function _cfgMulti() internal pure returns (uint256 w) {
         assembly ("memory-safe") {
             w := calldataload(sub(calldatasize(), 32))
         }
@@ -147,7 +157,7 @@ library UARegistryCoreLib {
     // ----- the helpers the other two libraries call (T66b 3.1c, owner 2026-11-09, spec 2026-11-09-t66b-library-organisation.md §11 (f); owner 2026-11-19) -----
 
     /// One copy of the verify code in the registry's libraries: `UARegistryAuxLib` (both) and `UARegistryRegLib` (`portableOk`,
-    /// the step-6 PoP) run these by a nested DELEGATECALL (their `_lib`), this call's arguments followed by the three words the
+    /// the step-6 PoP) run these by a nested DELEGATECALL (their `_lib`), this call's arguments followed by the four words the
     /// registry appended to the caller's entry, so `address(this)`, the storage and `_cfgKind` / `_cfgPqz` / `_cloneHash` are the
     /// registry's, as when the caller compiled this code in. Each is its `internal` twin and nothing else. None is `view` or
     /// `pure`: solc's library call protection covers each, a direct call reverts.
@@ -203,7 +213,8 @@ library UARegistryCoreLib {
         if (r.kind == 0 || purposeTag == UAKinds.PURPOSE_POP_V2) revert IUARegistry.UAUnauthorized(ua);
         bool ok;
         if (r.kind != UAKinds.MSIG) {
-            (bytes memory d,) = UAStore.registration(ua, r);
+            bytes memory d; // a surplus-form kind verifies its stored `p` (`_multi`), never `d`
+            if (!UAKinds.hasSurplusForm(r.kind)) (d,) = UAStore.registration(ua, r);
             ok = auth.keyData.length == 0 && auth.members.length == 0
                 && _single(_cfgKind(), r.kind, d, ua, purposeTag, typedDigest, auth.signature);
         } else {
@@ -289,27 +300,49 @@ library UARegistryCoreLib {
         bytes32 digest,
         bytes memory sig
     ) internal view returns (bool) {
+        // spec 2026-11-19-bls12381-multi §5.3 (N1): a surplus-form kind by its own dispatch, `cfg` 0 included (no hand-off)
+        if (UAKinds.hasSurplusForm(kind)) return _multi(cfg, kind, ua, purpose, digest, d, sig);
         // A6-I1: a gen-1 holder's PQZ key record on gen 2 (the PQ holder kinds are stored: no key data in `auth`); the
         // PQ verifiers' `verify` is their `verifyPop`
         if (uint160(cfg) == 0) {
             return UAStore.via(_pred(), ua, purpose, digest, IUARegistry.UASig("", sig, new IUARegistry.MemberSig[](0)));
         }
-        // `bls12381-multi`: only the registration PoP is ever checked under `DST_MULTI_POP` (spec 2026-11-19-bls12381-multi §4
-        // condition 2); its other stored paths need `verifyMinimal` (§5.3, plan Task 8, not built): refused until then (fail closed)
-        if (kind == UAKinds.BLS12381_MULTI && purpose != UAKinds.PURPOSE_POP_V2) return false;
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         bytes memory ek = UAStore.expanded(ua, kind); // ML-DSA: a complete cache is the key the PoP verifies on
         bytes memory data = ek.length != 0
             ? abi.encodeWithSelector(MldsaVerifier.verifyCached.selector, ek, message, sig)
             : abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, sig);
-        // group kinds: the whole group check runs here, bounded by verifyBudget (§1.8 step 6), without the hold; `bls12381-multi`'s
-        // registration PoP too (n + 1 pairings over `d`, spec 2026-11-19-bls12381-multi §4, §5.3)
-        if (
-            (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254)
-                || (kind == UAKinds.BLS12381_MULTI && purpose == UAKinds.PURPOSE_POP_V2)
-        ) {
+        // group kinds: the whole group check runs here, bounded by verifyBudget (§1.8 step 6), without the hold
+        if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) {
             return UAStore.capped(address(uint160(cfg)), IUARegistry(address(this)).verifyBudget(), data, 1, false);
         }
+        return UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
+    }
+
+    /// A surplus-form kind (`0x0121`, spec 2026-11-19-bls12381-multi §5.3 dispatch, N1) on the library's paths, every one a stored path:
+    /// the registration `pop` v2 → `verifyPop(d)` (all n, `DST_MULTI_POP`, the only use of that DST), under `verifyBudget` without the
+    /// hold; any other purpose → `verifyMinimal(p)` (`DST_MULTI_SIG`, every signer necessary), `p` the stored `ua ‖ s` of the record
+    /// held here with that kind (else `false`), under the kind's cap with the hold. `cfg` 0 (this generation has no verifier for the
+    /// kind): `false`, never a hand-off to the predecessor, whose `requireAuthorized` would take `verify`.
+    function _multi(
+        uint256 cfg,
+        uint16 kind,
+        bytes32 ua,
+        bytes32 purpose,
+        bytes32 digest,
+        bytes memory d,
+        bytes memory sig
+    ) private view returns (bool) {
+        if (uint160(cfg) == 0) return false;
+        bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
+        if (purpose == UAKinds.PURPOSE_POP_V2) {
+            bytes memory pop = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, sig);
+            return UAStore.capped(address(uint160(cfg)), IUARegistry(address(this)).verifyBudget(), pop, 1, false);
+        }
+        IUARegistry.Record memory r = UAStore.layout().records[ua];
+        if (r.kind != kind) return false;
+        bytes memory data =
+            abi.encodeWithSelector(IUAMinimalVerifier.verifyMinimal.selector, SSTORE2.read(r.keyPtr), message, sig);
         return UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
     }
 
@@ -393,6 +426,9 @@ library UARegistryCoreLib {
             return s.sig.length == 0 && _msig(id, inner, typed, false, _msigBytes(id), UAStore.lift(s.members));
         }
         if (s.members.length != 0) return false;
+        // spec 2026-11-19-bls12381-multi §5.3 (N1): a surplus-form member is checked here by `verifyMinimal`, never by the hop below
+        // (whose `requireAuthorized` takes `verify`, extra signers included)
+        if (UAKinds.hasSurplusForm(kind)) return _multi(_cfgMulti(), kind, id, UAKinds.PURPOSE_MEMBER, md, "", s.sig);
         if (!UAKinds.isNative(kind)) {
             return UAStore.via(
                 address(this),

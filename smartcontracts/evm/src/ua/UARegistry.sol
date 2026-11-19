@@ -656,12 +656,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     // ----- the writers and the reads off the hot path: in `UARegistryRegLib`, `UARegistryCoreLib` and `UARegistryAuxLib` -----
 
-    /// Runs the library `lib`'s entry `sel` by DELEGATECALL (`UARegistryRegLib`, `UARegistryCoreLib` or `UARegistryAuxLib`, by the entry's domain): this call's arguments as they came, then three words the
-    /// library cannot read for itself, `_cfg(kind)`, `_cfg(0x0142)`, the clone codehash (`kind` is the kind the entry knows).
+    /// Runs the library `lib`'s entry `sel` by DELEGATECALL (`UARegistryRegLib`, `UARegistryCoreLib` or `UARegistryAuxLib`, by the entry's domain): this call's arguments as they came, then four words the
+    /// library cannot read for itself, `_cfg(kind)`, `_cfg(0x0142)`, the clone codehash (`kind` is the kind the entry knows), and
+    /// (spec 2026-11-19-bls12381-multi §5.3, N1) `_cfg(0x0121)`, the verifier of a `0x0121` `msig` member on a stored path.
     /// They come from this contract's immutables only and sit past the caller's bytes; the library reads them from the end
     /// of its calldata. Its return data or revert data is this call's, byte for byte.
     function _lib(address lib, bytes4 sel, uint16 kind) private {
-        (uint256 a, uint256 b, bytes32 c) = (_cfg(kind), _CFG18, _SMART_KEY_CLONE_CODEHASH);
+        (uint256 a, uint256 b, bytes32 c, uint256 m) = (_cfg(kind), _CFG18, _SMART_KEY_CLONE_CODEHASH, _CFG21);
         assembly {
             mstore(0, sel)
             calldatacopy(4, 4, sub(calldatasize(), 4))
@@ -669,7 +670,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             mstore(e, a)
             mstore(add(e, 32), b)
             mstore(add(e, 64), c)
-            let ok := delegatecall(gas(), lib, 0, add(e, 96), 0, 0)
+            mstore(add(e, 96), m)
+            let ok := delegatecall(gas(), lib, 0, add(e, 128), 0, 0)
             returndatacopy(0, 0, returndatasize())
             if ok { return(0, returndatasize()) }
             revert(0, returndatasize())
@@ -794,7 +796,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// T66b R-1 (spec 2026-11-09-t66b-library-organisation.md §5): a `pure` view whose code a registry library holds runs there
     /// (`lib`: the core for `uaOf` and `keyHashOf`, since 3.1d the Aux library for the five `*Digest` views), one copy of it in the pair: this call's
-    /// calldata under the library entry `sel` (the same ABI), none of `_lib`'s three words
+    /// calldata under the library entry `sel` (the same ABI), none of `_lib`'s four words
     /// appended (a pure body reads no configuration); its return or revert data is this call's, byte for byte. Only where the
     /// view's own bytes exceed this stub (≈ 45–80 B); `uaAuthDigest` stays (it reads this contract's EIP-712 immutables).
     function _libRaw(address lib, bytes4 sel) private {

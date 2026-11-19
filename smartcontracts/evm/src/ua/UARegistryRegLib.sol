@@ -18,7 +18,7 @@ import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
 ///        `UARegistryCoreLib`, which keeps the authorization and verify paths: the step-6 PoP runs there by one nested
 ///        DELEGATECALL (`_lib` to `UARegistryCoreLib.portableOk`), the core's small `internal` helpers (the appended words, the
 ///        getters, `_msigBytes`, `_memberSig`, `_pqEligible`) are compiled in. Run by DELEGATECALL from the registry's thin
-///        entry (`_lib`, the same three appended words), so `address(this)` is the registry and the storage is its
+///        entry (`_lib`, the same four appended words), so `address(this)` is the registry and the storage is its
 ///        `UAStore.Layout`; same check order, same stored bytes, same events and errors as in `UARegistryCoreLib` before the
 ///        split. Called directly every entry reverts (solc's library call protection; none is `view` or `pure`). UNAUDITED.
 library UARegistryRegLib {
@@ -741,15 +741,15 @@ library UARegistryRegLib {
         );
     }
 
-    /// Runs a `UARegistryCoreLib` helper by a nested DELEGATECALL: `call`, then the three words the registry appended to this
-    /// entry's calldata (its last 96 bytes), so the helper reads this frame's configuration; `address(this)` and the storage
+    /// Runs a `UARegistryCoreLib` helper by a nested DELEGATECALL: `call`, then the four words the registry appended to this
+    /// entry's calldata (its last 128 bytes), so the helper reads this frame's configuration; `address(this)` and the storage
     /// stay the registry's. One level only: the core never calls back here. A core without code reverts `UAConfig(0)` (a
     /// DELEGATECALL to it would succeed with nothing checked); the helper's revert data passes verbatim.
     function _lib(bytes memory call) private returns (bytes memory ret) {
         address core = address(UARegistryCoreLib);
         if (core.code.length == 0) revert UAConfig(0);
         bool ok;
-        (ok, ret) = core.delegatecall(bytes.concat(call, msg.data[msg.data.length - 96:]));
+        (ok, ret) = core.delegatecall(bytes.concat(call, msg.data[msg.data.length - 128:]));
         if (!ok) {
             assembly ("memory-safe") {
                 revert(add(ret, 32), mload(ret))

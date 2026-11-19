@@ -16,7 +16,7 @@ import {PqzSet} from "../pqz/PqzSet.sol";
 ///        the key writes after registration: the ML-DSA expanded-key cache, the PQZ key proof and versions (`storePqzPop`,
 ///        `setPqzKey`) and the KEM records (`setKemKey`); and reads off the registry's hot path (`popOf`, `popSlotsOf`,
 ///        `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`, `uaAt`, `uaPage`, `uaIndex`, run inside the registry's view). Run by
-///        DELEGATECALL from the registry's thin entry (`_lib`, the same three appended words as `UARegistryCoreLib`'s), so
+///        DELEGATECALL from the registry's thin entry (`_lib`, the same four appended words as `UARegistryCoreLib`'s), so
 ///        `address(this)` is the registry and the storage is its `UAStore.Layout`; one DELEGATECALL per operation, as before.
 ///        Same check order, same stored bytes, same events and errors as when this code was in `UARegistryCoreLib`
 ///        (`legacy/ua-mtx-merge/t66b/src/ua/UARegistryLib.sol`, the reads `UARegistry.sol` there). The helpers it shares with registration (the appended words,
@@ -32,7 +32,7 @@ library UARegistryAuxLib {
     // ----- the core's shared helpers (T66b 3.1c, owner 2026-11-09, spec §11 (f)) -----
 
     /// Runs a helper of `core` (`UARegistryCoreLib`, or since owner 2026-11-19 `UARegistryRegLib` for the registration-bound
-    /// ones) by a nested DELEGATECALL: `call`, then the three words the registry appended to this entry's calldata (its last 96
+    /// ones) by a nested DELEGATECALL: `call`, then the four words the registry appended to this entry's calldata (its last 128
     /// bytes), so the helper reads this frame's configuration; `address(this)` and the storage stay the registry's. One level
     /// only: neither calls back here (`UARegistryRegLib` reaches only the core's `portableOk`, not from these helpers). A
     /// library without code reverts `UAConfig(0)` (a DELEGATECALL to it would succeed with nothing checked); the helper's revert
@@ -40,7 +40,7 @@ library UARegistryAuxLib {
     function _core(address core, bytes memory call) private returns (bytes memory ret) {
         if (core.code.length == 0) revert UAConfig(0);
         bool ok;
-        (ok, ret) = core.delegatecall(bytes.concat(call, msg.data[msg.data.length - 96:]));
+        (ok, ret) = core.delegatecall(bytes.concat(call, msg.data[msg.data.length - 128:]));
         if (!ok) {
             assembly ("memory-safe") {
                 revert(add(ret, 32), mload(ret))

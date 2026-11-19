@@ -299,16 +299,17 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         }
     }
 
-    /// An offset inside a struct is checked where it is read, and in the library the calldata is 96 B longer than the entry's. A `pqzKey`
-    /// offset aimed at the appended clone word (0 here) reads as the empty key, which is what the well-formed call has: the same record,
-    /// nothing the caller could not send. Aimed past those 96 B it is past the calldata, and refused.
+    /// An offset inside a struct is checked where it is read, and in the library the calldata is 128 B longer than the entry's (96 B
+    /// before the fourth word, spec 2026-11-19-bls12381-multi §5.3, N1). A `pqzKey` offset aimed at the appended clone word (0 here)
+    /// reads as the empty key, which is what the well-formed call has: the same record, nothing the caller could not send. Aimed past
+    /// those 128 B it is past the calldata, and refused.
     function test_nestedOffsetReadsAWordAsItsOwnArgument() public {
         bytes memory good = _plain(SLH, _pk(SLH, 1));
         uint256 attrs = 4 + uint256(_word(good, 4 + 2 * 32));
         _deploy(R1, chainUidA, address(0), false, BUDGET, address(0), true, _one(SLH, address(mock), PQ));
         _deploy(R2, chainUidA, address(0), false, BUDGET, address(0), true, _one(SLH, address(mock), PQ));
 
-        (bool ok, bytes memory ret) = R2.call(_aimed(good, attrs, good.length + 96));
+        (bool ok, bytes memory ret) = R2.call(_aimed(good, attrs, good.length + 128));
         assertFalse(ok, "past the calldata");
         assertEq(ret.length, 0);
         (ok,) = R2.call(_aimed(good, attrs, good.length + 64));

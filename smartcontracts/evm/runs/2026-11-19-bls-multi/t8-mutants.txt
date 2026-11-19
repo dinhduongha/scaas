@@ -1,0 +1,8 @@
+killed   | M1 verify instead of verifyMinimal on the stored paths (single signer) | expect test_portable_minimalOnly 
+killed   | M2 verify instead of verifyMinimal for every stored path (the shared helper) | expect test_acceptMembership_minimalOnly 
+killed   | M3 pop v2 sent to verifyMinimal | expect test_register_typedEqualsPacked 
+killed   | M4 verifyPop kept for app purposes | expect test_portableApp_popAggregateUnderMultiPop_UAUnauthorized 
+killed   | M5 _memberOk keeps the requireAuthorized hop for 0x0121 | expect test_acceptMembership_minimalOnly 
+killed   | M6 a hand-off to the predecessor when _cfg(0x0121) is 0 | expect test_storedPath_noMultiVerifier_false 
+killed   | M7 the fourth word not appended | expect test_libWords_fourth_isMultiCfg 
+7 mutants, 7 killed, 0 survived, 0 not loaded (one equivalent left out: the record kind check in _multi; a gen 2 cannot enable 0x0121 while gen 1 does, UAConfig(289))
