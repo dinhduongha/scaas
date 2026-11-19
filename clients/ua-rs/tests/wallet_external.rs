@@ -244,7 +244,54 @@ fn webauthn_rows_through_an_external_passkey() {
         );
         n += 1;
     }
-    assert_eq!(n, 4);
+    assert_eq!(n, 5, "the fifth at the cap (G3)");
+}
+
+/// Owner 2026-11-19, G3: a device's assertion one byte above the cap (`authData` and `clientDataJSON` together), valid on the
+/// chains, is `WebAuthnTooLong`, nothing returned (control: the accepted row at the cap passes above).
+#[test]
+fn an_external_assertion_above_the_cap_is_refused() {
+    let s = load("sign.json");
+    let r = arr(&s["webauthn"], "refusals")
+        .iter()
+        .find(|r| r["case"] == "above-the-cap")
+        .unwrap();
+    let (a, c) = (bytes(&r["authData"]), bytes(&r["clientDataJSON"]));
+    assert_eq!(
+        a.len() + c.len(),
+        scaas_ua::wallet::WEBAUTHN_MAX_ASSERTION + 1
+    );
+    let word = |n: usize| {
+        let mut w = [0u8; 32];
+        w[24..].copy_from_slice(&(n as u64).to_be_bytes());
+        w
+    };
+    let padded = |b: &[u8]| [&word(b.len())[..], b, &vec![0; (32 - b.len() % 32) % 32]].concat();
+    let blob = [
+        &word(0x80)[..],
+        &word(0xa0 + a.len().next_multiple_of(32)),
+        &bytes(&r["r"]),
+        &bytes(&r["s"]),
+        &padded(&a),
+        &padded(&c),
+    ]
+    .concat();
+    let (kd, challenge) = (bytes(&r["keyData"]), b32(&r["expectedChallenge"]));
+    assert!(
+        verify(0x0100, &kd, &challenge, &blob, false),
+        "valid on the chains"
+    );
+    let x = TestExternalKey::new(
+        KeyRef::Ua {
+            kind: 0x0100,
+            key_data: kd,
+        },
+        move |_: &SignRequest| Ok(blob.clone()),
+    );
+    assert_eq!(
+        ua_sig(&x, None, &b32(&r["purposeTag"]), &b32(&r["digest"])).err(),
+        Some(Error::WebAuthnTooLong)
+    );
 }
 
 /// A device answer that does not verify: one bit flipped, or another key's signature, per signing scheme (positive control

@@ -237,6 +237,44 @@ pub(crate) fn quoted(
     ))
 }
 
+/// The calldata bytes a quote of signer kind `signer` counted (owner 2026-11-19, G3): the unsigned calldata (`unsigned`) plus
+/// the verify row's `sig_bytes` when the verify part came from a row (looked up in the same order, so from the same row); an
+/// app's figure, an estimate or no source counted the unsigned calldata only.
+pub(crate) fn counted_bytes(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    signer: u16,
+    from: Option<&GasSources>,
+    unsigned: usize,
+) -> u64 {
+    let unsigned = u64::try_from(unsigned).unwrap_or(u64::MAX);
+    let sig = match from.map(|f| &f.verify) {
+        Some(GasFrom::Chain | GasFrom::Module(_) | GasFrom::Reference) => {
+            part(chain, opt_in, tables, |r| {
+                r.verify
+                    .iter()
+                    .find(|v| v.signer == signer)
+                    .map(|v| v.sig_bytes)
+            })
+            .map_or(0, |v| v.0)
+        }
+        _ => 0,
+    };
+    unsigned.saturating_add(sig)
+}
+
+/// The gas of a quoted operation once signed (owner 2026-11-19, G3): the calldata part recomputed from the signed calldata
+/// (`signed` bytes, the real signature's length) where it exceeds what the quote counted (`counted`), with the margin; never
+/// below the quote's figure (`quoted`).
+pub(crate) fn signed_gas(quoted: u64, counted: u64, signed: usize) -> u64 {
+    let signed = u64::try_from(signed).unwrap_or(u64::MAX);
+    match signed.saturating_sub(counted) {
+        0 => quoted,
+        more => quoted.saturating_add(with_margin(more.saturating_mul(PER_BYTE))),
+    }
+}
+
 /// The length in bytes of an operation's variable-length input a per-byte part names (`extra`, `message`: the prepared
 /// operation's unsigned arguments and message): `meta.body`, the `PayMeta` body as the contract receives it (`scaas-ua`'s
 /// encoding); `data`, the message's `data` (hex). `None`: the operation has none.
@@ -978,6 +1016,39 @@ mod tests {
             lookup(&r, &[], &[], Some(500), K),
             Some((500, GasSources::both(GasFrom::App)))
         );
+    }
+
+    /// Owner 2026-11-19, G3: a quote counted the unsigned calldata plus its verify row's `sig_bytes` when the verify part
+    /// came from a row (the same row, by the same order), the unsigned calldata only for an app's figure, an estimate or no
+    /// source; once signed, the bytes beyond that at 64 gas a byte with the margin, never below the quote.
+    #[test]
+    fn signed_gas_counts_the_real_signature() {
+        let mut r = rows(1_000, 10);
+        r.verify[0].sig_bytes = 128;
+        let mut m = rows(1_000, 10);
+        m.verify[0].sig_bytes = 200;
+        let tables = vec![table("vault", m)];
+        let opt = all(&["vault"]);
+        let c = |chain: &GasRows, from: Option<GasSources>| {
+            counted_bytes(chain, &opt, &tables, 0x0101, from.as_ref(), 500)
+        };
+        assert_eq!(c(&r, Some(GasSources::both(GasFrom::Chain))), 628);
+        assert_eq!(
+            c(&GasRows::default(), Some(src(GasFrom::Chain, module("vault")))),
+            700,
+            "the module's row, as the quote found it"
+        );
+        for f in [
+            Some(GasSources::both(GasFrom::App)),
+            Some(GasSources::both(GasFrom::Estimate)),
+            None,
+        ] {
+            assert_eq!(c(&r, f.clone()), 500, "{f:?}");
+        }
+        assert_eq!(signed_gas(90_000, 628, 628), 90_000);
+        assert_eq!(signed_gas(90_000, 628, 600), 90_000, "never lowered");
+        assert_eq!(signed_gas(90_000, 628, 629), 90_000 + 96);
+        assert_eq!(signed_gas(90_000, 500, 628), 90_000 + 12_288);
     }
 
     /// Ruling 4: the attached signature's kind, read from `payerSig` and the payment's `from`.

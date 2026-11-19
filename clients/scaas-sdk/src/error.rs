@@ -95,6 +95,9 @@ own_codes! {
     ValidUntilRefused,
     /// A gas table's verify row without `sig_bytes` (owner 2026-11-19, A4): every verify row states its signature's length.
     GasSigBytesMissing,
+    /// A self-relay whose gas, recomputed after signing from the signed calldata (the real signature's length; owner
+    /// 2026-11-19, G3), exceeds `Limits::max_gas`: nothing written or sent.
+    SignedGasAboveCap,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

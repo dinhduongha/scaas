@@ -1402,6 +1402,7 @@ STATUS = {
             "PqzSetMismatch",
             "PqzKeyVersion",
             "KeyInUse",
+            "WebAuthnTooLong",
         ],
         21,
     )
@@ -1645,8 +1646,8 @@ class WalletAbi(WalletCase):
             self.assertEqual(L.status_name(v).decode(), "UA" + n)
         self.assertEqual(L.status_name(12).decode(), "UAKemHolder")
         self.assertEqual(
-            L.status_name(43).decode(), "UAStatusUnknown"
-        )  # T15: 40 -> 41 (UAPqzSetMismatch appended); T15o: 41 -> 43
+            L.status_name(44).decode(), "UAStatusUnknown"
+        )  # T15: 40 -> 41 (UAPqzSetMismatch appended); T15o: 41 -> 43; G3: 43 -> 44 (UAWebAuthnTooLong appended)
         self.assertNotEqual(STATUS["KindUnavailable"], 3)
 
     def test_free_null_is_a_noop(self):

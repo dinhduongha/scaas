@@ -476,8 +476,19 @@ test("WebAuthn assertion: accepted rows, refusals (wrong challenge, reordered JS
     assert.ok(kindVerify(0x0100, x.keyData, x.expectedChallenge, x.assertion));
   }
   const cases = new Set(S.webauthn.refusals.map((x) => x.case));
-  for (const c of ["wrong-challenge", "reordered-json", "cross-origin-true", "r-zero", "s-n", "client-data-not-utf8"])
+  for (const c of [
+    "wrong-challenge",
+    "reordered-json",
+    "cross-origin-true",
+    "r-zero",
+    "s-n",
+    "client-data-not-utf8",
+    "above-the-cap",
+  ])
     assert.ok(cases.has(c), c);
+  // G3 (owner 2026-11-19): the last accepted row at the cap, the `above-the-cap` refusal one byte above
+  const size = (x) => (x.authData.length + x.clientDataJSON.length) / 2 - 2;
+  assert.equal(size(a.at(-1)), U.WEBAUTHN_MAX_ASSERTION);
   for (const x of S.webauthn.refusals) {
     assert.throws(
       () =>
@@ -489,7 +500,7 @@ test("WebAuthn assertion: accepted rows, refusals (wrong challenge, reordered JS
           r: B(x.r),
           s: B(x.s),
         }),
-      (e) => e.code === "WebAuthnAssertion",
+      (e) => e.code === x.error && x.error === (x.case === "above-the-cap" ? "WebAuthnTooLong" : "WebAuthnAssertion"),
       x.case,
     );
   }

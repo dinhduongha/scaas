@@ -1276,7 +1276,9 @@ async fn sim_refused_is_written_and_followed() {
         if revert {
             t.chain.lock().unwrap().call_revert = true;
         } else {
-            t.chain.lock().unwrap().gas = q.gas_limit + 1; // the signed form needs more than the user confirmed
+            // the signed form needs more than the limit sent (the quote's, raised by G3 for the signature's bytes, which the
+            // fixture's `sig_bytes` of 0 left out: below twice the quote's, asserted below)
+            t.chain.lock().unwrap().gas = q.gas_limit * 2;
         }
         let op = t
             .sdk
@@ -1295,6 +1297,7 @@ async fn sim_refused_is_written_and_followed() {
             (row.digest.as_str(), row.state.as_str(), row.detail.as_str()),
             (p.id().as_str(), "signed", "SimRefused")
         );
+        assert!(row.gas_limit < Some(q.gas_limit * 2));
         // what the endpoint saw: the signed calldata, after the row was written
         assert!(t
             .chain
@@ -1704,4 +1707,65 @@ async fn retry_on_a_lane_waits_for_expired() {
     assert_ne!(second, first);
     assert_eq!(t.sdk.op().state(first).await.unwrap(), OpState::Expired);
     assert_eq!(signs(&t), 2);
+}
+
+/// Owner 2026-11-19, G3: after signing and before anything is written, a self-relay's gas is recomputed from the signed
+/// calldata: the signature's bytes beyond what the quote counted (the verify row's `sig_bytes`) at 64 gas a byte with the
+/// margin, never below the quote's figure; the transaction is signed with it. Above `Limits::max_gas`: `SignedGasAboveCap`,
+/// nothing written or sent, the operation still submittable (control: at the cap it is sent).
+#[tokio::test(flavor = "multi_thread")]
+async fn signed_gas_is_recomputed_from_the_signature() {
+    // the tests' UA (0x0101, P-256) signs 128 bytes of key data and signature beyond the empty `UASig`
+    let (mut sent_with, mut quoted) = (vec![], vec![]);
+    for sig_bytes in [0u64, 100, 128, 1_000] {
+        let t = setup(0, |p, _| {
+            for v in p.gas.verify.iter_mut() {
+                v.sig_bytes = sig_bytes;
+            }
+        })
+        .await;
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let q = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        let unsigned = submit::unsigned(&p).unwrap().calldata.len() as u64;
+        let op = t.sdk.op().submit(p, q.clone()).await.unwrap();
+        let row = state::row(&t.sdk, &op).await.unwrap();
+        let signed = unhex(&row.calldata).unwrap().len() as u64;
+        assert_eq!(signed - unsigned, 128, "P-256: key data and signature");
+        let more = 128u64.saturating_sub(sig_bytes);
+        assert_eq!(
+            row.gas_limit,
+            Some(q.gas_limit + gas::with_margin(64 * more)),
+            "sig_bytes {sig_bytes}: raised by the uncounted bytes only, never lowered"
+        );
+        sent_with.push(row.gas_limit.unwrap() - q.gas_limit);
+        quoted.push(q.gas_limit);
+    }
+    assert_eq!(sent_with, [12_288, 2_688, 0, 0]);
+    // above the cap: refused by name, nothing written or sent, the operation put back; control: at the cap it is sent
+    for (over, max) in [(true, quoted[0] + 12_288 - 1), (false, quoted[0] + 12_288)] {
+        let t = setup(0, |_, l| l.max_gas = max).await;
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let q = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        assert_eq!(q.gas_limit, quoted[0], "the same quote");
+        let got = t.sdk.op().submit(p.clone(), q.clone()).await;
+        if over {
+            assert_eq!(code(got), "SignedGasAboveCap");
+            assert!(state::rows(&t.sdk).await.unwrap().is_empty(), "nothing written");
+            assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
+            Op::known(&t.sdk, &p).expect("put back");
+        } else {
+            got.unwrap();
+            sent_txs(&t, 1).await;
+        }
+    }
 }

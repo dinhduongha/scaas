@@ -165,6 +165,59 @@ pub(crate) async fn self_relay(
     })
 }
 
+/// The signer kind of `p`'s quote: a UA key's kind, else the native EVM key (the reference signer).
+pub(crate) fn signer_kind(p: &Prepared) -> u16 {
+    match p.signer() {
+        KeyRef::Ua { kind, .. } => kind,
+        KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
+    }
+}
+
+/// A self-relay quote `q` of `p` once `p` is signed into `signed` calldata bytes (owner 2026-11-19, G3): its gas recomputed
+/// from the real signature's length, never below `q`'s (`q` itself when nothing grew); above `Limits::max_gas`
+/// `SignedGasAboveCap`, above the profile's per-transaction cap `GasAboveTxCap`, a cost above the caps `FeeAboveCap`.
+pub(crate) fn signed_quote(
+    sdk: &Sdk,
+    p: &Prepared,
+    q: &SubmitQuote,
+    signed: usize,
+) -> Result<SubmitQuote, SdkError> {
+    let chain = sdk
+        .chains
+        .iter()
+        .find(|c| c.profile.key == p.chain())
+        .ok_or(SdkError::ChainUnknown)?;
+    let counted = super::gas::counted_bytes(
+        &chain.profile.gas,
+        &chain.profile.gas_opt_in,
+        &sdk.gas_tables,
+        signer_kind(p),
+        q.gas_from.as_ref(),
+        super::submit::unsigned(p)?.calldata.len(),
+    );
+    let gas = super::gas::signed_gas(q.gas_limit, counted, signed);
+    if gas == q.gas_limit {
+        return Ok(q.clone());
+    }
+    if gas > sdk.limits.max_gas {
+        return Err(SdkError::SignedGasAboveCap);
+    }
+    if chain.profile.tx_gas_cap.is_some_and(|c| gas > c) {
+        return Err(SdkError::GasAboveTxCap);
+    }
+    let fee = q
+        .max_fee_per_gas
+        .parse::<u128>()
+        .map_err(|_| SdkError::Argument)?;
+    let cost = check_caps(sdk, gas, fee)?;
+    Ok(SubmitQuote {
+        gas_limit: gas,
+        gas: Some(gas),
+        max_cost: cost.to_string(),
+        ..q.clone()
+    })
+}
+
 /// Every gateway of `chain` announces the profile's `chain_uid` for its chain id (`GET /v1/gateway`; NODE-GW-05), else
 /// `ProfileMismatch` and none is used (spec §8; a gateway that announces none is refused too).
 pub(crate) async fn check_gateways(sdk: &Sdk, chain: &str) -> Result<(), SdkError> {
@@ -251,10 +304,7 @@ impl Op {
                 // no signature here (ruling 1): the gas figure of the operation's key (ruling B, the gas-table rulings), on
                 // every path
                 let unsigned = super::submit::unsigned(&prepared)?;
-                let signer = match prepared.signer() {
-                    KeyRef::Ua { kind, .. } => kind,
-                    KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
-                };
+                let signer = signer_kind(&prepared);
                 let fresh = prepared
                     .t
                     .lane

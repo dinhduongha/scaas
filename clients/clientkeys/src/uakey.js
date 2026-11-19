@@ -306,12 +306,19 @@ export function signContainer(sender, digest, fixed) {
 /** The authenticator's challenge for a `webauthn-p256` UA: `ua_msg` (spec §5.6). */
 export const webauthnChallenge = (purposeTag, digest) => ua.uaMessage(0x0100, purposeOf(purposeTag), digest);
 
+/** The longest assertion encoded: `authData` and `clientDataJSON` together, 1,024 bytes (owner 2026-11-19, G3; ua-rs
+ *  `WEBAUTHN_MAX_ASSERTION`, its basis there). Longer: `WebAuthnTooLong`. */
+export const WEBAUTHN_MAX_ASSERTION = 1024;
+
 /** The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` from an assertion, against the challenge the
  *  caller asked for (spec §5.6, C-07): 0 < r, s < n first, s made low, clientDataJSON UTF-8 (as ua-rs; the chains' rule alone
  *  does not ask it), kept as signed and accepted only by the chains' rule (`clientDataOk`: type, challenge = expected, origin,
- *  then `}` or `,"crossOrigin":false`), then the whole encoding verified before it is returned. Any failure: `WebAuthnAssertion`. */
+ *  then `}` or `,"crossOrigin":false`), then the whole encoding verified before it is returned. Any failure: `WebAuthnAssertion`; first, `authData` and
+ *  `clientDataJSON` above `WEBAUTHN_MAX_ASSERTION` together: `WebAuthnTooLong`. */
 export function webauthnAssertion({ keyData, expectedChallenge, authData, clientDataJSON, r, s }) {
   const no = (why) => fail("WebAuthnAssertion", why);
+  if ((authData?.length ?? 0) + (clientDataJSON?.length ?? 0) > WEBAUTHN_MAX_ASSERTION)
+    fail("WebAuthnTooLong", `authData and clientDataJSON above ${WEBAUTHN_MAX_ASSERTION} bytes`);
   if (keyData?.length !== 96 || expectedChallenge?.length !== 32 || r?.length !== 32 || s?.length !== 32) no("lengths");
   const [R, S] = [int(r), int(s)];
   if (!(R > 0n && R < P256_N && S > 0n && S < P256_N)) no("r or s out of range");

@@ -213,7 +213,7 @@ fn webauthn_challenge_is_ua_msg() {
 fn sign_json_accepted_rows() {
     let v = load("sign.json");
     let rows = v["webauthn"]["accepted"].as_array().unwrap();
-    assert_eq!(rows.len(), 4);
+    assert_eq!(rows.len(), 5, "the fifth at the cap (G3)");
     let mut high = 0;
     for r in rows {
         let blob = row_assertion(r).unwrap_or_else(|e| panic!("{e:?}: {}", r["clientDataJSON"]));
@@ -233,7 +233,7 @@ fn sign_json_accepted_rows() {
 
 /// sign.json `webauthn.refusals`: wrong challenge with a self-consistent JSON, reordered JSON, `crossOrigin: true`, `r = 0`,
 /// `s = n`, `s = 0`, a flipped signature, no UV flag, another key, a clientDataJSON that is not UTF-8 (clientkeys refuses it
-/// too): each `WebAuthnAssertion`.
+/// too): each `WebAuthnAssertion`; one byte above the cap (owner 2026-11-19, G3; valid on the chains): `WebAuthnTooLong`.
 #[test]
 fn sign_json_refusals() {
     let v = load("sign.json");
@@ -246,12 +246,18 @@ fn sign_json_refusals() {
         "r-zero",
         "s-n",
         "client-data-not-utf8",
+        "above-the-cap",
     ] {
         assert!(cases.contains(&c), "{c}");
     }
     for r in rows {
         let e = row_assertion(r).expect_err(r["case"].as_str().unwrap());
-        assert_eq!(e, Error::WebAuthnAssertion, "{}", r["case"]);
+        let want = if r["case"] == "above-the-cap" {
+            Error::WebAuthnTooLong
+        } else {
+            Error::WebAuthnAssertion
+        };
+        assert_eq!(e, want, "{}", r["case"]);
         assert_eq!(e.code(), r["error"].as_str().unwrap());
     }
 }

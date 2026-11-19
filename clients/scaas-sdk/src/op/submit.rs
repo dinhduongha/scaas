@@ -6,7 +6,9 @@
 //! the operation tracked to a chain fact like any other. A row still `signed` after a restart is sent by `resume` (unless its
 //! simulation was refused); a row `sent` is sent again only by the user's `resend`, the same bytes.
 use super::prepared::{envelope, Prepared};
-use super::quote::{check_caps, check_gateways, door_a, payer_address, SubmitPath, SubmitQuote};
+use super::quote::{
+    check_caps, check_gateways, door_a, payer_address, signed_quote, SubmitPath, SubmitQuote,
+};
 use super::state::{self, Row};
 use super::{dec, evm, hex, key, lane_nonce, unhex, InFlight, Op, OpState};
 use crate::events::Event;
@@ -268,7 +270,9 @@ impl Op {
     /// Signs `prepared` under its check, writes the operation's row (state `signed`) and returns its id (spec §13.4, R17;
     /// owner 2026-11-19, ruling A); the simulation of a self-relay and the send run on and report as `Event::OpState`. An `Err`
     /// means nothing was written or sent (a signature made before a failed write never leaves the SDK): `PreparedUnknown`,
-    /// `PreparedStale`, `PolicyRefused`, `FeeAboveCap`, `SubmitPathNone`, `ProfileMismatch`, a store failure.
+    /// `PreparedStale`, `PolicyRefused`, `FeeAboveCap`, `SubmitPathNone`, `ProfileMismatch`, a store failure; a self-relay's
+    /// gas recomputed from the signed calldata (owner 2026-11-19, G3: never below the quote's, its transaction sent with it)
+    /// above `Limits::max_gas` `SignedGasAboveCap`, above the chain's per-transaction cap `GasAboveTxCap`.
     pub async fn submit(
         &self,
         prepared: Arc<Prepared>,
@@ -303,6 +307,19 @@ impl Op {
                         put_back(&sdk, &prepared);
                         return Err(e);
                     }
+                };
+                // G3: a self-relay's gas recomputed from the signed calldata, before anything is written or sent
+                let quote = match &quote.path {
+                    SubmitPath::SelfRelay { .. } => {
+                        match signed_quote(&sdk, &prepared, &quote, built.calldata.len()) {
+                            Ok(q) => q,
+                            Err(e) => {
+                                put_back(&sdk, &prepared);
+                                return Err(e);
+                            }
+                        }
+                    }
+                    _ => quote,
                 };
                 let (raw, tx_id, payer) = match &quote.path {
                     SubmitPath::SelfRelay { payer } => {

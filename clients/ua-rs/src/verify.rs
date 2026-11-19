@@ -118,7 +118,7 @@ pub(crate) fn word_usize(b: &[u8], o: usize) -> Option<usize> {
 /// `(authenticatorData, clientDataJSON)` of the WebAuthn blob, only if `sig` is their canonical
 /// `abi.encode(authenticatorData, clientDataJSON, r, s)` (owner 2026-10-30, CTR-UA-33 C; `WebAuthnP256Verifier._fields`):
 /// heads 0x80 and 0xa0 + pad32(len a), each field its length word ‖ data ‖ zero padding, no trailing bytes.
-fn webauthn_fields(sig: &[u8]) -> Option<(&[u8], &[u8])> {
+pub(crate) fn webauthn_fields(sig: &[u8]) -> Option<(&[u8], &[u8])> {
     let pad = |n: usize| n.checked_add(31).map(|x| x / 32 * 32);
     let n = sig.len();
     let la = word_usize(sig, 0x80).filter(|x| *x <= n)?;
