@@ -7,3 +7,4 @@ GovDeploy test_wrappedReleaseIsGated, test_routerAndRelayFeeRouterNewAddresses |
 sdk_gas.json (generate.py --measure, 18 runs) | 0 | 228 of 1,681 keys moved: +16 (2), +34 (84), +85 (12), +87 (4), +119 (4), +156 (120), +190 (2); reference.json 3 rows cross 1,000 (token mtxWrapToUA 794,000 -> 795,000, pqz mtxUnwrapToUA 397,000 -> 398,000, verify 0x0105 49,000 -> 50,000); generate.py --check ok
 scaas-sdk cargo test --lib gas | 0 | 23 passed
 note | - | `register msig-pq` rows (every set) measure 100,352 regular and 2,732,580 state below their pins (1,786 code bytes fewer); not re-pinned (pins are upper bounds and only risen rows move here); cause not investigated
+UARegistryUaPortable test_T_GAS (check, at-set others) | 0 | 3 passed at each of n2048-kmax1024, n2560-kmax16384, n2816-kmax65536
