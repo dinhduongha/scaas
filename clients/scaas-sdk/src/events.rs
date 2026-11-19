@@ -33,6 +33,23 @@ pub enum Event {
         op: String,
         state: OpState,
     },
+    /// A watched token's balance moved at the profile's final block (spec §14).
+    BalanceChanged {
+        account: String,
+        chain: String,
+        token: String,
+    },
+    /// A watched account's new history items (spec §8.4), newest first.
+    #[cfg(feature = "wallet")]
+    HistoryAdded {
+        account: String,
+        chain: String,
+        items: Vec<crate::wallet::HistoryItem>,
+    },
+    /// Another process changed `sdk.state` (R17): its `rev` now.
+    StateChanged {
+        rev: u64,
+    },
 }
 
 /// An operation's state (spec §13.5, CLI-SDK-18): terminal only on a chain fact from a decisive read at the profile's final

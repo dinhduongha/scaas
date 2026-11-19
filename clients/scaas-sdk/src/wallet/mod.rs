@@ -3,12 +3,14 @@
 //! EVM native send. A gateway or a token whose `chain_uid` is not the profile's is refused (`ProfileMismatch`) before it is used;
 //! a token off the profile's reviewed list is `unlisted`, its name and symbol bounded and stripped, never shown without the
 //! mark. Values are decimal strings of the smallest unit; no floating point. UNAUDITED.
-mod balances;
+pub(crate) mod balances;
+pub(crate) mod history;
 mod native_evm;
 mod ops;
-mod tokens;
+pub(crate) mod tokens;
 
 pub use balances::{Balances, TokenBalance};
+pub use history::{Cursor, HistoryItem, HistoryPage, OpItem};
 pub use native_evm::{NativeQuote, NativeSend};
 pub use ops::*;
 pub use tokens::TokenInfo;

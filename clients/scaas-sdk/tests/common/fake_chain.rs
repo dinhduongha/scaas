@@ -358,14 +358,24 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
         "eth_getLogs" => {
             let f = &p[0];
             let (lo, hi) = (named(c, &f["fromBlock"]), named(c, &f["toBlock"]));
-            let addr = f["address"]
-                .as_str()
-                .map(str::to_ascii_lowercase)
-                .or(f["address"][0].as_str().map(str::to_ascii_lowercase));
-            let t0 = f["topics"][0]
-                .as_str()
-                .or(f["topics"][0][0].as_str())
-                .map(str::to_string);
+            let addr: Option<Vec<Value>> = match &f["address"] {
+                Value::String(a) => Some(vec![json!(a.to_ascii_lowercase())]),
+                Value::Array(a) => Some(
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(|a| json!(a.to_ascii_lowercase()))
+                        .collect(),
+                ),
+                _ => None,
+            };
+            let ts: Vec<Option<String>> = (0..4)
+                .map(|i| {
+                    f["topics"][i]
+                        .as_str()
+                        .or(f["topics"][i][0].as_str())
+                        .map(str::to_string)
+                })
+                .collect();
             let logs: Vec<Value> = c
                 .logs
                 .iter()
@@ -373,8 +383,11 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                     let n = named(c, &l["blockNumber"]);
                     n >= lo
                         && n <= hi
-                        && addr.as_ref().is_none_or(|a| l["address"] == json!(a))
-                        && t0.as_ref().is_none_or(|t| l["topics"][0] == json!(t))
+                        && addr.as_ref().is_none_or(|a| a.contains(&l["address"]))
+                        && ts
+                            .iter()
+                            .enumerate()
+                            .all(|(i, t)| t.as_ref().is_none_or(|t| l["topics"][i] == json!(t)))
                 })
                 .cloned()
                 .collect();

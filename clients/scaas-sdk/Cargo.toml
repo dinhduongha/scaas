@@ -107,3 +107,7 @@ required-features = ["wallet"]
 [[test]]
 name = "e2e"
 required-features = ["wallet"]
+
+[[test]]
+name = "history"
+required-features = ["wallet"]

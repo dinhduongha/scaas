@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! `sdk.state`'s operation rows (spec §13.4): public data only, `{"rev": N, "ops": [row …]}`, each change a read-modify-write
-//! under the store's lock at the read `rev` (`StoreConflict` after three tries), as the keystore's (§6.3).
+//! under the store's lock at the read `rev` (`StoreConflict` after three tries), as the keystore's (§6.3); beside them the watch's
+//! history cursors (spec §8.4: the last block read per watched `(chain, account, token)`; never for a hidden set).
 use crate::vault::{StoreError, StorePolicy};
 use crate::{Sdk, SdkError};
 use serde::{Deserialize, Serialize};
@@ -75,6 +76,8 @@ impl Row {
 struct State {
     rev: u64,
     ops: Vec<Row>,
+    #[serde(default)]
+    cursors: std::collections::BTreeMap<String, u64>,
 }
 
 fn io(e: StoreError) -> SdkError {
@@ -116,13 +119,38 @@ pub(crate) async fn row(sdk: &Sdk, op: &str) -> Result<Row, SdkError> {
 /// Writes `row` (replacing the row of its `op`), under the lock at the read `rev`; the terminal rows past their retention are
 /// pruned in the same write, never a non-terminal one (T13b ruling 2).
 pub(crate) async fn put(sdk: &Sdk, row: &Row) -> Result<(), SdkError> {
+    update(sdk, |st| match st.ops.iter_mut().find(|r| r.op == row.op) {
+        Some(r) => *r = row.clone(),
+        None => st.ops.push(row.clone()),
+    })
+    .await
+}
+
+/// The watch's cursor `key` (the last block read), if written.
+pub(crate) async fn cursor(sdk: &Sdk, key: &str) -> Result<Option<u64>, SdkError> {
+    Ok(load(sdk).await?.1.cursors.get(key).copied())
+}
+
+/// Writes the watch's cursor `key`.
+pub(crate) async fn put_cursor(sdk: &Sdk, key: &str, block: u64) -> Result<(), SdkError> {
+    update(sdk, |st| {
+        st.cursors.insert(key.to_owned(), block);
+    })
+    .await
+}
+
+/// The item's `rev` (0: none written): R17's cheap read.
+pub(crate) async fn rev(sdk: &Sdk) -> Result<u64, SdkError> {
+    Ok(load(sdk).await?.0.unwrap_or(0))
+}
+
+/// One read-modify-write of the state under the lock at the read `rev`; the SDK notes the `rev` it wrote, so its own write is
+/// no `StateChanged`.
+async fn update(sdk: &Sdk, f: impl Fn(&mut State)) -> Result<(), SdkError> {
     for _ in 0..TRIES {
         let _lock = sdk.store.lock(STATE.into()).await.map_err(io)?;
         let (rev, mut st) = load(sdk).await?;
-        match st.ops.iter_mut().find(|r| r.op == row.op) {
-            Some(r) => *r = row.clone(),
-            None => st.ops.push(row.clone()),
-        }
+        f(&mut st);
         let (now, keep) = (sdk.now(), sdk.limits.state_retention_secs);
         st.ops
             .retain(|r| !r.terminal() || r.ended_at.is_none_or(|e| e.saturating_add(keep) > now));
@@ -137,6 +165,10 @@ pub(crate) async fn put(sdk: &Sdk, row: &Row) -> Result<(), SdkError> {
             .await
         {
             Err(StoreError::Conflict) => continue,
+            Ok(()) => {
+                sdk.note_state_rev(rev, st.rev);
+                return Ok(());
+            }
             r => return r.map_err(io),
         }
     }

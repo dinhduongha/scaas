@@ -27,6 +27,8 @@ pub(crate) mod text;
 pub mod vault;
 #[cfg(feature = "wallet")]
 pub mod wallet;
+#[cfg(feature = "wallet")]
+mod watch;
 
 pub use config::{
     ChainProfile, Clock, EndpointConfig, Family, Finality, GasBase, GasRows, GasTable, GasVerify,
@@ -182,6 +184,12 @@ pub struct Sdk {
     /// floor above the endpoints' pending nonce (spec §8.5; under `strict_majority` the agreed nonce is the committed one)
     #[cfg(feature = "wallet")]
     pub(crate) sent_nonces: Mutex<HashMap<(String, String), u64>>,
+    /// the watched pairs and the polls' last reads (spec §14)
+    #[cfg(feature = "wallet")]
+    pub(crate) watching: Mutex<watch::Watching>,
+    /// `sdk.state`'s `rev` last seen by a poll or written by this SDK (R17)
+    #[cfg(feature = "wallet")]
+    pub(crate) state_seen: std::sync::atomic::AtomicU64,
     /// the tests' count of SCaaS signatures made (`op::submit::sign`)
     #[cfg(all(test, feature = "wallet"))]
     pub(crate) signs: std::sync::atomic::AtomicU32,
@@ -286,6 +294,10 @@ impl Sdk {
             tokens: Mutex::new(HashMap::new()),
             #[cfg(feature = "wallet")]
             sent_nonces: Mutex::new(HashMap::new()),
+            #[cfg(feature = "wallet")]
+            watching: Mutex::default(),
+            #[cfg(feature = "wallet")]
+            state_seen: std::sync::atomic::AtomicU64::new(watch::REV_UNSEEN),
             #[cfg(all(test, feature = "wallet"))]
             signs: std::sync::atomic::AtomicU32::new(0),
         }))

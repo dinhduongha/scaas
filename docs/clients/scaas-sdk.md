@@ -250,6 +250,11 @@ abandoned hidden-set operations, operation states, balances, history items, drop
 queue; a slow subscriber gets `Lagged` with the count missed and re-reads state, and the SDK never waits for it. Watching is bounded per
 poll. No event callback crosses a binding: the only interfaces an app implements are `SecureStore` and `Authenticator`, whose errors
 include an unexpected-callback case, so a host exception never panics the SDK. A change of the SDK's state by another process is the event `StateChanged` (found by a cheap read of the state's revision on each poll, or at once where the store reports changes) (owner 2026-11-17, "OK, all four points as proposed").
+History and watching are BUILT (plan T14; `clients/scaas-sdk/src/wallet/history.rs`, `src/watch.rs`, `tests/history.rs`): history
+pages backwards from the profile's final block, one log window per request with both bounds, newest first, the account's operations
+on the first page; `watch` takes only an account a keystore row names (a hidden set's account is never written, so no event or
+cursor names it), reads at most `max_watch` (account, chain, token) triples per poll in turn, and keeps each triple's cursor in the
+SDK's state; `StateChanged` and `state_rev` are built as stated.
 
 <a id="CLI-SDK-13"></a>**CLI-SDK-13** — **Errors are named, stable codes; the layers below keep their names** (SPECIFIED). An error
 answers `code()`, the variant's name, appended and never reused. `ua-rs`'s and `scaas-rpc`'s codes pass through by their own names (a

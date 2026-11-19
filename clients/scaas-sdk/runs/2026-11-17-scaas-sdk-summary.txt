@@ -8,8 +8,6 @@ baseline ua-test | 4de8a5604 | 0 | 503 passed, 0 failed, 3 ignored (47 binaries)
 baseline ua-clippy | 4de8a5604 | 0 | -
 baseline features | 4de8a5604 | 0 | feature_tree not run (crate absent)
 # latest runs:
-docs | 81a8cbcf2 | 0 | -
-features | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 ck-test | 81a8cbcf2 | 0 | node: 472 pass, 0 fail, 4 skipped
 ua-test | 81a8cbcf2 | 0 | 543 passed, 0 failed, 3 ignored (55 binaries)
 ua-clippy | 81a8cbcf2 | 0 | -
@@ -19,12 +17,8 @@ ua-wallet-rows | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 rpc-test | 81a8cbcf2 | 0 | 162 passed, 0 failed, 10 ignored (16 binaries)
 rpc-clippy | 81a8cbcf2 | 0 | -
 rpc-wasm | 81a8cbcf2 | 0 | -
-sdk-test | 81a8cbcf2 | 0 | 142 passed, 0 failed, 2 ignored (14 binaries)
 sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
-sdk-min | 81a8cbcf2 | 0 | 69 passed, 0 failed, 0 ignored (8 binaries)
 sdk-sets | 81a8cbcf2 | 0 | 6 passed, 0 failed, 0 ignored (3 binaries)
-sdk-clippy | 81a8cbcf2 | 0 | -
-sdk-wasm | 81a8cbcf2 | 0 | -
 sdk-deny | 81a8cbcf2 | 0 | -
 sdk-e2e | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 ua-c | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
@@ -34,10 +28,19 @@ ua-go | 81a8cbcf2 | 0 | -
 ua-cs | 81a8cbcf2 | 0 | -
 ua-cxx | 81a8cbcf2 | 0 | ctest: 0 tests failed out of 43
 frb-dart | 81a8cbcf2 | 0 | dart: +46:
-bind-dart | 81a8cbcf2 | 0 | dart: +6:
 # SDK round-end matrix (T0-T13b) at 81a8cbcf2: the 27 rows above, clean tree, every rc 0. The first full run at f1a93439a
 # started from `cargo clean` of scaas-sdk, its ffi, ua-rs, scaas-rpc, ua-c, ua-cxx and ua-dart-frb; it had two reds (sdk-min:
 # tests/e2e.rs without `wallet`; ua-go: the runner's library path), fixed at 81a8cbcf2, whose run reused that build.
 # Counts the runner does not parse: ua-c python 101 tests OK, ua-py 99 OK, ua-go 2 packages ok, ua-cs 61 passed.
 # Not applicable: `sync-api` (feature not built: plan T20b), bind-cpp (no bindings/cpp: T20b). wasm32: `cargo check` only
 # (sdk-wasm, rpc-wasm); no wasm32 test ran (wasm-bindgen-test is not in the offline tree).
+sdk-test | 82d0b1cf5 | 0 | 156 passed, 0 failed, 2 ignored (15 binaries); tree dirty
+sdk-wasm | 82d0b1cf5 | 0 | -; tree dirty
+sdk-min | 82d0b1cf5 | 101 | 30 passed, 1 failed, 0 ignored (3 binaries); tree dirty
+docs | 82d0b1cf5 | 0 | -; tree dirty
+features | 82d0b1cf5 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+bind-dart | 82d0b1cf5 | 0 | dart: +6:; tree dirty
+sdk-clippy | 82d0b1cf5 | 0 | -; tree dirty
+# T14 (history, watching, events) replaced seven rows above, run on the T14 tree before its commit. sdk-min's one red is
+# tests/config.rs open_checks_gas_tables_and_opt_ins, from the gas-table commits 64c8ed24d and 2df23400e (without `wallet` the
+# SDK holds no `reference` table, so the opt-in is refused); T14 touches no file of it. T14 mutants: 8/8 killed.

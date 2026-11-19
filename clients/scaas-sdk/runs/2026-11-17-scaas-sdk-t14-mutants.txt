@@ -1,0 +1,10 @@
+# t14 mutants at commit 82d0b1cf5 (name | outcome | test)
+one unbounded range | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test history history_pages_with_logs_range
+block the producer on a full queue | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test history lagged_subscriber
+write a hidden set's cursor | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test history no_hidden_set_cursor
+resume from the final block, not the cursor | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test history cursor_resumes_after_restart
+the SDK's own write is a StateChanged | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test history state_changed_from_another_process
+no cap per poll | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test history watch_cap
+a first read is a BalanceChanged | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test history history_added_and_balance_changed_events
+history older than the cursor not dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test history history_pages_with_logs_range
+8 mutants, 8 killed, 0 survived, 0 not loaded
