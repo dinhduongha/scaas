@@ -10,7 +10,6 @@ baseline features | 4de8a5604 | 0 | feature_tree not run (crate absent)
 # latest runs:
 ua-verify-only | 81a8cbcf2 | 0 | 84 passed, 0 failed, 0 ignored (18 binaries)
 ua-wallet-rows | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-sdk-deny | 81a8cbcf2 | 0 | -
 ua-c | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-c-release | 81a8cbcf2 | 0 | -
 ua-py | 81a8cbcf2 | 0 | -
@@ -20,7 +19,6 @@ ua-cxx | 81a8cbcf2 | 0 | ctest: 0 tests failed out of 43
 frb-dart | 81a8cbcf2 | 0 | dart: +46:
 rpc-wasm | 81a8cbcf2 | 0 | -
 sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
-sdk-deny | 81a8cbcf2 | 0 | -
 # SDK round-end matrix (T0-T13b) at 81a8cbcf2: the 27 rows above, clean tree, every rc 0. The first full run at f1a93439a
 # started from `cargo clean` of scaas-sdk, its ffi, ua-rs, scaas-rpc, ua-c, ua-cxx and ua-dart-frb; it had two reds (sdk-min:
 # tests/e2e.rs without `wallet`; ua-go: the runner's library path), fixed at 81a8cbcf2, whose run reused that build.
@@ -68,9 +66,6 @@ format | fdd34262d | 0 | format.sh --check, every part but tact: clean
 # clients/scaas-sdk/bindings/cpp yet (the C++ binding is a later task), so plan T13's gate box stays open.
 # Mutants: t13msig 7/7, t13cache 3/3, t13keyrows 2/2, t13policy 1/1, t13rpid 1/1 killed (t13cache's third by the entries
 # assertion: the prepare and the landed rule share the part reader, recorded in its name; every other by its intended one).
-ua-clippy | a58face1d | 0 | -
-ua-test | 8ff3d4ebf | 0 | 557 passed, 0 failed, 3 ignored (55 binaries)
-ua-vectors | 8ff3d4ebf | 0 | 661 passed, 0 failed, 6 ignored (62 binaries)
 format | 8ff3d4ebf | 0 | format.sh --check rust py toml sh: clean
 # T16 part 3 and T13's M1-M5 (764661283 P-T16-1/-2; be0d622ee + dff035bc3 the six PQZ debits; 392323f1c P-T16-3/-5;
 # a58face1d M1-M5; 8ff3d4ebf docs only). At 764661283: ua-clippy, sdk-clippy, ua-test 555, ua-vectors 659 green. At
@@ -87,9 +82,6 @@ ua-go | b0c917a2c | 0 | -; tree dirty
 ua-cs | b0c917a2c | 0 | -; tree dirty
 ua-cxx | b0c917a2c | 0 | ctest: 0 tests failed out of 43; tree dirty
 frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
-ua-test | c0b97063f | 0 | 551 passed, 0 failed, 3 ignored (55 binaries)
-ua-clippy | c0b97063f | 0 | -
-ua-vectors | c0b97063f | 0 | 656 passed, 0 failed, 6 ignored (62 binaries)
 gas-gen | cd3cc4c93 | 0 | -
 ck-test | cd3cc4c93 | 0 | node: 482 pass, 0 fail, 4 skipped
 # PR A review fixes (findings 1-6) at cd3cc4c93, clean tree: the 11 rows above, every rc 0. One red first, at b4d5285fb:
@@ -105,21 +97,33 @@ rpc-clippy | 9f3e640dd | 0 | -
 # slot apart through Op::member_sign), no anvil left. format.sh --check rust clean. Mutants t16e 6/6 killed, each by its
 # intended assertion (t16e-mutants.txt). The earlier sdk-test / sdk-clippy rc 101 at 9f3e640dd: the e2e binary did not
 # compile (E0515 in the new member_sign test), fixed at 96d4c5363.
-sdk-sets | ec925fe36 | 0 | 9 passed, 0 failed, 0 ignored (3 binaries)
-sdk-e2e | ec925fe36 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
-sdk-test | 01a284f17 | 0 | 263 passed, 0 failed, 12 ignored (21 binaries); tree dirty
-sdk-clippy | 01a284f17 | 0 | -; tree dirty
-sdk-wasm | 01a284f17 | 0 | -; tree dirty
-docs | 01a284f17 | 0 | -; tree dirty
-features | 01a284f17 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-bind-dart | 01a284f17 | 0 | dart: +6:; tree dirty
-sdk-min | 01a284f17 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
-ffi | 01a284f17 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 # T17-T19 (b7894f257 .. 01a284f17): sdk-test rc 101 at b7894f257 (op::gas attached_signature_kind: the T17 envelope rule),
 # fixed at 54667090e. "tree dirty" at ec925fe36 and 01a284f17: the runs files and a rustfmt-only change of
 # tests/governance_delay.rs, uncommitted. sdk-e2e 11/11 at ec925fe36 (e2e_dex_cancel_order_on_anvil among them), no anvil
 # left; T18b and T19 touch no e2e path. With native-networks,raw-native: cargo test --lib 110 passed at 01a284f17 (the 9 raw
 # tests), clippy --all-targets -D warnings clean. format.sh --check rust clean. Mutants t17 7/7, t18 5/5, t18b 3/3, t19 6/6
 # killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
-bind-gen | 5d206063c | 0 | -; tree dirty
 # T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
+bind-dart | 7f5e03caf | 0 | dart: +14:; tree dirty
+ffi | 7f5e03caf | 0 | 0 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+sdk-test | 7f5e03caf | 0 | 264 passed, 0 failed, 12 ignored (21 binaries); tree dirty
+sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
+sdk-clippy | 7f5e03caf | 0 | -; tree dirty
+sdk-wasm | 7f5e03caf | 0 | -; tree dirty
+features | 7f5e03caf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+sdk-deny | 7f5e03caf | 0 | -; tree dirty
+sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
+ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
+ua-clippy | 1233ed00d | 0 | -; tree dirty
+bind-gen | c1a17c82f | 0 | -
+docs | c1a17c82f | 0 | -
+ua-vectors | c1a17c82f | 0 | 665 passed, 0 failed, 6 ignored (62 binaries)
+sdk-e2e | c1a17c82f | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
+# T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
+# tree that became those two commits (the SDK, ffi, Dart and ua-rs files); ua-test ran before a clippy-only rewrite of one
+# lookup in policy.rs (ua-clippy at 1233ed00d + it), the touched ua-rs tests (wallet_uasig, sign_scaas, wallet_typed) rerun
+# after it, and ua-vectors 665 at c1a17c82f. bind-dart +14 includes the e2e smoke on a local anvil (native send to Landed);
+# no anvil left after bind-dart or sdk-e2e. sdk-deny covers clients/scaas-sdk (not the ffi crate). actionlint 1.7.12 clean,
+# ci_changes.py self-tests ok, format.sh --check rust dart sh toml yaml py clean, docs check 0 errors, paths 0,
+# test_docs_check ok. No vector file changed (the consent rows were already in typed_ops.json). Mutants t20b 8/8 killed,
+# each by its intended assertion (t20b-mutants.txt).
