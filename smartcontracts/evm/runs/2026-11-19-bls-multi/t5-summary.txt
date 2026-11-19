@@ -1,0 +1,9 @@
+bls-multi Task 5 (UAKinds 0x0121 key data) | step | rc | counts
+forge test/ua/{UAKinds,UADeploy}.t.sol | 0 | 47 passed (UAKinds 29, UADeploy 18)
+forge test/ua (all 50 suites, Task 5 tree) | 1 | 747 passed, 9 failed
+  UARegistryCoreLibMsig x5: deployCodeTo fails, the registry has no kind-table slot for 0x0121 that kinds.json's rows (Task 4) enable; Task 7 adds it
+  UARegistryUaPortable test_kindNameEveryKind: kind count 33 -> 34 (pin moved here)
+  UARegistryUaPortable gas pins over (registry bytecode): register webauthn-p256 182,197 < 182,394; setKemKey fndsa512/v2 n2304-kmax4096 2,524,767 < 2,524,830; registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096 146,516 < 146,544 (first failure per test only); re-pinned once after Task 8, the last registry change
+mutants t5-mutants.py | 1 | 6: 5 killed by the intended test, 1 equivalent (t5-mutants.txt)
+size gate | 0 | 172 contracts, 44 baseline rows raised (size-baseline.json _comment): UARegistryCoreLib 34,116 -> 35,248, UARegistryAuxLib 33,685 -> 33,810, UARegistry 32,477 -> 32,570, every token +16 B
+format.sh --check sol py rust js | 0 |

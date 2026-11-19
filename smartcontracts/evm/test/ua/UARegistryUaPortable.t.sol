@@ -560,7 +560,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
             uint16 kind = uint16(vm.parseJsonUint(j, string.concat(p, ".kind")));
             assertEq(a.kindName(kind), vm.parseJsonString(j, string.concat(p, ".name")));
         }
-        assertEq(n, 33); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40)
+        assertEq(n, 34); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40), bls12381-multi (0x0121, spec 2026-11-19)
         assertEq(a.kindName(uint16(vm.parseJsonUint(j, ".schemes[0].kind"))), vm.parseJsonString(j, ".schemes[0].name"));
         assertFalse(a.kindEnabled(0x0011));
         assertEq(a.kindName(0x0011), "stellar-account");

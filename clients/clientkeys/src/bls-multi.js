@@ -138,7 +138,11 @@ export function bitmapIndices(bitmap, n) {
   for (let i = 0; i < n; i++) if ((v >> BigInt(i)) & 1n) out.push(i);
   return out;
 }
-export const indicesBitmap = (signers) => be(signers.reduce((a, i) => a | (1n << BigInt(i)), 0n), 32);
+export const indicesBitmap = (signers) =>
+  be(
+    signers.reduce((a, i) => a | (1n << BigInt(i)), 0n),
+    32,
+  );
 
 /** `[W(S), min_{i∈S} w_i]` or null unless `signers` is non-empty, strictly increasing and < n. */
 function weights(kd, signers) {
@@ -219,7 +223,8 @@ export const blsMultiOk = (keyData, msg, sig, minimal = false, pop = false) =>
   pop ? blsMultiPopOk(keyData, msg, sig) : blsMultiSigOk(keyData, msg, sig, minimal);
 
 /** popMsg = uaMessage(0x0121, POP_V2, registrationDigest(UAPortableRecord{ua, 0x0121, 0, UAKemRecord{ua, 0, 0, 0}}, 0)) from d (N5). */
-export const popMessage = (keyData) => ua.holderPopMessage(KIND, { ua: ua.uaOf(KIND, keyData), keyData: B(keyData) }).message;
+export const popMessage = (keyData) =>
+  ua.holderPopMessage(KIND, { ua: ua.uaOf(KIND, keyData), keyData: B(keyData) }).message;
 
 // --- member parts, aggregation, builder (spec §4, §5.4) ---
 

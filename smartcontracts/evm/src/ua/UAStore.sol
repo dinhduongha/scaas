@@ -133,7 +133,9 @@ library UAStore {
     /// Length of the stored `vk` of a stored kind (CTR-UA-17), 0 otherwise: `Q` / `Y` SEC1 compressed (secp256k1) or
     /// EIP-196 uncompressed (bn254), the first bytes of the key data; Zether `Y` (128) and the PQ `pk` (ML-DSA
     /// 1,312 / 1,952 / 2,592, FN-DSA 897 / 1,793, SLH-DSA 32), the whole key data. (The PQZ key has its own pointer, `pqzKey`.) The
-    /// rest of the key data is in the registration blob (`reg`), so `keyData` is stored once (UA8-D7).
+    /// rest of the key data is in the registration blob (`reg`), so `keyData` is stored once (UA8-D7). `bls12381-multi` (spec
+    /// 2026-11-19-bls12381-multi §2, owner ruling 2026-11-19): 228, the fixed part of its stored `p = ua ‖ s` (`ua ‖ c(apk) ‖ t ‖ n`), a
+    /// flag that the kind is stored, not a cut length (`p` grows with n); its record takes its own branch before any use as a length.
     function vkLength(uint16 kind) internal pure returns (uint256) {
         if (kind == UAKinds.MUSIG2_SECP256K1 || kind == UAKinds.FROST_SECP256K1) return 33;
         if (kind == UAKinds.MUSIG2_BN254 || kind == UAKinds.FROST_BN254) return 64;
@@ -144,6 +146,7 @@ library UAStore {
         if (kind == UAKinds.SLHDSA128S) return 32;
         if (kind == UAKinds.MLDSA87) return 2592;
         if (kind == UAKinds.FNDSA1024) return 1793;
+        if (kind == UAKinds.BLS12381_MULTI) return 228;
         return 0;
     }
 

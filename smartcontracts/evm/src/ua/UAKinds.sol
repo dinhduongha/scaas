@@ -34,6 +34,9 @@ library UAKinds {
     uint16 internal constant MUSIG2_BN254 = 0x0112;
     uint16 internal constant FROST_BN254 = 0x0113;
     uint16 internal constant MSIG = 0x0120;
+    /// `bls12381-multi` (spec 2026-11-19-bls12381-multi; CTR-UA-47 … CTR-UA-56, placeholders): weighted t-of-n BLS12-381 same-message
+    /// multi-signature with a signer bitmap; a structure (no keyHash, as `msig`), in SIGNING and MEMBER, the only kind with a surplus form.
+    uint16 internal constant BLS12381_MULTI = 0x0121;
     uint16 internal constant MLDSA44 = 0x0130;
     uint16 internal constant MLDSA65 = 0x0131;
     uint16 internal constant FNDSA512 = 0x0132;
@@ -151,6 +154,8 @@ library UAKinds {
     uint256 internal constant G1MSM_GAS = 24_000;
     uint256 internal constant G2MSM_GAS = 45_000;
     uint256 internal constant PAIRING_GAS = 158_000;
+    /// 2× the EIP-2537 G2ADD price (600): `bls12381-multi`'s `apk = Σ pk_i` check.
+    uint256 internal constant G2ADD_GAS = 1_200;
 
     uint256 private constant SECP_P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
     uint256 private constant SECP_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
@@ -180,7 +185,13 @@ library UAKinds {
     }
 
     function isSigning(uint16 kind) internal pure returns (bool) {
-        return kind == MSIG || kind == ZETHER_BLS12381 || _singleSigning(kind);
+        return kind == MSIG || kind == BLS12381_MULTI || kind == ZETHER_BLS12381 || _singleSigning(kind);
+    }
+
+    /// The kinds whose signatures have a surplus form (spec 2026-11-19-bls12381-multi §5.3): every stored or hash-committed path takes
+    /// their minimal form (`IUAMinimalVerifier.verifyMinimal`). A closed set: `bls12381-multi` only.
+    function hasSurplusForm(uint16 kind) internal pure returns (bool) {
+        return kind == BLS12381_MULTI;
     }
 
     function isDerived(uint16 kind) internal pure returns (bool) {
@@ -189,7 +200,7 @@ library UAKinds {
 
     /// `msig` itself since owner 2026-11-02: one level down only, `UARegistryCoreLib._worst` refuses an `msig` that holds one as a member.
     function isMember(uint16 kind, bool hederaNative) internal pure returns (bool) {
-        return _singleSigning(kind) || kind == MSIG || kind == EVM_EOA || kind == EVM_CONTRACT
+        return _singleSigning(kind) || kind == MSIG || kind == BLS12381_MULTI || kind == EVM_EOA || kind == EVM_CONTRACT
             || (hederaNative && kind == HEDERA_NATIVE);
     }
 
@@ -222,6 +233,7 @@ library UAKinds {
         if (kind == 0x0112) return "musig2-bn254";
         if (kind == 0x0113) return "frost-bn254";
         if (kind == 0x0120) return "msig";
+        if (kind == 0x0121) return "bls12381-multi";
         if (kind == 0x0130) return "mldsa44";
         if (kind == 0x0131) return "mldsa65";
         if (kind == 0x0132) return "fndsa512";
@@ -262,7 +274,7 @@ library UAKinds {
         if (kind == SCHNORR_BLS12381 || kind == ZETHER_BLS12381) return "bls12381-g1";
         if (kind == BLS12381_MINSIG) return "bls12381-g2";
         if (kind == BLS_BN254_MINSIG) return "bn254-g2";
-        if (kind == MSIG) return "";
+        if (kind == MSIG || kind == BLS12381_MULTI) return ""; // structures: no keyHash (CTR-UA-11; 0x0121 owner ruling Q5)
         return name(kind); // mldsa44, mldsa65, fndsa512, slhdsa128s, mldsa87, fndsa1024, the scheme pqz-mlwe: the group is the name
     }
 
@@ -282,7 +294,7 @@ library UAKinds {
         return uint256(id) >> 160 == 0;
     }
 
-    /// `keccak256(GROUP(g) ‖ canonical pubkey)`, 0 for `msig`. Call on validated key data.
+    /// `keccak256(GROUP(g) ‖ canonical pubkey)`, 0 for `msig` and `bls12381-multi`. Call on validated key data.
     function keyHashOf(uint16 kind, bytes memory d) internal pure returns (bytes32) {
         string memory g = groupName(kind);
         if (bytes(g).length == 0) return bytes32(0);
@@ -559,6 +571,7 @@ library UAKinds {
         else if (kind == MUSIG2_BN254) ok = _musig2(d, 64);
         else if (kind == FROST_BN254) ok = _frost(d, 64);
         else if (kind == MSIG) ok = _msig(d, hederaNative);
+        else if (kind == BLS12381_MULTI) ok = _blsMulti(d);
         else if (kind == FNDSA512) ok = _fndsa(d, 0x09, 512);
         else if (kind == FNDSA1024) ok = _fndsa(d, 0x0a, 1024);
         else ok = true; // mldsa44/65/87, slhdsa128s: the length is the whole check
@@ -747,6 +760,81 @@ library UAKinds {
             total += weight;
         }
         return threshold != 0 && threshold <= total;
+    }
+
+    /// `bls12381-multi` (spec 2026-11-19-bls12381-multi §2): `apk ‖ u16 t ‖ u16 n ‖ n × (pk_i ‖ u16 w_i)`, 2 ≤ n ≤ 64, every
+    /// `w_i ≥ 1`, `1 ≤ t ≤ Σ w_i` (the sum in 256 bits; no other weight bound, owner ruling R2-Q3), every `pk_i` canonical, on the
+    /// curve, in G2 and not the identity (G2MSM with scalar 1, capped as `_bls`), `pk_1 < … < pk_n`, `apk` byte-equal to the G2ADD
+    /// sum and not the identity. Order (F14): length, n, weights and t; the n G2MSM checks; only then the (n − 1) capped G2ADD.
+    function _blsMulti(bytes memory d) private view returns (bool) {
+        if (d.length < 260) return false;
+        uint256 n = _u16(d, 258);
+        if (n < 2 || n > 64 || d.length != 260 + 258 * n) return false;
+        uint256 total;
+        for (uint256 i; i < n; ++i) {
+            uint256 w = _u16(d, 516 + 258 * i);
+            if (w == 0) return false;
+            total += w;
+        }
+        uint256 t = _u16(d, 256);
+        if (t == 0 || t > total) return false;
+        bytes memory buf = new bytes(512); // a key ‖ scalar 1 (G2MSM), then acc ‖ key (G2ADD)
+        for (uint256 i; i < n; ++i) {
+            uint256 o = 260 + 258 * i;
+            if (i > 0 && !_lt(d, o - 258, o, 256)) return false;
+            assembly ("memory-safe") {
+                mcopy(add(buf, 32), add(add(d, 32), o), 256)
+                mstore(buf, 288)
+                mstore(add(buf, 288), 1)
+            }
+            if (_zeroAt(buf, 0, 256) || !_precompile(address(0x0e), buf, G2MSM_GAS, 256)) return false;
+        }
+        assembly ("memory-safe") {
+            mstore(buf, 512)
+            mcopy(add(buf, 32), add(d, 292), 256) // acc = pk_1
+        }
+        for (uint256 i = 1; i < n; ++i) {
+            uint256 o = 260 + 258 * i;
+            assembly ("memory-safe") {
+                mcopy(add(buf, 288), add(add(d, 32), o), 256)
+            }
+            if (!_add(buf)) return false;
+        }
+        assembly ("memory-safe") {
+            mstore(buf, 256)
+        }
+        return !_zeroAt(buf, 0, 256) && keccak256(buf) == _hashAt(d, 0, 256);
+    }
+
+    /// One capped precompile call over `input`, `len` bytes out; less gas than the cap plus 1/64 is `UAVerifyGas`.
+    function _precompile(address p, bytes memory input, uint256 cap, uint256 len) private view returns (bool) {
+        if (gasleft() < cap + cap / 63 + 5_000) revert UAVerifyGas();
+        (bool ok, bytes memory out) = p.staticcall{gas: cap}(input);
+        return ok && out.length == len;
+    }
+
+    /// G2ADD of `buf = acc ‖ key` (512 bytes), the sum written over `acc`; capped at `G2ADD_GAS`.
+    function _add(bytes memory buf) private view returns (bool ok) {
+        if (gasleft() < G2ADD_GAS + G2ADD_GAS / 63 + 5_000) revert UAVerifyGas();
+        assembly ("memory-safe") {
+            // the call first: Yul evaluates arguments right to left, so `and(staticcall(…), eq(returndatasize(), 256))` would
+            // read the previous call's return size
+            ok := staticcall(G2ADD_GAS, 0x0d, add(buf, 32), 512, add(buf, 32), 256)
+            ok := and(ok, eq(returndatasize(), 256))
+        }
+    }
+
+    function _zeroAt(bytes memory b, uint256 o, uint256 len) private pure returns (bool z) {
+        z = true;
+        for (uint256 i; i < len; i += 32) {
+            if (_word(b, o + i) != 0) return false;
+        }
+    }
+
+    function _hashAt(bytes memory b, uint256 o, uint256 len) private pure returns (bytes32 h) {
+        assembly ("memory-safe") {
+            h := keccak256(add(add(b, 32), o), len)
+        }
     }
 
     /// `head ‖ n × 14-bit h_i`, each `< 12289`: `0x09`, n = 512 (`fndsa512`) or `0x0A`, n = 1,024 (`fndsa1024`); the decoding of
