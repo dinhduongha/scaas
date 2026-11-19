@@ -367,6 +367,75 @@ fn known(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
     }
 }
 
+/// A seed key's registration by `scaas-ua` (`registration_args_json`; the PoP by `sign_ua` under `pop` v2, the Zether UA's by
+/// its facade): the UA and `{args, kemFill, …}`.
+pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result<([u8; 32], Value), SdkError> {
+    if attrs.pqz_key {
+        return Err(SdkError::FeatureMissing);
+    }
+    let (kind, key_data, ua, pop, kem_pk) = match key(sdk, key_ref)? {
+        Key::Ua(_, k) => {
+            let ua = k.ua().ok_or(SdkError::Argument)?;
+            let kem_pk = if attrs.kem {
+                k.kem_key(0)?.kem_pk()
+            } else {
+                vec![]
+            };
+            let hp = scaas_ua::holder_pop_message(
+                k.kind(),
+                &ua,
+                &k.key_data(),
+                None,
+                None,
+                None,
+                Some(&kem_pk),
+            )
+            .map_err(|_| SdkError::Argument)?;
+            let pop = k.sign_ua(
+                &scaas_ua::ua_portable::pop_v2_tag(),
+                &hp.registration_digest,
+            )?;
+            (k.kind(), k.key_data(), ua, pop, kem_pk)
+        }
+        #[cfg(feature = "zether")]
+        Key::Zether(_, z) => {
+            if attrs.kem {
+                return Err(SdkError::Argument); // a Zether UA holds no KEM key
+            }
+            let (y, pop) = z.pop()?;
+            (crate::confidential::ZETHER_KIND, y, z.ua(), pop, vec![])
+        }
+        Key::Native(..) => return Err(SdkError::Argument),
+    };
+    let input = json!({
+        "kind": kind, "keyData": hex(&key_data), "pqzKey": "0x", "pqzPopHash": "0x", "pqzPop": "0x",
+        "kemPk": hex(&kem_pk), "pop": hex(&pop),
+    });
+    let r: Value = serde_json::from_str(
+        &scaas_ua::json::registration_args_json(&input.to_string())
+            .map_err(|_| SdkError::Argument)?,
+    )
+    .map_err(|_| SdkError::Internal)?;
+    Ok((ua, r))
+}
+
+/// `ReceiverUnregistered` (spec §7.1): `to` a derived UA (not a native id: its top 12 bytes not all zero) that the profile's
+/// registry does not hold; a native id, or a profile naming no registry (the token's own refusal then stands), passes.
+pub(crate) async fn receiver_registered(sdk: &Sdk, chain: &str, to: &[u8; 32]) -> Result<(), SdkError> {
+    if to.get(..12).is_some_and(|h| h.iter().all(|b| *b == 0)) {
+        return Ok(());
+    }
+    let (profile, _, pool) = evm(sdk, chain)?;
+    let Some(registry) = profile.registry.as_deref() else {
+        return Ok(());
+    };
+    let registry: Address = registry.parse().map_err(|_| SdkError::Argument)?;
+    match read_record(&pool, registry, Landed::Registered, to).await? {
+        true => Ok(()),
+        false => Err(SdkError::ReceiverUnregistered),
+    }
+}
+
 impl Account {
     /// Prepares the registration of `req.key` (spec §7): the arguments and the PoP by `scaas-ua`, then the writes (the
     /// registration, `storePqzPop` when split, `setKemKey` for a hash-committed KEM key), in the order they must land; an
@@ -377,52 +446,7 @@ impl Account {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                if req.attrs.pqz_key {
-                    return Err(SdkError::FeatureMissing);
-                }
-                let (kind, key_data, ua, pop, kem_pk) = match key(&sdk, &req.key)? {
-                    Key::Ua(_, k) => {
-                        let ua = k.ua().ok_or(SdkError::Argument)?;
-                        let kem_pk = if req.attrs.kem {
-                            k.kem_key(0)?.kem_pk()
-                        } else {
-                            vec![]
-                        };
-                        let hp = scaas_ua::holder_pop_message(
-                            k.kind(),
-                            &ua,
-                            &k.key_data(),
-                            None,
-                            None,
-                            None,
-                            Some(&kem_pk),
-                        )
-                        .map_err(|_| SdkError::Argument)?;
-                        let pop = k.sign_ua(
-                            &scaas_ua::ua_portable::pop_v2_tag(),
-                            &hp.registration_digest,
-                        )?;
-                        (k.kind(), k.key_data(), ua, pop, kem_pk)
-                    }
-                    #[cfg(feature = "zether")]
-                    Key::Zether(_, z) => {
-                        if req.attrs.kem {
-                            return Err(SdkError::Argument); // a Zether UA holds no KEM key
-                        }
-                        let (y, pop) = z.pop()?;
-                        (crate::confidential::ZETHER_KIND, y, z.ua(), pop, vec![])
-                    }
-                    Key::Native(..) => return Err(SdkError::Argument),
-                };
-                let input = json!({
-                    "kind": kind, "keyData": hex(&key_data), "pqzKey": "0x", "pqzPopHash": "0x", "pqzPop": "0x",
-                    "kemPk": hex(&kem_pk), "pop": hex(&pop),
-                });
-                let r: Value = serde_json::from_str(
-                    &scaas_ua::json::registration_args_json(&input.to_string())
-                        .map_err(|_| SdkError::Argument)?,
-                )
-                .map_err(|_| SdkError::Internal)?;
+                let (ua, r) = build(&sdk, &req.key, req.attrs)?;
                 let args = r.get("args").ok_or(SdkError::Internal)?;
                 let fill = r.get("kemFill").filter(|f| !f.is_null());
                 writes(&sdk, &req.chain, &req.payer, ua, args, fill).await
@@ -600,3 +624,7 @@ impl Account {
             .await
     }
 }
+
+#[cfg(test)]
+#[path = "register_tests.rs"]
+mod tests;

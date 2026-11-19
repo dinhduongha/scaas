@@ -327,6 +327,44 @@ fn register_zether(rpc: &str, registry: &str, account: u32) -> String {
     p["UA"].as_str().unwrap().to_ascii_lowercase()
 }
 
+/// The seed's UA `kind` of wallet `account` (index 0) registered through the SDK (plan T13): each registry write quoted,
+/// self-relayed by the seed's EVM key and followed to `Landed` by its record; the UA.
+#[cfg(feature = "account")]
+async fn register_with_sdk(sdk: &Arc<Sdk>, seed: &str, kind: u16, account: u32, kem: bool) -> String {
+    use scaas_sdk::account::{Register, RegisterAttrs};
+    let acc = sdk.account();
+    let writes = acc
+        .prepare_register(Register {
+            key: KeyRef::Ua {
+                seed: seed.into(),
+                kind,
+                account,
+                index: 0,
+            },
+            chain: "anvil".into(),
+            attrs: RegisterAttrs {
+                pqz_key: false,
+                kem,
+            },
+            payer: KeyRef::Native {
+                seed: seed.into(),
+                network: "evm".into(),
+                index: 0,
+            },
+        })
+        .await
+        .unwrap();
+    assert!(!writes.is_empty());
+    let ua = writes[0].ua();
+    for w in writes {
+        let q = acc.quote_registry_write(w.clone()).await.unwrap();
+        let op = acc.submit_registry_write(w.clone(), q).await.unwrap();
+        let s = follow(sdk, op).await;
+        assert!(matches!(s, OpState::Landed { .. }), "{}: {s:?}", w.entry());
+    }
+    ua
+}
+
 /// A `NORMAL_ZETHER` token (kind 2, version 1: BUNDLE, no auditor, scale 1) created through `factory` by the deployer, its
 /// supply held by `holder`; the token.
 #[cfg(feature = "zether")]
@@ -496,7 +534,6 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_register_pq_kind_on_anvil() {
-    use scaas_sdk::account::{Register, RegisterAttrs};
     const FNDSA512: u16 = 0x0132;
     let (_anvil, rpc) = anvil(2).await;
     let rpc = rpc.as_str();
@@ -529,38 +566,129 @@ async fn e2e_register_pq_kind_on_anvil() {
         gas_opt_in: vec![],
     })
     .await;
+    let ua = register_with_sdk(&sdk, &seed, FNDSA512, 0, true).await;
     let acc = sdk.account();
-    let key = KeyRef::Ua {
-        seed: seed.clone(),
-        kind: FNDSA512,
-        account: 0,
-        index: 0,
+    let r = acc.registration_of("anvil".into(), ua).await.unwrap();
+    assert!(r.registered && r.kem_stored, "{r:?}");
+}
+
+/// Plan T13b's positive control (spec §7.1, §18 "Sponsored registration"): on `anvil` with the demo token held by the seed's
+/// EVM key, a pay to an unregistered derived UA is `ReceiverUnregistered`; the receiver's SDK makes its blob, the sender's SDK
+/// checks it, submits it paying the gas and follows it to `Landed`; only then the pay is prepared, and it lands.
+#[cfg(feature = "account")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_sponsored_registration_then_pay_on_anvil() {
+    use scaas_sdk::account::RegisterAttrs;
+    const ED25519: u16 = 0x0102;
+    let (_anvil, rpc) = anvil(3).await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    let holder = funded_holder(rpc);
+    let dep = deploy(
+        rpc,
+        &format!("local-31337-{port}-testnet"),
+        &[("DEMO_SUPPLY", "1000000000000"), ("DEMO_HOLDER", &holder)],
+    );
+    let token = dep["demo_token"].as_str().unwrap().to_ascii_lowercase();
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]);
+    let profile = ChainProfile {
+        key: "anvil".into(),
+        family: Family::Evm,
+        chain_id: Some(31337),
+        chain_uid: uid,
+        rpc: vec![endpoint(rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: Some(registry),
+        factory: None,
+        router: None,
+        finality: Finality::Depth(0),
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![ListedToken {
+            address: token.clone(),
+            symbol: "DEMO".into(),
+            decimals: 0,
+        }],
+        gas: GasRows {
+            base: vec![GasBase {
+                entry: "mtxPay".into(),
+                kind: "token".into(),
+                fresh: true,
+                gas: 400_000,
+            }],
+            verify: vec![GasVerify { signer: 0, gas: 0 }],
+        },
+        max_valid_secs: None,
+        gas_opt_in: vec![],
     };
+    // the receiver's app and the sender's app: two SDKs (the same test seed, roles apart)
+    let (receiver, rseed) = sdk_on(profile.clone()).await;
+    let (sender, sseed) = sdk_on(profile).await;
+    let blob = receiver
+        .account()
+        .registration_blob(
+            KeyRef::Ua {
+                seed: rseed,
+                kind: ED25519,
+                account: 7,
+                index: 0,
+            },
+            RegisterAttrs::default(),
+        )
+        .await
+        .unwrap();
+    let to: serde_json::Value = serde_json::from_str(&blob).unwrap();
+    let to = to["ua"].as_str().unwrap().to_string();
     let payer = KeyRef::Native {
-        seed,
+        seed: sseed,
         network: "evm".into(),
         index: 0,
     };
+    let pay = || Pay {
+        signer: payer.clone(),
+        chain: "anvil".into(),
+        token: token.clone(),
+        to: to.clone(),
+        value: "1000".into(),
+        meta: PayMeta {
+            salt: None,
+            pay_no: Some("01890a5d-ac96-774b-bcce-b302099a8058".into()),
+            save: false,
+            body: PayBody::Note { note: "sponsored".into() },
+        },
+        envelope: Envelope {
+            valid_until: now() + 600,
+            mode: 0,
+            relayer: None,
+            fee: "0".into(),
+            fee_recipient: None,
+        },
+    };
+    assert_eq!(
+        sender.wallet().prepare_pay(pay()).await.err().map(|e| e.code()),
+        Some("ReceiverUnregistered")
+    );
+    let acc = sender.account();
     let writes = acc
-        .prepare_register(Register {
-            key,
-            chain: "anvil".into(),
-            attrs: RegisterAttrs {
-                pqz_key: false,
-                kem: true,
-            },
-            payer,
-        })
+        .prepare_submit_registration(blob, "anvil".into(), to.clone(), payer.clone())
         .await
         .unwrap();
-    assert!(!writes.is_empty());
-    let ua = writes[0].ua();
+    assert_eq!(writes.len(), 1);
     for w in writes {
         let q = acc.quote_registry_write(w.clone()).await.unwrap();
-        let op = acc.submit_registry_write(w.clone(), q).await.unwrap();
-        let s = follow(&sdk, op).await;
-        assert!(matches!(s, OpState::Landed { .. }), "{}: {s:?}", w.entry());
+        let op = acc.submit_registry_write(w, q).await.unwrap();
+        let s = follow(&sender, op).await;
+        assert!(matches!(s, OpState::Landed { .. }), "registration: {s:?}");
     }
-    let r = acc.registration_of("anvil".into(), ua).await.unwrap();
-    assert!(r.registered && r.kem_stored, "{r:?}");
+    let p = sender.wallet().prepare_pay(pay()).await.unwrap();
+    let q = sender
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer })
+        .await
+        .unwrap();
+    let op = sender.op().submit(p, q).await.unwrap();
+    let s = follow(&sender, op).await;
+    assert!(matches!(s, OpState::Landed { .. }), "pay: {s:?}");
 }

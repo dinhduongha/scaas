@@ -324,3 +324,178 @@ async fn kem_repair_after_commit_form() {
     registry(&t, &ua, false, &hx(&[0; 32]), false);
     assert!(repair().await.unwrap().is_none(), "not registered");
 }
+
+// --- plan T13b: sponsored registration (spec §7.1, R16) ---
+
+/// The fake registry's `kindEnabled(kind)`.
+fn kind_enabled(t: &T, kind: u16, on: bool) {
+    let mut c = t.chain.lock().unwrap();
+    let d = format!("{}{}", sel("kindEnabled(uint16)"), w(u64::from(kind)));
+    c.answers.retain(|(_, x, _)| *x != d);
+    c.answers.push((REGISTRY.into(), d, format!("0x{}", w(u64::from(on)))));
+}
+
+/// A blob of `registration_blobs.json` by name.
+fn blob(name: &str) -> Value {
+    load("ua/registration_blobs.json")["blobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|b| b["name"] == name)
+        .unwrap()["blob"]
+        .clone()
+}
+
+/// The receiver's blob is clientkeys' form (`registrationBlob`): its fields, the arguments `scaas-ua`'s with their entry; it
+/// passes the sender's checks.
+#[tokio::test(flavor = "multi_thread")]
+async fn registration_blob_is_clientkeys_form() {
+    let t = setup().await;
+    let (ua, calldata, args) = independent_register(ED25519);
+    let text = t
+        .sdk
+        .account()
+        .registration_blob(ua_key(&t, ED25519), RegisterAttrs::default())
+        .await
+        .unwrap();
+    let b: Value = serde_json::from_str(&text).unwrap();
+    let mut keys: Vec<&String> = b.as_object().unwrap().keys().collect();
+    keys.sort();
+    assert_eq!(keys, ["args", "kem", "kind", "ua", "v"]);
+    assert_eq!(b["ua"], json!(ua));
+    assert_eq!(b["args"]["entry"], "register");
+    assert_eq!(b["args"], args, "the arguments are scaas-ua's");
+    assert!(b["kem"].is_null());
+    registry(&t, &ua, false, &hx(&[0; 32]), false);
+    kind_enabled(&t, ED25519, true);
+    let ws = t
+        .sdk
+        .account()
+        .prepare_submit_registration(text, "local".into(), ua, t.payer.clone())
+        .await
+        .unwrap();
+    assert_eq!(ws.len(), 1);
+    assert_eq!(ws[0].calldata(), hx(&calldata));
+}
+
+/// Spec §18 "Sponsored registration": the positive control, then one change at a time, each refused by name before
+/// anything is sent (the fake chain counts no transaction).
+#[tokio::test(flavor = "multi_thread")]
+async fn sponsored_registration_checks() {
+    let t = setup().await;
+    let acc = t.sdk.account();
+    let submit = |b: &Value, expected: &str| {
+        acc.prepare_submit_registration(b.to_string(), "local".into(), expected.into(), t.payer.clone())
+    };
+    // every single-key blob of the vectors passes (each kind enabled, none registered)
+    for b in load("ua/registration_blobs.json")["blobs"].as_array().unwrap() {
+        let (name, b) = (b["name"].as_str().unwrap(), &b["blob"]);
+        let ua = b["ua"].as_str().unwrap();
+        registry(&t, ua, false, &hx(&[0; 32]), false);
+        kind_enabled(&t, b["kind"].as_u64().unwrap() as u16, true);
+        let r = submit(b, ua).await;
+        if b.to_string().len() > 64 * 1024 {
+            assert_eq!(code(r), "Argument", "{name}: above 64 KiB");
+            continue;
+        }
+        let ws = r.unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        let want = if b["kem"].is_null() { 1 } else { 2 };
+        assert_eq!(ws.len(), want, "{name}");
+        if want == 2 {
+            assert_eq!(ws[1].entry(), "setKemKey", "{name}");
+        }
+    }
+    let ed = blob("ed25519");
+    let ua = ed["ua"].as_str().unwrap().to_string();
+    assert!(submit(&ed, &ua).await.is_ok(), "the control");
+    // another receiver than the user means; key data that does not give the UA
+    let other = blob("p256")["ua"].as_str().unwrap().to_string();
+    assert_eq!(code(submit(&ed, &other).await), "RegistrationUaMismatch");
+    let mut forged = ed.clone();
+    forged["args"]["keyData"] = blob("bip340")["args"]["keyData"].clone();
+    assert_eq!(code(submit(&forged, &ua).await), "RegistrationUaMismatch");
+    // the kind disabled on the chain
+    kind_enabled(&t, ED25519, false);
+    assert_eq!(code(submit(&ed, &ua).await), "RegistrationKindDisabled");
+    kind_enabled(&t, ED25519, true);
+    // a PoP over another digest, by the right key
+    let wallet = Wallet::from_mnemonic(REPO, "").unwrap();
+    let k = wallet.ua_key(ED25519, 0, 0).unwrap();
+    let mine = t
+        .sdk
+        .account()
+        .registration_blob(ua_key(&t, ED25519), RegisterAttrs::default())
+        .await
+        .unwrap();
+    let mut bad: Value = serde_json::from_str(&mine).unwrap();
+    let mine_ua = bad["ua"].as_str().unwrap().to_string();
+    registry(&t, &mine_ua, false, &hx(&[0; 32]), false);
+    assert!(submit(&bad, &mine_ua).await.is_ok(), "the control");
+    bad["args"]["pop"] = json!(hx(&k.sign_ua(&scaas_ua::ua_portable::pop_v2_tag(), &[7; 32]).unwrap()));
+    assert_eq!(code(submit(&bad, &mine_ua).await), "RegistrationPopInvalid");
+    // a committed KEM key: missing, or another key than the committed one
+    let c = blob("fndsa512/kem-commit");
+    let cua = c["ua"].as_str().unwrap().to_string();
+    kind_enabled(&t, c["kind"].as_u64().unwrap() as u16, true);
+    registry(&t, &cua, false, &hx(&[0; 32]), false);
+    assert_eq!(submit(&c, &cua).await.unwrap().len(), 2, "the control");
+    let mut missing = c.clone();
+    missing["kem"] = Value::Null;
+    assert_eq!(code(submit(&missing, &cua).await), "RegistrationKemMissing");
+    let mut swapped = c.clone();
+    swapped["kem"]["kemPk"] = blob("mldsa87/kem-commit")["kem"]["kemPk"].clone();
+    assert_eq!(code(submit(&swapped, &cua).await), "RegistrationKemMissing");
+    // already registered: skipped, the KEM key added while missing, nothing once stored
+    let hash = c["args"]["attrs"]["kemPkHash"].as_str().unwrap().to_string();
+    registry(&t, &cua, true, &hash, false);
+    let ws = submit(&c, &cua).await.unwrap();
+    assert_eq!(ws.iter().map(|w| w.entry()).collect::<Vec<_>>(), ["setKemKey"]);
+    registry(&t, &cua, true, &hash, true);
+    assert!(submit(&c, &cua).await.unwrap().is_empty());
+    // the blob's bounds: an unknown field, depth 5, another version
+    let mut unknown = ed.clone();
+    unknown["memo"] = json!("x");
+    assert_eq!(code(submit(&unknown, &ua).await), "Argument");
+    let mut deep = ed.clone();
+    deep["args"]["attrs"]["kem"]["scheme"] = json!({"a": 0});
+    assert_eq!(code(submit(&deep, &ua).await), "Argument");
+    let mut v2 = ed.clone();
+    v2["v"] = json!(2);
+    assert_eq!(code(submit(&v2, &ua).await), "Argument");
+    assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent by any check");
+}
+
+/// A pay to an unregistered derived UA is `ReceiverUnregistered` before anything is prepared; a registered one, or a native
+/// id, passes that check.
+#[tokio::test(flavor = "multi_thread")]
+async fn pay_to_unregistered_derived_ua() {
+    use scaas_sdk::wallet::{Envelope, Pay, PayBody, PayMeta};
+    let t = setup().await;
+    let ua = blob("ed25519")["ua"].as_str().unwrap().to_string();
+    let pay = |to: &str| Pay {
+        signer: t.payer.clone(),
+        chain: "local".into(),
+        token: format!("0x{}", "7a".repeat(20)),
+        to: to.into(),
+        value: "1".into(),
+        meta: PayMeta {
+            salt: None,
+            pay_no: None,
+            save: false,
+            body: PayBody::Note { note: "x".into() },
+        },
+        envelope: Envelope {
+            valid_until: 1_800_000_600,
+            mode: 0,
+            relayer: None,
+            fee: "0".into(),
+            fee_recipient: None,
+        },
+    };
+    registry(&t, &ua, false, &hx(&[0; 32]), false);
+    assert_eq!(code(t.sdk.wallet().prepare_pay(pay(&ua)).await), "ReceiverUnregistered");
+    registry(&t, &ua, true, &hx(&[0; 32]), false);
+    assert_ne!(code(t.sdk.wallet().prepare_pay(pay(&ua)).await), "ReceiverUnregistered");
+    let native = format!("0x{}{}", "00".repeat(12), "ca".repeat(20));
+    assert_ne!(code(t.sdk.wallet().prepare_pay(pay(&native)).await), "ReceiverUnregistered");
+}

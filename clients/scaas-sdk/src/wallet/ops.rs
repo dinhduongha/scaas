@@ -681,6 +681,9 @@ impl Wallet {
         self.sdk
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
+                // a derived UA the registry does not hold: refused before anything is prepared (spec §7.1, R16)
+                #[cfg(feature = "account")]
+                crate::account::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;
                 let kind = kind_of(&sdk, &req.chain, "UAMetaTransfer", token).await?;
                 let from = from_of(&sdk, &req.signer, "UAMetaTransfer").await?;
                 let (mj, entry_ref, ua, review) = meta(

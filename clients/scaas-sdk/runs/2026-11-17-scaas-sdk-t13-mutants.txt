@@ -1,0 +1,7 @@
+# t13 mutants at commit 5721c48da (name | outcome | test)
+a PoP signed under another purpose | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops registration_args_equal_portable_json
+landed by the receipt, not the record | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops registry_write_landed_by_record
+a registered UA written again | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops registry_write_landed_by_record
+a write submitted twice | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops registry_write_landed_by_record
+the KEM repair ignores a stored key | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops kem_repair_after_commit_form
+5 mutants, 5 killed, 0 survived, 0 not loaded

@@ -6,11 +6,13 @@
 #[cfg(feature = "wallet")]
 mod register;
 mod restore;
+#[cfg(feature = "wallet")]
+mod sponsor;
 
 #[cfg(feature = "wallet")]
 pub use register::{Register, RegisterAttrs, RegistrationState, RegistryWrite};
 #[cfg(feature = "wallet")]
-pub(crate) use register::{record_call, record_holds, Landed};
+pub(crate) use register::{receiver_registered, record_call, record_holds, Landed};
 pub use restore::Restore;
 
 use crate::vault::{change_entry, AccountRow, SeedEntry};
