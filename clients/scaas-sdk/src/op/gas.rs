@@ -122,7 +122,8 @@ impl OpGas<'_> {
     };
 }
 
-/// A verify part of signer kind `signer`: its row's gas, plus 64 gas a byte of its `sig_bytes` when `bytes` (owner 2026-11-19,
+/// A verify part of signer kind `signer`: its row's gas and `margin` (owner 2026-11-19, ruling 2 (b) of the sampled check),
+/// plus 64 gas a byte of its `sig_bytes` when `bytes` (owner 2026-11-19,
 /// ruling 2: the quote's calldata is that of the operation built with an empty signature; A3: an attached signature's bytes
 /// are in that calldata already, so only its verify gas), and its source.
 fn verify_part(
@@ -135,7 +136,11 @@ fn verify_part(
     part(chain, opt_in, tables, |r| {
         let v = r.verify.iter().find(|v| v.signer == signer)?;
         let b = if bytes { v.sig_bytes } else { 0 };
-        Some(v.gas.saturating_add(b.saturating_mul(PER_BYTE)))
+        Some(
+            v.gas
+                .saturating_add(v.margin)
+                .saturating_add(b.saturating_mul(PER_BYTE)),
+        )
     })
 }
 
@@ -308,6 +313,7 @@ mod tests {
                 signer: 0x0101,
                 gas: verify,
                 sig_bytes: 0,
+                margin: 0,
             }],
         }
     }
@@ -558,6 +564,8 @@ mod tests {
             .iter()
             .chain(t["verify"].as_array().unwrap());
         let native_sig = t["verify"][0]["sig_bytes"].as_u64();
+        let inputs: serde_json::Value =
+            serde_json::from_str(include_str!("../../gas/inputs.json")).unwrap();
         for r in rows {
             let Some((path, keys)) = r["source"].as_str().unwrap().split_once('#') else {
                 assert_eq!(
@@ -597,6 +605,14 @@ mod tests {
                     .unwrap();
                 assert_eq!(worst, x["measured"].as_u64().unwrap(), "{f} {r}");
             }
+            // the sampled check's ruling 2 (b): a verify row's `margin` is the input list's for its kind, and only there
+            if let Some(sg) = r.get("signer").and_then(|s| s.as_u64()) {
+                assert_eq!(
+                    &r["margin"],
+                    &inputs["margin"][sg.to_string()],
+                    "margin {r}"
+                );
+            }
             // ruling 2 (A4: every verify row): a verify row's `sig_bytes`, measured beside its delta
             if let Some(n) = r.get("sig_bytes").filter(|_| r.get("signer").is_some()) {
                 let k = keys.strip_suffix("_delta").unwrap();
@@ -627,10 +643,12 @@ mod tests {
     /// signs end to end on `NormalToken` by the native key, P-256, ed25519 and secp256k1, both lanes, held to the SDK's own
     /// composition (`lookup`: base + verify + `ua_extra`, the verify part's calldata bytes left out, the run being execution
     /// gas) with the base row at that variant's own figure (the table's is the worst of the variants, regulated included):
-    /// measured <= composed < measured + 2,000. The sampled signature's bytes are the verify row's `sig_bytes`. Red today,
-    /// open for the owner (spec §13.3): run with `--ignored`; the bound is not loosened.
+    /// measured <= composed < measured + 3,000 (owner 2026-11-19, "approved": three parts each rounded up to 1,000; it was
+    /// 2,000). The sampled signature's bytes are the verify row's `sig_bytes`. Red in ed25519's 8 cells only (3,441–6,498
+    /// over: its row is the forced worst case, 2,876 above the vector, as ruled; the sampled signatures are ordinary), open
+    /// for the owner: run with `--ignored`; the bound is not loosened further.
     #[test]
-    #[ignore = "red: P-256 up to 2,350 over, ed25519 up to 559 under; open for the owner (spec 13.3)"]
+    #[ignore = "red: ed25519 3,441-6,498 over the 3,000 bound (its row is the forced worst case); open for the owner"]
     fn sampled_end_to_end_check() {
         let file = format!(
             "{}/../../smartcontracts/evm/test/vectors/sdk_gas.json",
@@ -669,10 +687,10 @@ mod tests {
                 }
             }
         }
-        let bad: Vec<_> = out.iter().filter(|x| !(0..2_000).contains(&x.3)).collect();
+        let bad: Vec<_> = out.iter().filter(|x| !(0..3_000).contains(&x.3)).collect();
         assert!(
             bad.is_empty(),
-            "measured <= base + verify + ua_extra < measured + 2,000; slack out of bounds: {bad:?}"
+            "measured <= base + verify + ua_extra < measured + 3,000; slack out of bounds: {bad:?}"
         );
     }
 
@@ -767,6 +785,51 @@ mod tests {
         assert_eq!(by(&r, false, false), Some(1_010 + 64 * 128));
     }
 
+    /// Owner 2026-11-19 (the sampled check's ruling 2 (b)): a verify row's `margin` is added with its gas, for the signer and
+    /// for an attached signature of that kind alike; parsed 1–100,000, absent 0.
+    #[test]
+    fn gas_verify_margin() {
+        let mut r = rows(1_000, 10);
+        r.verify[0].margin = 1_000;
+        assert_eq!(lookup(&r, &[], &[], None, K).map(|f| f.0), Some(2_010));
+        r.verify.push(GasVerify {
+            signer: 0x0102,
+            gas: 5,
+            sig_bytes: 0,
+            margin: 2_000,
+        });
+        let op = OpGas {
+            attached: Some(Some(0x0102)),
+            ..OpGas::PLAIN
+        };
+        assert_eq!(
+            lookup_by(&r, &[], &[], None, K, &op).map(|f| f.0),
+            Some(2_010 + 2_005),
+            "the attached kind's margin too"
+        );
+        let with = |m: &str| {
+            file(
+                "",
+                &v(306, 3_000, 2_100).replace(r#""sig_bytes":0"#, &format!(r#""sig_bytes":0,{m}"#)),
+            )
+        };
+        assert_eq!(
+            GasTable::parse(&with(r#""margin":1000"#))
+                .unwrap()
+                .rows
+                .verify[0]
+                .margin,
+            1_000
+        );
+        assert_eq!(
+            GasTable::parse(&with(r#""x":0"#)).unwrap().rows.verify[0].margin,
+            0
+        );
+        for bad in [r#""margin":0"#, r#""margin":100001"#, r#""margin":"1000""#] {
+            assert!(GasTable::parse(&with(bad)).is_err(), "{bad}");
+        }
+    }
+
     /// Owner 2026-11-19, A1: a derived-UA signer adds the row's `ua_extra`, the native key nothing; a row without one adds
     /// nothing. Each beside its control.
     #[test]
@@ -776,6 +839,7 @@ mod tests {
             signer: NATIVE_EVM,
             gas: 0,
             sig_bytes: 0,
+            margin: 0,
         });
         let by = |r: &GasRows, signer: u16| {
             lookup(r, &[], &[], None, ("mtxPay", "token", signer, false)).map(|f| f.0)
@@ -798,6 +862,7 @@ mod tests {
                 signer: *s,
                 gas: u64::from(*s),
                 sig_bytes: 1,
+                margin: 0,
             })
             .collect();
         let by = |r: &GasRows, attached| {

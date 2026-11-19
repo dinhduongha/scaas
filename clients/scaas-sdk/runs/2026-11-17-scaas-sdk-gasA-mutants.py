@@ -52,7 +52,7 @@ MUTANTS = [
     ("A5: WebAuthn sig_bytes back at the first vector", [(R, '"sig_bytes": 608', '"sig_bytes": 480')],
      U + "reference_rows_hold_their_sources"),
     ("A5: SLH-DSA's verify row at the valid vector",
-     [(R, '"signer": 307,\n      "gas": 1339000,\n      "measured": 1338853,', '"signer": 307,\n      "gas": 816000,\n      "measured": 815175,')],
+     [(R, '"signer": 307,\n      "gas": 1339000,\n      "measured": 1338149,', '"signer": 307,\n      "gas": 816000,\n      "measured": 815175,')],
      U + "reference_rows_hold_their_sources"),
     # A6: the wrap-in fee rows held to their source (the fee against the signer holding units)
     ("A6: a wrap-in fee_extra against the fresh row",

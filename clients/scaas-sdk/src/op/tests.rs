@@ -198,6 +198,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
             signer,
             gas: 0,
             sig_bytes: 0,
+            margin: 0,
         })
         .to_vec();
     crate::GasRows { base, verify }
@@ -1042,6 +1043,7 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
             signer: 0x0131,
             gas: 0,
             sig_bytes: 0,
+            margin: 0,
         }];
         p.gas = g;
     })

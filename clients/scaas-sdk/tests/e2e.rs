@@ -176,6 +176,7 @@ async fn e2e_pay_on_anvil() {
                 signer: 0,
                 gas: 0,
                 sig_bytes: 0,
+                margin: 0,
             }],
         },
         max_valid_secs: None,

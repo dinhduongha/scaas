@@ -569,6 +569,7 @@ fn gas_rows() -> GasRows {
                 signer,
                 gas: if signer == 0x0135 { 5_000 } else { 0 }, // the dearest (ruling 4)
                 sig_bytes: 0,
+                margin: 0,
             })
             .collect(),
     }
