@@ -29,18 +29,21 @@ ua-go | b0c917a2c | 0 | -; tree dirty
 ua-cs | b0c917a2c | 0 | -; tree dirty
 ua-cxx | b0c917a2c | 0 | ctest: 0 tests failed out of 43; tree dirty
 frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
-ck-test | c0b97063f | 0 | node: 480 pass, 0 fail, 4 skipped
-docs | c0b97063f | 0 | -
 ua-test | c0b97063f | 0 | 551 passed, 0 failed, 3 ignored (55 binaries)
 ua-clippy | c0b97063f | 0 | -
 ua-vectors | c0b97063f | 0 | 656 passed, 0 failed, 6 ignored (62 binaries)
-docs | 540d18a70 | 0 | -
-sdk-min | 44ea8ddd6 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
-ffi | c01e6587b | 0 | clippy clean (generated module allowed), cargo test ok
-bind-dart | 44ea8ddd6 | 0 | dart: +6:
-sdk-wasm | 44ea8ddd6 | 0 | -
-sdk-clippy | 44ea8ddd6 | 0 | -
-sdk-test | 44ea8ddd6 | 0 | 172 passed, 0 failed, 2 ignored (14 binaries)
-gas-gen | 44ea8ddd6 | 0 | -
-features | 44ea8ddd6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-sdk-e2e | 44ea8ddd6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+sdk-test | cd3cc4c93 | 0 | 177 passed, 0 failed, 2 ignored (14 binaries)
+sdk-min | cd3cc4c93 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
+sdk-clippy | cd3cc4c93 | 0 | -
+sdk-wasm | cd3cc4c93 | 0 | -
+features | cd3cc4c93 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+bind-dart | cd3cc4c93 | 0 | dart: +6:
+sdk-e2e | cd3cc4c93 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+ffi | cd3cc4c93 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+gas-gen | cd3cc4c93 | 0 | -
+ck-test | cd3cc4c93 | 0 | node: 482 pass, 0 fail, 4 skipped
+docs | cd3cc4c93 | 0 | -
+# PR A review fixes (findings 1-6) at cd3cc4c93, clean tree: the 11 rows above, every rc 0. One red first, at b4d5285fb:
+# sdk-test 84 passed, 1 failed (gas_verify_margin read a filler key "x" as "no margin"; finding 1 refuses it), fixed at
+# cd3cc4c93 (the control reads a row without `margin`, the filler asserted GasFieldUnknown). Also at cd3cc4c93: docs_check
+# paths 0; format.sh --check (every part but tact) ok; mutants gasR 21/21 killed (gasR-mutants.txt). ffi has no own tests.
