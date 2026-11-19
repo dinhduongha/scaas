@@ -22,16 +22,15 @@ interface ISdkGasBurn {
         returns (bytes memory);
 }
 
-/// @notice The SDK gas table's measurement (scaas-sdk spec §13.3, owner 2026-11-19, part 3b): each base row's execution gas,
-///         `gasTotalUsed - 15,000 (the Amsterdam intrinsic cost) - the call's standard calldata gas (4 a zero byte, 16 a
-///         non-zero byte)`, of one isolated call (`foundry.toml`: `isolate = true`) signed by the reference signer, a native
-///         EVM key (no registry call), on a fresh lane (nonce 0) and on a used one (the lane's nonce slot set to 1 before the
-///         call, everything else the same). The figure is regular gas (`gasTotalUsed`); the call's net state gas
-///         (EIP-8037, `gasStateUsed`) is recorded beside it under `<key>_state`, not added: see the open question in the
-///         spec (§13.3). Every call starts from the same state (a snapshot), so the payee holds nothing
-///         before it: the worst case of a first write. `SDK_GAS_WRITE=true` merges each key into `SDK_GAS_OUT` (default
-///         `test/vectors/sdk_gas.json`); run it with `--threads 1`. The SDK table's generator (PLANNED) reads the
-///         file. Keys: `<kind>_<entry>_<fresh|used>_<variant>`.
+/// @notice The SDK gas table's measurement (scaas-sdk spec §13.3, owner 2026-11-19, part 3b): each base row's execution gas
+///         of one isolated call (`foundry.toml`: `isolate = true`) signed by the reference signer, a native EVM key (no
+///         registry call): regular gas, `gasTotalUsed - 15,000 (the Amsterdam intrinsic cost) - the call's standard calldata
+///         gas (4 a zero byte, 16 a non-zero byte)`, plus the call's state gas (EIP-8037, `lastFrameGas().gasStateUsed`)
+///         (owner 2026-11-19, "approved"). A fresh lane has nonce 0; a used one has its nonce slot set to 1 before the call,
+///         everything else the same. Every call starts from the same snapshot, so the payee holds nothing before it: the
+///         worst case of a first write. `SDK_GAS_WRITE=true` merges `<key>` (the sum), `<key>_regular` and `<key>_state` into
+///         `SDK_GAS_OUT` (default `test/vectors/sdk_gas.json`); run it with `--threads 1`. Keys:
+///         `<kind>_<entry>_<fresh|used>_<variant>`.
 abstract contract SdkGasRows is Test {
     string internal constant SDK_GAS = "test/vectors/sdk_gas.json";
     address internal constant SG_RELAYER = address(0x5EAD);
@@ -62,12 +61,15 @@ abstract contract SdkGasRows is Test {
             assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
         }
         Vm.Gas memory used = vm.lastFrameGas();
-        g = used.gasTotalUsed - 15_000 - _cdGas(cd);
         assertGe(used.gasStateUsed, 0, "net state gas of a top-level call");
+        uint256 regular = used.gasTotalUsed - 15_000 - _cdGas(cd);
+        uint256 state = uint256(int256(used.gasStateUsed));
+        g = regular + state;
         if (vm.envOr("SDK_GAS_WRITE", false)) {
             string memory out = vm.envOr("SDK_GAS_OUT", SDK_GAS);
             if (vm.exists(out)) vm.serializeJson("sdkgas", vm.readFile(out));
-            vm.serializeUint("sdkgas", string.concat(key, "_state"), uint256(int256(used.gasStateUsed)));
+            vm.serializeUint("sdkgas", string.concat(key, "_regular"), regular);
+            vm.serializeUint("sdkgas", string.concat(key, "_state"), state);
             vm.writeJson(vm.serializeUint("sdkgas", key, g), out);
         }
     }
