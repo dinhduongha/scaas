@@ -85,8 +85,9 @@ abstract contract SdkGasRows is Test {
         }
         Vm.Gas memory used = vm.lastFrameGas();
         assertGe(used.gasStateUsed, 0, "net state gas of a top-level call");
-        // EIP-7976's floor (EIP-2780's 12,000 base + 64 a calldata byte) above the standard total hides the execution gas
-        assertGt(used.gasTotalUsed, 12_000 + 64 * cd.length, "the calldata floor bound the total");
+        // EIP-7976's floor (the 15,000 base + 64 a calldata byte) binding the total hides the execution gas: refused (a
+        // total at the floor; probe: `mtxExecute` with 1,024 bytes of data sat on it, 48 = 64 - 16 gas a byte above)
+        assertGt(used.gasTotalUsed, 15_000 + 64 * cd.length, "the calldata floor bound the total");
         uint256 regular = used.gasTotalUsed - 15_000 - _cdGas(cd);
         uint256 state = uint256(int256(used.gasStateUsed));
         g = regular + state;
