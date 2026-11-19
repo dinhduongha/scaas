@@ -184,6 +184,26 @@
       "test/gas/SdkGasRouterConf.t.sol",
       "SdkGasRouterZetherTest",
       "test_sdkGas_routerZether"
+    ],
+    [
+      "test/gas/SdkGasConfZether.t.sol",
+      "SdkGasConfZetherTest",
+      "test_sdkGas_zetherConf"
+    ],
+    [
+      "test/gas/SdkGasConfZether.t.sol",
+      "SdkGasConfZetherTest",
+      "test_sdkGas_zetherConfRegulated"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConf"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfRegulated"
     ]
   ],
   "base": [
@@ -333,6 +353,31 @@
         "mtxUnfreeze",
         "mtxUnpause"
       ]
+    },
+    {
+      "kinds": [
+        "zether"
+      ],
+      "entries": [
+        "mtxShield",
+        "mtxWrapShield",
+        "mtxConfidentialTransferSingle",
+        "mtxUnshield",
+        "mtxUnshieldUnwrap",
+        "mtxRollOver",
+        "mtxRollOverSigned",
+        "mtxSetRollOverMode"
+      ]
+    },
+    {
+      "kinds": [
+        "pqz"
+      ],
+      "entries": [
+        "mtxShield",
+        "mtxWrapShield",
+        "mtxPrepareAcc"
+      ]
     }
   ],
   "ua_signer": 264,
@@ -373,6 +418,7 @@
     "Order entries (mtxCancelOrder, mtxInvalidateNonces, mtxWrapOrder; the DEX's mtxCancelOrders, one order, and mtxInvalidateNonces): no envelope or meta-tx lane, signed over the order under the UA purpose trade (a native key signs the digest itself), the DEX's by an address. The SDK keys a struct without a lane as used and mtxWrapOrder by its order nonce, so both rows are the worst case: nothing of the signer's on the batch written yet (the floor raised the first time, the wrapper holding none of the leg, the signer none of its units). The call sits on EIP-7976's calldata floor: measured inside the transaction, by a meter contract's gasleft around the call less the meter's own 3,038 (a cold callee and its opcodes; held equal to the transaction's figure on two rows off the floor).",
     "account (SmartKeyAccount): signed by its secp256k1 key 0 (the reference signer) in an AccountSig with an empty proof; the worst over the key kinds added, removed or replaced (a secp256k1 key or a passkey) and over a guardian set with or without a recovery pending; mtxExecute's data per byte measured inside the transaction as the order entries are.",
     "gov_router (GovernanceRouter): each entry signed for its target by the role it needs, a native key where the role takes one, else an ERC-1271 wallet (the contract-only bits: RATE_ADJUSTABLE's rate entries, the regulated issuer's pause, freeze, force transfer and the compliance seat's order entries); the target in the state the governance sequence reaches just before the entry, every write a first write; the worst over the targets measured: a Normal, a regulated Normal (kind 8), a Wrapped, a hybrid with the wrap controls, the DEX, the factory, the compliance registry, an OFFCHAIN PQZ token, a Zether token; the factory's notice period 0 and no grant delay where a change applies at once; the list entries with one account, the directory with all four entries, mtxCreate* one new contract each.",
+    "Confidential entries (Zether and PQZ apart): the enveloped (relayed) form on the kind's Normal and Wrapped tokens, plain and regulated, signed by the reference signer; Zether with real proofs (the fixture's prover, the real BLS12-381 verifiers), the transfer and unshields from an account holding a rolled-over balance, the receiver holding nothing; mtxRollOverSigned and mtxSetRollOverMode in their enveloped form, a superset of the owner-only form; PQZ at the build's parameter set n2304-kmax4096, mtxPrepareAcc the worst of its two halves on an account never prepared. No ua_extra (the fixtures' registries have no secp256k1 verifier).",
     "Verify rows: the copy-cost forwarder's check of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature."
   ],
   "save": [

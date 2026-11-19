@@ -16,6 +16,7 @@
     "Order entries (mtxCancelOrder, mtxInvalidateNonces, mtxWrapOrder; the DEX's mtxCancelOrders, one order, and mtxInvalidateNonces): no envelope or meta-tx lane, signed over the order under the UA purpose trade (a native key signs the digest itself), the DEX's by an address. The SDK keys a struct without a lane as used and mtxWrapOrder by its order nonce, so both rows are the worst case: nothing of the signer's on the batch written yet (the floor raised the first time, the wrapper holding none of the leg, the signer none of its units). The call sits on EIP-7976's calldata floor: measured inside the transaction, by a meter contract's gasleft around the call less the meter's own 3,038 (a cold callee and its opcodes; held equal to the transaction's figure on two rows off the floor).",
     "account (SmartKeyAccount): signed by its secp256k1 key 0 (the reference signer) in an AccountSig with an empty proof; the worst over the key kinds added, removed or replaced (a secp256k1 key or a passkey) and over a guardian set with or without a recovery pending; mtxExecute's data per byte measured inside the transaction as the order entries are.",
     "gov_router (GovernanceRouter): each entry signed for its target by the role it needs, a native key where the role takes one, else an ERC-1271 wallet (the contract-only bits: RATE_ADJUSTABLE's rate entries, the regulated issuer's pause, freeze, force transfer and the compliance seat's order entries); the target in the state the governance sequence reaches just before the entry, every write a first write; the worst over the targets measured: a Normal, a regulated Normal (kind 8), a Wrapped, a hybrid with the wrap controls, the DEX, the factory, the compliance registry, an OFFCHAIN PQZ token, a Zether token; the factory's notice period 0 and no grant delay where a change applies at once; the list entries with one account, the directory with all four entries, mtxCreate* one new contract each.",
+    "Confidential entries (Zether and PQZ apart): the enveloped (relayed) form on the kind's Normal and Wrapped tokens, plain and regulated, signed by the reference signer; Zether with real proofs (the fixture's prover, the real BLS12-381 verifiers), the transfer and unshields from an account holding a rolled-over balance, the receiver holding nothing; mtxRollOverSigned and mtxSetRollOverMode in their enveloped form, a superset of the owner-only form; PQZ at the build's parameter set n2304-kmax4096, mtxPrepareAcc the worst of its two halves on an account never prepared. No ua_extra (the fixtures' registries have no secp256k1 verifier).",
     "Verify rows: the copy-cost forwarder's check of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature."
   ],
   "base": [
@@ -2736,6 +2737,292 @@
       "gas": 90000,
       "measured": 89541,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxUnpause_used_regulated"
+    },
+    {
+      "entry": "mtxShield",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 906000,
+      "measured": 905039,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxShield_fresh_normal,zether_mtxShield_fresh_normal_reg,zether_mtxShield_fresh_wrapped,zether_mtxShield_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 134000,
+        "measured": 133571,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxShield_fee_normal-zether_mtxShield_fresh_normal,zether_mtxShield_fee_normal_reg-zether_mtxShield_fresh_normal_reg,zether_mtxShield_fee_wrapped-zether_mtxShield_fresh_wrapped,zether_mtxShield_fee_wrapped_reg-zether_mtxShield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxShield",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 808000,
+      "measured": 807119,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxShield_used_normal,zether_mtxShield_used_normal_reg,zether_mtxShield_used_wrapped,zether_mtxShield_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 134000,
+        "measured": 133571,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxShield_fee_normal-zether_mtxShield_fresh_normal,zether_mtxShield_fee_normal_reg-zether_mtxShield_fresh_normal_reg,zether_mtxShield_fee_wrapped-zether_mtxShield_fresh_wrapped,zether_mtxShield_fee_wrapped_reg-zether_mtxShield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxWrapShield",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 979000,
+      "measured": 978356,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapShield_fresh_wrapped,zether_mtxWrapShield_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 146000,
+        "measured": 145405,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapShield_fee_wrapped-zether_mtxWrapShield_fresh_wrapped,zether_mtxWrapShield_fee_wrapped_reg-zether_mtxWrapShield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxWrapShield",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 881000,
+      "measured": 880436,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapShield_used_wrapped,zether_mtxWrapShield_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 146000,
+        "measured": 145405,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapShield_fee_wrapped-zether_mtxWrapShield_fresh_wrapped,zether_mtxWrapShield_fee_wrapped_reg-zether_mtxWrapShield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxConfidentialTransferSingle",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 5475000,
+      "measured": 5474504,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferSingle_fresh_normal,zether_mtxConfidentialTransferSingle_fresh_normal_reg,zether_mtxConfidentialTransferSingle_fresh_wrapped,zether_mtxConfidentialTransferSingle_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 148000,
+        "measured": 147586,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferSingle_fee_normal-zether_mtxConfidentialTransferSingle_fresh_normal,zether_mtxConfidentialTransferSingle_fee_normal_reg-zether_mtxConfidentialTransferSingle_fresh_normal_reg,zether_mtxConfidentialTransferSingle_fee_wrapped-zether_mtxConfidentialTransferSingle_fresh_wrapped,zether_mtxConfidentialTransferSingle_fee_wrapped_reg-zether_mtxConfidentialTransferSingle_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxConfidentialTransferSingle",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 5377000,
+      "measured": 5376584,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferSingle_used_normal,zether_mtxConfidentialTransferSingle_used_normal_reg,zether_mtxConfidentialTransferSingle_used_wrapped,zether_mtxConfidentialTransferSingle_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 148000,
+        "measured": 147586,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferSingle_fee_normal-zether_mtxConfidentialTransferSingle_fresh_normal,zether_mtxConfidentialTransferSingle_fee_normal_reg-zether_mtxConfidentialTransferSingle_fresh_normal_reg,zether_mtxConfidentialTransferSingle_fee_wrapped-zether_mtxConfidentialTransferSingle_fresh_wrapped,zether_mtxConfidentialTransferSingle_fee_wrapped_reg-zether_mtxConfidentialTransferSingle_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxUnshield",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 1904000,
+      "measured": 1903027,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshield_fresh_normal,zether_mtxUnshield_fresh_normal_reg,zether_mtxUnshield_fresh_wrapped,zether_mtxUnshield_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 141000,
+        "measured": 140680,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshield_fee_normal-zether_mtxUnshield_fresh_normal,zether_mtxUnshield_fee_normal_reg-zether_mtxUnshield_fresh_normal_reg,zether_mtxUnshield_fee_wrapped-zether_mtxUnshield_fresh_wrapped,zether_mtxUnshield_fee_wrapped_reg-zether_mtxUnshield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxUnshield",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 1806000,
+      "measured": 1805107,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshield_used_normal,zether_mtxUnshield_used_normal_reg,zether_mtxUnshield_used_wrapped,zether_mtxUnshield_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 141000,
+        "measured": 140680,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshield_fee_normal-zether_mtxUnshield_fresh_normal,zether_mtxUnshield_fee_normal_reg-zether_mtxUnshield_fresh_normal_reg,zether_mtxUnshield_fee_wrapped-zether_mtxUnshield_fresh_wrapped,zether_mtxUnshield_fee_wrapped_reg-zether_mtxUnshield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxUnshieldUnwrap",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 1966000,
+      "measured": 1965827,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshieldUnwrap_fresh_wrapped,zether_mtxUnshieldUnwrap_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 148000,
+        "measured": 147580,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshieldUnwrap_fee_wrapped-zether_mtxUnshieldUnwrap_fresh_wrapped,zether_mtxUnshieldUnwrap_fee_wrapped_reg-zether_mtxUnshieldUnwrap_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxUnshieldUnwrap",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 1868000,
+      "measured": 1867907,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshieldUnwrap_used_wrapped,zether_mtxUnshieldUnwrap_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 148000,
+        "measured": 147580,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshieldUnwrap_fee_wrapped-zether_mtxUnshieldUnwrap_fresh_wrapped,zether_mtxUnshieldUnwrap_fee_wrapped_reg-zether_mtxUnshieldUnwrap_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxRollOver",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 926000,
+      "measured": 925566,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOver_fresh_normal,zether_mtxRollOver_fresh_normal_reg,zether_mtxRollOver_fresh_wrapped,zether_mtxRollOver_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149571,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOver_fee_normal-zether_mtxRollOver_fresh_normal,zether_mtxRollOver_fee_normal_reg-zether_mtxRollOver_fresh_normal_reg,zether_mtxRollOver_fee_wrapped-zether_mtxRollOver_fresh_wrapped,zether_mtxRollOver_fee_wrapped_reg-zether_mtxRollOver_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxRollOver",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 828000,
+      "measured": 827646,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOver_used_normal,zether_mtxRollOver_used_normal_reg,zether_mtxRollOver_used_wrapped,zether_mtxRollOver_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149571,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOver_fee_normal-zether_mtxRollOver_fresh_normal,zether_mtxRollOver_fee_normal_reg-zether_mtxRollOver_fresh_normal_reg,zether_mtxRollOver_fee_wrapped-zether_mtxRollOver_fresh_wrapped,zether_mtxRollOver_fee_wrapped_reg-zether_mtxRollOver_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxRollOverSigned",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 993000,
+      "measured": 992945,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverSigned_fresh_normal,zether_mtxRollOverSigned_fresh_normal_reg,zether_mtxRollOverSigned_fresh_wrapped,zether_mtxRollOverSigned_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149575,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverSigned_fee_normal-zether_mtxRollOverSigned_fresh_normal,zether_mtxRollOverSigned_fee_normal_reg-zether_mtxRollOverSigned_fresh_normal_reg,zether_mtxRollOverSigned_fee_wrapped-zether_mtxRollOverSigned_fresh_wrapped,zether_mtxRollOverSigned_fee_wrapped_reg-zether_mtxRollOverSigned_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxRollOverSigned",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 896000,
+      "measured": 895025,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverSigned_used_normal,zether_mtxRollOverSigned_used_normal_reg,zether_mtxRollOverSigned_used_wrapped,zether_mtxRollOverSigned_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149575,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverSigned_fee_normal-zether_mtxRollOverSigned_fresh_normal,zether_mtxRollOverSigned_fee_normal_reg-zether_mtxRollOverSigned_fresh_normal_reg,zether_mtxRollOverSigned_fee_wrapped-zether_mtxRollOverSigned_fresh_wrapped,zether_mtxRollOverSigned_fee_wrapped_reg-zether_mtxRollOverSigned_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxSetRollOverMode",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 340000,
+      "measured": 339004,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxSetRollOverMode_fresh_normal,zether_mtxSetRollOverMode_fresh_normal_reg,zether_mtxSetRollOverMode_fresh_wrapped,zether_mtxSetRollOverMode_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149575,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxSetRollOverMode_fee_normal-zether_mtxSetRollOverMode_fresh_normal,zether_mtxSetRollOverMode_fee_normal_reg-zether_mtxSetRollOverMode_fresh_normal_reg,zether_mtxSetRollOverMode_fee_wrapped-zether_mtxSetRollOverMode_fresh_wrapped,zether_mtxSetRollOverMode_fee_wrapped_reg-zether_mtxSetRollOverMode_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxSetRollOverMode",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 242000,
+      "measured": 241084,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxSetRollOverMode_used_normal,zether_mtxSetRollOverMode_used_normal_reg,zether_mtxSetRollOverMode_used_wrapped,zether_mtxSetRollOverMode_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149575,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxSetRollOverMode_fee_normal-zether_mtxSetRollOverMode_fresh_normal,zether_mtxSetRollOverMode_fee_normal_reg-zether_mtxSetRollOverMode_fresh_normal_reg,zether_mtxSetRollOverMode_fee_wrapped-zether_mtxSetRollOverMode_fresh_wrapped,zether_mtxSetRollOverMode_fee_wrapped_reg-zether_mtxSetRollOverMode_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxShield",
+      "kind": "pqz",
+      "fresh": true,
+      "gas": 451000,
+      "measured": 450757,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxShield_fresh_normal,pqz_mtxShield_fresh_normal_reg,pqz_mtxShield_fresh_wrapped,pqz_mtxShield_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 134000,
+        "measured": 133559,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxShield_fee_normal-pqz_mtxShield_fresh_normal,pqz_mtxShield_fee_normal_reg-pqz_mtxShield_fresh_normal_reg,pqz_mtxShield_fee_wrapped-pqz_mtxShield_fresh_wrapped,pqz_mtxShield_fee_wrapped_reg-pqz_mtxShield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxShield",
+      "kind": "pqz",
+      "fresh": false,
+      "gas": 353000,
+      "measured": 352837,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxShield_used_normal,pqz_mtxShield_used_normal_reg,pqz_mtxShield_used_wrapped,pqz_mtxShield_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 134000,
+        "measured": 133559,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxShield_fee_normal-pqz_mtxShield_fresh_normal,pqz_mtxShield_fee_normal_reg-pqz_mtxShield_fresh_normal_reg,pqz_mtxShield_fee_wrapped-pqz_mtxShield_fresh_wrapped,pqz_mtxShield_fee_wrapped_reg-pqz_mtxShield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxWrapShield",
+      "kind": "pqz",
+      "fresh": true,
+      "gas": 523000,
+      "measured": 522699,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapShield_fresh_wrapped,pqz_mtxWrapShield_fresh_wrapped_reg",
+      "fee_extra": {
+        "gas": 146000,
+        "measured": 145393,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapShield_fee_wrapped-pqz_mtxWrapShield_fresh_wrapped,pqz_mtxWrapShield_fee_wrapped_reg-pqz_mtxWrapShield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxWrapShield",
+      "kind": "pqz",
+      "fresh": false,
+      "gas": 425000,
+      "measured": 424779,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapShield_used_wrapped,pqz_mtxWrapShield_used_wrapped_reg",
+      "fee_extra": {
+        "gas": 146000,
+        "measured": 145393,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapShield_fee_wrapped-pqz_mtxWrapShield_fresh_wrapped,pqz_mtxWrapShield_fee_wrapped_reg-pqz_mtxWrapShield_fresh_wrapped_reg"
+      }
+    },
+    {
+      "entry": "mtxPrepareAcc",
+      "kind": "pqz",
+      "fresh": true,
+      "gas": 23292000,
+      "measured": 23291184,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPrepareAcc_fresh_normal,pqz_mtxPrepareAcc_fresh_normal_half1,pqz_mtxPrepareAcc_fresh_normal_reg,pqz_mtxPrepareAcc_fresh_normal_reg_half1,pqz_mtxPrepareAcc_fresh_wrapped,pqz_mtxPrepareAcc_fresh_wrapped_half1,pqz_mtxPrepareAcc_fresh_wrapped_reg,pqz_mtxPrepareAcc_fresh_wrapped_reg_half1",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149556,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPrepareAcc_fee_normal-pqz_mtxPrepareAcc_fresh_normal,pqz_mtxPrepareAcc_fee_normal_half1-pqz_mtxPrepareAcc_fresh_normal_half1,pqz_mtxPrepareAcc_fee_normal_reg-pqz_mtxPrepareAcc_fresh_normal_reg,pqz_mtxPrepareAcc_fee_normal_reg_half1-pqz_mtxPrepareAcc_fresh_normal_reg_half1,pqz_mtxPrepareAcc_fee_wrapped-pqz_mtxPrepareAcc_fresh_wrapped,pqz_mtxPrepareAcc_fee_wrapped_half1-pqz_mtxPrepareAcc_fresh_wrapped_half1,pqz_mtxPrepareAcc_fee_wrapped_reg-pqz_mtxPrepareAcc_fresh_wrapped_reg,pqz_mtxPrepareAcc_fee_wrapped_reg_half1-pqz_mtxPrepareAcc_fresh_wrapped_reg_half1"
+      }
+    },
+    {
+      "entry": "mtxPrepareAcc",
+      "kind": "pqz",
+      "fresh": false,
+      "gas": 23194000,
+      "measured": 23193264,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPrepareAcc_used_normal,pqz_mtxPrepareAcc_used_normal_half1,pqz_mtxPrepareAcc_used_normal_reg,pqz_mtxPrepareAcc_used_normal_reg_half1,pqz_mtxPrepareAcc_used_wrapped,pqz_mtxPrepareAcc_used_wrapped_half1,pqz_mtxPrepareAcc_used_wrapped_reg,pqz_mtxPrepareAcc_used_wrapped_reg_half1",
+      "fee_extra": {
+        "gas": 150000,
+        "measured": 149556,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPrepareAcc_fee_normal-pqz_mtxPrepareAcc_fresh_normal,pqz_mtxPrepareAcc_fee_normal_half1-pqz_mtxPrepareAcc_fresh_normal_half1,pqz_mtxPrepareAcc_fee_normal_reg-pqz_mtxPrepareAcc_fresh_normal_reg,pqz_mtxPrepareAcc_fee_normal_reg_half1-pqz_mtxPrepareAcc_fresh_normal_reg_half1,pqz_mtxPrepareAcc_fee_wrapped-pqz_mtxPrepareAcc_fresh_wrapped,pqz_mtxPrepareAcc_fee_wrapped_half1-pqz_mtxPrepareAcc_fresh_wrapped_half1,pqz_mtxPrepareAcc_fee_wrapped_reg-pqz_mtxPrepareAcc_fresh_wrapped_reg,pqz_mtxPrepareAcc_fee_wrapped_reg_half1-pqz_mtxPrepareAcc_fresh_wrapped_reg_half1"
+      }
     }
   ],
   "verify": [

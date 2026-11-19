@@ -157,6 +157,15 @@ pub(crate) const QUOTABLE: &[(&str, &[&str])] = &[
     ("mtxRotateKey", &["account"]),
     ("mtxSetGuardian", &["account"]),
     ("mtxCancelRecovery", &["account"]),
+    ("mtxShield", &["zether", "pqz"]),
+    ("mtxWrapShield", &["zether", "pqz"]),
+    ("mtxConfidentialTransferSingle", &["zether"]),
+    ("mtxUnshield", &["zether"]),
+    ("mtxUnshieldUnwrap", &["zether"]),
+    ("mtxRollOver", &["zether"]),
+    ("mtxRollOverSigned", &["zether"]),
+    ("mtxSetRollOverMode", &["zether"]),
+    ("mtxPrepareAcc", &["pqz"]),
     ("mtxAcceptAdmin", &["gov_router"]),
     ("mtxApproveDexRelease", &["gov_router"]),
     ("mtxApproveRelease", &["gov_router"]),
@@ -223,20 +232,19 @@ const TOKEN_KINDS: &[&str] = &["token", "zether", "pqz"];
 /// What the SDK prepares without a reference row yet (PLANNED: their fixtures), each on the domain kinds listed.
 #[cfg(test)] // the coverage test's
 pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
+    // their cost grows with a count the row has no part for (the legs, the accounts, the entries rolled)
     ("mtxConfidentialTransfer", &["pqz", "zether"]),
     ("mtxConfidentialTransferCompact", &["pqz", "zether"]),
-    ("mtxConfidentialTransferSingle", &["pqz", "zether"]),
-    ("mtxConfidentialTransferSingleCompact", &["pqz"]),
-    ("mtxPrepareAcc", &["pqz"]),
-    ("mtxRollOver", &["pqz", "zether"]),
+    ("mtxRollOver", &["pqz"]),
     ("mtxRollOverBatch", &["zether"]),
-    ("mtxRollOverSigned", &["pqz", "zether"]),
+    ("mtxRollOverSigned", &["pqz"]),
+    // the PQZ debits: the proof's precompile and the holder's ML-DSA authorization have no forge path yet
+    ("mtxConfidentialTransferSingle", &["pqz"]),
+    ("mtxConfidentialTransferSingleCompact", &["pqz"]),
+    ("mtxUnshield", &["pqz"]),
+    ("mtxUnshieldUnwrap", &["pqz"]),
+    // the new auditor's consent, a second signature (ruling 4) the fixture mocks
     ("mtxSetAuditorUA", &["gov_router"]),
-    ("mtxSetRollOverMode", &["zether"]),
-    ("mtxShield", &["pqz", "zether"]),
-    ("mtxUnshield", &["pqz", "zether"]),
-    ("mtxUnshieldUnwrap", &["pqz", "zether"]),
-    ("mtxWrapShield", &["pqz", "zether"]),
 ];
 
 /// The EIP-712 domain's name of a domain kind (`typed_ops.json`'s `domains`).

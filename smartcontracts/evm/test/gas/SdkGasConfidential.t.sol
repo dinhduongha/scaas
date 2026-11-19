@@ -22,7 +22,7 @@ import {SdkGasOps} from "./SdkGasOps.sol";
 /// variants count): each entry on the kind's Normal, Wrapped and regulated Normal / Wrapped tokens, public balances, the
 /// reference signer a native key. A regulated token has the registry check (`KYC` with the deny mask, every party read
 /// there, none denied) and `TAX` at 10 %.
-abstract contract SdkGasKind is SdkGasOps {
+abstract contract SdkGasKindBase is SdkGasOps {
     address internal constant SG_TAX_TO = address(0x7A0);
     uint64 internal constant SG_KYC = 1;
     uint64 internal constant SG_DENIED = 1 << 16;
@@ -142,7 +142,10 @@ abstract contract SdkGasKind is SdkGasOps {
         WrappedToken(payable(t)).wrap(address(sgUnd), amount);
         WrappedToken(payable(t)).transfer(to, amount);
     }
+}
 
+/// The base rows' runs of a kind (`inputs.json` `runs`).
+abstract contract SdkGasKind is SdkGasKindBase {
     function test_sdkGas_kind() public {
         _sgRows(false);
     }
@@ -160,12 +163,13 @@ abstract contract SdkGasKind is SdkGasOps {
     }
 }
 
-contract SdkGasZetherTest is SdkGasKind, ZetherRegFixture {
+/// The `zether` kind's fixture: `ZetherRegFixture` with the `WRAPPED_ZETHER` release.
+abstract contract SdkGasZetherBase is SdkGasKindBase, ZetherRegFixture {
     function _isWrapped() internal pure override returns (bool) {
         return false;
     }
 
-    function setUp() public override {
+    function setUp() public virtual override {
         super.setUp();
         Catalogue.release(
             factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
@@ -200,12 +204,15 @@ contract SdkGasZetherTest is SdkGasKind, ZetherRegFixture {
     }
 }
 
-contract SdkGasPqzTest is SdkGasKind, PqzRegFixture {
+contract SdkGasZetherTest is SdkGasKind, SdkGasZetherBase {}
+
+/// The `pqz` kind's fixture: `PqzRegFixture` with the `WRAPPED_PQZ` release.
+abstract contract SdkGasPqzBase is SdkGasKindBase, PqzRegFixture {
     function _isWrapped() internal pure override returns (bool) {
         return false;
     }
 
-    function setUp() public override {
+    function setUp() public virtual override {
         super.setUp();
         _releaseWrapped();
         (sgPk, sgUaTo) = (0xA11CE5EED, more[2]);
@@ -234,3 +241,5 @@ contract SdkGasPqzTest is SdkGasKind, PqzRegFixture {
         return (creg, attester, issuer);
     }
 }
+
+contract SdkGasPqzTest is SdkGasKind, SdkGasPqzBase {}
