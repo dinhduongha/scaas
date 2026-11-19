@@ -40,6 +40,7 @@ STEPS=(
     "rpc-test|clients/scaas-rpc|$cap cargo test $C --all-features"
     "frb-dart|clients/ua-dart-frb|(cd rust && $cap cargo build $C) && $cap dart test --reporter expanded --no-color"
     "bind-dart|clients/scaas-sdk/bindings/dart|bash ./run.sh"
+    "bind-gen|.|bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check"
     "bind-cpp|clients/scaas-sdk/bindings/cpp|$cap cmake -B build && $cap cmake --build build && cd build && $cap ctest --output-on-failure"
     "sdk-opaque|clients/scaas-sdk|$cap cargo test $C --features $F,opaque-calls --test wallet_ops"
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"

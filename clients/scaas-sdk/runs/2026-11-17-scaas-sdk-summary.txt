@@ -121,3 +121,5 @@ ffi | 01a284f17 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 # left; T18b and T19 touch no e2e path. With native-networks,raw-native: cargo test --lib 110 passed at 01a284f17 (the 9 raw
 # tests), clippy --all-targets -D warnings clean. format.sh --check rust clean. Mutants t17 7/7, t18 5/5, t18b 3/3, t19 6/6
 # killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
+bind-gen | 5d206063c | 0 | -; tree dirty
+# T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).

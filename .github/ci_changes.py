@@ -87,6 +87,18 @@ JOBS = {
     ]
     + RT,
     "ua-dart": ["clients/ua-dart/", "smartcontracts/vectors/", "smartcontracts/evm/"],
+    # the SDK (plan T20) and what it builds: ua-rs, scaas-rpc, zether-prover, pqz-core's crates, the vectors and gas tables it reads
+    "scaas-sdk": [
+        "clients/scaas-sdk/",
+        "clients/scaas-rpc/",
+        "clients/zether-prover/",
+        "clients/scaas-ct/",
+        "smartcontracts/vectors/",
+    ]
+    + UARS,
+    "scaas-sdk-wasm": ["clients/scaas-sdk/", "clients/scaas-rpc/"] + UARS,
+    "scaas-sdk-bindings": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/"] + UARS,
+    "keystore-vectors": ["clients/scaas-sdk/", "clients/clientkeys/", "smartcontracts/vectors/keystore/"] + UARS,
     # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
     # zether-prover or pqz-ffi
     "test-features": ["clients/", "pqz-core/ffi/", "scaas-node/Cargo.toml", "scripts/check_test_features.py"] + RT,
@@ -95,7 +107,8 @@ JOBS = {
 GROUPS = {
     "ci-full-contracts": [j for j in JOBS if j.startswith("contract-")],
     "ci-full-node": ["node", "scaas-rpc"],
-    "ci-full-clients": ["clientkeys", "zether-prover", "scaas-ct", "test-features"]
+    "ci-full-clients": ["clientkeys", "zether-prover", "scaas-ct", "test-features", "keystore-vectors"]
+    + [j for j in JOBS if j.startswith("scaas-sdk")]
     + [j for j in JOBS if j.startswith("ua-")],
     "ci-full-pqz": ["pqz"],
     "ci-full": list(JOBS),
@@ -118,6 +131,8 @@ RUNS_READ = {
     "smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt": [
         "node"
     ],  # guard.rs erc1271_floor_covers_forge_minimum
+    # the generated bindings' drift check (plan T20)
+    "clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh": ["scaas-sdk-bindings"],
 }
 
 
@@ -214,7 +229,17 @@ if __name__ == "__main__":
         "ua-dart",
         "test-features",
         "ua-deps",
+        "scaas-sdk",
+        "scaas-sdk-wasm",
+        "scaas-sdk-bindings",
+        "keystore-vectors",
     }
+    # plan T20: the SDK's jobs; its generator under runs/ starts the bindings' drift check, other runs/ files nothing
+    sdk = {j for j, r in needed(["clients/scaas-sdk/src/lib.rs"]).items() if r}
+    assert sdk >= {"scaas-sdk", "scaas-sdk-wasm", "scaas-sdk-bindings", "keystore-vectors"}, sdk
+    assert needed(["clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh"])["scaas-sdk-bindings"]
+    assert not needed(["clients/scaas-sdk/runs/2026-11-17-scaas-sdk-summary.txt"])["scaas-sdk"]
+    assert needed(["smartcontracts/vectors/keystore/keystore.json"])["keystore-vectors"]
     assert all(needed(["docs/x.md"], ["ci-full"]).values())
     assert needed(["docs/x.md"], ["bug", "ci-full-node"]) == needed(
         ["docs/x.md"], ["ci-full-node"]
@@ -261,6 +286,10 @@ if __name__ == "__main__":
         "ua-cs",
         "ua-deps",
         "scaas-rpc",
+        "scaas-sdk",
+        "scaas-sdk-wasm",
+        "scaas-sdk-bindings",
+        "keystore-vectors",
     }
     # the network crate: its own job and the node's (the node builds it); ua-rs (its depth scan) runs it too
     assert {j for j, r in needed(["clients/scaas-rpc/src/evm.rs"]).items() if r} >= {"scaas-rpc", "node"}
