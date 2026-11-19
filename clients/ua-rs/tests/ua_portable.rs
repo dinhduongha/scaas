@@ -3106,3 +3106,80 @@ fn record_checks_read_the_current_structure() {
         }
     }
 }
+
+/// bls-multi T4: `blsMultiRegistrations` (clientkeys ua-portable-vectors.mjs, spec 2026-11-19-bls12381-multi §2, §4, §6): the
+/// record and its digests, `popMessage` derived from the key data alone, the members' pop accepted by `check_registration` (and
+/// refused a byte off), `registerBlsMulti` (typed) assembling the packed key data of `register(0x0121, …)`, `stored` = p, and a KEM
+/// key refused (`UAKemHolder`).
+#[test]
+fn bls_multi_registrations() {
+    let p = load("portable.json");
+    let rows = arr(&p, "blsMultiRegistrations");
+    assert_eq!(rows.len(), 2);
+    for r in rows {
+        let name = r["name"].as_str().unwrap();
+        let d = bytes(&r["keyData"]);
+        let h = register(r, false).unwrap();
+        assert_eq!(
+            hx(&h.registration_digest),
+            r["registrationDigest"],
+            "{name}"
+        );
+        assert_eq!(hx(&h.message), r["popMessage"], "{name}");
+        assert_eq!(h.message, bls_multi::pop_message(&d).unwrap(), "{name}");
+        let pop = bytes(&r["pop"]);
+        let no = |_: [u8; 32]| None;
+        let attrs = UAAttrs {
+            pqz_pop_hash: [0; 32],
+            ..Default::default()
+        };
+        assert_eq!(
+            check_registration(0x0121, &d, &attrs, &pop, &[], &no),
+            Ok(()),
+            "{name}"
+        );
+        let mut off = pop.clone();
+        off[100] ^= 1;
+        assert_eq!(
+            check_registration(0x0121, &d, &attrs, &off, &[], &no),
+            Err(UAError::Pop),
+            "{name}"
+        );
+        let full = registration_args(&RegistrationInput {
+            kem_commit: Some(false),
+            ..reg_input(r)
+        })
+        .unwrap();
+        assert_eq!(args_json(&full.args), r["args"], "{name}");
+        let RegisterArgs::RegisterBlsMulti { key, .. } = &full.args else {
+            panic!("{name}")
+        };
+        assert_eq!(
+            key.key_data(),
+            d,
+            "{name}: the typed key assembles the packed key data"
+        );
+        assert_eq!(BlsMultiKey::from_key_data(&d).unwrap(), *key, "{name}");
+        let packed = &r["packed"];
+        assert_eq!(
+            (
+                packed["entry"].as_str(),
+                num(&packed["kind"]),
+                &packed["keyData"],
+                &packed["pop"]
+            ),
+            (Some("register"), 0x0121, &r["keyData"], &r["pop"]),
+            "{name}"
+        );
+        assert_eq!(hx(&bls_multi::stored(&d).unwrap()), r["stored"], "{name}");
+        assert_eq!(
+            registration_args(&RegistrationInput {
+                kem_pk: vec![1u8; 8],
+                ..reg_input(r)
+            })
+            .err(),
+            Some(UAError::KemHolder(0x0121)),
+            "{name}"
+        );
+    }
+}

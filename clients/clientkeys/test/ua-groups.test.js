@@ -280,3 +280,33 @@ test("group kinds as msig members: id, member digest, secp256k1 group slots; the
   }
   assert.equal(n, 12);
 });
+
+// bls-multi T4: groups.json blsMulti (written by clients/ua-rs tests/groups.rs, checked here on noble): the H_G1 KATs under both DSTs,
+// every group's id, stored form, popMsg and pop, every PoP row and every signature row (verify and verifyMinimal) as written.
+test("bls_multi: groups.json blsMulti rows", async () => {
+  const bm = await import("../src/bls-multi.js");
+  const { verify } = await import("../src/ua-verify.js");
+  const { bls12_381 } = await import("@noble/curves/bls12-381.js");
+  const s = V.blsMulti;
+  assert.deepEqual([s.dsts.sig, s.dsts.pop], [bm.DST_MULTI_SIG, bm.DST_MULTI_POP]);
+  for (const r of s.hashToG1) {
+    const P = bls12_381.G1.hashToCurve(B(r.msg), { DST: r.dst === "sig" ? bm.DST_MULTI_SIG : bm.DST_MULTI_POP });
+    assert.equal(hex(bm.g1Bytes(P)), r.point);
+  }
+  for (const g of s.groups) {
+    assert.equal(hex(ua.deriveUA(0x0121, B(g.keyData))), g.ua, g.name);
+    assert.equal(hex(bm.storedBlsMulti(g.keyData)), g.stored, g.name);
+    assert.equal(hex(bm.popMessage(g.keyData)), g.popMessage, g.name);
+    assert.ok(verify(0x0121, g.keyData, g.popMessage, g.pop, true), g.name);
+  }
+  for (const r of s.pop) {
+    assert.equal(hex(bm.popMessage(r.keyData)), r.popMessage, r.name);
+    assert.equal(verify(0x0121, r.keyData, r.popMessage, r.pop, true), r.valid, r.name);
+  }
+  for (const r of s.signatures) {
+    assert.equal(hex(bm.storedBlsMulti(r.keyData)), r.stored, r.name);
+    assert.equal(verify(0x0121, r.keyData, r.uaMsg, r.signature, false, false), r.verify, r.name);
+    assert.equal(verify(0x0121, r.keyData, r.uaMsg, r.signature, false, true), r.minimal, r.name);
+  }
+  assert.deepEqual([s.pop.length, s.signatures.length], [11, 30]);
+});

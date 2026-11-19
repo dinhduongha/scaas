@@ -49,7 +49,11 @@ function groupPoints(ms, t) {
   const d = concatBytes(g2Bytes(apk), u16(t), u16(rows.length), ...rows.flatMap((r) => [r.key, u16(r.w)]));
   return { d, s: rows.map((r) => ({ sk: r.sk, w: r.w })) };
 }
-const group = (ms, t) => groupPoints(ms.map(([sk, w]) => ({ P: pk(sk), sk, w })), t);
+const group = (ms, t) =>
+  groupPoints(
+    ms.map(([sk, w]) => ({ P: pk(sk), sk, w })),
+    t,
+  );
 const sks = (n) => Array.from({ length: n }, (_, i) => [1000n + 7n * BigInt(i), 1]);
 const mmsg = (d, m) => keccak_256(concatBytes(ua.uaOf(K, d), m));
 function signWith(d, s, m, signers, dst) {
@@ -60,7 +64,11 @@ function signWith(d, s, m, signers, dst) {
 const sign = (d, s, m, signers) => signWith(d, s, m, signers, DST_MULTI_SIG);
 const ok = (d, m, sig) => verify(K, hex(d), hex(m), hex(sig), false, false);
 const okMin = (d, m, sig) => verify(K, hex(d), hex(m), hex(sig), false, true);
-const refused = (d) => assert.throws(() => ua.validateKeyData(K, d), (e) => e.code === "UAKeyData");
+const refused = (d) =>
+  assert.throws(
+    () => ua.validateKeyData(K, d),
+    (e) => e.code === "UAKeyData",
+  );
 const valid = (d) => assert.doesNotThrow(() => ua.validateKeyData(K, d));
 const at = (s, sk) => s.findIndex((x) => x.sk === sk);
 
@@ -381,7 +389,8 @@ test("kindVerify passes minimal and pop through", () => {
 
 const popParts = (d, s) => s.map((x, i) => [i, memberPop(x.sk, d)]);
 const popOk = (d, pop) => verify(K, hex(d), hex(popMessage(d)), hex(pop), true);
-const hPop = (d, i) => G1.hashToCurve(popMemberMessage(popMessage(d), d.subarray(260 + 258 * i, 516 + 258 * i)), { DST: DST_MULTI_POP });
+const hPop = (d, i) =>
+  G1.hashToCurve(popMemberMessage(popMessage(d), d.subarray(260 + 258 * i, 516 + 258 * i)), { DST: DST_MULTI_POP });
 const throwsCode = (f, code, index) =>
   assert.throws(f, (e) => e.code === code && (index === undefined || e.index === index));
 
@@ -415,7 +424,10 @@ test("popRogueSharedMessage", () => {
   const H = G1.hashToCurve(popMessage(d), { DST: DST_MULTI_POP });
   const pop = H.multiply(x);
   const { Fp12 } = bls12_381.fields;
-  assert.ok(Fp12.eql(bls12_381.pairing(pop, G2.Point.BASE), bls12_381.pairing(H, pkH.add(pkM))), "passes a shared-message check");
+  assert.ok(
+    Fp12.eql(bls12_381.pairing(pop, G2.Point.BASE), bls12_381.pairing(H, pkH.add(pkM))),
+    "passes a shared-message check",
+  );
   assert.ok(!popOk(d, g1Bytes(pop)));
 });
 
@@ -432,7 +444,12 @@ test("popSplitRogue", () => {
   );
   valid(d);
   const hm = G1.hashToCurve(popMessage(d), { DST: DST_MULTI_POP });
-  for (const c of [hPop(d, 0).multiply(x), hPop(d, 1).multiply(x), hPop(d, 0).add(hPop(d, 1)).multiply(x), hm.multiply(x)])
+  for (const c of [
+    hPop(d, 0).multiply(x),
+    hPop(d, 1).multiply(x),
+    hPop(d, 0).add(hPop(d, 1)).multiply(x),
+    hm.multiply(x),
+  ])
     assert.ok(!popOk(d, g1Bytes(c)));
 });
 
@@ -453,7 +470,9 @@ test("popTwoRogues", () => {
   for (const c of [
     hPop(d, i1).multiply(x).add(hPop(d, i2).multiply(y)),
     hm.multiply(x + y),
-    hPop(d, i1).add(hPop(d, i2)).multiply(x + y),
+    hPop(d, i1)
+      .add(hPop(d, i2))
+      .multiply(x + y),
   ])
     assert.ok(!popOk(d, g1Bytes(c)));
 });
@@ -580,7 +599,10 @@ test("builderOrderAndIndexMap", () => {
     keys.map((key) => ({ key })),
     2,
   );
-  assert.ok(parseBlsMulti(u.keyData).members.every((m) => m.weight === 1), "weight defaults to 1");
+  assert.ok(
+    parseBlsMulti(u.keyData).members.every((m) => m.weight === 1),
+    "weight defaults to 1",
+  );
   assert.throws(() => buildKeyData(sorted.slice(0, 1), 1));
 });
 

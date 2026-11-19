@@ -226,3 +226,107 @@ fn t_frost_rows() {
         assert_eq!(ok, r["valid"].as_bool().unwrap(), "{}", r["name"]);
     }
 }
+
+/// bls-multi T4: groups.json `blsMulti` (written by tests/groups.rs): the `H_G1` KATs under both DSTs, every group's id, stored form,
+/// `popMsg` and pop, every PoP row (`verifyPop`) and signature row (`verify` and `verifyMinimal`) as written.
+#[test]
+fn bls_multi_rows_verify() {
+    use scaas_ua::bls_multi as bm;
+    let v = load();
+    let s = &v["blsMulti"];
+    assert_eq!(
+        s["dsts"]["sig"].as_str().unwrap().as_bytes(),
+        &bm::DST_MULTI_SIG[..]
+    );
+    assert_eq!(
+        s["dsts"]["pop"].as_str().unwrap().as_bytes(),
+        &bm::DST_MULTI_POP[..]
+    );
+    for r in arr(&s["hashToG1"]) {
+        let dst = if r["dst"] == "sig" {
+            &bm::DST_MULTI_SIG[..]
+        } else {
+            &bm::DST_MULTI_POP[..]
+        };
+        assert_eq!(
+            &bm::g1_encode(&scaas_ua::verify::hash_to_g1_bls12381(
+                &bytes(&r["msg"]),
+                dst
+            ))[..],
+            &bytes(&r["point"])[..]
+        );
+    }
+    for g in arr(&s["groups"]) {
+        let d = bytes(&g["keyData"]);
+        let name = g["name"].as_str().unwrap();
+        assert_eq!(
+            derive_ua(0x0121, &d, false).unwrap(),
+            b32(&g["ua"]),
+            "{name}"
+        );
+        assert_eq!(bm::stored(&d).unwrap(), bytes(&g["stored"]), "{name}");
+        assert_eq!(
+            bm::pop_message(&d).unwrap(),
+            b32(&g["popMessage"]),
+            "{name}"
+        );
+        assert!(
+            verify(
+                0x0121,
+                &d,
+                &b32(&g["popMessage"]),
+                &bytes(&g["pop"]),
+                true,
+                false
+            ),
+            "{name}"
+        );
+    }
+    let (mut pops, mut sigs) = (0, 0);
+    for r in arr(&s["pop"]) {
+        let d = bytes(&r["keyData"]);
+        assert_eq!(
+            bm::pop_message(&d).unwrap(),
+            b32(&r["popMessage"]),
+            "{}",
+            r["name"]
+        );
+        let ok = verify(
+            0x0121,
+            &d,
+            &b32(&r["popMessage"]),
+            &bytes(&r["pop"]),
+            true,
+            false,
+        );
+        assert_eq!(ok, r["valid"].as_bool().unwrap(), "{}", r["name"]);
+        pops += 1;
+    }
+    for r in arr(&s["signatures"]) {
+        let (d, m, sig) = (
+            bytes(&r["keyData"]),
+            b32(&r["uaMsg"]),
+            bytes(&r["signature"]),
+        );
+        assert_eq!(
+            bm::stored(&d).unwrap(),
+            bytes(&r["stored"]),
+            "{}",
+            r["name"]
+        );
+        assert_eq!(
+            verify(0x0121, &d, &m, &sig, false, false),
+            r["verify"].as_bool().unwrap(),
+            "{}",
+            r["name"]
+        );
+        assert_eq!(
+            verify(0x0121, &d, &m, &sig, false, true),
+            r["minimal"].as_bool().unwrap(),
+            "{}",
+            r["name"]
+        );
+        sigs += 1;
+    }
+    assert_eq!((pops, sigs), (11, 30));
+}

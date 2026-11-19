@@ -309,6 +309,15 @@
       }
     },
     {
+      "name": "derived bls12381-multi",
+      "id": "0xae28529a52a0e6c9ce6f12ab8c8262290ce9e49d1345e5bd67278c368b9a9825",
+      "kind": 289,
+      "display": {
+        "kind": "derived",
+        "urn": "urn:scaas:ua:v1:bls12381-multi:ae28529a52a0e6c9ce6f12ab8c8262290ce9e49d1345e5bd67278c368b9a9825"
+      }
+    },
+    {
       "name": "derived, bit 160 set over an address",
       "id": "0x0000000000000000000000015aaeb6053f3e94c9b9a09f33669435e7ef1beaed",
       "kind": 258,

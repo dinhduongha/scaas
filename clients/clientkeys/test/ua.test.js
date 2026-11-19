@@ -277,3 +277,25 @@ test("id_display.json: the generator reproduces it, every row holds, every kind 
   for (const k of ua.KINDS) assert.ok((k.native ? notDerived : urnKinds).has(k.kind), `no row for ${k.name}`);
   assert.ok(D.rows.some((r) => r.display?.address) && D.rows.some((r) => r.error === "UAIdFormat"));
 });
+
+// bls-multi T4: the 0x0121 rows of kinds.json: d, s, p = ua ‖ s, keyOf = apk, the 12,644-byte pair, the builder row (Review Focus 2).
+test("bls_multi: kinds.json 0x0121 rows", async () => {
+  const bm = await import("../src/bls-multi.js");
+  const rows = K.valid.filter((r) => r.kind === 0x0121);
+  assert.equal(rows.length, 10);
+  for (const r of rows) {
+    assert.equal(hex(ua.deriveUA(0x0121, fromHex(r.keyData))), r.ua, r.label);
+    assert.equal(r.keyHash, null);
+    assert.equal(hex(bm.compressBlsMulti(r.keyData)), r.compressed, r.label);
+    assert.equal(hex(bm.expandBlsMulti(r.compressed)), r.keyData, r.label);
+    assert.equal(hex(bm.storedBlsMulti(r.keyData)), r.stored, r.label);
+    assert.equal(r.keyOf, r.keyData.slice(0, 2 + 512));
+  }
+  assert.equal(fromHex(rows.find((r) => r.label.startsWith("n48")).keyData).length, 12644);
+  assert.equal(fromHex(rows.find((r) => r.label.startsWith("n64 t1")).stored).length, 12644);
+  const b = K.blsMultiBuilder;
+  const { keyData, indexMap } = bm.buildKeyData(b.members, b.threshold);
+  assert.deepEqual([hex(keyData), indexMap], [b.keyData, b.indexMap]);
+  assert.ok(K.kinds.find((k) => k.kind === 0x0121).surplusForm);
+  assert.ok(K.kinds.filter((k) => k.surplusForm).length === 1);
+});
