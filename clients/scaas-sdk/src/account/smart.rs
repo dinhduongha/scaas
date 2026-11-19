@@ -138,10 +138,8 @@ impl Account {
         self.sdk
             .spawn(async move {
                 let account = addr20(&op.account.to_ascii_lowercase())?;
+                // only the `account` kind has these rows: another contract's domain is `Argument` here
                 let kind = kind_of(&sdk, &op.chain, name, account).await?;
-                if kind != "account" {
-                    return Err(SdkError::Argument);
-                }
                 let mut m = Map::new();
                 m.insert("from".into(), json!(hex(&account)));
                 m.extend(fields);

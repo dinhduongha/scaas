@@ -36,7 +36,6 @@ rpc-wasm | 9172eb6dd | 0 | -; tree dirty
 rpc-test | 9172eb6dd | 0 | 332 passed, 0 failed, 20 ignored (32 binaries); tree dirty
 rpc-clippy | 9172eb6dd | 0 | -; tree dirty
 ck-test | 818595dbf | 0 | node: 480 pass, 0 fail, 4 skipped
-ua-clippy | 818595dbf | 0 | -
 ua-test | 818595dbf | 0 | 553 passed, 0 failed, 3 ignored (55 binaries)
 # Plan T13 part 1 (registration, split, records) 5721c48da, T13b (sponsored registration) 66e995ee2, the T15 e2e switch to
 # SDK registration 818595dbf: the rows above at 818595dbf. sdk-e2e 4 passed (the PQ-kind registration, the sponsored
@@ -45,16 +44,23 @@ ua-test | 818595dbf | 0 | 553 passed, 0 failed, 3 ignored (55 binaries)
 # bind-cpp not applicable (no bindings/cpp). Mutants: t13 5/5 killed, t13sponsor 9/9 killed (the t13a..t13f files are an
 # earlier round's numbering).
 # This commit also formats clients/clientkeys/scripts/registration-blob-vectors.mjs (Prettier; its output unchanged, the blobs regenerate byte for byte).
-sdk-opaque | 3d0110340 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
 bind-dart | 3d0110340 | 0 | dart: +6:
-sdk-wasm | 3d0110340 | 0 | -
-features | 3d0110340 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-sdk-clippy | 3d0110340 | 0 | -
-docs | 3d0110340 | 0 | -
 sdk-min | 3d0110340 | 101 | 30 passed, 1 failed, 0 ignored (3 binaries)
-sdk-test | 3d0110340 | 0 | 184 passed, 0 failed, 5 ignored (16 binaries)
-sdk-e2e | 3d0110340 | 0 | 4 passed, 0 failed, 0 ignored (1 binaries)
 # Owner rulings R1-R4 (3d0110340): sdk-test and sdk-e2e ran as the runner's command split per test binary (sdk-test) and per
 # test (sdk-e2e), so no call outlives the session's 180 s foreground limit; the counts are their sums. sdk-min's one red is
 # the same pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins; no other failure. Mutants: t13rulings 5/5
 # killed, each by its intended assertion. ua-rs and clientkeys untouched.
+docs | de8b02596 | 0 | -; tree dirty
+features | de8b02596 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+sdk-clippy | 8943e348c | 0 | -; tree dirty
+ua-clippy | 8943e348c | 0 | -; tree dirty
+sdk-wasm | 8943e348c | 0 | -; tree dirty
+sdk-opaque | 8943e348c | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+sdk-test | dfb10d2c8 | 0 | 187 passed, 0 failed, 7 ignored (16 binaries); tree dirty
+sdk-e2e | dfb10d2c8 | 0 | 6 passed, 0 failed, 0 ignored (1 binaries)
+ua-test (touched) | dfb10d2c8 | 0 | 93 passed, 0 failed, 0 ignored (6 binaries: --lib, sign_scaas, wallet_typed, wallet_sign, entries, json); tree dirty
+# T13 part 2: the PQZ key attribute 8943e348c, SmartKeyAccount and guardian recovery dfb10d2c8. sdk-test split per binary
+# group, sdk-e2e per test (the two new ones at dfb10d2c8, the four others at 3d0110340); sets at all four sets green
+# (proof_system_ids_are_the_sets_pins). ua-rs's whole suite waits for the round-end matrix (touched suites above).
+# Mutants: t13pqz 2/2, t13smart 4/4 killed, each by its intended assertion; one first-run survivor each, recorded in its
+# script (an unobservable pre-check; dead code, removed).
