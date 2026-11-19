@@ -251,7 +251,46 @@ async fn registration_args_equal_portable_json() {
     assert_eq!(code(t.sdk.account().prepare_register(native).await), "Argument");
     let mut pqz = req(&t, ED25519, false);
     pqz.attrs.pqz_key = true;
-    assert_eq!(code(t.sdk.account().prepare_register(pqz).await), "FeatureMissing");
+    assert_eq!(code(t.sdk.account().prepare_register(pqz).await), "Argument", "ed25519 holds no PQZ key");
+}
+
+/// The PQZ key attribute (spec §7): the wallet's PQZ key of the same account and index, its `R_REG` proof by `scaas-ua` under
+/// the build's PQZL id as `pqzPop`, `pqzPopHash` its hash, and the PoP over all of it verifies (`check_registration`, as the
+/// registry checks it); with the KEM key too.
+#[cfg(feature = "pqz")]
+#[tokio::test(flavor = "multi_thread")]
+async fn registration_with_pqz_key() {
+    let t = setup().await;
+    let wallet = Wallet::from_mnemonic(REPO, "").unwrap();
+    let k = wallet.ua_key(MLDSA44, 0, 0).unwrap();
+    let ua = hx(&k.ua().unwrap());
+    registry(&t, &ua, false, &hx(&[0; 32]), false);
+    for kem in [false, true] {
+        let mut r = req(&t, MLDSA44, kem);
+        r.attrs.pqz_key = true;
+        let ws = t.sdk.account().prepare_register(r).await.unwrap();
+        assert_eq!(ws.len(), 1, "it fits the fake chain's cap: no split");
+        let f = |n: &str| ws[0].review().into_iter().find(|x| x.name == n).unwrap().value;
+        let pqz_key = wallet.pqz_key(0, 0).unwrap().pk();
+        assert_eq!(f("args.attrs.pqzKey"), hx(&pqz_key));
+        let pqz_pop = alloy::hex::decode(&f("args.pqzPop")[2..]).unwrap();
+        assert!(pqz_pop.len() > 20_000, "an R_REG proof");
+        assert_eq!(f("args.attrs.pqzPopHash"), hx(&scaas_ua::keccak256(&pqz_pop)));
+        let kem_pk = if kem { k.kem_key(0).unwrap().kem_pk() } else { vec![] };
+        let attrs = scaas_ua::ua_portable::UAAttrs {
+            pqz_key: pqz_key.clone(),
+            pqz_pop_hash: scaas_ua::keccak256(&pqz_pop),
+            kem: if kem {
+                scaas_ua::ua_portable::KemKey::from_kem_pk(&kem_pk).unwrap()
+            } else {
+                Default::default()
+            },
+            kem_pk_hash: [0; 32],
+        };
+        let pop = alloy::hex::decode(&f("args.pop")[2..]).unwrap();
+        scaas_ua::ua_portable::check_registration(MLDSA44, &k.key_data(), &attrs, &pop, &pqz_pop, &|_| None)
+            .expect("the PoP covers the PQZ key, its proof and the KEM key");
+    }
 }
 
 /// A registry write lands by its record, whoever sent it: no receipt for the payer's transaction, the record present is

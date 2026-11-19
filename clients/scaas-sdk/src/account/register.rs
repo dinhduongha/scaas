@@ -382,9 +382,7 @@ fn take(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
 /// A seed key's registration by `scaas-ua` (`registration_args_json`; the PoP by `sign_ua` under `pop` v2, the Zether UA's by
 /// its facade): the UA and `{args, kemFill, …}`.
 pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result<([u8; 32], Value), SdkError> {
-    if attrs.pqz_key {
-        return Err(SdkError::FeatureMissing);
-    }
+    let (mut pqz_key, mut pqz_pop) = (vec![], vec![]);
     let (kind, key_data, ua, pop, kem_pk) = match key(sdk, key_ref)? {
         Key::Ua(_, k) => {
             let ua = k.ua().ok_or(SdkError::Argument)?;
@@ -393,12 +391,19 @@ pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result
             } else {
                 vec![]
             };
+            if attrs.pqz_key {
+                // a kind that holds no PQZ key is refused before anything is proved
+                if !scaas_ua::is_pqz_holder(k.kind()) {
+                    return Err(SdkError::Argument);
+                }
+                (pqz_key, pqz_pop) = pqz_attr(sdk, key_ref, k.kind(), &ua, &kem_pk)?;
+            }
             let hp = scaas_ua::holder_pop_message(
                 k.kind(),
                 &ua,
                 &k.key_data(),
-                None,
-                None,
+                Some(&pqz_key),
+                Some(&pqz_pop),
                 None,
                 Some(&kem_pk),
             )
@@ -411,7 +416,7 @@ pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result
         }
         #[cfg(feature = "zether")]
         Key::Zether(_, z) => {
-            if attrs.kem {
+            if attrs.kem || attrs.pqz_key {
                 return Err(SdkError::Argument); // a Zether UA holds no KEM key
             }
             let (y, pop) = z.pop()?;
@@ -419,8 +424,12 @@ pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result
         }
         Key::Native(..) => return Err(SdkError::Argument),
     };
+    let pop_hash = match pqz_pop.is_empty() {
+        true => "0x".to_string(),
+        false => hex(&scaas_ua::keccak256(&pqz_pop)),
+    };
     let input = json!({
-        "kind": kind, "keyData": hex(&key_data), "pqzKey": "0x", "pqzPopHash": "0x", "pqzPop": "0x",
+        "kind": kind, "keyData": hex(&key_data), "pqzKey": hex(&pqz_key), "pqzPopHash": pop_hash, "pqzPop": hex(&pqz_pop),
         "kemPk": hex(&kem_pk), "pop": hex(&pop),
     });
     let r: Value = serde_json::from_str(
@@ -429,6 +438,47 @@ pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result
     )
     .map_err(|_| SdkError::Internal)?;
     Ok((ua, r))
+}
+
+/// The PQZ key attribute of a seed's UA key (spec §7): the PQZ key of the same wallet account and index
+/// (`Wallet::pqz_key`, version 0) and its `R_REG` proof by `scaas-ua`'s `proveRegister` over `pqz_reg_message(kind, ua, pk,
+/// kem)`, under this build's PQZL `proofSystemId` (`pqz_set`, the set the build carries; the registry's PoP verifier takes
+/// PQZL). `(pqzKey, pqzPop)`. `FeatureMissing` without feature `pqz`.
+#[cfg(feature = "pqz")]
+fn pqz_attr(
+    sdk: &Sdk,
+    key_ref: &KeyRef,
+    kind: u16,
+    ua: &[u8; 32],
+    kem_pk: &[u8],
+) -> Result<(Vec<u8>, Vec<u8>), SdkError> {
+    let KeyRef::Ua {
+        seed,
+        account,
+        index,
+        ..
+    } = key_ref
+    else {
+        return Err(SdkError::Argument);
+    };
+    let pk = sdk.open_seed(seed)?.wallet.pqz_key(*account, *index)?;
+    let mut req = serde_json::Map::new();
+    req.insert("proofSystemId".into(), json!(hex(&scaas_ua::facade::pqz::pqz_set().pqzl_id)));
+    req.insert("kind".into(), json!(kind));
+    req.insert("ua".into(), json!(hex(ua)));
+    if !kem_pk.is_empty() {
+        req.insert("kemPk".into(), json!(hex(kem_pk)));
+    }
+    let req = Value::Object(req);
+    let a: Value = serde_json::from_str(&pk.call("proveRegister", req.to_string().as_bytes())?)
+        .map_err(|_| SdkError::Internal)?;
+    let proof = unhex(a.get("proof").and_then(Value::as_str).ok_or(SdkError::Internal)?)?;
+    Ok((pk.pk(), proof))
+}
+
+#[cfg(not(feature = "pqz"))]
+fn pqz_attr(_: &Sdk, _: &KeyRef, _: u16, _: &[u8; 32], _: &[u8]) -> Result<(Vec<u8>, Vec<u8>), SdkError> {
+    Err(SdkError::FeatureMissing)
 }
 
 /// `ReceiverUnregistered` (spec §7.1): `to` a derived UA (not a native id: its top 12 bytes not all zero) that the profile's
@@ -452,8 +502,8 @@ impl Account {
     /// Prepares the registration of `req.key` (spec §7): the arguments and the PoP by `scaas-ua`, then the writes (the
     /// registration, `storePqzPop` when split, `setKemKey` for a hash-committed KEM key), in the order they must land; an
     /// already registered UA gives only what it misses. `WalletLocked`; `Argument` (a key other than a seed's UA key, a KEM
-    /// key on a kind that holds none, a profile without a registry); `FeatureMissing` (`attrs.pqz_key`: the PQZ key's
-    /// `R_REG` proof is not built in this SDK yet); `GasAboveTxCap`.
+    /// key on a kind that holds none, a profile without a registry); `FeatureMissing` (`attrs.pqz_key` without feature
+    /// `pqz`; a PQZ key on a kind that holds none is `Argument`); `GasAboveTxCap`.
     pub async fn prepare_register(&self, req: Register) -> Result<Vec<Arc<RegistryWrite>>, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk

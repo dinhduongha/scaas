@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Plan T1 `sets` (`--test sets` at every PQZ set): the build's one set bit is the set `scaas-ua` proves, and another set is
 //! `PqzSetMismatch` by that name through the SDK's error.
+#![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
 use scaas_sdk::{bits, Sdk, SdkError};
 
@@ -31,4 +32,20 @@ fn another_set_is_pqz_set_mismatch() {
     other.pqzl_id[0] ^= 1;
     let e: SdkError = scaas_ua::facade::pqz::check_set(&other).unwrap_err().into();
     assert_eq!(e.code(), "PqzSetMismatch");
+}
+
+/// The `proofSystemId`s the SDK proves under (a registration's PQZ key: PQZL, plan T13) are the set's pins: `set.json` of the
+/// build's set in `pqz-core/params/sets` (written by `gen_set.py`, the same values `PqzSet.sol` and the vectors carry).
+#[test]
+fn proof_system_ids_are_the_sets_pins() {
+    let mine = scaas_ua::facade::pqz::pqz_set();
+    let path = format!(
+        "{}/../../pqz-core/params/sets/{}/set.json",
+        env!("CARGO_MANIFEST_DIR"),
+        mine.name
+    );
+    let pin: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let hex = |b: &[u8; 32]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    assert_eq!(pin["pqzl_id"].as_str(), Some(hex(&mine.pqzl_id).as_str()));
+    assert_eq!(pin["pqzh_id"].as_str(), mine.pqzh_id.as_ref().map(hex).as_deref());
 }
