@@ -99,7 +99,7 @@ contract PqChatGasTest is PqTopicsBase {
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         bytes32 e2 = chat.rekey(e, ew, sig);
-        _row("rekey 2 members, plain, next epoch list entry", 366_678, 7_642_350);
+        _row("rekey 2 members, plain, next epoch list entry", 367_240, 7_642_350);
 
         IPqChat.PqChatMessage memory m = _msg(sid, e2, ids[1], 0, 1040); // a 1,024-B bucket + the GCM-SIV tag
         sig = _sig(m.sender, h.message(m));
