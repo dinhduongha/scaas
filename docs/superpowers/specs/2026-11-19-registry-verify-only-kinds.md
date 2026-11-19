@@ -4,7 +4,9 @@
 fixes", P0 0 / P1 0 / P2 3 / P3 7, M1 – M10, positions on P7 – P14; file in the private scratchpad, not in the repo) applied,
 and the owner's rulings of 2026-11-19 on it recorded in §0.4 (P7 – P14, P9's refusal, the per-transaction cap as a deploy
 parameter, M2, M9). Revision 3 applied the fix-check of revision 2 (N1 – N16, rulings §0.3); revision 2 the Fable review of
-revision 1 (F1 – F17, rulings §0.2). Status: **SPECIFIED**, nothing built. Everything cryptographic stays
+revision 1 (F1 – F17, rulings §0.2). Build plan:
+[plans/2026-11-19-registry-verify-only-kinds.md](../plans/2026-11-19-registry-verify-only-kinds.md). Status:
+**SPECIFIED**, nothing built. Everything cryptographic stays
 **UNAUDITED**. Scope: **EVM** (the contracts, the factory, the deploy, the node, the SDK and clients); the other families take
 the principle in their own rounds (§12, PLANNED).
 
