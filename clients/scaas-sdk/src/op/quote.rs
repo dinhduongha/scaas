@@ -253,7 +253,8 @@ pub(crate) async fn check_gateways(sdk: &Sdk, chain: &str) -> Result<(), SdkErro
 impl Op {
     /// The quote of `prepared` on `path` (spec §13.3). `PreparedUnknown`, `PreparedStale` (expired or its lane nonce moved),
     /// `SubmitPathNone`, `PayerDelegated`, `GasUnquoted` (a self-relay with no gas figure for the operation's key; a gateway
-    /// quote reports `gas: None` instead), `GasAboveTxCap`, `FeeAboveCap`.
+    /// quote reports `gas: None` instead), `GasCountUnknown` (a row of the operation's key grows with a count the SDK cannot
+    /// read from it, on every path; owner 2026-11-19, I1), `GasAboveTxCap`, `FeeAboveCap`.
     pub async fn quote(
         &self,
         prepared: Arc<Prepared>,
@@ -315,6 +316,8 @@ impl Op {
                     let (extra, message) = (&prepared.t.extra, &prepared.t.message);
                     let op = super::gas::OpGas {
                         len: &|input| super::gas::input_len(extra, message, input),
+                        // I1: the count a per-item part names
+                        count: &|item| super::gas::item_count(message, item),
                         // ruling 1: the record saved (`PayMeta.save`)
                         saves: extra.get("meta").is_some_and(|m| {
                             scaas_ua::wallet::entries::pay_meta_of(m).is_ok_and(|m| m.save)
@@ -332,7 +335,7 @@ impl Op {
                         (&entry, prepared.t.kind, signer, fresh),
                         unsigned.calldata.len(),
                         &op,
-                    )
+                    )?
                 }; // `op` borrows a closure that is not `Send`: dropped before any await
                 let gateway = || SubmitQuote {
                     path: SubmitPath::Gateway,

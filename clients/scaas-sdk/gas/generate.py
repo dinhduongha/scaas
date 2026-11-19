@@ -19,7 +19,11 @@ its `ua_extra` (A1) the worst `..._ua_<variant>` (the derived reference signer `
 `..._fresh_<variant>` less that signer's verify delta, absent when not positive (a source item `a-b[-c]` is the first key less
 the others); a verify row `verify_<kind>_delta`, its `sig_bytes` (ruling 2, A4: every row) `verify_<kind>_sig_bytes`, its
 `margin` (ruling 2 (b) of the sampled check: a kind whose worst case cannot be determined) and `stand_in` from the input
-list. Prints its run time.
+list. A base or verify row whose cost grows with a count (owner 2026-11-19, I1; optional `per_item` of the input list: an
+entry's name or a signer kind's number → the item counted, one of ITEMS) gets `item` and `per_item` {gas, base_count 0,
+source}: its gas the worst whole-gas slope `<kind>_<entry>_per_item_<variant>` (a verify row: `verify_<kind>_per_item`),
+and its figure keys then hold the gas at a count of 0 (the line's intercept, fitted by the forge harness). Prints its run
+time.
 """
 
 import argparse
@@ -29,6 +33,9 @@ import re
 import subprocess
 import sys
 import time
+
+# The counts a row's `item` may name: the SDK's `GAS_ITEMS` (src/config.rs), which reads each from the operation.
+ITEMS = ("legs", "accounts", "entries", "members")
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 
@@ -70,6 +77,22 @@ def extra(m, src, kind, entry, what, less=None):
     }
 
 
+def per_item(inputs, m, src, name, prefix):
+    """The row's `item` and `per_item` (I1) when the input list counts `name`: the worst slope of the keys `prefix*`."""
+    item = inputs.get("per_item", {}).get(name)
+    if item is None:
+        return {}
+    if item not in ITEMS:
+        raise SystemExit(f"{name}: item {item!r} is not one of {ITEMS}")
+    keys = sorted(k for k in m if k.startswith(prefix))
+    if not keys:
+        raise SystemExit(f"no per-item measurement {prefix}")
+    return {
+        "item": item,
+        "per_item": {"gas": max(m[k] for k in keys), "base_count": 0, "source": f"{src}#{','.join(keys)}"},
+    }
+
+
 def table(inputs, m):
     src = inputs["measurements"]
     base = []
@@ -108,6 +131,7 @@ def table(inputs, m):
                     ua = extra(m, src, kind, entry, "ua", f"verify_0x{inputs['ua_signer']:04x}_delta")
                     if ua is not None:
                         row["ua_extra"] = ua
+                    row.update(per_item(inputs, m, src, entry, f"{kind}_{entry}_per_item_"))
                     base.append(row)
     verify = [
         {
@@ -126,6 +150,7 @@ def table(inputs, m):
         row["sig_bytes"] = m[f"verify_0x{signer:04x}_sig_bytes"]
         if str(signer) in inputs["margin"]:
             row["margin"] = inputs["margin"][str(signer)]
+        row.update(per_item(inputs, m, src, str(signer), f"verify_0x{signer:04x}_per_item"))
         if str(signer) in inputs["stand_in"]:
             row["stand_in"] = inputs["stand_in"][str(signer)]
         verify.append(row)

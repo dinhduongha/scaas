@@ -189,6 +189,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
                     save: None,
                     fee_extra: None,
                     ua_extra: None,
+                    per_item: None,
                 });
             }
         }
@@ -199,6 +200,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
             gas: 0,
             sig_bytes: 0,
             margin: 0,
+            per_item: None,
         })
         .to_vec();
     crate::GasRows { base, verify }
@@ -1044,6 +1046,7 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
             gas: 0,
             sig_bytes: 0,
             margin: 0,
+            per_item: None,
         }];
         p.gas = g;
     })
@@ -1146,6 +1149,57 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
         );
         assert_eq!(signs(&t), 0);
     }
+}
+
+/// Owner 2026-11-19, I1, through the quote: `mtxRollOverBatch`'s base row with a per-item part on `accounts` quotes its gas
+/// plus the part times the number of `uas` the operation names, on both paths; the same part on another count (`legs`), which
+/// the operation lacks, refuses it as `GasCountUnknown` on both paths, the app's figure too; without the part the quote is
+/// the row's alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_counted_row_quotes_its_count_or_refuses() {
+    let with = |item: Option<&'static str>| {
+        move |p: &mut ChainProfile, _: &mut Limits| {
+            for b in &mut p.gas.base {
+                if b.entry == "mtxRollOverBatch" {
+                    b.per_item = item.map(|i| crate::GasPerItem {
+                        item: i.into(),
+                        gas: 7_000,
+                    });
+                }
+            }
+        }
+    };
+    let batch = |t: &T| {
+        let until = t.chain.lock().unwrap().timestamp + 3600;
+        let uas: Vec<String> = (1..=3u8).map(|i| hex(&[i; 32])).collect();
+        Draft {
+            message: json!({"from": ua(), "uas": uas, "batch": "7", "validUntil": until.to_string(), "mode": 0,
+                "relayer": ZERO, "fee": "0", "feeRecipient": ZERO}),
+            name: "UARollOverBatch",
+            kind: "zether",
+            ..cancel(t, "token", TOKEN, "5", "0")
+        }
+    };
+    let mut figures = vec![];
+    for item in [None, Some("accounts"), Some("legs")] {
+        let t = setup(1, with(item)).await;
+        let p = prepare(&t, batch(&t)).await;
+        let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+        let self_relay = SubmitPath::SelfRelay { payer: payer(&t) };
+        if item == Some("legs") {
+            assert_eq!(code(t.sdk.op().quote(p.clone(), self_relay).await), "GasCountUnknown");
+            assert_eq!(code(t.sdk.op().quote(p.clone(), SubmitPath::Gateway).await), "GasCountUnknown");
+            let app = t.sdk.op().quote_with_gas(p, SubmitPath::SelfRelay { payer: payer(&t) }, 500_000).await;
+            assert_eq!(code(app), "GasCountUnknown", "never the app's figure instead");
+            continue;
+        }
+        let q = t.sdk.op().quote(p.clone(), self_relay).await.unwrap();
+        assert_eq!(gateway_quote(&t, &p).await.gas, Some(q.gas_limit), "the same figure on both paths");
+        figures.push((q.gas_limit, len));
+    }
+    let [(plain, len), (counted, _)] = figures[..] else { panic!("{figures:?}") };
+    assert_eq!(plain, gas::with_margin(100_000 + 21_000 + 64 * len));
+    assert_eq!(counted, gas::with_margin(100_000 + 3 * 7_000 + 21_000 + 64 * len));
 }
 
 /// The gas-table rulings (owner 2026-11-19): each source on the self-relay path, in the lookup order chain → module (opted in)

@@ -9,7 +9,7 @@
 //! on the call (one total, at most `Limits::max_gas`) → none. The quote names both sources ([`GasSources`]). Without a figure
 //! a self-relay is `GasUnquoted`; a relayed (gateway) quote reports the gas as unquoted and is not refused for it. EVM only
 //! today; every family follows the same principle with its own row shape (spec §13.3).
-use crate::{GasRows, GasTable};
+use crate::{GasPerItem, GasRows, GasTable, SdkError};
 
 /// A native EVM key's signer kind in the table: the reference signer.
 pub const NATIVE_EVM: u16 = 0;
@@ -57,6 +57,10 @@ impl GasSources {
 const INTRINSIC: u64 = 21_000;
 const PER_BYTE: u64 = 64;
 
+/// The largest count a per-item part is quoted at (owner 2026-11-19, I1: a bounded count); above it the operation is
+/// refused as `GasCountUnknown`.
+pub(crate) const COUNT_MAX: u64 = 65_536;
+
 /// The stated margin: the figure plus half of it.
 pub(crate) fn with_margin(g: u64) -> u64 {
     g.saturating_add(g / 2)
@@ -102,6 +106,8 @@ pub(crate) const EXECUTE: &str = "mtxExecute";
 pub(crate) struct OpGas<'a> {
     /// the length of a per-byte part's input (ruling B); `None`: the operation has none
     pub len: &'a dyn Fn(&str) -> Option<u64>,
+    /// the count a per-item part names (I1: [`item_count`]); `None`: the SDK cannot read it from the operation
+    pub count: &'a dyn Fn(&str) -> Option<u64>,
     /// the operation saves its `PayMeta` record (ruling 1)
     pub saves: bool,
     /// the operation's fee is > 0 (ruling 3)
@@ -116,6 +122,7 @@ impl OpGas<'_> {
     #[cfg(test)]
     pub(crate) const PLAIN: OpGas<'static> = OpGas {
         len: &|_| Some(0),
+        count: &|_| None,
         saves: false,
         fee: false,
         attached: None,
@@ -132,6 +139,7 @@ fn verify_part(
     tables: &[GasTable],
     signer: u16,
     bytes: bool,
+    items: &dyn Fn(&Option<GasPerItem>) -> Option<u64>,
 ) -> Option<(u64, GasFrom)> {
     part(chain, opt_in, tables, |r| {
         let v = r.verify.iter().find(|v| v.signer == signer)?;
@@ -139,7 +147,8 @@ fn verify_part(
         Some(
             v.gas
                 .saturating_add(v.margin)
-                .saturating_add(b.saturating_mul(PER_BYTE)),
+                .saturating_add(b.saturating_mul(PER_BYTE))
+                .saturating_add(items(&v.per_item)?),
         )
     })
 }
@@ -152,7 +161,11 @@ fn verify_part(
 /// debits is a derived UA, the signer or an attached signature's owner (A1, G1; a row without one adds nothing); the verify
 /// part adds 64 gas a byte of its `sig_bytes` (ruling 2); a second signature, the one attached (ruling 4 as A2 reads it), adds its kind's verify gas without its bytes (A3), or when its kind
 /// is unknown the most expensive of [`ACCEPTED_SIGNERS`] (a kind without a row: no answer). `mtxExecute` (ruling 5): the
-/// app's figure is its inner call's, added to the rows, never a total; without it, or without the rows, no figure.
+/// app's figure is its inner call's, added to the rows, never a total; without it, or without the rows, no figure. A base
+/// or verify row's `per_item` (I1) adds its gas times the count it names, read by `op.count` (the signer's verify row) and
+/// at most [`COUNT_MAX`]; a row read whose count is unknown or above it refuses the operation, `GasCountUnknown` (fail
+/// closed: never quoted from a later table or the app's figure instead), an attached signature's verify row with one too
+/// (its count is not read).
 pub(crate) fn lookup_by(
     chain: &GasRows,
     opt_in: &[String],
@@ -160,8 +173,19 @@ pub(crate) fn lookup_by(
     app: Option<u64>,
     key: (&str, &str, u16, bool),
     op: &OpGas,
-) -> Option<(u64, GasSources)> {
+) -> Result<Option<(u64, GasSources)>, SdkError> {
     let (entry, kind, signer, fresh) = key;
+    let uncounted = std::cell::Cell::new(false);
+    let items = |p: &Option<GasPerItem>, count: &dyn Fn(&str) -> Option<u64>| {
+        let Some(p) = p else { return Some(0) };
+        let n = count(&p.item).filter(|n| *n <= COUNT_MAX);
+        if n.is_none() {
+            uncounted.set(true);
+        }
+        Some(p.gas.saturating_mul(n?))
+    };
+    let own = |p: &Option<GasPerItem>| items(p, op.count);
+    let attached = |p: &Option<GasPerItem>| items(p, &|_| None);
     let base = part(chain, opt_in, tables, |r| {
         let b = r.base.iter().find(|b| b.key() == (entry, kind, fresh))?;
         let mut g = b.gas;
@@ -179,32 +203,39 @@ pub(crate) fn lookup_by(
         if signer != NATIVE_EVM || op.attached.is_some_and(|k| k != Some(NATIVE_EVM)) {
             g = g.saturating_add(b.ua_extra.unwrap_or(0));
         }
+        g = g.saturating_add(own(&b.per_item)?);
         Some(g)
     });
-    let verify = verify_part(chain, opt_in, tables, signer, true);
+    let verify = verify_part(chain, opt_in, tables, signer, true, &own);
     let second = match op.attached {
         None => Some(0),
-        Some(Some(k)) => verify_part(chain, opt_in, tables, k, false).map(|v| v.0),
+        Some(Some(k)) => verify_part(chain, opt_in, tables, k, false, &attached).map(|v| v.0),
         Some(None) => ACCEPTED_SIGNERS
             .iter()
-            .map(|k| verify_part(chain, opt_in, tables, *k, false).map(|v| v.0))
+            .map(|k| verify_part(chain, opt_in, tables, *k, false, &attached).map(|v| v.0))
             .try_fold(0, |m, v| v.map(|v| m.max(v))),
     };
+    if uncounted.get() {
+        return Err(SdkError::GasCountUnknown);
+    }
     let execute = entry == EXECUTE;
-    match (base, verify, second) {
+    Ok(match (base, verify, second) {
         (Some((b, base)), Some((v, verify)), Some(s)) => {
-            let inner = if execute { app? } else { 0 };
-            Some((
-                b.saturating_add(v).saturating_add(s).saturating_add(inner),
-                GasSources { base, verify },
-            ))
+            let inner = if execute { app } else { Some(0) };
+            inner.map(|inner| {
+                (
+                    b.saturating_add(v).saturating_add(s).saturating_add(inner),
+                    GasSources { base, verify },
+                )
+            })
         }
         _ if execute => None,
         _ => app.map(|g| (g, GasSources::both(GasFrom::App))),
-    }
+    })
 }
 
-/// [`lookup_by`] of an operation without a variable-length input, a saved record, a fee or a second signature.
+/// [`lookup_by`] of an operation without a variable-length input, a saved record, a fee, a second signature or a count
+/// (a row with a per-item part: no figure).
 #[cfg(test)]
 pub(crate) fn lookup(
     chain: &GasRows,
@@ -214,10 +245,12 @@ pub(crate) fn lookup(
     key: (&str, &str, u16, bool),
 ) -> Option<(u64, GasSources)> {
     lookup_by(chain, opt_in, tables, app, key, &OpGas::PLAIN)
+        .ok()
+        .flatten()
 }
 
 /// The quote's gas of a key whose unsigned calldata is `len` bytes: the figure plus the intrinsic cost and the calldata, with
-/// the margin, and its sources; `None`: unquoted.
+/// the margin, and its sources; `None`: unquoted; `GasCountUnknown` as [`lookup_by`].
 pub(crate) fn quoted(
     chain: &GasRows,
     opt_in: &[String],
@@ -226,15 +259,16 @@ pub(crate) fn quoted(
     key: (&str, &str, u16, bool),
     len: usize,
     op: &OpGas,
-) -> Option<(u64, GasSources)> {
-    let (g, from) = lookup_by(chain, opt_in, tables, app, key, op)?;
+) -> Result<Option<(u64, GasSources)>, SdkError> {
     let bytes = u64::try_from(len)
         .unwrap_or(u64::MAX)
         .saturating_mul(PER_BYTE);
-    Some((
-        with_margin(g.saturating_add(INTRINSIC).saturating_add(bytes)),
-        from,
-    ))
+    Ok(lookup_by(chain, opt_in, tables, app, key, op)?.map(|(g, from)| {
+        (
+            with_margin(g.saturating_add(INTRINSIC).saturating_add(bytes)),
+            from,
+        )
+    }))
 }
 
 /// The calldata bytes a quote of signer kind `signer` counted (owner 2026-11-19, G3): the unsigned calldata (`unsigned`) plus
@@ -301,6 +335,26 @@ pub(crate) fn input_len(
     u64::try_from(n).ok()
 }
 
+/// The count a per-item part names (owner 2026-11-19, I1), read from the operation's signed message: `legs`, the length of
+/// `args.legs` (a Zether or PQZ multi-recipient transfer, `mtxConfidentialTransfer[Compact]`) or of a list parameter `legs`
+/// (`mtxSetWrapLimits`); `accounts`, the length of `uas` (`mtxRollOverBatch`) or of a list parameter `accounts`
+/// (`mtxSetAllowed`, `mtxSetDenied`, `mtxSetCompliance`); `entries`, a rollover's `n` (PQZ `mtxRollOver`,
+/// `mtxRollOverSigned`); `members` is not read (no `0x0121` signer in the SDK yet). `None`: the operation has no such count.
+pub(crate) fn item_count(message: &serde_json::Value, item: &str) -> Option<u64> {
+    let len = |v: Option<&serde_json::Value>| v?.as_array().map(Vec::len);
+    let n = match item {
+        "legs" => len(message.get("args").and_then(|a| a.get("legs")))
+            .or_else(|| len(message.get("legs")))?,
+        "accounts" => len(message.get("uas")).or_else(|| len(message.get("accounts")))?,
+        "entries" => {
+            let n = message.get("n")?;
+            return n.as_u64().or_else(|| n.as_str()?.parse().ok());
+        }
+        _ => return None,
+    };
+    u64::try_from(n).ok()
+}
+
 /// The kind of the second signature an operation attaches (owner 2026-11-19, ruling 4): `mtxPayWithPayeeFee`'s payer
 /// `UASig` (`extra.payerSig`) over the payment (`message.payment`, whose `from` it signs for); `None`: the operation attaches
 /// none. Within: the native key for an empty key data on a native id; else the accepted kind whose id of the key data is
@@ -335,7 +389,7 @@ pub(crate) fn attached_kind(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
     use super::*;
-    use crate::{GasBase, GasPerByte, GasVerify};
+    use crate::{GasBase, GasPerByte, GasPerItem, GasVerify};
 
     fn rows(base: u64, verify: u64) -> GasRows {
         GasRows {
@@ -348,12 +402,14 @@ mod tests {
                 save: None,
                 fee_extra: None,
                 ua_extra: None,
+                per_item: None,
             }],
             verify: vec![GasVerify {
                 signer: 0x0101,
                 gas: verify,
                 sig_bytes: 0,
                 margin: 0,
+                per_item: None,
             }],
         }
     }
@@ -430,7 +486,7 @@ mod tests {
             "no opt-in and no app figure: unquoted"
         );
         assert_eq!(
-            quoted(&rows(1_000, 10), &[], &tables, None, K, 10, &OpGas::PLAIN),
+            quoted(&rows(1_000, 10), &[], &tables, None, K, 10, &OpGas::PLAIN).unwrap(),
             Some((
                 (1_010 + 21_000 + 640) * 3 / 2,
                 src(GasFrom::Chain, GasFrom::Chain)
@@ -663,8 +719,8 @@ mod tests {
                     "the reference signer's sig_bytes"
                 );
             }
-            // a per-byte part: the worst of its source keys (each a whole-gas slope), its input one the SDK measures
-            if let Some(p) = r.get("per_byte") {
+            // a per-byte or per-item part (I1): the worst of its source keys (each a whole-gas slope)
+            for p in r.get("per_byte").into_iter().chain(r.get("per_item")) {
                 let (path, keys) = p["source"].as_str().unwrap().split_once('#').unwrap();
                 let file = format!("{}/../../{path}", env!("CARGO_MANIFEST_DIR"));
                 let m: serde_json::Value =
@@ -780,6 +836,7 @@ mod tests {
                     ..OpGas::PLAIN
                 },
             )
+            .unwrap()
         };
         assert_eq!(by(Some(100)).map(|f| f.0), Some(1_000 + 9 * 100 + 10));
         assert_eq!(by(Some(0)).map(|f| f.0), Some(1_010));
@@ -808,6 +865,149 @@ mod tests {
         assert!(note("ab") > 0);
     }
 
+    fn per_item(item: &str, gas: u64) -> Option<GasPerItem> {
+        Some(GasPerItem {
+            item: item.into(),
+            gas,
+        })
+    }
+
+    /// Owner 2026-11-19, I1: a base row's and a verify row's `per_item` add their gas times the count each names, read from
+    /// the operation (`gas + per_item × count`, the row's figure being at a count of 0), on top of the other parts; a row
+    /// without one reads no count and quotes as before; a count the SDK cannot read, or above `COUNT_MAX`, refuses the
+    /// operation as `GasCountUnknown`, never a figure from a later table or the app's; an attached signature's row with one
+    /// too. Each beside its control.
+    #[test]
+    fn gas_per_item_adds_gas_times_its_count() {
+        let by = |r: &GasRows, counts: &[(&str, u64)], app: Option<u64>, attached| {
+            let count = |i: &str| counts.iter().find(|c| c.0 == i).map(|c| c.1);
+            lookup_by(
+                r,
+                &[],
+                &[],
+                app,
+                K,
+                &OpGas {
+                    count: &count,
+                    attached,
+                    ..OpGas::PLAIN
+                },
+            )
+            .map(|f| f.map(|f| f.0))
+            .map_err(|e| e.code())
+        };
+        let mut r = rows(1_000, 10);
+        let both = [("legs", 3), ("members", 5)];
+        assert_eq!(by(&r, &[], None, None), Ok(Some(1_010)), "absent: unchanged, no count read");
+        assert_eq!(by(&r, &both, None, None), Ok(Some(1_010)), "absent: a count adds nothing");
+        r.base[0].per_item = per_item("legs", 30_000);
+        r.base[0].save = Some(331_000);
+        assert_eq!(by(&r, &both, None, None), Ok(Some(1_010 + 90_000)), "base: gas + per_item × 3");
+        assert_eq!(by(&r, &[("legs", 0)], None, None), Ok(Some(1_010)), "a count of 0: the row's figure");
+        r.verify[0].per_item = per_item("members", 450);
+        assert_eq!(
+            by(&r, &both, None, None),
+            Ok(Some(1_010 + 90_000 + 2_250)),
+            "verify: gas + per_item × 5, on top of the base's"
+        );
+        for counts in [&[("legs", 3)][..], &[("members", 5)], &[("legs", 3), ("members", COUNT_MAX + 1)]] {
+            assert_eq!(by(&r, counts, Some(9), None), Err("GasCountUnknown"), "{counts:?}");
+        }
+        assert_eq!(
+            by(&r, &[("legs", COUNT_MAX), ("members", 0)], None, None),
+            Ok(Some(1_010 + 30_000 * COUNT_MAX)),
+            "the bound itself"
+        );
+        // a count unknown on the chain's row refuses, though a later table's row would answer without one (fail closed)
+        let mut chain = rows(1_000, 10);
+        chain.base[0].per_item = per_item("legs", 30_000);
+        let later = vec![table(REFERENCE, rows(4_000, 40))];
+        let opt = all(&[REFERENCE]);
+        let plain = lookup_by(&chain, &opt, &later, None, K, &OpGas::PLAIN);
+        assert_eq!(plain.map_err(|e| e.code()), Err("GasCountUnknown"));
+        chain.base[0].per_item = None;
+        assert_eq!(
+            lookup_by(&chain, &opt, &later, None, K, &OpGas::PLAIN).unwrap().map(|f| f.0),
+            Some(1_010),
+            "control"
+        );
+        // overflow-safe: a figure past u64 saturates
+        r.base[0].per_item = per_item("legs", u64::MAX);
+        assert_eq!(by(&r, &[("legs", 2), ("members", 0)], None, None), Ok(Some(u64::MAX)));
+        // an attached signature's verify row with a per-item part: its count is not read, refused
+        let mut r = rows(1_000, 10);
+        r.verify.push(GasVerify {
+            signer: 0x0102,
+            gas: 5,
+            sig_bytes: 0,
+            margin: 0,
+            per_item: None,
+        });
+        assert_eq!(by(&r, &both, None, Some(Some(0x0102))), Ok(Some(1_015)));
+        r.verify[1].per_item = per_item("members", 450);
+        assert_eq!(by(&r, &both, None, Some(Some(0x0102))), Err("GasCountUnknown"));
+    }
+
+    /// I1: the counts read from the operation's signed message, each item from its own field; `None` where it has none.
+    #[test]
+    fn item_count_reads_the_operations_counts() {
+        use serde_json::json as j;
+        let multi = j!({"from": "0x01", "args": {"legs": [{}, {}, {}], "u": [1]}});
+        assert_eq!(item_count(&multi, "legs"), Some(3), "a multi-recipient transfer's legs");
+        assert_eq!(item_count(&j!({"legs": [{}, {}]}), "legs"), Some(2), "mtxSetWrapLimits' legs");
+        assert_eq!(item_count(&j!({"uas": ["0x01", "0x02"]}), "accounts"), Some(2), "mtxRollOverBatch");
+        assert_eq!(item_count(&j!({"accounts": ["0x01"], "flags": [1, 2]}), "accounts"), Some(1));
+        assert_eq!(item_count(&j!({"n": "7"}), "entries"), Some(7), "a rollover's n, decimal");
+        assert_eq!(item_count(&j!({"n": 9}), "entries"), Some(9));
+        assert_eq!(item_count(&j!({"legs": []}), "legs"), Some(0));
+        for (m, item) in [
+            (j!({"n": "0x07"}), "entries"),
+            (j!({"n": "-1"}), "entries"),
+            (j!({"uas": "0x01"}), "accounts"),
+            (j!({"legs": [{}]}), "accounts"),
+            (multi.clone(), "members"),
+            (multi.clone(), "u"),
+            (j!({}), "legs"),
+        ] {
+            assert_eq!(item_count(&m, item), None, "{m} {item}");
+        }
+    }
+
+    /// I1, the parse: `item` and `per_item` together on base and verify rows (`GasItemUnpaired` otherwise), `item` one the SDK
+    /// reads (`GasItemUnknown` otherwise), `per_item` `{gas 1–1,000,000, base_count 0, source}` (`Argument` otherwise); a
+    /// file without them reads unchanged. Each refusal beside its control.
+    #[test]
+    fn gas_table_per_item_parse() {
+        let part = |g: u64, at: u64| format!(r#""per_item":{{"gas":{g},"base_count":{at},"source":"s"}}"#);
+        let base = |f: &str| file(&b(98_000, 97_947).replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)), "");
+        let verify = |f: &str| file("", &v(289, 1_000, 900).replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)));
+        let ok = format!(r#""item":"legs",{}"#, part(31_000, 0));
+        assert_eq!(GasTable::parse(&base(&ok)).unwrap().rows.base[0].per_item, per_item("legs", 31_000));
+        let members = format!(r#""item":"members",{}"#, part(450, 0));
+        assert_eq!(GasTable::parse(&verify(&members)).unwrap().rows.verify[0].per_item, per_item("members", 450));
+        assert_eq!(GasTable::parse(&file(&b(98_000, 97_947), "")).unwrap().rows.base[0].per_item, None, "absent");
+        assert!(GasTable::parse(&base(&format!(r#""item":"entries",{}"#, part(1_000_000, 0)))).is_ok());
+        for row in [base, verify] {
+            for (f, code) in [
+                (part(450, 0), "GasItemUnpaired"),
+                (r#""item":"legs""#.to_string(), "GasItemUnpaired"),
+                (format!(r#""item":"uas",{}"#, part(450, 0)), "GasItemUnknown"),
+                (format!(r#""item":"Legs",{}"#, part(450, 0)), "GasItemUnknown"),
+                (format!(r#""item":"legs",{}"#, part(450, 1)), "Argument"),
+                (format!(r#""item":"legs",{}"#, part(0, 0)), "Argument"),
+                (format!(r#""item":"legs",{}"#, part(1_000_001, 0)), "Argument"),
+                (format!(r#""item":"legs",{}"#, part(450, 0).replace(r#","source":"s""#, "")), "Argument"),
+                (format!(r#""item":"legs",{}"#, part(450, 0).replace(r#""base_count":0,"#, "")), "Argument"),
+                (format!(r#""item":7,{}"#, part(450, 0)), "Argument"),
+                (r#""item":"legs","per_item":450"#.to_string(), "Argument"),
+                // the part checked even when unpaired: a broken file stays `Argument`
+                (part(0, 0), "Argument"),
+            ] {
+                assert_eq!(GasTable::parse(&row(&f)).unwrap_err().code(), code, "{f}");
+            }
+        }
+    }
+
     /// Owner 2026-11-19, rulings 1-3: a saving operation adds the row's `save` (a row without one does not answer); a fee > 0
     /// adds its `fee_extra` (a row without one adds nothing); the verify part adds 64 gas a byte of `sig_bytes`. Each beside
     /// its control.
@@ -827,6 +1027,7 @@ mod tests {
                     ..OpGas::PLAIN
                 },
             )
+            .unwrap()
             .map(|f| f.0)
         };
         assert_eq!(
@@ -861,13 +1062,14 @@ mod tests {
             gas: 5,
             sig_bytes: 0,
             margin: 2_000,
+            per_item: None,
         });
         let op = OpGas {
             attached: Some(Some(0x0102)),
             ..OpGas::PLAIN
         };
         assert_eq!(
-            lookup_by(&r, &[], &[], None, K, &op).map(|f| f.0),
+            lookup_by(&r, &[], &[], None, K, &op).unwrap().map(|f| f.0),
             Some(2_010 + 2_005),
             "the attached kind's margin too"
         );
@@ -906,6 +1108,7 @@ mod tests {
                 gas: if *s == 0x0101 { 10 } else { 0 },
                 sig_bytes: 0,
                 margin: 0,
+                per_item: None,
             })
             .collect();
         let by = |r: &GasRows, signer: u16| {
@@ -922,7 +1125,9 @@ mod tests {
                 attached: Some(attached),
                 ..OpGas::PLAIN
             };
-            lookup_by(&r, &[], &[], None, ("mtxPay", "token", signer, false), &op).map(|f| f.0)
+            lookup_by(&r, &[], &[], None, ("mtxPay", "token", signer, false), &op)
+                .unwrap()
+                .map(|f| f.0)
         };
         assert_eq!(
             with(NATIVE_EVM, Some(0x0101)),
@@ -959,6 +1164,7 @@ mod tests {
                 gas: u64::from(*s),
                 sig_bytes: 1,
                 margin: 0,
+                per_item: None,
             })
             .collect();
         let by = |r: &GasRows, attached| {
@@ -973,6 +1179,7 @@ mod tests {
                     ..OpGas::PLAIN
                 },
             )
+            .unwrap()
             .map(|f| f.0)
         };
         let own = 1_000 + 0x0101 + 64;
