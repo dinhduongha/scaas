@@ -22,7 +22,9 @@ import {HashToCurve} from "../../common/HashToCurve.sol";
 ///         subgroups of σ, `pop`, the keys and `apk(S)`. **UNAUDITED.**
 contract BlsMultiBls12381Verifier is UASafeVerifier, IUAMinimalVerifier {
     /// The PoP at n = 64 measured 5,578,582 (`BlsMultiVerifier.t.sol` `test_checkGas_worstRows`; spec §8.1 estimated ≈ 3.2 M: the
-    /// Solidity hash-to-G1 costs more than its estimate), ~20 % margin; plan Task 9's gas rows check it.
+    /// Solidity hash-to-G1 costs more than its estimate), ~20 % margin. Plan Task 9 (`UAGas.t.sol` `test_T_GAS_blsMultiPop`, inside
+    /// `check`): n = 2 244,152, n = 16 1,418,542, n = 64 5,578,617: kept, 1,121,383 (20.1 %) over the worst; with the hold
+    /// (6,811,349) within the 12 M deploy budget.
     uint256 public constant POP_GAS = 6_700_000;
 
     /// BLS12-381 base field modulus `p_381`, split as a 64-byte EIP-2537 limb: the high 32 bytes (top 16 zero), the low 32.
@@ -30,7 +32,9 @@ contract BlsMultiBls12381Verifier is UASafeVerifier, IUAMinimalVerifier {
     uint256 private constant P_LO = 0x64774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab;
 
     /// The worst verify measured 253,109 (n = 64, k = 33, the subtract path with the negation; k = 32 252,320; `test_checkGas_worstRows`;
-    /// spec §8.2 estimated ≈ 240 k with the margin), ~20 % margin; plan Task 9's gas rows check it.
+    /// spec §8.2 estimated ≈ 240 k with the margin), ~20 % margin. Plan Task 9 (`UAGas.t.sol` `test_T_GAS_blsMultiVerify`, inside
+    /// `check`, `verify` and `verifyMinimal` at (n, k) = (2, 2), (16, 8), (64, 1), (64, 32), (64, 33), (64, 64)): the worst 252,564
+    /// (n = 64, k = 33, `verifyMinimal`): kept, 47,436 (18.8 %) over it.
     constructor() UASafeVerifier(300_000) {}
 
     function verifyMinimal(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool) {

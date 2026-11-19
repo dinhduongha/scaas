@@ -216,7 +216,9 @@ abstract contract DeployBase is DeployBook {
     ///         `script/pqz/e2e.py` (`CAP_PQZ`, the P6g gen-1 registry of the SCaaS testnet).
     uint64 internal constant CAP_PQZ_MLWE = 4_500_000;
     /// `bls12381-multi` (0x0121): `BlsMultiBls12381Verifier.CHECK_GAS` (300,000) + 1/63 + 5,000 plus the call around it with the
-    /// stored `p` (up to 12,644 B) as calldata; provisional, plan Task 9 measures it (spec 2026-11-19-bls12381-multi §8.2).
+    /// stored `p` (up to 12,644 B) as calldata (spec 2026-11-19-bls12381-multi §8.2). Plan Task 9 (`UAGas.t.sol`
+    /// `test_T_GAS_blsMultiLeastCap`): the least cap at n = 64, k = 33 is 310,778 on the hot path (`verify`) and 310,823 on a stored
+    /// path (`verifyMinimal`), both set by `CHECK_GAS`'s floor; 330,000 keeps 19,177 (6.2 %) over it.
     uint64 internal constant CAP_BLS12381_MULTI = 330_000;
 
     /// @notice The ML-DSA precompile candidates, probed in order (CTR-UA-23 / CTR-UA-39): EIP-8355's `0x12` / `0x13` / `0x14`,
