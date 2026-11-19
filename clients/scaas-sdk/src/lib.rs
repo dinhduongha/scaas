@@ -29,8 +29,8 @@ pub mod vault;
 pub mod wallet;
 
 pub use config::{
-    ChainProfile, Clock, EndpointConfig, Family, Finality, GasBase, GasRows, GasTable, GasVerify,
-    Limits, ListedToken, RuntimeChoice, SdkConfig,
+    ChainProfile, Clock, EndpointConfig, Family, Finality, GasBase, GasPerByte, GasRows, GasTable,
+    GasVerify, Limits, ListedToken, RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};

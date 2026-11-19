@@ -167,6 +167,7 @@ async fn e2e_pay_on_anvil() {
                 kind: "token".into(),
                 fresh: true,
                 gas: 400_000,
+                per_byte: None,
             }],
             verify: vec![GasVerify { signer: 0, gas: 0 }],
         },

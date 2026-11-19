@@ -91,6 +91,16 @@ pub struct GasBase {
     pub kind: String,
     pub fresh: bool,
     pub gas: u64,
+    /// the part that grows with an input's length (owner 2026-11-19, ruling B)
+    pub per_byte: Option<GasPerByte>,
+}
+
+/// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
+/// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GasPerByte {
+    pub input: String,
+    pub gas: u64,
 }
 
 /// A verify row (gas table v2): what a signer of UA kind `signer` (`0`: a native EVM key, the reference) adds over the
@@ -109,7 +119,8 @@ pub struct GasRows {
 }
 
 /// A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
-/// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, stand_in?}`, each verify row `{signer,
+/// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
+/// stand_in?}`, each verify row `{signer,
 /// gas, measured, source, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,6 +136,9 @@ pub struct GasTable {
 const GAS_TABLE_MAX_BYTES: usize = 256 * 1024;
 const GAS_TABLE_MAX_ROWS: usize = 1_024;
 const GAS_NAME_MAX: usize = 64;
+/// A per-byte part's inputs and bound.
+const GAS_PER_BYTE_INPUTS: [&str; 2] = ["meta.body", "data"];
+const GAS_PER_BYTE_MAX: u64 = 1_000;
 
 /// A figure rounded up to the next 1,000 from `measured` (owner 2026-11-19): a multiple of 1,000, `measured <= gas < measured +
 /// 1000`.
@@ -136,7 +150,8 @@ impl GasTable {
     /// Parses and checks a gas table file: at most 256 KiB and 1,024 rows (base and verify together); the format and version
     /// 2; `name`, `entry` and `kind` 1–64 characters of `[A-Za-z0-9_:.-]`; `signer` a `u16`; each `gas` a multiple of 1,000
     /// with `measured <= gas < measured + 1000` (owner 2026-11-19: rounded up to the next 1,000), a base row's positive (a
-    /// verify row's may be 0: the reference signer's own row); `source` present; no key twice. `Argument` on any failure.
+    /// verify row's may be 0: the reference signer's own row); `source` present; a base row's optional `per_byte` names an
+    /// input of [`GasPerByte`] with a `gas` of 1–1,000 and its `source`; no key twice. `Argument` on any failure.
     pub fn parse(text: &str) -> Result<GasTable, crate::SdkError> {
         Self::parse_inner(text).ok_or(crate::SdkError::Argument)
     }
@@ -178,6 +193,20 @@ impl GasTable {
                 kind: name(r, "kind")?,
                 fresh: r.get("fresh")?.as_bool()?,
                 gas: figure(r).filter(|g| *g > 0)?,
+                per_byte: match r.get("per_byte") {
+                    None => None,
+                    Some(p) => {
+                        p.get("source")?.as_str().filter(|s| !s.is_empty())?;
+                        Some(GasPerByte {
+                            input: name(p, "input")
+                                .filter(|i| GAS_PER_BYTE_INPUTS.contains(&i.as_str()))?,
+                            gas: p
+                                .get("gas")?
+                                .as_u64()
+                                .filter(|g| (1..=GAS_PER_BYTE_MAX).contains(g))?,
+                        })
+                    }
+                },
             };
             if rows.base.iter().any(|o| o.key() == row.key()) {
                 return None;

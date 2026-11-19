@@ -19,8 +19,8 @@ use scaas_sdk::op::{KeyRef, Prepared, Source, SubmitPath};
 use scaas_sdk::vault::{ImportKey, ImportWords, MemoryStore};
 use scaas_sdk::wallet::*;
 use scaas_sdk::{
-    ChainProfile, EndpointConfig, Family, Finality, GasBase, GasRows, GasVerify, Limits,
-    ListedToken, RuntimeChoice, Sdk, SdkConfig, SdkError,
+    ChainProfile, EndpointConfig, Family, Finality, GasBase, GasPerByte, GasRows, GasVerify,
+    Limits, ListedToken, RuntimeChoice, Sdk, SdkConfig, SdkError,
 };
 use scaas_ua::wallet::SecretBytes;
 use serde_json::{json, Value};
@@ -546,6 +546,11 @@ fn gas_rows() -> GasRows {
                 kind: kind.clone(),
                 fresh,
                 gas: 100_000,
+                // ruling B: `mtxPay`'s body at 1,000 gas a byte (`pay_with_paymeta_v3` reads it)
+                per_byte: (entry == "mtxPay").then(|| GasPerByte {
+                    input: "meta.body".into(),
+                    gas: 1_000,
+                }),
             })
         })
         .collect();
@@ -839,6 +844,25 @@ async fn pay_with_paymeta_v3() {
         .quote(p.clone(), SubmitPath::Gateway)
         .await
         .unwrap();
+    // owner 2026-11-19, ruling B: the quote adds the row's per-byte gas times the body's length (34 bytes of note here),
+    // beside the calldata's 64 a byte
+    let gas_of = |r: &Value| {
+        let (t, pay) = (&t, &pay);
+        let m = meta_of(r);
+        async move {
+            let p = t.sdk.wallet().prepare_pay(pay(m)).await.unwrap();
+            t.sdk
+                .op()
+                .quote(p, SubmitPath::Gateway)
+                .await
+                .unwrap()
+                .gas
+                .unwrap()
+        }
+    };
+    assert_eq!(rows[5]["name"], "note_utf8");
+    let (none, note) = (gas_of(&rows[0]).await, gas_of(&rows[5]).await);
+    assert!(note - none >= 1_000 * 34 * 3 / 2, "{none} {note}");
     t.sdk.op().submit(p, q).await.unwrap();
     let body = body_at(&t, 0).await;
     assert_eq!(body["op"]["entry"], "mtxPay");

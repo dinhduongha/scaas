@@ -76,6 +76,12 @@ abstract contract SdkGasRows is Test {
         }
     }
 
+    /// Ruling B's coefficient: the gas a byte between two lengths `n` bytes apart, rounded up to the whole gas.
+    function _perByte(string memory key, uint256 lo, uint256 hi, uint256 n) internal {
+        assertGt(hi, lo, "the cost grows with the input");
+        _pin(key, (hi - lo + n - 1) / n);
+    }
+
     /// The call by the relayer, its execution gas pinned under `key`.
     function _measure(string memory key, address c, bytes memory cd) internal returns (uint256 g) {
         vm.prank(SG_RELAYER);
@@ -381,10 +387,11 @@ abstract contract SdkGasOps is SdkGasRows {
         _measure(string.concat(k, "saved_", variant), c, build(c, 0));
         vm.revertToState(s);
         (sgBody, sgSave) = (SG_BODY_LO, true);
-        _measure(string.concat(k, "body", vm.toString(SG_BODY_LO), "_", variant), c, build(c, 0));
+        uint256 lo = _measure(string.concat(k, "body", vm.toString(SG_BODY_LO), "_", variant), c, build(c, 0));
         vm.revertToState(s);
         (sgBody, sgSave) = (SG_BODY_HI, true);
-        _measure(string.concat(k, "body", vm.toString(SG_BODY_HI), "_", variant), c, build(c, 0));
+        uint256 hi = _measure(string.concat(k, "body", vm.toString(SG_BODY_HI), "_", variant), c, build(c, 0));
         vm.revertToState(s);
+        _perByte(string.concat(k, "per_byte_", variant), lo, hi, SG_BODY_HI - SG_BODY_LO);
     }
 }

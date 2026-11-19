@@ -185,6 +185,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
                     kind: (*k).into(),
                     fresh,
                     gas: g,
+                    per_byte: None,
                 });
             }
         }
@@ -1106,7 +1107,16 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
         }
         let q = r.unwrap();
         let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
-        assert_eq!(q.gas_limit, gas::with_margin(55_000 + 21_000 + 64 * len));
+        // the reference table's row of the router's cancel on a used lane (the generated file's figure: 55,000 for the old
+        // seed pin, regular gas only; since part 3b's measurement regular + state gas)
+        let row = crate::GasTable::parse(gas::REFERENCE_FILE)
+            .unwrap()
+            .rows
+            .base
+            .into_iter()
+            .find(|b| b.key() == ("mtxCancelNonce", "gov_router", false))
+            .unwrap();
+        assert_eq!(q.gas_limit, gas::with_margin(row.gas + 21_000 + 64 * len));
         assert_eq!(
             (q.gas, q.gas_from),
             (

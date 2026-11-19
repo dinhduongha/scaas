@@ -57,7 +57,7 @@ contract SdkGasMeter {
 /// the generator stores the difference (both metered by `SdkGasMeter`). Real verifiers on the gen-1 caps (`UARegistryVectors.t.sol`'s registry), each UA
 /// registered with its vector PoP and checked with its vector signature under `metatx`
 /// (`smartcontracts/vectors/ua/signatures.json`, `derived[]`); P-256 on the 0x100 precompile. Keys `verify_<kind>`
-/// (4 hex digits) and `verify_native`.
+/// (4 hex digits) and `verify_native`, the difference `verify_<kind>_delta`.
 contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
     string internal sj;
     SdkGasForwarder internal fwd;
@@ -98,9 +98,9 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
     /// The gas of `fwd`'s `check` inside the meter's call: the native key's `check` is too small for its own transaction to
     /// clear EIP-7976's calldata floor (its total sat on it), so both sides of the difference are metered alike; the
     /// meter's call overhead cancels, its copy of a longer signature counts against the kind (an upper bound).
-    function _metered(string memory key, bytes memory cd) internal {
+    function _metered(string memory key, bytes memory cd) internal returns (uint256 g) {
         vm.prank(SG_RELAYER);
-        uint256 g = meter.run(address(fwd), cd);
+        g = meter.run(address(fwd), cd);
         Vm.Gas memory used = vm.lastFrameGas();
         assertEq(used.gasStateUsed, 0, "a check writes nothing");
         _pin(key, g);
@@ -112,7 +112,8 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         IUARegistry.UASig memory a;
         a.signature = _ecdsa(pk, dg);
         bytes32 native = bytes32(uint256(uint160(vm.addr(pk))));
-        _metered("verify_native", abi.encodeCall(SdkGasForwarder.check, (native, UAKinds.PURPOSE_METATX, dg, a)));
+        uint256 n =
+            _metered("verify_native", abi.encodeCall(SdkGasForwarder.check, (native, UAKinds.PURPOSE_METATX, dg, a)));
         uint256 rows;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             uint16 kind = uint16(vm.parseJsonUint(sj, _d(i, "kind")));
@@ -134,7 +135,8 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
                 SdkGasForwarder.check,
                 (ua, UAKinds.PURPOSE_METATX, vm.parseJsonBytes32(sj, _d(i, string.concat(row, "digest"))), u)
             );
-            _metered(string.concat("verify_", _hex4(kind)), cd);
+            string memory key = string.concat("verify_", _hex4(kind));
+            _pin(string.concat(key, "_delta"), _metered(key, cd) - n); // the verify row's figure
             ++rows;
         }
         assertEq(rows, 9, "0x0100 - 0x0108");

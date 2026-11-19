@@ -266,6 +266,7 @@ impl Op {
                     app,
                     (&entry, prepared.t.kind, signer, fresh),
                     unsigned.calldata.len(),
+                    &|input| super::gas::input_len(&prepared.t.extra, &prepared.t.message, input),
                 );
                 let gateway = || SubmitQuote {
                     path: SubmitPath::Gateway,

@@ -88,20 +88,24 @@ fn part(
 }
 
 /// The execution gas of the key `(entry, kind, signer, fresh)` and its sources: base + verify, each looked up on its own;
-/// without both, the app's figure (one total); `None`: no figure.
-pub(crate) fn lookup(
+/// without both, the app's figure (one total); `None`: no figure. A base row with a per-byte part (owner 2026-11-19, ruling
+/// B) adds its `gas` times the length of its input, `len(input)`; an input the operation does not carry: the row does not
+/// answer (fail closed).
+pub(crate) fn lookup_by(
     chain: &GasRows,
     opt_in: &[String],
     tables: &[GasTable],
     app: Option<u64>,
     key: (&str, &str, u16, bool),
+    len: &dyn Fn(&str) -> Option<u64>,
 ) -> Option<(u64, GasSources)> {
     let (entry, kind, signer, fresh) = key;
     let base = part(chain, opt_in, tables, |r| {
-        r.base
-            .iter()
-            .find(|b| b.key() == (entry, kind, fresh))
-            .map(|b| b.gas)
+        let b = r.base.iter().find(|b| b.key() == (entry, kind, fresh))?;
+        match &b.per_byte {
+            None => Some(b.gas),
+            Some(p) => Some(b.gas.saturating_add(p.gas.saturating_mul(len(&p.input)?))),
+        }
     });
     let verify = part(chain, opt_in, tables, |r| {
         r.verify.iter().find(|v| v.signer == signer).map(|v| v.gas)
@@ -114,6 +118,18 @@ pub(crate) fn lookup(
     }
 }
 
+/// [`lookup_by`] of an operation without a variable-length input.
+#[cfg(test)]
+pub(crate) fn lookup(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    app: Option<u64>,
+    key: (&str, &str, u16, bool),
+) -> Option<(u64, GasSources)> {
+    lookup_by(chain, opt_in, tables, app, key, &|_| Some(0))
+}
+
 /// The quote's gas of a key whose unsigned calldata is `len` bytes: the figure plus the intrinsic cost and the calldata, with
 /// the margin, and its sources; `None`: unquoted.
 pub(crate) fn quoted(
@@ -123,8 +139,9 @@ pub(crate) fn quoted(
     app: Option<u64>,
     key: (&str, &str, u16, bool),
     len: usize,
+    input_len: &dyn Fn(&str) -> Option<u64>,
 ) -> Option<(u64, GasSources)> {
-    let (g, from) = lookup(chain, opt_in, tables, app, key)?;
+    let (g, from) = lookup_by(chain, opt_in, tables, app, key, input_len)?;
     let bytes = u64::try_from(len)
         .unwrap_or(u64::MAX)
         .saturating_mul(PER_BYTE);
@@ -134,11 +151,37 @@ pub(crate) fn quoted(
     ))
 }
 
+/// The length in bytes of an operation's variable-length input a per-byte part names (`extra`, `message`: the prepared
+/// operation's unsigned arguments and message): `meta.body`, the `PayMeta` body as the contract receives it (`scaas-ua`'s
+/// encoding); `data`, the message's `data` (hex). `None`: the operation has none.
+pub(crate) fn input_len(
+    extra: &serde_json::Value,
+    message: &serde_json::Value,
+    input: &str,
+) -> Option<u64> {
+    let n = match input {
+        "meta.body" => scaas_ua::wallet::entries::pay_meta_of(extra.get("meta")?)
+            .ok()?
+            .body
+            .len(),
+        "data" => {
+            let h = message.get("data")?.as_str()?;
+            let h = h.strip_prefix("0x").unwrap_or(h);
+            if h.len() % 2 != 0 {
+                return None;
+            }
+            h.len() / 2
+        }
+        _ => return None,
+    };
+    u64::try_from(n).ok()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
     use super::*;
-    use crate::{GasBase, GasVerify};
+    use crate::{GasBase, GasPerByte, GasVerify};
 
     fn rows(base: u64, verify: u64) -> GasRows {
         GasRows {
@@ -147,6 +190,7 @@ mod tests {
                 kind: "token".into(),
                 fresh: false,
                 gas: base,
+                per_byte: None,
             }],
             verify: vec![GasVerify {
                 signer: 0x0101,
@@ -227,7 +271,7 @@ mod tests {
             "no opt-in and no app figure: unquoted"
         );
         assert_eq!(
-            quoted(&rows(1_000, 10), &[], &tables, None, K, 10),
+            quoted(&rows(1_000, 10), &[], &tables, None, K, 10, &|_| Some(0)),
             Some((
                 (1_010 + 21_000 + 640) * 3 / 2,
                 src(GasFrom::Chain, GasFrom::Chain)
@@ -422,6 +466,155 @@ mod tests {
                 .max()
                 .unwrap();
             assert_eq!(worst, r["measured"].as_u64().unwrap(), "{r}");
+            // a per-byte part: the worst of its source keys (each a whole-gas slope), its input one the SDK measures
+            if let Some(p) = r.get("per_byte") {
+                let (path, keys) = p["source"].as_str().unwrap().split_once('#').unwrap();
+                let file = format!("{}/../../{path}", env!("CARGO_MANIFEST_DIR"));
+                let m: serde_json::Value =
+                    serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+                let worst = keys
+                    .split(',')
+                    .map(|k| m[k].as_u64().unwrap())
+                    .max()
+                    .unwrap();
+                assert_eq!(worst, p["gas"].as_u64().unwrap(), "{r}");
+            }
+        }
+    }
+
+    /// Owner 2026-11-19, ruling B: a base row's per-byte part adds its gas times the input's length, the input read from
+    /// the operation (`meta.body` encoded by `scaas-ua`, `data` hex); without the input the row does not answer.
+    #[test]
+    fn gas_per_byte_part_adds_the_inputs_length() {
+        let mut r = rows(1_000, 10);
+        r.base[0].per_byte = Some(GasPerByte {
+            input: "meta.body".into(),
+            gas: 9,
+        });
+        let len = |n: Option<u64>| move |i: &str| (i == "meta.body").then_some(n).flatten();
+        assert_eq!(
+            lookup_by(&r, &[], &[], None, K, &len(Some(100))).map(|f| f.0),
+            Some(1_000 + 9 * 100 + 10)
+        );
+        assert_eq!(
+            lookup_by(&r, &[], &[], None, K, &len(Some(0))).map(|f| f.0),
+            Some(1_010)
+        );
+        assert_eq!(lookup_by(&r, &[], &[], None, K, &len(None)), None);
+        let (empty, msg) = (
+            serde_json::json!({}),
+            serde_json::json!({"data": "0x0102ab"}),
+        );
+        assert_eq!(input_len(&empty, &msg, "data"), Some(3));
+        assert_eq!(
+            input_len(&empty, &serde_json::json!({"data": "0x012"}), "data"),
+            None
+        );
+        assert_eq!(input_len(&empty, &msg, "meta.body"), None);
+        assert_eq!(input_len(&empty, &msg, "other"), None);
+        let salt = format!("0x{}", "11".repeat(32));
+        let meta = |body: serde_json::Value| serde_json::json!({"meta": {"salt": salt, "schema": 1, "body": body}});
+        let note = |n: &str| {
+            input_len(&meta(serde_json::json!({"note": n})), &empty, "meta.body").unwrap()
+        };
+        assert_eq!(
+            note("abcd") - note("ab"),
+            2,
+            "the body's encoding grows a byte a character"
+        );
+        assert!(note("ab") > 0);
+    }
+
+    #[test]
+    fn gas_table_per_byte_parse() {
+        let with = |p: &str| {
+            file(
+                &b(98_000, 97_947).replace(
+                    r#""source":"s""#,
+                    &format!(r#""source":"s","per_byte":{p}"#),
+                ),
+                "",
+            )
+        };
+        let ok = GasTable::parse(&with(r#"{"input":"meta.body","gas":9,"source":"s"}"#)).unwrap();
+        assert_eq!(
+            ok.rows.base[0].per_byte,
+            Some(GasPerByte {
+                input: "meta.body".into(),
+                gas: 9
+            })
+        );
+        assert!(GasTable::parse(&with(r#"{"input":"data","gas":1000,"source":"s"}"#)).is_ok());
+        for bad in [
+            r#"{"input":"other","gas":9,"source":"s"}"#,
+            r#"{"input":"data","gas":0,"source":"s"}"#,
+            r#"{"input":"data","gas":1001,"source":"s"}"#,
+            r#"{"input":"data","gas":9}"#,
+            r#"{"input":"data","gas":9,"source":""}"#,
+            r#"{"gas":9,"source":"s"}"#,
+        ] {
+            assert!(GasTable::parse(&with(bad)).is_err(), "{bad}");
+        }
+    }
+
+    /// Owner 2026-11-19 (part 3b, ruling 6): every entry the SDK prepares is either quotable from the reference table (a
+    /// base row on both lane states, `QUOTABLE`) or listed as not measured yet (`UNMEASURED`), never both, none missing; the
+    /// verify rows cover the signer kinds the rulings name (the native key, 0x0101-0x0108, 0x0130-0x0135) except those
+    /// listed as not measured yet.
+    #[test]
+    fn reference_table_covers_every_quotable_key() {
+        use super::super::prepared::{QUOTABLE, UNMEASURED, UNMEASURED_SIGNERS};
+        use scaas_ua::wallet::entries::entry_rows;
+        let t = GasTable::parse(REFERENCE_FILE).unwrap();
+        let mut preparable: Vec<(String, String)> = entry_rows()
+            .iter()
+            .filter(|r| !r.entry.is_empty()) // a struct without an entry of its own
+            .flat_map(|r| r.kinds.iter().map(|k| (r.entry.to_string(), k.to_string())))
+            .chain(
+                ["token", "zether", "pqz"]
+                    .map(|k| ("mtxExecuteTransfer".to_string(), k.to_string())),
+            )
+            .collect();
+        preparable.sort();
+        preparable.dedup();
+        let pairs = |l: &[(&str, &[&str])]| -> Vec<(String, String)> {
+            l.iter()
+                .flat_map(|(e, ks)| ks.iter().map(|k| (e.to_string(), k.to_string())))
+                .collect()
+        };
+        let (q, u) = (pairs(QUOTABLE), pairs(UNMEASURED));
+        let mut both: Vec<_> = q.iter().chain(&u).cloned().collect();
+        both.sort();
+        let n = both.len();
+        both.dedup();
+        assert_eq!(both.len(), n, "a key in both lists or twice");
+        assert_eq!(
+            both, preparable,
+            "the two lists are every entry the SDK prepares"
+        );
+        for (e, k) in &q {
+            for fresh in [true, false] {
+                assert!(
+                    t.rows
+                        .base
+                        .iter()
+                        .any(|b| b.key() == (e.as_str(), k.as_str(), fresh)),
+                    "{e} {k} {fresh}"
+                );
+            }
+        }
+        for (e, k) in &u {
+            assert!(
+                !t.rows.base.iter().any(|b| b.entry == *e && b.kind == *k),
+                "{e} {k} measured: move it"
+            );
+        }
+        let signers = std::iter::once(0)
+            .chain(0x0101..=0x0108)
+            .chain(0x0130..=0x0135);
+        for s in signers {
+            let has = t.rows.verify.iter().any(|v| v.signer == s);
+            assert_eq!(has, !UNMEASURED_SIGNERS.contains(&s), "signer {s:#06x}");
         }
     }
 }

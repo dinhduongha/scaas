@@ -111,11 +111,12 @@ contract SdkGasWalletTest is SdkGasOps, UALedgerBase {
         // `data` at 32 and 160 bytes: from about 250, the calldata floor binds this small call's total
         uint256 s = vm.snapshotState();
         sgBody = 32;
-        _measure("wallet_mtxExecute_body32_mandate", address(w), _execute(address(w), 0));
+        uint256 lo = _measure("wallet_mtxExecute_body32_mandate", address(w), _execute(address(w), 0));
         vm.revertToState(s);
         sgBody = 160;
-        _measure("wallet_mtxExecute_body160_mandate", address(w), _execute(address(w), 0));
+        uint256 hi = _measure("wallet_mtxExecute_body160_mandate", address(w), _execute(address(w), 0));
         vm.revertToState(s);
+        _perByte("wallet_mtxExecute_per_byte_mandate", lo, hi, 128);
     }
 }
 
