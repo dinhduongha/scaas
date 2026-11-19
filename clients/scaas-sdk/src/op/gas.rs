@@ -348,48 +348,71 @@ pub(crate) fn input_len(
     u64::try_from(n).ok()
 }
 
-/// The count a per-item part names (owner 2026-11-19, I1), read from the operation's signed message: `legs`, the length of
-/// `args.legs` (a Zether or PQZ multi-recipient transfer, `mtxConfidentialTransfer[Compact]`) or of a list parameter `legs`
-/// (`mtxSetWrapLimits`); `accounts`, the length of `uas` (`mtxRollOverBatch`) or of a list parameter `accounts`
-/// (`mtxSetAllowed`, `mtxSetDenied`, `mtxSetCompliance`); `entries`, a rollover's `n` (PQZ `mtxRollOver`,
-/// `mtxRollOverSigned`), any `uint256` held to the set's [`roll_max`] (owner 2026-11-19, K1: the contract's own bound, so an
-/// app's huge `n` meaning "all" is quoted at `ROLL_MAX`); `members` is not read (no `0x0121` signer in the SDK yet). `None`:
-/// the operation has no such count.
-pub(crate) fn item_count(message: &serde_json::Value, item: &str) -> Option<u64> {
+/// The count a per-item part names (owner 2026-11-19, I1), read from the operation's signed message (and its `extra`):
+/// `legs`, the length of `args.legs` (a Zether or PQZ multi-recipient transfer, `mtxConfidentialTransfer[Compact]`), of a
+/// list parameter `legs` (`mtxSetWrapLimits`) or of `extra.config.legs` (`mtxCreateToken`'s `TokenConfig`, K2); `accounts`,
+/// the length of `uas` (`mtxRollOverBatch`) or of a list parameter `accounts` (`mtxSetAllowed`, `mtxSetDenied`,
+/// `mtxSetCompliance`); `entries`, a rollover's `n` (PQZ `mtxRollOver`, `mtxRollOverSigned`), any `uint256` held to the
+/// set's [`roll_max`] (owner 2026-11-19, K1: the contract's own bound, so an app's huge `n` meaning "all" is quoted at
+/// `ROLL_MAX`), plus the length of its `skip` marks where it has them (P1, "approved": min(n, ROLL_MAX) + len(skip));
+/// `env_items` (P1, K2), the elements of an env publish's four `Env` arrays (`env.deps`, `env.params`, `env.libs`,
+/// `env.libCodeHashes`) together; `orders` (K2), a DEX cancel's orders, 1 for its one `order`; `members` is not read (no
+/// `0x0121` signer in the SDK yet). `None`: the operation has no such count.
+pub(crate) fn item_count(
+    extra: &serde_json::Value,
+    message: &serde_json::Value,
+    item: &str,
+) -> Option<u64> {
     let len = |v: Option<&serde_json::Value>| v?.as_array().map(Vec::len);
     let n = match item {
         "legs" => len(message.get("args").and_then(|a| a.get("legs")))
-            .or_else(|| len(message.get("legs")))?,
+            .or_else(|| len(message.get("legs")))
+            .or_else(|| len(extra.get("config").and_then(|c| c.get("legs"))))?,
         "accounts" => len(message.get("uas")).or_else(|| len(message.get("accounts")))?,
         "entries" => {
             let n = super::dec(message.get("n")?).ok()?;
             let n = roll_max().map_or(n, |m| n.min(alloy::primitives::U256::from(m)));
-            return u64::try_from(n).ok();
+            let skip = match message.get("skip") {
+                Some(s) => s.as_array()?.len(),
+                None => 0,
+            };
+            return u64::try_from(n).ok()?.checked_add(u64::try_from(skip).ok()?);
         }
+        "env_items" => {
+            let env = message.get("env")?;
+            let mut t = 0;
+            for a in ["deps", "params", "libs", "libCodeHashes"] {
+                t += len(env.get(a))?;
+            }
+            t
+        }
+        "orders" => len(message.get("orders"))
+            .or_else(|| message.get("order").filter(|o| o.is_object()).map(|_| 1))?,
         _ => return None,
     };
     u64::try_from(n).ok()
 }
 
 /// The kind of the second signature an operation attaches (owner 2026-11-19, ruling 4): `mtxPayWithPayeeFee`'s payer
-/// `UASig` (`extra.payerSig`) over the payment (`message.payment`, whose `from` it signs for); `None`: the operation attaches
-/// none. Within: the native key for an empty key data on a native id; else the accepted kind whose id of the key data is
+/// `UASig` (`extra.payerSig`) over the payment (`message.payment`, whose `from` it signs for), or (I3) `mtxSetAuditorUA`'s
+/// new auditor's consent (`extra.consent`, signed by `message.newAuditor`; the row is measured without its verify);
+/// `None`: the operation attaches none. Within: the native key for an empty key data on a native id; else the accepted kind whose id of the key data is
 /// the payment's `from`; `None` when it cannot be determined (members, a stored kind's empty key data, no kind matches).
 pub(crate) fn attached_kind(
     extra: &serde_json::Value,
     message: &serde_json::Value,
 ) -> Option<Option<u16>> {
-    let sig = extra.get("payerSig")?;
+    let (sig, owner) = match (extra.get("payerSig"), extra.get("consent")) {
+        (Some(s), _) => (s, super::prepared::envelope(message).and_then(|e| e.get("from"))),
+        (None, Some(s)) => (s, message.get("newAuditor")),
+        (None, None) => return None,
+    };
     let kind = || -> Option<u16> {
         if !sig.get("members")?.as_array()?.is_empty() {
             return None;
         }
         let kd = super::unhex(sig.get("keyData")?.as_str()?).ok()?;
-        let from: [u8; 32] =
-            super::unhex(super::prepared::envelope(message)?.get("from")?.as_str()?)
-                .ok()?
-                .try_into()
-                .ok()?;
+        let from: [u8; 32] = super::unhex(owner?.as_str()?).ok()?.try_into().ok()?;
         if kd.is_empty() {
             return scaas_ua::in_native_space(&from).then_some(NATIVE_EVM);
         }
@@ -648,10 +671,11 @@ mod tests {
             GasTable::parse(&file(&many, &verify(25))).is_err(),
             "more than 1,024 rows, base and verify together"
         );
-        assert!(
-            GasTable::parse(&" ".repeat(256 * 1024 + 1)).is_err(),
-            "above 256 KiB"
-        );
+        // W3: a sound table padded to exactly 1 MiB parses; one byte more is refused
+        let one = file(&b(98_000, 97_947), "");
+        let at = format!("{one}{}", " ".repeat(1024 * 1024 - one.len()));
+        assert!(GasTable::parse(&at).is_ok(), "a table of exactly 1 MiB");
+        assert!(GasTable::parse(&format!("{at} ")).is_err(), "above 1 MiB");
     }
 
     /// The SCaaS reference table parses, is named `reference`, and is EVM.
@@ -747,6 +771,105 @@ mod tests {
                     .max()
                     .unwrap();
                 assert_eq!(worst, p["gas"].as_u64().unwrap(), "{r}");
+            }
+        }
+    }
+
+    /// G2 (owner 2026-11-19, "approved"): a base row's `ua_extra` covers every variant a derived signer can sign. Its own figure
+    /// is the worst of the variants measured with the derived reference signer (`reference_rows_hold_their_sources`), the
+    /// variants measured without it listed `unmeasured` (theirs is the largest measured on another variant); a row none of
+    /// whose variants was measured takes the largest `ua_extra` measured for the same entry and lane state on another kind
+    /// (`from_kind`, every variant `unmeasured`), never none; an entry a derived signer cannot sign (`ua_native` of the input
+    /// list: its kind or its entry) has none and no derived measurement.
+    #[test]
+    fn reference_ua_extra_covers_every_variant() {
+        use std::collections::BTreeSet;
+        let t: serde_json::Value = serde_json::from_str(REFERENCE_FILE).unwrap();
+        let inputs: serde_json::Value =
+            serde_json::from_str(include_str!("../../gas/inputs.json")).unwrap();
+        let file = format!(
+            "{}/../../{}",
+            env!("CARGO_MANIFEST_DIR"),
+            inputs["measurements"].as_str().unwrap()
+        );
+        let m: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+        let keys: Vec<&str> = m
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .filter(|k| !k.ends_with("_regular") && !k.ends_with("_state"))
+            .collect();
+        let vars = |pre: &str| -> BTreeSet<String> {
+            keys.iter()
+                .filter_map(|k| k.strip_prefix(pre))
+                .map(str::to_string)
+                .collect()
+        };
+        let native = |list: &str, x: &str| {
+            inputs["ua_native"][list]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v == x)
+        };
+        let base = t["base"].as_array().unwrap();
+        for r in base {
+            let (kind, entry) = (r["kind"].as_str().unwrap(), r["entry"].as_str().unwrap());
+            let fresh = vars(&format!("{kind}_{entry}_fresh_"));
+            let ua = vars(&format!("{kind}_{entry}_ua_"));
+            let x = r.get("ua_extra");
+            if native("kinds", kind) || native("entries", entry) {
+                assert!(x.is_none() && ua.is_empty(), "native-only {r}");
+                continue;
+            }
+            let listed: BTreeSet<String> = x
+                .and_then(|x| x.get("unmeasured"))
+                .map(|u| {
+                    u.as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_str().unwrap().to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            if ua.is_empty() {
+                let x = x.unwrap_or_else(|| panic!("no ua_extra and none measured: {r}"));
+                let own = |o: &&serde_json::Value| {
+                    o["entry"] == r["entry"]
+                        && o["fresh"] == r["fresh"]
+                        && o["kind"] != r["kind"]
+                        && o.get("ua_extra").is_some_and(|u| u.get("from_kind").is_none())
+                };
+                let best = base
+                    .iter()
+                    .filter(own)
+                    .map(|o| o["ua_extra"]["measured"].as_u64().unwrap())
+                    .max()
+                    .unwrap_or_else(|| panic!("no donor: {r}"));
+                assert_eq!(x["measured"].as_u64(), Some(best), "the largest on another kind: {r}");
+                assert!(
+                    base.iter().filter(own).any(|o| o["kind"] == x["from_kind"]
+                        && o["ua_extra"]["measured"] == x["measured"]),
+                    "from_kind names it: {r}"
+                );
+                assert_eq!(listed, fresh, "every variant unmeasured: {r}");
+            } else {
+                // its own: present exactly when a variant's derived run cost more than the native one and its verify row
+                let worst = ua
+                    .iter()
+                    .map(|v| {
+                        let k = |w: &str| m[format!("{kind}_{entry}_{w}_{v}")].as_i64().unwrap();
+                        k("ua") - k("fresh") - m["verify_0x0108_delta"].as_i64().unwrap()
+                    })
+                    .max()
+                    .unwrap();
+                assert_eq!(x.is_some(), worst > 0, "ua_extra where the derived run costs more: {r}");
+                if let Some(x) = x {
+                    assert!(x.get("from_kind").is_none(), "{r}");
+                    assert_eq!(listed, &fresh - &ua, "the variants without a derived run: {r}");
+                }
             }
         }
     }
@@ -968,6 +1091,8 @@ mod tests {
     #[test]
     fn item_count_reads_the_operations_counts() {
         use serde_json::json as j;
+        let none = j!({});
+        let item_count = |m: &serde_json::Value, i: &str| item_count(&none, m, i);
         let multi = j!({"from": "0x01", "args": {"legs": [{}, {}, {}], "u": [1]}});
         assert_eq!(item_count(&multi, "legs"), Some(3), "a multi-recipient transfer's legs");
         assert_eq!(item_count(&j!({"legs": [{}, {}]}), "legs"), Some(2), "mtxSetWrapLimits' legs");
@@ -976,6 +1101,25 @@ mod tests {
         assert_eq!(item_count(&j!({"n": "7"}), "entries"), Some(7), "a rollover's n, decimal");
         assert_eq!(item_count(&j!({"n": 9}), "entries"), Some(9));
         assert_eq!(item_count(&j!({"legs": []}), "legs"), Some(0));
+        // K2: mtxCreateToken's TokenConfig.legs, in the op's extra (the message carries only its hash)
+        let cfg = j!({"config": {"name": "W", "legs": [{}, {}, {}, {}]}});
+        assert_eq!(super::item_count(&cfg, &j!({"initHash": "0x01"}), "legs"), Some(4), "TokenConfig.legs");
+        assert_eq!(super::item_count(&j!({"config": {"legs": []}}), &none, "legs"), Some(0));
+        assert_eq!(super::item_count(&cfg, &j!({"legs": [{}]}), "legs"), Some(1), "the message's own first");
+        // P1: a signed rollover's skip marks added to n; none without the field
+        assert_eq!(item_count(&j!({"n": 3, "skip": [5, 9]}), "entries"), Some(5), "n + len(skip)");
+        assert_eq!(item_count(&j!({"n": 0, "skip": [5]}), "entries"), Some(1), "marks only");
+        assert_eq!(item_count(&j!({"n": 2, "skip": "x"}), "entries"), None, "a skip not a list");
+        // P1, K2: an env publish's four arrays together
+        let env = j!({"env": {"deps": ["0x01"], "params": ["0x02", "0x03"], "libs": ["0x04"], "libCodeHashes": ["0x05"]}});
+        assert_eq!(item_count(&env, "env_items"), Some(5), "every element of the four arrays");
+        let empty = j!({"env": {"deps": [], "params": [], "libs": [], "libCodeHashes": []}});
+        assert_eq!(item_count(&empty, "env_items"), Some(0));
+        assert_eq!(item_count(&j!({"env": {"deps": []}}), "env_items"), None, "an array missing");
+        // K2: the DEX cancel's one order; a list of them counted
+        assert_eq!(item_count(&j!({"order": {"nonce": "1"}}), "orders"), Some(1), "the SDK's one order");
+        assert_eq!(item_count(&j!({"orders": [{}, {}]}), "orders"), Some(2));
+        assert_eq!(item_count(&j!({"order": "0x01"}), "orders"), None);
         // K1: a rollover's n held to the set's ROLL_MAX (control: n at ROLL_MAX itself); every other count unclamped; a
         // build without a set (no PQZ entry) reads n as given
         let huge = alloy::primitives::U256::MAX.to_string();
@@ -984,6 +1128,8 @@ mod tests {
             for n in [j!(m + 1), j!(huge), j!(u64::MAX)] {
                 assert_eq!(item_count(&j!({"n": n}), "entries"), Some(m), "{n}");
             }
+            // P1: n clamped first, then the skip marks added
+            assert_eq!(item_count(&j!({"n": huge, "skip": [1, 2]}), "entries"), Some(m + 2));
         } else {
             assert_eq!(item_count(&j!({"n": 1_000}), "entries"), Some(1_000));
             assert_eq!(item_count(&j!({"n": huge}), "entries"), None);
@@ -1015,7 +1161,7 @@ mod tests {
         let quote = |item: &str, message: serde_json::Value| {
             let mut r = rows(1_000, 10);
             r.base[0].per_item = per_item(item, 30_000);
-            let count = |i: &str| item_count(&message, i);
+            let count = |i: &str| item_count(&serde_json::Value::Null, &message, i);
             lookup_by(
                 &r,
                 &[],
@@ -1095,7 +1241,7 @@ mod tests {
     }
 
     /// I1, the parse: `item` and `per_item` together on base and verify rows (`GasItemUnpaired` otherwise), `item` one the SDK
-    /// reads (`GasItemUnknown` otherwise), `per_item` `{gas 1–1,000,000, base_count 0, source}` (`Argument` otherwise); a
+    /// reads (`GasItemUnknown` otherwise), `per_item` `{gas 1–2^24, base_count 0, source}` (`Argument` otherwise); a
     /// file without them reads unchanged. Each refusal beside its control.
     #[test]
     fn gas_table_per_item_parse() {
@@ -1107,7 +1253,11 @@ mod tests {
         let members = format!(r#""item":"members",{}"#, part(450, 0));
         assert_eq!(GasTable::parse(&verify(&members)).unwrap().rows.verify[0].per_item, per_item("members", 450));
         assert_eq!(GasTable::parse(&file(&b(98_000, 97_947), "")).unwrap().rows.base[0].per_item, None, "absent");
-        assert!(GasTable::parse(&base(&format!(r#""item":"entries",{}"#, part(1_000_000, 0)))).is_ok());
+        assert!(GasTable::parse(&base(&format!(r#""item":"entries",{}"#, part(1 << 24, 0)))).is_ok());
+        for item in ["env_items", "orders"] {
+            let f = format!(r#""item":"{item}",{}"#, part(450, 0));
+            assert_eq!(GasTable::parse(&base(&f)).unwrap().rows.base[0].per_item, per_item(item, 450), "{item}");
+        }
         for row in [base, verify] {
             for (f, code) in [
                 (part(450, 0), "GasItemUnpaired"),
@@ -1116,7 +1266,8 @@ mod tests {
                 (format!(r#""item":"Legs",{}"#, part(450, 0)), "GasItemUnknown"),
                 (format!(r#""item":"legs",{}"#, part(450, 1)), "Argument"),
                 (format!(r#""item":"legs",{}"#, part(0, 0)), "Argument"),
-                (format!(r#""item":"legs",{}"#, part(1_000_001, 0)), "Argument"),
+                (format!(r#""item":"legs",{}"#, part((1 << 24) + 1, 0)), "Argument"),
+                (format!(r#""item":"env",{}"#, part(450, 0)), "GasItemUnknown"),
                 (format!(r#""item":"legs",{}"#, part(450, 0).replace(r#","source":"s""#, "")), "Argument"),
                 (format!(r#""item":"legs",{}"#, part(450, 0).replace(r#""base_count":0,"#, "")), "Argument"),
                 (format!(r#""item":7,{}"#, part(450, 0)), "Argument"),
@@ -1379,7 +1530,8 @@ mod tests {
         assert_eq!(signed_gas(90_000, 500, 628), 90_000 + 12_288);
     }
 
-    /// Ruling 4: the attached signature's kind, read from `payerSig` and the payment's `from`.
+    /// Ruling 4: the attached signature's kind, read from `payerSig` and the payment's `from`; I3: from `consent` and
+    /// `newAuditor`.
     #[test]
     fn attached_signature_kind() {
         let kd = vec![7u8; 64];
@@ -1415,6 +1567,25 @@ mod tests {
             Some(None),
             "members"
         );
+        // I3: mtxSetAuditorUA's consent, signed by the new auditor (`message.newAuditor`)
+        let consent = |kd: &str| serde_json::json!({"consent": {"keyData": kd, "signature": "0x01", "members": []}});
+        let aud = |a: &str| serde_json::json!({"from": native, "target": "0x01", "newAuditor": a, "epoch": 1});
+        assert_eq!(
+            attached_kind(&consent(&super::super::hex(&kd)), &aud(&super::super::hex(&ua))),
+            Some(Some(0x0101)),
+            "the auditor's kind"
+        );
+        assert_eq!(
+            attached_kind(&consent("0x"), &aud(&super::super::hex(&ua))),
+            Some(None),
+            "a stored kind's consent: the worst kind"
+        );
+        assert_eq!(
+            attached_kind(&consent(&super::super::hex(&kd)), &aud(&native)),
+            Some(None),
+            "the consent's key is not the auditor's"
+        );
+        assert_eq!(attached_kind(&serde_json::json!({}), &aud(&native)), None, "none attached");
     }
 
     /// The new optional fields' parse: `save` and `fee_extra` held like a figure and positive, `sig_bytes` bounded.

@@ -7,10 +7,9 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
-import {RegFixture} from "../as/helpers/RegFixture.sol";
+import {SdkGasRegFix} from "./SdkGasFixtures.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
-import {SdkGasOps} from "./SdkGasOps.sol";
 import {SdkGasLedger} from "./SdkGasLedger.sol";
 
 /// The `token` domain kind's base rows on `NormalToken` and `WrappedToken` (the generator stores the worst over these and
@@ -58,9 +57,11 @@ contract SdkGasTokenTest is SdkGasLedger {
 
 /// The same rows on the regulated variants (owner 2026-11-19, ruling A: they count toward the worst case): kinds 8 and 9
 /// with every control the fixture enables, the registry check (`KYC`, every party attested) and `TAX` at 10 %, where
-/// `mtxPayWithTax` lives.
-contract SdkGasRegulatedTest is SdkGasOps, RegFixture {
+/// `mtxPayWithTax` lives; the UA a `…ToUA` entry credits a P-256 UA registered on the fixture's registry (G4: a real one).
+/// G2: the derived reference signer (secp256k1, attested) holds up to 10,000 units of the token in its run only.
+contract SdkGasRegulatedTest is SdkGasRegFix {
     address internal constant SG_TAX_TO = address(0x7A0);
+    uint256 internal constant SG_TO_SK = 0xC0FFEE;
     address internal t8k;
     address internal t9k;
 
@@ -85,11 +86,20 @@ contract SdkGasRegulatedTest is SdkGasOps, RegFixture {
         for (uint256 i; i < parties.length; ++i) {
             _attest(nid(parties[i]), KYC, type(uint64).max);
         }
-        _attest(UA_X, KYC, type(uint64).max);
+        (bytes32 to,) = _sgRegisterOn(address(ureg), UAKinds.P256, SG_TO_SK); // the UA a `…ToUA` entry credits (G4)
+        _attest(to, KYC, type(uint64).max);
         t8k = _reg(false, _cfg8(), "sg8");
         t9k = _reg(true, _cfg9(), "sg9");
         _wrapFor(t9k, alice, SUPPLY);
-        (sgLeg, sgUaTo) = (address(usd), UA_X);
+        (sgLeg, sgUaTo) = (address(usd), to);
+        // G2: the derived reference signer and Q1's derived payee on the fixture's registry, attested as every party is
+        _attest(_sgUaSignerOn(address(ureg)), KYC, type(uint64).max);
+        _attest(_sgPayeeUa(), KYC, type(uint64).max);
+    }
+
+    /// G2: the derived signer's units of the token `c`, from the native signer, in its run only.
+    function _sgUaPrep(address c) internal override {
+        _sgUaFund(c, alice, 10_000);
     }
 
     function test_sdkGas_tokenRegulated() public {

@@ -90,7 +90,7 @@ abstract contract UALedgerBase is UARegistryBase {
         tok = NormalToken(
             EnvKit.clone(
                 address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
-                EnvKit.env(chainUidA, REG_L, address(0), false)
+                EnvKit.env(chainUidA, REG_L, _fixtureSka(), false)
             )
         );
         tok.initialize(
@@ -100,7 +100,7 @@ abstract contract UALedgerBase is UARegistryBase {
         wrp = WrappedToken(
             EnvKit.clone(
                 address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
-                EnvKit.env(chainUidA, REG_L, address(0), false)
+                EnvKit.env(chainUidA, REG_L, _fixtureSka(), false)
             )
         );
         address[] memory us = new address[](1);
@@ -124,7 +124,7 @@ abstract contract UALedgerBase is UARegistryBase {
         w = WrappedToken(
             EnvKit.clone(
                 address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
-                EnvKit.env(chainUidA, REG_L, address(0), false)
+                EnvKit.env(chainUidA, REG_L, _fixtureSka(), false)
             )
         );
         address[] memory us = new address[](1);

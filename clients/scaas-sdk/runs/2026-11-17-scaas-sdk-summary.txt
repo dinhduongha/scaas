@@ -41,3 +41,7 @@ docs | c0b97063f | 0 | -
 ua-test | c0b97063f | 0 | 551 passed, 0 failed, 3 ignored (55 binaries)
 ua-clippy | c0b97063f | 0 | -
 ua-vectors | c0b97063f | 0 | 656 passed, 0 failed, 6 ignored (62 binaries)
+sdk-test | 540d18a70 | 0 | 172 passed, 0 failed, 2 ignored (14 binaries)
+sdk-min | 540d18a70 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
+sdk-clippy | 540d18a70 | 0 | -
+docs | 540d18a70 | 0 | -

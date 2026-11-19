@@ -4,9 +4,8 @@ pragma solidity ^0.8.24;
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
-import {GovRouterFixture} from "../governance/GovRouter.t.sol";
+import {SdkGasRouterFix} from "./SdkGasFixtures.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
-import {SdkGasOps} from "./SdkGasOps.sol";
 import {SdkGasLedger} from "./SdkGasLedger.sol";
 
 /// The `wallet` domain kind's base rows on `MandateWallet` (variant `mandate`) and `HederaMandateWallet` (variant `hedera`,
@@ -169,7 +168,7 @@ contract SdkGasWalletTest is SdkGasLedger {
 }
 
 /// The `gov_router` domain kind's `mtxCancelNonce` (variant `router`): the ordered cancel on the router, by a native key.
-contract SdkGasRouterTest is SdkGasOps, GovRouterFixture {
+contract SdkGasRouterTest is SdkGasRouterFix {
     function setUp() public override {
         super.setUp();
         sgPk = 0xA11CE;

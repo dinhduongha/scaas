@@ -1,0 +1,11 @@
+# gas8 mutants at commit 4039fe21f (name | outcome | test)
+a new row below its measurement | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib reference_file_parses
+a measured entry in neither list | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib reference_table_covers_every_quotable_key
+a measured entry in both lists | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib reference_table_covers_every_quotable_key
+an unmeasured entry listed as quotable | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib reference_table_covers_every_quotable_key
+the account's fresh cancel row gone from the table | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib a_newly_measured_entry_quotes_from_the_reference_table
+the meter's offset off by 38 | killed | ../../scripts/capped forge test --match-path test/gas/SdkGasOrder.t.sol --match-contract '^SdkGasOrderTokenTest$'
+fee_due: the guard removed (the order refused for its missing mode) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas fee_due_of_a_struct_without_the_envelope_is_zero
+fee_due: 0 for every row, the envelope's too | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas fee_due_is_the_amount_the_check_charges
+fee_due: 0 for a struct without its mode (an enveloped one included) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas fee_due_of_a_struct_without_the_envelope_is_zero
+9 mutants, 9 killed, 0 survived, 0 not loaded
