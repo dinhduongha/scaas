@@ -114,7 +114,8 @@ async fn setup(gateways: usize, dead: usize) -> T {
             ));
         }
         for d in [DEX, DEX_OUT] {
-            c.domains.insert(d.into(), ("SCaaS Dex".into(), salt.clone()));
+            c.domains
+                .insert(d.into(), ("SCaaS Dex".into(), salt.clone()));
             c.answers
                 .push((d.into(), sel("factory()"), format!("0x{}", word(FACTORY))));
             c.answers.push((
@@ -268,12 +269,21 @@ async fn dex_not_on_profile_list_is_refused() {
         .prepare_trade_order(order(&t, TOKEN, DEX))
         .await
         .unwrap();
-    assert!(p.review().iter().any(|f| f.name == "dex" && f.display == "listed"));
+    assert!(p
+        .review()
+        .iter()
+        .any(|f| f.name == "dex" && f.display == "listed"));
     // the liquidity order and the cancel-all hold the same list; a DEX without its liquidity mark is refused too
     let l = liquidity(&t, UNLISTED);
-    assert_eq!(code(t.sdk.dex().prepare_liquidity_order(l).await), "DexNotListed");
+    assert_eq!(
+        code(t.sdk.dex().prepare_liquidity_order(l).await),
+        "DexNotListed"
+    );
     let l = liquidity(&t, DEX_OUT);
-    assert_eq!(code(t.sdk.dex().prepare_liquidity_order(l).await), "DexNotListed");
+    assert_eq!(
+        code(t.sdk.dex().prepare_liquidity_order(l).await),
+        "DexNotListed"
+    );
     let all = CancelAll {
         signer: t.signer.clone(),
         chain: "local".into(),
@@ -294,7 +304,11 @@ async fn min_fill_shown_as_signed() {
         .prepare_trade_order(order(&t, TOKEN, DEX))
         .await
         .unwrap();
-    let f = p.review().into_iter().find(|f| f.name == "minFill").unwrap();
+    let f = p
+        .review()
+        .into_iter()
+        .find(|f| f.name == "minFill")
+        .unwrap();
     assert_eq!((f.value.as_str(), f.source), ("250", Source::Signed));
     // the nonce is the lane's floor read on the sell token, `from` the signer's 32-byte id
     let r = p.review();
@@ -308,58 +322,94 @@ async fn reads_fail_over_across_the_gateway_list() {
     let t = setup(2, 1).await;
     let dex = t.sdk.dex();
     let m: Value = serde_json::from_str(&dex.markets("local".into()).await.unwrap()).unwrap();
-    assert_eq!(m["route"], json!(format!("/v1/dex/markets?chain={CHAIN_ID}")));
+    assert_eq!(
+        m["route"],
+        json!(format!("/v1/dex/markets?chain={CHAIN_ID}"))
+    );
     let d: Value =
         serde_json::from_str(&dex.depth("local".into(), 3, Some(500)).await.unwrap()).unwrap();
     assert_eq!(
         d["route"],
-        json!(format!("/v1/dex/depth?chain={CHAIN_ID}&market=3&levels=200"))
+        json!(format!(
+            "/v1/dex/depth?chain={CHAIN_ID}&market=3&levels=200"
+        ))
     );
     for (r, route) in [
         (dex.trades("local".into(), 3).await, "trades"),
         (dex.ticker("local".into(), 3).await, "ticker"),
     ] {
         let v: Value = serde_json::from_str(&r.unwrap()).unwrap();
-        assert!(v["route"].as_str().unwrap().starts_with(&format!("/v1/dex/{route}?")));
+        assert!(v["route"]
+            .as_str()
+            .unwrap()
+            .starts_with(&format!("/v1/dex/{route}?")));
     }
     let maker = t.v["key"]["ua"].as_str().unwrap().to_string();
-    let o: Value = serde_json::from_str(&dex.orders("local".into(), maker.clone()).await.unwrap())
-        .unwrap();
+    let o: Value =
+        serde_json::from_str(&dex.orders("local".into(), maker.clone()).await.unwrap()).unwrap();
     assert_eq!(
         o["route"],
         json!(format!("/v1/dex/orders?chain={CHAIN_ID}&maker={maker}"))
     );
     // every gateway down: no answer
     let t2 = setup(2, 2).await;
-    assert_eq!(code(t2.sdk.dex().markets("local".into()).await), "EndpointAllFailed");
+    assert_eq!(
+        code(t2.sdk.dex().markets("local".into()).await),
+        "EndpointAllFailed"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn place_posts_the_named_order_signed_in_its_form() {
     let t = setup(2, 1).await;
     let dex = t.sdk.dex();
-    let p = dex.prepare_trade_order(order(&t, TOKEN, DEX)).await.unwrap();
+    let p = dex
+        .prepare_trade_order(order(&t, TOKEN, DEX))
+        .await
+        .unwrap();
     let hash = dex.place(p.clone()).await.unwrap();
     assert_eq!(hash, p.id());
     let (body, path) = {
         let c = t.chain.lock().unwrap();
-        (c.bodies.last().cloned().unwrap(), c.gw_paths.last().cloned().unwrap())
+        (
+            c.bodies.last().cloned().unwrap(),
+            c.gw_paths.last().cloned().unwrap(),
+        )
     };
     assert_eq!(path, "/v1/dex/orders");
     let b: Value = serde_json::from_str(&body).unwrap();
-    assert_eq!((b["chain"].clone(), b["sellToken"].clone()), (json!(CHAIN_ID), json!(TOKEN)));
+    assert_eq!(
+        (b["chain"].clone(), b["sellToken"].clone()),
+        (json!(CHAIN_ID), json!(TOKEN))
+    );
     // the node's `WireOrder`: these 13 names, no other; a SCaaS sell token's `auth` (a UASig), no `signature`
     let mut names: Vec<_> = b["order"].as_object().unwrap().keys().cloned().collect();
     names.sort();
     assert_eq!(
         names,
-        ["amount", "batch", "destination", "dex", "fee", "flags", "from", "minFill", "nonce", "receiveAmount",
-            "receiveToken", "relayer", "validUntil"]
+        [
+            "amount",
+            "batch",
+            "destination",
+            "dex",
+            "fee",
+            "flags",
+            "from",
+            "minFill",
+            "nonce",
+            "receiveAmount",
+            "receiveToken",
+            "relayer",
+            "validUntil"
+        ]
     );
     assert_eq!(b["order"]["minFill"], "250");
     assert!(b["auth"]["signature"].as_str().unwrap().len() > 2 && b.get("signature").is_none());
     // an outside sell token: a `DexOrder` in the DEX's domain, `from` the EVM address, the nonce the DEX's floor, `signature`
-    let p = dex.prepare_trade_order(order(&t, OUTSIDE, DEX_OUT)).await.unwrap();
+    let p = dex
+        .prepare_trade_order(order(&t, OUTSIDE, DEX_OUT))
+        .await
+        .unwrap();
     dex.place(p).await.unwrap();
     let b: Value =
         serde_json::from_str(&t.chain.lock().unwrap().bodies.last().cloned().unwrap()).unwrap();
@@ -367,7 +417,10 @@ async fn place_posts_the_named_order_signed_in_its_form() {
     assert_eq!(b["order"]["nonce"], "9");
     assert!(b["signature"].as_str().unwrap().len() == 132 && b.get("auth").is_none());
     // a gateway that announces another `chain_uid` is not used: nothing posted
-    let p = dex.prepare_trade_order(order(&t, TOKEN, DEX)).await.unwrap();
+    let p = dex
+        .prepare_trade_order(order(&t, TOKEN, DEX))
+        .await
+        .unwrap();
     let (uid, n) = {
         let mut c = t.chain.lock().unwrap();
         let uid = c.gw_info["chains"][0]["chain_uid"].clone();
@@ -382,7 +435,10 @@ async fn place_posts_the_named_order_signed_in_its_form() {
     }
     // a refusing venue: the node's code, final
     t.chain.lock().unwrap().gw = Gw::Refuse;
-    let p = dex.prepare_trade_order(order(&t, TOKEN, DEX)).await.unwrap();
+    let p = dex
+        .prepare_trade_order(order(&t, TOKEN, DEX))
+        .await
+        .unwrap();
     match dex.place(p).await {
         Err(SdkError::Rpc(scaas_rpc::RpcError::NodeRefused { code, .. })) => {
             assert_eq!(code, "DEX_NOT_LISTED")
@@ -410,7 +466,10 @@ async fn cancel_all_posts_the_lane_floor_plus_one() {
     let c = t.chain.lock().unwrap();
     assert_eq!(c.gw_paths.last().unwrap(), "/v1/dex/cancel-all");
     let b: Value = serde_json::from_str(c.bodies.last().unwrap()).unwrap();
-    assert_eq!((b["minNonce"].clone(), b["batch"].clone()), (json!("6"), json!("7")));
+    assert_eq!(
+        (b["minNonce"].clone(), b["batch"].clone()),
+        (json!("6"), json!("7"))
+    );
     assert_eq!(b["from"], t.v["key"]["ua"]);
     assert!(b["auth"].is_object() && h.len() == 66);
 }
@@ -464,7 +523,11 @@ async fn cancel_and_wrap_rows_equal_the_vectors() {
             })
             .await
             .unwrap();
-        assert_eq!((p.id(), p.entry()), (digest("CancelUAOrder"), "mtxCancelOrder".into()), "{k}");
+        assert_eq!(
+            (p.id(), p.entry()),
+            (digest("CancelUAOrder"), "mtxCancelOrder".into()),
+            "{k}"
+        );
         let m = &ops["CancelUAWrapOrder"]["message"]["order"];
         let p = dex
             .prepare_cancel_wrap_order(CancelWrapOrder {
@@ -494,8 +557,15 @@ async fn cancel_and_wrap_rows_equal_the_vectors() {
             valid_until: s(&m["validUntil"]).parse().unwrap(),
         };
         let p = dex.prepare_wrap_order(req.clone()).await.unwrap();
-        assert_eq!((p.id(), p.entry()), (digest("UAWrapOrder"), "mtxWrapOrder".into()), "{k}");
-        assert!(p.review().iter().any(|f| f.name == "target" && f.value == WRAPPER));
+        assert_eq!(
+            (p.id(), p.entry()),
+            (digest("UAWrapOrder"), "mtxWrapOrder".into()),
+            "{k}"
+        );
+        assert!(p
+            .review()
+            .iter()
+            .any(|f| f.name == "target" && f.value == WRAPPER));
         // a wrapper off the profile's list
         let off = WrapOrder {
             wrapped_token: UNLISTED.into(),
@@ -514,7 +584,10 @@ async fn cancel_and_wrap_rows_equal_the_vectors() {
     let p = dex.prepare_cancel_order(req.clone()).await.unwrap();
     assert_eq!(
         (p.id(), p.entry()),
-        (s(&ops["CancelDexOrder"]["domains"]["dex"]["digest"]), "mtxCancelOrders".into())
+        (
+            s(&ops["CancelDexOrder"]["domains"]["dex"]["digest"]),
+            "mtxCancelOrders".into()
+        )
     );
     let mut off = req.clone();
     off.order.dex = UNLISTED.into();
@@ -572,7 +645,10 @@ fn liquidity(t: &T, dex: &str) -> LiquidityOrder {
 async fn liquidity_order_signs_under_its_check() {
     let t = setup(1, 0).await;
     let dex = t.sdk.dex();
-    let p = dex.prepare_liquidity_order(liquidity(&t, DEX)).await.unwrap();
+    let p = dex
+        .prepare_liquidity_order(liquidity(&t, DEX))
+        .await
+        .unwrap();
     let s = dex.sign_order(p.clone()).await.unwrap();
     assert_eq!(s.order_hash, p.id());
     let auth: Value = serde_json::from_str(&s.signature).unwrap();

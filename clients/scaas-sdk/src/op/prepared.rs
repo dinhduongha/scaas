@@ -289,14 +289,10 @@ pub(crate) fn domain_name(kind: &str) -> Result<&'static str, SdkError> {
     })
 }
 
-/// The envelope's object: the message itself, or its `payment` (`UAPayeeFee`, `UAPayWithTax`). An order (`UAWrapOrder`) has
-/// `from`, `batch` and `validUntil` but no fee `mode`: its nonce is an order lane's (`minNonce`), not an envelope's.
+/// The envelope's object: the message itself, or its `payment` (`UAPayeeFee`, `UAPayWithTax`).
 pub(crate) fn envelope(m: &Value) -> Option<&Map<String, Value>> {
     let has = |o: &Map<String, Value>| {
-        o.contains_key("from")
-            && o.contains_key("batch")
-            && o.contains_key("validUntil")
-            && o.contains_key("mode")
+        o.contains_key("from") && o.contains_key("batch") && o.contains_key("validUntil")
     };
     match m.as_object() {
         Some(o) if has(o) => Some(o),
@@ -373,7 +369,9 @@ impl Op {
             .map_err(|_| SdkError::Argument)?;
         let mut message = d.message;
         let mut lane = None;
-        if let Some(e) = envelope(&message) {
+        // an order (`UAWrapOrder`) has `from`, `batch` and `validUntil` but its nonce is an order lane's (`minNonce`, signed
+        // as given), not an envelope lane's: no lane is read or checked for it
+        if let Some(e) = envelope(&message).filter(|_| d.name != "UAWrapOrder") {
             let from = super::unhex(
                 e.get("from")
                     .and_then(Value::as_str)
@@ -512,7 +510,6 @@ impl Op {
                 .map(|r| r.entry.to_string())
                 .ok_or(SdkError::Argument)?,
         };
-        // an order's `validUntil` (no envelope) ends it too
         // an order row ends on its order's event, not an executed event (the token's and the DEX's trade events, R18)
         let order_hash = |ty: &str, m: &Value| -> Result<[u8; 32], SdkError> {
             Ok(scaas_typed_data(
@@ -541,7 +538,6 @@ impl Op {
         };
         let expires_at = env
             .get("validUntil")
-            .or_else(|| canonical.get("validUntil"))
             .map(dec)
             .transpose()?
             .map_or(u64::MAX, |v| u64::try_from(v).unwrap_or(u64::MAX));
