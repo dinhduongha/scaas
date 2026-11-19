@@ -1146,6 +1146,51 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
     }
 }
 
+/// Item 8 of the gas-table round (owner 2026-11-19): an entry formerly without a reference row (`UNMEASURED`) quotes from it
+/// once measured: the account's ordered cancel by its native key on a fresh lane, `GasUnquoted` without the opt-in, the
+/// reference row's figure with it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_newly_measured_entry_quotes_from_the_reference_table() {
+    for opt_in in [false, true] {
+        let t = setup(0, |p, _| {
+            p.gas = Default::default();
+            if opt_in {
+                p.gas_opt_in = vec![gas::REFERENCE.into()];
+            }
+        })
+        .await;
+        let p = prepare(&t, cancel(&t, "account", OTHER, "5", "0")).await;
+        let r = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await;
+        if !opt_in {
+            assert_eq!(code(r), "GasUnquoted");
+            continue;
+        }
+        let q = r.unwrap();
+        let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+        let rows = crate::GasTable::parse(gas::REFERENCE_FILE).unwrap().rows;
+        let row = rows
+            .base
+            .iter()
+            .find(|b| b.key() == ("mtxCancelNonce", "account", true))
+            .unwrap();
+        let sig = rows
+            .verify
+            .iter()
+            .find(|v| v.signer == 0)
+            .unwrap()
+            .sig_bytes;
+        assert_eq!(
+            q.gas_limit,
+            gas::with_margin(row.gas + 21_000 + 64 * (len + sig))
+        );
+        assert_eq!(q.gas_from, Some(GasSources::both(GasFrom::Reference)));
+    }
+}
+
 /// The gas-table rulings (owner 2026-11-19): each source on the self-relay path, in the lookup order chain → module (opted in)
 /// → reference (opted in) → the app's figure → `GasUnquoted`; the quote names the source; an app figure above `max_gas` is
 /// refused. No signature at quote time.

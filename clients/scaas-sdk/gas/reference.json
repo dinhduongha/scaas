@@ -12,7 +12,9 @@
     "per_byte (owner 2026-11-19, ruling B): whole gas a byte of the input, the slope between two lengths below where the calldata floor binds (PayMeta body: 256 and 1,024 bytes, a saved record; mtxExecute data: 32 and 160 bytes).",
     "save (owner 2026-11-19, ruling 1): the fixed cost a pay entry adds when it saves its PayMeta record (save set, payNo non-zero): the worst difference, per variant, between the saved record with an empty body and the unsaved pay, both on a fresh lane; the SDK adds it when the operation saves.",
     "fee_extra (owner 2026-11-19, ruling 3): the worst difference, per variant, between the entry with a fee of 1 (FIXED, amounts of 1 raised to 100 for the 1 % cap, the recipient unbound: the relayer, holding nothing) and without, both on a fresh lane; the SDK adds it when the fee is > 0. Not on mtxRelayFee and mtxPayWithPayeeFee (their payment is their fee, in the row) nor on the wrap-in entries (their fee is charged in units the signer holds before the call; the rows are measured with a signer holding none).",
-    "mtxExecute: the wallet's own cost, calling an account without code with no value; the target's cost is never in the row.",
+    "mtxExecute: the wallet's or the account's own cost, calling an account without code with no value; the target's cost is never in the row.",
+    "Order entries (mtxCancelOrder, mtxInvalidateNonces, mtxWrapOrder; the DEX's mtxCancelOrders, one order, and mtxInvalidateNonces): no envelope or meta-tx lane, signed over the order under the UA purpose trade (a native key signs the digest itself), the DEX's by an address. The SDK keys a struct without a lane as used and mtxWrapOrder by its order nonce, so both rows are the worst case: nothing of the signer's on the batch written yet (the floor raised the first time, the wrapper holding none of the leg, the signer none of its units). The call sits on EIP-7976's calldata floor: measured inside the transaction, by a meter contract's gasleft around the call less the meter's own 3,038 (a cold callee and its opcodes; held equal to the transaction's figure on two rows off the floor).",
+    "account (SmartKeyAccount): signed by its secp256k1 key 0 (the reference signer) in an AccountSig with an empty proof; the worst over the key kinds added, removed or replaced (a secp256k1 key or a passkey) and over a guardian set with or without a recovery pending; mtxExecute's data per byte measured inside the transaction as the order entries are.",
     "Verify rows: the copy-cost forwarder's check of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature."
   ],
   "base": [
@@ -1465,6 +1467,314 @@
       "gas": 152000,
       "measured": 151937,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelNonce_used_router"
+    },
+    {
+      "entry": "mtxCancelOrder",
+      "kind": "token",
+      "fresh": true,
+      "gas": 137000,
+      "measured": 136435,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelOrder_fresh_normal,token_mtxCancelOrder_fresh_normal_reg,token_mtxCancelOrder_fresh_normal_reg_wo,token_mtxCancelOrder_fresh_normal_wo,token_mtxCancelOrder_fresh_wrapped,token_mtxCancelOrder_fresh_wrapped_reg,token_mtxCancelOrder_fresh_wrapped_reg_wo,token_mtxCancelOrder_fresh_wrapped_wo"
+    },
+    {
+      "entry": "mtxCancelOrder",
+      "kind": "token",
+      "fresh": false,
+      "gas": 137000,
+      "measured": 136435,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelOrder_used_normal,token_mtxCancelOrder_used_normal_reg,token_mtxCancelOrder_used_normal_reg_wo,token_mtxCancelOrder_used_normal_wo,token_mtxCancelOrder_used_wrapped,token_mtxCancelOrder_used_wrapped_reg,token_mtxCancelOrder_used_wrapped_reg_wo,token_mtxCancelOrder_used_wrapped_wo"
+    },
+    {
+      "entry": "mtxInvalidateNonces",
+      "kind": "token",
+      "fresh": true,
+      "gas": 132000,
+      "measured": 131688,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxInvalidateNonces_fresh_normal,token_mtxInvalidateNonces_fresh_normal_reg,token_mtxInvalidateNonces_fresh_wrapped,token_mtxInvalidateNonces_fresh_wrapped_reg"
+    },
+    {
+      "entry": "mtxInvalidateNonces",
+      "kind": "token",
+      "fresh": false,
+      "gas": 132000,
+      "measured": 131688,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxInvalidateNonces_used_normal,token_mtxInvalidateNonces_used_normal_reg,token_mtxInvalidateNonces_used_wrapped,token_mtxInvalidateNonces_used_wrapped_reg"
+    },
+    {
+      "entry": "mtxWrapOrder",
+      "kind": "token",
+      "fresh": true,
+      "gas": 762000,
+      "measured": 761806,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_fresh_wrapped,token_mtxWrapOrder_fresh_wrapped_reg",
+      "ua_extra": {
+        "gas": 140000,
+        "measured": 139335,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_ua_wrapped-token_mtxWrapOrder_fresh_wrapped-verify_0x0108_delta"
+      }
+    },
+    {
+      "entry": "mtxWrapOrder",
+      "kind": "token",
+      "fresh": false,
+      "gas": 762000,
+      "measured": 761806,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_used_wrapped,token_mtxWrapOrder_used_wrapped_reg",
+      "ua_extra": {
+        "gas": 140000,
+        "measured": 139335,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_ua_wrapped-token_mtxWrapOrder_fresh_wrapped-verify_0x0108_delta"
+      }
+    },
+    {
+      "entry": "mtxCancelOrder",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 137000,
+      "measured": 136457,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxCancelOrder_fresh_normal,zether_mtxCancelOrder_fresh_normal_reg,zether_mtxCancelOrder_fresh_normal_reg_wo,zether_mtxCancelOrder_fresh_normal_wo,zether_mtxCancelOrder_fresh_wrapped,zether_mtxCancelOrder_fresh_wrapped_reg,zether_mtxCancelOrder_fresh_wrapped_reg_wo,zether_mtxCancelOrder_fresh_wrapped_wo"
+    },
+    {
+      "entry": "mtxCancelOrder",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 137000,
+      "measured": 136457,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxCancelOrder_used_normal,zether_mtxCancelOrder_used_normal_reg,zether_mtxCancelOrder_used_normal_reg_wo,zether_mtxCancelOrder_used_normal_wo,zether_mtxCancelOrder_used_wrapped,zether_mtxCancelOrder_used_wrapped_reg,zether_mtxCancelOrder_used_wrapped_reg_wo,zether_mtxCancelOrder_used_wrapped_wo"
+    },
+    {
+      "entry": "mtxInvalidateNonces",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 132000,
+      "measured": 131710,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxInvalidateNonces_fresh_normal,zether_mtxInvalidateNonces_fresh_normal_reg,zether_mtxInvalidateNonces_fresh_wrapped,zether_mtxInvalidateNonces_fresh_wrapped_reg"
+    },
+    {
+      "entry": "mtxInvalidateNonces",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 132000,
+      "measured": 131710,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxInvalidateNonces_used_normal,zether_mtxInvalidateNonces_used_normal_reg,zether_mtxInvalidateNonces_used_wrapped,zether_mtxInvalidateNonces_used_wrapped_reg"
+    },
+    {
+      "entry": "mtxWrapOrder",
+      "kind": "zether",
+      "fresh": true,
+      "gas": 762000,
+      "measured": 761682,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapOrder_fresh_wrapped,zether_mtxWrapOrder_fresh_wrapped_reg"
+    },
+    {
+      "entry": "mtxWrapOrder",
+      "kind": "zether",
+      "fresh": false,
+      "gas": 762000,
+      "measured": 761682,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapOrder_used_wrapped,zether_mtxWrapOrder_used_wrapped_reg"
+    },
+    {
+      "entry": "mtxCancelOrder",
+      "kind": "pqz",
+      "fresh": true,
+      "gas": 137000,
+      "measured": 136435,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxCancelOrder_fresh_normal,pqz_mtxCancelOrder_fresh_normal_reg,pqz_mtxCancelOrder_fresh_normal_reg_wo,pqz_mtxCancelOrder_fresh_normal_wo,pqz_mtxCancelOrder_fresh_wrapped,pqz_mtxCancelOrder_fresh_wrapped_reg,pqz_mtxCancelOrder_fresh_wrapped_reg_wo,pqz_mtxCancelOrder_fresh_wrapped_wo"
+    },
+    {
+      "entry": "mtxCancelOrder",
+      "kind": "pqz",
+      "fresh": false,
+      "gas": 137000,
+      "measured": 136435,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxCancelOrder_used_normal,pqz_mtxCancelOrder_used_normal_reg,pqz_mtxCancelOrder_used_normal_reg_wo,pqz_mtxCancelOrder_used_normal_wo,pqz_mtxCancelOrder_used_wrapped,pqz_mtxCancelOrder_used_wrapped_reg,pqz_mtxCancelOrder_used_wrapped_reg_wo,pqz_mtxCancelOrder_used_wrapped_wo"
+    },
+    {
+      "entry": "mtxInvalidateNonces",
+      "kind": "pqz",
+      "fresh": true,
+      "gas": 132000,
+      "measured": 131732,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxInvalidateNonces_fresh_normal,pqz_mtxInvalidateNonces_fresh_normal_reg,pqz_mtxInvalidateNonces_fresh_wrapped,pqz_mtxInvalidateNonces_fresh_wrapped_reg"
+    },
+    {
+      "entry": "mtxInvalidateNonces",
+      "kind": "pqz",
+      "fresh": false,
+      "gas": 132000,
+      "measured": 131732,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxInvalidateNonces_used_normal,pqz_mtxInvalidateNonces_used_normal_reg,pqz_mtxInvalidateNonces_used_wrapped,pqz_mtxInvalidateNonces_used_wrapped_reg"
+    },
+    {
+      "entry": "mtxWrapOrder",
+      "kind": "pqz",
+      "fresh": true,
+      "gas": 762000,
+      "measured": 761750,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapOrder_fresh_wrapped,pqz_mtxWrapOrder_fresh_wrapped_reg"
+    },
+    {
+      "entry": "mtxWrapOrder",
+      "kind": "pqz",
+      "fresh": false,
+      "gas": 762000,
+      "measured": 761750,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapOrder_used_wrapped,pqz_mtxWrapOrder_used_wrapped_reg"
+    },
+    {
+      "entry": "mtxCancelOrders",
+      "kind": "dex",
+      "fresh": true,
+      "gas": 139000,
+      "measured": 138134,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_fresh_dex"
+    },
+    {
+      "entry": "mtxCancelOrders",
+      "kind": "dex",
+      "fresh": false,
+      "gas": 139000,
+      "measured": 138134,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_used_dex"
+    },
+    {
+      "entry": "mtxInvalidateNonces",
+      "kind": "dex",
+      "fresh": true,
+      "gas": 131000,
+      "measured": 130542,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxInvalidateNonces_fresh_dex"
+    },
+    {
+      "entry": "mtxInvalidateNonces",
+      "kind": "dex",
+      "fresh": false,
+      "gas": 131000,
+      "measured": 130542,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxInvalidateNonces_used_dex"
+    },
+    {
+      "entry": "mtxAddKey",
+      "kind": "account",
+      "fresh": true,
+      "gas": 828000,
+      "measured": 827547,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxAddKey_fresh_p256,account_mtxAddKey_fresh_secp"
+    },
+    {
+      "entry": "mtxAddKey",
+      "kind": "account",
+      "fresh": false,
+      "gas": 730000,
+      "measured": 729627,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxAddKey_used_p256,account_mtxAddKey_used_secp"
+    },
+    {
+      "entry": "mtxRemoveKey",
+      "kind": "account",
+      "fresh": true,
+      "gas": 227000,
+      "measured": 226454,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxRemoveKey_fresh_p256,account_mtxRemoveKey_fresh_secp"
+    },
+    {
+      "entry": "mtxRemoveKey",
+      "kind": "account",
+      "fresh": false,
+      "gas": 129000,
+      "measured": 128534,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxRemoveKey_used_p256,account_mtxRemoveKey_used_secp"
+    },
+    {
+      "entry": "mtxRotateKey",
+      "kind": "account",
+      "fresh": true,
+      "gas": 904000,
+      "measured": 903793,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxRotateKey_fresh_p256,account_mtxRotateKey_fresh_secp"
+    },
+    {
+      "entry": "mtxRotateKey",
+      "kind": "account",
+      "fresh": false,
+      "gas": 806000,
+      "measured": 805873,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxRotateKey_used_p256,account_mtxRotateKey_used_secp"
+    },
+    {
+      "entry": "mtxSetGuardian",
+      "kind": "account",
+      "fresh": true,
+      "gas": 253000,
+      "measured": 252034,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxSetGuardian_fresh_none,account_mtxSetGuardian_fresh_pending"
+    },
+    {
+      "entry": "mtxSetGuardian",
+      "kind": "account",
+      "fresh": false,
+      "gas": 155000,
+      "measured": 154114,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxSetGuardian_used_none,account_mtxSetGuardian_used_pending"
+    },
+    {
+      "entry": "mtxCancelRecovery",
+      "kind": "account",
+      "fresh": true,
+      "gas": 164000,
+      "measured": 163960,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxCancelRecovery_fresh_account"
+    },
+    {
+      "entry": "mtxCancelRecovery",
+      "kind": "account",
+      "fresh": false,
+      "gas": 67000,
+      "measured": 66040,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxCancelRecovery_used_account"
+    },
+    {
+      "entry": "mtxExecute",
+      "kind": "account",
+      "fresh": true,
+      "gas": 144000,
+      "measured": 143154,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxExecute_fresh_account",
+      "per_byte": {
+        "input": "data",
+        "gas": 2,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxExecute_per_byte_account"
+      }
+    },
+    {
+      "entry": "mtxExecute",
+      "kind": "account",
+      "fresh": false,
+      "gas": 46000,
+      "measured": 45234,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxExecute_used_account",
+      "per_byte": {
+        "input": "data",
+        "gas": 2,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxExecute_per_byte_account"
+      }
+    },
+    {
+      "entry": "mtxCancelNonce",
+      "kind": "account",
+      "fresh": true,
+      "gas": 251000,
+      "measured": 250855,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxCancelNonce_fresh_account"
+    },
+    {
+      "entry": "mtxCancelNonce",
+      "kind": "account",
+      "fresh": false,
+      "gas": 153000,
+      "measured": 152935,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxCancelNonce_used_account"
     }
   ],
   "verify": [
