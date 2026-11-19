@@ -423,8 +423,9 @@ fn structure(kd: &[u8]) -> Result<MsigStructure, SdkError> {
     MsigStructure::from_key_data(kd).map_err(ua_err)
 }
 
-/// The registry's domain for a native member's `UAAuth` (gen 1 only: `predecessor() == 0`).
-async fn domain(
+/// The registry's domain for a native signer's `UAAuth` (gen 1 only: `predecessor() == 0`): an `msig`'s native member, a
+/// native auditor's consent (`Admin::sign_pqz_auditor_consent`).
+pub(crate) async fn domain(
     sdk: &Sdk,
     chain: &str,
     pool: &EvmPool,

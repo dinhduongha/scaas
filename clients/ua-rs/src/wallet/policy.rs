@@ -694,6 +694,10 @@ pub fn sign_scaas(
         return Err(Error::Argument);
     }
     if let super::signer::KeyRef::Native { .. } = key.key_ref() {
+        // the token checks a consent through the registry, never the digest itself: [`sign_auditor_consent_native`]
+        if td.primary_type() == "AuditorConsent" {
+            return Err(Error::Argument);
+        }
         return Ok(crate::ua_portable::UASig {
             key_data: vec![],
             signature: sign_typed_by(key, td, expect)?,
@@ -705,6 +709,44 @@ pub fn sign_scaas(
         return Err(Error::PolicyRefused);
     }
     super::uasig::ua_sig(key, None, &scaas_purpose(td)?, &digest)
+}
+
+/// A native (EVM address) auditor's consent to a set-auditor (`AuditorConsent`, set-auditor spec §5.2): the PQZ token checks it
+/// through the registry (`PqzStateLib._auditorChecks`: `requireAuthorized(auditor, PURPOSE_AUDITOR_CONSENT, digest, consent)`),
+/// so the key signs `UAAuth(id, auditor-consent, digest)` under the registry's domain `registry` over the consent's typed
+/// digest, never that digest bare: `{"", r ‖ s ‖ v, []}`. Checked against `expect` as [`sign_scaas`] checks a UA key
+/// (`PolicyRefused`, nothing signed); `Argument` for a key other than a native EVM key, another primary type, or a consent
+/// whose `auditor` is not the key's own id.
+pub fn sign_auditor_consent_native(
+    key: &dyn Signer,
+    td: &TypedData,
+    expect: Expect,
+    registry: &crate::Domain,
+) -> Result<crate::ua_portable::UASig> {
+    if matches!(expect, Expect::Any(_)) || td.primary_type() != "AuditorConsent" {
+        return Err(Error::Argument);
+    }
+    let digest = td.digest()?;
+    if check(td, &expect)? != digest {
+        return Err(Error::PolicyRefused);
+    }
+    let id = super::uasig::native_id(&key.key_ref()).ok_or(Error::Argument)?;
+    let v = td.to_value();
+    let auditor = v
+        .get("message")
+        .and_then(|m| m.get("auditor"))
+        .and_then(Value::as_str)
+        .map(str::to_ascii_lowercase);
+    let own: String = id.iter().map(|b| format!("{b:02x}")).collect();
+    if auditor != Some(format!("0x{own}")) {
+        return Err(Error::Argument);
+    }
+    super::uasig::ua_sig(
+        key,
+        Some(registry),
+        &crate::purpose_tag("auditor-consent")?,
+        &digest,
+    )
 }
 
 /// The purpose tag a UA key signs the typed SCaaS struct `td` under in [`sign_scaas`] (its table, public so an external key's

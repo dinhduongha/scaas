@@ -86,8 +86,8 @@ pub use manifest::{
 pub use pairing::NonceSlotProbe;
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{
-    fee_due, scaas_purpose, sign_scaas, sign_typed_by, AllowAnyTypedData, AllowRow, DecodedCall,
-    Expect, Invalidate, SubjectKey,
+    fee_due, scaas_purpose, sign_auditor_consent_native, sign_scaas, sign_typed_by,
+    AllowAnyTypedData, AllowRow, DecodedCall, Expect, Invalidate, SubjectKey,
 };
 #[cfg(feature = "pqz")]
 pub(crate) use seal::now;

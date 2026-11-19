@@ -49,7 +49,7 @@ fn stored(kind: u16) -> bool {
 }
 
 /// The native id (`evm-eoa`, CTR-UA-03) of an EVM key: its address left-padded to 32 bytes; any other key `None`.
-fn native_id(r: &KeyRef) -> Option<[u8; 32]> {
+pub(super) fn native_id(r: &KeyRef) -> Option<[u8; 32]> {
     let KeyRef::Native {
         network: Network::Evm,
         public_key,

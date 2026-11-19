@@ -1706,3 +1706,122 @@ fn registration_typed_data_digest() {
         );
     }
 }
+
+/// A native (address) auditor's consent to a set-auditor (controller call, owner auto-run 2026-11-19; set-auditor spec §5.2):
+/// `sign_auditor_consent_native` gives `typed_ops.json`'s `consent.native` row byte for byte in each token domain, the
+/// registry's `UAAuth(id, auditor-consent, digest)` under structures.json context A (generation 1) by the fixed native key,
+/// which `requireAuthorized` checks (`PqzStateLib._auditorChecks`); the bare form is refused by `sign_scaas`; a consent naming
+/// another auditor, a check of another epoch and a non-native key are refused, nothing signed.
+#[test]
+fn native_auditor_consent_signs_the_registry_form() {
+    use scaas_ua::wallet::{scaas_typed_data, sign_auditor_consent_native, sign_scaas, Expect};
+    let t = serde_json::from_str::<Value>(
+        &std::fs::read_to_string(format!(
+            "{}/../../smartcontracts/vectors/typed/typed_ops.json",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let row = &t["ops"]["AuditorConsent"];
+    let reg = context_a();
+    let n = Native::fixed();
+    let w = wallet();
+    let ua_key = w.ua_key(0x0101, 0, 0).unwrap();
+    let mut checked = 0;
+    for (kind, d) in row["domains"].as_object().unwrap() {
+        let dom = &d["domain"];
+        let contract: [u8; 20] = bytes(&dom["verifyingContract"]).try_into().unwrap();
+        let chain_id: u64 = dom["chainId"].as_str().unwrap().parse().unwrap();
+        let salt = b32(&dom["salt"]);
+        let build = |auditor: &Value, epoch: u64| {
+            let mut m = row["message"].clone();
+            m["auditor"] = auditor.clone();
+            m["epoch"] = epoch.into();
+            let td = scaas_typed_data(
+                "AuditorConsent",
+                dom["name"].as_str(),
+                &contract,
+                chain_id,
+                &salt,
+                &m,
+            )
+            .unwrap();
+            let ex = |m: Value| Expect::Op {
+                op: "AuditorConsent".into(),
+                contract,
+                chain_id,
+                chain_uid: salt,
+                message: m,
+                max_fee: "0".into(),
+                fee_recipient: None,
+                relayer: None,
+                now: 0,
+                max_window: 0,
+            };
+            let canonical = td.to_value()["message"].clone();
+            (td, ex(canonical))
+        };
+        let nat = &d["consent"]["native"];
+        let epoch = row["message"]["epoch"].as_u64().unwrap();
+        let (td, ex) = build(&nat["ua"], epoch);
+        assert_eq!(
+            td.digest().unwrap(),
+            b32(&nat["digest"]),
+            "{kind}: the row's digest"
+        );
+        assert_eq!(
+            ua_auth_digest(
+                &reg,
+                &n.id(),
+                &purpose_tag("auditor-consent").unwrap(),
+                &td.digest().unwrap()
+            ),
+            b32(&nat["uaAuthDigest"]),
+            "{kind}: the registry's form"
+        );
+        let s = sign_auditor_consent_native(&n, &td, ex.clone(), &reg).unwrap();
+        assert_eq!(
+            s,
+            UASig {
+                key_data: vec![],
+                signature: bytes(&nat["signature"]),
+                members: vec![]
+            },
+            "{kind}: the row's signature (RFC 6979)"
+        );
+        assert!(native_ecdsa(
+            &n.address(),
+            &b32(&nat["uaAuthDigest"]),
+            &s.signature
+        ));
+        // the bare digest is never signed for a consent
+        assert_eq!(
+            sign_scaas(&n, &td, ex.clone()).unwrap_err(),
+            Error::Argument,
+            "{kind}"
+        );
+        // a consent naming another auditor (the derived row's UA)
+        let (other, ex_other) = build(&d["consent"]["derived"]["ua"], epoch);
+        assert_eq!(
+            sign_auditor_consent_native(&n, &other, ex_other, &reg).unwrap_err(),
+            Error::Argument,
+            "{kind}: another auditor"
+        );
+        // a check of another epoch than the data's
+        let (_, ex_epoch) = build(&nat["ua"], epoch + 1);
+        assert_eq!(
+            sign_auditor_consent_native(&n, &td, ex_epoch, &reg).unwrap_err(),
+            Error::PolicyRefused,
+            "{kind}: the check"
+        );
+        // a UA key signs by `sign_scaas`, not here
+        assert_eq!(
+            sign_auditor_consent_native(&ua_key, &td, ex, &reg).unwrap_err(),
+            Error::Argument,
+            "{kind}: a UA key"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 2, "the PQZ and Zether domains");
+}
