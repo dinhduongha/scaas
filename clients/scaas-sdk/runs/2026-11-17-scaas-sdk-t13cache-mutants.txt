@@ -1,0 +1,5 @@
+# t13cache mutants at commit d98a4c952 (name | outcome | test)
+the cache written on a registry with the precompile (no probe) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops -- --exact mldsa_cache_then_register
+a stored part written again | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops -- --exact mldsa_cache_then_register
+a part's record read from another part's pointer (prepare and landed share the reader) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops -- --exact mldsa_cache_then_register
+3 mutants, 3 killed, 0 survived, 0 not loaded

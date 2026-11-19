@@ -1061,3 +1061,44 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
     let st = acc.msig_state("anvil".into(), ua).await.unwrap();
     assert!(st.version == 1 && !st.slots[2].enabled && st.active, "{st:?}");
 }
+
+/// Owner 2026-11-19, T1 (CTR-UA-23 MD-3): on `anvil` the ML-DSA verifiers have no precompile, so the registry caches the
+/// expanded key: the SDK's registration of the seed's mldsa65 UA is its two `cacheExpandedKey` parts, then `register`, each
+/// landed by its record (`expandedKeyOf(ua)[p]`, `isRegistered`); a second preparation has nothing left to write.
+#[cfg(feature = "account")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_register_mldsa_cached_on_anvil() {
+    use scaas_sdk::account::{Register, RegisterAttrs};
+    const MLDSA65: u16 = 0x0131;
+    let (_anvil, rpc) = anvil(8).await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    funded_holder(rpc);
+    let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    assert_eq!(
+        cast(&["call", "--rpc-url", rpc, &registry, "kindEnabled(uint16)(bool)", &MLDSA65.to_string()]),
+        "true",
+        "mldsa65 enabled on this registry"
+    );
+    let (sdk, seed) = sdk_on(registry_profile(rpc, &registry, Some(1 << 24))).await;
+    let acc = sdk.account();
+    let req = || Register {
+        key: KeyRef::Ua { seed: seed.clone(), kind: MLDSA65, account: 0, index: 0 },
+        chain: "anvil".into(),
+        attrs: RegisterAttrs::default(),
+        payer: key0(&seed),
+    };
+    let writes = acc.prepare_register(req()).await.unwrap();
+    let entries: Vec<_> = writes.iter().map(|w| w.entry()).collect();
+    assert_eq!(entries, ["cacheExpandedKey", "cacheExpandedKey", "register"]);
+    let ua = writes[0].ua();
+    for w in writes {
+        land_write(&sdk, w).await;
+    }
+    let ek = cast(&["call", "--rpc-url", rpc, &registry, "expandedKeyOf(bytes32)(address[3])", &ua]);
+    assert_eq!(ek.matches("0x0000000000000000000000000000000000000000").count(), 1, "parts 0 and 1 stored: {ek}");
+    assert!(acc.registration_of("anvil".into(), ua).await.unwrap().registered);
+    assert!(acc.prepare_register(req()).await.unwrap().is_empty(), "nothing left to write");
+}

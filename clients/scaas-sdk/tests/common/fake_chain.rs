@@ -77,6 +77,8 @@ pub struct Chain {
     pub answers: Vec<(String, String, String)>,
     /// `eth_estimateGas` by the call's input (plan T13: a registration's size); `None`: `gas`
     pub gas_of: Option<fn(&str) -> u64>,
+    /// `eth_estimateGas` reverts for the inputs this answers true (plan T13: a registry refusing a call)
+    pub estimate_reverts: Option<fn(&str) -> bool>,
 }
 
 impl Default for Chain {
@@ -114,6 +116,7 @@ impl Default for Chain {
             storage: HashMap::new(),
             answers: vec![],
             gas_of: None,
+            estimate_reverts: None,
         }
     }
 }
@@ -336,6 +339,11 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             }
         }
         "eth_estimateGas" if c.call_revert => err("execution reverted"),
+        "eth_estimateGas"
+            if c.estimate_reverts.is_some_and(|f| f(p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap_or_default())) =>
+        {
+            err("execution reverted")
+        }
         "eth_estimateGas" => {
             let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap_or_default();
             ok(json!(format!("{:#x}", c.gas_of.map_or(c.gas, |f| f(input)))))

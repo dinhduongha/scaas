@@ -167,6 +167,12 @@ fn registry(t: &T, ua: &str, registered: bool, kem_pk_hash: &str, kem_stored: bo
             w(0)
         ),
     ));
+    // `address[3]`: an ML-DSA key's expanded-key cache complete (a registry on the cache; T1's test sets its own)
+    c.answers.push((
+        REGISTRY.into(),
+        format!("{}{ua}", sel("expandedKeyOf(bytes32)")),
+        format!("0x{}{}{}", w(0xc1), w(0xc2), w(0xc3)),
+    ));
     // `(address ptr, bytes32 pqzPopHash, bool proven)`: no PQZ key
     c.answers.push((
         REGISTRY.into(),
@@ -681,4 +687,55 @@ async fn pay_to_unregistered_derived_ua() {
     };
     assert_eq!(code(n.sdk.wallet().prepare_pay(pay(&ua)).await), "ReceiverUnregistered");
     assert_ne!(code(n.sdk.wallet().prepare_pay(pay(&native)).await), "ReceiverUnregistered");
+}
+
+/// Owner 2026-11-19, T1 (CTR-UA-23 MD-3, MD-4): an ML-DSA key on a registry that caches expanded keys (`cacheExpandedKey` of
+/// part 0 simulates) registers after each part not stored yet: mldsa65 with part 0 stored gives part 1's write (`scaas-ua`'s
+/// `part_call`, landed by `expandedKeyOf(ua)[1]`, not by the payer's transaction), then the registration; on a registry
+/// whose verifier has the precompile (`cacheExpandedKey` refused) or with every part stored, the registration alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn mldsa_cache_then_register() {
+    const MLDSA65: u16 = 0x0131;
+    let t = setup().await;
+    let k = Wallet::from_mnemonic(REPO, "").unwrap().ua_key(MLDSA65, 0, 0).unwrap();
+    let ua = hx(&k.ua().unwrap());
+    let cached = |p0: u64, p1: u64| {
+        let mut c = t.chain.lock().unwrap();
+        let d = format!("{}{}", sel("expandedKeyOf(bytes32)"), &ua[2..]);
+        c.answers.retain(|(_, x, _)| *x != d);
+        c.answers.push((REGISTRY.into(), d, format!("0x{}{}{}", w(p0), w(p1), w(0))));
+    };
+    registry(&t, &ua, false, &hx(&[0; 32]), false);
+    cached(0xc1, 0);
+    let entries = |ws: &[Arc<scaas_sdk::account::RegistryWrite>]| ws.iter().map(|w| w.entry()).collect::<Vec<_>>();
+    let ws = t.sdk.account().prepare_register(req(&t, MLDSA65, false)).await.unwrap();
+    assert_eq!(entries(&ws), ["cacheExpandedKey", "register"]);
+    let part1 = scaas_ua::mldsa_cache::part_call(MLDSA65, &k.key_data(), 1).unwrap();
+    assert_eq!(ws[0].calldata(), hx(&part1));
+    let q = t.sdk.account().quote_registry_write(ws[0].clone()).await.unwrap();
+    let op = t.sdk.account().submit_registry_write(ws[0].clone(), q).await.unwrap();
+    for _ in 0..50 {
+        if !t.chain.lock().unwrap().sent.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    {
+        let mut c = t.chain.lock().unwrap();
+        let raw = c.sent.last().unwrap().clone();
+        let id = keccak_hex(&alloy::hex::decode(raw.trim_start_matches("0x")).unwrap());
+        c.receipts.insert(id, true);
+    }
+    let s = t.sdk.op().state(op.clone()).await.unwrap();
+    assert!(!matches!(s, OpState::Landed { .. }), "a receipt alone lands nothing: {s:?}");
+    cached(0xc1, 0xc2);
+    assert!(matches!(t.sdk.op().state(op).await.unwrap(), OpState::Landed { .. }), "part 1 stored lands it");
+    // every part stored: the registration alone
+    let ws = t.sdk.account().prepare_register(req(&t, MLDSA65, false)).await.unwrap();
+    assert_eq!(entries(&ws), ["register"]);
+    // a verifier with the precompile: `cacheExpandedKey` refused, the registration alone
+    cached(0, 0);
+    t.chain.lock().unwrap().estimate_reverts = Some(|input| input.starts_with("0x8b738873"));
+    let ws = t.sdk.account().prepare_register(req(&t, MLDSA65, false)).await.unwrap();
+    assert_eq!(entries(&ws), ["register"]);
 }

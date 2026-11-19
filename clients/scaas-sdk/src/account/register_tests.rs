@@ -51,6 +51,9 @@ async fn pq_registration_split() {
         c.gas_of = Some(by_size);
         let sel = keccak_hex(b"isRegistered(bytes32)")[..10].to_string();
         c.answers.push((REGISTRY.into(), sel, format!("0x{}", "00".repeat(32))));
+        // `address[3]`: the ML-DSA key's expanded-key cache complete (plan T13, owner 2026-11-19 T1)
+        let sel = keccak_hex(b"expandedKeyOf(bytes32)")[..10].to_string();
+        c.answers.push((REGISTRY.into(), sel, format!("0x{}", "11".repeat(96))));
     }
     let url = serve(chain.clone()).await;
     let profile = ChainProfile {

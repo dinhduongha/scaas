@@ -5,6 +5,8 @@
 //! registration carrying a `pqzPop` whose full call's gas is above min(the chain's per-transaction cap, its block gas
 //! limit, `Limits::max_gas`), or whose estimate fails, is sent as the registration without `pqzPop`, then `storePqzPop`; a part
 //! still above the cap is `GasAboveTxCap`. A KEM key in its hash-commit form is filled by `setKemKey(ua, 0, kem, UASig())`.
+//! An ML-DSA key on a registry that caches expanded keys (`cacheExpandedKey(kind, pk, 0)` simulates; with the precompile the
+//! registry refuses it) first gets each part `expandedKeyOf(ua)` shows missing (CTR-UA-23 MD-3; owner 2026-11-19, T1).
 //! A registry write is an opaque [`RegistryWrite`] kept in the SDK's table, quoted (the payer's estimate) and submitted like a
 //! native send (sign → write ahead → simulate → send); it lands **by its record** (`isRegistered`, `pqzPopOf(…)` non-empty:
 //! the proof stored, proven or not, as on a chain with no PoP verifier (owner 2026-11-19, S2), `kemKeyAt(…)`), whoever sent
@@ -56,6 +58,8 @@ pub(crate) enum Landed {
     /// `msigStateOf(ua).version >= v`: the `msig` at or past update `v` on this registry (CTR-UA-44; whoever sent it, as a
     /// registration)
     MsigVersion(u64),
+    /// `expandedKeyOf(ua)[p] != 0`: part `p` of an ML-DSA key's expanded-key cache stored (CTR-UA-23 MD-3, MD-4)
+    Cached(u64),
 }
 
 impl Landed {
@@ -66,6 +70,7 @@ impl Landed {
             Landed::Kem(v) => format!("kem:{v}"),
             Landed::Accepted(i) => format!("accepted:{i}"),
             Landed::MsigVersion(v) => format!("msigVersion:{v}"),
+            Landed::Cached(p) => format!("cached:{p}"),
         }
     }
     pub(crate) fn parse(s: &str) -> Option<Landed> {
@@ -75,6 +80,7 @@ impl Landed {
             Some(("kem", v)) => v.parse().ok().map(Landed::Kem),
             Some(("accepted", i)) => i.parse().ok().map(Landed::Accepted),
             Some(("msigVersion", v)) => v.parse().ok().map(Landed::MsigVersion),
+            Some(("cached", p)) => p.parse().ok().map(Landed::Cached),
             _ => None,
         }
     }
@@ -109,7 +115,8 @@ impl RegistryWrite {
     pub fn chain(&self) -> String {
         self.chain.clone()
     }
-    /// The registry function: `register`, `registerWebAuthn`, …, `storePqzPop`, `setKemKey`.
+    /// The registry function: `register`, `registerWebAuthn`, …, `storePqzPop`, `setKemKey`, `cacheExpandedKey`, `registerMsig`,
+    /// `acceptMembership`, `updateMsig`.
     pub fn entry(&self) -> String {
         self.entry.clone()
     }
@@ -171,11 +178,12 @@ pub(crate) fn record_call(landed: Landed, ua: &[u8; 32]) -> Bytes {
         Landed::PqzPop(_) => selector("pqzPopOf(bytes32,uint64)"),
         Landed::Kem(_) => selector("kemKeyAt(bytes32,uint64)"),
         Landed::Accepted(_) | Landed::MsigVersion(_) => selector("msigStateOf(bytes32)"),
+        Landed::Cached(_) => selector("expandedKeyOf(bytes32)"),
     };
     d.extend_from_slice(ua);
     match landed {
         Landed::PqzPop(v) | Landed::Kem(v) => d.extend_from_slice(&word_u64(v)),
-        Landed::Registered | Landed::Accepted(_) | Landed::MsigVersion(_) => {}
+        Landed::Registered | Landed::Accepted(_) | Landed::MsigVersion(_) | Landed::Cached(_) => {}
     }
     Bytes::from(d)
 }
@@ -209,6 +217,8 @@ pub(crate) fn record_holds(landed: Landed, out: &[u8]) -> Option<bool> {
             (96, w) if w <= U256::from(u64::MAX) => Some(w >= U256::from(v)),
             _ => None,
         },
+        // `address[3]`: part `p`'s pointer
+        Landed::Cached(p) => (out.len() == 96).then(|| word(out, usize::try_from(p).unwrap_or(3)).is_some_and(|w| !w.is_zero())),
     }
 }
 
@@ -362,12 +372,33 @@ pub(crate) async fn writes(
     let mut out = Vec::new();
     let registered = read_record(&pool, registry, Landed::Registered, &ua).await?;
     if !registered {
+        // an ML-DSA key on a registry that caches its expanded key (no precompile: `cacheExpandedKey` of part 0 simulates;
+        // with a precompile it reverts `UAKeyCache`): each part not stored yet, before the registration (CTR-UA-23 MD-3)
+        let mut cache_pending = false;
+        let kind = args.get("kind").and_then(Value::as_u64).and_then(|k| u16::try_from(k).ok());
+        let parts = kind.map_or(0, scaas_ua::mldsa_cache::parts);
+        if entry == "register" && parts > 0 {
+            let kind = kind.ok_or(SdkError::Argument)?;
+            let pk = unhex(args.get("keyData").and_then(Value::as_str).ok_or(SdkError::Argument)?)?;
+            let probe = scaas_ua::mldsa_cache::part_call(kind, &pk, 0).map_err(|_| SdkError::Argument)?;
+            if pool.simulate_from(from, registry, Bytes::from(probe)).await.is_ok() {
+                for p in 0..parts {
+                    if !read_record(&pool, registry, Landed::Cached(p), &ua).await? {
+                        let a = json!({"kind": kind, "pk": hex(&pk), "part": p});
+                        out.push(keep(sdk, chain, "cacheExpandedKey", ua, &a, payer, Landed::Cached(p))?);
+                        cache_pending = true;
+                    }
+                }
+            }
+        }
         let full = registry_call(&entry, args)?;
         let pqz_pop = args.get("pqzPop").and_then(Value::as_str).unwrap_or("0x");
         let cap = gas_cap(sdk, chain, &pool).await?;
         let fits = |g: Result<u64, _>| matches!(g, Ok(g) if g <= cap);
+        // with the cache pending the registration cannot be estimated yet (`UAKeyNotCached`): a `pqzPop` goes apart, each
+        // part quoted after the one before it landed
         let split = pqz_pop != "0x"
-            && !fits(pool.simulate_from(from, registry, Bytes::from(full)).await);
+            && (cache_pending || !fits(pool.simulate_from(from, registry, Bytes::from(full)).await));
         if split {
             let mut first = args.clone();
             first
@@ -375,7 +406,7 @@ pub(crate) async fn writes(
                 .ok_or(SdkError::Argument)?
                 .insert("pqzPop".into(), json!("0x"));
             let part = registry_call(&entry, &first)?;
-            if !fits(pool.simulate_from(from, registry, Bytes::from(part)).await) {
+            if !cache_pending && !fits(pool.simulate_from(from, registry, Bytes::from(part)).await) {
                 return Err(SdkError::GasAboveTxCap);
             }
             out.push(keep(sdk, chain, &entry, ua, &first, payer, Landed::Registered)?);
