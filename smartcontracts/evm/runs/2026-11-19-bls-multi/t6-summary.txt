@@ -1,0 +1,8 @@
+bls-multi Task 6 (BlsMultiBls12381Verifier, IUAMinimalVerifier, UASafeVerifier mode) | step | rc | counts
+forge test/ua/verifiers (6 suites) | 0 | 73 passed (BlsMultiVerifier 17 then 18 with test_identityPair_refused)
+forge test/ua/{UAGas,UADeploy,UAModulePins,PqGas} | 0 | 34 passed
+forge test/gas | 1 | 8 passed, 10 failed: sdk_gas.json exact figures +34 .. +134 (registry / token bytecode since Task 5); regenerated once after Task 8
+mutants t6-mutants.py | 1 | 12: 10 killed by the intended test, 2 equivalent (t6-mutants.txt)
+measured inside check (test_checkGas_worstRows): verify n64 k32 252,320, k33 253,109 (spec ~240 k with margin); pop n64 5,578,582 (spec ~3.2 M) -> CHECK_GAS 300,000, POP_GAS 6,700,000 (~20 %)
+size gate | 0 | 173 contracts: BlsMultiBls12381Verifier 6,387 (new); the mode: BlsMinSigBls12381Verifier 4,738 -> 4,795, BlsMinSigBn254Verifier 2,829 -> 2,886, Musig2Bn254Verifier 5,244 -> 5,321, SchnorrBls12381Verifier / SchnorrBn254Verifier 3,486 -> 3,503, ZetherSchnorrBls12381Verifier 3,496 -> 3,513 (none in the baseline)
+forge fmt --check | 0 |

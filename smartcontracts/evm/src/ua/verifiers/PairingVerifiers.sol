@@ -6,7 +6,7 @@ import {UAKinds} from "../UAKinds.sol";
 import {CurveSigs} from "../../common/CurveSigs.sol";
 
 /// @title A UA verifier that answers false instead of reverting (accounts.md §1.9, CTR-UA-17).
-/// @notice `verify` / `verifyPop` run `check` through an external self-call capped at `CHECK_GAS` under `try`, so a
+/// @notice `verify` / `verifyPop` (and a kind's `verifyMinimal`) run `check` through an external self-call capped at `CHECK_GAS` under `try`, so a
 ///         revert inside a curve helper (off-curve, non-canonical or out-of-subgroup point: the precompile fails and
 ///         `G1Bn254` / `G1Bls12381` / `Bls12381` revert) or an out-of-gas inside it becomes `false`. The cap matters: a
 ///         failing EIP-196/197/2537 precompile consumes all the gas it was given, and the curve helpers forward `gas()`,
@@ -15,6 +15,14 @@ import {CurveSigs} from "../../common/CurveSigs.sol";
 ///         For well-sized inputs the worst case of any call is `CHECK_GAS` + the wrapper (oversized calldata only shortens the inner
 ///         budget and fails the length checks). **UNAUDITED.**
 abstract contract UASafeVerifier is IUAPopVerifier {
+    /// What `check` runs (spec 2026-11-19-bls12381-multi §5.3; owner ruling 2026-11-19, plan choice 5): `verify`, the minimal
+    /// form of a kind with a surplus form (`IUAMinimalVerifier.verifyMinimal`), or the proof of possession.
+    enum Mode {
+        Verify,
+        Minimal,
+        Pop
+    }
+
     uint256 public immutable CHECK_GAS;
 
     constructor(uint256 checkGas) {
@@ -22,30 +30,34 @@ abstract contract UASafeVerifier is IUAPopVerifier {
     }
 
     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool) {
-        return _safe(keyData, message, sig, false);
+        return _safe(keyData, message, sig, Mode.Verify);
     }
 
     function verifyPop(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool) {
-        return _safe(keyData, message, sig, true);
+        return _safe(keyData, message, sig, Mode.Pop);
     }
 
-    /// @notice The unguarded check (`pop` selects the PoP domain); may revert on malformed points. External only so
-    ///         `verify` / `verifyPop` can catch its reverts; it is as safe to call as they are, minus that guarantee.
-    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop)
+    /// @notice The unguarded check (`mode` selects the form; `Pop` the PoP domain); may revert on malformed points. External only
+    ///         so `verify` / `verifyPop` can catch its reverts; it is as safe to call as they are, minus that guarantee.
+    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, Mode mode)
         external
         view
         virtual
         returns (bool);
 
     /// The gas `check` gets: `CHECK_GAS`; a kind whose PoP costs more (the MuSig2 / FROST group checks) overrides it.
-    function _checkGas(bool) internal view virtual returns (uint256) {
+    function _checkGas(Mode) internal view virtual returns (uint256) {
         return CHECK_GAS;
     }
 
-    function _safe(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop) private view returns (bool) {
-        uint256 g = _checkGas(pop);
+    function _safe(bytes calldata keyData, bytes32 message, bytes calldata sig, Mode mode)
+        internal
+        view
+        returns (bool)
+    {
+        uint256 g = _checkGas(mode);
         if (gasleft() < g + g / 63 + 5_000) revert UAKinds.UAVerifyGas();
-        try this.check{gas: g}(keyData, message, sig, pop) returns (bool ok) {
+        try this.check{gas: g}(keyData, message, sig, mode) returns (bool ok) {
             return ok;
         } catch {
             return false;
@@ -60,7 +72,7 @@ contract SchnorrBn254Verifier is UASafeVerifier {
     /// valid ≈ 27 k inside `check` (3 ECMUL + 3 ECADD); R, Y checked in Solidity, so no failing precompile.
     constructor() UASafeVerifier(40_000) {}
 
-    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
+    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, Mode)
         external
         view
         override
@@ -75,7 +87,7 @@ contract SchnorrBls12381Verifier is UASafeVerifier {
     /// valid ≈ 39 k inside `check` (G1MSM k = 3); a malformed R / Y fails G1MSM and burns the cap.
     constructor() UASafeVerifier(60_000) {}
 
-    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
+    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, Mode)
         external
         view
         override
@@ -93,13 +105,13 @@ contract BlsMinSigBls12381Verifier is UASafeVerifier {
     bytes internal constant DST_SIG = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_";
     bytes internal constant DST_POP = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
 
-    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop)
+    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, Mode mode)
         external
         view
         override
         returns (bool)
     {
-        return CurveSigs.bls12381(pop ? DST_POP : DST_SIG, keyData, message, sig);
+        return CurveSigs.bls12381(mode == Mode.Pop ? DST_POP : DST_SIG, keyData, message, sig);
     }
 }
 
@@ -112,13 +124,13 @@ contract BlsMinSigBn254Verifier is UASafeVerifier {
     bytes internal constant LABEL_SIG = "SCAAS-UA-BLS-BN254-SIG-V1";
     bytes internal constant LABEL_POP = "SCAAS-UA-BLS-BN254-POP-V1";
 
-    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop)
+    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, Mode mode)
         external
         view
         override
         returns (bool)
     {
-        return CurveSigs.blsBn254(pop ? LABEL_POP : LABEL_SIG, keyData, message, sig);
+        return CurveSigs.blsBn254(mode == Mode.Pop ? LABEL_POP : LABEL_SIG, keyData, message, sig);
     }
 }
 
@@ -131,7 +143,7 @@ bytes constant ZETHER_SCHNORR_TAG = "SCAAS-ZETHER-SCHNORR-V1";
 contract ZetherSchnorrBls12381Verifier is UASafeVerifier {
     constructor() UASafeVerifier(60_000) {}
 
-    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
+    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, Mode)
         external
         view
         override

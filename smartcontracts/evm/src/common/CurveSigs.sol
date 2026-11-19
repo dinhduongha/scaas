@@ -14,6 +14,11 @@ import {G1Bn254, G1Bls12381} from "../zether/ZetherCurves.sol";
 ///         **revert** (`G1Bls12381.BadPoint`, `Bls12381.PrecompileFailed`) or answer false (bn254 pairing); callers
 ///         that must answer false within a bound wrap the call with a gas cap (`UASafeVerifier`).
 library CurveSigs {
+    /// `bls12381-multi` (0x0121, spec 2026-11-19-bls12381-multi §3, owner ruling Q11): members sign `memberDigest(ua, ua_msg)`
+    /// under `DST_MULTI_SIG`; the registration PoP (and nothing else) is under `DST_MULTI_POP`. Neither is `0x0106`'s.
+    bytes internal constant DST_MULTI_SIG = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_MULTI_SIG_";
+    bytes internal constant DST_MULTI_POP = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_MULTI_POP_";
+
     /// bn254 G2 generator, EIP-197 order: x_im, x_re, y_im, y_re.
     bytes internal constant BN254_G2 = abi.encodePacked(
         uint256(11559732032986387107991004021392285783925812861821192530917403151452391805634),
