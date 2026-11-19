@@ -109,7 +109,8 @@ no public key of the unlock credential exists, so user verification is enforced 
 without it) and by the AEAD (a wrong output is `VaultOpen`); an answer without an output is `AuthenticatorRefused` and the passphrase
 remains. Signing keys' assertions are checked in full by `ua-rs` ([CLI-UAL-16](ua-libraries.md#CLI-UAL-16)); the app's `Authenticator`
 and `SecureStore` are never trusted for policy. The passkey RP ID is the deployment's, never a SCaaS constant
-([CLI-APP-14](app.md#CLI-APP-14)). Every change of a sealed record after unlock (the manifest, a backup generation) is re-sealed by
+([CLI-APP-14](app.md#CLI-APP-14)): `SdkConfig.rp_id`, which `create_passkey_key(seed, name)` and every passkey signing read, never a
+parameter (owner 2026-11-19, T4; none configured: `AuthenticatorRefused`). Every change of a sealed record after unlock (the manifest, a backup generation) is re-sealed by
 `ua-rs` under the vault's same data key, both envelopes kept, so a passkey session persists its changes; a new vault (an imported
 key) takes the vault passphrase and, with a passkey set, its PRF output. A biometric is a platform gate; nothing is derived from it. A
 passphrase change keeps the data key and removing the passkey unlock revokes nothing from an earlier copy of the container: the UI

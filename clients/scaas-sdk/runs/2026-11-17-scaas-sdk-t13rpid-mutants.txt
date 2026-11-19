@@ -1,0 +1,3 @@
+# t13rpid mutants at commit 6c29ffbea (name | outcome | test)
+a passkey created with no RP ID configured | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact op::tests::passkey_rp_id_from_config
+1 mutants, 1 killed, 0 survived, 0 not loaded

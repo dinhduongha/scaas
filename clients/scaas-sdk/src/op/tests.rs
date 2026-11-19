@@ -1994,3 +1994,41 @@ async fn policy_refusal_asks_no_device() {
         assert_eq!(dev.asked.load(SeqCst), 1);
     }
 }
+
+/// Owner 2026-11-19, T4: `create_passkey_key(seed, name)` takes the RP ID from the SDK's configuration: the row's key data
+/// ends with SHA-256 of [`RP_ID`] (the RP ID the device was asked for); an SDK configured with an `Authenticator` and no RP ID
+/// refuses `AuthenticatorRefused` and asks the device nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn passkey_rp_id_from_config() {
+    let dev = Arc::new(Device::default());
+    let auth: Arc<dyn crate::platform::Authenticator> = dev.clone();
+    let t = setup_with(0, |_, _| {}, Some(auth.clone())).await;
+    let acc = t.sdk.account();
+    acc.create_passkey_key(crate::account::CreatePasskeyKey { seed: t.seed.clone(), name: "phone".into() })
+        .await
+        .unwrap();
+    let row = acc.accounts(t.seed.clone()).await.unwrap().into_iter().find(|r| r.shape == "key").unwrap();
+    let kd = [xy(&device_key(1)), scaas_ua::sha256(RP_ID.as_bytes()).to_vec()].concat();
+    assert_eq!(row.id_text, hex(&scaas_ua::derive_ua(0x0100, &kd, false).unwrap()), "the configured RP ID");
+    let sdk = Sdk::open(SdkConfig {
+        profiles: vec![t.profile.clone()],
+        store: MemoryStore::new(),
+        rp_id: None,
+        authenticator: Some(auth),
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let sec = |s: &str| Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(s.as_bytes().to_vec())).unwrap());
+    let seed = sdk
+        .vault()
+        .import_words(ImportWords { label: "main".into(), words: sec(REPO), vault_passphrase: sec(PASS) })
+        .await
+        .unwrap()
+        .id;
+    let r = sdk.account().create_passkey_key(crate::account::CreatePasskeyKey { seed, name: "phone".into() }).await;
+    assert_eq!(code(r), "AuthenticatorRefused", "no RP ID configured");
+}
