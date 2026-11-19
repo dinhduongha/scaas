@@ -1,0 +1,4 @@
+bls-multi node e2e after the registry split, Task 8 and Task 9 (the registry deploys within its lines) | step | rc | counts
+zether-cli (release, hazmat, the e2e's prover) | 0 | built
+scaas-node cargo test --test e2e -- --ignored --test-threads=1 | 1 | 23 passed, 1 failed: plain_rows_match_the_forge_abi, its row count 36 -> 37 (Task 10's registerBlsMulti row; every row's ABI matched)
+the same test after the count | 0 | 1 passed
