@@ -2026,7 +2026,11 @@ async fn resend_as_self_relay_takes_the_rows_own_figure() {
             .await
             .unwrap();
         let row = state::row(&t.sdk, &op).await.unwrap();
-        assert_eq!((row.path.as_str(), row.nonce.as_str()), ("gateway", "0"), "a fresh lane");
+        assert_eq!(
+            (row.path.as_str(), row.nonce.as_str()),
+            ("gateway", "0"),
+            "a fresh lane"
+        );
         // the payer's quote of a cancel: another entry, far below the transfer's
         let c = prepare(&t, cancel(&t, "token", TOKEN, "6", "0")).await;
         let mut q = t

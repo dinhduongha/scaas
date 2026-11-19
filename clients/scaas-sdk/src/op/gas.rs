@@ -1611,9 +1611,18 @@ mod tests {
                 .margin,
             1_000
         );
+        // no `margin`: 0 (the control's filler key `"x"` is refused since the PR A review's finding 1)
         assert_eq!(
-            GasTable::parse(&with(r#""x":0"#)).unwrap().rows.verify[0].margin,
+            GasTable::parse(&file("", &v(306, 3_000, 2_100)))
+                .unwrap()
+                .rows
+                .verify[0]
+                .margin,
             0
+        );
+        assert_eq!(
+            GasTable::parse(&with(r#""x":0"#)).unwrap_err().code(),
+            "GasFieldUnknown"
         );
         for bad in [r#""margin":0"#, r#""margin":100001"#, r#""margin":"1000""#] {
             assert!(GasTable::parse(&with(bad)).is_err(), "{bad}");
