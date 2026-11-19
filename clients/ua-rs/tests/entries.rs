@@ -1125,3 +1125,80 @@ fn pay_meta_of_paymeta_rows() {
         "a hex body refused"
     );
 }
+
+/// Part 3b item 7 (owner 2026-11-19): every row names an entry its kinds' contracts have, so a quote or a job never names an
+/// entry the contract lacks. The contracts' entries are `selector_audit.json`'s (every non-view external of each artifact,
+/// read by `SelectorAudit.t.sol` against the build) for the token kinds (Normal, Wrapped and their regulated variants: a
+/// row holds when one of them has the entry), the router, the DEX and the smart-key account; the mandate wallet (not an
+/// audit artifact) by its source. A row with a vector in `typed_ops.json` is held by its whole ABI signature (the selector),
+/// the others by the entry's name.
+#[test]
+fn rows_name_entries_their_contracts_have() {
+    let audit = load("smartcontracts/evm/test/vectors/selector_audit.json");
+    let vectors = ops();
+    let wallet = ["MandateWallet.sol", "WalletExecute.sol"]
+        .map(|f| {
+            std::fs::read_to_string(root(&format!("smartcontracts/evm/src/wallet/{f}"))).unwrap()
+        })
+        .concat()
+        + &std::fs::read_to_string(root("smartcontracts/evm/src/metatx/UAMetaTxBase.sol")).unwrap();
+    let arts = |kind: &str| -> Vec<&str> {
+        match kind {
+            "token" => vec![
+                "NormalToken",
+                "WrappedToken",
+                "NormalRegulatedToken",
+                "WrappedRegulatedToken",
+            ],
+            "zether" => vec![
+                "NormalZetherToken",
+                "WrappedZetherToken",
+                "NormalZetherRegulatedToken",
+                "WrappedZetherRegulatedToken",
+            ],
+            "pqz" => vec![
+                "NormalPqzToken",
+                "WrappedPqzToken",
+                "NormalPqzRegulatedToken",
+                "WrappedPqzRegulatedToken",
+            ],
+            "gov_router" => vec!["GovernanceRouter"],
+            "dex" => vec!["SCaaSDex"],
+            "account" => vec!["SmartKeyAccount"],
+            _ => vec![],
+        }
+    };
+    let mut held = 0;
+    for r in entry_rows().iter().filter(|r| !r.entry.is_empty()) {
+        for kind in r.kinds {
+            // the vector's signature is the row's own (`vector_pairs` holds the calldata the row builds equal to it)
+            let abi = vectors["ops"][r.name]["domains"][*kind]["abi"].as_str();
+            assert!(
+                abi.is_none_or(|a| a.starts_with(&format!("{}(", r.entry))),
+                "{} on {kind}: the vector's {abi:?} is not {}",
+                r.name,
+                r.entry
+            );
+            let have = |art: &str| -> bool {
+                audit[art].as_array().unwrap().iter().any(|f| {
+                    let sig = f["sig"].as_str().unwrap();
+                    match abi {
+                        Some(a) => sig == a,
+                        None => sig.split('(').next() == Some(r.entry),
+                    }
+                })
+            };
+            let ok = match *kind {
+                "wallet" => wallet.contains(&format!("function {}(", r.entry)),
+                k => arts(k).into_iter().any(have),
+            };
+            assert!(
+                ok,
+                "{} on {kind}: {} ({abi:?}) is not an entry of the kind's contracts",
+                r.name, r.entry
+            );
+            held += 1;
+        }
+    }
+    assert!(held > 100, "{held} rows held");
+}
