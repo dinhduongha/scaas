@@ -931,8 +931,8 @@ mod tests {
             Some(1_010),
             "control"
         );
-        // overflow-safe: a figure past u64 saturates
-        r.base[0].per_item = per_item("legs", u64::MAX);
+        // overflow-safe: a figure past u64 saturates (2^63 × 2 wraps to 0)
+        r.base[0].per_item = per_item("legs", 1 << 63);
         assert_eq!(by(&r, &[("legs", 2), ("members", 0)], None, None), Ok(Some(u64::MAX)));
         // an attached signature's verify row with a per-item part: its count is not read, refused
         let mut r = rows(1_000, 10);
