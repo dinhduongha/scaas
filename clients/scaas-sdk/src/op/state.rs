@@ -64,6 +64,10 @@ pub(crate) struct Row {
     /// the signed message, canonical (public: the calldata holds it): a retry is the same message but its `validUntil`
     #[serde(default)]
     pub message: serde_json::Value,
+    /// the prepared operation's unsigned arguments beside the message (public: the calldata holds them): a gateway row's
+    /// self-relay `resend` recomputes the operation's own gas figure from them (PR A review, finding 2)
+    #[serde(default)]
+    pub extra: serde_json::Value,
 }
 
 impl Row {

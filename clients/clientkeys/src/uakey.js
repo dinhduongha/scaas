@@ -29,7 +29,7 @@ import {
   P256_N,
 } from "./ua-verify.js";
 import { kemPrk, kemKeyFromPrk, isKemHolder } from "./kem.js";
-import { WEBAUTHN_MAX_ASSERTION } from "./webauthn.js";
+import { WEBAUTHN_MAX_ASSERTION, bytesOf } from "./webauthn.js";
 
 const fail = (code, reason) => {
   throw new ua.UAError(code, reason);
@@ -332,10 +332,13 @@ function webauthnCapped(sig) {
  *  caller asked for (spec §5.6, C-07): 0 < r, s < n first, s made low, clientDataJSON UTF-8 (as ua-rs; the chains' rule alone
  *  does not ask it), kept as signed and accepted only by the chains' rule (`clientDataOk`: type, challenge = expected, origin,
  *  then `}` or `,"crossOrigin":false`), then the whole encoding verified before it is returned. Any failure: `WebAuthnAssertion`; first, `authData` and
- *  `clientDataJSON` above `WEBAUTHN_MAX_ASSERTION` together: `WebAuthnTooLong`. */
-export function webauthnAssertion({ keyData, expectedChallenge, authData, clientDataJSON, r, s }) {
+ *  `clientDataJSON` above `WEBAUTHN_MAX_ASSERTION` together: `WebAuthnTooLong`, either not bytes (a `Uint8Array`, an
+ *  `ArrayBuffer` or another view, read as bytes: PR A review, finding 5) `WebAuthnAssertion`. */
+export function webauthnAssertion({ keyData, expectedChallenge, authData: ad, clientDataJSON: cd, r, s }) {
   const no = (why) => fail("WebAuthnAssertion", why);
-  if ((authData?.length ?? 0) + (clientDataJSON?.length ?? 0) > WEBAUTHN_MAX_ASSERTION)
+  const [authData, clientDataJSON] = [bytesOf(ad), bytesOf(cd)];
+  if (!authData || !clientDataJSON) no("authData and clientDataJSON must be bytes");
+  if (authData.length + clientDataJSON.length > WEBAUTHN_MAX_ASSERTION)
     fail("WebAuthnTooLong", `authData and clientDataJSON above ${WEBAUTHN_MAX_ASSERTION} bytes`);
   if (keyData?.length !== 96 || expectedChallenge?.length !== 32 || r?.length !== 32 || s?.length !== 32) no("lengths");
   const [R, S] = [int(r), int(s)];

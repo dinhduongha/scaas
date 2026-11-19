@@ -188,6 +188,78 @@ pub(crate) const GAS_ITEMS: [&str; 6] = [
 ];
 /// A per-item part's largest `gas`: EIP-7825's transaction cap, 2^24 (a Zether leg is about 3.1 M).
 const GAS_PER_ITEM_MAX: u64 = 1 << 24;
+/// The keys a gas table may carry (PR A review, finding 1): any other key at the top, on a row or inside a row's part is refused
+/// by name, `GasFieldUnknown`, so a misspelt part, or one a newer table adds, is never dropped from a quote silently. Besides the
+/// figures the SDK reads: `assumptions` (top), `stand_in` (a row), `calldata_gas` (a base row's per-key calldata pins, its keys
+/// the source's, not checked), and inside `ua_extra` the generator's `second_party` (Q1, information only), `unmeasured` and
+/// `from_kind` (G2).
+const GAS_TOP_KEYS: &[&str] = &[
+    "format",
+    "v",
+    "name",
+    "family",
+    "assumptions",
+    "base",
+    "verify",
+];
+const GAS_BASE_KEYS: &[&str] = &[
+    "entry",
+    "kind",
+    "fresh",
+    "gas",
+    "measured",
+    "source",
+    "calldata_gas",
+    "per_byte",
+    "save",
+    "fee_extra",
+    "ua_extra",
+    "item",
+    "per_item",
+    "stand_in",
+];
+const GAS_VERIFY_KEYS: &[&str] = &[
+    "signer",
+    "gas",
+    "measured",
+    "source",
+    "sig_bytes",
+    "margin",
+    "item",
+    "per_item",
+    "stand_in",
+];
+/// A row's parts, each with its keys (`second_party` is a part of `ua_extra`).
+const GAS_PART_KEYS: &[(&str, &[&str])] = &[
+    ("per_byte", &["input", "gas", "source"]),
+    ("per_item", &["gas", "base_count", "source"]),
+    ("save", &["gas", "measured", "source"]),
+    ("fee_extra", &["gas", "measured", "source"]),
+    (
+        "ua_extra",
+        &[
+            "gas",
+            "measured",
+            "source",
+            "second_party",
+            "unmeasured",
+            "from_kind",
+        ],
+    ),
+    ("second_party", &["measured", "source"]),
+];
+
+/// An object with a key outside `keys`, or a part (of [`GAS_PART_KEYS`]) with one outside its own.
+fn unknown_key(x: &serde_json::Value, keys: &[&str]) -> bool {
+    x.as_object().is_some_and(|o| {
+        o.iter().any(|(k, v)| {
+            !keys.contains(&k.as_str())
+                || GAS_PART_KEYS
+                    .iter()
+                    .any(|(p, pk)| p == k && unknown_key(v, pk))
+        })
+    })
+}
 
 /// A figure rounded up to the next 1,000 from `measured` (owner 2026-11-19): a multiple of 1,000, `measured <= gas < measured +
 /// 1000`.
@@ -207,7 +279,9 @@ impl GasTable {
     /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); no key twice.
     /// By name when the file is otherwise sound (the first such fault): `GasSigBytesMissing` when a verify row has no
     /// `sig_bytes` (owner 2026-11-19, A4), `GasItemUnpaired` when a row has `per_item` without `item` or the reverse,
-    /// `GasItemUnknown` when an `item` is not one of `GAS_ITEMS`; `Argument` on any other failure.
+    /// `GasItemUnknown` when an `item` is not one of `GAS_ITEMS`, `GasFieldUnknown` when a key is outside the format (at the top,
+    /// on a base or verify row, or inside a row's `per_byte`, `per_item`, `save`, `fee_extra`, `ua_extra` or its
+    /// `second_party`; PR A review, finding 1); `Argument` on any other failure.
     pub fn parse(text: &str) -> Result<GasTable, crate::SdkError> {
         match Self::parse_inner(text) {
             Some((t, None)) => Ok(t),
@@ -249,6 +323,13 @@ impl GasTable {
         }
         let mut rows = GasRows::default();
         let mut named = None;
+        // PR A review, finding 1: no key outside the format, at the top, on a row or in a row's part
+        if unknown_key(&v, GAS_TOP_KEYS)
+            || base.iter().any(|r| unknown_key(r, GAS_BASE_KEYS))
+            || verify.iter().any(|r| unknown_key(r, GAS_VERIFY_KEYS))
+        {
+            named = Some(crate::SdkError::GasFieldUnknown);
+        }
         for r in base {
             let row = GasBase {
                 entry: name(r, "entry")?,

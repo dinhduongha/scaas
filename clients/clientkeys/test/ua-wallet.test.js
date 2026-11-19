@@ -506,6 +506,38 @@ test("WebAuthn assertion: accepted rows, refusals (wrong challenge, reordered JS
   }
 });
 
+// PR A review, finding 5: `webauthnAssertion` reads an `ArrayBuffer` (what an authenticator returns) as its bytes: the row at
+// the cap accepted with the same encoding, one above it or 2,000 bytes `WebAuthnTooLong` (the cap summed `undefined ?? 0` and
+// passed); not bytes `WebAuthnAssertion`.
+test("finding 5: webauthnAssertion caps ArrayBuffer inputs by their bytes", () => {
+  const buf = (h) => B(h).slice().buffer;
+  const args = (x, authData, clientDataJSON) => ({
+    keyData: B(x.keyData),
+    expectedChallenge: B(x.expectedChallenge),
+    authData,
+    clientDataJSON,
+    r: B(x.r),
+    s: B(x.s),
+  });
+  const at = S.webauthn.accepted.at(-1);
+  assert.equal(
+    hex(U.webauthnAssertion(args(at, buf(at.authData), buf(at.clientDataJSON)))),
+    at.assertion,
+    "control: at the cap",
+  );
+  const above = S.webauthn.refusals.find((x) => x.case === "above-the-cap");
+  const code = (c) => (e) => e.code === c;
+  assert.throws(
+    () => U.webauthnAssertion(args(above, buf(above.authData), buf(above.clientDataJSON))),
+    code("WebAuthnTooLong"),
+  );
+  const big = new Uint8Array(2000).fill(1).buffer;
+  assert.throws(() => U.webauthnAssertion(args(at, big, B(at.clientDataJSON))), code("WebAuthnTooLong"));
+  assert.throws(() => U.webauthnAssertion(args(at, B(at.authData), big)), code("WebAuthnTooLong"));
+  for (const x of [undefined, at.authData, [1, 2]])
+    assert.throws(() => U.webauthnAssertion(args(at, x, B(at.clientDataJSON))), code("WebAuthnAssertion"), String(x));
+});
+
 test("WebAuthn clientDataJSON that is not UTF-8 is refused by the builder, accepted by the chains' byte rule (ua-rs parity)", () => {
   const x = S.webauthn.refusals.find((r) => r.case === "client-data-not-utf8");
   const cd = B(x.clientDataJSON);

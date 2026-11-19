@@ -1831,6 +1831,53 @@ async fn retry_on_a_lane_waits_for_expired() {
     assert_eq!(signs(&t), 2);
 }
 
+/// PR A review, finding 4: `mtxOperatorTransfer` debits the message's `account`, a third party; a native signer moving a
+/// derived holder's tokens adds the row's `ua_extra` (with the margin), a native holder nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn operator_transfer_quote_counts_a_derived_holder() {
+    let t = setup(0, |p, _| {
+        for b in p
+            .gas
+            .base
+            .iter_mut()
+            .filter(|b| b.entry == "mtxOperatorTransfer")
+        {
+            b.ua_extra = Some(15_000);
+        }
+    })
+    .await;
+    t.chain.lock().unwrap().nonces.insert(OTHER.into(), 3);
+    let native = format!("0x{}{}", "00".repeat(12), &evm_address()[2..]);
+    let mut gas = vec![];
+    for account in [native.clone(), ua()] {
+        let mut d = cancel(&t, "gov_router", OTHER, "5", "0");
+        d.name = "UAOperatorTransfer";
+        d.signer = payer(&t);
+        let m = d.message.as_object_mut().unwrap();
+        m.remove("lane");
+        m.insert("from".into(), json!(native));
+        m.insert("target".into(), json!(TOKEN));
+        m.insert("account".into(), json!(account));
+        m.insert("to".into(), json!(native));
+        m.insert("amount".into(), json!("5"));
+        m.insert("ref".into(), json!(UID));
+        m.insert("chainUid".into(), json!(UID));
+        let p = prepare(&t, d).await;
+        let q = t
+            .sdk
+            .op()
+            .quote(p, SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        gas.push(q.gas_limit);
+    }
+    assert_eq!(
+        gas[1] - gas[0],
+        gas::with_margin(15_000),
+        "a derived holder, a native one"
+    );
+}
+
 /// Owner 2026-11-19, G3: after signing and before anything is written, a self-relay's gas is recomputed from the signed
 /// calldata: the signature's bytes beyond what the quote counted (the verify row's `sig_bytes`) at 64 gas a byte with the
 /// margin, never below the quote's figure; the transaction is signed with it. Above `Limits::max_gas`: `SignedGasAboveCap`,
@@ -1892,6 +1939,117 @@ async fn signed_gas_is_recomputed_from_the_signature() {
             got.unwrap();
             sent_txs(&t, 1).await;
         }
+    }
+}
+
+/// PR A review, finding 3: `submit`'s re-quote after signing (G3) holds the raised gas to the chain's block gas limit, as the
+/// quote does: one gas above it `GasAboveTxCap`, nothing written or sent, the operation put back; at it, sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn signed_gas_is_held_to_the_block_limit() {
+    // the tests' UA (0x0101) signs 128 bytes beyond the empty `UASig`, the rows count none: the signed gas is the quote's
+    // plus `with_margin(64 × 128)`
+    let more = gas::with_margin(64 * 128);
+    for over in [true, false] {
+        let t = setup(0, |_, _| {}).await;
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let q = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        t.chain.lock().unwrap().block_gas_limit = q.gas_limit + more - u64::from(over);
+        let got = t.sdk.op().submit(p.clone(), q.clone()).await;
+        if over {
+            assert_eq!(code(got), "GasAboveTxCap");
+            assert!(
+                state::rows(&t.sdk).await.unwrap().is_empty(),
+                "nothing written"
+            );
+            assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
+            Op::known(&t.sdk, &p).expect("put back");
+        } else {
+            let op = got.unwrap();
+            let row = state::row(&t.sdk, &op).await.unwrap();
+            assert_eq!(
+                row.gas_limit,
+                Some(q.gas_limit + more),
+                "control: at the limit"
+            );
+            sent_txs(&t, 1).await;
+        }
+    }
+}
+
+/// PR A review, finding 2: `resend` of a gateway row as a self-relay recomputes the row's own figure (its entry, kind, signer
+/// kind and lane state, from its stored message and arguments) and takes the larger of it and the payer's quote: a cancel's
+/// quote passed for a Zether `mtxConfidentialTransfer` row does not lower it (the transfer's figure is taken); a payer's
+/// quote above the row's figure is kept. Both raised by the signer's uncounted signature bytes (G3).
+#[tokio::test(flavor = "multi_thread")]
+async fn resend_as_self_relay_takes_the_rows_own_figure() {
+    let more = gas::with_margin(64 * 128);
+    let g1 = json!({"x0": UID, "x1": UID, "y0": UID, "y1": UID});
+    for higher in [false, true] {
+        let t = setup(1, |p, _| {
+            // the lane state is part of the key: the fresh lane's row (the transfer's) above the used lane's
+            for b in p.gas.base.iter_mut() {
+                if b.entry == "mtxConfidentialTransfer" {
+                    b.gas = if b.fresh { 3_000_000 } else { 2_000_000 };
+                }
+            }
+        })
+        .await;
+        let until = t.chain.lock().unwrap().timestamp + 3600;
+        let d = Draft {
+            name: "UAZetherTransfer",
+            kind: "zether",
+            message: json!({"from": ua(), "args": {"accSeq": "1", "sendCounter": "1", "validUntilBlock": "99",
+                "salt": "0x0102030405060708090a0b0c0d0e0f10", "beneficiaryUA": ua(), "decoyFee": "0", "yFrom": g1,
+                "dOut": g1, "cDeb": g1, "legs": [{"yTo": g1, "cOut": g1, "cAud": g1, "dAud": g1}], "sealedMemo": "0x"},
+                "proof": "0x01", "batch": "7", "validUntil": until.to_string(), "mode": 0, "relayer": ZERO, "fee": "0",
+                "feeRecipient": ZERO}),
+            ..cancel(&t, "token", TOKEN, "5", "0")
+        };
+        let p = prepare(&t, d).await;
+        assert_eq!(p.entry(), "mtxConfidentialTransfer");
+        // the transfer's own self-relay figure, before it is submitted on the gateway path
+        let own = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        let op = t
+            .sdk
+            .op()
+            .submit(p.clone(), gateway_quote(&t, &p).await)
+            .await
+            .unwrap();
+        let row = state::row(&t.sdk, &op).await.unwrap();
+        assert_eq!((row.path.as_str(), row.nonce.as_str()), ("gateway", "0"), "a fresh lane");
+        // the payer's quote of a cancel: another entry, far below the transfer's
+        let c = prepare(&t, cancel(&t, "token", TOKEN, "6", "0")).await;
+        let mut q = t
+            .sdk
+            .op()
+            .quote(c, SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        assert!(q.gas_limit < own.gas_limit / 10);
+        if higher {
+            q.gas_limit = own.gas_limit + 1_000;
+            q.gas = Some(q.gas_limit);
+        }
+        t.sdk.op().resend(op.clone(), q.clone()).await.unwrap();
+        let row = state::row(&t.sdk, &op).await.unwrap();
+        assert_eq!(row.path, "self");
+        let want = if higher { q.gas_limit } else { own.gas_limit };
+        assert_eq!(
+            row.gas_limit,
+            Some(want + more),
+            "higher {higher}: the larger, never lowered"
+        );
+        sent_txs(&t, 1).await;
     }
 }
 

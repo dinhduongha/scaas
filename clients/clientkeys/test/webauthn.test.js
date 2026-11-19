@@ -144,3 +144,37 @@ test("Q4: account and metaop passkey assertions capped at 1,024 bytes", async ()
   assert.equal(ok.clientDataJSON.length, at.length, "control");
   await assert.rejects(passkeyAssertion(digest, cred(above), derToRS), tooLong);
 });
+
+// PR A review, finding 5: an authenticator returns `ArrayBuffer`s, which have no `.length`; the cap reads their bytes (it
+// summed `NaN` and passed): a 2,000-byte `ArrayBuffer` refused `WebAuthnTooLong`, one at the cap accepted, read as bytes;
+// anything that is not bytes refused `WebAuthnAssertion`. On both paths (`encodeAssertion`, `passkeyAssertion`).
+test("finding 5: ArrayBuffer assertions are capped by their bytes", async () => {
+  const digest = new Uint8Array(32).fill(0xab);
+  const ad = concatBytes(sha256(utf8ToBytes(RP)), new Uint8Array([5, 0, 0, 0, 0]));
+  const prefix = `{"type":"webauthn.get","challenge":"${"q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s"}","origin":"https://`;
+  const cdj = (n) => utf8ToBytes(prefix + "a".repeat(n - ad.length - prefix.length - 2) + '"}');
+  const signature = p1363ToDer(fromHex("00".repeat(31) + "05" + "00".repeat(31) + "07"));
+  const buf = (b) => b.slice().buffer;
+  const at = cdj(1024);
+  const big = new Uint8Array(2000).fill(1);
+  const code = (c) => (e) => e.code === c;
+  const enc = (authenticatorData, clientDataJSON) => encodeAssertion({ authenticatorData, clientDataJSON, signature });
+  const cred = (authenticatorData, clientDataJSON) => ({
+    get: async () => ({ authenticatorData, clientDataJSON, signature }),
+  });
+  // control: at the cap, ArrayBuffers encode as their bytes do
+  assert.equal(bytesToHex(enc(buf(ad), buf(at))), bytesToHex(enc(ad, at)));
+  const ok = await passkeyAssertion(digest, cred(buf(ad), buf(at)), derToRS);
+  assert.ok(ok.authenticatorData instanceof Uint8Array && bytesToHex(ok.authenticatorData) === bytesToHex(ad));
+  // 2,000 bytes of ArrayBuffer, as authenticatorData or clientDataJSON
+  assert.throws(() => enc(buf(big), at), code("WebAuthnTooLong"));
+  assert.throws(() => enc(ad, buf(big)), code("WebAuthnTooLong"));
+  await assert.rejects(passkeyAssertion(digest, cred(buf(big), at), derToRS), code("WebAuthnTooLong"));
+  await assert.rejects(passkeyAssertion(digest, cred(ad, buf(big)), derToRS), code("WebAuthnTooLong"));
+  // a DataView over the bytes reads its own window
+  assert.throws(() => enc(new DataView(buf(big), 1), at), code("WebAuthnTooLong"));
+  // not bytes: refused by name
+  for (const x of [undefined, "0x00", [1, 2], { length: 1 }])
+    assert.throws(() => enc(x, at), code("WebAuthnAssertion"), String(x));
+  await assert.rejects(passkeyAssertion(digest, cred([1, 2], at), derToRS), code("WebAuthnAssertion"));
+});

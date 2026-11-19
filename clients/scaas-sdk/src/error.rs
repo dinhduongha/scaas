@@ -105,6 +105,9 @@ own_codes! {
     /// An operation whose gas row grows with a count (`per_item`) that the SDK cannot read from the operation, or above
     /// 65,536 (owner 2026-11-19, I1): refused, never quoted without it.
     GasCountUnknown,
+    /// A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
+    /// unknown part is refused, never dropped from a quote.
+    GasFieldUnknown,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).
