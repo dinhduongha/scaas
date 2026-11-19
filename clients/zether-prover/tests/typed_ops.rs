@@ -144,11 +144,17 @@ fn every_zether_row_digest_equals_the_vector() {
             continue;
         };
         zether += 1;
-        let r = merge(req(row), json!({"op": op, "message": row["message"]}));
+        // the Zether domain's own message and struct hash (`AuditorConsent` names its token), else the op's
+        let msg = dom.get("message").unwrap_or(&row["message"]);
+        let r = merge(req(row), json!({"op": op, "message": msg}));
         let out: Value =
             serde_json::from_str(&call("typedDigest", &r.to_string()).unwrap()).unwrap();
         assert_eq!(out["typehash"], row["typehash"], "{op} typehash");
-        assert_eq!(out["structHash"], row["structHash"], "{op} structHash");
+        assert_eq!(
+            &out["structHash"],
+            dom.get("structHash").unwrap_or(&row["structHash"]),
+            "{op} structHash"
+        );
         assert_eq!(
             out["domainSeparator"], dom["domainSeparator"],
             "{op} domainSeparator"

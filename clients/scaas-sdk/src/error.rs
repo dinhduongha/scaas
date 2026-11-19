@@ -125,6 +125,9 @@ own_codes! {
     /// An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
     /// wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
     DexNotListed,
+    /// A PQZ auditor consent whose auditor is a native (address) key (controller call, owner auto-run 2026-11-19): a native id
+    /// holds no PQZ key (CTR-UA-32), so the token refuses it on chain anyway; refused before anything is read or signed.
+    PqzAuditorNative,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

@@ -1735,7 +1735,8 @@ fn native_auditor_consent_signs_the_registry_form() {
         let chain_id: u64 = dom["chainId"].as_str().unwrap().parse().unwrap();
         let salt = b32(&dom["salt"]);
         let build = |auditor: &Value, epoch: u64| {
-            let mut m = row["message"].clone();
+            // the domain's own message: it names this token
+            let mut m = d["message"].clone();
             m["auditor"] = auditor.clone();
             m["epoch"] = epoch.into();
             let td = scaas_typed_data(
