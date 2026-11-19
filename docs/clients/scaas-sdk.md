@@ -211,6 +211,13 @@ registry record, P2). The Zether UA's verify gas of a multi-recipient proof is t
 request's `ua_signer_gas` (P1). The
 watch loop reads a watched Zether UA's words on its fixed schedule, nothing decrypted. The anvil e2e (shield → roll-over →
 transfer → balances, the token made through the factory, the Zether UAs registered first) is BUILT (gate `sdk-e2e`).
+The PQZ reading layer, the balance, the verdicts and the PQZ rows without a proof are BUILT (plan T16 parts 1 and 2;
+`clients/scaas-sdk/src/confidential/{pqz.rs,verdict.rs}`, `tests/confidential_pqz.rs`; UNAUDITED): the factory record, the clone's
+code and `psid` first, a token of another set `PqzSetMismatch` with no account word read; then the account's slots, `sendCounter`,
+`pqzKey` / `pqzVersions`, `accWords` or `accBlob`, the window and the blobs, `proofStore` a storage word (owner 2026-11-19, T16-b);
+the registry's proven key the handle's. A verdict comes from `ChainProfile.verifiers` under its own policy (T16-a), its signer checked
+against the verifier UA's registry record read at the same final block (T16-c). The six PQZ debits with `PqzAuth`, `PqzRollOver`
+and the PQZ e2e are SPECIFIED.
 
 ## 7. App cores above the SDK
 
