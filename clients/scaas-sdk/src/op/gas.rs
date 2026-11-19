@@ -148,9 +148,9 @@ fn verify_part(
 /// without both, the app's figure (one total); `None`: no figure. The base row adds (owner 2026-11-19) its per-byte part
 /// times the input's length (ruling B; an input the operation lacks: the row does not answer), its `save` when the operation
 /// saves its record (ruling 1; a row without one does not answer: fail closed), its `fee_extra` when the fee is > 0 (ruling
-/// 3; a row without one adds nothing: the entry's fee is its own payment), its `ua_extra` when the signer is a derived UA
-/// (A1; a row without one adds nothing); the verify part adds 64 gas a byte of its `sig_bytes` (ruling 2); a second
-/// signature, the one attached (ruling 4 as A2 reads it), adds its kind's verify gas without its bytes (A3), or when its kind
+/// 3; a row without one adds nothing: the entry's fee is its own payment), its `ua_extra` once when either party the entry
+/// debits is a derived UA, the signer or an attached signature's owner (A1, G1; a row without one adds nothing); the verify
+/// part adds 64 gas a byte of its `sig_bytes` (ruling 2); a second signature, the one attached (ruling 4 as A2 reads it), adds its kind's verify gas without its bytes (A3), or when its kind
 /// is unknown the most expensive of [`ACCEPTED_SIGNERS`] (a kind without a row: no answer). `mtxExecute` (ruling 5): the
 /// app's figure is its inner call's, added to the rows, never a total; without it, or without the rows, no figure.
 pub(crate) fn lookup_by(
@@ -174,7 +174,9 @@ pub(crate) fn lookup_by(
         if op.fee {
             g = g.saturating_add(b.fee_extra.unwrap_or(0));
         }
-        if signer != NATIVE_EVM {
+        // G1: either party the entry debits a derived UA, the signer or the attached signature's owner (an attached
+        // signature of unknown kind counts as derived: fail closed); added once
+        if signer != NATIVE_EVM || op.attached.is_some_and(|k| k != Some(NATIVE_EVM)) {
             g = g.saturating_add(b.ua_extra.unwrap_or(0));
         }
         Some(g)
@@ -854,17 +856,20 @@ mod tests {
         }
     }
 
-    /// Owner 2026-11-19, A1: a derived-UA signer adds the row's `ua_extra`, the native key nothing; a row without one adds
-    /// nothing. Each beside its control.
+    /// Owner 2026-11-19, A1 and G1: a derived-UA signer, or an attached signature's derived owner, adds the row's `ua_extra`
+    /// once, the native key nothing; a row without one adds nothing. Each beside its control.
     #[test]
     fn gas_ua_extra_for_a_derived_signer() {
         let mut r = rows(1_000, 10);
-        r.verify.push(GasVerify {
-            signer: NATIVE_EVM,
-            gas: 0,
-            sig_bytes: 0,
-            margin: 0,
-        });
+        r.verify = ACCEPTED_SIGNERS
+            .iter()
+            .map(|s| GasVerify {
+                signer: *s,
+                gas: if *s == 0x0101 { 10 } else { 0 },
+                sig_bytes: 0,
+                margin: 0,
+            })
+            .collect();
         let by = |r: &GasRows, signer: u16| {
             lookup(r, &[], &[], None, ("mtxPay", "token", signer, false)).map(|f| f.0)
         };
@@ -872,6 +877,35 @@ mod tests {
         r.base[0].ua_extra = Some(14_000);
         assert_eq!(by(&r, 0x0101), Some(1_010 + 14_000), "a derived signer");
         assert_eq!(by(&r, NATIVE_EVM), Some(1_000), "the native key");
+        // G1: the attached signature's owner is debited too (`mtxPayWithPayeeFee`'s payer under the signing payee): a derived
+        // payer (or one of unknown kind) under a native payee adds it; native both: not; derived both: once
+        let with = |signer: u16, attached| {
+            let op = OpGas {
+                attached: Some(attached),
+                ..OpGas::PLAIN
+            };
+            lookup_by(&r, &[], &[], None, ("mtxPay", "token", signer, false), &op).map(|f| f.0)
+        };
+        assert_eq!(
+            with(NATIVE_EVM, Some(0x0101)),
+            Some(1_000 + 10 + 14_000),
+            "a derived payer, a native payee"
+        );
+        assert_eq!(
+            with(NATIVE_EVM, None),
+            Some(1_000 + 10 + 14_000),
+            "a payer of unknown kind (the dearest verify: 0x0101's 10 here)"
+        );
+        assert_eq!(
+            with(NATIVE_EVM, Some(NATIVE_EVM)),
+            Some(1_000),
+            "native both"
+        );
+        assert_eq!(
+            with(0x0101, Some(0x0101)),
+            Some(1_010 + 14_000 + 10),
+            "derived both: once"
+        );
     }
 
     /// Owner 2026-11-19, ruling 4 (A2: the attached signature): a second signature adds its kind's verify gas, not its

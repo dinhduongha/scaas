@@ -1,0 +1,6 @@
+# gasG mutants at commit 1a11fda49 (name | outcome | test)
+G1: the attached owner ignored (signer only, as before) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
+G1: an attached signature of unknown kind read as native | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
+G1: a native attached owner counted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
+G1: added twice when both are derived | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
+4 mutants, 4 killed, 0 survived, 0 not loaded
