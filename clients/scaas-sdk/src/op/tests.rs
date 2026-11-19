@@ -1971,3 +1971,26 @@ async fn key_rows_register() {
         assert_eq!(refused, if se { "ExternalSignature" } else { "AuthenticatorRefused" });
     }
 }
+
+/// Owner 2026-11-19, T3: a policy refusal never asks the device. A passkey row and a secure-element row each sign one
+/// operation's typed data under another operation's check (another lane: `PolicyRefused`) with no request to the
+/// `Authenticator`; the control, the same typed data under its own check, asks it once.
+#[tokio::test(flavor = "multi_thread")]
+async fn policy_refusal_asks_no_device() {
+    for se in [false, true] {
+        let dev = Arc::new(Device::default());
+        let (t, p, _) = device_op(&dev, se).await;
+        let mut d = cancel(&t, "token", TOKEN, "6", "0");
+        d.signer = p.signer();
+        d.message["from"] = p.t.message["from"].clone();
+        let other = prepare(&t, d).await;
+        let Key::External(row, _) = key_opened(&t.sdk, &p.signer()).await.unwrap() else {
+            panic!("a key row")
+        };
+        let refused = external::sign(&t.sdk, &row, &p.t.td, &other.t.expect).await;
+        assert_eq!(code(refused), "PolicyRefused", "se: {se}");
+        assert_eq!(dev.asked.load(SeqCst), 0, "no device asked (se: {se})");
+        assert!(external::sign(&t.sdk, &row, &p.t.td, &p.t.expect).await.is_ok(), "the control (se: {se})");
+        assert_eq!(dev.asked.load(SeqCst), 1);
+    }
+}
