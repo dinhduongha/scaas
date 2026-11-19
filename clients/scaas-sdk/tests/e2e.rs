@@ -298,35 +298,6 @@ async fn e2e_pay_on_anvil() {
     assert!(matches!(last, OpState::Landed { .. }), "{last:?}");
 }
 
-/// The Zether UA `0x0141` of the seed's account `account` registered on `registry` with the facade's portable PoP (relayed by
-/// the deployer: the SDK has no registration entry for it yet); the UA.
-#[cfg(feature = "zether")]
-fn register_zether(rpc: &str, registry: &str, account: u32) -> String {
-    // the wallet kept open while its key is used (dropping it revokes the handle)
-    let w = Wallet::from_mnemonic(REPO, "").unwrap();
-    let k = w
-        .zether_key(60, account, scaas_ua::facade::zether::USE_CONF)
-        .unwrap();
-    let p: serde_json::Value =
-        serde_json::from_str(&k.call("pop", br#"{"curve":"bls12381"}"#).unwrap()).unwrap();
-    let z = format!("0x{}", "00".repeat(32));
-    cast(&[
-        "send",
-        "--rpc-url",
-        rpc,
-        "--private-key",
-        DEPLOYER,
-        registry,
-        "register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)",
-        "321",
-        p["Y"].as_str().unwrap(),
-        &format!("(0x,{z},(0,0x,{z}),{z})"),
-        p["pop"].as_str().unwrap(),
-        "0x",
-    ]);
-    p["UA"].as_str().unwrap().to_ascii_lowercase()
-}
-
 /// The seed's UA `kind` of wallet `account` (index 0) registered through the SDK (plan T13): each registry write quoted,
 /// self-relayed by the seed's EVM key and followed to `Landed` by its record; the UA.
 #[cfg(feature = "account")]
@@ -391,10 +362,10 @@ fn zether_token(rpc: &str, factory: &str, holder: &str) -> String {
 }
 
 /// Plan T15's e2e (spec §9.1, §9.4): on `anvil` with the Zether stack (`DEPLOY_ZETHER=1`), the seed's Zether UAs of accounts
-/// 0 and 1 registered first, a `NORMAL_ZETHER` token created through the factory; the seed's EVM key shields 1234 to account
+/// 0 and 1 registered first through the SDK (plan T13; owner-approved T16-d), a `NORMAL_ZETHER` token created through the factory; the seed's EVM key shields 1234 to account
 /// 0's Zether UA and rolls it over, the Zether UA transfers 100 to account 1's (the proof over the reading layer's words,
 /// self-relayed by the EVM key), and the balances read back through the reading layer: 1134 spendable, 100 pending.
-#[cfg(feature = "zether")]
+#[cfg(all(feature = "zether", feature = "account"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_zether_shield_transfer_balance_on_anvil() {
@@ -407,7 +378,6 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
     let dep = deploy(rpc, &name, &[("DEPLOY_ZETHER", "true")]);
     let factory = dep["token_factory"].as_str().unwrap().to_ascii_lowercase();
     let registry = dep["zether_registry"].as_str().unwrap().to_ascii_lowercase();
-    let (ua0, ua1) = (register_zether(rpc, &registry, 0), register_zether(rpc, &registry, 1));
     let token = zether_token(rpc, &factory, &holder);
     let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]);
     let (sdk, seed) = sdk_on(ChainProfile {
@@ -429,6 +399,9 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
         gas_opt_in: vec![],
     })
     .await;
+    let zether = 0x0141; // zether-bls12381
+    let ua0 = register_with_sdk(&sdk, &seed, zether, 0, false).await;
+    let ua1 = register_with_sdk(&sdk, &seed, zether, 1, false).await;
     let conf = sdk.confidential();
     assert_eq!(conf.zether_key(seed.clone(), 0).await.unwrap().ua, ua0);
     let payer = KeyRef::Native {
