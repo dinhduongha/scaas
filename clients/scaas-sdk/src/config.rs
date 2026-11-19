@@ -162,7 +162,8 @@ pub struct GasTable {
 }
 
 /// Bounds of a gas table's parse.
-const GAS_TABLE_MAX_BYTES: usize = 256 * 1024;
+/// W3 (owner 2026-11-19, "approved"): 1 MiB, headroom over the full reference table (about 0.2 MB) and its growth.
+const GAS_TABLE_MAX_BYTES: usize = 1024 * 1024;
 const GAS_TABLE_MAX_ROWS: usize = 1_024;
 const GAS_NAME_MAX: usize = 64;
 /// A per-byte part's inputs and bound.
@@ -186,7 +187,7 @@ fn rounded(gas: u64, measured: u64) -> bool {
 }
 
 impl GasTable {
-    /// Parses and checks a gas table file: at most 256 KiB and 1,024 rows (base and verify together); the format and version
+    /// Parses and checks a gas table file: at most 1 MiB and 1,024 rows (base and verify together); the format and version
     /// 2; `name`, `entry` and `kind` 1–64 characters of `[A-Za-z0-9_:.-]`; `signer` a `u16`; each `gas` a multiple of 1,000
     /// with `measured <= gas < measured + 1000` (owner 2026-11-19: rounded up to the next 1,000), a base row's positive (a
     /// verify row's may be 0: the reference signer's own row); `source` present; a base row's optional `per_byte` names an

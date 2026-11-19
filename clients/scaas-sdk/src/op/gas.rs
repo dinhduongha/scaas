@@ -648,10 +648,11 @@ mod tests {
             GasTable::parse(&file(&many, &verify(25))).is_err(),
             "more than 1,024 rows, base and verify together"
         );
-        assert!(
-            GasTable::parse(&" ".repeat(256 * 1024 + 1)).is_err(),
-            "above 256 KiB"
-        );
+        // W3: a sound table padded to exactly 1 MiB parses; one byte more is refused
+        let one = file(&b(98_000, 97_947), "");
+        let at = format!("{one}{}", " ".repeat(1024 * 1024 - one.len()));
+        assert!(GasTable::parse(&at).is_ok(), "a table of exactly 1 MiB");
+        assert!(GasTable::parse(&format!("{at} ")).is_err(), "above 1 MiB");
     }
 
     /// The SCaaS reference table parses, is named `reference`, and is EVM.
