@@ -5361,6 +5361,8 @@ Change (2026-11-17, owner, the code-format round, contracts; status: in force, A
 
 Change (2026-11-18, owner, the setAuditor round; status: in force, AGENTS.md Verify): as proposed. A round of several tasks on one branch no longer runs the full forge sweep and the per-set sweep after every task: each task runs its own suites at the default set, its mutants and every pin it moves (old → new figures); the full matrix (every forge directory, the set-sensitive tests at the four PQZ sets, node and e2e, clients, vectors) runs once at the round's end, on the final tree, before the merge. Why: setAuditor's per-task sweeps repeated the bundle gate the code-format plan already schedules. Planned tooling, not yet built: test selection by changed runtime bytecode, an explicit list of set-sensitive suites, a build output shared between snapshots, generated code-hash pins.
 
+Change (2026-11-19, owner, the code-format round, Move; status: in force, `scripts/format.sh`): "as proposed" (quoted in English). Sui's Move stays out of the formatter: Prettier with the pinned `@mysten/prettier-plugin-move` 0.5.0 changes the bytecode of all 5 Sui `scaas` modules, because Sui's clever errors (`#[error]` constants, edition 2024) encode the source line into the abort codes, so a reflow moves the deployed code. Aptos' Move stays formatted (movefmt, bytecode identical). Plan: `superpowers/plans/2026-11-17-code-format.md` F13.
+
 ### CTR-UA-40 — `fndsa1024` (0x0135): Falcon-1024 (round-3 specification v1.2) as a UA kind, pure Solidity on every EVM chain
 - old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/accounts.md#CTR-UA-40 · superseded-by: —
 
@@ -9413,13 +9415,15 @@ Change (2026-10-08): `checkPayment` rebuilds a payment `MetaTransfer`; `checkOwn
 **Cost if wrong.** a misreporting authenticator mislabels a key; counting is unaffected.
 **Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 123.
 
-### CLI-SGN-17 — Vault v2 under non-extractable device key
+### CLI-SGN-17 — Vault v3 under non-extractable device key
 - old: R255 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-17 · superseded-by: —
 
-**Rule.** Vault v2 is an outer AES-256-GCM layer under a per-origin non-extractable device key, wrapped around the unchanged v1 vault.
-**Why.** All of the v1 vault is reused, and a blob leaked on its own (storage dump, log, support export, file sync) becomes useless without the profile's IndexedDB.
+**Rule.** Vault v3 is an outer AES-256-GCM layer under a per-origin non-extractable device key, wrapped around the unchanged v2 vault (CLI-SGN-02).
+**Why.** All of the v2 vault is reused, and a blob leaked on its own (storage dump, log, support export, file sync) becomes useless without the profile's IndexedDB.
 **Cost if wrong.** Once the device key is gone (site data cleared, Safari's 7-day eviction) the blob never opens again, and only the phrase recovers the keys (CLI-SGN-20).
 **Source.** [history/specs/2026-10-06-signers-followups.md](history/specs/2026-10-06-signers-followups.md) line 135.
+
+Change (owner 2026-11-19, "as proposed" (quoted in English), the open question of scaas-sdk T13b ruling 3; owner: yes; status: SPECIFIED, not built): the device-bound outer layer is **vault v3** (`"v": 3`), no longer "v2": the seed and label vault of [CLI-SGN-02](clients/signers-clientkeys.md#CLI-SGN-02) became `v: 2` in T13b (BUILT), so the layer wraps that v2 vault, a fallback writes a v2 vault, and its fixture is `test/vectors/vault_v3_fixture.json` (not yet built; the earlier specs call it `test/vectors/vault_v2_fixture.json`, short `vault_v2_fixture.json`). The id, the anchor, the device key (`device-key:v1`, `kid` `device-v1`), the outer AAD and the tombstone `{v: 2, moved}` are unchanged.
 
 ### CLI-SGN-18 — Device binding relaxes nothing
 - old: R256 · status: current · owner: no · date: 2026-10-06 · normative: clients/signers-clientkeys.md#CLI-SGN-18 · superseded-by: —
