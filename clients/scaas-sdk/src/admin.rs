@@ -15,6 +15,8 @@ use scaas_ua::wallet::entries::{entry, entry_rows};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 
+pub mod delay;
+
 /// The admin module.
 pub struct Admin {
     sdk: Arc<Sdk>,

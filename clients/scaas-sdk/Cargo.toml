@@ -138,3 +138,7 @@ required-features = ["dex"]
 [[test]]
 name = "completeness"
 required-features = ["wallet"]
+
+[[test]]
+name = "governance_delay"
+required-features = ["admin"]
