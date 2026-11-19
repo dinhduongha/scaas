@@ -110,13 +110,13 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
             address v = k[i] == ML44 || k[i] == ML65 || k[i] == 0x0134
                 ? address(new CacheVerifier(address(0x14)))
                 : address(new MockVerifier(0, 0));
-            c[i] = UARegistry.KindConfig(k[i], v, k[i] >= 0x0110 ? PQ : _cap(k[i]));
+            c[i] = UARegistry.KindConfig(k[i], v, k[i] >= 0x0110 ? PQ : _cap(k[i]), false, 0);
         }
     }
 
     function _one(uint16 kind, address v, uint64 cap) internal pure returns (UARegistry.KindConfig[] memory c) {
         c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(kind, v, cap);
+        c[0] = UARegistry.KindConfig(kind, v, cap, false, 0);
     }
 
     function _plain(uint16 kind, bytes memory d) internal pure returns (bytes memory) {

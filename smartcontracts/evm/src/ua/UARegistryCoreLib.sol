@@ -100,7 +100,7 @@ library UARegistryCoreLib {
 
     /// A kind this generation lists itself (`UARegistry._listedHere`): `_cfgKind()` is the kind's word the entry appended.
     function _listedHere() internal view returns (bool) {
-        return _pred() == address(0) || uint160(_cfgKind()) != 0;
+        return _pred() == address(0) || UAStore._registrable(_cfgKind());
     }
 
     /// The **current** structure of the `msig` `id` (CTR-UA-44, the key bytes only, never its `pop`): its blob or registration bytes
@@ -304,7 +304,7 @@ library UARegistryCoreLib {
         if (UAKinds.hasSurplusForm(kind)) return _multi(cfg, kind, ua, purpose, digest, d, sig);
         // A6-I1: a gen-1 holder's PQZ key record on gen 2 (the PQ holder kinds are stored: no key data in `auth`); the
         // PQ verifiers' `verify` is their `verifyPop`
-        if (uint160(cfg) == 0) {
+        if (!UAStore._registrable(cfg)) {
             return UAStore.via(_pred(), ua, purpose, digest, IUARegistry.UASig("", sig, new IUARegistry.MemberSig[](0)));
         }
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
@@ -316,7 +316,7 @@ library UARegistryCoreLib {
         if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) {
             return UAStore.capped(address(uint160(cfg)), IUARegistry(address(this)).verifyBudget(), data, 1, false);
         }
-        return UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
+        return UAStore.capped(address(uint160(cfg)), UAStore._capOf(cfg), data, 1, true);
     }
 
     /// A surplus-form kind (`0x0121`, spec 2026-11-19-bls12381-multi §5.3 dispatch, N1) on the library's paths, every one a stored path:
@@ -333,7 +333,7 @@ library UARegistryCoreLib {
         bytes memory d,
         bytes memory sig
     ) private view returns (bool) {
-        if (uint160(cfg) == 0) return false;
+        if (!UAStore._registrable(cfg)) return false;
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         if (purpose == UAKinds.PURPOSE_POP_V2) {
             bytes memory pop = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, sig);
@@ -343,7 +343,7 @@ library UARegistryCoreLib {
         if (r.kind != kind) return false;
         bytes memory data =
             abi.encodeWithSelector(IUAMinimalVerifier.verifyMinimal.selector, SSTORE2.read(r.keyPtr), message, sig);
-        return UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
+        return UAStore.capped(address(uint160(cfg)), UAStore._capOf(cfg), data, 1, true);
     }
 
     /// The portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3; PQCHAT, UA-7 O1; PQZ_SCOPED_KEY, the three-key model
@@ -441,6 +441,16 @@ library UARegistryCoreLib {
         return UAStore.byCode(
             address(uint160(uint256(id))), typed, s.sig, here ? _cloneHash() : IUARegistry(_pred()).smartKeyCloneHash()
         );
+    }
+
+    // ----- the line (spec 2026-11-19-registry-verify-only-kinds §11.1, owner Y1): run by `_libView` -----
+
+    /// `IUARegistry.kindHome`: this generation where `kind` is registrable here (`_cfgKind()`, its word), else the predecessor's
+    /// answer, 0 at generation 1; for `0x0142` (enabled in several generations, §11.2) the newest on the walk.
+    function kindHome(uint16 kind) external returns (address) {
+        if (UAStore._registrable(_cfgKind())) return address(this);
+        address p = _pred();
+        return p == address(0) ? address(0) : IUARegistry(p).kindHome(kind);
     }
 
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----

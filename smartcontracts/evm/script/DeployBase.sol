@@ -1192,67 +1192,84 @@ abstract contract DeployBase is DeployBook {
         uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](22);
         uint256 n;
-        k[n++] = UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier{salt: salt}()), 400_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.ED25519, address(new Ed25519Verifier{salt: salt}()), 210_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.BIP340, address(new Bip340Verifier{salt: salt}()), 50_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.SECP256K1, address(new Secp256k1Verifier{salt: salt}()), 50_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier{salt: salt}()), 50_000);
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000, false, 0
+        );
+        k[n++] = UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier{salt: salt}()), 400_000, false, 0);
+        k[n++] = UARegistry.KindConfig(UAKinds.ED25519, address(new Ed25519Verifier{salt: salt}()), 210_000, false, 0);
+        k[n++] = UARegistry.KindConfig(UAKinds.BIP340, address(new Bip340Verifier{salt: salt}()), 50_000, false, 0);
+        k[n++] =
+            UARegistry.KindConfig(UAKinds.SECP256K1, address(new Secp256k1Verifier{salt: salt}()), 50_000, false, 0);
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier{salt: salt}()), 50_000, false, 0
+        );
         if (bls) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.SCHNORR_BLS12381, address(new SchnorrBls12381Verifier{salt: salt}()), 70_000
+                UAKinds.SCHNORR_BLS12381, address(new SchnorrBls12381Verifier{salt: salt}()), 70_000, false, 0
             );
             k[n++] = UARegistry.KindConfig(
-                UAKinds.BLS12381_MINSIG, address(new BlsMinSigBls12381Verifier{salt: salt}()), 200_000
+                UAKinds.BLS12381_MINSIG, address(new BlsMinSigBls12381Verifier{salt: salt}()), 200_000, false, 0
             );
         }
         if (bnG2) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier{salt: salt}()), 345_000
+                UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier{salt: salt}()), 345_000, false, 0
             );
         }
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier{salt: salt}()), 50_000, false, 0
+        );
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.FROST_SECP256K1, address(new FrostSecp256k1Verifier{salt: salt}()), 50_000, false, 0
+        );
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000, false, 0
+        );
         k[n++] =
-            UARegistry.KindConfig(UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier{salt: salt}()), 50_000);
-        k[n++] =
-            UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new FrostSecp256k1Verifier{salt: salt}()), 50_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000);
+            UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000, false, 0);
         if (bls && !isHedera) {
             // ARCH-POS-18: the probe chooses the path; the EIP-2537 one, the only one built (spec 2026-11-19-bls12381-multi §7)
             k[n++] = UARegistry.KindConfig(
-                UAKinds.BLS12381_MULTI, address(new BlsMultiBls12381Verifier{salt: salt}()), CAP_BLS12381_MULTI
+                UAKinds.BLS12381_MULTI,
+                address(new BlsMultiBls12381Verifier{salt: salt}()),
+                CAP_BLS12381_MULTI,
+                false,
+                0
             );
         }
         vm.serializeString("deploy", "ua_kind_0x0121", _blsMultiPath(bls, isHedera));
         if (bls && !isHedera) {
             // never on Hedera: no Zether token can exist there (`ZetherLayer`)
             k[n++] = UARegistry.KindConfig(
-                UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
+                UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000, false, 0
             );
         }
         // the PQ signing kinds (CTR-UA-23): wherever the kind's cap is at most 75 % of the chain's verify budget; ML-DSA on
         // the chain's precompile or on the registry's cache (`MLDSA_PRECOMPILE`)
         for (uint256 i; i < 2; ++i) {
             (address v, uint64 cap) = _mldsaVerifier(i, ml[i], budget);
-            if (v != address(0)) k[n++] = UARegistry.KindConfig([UAKinds.MLDSA44, UAKinds.MLDSA65][i], v, cap);
+            if (v != address(0)) {
+                k[n++] = UARegistry.KindConfig([UAKinds.MLDSA44, UAKinds.MLDSA65][i], v, cap, false, 0);
+            }
         }
         if (_pqKindFits(CAP_FNDSA512, budget)) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.FNDSA512, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA512)), CAP_FNDSA512
+                UAKinds.FNDSA512, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA512)), CAP_FNDSA512, false, 0
             );
         }
         if (_pqKindFits(CAP_SLHDSA128S, budget)) {
-            k[n++] =
-                UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.SLHDSA128S, address(new SlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S, false, 0
+            );
         }
         if (_pqKindFits(CAP_FNDSA1024, budget)) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.FNDSA1024, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA1024)), CAP_FNDSA1024
+                UAKinds.FNDSA1024, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA1024)), CAP_FNDSA1024, false, 0
             );
         }
         { // `mldsa87` after the FN-DSA kinds, as before (the kind table's order moves the registry's address)
             (address v, uint64 cap) = _mldsaVerifier(2, ml[2], budget);
-            if (v != address(0)) k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, v, cap);
+            if (v != address(0)) k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, v, cap, false, 0);
         }
         if (pqzKeyVerifier != address(0) && _pqKindFits(CAP_PQZ_MLWE, budget)) {
             require(
@@ -1260,7 +1277,7 @@ abstract contract DeployBase is DeployBook {
                     && PqzKeyVerifier(pqzKeyVerifier).PROOF_SYSTEM_ID() == PqzSafety.PQZL_ID,
                 "PQZ_KEY_VERIFIER: not a PqzKeyVerifier on the PQZ precompile and the set's PQZL id"
             );
-            k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, pqzKeyVerifier, CAP_PQZ_MLWE);
+            k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, pqzKeyVerifier, CAP_PQZ_MLWE, false, 0);
         }
         assembly ("memory-safe") {
             mstore(k, n)
@@ -1310,7 +1327,9 @@ abstract contract DeployBase is DeployBook {
         _requireReleaseGas(
             "UARegistry",
             address(0),
-            abi.encodePacked(type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, txGasCap, ska, true, k))
+            abi.encodePacked(
+                type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, txGasCap, ska, true, k)
+            )
         );
         _requireReleaseGas("UARegistryCoreLib", address(0), vm.getCode("UARegistryCoreLib.sol:UARegistryCoreLib"));
         _requireReleaseGas("UARegistryAuxLib", address(0), vm.getCode("UARegistryAuxLib.sol:UARegistryAuxLib"));

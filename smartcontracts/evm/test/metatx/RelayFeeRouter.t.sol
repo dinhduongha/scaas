@@ -110,7 +110,7 @@ contract RelayFeeRouterTest is PqzRegistryBase {
         (bytes memory valid, bytes memory invalid) = _mockMlDsa();
         mlv = new MldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000, false, 0);
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
         tok = NormalToken(
             EnvKit.clone(

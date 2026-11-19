@@ -195,7 +195,7 @@ abstract contract GovRouterFixture is UARegistryBase {
 
     function _mockPqCfg() internal view returns (UARegistry.KindConfig[] memory c) {
         c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(ML44, address(mock), CAP);
+        c[0] = UARegistry.KindConfig(ML44, address(mock), CAP, false, 0);
     }
 
     function _native(string memory name) internal returns (bytes32 id) {

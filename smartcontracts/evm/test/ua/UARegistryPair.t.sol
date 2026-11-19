@@ -299,7 +299,7 @@ contract UARegistryPairTest is UARegistryBase {
         uint16[8] memory ks = [uint16(0x0101), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](8);
         for (uint256 i; i < 8; ++i) {
-            c[i] = UARegistry.KindConfig(ks[i], address(mock), i == 0 ? 400_000 : 4_250_000);
+            c[i] = UARegistry.KindConfig(ks[i], address(mock), i == 0 ? 400_000 : 4_250_000, false, 0);
         }
         r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
         pk = new bytes(1312);
@@ -372,9 +372,9 @@ contract UARegistryPairTest is UARegistryBase {
     /// refusal passes verbatim.
     function test_c_cacheRunsTheCoreKeyCheck() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
-        c[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);
+        c[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000, false, 0);
         c[1] = UARegistry.KindConfig(
-            UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000
+            UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000, false, 0
         );
         UARegistry r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
         vm.expectCall(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.keyUa.selector), 1);
@@ -428,7 +428,7 @@ contract UARegistryPairTest is UARegistryBase {
     /// (owner 2026-11-19). The control: the same registration passes with the core in place, by `portableOk`, once.
     function test_c_regNeedsItsCore() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(UAKinds.MLDSA44, address(mock), 4_250_000);
+        c[0] = UARegistry.KindConfig(UAKinds.MLDSA44, address(mock), 4_250_000, false, 0);
         UARegistry r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
         bytes memory pk = new bytes(1312);
         pk[0] = 0x01;

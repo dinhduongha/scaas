@@ -51,12 +51,12 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
     function _allCfgs(uint256 single) internal view returns (UARegistry.KindConfig[] memory c) {
         c = new UARegistry.KindConfig[](single + 4);
         for (uint256 i; i < single; ++i) {
-            c[i] = UARegistry.KindConfig(KINDS[i], address(mock), _cap(KINDS[i]));
+            c[i] = UARegistry.KindConfig(KINDS[i], address(mock), _cap(KINDS[i]), false, 0);
         }
-        c[single] = UARegistry.KindConfig(MS, vMS, GROUP_CAP);
-        c[single + 1] = UARegistry.KindConfig(FS, vFS, GROUP_CAP);
-        c[single + 2] = UARegistry.KindConfig(MB, vMB, GROUP_CAP);
-        c[single + 3] = UARegistry.KindConfig(FB, vFB, GROUP_CAP);
+        c[single] = UARegistry.KindConfig(MS, vMS, GROUP_CAP, false, 0);
+        c[single + 1] = UARegistry.KindConfig(FS, vFS, GROUP_CAP, false, 0);
+        c[single + 2] = UARegistry.KindConfig(MB, vMB, GROUP_CAP, false, 0);
+        c[single + 3] = UARegistry.KindConfig(FB, vFB, GROUP_CAP, false, 0);
     }
 
     function _gen2Empty() internal returns (UARegistry) {
@@ -328,7 +328,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         UARegistry.KindConfig[] memory one = new UARegistry.KindConfig[](1);
         uint16[4] memory g = [MS, FS, MB, FB];
         for (uint256 i; i < 4; ++i) {
-            one[0] = UARegistry.KindConfig(g[i], vMS, GROUP_CAP);
+            one[0] = UARegistry.KindConfig(g[i], vMS, GROUP_CAP, false, 0);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, g[i]));
             new UARegistry(chainUidA, address(reg), false, BUDGET, 1 << 24, address(0), true, one);
         }
@@ -336,7 +336,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         UARegistry.KindConfig[] memory c1 = new UARegistry.KindConfig[](6);
         uint16[6] memory k1 = [0x0100, 0x0101, 0x0102, 0x0105, 0x0106, 0x0107];
         for (uint256 i; i < 6; ++i) {
-            c1[i] = UARegistry.KindConfig(k1[i], address(mock), _cap(k1[i]));
+            c1[i] = UARegistry.KindConfig(k1[i], address(mock), _cap(k1[i]), false, 0);
         }
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c1);
         UARegistry gen2 =
@@ -505,7 +505,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
 
     function _memberBound(uint16 kind, uint256 sigLen, address at) internal {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(kind, address(new BurnVerify()), GROUP_CAP);
+        c[0] = UARegistry.KindConfig(kind, address(new BurnVerify()), GROUP_CAP, false, 0);
         UARegistry r1 = _deploy(at, chainUidA, address(0), false, BUDGET, address(0), true, c);
         UARegistry r2 = _deploy(
             address(uint160(at) + 1),

@@ -1721,7 +1721,10 @@ def run(kd, kr, ke):
     require_release_gas("UARegistryRegLib")
     reg = D.deploy(
         "UARegistry",
-        encs(["w", "w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))], [uid, 0, 0, BUDGET, TX_GAS_CAP, 0, 1, kinds]),
+        encs(
+            ["w", "w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w", "w", "w"]))],
+            [uid, 0, 0, BUDGET, TX_GAS_CAP, 0, 1, [tuple(k) + (0, 0) for k in kinds]],  # verifyOnly, keyForm: 0 (gen 1)
+        ),
         label="UARegistry gen 1",
     )
     REG[0] = reg

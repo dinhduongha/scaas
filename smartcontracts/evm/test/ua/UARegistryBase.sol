@@ -115,6 +115,11 @@ contract MockPredecessor {
         return 1;
     }
 
+    function predecessor() external pure returns (address) {}
+
+    /// The line's view (spec 2026-11-19-registry-verify-only-kinds §11.1): this stand-in enables no kind.
+    function kindHome(uint16) external pure returns (address) {}
+
     function hederaNative() external pure returns (bool) {
         return false;
     }
@@ -258,7 +263,7 @@ abstract contract UARegistryBase is Test {
     function _cfgs(address v) internal view returns (UARegistry.KindConfig[] memory c) {
         c = new UARegistry.KindConfig[](KINDS.length);
         for (uint256 i; i < KINDS.length; ++i) {
-            c[i] = UARegistry.KindConfig(KINDS[i], v, _cap(KINDS[i]));
+            c[i] = UARegistry.KindConfig(KINDS[i], v, _cap(KINDS[i]), false, 0);
         }
     }
 

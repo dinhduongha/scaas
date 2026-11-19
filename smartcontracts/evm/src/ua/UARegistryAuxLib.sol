@@ -114,8 +114,10 @@ library UARegistryAuxLib {
     /// that uses a precompile; `UAKeyData` for a key of the wrong length.
     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
         UAStore.Layout storage s = UAStore.layout();
-        address v = address(uint160(UARegistryCoreLib._cfgKind()));
-        if (part >= PqUA.mldsaParts(kind) || v == address(0) || MldsaVerifier(v).PRECOMPILE() != address(0)) {
+        uint256 cfg = UARegistryCoreLib._cfgKind();
+        address v = address(uint160(cfg));
+        if (part >= PqUA.mldsaParts(kind) || !UAStore._registrable(cfg) || MldsaVerifier(v).PRECOMPILE() != address(0))
+        {
             revert IUARegistry.UAKeyCache(kind);
         }
         ua = abi.decode(
@@ -548,7 +550,7 @@ library UARegistryAuxLib {
             UAKinds.pqzScopedKeyDigest(ua, _class(scope), _chainUid(), scope, version, h)
         );
         bytes memory data = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, key, m, pqzPop);
-        if (!UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true)) revert IUARegistry.UAPoP();
+        if (!UAStore.capped(address(uint160(cfg)), UAStore._capOf(cfg), data, 1, true)) revert IUARegistry.UAPoP();
         bytes32 owner = UARegistryCoreLib._keyOwner(h);
         if (owner != 0) revert IUARegistry.UAKeyInUse(h, owner);
         UAStore.Layout storage s = UAStore.layout();

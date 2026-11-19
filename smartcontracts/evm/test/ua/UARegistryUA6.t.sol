@@ -35,10 +35,11 @@ contract UARegistryUA6Test is UARegistryBase {
         }
         uint16[8] memory pq = [uint16(0x0108), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
         for (uint256 i; i < 8; ++i) {
-            c[base.length + i] = UARegistry.KindConfig(pq[i], address(mock), i == 0 ? 50_000 : PQ_CAP);
+            c[base.length + i] = UARegistry.KindConfig(pq[i], address(mock), i == 0 ? 50_000 : PQ_CAP, false, 0);
         }
-        c[base.length + 8] =
-            UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        c[base.length + 8] = UARegistry.KindConfig(
+            UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000, false, 0
+        );
         r = _deploy(REG_U, chainUidA, address(0), false, BUDGET, address(0), true, c);
         mlKey = _pk(0x0131, 100);
         mlUa = _register(r, 0x0131, mlKey);
@@ -332,9 +333,11 @@ contract UARegistryUA6Test is UARegistryBase {
         bytes32 holder = _holder(0x0130, _pk(0x0130, 9), _pk(0x0142, 9));
         (, address ptr) = r.recordOf(holder);
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), PQ_CAP);
-        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, UAKinds.PQZ_MLWE));
-        new UARegistry(chainUidA, address(r), false, BUDGET, 1 << 24, address(0), true, c);
+        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), PQ_CAP, false, 0);
+        // spec 2026-11-19-registry-verify-only-kinds §11.2 (1) (owner W2, P7): a later generation may enable 0x0142 again (was
+        // refused by ruling A5-I1's group rule); it is the newest enabling generation on the walk
+        UARegistry again = new UARegistry(chainUidA, address(r), false, BUDGET, 1 << 24, address(0), true, c);
+        assertEq(again.kindHome(UAKinds.PQZ_MLWE), address(again));
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
         UARegistry g2 = new UARegistry(chainUidA, address(r), false, BUDGET, 1 << 24, address(0), true, none);
         (IUARegistry.Record memory rec, address p2) = g2.recordOf(holder);
@@ -359,8 +362,9 @@ contract UARegistryUA6Test is UARegistryBase {
     /// registration (PQZ key and proof) to gen 2 first must be refused, else the key would stay unproven in gen 2 for
     /// good; the same bytes then register in gen 1, proven.
     function test_UA6_gen2GrieferRefused() public {
-        UARegistry g2 =
-            new UARegistry(chainUidA, address(r), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry g2 = new UARegistry(
+            chainUidA, address(r), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0)
+        );
         (bytes memory d, bytes32 msUa) = _msig(2, 1, 1);
         bytes memory key = _pk(0x0142, 20);
         IUARegistry.UAAttrs memory a = _a(msUa, UAKinds.MSIG, key);
@@ -384,7 +388,7 @@ contract UARegistryUA6Test is UARegistryBase {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, reg.uaOf(0x0101, p)));
         UACall.register(reg, 0x0101, p, _pqzOnly(_pk(0x0142, 1)), "", hex"01");
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(0x0131, address(mock), PQ_CAP);
+        c[0] = UARegistry.KindConfig(0x0131, address(mock), PQ_CAP, false, 0);
         UARegistry n = _deploy(address(0x5ca7), chainUidA, address(0), false, BUDGET, address(0), true, c);
         bytes memory pk = _pk(0x0131, 77);
         bytes32 ua = n.uaOf(0x0131, pk);

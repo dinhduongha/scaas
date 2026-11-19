@@ -24,9 +24,9 @@ contract UARegistryPqzBoundTest is UARegistryBase {
             c[i] = base[i];
         }
         for (uint256 i; i < 3; ++i) {
-            c[base.length + i] = UARegistry.KindConfig(kinds[i], address(mock), caps[i]);
+            c[base.length + i] = UARegistry.KindConfig(kinds[i], address(mock), caps[i], false, 0);
         }
-        c[base.length + 3] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 1_000_000);
+        c[base.length + 3] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 1_000_000, false, 0);
         r = _deploy(where, chainUidA, address(0), false, BUDGET, address(0), true, c);
     }
 
@@ -249,8 +249,7 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0131, 2, false, 2);
         _holder(r, d, ua, keys, ks);
         txCap = uint64(_bound(lo) - 1);
-        UARegistry r2 =
-            _regs(address(0x5CA7012), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
+        UARegistry r2 = _regs(address(0x5CA7012), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
         (d, ua, keys, ks) = _members(r2, 0x0131, 2, false, 2);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
         UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 904)), hex"01", hex"01");

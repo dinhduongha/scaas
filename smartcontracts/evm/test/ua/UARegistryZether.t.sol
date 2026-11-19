@@ -36,7 +36,7 @@ contract UARegistryZetherTest is UARegistryBase {
         for (uint256 i; i < base.length; ++i) {
             c[i] = base[i];
         }
-        c[base.length] = UARegistry.KindConfig(ZK, address(zbls), 70_000);
+        c[base.length] = UARegistry.KindConfig(ZK, address(zbls), 70_000, false, 0);
     }
 
     /// The Zether PoP: Schnorr by `x` under the Zether tag over the portable `uaMessage(0x0141, POP_V2, registrationDigest(ua, 0x0141, 0, zero KEM record, 0))` (UA-8, typed-signing TS-D3).
@@ -149,7 +149,7 @@ contract UARegistryZetherTest is UARegistryBase {
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, ZK));
         UACall.register(gen2, ZK, y, _none(), "", "");
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(ZK, address(zbls), 70_000);
+        c[0] = UARegistry.KindConfig(ZK, address(zbls), 70_000, false, 0);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, ZK));
         new UARegistry(chainUidA, address(zreg), false, BUDGET, 1 << 24, address(0), true, c);
     }
@@ -165,7 +165,7 @@ contract UARegistryZetherTest is UARegistryBase {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         uint16[4] memory refused = [0x013f, 0x0140, 0x0143, 0x0144];
         for (uint256 i; i < refused.length; ++i) {
-            c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
+            c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000, false, 0);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));
             new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, c);
         }

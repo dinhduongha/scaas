@@ -343,16 +343,18 @@ contract UARegistryUaPortableTest is UARegistryBase {
             address(new BlsMinSigBn254Verifier())
         ];
         for (uint256 i; i < 8; ++i) {
-            vcfg.push(UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i])));
+            vcfg.push(UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]), false, 0));
         }
-        vcfg.push(UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000));
-        vcfg.push(UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000));
-        vcfg.push(UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44));
+        vcfg.push(UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000, false, 0));
+        vcfg.push(UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000, false, 0));
+        vcfg.push(
+            UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44, false, 0)
+        );
         MldsaVerifier m65 = new MldsaVerifier(0x0131, ML65, valid, new bytes(ML65_LEN));
         assertEq(m65.PRECOMPILE(), ML65);
-        vcfg.push(UARegistry.KindConfig(0x0131, address(m65), 200_000));
-        vcfg.push(UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), CAP_FNDSA));
-        vcfg.push(UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), CAP_SLHDSA));
+        vcfg.push(UARegistry.KindConfig(0x0131, address(m65), 200_000, false, 0));
+        vcfg.push(UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), CAP_FNDSA, false, 0));
+        vcfg.push(UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), CAP_SLHDSA, false, 0));
         string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
         bytes memory probe = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
         ml87 = new Eip8355Allowed();
@@ -365,10 +367,12 @@ contract UARegistryUaPortableTest is UARegistryBase {
                         0x0134, address(ml87), probe, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")
                     )
                 ),
-                CAP_MLDSA87
+                CAP_MLDSA87,
+                false,
+                0
             )
         );
-        vcfg.push(UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), CAP_FNDSA1024));
+        vcfg.push(UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), CAP_FNDSA1024, false, 0));
         rreg = makeAddr("rreg");
         vm.etch(rreg, hex"00"); // STOP: any input the test did not allow returns nothing (refused)
     }
@@ -380,7 +384,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         for (uint256 i; i < vcfg.length; ++i) {
             if (vcfg[i].kind != drop) c[n++] = vcfg[i];
         }
-        if (pqz) c[n++] = UARegistry.KindConfig(0x0142, rreg, 1_000_000);
+        if (pqz) c[n++] = UARegistry.KindConfig(0x0142, rreg, 1_000_000, false, 0);
         assembly {
             mstore(c, n)
         }
@@ -1278,7 +1282,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
     function test_ua_portable_largestMsigPopStored() public {
         BurnAll impl = new BurnAll();
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(0x0133, address(new BurnAll()), 1_400_000);
+        c[0] = UARegistry.KindConfig(0x0133, address(new BurnAll()), 1_400_000, false, 0);
         address clone = address(0x5cf40);
         vm.etch(clone, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
         uint256 bound = 8 * (1_400_000 + 45_000) + 400_000 + 45_000 + uint256(1_400_000 - 400_000) / 63 + 3_500; // MSIG_ACCEPTED_GAS (3ze: 2,500 -> 3,500)
@@ -1407,7 +1411,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
     /// POP_V2, KEM and PQZ_KEY; any other purpose reverts `UAUnauthorized`, for every kind.
     function test_ua_portable_sigOkPortablePurposesOnly() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);
+        k[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000, false, 0);
         SigOkHarness h = new SigOkHarness(chainUidA, BUDGET, k);
         bytes memory p = _key(0x0101);
         bytes32 ua = UAKinds.uaOf(0x0101, p);
@@ -1764,7 +1768,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         assertEq(g2.keyOwner(h), bytes32(0));
         vm.revertToState(snap);
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, rreg, 1_000_000);
+        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, rreg, 1_000_000, false, 0);
         UARegistry g2p = _deploy(address(0x5ceb6), chainUidA, address(g1), false, BUDGET, address(0), true, c);
         _allowPqz(m);
         _reg(g2p, m);
@@ -2118,10 +2122,10 @@ contract UARegistryUaPortableTest is UARegistryBase {
         a.setPqzKey(r.ua, 0, r.pqzKey, r.pqzPopHash, UACall.sig(r.sig));
         // A5-I1: gen 2 (fndsa512) in front of a gen 1 that enables 0x0142
         UARegistry.KindConfig[] memory c1 = new UARegistry.KindConfig[](1);
-        c1[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, rreg, 1_000_000);
+        c1[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, rreg, 1_000_000, false, 0);
         UARegistry g1 = _deploy(address(0x5ceb8), chainUidA, address(0), false, BUDGET, address(0), true, c1);
         UARegistry.KindConfig[] memory c2 = new UARegistry.KindConfig[](1);
-        c2[0] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(0x0132)), CAP_FNDSA);
+        c2[0] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(0x0132)), CAP_FNDSA, false, 0);
         UARegistry g2 = _deploy(address(0x5ceb9), chainUidA, address(g1), false, BUDGET, address(0), true, c2);
         _reg(g2, rows[FNDSA_ROW]);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.PQZ_MLWE));
@@ -2182,7 +2186,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
     /// Gen 2 enabling 0x0142 in front of `g1` (which does not).
     function _gen2Pqz(address where, UARegistry g1) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, rreg, 1_000_000);
+        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, rreg, 1_000_000, false, 0);
         return _deploy(where, chainUidA, address(g1), false, BUDGET, address(0), true, c);
     }
 
@@ -2487,7 +2491,9 @@ contract UARegistryUaPortableTest is UARegistryBase {
     function test_ua_portable_gen2RefusesPreUaPortableGen1() public {
         PreUaPortableGen1 old = new PreUaPortableGen1(chainUidA);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(old), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
+        new UARegistry(
+            chainUidA, address(old), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0)
+        );
         UARegistry g1 = _regA(false);
         assertEq(_gen2Pqz(address(0x5cec3), g1).predecessor(), address(g1));
     }
@@ -3939,7 +3945,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
         }
         // 12 x slhdsa128s members
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(0x0133, address(new AcceptAll()), 1_400_000);
+        c[0] = UARegistry.KindConfig(0x0133, address(new AcceptAll()), 1_400_000, false, 0);
         txCap = uint64(12 * 1_445_000 + uint256(1_000_000) / 63 + 3_500); // owner P17: a chain whose cap admits that budget
         UARegistry big = _deploy(
             address(0x5cea2),

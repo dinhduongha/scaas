@@ -90,7 +90,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     function _config(Case memory c) internal returns (UARegistry.KindConfig[] memory k, address burn) {
         burn = PqUA.mldsaParts(c.kind) != 0 ? address(new BurnAllPrecompile()) : address(new BurnAll());
         k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(c.kind, burn, c.cap);
+        k[0] = UARegistry.KindConfig(c.kind, burn, c.cap, false, 0);
     }
 
     /// The registered inner `msig` of `n` fresh signing slots, n-of-n, its `pop` of all of them (BurnAll accepts anything).
@@ -415,8 +415,8 @@ contract UARegistryNestedGasTest is UARegistryBase {
         Case memory c = _case("ml65", 0x0131, 200_000, 3309, 0, _none256());
         address burn = address(new BurnAll());
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(0x0131, burn, 200_000);
-        k[1] = UARegistry.KindConfig(0x0132, burn, 2_500_000);
+        k[0] = UARegistry.KindConfig(0x0131, burn, 200_000, false, 0);
+        k[1] = UARegistry.KindConfig(0x0132, burn, 2_500_000, false, 0);
         r = _deploy(_at(), chainUidA, address(0), false, 12_000_000, address(0), true, k);
         Member[] memory m = new Member[](3);
         m[0] = Member(0x0132, UACall.register(r, 0x0132, _pk(0x0132), _none(), hex"01", ""), 1);
@@ -476,7 +476,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     function test_pqzHolderCalldataFloor() public {
         address burn = address(new BurnAll());
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(0x0133, burn, 20_000);
+        k[0] = UARegistry.KindConfig(0x0133, burn, 20_000, false, 0);
         UARegistry r = _deploy(_at(), chainUidA, address(0), false, 12_000_000, address(0), true, k);
         Case memory c = _case("slh", 0x0133, 20_000, 7856, 0, _none256());
         Member[] memory m = new Member[](2);
@@ -502,10 +502,10 @@ contract UARegistryNestedGasTest is UARegistryBase {
     function test_pqzHolderGen1RecordCountsGen1NativeCap() public {
         address burn = address(new BurnAll());
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(0x0131, burn, 4_000_000);
+        k[0] = UARegistry.KindConfig(0x0131, burn, 4_000_000, false, 0);
         UARegistry g1 = _deploy(_at(), chainUidA, address(0), false, 12_000_000, burn, true, k);
         UARegistry.KindConfig[] memory p = new UARegistry.KindConfig[](1);
-        p[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, burn, 400_000);
+        p[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, burn, 400_000, false, 0);
         UARegistry g2 = _deploy(_at(), chainUidA, address(g1), false, 12_000_000, address(0), true, p);
         bytes32 ml = UACall.register(g1, 0x0131, _pk(0x0131), _none(), hex"01", "");
         bytes memory key = new bytes(PqzSet.PK);

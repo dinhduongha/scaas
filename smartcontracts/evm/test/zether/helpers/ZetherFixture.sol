@@ -138,8 +138,10 @@ abstract contract ZetherFixture is Test {
     /// Gen 1 with `zether-bls12381` and `schnorr-bn254` (caps as accounts.md §1.15), budget 12 M, no msig.
     function _uaRegistry() internal returns (UARegistry) {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
-        c[0] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
-        c[1] = UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier()), 50_000);
+        c[0] = UARegistry.KindConfig(
+            UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000, false, 0
+        );
+        c[1] = UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier()), 50_000, false, 0);
         return new UARegistry(ZUID, address(0), false, 12_000_000, 1 << 24, address(0), false, c);
     }
 

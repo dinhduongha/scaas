@@ -205,12 +205,16 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
 
     /// The pre-change `UARegistry` (legacy/ua-pre-app/: its source and its libraries as of f655cb0e0, compiled with this build;
     /// owner 2026-11-18, no bytecode in the repository) deployed with `cfgs`, its libraries linked by forge: a gen 1 without
-    /// `requirePortableApp` and without a fallback. Its creation code with the constructor arguments, so the arguments are this
-    /// tree's `KindConfig` (the same struct at f655cb0e0).
+    /// `requirePortableApp` and without a fallback. Its creation code with the constructor arguments, so the arguments are its own
+    /// `KindConfig` (three fields at f655cb0e0).
     function _preApp(UARegistry.KindConfig[] memory cfgs) internal returns (UARegistry r) {
+        // its `KindConfig` has three fields (verify-only kinds came later, spec 2026-11-19-registry-verify-only-kinds §2)
+        UARegistryPreApp.KindConfig[] memory old = new UARegistryPreApp.KindConfig[](cfgs.length);
+        for (uint256 i; i < cfgs.length; ++i) {
+            old[i] = UARegistryPreApp.KindConfig(cfgs[i].kind, cfgs[i].verifier, cfgs[i].cap);
+        }
         bytes memory init = abi.encodePacked(
-            type(UARegistryPreApp).creationCode,
-            abi.encode(chainUidA, address(0), false, BUDGET, address(0), true, cfgs)
+            type(UARegistryPreApp).creationCode, abi.encode(chainUidA, address(0), false, BUDGET, address(0), true, old)
         );
         assembly ("memory-safe") {
             r := create(0, add(init, 32), mload(init))

@@ -443,8 +443,8 @@ contract UARegistryNestedTest is UARegistryBase {
 
     function _pqRegistry() internal returns (UARegistry r, bytes[3] memory k, bytes32[3] memory id) {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
-        c[0] = UARegistry.KindConfig(ML65, address(mock), 200_000);
-        c[1] = UARegistry.KindConfig(P256, address(mock), 400_000);
+        c[0] = UARegistry.KindConfig(ML65, address(mock), 200_000, false, 0);
+        c[1] = UARegistry.KindConfig(P256, address(mock), 400_000, false, 0);
         r = _deploy(address(0x5cb9), chainUidA, address(0), false, BUDGET, address(0), true, c);
         for (uint256 i; i < 3; ++i) {
             k[i] = new bytes(1952);
@@ -988,7 +988,9 @@ contract UARegistryNestedTest is UARegistryBase {
     function test_newGen2OverOldGen1() public {
         OldGen1 old = new OldGen1(chainUidA, idP);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(old), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
+        new UARegistry(
+            chainUidA, address(old), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0)
+        );
     }
 
     // ----- CTR-UA-33 / CTR-UA-37: a member signature's hash is kept, its bytes are in `UAMemberSig`, a copy replays them (owner 2026-11-03) -----
@@ -1019,8 +1021,8 @@ contract UARegistryNestedTest is UARegistryBase {
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
-        c[0] = UARegistry.KindConfig(ML65, address(mock), 200_000);
-        c[1] = UARegistry.KindConfig(P256, address(mock), 400_000);
+        c[0] = UARegistry.KindConfig(ML65, address(mock), 200_000, false, 0);
+        c[1] = UARegistry.KindConfig(P256, address(mock), 400_000, false, 0);
         UARegistry b = _deploy(address(0x5cba), chainUidA, address(0), false, BUDGET, address(0), true, c);
         for (uint256 i; i < 3; ++i) {
             UACall.register(b, ML65, p.k[i], _none(), p.r.popOf(p.id[i]), "");

@@ -125,6 +125,17 @@ library UAStore {
 
     // ----- kinds -----
 
+    /// The cap of a kind word `cfg` (`verifier | cap << 160 | verifyOnly << 224 | keyForm << 225`, spec
+    /// 2026-11-19-registry-verify-only-kinds §2, N12): the flags masked (a flagged word read raw is above 2^64).
+    function _capOf(uint256 cfg) internal pure returns (uint256) {
+        return uint64(cfg >> 160);
+    }
+
+    /// A kind registrable here (N12): a verifier word set, not verify-only (`kindEnabled` stays `uint160(cfg) != 0`).
+    function _registrable(uint256 cfg) internal pure returns (bool) {
+        return uint160(cfg) != 0 && cfg >> 224 & 1 == 0;
+    }
+
     /// PQ weight in an `msig` (CTR-PQZ-12): 0x0130–0x0135, `mldsa87` and `fndsa1024` since owner 2026-11-04 (CTR-UA-39 / -40 Q3).
     /// Not the registry's config slot map (`UARegistry._slot`).
     function isPq(uint16 kind) internal pure returns (bool) {

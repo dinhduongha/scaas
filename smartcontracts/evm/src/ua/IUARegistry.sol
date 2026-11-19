@@ -253,9 +253,17 @@ interface IUARegistry is IERC5267 {
     /// CTR-UA-44: a target threshold of 0, or above the weight of its enabled and accepted slots.
     error UAMsigThreshold(bytes32 ua);
 
-    function generation() external view returns (uint8); // 1 or 2
+    function generation() external view returns (uint8); // 1 … MAX_GENERATION (16): the predecessor's + 1
     function predecessor() external view returns (address);
-    function kindEnabled(uint16 kind) external view returns (bool);
+    function kindEnabled(uint16 kind) external view returns (bool); // a verifier word is set here (verify-only included)
+    /// Spec 2026-11-19-registry-verify-only-kinds §3 (N4): this generation carries `kind` for the consumer checks only.
+    function verifyOnly(uint16 kind) external view returns (bool);
+    /// §11.1: this generation's verifier of `kind` (0 if none).
+    function verifierOf(uint16 kind) external view returns (address);
+    /// §11.1: the generation of the line where `kind` registers (this one if registrable here, else the predecessor's answer; 0
+    /// at generation 1); for `0x0142` the newest enabling generation. A client offers registration only where
+    /// `kindHome(kind) == registry`.
+    function kindHome(uint16 kind) external view returns (address);
     function verifyCap(uint16 kind) external view returns (uint64); // measured per chain
     function verifyBudget() external view returns (uint64); // UA_VERIFY_BUDGET of this chain
     /// The chain's per-transaction gas cap (owner X1, spec 2026-11-19-registry-verify-only-kinds §2): an immutable constructor

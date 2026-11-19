@@ -3,3 +3,6 @@ t1 forge test/ua | task 1 | 1 | 816 tests, 812 passed, 4 failed: 2 dispatch gas 
 t1 forge touched suites (pqz, metatx, zether, liquidity, v2, as) | task 1 | 0 | 14 suites, 183 passed, 2 skipped
 t1 mutants | task 1 | 0 | 3 of 3 killed (task1-mutants.txt)
 t1 size gate | task 1 | 0 | UARegistry 33,335 -> 33,385; UARegistryRegLib 30,157 -> 30,330 (30,209 at the round's base, B1-B3)
+t2 forge test/ua + v2/layout + LinkClosure + ChainNeutral + ZetherDeploy + GovDeploy | task 2 | 1 | 59 suites, 867 tests, 861 passed, 6 failed: 2 test rows the line rule changed (fixed, re-run 46 / 46), 4 dispatch / masking gas pins left for Task 15 (UaPortable register webauthn-p256 190,627 -> 190,887, setKemKey fndsa512/v2 n2304-kmax4096 2,524,867 -> 2,525,013, registrationOf msig-pq on gen 2 n2304-kmax4096 146,805 -> 146,937; requireAuthorized 256 17,177 -> 17,246)
+t2 mutants | task 2 | 0 | 7 of 7 killed (task2-mutants.txt)
+t2 size gate | task 2 | 0 | UARegistry 33,385 -> 33,596; UARegistryCoreLib 16,226 -> 16,496; UARegistryRegLib 30,330 -> 30,371; UARegistryAuxLib 35,417 -> 35,460 (room 234); OpenFactory 34,999

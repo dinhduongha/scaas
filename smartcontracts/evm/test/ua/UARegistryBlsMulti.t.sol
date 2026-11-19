@@ -35,7 +35,7 @@ contract UARegistryBlsMultiTest is Test {
 
     function _registry(bytes32 uid, address v, uint64 cap) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](v == address(0) ? 0 : 1);
-        if (v != address(0)) k[0] = UARegistry.KindConfig(K, v, cap);
+        if (v != address(0)) k[0] = UARegistry.KindConfig(K, v, cap, false, 0);
         return new UARegistry(uid, address(0), false, BUDGET, 1 << 24, address(0), true, k);
     }
 
@@ -427,8 +427,8 @@ contract UARegistryBlsMultiTest is Test {
     /// set (3 of a 2-of-3) is `UAPoP`, a minimal one registers.
     function test_msigPop_blsMultiMember_minimalOnly() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(K, address(verifier), CAP);
-        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000);
+        k[0] = UARegistry.KindConfig(K, address(verifier), CAP, false, 0);
+        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000, false, 0);
         reg = new UARegistry(UID, address(0), false, BUDGET, 1 << 24, address(0), true, k);
         BlsMultiKit.Group memory g = _kit(3, 2, 47);
         reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
@@ -455,8 +455,8 @@ contract UARegistryBlsMultiTest is Test {
     /// 2-of-3) is `UAUnauthorized`, a minimal one updates (the version moves).
     function test_updateMsig_blsMultiMember_minimalOnly() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(K, address(verifier), CAP);
-        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000);
+        k[0] = UARegistry.KindConfig(K, address(verifier), CAP, false, 0);
+        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000, false, 0);
         reg = new UARegistry(UID, address(0), false, BUDGET, 1 << 24, address(0), true, k);
         BlsMultiKit.Group memory g = _kit(3, 2, 53);
         reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");

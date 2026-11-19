@@ -115,7 +115,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         for (uint256 i; i < base.length; ++i) {
             cfg[i] = base[i];
         }
-        cfg[base.length] = UARegistry.KindConfig(ML, address(mock), mlCap);
+        cfg[base.length] = UARegistry.KindConfig(ML, address(mock), mlCap, false, 0);
     }
 
     function _mlKey(uint256 salt) internal pure returns (bytes memory pk) {
@@ -861,8 +861,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         bytes32 ua = _reg(r, 3, _ids(ml[1], ml[2], ml[3]), _w(3), _ids(ml[1], ml[2], ml[3]));
         uint256 worst = 3 * (UARegistryRegLib.MSIG_MEMBER_GAS + 400_000) + UARegistryRegLib.MSIG_ACCEPTED_GAS;
         worst += 16 * 3 * (192 + 3_328); // Fable P2-1: the quorum's signature calldata, three mldsa65 signatures (3,309 B each)
-        uint256 fit = (uint256(txCap) - UARegistryRegLib.MSIG_UPDATE_GAS - worst)
-            / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
+        uint256 fit =
+            (uint256(txCap) - UARegistryRegLib.MSIG_UPDATE_GAS - worst) / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
         assertLt(fit, 256, "row 13 must be able to refuse here: heavier signers if the constants move");
         Up memory u = _next(r, ua);
         for (uint256 i = 3; i <= fit; ++i) {
@@ -887,11 +887,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
             + (UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 400_000);
         uint256 calldata_ = 16 * ((192 + 128 + 3_328) + (192 + 1_024));
         uint256 fit =
-            (uint256(txCap)
-                    - UARegistryRegLib.MSIG_UPDATE_GAS
-                    - w
-                    - calldata_
-                    - UARegistryRegLib.MSIG_UPDATE_INNER_GAS) / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
+            (uint256(txCap) - UARegistryRegLib.MSIG_UPDATE_GAS - w - calldata_ - UARegistryRegLib.MSIG_UPDATE_INNER_GAS)
+                / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
         assertLt(fit, 256);
         Up memory u = _next(r, ua);
         for (uint256 k = 3; k <= fit; ++k) {
@@ -958,7 +955,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         _apply(r, u, _ids(ml[1], ml[2]));
         _accept(r, ua, ml[4]);
         UARegistry.KindConfig[] memory cfg = new UARegistry.KindConfig[](1);
-        cfg[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 400_000);
+        cfg[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 400_000, false, 0);
         UARegistry g2 = _deploy(REG_G2, chainUidA, address(r), false, BUDGET, address(0), true, cfg);
         (bool ok,) = _call(address(g2), _pqzKeyCall(g2, ua, 0, _ids(ml[1], ml[4]), 1));
         assertTrue(ok, "an appended signer");
@@ -1251,7 +1248,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         uint256 bound = 1_387_000;
         Burner burner = new Burner();
         UARegistry.KindConfig[] memory cfg = new UARegistry.KindConfig[](1);
-        cfg[0] = UARegistry.KindConfig(ML, address(burner), 400_000);
+        cfg[0] = UARegistry.KindConfig(ML, address(burner), 400_000, false, 0);
         UARegistry x = _deploy(REG_X, keccak256("chain x"), address(0), false, uint64(bound), address(0), true, cfg);
         for (uint256 i = 1; i <= 4; ++i) {
             _register(x, ML, keyOfId[ml[i]]);

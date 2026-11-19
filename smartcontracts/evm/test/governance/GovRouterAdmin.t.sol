@@ -312,9 +312,9 @@ contract GovRouterAdminTest is UARegistryBase {
         skaf = new SmartKeyAccountFactory(chainUidA);
         impl = skaf.IMPLEMENTATION();
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](3);
-        c[0] = UARegistry.KindConfig(K1, address(mock), 50_000);
-        c[1] = UARegistry.KindConfig(ML65, address(mock), CAP);
-        c[2] = UARegistry.KindConfig(WA, address(mock), 400_000);
+        c[0] = UARegistry.KindConfig(K1, address(mock), 50_000, false, 0);
+        c[1] = UARegistry.KindConfig(ML65, address(mock), CAP, false, 0);
+        c[2] = UARegistry.KindConfig(WA, address(mock), 400_000, false, 0);
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, impl, true, c);
         router = new GovernanceRouter(chainUidA, PREG, impl, false);
         relay = new RelayFeeRouter();

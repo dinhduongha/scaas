@@ -131,11 +131,12 @@ contract UATradeVectorsTest is UARegistryBase {
         ];
         c = new UARegistry.KindConfig[](11);
         for (uint256 i; i < 8; ++i) {
-            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
+            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]), false, 0);
         }
-        c[8] = UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
-        c[9] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
-        c[10] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        c[8] =
+            UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), 5_950_000, false, 0);
+        c[9] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000, false, 0);
+        c[10] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000, false, 0);
     }
 
     // ----- vector reading -----

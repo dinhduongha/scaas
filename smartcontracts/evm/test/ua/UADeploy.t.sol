@@ -344,10 +344,10 @@ contract UADeployTest is Test {
     {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](4);
         uint256 n;
-        if (schnorrBls) k[n++] = UARegistry.KindConfig(UAKinds.SCHNORR_BLS12381, address(this), 70_000);
-        if (blsMinSig) k[n++] = UARegistry.KindConfig(UAKinds.BLS12381_MINSIG, address(this), 200_000);
-        if (zether) k[n++] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(this), 70_000);
-        if (multi) k[n++] = UARegistry.KindConfig(UAKinds.BLS12381_MULTI, address(this), 330_000);
+        if (schnorrBls) k[n++] = UARegistry.KindConfig(UAKinds.SCHNORR_BLS12381, address(this), 70_000, false, 0);
+        if (blsMinSig) k[n++] = UARegistry.KindConfig(UAKinds.BLS12381_MINSIG, address(this), 200_000, false, 0);
+        if (zether) k[n++] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(this), 70_000, false, 0);
+        if (multi) k[n++] = UARegistry.KindConfig(UAKinds.BLS12381_MULTI, address(this), 330_000, false, 0);
         assembly ("memory-safe") {
             mstore(k, n)
         }
@@ -393,8 +393,8 @@ contract UADeployTest is Test {
     function _gen1Pq(bool pqz, bool ml87) internal returns (IUARegistry) {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
         uint256 n;
-        if (pqz) k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(this), 4_500_000);
-        if (ml87) k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, address(this), 250_000);
+        if (pqz) k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(this), 4_500_000, false, 0);
+        if (ml87) k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, address(this), 250_000, false, 0);
         assembly ("memory-safe") {
             mstore(k, n)
         }

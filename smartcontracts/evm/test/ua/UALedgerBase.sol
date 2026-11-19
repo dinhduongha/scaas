@@ -66,8 +66,9 @@ abstract contract UALedgerBase is UARegistryBase {
         for (uint256 i; i < base.length; ++i) {
             c[i] = base[i];
         }
-        c[base.length] =
-            UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        c[base.length] = UARegistry.KindConfig(
+            UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000, false, 0
+        );
         lreg = _deploy(REG_L, chainUidA, address(0), false, BUDGET, address(0), true, c);
         uaP = _register(lreg, UAKinds.P256, _key(UAKinds.P256));
         uaB = _register(lreg, UAKinds.BIP340, _key(UAKinds.BIP340));

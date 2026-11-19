@@ -64,7 +64,7 @@ contract UARegistryPqTest is UARegistryBase {
         bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
         ml87.allow(keccak256(valid));
         c = new UARegistry.KindConfig[](7);
-        c[6] = UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), 5_250_000); // CTR-UA-40, provisional cap
+        c[6] = UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), 5_250_000, false, 0); // CTR-UA-40, provisional cap
         c[5] = UARegistry.KindConfig(
             0x0134,
             address(
@@ -72,13 +72,19 @@ contract UARegistryPqTest is UARegistryBase {
                     0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")
                 )
             ),
-            250_000
+            250_000,
+            false,
+            0
         );
-        c[0] = UARegistry.KindConfig(0x0101, address(new P256Verifier()), 400_000);
-        c[1] = UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44);
-        c[2] = UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65);
-        c[3] = UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), CAP_FNDSA);
-        c[4] = UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), CAP_SLHDSA);
+        c[0] = UARegistry.KindConfig(0x0101, address(new P256Verifier()), 400_000, false, 0);
+        c[1] = UARegistry.KindConfig(
+            0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44, false, 0
+        );
+        c[2] = UARegistry.KindConfig(
+            0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65, false, 0
+        );
+        c[3] = UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), CAP_FNDSA, false, 0);
+        c[4] = UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), CAP_SLHDSA, false, 0);
     }
 
     /// Mock verifiers for 0x0101, the six PQ kinds and the PQZ key verifier 0x0142, PQ caps `pqCap`.
@@ -86,7 +92,7 @@ contract UARegistryPqTest is UARegistryBase {
         uint16[8] memory ks = [uint16(0x0101), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
         c = new UARegistry.KindConfig[](8);
         for (uint256 i; i < 8; ++i) {
-            c[i] = UARegistry.KindConfig(ks[i], v, i == 0 ? 400_000 : pqCap);
+            c[i] = UARegistry.KindConfig(ks[i], v, i == 0 ? 400_000 : pqCap, false, 0);
         }
     }
 
@@ -124,7 +130,7 @@ contract UARegistryPqTest is UARegistryBase {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         uint16[4] memory refused = [uint16(0x012f), 0x0136, 0x0143, 0x0150];
         for (uint256 i; i < 4; ++i) {
-            c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
+            c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000, false, 0);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));
             new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, c);
         }
@@ -162,7 +168,10 @@ contract UARegistryPqTest is UARegistryBase {
         assertEq(r.verifyCap(0x0141), 0, "slot 13, not configured");
         UARegistry.KindConfig[] memory two = new UARegistry.KindConfig[](2);
         (two[0], two[1]) =
-        (UARegistry.KindConfig(0x0134, address(mock), 250_000), UARegistry.KindConfig(0x0134, address(mock), 1));
+        (
+            UARegistry.KindConfig(0x0134, address(mock), 250_000, false, 0),
+            UARegistry.KindConfig(0x0134, address(mock), 1, false, 0)
+        );
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0134)));
         new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, two);
         // a registry configured without it (e.g. a budget it does not fit, CTR-UA-23): not registrable
@@ -182,14 +191,17 @@ contract UARegistryPqTest is UARegistryBase {
             c[i] = m[i];
         }
         c[6].cap = 5_250_000; // 0x0135
-        c[m.length] = UARegistry.KindConfig(UAKinds.SECP256K1, address(mock), 50_000);
+        c[m.length] = UARegistry.KindConfig(UAKinds.SECP256K1, address(mock), 50_000, false, 0);
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
         assertEq(r.verifyCap(0x0135), 5_250_000);
         assertEq(r.verifyCap(UAKinds.SECP256K1), 50_000);
         assertEq(r.verifyCap(0x0134), 1_000_000);
         UARegistry.KindConfig[] memory two = new UARegistry.KindConfig[](2);
         (two[0], two[1]) =
-        (UARegistry.KindConfig(0x0135, address(mock), 5_250_000), UARegistry.KindConfig(0x0135, address(mock), 1));
+        (
+            UARegistry.KindConfig(0x0135, address(mock), 5_250_000, false, 0),
+            UARegistry.KindConfig(0x0135, address(mock), 1, false, 0)
+        );
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0135)));
         new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, two);
         // without a verifier for it: not registrable
@@ -337,7 +349,7 @@ contract UARegistryPqTest is UARegistryBase {
         for (uint256 i; i < b.length; ++i) {
             c[i] = b[i];
         }
-        c[b.length] = UARegistry.KindConfig(0x0142, rreg, 1_000_000);
+        c[b.length] = UARegistry.KindConfig(0x0142, rreg, 1_000_000, false, 0);
     }
 
     /// The negative that is refused only when registering WITH the PQZ key (a plain-digest PoP offered with a key).
@@ -462,9 +474,15 @@ contract UARegistryPqTest is UARegistryBase {
     /// `mldsa44` / `mldsa65` / `mldsa87` in pure Solidity on the registry's cache, at `DeployBase`'s cached caps.
     function _cachedMl() internal returns (UARegistry.KindConfig[] memory c) {
         c = new UARegistry.KindConfig[](3);
-        c[0] = UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44);
-        c[1] = UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65);
-        c[2] = UARegistry.KindConfig(0x0134, address(new MldsaVerifier(0x0134, address(0), "", "")), CAP_MLDSA87);
+        c[0] = UARegistry.KindConfig(
+            0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44, false, 0
+        );
+        c[1] = UARegistry.KindConfig(
+            0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65, false, 0
+        );
+        c[2] = UARegistry.KindConfig(
+            0x0134, address(new MldsaVerifier(0x0134, address(0), "", "")), CAP_MLDSA87, false, 0
+        );
     }
 
     /// The regular gas of the test's last call, its own transaction under `isolate` (intrinsic and calldata included),
@@ -865,7 +883,7 @@ contract UARegistryPqTest is UARegistryBase {
     function _handedHome() internal returns (UARegistry home, address impl, bytes32 mlId) {
         impl = address(new BurnAll());
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(0x0131, address(new BurnAll()), CAP_MLDSA65);
+        c[0] = UARegistry.KindConfig(0x0131, address(new BurnAll()), CAP_MLDSA65, false, 0);
         home = _deploy(address(0x5d00), chainUidA, address(0), false, BUDGET, impl, true, c);
         mlId = UACall.register(home, 0x0131, _pk(0x0131, 1), _none(), "", "");
     }

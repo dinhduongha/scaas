@@ -111,7 +111,7 @@ library UARegistryRegLib {
         if (kind != UAKinds.MUSIG2_SECP256K1 && kind != UAKinds.MUSIG2_BN254) {
             revert IUARegistry.UAKeyData(kind);
         }
-        if (uint160(UARegistryCoreLib._cfgKind()) == 0) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
+        if (!UAStore._registrable(UARegistryCoreLib._cfgKind())) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
         uint256 size = UAStore.vkLength(kind);
         bytes[] calldata m = key.memberKeys;
         bytes memory d = abi.encodePacked(_point(kind, key.aggKey, size), uint16(m.length));
@@ -133,7 +133,7 @@ library UARegistryRegLib {
         if (kind != UAKinds.FROST_SECP256K1 && kind != UAKinds.FROST_BN254) {
             revert IUARegistry.UAKeyData(kind);
         }
-        if (uint160(UARegistryCoreLib._cfgKind()) == 0) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
+        if (!UAStore._registrable(UARegistryCoreLib._cfgKind())) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
         IUARegistry.FrostMember[] calldata m = key.members;
         bytes memory d =
             abi.encodePacked(_point(kind, key.groupKey, UAStore.vkLength(kind)), key.threshold, uint16(m.length));
@@ -152,7 +152,7 @@ library UARegistryRegLib {
         bytes calldata pqzPop
     ) external returns (bytes32 ua) {
         uint16 kind = UAKinds.BLS12381_MULTI;
-        if (uint160(UARegistryCoreLib._cfgKind()) == 0) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
+        if (!UAStore._registrable(UARegistryCoreLib._cfgKind())) revert IUARegistry.UAKindDisabled(kind); // step 1 before the key's fields (step 2)
         IUARegistry.BlsMultiMember[] calldata m = key.members;
         bytes memory d = new bytes(260 + 258 * m.length); // one allocation: n ≤ 64 members of 258 B
         _put(d, 0, _point(kind, key.aggKey, 256), key.threshold);
@@ -303,7 +303,7 @@ library UARegistryRegLib {
     /// Steps 1–4: kind enabled, key data canonical, the id (not native-space, not registered here or in gen 1), the
     /// keyHash (single keys) or the members (msig).
     function _identify(uint16 kind, bytes memory d) internal view returns (bytes32 ua, bytes32 kh) {
-        if (uint160(UARegistryCoreLib._cfgKind()) == 0) revert IUARegistry.UAKindDisabled(kind); // 1
+        if (!UAStore._registrable(UARegistryCoreLib._cfgKind())) revert IUARegistry.UAKindDisabled(kind); // 1
         bool structure = kind == UAKinds.MSIG;
         // 2. msig: the layout with the widest member set; the profile's MEMBER set is step 4 (UAMemberUnknown).
         UAKinds.validateKeyData(kind, d, structure || IUARegistry(address(this)).hederaNative());
@@ -390,7 +390,7 @@ library UARegistryRegLib {
         // MD-13 (owner 2026-11-15, F-1): every holder kind, a single key with its own cap (gen 1's for a record gen 1 holds)
         if (kind != UAKinds.MSIG) {
             return _msigDebit(
-                gen1 ? IUARegistry(g1).verifyCap(kind) : UARegistryCoreLib._cfgKind() >> 160,
+                gen1 ? IUARegistry(g1).verifyCap(kind) : UAStore._capOf(UARegistryCoreLib._cfgKind()),
                 192 + _slotBytes(kind, 0),
                 ua
             );
@@ -468,7 +468,7 @@ library UARegistryRegLib {
         bool proven = uint160(cfg) != 0;
         if (proven) {
             bytes memory data = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, pqzKey, message, pqzPop);
-            if (!UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true)) revert IUARegistry.UAPoP();
+            if (!UAStore.capped(address(uint160(cfg)), UAStore._capOf(cfg), data, 1, true)) revert IUARegistry.UAPoP();
             _pqzOwn(ua, v, h);
         }
         emit IUARegistry.UAPqzPopStored(ua, v, UAStore.checked(proven), logged);
@@ -562,7 +562,7 @@ library UARegistryRegLib {
     /// first. Asked only after a false verdict, so an accepted check pays nothing for it.
     function _notCached(uint256 cfg, uint16 kind, bytes32 ua) internal view {
         if (
-            PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
+            PqUA.mldsaParts(kind) != 0 && UAStore._registrable(cfg) && UAStore.expanded(ua, kind).length == 0
                 && UAStore.noPrecompile(address(uint160(cfg)))
         ) revert IUARegistry.UAKeyNotCached(ua);
     }
