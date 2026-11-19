@@ -381,7 +381,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 892000,
-      "measured": 891909,
+      "measured": 891943,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapToUA_fresh_wrapped,token_mtxWrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 138000,
@@ -393,8 +393,8 @@
       "entry": "mtxWrapToUA",
       "kind": "token",
       "fresh": false,
-      "gas": 794000,
-      "measured": 793989,
+      "gas": 795000,
+      "measured": 794023,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapToUA_used_wrapped,token_mtxWrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 138000,
@@ -479,7 +479,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 491000,
-      "measured": 490528,
+      "measured": 490562,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapToUA_fresh_wrapped,token_mtxUnwrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -497,7 +497,7 @@
       "kind": "token",
       "fresh": false,
       "gas": 393000,
-      "measured": 392608,
+      "measured": 392642,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapToUA_used_wrapped,token_mtxUnwrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -815,7 +815,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 895000,
-      "measured": 894884,
+      "measured": 894918,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapToUA_fresh_wrapped,zether_mtxWrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 139000,
@@ -828,7 +828,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 797000,
-      "measured": 796964,
+      "measured": 796998,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapToUA_used_wrapped,zether_mtxWrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 139000,
@@ -893,7 +893,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 495000,
-      "measured": 494597,
+      "measured": 494631,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnwrapToUA_fresh_wrapped,zether_mtxUnwrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -906,7 +906,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 397000,
-      "measured": 396677,
+      "measured": 396711,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnwrapToUA_used_wrapped,zether_mtxUnwrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1219,7 +1219,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 896000,
-      "measured": 895099,
+      "measured": 895133,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapToUA_fresh_wrapped,pqz_mtxWrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 139000,
@@ -1232,7 +1232,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 798000,
-      "measured": 797179,
+      "measured": 797213,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapToUA_used_wrapped,pqz_mtxWrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 139000,
@@ -1297,7 +1297,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 495000,
-      "measured": 494890,
+      "measured": 494924,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxUnwrapToUA_fresh_wrapped,pqz_mtxUnwrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1309,8 +1309,8 @@
       "entry": "mtxUnwrapToUA",
       "kind": "pqz",
       "fresh": false,
-      "gas": 397000,
-      "measured": 396970,
+      "gas": 398000,
+      "measured": 397004,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxUnwrapToUA_used_wrapped,pqz_mtxUnwrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1558,70 +1558,70 @@
     {
       "signer": 256,
       "gas": 34000,
-      "measured": 33799,
+      "measured": 33955,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0100_delta",
       "sig_bytes": 608
     },
     {
       "signer": 257,
       "gas": 19000,
-      "measured": 18503,
+      "measured": 18659,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta",
       "sig_bytes": 128
     },
     {
       "signer": 258,
       "gas": 180000,
-      "measured": 179084,
+      "measured": 179240,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0102_delta",
       "sig_bytes": 96
     },
     {
       "signer": 259,
       "gas": 20000,
-      "measured": 19296,
+      "measured": 19452,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0103_delta",
       "sig_bytes": 96
     },
     {
       "signer": 260,
       "gas": 38000,
-      "measured": 37007,
+      "measured": 37094,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0104_delta",
       "sig_bytes": 160
     },
     {
       "signer": 261,
-      "gas": 49000,
-      "measured": 48966,
+      "gas": 50000,
+      "measured": 49053,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0105_delta",
       "sig_bytes": 288
     },
     {
       "signer": 262,
       "gas": 172000,
-      "measured": 171641,
+      "measured": 171760,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0106_delta",
       "sig_bytes": 384
     },
     {
       "signer": 263,
       "gas": 155000,
-      "measured": 154250,
+      "measured": 154369,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0107_delta",
       "sig_bytes": 192
     },
     {
       "signer": 264,
       "gas": 15000,
-      "measured": 14188,
+      "measured": 14344,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0108_delta",
       "sig_bytes": 160
     },
     {
       "signer": 304,
       "gas": 80000,
-      "measured": 79837,
+      "measured": 79922,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0130_delta",
       "sig_bytes": 2432,
       "stand_in": "ML-DSA-44 on a GasBurner standing in for its precompile (SCaaS testnet address 0x...5caa0012) at the calibrated 59,000 + 6 a message word; a chain without the precompile runs the registry's cached path, far dearer"
@@ -1629,7 +1629,7 @@
     {
       "signer": 305,
       "gas": 123000,
-      "measured": 122302,
+      "measured": 122387,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0131_delta",
       "sig_bytes": 3328,
       "stand_in": "ML-DSA-65 on a GasBurner standing in for its precompile (0x...5caa0013) at the calibrated 100,000 + 6 a message word; a chain without the precompile runs the registry's cached path, far dearer"
@@ -1637,7 +1637,7 @@
     {
       "signer": 306,
       "gas": 2355000,
-      "measured": 2354624,
+      "measured": 2354709,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta",
       "sig_bytes": 672,
       "margin": 1000
@@ -1645,14 +1645,14 @@
     {
       "signer": 307,
       "gas": 1339000,
-      "measured": 1338149,
+      "measured": 1338234,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0133_delta",
       "sig_bytes": 7872
     },
     {
       "signer": 308,
       "gas": 160000,
-      "measured": 159204,
+      "measured": 159289,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0134_delta",
       "sig_bytes": 4640,
       "stand_in": "ML-DSA-87 on a GasBurner standing in for its precompile (0x...5caa0014) at the calibrated 135,000 + 6 a message word; the kind is enabled only where a precompile verifies it (CTR-UA-39)"
@@ -1660,7 +1660,7 @@
     {
       "signer": 309,
       "gas": 4824000,
-      "measured": 4823467,
+      "measured": 4823552,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0135_delta",
       "sig_bytes": 1280,
       "margin": 1000
@@ -1668,7 +1668,7 @@
     {
       "signer": 321,
       "gas": 52000,
-      "measured": 51229,
+      "measured": 51245,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0141_delta",
       "sig_bytes": 160
     }
