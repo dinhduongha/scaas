@@ -940,7 +940,7 @@ jobs:
       - name: clippy
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCAAS_UA_CARGO_TARGET_DIR=$PWD/target
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCAAS_UA_CARGO_TARGET_DIR="$PWD/target"
       - name: build
         run: cmake --build build
       - name: vectors
