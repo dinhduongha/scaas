@@ -25,19 +25,19 @@ bind-dart | 81a8cbcf2 | 0 | dart: +6:
 # Counts the runner does not parse: ua-c python 101 tests OK, ua-py 99 OK, ua-go 2 packages ok, ua-cs 61 passed.
 # Not applicable: `sync-api` (feature not built: plan T20b), bind-cpp (no bindings/cpp: T20b). wasm32: `cargo check` only
 # (sdk-wasm, rpc-wasm); no wasm32 test ran (wasm-bindgen-test is not in the offline tree).
-sdk-e2e | b0c917a2c | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-ua-clippy | b0c917a2c | 0 | -; tree dirty
-ck-test | b0c917a2c | 0 | node: 478 pass, 0 fail, 4 skipped; tree dirty
-ua-test | b0c917a2c | 0 | 550 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 ua-c | b0c917a2c | 0 | 9 passed, 0 failed, 0 ignored (2 binaries); tree dirty
 ua-c-release | b0c917a2c | 0 | -; tree dirty
 ua-py | b0c917a2c | 0 | -; tree dirty
 ua-go | b0c917a2c | 0 | -; tree dirty
-ua-vectors | b0c917a2c | 0 | 655 passed, 0 failed, 6 ignored (62 binaries); tree dirty
 ua-cs | b0c917a2c | 0 | -; tree dirty
 ua-cxx | b0c917a2c | 0 | ctest: 0 tests failed out of 43; tree dirty
 frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
-sdk-min | 120b1db5d | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
-sdk-clippy | 120b1db5d | 0 | -; tree dirty
-sdk-test | 120b1db5d | 0 | 167 passed, 0 failed, 2 ignored (14 binaries); tree dirty
-docs | 120b1db5d | 0 | -; tree dirty
+sdk-test | c0b97063f | 0 | 170 passed, 0 failed, 2 ignored (14 binaries)
+ck-test | c0b97063f | 0 | node: 480 pass, 0 fail, 4 skipped
+sdk-min | c0b97063f | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
+sdk-clippy | c0b97063f | 0 | -
+sdk-e2e | c0b97063f | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+docs | c0b97063f | 0 | -
+ua-test | c0b97063f | 0 | 551 passed, 0 failed, 3 ignored (55 binaries)
+ua-clippy | c0b97063f | 0 | -
+ua-vectors | c0b97063f | 0 | 656 passed, 0 failed, 6 ignored (62 binaries)
