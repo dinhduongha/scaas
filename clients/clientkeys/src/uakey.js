@@ -19,7 +19,15 @@ import * as ua from "./ua.js";
 import { slip10, NETWORKS } from "./seed.js";
 import { eip2333 } from "./zether.js";
 import { PQ_KINDS, pqKeygen, pqMessage } from "./pq.js";
-import { hashToScalar, mapToG1Bn254, clientDataOk, webauthnOk, encodeMemberSigs, P256_N } from "./ua-verify.js";
+import {
+  hashToScalar,
+  mapToG1Bn254,
+  clientDataOk,
+  webauthnOk,
+  webauthnFields,
+  encodeMemberSigs,
+  P256_N,
+} from "./ua-verify.js";
 import { kemPrk, kemKeyFromPrk, isKemHolder } from "./kem.js";
 
 const fail = (code, reason) => {
@@ -310,6 +318,15 @@ export const webauthnChallenge = (purposeTag, digest) => ua.uaMessage(0x0100, pu
  *  `WEBAUTHN_MAX_ASSERTION`, its basis there). Longer: `WebAuthnTooLong`. */
 export const WEBAUTHN_MAX_ASSERTION = 1024;
 
+/** A `webauthn-p256` signature from any member key (a third party's `signMember` too; owner 2026-11-19, Q3, as ua-rs's
+ *  `UASig` builders): canonical, `authData` and `clientDataJSON` at most `WEBAUTHN_MAX_ASSERTION` together, else
+ *  `WebAuthnTooLong`; not canonical (its length cannot be read): `WebAuthnAssertion`. */
+function webauthnCapped(sig) {
+  const f = webauthnFields(sig) ?? fail("WebAuthnAssertion", "not the canonical encoding");
+  if (f[0].length + f[1].length > WEBAUTHN_MAX_ASSERTION)
+    fail("WebAuthnTooLong", `authData and clientDataJSON above ${WEBAUTHN_MAX_ASSERTION} bytes`);
+}
+
 /** The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` from an assertion, against the challenge the
  *  caller asked for (spec §5.6, C-07): 0 < r, s < n first, s made low, clientDataJSON UTF-8 (as ua-rs; the chains' rule alone
  *  does not ask it), kept as signed and accepted only by the chains' rule (`clientDataOk`: type, challenge = expected, origin,
@@ -368,7 +385,9 @@ function memberSlots({ ua: id, keyData, slots, inner, enabledOf }, md) {
   const all = ua.msigStructure(keyData).members;
   const own = (key, m, structure, msg) => {
     if (!key || key.kind !== m.kind || hex(key.ua) !== m.id) fail("Argument", "the key is not the slot's member");
-    return key.signMember(structure, msg);
+    const sig = key.signMember(structure, msg);
+    if (m.kind === 0x0100) webauthnCapped(sig);
+    return sig;
   };
   return slots.map((s) => {
     const m = all[s.index];

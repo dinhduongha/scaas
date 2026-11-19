@@ -99,7 +99,7 @@ pub fn ua_sig(
     if kind == MSIG {
         return Err(Error::Argument);
     }
-    let signature = key.sign_request(&ua_request(kind, purpose, digest)?)?;
+    let signature = super::webauthn::answer(key, &ua_request(kind, purpose, digest)?)?;
     let bare = stored(kind)
         || is_portable_purpose(purpose)
         || portable_record_purposes().contains(purpose)
@@ -121,7 +121,7 @@ pub fn ua_sig_app(key: &dyn Signer, app_id: &[u8; 32], digest: &[u8; 32]) -> Res
     if kind == MSIG {
         return Err(Error::Argument);
     }
-    let signature = key.sign_request(&app_request(kind, app_id, digest)?)?;
+    let signature = super::webauthn::answer(key, &app_request(kind, app_id, digest)?)?;
     Ok(UASig {
         key_data: vec![],
         signature,
@@ -508,7 +508,7 @@ fn sign(p: &Plan, ua: &[u8; 32], msg: &[u8; 32], native: &Native) -> Result<Memb
         if matches!(req, SignRequest::Eip712 { .. }) != (m.kind == EVM_EOA) {
             return Err(Error::Argument);
         }
-        key.sign_request(&req)
+        super::webauthn::answer(key, &req)
     };
     match &p.signers {
         Signers::Key(key) => Ok(MemberSig {
