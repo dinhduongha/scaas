@@ -1,0 +1,6 @@
+# p1p2 mutants at commit e924d70e4 (name | outcome | test)
+P1: the request's figure always (the table row ignored) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_ua_verify_gas_from_the_table_then_the_request
+P1: no request figure (0 without a table row) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_ua_verify_gas_from_the_table_then_the_request
+P2: an unregistered recipient is LegKeyMismatch | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential zether_transfer_single_pair
+P2: the holder's missing record named as a recipient's | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential leg_of_another_key_refused
+4 mutants, 4 killed, 0 survived, 0 not loaded

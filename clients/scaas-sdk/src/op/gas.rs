@@ -114,6 +114,21 @@ pub(crate) fn lookup(
     }
 }
 
+/// The verify row of `signer` alone, in the lookup order (chain → module → reference), else the app's figure `app` (owner
+/// 2026-11-19, P1: the Zether UA's verify gas a multi-recipient proof adds; the table row wins when present).
+pub(crate) fn verify_or(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    signer: u16,
+    app: u64,
+) -> (u64, GasFrom) {
+    part(chain, opt_in, tables, |r| {
+        r.verify.iter().find(|v| v.signer == signer).map(|v| v.gas)
+    })
+    .unwrap_or((app, GasFrom::App))
+}
+
 /// The quote's gas of a key whose unsigned calldata is `len` bytes: the figure plus the intrinsic cost and the calldata, with
 /// the margin, and its sources; `None`: unquoted.
 pub(crate) fn quoted(

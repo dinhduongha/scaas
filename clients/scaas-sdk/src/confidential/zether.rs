@@ -192,7 +192,8 @@ pub struct ZetherLeg {
 /// `UAZetherTransfer` / `UAZetherTransferCompact`: the real `recipients` and `decoys` legs of amount 0 drawn uniformly from
 /// the registry's `0x0141` list (CTR-UA-29, the default), every leg's position shuffled. `decoy_fee`: the per-leg fee the
 /// token pays (decimal, `"0"` none; the token's `minDecoyFee` is the contract's check). `ua_signer_gas`: the Zether UA's
-/// verify gas the prover's gas-cap check adds for the relayed build (zether-prover `uaSignerGas`).
+/// verify gas the prover's gas-cap check adds for the relayed build (zether-prover `uaSignerGas`), the app's figure: a verify
+/// row for `0x0141` in the gas tables (chain → module → reference) wins over it (owner 2026-11-19, P1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZetherTransferMulti {
     pub seed: String,
@@ -449,7 +450,17 @@ impl super::Confidential {
         review.push(field("request.decoys", &d, &d, Source::Derived));
         let mut fields = Map::new();
         fields.insert("decoyFee".into(), json!(r.decoy_fee));
-        fields.insert("uaSignerGas".into(), json!(r.ua_signer_gas));
+        // P1 (owner 2026-11-19): the gas table's verify row of the Zether UA in the lookup order (chain → module →
+        // reference), else the request's figure
+        let (profile, _, _) = evm(&self.sdk, &r.chain)?;
+        let (ua_gas, _) = crate::op::gas::verify_or(
+            &profile.gas,
+            &profile.gas_opt_in,
+            &self.sdk.gas_tables,
+            ZETHER_KIND,
+            r.ua_signer_gas,
+        );
+        fields.insert("uaSignerGas".into(), json!(ua_gas));
         self.proved(Proof {
             name,
             cmd: "proveTransferMulti",

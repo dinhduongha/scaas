@@ -503,6 +503,11 @@ fn env() -> scaas_sdk::wallet::Envelope {
 /// A fake with the holder (account 0, 5 units) and a registered recipient (account 1), a gateway, the Zether token's domain
 /// and gas rows for the Zether entries signed by a Zether UA or a native key.
 async fn pairs_setup() -> (Arc<Sdk>, String, Fake, ZetherKeyInfo, ZetherKeyInfo) {
+    pairs_setup_verify(&[0, 0x0141]).await
+}
+
+/// [`pairs_setup`] with verify rows (gas 0) for the signer kinds `verify` only.
+async fn pairs_setup_verify(verify: &[u16]) -> (Arc<Sdk>, String, Fake, ZetherKeyInfo, ZetherKeyInfo) {
     let c = fake();
     let url = serve(c.clone()).await;
     let gw = serve(c.clone()).await;
@@ -521,9 +526,7 @@ async fn pairs_setup() -> (Arc<Sdk>, String, Fake, ZetherKeyInfo, ZetherKeyInfo)
                 })
             })
             .collect(),
-        verify: [0u16, 0x0141]
-            .map(|signer| scaas_sdk::GasVerify { signer, gas: 0 })
-            .to_vec(),
+        verify: verify.iter().map(|&signer| scaas_sdk::GasVerify { signer, gas: 0 }).collect(),
     };
     let (s, seed) = sdk(p).await;
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
@@ -607,9 +610,15 @@ async fn zether_transfer_single_pair() {
     c.lock().unwrap().code.insert(KEYPTR2.into(), hx(&other));
     assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "LegKeyMismatch");
     c.lock().unwrap().code.insert(KEYPTR2.into(), good);
-    // the recipient not registered: refused by the reading layer
-    put(&c, REGISTRY, &map(&unhex(&k2.ua).try_into().unwrap(), &be(0)), &[0; 32]);
+    // a record of another kind: a key mismatch; no record at all: the recipient is unregistered (owner 2026-11-19, P2)
+    let slot = map(&unhex(&k2.ua).try_into().unwrap(), &be(0));
+    let rec: W = unhex(&c.lock().unwrap().storage.get(&(REGISTRY.into(), hx(&slot))).cloned().unwrap()).try_into().unwrap();
+    let mut r = rec;
+    r[31] = 0x40;
+    put(&c, REGISTRY, &slot, &r);
     assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "LegKeyMismatch");
+    put(&c, REGISTRY, &slot, &[0; 32]);
+    assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "ReceiverUnregistered");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -860,7 +869,44 @@ async fn zether_transfer_multi_pairs() {
     assert_eq!(signed_by_zether(&c, 1, &p.id(), &k).await["op"]["entry"], "mtxConfidentialTransferCompact");
     // a listed UA whose record is gone: when it must be drawn, the key read refuses it (R6)
     put(&c, REGISTRY, &map(&unhex(&k4.ua).try_into().unwrap(), &be(0)), &[0; 32]);
-    assert_eq!(code(s.confidential().prepare_zether_transfer_multi(t(2)).await), "LegKeyMismatch");
+    assert_eq!(code(s.confidential().prepare_zether_transfer_multi(t(2)).await), "ReceiverUnregistered");
+}
+
+/// P1 (owner 2026-11-19): the Zether UA's verify gas the prover adds comes from the gas table's `0x0141` verify row when there
+/// is one, else from the request (`ua_signer_gas`, the app's figure). A figure above the transaction cap makes the prover
+/// refuse the build, so which figure was used shows.
+#[tokio::test(flavor = "multi_thread")]
+async fn zether_ua_verify_gas_from_the_table_then_the_request() {
+    use scaas_sdk::confidential::{ZetherLeg, ZetherTransferMulti};
+    for (verify, app, ok) in [
+        (&[0u16, 0x0141][..], 1u64 << 30, true), // the table's row (0) wins over an over-cap request figure
+        (&[0u16][..], 1u64 << 30, false),         // no row: the request's figure is used, over the cap
+        (&[0u16][..], 0, true),                   // no row: the request's figure, within the cap (control)
+    ] {
+        let (s, seed, c, k, k2) = pairs_setup_verify(verify).await;
+        let k3 = s.confidential().zether_key(seed.clone(), 2).await.unwrap();
+        register(&c, &k3, KEYPTR3);
+        list(&c, &[&k, &k2, &k3]);
+        let r = s
+            .confidential()
+            .prepare_zether_transfer_multi(ZetherTransferMulti {
+                seed: seed.clone(),
+                account: 0,
+                chain: "local".into(),
+                token: TOKEN.into(),
+                batch: "0".into(),
+                recipients: vec![ZetherLeg { to_ua: k2.ua.clone(), amount: "3".into() }],
+                decoys: 1,
+                decoy_fee: "0".into(),
+                ua_signer_gas: app,
+                valid_until_block: 1000,
+                envelope: env(),
+                table_bits: Some(18),
+                bound_bits: Some(18),
+            })
+            .await;
+        assert_eq!(r.is_ok(), ok, "verify rows {verify:?}, request {app}: {:?}", r.err());
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -205,7 +205,9 @@ six slots and every point's four data words, each named UA's registry record and
 returned; `zether_balance` decrypts it in the facade; every Zether entry of spec §9.1 is a prepared operation, the Zether UA signing
 through `sign_scaas`: the multi-recipient transfers draw their decoys uniformly from the registry's `0x0141` list read as a second
 fixed word set (CTR-UA-29) and shuffle every leg; the owner statements sign under `zether-owner`, their relayed forms carrying that
-signature as `ownerSig` (owner 2026-11-19, C3). A failed check is a named error (`TokenUncatalogued`, `LegKeyMismatch`, C4). The
+signature as `ownerSig` (owner 2026-11-19, C3). A failed check is a named error (`TokenUncatalogued`, `LegKeyMismatch`, C4; `ReceiverUnregistered` for a recipient with no
+registry record, P2). The Zether UA's verify gas of a multi-recipient proof is the gas table's `0x0141` verify row, else the
+request's `ua_signer_gas` (P1). The
 watch loop reads a watched Zether UA's words on its fixed schedule, nothing decrypted. The anvil e2e is PLANNED.
 
 ## 7. App cores above the SDK

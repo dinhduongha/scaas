@@ -233,7 +233,11 @@ fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: 
     }
     // R6: the holder's registered Y is the handle's; each recipient's Y is its UA's
     let mut ys = Vec::with_capacity(uas.len());
-    for (ua, (rec, code)) in uas.iter().zip(&r.keys) {
+    for (i, (ua, (rec, code))) in uas.iter().zip(&r.keys).enumerate() {
+        // a recipient with no registry record (kind 0) has its own name (owner 2026-11-19, P2); the holder's stays R6's
+        if i > 0 && u16::from_be_bytes([rec[30], rec[31]]) == 0 {
+            return Err(SdkError::ReceiverUnregistered);
+        }
         ys.push(registered(ua, rec, code)?);
     }
     if y.is_some_and(|y| ys.first().map(Vec::as_slice) != Some(y)) {
@@ -269,7 +273,8 @@ fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: 
 
 /// The words of Zether token `token` on `chain` for the handle `(y, ua)` and the recipient UAs `others`, at the profile's final
 /// block (R1 to R7). `ChainUnknown`; `Argument`: no factory in the profile; `TokenUncatalogued`: a token not catalogued as Zether
-/// or not a clone; `LegKeyMismatch`: a UA not registered with its `Y`, the holder's `Y` not the handle's; `ProfileMismatch`: the
+/// or not a clone; `ReceiverUnregistered`: a recipient UA with no registry record (P2); `LegKeyMismatch`: the holder not
+/// registered, a UA's record of another kind or key, the holder's `Y` not the handle's; `ProfileMismatch`: the
 /// token's `ChainEnv` of another chain; the pool's codes (`NoTrustedEndpoint`, `AgreementNeedsThree`, …).
 pub(crate) async fn zether(
     sdk: &Sdk,
