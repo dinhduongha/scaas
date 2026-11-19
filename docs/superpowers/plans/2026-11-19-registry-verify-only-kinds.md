@@ -39,8 +39,8 @@ repeat the spec's rules.
 - Views: `holderOf(bytes32) → (address holder, uint16 kind, address pqzHome)`, `pqzHomeOf(bytes32) → address` (third word),
   `kindHome(uint16) → address`, `verifierOf(uint16) → address`, `verifyOnly(uint16) → bool`, `txGasCap() → uint64`; error
   `UAVerifyOnly(uint16 kind)`. Native-space ids answer `(0, 0, 0)` / `kindOf = 0` / `isRegistered = false` without a walk.
-- `txGasCap`: immutable constructor parameter after `verifyBudget_` (plan choice C1); `verifyBudget ≤ txGasCap < 2^64`
-  (spec P17); replaces `UARegistryCoreLib.TX_GAS_CAP`. Tests construct with `1 << 24` unless they test the cap.
+- `txGasCap`: immutable constructor parameter after `verifyBudget_` (owner C1); `verifyBudget ≤ txGasCap < 2^64`
+  (owner P17); replaces `UARegistryCoreLib.TX_GAS_CAP`. Tests construct with `1 << 24` unless they test the cap.
 - Errors kept: `UAKeyData(0x0120)` (registration over the hard bound), `UAMsigSlots(n)` (`updateMsig` over it),
   `UAPqzHolder(ua)` (PQZ debit bound), `UAConfig(kind)` / `UAConfig(0)` (constructor), `UAVerifyGas`, `UAKeyNotCached`,
   `UAUnauthorized`, `UAKindDisabled(0x0142)`.
@@ -48,7 +48,10 @@ repeat the spec's rules.
   `GEN_VERIFY_ONLY_NO_PRECOMPILE <kind>`, `GEN_PQZ_OMITTED`, `GEN_PQZ_DEBIT_BOUND <kind>`, `GEN_TX_CAP_UNKNOWN`,
   `GEN_TX_CAP_MISMATCH`; node errors `UA_VERIFY_ONLY`, `UA_WRONG_GENERATION`, `UA_KEY_NOT_CACHEABLE`.
 - Constants measured by the round, pinned with old → new in the commit: `UA_CONSUMER_RESERVE_GAS`, `MSIG_REGISTER_GAS`,
-  `PQZ_KEY_WRITE_GAS` (spec P15), each verify-only verifier's explicit precompile gas limit (spec P20).
+  `PQZ_KEY_WRITE_GAS` (owner P15), each verify-only verifier's explicit precompile gas limit (owner P20).
+- **Where the walk lives (owner Y1):** the generation walk's logic is in `UARegistryCoreLib`; `UARegistry`'s `holderOf`,
+  `kindHome`, `verifierOf`, `pqzHomeOf` and the forwarding readers are thin views that DELEGATECALL into it through
+  `_libView` (as today's library readers). The selectors stay on the registry: the frozen interface does not change.
 - Eligible verify-only kinds this round: ML-DSA `0x0130`, `0x0131`, `0x0134` only (§2, §7); every other kind waits for its
   edge-class list and vectors.
 - Rule ids `CTR-UA-58` … `CTR-UA-72` are placeholders until Task 19.
@@ -90,26 +93,40 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
   fields); 17 and 18 after 15; 19 after 17 and 18; 20 last before 21.
 - **Tests first** in every code task: the test, red; the code; green. Every refusal test changes one thing from a valid row
   (positive control first). Mutants per task, each killed by a named test; mutant scripts and `step | commit | rc | counts`
-  summaries in `smartcontracts/evm/runs/<round-start-date>-gen2-verify/` (plan choice C2; full output in git-ignored
+  summaries in `smartcontracts/evm/runs/<round-start-date>-gen2-verify/` (owner C2; full output in git-ignored
   `.log` files, no absolute paths).
 - **Gates per task** (AGENTS.md "round of several tasks"): the task's own suites at the default set, its mutants, every pin
   it moves (gas, size, typehash, layout, selector audit: old → new in the commit). Contract tasks that do not touch
   `src/pqz/` also run `script/pqz/at-set.sh others sensitive` and `others modules` when they move a set-sensitive pin.
   Task 8 changes `src/pqz/PqzStateLib.sol`: a **PQZ change** under AGENTS.md, so the round gate runs every forge directory
-  at all four sets (`at-set.sh others test`), not only the set-sensitive tests (plan choice C3: AGENTS.md's PQZ rule is the
-  stricter reading of the brief's "set-sensitive tests at the other sets"). Each commit body says "full matrix pending
+  at all four sets (`at-set.sh others test`), not only the set-sensitive tests (owner C3: AGENTS.md's PQZ rule). Each commit body says "full matrix pending
   (round gate)".
 - **Size gate per contract task:** `T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json; python3
   ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json`. Record `UARegistry`, `UARegistryCoreLib`,
   `UARegistryRegLib`, `UARegistryAuxLib`, `OpenFactory` and each new verifier before → after in the commit. **STOP on a T-1
   line** (library 35,694 B, plain 35,286 B, release 35,386 B, module 35,570 B; `scripts/size_gate.py`): report the sizes
   and wait; no module split and no size lever without the owner's word. A baseline move needs its reason in the commit.
+  Room on `bls-multi` after its split (its `size-baseline.json`, commit `383d1e2f8`; re-read before Task 1, the figures move
+  with `bls-multi`'s remaining tasks):
+
+  | Contract | Form | Runtime | T-1 line | Room | Grown by |
+  |---|---|---|---|---|---|
+  | `UARegistry` | plain | 33,293 B | 35,286 B | 1,993 B | Tasks 1, 2 (constructor rules, flags, probes), 3 (thin views), 5 – 6 (consumer path), 8 (PQZ views) |
+  | `UARegistryCoreLib` | library | 15,737 B | 35,694 B | 19,957 B | Tasks 3 (the walk, owner Y1), 4 – 7 (write flag, consumer branch, fallback, bounds) |
+  | `UARegistryRegLib` | library | 30,157 B | 35,694 B | 5,537 B | Tasks 1, 3 (step 1, `_identify`), 7 (`msigBound`, `pqzHolder`), 8 (`pqzProof`) |
+  | `UARegistryAuxLib` | library | 35,417 B | 35,694 B | 277 B | Tasks 3 (`cacheExpandedKey`), 8 (the PQZ positions): **expected size stop** |
+  | `OpenFactory` | plain | 34,999 B | 35,286 B | 287 B | Task 12 (the env walk): **expected size stop** |
+
+  `UARegistry`'s 2 KB must cover the constructor rules (which run in the constructor and stay there) and one thin view
+  per walked selector; every line of walk logic goes to `UARegistryCoreLib`. Where Task 8 or Task 12 crosses its line, the
+  task stops at Step 4 with the sizes; the option of moving the PQZ positions' logic to `UARegistryCoreLib` (which has the
+  room) is the owner's to choose, not the implementer's.
 - **Heavy commands** through `scripts/capped`, foreground, never inside `timeout`; the node suite alone with
   `CAPPED_MEM=6G`. No background shells, no sleep loops, no `anvil` left running. `at-set.sh` rewrites
   `src/pqz/PqzSet.sol`: one run per worktree, restored after.
 - **Commits:** one per task, staged by explicit path (`git commit --only -- <paths>`), trailers as the session gives
   them, no `Signed-off-by`.
-- **Plan choices** (controller may override) are marked *plan choice Cn* and listed at the end.
+- **Owner rulings on the plan** (2026-11-19, "approve all as proposed"): C1 – C7, marked *owner Cn* and listed at the end.
 
 ---
 
@@ -146,17 +163,23 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
   single-key kinds, `msig` / `0x0142` never flagged (M6), key form `1` refused where the home's `verifierOf(kind)` has
   `PRECOMPILE() ≠ 0` (N8), a verify-only verifier with `PRECOMPILE() == 0` refused (P11), `KEY_FORM()` equal to bit 225,
   `_groupInPredecessor` by `kindHome(j) != 0`, `0x0142` exempt; `generation = p.generation() + 1`, `MAX_GENERATION = 16`,
-  the bounded walk of predecessors; views `kindHome`, `verifierOf`, `verifyOnly`; N12 masking at `_verifierCall`,
-  `kindEnabled`, `_listedHere`, `requireAuthorized`, `_derived`), `smartcontracts/evm/src/ua/UARegistryCoreLib.sol`,
-  `UARegistryRegLib.sol`, `UARegistryAuxLib.sol` (N12 masking at every site of the spec's §14 list, `_consent`'s
+  the bounded walk of predecessors: these run in the constructor and stay in `UARegistry`; the thin views `kindHome`,
+  `verifierOf` (`_libView` into the library), `verifyOnly` (a read of the local word); N12 masking at `_verifierCall`,
+  `kindEnabled`, `_listedHere`, `requireAuthorized`, `_derived`), `smartcontracts/evm/src/ua/UARegistryCoreLib.sol`
+  (`kindHome`'s recursion and `verifierOf`'s word read, owner Y1; N12 masking), `UARegistryRegLib.sol`,
+  `UARegistryAuxLib.sol` (N12 masking at every site of the spec's §14 list, `_consent`'s
   `_notCached(_cfgKind(), …)` and `_single`'s `uint160(cfg) == 0` included), `smartcontracts/evm/src/ua/IUARegistry.sol`
 - Test: create `smartcontracts/evm/test/ua/UARegistryLine.t.sol` (helpers: a three-generation fixture
   `_line3(bool[3] pqz)` and a stand-in verifier `VerifyOnlyStandIn` with settable `PRECOMPILE()`, `KEY_FORM()` and
   answer); modify `test/ua/UARegistry.t.sol` (T-REG-4 rows)
 
 **Interfaces:**
-- Produces: `UARegistry.KindConfig` (five fields), `kindHome`, `verifierOf`, `verifyOnly`, `_capOf`, `_registrable`, the
-  fixture `_line3` used by Tasks 3 – 8.
+- Produces: `UARegistry.KindConfig` (five fields), `kindHome`, `verifierOf`, `verifyOnly`, `_capOf`, `_registrable`
+  (internal helpers in a shared place both the registry and the libraries read: `UAStore` or `UAKinds`, beside today's
+  word readers), the library entries `UARegistryCoreLib.kindHome(uint16)` and `verifierOf(uint16)`, the fixture `_line3`
+  used by Tasks 3 – 8.
+- Size: `UARegistry` grows by the constructor rules and two thin views (expected the larger part of its 1,993 B room;
+  record it, since Tasks 3, 5, 6 and 8 need the rest); `UARegistryCoreLib` by `kindHome` (small).
 
 - [ ] **Step 1: Failing tests:** T-REG-4 changed: `test_gen2_predecessorKind_withoutFlag_UAConfig`,
   `test_gen2_flagOnUnknownKind_UAConfig`, `test_gen1_flag_UAConfig`, `test_flagOnMsig_UAConfig`,
@@ -178,10 +201,12 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
 ### Task 3: the one walk, forwarding readers, refusals, probes (§3, §11.1, §11.3 W3, M4, P12)
 
 **Files:**
-- Modify: `smartcontracts/evm/src/ua/UARegistry.sol` (`holderOf` three words per §11.1, `pqzHomeOf` as its third word,
-  native-space shortcut on `kindOf` / `holderOf` / `isRegistered`, every forwarding reader of §11.1 by `holderOf`,
-  forwarding `expandedKeyOf`, `_listedHere` false for a verify-only kind, list views of a verify-only kind forwarded to
-  `kindHome`; the constructor probes of §11.3 on every predecessor of the walk: `holderOf(0)`, `kindHome(0)`,
+- Modify: `smartcontracts/evm/src/ua/UARegistryCoreLib.sol` (owner Y1: the walk's logic: `holderOf` three words per
+  §11.1, `pqzHomeOf` as its third word, each forwarding reader of §11.1 reading at `holderOf`'s holder, forwarding
+  `expandedKeyOf`, a verify-only kind's list views forwarded to `kindHome`), `smartcontracts/evm/src/ua/UARegistry.sol`
+  (thin views `holderOf`, `pqzHomeOf` and the forwarding readers, each `_libView(address(UARegistryCoreLib), sel, 0)`;
+  the native-space shortcut on `kindOf` / `holderOf` / `isRegistered` before the library call; `_listedHere` false for a
+  verify-only kind; the constructor probes of §11.3 on every predecessor of the walk: `holderOf(0)`, `kindHome(0)`,
   `verifierOf(0)`, `verifyOnly(0)`, `pqzHomeOf(0)`, `txGasCap()`, `expandedKeyOf(0)`, plus today's three),
   `UARegistryRegLib.sol` (step 1 of every `register*`: `_registrable`, then `UAVerifyOnly(kind)`; `_identify` local for a
   single-key kind, P12), `UARegistryAuxLib.sol` (`cacheExpandedKey` of a verify-only kind reverts `UAVerifyOnly`),
@@ -189,12 +214,18 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
 - Test: `smartcontracts/evm/test/ua/UARegistryLine.t.sol`
 
 **Interfaces:**
-- Produces: `holderOf(bytes32) → (address, uint16, address)`, `pqzHomeOf`, `UAVerifyOnly(uint16)`.
+- Produces: `holderOf(bytes32) → (address, uint16, address)` on the registry (thin) and
+  `UARegistryCoreLib.holderOf(bytes32)` (the walk, an external library entry `_libView` reaches; library-internal callers
+  in Tasks 4 – 8 use an internal `_holderOf(bytes32)`), `pqzHomeOf`, `UAVerifyOnly(uint16)`.
+- Size: `UARegistryCoreLib` takes the walk (expected ≈ 1 – 3 KB of its 19,957 B room [estimate]); `UARegistry` one thin view
+  per walked selector (≈ 40 – 80 B each [estimate]: a selector entry and a `_libView` call); `UARegistryRegLib` step 1 and
+  `_identify`; `UARegistryAuxLib` only `cacheExpandedKey`'s refusal (≈ 30 – 60 B of its 277 B).
 
 - [ ] **Step 1: Failing tests:** `test_holderOf_ownRecord`, `test_holderOf_threeGenerations` (gen-1, gen-2, gen-3 records
   read through gen 3), `test_holderOf_miss_zero`, `test_holderOf_pqzHome_thirdWord` (both fixtures of §11.2 (a), (b)),
   `test_holderOf_oneCallPerGeneration` (§11.2 (g), M4: four generations all enabling `0x0142`, gas of a miss ≤ 4 × the
-  pinned per-hop figure), `test_nativeSpace_noWalk_noStore` (every registration form with a native-space id refused,
+  pinned per-hop figure, the library DELEGATECALL included), `test_holderOf_viewOverhead` (the thin view's gas over the
+  library entry's, pinned: the spec's "a few hundred gas" checked), `test_nativeSpace_noWalk_noStore` (every registration form with a native-space id refused,
   nothing stored; the views answer without a call: P5), `test_readers_forwardByHolder` (each reader of §11.1 on a gen-1
   record through gen 3 equals gen 1's answer), `test_expandedKeyOf_forwards`, `test_register_verifyOnly_UAVerifyOnly` (all
   four forms), `test_cacheExpandedKey_verifyOnly_UAVerifyOnly`, `test_lists_verifyOnly_forwardToHome`,
@@ -241,7 +272,8 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
 - Modify: `smartcontracts/evm/src/ua/UARegistry.sol` (`_authorized`, `_derived`, `_memberOk`: own verifier where the kind
   is verify-only here, else the holder directly; `requireAuthorized`'s `UAKeyNotCached` branch on `holderOf`'s kind;
   `requirePortable` / `requirePortableApp` by §4's table; key bytes and entry per §4 "Key bytes", key form `1` from the
-  holder's `expandedKeyOf`), `UARegistryCoreLib.sol` (`_portable` / `_single` / `_memberOk` verify-only branch from consumer
+  holder's `expandedKeyOf`; the walk read by a static self-call `IUARegistry(address(this)).holderOf(ua)` (plan choice C8, spec
+  proposal P21; owner Y1: no walk logic in `UARegistry`)), `UARegistryCoreLib.sol` (`_portable` / `_single` / `_memberOk` verify-only branch from consumer
   entries only; `_notCached` on `holderOf`'s kind; failed predecessor reads re-raise `UAVerifyGas`)
 - Test: create `smartcontracts/evm/test/ua/UARegistryVerifyOnly.t.sol`
 
@@ -319,7 +351,10 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
   list views on this generation's own list, M5), `UARegistryAuxLib.sol` (`_host`, `_away`, `_scopedFrom`, `_pqzRecord`,
   `_pqzNext`, `_kemHash`, `_registerKeyMessage`, `registrationOf`'s patch, per §11.2's table), `UARegistryCoreLib.sol` /
   `UARegistryRegLib.sol` (`pqzProof` with the line-wide `keyOwner` walk; A5-I1 (3) by `kindHome(0x0142)`),
-  `smartcontracts/evm/src/pqz/PqzStateLib.sol` (`_auditorChecks`: `kindHome(0x0142) != 0`)
+  `smartcontracts/evm/src/pqz/PqzStateLib.sol` (`_auditorChecks`: `kindHome(0x0142) != 0`). The PQZ positions read the
+  walk through `_holderOf` (the library internal reached by `UARegistryCoreLib`, or `IUARegistry(address(this)).holderOf`
+  from `UARegistryAuxLib`). Size: `UARegistryAuxLib` has 277 B: if Step 4's size gate crosses its T-1 line, STOP and report
+  (see "Size gate per contract task").
 - Test: create `smartcontracts/evm/test/ua/UARegistryPqzHome.t.sol`; modify `test/pqz/PqzAuditor.t.sol`
 
 - [ ] **Step 1: Failing tests:** §11.2 (a) – (e), (g) – (h): `test_pqzHome_a_gen1With_gen2Without_gen3With` (gen 2 built
@@ -344,8 +379,8 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
 ### Task 9: ML-DSA verify-only verifiers (§2, §5, §9, M7)
 
 **Files:**
-- Create: `smartcontracts/evm/src/ua/MlDsaVerifyOnly.sol` (one contract per kind, `MldsaVerifyOnly44` / `65` / `87`, plan
-  choice C4: one file, a shared base): constructor probe at a candidate address list (valid / flipped pair plus one negative
+- Create: `smartcontracts/evm/src/ua/MlDsaVerifyOnly.sol` (one contract per kind, `MldsaVerifyOnly44` / `65` / `87`,
+  owner C4: one file, a shared base): constructor probe at a candidate address list (valid / flipped pair plus one negative
   row per §7 ML-DSA edge class, `PRECOMPILE = 0` on any miss), `PRECOMPILE()`, `KEY_FORM()` (`0`, or `1` for an
   EIP-8051-style precompile), `verify` / `verifyPop` / `verifyCached` as the holder's entries; lengths and encodings first
   (the holder's decoding code reused unchanged), the precompile called with an explicit gas limit, the alive-check,
@@ -407,7 +442,8 @@ The run against a real precompile is on a local chain whose client has it (never
 **Files:**
 - Modify: `smartcontracts/evm/src/factory/OpenFactory.sol` (the env check: 0, `uaRegistry()`, or a registry whose
   predecessor walk reaches it within `MAX_GENERATION − 1` steps, each a contract; `chainUid` equal; `smartKeyCloneHash()`
-  equal; else `EnvRegistryMismatch`)
+  equal; else `EnvRegistryMismatch`). Size: `OpenFactory` has 287 B: if Step 4's size gate crosses its T-1 line, STOP
+  and report.
 - Test: `smartcontracts/evm/test/v2/FactoryDirectory.t.sol`
 
 - [ ] **Step 1: Failing tests:** `test_env_gen3OfRouterLine_accepted`, `test_env_otherChainUid_refused`,
@@ -462,7 +498,7 @@ The run against a real precompile is on a local chain whose client has it (never
 - Modify: `smartcontracts/evm/script/pq_verifiers.py` and `smartcontracts/evm/script/DeployBase.sol`
   (`_mldsaCandidates`: by default the Final EIP addresses and the chain-own `0x…5caa0012` / `13` / `14`; the Draft
   `0x12` / `0x13` / `0x14` only when the chain's row in `smartcontracts/evm/chain-uids.json` has
-  `"probe_draft_precompiles": true` (plan choice C5) and the book records the owner's confirmation, then with the fuller
+  `"probe_draft_precompiles": true` (owner C5) and the book records the owner's confirmation, then with the fuller
   probe: valid row, flipped row, the edge-class vectors), `chain-uids.json` (the field, absent on every chain today)
 - Test: `smartcontracts/evm/test/ua/UADeploy.t.sol`, the Python self-test of `pq_verifiers.py` (create
   `script/test_pq_verifiers.py` if none exists)
@@ -518,7 +554,7 @@ The run against a real precompile is on a local chain whose client has it (never
 - Modify: `clients/scaas-sdk/src/config.rs` (verify rows keyed by chain, registry address and signer kind; columns path
   `cache` / `precompile` / `fallback`, depth, write path; the chain's `txGasCap` row), the SDK's registration and key-write
   targets (`kindHome`, `holderOf`, `pqzHomeOf`), the PQZ decoy draw (the `0x0142` list of every enabling generation on the
-  token registry's walk, concatenated, by distinct key hash: spec P19), `clients/scaas-sdk/gas/{inputs.json,reference.json,generate.py}`
+  token registry's walk, concatenated, by distinct key hash: owner P19), `clients/scaas-sdk/gas/{inputs.json,reference.json,generate.py}`
 - Test: `clients/scaas-sdk/src/op/gas.rs` tests, `clients/scaas-sdk/tests/account.rs`
 
 - [ ] **Step 1: Failing tests:** `verify_row_keyed_by_registry`, `quote_takes_bound_registry_row`,
@@ -532,7 +568,7 @@ The run against a real precompile is on a local chain whose client has it (never
 
 **Files:**
 - Modify: `clients/ua-rs/src/lib.rs` (a pure check `registration_target_ok(kind, registry, kind_home) -> Result<(),
-  VerifyOnly>`: the caller passes the `kindHome(kind)` it read; plan choice C6: no RPC in the libraries), the same check in
+  VerifyOnly>`: the caller passes the `kindHome(kind)` it read; owner C6: no RPC in the libraries), the same check in
   `clients/clientkeys`, `clients/ua-py`, `clients/ua-go`, `clients/ua-cs`, `clients/ua-dart` (the ua-rs bindings `ua-c`,
   `ua-cxx`, `ua-qt`, `ua-dart-frb` re-export ua-rs's); `docs/clients/ua-libraries.md`
 - [ ] **Step 1: Failing tests** per language: `target_equal_ok`, `target_other_verify_only`. No byte format changes: no
@@ -599,9 +635,11 @@ A red step is reported with its output; no pin, bound or test is edited to go gr
 
 ---
 
-## Plan choices (controller may override)
+## Owner rulings on the plan (2026-11-19)
 
-| # | Choice |
+The owner on the plan's choices C1 – C7: **"approve all as proposed"**.
+
+| # | Ruling |
 |---|---|
 | C1 | `txGasCap` is the constructor's argument right after `verifyBudget_` (one ABI change; the 40 construction sites updated in Task 1) |
 | C2 | The round's runs folder is `smartcontracts/evm/runs/<round-start-date>-gen2-verify/` |
@@ -610,3 +648,9 @@ A red step is reported with its output; no pin, bound or test is edited to go gr
 | C5 | The Draft probe flag is a field of the chain's row in `smartcontracts/evm/chain-uids.json` (`probe_draft_precompiles`), and the owner's confirmation is a book field |
 | C6 | The client libraries check the registration target from a `kindHome` value the caller passes; only scaas-sdk reads it from the chain (no RPC in `ua-*`) |
 | C7 | Task order: writes (Task 4) before the consumer path (Task 5), so no build of the round lets a verify-only verifier near a write |
+
+Open (plan choice, controller may override; the spec's proposal P21):
+
+| # | Choice |
+|---|---|
+| C8 | `UARegistry`'s consumer path (Task 5) reads the walk by a static self-call to its own thin `holderOf` view |

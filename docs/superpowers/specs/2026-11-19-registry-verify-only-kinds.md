@@ -3,7 +3,8 @@
 2026-11-19. **Revision 4**: every finding of the Fable fix-check of revision 3 (Fable, high effort, verdict "build after
 fixes", P0 0 / P1 0 / P2 3 / P3 7, M1 – M10, positions on P7 – P14; file in the private scratchpad, not in the repo) applied,
 and the owner's rulings of 2026-11-19 on it recorded in §0.4 (P7 – P14, P9's refusal, the per-transaction cap as a deploy
-parameter, M2, M9). Revision 3 applied the fix-check of revision 2 (N1 – N16, rulings §0.3); revision 2 the Fable review of
+parameter, M2, M9), amended the same day with the owner's rulings on revision 4's proposals P15 – P20 and on the
+library that holds the generation walk (§0.4, Y1). Revision 3 applied the fix-check of revision 2 (N1 – N16, rulings §0.3); revision 2 the Fable review of
 revision 1 (F1 – F17, rulings §0.2). Build plan:
 [plans/2026-11-19-registry-verify-only-kinds.md](../plans/2026-11-19-registry-verify-only-kinds.md). Status:
 **SPECIFIED**, nothing built. Everything cryptographic stays
@@ -14,15 +15,16 @@ Rule ids `CTR-UA-58` … `CTR-UA-72` are **placeholders**: the highest id define
 `2026-11-19-bls12381-multi.md` holds `CTR-UA-47` … `CTR-UA-57` (placeholders too); landing assigns the real ones, writes the
 [decisions.md](../../decisions.md) entry with §0 verbatim and moves the rules into [accounts.md](../../contracts/accounts.md).
 Rows marked **owner** are the owner's ruling; **follows** applies a stated rule or a fix-check finding as the fix-check states
-it; **proposal** is the author's and is listed in §16 for the owner (revision 3's proposals P7 – P14 are owner rulings
-since §0.4; revision 4's own proposals are P15 onward). Despite the title, the design covers every later
+it; **proposal** is the author's and is listed in §16 for the owner (revision 3's P7 – P14 and revision 4's P15 – P20 are
+owner rulings in §0.4; P21 is open). Despite the title, the design covers every later
 generation (§11): "gen 2" below reads "a later generation", "gen 1" "the generation that holds the record", unless a section
 says otherwise.
 
 The work list (§14) is written against the registry's library layout of branch `bls-multi` (owner-approved, in progress):
 `UARegistryRegLib` holds every `register*` form and the registration helpers (`keyUa`, `pqzHolder`, `msigBound`,
-`pqzProof`); `UARegistryCoreLib` keeps the authorization and verify paths; `UARegistryAuxLib` keeps the PQZ attachment, the
-KEM records, `cacheExpandedKey` and the list pages; `UARegistry` keeps the constructor, the views and the walks.
+`pqzProof`); `UARegistryCoreLib` keeps the authorization and verify paths and, with this spec, **the generation walk's
+logic** (owner Y1, §0.4); `UARegistryAuxLib` keeps the PQZ attachment, the KEM records, `cacheExpandedKey` and the list
+pages; `UARegistry` keeps the constructor and the views, the walk's views thin (`_libView` into `UARegistryCoreLib`).
 
 ## 0. Owner rulings this spec implements
 
@@ -109,7 +111,20 @@ positions: **"approve all 8 as proposed"**. On P9: **"refuse such msigs at regis
 | M9 | `0x0142` in later generations | the deploy enables `0x0142` in every later generation whenever a predecessor enables it; omitting it is refused by name and can be overridden only with the owner's confirmation recorded in the book | **owner**; §9, §11.2 |
 
 The fix-check's M1, M3 – M8 and M10 are applied as it states them (**follows**; M1, M3, M4, M5 and M8 also through P7, P8,
-P13 and P14 above). Details they leave open are proposals P15 onward (§16).
+P13 and P14 above).
+
+The owner on revision 4's own proposals P15 – P20 and on the controller's proposal for the walk's library (Y1): **"approve
+all as proposed"** (2026-11-19).
+
+| # | Topic | Ruling | Where |
+|---|---|---|---|
+| P15 | Names | constants `UA_CONSUMER_RESERVE_GAS`, `MSIG_REGISTER_GAS`, `PQZ_KEY_WRITE_GAS` (values measured by the round, pinned old → new); deploy refusals `GEN_PQZ_OMITTED` (M9), `GEN_PQZ_DEBIT_BOUND <kind>` (M10 d), `GEN_TX_CAP_UNKNOWN`, `GEN_TX_CAP_MISMATCH` (X1); view `txGasCap()` | **owner**; §2, §4, §9 |
+| P16 | Where M10 (d)'s check runs | in the constructor (`UAConfig(kind)`) and first in the deploy by name, only where `0x0142` is on the line; the kind stays served by its home | **owner**; §2, §9 |
+| P17 | `txGasCap`'s constructor bounds | `verifyBudget ≤ txGasCap < 2^64`, else `UAConfig(0)`; no relation to a predecessor's value is required (each generation's bounds use its own) | **owner**; §2 |
+| P18 | The cap probe | `eth_call` at `2^24` and `2^24 + 1` through the node list under strict majority, then a binary search up to the block gas limit where `2^24 + 1` is accepted; the rows in the book; no cap found ⇒ `GEN_TX_CAP_UNKNOWN` until the owner sets the value in the book | **owner**; §9 |
+| P19 | Decoys over concatenated lists | the SDK draws decoys by distinct key hash, so a key held by two UAs (§11.2 residual) counts once | **owner**; §11.2, §12 |
+| P20 | The explicit gas limit of a verify-only verifier's precompile call (M7) | the precompile's worst cost for the kind's largest input, measured on the chain's client, a constant of the verifier (part of its init code, so of its CREATE2 address) and covered by its cap | **owner**; §5 |
+| Y1 | Where the walk lives | the generation walk's **logic** (`holderOf`'s recursion and `pqzHome` fill, `kindHome`, the forwarding readers' target choice, the constructor-time line checks that can run in a library) lives in `UARegistryCoreLib` (≈ 20 KB of room after `bls-multi`'s split), not in `UARegistry` (≈ 2 KB of room). `UARegistry` keeps thin views (`holderOf`, `kindHome`, `verifierOf`, `pqzHomeOf`, the forwarding readers) that DELEGATECALL into the library walk through `_libView` / `_lib`, as today's library readers and writers do. The frozen interface is unchanged: its selectors stay on the registry | **owner**; §9 Size, §11.1, §14 |
 
 ## 1. The code today (`ua-rs-sign` `a19151d64`)
 
@@ -186,18 +201,18 @@ generation enable it in full for its own records, never verify-only). `bls12381-
   exception (§11.2). The existing predecessor checks stay (`chainUid`, `hederaNative`, `checkedOf`, `memberSigHashOf`,
   `msigStateOf`; `generation()` as §11), with the new views' probes of §11.3. The cap is the generation's own measured cap,
   `0 < cap ≤ verifyBudget` as every kind, and the deploy's 75 % rule (`_pqKindFits`) applies.
-- **The single-key fallback against the home's PQZ debit bound (M10 d; placement proposal P16).** The home checked a
+- **The single-key fallback against the home's PQZ debit bound (M10 d; owner P16).** The home checked a
   single-key holder's PQZ key with its own numbers only (`_pqzHolder`: the home's cap). Through this generation a debit of
   that holder pays the fallback: this generation's cap and hold, then the home's cap and one hand-off, plus the reads. Where
   `0x0142` is on the line (`kindHome(0x0142) != 0` here or below), the constructor checks, per verify-only kind, that this
   fallback passes `_msigDebit`'s bound (§4) with the compiled set's `PQZ_DEBIT_MIN_GAS`, the kind's largest signature and
   this generation's `txGasCap`; else `UAConfig(kind)`, and the deploy refuses first by name (`GEN_PQZ_DEBIT_BOUND <kind>`,
-  proposal P15) with the numbers for the owner. The kind stays served by its home (nothing is disabled). Today's figures pass:
+  owner P15) with the numbers for the owner. The kind stays served by its home (nothing is disabled). Today's figures pass:
   `mldsa87` at `n2048-kmax1024` ≈ 16.6 M of 16.78 M [estimate].
 - **`txGasCap` (owner X1).** An immutable constructor parameter, the chain's per-transaction gas cap from the deploy book
   (§9), read by the libraries as `verifyBudget` is (`IUARegistry(address(this)).txGasCap()`) and replacing the constant
   `TX_GAS_CAP`; a view `txGasCap()` in the frozen list (§11.3). The constructor requires `verifyBudget ≤ txGasCap < 2^64`
-  (`UAConfig(0)`, proposal P17). A raised cap later is a new generation.
+  (`UAConfig(0)`, owner P17). A raised cap later is a new generation.
 - **The keyHash group stays where it is.** A later generation writes no `keyOwner` for a verify-only kind and reads
   `keyOwner` through its predecessors as today.
 
@@ -320,12 +335,12 @@ the kind verify-only is never asked on behalf of a later one, and holds do not s
       case) **plus** the holder's path (the holder's cap, one hand-off, the reads), the native members as today, **plus the
       consumer reserve**: the intrinsic 21,000, the signatures' calldata at the larger of 16 gas a byte and the EIP-7976
       floor of 64 gas a byte, and a named constant for the consumer's operation, `UA_CONSUMER_RESERVE_GAS` (measured by the
-      round, proposal P15). For a PQZ holder this mode is `_msigDebit`'s bound, whose reserve is `PQZ_DEBIT_MIN_GAS` (§3,
+      round, owner P15). For a PQZ holder this mode is `_msigDebit`'s bound, whose reserve is `PQZ_DEBIT_MIN_GAS` (§3,
       owner M2).
     - **Write mode** (W1): each derived member at its holder's path only, the native members as today, plus the signatures'
       calldata as above, plus the measured constants of the **dearest** of the three writes that fix or use the structure
-      (M10 b): registration (`MSIG_REGISTER_GAS`, proposal P15), `updateMsig` (`MSIG_UPDATE_GAS` + n × `MSIG_UPDATE_SLOT_GAS`
-      + the inner rows `msigBound` counts today) and `setPqzKey` (`PQZ_KEY_WRITE_GAS`, proposal P15). `acceptMembership`
+      (M10 b): registration (`MSIG_REGISTER_GAS`, owner P15), `updateMsig` (`MSIG_UPDATE_GAS` + n × `MSIG_UPDATE_SLOT_GAS`
+      + the inner rows `msigBound` counts today) and `setPqzKey` (`PQZ_KEY_WRITE_GAS`, owner P15). `acceptMembership`
       checks one member per call (one slot, M10 c) and needs no structure bound.
     Over the bound, **registration refuses `UAKeyData(0x0120)` and `updateMsig` `UAMsigSlots(n)`** (owner P9: the errors of
     today's two bounds; never at the write: nothing can be done there, the transaction cannot carry the gas). This is a
@@ -348,7 +363,7 @@ under the holder's hold); when it **answers 0**, the check is refused and there 
   1. **Lengths and encodings first**: every length, range and encoding check the holder enforces runs before the call (§7
      "Reuse the decoding"); a malformed input answers **0**, never `PqNoAnswer`.
   2. **The call**, with an **explicit gas limit** (M7): the verifier calls its precompile with a fixed limit, the
-     precompile's own worst cost for the kind's largest input (measured, a constant of the verifier, proposal P20), never all its gas, so a
+     precompile's own worst cost for the kind's largest input (measured, a constant of the verifier, owner P20), never all its gas, so a
      precompile that burns all forwarded gas on failure (EIP-2537 style) leaves the alive-check its gas; otherwise the
      verifier would keep 1/64 of its cap, the alive-check would run out of gas and the registry would fall back: a
      caller-forced fallback. Success with exactly one word `1` (or the precompile's own valid encoding) answers **1**; exactly
@@ -518,17 +533,17 @@ review checked this against the code and found it holds):
 - **The per-transaction cap (owner X1).** No opcode exposes EIP-7825's cap, so the deploy script probes it off chain before
   broadcast, through the chain's node list with the strict-majority option (ARCH-POS-15): `eth_call` (or `eth_estimateGas`)
   of a cheap call with gas `2^24` and `2^24 + 1`, then, where `2^24 + 1` is accepted, a binary search up to the block gas
-  limit for the largest accepted value (proposal P18: the search and its rows). The value found is the constructor's
+  limit for the largest accepted value (owner P18: the search and its rows). The value found is the constructor's
   `txGasCap` and is recorded in the book with the probe's rows and the nodes' client versions. Where no cap is found below the
-  block gas limit (a chain without EIP-7825), the deploy refuses by name (`GEN_TX_CAP_UNKNOWN`, proposal P15) until the owner
-  sets the value in the book. The book's value and the probe must agree, else `GEN_TX_CAP_MISMATCH` (proposal P15). A chain
+  block gas limit (a chain without EIP-7825), the deploy refuses by name (`GEN_TX_CAP_UNKNOWN`, owner P15) until the owner
+  sets the value in the book. The book's value and the probe must agree, else `GEN_TX_CAP_MISMATCH` (owner P15). A chain
   that raises its cap later keeps the old bound in every deployed generation; the next generation takes the new value. One
   rule on every chain: nothing assumes 2^24.
 - **`0x0142` in every later generation (owner M9).** `msig` is a PQZ holder kind in every generation, so a later generation
   without `0x0142` behind one with it would bar its own `msig`s and holder kinds from PQZ until the next generation, and a
   portable registration that carries a PQZ key could not be copied there at all (`UAKindDisabled(0x0142)` at `register`).
   The deploy therefore enables `0x0142` in every later generation whenever a predecessor enables it (the same `pqz-mlwe`
-  verifier address serves, its code hash checked). Leaving it out is refused by name (**`GEN_PQZ_OMITTED`**, proposal P15)
+  verifier address serves, its code hash checked). Leaving it out is refused by name (**`GEN_PQZ_OMITTED`**, owner P15)
   and can be overridden only with the owner's confirmation recorded in the book with the reason.
 - **The PQZ debit check (M10 d).** Per verify-only kind, the deploy runs §2's check of the single-key fallback against
   `_msigDebit`'s bound before broadcast and refuses by name (`GEN_PQZ_DEBIT_BOUND <kind>`) with the numbers for the owner.
@@ -538,11 +553,22 @@ review checked this against the code and found it holds):
   constructor's rows and the differential rows run); the node list and client versions of the probe; the walk check's
   result and any owner-confirmed `GEN_NOT_LATEST` override; the router and factory that bind it (§10); the Blockscout
   verification of every one of them ([NET-EVM-12](../../networks/evm.md#NET-EVM-12)); the Draft flag of CTR-UA-69 where set.
-- **Size.** Today `UARegistry` 32,477 B, `UARegistryCoreLib` 34,116 B, `UARegistryAuxLib` 33,685 B (`size-baseline.json`),
-  under the 131,072 B runtime ceiling; the `bls-multi` split moves the registration code to `UARegistryRegLib` and leaves
-  `UARegistryCoreLib` about 20 KB of room. The change adds to `UARegistry`, the libraries and `OpenFactory` [estimate: a few
-  KB, not measured; the PQZ positions of §11.2 and the write flag are the largest part]; the baseline moves with this reason,
-  old → new in the commit.
+- **Size.** On `bls-multi` after its library split (`size-baseline.json` there, commit `383d1e2f8`), against the size gate's
+  T-1 lines (library 35,694 B, plain 35,286 B; `scripts/size_gate.py`) under the 131,072 B ceiling:
+
+  | Contract | Form | Runtime | T-1 line | Room |
+  |---|---|---|---|---|
+  | `UARegistry` | plain | 33,293 B | 35,286 B | 1,993 B |
+  | `UARegistryCoreLib` | library | 15,737 B | 35,694 B | 19,957 B |
+  | `UARegistryRegLib` | library | 30,157 B | 35,694 B | 5,537 B |
+  | `UARegistryAuxLib` | library | 35,417 B | 35,694 B | 277 B |
+  | `OpenFactory` | plain | 34,999 B | 35,286 B | 287 B |
+
+  So the walk's logic goes to `UARegistryCoreLib` (owner Y1) and `UARegistry` grows only by the thin views, the constructor
+  rules and the kind word's flags. `UARegistryAuxLib` (the PQZ positions of §11.2) and `OpenFactory` (the env walk of §10)
+  have almost no room: the build stops and reports the sizes there if a T-1 line is crossed (no module split and no size
+  lever without the owner's word). The figures move with `bls-multi`'s remaining tasks; the round re-reads them before
+  its first task. The baseline moves with its reason, old → new in each commit.
 
 **CTR-UA-69 (owner R9).** Which addresses a PQ verifier's deploy probes, for gen 1's ML-DSA verifiers today and every later
 generation's verifiers:
@@ -598,7 +624,13 @@ today. Checked in code, no admin key, no stored list.
   predecessor.holderOf(ua)` (`(0, 0, 0)` at generation 1), and where `h ≠ 0`, `p == 0` and this generation enables `0x0142`,
   `p = this`; return `(h, k, p)`. One call per generation, O(n) at depth n (M4: a second recursive walk per PQZ read, with a
   `holderOf` at every enabling generation, would cost O(n²) hops, ≈ 1.3 M on a miss at depth 16). `pqzHomeOf(ua)` is a thin
-  view returning the third word. `kindHome(uint16 kind) → address`: this
+  view returning the third word. **Where the logic lives (owner Y1):** the walk's logic (the local answer, the predecessor
+  call, the `pqzHome` fill, `kindHome`'s recursion, each forwarding reader's choice of target) is in `UARegistryCoreLib`;
+  `UARegistry`'s `holderOf`, `kindHome`, `verifierOf`, `pqzHomeOf` and the forwarding readers are thin views that
+  DELEGATECALL into it through `_libView`, as today's library readers do; the consumer path in `UARegistry` reaches the
+  walk by a static self-call to its own thin `holderOf` view (a few hundred gas more [estimate]; proposal P21), the
+  libraries by their internal walk. The selectors stay on the registry, so the frozen interface (§11.3) does not change; a predecessor's
+  walk is called as `IUARegistry(predecessor).holderOf(ua)`. `kindHome(uint16 kind) → address`: this
   generation if the kind is registrable here (`_registrable`), else the predecessor's answer, 0 at generation 1 (for
   `0x0142`, which several generations may enable, §11.2, it is the newest such generation on the walk). `verifierOf(uint16
   kind) → address`: this generation's verifier word's address (0 if none). `verifyOnly(kind)`. `pqzHomeOf(ua)` (§11.2).
@@ -643,7 +675,12 @@ today. Checked in code, no admin key, no stored list.
   one cold call to the holder per further read (≈ 2,600 + its slots), with no per-hop re-encoding of the returned bytes. The
   **common** cost is a **deep hit**: an operation of a gen-1 UA in a gen-n token reads `holderOf` for the sender and for the
   receiver's `kindOf`, then the key at the holder: ≈ 2 × 5 k × (n − 1) + the reads. The worst case is a **miss** (an id
-  registered nowhere): the whole line, ≈ 80–120 k at depth 16. A forwarded signature check (not a read) holds `1/63` of the
+  registered nowhere): the whole line, ≈ 80–120 k at depth 16. **Library call overhead (owner Y1):** each thin view's
+  DELEGATECALL into `UARegistryCoreLib` costs a few hundred gas [estimate: the call, `_lib`'s calldata copy with its appended
+  words, the return copy], plus 2,600 once per transaction where that generation's library address is still cold
+  (EIP-2929); generations that share one library deployment (same code, same CREATE2 address) pay the cold access once. So a
+  hop costs ≈ 5 k plus the view's few hundred, ≈ 8 k with a cold library [estimate], and a miss at depth 16 ≈ 125–170 k
+  [estimate]. A forwarded signature check (not a read) holds `1/63` of the
   holder's cap plus `GAS_MARGIN` once (N3). `_slotCap`, `_pqzHolder` and the caps count the hops to the member's holder
   (fixed: a record never moves, a predecessor never changes).
 - **Mitigations (proposals).** (1) The native-space shortcut (owner P5). (2) The depth cap bounds the miss. (3) The SDK gas
@@ -707,7 +744,7 @@ the owner refused that (W2).
     holder's key only forward, from the UA (`_keyOf`: `pqzKeyOf` / `pqzScopedKeyOf`; `_debitKey`: KV-8's capture-once
     debit), and never maps a key back to a UA. So no `PqzCore` property relies on one key per UA by code; the build
     re-checks this and Fable's review of the built round is asked it. The one observable effect is on the decoy draw: one
-    key may appear twice in the concatenated `0x0142` lists (the SDK draws decoys by distinct key hash, proposal P19).
+    key may appear twice in the concatenated `0x0142` lists (the SDK draws decoys by distinct key hash, owner P19).
   - **Accepted (owner P8)**, each reader seeing one owner per generation (`keyOwner` answers local first) and indexers
     flagging a hash owned twice on the line (§12).
   - **The on-chain alternative, taken instead if the build or the review finds a `PqzCore` property that relies on one key
@@ -790,7 +827,7 @@ the owner refused that (W2).
   The gas table's verify rows are keyed by chain, registry address and signer kind; the verify path (`cache` / `precompile` /
   `fallback`), the depth and the write path of W1 are columns, measured per chain per registry
   ([CLI-SDK-09](../../clients/scaas-sdk.md#CLI-SDK-09)); the quote takes the row of the registry the token binds; the
-  reference table carries every path. The PQZ decoy draw reads the `0x0142` list of every enabling generation on the walk of the token's registry and concatenates them (§11.2, M5), drawing by distinct key hash (proposal P19).
+  reference table carries every path. The PQZ decoy draw reads the `0x0142` list of every enabling generation on the walk of the token's registry and concatenates them (§11.2, M5), drawing by distinct key hash (owner P19).
 - **Clients.** Signing is unchanged (same kind, same message). A client choosing a token release shows its registry and that
   registry's verify path for the holder's kind. `ua-rs` and every `ua-*` registration builder offer a kind on a registry only
   where `kindHome(kind) == registry`.
@@ -858,13 +895,13 @@ Against the `bls-multi` layout (front matter). Each row names its file.
 
 | Component | Work |
 |---|---|
-| `UARegistry` (constructor, views, walks) | `KindConfig.verifyOnly`, `keyForm`, bits 224 / 225; the constructor rules of §2 (`verifyOnly ⇔ predecessor.kindHome(kind) != 0`, the impossible combination through the home's `verifierOf`, `PRECOMPILE() == 0` refused, `_groupInPredecessor` by `kindHome`, `0x0142` exempt); `msig` / `0x0142` outside the `⇔` rule (M6); the PQZ debit check per verify-only kind (M10 d); the immutable `txGasCap` and its view (X1); `generation = p + 1`, `MAX_GENERATION`; the walk over every predecessor with the probes of §11.3; the views `holderOf` (holder, kind, PQZ home: the one walk, M4), `kindHome`, `verifierOf`, `verifyOnly`, `pqzHomeOf` (a view over `holderOf`), `txGasCap`, forwarding `expandedKeyOf`; the native-space shortcut on `kindOf`, `holderOf`, `isRegistered`; every forwarding reader by `holderOf` (§11.1); `_authorized`, `_derived`, `_memberOk` by §4 (own verifier, else the holder directly); `requireAuthorized`'s `UAKeyNotCached` branch on `holderOf`'s kind; `requirePortable(App)` by §4; `_listedHere` false for a verify-only kind; the `0x0142` list per generation (M5); `_pqzHost` and the PQZ views of §11.2; the EIP-712 version; N12 masking at `_verifierCall` (`cfg >> 160`), `kindEnabled`, `_listedHere`, `requireAuthorized`, `_derived` (`uint160(cfg)`) |
-| `UARegistryCoreLib` (authorization, verify) | the `write` flag through `_sigOk` / `_msig` / `_memberOk` / `_portableOk` / `_single` (W1, M1), default the write side, `false` only from the three consumer entries: on a write `via(holderOf(member))`; `_single` on a write `via(holderOf(ua))` whenever `!_registrable(cfg)` (N2, M1); the verify-only branch of `_portable` / `_single` / `_memberOk` from consumer entries only, with the hold on every verify-only call, group kinds included (N9); the three-state call (not through `capped`'s boolean read: exactly one word `0` / `1`, anything else and any revert ⇒ fallback, M7) and the fallback to the holder's entry of §4 (§5); failed reads ⇒ `UAVerifyGas`; `_notCached` on `holderOf`'s kind; `_slotCap` by the holder's cap plus one hand-off (N3); the hard bound as the maximum of its consumer mode (with the consumer reserve) and its write mode (the dearest of registration, `updateMsig`, `setPqzKey`) against `txGasCap` (P9, M2, M10); `_msigDebit` with `w` the fallback worst and `txGasCap` (M2); the constant `TX_GAS_CAP` removed (X1); `_accepted` / `_msigBytes` from `holderOf`; N12 masking at `_single` (`cfg >> 160` and its `uint160(cfg) == 0` test, M1), `_consent`'s `_notCached(_cfgKind(), …)` (M1), `_notCached`, `_listedHere`, `_pqzProof` |
+| `UARegistry` (constructor, thin views; ≈ 2.0 KB of room) | `KindConfig.verifyOnly`, `keyForm`, bits 224 / 225; the constructor rules of §2 (`verifyOnly ⇔ predecessor.kindHome(kind) != 0`, the impossible combination through the home's `verifierOf`, `PRECOMPILE() == 0` refused, `_groupInPredecessor` by `kindHome`, `0x0142` exempt); `msig` / `0x0142` outside the `⇔` rule (M6); the PQZ debit check per verify-only kind (M10 d); the immutable `txGasCap` and its view (X1); `generation = p + 1`, `MAX_GENERATION`; the walk over every predecessor with the probes of §11.3; the thin views `holderOf`, `kindHome`, `verifierOf`, `pqzHomeOf` and the forwarding readers (`_libView` into `UARegistryCoreLib`'s walk, owner Y1), `verifyOnly`, `txGasCap`; the native-space shortcut on `kindOf`, `holderOf`, `isRegistered` (before the library call); `_authorized`, `_derived`, `_memberOk` by §4 (own verifier, else the holder directly); `requireAuthorized`'s `UAKeyNotCached` branch on `holderOf`'s kind; `requirePortable(App)` by §4; `_listedHere` false for a verify-only kind; the `0x0142` list per generation (M5); `_pqzHost` and the PQZ views of §11.2; the EIP-712 version; N12 masking at `_verifierCall` (`cfg >> 160`), `kindEnabled`, `_listedHere`, `requireAuthorized`, `_derived` (`uint160(cfg)`) |
+| `UARegistryCoreLib` (authorization, verify, the walk; ≈ 20 KB of room) | the walk's logic (owner Y1): `holderOf` (holder, kind, PQZ home: the one walk, M4), `kindHome`'s recursion, `pqzHomeOf` as its third word, each forwarding reader's target by `holderOf` (§11.1); the `write` flag through `_sigOk` / `_msig` / `_memberOk` / `_portableOk` / `_single` (W1, M1), default the write side, `false` only from the three consumer entries: on a write `via(holderOf(member))`; `_single` on a write `via(holderOf(ua))` whenever `!_registrable(cfg)` (N2, M1); the verify-only branch of `_portable` / `_single` / `_memberOk` from consumer entries only, with the hold on every verify-only call, group kinds included (N9); the three-state call (not through `capped`'s boolean read: exactly one word `0` / `1`, anything else and any revert ⇒ fallback, M7) and the fallback to the holder's entry of §4 (§5); failed reads ⇒ `UAVerifyGas`; `_notCached` on `holderOf`'s kind; `_slotCap` by the holder's cap plus one hand-off (N3); the hard bound as the maximum of its consumer mode (with the consumer reserve) and its write mode (the dearest of registration, `updateMsig`, `setPqzKey`) against `txGasCap` (P9, M2, M10); `_msigDebit` with `w` the fallback worst and `txGasCap` (M2); the constant `TX_GAS_CAP` removed (X1); `_accepted` / `_msigBytes` from `holderOf`; N12 masking at `_single` (`cfg >> 160` and its `uint160(cfg) == 0` test, M1), `_consent`'s `_notCached(_cfgKind(), …)` (M1), `_notCached`, `_listedHere`, `_pqzProof` |
 | `UARegistryRegLib` (registration) | step 1 of every `register*` form: `_registrable` then `UAVerifyOnly(kind)`; `_identify` without the line walk for a single-key kind (N11); `pqzHolder`: A5-I1 (3) by `kindHome(0x0142)`, `w` the fallback worst (owner M2), `UAPqzHolder`; `msigBound` and the registration bound with the hard bound against `txGasCap` (`UAKeyData(0x0120)` / `UAMsigSlots(n)`, owner P9); `pqzProof` with the line-wide `keyOwner` walk; N12 masking at `pqzHolder`'s `_cfgKind() >> 160` |
-| `UARegistryAuxLib` (PQZ attachment, KEM, cache, pages) | `cacheExpandedKey` refuses a verify-only kind (`UAVerifyOnly`), N12 masking; `_host`, `_away`, `_scopedFrom`, `_pqzRecord`, `_pqzNext`, `_kemHash`, `_registerKeyMessage`, `registrationOf`'s patch by §11.2; `uaCount` / `uaAt` / `uaPage` / `uaIndex` of `0x0142` on this generation's own list (M5) |
+| `UARegistryAuxLib` (PQZ attachment, KEM, cache, pages; ≈ 0.3 KB of room: the likely size stop) | `cacheExpandedKey` refuses a verify-only kind (`UAVerifyOnly`), N12 masking; `_host`, `_away`, `_scopedFrom`, `_pqzRecord`, `_pqzNext`, `_kemHash`, `_registerKeyMessage`, `registrationOf`'s patch by §11.2; `uaCount` / `uaAt` / `uaPage` / `uaIndex` of `0x0142` on this generation's own list (M5) |
 | Verify-only verifiers | one per eligible kind (ML-DSA first): `KEY_FORM()`, the edge-class constructor rows, the valid row kept for the alive-check, the mapping of §5 (lengths and encodings first, the precompile called with an explicit gas limit, alive-check, `PqNoAnswer`; M7) |
 | `PqzStateLib` | `_auditorChecks`: `kindHome(0x0142) != 0` instead of `kindEnabled` (N4); a PQZ change: its per-set run |
-| `OpenFactory` | the env check of §10 (bounded walk, `chainUid`, `smartKeyCloneHash`) |
+| `OpenFactory` (≈ 0.3 KB of room) | the env check of §10 (bounded walk, `chainUid`, `smartKeyCloneHash`) |
 | `IUARegistry` | the new views (`holderOf` with three words, `txGasCap`) and errors (`UAVerifyOnly`), doc comments; the frozen list of §11.3 with M8's additions |
 | Tests | T-REG-4 changed: a later generation refuses a kind a predecessor enables unless flagged verify-only, refuses the flag otherwise, refuses the impossible key form (through a middle verify-only generation too, N8), refuses a verify-only verifier without a precompile, refuses its registration (`UAVerifyOnly`) and its `cacheExpandedKey`, forwards its lists and `expandedKeyOf`; `UAKeyInUse` across the line. New: §7 (a)–(f) per eligible kind; every row of §4's table, its fallback entry included; W1: an accept-all stand-in against each of the five writes (§7 (e)), M1's single-key configuration in a PQZ home included; N2 / N3: the three-generation accept-all middle test (§7 (f)); §5: no-answer stand-ins (empty account, revert, malformed return data, out of gas at the cap, burn-all on malformed input, M7) fall back, a verifier return that is not exactly one word `0` / `1` falls back (M7), an answer 0 does not, gas below the cap is `UAVerifyGas`, the group kinds' path holds; N5: per verifier, the fuzz test and the mutant without the alive-check; ML-DSA with gen 1 on the cache and gen 2 on a precompile stand-in (form `0`), gen 2 under form `1` (incomplete cache ⇒ `UAKeyNotCached`; the layout test); the hard bound (the treasury fits, `{mldsa87 ×2} t=2` and `{mldsa65 ×3} t=3` are refused at registration and at `updateMsig`, P9; the maximum, not the sum, of the two modes; the treasury with a PQZ key refused `UAPqzHolder`, M2; every bound read from `txGasCap`: a registry deployed with a smaller cap refuses what one at 2^24 accepts, X1); the PQZ debit check per verify-only kind (M10 d); §11.2 (a)–(h); the constructor probes of §11.3 against a predecessor lacking each view; `RegistryWalkInterfaceIsPinned`; P5: no registration stores a native-space id; the depth cap; the factory walk (accept the line, refuse another chain's, a non-registry and another clone hash); T-GAS with verify-only `msig` members at the budget, per depth and on the write path; T-AUTH-4 on the new path; storage layout and typehash pins unchanged |
 | Deploy | the later-generation mode of `DeployBase` with the book's latest as predecessor (`GEN_NOT_LATEST` with the owner-confirmed override, `GEN_DEPTH`, `GEN_KEY_FORM_IMPOSSIBLE`, `GEN_VERIFY_ONLY_NO_PRECOMPILE`, the walk check `GEN_WALK_MISMATCH`, `GEN_PQZ_OMITTED` (M9), `GEN_PQZ_DEBIT_BOUND` (M10 d), `GEN_TX_CAP_UNKNOWN` / `GEN_TX_CAP_MISMATCH` (X1)); the per-transaction cap probe and the constructor parameter (X1); `0x0142` enabled in every later generation where a predecessor enables it (M9); gen 1 with the new views at the SCaaS testnet's next reset; the differential probe through the node list under strict majority, the holder entry per kind (§9); the book fields (§9); `script/pq_verifiers.py` and `DeployBase._mldsaCandidates`: default candidates Final + chain-own only, Draft only under the profile flag with the fuller probe (CTR-UA-69); the verify-only verifiers; the probe re-run after client upgrades in the operations runbook |
@@ -893,19 +930,14 @@ for one rule); `uint160(cfg) != 0` meaning "registrable here" at `_identify` and
 | `PqzStateLib._auditorChecks` | `kindEnabled(0x0142)` of the token's registry | `kindHome(0x0142) != 0` |
 | `script/pq_verifiers.py`, `DeployBase._mldsaCandidates`, [evm.md](../../networks/evm.md) | `0x12`–`0x14` probed first | Final and chain-own by default; Draft under the owner-confirmed flag (CTR-UA-69) |
 
-## 16. Open questions for the owner (proposals, not rulings)
+## 16. Open questions for the owner
 
-The questions of revision 1 (Q1 – Q11) are ruled (§0.2); revision 2's P1 – P6 (§0.3) and revision 3's P7 – P14 (§0.4) are
-ruled. The author's proposals of revision 4, for details the rulings and the fix-check leave open:
+The questions of revision 1 (Q1 – Q11) are ruled (§0.2), revision 2's P1 – P6 (§0.3), revision 3's P7 – P14 and
+revision 4's P15 – P20 and Y1 (§0.4). Open (proposal, not a ruling):
 
 | # | Question | Proposal |
 |---|---|---|
-| P15 | Names | constants `UA_CONSUMER_RESERVE_GAS`, `MSIG_REGISTER_GAS`, `PQZ_KEY_WRITE_GAS` (values measured by the round, pinned old → new); deploy refusals `GEN_PQZ_OMITTED` (M9), `GEN_PQZ_DEBIT_BOUND <kind>` (M10 d), `GEN_TX_CAP_UNKNOWN`, `GEN_TX_CAP_MISMATCH` (X1); view `txGasCap()` |
-| P16 | Where M10 (d)'s check runs | in the constructor (`UAConfig(kind)`) and first in the deploy by name, only where `0x0142` is on the line; the kind stays served by its home |
-| P17 | `txGasCap`'s constructor bounds | `verifyBudget ≤ txGasCap < 2^64`, else `UAConfig(0)`; no relation to a predecessor's value is required (each generation's bounds use its own) |
-| P18 | The cap probe | `eth_call` at `2^24` and `2^24 + 1` through the node list under strict majority, then a binary search up to the block gas limit where `2^24 + 1` is accepted; the rows in the book; no cap found ⇒ `GEN_TX_CAP_UNKNOWN` until the owner sets the value in the book |
-| P19 | Decoys over concatenated lists | the SDK draws decoys by distinct key hash, so a key held by two UAs (§11.2 residual) counts once |
-| P20 | The explicit gas limit of a verify-only verifier's precompile call (M7) | the precompile's worst cost for the kind's largest input, measured on the chain's client, a constant of the verifier (part of its init code, so of its CREATE2 address) and covered by its cap |
+| P21 | How `UARegistry`'s own consumer path reads the walk under Y1 | a static self-call `IUARegistry(address(this)).holderOf(ua)` to its thin view (smallest in `UARegistry`'s bytes; a few hundred gas more per check [estimate]), rather than a second DELEGATECALL helper with its own calldata or moving the consumer branch into the library |
 
 ## Sources
 
