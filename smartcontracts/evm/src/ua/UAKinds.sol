@@ -34,7 +34,7 @@ library UAKinds {
     uint16 internal constant MUSIG2_BN254 = 0x0112;
     uint16 internal constant FROST_BN254 = 0x0113;
     uint16 internal constant MSIG = 0x0120;
-    /// `bls12381-multi` (spec 2026-11-19-bls12381-multi; CTR-UA-47 … CTR-UA-56, placeholders): weighted t-of-n BLS12-381 same-message
+    /// `bls12381-multi` (spec 2026-11-19-bls12381-multi; CTR-UA-47 … CTR-UA-56): weighted t-of-n BLS12-381 same-message
     /// multi-signature with a signer bitmap; a structure (no keyHash, as `msig`), in SIGNING and MEMBER, the only kind with a surplus form.
     uint16 internal constant BLS12381_MULTI = 0x0121;
     uint16 internal constant MLDSA44 = 0x0130;

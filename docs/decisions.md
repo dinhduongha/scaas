@@ -4970,6 +4970,140 @@ Change (2026-11-10, ua-mtx-merge T19; pay-meta-tax spec §10; status: BUILT on b
 
 Change (controller, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md`, kept outside the tracked files), findings R1, R6, R10, R14; status: SPECIFIED, nothing built): (R1) old, `_portablePurpose` moves out of `_sigOk`; new, `_sigOk` keeps its behaviour and its guard (ruling A5-m3; `test_ua8_sigOkPortablePurposesOnly` unchanged), its single-key tail is shared as `_single`, and `_portable` is today's `requirePortable` body, so a classical-only `msig` with no members is refused on the app path. (R6) old, "the domain's `salt = appId` names the app" given as the guard for native `msig` members; new, the guard is the app contract computing the digest itself in its own domain; an app portable domain is exactly `name, version, salt`, so its typehash differs from every SCaaS portable domain's; every app contract on the entry must (a) compute the digest itself, never from a caller's bytes, (b) name the signing UA in every record, (c) use different domain field sets on the two paths; the residual (a dapp phishing a native member's signature over a valid record, for every app and for `PqChat`) is stated; the sentence that the domain rule keeps two apps with one `appId` apart is withdrawn (only their names, versions and types do). (R10) old, a predecessor's empty revert mapped to `UAUnauthorized`; new, a plain forward (a revert of any shape is a refusal), tested against the pre-change `UARegistry` bytecode. Cost if wrong (R14): a third-party app contract that breaks rule (a), (b) or (c) accepts replayed native-member signatures; the phishing residual is not closed by any registry check.
 
+### CTR-UA-47 — `bls12381-multi` (0x0121): key data, id, the stored `ua ‖ s`, no keyHash
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-47 · superseded-by: —
+
+**Rule.** One kind, `0x0121`, weighted t-of-n with a signer bitmap; `d = apk ‖ u16 t ‖ u16 n ‖ n × (pk_i ‖ u16 w_i)`, 2 ≤ n ≤ 64,
+`w_i ≥ 1`, `1 ≤ t ≤ Σ w_i`, no other weight bound; no keyHash; `keyPtr` holds `ua ‖ s` (48-byte limbs); `vkLength(0x0121)` = 228
+(a flag); `keyOf` returns `apk`; off-chain verifiers take `d`.
+**Status.** BUILT on EVM, ua-rs, clientkeys, ua-py / ua-go / ua-cs / ua-dart, the bindings (spec 2026-11-19-bls12381-multi
+§0.1; commits in [accounts.md §1.6.2](contracts/accounts.md#bls12381-multi)). UNAUDITED.
+**Why.** One kind covers plain t-of-n (unit weights), weighted thresholds and n-of-n (the stored `apk`, no per-member work);
+without a keyHash an old `pop` cannot squat a set; storing `ua` saves the expansion and keccak of `d` on every verify (≈ 15 k
+at n = 64) for 32 bytes once; 48-byte limbs save ≈ 6.4 M state gas at n = 64.
+**Cost if wrong.** Equivalent access structures under different ids (harmless without a keyHash); a verifier that recomputed
+`ua` instead of reading it would accept a forged pointer (the stored-`ua` mutant pins it).
+**Source.** Owner 2026-11-19 ("the rest as proposed": Q1 one kind, Q2 threshold BLS as a plain `0x0106` key shown
+attestation-only; Q4 cap 64 "as proposed"; Q5 no keyHash "as proposed"; R2-Q1 `ua` in the key pointer and R2-Q3 no weight bound
+beyond `msig`'s, "approved"; revision 4: "Approved all 10 choices; run revision 4" — choice 1, off-chain verifiers take `d` —
+and "Approved the 7 choices" — choices 1, `vkLength(0x0121)` = 228, and 2, `keyOf` returns `apk`; R2-Q1's two conditions:
+`vkLength ≠ 0` and each entry checks its own form's length). Owner 2026-11-19: `bls12381-multi`, number `0x0121`, reserved
+since UA design rev 1.3; "no consumer" is not a reason, build it.
+
+### CTR-UA-48 — `bls12381-multi`: members sign `memberDigest(ua, ua_msg)`; two DSTs of the kind's own
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-48 · superseded-by: —
+
+**Status.** BUILT (as CTR-UA-47). UNAUDITED.
+**Why.** Domain separation by DST, not by preimage length: a partial is never a `0x0106` signature or a PoP, and a PoP part is
+never a partial.
+**Cost if wrong.** A cross-kind or cross-role replay; the equal-DST mutant is killed by the vectors.
+**Source.** Owner 2026-11-19, Q11 "as proposed" (the Fable review's proposal: distinct DSTs for 0x0121, signing and PoP, not
+shared with 0x0106).
+
+### CTR-UA-49 — `bls12381-multi`: every member's PoP over distinct per-member messages, checked on chain at registration
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-49 · superseded-by: —
+
+**Status.** BUILT (as CTR-UA-47). UNAUDITED; the batched form is an **external-audit item** (no published proof known; argued in
+the algebraic group model and the random-oracle model under spec §4's two conditions).
+**Why.** All n members at registration make every subset's aggregate key safe (Q12); n + 1 pairings once instead of a check per
+verify; the textbook per-member PoP was weighed and not taken (spec §4).
+**Cost if wrong.** A rogue-key forgery against every subset of the group; one withholding member blocks registration (liveness).
+**Source.** Owner 2026-11-19, "the rest as proposed" (review F3, Q12); N5 (member signers derive `popMsg`), revision 4.
+
+### CTR-UA-50 — `bls12381-multi`: surplus on the verify path, the minimal form on every stored path through `verifyMinimal`
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-50 · superseded-by: —
+
+**Rule.** `σ ‖ signers` (160 B) in the ABI, named `signature` / `signers` at the node, the SDK and every client API (one hex:
+`HEX_ARGS_REFUSED`); `W(S) ≥ t` on `requireAuthorized`; every stored or hash-committed path also requires every signer
+necessary, through `IUAMinimalVerifier.verifyMinimal`; an `msig` member of kind `0x0121` by a direct call from the `msig` library
+with the verifier from a fourth appended word; `apk(S)` pinned (stored, add, subtract with a per-component Fp negation).
+**Status.** BUILT on EVM (`f5f30b48c`, `f1e88035b`), the node (`d02f07d32`), scaas-sdk (`ed0b3ab37`). UNAUDITED. A stored path
+whose generation has no `0x0121` verifier is `false`: a gen-2 `msig` whose `0x0121` member is a gen-1 record can never accept
+that slot (controller call, owner auto-run 2026-11-19: kept as stated in spec §5.3; the planned verify-only / N-generations
+round, spec `2026-11-19-registry-verify-only-kinds.md`, resolves it: writes go to `holderOf(member)`).
+**Why.** Extra signers keep the hot path cheap at near-n; stored evidence stays canonical, so a front-runner cannot store a
+different `pop` for the same record (review F2's second option).
+**Cost if wrong.** A non-canonical stored signature; a stored path that took `verify` would accept surplus evidence.
+**Source.** Owner 2026-11-19: Q7 "Allow extra signers"; Q6 named fields ("the rest as proposed", review F6); revision 4: the N1
+mechanism "approved" (direct call, no new registry entry), the plan's choices 2 (`minimal: bool` in ua-rs and clientkeys) and 5
+(`UASafeVerifier` `enum Mode { Verify, Minimal, Pop }`), the seven choices 3 (Fp negation, not a third pairing pair or a G2MSM by
+`r − 1`) and 4 (the fourth word `_lib` appends, not a getter).
+
+### CTR-UA-51 — `bls12381-multi`: typed `registerBlsMulti`, no KEM or PQZ key, in SIGNING and MEMBER, no update path
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-51 · superseded-by: —
+
+**Status.** BUILT on EVM (`e961a27d5`; the registration forms in the split library `UARegistryRegLib`, `383d1e2f8`). UNAUDITED.
+**Why.** A group is one verifier call on chain, as MuSig2 / FROST, so it may sit in an `msig` without a level; immutable key
+data is the id.
+**Cost if wrong.** A new member set needs a new UA and a move of holdings.
+**Source.** Owner 2026-11-19, "the rest as proposed": Q9 (`0x0121` in MEMBER), Q10 (no update path); the explicit ABI follows
+[CTR-UA-36](contracts/accounts.md#CTR-UA-36). The registry library split, candidate (2) by domain, the name
+`UARegistryRegLib` (owner 2026-11-19, "Approved both as proposed"; "UARegistryRegLib is the more sensible name"): every
+`register*` form and the registration-bound helpers in `UARegistryRegLib` (built CoreLib 15,737 B, RegLib 30,157 B, AuxLib
+35,417 B, `UARegistry` 33,293 B).
+
+### CTR-UA-52 — `bls12381-multi`: gas in two columns, the member cap 64, quoted by `per_item`
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-52 · superseded-by: —
+
+**Status.** BUILT: measured (`00cf757bf`), the SDK's rows (`6e16ea8d3`).
+**Why.** The cap is a state-gas judgement (≈ 20.5 M state at n = 64), gated on regular gas vs 75 % of 2^24; one constant on
+every chain; inclusion is regular + state against a block's limit, which no figure assumes.
+**Cost if wrong.** A chain whose block limit is below a 64-member registration cannot include it; the client registers a
+smaller group.
+**Source.** Owner 2026-11-19: Q4 "as proposed"; R2-Q2 (`per_member`, renamed `per_item` by I1 of the SDK gas round, "approved");
+the plan's choices 6 (forge gas rows without asking first: deterministic, not calibration) and 9 (`per_item = ⌈(g(64) − g(2)) /
+62⌉`, `gas = g(2) − 2·per_item`, checked at all four points). Controller calls (owner auto-run 2026-11-19): (a) the state-gas
+formula takes the measured form, `1,530 × (code bytes + 120 × new accounts) + 97,920 × new slots` (183,600 a new SSTORE2
+contract); (b) where a point lies above choice 9's line (the verify row at n = 16, by 304 gas), the row's gas is the largest
+`g(n) − per_item·n`, the slope kept, the line within 1,000 gas of n = 64 (`6e16ea8d3`); (c) an attached signature of unknown
+kind in the SDK quote counts a group's `members` at the cap 64 (`ed0b3ab37`); (d) the registration's self-relay gas is the
+quote's or, where more, the simulation's with the margin (G3's rule: the PoP check's gas pre-check asks the verifier's whole
+`POP_GAS` up front, `ed0b3ab37`).
+
+### CTR-UA-53 — `bls12381-multi`: byte formats change everywhere at once
+- old: — · status: current · owner: no · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-53 · superseded-by: —
+
+**Status.** BUILT (the round's commits, [accounts.md §1.6.2](contracts/accounts.md#bls12381-multi)).
+**Why.** AGENTS.md: one byte format, one set of vectors, every language reads the same rows.
+**Cost if wrong.** A client that reproduces bytes no other reads.
+**Source.** Follows AGENTS.md. Owner rulings 2026-11-19 on its shape ("Approved all 10 choices"): the plan's choices 3 (the
+`0x0121` PoP and signature vectors in `groups.json` from ua-rs, key-data rows in `kinds.json` from clientkeys), 4
+(`BlsMultiKeyData.sol` an internal library), 8 (the four Rust bindings one task) and 10 (rule ids final once, in the docs
+task: `CTR-UA-47` … `CTR-UA-56`, no renumbering needed); M1 and M2 ("Approved all as proposed": the ua-rs field
+`BlsMultiSig.dropped`; the vector sections `blsMulti`, `blsMultiRegistrations`, `surplusForm`).
+
+### CTR-UA-54 — `bls12381-multi`: every family must support the kind; disabled only with the owner's confirmation
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-54 · superseded-by: —
+
+**Status.** EVM BUILT (the deploy probe with G2ADD; `ua_kind_0x0121` in the deploy book). Hedera: disabled, owner-confirmed
+([ARCH-POS-18](#ARCH-POS-18)). Soroban: PLANNED in the `ua-soroban` round, refused until then. Other families: PLANNED, each round.
+**Why.** [ARCH-POS-18](#ARCH-POS-18): a missing precompile never disables a kind; one rule on every chain.
+**Cost if wrong.** A family that cannot hold the cap reports numbers to the owner; it never lowers the cap.
+**Source.** Owner 2026-11-19: "EVM supports the maximum, even PQZ although the chain has no native PQ support. Other chains must
+be able to support it the same way"; Q-SW1 "choose 3, since only Hedera is affected; disabling it there is fine while the kind is
+not supported" (no software path in this round); Q3 no `bls-bn254-multi` ("the rest as proposed"; its Hedera consequence
+superseded by ARCH-POS-18); the plan's choice 7 (the Soroban arm moves to the `ua-soroban` round); the seven choices 5 (a chain
+without EIP-2537 deploys no `0x0121` verifier and its deploy book names it; any EVM chain other than Hedera goes to the owner)
+and 7 (moot).
+
+### CTR-UA-55 — `bls12381-multi`: member keys are `0x0106`-format, derived on the `0x0121` path
+- old: — · status: current · owner: no · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-55 · superseded-by: —
+
+**Status.** BUILT in ua-rs (`ua_key(0x0121, account, 0)`, EIP-2333) and the clients.
+**Why.** As MuSig2 / FROST participants: layer 1 keeps a member key on its own path; the DSTs keep it apart from a `0x0106` use.
+**Cost if wrong.** A wallet that reuses one key for `0x0106` and a group gains nothing an attacker could use (distinct DSTs).
+**Source.** Follows CTR-UA-10 (MuSig2 / FROST precedent); Q8 ("the rest as proposed": a member key may also be a `0x0106` UA's).
+
+### CTR-UA-56 — `bls12381-multi`: the aggregator checks each partial, names a bad one, emits a minimal set by default
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-56 · superseded-by: —
+
+**Status.** BUILT in ua-rs (`aggregate(…, surplus)`), clientkeys, scaas-sdk (`Op::bls_multi_part_ok`, `submit_bls_multi`).
+UNAUDITED.
+**Why.** One bad partial otherwise spoils the aggregate without saying whose it was; a minimal set is valid on every path.
+**Cost if wrong.** Liveness only: the chain's check is the authority.
+**Source.** Controller proposal (spec §5.4), N5 and N6 of the revision-3 fix-check; owner 2026-11-19, "Approved the 7 choices":
+choice 6, one function `aggregate(…, surplus: bool)`, minimal when false.
+
 ## 25. Contracts — Post-quantum Zether
 
 ### CTR-UA-29 — The registry keeps an on-chain list of the UAs of each kind

@@ -539,3 +539,8 @@ router reads the target's own receipt: the target succeeded = success, child pro
 entry's id and stage, so a late callback pays nothing. `relay_timeout(ref)`, anyone, after the deadline: refund. The
 router and executor have no admin and no access key; `relay_check(…)` quotes deposit and gas for a 64-character relayer.
 BUILT.
+
+<a id="bls12381-multi"></a>**`bls12381-multi` (`0x0121`) — PLANNED** in the `ua-near` round: the family must support it
+([ARCH-POS-18](../decisions.md#ARCH-POS-18), [CTR-UA-54](../contracts/accounts.md#CTR-UA-54)): its BLS12-381 host functions where
+present, else software, with the same checks (subgroup, infinity, the minimal form on stored paths) and the 64-member cap; the
+round measures its path and brings infeasibility to the owner with numbers.

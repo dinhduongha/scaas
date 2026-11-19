@@ -8,7 +8,7 @@ import {Bls12381} from "../../common/Bls12381.sol";
 import {CurveSigs} from "../../common/CurveSigs.sol";
 import {HashToCurve} from "../../common/HashToCurve.sol";
 
-/// @title UA verifier for `bls12381-multi` (0x0121, spec 2026-11-19-bls12381-multi §4, §5; CTR-UA-49 / CTR-UA-50, placeholders).
+/// @title UA verifier for `bls12381-multi` (0x0121, spec 2026-11-19-bls12381-multi §4, §5; CTR-UA-49 / CTR-UA-50).
 /// @notice `verify(p, ua_msg, σ ‖ signers)` / `verifyMinimal(…)`: `p = ua (32) ‖ s` is the registry's stored key pointer
 ///         (`s` = the key data in 48-byte limbs, `228 + 194·n` bytes, checked against the `n` it holds); `sig` is σ (128, G1,
 ///         EIP-2537) ‖ `signers` (uint256, bit i = member i). `m = keccak256(ua ‖ ua_msg)`; `W(S) ≥ t` (`verifyMinimal`: also

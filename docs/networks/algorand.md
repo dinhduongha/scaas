@@ -475,3 +475,8 @@ ed25519 point (go-algorand `IsEdwards25519Point`), so no private key can exist f
 Unsalted, 9 of router ids 1000–1019 were on-curve (`smartcontracts/algorand/runs/2026-10-28-algorand-limits.txt`); the
 lowest-salt search is `exec_salt` (`smartcontracts/algorand/tests/conftest.py:362`) and `deploy.py`. The
 router is no longer fully stateless (one global). BUILT.
+
+<a id="bls12381-multi"></a>**`bls12381-multi` (`0x0121`) — PLANNED** in the `ua-algorand` round: the family must support it
+([ARCH-POS-18](../decisions.md#ARCH-POS-18), [CTR-UA-54](../contracts/accounts.md#CTR-UA-54)): its BLS12-381 host functions where
+present, else software, with the same checks (subgroup, infinity, the minimal form on stored paths) and the 64-member cap; the
+round measures its path and brings infeasibility to the owner with numbers.

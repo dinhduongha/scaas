@@ -208,7 +208,7 @@ pub const KINDS: &[Kind] = &[
     derived(0x0108, "secp256k1", &[64], Some("secp256k1")), // 2026-10-17, appended as in kinds.json
     derived(0x0134, "mldsa87", &[2592], Some("mldsa87")), // CTR-UA-39, 2026-11-04, appended as in kinds.json
     derived(0x0135, "fndsa1024", &[1793], Some("fndsa1024")), // CTR-UA-40, 2026-11-04, appended as in kinds.json
-    derived(0x0121, "bls12381-multi", &[], None), // CTR-UA-47 (placeholder), 2026-11-19, appended as in kinds.json
+    derived(0x0121, "bls12381-multi", &[], None), // CTR-UA-47, 2026-11-19, appended as in kinds.json
 ];
 
 /// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
