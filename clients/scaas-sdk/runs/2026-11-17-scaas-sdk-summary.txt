@@ -37,7 +37,7 @@ ua-vectors | b0c917a2c | 0 | 655 passed, 0 failed, 6 ignored (62 binaries); tree
 ua-cs | b0c917a2c | 0 | -; tree dirty
 ua-cxx | b0c917a2c | 0 | ctest: 0 tests failed out of 43; tree dirty
 frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
-sdk-test | c3df7f060 | 0 | 172 passed, 0 failed, 2 ignored (14 binaries)
-sdk-min | c3df7f060 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
-sdk-clippy | c3df7f060 | 0 | -
-docs | c3df7f060 | 0 | -
+sdk-test | 2dd257564 | 0 | 172 passed, 0 failed, 2 ignored (14 binaries)
+sdk-min | 2dd257564 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
+sdk-clippy | 2dd257564 | 0 | -
+docs | 2dd257564 | 0 | -
