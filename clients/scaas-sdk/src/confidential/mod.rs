@@ -1,24 +1,39 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! `confidential` (spec §9, CLI-SDK-10; plan T15): Zether keys, balances and operations over the SDK's reading layer
-//! ([`read`], spec §9.4). The key stays in `ua-rs`'s Zether facade: every decryption and proof runs in its JSON `call`, whose
+//! `confidential` (spec §9, CLI-SDK-10; plans T15, T16): Zether (feature `zether`) and PQZ (feature `pqz`) keys, balances and
+//! operations over the SDK's reading layers ([`read`] for Zether, [`pqz`]'s for PQZ, spec §9.4), and the PQZ verdicts
+//! ([`verdict`], spec §9.3). Zether and PQZ are separate: separate keys, words, facades and features. The key stays in `ua-rs`'s Zether facade: every decryption and proof runs in its JSON `call`, whose
 //! requests carry no key (CLI-UAL-06), over words the reading layer read at one final block. A decryption runs only after the
 //! read returned and its result goes to the caller (the holder) only: nothing the SDK sends, reads next or retries depends on
 //! it (spec §9.5). UNAUDITED.
+pub(crate) mod words;
+#[cfg(feature = "zether")]
 pub(crate) mod read;
+#[cfg(feature = "zether")]
 mod zether;
+#[cfg(feature = "pqz")]
+pub(crate) mod pqz;
 
+#[cfg(feature = "pqz")]
+pub use pqz::*;
+#[cfg(feature = "zether")]
 pub use zether::*;
 
+#[cfg(feature = "zether")]
 use crate::vault::OpenSeed;
 use crate::{Sdk, SdkError};
+#[cfg(feature = "zether")]
 use scaas_ua::facade::zether::{ZetherKey, USE_CONF};
-use serde_json::{json, Value};
+use serde_json::Value;
+#[cfg(feature = "zether")]
+use serde_json::json;
 use std::sync::Arc;
 
 /// The UA kind `zether-bls12381`.
+#[cfg(feature = "zether")]
 pub(crate) const ZETHER_KIND: u16 = 0x0141;
 
 /// The Zether key's `<coin>` on an EVM chain: the network's SLIP-44, EVM 60 (CLI-SGN-10).
+#[cfg(feature = "zether")]
 pub(crate) const COIN_EVM: u32 = 60;
 
 /// The confidential module.
@@ -33,6 +48,7 @@ impl Sdk {
     }
 }
 
+#[cfg(feature = "zether")]
 /// A Zether key's public parts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZetherKeyInfo {
@@ -42,6 +58,7 @@ pub struct ZetherKeyInfo {
     pub y: String,
 }
 
+#[cfg(feature = "zether")]
 /// A balance read (spec §9.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZetherBalanceRequest {
@@ -57,6 +74,7 @@ pub struct ZetherBalanceRequest {
     pub bound_bits: Option<u32>,
 }
 
+#[cfg(feature = "zether")]
 /// A decrypted balance, for the holder only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZetherBalance {
@@ -68,6 +86,7 @@ pub struct ZetherBalance {
     pub acc_seq: u64,
 }
 
+#[cfg(feature = "zether")]
 /// The conf key (`m/12381/60/<account>/7`) of an open seed, kept beside its seed.
 pub(crate) fn handle(sdk: &Sdk, seed: &str, account: u32) -> Result<(Arc<OpenSeed>, ZetherKey), SdkError> {
     let s = sdk.open_seed(seed)?;
@@ -86,6 +105,7 @@ pub(crate) fn set(v: &mut Value, k: &str, x: Value) -> Result<(), SdkError> {
     Ok(())
 }
 
+#[cfg(feature = "zether")]
 /// `cmd` of the facade on `req` off the async workers, the seed kept open meanwhile; its JSON answer.
 pub(crate) async fn call(
     sdk: &Sdk,
@@ -103,6 +123,7 @@ pub(crate) async fn call(
     serde_json::from_str(&out).map_err(|_| SdkError::Internal)
 }
 
+#[cfg(feature = "zether")]
 impl Confidential {
     /// The Zether key of `seed` / `account` (spec §9.1): its UA and `Y`. `WalletLocked`.
     pub async fn zether_key(&self, seed: String, account: u32) -> Result<ZetherKeyInfo, SdkError> {

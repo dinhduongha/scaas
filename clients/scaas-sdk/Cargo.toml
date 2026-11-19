@@ -20,7 +20,8 @@ wallet = ["vault", "scaas-rpc/evm", "scaas-rpc/node-client", "dep:alloy"]
 # T15: the reading layer reads through `scaas-rpc`'s EVM pool and the operations are `wallet`'s; the layout constants of
 # `scaas.zether` (`ROOT`, `LAYOUT`) are zether-prover's, the prover `scaas-ua`'s facade runs
 zether = ["wallet", "scaas-ua/zether", "dep:zether-prover"]
-pqz = ["vault", "scaas-ua/pqz"]
+# T16: the PQZ reading layer reads through `scaas-rpc`'s EVM pool and the operations are `wallet`'s, as `zether`
+pqz = ["wallet", "scaas-ua/pqz"]
 pqz-set-n2048-kmax1024 = ["scaas-ua/pqz-set-n2048-kmax1024"]
 pqz-set-n2304-kmax4096 = ["scaas-ua/pqz-set-n2304-kmax4096"]
 pqz-set-n2560-kmax16384 = ["scaas-ua/pqz-set-n2560-kmax16384"]
@@ -125,3 +126,7 @@ required-features = ["wallet"]
 [[test]]
 name = "confidential"
 required-features = ["zether"]
+
+[[test]]
+name = "confidential_pqz"
+required-features = ["pqz"]

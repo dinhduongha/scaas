@@ -21,24 +21,17 @@
 //!   failure never makes the pool ask another endpoint.
 //!
 //! UNAUDITED.
+use super::words::{add, be, class_kind, map_slot, rec_slot, word, CLASS_TOKEN, PURPOSE, W};
 use crate::op::{addr20, evm, final_block, hex, unhex};
 use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, U256};
 use scaas_rpc::evm::EvmPool;
 use scaas_rpc::pool::{ReadAt, ReadError};
-use scaas_rpc::Purpose;
 use serde_json::{json, Value};
 use zether_prover::state::{LAYOUT, ROOT};
 
-pub(crate) type W = [u8; 32];
-
-/// R1: every read of this layer feeds a decryption.
-const PURPOSE: Purpose = Purpose::FeedsDecryption;
-/// `OpenFactory._rec` (slot 8, two words; word 1: `contractClass(16) ‖ kind(16) ‖ …` from the low end), class TOKEN, the Zether
-/// kinds (`IOpenFactory.TokenKind`: NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_ZETHER_REGULATED, WRAPPED_ZETHER_REGULATED); held to
-/// the pin `test/zether/ZetherStateVectors.t.sol` by zether-prover's `zether-read-balance`.
-const REC_SLOT: u64 = 8;
-const CLASS_TOKEN: u16 = 1;
+/// The Zether kinds (`IOpenFactory.TokenKind`: NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_ZETHER_REGULATED,
+/// WRAPPED_ZETHER_REGULATED) of the factory record (R5).
 const ZETHER_KINDS: [u16; 4] = [2, 3, 10, 11];
 /// `UAStore.Layout.records` (registry slot 0): `kind(16) ‖ registeredAt(40) ‖ keyPtr(160) ‖ index(40)` from the low end.
 const REG_RECORDS_SLOT: u64 = 0;
@@ -82,22 +75,6 @@ pub(crate) struct Read {
     pub ys: Vec<Vec<u8>>,
 }
 
-/// `a + i` (mod 2^256), big-endian.
-pub(crate) fn add(a: &W, i: u64) -> W {
-    U256::from_be_bytes(*a)
-        .wrapping_add(U256::from(i))
-        .to_be_bytes::<32>()
-}
-
-pub(crate) fn be(n: u64) -> W {
-    U256::from(n).to_be_bytes::<32>()
-}
-
-/// `keccak256(key ‖ base)`: a mapping's value slot.
-pub(crate) fn map_slot(key: &W, base: &W) -> W {
-    scaas_ua::keccak256(&[key.as_slice(), base.as_slice()].concat())
-}
-
 fn lay(label: &str) -> Result<(u64, u64, usize, usize), SdkError> {
     LAYOUT
         .iter()
@@ -120,12 +97,6 @@ fn field(w: &W, label: &str) -> Result<u64, SdkError> {
     Ok(b.iter().fold(0u64, |a, x| (a << 8) | u64::from(*x)))
 }
 
-fn pad(a: &[u8; 20]) -> W {
-    let mut w = [0u8; 32];
-    w[12..].copy_from_slice(a);
-    w
-}
-
 /// The words of the fixed set's plan: the slots asked, chosen by the token and the UAs only (R7).
 struct Plan {
     factory: Address,
@@ -136,14 +107,6 @@ struct Plan {
     auditor: W,
     base: W,
     uas: Vec<W>,
-}
-
-/// One storage word at the read's block (R4).
-async fn word(pool: &EvmPool, at: &ReadAt<alloy::primitives::B256>, who: Address, slot: &W) -> Result<W, ReadError> {
-    Ok(pool
-        .storage_at(at, who, U256::from_be_bytes(*slot))
-        .await?
-        .to_be_bytes::<32>())
 }
 
 /// The fixed set at the read's block, nothing checked; the registry and the key pointers are where the token's code and the
@@ -221,8 +184,7 @@ fn registered(ua: &W, rec: &W, code: &[u8]) -> Result<Vec<u8>, SdkError> {
 /// handle, the watch loop's read of a keystore row's UA; R6 still binds the record's `Y` to the UA).
 fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: Option<&[u8]>, uas: &[W]) -> Result<Read, SdkError> {
     // R5: catalogued by the profile's factory, a Zether kind
-    let class = u16::from_be_bytes([r.rec[30], r.rec[31]]);
-    let kind = u16::from_be_bytes([r.rec[28], r.rec[29]]);
+    let (class, kind) = class_kind(&r.rec);
     if class != CLASS_TOKEN || !ZETHER_KINDS.contains(&kind) {
         return Err(SdkError::TokenUncatalogued);
     }
@@ -293,7 +255,7 @@ pub(crate) async fn zether(
     let plan = Plan {
         factory: Address::from(factory),
         token: Address::from(t),
-        rec: add(&map_slot(&pad(&t), &be(REC_SLOT)), 1),
+        rec: rec_slot(&t),
         psid: ns("psid")?,
         modes: ns("disclosureMode")?,
         auditor: ns("auditorKey")?,

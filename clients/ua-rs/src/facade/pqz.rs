@@ -362,6 +362,11 @@ pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("auditorEpoch", 0, 0, 26, 4),
     ("auditorUAs[E]", 25, 0, 0, 32),
     ("entryAuditorEpoch[V]", 26, 0, 0, 4),
+    // scaas-sdk T16 (owner 2026-11-19, T16-b): `proofStore` (NONE 0 / LOG 1) read as a storage word, never by `eth_call`; the
+    // verifier UA and its epoch a verdict is checked against (spec §9.3)
+    ("proofStore", 0, 0, 23, 1),
+    ("pqzVerifierUA", 13, 0, 0, 32),
+    ("pqzVerifierEpoch", 15, 0, 0, 4),
 ];
 
 /// The ERC-7201 root of `scaas.pqz` (`keccak256(abi.encode(uint256(keccak256("scaas.pqz")) - 1)) & ~0xff`).
