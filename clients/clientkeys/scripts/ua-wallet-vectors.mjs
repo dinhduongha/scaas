@@ -43,6 +43,7 @@ import {
   sigRole,
   webauthnChallenge,
   webauthnAssertion,
+  WEBAUTHN_MAX_ASSERTION,
   msigMemberSigs,
   importedUAKey,
   importedKind,
@@ -1460,11 +1461,17 @@ const assertionOf = (digest, opts = {}, flags = 0x05) => {
 const D1 = keccak_256(utf8ToBytes("scaas.ua-rs-sign.t1a.webauthn.d1"));
 const D2 = keccak_256(utf8ToBytes("scaas.ua-rs-sign.t1a.webauthn.d2"));
 const highOf = (a) => ({ ...a, s: hex(be(N - int(fromHex(a.s)), 32)), highS: true });
+// G3 (owner 2026-11-19): `authData` and `clientDataJSON` of exactly `n` bytes together, the extra member padded
+const sized = (n) => (ch) => {
+  const at = (k) => cdj(ch, { tail: `,"crossOrigin":false,"other_keys_can_be_added_here":"${"x".repeat(k)}"` });
+  return at(n - authData().length - at(0).length);
+};
 const webauthnAccepted = [
   assertionOf(D1),
   highOf(assertionOf(D1)),
   assertionOf(D2, { tail: ',"crossOrigin":false' }),
   assertionOf(D2, { tail: ',"crossOrigin":false,"other_keys_can_be_added_here":"x"' }),
+  assertionOf(D2, { raw: sized(WEBAUTHN_MAX_ASSERTION) }), // G3: at the cap
 ].map((a) => {
   const blob = webauthnAssertion(
     Object.fromEntries(
@@ -1504,7 +1511,9 @@ const waRefusals = [
     "client-data-not-utf8",
     assertionOf(D1, { raw: (ch) => concatBytes(cdj(ch).subarray(0, -2), Uint8Array.of(0xff), utf8ToBytes('"}')) }),
   ],
-].map(([c, a]) => {
+  // G3 (owner 2026-11-19): one byte above the cap, otherwise valid (control: the accepted row at the cap)
+  ["above-the-cap", assertionOf(D2, { raw: sized(WEBAUTHN_MAX_ASSERTION + 1) }), "WebAuthnTooLong"],
+].map(([c, a, error = "WebAuthnAssertion"]) => {
   const e = refusedBy(() =>
     webauthnAssertion(
       Object.fromEntries(
@@ -1512,9 +1521,20 @@ const waRefusals = [
       ),
     ),
   );
-  must(e?.code === "WebAuthnAssertion", c);
-  return { case: c, ...a, error: "WebAuthnAssertion" };
+  must(e?.code === error, c);
+  return { case: c, ...a, error };
 });
+{
+  const size = (r) => (r.authData.length + r.clientDataJSON.length) / 2 - 2;
+  must(size(webauthnAccepted.at(-1)) === WEBAUTHN_MAX_ASSERTION, "G3: the accepted row at the cap");
+  must(size(waRefusals.at(-1)) === WEBAUTHN_MAX_ASSERTION + 1, "G3: the refused row one above");
+  const x = waRefusals.at(-1);
+  const blob = abiEncode(
+    ["bytes", "bytes", "bytes32", "bytes32"],
+    [fromHex(x.authData), fromHex(x.clientDataJSON), fromHex(x.r), fromHex(x.s)],
+  );
+  must(verify(0x0100, x.keyData, x.expectedChallenge, hex(blob), false), "G3: the refused row verifies on the chains");
+}
 {
   const x = waRefusals.find((r) => r.case === "client-data-not-utf8");
   must(
@@ -1748,7 +1768,7 @@ const sign = {
     "typed: generic = the faithful EIP-712 hasher (missing field = zero, unknown field refused, int two's complement, T[k]); " +
     "canon = the SCaaS builders, whose unbound relayer / feeRecipient hash as zero (nested too); policy = expectDigest(td, " +
     "expect) over the check* functions. tx: evmTransaction types 0-3 (no type 4), chainId 1 … 2^64 − 1, signTransaction. webauthn: " +
-    "webauthnAssertion against the expected challenge, clientDataJSON UTF-8. msig: msigMemberSigs, minimal at both levels. chainSeparation (owner 2026-11-05): one message and " +
+    "webauthnAssertion against the expected challenge, clientDataJSON UTF-8, authData and clientDataJSON at most 1,024 bytes together (WebAuthnTooLong, owner 2026-11-19, G3). msig: msigMemberSigs, minimal at both levels. chainSeparation (owner 2026-11-05): one message and " +
     "one key on chain 7622 (SCaaS testnet) and 22776 (SCaaS mainnet): a UAMetaTransfer in a token domain with chainId (UA key 0x0108, " +
     "signUA metatx) and EIP-155 transactions of types 0 and 2 (the EVM key) give other digests and signatures per chain; refusals: a " +
     "signature for one chain does not verify against the other's digest; portable: a record in the portable domain (no chainId) " +

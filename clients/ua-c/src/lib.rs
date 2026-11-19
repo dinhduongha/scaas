@@ -123,6 +123,9 @@ pub const SCAAS_UA_ERR_PQZ_SET_MISMATCH: ScaasUaStatus = 40;
 pub const SCAAS_UA_ERR_PQZ_KEY_VERSION: ScaasUaStatus = 41;
 /// "UAKeyInUse": a stored version of the UA holds this PQZ key (group 3g, KV-1; T15o).
 pub const SCAAS_UA_ERR_KEY_IN_USE: ScaasUaStatus = 42;
+/// "UAWebAuthnTooLong": an assertion whose authData and clientDataJSON together exceed 1,024 bytes (owner 2026-11-19, G3:
+/// appended, ABI 6 kept).
+pub const SCAAS_UA_ERR_WEBAUTHN_TOO_LONG: ScaasUaStatus = 43;
 
 /// One row of the kind table. `name` and `group` are static NUL-terminated strings (never freed); `group` is NULL when
 /// the kind has no group. `lengths[0..lengths_len]` are the accepted key-data lengths; `lengths_len == 0` means variable
@@ -206,6 +209,7 @@ impl From<uw::Error> for Fail {
             E::WalletMismatch => SCAAS_UA_ERR_WALLET_MISMATCH,
             E::PqzSetMismatch => SCAAS_UA_ERR_PQZ_SET_MISMATCH,
             E::ExternalSignature => SCAAS_UA_ERR_EXTERNAL_SIGNATURE,
+            E::WebAuthnTooLong => SCAAS_UA_ERR_WEBAUTHN_TOO_LONG,
             _ => SCAAS_UA_ERR_INTERNAL, // `#[non_exhaustive]`: a variant added later maps here until it has its status
         };
         fail(status)
@@ -398,6 +402,7 @@ fn status_cstr(status: ScaasUaStatus) -> &'static CStr {
         SCAAS_UA_ERR_PQZ_SET_MISMATCH => c"UAPqzSetMismatch",
         SCAAS_UA_ERR_PQZ_KEY_VERSION => c"UAPqzKeyVersion",
         SCAAS_UA_ERR_KEY_IN_USE => c"UAKeyInUse",
+        SCAAS_UA_ERR_WEBAUTHN_TOO_LONG => c"UAWebAuthnTooLong",
         _ => c"UAStatusUnknown",
     }
 }
@@ -3867,7 +3872,8 @@ pub extern "C" fn scaas_ua_pqz_seed_backup_warning(
 }
 
 /// The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` of an assertion against `expected_challenge32`
-/// (low-s, the chains' clientDataJSON rule), verified with `key_data` before it is written: SCAAS_UA_ERR_WEBAUTHN_ASSERTION.
+/// (low-s, the chains' clientDataJSON rule), verified with `key_data` before it is written: SCAAS_UA_ERR_WEBAUTHN_ASSERTION;
+/// authData and clientDataJSON above 1,024 bytes together: SCAAS_UA_ERR_WEBAUTHN_TOO_LONG.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn scaas_ua_webauthn_assertion(

@@ -6,7 +6,10 @@
 //! the operation tracked to a chain fact like any other. A row still `signed` after a restart is sent by `resume` (unless its
 //! simulation was refused); a row `sent` is sent again only by the user's `resend`, the same bytes.
 use super::prepared::{envelope, Prepared};
-use super::quote::{check_caps, check_gateways, door_a, payer_address, SubmitPath, SubmitQuote};
+use super::quote::{
+    check_caps, check_gateways, door_a, payer_address, signed_quote, signer_kind, SubmitPath,
+    SubmitQuote,
+};
 use super::state::{self, Row};
 use super::{dec, evm, hex, key, lane_nonce, unhex, InFlight, Op, OpState};
 use crate::events::Event;
@@ -268,7 +271,9 @@ impl Op {
     /// Signs `prepared` under its check, writes the operation's row (state `signed`) and returns its id (spec §13.4, R17;
     /// owner 2026-11-19, ruling A); the simulation of a self-relay and the send run on and report as `Event::OpState`. An `Err`
     /// means nothing was written or sent (a signature made before a failed write never leaves the SDK): `PreparedUnknown`,
-    /// `PreparedStale`, `PolicyRefused`, `FeeAboveCap`, `SubmitPathNone`, `ProfileMismatch`, a store failure.
+    /// `PreparedStale`, `PolicyRefused`, `FeeAboveCap`, `SubmitPathNone`, `ProfileMismatch`, a store failure; a self-relay's
+    /// gas recomputed from the signed calldata (owner 2026-11-19, G3: never below the quote's, its transaction sent with it)
+    /// above `Limits::max_gas` `SignedGasAboveCap`, above the chain's per-transaction cap `GasAboveTxCap`.
     pub async fn submit(
         &self,
         prepared: Arc<Prepared>,
@@ -303,6 +308,34 @@ impl Op {
                         put_back(&sdk, &prepared);
                         return Err(e);
                     }
+                };
+                // G3: a self-relay's gas recomputed from the signed calldata, before anything is written or sent; the signer's
+                // kind and the unsigned calldata's length kept on the row for a later self-relay `resend` (Q5)
+                let (signer, unsigned_len) = match unsigned(&prepared) {
+                    Ok(u) => (signer_kind(&prepared), u.calldata.len()),
+                    Err(e) => {
+                        put_back(&sdk, &prepared);
+                        return Err(e);
+                    }
+                };
+                let quote = match &quote.path {
+                    SubmitPath::SelfRelay { .. } => {
+                        match signed_quote(
+                            &sdk,
+                            &prepared.chain(),
+                            signer,
+                            unsigned_len,
+                            &quote,
+                            built.calldata.len(),
+                        ) {
+                            Ok(q) => q,
+                            Err(e) => {
+                                put_back(&sdk, &prepared);
+                                return Err(e);
+                            }
+                        }
+                    }
+                    _ => quote,
                 };
                 let (raw, tx_id, payer) = match &quote.path {
                     SubmitPath::SelfRelay { payer } => {
@@ -346,6 +379,8 @@ impl Op {
                     tx_id,
                     tx_nonce: payer.as_ref().map(|_| quote.tx_nonce),
                     gas_limit: payer.as_ref().map(|_| quote.gas_limit),
+                    signer_kind: Some(signer),
+                    unsigned_len: Some(unsigned_len as u64),
                     ended_at: None,
                     message: prepared.t.message.clone(),
                     path: if payer.is_some() { "self" } else { "gateway" }.into(),
@@ -391,7 +426,11 @@ impl Op {
 
     /// The same signed bytes again, at the user's request only (spec §13.3): on its own path, or a gateway's operation
     /// self-relayed by a payer when its `relayer` is unbound (`Argument` otherwise), or a self-relayed one posted to the
-    /// gateways. Never re-signed (a self-relay's transaction by a new payer quote is the payer's own new transaction).
+    /// gateways. Never re-signed (a self-relay's transaction by a new payer quote is the payer's own new transaction). A
+    /// gateway's operation self-relayed: its gas recomputed from the row's stored signed calldata as `submit` does (owner
+    /// 2026-11-19, Q5, G3's rule): never below `quote`'s, above `Limits::max_gas` `SignedGasAboveCap`, above the chain's
+    /// per-transaction cap `GasAboveTxCap`, a cost above the caps `FeeAboveCap`, nothing written or sent; a row without the
+    /// signer's kind and unsigned length (written before Q5): `Argument`.
     pub async fn resend(&self, op: String, quote: SubmitQuote) -> Result<(), SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
@@ -412,6 +451,20 @@ impl Op {
                         }
                         let (_, chain_id, _) = evm(&sdk, &row.chain)?;
                         let to = super::addr20(&row.contract)?;
+                        let (Some(signer), Some(unsigned_len)) =
+                            (row.signer_kind, row.unsigned_len)
+                        else {
+                            return Err(SdkError::Argument);
+                        };
+                        // Q5: the gas from the stored signed calldata, before anything is written or sent
+                        let quote = signed_quote(
+                            &sdk,
+                            &row.chain,
+                            signer,
+                            usize::try_from(unsigned_len).map_err(|_| SdkError::Argument)?,
+                            &quote,
+                            unhex(&row.calldata)?.len(),
+                        )?;
                         let (raw, id) = sign_tx(
                             &sdk,
                             chain_id,

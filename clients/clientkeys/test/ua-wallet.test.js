@@ -476,8 +476,19 @@ test("WebAuthn assertion: accepted rows, refusals (wrong challenge, reordered JS
     assert.ok(kindVerify(0x0100, x.keyData, x.expectedChallenge, x.assertion));
   }
   const cases = new Set(S.webauthn.refusals.map((x) => x.case));
-  for (const c of ["wrong-challenge", "reordered-json", "cross-origin-true", "r-zero", "s-n", "client-data-not-utf8"])
+  for (const c of [
+    "wrong-challenge",
+    "reordered-json",
+    "cross-origin-true",
+    "r-zero",
+    "s-n",
+    "client-data-not-utf8",
+    "above-the-cap",
+  ])
     assert.ok(cases.has(c), c);
+  // G3 (owner 2026-11-19): the last accepted row at the cap, the `above-the-cap` refusal one byte above
+  const size = (x) => (x.authData.length + x.clientDataJSON.length) / 2 - 2;
+  assert.equal(size(a.at(-1)), U.WEBAUTHN_MAX_ASSERTION);
   for (const x of S.webauthn.refusals) {
     assert.throws(
       () =>
@@ -489,7 +500,7 @@ test("WebAuthn assertion: accepted rows, refusals (wrong challenge, reordered JS
           r: B(x.r),
           s: B(x.s),
         }),
-      (e) => e.code === "WebAuthnAssertion",
+      (e) => e.code === x.error && x.error === (x.case === "above-the-cap" ? "WebAuthnTooLong" : "WebAuthnAssertion"),
       x.case,
     );
   }
@@ -543,6 +554,40 @@ test("msig rows: minimal sets signed at both levels, non-minimal and unsorted se
     if (m.refused) assert.throws(call, (e) => e.code === m.refused, m.case);
     else assert.equal(hex(call()), m.memberSigs, m.case);
   }
+});
+
+test("Q3 (owner 2026-11-19): a third party's webauthn-p256 member cannot bypass the cap in msigMemberSigs", () => {
+  const at = S.webauthn.accepted.find((r) => B(r.authData).length + B(r.clientDataJSON).length === 1024);
+  const above = S.webauthn.refusals.find((r) => r.case === "above-the-cap");
+  const n = p256.Point.Fn.ORDER;
+  const low = (s) => fromHex((BigInt(s) > n / 2n ? n - BigInt(s) : BigInt(s)).toString(16).padStart(64, "0"));
+  const longBlob = abiEncode(
+    ["bytes", "bytes", "bytes32", "bytes32"],
+    [B(above.authData), B(above.clientDataJSON), B(above.r), low(above.s)],
+  );
+  assert.ok(kindVerify(0x0100, above.keyData, above.expectedChallenge, hex(longBlob)), "valid on the chains");
+  const call = (keyData, blob) => {
+    const id = ua.deriveUA(0x0100, B(keyData));
+    const msigKd = ua.encodeMsig(1, [{ kind: 0x0100, id, weight: 1 }]);
+    const key = { kind: 0x0100, ua: id, signMember: () => blob };
+    return U.msigMemberSigs({
+      ua: ua.deriveUA(0x0120, msigKd),
+      keyData: msigKd,
+      purposeTag: ua.purposeTag("metatx"),
+      digest: new Uint8Array(32).fill(6),
+      slots: [{ index: 0, key }],
+      inner: () => undefined,
+    });
+  };
+  assert.ok(call(at.keyData, B(at.assertion)).length > 0, "control: at the cap");
+  assert.throws(
+    () => call(above.keyData, longBlob),
+    (e) => e.code === "WebAuthnTooLong",
+  );
+  assert.throws(
+    () => call(at.keyData, concatBytes(B(at.assertion), new Uint8Array(32))),
+    (e) => e.code === "WebAuthnAssertion",
+  );
 });
 
 test("chain separation (owner 2026-11-05): one message and one key on 7622 and 22776, other digests and signatures, no cross-chain verify", () => {

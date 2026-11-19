@@ -1,6 +1,7 @@
 // Shared by the NEAR and Algorand clients (near-algorand T18): the scaas.metaop.v1 envelope parts both families use.
 import { keccak_256, concatBytes, utf8ToBytes, hex, fromHex, b64url } from "./bytes.js";
 import { metaPayIdV1 as metaPayId, payLane } from "./evm.js";
+import { assertionCapped } from "./webauthn.js";
 
 export const LABEL = utf8ToBytes("scaas.metaop.v1");
 
@@ -64,9 +65,11 @@ export function checkPayMeta(op, salt, meta) {
 }
 
 /** WebAuthn: the authenticator signs `challenge = digest`; the chains take low-s r‖s (a high-s signature is refused). The
- *  returned clientDataJSON must be valid UTF-8, type webauthn.get, challenge b64url(digest). */
+ *  returned clientDataJSON must be valid UTF-8, type webauthn.get, challenge b64url(digest); first, `authenticatorData` and
+ *  `clientDataJSON` above 1,024 bytes together: `WebAuthnTooLong` (owner 2026-11-19, Q4). */
 export async function passkeyAssertion(digest, cred, derToRS) {
   const a = await cred.get(digest);
+  assertionCapped(a.authenticatorData, a.clientDataJSON);
   let cdj;
   try {
     cdj = new TextDecoder("utf-8", { fatal: true }).decode(a.clientDataJSON);

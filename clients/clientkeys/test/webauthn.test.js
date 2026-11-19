@@ -9,7 +9,10 @@ import {
   requestOptions,
   passkeySupported,
   P256_N,
+  WEBAUTHN_MAX_ASSERTION,
 } from "../src/webauthn.js";
+import { passkeyAssertion } from "../src/metaop.js";
+import { WEBAUTHN_MAX_ASSERTION as UA_CAP } from "../src/uakey.js";
 import { sha256, concatBytes, bytesToHex, fromHex, keccak_256, utf8ToBytes } from "../src/bytes.js";
 import { softAuthenticator, p1363ToDer } from "./softauthn.js";
 
@@ -116,4 +119,28 @@ test("creationOptions: random 16-byte user handle per credential, account passke
       }),
     /user handle/,
   );
+});
+
+// Owner 2026-11-19, Q4: the G3 cap on the account passkey path (`encodeAssertion`, `SmartKeyAccount`) and the NEAR / Algorand
+// path (`passkeyAssertion`): authenticatorData and clientDataJSON at most 1,024 bytes together; at the cap encoded (control), a
+// byte above `WebAuthnTooLong`, nothing returned.
+test("Q4: account and metaop passkey assertions capped at 1,024 bytes", async () => {
+  assert.equal(WEBAUTHN_MAX_ASSERTION, 1024);
+  assert.equal(UA_CAP, WEBAUTHN_MAX_ASSERTION, "one constant with uakey.js");
+  const digest = new Uint8Array(32).fill(0xab);
+  const authenticatorData = concatBytes(sha256(utf8ToBytes(RP)), new Uint8Array([5, 0, 0, 0, 0]));
+  const prefix = `{"type":"webauthn.get","challenge":"${"q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6s"}","origin":"https://`;
+  const cdj = (n) => utf8ToBytes(prefix + "a".repeat(n - authenticatorData.length - prefix.length - 2) + '"}');
+  const signature = p1363ToDer(fromHex("00".repeat(31) + "05" + "00".repeat(31) + "07"));
+  const at = cdj(1024),
+    above = cdj(1025);
+  assert.equal(authenticatorData.length + at.length, 1024);
+  assert.equal(authenticatorData.length + above.length, 1025);
+  const tooLong = (e) => e.code === "WebAuthnTooLong";
+  assert.ok(encodeAssertion({ authenticatorData, clientDataJSON: at, signature }).length > 0, "control");
+  assert.throws(() => encodeAssertion({ authenticatorData, clientDataJSON: above, signature }), tooLong);
+  const cred = (clientDataJSON) => ({ get: async () => ({ authenticatorData, clientDataJSON, signature }) });
+  const ok = await passkeyAssertion(digest, cred(at), derToRS);
+  assert.equal(ok.clientDataJSON.length, at.length, "control");
+  await assert.rejects(passkeyAssertion(digest, cred(above), derToRS), tooLong);
 });
