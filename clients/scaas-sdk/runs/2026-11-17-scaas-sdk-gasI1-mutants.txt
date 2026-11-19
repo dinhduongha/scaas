@@ -1,0 +1,22 @@
+# gasI1 mutants at commit 120b1db5d (name | outcome | test)
+base per_item not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+verify per_item not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+the signer's verify row reads no count | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+an attached signature's count read as the operation's | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+not saturating | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+an unknown count falls through (no refusal) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+an unknown count read as 0 | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+the count unbounded | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+the bound off by one | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_item_adds_gas_times_its_count
+legs: args.legs not read | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib item_count_reads_the_operations_counts
+accounts: uas not read | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib item_count_reads_the_operations_counts
+entries: a decimal n not read | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib item_count_reads_the_operations_counts
+the quote reads no count | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib a_counted_row_quotes_its_count_or_refuses
+the quote drops the refusal | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib a_counted_row_quotes_its_count_or_refuses
+an unpaired item / per_item accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_item_parse
+an unknown item accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_item_parse
+an unknown item refused as Argument | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_item_parse
+base_count not enforced | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_item_parse
+the per-item gas unbounded | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_item_parse
+an unpaired part not checked | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_item_parse
+20 mutants, 20 killed, 0 survived, 0 not loaded
