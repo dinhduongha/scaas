@@ -82,7 +82,7 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
 
 ## How to run this plan
 
-- **Branch and worktree.** `multi-gen-verify` in `.claude/worktrees/gen2-verify`, cut from `bls-multi` once its library split
+- **Branch and worktree.** `multi-gen-verify` in `.claude/worktrees/multi-gen-verify`, cut from `bls-multi` once its library split
   and Task 8 are committed there (check `git log bls-multi` for both and that `UARegistryRegLib.sol` exists). Before Task 1
   re-read the split's final function placement; every file path below uses it. Agents commit locally; they do not merge
   or push.
@@ -93,7 +93,7 @@ Inputs the spec implies that no spec test row names; each has its test in the ow
   fields); 17 and 18 after 15; 19 after 17 and 18; 20 last before 21.
 - **Tests first** in every code task: the test, red; the code; green. Every refusal test changes one thing from a valid row
   (positive control first). Mutants per task, each killed by a named test; mutant scripts and `step | commit | rc | counts`
-  summaries in `smartcontracts/evm/runs/<round-start-date>-gen2-verify/` (owner C2; full output in git-ignored
+  summaries in `smartcontracts/evm/runs/<round-start-date>-multi-gen-verify/` (owner C2; full output in git-ignored
   `.log` files, no absolute paths).
 - **Gates per task** (AGENTS.md "round of several tasks"): the task's own suites at the default set, its mutants, every pin
   it moves (gas, size, typehash, layout, selector audit: old → new in the commit). Contract tasks that do not touch
@@ -599,7 +599,7 @@ The run against a real precompile is on a local chain whose client has it (never
 ### Task 20: round gate (full matrix, once)
 
 On the final tree, after Task 19; per-step logs, resume per step (read the gate's `last` file first); summary
-`smartcontracts/evm/runs/<round-start-date>-gen2-verify/gate-summary.txt` (`step | commit | rc | counts`, no absolute
+`smartcontracts/evm/runs/<round-start-date>-multi-gen-verify/gate-summary.txt` (`step | commit | rc | counts`, no absolute
 paths).
 
 | Step | Command |
@@ -642,7 +642,7 @@ The owner on the plan's choices C1 – C7: **"approve all as proposed"**.
 | # | Ruling |
 |---|---|
 | C1 | `txGasCap` is the constructor's argument right after `verifyBudget_` (one ABI change; the 40 construction sites updated in Task 1) |
-| C2 | The round's runs folder is `smartcontracts/evm/runs/<round-start-date>-gen2-verify/` |
+| C2 | The round's runs folder is `smartcontracts/evm/runs/<round-start-date>-multi-gen-verify/` |
 | C3 | Because `src/pqz/PqzStateLib.sol` changes, the round gate runs every forge directory at all four sets (AGENTS.md's PQZ rule), not only the set-sensitive tests |
 | C4 | The three ML-DSA verify-only verifiers live in one new file `src/ua/MlDsaVerifyOnly.sol` with a shared base |
 | C5 | The Draft probe flag is a field of the chain's row in `smartcontracts/evm/chain-uids.json` (`probe_draft_precompiles`), and the owner's confirmation is a book field |
