@@ -42,7 +42,9 @@ contract DexLiquidityUATest is UADexBase {
         p.order = o;
         p.auth = UACall.auth(uaP, _auth(lreg, lreg.kindOf(uaP), _key(UAKinds.P256), UAKinds.PURPOSE_TRADE, h));
         p.pull = new uint256[](o.inputs.length);
-        for (uint256 i; i < o.inputs.length; ++i) p.pull[i] = o.inputs[i].amount;
+        for (uint256 i; i < o.inputs.length; ++i) {
+            p.pull[i] = o.inputs[i].amount;
+        }
     }
 
     function _xs() internal view returns (ISCaaSDex.Interaction[] memory xs) {
@@ -67,8 +69,13 @@ contract DexLiquidityUATest is UADexBase {
     /// fix2-dex (CTR-DEX-32): on a DEX that never listed `A` / `B` the kind is the factory's at use, so a derived signer's
     /// SCaaS inputs are verified by the tokens (the DEX cannot verify a derived signer itself).
     function test_derivedSigner_unlistedScaasInputs() public {
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0,
-            address(0), 0, 0)), "fresh"));
+        dex = SCaaSDex(
+            f.createDex(
+                1,
+                abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0, address(0), 0, 0)),
+                "fresh"
+            )
+        );
         assertEq(dex.tokenKind(address(A)), 0);
         _run(_plan(_order(address(pair))));
         assertGt(pair.balanceOf(RECV), 48_000);

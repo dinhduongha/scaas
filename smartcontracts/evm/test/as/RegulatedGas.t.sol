@@ -92,7 +92,7 @@ contract RegulatedGasTest is ListFixture {
     function _mtxCd(address t, uint32 mode, uint256 fee) internal returns (bytes memory) {
         MetaTxLib.UAMetaTransfer memory x;
         (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.fee) =
-            (nid(alice), nid(bob), 100, 1, nonce++, block.timestamp + 60, mode, fee); // FIXED: at most 1 %
+        (nid(alice), nid(bob), 100, 1, nonce++, block.timestamp + 60, mode, fee); // FIXED: at most 1 %
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
         IUARegistry.UASig memory a;
         a.signature = abi.encodePacked(r, s, v);
@@ -108,7 +108,12 @@ contract RegulatedGasTest is ListFixture {
     function test_gas_mtxTransfer_feeLists() public {
         address t = _tokenWith((1 << ALLOW) | (1 << DENY), "mf");
         _prime(t, _mtxCd(t, MetaTxLib.MODE_FEE_FIXED, 1));
-        _measure("mtxExecuteTransfer with a fee, ALLOWLIST and DENYLIST", t, relayer, _mtxCd(t, MetaTxLib.MODE_FEE_FIXED, 1),
-            PIN_MTX_FEE_LISTS);
+        _measure(
+            "mtxExecuteTransfer with a fee, ALLOWLIST and DENYLIST",
+            t,
+            relayer,
+            _mtxCd(t, MetaTxLib.MODE_FEE_FIXED, 1),
+            PIN_MTX_FEE_LISTS
+        );
     }
 }

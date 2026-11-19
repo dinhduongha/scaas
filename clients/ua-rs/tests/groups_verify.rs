@@ -8,7 +8,10 @@ use scaas_ua::*;
 use serde_json::Value;
 
 fn load() -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/ua/groups.json", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/ua/groups.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 fn bytes(v: &Value) -> Vec<u8> {
@@ -24,9 +27,17 @@ fn arr(v: &Value) -> &Vec<Value> {
 /// the zero KEM record).
 fn pop_message(_v: &Value, kind: u16, kd: &[u8]) -> ([u8; 32], [u8; 32]) {
     let ua = ua_of(kind, kd).unwrap();
-    let no_kem = ua8::kem_record_hash(&ua, 0, &[]).unwrap();
-    let pd = ua8::portable_record_digest(&ua, kind, &[0; 32], &no_kem);
-    (pd, ua_message(kind, &ua8::pop_v2_tag(), &ua8::registration_digest(&ua, kind, &[0; 32], &no_kem, &[0; 32])).unwrap())
+    let no_kem = ua_portable::kem_record_hash(&ua, 0, &[]).unwrap();
+    let pd = ua_portable::portable_record_digest(&ua, kind, &[0; 32], &no_kem);
+    (
+        pd,
+        ua_message(
+            kind,
+            &ua_portable::pop_v2_tag(),
+            &ua_portable::registration_digest(&ua, kind, &[0; 32], &no_kem, &[0; 32]),
+        )
+        .unwrap(),
+    )
 }
 
 #[test]
@@ -35,19 +46,58 @@ fn groups_register_and_sign() {
     let gs = arr(&v["groups"]);
     assert_eq!(gs.len(), 20);
     for g in gs {
-        let (kind, kd, name) = (g["kind"].as_u64().unwrap() as u16, bytes(&g["keyData"]), g["name"].as_str().unwrap());
-        assert_eq!(derive_ua(kind, &kd, false).unwrap(), b32(&g["ua"]), "{name}");
-        assert_eq!(key_hash_of(kind, &kd).unwrap().unwrap(), b32(&g["keyHash"]), "{name}");
+        let (kind, kd, name) = (
+            g["kind"].as_u64().unwrap() as u16,
+            bytes(&g["keyData"]),
+            g["name"].as_str().unwrap(),
+        );
+        assert_eq!(
+            derive_ua(kind, &kd, false).unwrap(),
+            b32(&g["ua"]),
+            "{name}"
+        );
+        assert_eq!(
+            key_hash_of(kind, &kd).unwrap().unwrap(),
+            b32(&g["keyHash"]),
+            "{name}"
+        );
         let vk = bytes(&g["vk"]);
-        assert_eq!(vk, kd[..if matches!(kind, 0x0110 | 0x0111) { 33 } else { 64 }], "{name}");
+        assert_eq!(
+            vk,
+            kd[..if matches!(kind, 0x0110 | 0x0111) {
+                33
+            } else {
+                64
+            }],
+            "{name}"
+        );
         let (pd, m) = pop_message(&v, kind, &kd);
-        assert_eq!((pd, m), (b32(&g["pop"]["popDigest"]), b32(&g["pop"]["message"])), "{name}");
-        assert!(verify(kind, &kd, &m, &bytes(&g["pop"]["blob"]), true), "{name}: verifyPop");
-        assert!(verify(kind, &vk, &m, &bytes(&g["pop"]["sig"]), false), "{name}: the PoP signature against vk");
+        assert_eq!(
+            (pd, m),
+            (b32(&g["pop"]["popDigest"]), b32(&g["pop"]["message"])),
+            "{name}"
+        );
+        assert!(
+            verify(kind, &kd, &m, &bytes(&g["pop"]["blob"]), true),
+            "{name}: verifyPop"
+        );
+        assert!(
+            verify(kind, &vk, &m, &bytes(&g["pop"]["sig"]), false),
+            "{name}: the PoP signature against vk"
+        );
         for s in arr(&g["sigs"]) {
-            let mm = ua_message(kind, &purpose_tag(s["purpose"].as_str().unwrap()).unwrap(), &b32(&s["digest"])).unwrap();
+            let mm = ua_message(
+                kind,
+                &purpose_tag(s["purpose"].as_str().unwrap()).unwrap(),
+                &b32(&s["digest"]),
+            )
+            .unwrap();
             assert_eq!(mm, b32(&s["message"]));
-            assert!(verify(kind, &vk, &mm, &bytes(&s["sig"]), false), "{name} {}", s["purpose"]);
+            assert!(
+                verify(kind, &vk, &mm, &bytes(&s["sig"]), false),
+                "{name} {}",
+                s["purpose"]
+            );
         }
         if matches!(kind, 0x0111 | 0x0113) {
             assert!(dkg_transcript_ok(kind, &kd), "{name}");
@@ -64,19 +114,39 @@ fn group_negatives_refused() {
         for x in arr(&g["negatives"]) {
             let name = format!("{} {}", g["name"], x["name"]);
             if x["entry"] == "verify" {
-                assert!(!verify(kind, &bytes(&x["vk"]), &b32(&x["message"]), &bytes(&x["sig"]), false), "{name}");
+                assert!(
+                    !verify(
+                        kind,
+                        &bytes(&x["vk"]),
+                        &b32(&x["message"]),
+                        &bytes(&x["sig"]),
+                        false
+                    ),
+                    "{name}"
+                );
             } else {
                 let kd = bytes(&x["keyData"]);
                 assert_eq!(ua_of(kind, &kd).unwrap(), b32(&x["ua"]), "{name}");
                 let (_, m) = pop_message(&v, kind, &kd);
                 assert_eq!(m, b32(&x["message"]), "{name}");
                 let valid = validate_key_data(kind, &kd, false).is_ok();
-                let (w, sl) = match kind { 0x0110 => (33, 64), 0x0111 => (33, 65), _ => (64, 96) };
+                let (w, sl) = match kind {
+                    0x0110 => (33, 64),
+                    0x0111 => (33, 65),
+                    _ => (64, 96),
+                };
                 let blob = bytes(&x["pop"]);
-                assert_eq!(verify(kind, &kd[..w], &m, &blob[..sl.min(blob.len())], false), x["sigValid"].as_bool().unwrap(), "{name}: sigValid");
+                assert_eq!(
+                    verify(kind, &kd[..w], &m, &blob[..sl.min(blob.len())], false),
+                    x["sigValid"].as_bool().unwrap(),
+                    "{name}: sigValid"
+                );
                 match x["error"].as_str().unwrap() {
                     "UAKeyData" => assert!(!valid, "{name}: key data must be refused"),
-                    "UAPoP" => assert!(valid && !verify(kind, &kd, &m, &bytes(&x["pop"]), true), "{name}: verifyPop must refuse"),
+                    "UAPoP" => assert!(
+                        valid && !verify(kind, &kd, &m, &bytes(&x["pop"]), true),
+                        "{name}: verifyPop must refuse"
+                    ),
                     e => panic!("{name}: {e}"),
                 }
             }
@@ -91,21 +161,37 @@ fn group_negatives_refused() {
 fn official_sections() {
     let v = load();
     let e = &v["rfc9591E5"];
-    assert!(frost_secp256k1(&bytes(&e["groupPublicKey"]), &bytes(&e["message"]), &bytes(&e["sig"])));
+    assert!(frost_secp256k1(
+        &bytes(&e["groupPublicKey"]),
+        &bytes(&e["message"]),
+        &bytes(&e["sig"])
+    ));
     let z = &v["zfDkg"];
     assert!(dkg_transcript_ok(0x0111, &bytes(&z["keyData"])));
     // BIP-327 KeyAgg rows: Σ a_i·P_i = Σ H_i = Q, x(Q) = the official expected key
     use k256::elliptic_curve::sec1::{FromSec1Point, ToSec1Point};
-    let pt = |b: &[u8]| k256::ProjectivePoint::from(k256::AffinePoint::from_sec1_point(&k256::Sec1Point::from_bytes(b).unwrap()).unwrap());
+    let pt = |b: &[u8]| {
+        k256::ProjectivePoint::from(
+            k256::AffinePoint::from_sec1_point(&k256::Sec1Point::from_bytes(b).unwrap()).unwrap(),
+        )
+    };
     for r in arr(&v["bip327"]["keyAgg"]) {
         let mut q = k256::ProjectivePoint::IDENTITY;
         for (i, k) in arr(&r["keys"]).iter().enumerate() {
-            let a: k256::Scalar = Option::from(<k256::Scalar as k256::elliptic_curve::PrimeField>::from_repr(b32(&r["coefficients"][i]).into())).unwrap();
+            let a: k256::Scalar = Option::from(
+                <k256::Scalar as k256::elliptic_curve::PrimeField>::from_repr(
+                    b32(&r["coefficients"][i]).into(),
+                ),
+            )
+            .unwrap();
             let h = pt(&[&[4u8][..], &bytes(&r["hints"][i])].concat());
             assert!(pt(&bytes(k)) * a == h);
             q += h;
         }
-        assert_eq!(q.to_affine().to_sec1_point(true).as_bytes(), &bytes(&r["Q"])[..]);
+        assert_eq!(
+            q.to_affine().to_sec1_point(true).as_bytes(),
+            &bytes(&r["Q"])[..]
+        );
         assert_eq!(bytes(&r["Q"])[1..], bytes(&r["expectedX"])[..]);
     }
 }
@@ -120,7 +206,12 @@ fn t_frost_rows() {
         let ok = match r["verifier"].as_str().unwrap() {
             "frost-secp256k1" => frost_secp256k1(&key, &msg, &sig),
             _ => {
-                let (Ok(vk), Ok(s)) = (k256::schnorr::VerifyingKey::from_slice(&key), k256::schnorr::Signature::try_from(&sig[..])) else { panic!() };
+                let (Ok(vk), Ok(s)) = (
+                    k256::schnorr::VerifyingKey::from_slice(&key),
+                    k256::schnorr::Signature::try_from(&sig[..]),
+                ) else {
+                    panic!()
+                };
                 vk.verify_raw(&msg, &s).is_ok()
             }
         };

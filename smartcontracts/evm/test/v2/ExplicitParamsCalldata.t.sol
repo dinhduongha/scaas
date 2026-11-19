@@ -13,14 +13,37 @@ import {UACall} from "../ua/UACall.sol";
 
 /// The packed PQZ entries as X0 measured them, gone from the token since typed-signing C4: the "today" column of X.6.
 interface IPackedToday {
-    function mtxConfidentialTransfer(bytes calldata payload, bytes calldata proof, bytes calldata auth, bytes32 beneficiary,
-        bytes calldata accHint) external returns (bytes32);
-    function mtxConfidentialTransferSingle(bytes calldata payload, bytes calldata proof, bytes calldata auth, bytes32 beneficiary,
-        bytes calldata accHint) external returns (bytes32);
-    function mtxUnshield(bytes calldata payload, bytes calldata proof, bytes calldata auth, bytes32 beneficiary,
-        bytes calldata accHint, uint256 amount, bytes32 recipient) external;
-    function mtxUnshieldUnwrap(bytes calldata payload, bytes calldata proof, bytes calldata auth, bytes32 beneficiary,
-        bytes calldata accHint, IConfidentialWrappedToken.Unwrap calldata x) external;
+    function mtxConfidentialTransfer(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint
+    ) external returns (bytes32);
+    function mtxConfidentialTransferSingle(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint
+    ) external returns (bytes32);
+    function mtxUnshield(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint,
+        uint256 amount,
+        bytes32 recipient
+    ) external;
+    function mtxUnshieldUnwrap(
+        bytes calldata payload,
+        bytes calldata proof,
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint,
+        IConfidentialWrappedToken.Unwrap calldata x
+    ) external;
 }
 
 /// typed-signing X0 (measurement only, no contract change): the calldata of every confidential op and of the PQZ
@@ -222,8 +245,12 @@ contract ExplicitParamsCalldataTest is Test {
     }
 
     function _g1(uint256 seed) internal pure returns (G1 memory g) {
-        g = G1(bytes32(uint256(uint128(uint256(keccak256(abi.encode(seed, 0)))))), keccak256(abi.encode(seed, 1)),
-            bytes32(uint256(uint128(uint256(keccak256(abi.encode(seed, 2)))))), keccak256(abi.encode(seed, 3)));
+        g = G1(
+            bytes32(uint256(uint128(uint256(keccak256(abi.encode(seed, 0)))))),
+            keccak256(abi.encode(seed, 1)),
+            bytes32(uint256(uint128(uint256(keccak256(abi.encode(seed, 2)))))),
+            keccak256(abi.encode(seed, 3))
+        );
     }
 
     function _g1b(uint256 seed) internal pure returns (bytes memory) {
@@ -235,26 +262,31 @@ contract ExplicitParamsCalldataTest is Test {
     }
 
     function _env() internal view returns (Envelope memory e) {
-        e = Envelope(vm.addr(0xA11CE), 0, 0, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, address(0), 7,
-            address(0));
+        e = Envelope(
+            vm.addr(0xA11CE), 0, 0, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, address(0), 7, address(0)
+        );
     }
 
     function _uaEnv() internal view returns (UAEnvelope memory e) {
-        e = UAEnvelope(keccak256("fee UA"), 0, 0, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, address(0), 7,
-            address(0));
+        e = UAEnvelope(
+            keccak256("fee UA"), 0, 0, block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, address(0), 7, address(0)
+        );
     }
 
     /// Today: `data` in a `mtxExecute` (ua = false) or `uaExecute` envelope, as `PqzStatePinGasTest._envelopeVia`.
     function _today(bool ua, bytes memory data) internal view returns (bytes memory) {
         if (ua) {
             UAEnvelope memory x = _uaEnv();
-            MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(x.from, data, 0, 0, x.validUntil, x.mode,
-                address(0), 7, address(0));
-            return abi.encodeCall(UAMetaTxBase.mtxExecute, (u, UACall.auth(u.from, abi.encode(bytes(""), _rnd(9, ML65_SIG)))));
+            MetaTxLib.UAMetaTransaction memory u =
+                MetaTxLib.UAMetaTransaction(x.from, data, 0, 0, x.validUntil, x.mode, address(0), 7, address(0));
+            return
+                abi.encodeCall(
+                    UAMetaTxBase.mtxExecute, (u, UACall.auth(u.from, abi.encode(bytes(""), _rnd(9, ML65_SIG))))
+                );
         }
         Envelope memory y = _env();
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(y.from, data, 0, 0, y.validUntil, y.mode,
-            address(0), 7, address(0));
+        MetaTxLib.MetaTransaction memory m =
+            MetaTxLib.MetaTransaction(y.from, data, 0, 0, y.validUntil, y.mode, address(0), 7, address(0));
         return abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _rnd(8, ECDSA_SIG)));
     }
 
@@ -280,17 +312,50 @@ contract ExplicitParamsCalldataTest is Test {
         uint256 f1 = 15_000 + 64 * n1;
         int256 d = int256(n1) - int256(n0);
         int256 dStd = int256(4 * z1 + 16 * (n1 - z1)) - int256(4 * z0 + 16 * (n0 - z0));
-        console2.log(string.concat("X0 ", PqzSet.NAME, " ", sys, ua ? " ua " : " mtx", " | ", form, " | today ",
-            vm.toString(n0), " B floor ", vm.toString(f0), " | typed ", vm.toString(n1), " B floor ", vm.toString(f1)));
-        console2.log(string.concat("    | delta ", vm.toString(d), " B, floor ", vm.toString(d * 64), " gas, std ",
-            vm.toString(dStd), " gas | floor headroom to 2^24 today ", vm.toString(int256(CAP) - int256(f0)), " / typed ",
-            vm.toString(int256(CAP) - int256(f1)), " (", vm.toString((int256(CAP) - int256(f1)) / 64), " B)",
-            f1 > CAP ? " | OVER" : ""));
+        console2.log(
+            string.concat(
+                "X0 ",
+                PqzSet.NAME,
+                " ",
+                sys,
+                ua ? " ua " : " mtx",
+                " | ",
+                form,
+                " | today ",
+                vm.toString(n0),
+                " B floor ",
+                vm.toString(f0),
+                " | typed ",
+                vm.toString(n1),
+                " B floor ",
+                vm.toString(f1)
+            )
+        );
+        console2.log(
+            string.concat(
+                "    | delta ",
+                vm.toString(d),
+                " B, floor ",
+                vm.toString(d * 64),
+                " gas, std ",
+                vm.toString(dStd),
+                " gas | floor headroom to 2^24 today ",
+                vm.toString(int256(CAP) - int256(f0)),
+                " / typed ",
+                vm.toString(int256(CAP) - int256(f1)),
+                " (",
+                vm.toString((int256(CAP) - int256(f1)) / 64),
+                " B)",
+                f1 > CAP ? " | OVER" : ""
+            )
+        );
     }
 
     function _count(bytes memory b) internal pure returns (uint256 n, uint256 z) {
         n = b.length;
-        for (uint256 i; i < n; ++i) if (b[i] == 0) ++z;
+        for (uint256 i; i < n; ++i) {
+            if (b[i] == 0) ++z;
+        }
     }
 
     /// A typed entry's selector (4 bytes; the exact signatures are Appendix X's, overloads included).
@@ -305,22 +370,40 @@ contract ExplicitParamsCalldataTest is Test {
     }
 
     function _op1Today(bool aud, bytes memory proof, bytes memory memo) internal view returns (bytes memory) {
-        bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), FROM, TO, BEN), SALT,
-            _outOp1(aud), memo);
+        bytes memory pl = bytes.concat(
+            abi.encode(uint256(0), block.number + 100, uint256(0), FROM, TO, BEN), SALT, _outOp1(aud), memo
+        );
         return abi.encodeCall(IPackedToday.mtxConfidentialTransferSingle, (pl, proof, _mlAuthToday(), BEN, ""));
     }
 
     function _op1Args(bool aud, bytes memory memo) internal view returns (PqzTransferArgs memory a) {
         bytes memory o = _outOp1(aud);
-        a = PqzTransferArgs(0, block.number + 100, 0, FROM, TO, BEN, SALT, _cut(o, 0, PK), _cut(o, PK, V),
-            _cut(o, PK + V, V), aud ? _cut(o, PK + 2 * V, V) : bytes(""), memo.length == 0 ? memo : _cut(memo, 16, memo.length - 16));
+        a = PqzTransferArgs(
+            0,
+            block.number + 100,
+            0,
+            FROM,
+            TO,
+            BEN,
+            SALT,
+            _cut(o, 0, PK),
+            _cut(o, PK, V),
+            _cut(o, PK + V, V),
+            aud ? _cut(o, PK + 2 * V, V) : bytes(""),
+            memo.length == 0 ? memo : _cut(memo, 16, memo.length - 16)
+        );
     }
 
     function _op1Typed(bool ua, bool aud, bytes memory proof, bytes memory memo) internal view returns (bytes memory) {
         PqzTransferArgs memory a = _op1Args(aud, memo);
-        if (ua) return abi.encodeWithSelector(_sel("uaConfidentialTransferSingle"), _uaEnv(), a, proof,
-            _mlAuthTyped(), bytes(""), _feeAuth());
-        return abi.encodeWithSelector(_sel("mtxConfidentialTransferSingle"), _env(), a, proof, _mlAuthTyped(), bytes(""), _rnd(8, ECDSA_SIG));
+        if (ua) {
+            return abi.encodeWithSelector(
+                _sel("uaConfidentialTransferSingle"), _uaEnv(), a, proof, _mlAuthTyped(), bytes(""), _feeAuth()
+            );
+        }
+        return abi.encodeWithSelector(
+            _sel("mtxConfidentialTransferSingle"), _env(), a, proof, _mlAuthTyped(), bytes(""), _rnd(8, ECDSA_SIG)
+        );
     }
 
     function _groups(uint256 m, bool aud) internal pure returns (uint256) {
@@ -331,13 +414,20 @@ contract ExplicitParamsCalldataTest is Test {
         return keccak256(abi.encode("leg", j));
     }
 
-    function _op7Today(uint256 m, bool aud, bytes memory proof, bytes memory memo) internal view returns (bytes memory) {
+    function _op7Today(uint256 m, bool aud, bytes memory proof, bytes memory memo)
+        internal
+        view
+        returns (bytes memory)
+    {
         bytes memory r;
-        for (uint256 j; j < m; ++j) r = bytes.concat(r, _legUA(j));
+        for (uint256 j; j < m; ++j) {
+            r = bytes.concat(r, _legUA(j));
+        }
         uint256 g = _groups(m, aud);
         bytes memory out = _rnd(81 + m, PK * g + V * (m + 1) + (aud ? V * m : 0));
-        bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), FROM, BEN, m, uint256(0)),
-            SALT, r, out, memo);
+        bytes memory pl = bytes.concat(
+            abi.encode(uint256(0), block.number + 100, uint256(0), FROM, BEN, m, uint256(0)), SALT, r, out, memo
+        );
         return abi.encodeCall(IPackedToday.mtxConfidentialTransfer, (pl, proof, _mlAuthToday(), BEN, ""));
     }
 
@@ -350,23 +440,33 @@ contract ExplicitParamsCalldataTest is Test {
         a.beneficiaryUA = BEN;
         a.salt = SALT;
         a.u = new bytes[](g);
-        for (uint256 i; i < g; ++i) a.u[i] = _cut(out, PK * i, PK);
+        for (uint256 i; i < g; ++i) {
+            a.u[i] = _cut(out, PK * i, PK);
+        }
         a.legs = new PqzLeg[](m);
         uint256 vs = PK * g;
         for (uint256 j; j < m; ++j) {
-            a.legs[j] = PqzLeg(_legUA(j), _cut(out, vs + V * j, V), aud ? _cut(out, vs + V * (m + 1 + j), V) : bytes(""));
+            a.legs[j] =
+                PqzLeg(_legUA(j), _cut(out, vs + V * j, V), aud ? _cut(out, vs + V * (m + 1 + j), V) : bytes(""));
         }
         a.vFrom = _cut(out, vs + V * m, V);
         a.sealedMemo = memo.length == 0 ? memo : _cut(memo, 16, memo.length - 16);
     }
 
     function _op7Typed(bool ua, uint256 m, bool aud, bytes memory proof, bytes memory memo)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         PqzMultiArgs memory a = _op7Args(m, aud, memo);
-        if (ua) return abi.encodeWithSelector(_sel("uaConfidentialTransfer"), _uaEnv(), a, proof, _mlAuthTyped(),
-            bytes(""), _feeAuth());
-        return abi.encodeWithSelector(_sel("mtxConfidentialTransfer"), _env(), a, proof, _mlAuthTyped(), bytes(""), _rnd(8, ECDSA_SIG));
+        if (ua) {
+            return abi.encodeWithSelector(
+                _sel("uaConfidentialTransfer"), _uaEnv(), a, proof, _mlAuthTyped(), bytes(""), _feeAuth()
+            );
+        }
+        return abi.encodeWithSelector(
+            _sel("mtxConfidentialTransfer"), _env(), a, proof, _mlAuthTyped(), bytes(""), _rnd(8, ECDSA_SIG)
+        );
     }
 
     function _burnPayload() internal view returns (bytes memory) {
@@ -379,16 +479,26 @@ contract ExplicitParamsCalldataTest is Test {
     }
 
     function _burnToday(bytes memory proof, bytes memory auth, uint256 amount) internal view returns (bytes memory) {
-        return abi.encodeCall(IPackedToday.mtxUnshield, (_burnPayload(), proof, auth, BEN, "", amount,
-            amount == 0 ? bytes32(0) : bytes32(uint256(0xD00D))));
+        return abi.encodeCall(
+            IPackedToday.mtxUnshield,
+            (_burnPayload(), proof, auth, BEN, "", amount, amount == 0 ? bytes32(0) : bytes32(uint256(0xD00D)))
+        );
     }
 
-    function _burnTyped(bool ua, bytes memory proof, UASig memory auth, uint256 amount) internal view returns (bytes memory) {
+    function _burnTyped(bool ua, bytes memory proof, UASig memory auth, uint256 amount)
+        internal
+        view
+        returns (bytes memory)
+    {
         bytes32 rcp = amount == 0 ? bytes32(0) : bytes32(uint256(0xD00D));
-        if (ua) return abi.encodeWithSelector(_sel("uaUnshield"), _uaEnv(), _burnArgs(), amount, rcp, proof, auth,
-            bytes(""), _feeAuth());
-        return abi.encodeWithSelector(_sel("mtxUnshield"), _env(), _burnArgs(), amount, rcp, proof, auth, bytes(""),
-            _rnd(8, ECDSA_SIG));
+        if (ua) {
+            return abi.encodeWithSelector(
+                _sel("uaUnshield"), _uaEnv(), _burnArgs(), amount, rcp, proof, auth, bytes(""), _feeAuth()
+            );
+        }
+        return abi.encodeWithSelector(
+            _sel("mtxUnshield"), _env(), _burnArgs(), amount, rcp, proof, auth, bytes(""), _rnd(8, ECDSA_SIG)
+        );
     }
 
     function _unwrapX() internal pure returns (IConfidentialWrappedToken.Unwrap memory) {
@@ -396,15 +506,33 @@ contract ExplicitParamsCalldataTest is Test {
     }
 
     function _burnUnwrapToday(bytes memory proof) internal view returns (bytes memory) {
-        return abi.encodeCall(IPackedToday.mtxUnshieldUnwrap, (_burnPayload(), proof, _mlAuthToday(), BEN,
-            "", _unwrapX()));
+        return
+            abi.encodeCall(IPackedToday.mtxUnshieldUnwrap, (_burnPayload(), proof, _mlAuthToday(), BEN, "", _unwrapX()));
     }
 
     function _burnUnwrapTyped(bool ua, bytes memory proof) internal view returns (bytes memory) {
-        if (ua) return abi.encodeWithSelector(_sel("uaUnshieldUnwrap"), _uaEnv(), _burnArgs(), _unwrapX(), proof,
-            _mlAuthTyped(), bytes(""), _feeAuth());
-        return abi.encodeWithSelector(_sel("mtxUnshieldUnwrap"), _env(), _burnArgs(), _unwrapX(), proof,
-            _mlAuthTyped(), bytes(""), _rnd(8, ECDSA_SIG));
+        if (ua) {
+            return abi.encodeWithSelector(
+                _sel("uaUnshieldUnwrap"),
+                _uaEnv(),
+                _burnArgs(),
+                _unwrapX(),
+                proof,
+                _mlAuthTyped(),
+                bytes(""),
+                _feeAuth()
+            );
+        }
+        return abi.encodeWithSelector(
+            _sel("mtxUnshieldUnwrap"),
+            _env(),
+            _burnArgs(),
+            _unwrapX(),
+            proof,
+            _mlAuthTyped(),
+            bytes(""),
+            _rnd(8, ECDSA_SIG)
+        );
     }
 
     /// An n-of-n `mldsa65` `msig` holder's auth (`PqzStatePinGasTest._msigHolder`): today `abi.encode(structure,
@@ -421,7 +549,9 @@ contract ExplicitParamsCalldataTest is Test {
 
     function _msigTyped(uint256 n) internal pure returns (UASig memory a) {
         a.members = new MemberSig[](n);
-        for (uint256 i; i < n; ++i) a.members[i] = MemberSig(uint16(i), "", new bytes(ML65_SIG));
+        for (uint256 i; i < n; ++i) {
+            a.members[i] = MemberSig(uint16(i), "", new bytes(ML65_SIG));
+        }
     }
 
     function _pqzRows() internal {
@@ -433,15 +563,27 @@ contract ExplicitParamsCalldataTest is Test {
                 bool aud = a == 0;
                 string memory key = aud ? "TRANSFER" : "TRANSFER0";
                 bytes memory pf = _rnd(1, _proofLen(key));
-                { uint256 m0 = _fmp();
-                    _row(string.concat("op 1 BUNDLE", aud ? ", auditor" : ", no auditor"), ua, _today(ua, _op1Today(aud, pf, "")),
-                        _op1Typed(ua, aud, pf, ""));
-                    _reset(m0); }
+                {
+                    uint256 m0 = _fmp();
+                    _row(
+                        string.concat("op 1 BUNDLE", aud ? ", auditor" : ", no auditor"),
+                        ua,
+                        _today(ua, _op1Today(aud, pf, "")),
+                        _op1Typed(ua, aud, pf, "")
+                    );
+                    _reset(m0);
+                }
                 bytes memory memo = bytes.concat(SALT, _rnd(0x3e30, 2 + 40 * 1));
-                { uint256 m0 = _fmp();
-                    _row(string.concat("op 1 commit-reveal (memo 58 B)", aud ? ", auditor" : ", no auditor"), ua,
-                        _today(ua, _op1Today(aud, pf, memo)), _op1Typed(ua, aud, pf, memo));
-                    _reset(m0); }
+                {
+                    uint256 m0 = _fmp();
+                    _row(
+                        string.concat("op 1 commit-reveal (memo 58 B)", aud ? ", auditor" : ", no auditor"),
+                        ua,
+                        _today(ua, _op1Today(aud, pf, memo)),
+                        _op1Typed(ua, aud, pf, memo)
+                    );
+                    _reset(m0);
+                }
             }
             for (uint256 m = 1; m <= (h ? 4 : 8); m *= 2) {
                 for (uint256 a; a < 2; ++a) {
@@ -449,32 +591,58 @@ contract ExplicitParamsCalldataTest is Test {
                     string memory key = string.concat("M", vm.toString(m), aud ? "-on" : "-off");
                     bytes memory pf = _rnd(2, _proofLen(key));
                     string memory f = string.concat("op 7 M = ", vm.toString(m), aud ? ", auditor" : ", no auditor");
-                    { uint256 m0 = _fmp();
+                    {
+                        uint256 m0 = _fmp();
                         _row(f, ua, _today(ua, _op7Today(m, aud, pf, "")), _op7Typed(ua, m, aud, pf, ""));
-                        _reset(m0); }
+                        _reset(m0);
+                    }
                     bytes memory memo = bytes.concat(SALT, _rnd(0x3e31, 2 + 40 * m));
-                    { uint256 m0 = _fmp();
-                        _row(string.concat(f, ", commit-reveal (memo 18 + 40M B)"), ua, _today(ua, _op7Today(m, aud, pf, memo)),
-                            _op7Typed(ua, m, aud, pf, memo));
-                        _reset(m0); }
+                    {
+                        uint256 m0 = _fmp();
+                        _row(
+                            string.concat(f, ", commit-reveal (memo 18 + 40M B)"),
+                            ua,
+                            _today(ua, _op7Today(m, aud, pf, memo)),
+                            _op7Typed(ua, m, aud, pf, memo)
+                        );
+                        _reset(m0);
+                    }
                 }
             }
             bytes memory bp = _rnd(3, _proofLen("BURN"));
-            { uint256 m0 = _fmp();
-                _row("burn 1 to an address", ua, _today(ua, _burnToday(bp, _mlAuthToday(), 1)),
-                    _burnTyped(ua, bp, _mlAuthTyped(), 1));
-                _reset(m0); }
-            { uint256 m0 = _fmp();
-                _row("refresh", ua, _today(ua, _burnToday(bp, _mlAuthToday(), 0)), _burnTyped(ua, bp, _mlAuthTyped(), 0));
-                _reset(m0); }
-            { uint256 m0 = _fmp();
+            {
+                uint256 m0 = _fmp();
+                _row(
+                    "burn 1 to an address",
+                    ua,
+                    _today(ua, _burnToday(bp, _mlAuthToday(), 1)),
+                    _burnTyped(ua, bp, _mlAuthTyped(), 1)
+                );
+                _reset(m0);
+            }
+            {
+                uint256 m0 = _fmp();
+                _row(
+                    "refresh", ua, _today(ua, _burnToday(bp, _mlAuthToday(), 0)), _burnTyped(ua, bp, _mlAuthTyped(), 0)
+                );
+                _reset(m0);
+            }
+            {
+                uint256 m0 = _fmp();
                 _row("unshield-unwrap (wrapped PQZ)", ua, _today(ua, _burnUnwrapToday(bp)), _burnUnwrapTyped(ua, bp));
-                _reset(m0); }
+                _reset(m0);
+            }
             for (uint256 n = 2; n <= 3; ++n) {
-                { uint256 m0 = _fmp();
-                    _row(string.concat("burn 1, ", vm.toString(n), "-of-", vm.toString(n), " mldsa65 msig holder"), ua,
-                        _today(ua, _burnToday(bp, _msigToday(n), 1)), _burnTyped(ua, bp, _msigTyped(n), 1));
-                    _reset(m0); }
+                {
+                    uint256 m0 = _fmp();
+                    _row(
+                        string.concat("burn 1, ", vm.toString(n), "-of-", vm.toString(n), " mldsa65 msig holder"),
+                        ua,
+                        _today(ua, _burnToday(bp, _msigToday(n), 1)),
+                        _burnTyped(ua, bp, _msigTyped(n), 1)
+                    );
+                    _reset(m0);
+                }
             }
         }
         // registration (a direct call, no envelope): `mldsa65` UA with a PQZ key, without and with a scheme-1 KEM key
@@ -482,13 +650,26 @@ contract ExplicitParamsCalldataTest is Test {
         for (uint256 kem; kem < 2; ++kem) {
             bytes memory kemPk = kem == 1 ? bytes.concat(bytes1(0x01), _rnd(6, 1600)) : bytes("");
             UAAttrsPacked memory at = UAAttrsPacked(_rnd(7, PK), keccak256(rp), uint64(kem), kemPk);
-            UAAttrsT memory tt = UAAttrsT(_rnd(7, PK), keccak256(rp), uint64(kem),
-                kem == 1 ? KemKey(1, _cut(kemPk, 1, 1568), bytes32(_cut(kemPk, 1569, 32))) : KemKey(0, "", 0));
-            { uint256 m0 = _fmp();
-                _row(kem == 1 ? "register, PQZ key + KEM key (direct)" : "register, PQZ key, no KEM key (direct)", false,
-                    abi.encodeWithSelector(bytes4(0x0c936361), uint16(0x0131), _rnd(10, ML65_PK), at, new bytes(ML65_SIG), rp),
-                    abi.encodeWithSelector(_sel("register"), uint16(0x0131), _rnd(10, ML65_PK), tt, new bytes(ML65_SIG), rp));
-                _reset(m0); }
+            UAAttrsT memory tt = UAAttrsT(
+                _rnd(7, PK),
+                keccak256(rp),
+                uint64(kem),
+                kem == 1 ? KemKey(1, _cut(kemPk, 1, 1568), bytes32(_cut(kemPk, 1569, 32))) : KemKey(0, "", 0)
+            );
+            {
+                uint256 m0 = _fmp();
+                _row(
+                    kem == 1 ? "register, PQZ key + KEM key (direct)" : "register, PQZ key, no KEM key (direct)",
+                    false,
+                    abi.encodeWithSelector(
+                        bytes4(0x0c936361), uint16(0x0131), _rnd(10, ML65_PK), at, new bytes(ML65_SIG), rp
+                    ),
+                    abi.encodeWithSelector(
+                        _sel("register"), uint16(0x0131), _rnd(10, ML65_PK), tt, new bytes(ML65_SIG), rp
+                    )
+                );
+                _reset(m0);
+            }
         }
     }
 
@@ -496,25 +677,51 @@ contract ExplicitParamsCalldataTest is Test {
 
     function _zSinglePayload() internal view returns (bytes memory) {
         bytes memory pts;
-        for (uint256 i; i < 6; ++i) pts = bytes.concat(pts, _g1b(100 + i));
+        for (uint256 i; i < 6; ++i) {
+            pts = bytes.concat(pts, _g1b(100 + i));
+        }
         return bytes.concat(abi.encode(uint256(5), uint256(3), block.number + 100), SALT, pts);
     }
 
     function _zSingle() internal view returns (ZetherSingle memory) {
-        return ZetherSingle(5, 3, block.number + 100, SALT, BEN, _g1(100), _g1(101), _g1(102), _g1(103), _g1(104), _g1(105));
+        return
+            ZetherSingle(
+                5, 3, block.number + 100, SALT, BEN, _g1(100), _g1(101), _g1(102), _g1(103), _g1(104), _g1(105)
+            );
     }
 
     function _zMultiPayload(uint256 m, bytes memory memo) internal view returns (bytes memory pl) {
-        pl = bytes.concat(abi.encode(uint256(5), uint256(3), block.number + 100), SALT, abi.encode(m, uint256(7)),
-            _g1b(200), _g1b(201), _g1b(202));
-        for (uint256 j; j < m; ++j) pl = bytes.concat(pl, _g1b(300 + 4 * j), _g1b(301 + 4 * j), _g1b(302 + 4 * j), _g1b(303 + 4 * j));
+        pl = bytes.concat(
+            abi.encode(uint256(5), uint256(3), block.number + 100),
+            SALT,
+            abi.encode(m, uint256(7)),
+            _g1b(200),
+            _g1b(201),
+            _g1b(202)
+        );
+        for (uint256 j; j < m; ++j) {
+            pl = bytes.concat(pl, _g1b(300 + 4 * j), _g1b(301 + 4 * j), _g1b(302 + 4 * j), _g1b(303 + 4 * j));
+        }
         pl = bytes.concat(pl, memo);
     }
 
     function _zMulti(uint256 m, bytes memory memo) internal view returns (ZetherMulti memory z) {
-        z = ZetherMulti(5, 3, block.number + 100, SALT, BEN, 7, _g1(200), _g1(201), _g1(202), new ZetherLeg[](m),
-            memo.length == 0 ? memo : _cut(memo, 16, memo.length - 16));
-        for (uint256 j; j < m; ++j) z.legs[j] = ZetherLeg(_g1(300 + 4 * j), _g1(301 + 4 * j), _g1(302 + 4 * j), _g1(303 + 4 * j));
+        z = ZetherMulti(
+            5,
+            3,
+            block.number + 100,
+            SALT,
+            BEN,
+            7,
+            _g1(200),
+            _g1(201),
+            _g1(202),
+            new ZetherLeg[](m),
+            memo.length == 0 ? memo : _cut(memo, 16, memo.length - 16)
+        );
+        for (uint256 j; j < m; ++j) {
+            z.legs[j] = ZetherLeg(_g1(300 + 4 * j), _g1(301 + 4 * j), _g1(302 + 4 * j), _g1(303 + 4 * j));
+        }
     }
 
     function _zetherRows() internal {
@@ -524,51 +731,94 @@ contract ExplicitParamsCalldataTest is Test {
         bytes memory pb = _rnd(13, 2_816);
         for (uint256 k; k < 2; ++k) {
             bool ua = k == 1;
-            bytes memory today = _today(ua, abi.encodeCall(IPackedToday.mtxConfidentialTransferSingle,
-                (_zSinglePayload(), ps, "", BEN, "")));
+            bytes memory today = _today(
+                ua, abi.encodeCall(IPackedToday.mtxConfidentialTransferSingle, (_zSinglePayload(), ps, "", BEN, ""))
+            );
             bytes memory typed = ua
                 ? abi.encodeWithSelector(_sel("uaConfidentialTransferSingle"), _uaEnv(), _zSingle(), ps, _feeAuth())
-                : abi.encodeWithSelector(_sel("mtxConfidentialTransferSingle"), _env(), _zSingle(), ps, _rnd(8, ECDSA_SIG));
-            { uint256 m0 = _fmp();
+                : abi.encodeWithSelector(
+                    _sel("mtxConfidentialTransferSingle"), _env(), _zSingle(), ps, _rnd(8, ECDSA_SIG)
+                );
+            {
+                uint256 m0 = _fmp();
                 _row("single (6 points)", ua, today, typed);
-                _reset(m0); }
+                _reset(m0);
+            }
             for (uint256 m = 1; m <= 8; m = m == 1 ? 3 : m + 5) {
                 for (uint256 c; c < 2; ++c) {
                     bytes memory memo = c == 1 ? bytes.concat(SALT, _rnd(14, 1 + 40 * m)) : bytes("");
-                    today = _today(ua, abi.encodeCall(IPackedToday.mtxConfidentialTransfer,
-                        (_zMultiPayload(m, memo), pm, "", BEN, "")));
+                    today = _today(
+                        ua,
+                        abi.encodeCall(IPackedToday.mtxConfidentialTransfer, (_zMultiPayload(m, memo), pm, "", BEN, ""))
+                    );
                     typed = ua
-                        ? abi.encodeWithSelector(_sel("uaConfidentialTransfer"), _uaEnv(), _zMulti(m, memo), pm, _feeAuth())
-                        : abi.encodeWithSelector(_sel("mtxConfidentialTransfer"), _env(), _zMulti(m, memo), pm, _rnd(8, ECDSA_SIG));
-                    { uint256 m0 = _fmp();
-                        _row(string.concat("multi M = ", vm.toString(m), c == 1 ? ", commit-reveal (memo 17 + 40M B)" : ", BUNDLE",
-                            " (proof fixed at 11,936 B)"), ua, today, typed);
-                        _reset(m0); }
+                        ? abi.encodeWithSelector(
+                            _sel("uaConfidentialTransfer"), _uaEnv(), _zMulti(m, memo), pm, _feeAuth()
+                        )
+                        : abi.encodeWithSelector(
+                            _sel("mtxConfidentialTransfer"), _env(), _zMulti(m, memo), pm, _rnd(8, ECDSA_SIG)
+                        );
+                    {
+                        uint256 m0 = _fmp();
+                        _row(
+                            string.concat(
+                                "multi M = ",
+                                vm.toString(m),
+                                c == 1 ? ", commit-reveal (memo 17 + 40M B)" : ", BUNDLE",
+                                " (proof fixed at 11,936 B)"
+                            ),
+                            ua,
+                            today,
+                            typed
+                        );
+                        _reset(m0);
+                    }
                 }
             }
             bytes memory bpl = bytes.concat(abi.encode(uint256(5), uint256(3), block.number + 100), _g1b(400));
             ZetherBurn memory zb = ZetherBurn(5, 3, block.number + 100, BEN, _g1(400));
-            today = _today(ua, abi.encodeCall(IPackedToday.mtxUnshield, (bpl, pb, "", BEN, "", 1, bytes32(uint256(0xD00D)))));
+            today = _today(
+                ua, abi.encodeCall(IPackedToday.mtxUnshield, (bpl, pb, "", BEN, "", 1, bytes32(uint256(0xD00D))))
+            );
             typed = ua
-                ? abi.encodeWithSelector(_sel("uaUnshield"), _uaEnv(), zb, uint256(1), bytes32(uint256(0xD00D)), pb, _feeAuth())
-                : abi.encodeWithSelector(_sel("mtxUnshield"), _env(), zb, uint256(1), bytes32(uint256(0xD00D)), pb,
-                    _rnd(8, ECDSA_SIG));
-            { uint256 m0 = _fmp();
+                ? abi.encodeWithSelector(
+                    _sel("uaUnshield"), _uaEnv(), zb, uint256(1), bytes32(uint256(0xD00D)), pb, _feeAuth()
+                )
+                : abi.encodeWithSelector(
+                    _sel("mtxUnshield"), _env(), zb, uint256(1), bytes32(uint256(0xD00D)), pb, _rnd(8, ECDSA_SIG)
+                );
+            {
+                uint256 m0 = _fmp();
                 _row("unshield", ua, today, typed);
-                _reset(m0); }
+                _reset(m0);
+            }
         }
         // a static op for scale: `mtxUnwrap` / `uaUnwrap` named entry vs the generic envelope
         sys = "static";
         WrappedUnwrapArgs memory w = WrappedUnwrapArgs(address(0xBEEF), 1, address(0xD00D), 1);
-        bytes memory inner = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", w.underlying, w.wrapped,
-            w.recipient, w.minOut);
-        { uint256 m0 = _fmp();
-            _row("mtxUnwrap (WrappedToken)", false, _today(false, inner),
-                abi.encodeWithSelector(_sel("mtxUnwrap"), _env(), w, _rnd(8, ECDSA_SIG)));
-            _reset(m0); }
-        { uint256 m0 = _fmp();
-            _row("uaUnwrap (WrappedToken)", true, _today(true, inner), abi.encodeWithSelector(_sel("uaUnwrap"), _uaEnv(), w, _feeAuth()));
-            _reset(m0); }
+        bytes memory inner = abi.encodeWithSignature(
+            "unwrap(address,uint256,address,uint256)", w.underlying, w.wrapped, w.recipient, w.minOut
+        );
+        {
+            uint256 m0 = _fmp();
+            _row(
+                "mtxUnwrap (WrappedToken)",
+                false,
+                _today(false, inner),
+                abi.encodeWithSelector(_sel("mtxUnwrap"), _env(), w, _rnd(8, ECDSA_SIG))
+            );
+            _reset(m0);
+        }
+        {
+            uint256 m0 = _fmp();
+            _row(
+                "uaUnwrap (WrappedToken)",
+                true,
+                _today(true, inner),
+                abi.encodeWithSelector(_sel("uaUnwrap"), _uaEnv(), w, _feeAuth())
+            );
+            _reset(m0);
+        }
     }
 
     // ------------------------------------------------------------------ tests
@@ -576,8 +826,19 @@ contract ExplicitParamsCalldataTest is Test {
     function test_x0_calldata() public {
         vm.roll(1_000);
         vm.warp(1_800_000_000);
-        console2.log(string.concat("# X0 calldata at ", PqzSet.NAME, " (PK ", vm.toString(PK), ", V ", vm.toString(V),
-            ", S_AUD ", vm.toString(PqzSet.S_AUD), ")"));
+        console2.log(
+            string.concat(
+                "# X0 calldata at ",
+                PqzSet.NAME,
+                " (PK ",
+                vm.toString(PK),
+                ", V ",
+                vm.toString(V),
+                ", S_AUD ",
+                vm.toString(PqzSet.S_AUD),
+                ")"
+            )
+        );
         sys = "pqzl";
         _pqzRows();
         if (PqzSet.HAS_PQZH) {
@@ -606,7 +867,11 @@ contract ExplicitParamsCalldataTest is Test {
         bytes memory c = abi.encodeCall(IUARegistry.register, (0x0131, pk, hashOnly, new bytes(ML65_SIG), rp));
         bytes memory fill = abi.encodeCall(IUARegistry.setKemKey, (keccak256("ua"), 0, full.kem, none));
         uint256 limit = (CAP - 15_000) / 64; // the largest calldata whose floor fits
-        console2.log(string.concat("R1 ", PqzSet.NAME, " ", sys, " register + KEM key (full) B / hash commit B / setKemKey v0 B / limit B"));
+        console2.log(
+            string.concat(
+                "R1 ", PqzSet.NAME, " ", sys, " register + KEM key (full) B / hash commit B / setKemKey v0 B / limit B"
+            )
+        );
         console2.log(f.length, c.length, fill.length, limit);
         assertEq(f.length - c.length, 1568, "the commit drops the ek bytes (x25519 is a static word; kemPkHash was 0)");
         assertLe(c.length, limit, "register with the KEM hash fits");
@@ -623,10 +888,19 @@ contract ExplicitParamsCalldataTest is Test {
     function test_x0_reassemblesPayload() public view {
         bytes memory memo = bytes.concat(SALT, _rnd(0x3e30, 2 + 40 * 1));
         PqzTransferArgs memory a = _op1Args(true, memo);
-        bytes memory pl = bytes.concat(abi.encode(uint256(a.p), a.validUntilBlock, a.shieldIn, a.fromUA, a.toUA,
-            a.beneficiaryUA), a.salt, a.u, a.vTo, a.vFrom, a.vAuditor, a.salt, a.sealedMemo);
-        bytes memory want = bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), FROM, TO, BEN), SALT,
-            _outOp1(true), memo);
+        bytes memory pl = bytes.concat(
+            abi.encode(uint256(a.p), a.validUntilBlock, a.shieldIn, a.fromUA, a.toUA, a.beneficiaryUA),
+            a.salt,
+            a.u,
+            a.vTo,
+            a.vFrom,
+            a.vAuditor,
+            a.salt,
+            a.sealedMemo
+        );
+        bytes memory want = bytes.concat(
+            abi.encode(uint256(0), block.number + 100, uint256(0), FROM, TO, BEN), SALT, _outOp1(true), memo
+        );
         assertEq(pl, want, "op 1");
         PqzMultiArgs memory b = _op7Args(4, true, "");
         bytes memory r;
@@ -638,21 +912,49 @@ contract ExplicitParamsCalldataTest is Test {
             va = bytes.concat(va, b.legs[j].vAuditor);
         }
         bytes memory us;
-        for (uint256 i; i < b.u.length; ++i) us = bytes.concat(us, b.u[i]);
-        pl = bytes.concat(abi.encode(uint256(b.p), b.validUntilBlock, b.shieldIn, b.fromUA, b.beneficiaryUA,
-            b.legs.length, b.decoyFee), b.salt, r, us, vs, b.vFrom, va);
+        for (uint256 i; i < b.u.length; ++i) {
+            us = bytes.concat(us, b.u[i]);
+        }
+        pl = bytes.concat(
+            abi.encode(
+                uint256(b.p), b.validUntilBlock, b.shieldIn, b.fromUA, b.beneficiaryUA, b.legs.length, b.decoyFee
+            ),
+            b.salt,
+            r,
+            us,
+            vs,
+            b.vFrom,
+            va
+        );
         assertEq(keccak256(pl), keccak256(_cut(_op7Today(4, true, "", ""), 4 + 32 * 5 + 32, pl.length)), "op 7");
         PqzBurnArgs memory c = _burnArgs();
-        assertEq(bytes.concat(abi.encode(uint256(c.p), c.validUntilBlock, c.shieldIn, c.fromUA, c.beneficiaryUA), c.u,
-            c.vFrom), _burnPayload(), "burn");
+        assertEq(
+            bytes.concat(
+                abi.encode(uint256(c.p), c.validUntilBlock, c.shieldIn, c.fromUA, c.beneficiaryUA), c.u, c.vFrom
+            ),
+            _burnPayload(),
+            "burn"
+        );
         ZetherSingle memory z = _zSingle();
-        assertEq(bytes.concat(abi.encode(uint256(z.accSeq), uint256(z.sendCounter), z.validUntilBlock), z.salt,
-            abi.encode(z.yFrom, z.yTo, z.cOut, z.dOut, z.cDeb, z.cAud)), _zSinglePayload(), "zether single");
+        assertEq(
+            bytes.concat(
+                abi.encode(uint256(z.accSeq), uint256(z.sendCounter), z.validUntilBlock),
+                z.salt,
+                abi.encode(z.yFrom, z.yTo, z.cOut, z.dOut, z.cDeb, z.cAud)
+            ),
+            _zSinglePayload(),
+            "zether single"
+        );
         bytes memory zm = bytes.concat(SALT, _rnd(14, 1 + 40 * 3));
         ZetherMulti memory y = _zMulti(3, zm);
-        bytes memory zl = bytes.concat(abi.encode(uint256(y.accSeq), uint256(y.sendCounter), y.validUntilBlock), y.salt,
-            abi.encode(y.legs.length, y.decoyFee, y.yFrom, y.dOut, y.cDeb), abi.encode(y.legs[0], y.legs[1], y.legs[2]),
-            y.salt, y.sealedMemo);
+        bytes memory zl = bytes.concat(
+            abi.encode(uint256(y.accSeq), uint256(y.sendCounter), y.validUntilBlock),
+            y.salt,
+            abi.encode(y.legs.length, y.decoyFee, y.yFrom, y.dOut, y.cDeb),
+            abi.encode(y.legs[0], y.legs[1], y.legs[2]),
+            y.salt,
+            y.sealedMemo
+        );
         assertEq(zl, _zMultiPayload(3, zm), "zether multi");
     }
 

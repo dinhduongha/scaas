@@ -123,7 +123,8 @@ contract PqzKeyVerifierTest is PqzRegistryBase {
         bytes32 ua = reg.uaOf(UAKinds.MLDSA65, _mlPk(1));
         bytes32 h = reg.keyHashOf(UAKinds.PQZ_MLWE, pk);
         bytes32 msg_ = _pqzRegMessage(ua, pk);
-        bytes memory input = abi.encodePacked(uint8(3), uint32(ST_REG), _slice(regStmt, 0, 32), PQZL_ID, msg_, pk, hex"aa");
+        bytes memory input =
+            abi.encodePacked(uint8(3), uint32(ST_REG), _slice(regStmt, 0, 32), PQZL_ID, msg_, pk, hex"aa");
         vm.mockCall(PQZ, input, abi.encode(uint256(1)));
         vm.expectCall(PQZ, input);
         uint256 g = gasleft();

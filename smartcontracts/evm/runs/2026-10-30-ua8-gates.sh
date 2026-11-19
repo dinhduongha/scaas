@@ -15,7 +15,8 @@ FAMILIES="ua-rs ua-rs-signers ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dar
 # "<step>|<form>|<name>": every test name added by Tasks A1-A11 and the final fix wave, in its tool's pass form (forms: see the base runner);
 # last block: no7702 (EIP-7702 owner rulings D1-D5, 2026-10-30): its new tests and the flipped ones. no7702 reuses the
 # ua8 log names (P), so its logs overwrite the ua8 merge evidence in the tree; git history keeps the ua8 logs (06cedadc).
-NEW_TESTS=$(cat <<'NAMES'
+NEW_TESTS=$(
+    cat <<'NAMES'
 forge|forge|test_T_GAS_register_ua8PerKind
 forge|forge|test_T_GAS_setKemKey
 forge|forge|test_T_GAS_storePqzPop

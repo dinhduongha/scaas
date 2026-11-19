@@ -15,7 +15,8 @@ import {NoReturnERC20} from "../v2/DexOutside.t.sol";
 /// `setRescuer` and `rotateAdmin`, its chain-neutral signature, one shared `seq == seq() + 1`.
 contract RescueVaultTest is Test {
     address constant DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-    bytes constant DEPLOYER_CODE = hex"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3";
+    bytes constant DEPLOYER_CODE =
+        hex"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3";
     bytes32 constant SALT = keccak256("scaas.rescue-vault.v1");
     address constant DEV_EOA = 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131; // the first rescuer
     address constant ADMIN = 0xAb92b0E9bD2E18F7003c30dAFE93Ef9bc3e1248C; // the first admin, as a native UA (owner 2026-11-12)
@@ -37,12 +38,36 @@ contract RescueVaultTest is Test {
         return bytes32(uint256(uint160(a)));
     }
 
+    /// The committed creation code (`rescue-vault-init.hex` without its two constructor words): the deployed vault's bytes,
+    /// built with the metadata hash; today's compile (`bytecode_hash = "none"`) differs from it only in that metadata
+    /// (`test_artifactIsTheSource`; owner 2026-11-19, option (a)).
+    function _creation() internal view returns (bytes memory c) {
+        bytes memory init = vm.parseBytes(vm.readFile(INIT));
+        c = new bytes(init.length - 64);
+        for (uint256 i; i < c.length; ++i) {
+            c[i] = init[i];
+        }
+    }
+
+    /// The vault deployed by the CREATE2 deployer from the committed creation code: with `ADMIN` and `DEV_EOA` it is the
+    /// constant's address.
     function _deploy(bytes32 admin, address rescuer) internal returns (address a) {
         if (DEPLOYER.code.length == 0) vm.etch(DEPLOYER, DEPLOYER_CODE);
-        (bool ok, bytes memory ret) =
-            DEPLOYER.call(abi.encodePacked(SALT, type(RescueVault).creationCode, abi.encode(admin, rescuer)));
+        (bool ok, bytes memory ret) = DEPLOYER.call(abi.encodePacked(SALT, _creation(), abi.encode(admin, rescuer)));
         require(ok && ret.length == 20, "deploy");
         a = address(bytes20(ret));
+    }
+
+    /// `code` without its trailing CBOR metadata (solc appends it, its length in the last two bytes).
+    function _stripMetadata(bytes memory code) internal pure returns (bytes memory r) {
+        uint256 n = code.length;
+        require(n >= 2, "short");
+        uint256 m = (uint256(uint8(code[n - 2])) << 8) | uint8(code[n - 1]);
+        require(m + 2 <= n, "no metadata");
+        r = new bytes(n - m - 2);
+        for (uint256 i; i < r.length; ++i) {
+            r[i] = code[i];
+        }
     }
 
     function _sig(uint256 key, bytes32 digest) internal pure returns (bytes memory) {
@@ -80,12 +105,29 @@ contract RescueVaultTest is Test {
         assertFalse(ok);
     }
 
-    /// The source compiled today gives exactly the committed bytes, so every other test here (on the compiled source) tests
-    /// the deployed vault. An edit of `RescueVault.sol`, an import or a compiler setting fails here; the artifact stays the
-    /// deploy truth.
-    function test_artifactIsTheSource() public view {
-        assertEq(keccak256(type(RescueVault).creationCode), 0xa103dbdc3ecd0a1fc6cd1c96fe8bd904a07b7c5c55cc809eb4e466dcc153dc66, "creation code pin");
-        assertEq(abi.encodePacked(type(RescueVault).creationCode, abi.encode(_ua(ADMIN), DEV_EOA)), vm.parseBytes(vm.readFile(INIT)));
+    /// The source compiled today gives the committed vault's runtime code exactly, its trailing CBOR metadata aside (owner
+    /// 2026-11-19, option (a): the committed artifact was built with the metadata hash, today's compile uses
+    /// `bytecode_hash = "none"`), so every other test here (on the compiled source) tests the deployed vault. An edit of
+    /// `RescueVault.sol` or an import that changes code fails here; the artifact stays the deploy truth.
+    function test_artifactIsTheSource() public {
+        address a = _deploy(_ua(ADMIN), DEV_EOA);
+        assertEq(a, RescueLib.SCAAS_DEV_RESCUE);
+        assertTrue(keccak256(a.code) != keccak256(type(RescueVault).runtimeCode), "the metadata differs (control)");
+        assertEq(_stripMetadata(a.code), _stripMetadata(type(RescueVault).runtimeCode), "runtime code, metadata aside");
+    }
+
+    /// Negative control of the comparison above: one opcode byte of the compiled runtime changed (its first, and one in the
+    /// middle of the code) is caught; the metadata alone is not.
+    function test_artifactCompareCatchesOneByte() public {
+        bytes memory deployed = _stripMetadata(_deploy(_ua(ADMIN), DEV_EOA).code);
+        bytes memory built = type(RescueVault).runtimeCode;
+        uint256[2] memory at = [uint256(0), _stripMetadata(built).length / 2];
+        for (uint256 j; j < 2; ++j) {
+            bytes memory m = bytes.concat(built);
+            m[at[j]] = m[at[j]] ^ 0x01;
+            assertTrue(keccak256(_stripMetadata(m)) != keccak256(deployed), "a changed opcode byte is caught");
+        }
+        assertEq(keccak256(_stripMetadata(built)), keccak256(deployed), "control: unchanged code matches");
     }
 
     /// The admin is a native UA (not 0, high 96 bits 0); the rescuer is not 0.
@@ -104,23 +146,55 @@ contract RescueVaultTest is Test {
     /// 3 verifyingContract, 4 salt) gets the digests the vault checks. A wrong field set (0x0d: chainId instead of version)
     /// gives another digest and fails here.
     function test_eip712DomainRebuildsTheDigest() public view {
-        (bytes1 f, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt, uint256[] memory ext) =
-            v.eip712Domain();
+        (
+            bytes1 f,
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address vc,
+            bytes32 salt,
+            uint256[] memory ext
+        ) = v.eip712Domain();
         assertEq(ext.length, 0);
         string memory t = "EIP712Domain(";
         bytes memory enc;
         string memory sep = "";
-        if (uint8(f) & 0x01 != 0) { t = string.concat(t, "string name"); enc = abi.encode(keccak256(bytes(name))); sep = ","; }
-        if (uint8(f) & 0x02 != 0) { t = string.concat(t, sep, "string version"); enc = bytes.concat(enc, abi.encode(keccak256(bytes(version)))); sep = ","; }
-        if (uint8(f) & 0x04 != 0) { t = string.concat(t, sep, "uint256 chainId"); enc = bytes.concat(enc, abi.encode(chainId)); sep = ","; }
-        if (uint8(f) & 0x08 != 0) { t = string.concat(t, sep, "address verifyingContract"); enc = bytes.concat(enc, abi.encode(vc)); sep = ","; }
-        if (uint8(f) & 0x10 != 0) { t = string.concat(t, sep, "bytes32 salt"); enc = bytes.concat(enc, abi.encode(salt)); }
+        if (uint8(f) & 0x01 != 0) {
+            t = string.concat(t, "string name");
+            enc = abi.encode(keccak256(bytes(name)));
+            sep = ",";
+        }
+        if (uint8(f) & 0x02 != 0) {
+            t = string.concat(t, sep, "string version");
+            enc = bytes.concat(enc, abi.encode(keccak256(bytes(version))));
+            sep = ",";
+        }
+        if (uint8(f) & 0x04 != 0) {
+            t = string.concat(t, sep, "uint256 chainId");
+            enc = bytes.concat(enc, abi.encode(chainId));
+            sep = ",";
+        }
+        if (uint8(f) & 0x08 != 0) {
+            t = string.concat(t, sep, "address verifyingContract");
+            enc = bytes.concat(enc, abi.encode(vc));
+            sep = ",";
+        }
+        if (uint8(f) & 0x10 != 0) {
+            t = string.concat(t, sep, "bytes32 salt");
+            enc = bytes.concat(enc, abi.encode(salt));
+        }
         assertEq(uint8(f) & 0xe0, 0, "no undefined bits");
         bytes32 domain = keccak256(bytes.concat(keccak256(bytes(string.concat(t, ")"))), enc));
         bytes32 sr = keccak256(abi.encode(v.SET_RESCUER_TYPEHASH(), uint64(1), bob));
         bytes32 ra = keccak256(abi.encode(v.ROTATE_ADMIN_TYPEHASH(), uint64(2), _ua(bob)));
-        assertEq(keccak256(abi.encodePacked(hex"1901", domain, sr)), v.setRescuerDigest(1, bob), "setRescuer from ERC-5267");
-        assertEq(keccak256(abi.encodePacked(hex"1901", domain, ra)), v.rotateAdminDigest(2, _ua(bob)), "rotateAdmin from ERC-5267");
+        assertEq(
+            keccak256(abi.encodePacked(hex"1901", domain, sr)), v.setRescuerDigest(1, bob), "setRescuer from ERC-5267"
+        );
+        assertEq(
+            keccak256(abi.encodePacked(hex"1901", domain, ra)),
+            v.rotateAdminDigest(2, _ua(bob)),
+            "rotateAdmin from ERC-5267"
+        );
     }
 
     // ------------------------------------------------------------------ withdraw
@@ -432,11 +506,14 @@ contract RescueVaultTest is Test {
         DeployRescueVault s = new DeployRescueVault();
         bytes memory init = vm.parseBytes(vm.readFile(INIT));
         vm.etch(DEPLOYER, ""); // Foundry places the deployer by default: a chain without it
-        vm.expectRevert(bytes(
-            "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)"));
+        vm.expectRevert(
+            bytes(
+                "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)"
+            )
+        );
         s.deployAndCatchUp(init, "[]");
         vm.etch(DEPLOYER, DEPLOYER_CODE);
-        bytes memory other = abi.encodePacked(type(RescueVault).creationCode, abi.encode(_ua(ADMIN), PAYEE));
+        bytes memory other = abi.encodePacked(_creation(), abi.encode(_ua(ADMIN), PAYEE));
         vm.expectRevert(bytes("rescue-vault-init.hex is not RescueLib.SCAAS_DEV_RESCUE's init code"));
         s.deployAndCatchUp(other, "[]");
         s.deployAndCatchUp(init, "[]"); // control: the committed bytes deploy
@@ -445,19 +522,31 @@ contract RescueVaultTest is Test {
         string memory log = _log(w);
         s.deployAndCatchUp(init, log);
         w.setRescuer(4, PAYEE, _signRescuer(bobKey, w, 4, PAYEE)); // an operation not in the log
-        vm.expectRevert(bytes("vault differs from the admin log: another operation was applied on this chain (spec R1 / R3)"));
+        vm.expectRevert(
+            bytes("vault differs from the admin log: another operation was applied on this chain (spec R1 / R3)")
+        );
         s.deployAndCatchUp(init, log);
     }
 
     /// The three-row admin log of the script tests: alice sets PAYEE, rotates to bob, bob sets himself.
     function _log(RescueVault w) internal view returns (string memory) {
         return string.concat(
-            '[{"seq":1,"op":"setRescuer","newRescuer":"', vm.toString(PAYEE), '","sig":"',
-            vm.toString(_signRescuer(aliceKey, w, 1, PAYEE)), '"},',
-            '{"seq":2,"op":"rotateAdmin","newAdmin":"', vm.toString(_ua(bob)), '","sig":"',
-            vm.toString(_signAdmin(aliceKey, w, 2, _ua(bob))), '"},',
-            '{"seq":3,"op":"setRescuer","newRescuer":"', vm.toString(bob), '","sig":"',
-            vm.toString(_signRescuer(bobKey, w, 3, bob)), '"}]');
+            '[{"seq":1,"op":"setRescuer","newRescuer":"',
+            vm.toString(PAYEE),
+            '","sig":"',
+            vm.toString(_signRescuer(aliceKey, w, 1, PAYEE)),
+            '"},',
+            '{"seq":2,"op":"rotateAdmin","newAdmin":"',
+            vm.toString(_ua(bob)),
+            '","sig":"',
+            vm.toString(_signAdmin(aliceKey, w, 2, _ua(bob))),
+            '"},',
+            '{"seq":3,"op":"setRescuer","newRescuer":"',
+            vm.toString(bob),
+            '","sig":"',
+            vm.toString(_signRescuer(bobKey, w, 3, bob)),
+            '"}]'
+        );
     }
 
     // ------------------------------------------------------------------ KAT (clientkeys)
@@ -470,13 +559,25 @@ contract RescueVaultTest is Test {
         string memory j = string.concat(
             "{\n",
             '  "_comment": "Generated by smartcontracts/evm/test/governance/RescueVault.t.sol (WRITE_RESCUE_VAULT=true); spec superpowers/specs/2026-11-12-rescue-vault.md",\n',
-            '  "vault": "', vm.toString(address(w)), '",\n',
-            '  "setRescuerTypehash": "', vm.toString(w.SET_RESCUER_TYPEHASH()), '",\n',
-            '  "rotateAdminTypehash": "', vm.toString(w.ROTATE_ADMIN_TYPEHASH()), '",\n',
-            '  "setRescuer": {"seq": 1, "newRescuer": "', vm.toString(newRescuer), '", "digest": "',
-            vm.toString(w.setRescuerDigest(1, newRescuer)), '"},\n',
-            '  "rotateAdmin": {"seq": 2, "newAdmin": "', vm.toString(newAdmin), '", "digest": "',
-            vm.toString(w.rotateAdminDigest(2, newAdmin)), '"}\n',
+            '  "vault": "',
+            vm.toString(address(w)),
+            '",\n',
+            '  "setRescuerTypehash": "',
+            vm.toString(w.SET_RESCUER_TYPEHASH()),
+            '",\n',
+            '  "rotateAdminTypehash": "',
+            vm.toString(w.ROTATE_ADMIN_TYPEHASH()),
+            '",\n',
+            '  "setRescuer": {"seq": 1, "newRescuer": "',
+            vm.toString(newRescuer),
+            '", "digest": "',
+            vm.toString(w.setRescuerDigest(1, newRescuer)),
+            '"},\n',
+            '  "rotateAdmin": {"seq": 2, "newAdmin": "',
+            vm.toString(newAdmin),
+            '", "digest": "',
+            vm.toString(w.rotateAdminDigest(2, newAdmin)),
+            '"}\n',
             "}\n"
         );
         if (vm.envOr("WRITE_RESCUE_VAULT", false)) vm.writeFile(KAT, j);
@@ -505,7 +606,9 @@ contract RescueVaultTest is Test {
         RescueVault c = RescueVault(payable(_deploy(_ua(k1), k2)));
         assertEq(keccak256(address(c).code), keccak256(code), "no immutable: the runtime does not depend on the roles");
         assertEq(vm.load(address(c), bytes32(0)), _ua(k1), "slot 0 = admin");
-        assertEq(vm.load(address(c), bytes32(uint256(1))), bytes32(uint256(uint160(k2))), "slot 1 = rescuer, seq 0 above it");
+        assertEq(
+            vm.load(address(c), bytes32(uint256(1))), bytes32(uint256(uint160(k2))), "slot 1 = rescuer, seq 0 above it"
+        );
         assertEq(c.seq(), 0);
         bytes32 s0 = vm.load(address(c), bytes32(0));
         bytes32 s1 = vm.load(address(c), bytes32(uint256(1)));
@@ -514,9 +617,20 @@ contract RescueVaultTest is Test {
             '  "_comment": "Generated by smartcontracts/evm/test/governance/RescueVault.t.sol (WRITE_RESCUE_VAULT=true); NET-EVM-14: SCaaS testnet genesis only, never a mainnet (22776, *-mainnet)",\n',
             '  "chain": "scaas-testnet",\n',
             '  "chainId": 7622,\n',
-            '  "address": "', vm.toString(a), '",\n',
-            '  "account": {"balance": "0", "nonce": "1", "code": "', vm.toString(code), '", "storage": {"',
-            vm.toString(bytes32(0)), '": "', vm.toString(s0), '", "', vm.toString(bytes32(uint256(1))), '": "', vm.toString(s1), '"}}\n',
+            '  "address": "',
+            vm.toString(a),
+            '",\n',
+            '  "account": {"balance": "0", "nonce": "1", "code": "',
+            vm.toString(code),
+            '", "storage": {"',
+            vm.toString(bytes32(0)),
+            '": "',
+            vm.toString(s0),
+            '", "',
+            vm.toString(bytes32(uint256(1))),
+            '": "',
+            vm.toString(s1),
+            '"}}\n',
             "}\n"
         );
         if (vm.envOr("WRITE_RESCUE_VAULT", false)) vm.writeFile(ALLOC, j);

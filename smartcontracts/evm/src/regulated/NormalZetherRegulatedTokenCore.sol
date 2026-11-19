@@ -35,21 +35,25 @@ abstract contract NormalZetherRegulatedTokenCore is NormalZetherTokenCore, Regul
         RegulatedBase(implArgs)
     {}
 
-
     /// @dev The base kind's env checks, restated for the second base.
-    function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view override(MetaTokenBase, NormalZetherTokenCore) {
+    function _validateEnv(IFactoryToken.ChainEnv calldata env)
+        internal
+        view
+        override(MetaTokenBase, NormalZetherTokenCore)
+    {
         NormalZetherTokenCore._validateEnv(env);
     }
+
     function kind() public pure override(MetaTokenBase, NormalZetherTokenCore) returns (uint8) {
         return TokenStore.KIND_NORMAL_ZETHER_REGULATED;
     }
 
     function _validBits() internal pure override(GovernanceBaseCore, NormalZetherTokenCore) returns (uint256) {
-        return GovernanceBits.NORMAL_BITS | REG_BITS_CONFIDENTIAL;
+        return GovernanceBits.NORMAL_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.AUDITOR_BITS;
     }
 
-    function _roleBits() internal pure override returns (uint256) {
-        return GovernanceBits.NORMAL_ROLES | REG_ROLES_CONFIDENTIAL;
+    function _roleBits() internal pure override(MetaTokenBase, NormalZetherTokenCore) returns (uint256) {
+        return GovernanceBits.NORMAL_ROLES | REG_ROLES_CONFIDENTIAL | GovernanceBits.AUDITOR_BITS;
     }
 
     function _contractOnlyBits() internal pure override returns (uint256) {
@@ -116,12 +120,21 @@ abstract contract NormalZetherRegulatedTokenCore is NormalZetherTokenCore, Regul
         super._regReceiver(recipient);
     }
 
-    function _mtxSelectorsBody() internal pure override(MetaTxBaseCore, NormalZetherTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        override(MetaTxBaseCore, NormalZetherTokenCore)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return super._mtxSelectorsBody();
     }
 
-    function _mtxRule(bytes4 sel) internal view override(MetaTxBaseCore, NormalZetherTokenCore) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel)
+        internal
+        view
+        override(MetaTxBaseCore, NormalZetherTokenCore)
+        returns (MtxRule memory)
+    {
         return super._mtxRule(sel);
     }
 
@@ -134,13 +147,19 @@ abstract contract NormalZetherRegulatedTokenCore is NormalZetherTokenCore, Regul
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view override(MetaTxBaseCore, NormalZetherTokenCore) returns (bytes32)
+        internal
+        view
+        override(MetaTxBaseCore, NormalZetherTokenCore)
+        returns (bytes32)
     {
         return super._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(NormalZetherTokenCore, UAMetaTxBaseCore) returns (bytes32)
+        internal
+        view
+        override(NormalZetherTokenCore, UAMetaTxBaseCore)
+        returns (bytes32)
     {
         return super._uaEnvelopeBinding(m);
     }

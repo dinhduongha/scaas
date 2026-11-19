@@ -7,7 +7,10 @@
 use super::{Error, Result};
 use rand_core::{CryptoRng, RngCore};
 use schnorrkel::derive::{ChainCode, Derivation};
-use schnorrkel::{context::attach_rng, signing_context, ExpansionMode, MiniSecretKey, PublicKey, SecretKey, Signature};
+use schnorrkel::{
+    context::attach_rng, signing_context, ExpansionMode, MiniSecretKey, PublicKey, SecretKey,
+    Signature,
+};
 use zeroize::{Zeroize, Zeroizing};
 
 const CONTEXT: &[u8] = b"substrate";
@@ -54,17 +57,32 @@ fn chain_code(j: &[u8]) -> Result<[u8; 32]> {
     use blake2::Digest as _;
     let enc = if j.iter().all(u8::is_ascii_digit) {
         let s = core::str::from_utf8(j).map_err(|_| Error::Argument)?;
-        s.parse::<u64>().map_err(|_| Error::Argument)?.to_le_bytes().to_vec()
+        s.parse::<u64>()
+            .map_err(|_| Error::Argument)?
+            .to_le_bytes()
+            .to_vec()
     } else if j.len() < 64 {
-        [&[u8::try_from(j.len() << 2).map_err(|_| Error::Argument)?][..], j].concat()
+        [
+            &[u8::try_from(j.len() << 2).map_err(|_| Error::Argument)?][..],
+            j,
+        ]
+        .concat()
     } else {
-        [&u16::try_from((j.len() << 2) | 1).map_err(|_| Error::Argument)?.to_le_bytes()[..], j].concat()
+        [
+            &u16::try_from((j.len() << 2) | 1)
+                .map_err(|_| Error::Argument)?
+                .to_le_bytes()[..],
+            j,
+        ]
+        .concat()
     };
     let mut cc = [0u8; 32];
     if enc.len() <= 32 {
         cc.iter_mut().zip(&enc).for_each(|(c, e)| *c = *e);
     } else {
-        cc.copy_from_slice(&blake2::Blake2b::<blake2::digest::consts::U32>::digest(&enc));
+        cc.copy_from_slice(&blake2::Blake2b::<blake2::digest::consts::U32>::digest(
+            &enc,
+        ));
     }
     Ok(cc)
 }
@@ -96,7 +114,10 @@ pub(crate) fn parse_path(path: &str) -> Result<Vec<Junction>> {
         {
             return Err(Error::Argument);
         }
-        out.push(Junction { hard, chain_code: chain_code(j)? });
+        out.push(Junction {
+            hard,
+            chain_code: chain_code(j)?,
+        });
         if out.len() > MAX_JUNCTIONS {
             return Err(Error::Argument);
         }
@@ -119,7 +140,11 @@ struct OneShot {
 
 impl OneShot {
     fn new(r: [u8; 32]) -> OneShot {
-        OneShot { r: Zeroizing::new(r), reads: 0, misused: false }
+        OneShot {
+            r: Zeroizing::new(r),
+            reads: 0,
+            misused: false,
+        }
     }
     /// `Ok` only after exactly one read of 32 bytes.
     fn check(&self) -> Result<()> {
@@ -161,11 +186,17 @@ impl CryptoRng for OneShot {}
 
 /// The key of `junctions` from the bare secret: hard steps `hard_derive_mini_secret_key` → Ed25519 expansion, soft steps
 /// `derived_key_simple_rng` over the one-shot RNG of `rand()` (a soft step draws a fresh nonce half).
-pub(crate) fn derive(bare: &[u8], junctions: &[Junction], mut rand: impl FnMut() -> Result<[u8; 32]>) -> Result<Zeroizing<[u8; 64]>> {
+pub(crate) fn derive(
+    bare: &[u8],
+    junctions: &[Junction],
+    mut rand: impl FnMut() -> Result<[u8; 32]>,
+) -> Result<Zeroizing<[u8; 64]>> {
     let mut sk = secret(bare)?;
     for j in junctions {
         sk = if j.hard {
-            sk.hard_derive_mini_secret_key(Some(ChainCode(j.chain_code)), b"").0.expand(ExpansionMode::Ed25519)
+            sk.hard_derive_mini_secret_key(Some(ChainCode(j.chain_code)), b"")
+                .0
+                .expand(ExpansionMode::Ed25519)
         } else {
             let mut rng = OneShot::new(rand()?);
             let (child, _) = sk.derived_key_simple_rng(ChainCode(j.chain_code), b"", &mut rng);
@@ -191,7 +222,9 @@ pub(crate) fn sign(sk: &[u8], msg: &[u8], r: [u8; 32], check: &[u8]) -> Result<V
 
 /// sr25519 Verify with context `substrate`.
 pub(crate) fn verify(pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
-    let (Ok(pk), Ok(sig)) = (PublicKey::from_bytes(pk), Signature::from_bytes(sig)) else { return false };
+    let (Ok(pk), Ok(sig)) = (PublicKey::from_bytes(pk), Signature::from_bytes(sig)) else {
+        return false;
+    };
     pk.verify(signing_context(CONTEXT).bytes(msg), &sig).is_ok()
 }
 
@@ -203,7 +236,11 @@ pub(crate) fn ss58(pk: &[u8], prefix: u16) -> Result<String> {
         return Err(Error::Argument);
     }
     let [lo, hi] = prefix.to_le_bytes();
-    let pre = if prefix < 64 { vec![lo] } else { vec![((lo & 0xfc) >> 2) | 0x40, hi | ((lo & 0x03) << 6)] };
+    let pre = if prefix < 64 {
+        vec![lo]
+    } else {
+        vec![((lo & 0xfc) >> 2) | 0x40, hi | ((lo & 0x03) << 6)]
+    };
     let sum = blake2::Blake2b512::digest([&b"SS58PRE"[..], &pre, pk].concat());
     Ok(bs58::encode([&pre[..], pk, sum.get(..2).ok_or(Error::Argument)?].concat()).into_string())
 }

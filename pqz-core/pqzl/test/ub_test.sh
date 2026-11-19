@@ -12,7 +12,7 @@ L=${1:?label}
 O=test/runs/ub-$L.txt
 B=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG}
 mkdir -p test/runs $B/ub
-B=$B ./build.sh native > /dev/null || exit 1 # lazer.h and the set's headers
+B=$B ./build.sh native >/dev/null || exit 1 # lazer.h and the set's headers
 CC=${CC:-clang-18}
 F="-std=gnu11 -O1 -g -fsanitize=undefined,address -fno-omit-frame-pointer -DPQZ_SV"
 [ "${RECOVER:-0}" = 1 ] || F="$F -fno-sanitize-recover=all"
@@ -20,20 +20,20 @@ F="-std=gnu11 -O1 -g -fsanitize=undefined,address -fno-omit-frame-pointer -DPQZ_
 F="$F -w -I$B/include -Isrc -Ilazer -Iparams"
 SRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_keys.c src/pqz_sv.c test/pqz_ub_test.c"
 {
-  echo "# ub_test $L (set ${PQZ_SET:-n2304-kmax4096}): $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- src lazer || echo ' + uncommitted src/lazer changes'), $($CC --version | head -1)"
-  echo "# $CC $F [-DPQZ_DEBUG_MALLOC]"
-  # parts a .. f on the libc heap (ASan sees each block); g, h on the arena (pqz_ub_arena)
-  $CC $F -DPQZ_DEBUG_MALLOC -o $B/ub/pqz_ub_test $SRC 2>&1
-  $CC $F -o $B/ub/pqz_ub_arena $SRC 2>&1
-} > "$O"
+    echo "# ub_test $L (set ${PQZ_SET:-n2304-kmax4096}): $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- src lazer || echo ' + uncommitted src/lazer changes'), $($CC --version | head -1)"
+    echo "# $CC $F [-DPQZ_DEBUG_MALLOC]"
+    # parts a .. f on the libc heap (ASan sees each block); g, h on the arena (pqz_ub_arena)
+    $CC $F -DPQZ_DEBUG_MALLOC -o $B/ub/pqz_ub_test $SRC 2>&1
+    $CC $F -o $B/ub/pqz_ub_arena $SRC 2>&1
+} >"$O"
 fail=0
 for p in a b c d e f g h; do
-  case $p in g | h) X=$B/ub/pqz_ub_arena ;; *) X=$B/ub/pqz_ub_test ;; esac
-  echo "== part $p" >> "$O"
-  ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 $X $p >> "$O" 2>&1
-  rc=$?
-  echo "== part $p rc=$rc" >> "$O"
-  [ $rc = 0 ] || fail=1
+    case $p in g | h) X=$B/ub/pqz_ub_arena ;; *) X=$B/ub/pqz_ub_test ;; esac
+    echo "== part $p" >>"$O"
+    ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 $X $p >>"$O" 2>&1
+    rc=$?
+    echo "== part $p rc=$rc" >>"$O"
+    [ $rc = 0 ] || fail=1
 done
-echo "ub_test $L: $( [ $fail = 0 ] && echo PASS || echo FAIL )" | tee -a "$O"
+echo "ub_test $L: $([ $fail = 0 ] && echo PASS || echo FAIL)" | tee -a "$O"
 exit $fail

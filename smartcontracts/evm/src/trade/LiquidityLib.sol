@@ -17,9 +17,8 @@ library LiquidityLib {
     );
     /// @dev `SaltedEIP712`'s domain type, and the DEX's name and version hashes (`SCaaSDex`'s `SaltedEIP712Core("SCaaS
     ///      Dex", "1", …)`; the KAT `test/v2/LiquidityKat.t.sol` pins the parity).
-    bytes32 internal constant DOMAIN_TYPEHASH = keccak256(
-        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
-    );
+    bytes32 internal constant DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");
     bytes32 internal constant DEX_NAME_HASH = keccak256("SCaaS Dex");
     bytes32 internal constant DEX_VERSION_HASH = keccak256("1");
 
@@ -33,10 +32,20 @@ library LiquidityLib {
 
     /// @dev Two `abi.encode` halves of static words, concatenated: the one encoding of the 18 words, under the stack limit.
     function hashOrder(ITradeToken.LiquidityOrder calldata o) internal pure returns (bytes32) {
-        bytes memory a = abi.encode(LIQUIDITY_ORDER_TYPEHASH, o.from, hashTokens(o.inputs), hashTokens(o.outputs),
-            o.positionManager, o.positionReader, o.positionIn, o.positionPool, o.tickLower);
-        bytes memory b = abi.encode(o.tickUpper, o.minLiquidity, o.recipient, o.fee, o.relayer, o.flags, o.batch, o.nonce,
-            o.validUntil);
+        bytes memory a = abi.encode(
+            LIQUIDITY_ORDER_TYPEHASH,
+            o.from,
+            hashTokens(o.inputs),
+            hashTokens(o.outputs),
+            o.positionManager,
+            o.positionReader,
+            o.positionIn,
+            o.positionPool,
+            o.tickLower
+        );
+        bytes memory b = abi.encode(
+            o.tickUpper, o.minLiquidity, o.recipient, o.fee, o.relayer, o.flags, o.batch, o.nonce, o.validUntil
+        );
         return keccak256(bytes.concat(a, b));
     }
 
@@ -45,7 +54,11 @@ library LiquidityLib {
     }
 
     /// @notice The order's digest `h` in the domain of the DEX at `dex`.
-    function digest(ITradeToken.LiquidityOrder calldata o, address dex, bytes32 chainUid) internal view returns (bytes32) {
+    function digest(ITradeToken.LiquidityOrder calldata o, address dex, bytes32 chainUid)
+        internal
+        view
+        returns (bytes32)
+    {
         return keccak256(abi.encodePacked(hex"1901", separator(dex, chainUid), hashOrder(o)));
     }
 }

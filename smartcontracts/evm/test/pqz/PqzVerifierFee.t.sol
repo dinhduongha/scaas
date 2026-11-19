@@ -78,8 +78,13 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         _wrapShield(offW, 1000);
         fN = new OpenFactory(nid(registrar));
         EnvKit.configure(fN, PQZ_UID, NOTICE, address(0));
-        Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
-            type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            fN,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(fN)));
         vm.warp(block.timestamp + NOTICE); // the release usable
@@ -153,8 +158,10 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     }
 
     function test_init_feeAboveCap() public {
-        assertEq(_tryCreate(_offCfg(5, 4), "a1"),
-            abi.encodeWithSelector(IPqzToken.VerifierFeeAboveMax.selector, uint64(5), uint64(4)));
+        assertEq(
+            _tryCreate(_offCfg(5, 4), "a1"),
+            abi.encodeWithSelector(IPqzToken.VerifierFeeAboveMax.selector, uint64(5), uint64(4))
+        );
         assertEq(_tryCreate(_offCfg(4, 4), "a2"), "", "control: fee = cap");
         IPqzToken.PqzVerifyConfig memory v = _cfgOf(address(off));
         assertEq(v.verifierFee, F);
@@ -167,7 +174,9 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     function test_init_rangeRowWithTheCap() public {
         uint256 cap = uint256(1) << 40;
         IFactoryToken.TokenConfig memory c = _offCfg(0, uint64(cap - FEE));
-        assertEq(_tryCreate(c, "r1"), abi.encodeWithSelector(IPqzToken.BadInit.selector), "fee 0, the cap at the boundary");
+        assertEq(
+            _tryCreate(c, "r1"), abi.encodeWithSelector(IPqzToken.BadInit.selector), "fee 0, the cap at the boundary"
+        );
         c.conf.verifierFeeMax = uint64(cap - FEE - 1);
         assertEq(_tryCreate(c, "r2"), "", "one below");
         (c.conf.confidentialFee, c.conf.verifierFeeMax) = (0, uint64(cap));
@@ -187,7 +196,9 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         _setNext(0, 0, false, 0, 0);
         assertEq(_tryCreate(c, "o1"), abi.encodeWithSelector(IPqzToken.BadInit.selector));
         c.conf.verifierFeeMax = 1;
-        assertEq(_tryCreate(c, "o2"), abi.encodeWithSelector(IPqzToken.PqzVerifyConfigInvalid.selector), "then the mode row");
+        assertEq(
+            _tryCreate(c, "o2"), abi.encodeWithSelector(IPqzToken.PqzVerifyConfigInvalid.selector), "then the mode row"
+        );
     }
 
     // ------------------------------------------------------------------ the forms
@@ -204,11 +215,19 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         return t.pqzAccount(alice, 0).pendingCount;
     }
 
-    function _singleA(NormalPqzToken t, bool compact, bytes32 ben) internal view returns (IPqzToken.PqzTransferArgs memory) {
+    function _singleA(NormalPqzToken t, bool compact, bytes32 ben)
+        internal
+        view
+        returns (IPqzToken.PqzTransferArgs memory)
+    {
         return _ts(_payload(_p(t), 0, alice, bob, ben, _out(11, false), compact ? _memo() : bytes("")));
     }
 
-    function _multiA(NormalPqzToken t, bool compact, bytes32 ben, uint256 m) internal view returns (IPqzToken.PqzMultiArgs memory) {
+    function _multiA(NormalPqzToken t, bool compact, bytes32 ben, uint256 m)
+        internal
+        view
+        returns (IPqzToken.PqzMultiArgs memory)
+    {
         bytes32[] memory legs = new bytes32[](m);
         legs[0] = bob;
         if (m > 1) legs[1] = carol;
@@ -221,7 +240,8 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     }
 
     function _unwrapX(NormalPqzToken t) internal view returns (IConfidentialWrappedToken.Unwrap memory) {
-        return IConfidentialWrappedToken.Unwrap(WrappedPqzToken(payable(address(t))).underlyings()[0], TO, 10, 10 * SCALE);
+        return
+            IConfidentialWrappedToken.Unwrap(WrappedPqzToken(payable(address(t))).underlyings()[0], TO, 10, 10 * SCALE);
     }
 
     function _token(uint8 op, bool offchain) internal view returns (NormalPqzToken) {
@@ -230,7 +250,9 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
 
     /// The direct statement of form `op` on `t` with beneficiary `ben` (op 7: two legs).
     function _stmt(uint8 op, NormalPqzToken t, bytes32 ben) internal view returns (bytes memory) {
-        if (op == SINGLE || op == SINGLE_COMPACT) return t.transferSingleStatement(_singleA(t, op == SINGLE_COMPACT, ben), 0);
+        if (op == SINGLE || op == SINGLE_COMPACT) {
+            return t.transferSingleStatement(_singleA(t, op == SINGLE_COMPACT, ben), 0);
+        }
         if (op == MULTI || op == COMPACT) return t.transferStatement(_multiA(t, op == COMPACT, ben, 2), 0);
         if (op == UNSHIELD) return t.burnStatement(_burnA(t, ben), 5, TO, 0);
         if (op == REFRESH) return t.burnStatement(_burnA(t, ben), 0, 0, 0);
@@ -238,19 +260,31 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     }
 
     function _call(uint8 op, NormalPqzToken t, bytes32 ben, IPqzToken.PqzSignedVerdict memory sv)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         IUARegistry.UASig memory pa = _pqAuth();
-        if (op == SINGLE) return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_singleA(t, false, ben), VPROOF, pa, "", sv));
-        if (op == SINGLE_COMPACT) {
-            return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingleCompact, (_singleA(t, true, ben), VPROOF, pa, "", sv));
+        if (op == SINGLE) {
+            return
+                abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_singleA(t, false, ben), VPROOF, pa, "", sv));
         }
-        if (op == MULTI) return abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_multiA(t, false, ben, 2), VPROOF, pa, "", sv));
+        if (op == SINGLE_COMPACT) {
+            return abi.encodeCall(
+                IPqzToken.mtxConfidentialTransferSingleCompact, (_singleA(t, true, ben), VPROOF, pa, "", sv)
+            );
+        }
+        if (op == MULTI) {
+            return abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_multiA(t, false, ben, 2), VPROOF, pa, "", sv));
+        }
         if (op == COMPACT) {
-            return abi.encodeCall(IPqzToken.mtxConfidentialTransferCompact, (_multiA(t, true, ben, 2), VPROOF, pa, "", sv));
+            return
+                abi.encodeCall(IPqzToken.mtxConfidentialTransferCompact, (_multiA(t, true, ben, 2), VPROOF, pa, "", sv));
         }
         if (op == UNSHIELD) return abi.encodeCall(IPqzToken.mtxUnshield, (_burnA(t, ben), 5, TO, VPROOF, pa, "", sv));
-        if (op == REFRESH) return abi.encodeCall(IPqzToken.mtxUnshield, (_burnA(t, ben), 0, bytes32(0), VPROOF, pa, "", sv));
+        if (op == REFRESH) {
+            return abi.encodeCall(IPqzToken.mtxUnshield, (_burnA(t, ben), 0, bytes32(0), VPROOF, pa, "", sv));
+        }
         return abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_burnA(t, ben), _unwrapX(t), VPROOF, pa, "", sv));
     }
 
@@ -259,7 +293,9 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         st = _stmt(op, t, ben);
         bool offchain = address(t) != address(tok) && address(t) != address(w); // no view call: the access test reads none
         (bool ok, bytes memory ret) = address(t).call(_call(op, t, ben, offchain ? _sv(t, st) : noVerdict()));
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
     }
 
     function _wd(bytes memory st, uint256 off_) internal pure returns (uint256) {
@@ -298,10 +334,14 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         _run(UNSHIELD, tok, 0);
         (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(tok));
         for (uint256 i; i < reads.length; ++i) {
-            for (uint256 k = 20; k <= 22; ++k) assertTrue(reads[i] != bytes32(uint256(root) + k), "a fee slot read");
+            for (uint256 k = 20; k <= 22; ++k) {
+                assertTrue(reads[i] != bytes32(uint256(root) + k), "a fee slot read");
+            }
         }
         for (uint256 i; i < writes.length; ++i) {
-            for (uint256 k = 20; k <= 22; ++k) assertTrue(writes[i] != bytes32(uint256(root) + k), "a fee slot written");
+            for (uint256 k = 20; k <= 22; ++k) {
+                assertTrue(writes[i] != bytes32(uint256(root) + k), "a fee slot written");
+            }
         }
         assertEq(_cfgOf(address(tok)).verifierFee, 0, "PRECOMPILE: 0");
     }
@@ -337,11 +377,22 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
             assertEq(_wd(_stmt(UNSHIELD, off, 0), 544), 0, "burn: unchanged");
             assertEq(_wd(_stmt(REFRESH, off, 0), 544), 0, "refresh: unchanged");
             bytes32 env = keccak256("an envelope binding");
-            assertEq(bytes32(_wd(off.transferSingleStatement(_singleA(off, false, 0), env), 544)),
-                keccak256(abi.encode(env, BUNDLE_)), "relayed: unchanged");
+            assertEq(
+                bytes32(_wd(off.transferSingleStatement(_singleA(off, false, 0), env), 544)),
+                keccak256(abi.encode(env, BUNDLE_)),
+                "relayed: unchanged"
+            );
         }
-        assertEq(bytes32(_wd(_stmt(SINGLE, tok, 0), 544)), _direct(ZetherTypes.TransferMode.BUNDLE), "PRECOMPILE op 1: TAG_DIRECT_MODE");
-        assertEq(bytes32(_wd(_stmt(COMPACT, tok, 0), 544)), _direct(ZetherTypes.TransferMode.HASH), "PRECOMPILE op 7: TAG_DIRECT_MODE");
+        assertEq(
+            bytes32(_wd(_stmt(SINGLE, tok, 0), 544)),
+            _direct(ZetherTypes.TransferMode.BUNDLE),
+            "PRECOMPILE op 1: TAG_DIRECT_MODE"
+        );
+        assertEq(
+            bytes32(_wd(_stmt(COMPACT, tok, 0), 544)),
+            _direct(ZetherTypes.TransferMode.HASH),
+            "PRECOMPILE op 7: TAG_DIRECT_MODE"
+        );
     }
 
     // ------------------------------------------------------------------ (3) payment
@@ -590,8 +641,13 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
         OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
-        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
-            type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
         IFactoryToken.TokenConfig memory c = _offCfg(F, CAP);
@@ -602,17 +658,28 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
 
     /// `UASetVerifierFee(from, target, next, chainUid, …)` signed by `NKEY` for `signedNext`, `signedTarget` and its chain
     ///  word (CTR-GOV-28).
-    function _routerAuth(GovernanceRouter router, MetaTxLib.UAEnvelope memory u, address signedTarget, uint64 signedNext)
-        internal view returns (IUARegistry.UASig memory auth)
-    {
-        bytes32 sh = keccak256(bytes.concat(abi.encode(GovernanceRouterTypes.UA_SET_VERIFIER_FEE, u.from), abi.encode(signedTarget),
-            abi.encode(signedNext, EnvKit.codeUidOf(signedTarget)), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+    function _routerAuth(
+        GovernanceRouter router,
+        MetaTxLib.UAEnvelope memory u,
+        address signedTarget,
+        uint64 signedNext
+    ) internal view returns (IUARegistry.UASig memory auth) {
+        bytes32 sh = keccak256(
+            bytes.concat(
+                abi.encode(GovernanceRouterTypes.UA_SET_VERIFIER_FEE, u.from),
+                abi.encode(signedTarget),
+                abi.encode(signedNext, EnvKit.codeUidOf(signedTarget)),
+                abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
         (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(router)), sh));
         auth.signature = abi.encodePacked(r, ss, vv);
     }
 
     function _env(GovernanceRouter router) internal view returns (MetaTxLib.UAEnvelope memory) {
-        return MetaTxLib.UAEnvelope(nId, LANE, router.mtxNonce(nId, LANE), block.timestamp + 300, 0, address(0), 0, address(0));
+        return MetaTxLib.UAEnvelope(
+            nId, LANE, router.mtxNonce(nId, LANE), block.timestamp + 300, 0, address(0), 0, address(0)
+        );
     }
 
     /// Relayed at fee 0 by a stranger relayer; `next`, `target` and the chain word bound (B1, CTR-GOV-28): another `next`,
@@ -624,10 +691,12 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         IUARegistry.UASig memory auth = _routerAuth(router, u, address(t), 1);
         vm.prank(address(0x4E1A));
         bytes32 tu = EnvKit.codeUidOf(address(t));
-        (bool ok,) = address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(t), 0, tu, auth)));
+        (bool ok,) =
+            address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(t), 0, tu, auth)));
         assertFalse(ok, "B1: next bound");
         vm.prank(address(0x4E1A));
-        (ok,) = address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(other), 1, tu, auth)));
+        (ok,) =
+            address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(other), 1, tu, auth)));
         assertFalse(ok, "target bound");
         vm.prank(address(0x4E1A));
         (ok,) = address(router).call(abi.encodeCall(GovernanceRouter.mtxSetVerifierFee, (u, address(t), 1, ~tu, auth)));
@@ -646,7 +715,9 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         address[2] memory ts = [address(off), address(offW)];
         for (uint256 k; k < 2; ++k) {
             (bytes4[] memory s,,) = IMetaTx(ts[k]).mtxSelectors();
-            for (uint256 j; j < s.length; ++j) assertTrue(s[j] != IPqzToken.setVerifierFee.selector);
+            for (uint256 j; j < s.length; ++j) {
+                assertTrue(s[j] != IPqzToken.setVerifierFee.selector);
+            }
         }
     }
 
@@ -654,8 +725,13 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
 
     /// The `PqzAuth` digest of statement `st` of op byte `op` on `t` (PqzCore.authDigest, recomputed).
     function _authD(address t, uint8 op, bytes memory st) internal view returns (bytes32) {
-        bytes32 h = keccak256(bytes.concat(abi.encode(PqzCore.AUTH_TYPEHASH, uint256(op)), _slice(st, 0, 640),
-            abi.encode(keccak256(_slice(st, 640, st.length - 640)))));
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(PqzCore.AUTH_TYPEHASH, uint256(op)),
+                _slice(st, 0, 640),
+                abi.encode(keccak256(_slice(st, 640, st.length - 640)))
+            )
+        );
         return MessageHashUtils.toTypedDataHash(_sepOf(t), h);
     }
 
@@ -666,8 +742,13 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     }
 
     function _authAlso(address t, uint8 op, bytes memory st) internal {
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized,
-            (alice, UAKinds.PURPOSE_ZETHER_AUTH, _authD(t, op, st), _pqAuth())), "");
+        vm.mockCall(
+            address(reg),
+            abi.encodeCall(
+                IUARegistry.requireAuthorized, (alice, UAKinds.PURPOSE_ZETHER_AUTH, _authD(t, op, st), _pqAuth())
+            ),
+            ""
+        );
     }
 
     /// A built op 1 refuses `AuthRejected` after a decrease, and with a re-signed `pqzAuth` `PqzVerdictMismatch(3)`; the
@@ -722,8 +803,9 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
     function test_split_envelope() public {
         _public(off, vm.addr(NKEY), 0);
         IPqzToken.PqzMultiArgs memory a = _multiA(off, false, 0, 2);
-        MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(nId, LANE, off.mtxNonce(nId, LANE), block.timestamp + 300, 0,
-            address(0), 0, address(0));
+        MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(
+            nId, LANE, off.mtxNonce(nId, LANE), block.timestamp + 300, 0, address(0), 0, address(0)
+        );
         bytes32 tag = _envTag(u);
         bytes memory st = off.transferStatement(a, tag);
         IUARegistry.UASig memory auth = _envAuth(u, a);
@@ -735,42 +817,69 @@ contract PqzVerifierFeeTest is PqzOffchainBase {
         vm.revertToState(snap);
         _fee(address(off), F + 2);
         a.decoyFee = decoy - 1;
-        assertEq(keccak256(off.transferStatement(a, tag)), keccak256(st), "the same statement: only the signature binds d");
+        assertEq(
+            keccak256(off.transferStatement(a, tag)), keccak256(st), "the same statement: only the signature binds d"
+        );
         vm.prank(address(0x4E1A));
         (ok,) = address(off).call(_envCall(u, a, auth, sv));
         assertFalse(ok, "d - k under the same envelope signature");
     }
 
     function _envTag(MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
-        return keccak256(bytes.concat(
-            abi.encode(keccak256("SCAAS-PQZ-UA-ENVELOPE-V1"), block.chainid, off.chainUid(), address(off), u.from, u.batch),
-            abi.encode(u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    keccak256("SCAAS-PQZ-UA-ENVELOPE-V1"), block.chainid, off.chainUid(), address(off), u.from, u.batch
+                ),
+                abi.encode(u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
     }
 
     /// `NKEY`'s signature over `UAPqzTransfer` (args by `_hashM`, `decoyFee` among them) in `off`'s domain.
     function _envAuth(MetaTxLib.UAEnvelope memory u, IPqzToken.PqzMultiArgs memory a)
-        internal view returns (IUARegistry.UASig memory auth)
+        internal
+        view
+        returns (IUARegistry.UASig memory auth)
     {
         bytes32 th = keccak256(
-            "UAPqzTransfer(bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzLeg(bytes32 ua,bytes v,bytes vAuditor)PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)");
-        bytes32 sh = keccak256(bytes.concat(abi.encode(th, u.from), abi.encode(_hashM(a), keccak256(VPROOF), keccak256("")),
-            abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+            "UAPqzTransfer(bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzLeg(bytes32 ua,bytes v,bytes vAuditor)PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)"
+        );
+        bytes32 sh = keccak256(
+            bytes.concat(
+                abi.encode(th, u.from),
+                abi.encode(_hashM(a), keccak256(VPROOF), keccak256("")),
+                abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
         (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(off)), sh));
         auth.signature = abi.encodePacked(r, ss, vv);
     }
 
-    function _envCall(MetaTxLib.UAEnvelope memory u, IPqzToken.PqzMultiArgs memory a, IUARegistry.UASig memory auth,
-        IPqzToken.PqzSignedVerdict memory sv) internal pure returns (bytes memory)
-    {
-        return abi.encodeWithSignature("mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
-            u, a, VPROOF, _pqAuth(), bytes(""), auth, sv);
+    function _envCall(
+        MetaTxLib.UAEnvelope memory u,
+        IPqzToken.PqzMultiArgs memory a,
+        IUARegistry.UASig memory auth,
+        IPqzToken.PqzSignedVerdict memory sv
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSignature(
+            "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+            u,
+            a,
+            VPROOF,
+            _pqAuth(),
+            bytes(""),
+            auth,
+            sv
+        );
     }
 
     // ------------------------------------------------------------------ (6) the disclosure charges nothing
 
     function test_disclosure_movesNoBalance() public {
-        bytes32 ref = off.mtxConfidentialTransferSingle(_singleA(off, false, 0), VPROOF, _pqAuth(), "",
-            _sv(off, _stmt(SINGLE, off, 0)));
+        bytes32 ref = off.mtxConfidentialTransferSingle(
+            _singleA(off, false, 0), VPROOF, _pqAuth(), "", _sv(off, _stmt(SINGLE, off, 0))
+        );
         address v = vm.addr(VKEY);
         (uint256 b0, uint256 p0) = (off.balanceOf(v), off.balanceOf(MetaTxLib.SHIELD_POOL));
         bytes memory st = off.disclosureStatement(ref, 0, 7, 1, 0);

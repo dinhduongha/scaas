@@ -10,6 +10,10 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// @notice ua-rs-sign T14b (spec no-decryption-oracle §4.7, §5): the Zether state vectors. A token with an auditor key
 ///         (OPTIONAL, BUNDLE disclosure) in several account states (`acc` debited three times, `acc` and `pending` both set,
@@ -48,6 +52,10 @@ contract ZetherStateVectorsTest is ZetherFixture {
 
     Ent[] internal ents;
     uint256 internal aliceBal;
+    /// @dev Set-auditor A3 (CTR-ZTH-95): the second token (bit 32), its entries and each one's auditor epoch.
+    NormalZetherToken internal tok2;
+    Ent[] internal eents;
+    uint32[] internal eepochs;
 
     function setUp() public {
         _stack();
@@ -57,7 +65,14 @@ contract ZetherStateVectorsTest is ZetherFixture {
         dave = _user(XD, address(0xD4));
         IFactoryToken.TokenConfig memory c = _cfg(true, uint256(1) << 40);
         c.conf.auditorKey = ZetherKeys.pub(XAUD, bls);
-        tok = NormalZetherToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "zether-state"));
+        tok = NormalZetherToken(
+            factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "zether-state")
+        );
+        c.features |= uint256(1) << GovernanceBits.AUDITOR;
+        (c.admin, c.lockedFeatures) = (nid(address(this)), 0);
+        tok2 = NormalZetherToken(
+            factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "zether-state-epochs")
+        );
     }
 
     // ------------------------------------------------------------------ the state
@@ -75,7 +90,9 @@ contract ZetherStateVectorsTest is ZetherFixture {
     function _push(string memory name, bytes32 ref, uint64 c, User[] memory to, uint256[] memory vs) internal {
         Ent storage e = ents.push();
         (e.name, e.ref, e.from, e.counter, e.amounts) = (name, ref, alice, c, vs);
-        for (uint256 j; j < to.length; ++j) e.to.push(ZetherTypes.UA.unwrap(to[j].ua));
+        for (uint256 j; j < to.length; ++j) {
+            e.to.push(ZetherTypes.UA.unwrap(to[j].ua));
+        }
     }
 
     function _multi(string memory name, User[] memory to, uint256[] memory vs, ZetherTypes.TransferMode mode) internal {
@@ -101,12 +118,80 @@ contract ZetherStateVectorsTest is ZetherFixture {
         uint256[] memory v1 = new uint256[](1);
         v1[0] = 100;
         _push("single alice->bob 100 audited (fee 2 to carol)", ref, 0, one, v1);
-        _multi("multi BUNDLE alice->[bob 30, carol 0] audited", _two(bob, carol), _vs(30, 0), ZetherTypes.TransferMode.BUNDLE);
+        _multi(
+            "multi BUNDLE alice->[bob 30, carol 0] audited",
+            _two(bob, carol),
+            _vs(30, 0),
+            ZetherTypes.TransferMode.BUNDLE
+        );
         audOut = true;
-        _multi("multi HASH alice->[carol 20, bob 5] auditor left out", _two(carol, bob), _vs(20, 5), ZetherTypes.TransferMode.HASH);
+        _multi(
+            "multi HASH alice->[carol 20, bob 5] auditor left out",
+            _two(carol, bob),
+            _vs(20, 5),
+            ZetherTypes.TransferMode.HASH
+        );
         audOut = false;
         tok.mtxRollOver(ZetherTypes.UA.unwrap(bob.ua), 1); // bob: acc 135
         _fund(tok, bob, 7); // bob: pending 7
+    }
+
+    /// Set-auditor A3 (spec §9, CTR-ZTH-95) on `tok2`: an audited single entry at epoch 0, the auditor replaced by dave's
+    /// viewing key (`m/12381/60/1/8`, delay 0), then an audited single and an audited multi-recipient BUNDLE entry at epoch 1.
+    function _buildEpochs() internal {
+        NormalZetherToken t0 = tok;
+        tok = tok2;
+        _fund(tok, alice, 1000);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+        uint256 bal = 1000;
+        User[] memory one = new User[](1);
+        one[0] = bob;
+        uint256[] memory v1 = new uint256[](1);
+        v1[0] = 40;
+        _pushE(
+            "epoch 0: single alice->bob 40 audited (key m/12381/60/0/8)",
+            _direct(tok, _proveTransfer(tok, alice, bob, 40, bal, _none(), bytes32(0)), _none()),
+            0,
+            one,
+            v1,
+            0
+        );
+        bal -= 40;
+        bytes32 uid = EnvKit.codeUidOf(address(tok));
+        IGovernance(address(tok)).grantRole(GovernanceBits.AUDITOR, nid(address(this)), uid);
+        tok.setAuditorKey(ZetherKeys.pub(XD, bls), 1, _auditorPop(tok, XD, 1), uid);
+        v1[0] = 9;
+        _pushE(
+            "epoch 1: single alice->bob 9 audited (key m/12381/60/1/8)",
+            _direct(tok, _proveTransfer(tok, alice, bob, 9, bal, _none(), bytes32(0)), _none()),
+            1,
+            one,
+            v1,
+            1
+        );
+        bal -= 9;
+        Tx memory t =
+            _proveMulti(tok, alice, _two(bob, carol), _vs(3, 4), bal, _none(), ZetherTypes.TransferMode.BUNDLE);
+        _pushE(
+            "epoch 1: multi BUNDLE alice->[bob 3, carol 4] audited",
+            tok.mtxConfidentialTransfer(_zMulti(t.payload, _none()), t.proof),
+            2,
+            _two(bob, carol),
+            _vs(3, 4),
+            1
+        );
+        tok = t0;
+    }
+
+    function _pushE(string memory name, bytes32 ref, uint64 c, User[] memory to, uint256[] memory vs, uint32 epoch)
+        internal
+    {
+        Ent storage e = eents.push();
+        (e.name, e.ref, e.from, e.counter, e.amounts) = (name, ref, alice, c, vs);
+        for (uint256 j; j < to.length; ++j) {
+            e.to.push(ZetherTypes.UA.unwrap(to[j].ua));
+        }
+        eepochs.push(epoch);
     }
 
     // ------------------------------------------------------------------ the rows
@@ -140,8 +225,15 @@ contract ZetherStateVectorsTest is ZetherFixture {
         uint256 n = ((lw - 1) / 2 + 31) / 32;
         uint256 d = uint256(keccak256(abi.encode(slot)));
         for (uint256 i; i < n; ++i) {
-            r = string.concat(r, bytes(r).length == 0 ? "" : ", ", "{\"slot\": ", _hx32(bytes32(d + i)), ", \"word\": ",
-                _hx32(_load(d + i)), "}");
+            r = string.concat(
+                r,
+                bytes(r).length == 0 ? "" : ", ",
+                "{\"slot\": ",
+                _hx32(bytes32(d + i)),
+                ", \"word\": ",
+                _hx32(_load(d + i)),
+                "}"
+            );
         }
     }
 
@@ -150,22 +242,55 @@ contract ZetherStateVectorsTest is ZetherFixture {
         uint256 base = uint256(keccak256(abi.encode(u.ua, ROOT + 8)));
         string memory words;
         string memory data;
-        for (uint256 i; i < 6; ++i) words = string.concat(words, i == 0 ? "" : ", ", _hx32(_load(base + i)));
+        for (uint256 i; i < 6; ++i) {
+            words = string.concat(words, i == 0 ? "" : ", ", _hx32(_load(base + i)));
+        }
         for (uint256 i; i < 4; ++i) {
             string memory d = _bytesWords(base + i, false);
             if (bytes(d).length != 0) data = string.concat(data, bytes(data).length == 0 ? "" : ", ", d);
         }
         (uint256 acc, uint256 pend) = _balances(tok, u, 2000);
-        _w(string.concat("{\"name\": ", _q(name), ", \"ua\": ", _hx32(ZetherTypes.UA.unwrap(u.ua)), ", \"Y\": ", _hx(u.y),
-            ", \"account\": [", words, "], \"accountData\": [", data, "],"));
-        _w(string.concat("\"view\": {\"accC\": ", _hx(a.accC), ", \"accD\": ", _hx(a.accD), ", \"pendingC\": ", _hx(a.pendingC),
-            ", \"pendingD\": ", _hx(a.pendingD), ", \"accSeq\": ", vm.toString(uint256(a.accSeq)), ", \"pendingSeq\": ",
-            vm.toString(uint256(a.pendingSeq)), ", \"sendCounter\": ", vm.toString(uint256(a.sendCounter)), "},"));
+        _w(
+            string.concat(
+                "{\"name\": ",
+                _q(name),
+                ", \"ua\": ",
+                _hx32(ZetherTypes.UA.unwrap(u.ua)),
+                ", \"Y\": ",
+                _hx(u.y),
+                ", \"account\": [",
+                words,
+                "], \"accountData\": [",
+                data,
+                "],"
+            )
+        );
+        _w(
+            string.concat(
+                "\"view\": {\"accC\": ",
+                _hx(a.accC),
+                ", \"accD\": ",
+                _hx(a.accD),
+                ", \"pendingC\": ",
+                _hx(a.pendingC),
+                ", \"pendingD\": ",
+                _hx(a.pendingD),
+                ", \"accSeq\": ",
+                vm.toString(uint256(a.accSeq)),
+                ", \"pendingSeq\": ",
+                vm.toString(uint256(a.pendingSeq)),
+                ", \"sendCounter\": ",
+                vm.toString(uint256(a.sendCounter)),
+                "},"
+            )
+        );
         _w(string.concat("\"balance\": ", vm.toString(acc), ", \"pending\": ", vm.toString(pend), "}", last ? "" : ","));
     }
 
     function _uints(uint256[] memory v) internal pure returns (string memory r) {
-        for (uint256 i; i < v.length; ++i) r = string.concat(r, i == 0 ? "" : ", ", vm.toString(v[i]));
+        for (uint256 i; i < v.length; ++i) {
+            r = string.concat(r, i == 0 ? "" : ", ", vm.toString(v[i]));
+        }
         r = string.concat("[", r, "]");
     }
 
@@ -176,21 +301,60 @@ contract ZetherStateVectorsTest is ZetherFixture {
         uint256 ms = uint256(keccak256(abi.encode(x.ref, ROOT + 11)));
         bytes memory r = tok.transferEntry(x.ref);
         assertEq(x.ref, _ref(tok, x.from, x.counter), "entryRef");
-        _w(string.concat("{\"name\": ", _q(x.name), ", \"entryRef\": ", _hx32(x.ref), ", \"fromUA\": ",
-            _hx32(ZetherTypes.UA.unwrap(x.from.ua)), ", \"sendCounter\": ", vm.toString(uint256(x.counter)), ","));
-        _w(string.concat("\"entryWords\": [", _bytesWords(es, true), "], \"entryPtr\": ", _hx32(ptrWord), ","));
+        _w(
+            string.concat(
+                "{\"name\": ",
+                _q(x.name),
+                ", \"entryRef\": ",
+                _hx32(x.ref),
+                ", \"fromUA\": ",
+                _hx32(ZetherTypes.UA.unwrap(x.from.ua)),
+                ", \"sendCounter\": ",
+                vm.toString(uint256(x.counter)),
+                ","
+            )
+        );
+        _w(
+            string.concat(
+                "\"entryWords\": [",
+                _bytesWords(es, true),
+                "], \"entryPtr\": ",
+                _hx32(ptrWord),
+                ", \"entryAuditorEpoch\": ",
+                _hx32(_load(uint256(keccak256(abi.encode(x.ref, ROOT + 17))))),
+                ","
+            )
+        );
         if (ptr != address(0)) {
-            _w(string.concat("\"blob\": {\"address\": ", _q(vm.toString(abi.encodePacked(ptr))), ", \"code\": ", _hx(ptr.code), "},"));
+            _w(
+                string.concat(
+                    "\"blob\": {\"address\": ",
+                    _q(vm.toString(abi.encodePacked(ptr))),
+                    ", \"code\": ",
+                    _hx(ptr.code),
+                    "},"
+                )
+            );
             _w(string.concat("\"memoWords\": [", _bytesWords(ms, true), "],"));
         }
-        _w(string.concat("\"view\": {\"transferEntry\": ", _hx(r), ", \"transferMemo\": ", _hx(tok.transferMemo(x.ref)), ", \"legs\": ["));
+        _w(
+            string.concat(
+                "\"view\": {\"transferEntry\": ",
+                _hx(r),
+                ", \"transferMemo\": ",
+                _hx(tok.transferMemo(x.ref)),
+                ", \"legs\": ["
+            )
+        );
         for (uint256 j; j < x.to.length; ++j) {
             (bytes memory ct, bytes memory yt) = dis.transferCiphertext(address(tok), x.ref, j);
             _w(string.concat(j == 0 ? "" : ",", "{\"ciphertext\": ", _hx(ct), ", \"Yt\": ", _hx(yt), "}"));
         }
         bytes32[] memory to = x.to;
         string memory uas;
-        for (uint256 j; j < to.length; ++j) uas = string.concat(uas, j == 0 ? "" : ", ", _hx32(to[j]));
+        for (uint256 j; j < to.length; ++j) {
+            uas = string.concat(uas, j == 0 ? "" : ", ", _hx32(to[j]));
+        }
         _w(string.concat("]}, \"to\": [", uas, "], \"amounts\": ", _uints(x.amounts), "}", last ? "" : ","));
     }
 
@@ -206,22 +370,99 @@ contract ZetherStateVectorsTest is ZetherFixture {
             l = string.concat(l, i == 0 ? "" : ", ", _q(labels[i]));
             e = string.concat(e, i == 0 ? "" : ", ", _q(enc[i]));
         }
-        _w(string.concat("\"layout\": {\"id\": ", _q(vm.parseJsonString(ns, ".zether.id")), ", \"root\": ",
-            _hx32(vm.parseJsonBytes32(ns, ".zether.root")), ", \"labels\": [", l, "], \"encodings\": [", e, "],"));
-        _w(string.concat("\"slots\": ", _uints(vm.parseJsonUintArray(ns, ".zether.slots")), ", \"inner\": ",
-            _uints(vm.parseJsonUintArray(ns, ".zether.inner")), ", \"bytes\": ", _uints(vm.parseJsonUintArray(ns, ".zether.bytes")),
-            ", \"widths\": ", _uints(vm.parseJsonUintArray(ns, ".zether.widths")), "},"));
+        _w(
+            string.concat(
+                "\"layout\": {\"id\": ",
+                _q(vm.parseJsonString(ns, ".zether.id")),
+                ", \"root\": ",
+                _hx32(vm.parseJsonBytes32(ns, ".zether.root")),
+                ", \"labels\": [",
+                l,
+                "], \"encodings\": [",
+                e,
+                "],"
+            )
+        );
+        _w(
+            string.concat(
+                "\"slots\": ",
+                _uints(vm.parseJsonUintArray(ns, ".zether.slots")),
+                ", \"inner\": ",
+                _uints(vm.parseJsonUintArray(ns, ".zether.inner")),
+                ", \"bytes\": ",
+                _uints(vm.parseJsonUintArray(ns, ".zether.bytes")),
+                ", \"widths\": ",
+                _uints(vm.parseJsonUintArray(ns, ".zether.widths")),
+                "},"
+            )
+        );
+    }
+
+    /// The `epochs` section (set-auditor A3): `tok2`'s words (`modes` with `auditorEpoch` 1 at byte 22, the current key's words
+    /// at slot 5, epoch 0's key at `auditorKeys[0]`, slot 16) and its entries, each with its `entryAuditorEpoch` word.
+    function _epochRows() internal {
+        NormalZetherToken t0 = tok;
+        tok = tok2;
+        _w(
+            string.concat(
+                "\"epochs\": {\"token\": ",
+                _q(vm.toString(abi.encodePacked(address(tok)))),
+                ", \"modes\": ",
+                _hx32(_load(ROOT)),
+                ", \"auditorKeyWords\": [",
+                _bytesWords(ROOT + 5, true),
+                "], \"auditorKeyWords0\": [",
+                _bytesWords(uint256(keccak256(abi.encode(uint256(0), ROOT + 16))), true),
+                "],"
+            )
+        );
+        _w(
+            string.concat(
+                "\"auditorY\": [",
+                _hx(tok.auditorKeyOf(eents[0].ref)),
+                ", ",
+                _hx(tok.auditorKey()),
+                "], \"entryEpochs\": [",
+                vm.toString(uint256(eepochs[0])),
+                ", ",
+                vm.toString(uint256(eepochs[1])),
+                ", ",
+                vm.toString(uint256(eepochs[2])),
+                "],"
+            )
+        );
+        _w("\"entries\": [");
+        for (uint256 i; i < eents.length; ++i) {
+            _entry(eents[i], i + 1 == eents.length);
+        }
+        _w("]}");
+        tok = t0;
     }
 
     /// Builds the state; with `STATE_VECTORS=1` writes the rows (two runs give the same file).
     function test_stateVectors() public {
         _build();
-        assertEq(bytes32(ROOT), vm.parseJsonBytes32(vm.readFile(string.concat(vm.projectRoot(), "/test/v2/layout/namespaces.json")),
-            ".zether.root"), "the namespace root");
+        _buildEpochs();
+        assertEq(
+            uint256(vm.load(address(tok2), bytes32(uint256(keccak256(abi.encode(eents[1].ref, ROOT + 17)))))),
+            1,
+            "epoch row"
+        );
+        assertEq(tok2.auditorKeyOf(eents[0].ref), ZetherKeys.pub(XAUD, bls), "epoch 0's key");
+        assertEq(
+            bytes32(ROOT),
+            vm.parseJsonBytes32(
+                vm.readFile(string.concat(vm.projectRoot(), "/test/v2/layout/namespaces.json")), ".zether.root"
+            ),
+            "the namespace root"
+        );
         uint256 base = uint256(keccak256(abi.encode(address(tok), REC)));
         // two words since round 3r R1 (no owner): creatorId, class | kind | version | block | time
-        (bytes32 r0, bytes32 r1, bytes32 r2) = (vm.load(address(factory), bytes32(base)),
-            vm.load(address(factory), bytes32(base + 1)), vm.load(address(factory), bytes32(base + 2)));
+        (bytes32 r0, bytes32 r1, bytes32 r2) = (
+            vm.load(address(factory), bytes32(base)),
+            vm.load(address(factory), bytes32(base + 1)),
+            vm.load(address(factory), bytes32(base + 2))
+        );
         assertEq(r0, bytes32(uint256(uint160(address(this)))), "_rec[token].creatorId (slot 8)");
         assertEq(uint16(uint256(r1)), 1, "_rec[token].contractClass (TOKEN)");
         assertEq(uint16(uint256(r1) >> 16), uint16(uint8(IOpenFactory.TokenKind.NORMAL_ZETHER)), "_rec[token].kind");
@@ -231,14 +472,57 @@ contract ZetherStateVectorsTest is ZetherFixture {
         if (!vm.envOr("STATE_VECTORS", false)) return;
         path = string.concat(vm.projectRoot(), "/../vectors/zether/state.json");
         vm.writeFile(path, "");
-        _w(string.concat("{\"_comment\": ", _q(string.concat("smartcontracts/evm/test/zether/ZetherStateVectors.t.sol at contract commit ",
-            vm.envString("CONTRACT_COMMIT"), " (STATE_VECTORS=1); real proofs (the fixture's test prover); UNAUDITED")), ","));
-        _w(string.concat("\"file\": \"state.json\", \"contractCommit\": ", _q(vm.envString("CONTRACT_COMMIT")), ", \"family\": \"evm\", \"chainId\": ",
-            vm.toString(block.chainid), ", \"chainUid\": ", _hx32(tok.chainUid()), ", \"token\": ", _q(vm.toString(abi.encodePacked(address(tok)))),
-            ", \"block\": ", vm.toString(block.number), ","));
-        _w(string.concat("\"factory\": ", _q(vm.toString(abi.encodePacked(address(factory)))), ", \"record\": [", _hx32(r0), ", ", _hx32(r1), "], \"psid\": ",
-            _hx32(_load(ROOT + 6)), ", \"modes\": ", _hx32(_load(ROOT)), ", \"p\": ", _hx32(_load(ROOT + 7)), ", \"auditorKeyWords\": [",
-            _bytesWords(ROOT + 5, true), "], \"auditorY\": ", _hx(tok.auditorKey()), ", \"confidentialFee\": ", vm.toString(FEE), ","));
+        _w(
+            string.concat(
+                "{\"_comment\": ",
+                _q(
+                    string.concat(
+                        "smartcontracts/evm/test/zether/ZetherStateVectors.t.sol at contract commit ",
+                        vm.envString("CONTRACT_COMMIT"),
+                        " (STATE_VECTORS=1); real proofs (the fixture's test prover); UNAUDITED"
+                    )
+                ),
+                ","
+            )
+        );
+        _w(
+            string.concat(
+                "\"file\": \"state.json\", \"contractCommit\": ",
+                _q(vm.envString("CONTRACT_COMMIT")),
+                ", \"family\": \"evm\", \"chainId\": ",
+                vm.toString(block.chainid),
+                ", \"chainUid\": ",
+                _hx32(tok.chainUid()),
+                ", \"token\": ",
+                _q(vm.toString(abi.encodePacked(address(tok)))),
+                ", \"block\": ",
+                vm.toString(block.number),
+                ","
+            )
+        );
+        _w(
+            string.concat(
+                "\"factory\": ",
+                _q(vm.toString(abi.encodePacked(address(factory)))),
+                ", \"record\": [",
+                _hx32(r0),
+                ", ",
+                _hx32(r1),
+                "], \"psid\": ",
+                _hx32(_load(ROOT + 6)),
+                ", \"modes\": ",
+                _hx32(_load(ROOT)),
+                ", \"p\": ",
+                _hx32(_load(ROOT + 7)),
+                ", \"auditorKeyWords\": [",
+                _bytesWords(ROOT + 5, true),
+                "], \"auditorY\": ",
+                _hx(tok.auditorKey()),
+                ", \"confidentialFee\": ",
+                vm.toString(FEE),
+                ","
+            )
+        );
         _layout();
         _w("\"accounts\": [");
         _account("alice: acc after three debits, pending rolled", alice, false);
@@ -246,7 +530,11 @@ contract ZetherStateVectorsTest is ZetherFixture {
         _account("carol: pending only (a credit and a decoy)", carol, false);
         _account("dave: never touched", dave, true);
         _w("], \"entries\": [");
-        for (uint256 i; i < ents.length; ++i) _entry(ents[i], i + 1 == ents.length);
-        _w("]}");
+        for (uint256 i; i < ents.length; ++i) {
+            _entry(ents[i], i + 1 == ents.length);
+        }
+        _w("],");
+        _epochRows();
+        _w("}");
     }
 }

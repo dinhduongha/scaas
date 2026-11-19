@@ -10,11 +10,14 @@ set -eu
 cd "$(dirname "$0")/.."
 R=$1 K=$2 C=${3:-0}
 O=runs/3zh-calib/run$R-k$K$([ "$C" = 0 ] || echo "-cold$C")
-[ ! -f "$O.log" ] || { echo "skip $O (done)"; exit 0; }
+[ ! -f "$O.log" ] || {
+    echo "skip $O (done)"
+    exit 0
+}
 mkdir -p runs/3zh-calib
 S=$(echo "--keys $K --cold $C" | tr -cd 0-9)
 echo "$O: start $(date -u +%T)Z, load $(cut -d' ' -f1-3 /proc/loadavg)"
-sh calibrate.sh "${CALIB_LABEL:-pqz10}" --keys "$K" --cold "$C" > /dev/null
+sh calibrate.sh "${CALIB_LABEL:-pqz10}" --keys "$K" --cold "$C" >/dev/null
 F=$(ls runs/*-calib-ops"$S".txt)
 mv "${F%.txt}-engine-pqz.json" "$O.json.log" && mv "$F" "$O.log"
 echo "$O: done $(date -u +%T)Z, $(grep -c '^| [0-9]' "$O.log") rows; $(tail -1 "$O.log")"

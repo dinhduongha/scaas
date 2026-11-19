@@ -29,7 +29,10 @@ const MAX_INFLIGHT: usize = 64;
 pub enum Auth {
     None,
     Bearer(Arc<Vec<u8>>),
-    Hmac { secret: Arc<Vec<u8>>, seen: Arc<Mutex<HashMap<String, u64>>> },
+    Hmac {
+        secret: Arc<Vec<u8>>,
+        seen: Arc<Mutex<HashMap<String, u64>>>,
+    },
 }
 
 impl Auth {
@@ -37,8 +40,13 @@ impl Auth {
         Ok(match (mode, secret) {
             ("none", _) => Auth::None,
             ("bearer", Some(s)) if s.len() >= 16 => Auth::Bearer(Arc::new(s)),
-            ("hmac", Some(s)) if s.len() >= 16 => Auth::Hmac { secret: Arc::new(s), seen: Arc::default() },
-            ("bearer" | "hmac", _) => anyhow::bail!("gateway_auth {mode} needs a secret of at least 16 bytes"),
+            ("hmac", Some(s)) if s.len() >= 16 => Auth::Hmac {
+                secret: Arc::new(s),
+                seen: Arc::default(),
+            },
+            ("bearer" | "hmac", _) => {
+                anyhow::bail!("gateway_auth {mode} needs a secret of at least 16 bytes")
+            }
             (other, _) => anyhow::bail!("gateway_auth must be none|bearer|hmac, got {other}"),
         })
     }
@@ -52,7 +60,11 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 fn deny(why: &'static str) -> Response {
-    (StatusCode::UNAUTHORIZED, axum::Json(serde_json::json!({"error": why}))).into_response()
+    (
+        StatusCode::UNAUTHORIZED,
+        axum::Json(serde_json::json!({"error": why})),
+    )
+        .into_response()
 }
 
 fn header<'a>(req: &'a Request, name: &str) -> Option<&'a str> {
@@ -69,7 +81,11 @@ pub async fn check(State(auth): State<Auth>, req: Request, next: Next) -> Respon
             let ok = header(&req, "authorization")
                 .and_then(|h| h.strip_prefix("Bearer "))
                 .is_some_and(|t| ct_eq(t.as_bytes(), secret));
-            if ok { next.run(req).await } else { deny("unauthorized") }
+            if ok {
+                next.run(req).await
+            } else {
+                deny("unauthorized")
+            }
         }
         Auth::Hmac { secret, seen } => {
             let (Some(ts), Some(nonce), Some(sig)) = (
@@ -79,19 +95,29 @@ pub async fn check(State(auth): State<Auth>, req: Request, next: Next) -> Respon
             ) else {
                 return deny("missing signature headers");
             };
-            let Ok(t) = ts.parse::<u64>() else { return deny("bad timestamp") };
+            let Ok(t) = ts.parse::<u64>() else {
+                return deny("bad timestamp");
+            };
             let n = now();
             if t.saturating_add(SKEW) < n || t > n.saturating_add(SKEW) {
                 return deny("stale request");
             }
-            if nonce.is_empty() || nonce.len() > 64 || !nonce.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') {
+            if nonce.is_empty()
+                || nonce.len() > 64
+                || !nonce
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            {
                 return deny("bad nonce");
             }
             let (parts, body) = req.into_parts();
-            let Ok(Ok(bytes)) = tokio::time::timeout(BODY_TIMEOUT, to_bytes(body, MAX_BODY)).await else {
+            let Ok(Ok(bytes)) = tokio::time::timeout(BODY_TIMEOUT, to_bytes(body, MAX_BODY)).await
+            else {
                 return deny("body too large or too slow");
             };
-            let Ok(want) = alloy::hex::decode(sig.trim()) else { return deny("bad signature") };
+            let Ok(want) = alloy::hex::decode(sig.trim()) else {
+                return deny("bad signature");
+            };
             let mut mac = <Hmac<Sha256>>::new_from_slice(secret).expect("hmac key");
             mac.update(ts.as_bytes());
             mac.update(b".");
@@ -99,7 +125,13 @@ pub async fn check(State(auth): State<Auth>, req: Request, next: Next) -> Respon
             mac.update(b".");
             mac.update(parts.method.as_str().as_bytes());
             mac.update(b" ");
-            mac.update(parts.uri.path_and_query().map_or("/", |p| p.as_str()).as_bytes());
+            mac.update(
+                parts
+                    .uri
+                    .path_and_query()
+                    .map_or("/", |p| p.as_str())
+                    .as_bytes(),
+            );
             mac.update(b"\n");
             mac.update(&bytes);
             if mac.verify_slice(&want).is_err() {
@@ -114,7 +146,8 @@ pub async fn check(State(auth): State<Auth>, req: Request, next: Next) -> Respon
                 // Nhớ tới khi chính timestamp này hết hạn (review S1-5), không tính từ lúc nhận.
                 s.insert(nonce, t.saturating_add(SKEW + 1));
             }
-            next.run(Request::from_parts(parts, Body::from(bytes))).await
+            next.run(Request::from_parts(parts, Body::from(bytes)))
+                .await
         }
     }
 }
@@ -157,7 +190,8 @@ mod tests {
 
     #[tokio::test]
     async fn bearer() {
-        let app = app(Auth::from_mode("bearer", Some(b"0123456789abcdef-secret".to_vec())).unwrap());
+        let app =
+            app(Auth::from_mode("bearer", Some(b"0123456789abcdef-secret".to_vec())).unwrap());
         let mk = |h: Option<&str>| {
             let mut b = Request::builder().method("POST").uri("/v1/x");
             if let Some(h) = h {
@@ -165,10 +199,19 @@ mod tests {
             }
             b.body(Body::from("{}")).unwrap()
         };
-        assert_eq!(status(&app, mk(Some("Bearer 0123456789abcdef-secret"))).await, StatusCode::OK);
-        assert_eq!(status(&app, mk(Some("Bearer 0123456789abcdef-secreT"))).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            status(&app, mk(Some("Bearer 0123456789abcdef-secret"))).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            status(&app, mk(Some("Bearer 0123456789abcdef-secreT"))).await,
+            StatusCode::UNAUTHORIZED
+        );
         assert_eq!(status(&app, mk(None)).await, StatusCode::UNAUTHORIZED);
-        let health = Request::builder().uri("/healthz").body(Body::empty()).unwrap();
+        let health = Request::builder()
+            .uri("/healthz")
+            .body(Body::empty())
+            .unwrap();
         assert_eq!(status(&app, health).await, StatusCode::OK);
     }
 
@@ -188,27 +231,58 @@ mod tests {
                 .unwrap()
         };
         let good = sign(&secret, &ts, "n1", "{\"a\":1}");
-        assert_eq!(status(&app, mk(&ts, "n1", "{\"a\":1}", &good)).await, StatusCode::OK);
-        assert_eq!(status(&app, mk(&ts, "n1", "{\"a\":1}", &good)).await, StatusCode::UNAUTHORIZED, "replay");
+        assert_eq!(
+            status(&app, mk(&ts, "n1", "{\"a\":1}", &good)).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            status(&app, mk(&ts, "n1", "{\"a\":1}", &good)).await,
+            StatusCode::UNAUTHORIZED,
+            "replay"
+        );
         let tampered = sign(&secret, &ts, "n2", "{\"a\":1}");
-        assert_eq!(status(&app, mk(&ts, "n2", "{\"a\":2}", &tampered)).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            status(&app, mk(&ts, "n2", "{\"a\":2}", &tampered)).await,
+            StatusCode::UNAUTHORIZED
+        );
         let old = (now() - 3600).to_string();
         let s_old = sign(&secret, &old, "n3", "{}");
-        assert_eq!(status(&app, mk(&old, "n3", "{}", &s_old)).await, StatusCode::UNAUTHORIZED, "stale");
+        assert_eq!(
+            status(&app, mk(&old, "n3", "{}", &s_old)).await,
+            StatusCode::UNAUTHORIZED,
+            "stale"
+        );
         // a signature for another route does not authorize this one
         let other = sign_at(&secret, &ts, "n4", "/v1/y", "{}");
-        assert_eq!(status(&app, mk(&ts, "n4", "{}", &other)).await, StatusCode::UNAUTHORIZED, "path bound");
+        assert_eq!(
+            status(&app, mk(&ts, "n4", "{}", &other)).await,
+            StatusCode::UNAUTHORIZED,
+            "path bound"
+        );
         // a timestamp near u64::MAX must not overflow the skew check
         let huge = u64::MAX.to_string();
         let s_huge = sign(&secret, &huge, "n5", "{}");
-        assert_eq!(status(&app, mk(&huge, "n5", "{}", &s_huge)).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            status(&app, mk(&huge, "n5", "{}", &s_huge)).await,
+            StatusCode::UNAUTHORIZED
+        );
         // missing headers, bad nonce charset
-        let bare = Request::builder().method("POST").uri("/v1/x").body(Body::from("{}")).unwrap();
+        let bare = Request::builder()
+            .method("POST")
+            .uri("/v1/x")
+            .body(Body::from("{}"))
+            .unwrap();
         assert_eq!(status(&app, bare).await, StatusCode::UNAUTHORIZED);
         let s_dot = sign(&secret, &ts, "a.b", "{}");
-        assert_eq!(status(&app, mk(&ts, "a.b", "{}", &s_dot)).await, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            status(&app, mk(&ts, "a.b", "{}", &s_dot)).await,
+            StatusCode::UNAUTHORIZED
+        );
         let fresh = sign(&secret, &ts, "n6", "{}");
-        assert_eq!(status(&app, mk(&ts, "n6", "{}", &fresh)).await, StatusCode::OK);
+        assert_eq!(
+            status(&app, mk(&ts, "n6", "{}", &fresh)).await,
+            StatusCode::OK
+        );
     }
 
     #[test]

@@ -22,7 +22,10 @@ pub const ABI_VERSION: u32 = 6;
 /// The PQZ facade's largest output (`SCAAS_UA_PQZ_OUT_MAX`): a proof is sized by this bound, never by a size query.
 pub const PQZ_OUT_MAX: usize = 1_052_672;
 const _: () = assert!(PQZ_OUT_MAX >= fpqz::OUT_MAX);
-const _: () = assert!(!ua::build::VECTORS, "ua-cxx must not build scaas-ua with feature `vectors`");
+const _: () = assert!(
+    !ua::build::VECTORS,
+    "ua-cxx must not build scaas-ua with feature `vectors`"
+);
 
 impl From<uw::Error> for UaErr {
     fn from(e: uw::Error) -> Self {
@@ -87,53 +90,150 @@ mod ffi {
         fn pqz_out_max() -> usize;
 
         fn wallet_generate() -> Result<Generated>;
-        fn wallet_from_mnemonic(words: &mut [u8], bip39_passphrase: &mut [u8]) -> Result<Box<Wallet>>;
+        fn wallet_from_mnemonic(
+            words: &mut [u8],
+            bip39_passphrase: &mut [u8],
+        ) -> Result<Box<Wallet>>;
         // exactly one of `vault_passphrase` / `prf32` is meant (empty = absent; both: the PRF secret, the passphrase not tried)
-        fn wallet_open_vault(vault_json: &str, vault_passphrase: &mut [u8], prf32: &mut [u8], bip39_passphrase: &mut [u8])
-            -> Result<Box<Wallet>>;
-        fn wallet_unlock(w: &Wallet, vault_json: &str, vault_passphrase: &mut [u8], prf32: &mut [u8], bip39_passphrase: &mut [u8])
-            -> Result<()>;
+        fn wallet_open_vault(
+            vault_json: &str,
+            vault_passphrase: &mut [u8],
+            prf32: &mut [u8],
+            bip39_passphrase: &mut [u8],
+        ) -> Result<Box<Wallet>>;
+        fn wallet_unlock(
+            w: &Wallet,
+            vault_json: &str,
+            vault_passphrase: &mut [u8],
+            prf32: &mut [u8],
+            bip39_passphrase: &mut [u8],
+        ) -> Result<()>;
         fn wallet_seal_vault(w: &Wallet, vault_passphrase: &mut [u8]) -> Result<String>;
         fn wallet_lock(w: &Wallet);
         fn wallet_memory_protection(w: &Wallet) -> MemoryProtection;
         fn wallet_ua_key(w: &Wallet, kind: u16, account: u32, index: u32) -> Result<Box<Key>>;
         // `network` the clientkeys name (`evm`, `hedera_ecdsa`, ...); `coin_type` u32::MAX = the network's own
-        fn wallet_native_key(w: &Wallet, network: &str, index: u32, coin_type: u32) -> Result<Box<Key>>;
-        fn wallet_import_native_key(w: &Wallet, network: &str, secret: &mut [u8]) -> Result<Box<Key>>;
+        fn wallet_native_key(
+            w: &Wallet,
+            network: &str,
+            index: u32,
+            coin_type: u32,
+        ) -> Result<Box<Key>>;
+        fn wallet_import_native_key(
+            w: &Wallet,
+            network: &str,
+            secret: &mut [u8],
+        ) -> Result<Box<Key>>;
         // ua-rs-native: Bitcoin `change` 0 receive / 1 change, coin u32::MAX / 0 / 1; Polkadot junction path ("" the bare key)
-        fn wallet_bitcoin_key(w: &Wallet, network: &str, coin_type: u32, change: u32, index: u32) -> Result<Box<Key>>;
+        fn wallet_bitcoin_key(
+            w: &Wallet,
+            network: &str,
+            coin_type: u32,
+            change: u32,
+            index: u32,
+        ) -> Result<Box<Key>>;
         // every network name in the C ABI's order (clientkeys NETWORKS, then NATIVE_NETWORKS)
         fn native_networks() -> Vec<String>;
         fn wallet_polkadot_key(w: &Wallet, path: &str) -> Result<Box<Key>>;
         fn wallet_imported_key(w: &Wallet, network: &str, n: u32) -> Result<Box<Key>>;
         // T20c: the UA of an imported key, `kind` its scheme's derived kind (0x0108 / 0x0102) only
-        fn wallet_imported_ua_key(w: &Wallet, network: &str, n: u32, kind: u16) -> Result<Box<Key>>;
-        fn wallet_seal_label_vault(w: &Wallet, label: &str, vault_passphrase: &mut [u8]) -> Result<String>;
-        fn wallet_open_label_vault(w: &Wallet, vault_json: &str, vault_passphrase: &mut [u8], prf32: &mut [u8]) -> Result<()>;
+        fn wallet_imported_ua_key(w: &Wallet, network: &str, n: u32, kind: u16)
+            -> Result<Box<Key>>;
+        fn wallet_seal_label_vault(
+            w: &Wallet,
+            label: &str,
+            vault_passphrase: &mut [u8],
+        ) -> Result<String>;
+        fn wallet_open_label_vault(
+            w: &Wallet,
+            vault_json: &str,
+            vault_passphrase: &mut [u8],
+            prf32: &mut [u8],
+        ) -> Result<()>;
         fn wallet_manifest_json(w: &Wallet) -> String;
-        fn wallet_discover_candidates(w: &Wallet, kind: u16, account: u32, gap: u32) -> Result<String>;
-        fn wallet_backup_seal(w: &Wallet, sender: &Key, recipients: &[Recipient]) -> Result<Vec<String>>;
+        fn wallet_discover_candidates(
+            w: &Wallet,
+            kind: u16,
+            account: u32,
+            gap: u32,
+        ) -> Result<String>;
+        fn wallet_backup_seal(
+            w: &Wallet,
+            sender: &Key,
+            recipients: &[Recipient],
+        ) -> Result<Vec<String>>;
         // `members_json` / `accepted_json`: "" = none / no lookup
-        fn wallet_restore_backup(kk: &KemKey, container_json: &str, expect_json: &str, members_json: &str, accepted_json: &str,
-            bip39_passphrase: &mut [u8]) -> Result<Box<Restored>>;
-        fn wallet_restore_backup_over(kk: &KemKey, container_json: &str, expect_json: &str, members_json: &str,
-            accepted_json: &str, current: &Wallet, bip39_passphrase: &mut [u8]) -> Result<Box<Restored>>;
-        fn wallet_restore_backup_rollback(kk: &KemKey, container_json: &str, expect_json: &str, members_json: &str,
-            accepted_json: &str, current: &Wallet, bip39_passphrase: &mut [u8]) -> Result<Box<Restored>>;
+        fn wallet_restore_backup(
+            kk: &KemKey,
+            container_json: &str,
+            expect_json: &str,
+            members_json: &str,
+            accepted_json: &str,
+            bip39_passphrase: &mut [u8],
+        ) -> Result<Box<Restored>>;
+        fn wallet_restore_backup_over(
+            kk: &KemKey,
+            container_json: &str,
+            expect_json: &str,
+            members_json: &str,
+            accepted_json: &str,
+            current: &Wallet,
+            bip39_passphrase: &mut [u8],
+        ) -> Result<Box<Restored>>;
+        fn wallet_restore_backup_rollback(
+            kk: &KemKey,
+            container_json: &str,
+            expect_json: &str,
+            members_json: &str,
+            accepted_json: &str,
+            current: &Wallet,
+            bip39_passphrase: &mut [u8],
+        ) -> Result<Box<Restored>>;
         fn restored_installed(r: &Restored) -> bool;
         fn restored_take(r: &mut Restored) -> Result<Box<Wallet>>;
-        fn wallet_link_seal(w: &Wallet, sender: &Key, session_kem_pk: &[u8], short_code: &str) -> Result<String>;
-        fn wallet_from_link(s: &LinkSession, container_json: &str, expect_json: &str, members_json: &str, accepted_json: &str,
-            bip39_passphrase: &mut [u8]) -> Result<Box<Wallet>>;
-        fn wallet_zether_key(w: &Wallet, coin: u32, account: u32, key_use: u32) -> Result<Box<ZetherKey>>;
+        fn wallet_link_seal(
+            w: &Wallet,
+            sender: &Key,
+            session_kem_pk: &[u8],
+            short_code: &str,
+        ) -> Result<String>;
+        fn wallet_from_link(
+            s: &LinkSession,
+            container_json: &str,
+            expect_json: &str,
+            members_json: &str,
+            accepted_json: &str,
+            bip39_passphrase: &mut [u8],
+        ) -> Result<Box<Wallet>>;
+        fn wallet_zether_key(
+            w: &Wallet,
+            coin: u32,
+            account: u32,
+            key_use: u32,
+        ) -> Result<Box<ZetherKey>>;
         fn wallet_pqz_key(w: &Wallet, account: u32, index: u32) -> Result<Box<PqzKey>>;
         fn wallet_export_pqz_leaf_raw(w: &Wallet, account: u32, index: u32) -> Result<Vec<u8>>;
-        fn wallet_pqz_key_version(w: &Wallet, account: u32, index: u32, version: u64) -> Result<Box<PqzKey>>;
-        fn wallet_export_pqz_leaf_raw_version(w: &Wallet, account: u32, index: u32, version: u64) -> Result<Vec<u8>>;
+        fn wallet_pqz_key_version(
+            w: &Wallet,
+            account: u32,
+            index: u32,
+            version: u64,
+        ) -> Result<Box<PqzKey>>;
+        fn wallet_export_pqz_leaf_raw_version(
+            w: &Wallet,
+            account: u32,
+            index: u32,
+            version: u64,
+        ) -> Result<Vec<u8>>;
 
         fn seed_backup_reveal(b: &SeedBackup) -> Result<Vec<u8>>;
         fn seed_backup_challenge(b: &SeedBackup) -> Result<Vec<u32>>;
-        fn seed_backup_verify(b: &SeedBackup, word1: &mut [u8], word2: &mut [u8], word3: &mut [u8]) -> Result<bool>;
+        fn seed_backup_verify(
+            b: &SeedBackup,
+            word1: &mut [u8],
+            word2: &mut [u8],
+            word3: &mut [u8],
+        ) -> Result<bool>;
         fn seed_backup_take(b: &SeedBackup) -> Result<Vec<u8>>;
 
         fn key_is_ua(k: &Key) -> bool;
@@ -172,26 +272,65 @@ mod ffi {
         fn kem_decaps(kk: &KemKey, mlkem_ct: &[u8], x25519_eph: &[u8]) -> Result<Vec<u8>>;
         fn kem_encaps(kem_pk: &[u8]) -> Result<Encapsulated>;
         fn seal(kem_pk: &[u8], purpose: &str, aad: &[u8], pt: &[u8]) -> Result<Sealed>;
-        fn open(kk: &KemKey, purpose: &str, aad: &[u8], mlkem_ct: &[u8], x25519_eph: &[u8], ct: &[u8]) -> Result<Vec<u8>>;
-        fn open_container(kk: &KemKey, container_json: &str, expect_json: &str, members_json: &str, accepted_json: &str)
-            -> Result<Vec<u8>>;
+        fn open(
+            kk: &KemKey,
+            purpose: &str,
+            aad: &[u8],
+            mlkem_ct: &[u8],
+            x25519_eph: &[u8],
+            ct: &[u8],
+        ) -> Result<Vec<u8>>;
+        fn open_container(
+            kk: &KemKey,
+            container_json: &str,
+            expect_json: &str,
+            members_json: &str,
+            accepted_json: &str,
+        ) -> Result<Vec<u8>>;
         fn link_session_new() -> Result<Box<LinkSession>>;
         fn link_session_kem_pk(s: &LinkSession) -> Result<Vec<u8>>;
         fn link_session_short_code(s: &LinkSession) -> Result<String>;
 
         fn vault_needs_rewrap(vault_json: &str) -> Result<bool>;
-        fn vault_rewrap_pin(vault_json: &str, old_passphrase: &mut [u8], new_passphrase: &mut [u8]) -> Result<String>;
-        fn vault_enable_prf(vault_json: &str, vault_passphrase: &mut [u8], prf32: &mut [u8], credential_id: &str, salt: &[u8])
-            -> Result<String>;
+        fn vault_rewrap_pin(
+            vault_json: &str,
+            old_passphrase: &mut [u8],
+            new_passphrase: &mut [u8],
+        ) -> Result<String>;
+        fn vault_enable_prf(
+            vault_json: &str,
+            vault_passphrase: &mut [u8],
+            prf32: &mut [u8],
+            credential_id: &str,
+            salt: &[u8],
+        ) -> Result<String>;
 
         // `alg` 1 = AES-256-GCM, 2 = AES-256-GCM-SIV
-        fn aead_seal(alg: u32, key: &[u8], nonce: &[u8], aad: &[u8], data: &[u8]) -> Result<Vec<u8>>;
-        fn aead_open(alg: u32, key: &[u8], nonce: &[u8], aad: &[u8], data: &[u8]) -> Result<Vec<u8>>;
+        fn aead_seal(
+            alg: u32,
+            key: &[u8],
+            nonce: &[u8],
+            aad: &[u8],
+            data: &[u8],
+        ) -> Result<Vec<u8>>;
+        fn aead_open(
+            alg: u32,
+            key: &[u8],
+            nonce: &[u8],
+            aad: &[u8],
+            data: &[u8],
+        ) -> Result<Vec<u8>>;
         fn hkdf_sha256(ikm: &[u8], salt: &[u8], info: &[u8], len: usize) -> Result<Vec<u8>>;
         fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8>;
         fn webauthn_challenge(purpose: &[u8], digest: &[u8]) -> Result<Vec<u8>>;
-        fn webauthn_assertion(key_data: &[u8], expected_challenge: &[u8], auth_data: &[u8], client_data_json: &[u8], r: &[u8],
-            s: &[u8]) -> Result<Vec<u8>>;
+        fn webauthn_assertion(
+            key_data: &[u8],
+            expected_challenge: &[u8],
+            auth_data: &[u8],
+            client_data_json: &[u8],
+            r: &[u8],
+            s: &[u8],
+        ) -> Result<Vec<u8>>;
 
         fn zether_y(k: &ZetherKey) -> Vec<u8>;
         fn zether_ua(k: &ZetherKey) -> Vec<u8>;
@@ -277,7 +416,10 @@ fn key_register(k: &Key) -> u64 {
 }
 /// Frees the registry's handle of `id` once: `false` for an id it does not hold (released already, or never given).
 fn key_release(id: u64) -> bool {
-    REGISTRY.lock().map(|mut r| r.remove(&id).is_some()).unwrap_or(false)
+    REGISTRY
+        .lock()
+        .map(|mut r| r.remove(&id).is_some())
+        .unwrap_or(false)
 }
 /// A handle of the key registered as `id` (another share of it), or `None`.
 pub fn registered(id: u64) -> Option<Key> {
@@ -296,7 +438,10 @@ pub fn features() -> u64 {
         | on(b::FALCON, 2)
         | on(b::ZETHER, 3)
         | on(b::PQZ, 4)
-        | b::PQZ_SETS.iter().zip(5..).fold(0, |a, (x, bit)| a | on(*x, bit))
+        | b::PQZ_SETS
+            .iter()
+            .zip(5..)
+            .fold(0, |a, (x, bit)| a | on(*x, bit))
         | on(b::MLOCK, 10)
         | on(b::VECTORS, 11)
 }
@@ -364,14 +509,40 @@ struct Opening {
 }
 impl Opening {
     fn read(expect_json: &str, members_json: &str, accepted_json: &str) -> R<Opening> {
-        let members = if members_json.is_empty() { uw::MembersJson::default() } else { uw::MembersJson::from_json(members_json.as_bytes())? };
-        let accepted = if accepted_json.is_empty() { None } else { Some(uw::AcceptedJson::from_json(accepted_json.as_bytes())?) };
-        Ok(Opening { expect: uw::ContainerExpectJson::from_json(expect_json.as_bytes())?, members, accepted })
+        let members = if members_json.is_empty() {
+            uw::MembersJson::default()
+        } else {
+            uw::MembersJson::from_json(members_json.as_bytes())?
+        };
+        let accepted = if accepted_json.is_empty() {
+            None
+        } else {
+            Some(uw::AcceptedJson::from_json(accepted_json.as_bytes())?)
+        };
+        Ok(Opening {
+            expect: uw::ContainerExpectJson::from_json(expect_json.as_bytes())?,
+            members,
+            accepted,
+        })
     }
-    fn with<T>(&self, f: impl FnOnce(&uw::ContainerExpect, &ua::ua8::Members, Option<&ua::ua8::Accepted>) -> T) -> T {
+    fn with<T>(
+        &self,
+        f: impl FnOnce(
+            &uw::ContainerExpect,
+            &ua::ua_portable::Members,
+            Option<&ua::ua_portable::Accepted>,
+        ) -> T,
+    ) -> T {
         let members = |id: [u8; 32]| self.members.lookup(id);
-        let accepted = |id: [u8; 32], i: u16| self.accepted.as_ref().is_some_and(|a| a.accepted(id, i));
-        f(&self.expect.get(), &members, self.accepted.as_ref().map(|_| &accepted as &ua::ua8::Accepted))
+        let accepted =
+            |id: [u8; 32], i: u16| self.accepted.as_ref().is_some_and(|a| a.accepted(id, i));
+        f(
+            &self.expect.get(),
+            &members,
+            self.accepted
+                .as_ref()
+                .map(|_| &accepted as &ua::ua_portable::Accepted),
+        )
     }
 }
 
@@ -380,26 +551,56 @@ impl Opening {
 fn wallet_generate() -> R<ffi::Generated> {
     guard(|| {
         let (w, b) = uw::Wallet::generate()?;
-        Ok(ffi::Generated { wallet: Box::new(Wallet(w, Live::new())), backup: Box::new(SeedBackup(Mutex::new(b), Live::new())) })
+        Ok(ffi::Generated {
+            wallet: Box::new(Wallet(w, Live::new())),
+            backup: Box::new(SeedBackup(Mutex::new(b), Live::new())),
+        })
     })
 }
 fn wallet_from_mnemonic(words: &mut [u8], bip39_passphrase: &mut [u8]) -> R<Box<Wallet>> {
-    let r = guard(|| Ok(Box::new(Wallet(uw::Wallet::from_mnemonic(text(words)?, text(bip39_passphrase)?)?, Live::new()))));
+    let r = guard(|| {
+        Ok(Box::new(Wallet(
+            uw::Wallet::from_mnemonic(text(words)?, text(bip39_passphrase)?)?,
+            Live::new(),
+        )))
+    });
     wipe(&mut [words, bip39_passphrase]);
     r
 }
-fn wallet_open_vault(vault_json: &str, vault_passphrase: &mut [u8], prf32: &mut [u8], bip39_passphrase: &mut [u8]) -> R<Box<Wallet>> {
+fn wallet_open_vault(
+    vault_json: &str,
+    vault_passphrase: &mut [u8],
+    prf32: &mut [u8],
+    bip39_passphrase: &mut [u8],
+) -> R<Box<Wallet>> {
     let r = guard(|| {
         let v = uw::Vault::from_json(vault_json.as_bytes())?;
-        Ok(Box::new(Wallet(uw::Wallet::open_vault(&v, unlock(vault_passphrase, prf32)?, text(bip39_passphrase)?)?, Live::new())))
+        Ok(Box::new(Wallet(
+            uw::Wallet::open_vault(
+                &v,
+                unlock(vault_passphrase, prf32)?,
+                text(bip39_passphrase)?,
+            )?,
+            Live::new(),
+        )))
     });
     wipe(&mut [vault_passphrase, prf32, bip39_passphrase]);
     r
 }
-fn wallet_unlock(w: &Wallet, vault_json: &str, vault_passphrase: &mut [u8], prf32: &mut [u8], bip39_passphrase: &mut [u8]) -> R<()> {
+fn wallet_unlock(
+    w: &Wallet,
+    vault_json: &str,
+    vault_passphrase: &mut [u8],
+    prf32: &mut [u8],
+    bip39_passphrase: &mut [u8],
+) -> R<()> {
     let r = guard(|| {
         let v = uw::Vault::from_json(vault_json.as_bytes())?;
-        Ok(w.0.unlock(&v, unlock(vault_passphrase, prf32)?, text(bip39_passphrase)?)?)
+        Ok(w.0.unlock(
+            &v,
+            unlock(vault_passphrase, prf32)?,
+            text(bip39_passphrase)?,
+        )?)
     });
     wipe(&mut [vault_passphrase, prf32, bip39_passphrase]);
     r
@@ -417,17 +618,31 @@ fn wallet_lock(w: &Wallet) {
 }
 fn wallet_memory_protection(w: &Wallet) -> ffi::MemoryProtection {
     let m = w.0.memory_protection();
-    ffi::MemoryProtection { chunks: m.chunks, locked: m.locked, no_dump: m.no_dump }
+    ffi::MemoryProtection {
+        chunks: m.chunks,
+        locked: m.locked,
+        no_dump: m.no_dump,
+    }
 }
 fn wallet_ua_key(w: &Wallet, kind: u16, account: u32, index: u32) -> R<Box<Key>> {
     guard(|| Ok(key(KeyInner::Ua(w.0.ua_key(kind, account, index)?))))
 }
 fn wallet_native_key(w: &Wallet, net: &str, index: u32, coin_type: u32) -> R<Box<Key>> {
     let coin = (coin_type != u32::MAX).then_some(coin_type);
-    guard(|| Ok(key(KeyInner::Native(w.0.native_key(network(net)?, index, coin)?))))
+    guard(|| {
+        Ok(key(KeyInner::Native(w.0.native_key(
+            network(net)?,
+            index,
+            coin,
+        )?)))
+    })
 }
 fn wallet_import_native_key(w: &Wallet, net: &str, secret: &mut [u8]) -> R<Box<Key>> {
-    let r = guard(|| Ok(key(KeyInner::Native(w.0.import_native_key(network(net)?, secret)?))));
+    let r = guard(|| {
+        Ok(key(KeyInner::Native(
+            w.0.import_native_key(network(net)?, secret)?,
+        )))
+    });
     wipe(&mut [secret]);
     r
 }
@@ -435,14 +650,29 @@ fn wallet_imported_key(w: &Wallet, net: &str, n: u32) -> R<Box<Key>> {
     guard(|| Ok(key(KeyInner::Native(w.0.imported_key(network(net)?, n)?))))
 }
 fn wallet_imported_ua_key(w: &Wallet, net: &str, n: u32, kind: u16) -> R<Box<Key>> {
-    guard(|| Ok(key(KeyInner::Ua(w.0.imported_ua_key(network(net)?, n, kind)?))))
+    guard(|| {
+        Ok(key(KeyInner::Ua(w.0.imported_ua_key(
+            network(net)?,
+            n,
+            kind,
+        )?)))
+    })
 }
 fn wallet_seal_label_vault(w: &Wallet, label: &str, vault_passphrase: &mut [u8]) -> R<String> {
-    let r = guard(|| Ok(w.0.seal_label_vault(label, text(vault_passphrase)?, None)?.to_json()));
+    let r = guard(|| {
+        Ok(w.0
+            .seal_label_vault(label, text(vault_passphrase)?, None)?
+            .to_json())
+    });
     wipe(&mut [vault_passphrase]);
     r
 }
-fn wallet_open_label_vault(w: &Wallet, vault_json: &str, vault_passphrase: &mut [u8], prf32: &mut [u8]) -> R<()> {
+fn wallet_open_label_vault(
+    w: &Wallet,
+    vault_json: &str,
+    vault_passphrase: &mut [u8],
+    prf32: &mut [u8],
+) -> R<()> {
     let r = guard(|| {
         let v = uw::Vault::from_json(vault_json.as_bytes())?;
         Ok(w.0.open_label_vault(&v, unlock(vault_passphrase, prf32)?)?)
@@ -455,9 +685,15 @@ fn wallet_manifest_json(w: &Wallet) -> String {
 }
 fn wallet_discover_candidates(w: &Wallet, kind: u16, account: u32, gap: u32) -> R<String> {
     guard(|| {
-        let hex = |u: &[u8; 32]| u.iter().fold(String::from("0x"), |s, b| s + &format!("{b:02x}"));
+        let hex = |u: &[u8; 32]| {
+            u.iter()
+                .fold(String::from("0x"), |s, b| s + &format!("{b:02x}"))
+        };
         let rows: Vec<String> =
-            w.0.discover_candidates(kind, account, gap)?.iter().map(|(i, u)| format!("{{\"index\":{i},\"ua\":\"{}\"}}", hex(u))).collect();
+            w.0.discover_candidates(kind, account, gap)?
+                .iter()
+                .map(|(i, u)| format!("{{\"index\":{i},\"ua\":\"{}\"}}", hex(u)))
+                .collect();
         Ok(format!("[{}]", rows.join(",")))
     })
 }
@@ -465,59 +701,147 @@ fn wallet_backup_seal(w: &Wallet, sender: &Key, recipients: &[ffi::Recipient]) -
     guard(|| {
         let rs = recipients
             .iter()
-            .map(|r| if r.ephemeral { Ok(uw::Recipient::ephemeral(&r.kem_pk)) } else { uw::Recipient::ua(r.kind, &r.key_data, r.version, &r.kem_pk) })
+            .map(|r| {
+                if r.ephemeral {
+                    Ok(uw::Recipient::ephemeral(&r.kem_pk))
+                } else {
+                    uw::Recipient::ua(r.kind, &r.key_data, r.version, &r.kem_pk)
+                }
+            })
             .collect::<uw::Result<Vec<_>>>()?;
-        Ok(w.0.backup_seal(ua_key(sender)?, &rs)?.iter().map(uw::SealedContainer::to_json).collect())
+        Ok(w.0
+            .backup_seal(ua_key(sender)?, &rs)?
+            .iter()
+            .map(uw::SealedContainer::to_json)
+            .collect())
     })
 }
 #[allow(clippy::too_many_arguments)]
 fn restore(
-    kk: &KemKey, container_json: &str, expect_json: &str, members_json: &str, accepted_json: &str, current: Option<&Wallet>,
-    rollback: Option<uw::AllowRollback>, bip39_passphrase: &mut [u8],
+    kk: &KemKey,
+    container_json: &str,
+    expect_json: &str,
+    members_json: &str,
+    accepted_json: &str,
+    current: Option<&Wallet>,
+    rollback: Option<uw::AllowRollback>,
+    bip39_passphrase: &mut [u8],
 ) -> R<Box<Restored>> {
     let r = guard(|| {
-        let (c, o) = (container(container_json)?, Opening::read(expect_json, members_json, accepted_json)?);
+        let (c, o) = (
+            container(container_json)?,
+            Opening::read(expect_json, members_json, accepted_json)?,
+        );
         let pass = text(bip39_passphrase)?;
-        let w = o.with(|e, m, acc| uw::Wallet::restore_backup(&kk.0, &c, e, m, acc, current.map(|w| &w.0), rollback, pass))?;
+        let w = o.with(|e, m, acc| {
+            uw::Wallet::restore_backup(&kk.0, &c, e, m, acc, current.map(|w| &w.0), rollback, pass)
+        })?;
         Ok(Box::new(Restored(w)))
     });
     wipe(&mut [bip39_passphrase]);
     r
 }
 fn wallet_restore_backup(
-    kk: &KemKey, container_json: &str, expect_json: &str, members_json: &str, accepted_json: &str, bip39_passphrase: &mut [u8],
-) -> R<Box<Restored>> {
-    restore(kk, container_json, expect_json, members_json, accepted_json, None, None, bip39_passphrase)
-}
-fn wallet_restore_backup_over(
-    kk: &KemKey, container_json: &str, expect_json: &str, members_json: &str, accepted_json: &str, current: &Wallet,
+    kk: &KemKey,
+    container_json: &str,
+    expect_json: &str,
+    members_json: &str,
+    accepted_json: &str,
     bip39_passphrase: &mut [u8],
 ) -> R<Box<Restored>> {
-    restore(kk, container_json, expect_json, members_json, accepted_json, Some(current), None, bip39_passphrase)
+    restore(
+        kk,
+        container_json,
+        expect_json,
+        members_json,
+        accepted_json,
+        None,
+        None,
+        bip39_passphrase,
+    )
+}
+fn wallet_restore_backup_over(
+    kk: &KemKey,
+    container_json: &str,
+    expect_json: &str,
+    members_json: &str,
+    accepted_json: &str,
+    current: &Wallet,
+    bip39_passphrase: &mut [u8],
+) -> R<Box<Restored>> {
+    restore(
+        kk,
+        container_json,
+        expect_json,
+        members_json,
+        accepted_json,
+        Some(current),
+        None,
+        bip39_passphrase,
+    )
 }
 fn wallet_restore_backup_rollback(
-    kk: &KemKey, container_json: &str, expect_json: &str, members_json: &str, accepted_json: &str, current: &Wallet,
+    kk: &KemKey,
+    container_json: &str,
+    expect_json: &str,
+    members_json: &str,
+    accepted_json: &str,
+    current: &Wallet,
     bip39_passphrase: &mut [u8],
 ) -> R<Box<Restored>> {
     let allow = Some(uw::AllowRollback);
-    restore(kk, container_json, expect_json, members_json, accepted_json, Some(current), allow, bip39_passphrase)
+    restore(
+        kk,
+        container_json,
+        expect_json,
+        members_json,
+        accepted_json,
+        Some(current),
+        allow,
+        bip39_passphrase,
+    )
 }
 fn restored_installed(r: &Restored) -> bool {
     r.0.is_some()
 }
 fn restored_take(r: &mut Restored) -> R<Box<Wallet>> {
-    guard(|| r.0.take().map(|w| Box::new(Wallet(w, Live::new()))).ok_or_else(argument))
+    guard(|| {
+        r.0.take()
+            .map(|w| Box::new(Wallet(w, Live::new())))
+            .ok_or_else(argument)
+    })
 }
-fn wallet_link_seal(w: &Wallet, sender: &Key, session_kem_pk: &[u8], short_code: &str) -> R<String> {
-    guard(|| Ok(w.0.link_seal(ua_key(sender)?, session_kem_pk, short_code)?.to_json()))
+fn wallet_link_seal(
+    w: &Wallet,
+    sender: &Key,
+    session_kem_pk: &[u8],
+    short_code: &str,
+) -> R<String> {
+    guard(|| {
+        Ok(w.0
+            .link_seal(ua_key(sender)?, session_kem_pk, short_code)?
+            .to_json())
+    })
 }
 fn wallet_from_link(
-    s: &LinkSession, container_json: &str, expect_json: &str, members_json: &str, accepted_json: &str, bip39_passphrase: &mut [u8],
+    s: &LinkSession,
+    container_json: &str,
+    expect_json: &str,
+    members_json: &str,
+    accepted_json: &str,
+    bip39_passphrase: &mut [u8],
 ) -> R<Box<Wallet>> {
     let r = guard(|| {
-        let (c, o) = (container(container_json)?, Opening::read(expect_json, members_json, accepted_json)?);
+        let (c, o) = (
+            container(container_json)?,
+            Opening::read(expect_json, members_json, accepted_json)?,
+        );
         let pass = text(bip39_passphrase)?;
-        let taken = s.0.lock().map_err(|_| argument())?.take().ok_or_else(|| UaErr("UAKeyRevoked".into()))?;
+        let taken =
+            s.0.lock()
+                .map_err(|_| argument())?
+                .take()
+                .ok_or_else(|| UaErr("UAKeyRevoked".into()))?;
         let w = o.with(|e, m, acc| uw::Wallet::from_link(taken, &c, e, m, acc, pass))?;
         Ok(Box::new(Wallet(w, Live::new())))
     });
@@ -525,20 +849,43 @@ fn wallet_from_link(
     r
 }
 fn wallet_zether_key(w: &Wallet, coin: u32, account: u32, key_use: u32) -> R<Box<ZetherKey>> {
-    guard(|| Ok(Box::new(ZetherKey(w.0.zether_key(coin, account, key_use)?, Live::new()))))
+    guard(|| {
+        Ok(Box::new(ZetherKey(
+            w.0.zether_key(coin, account, key_use)?,
+            Live::new(),
+        )))
+    })
 }
 fn wallet_pqz_key(w: &Wallet, account: u32, index: u32) -> R<Box<PqzKey>> {
     guard(|| Ok(Box::new(PqzKey(w.0.pqz_key(account, index)?, Live::new()))))
 }
 fn wallet_export_pqz_leaf_raw(w: &Wallet, account: u32, index: u32) -> R<Vec<u8>> {
-    guard(|| Ok(w.0.export_pqz_leaf_raw(account, index, fpqz::AllowSecretExport)?.to_vec()))
+    guard(|| {
+        Ok(w.0
+            .export_pqz_leaf_raw(account, index, fpqz::AllowSecretExport)?
+            .to_vec())
+    })
 }
 /// Group 3g (T15o): the PQZ key and leaf of a key version.
 fn wallet_pqz_key_version(w: &Wallet, account: u32, index: u32, version: u64) -> R<Box<PqzKey>> {
-    guard(|| Ok(Box::new(PqzKey(w.0.pqz_key_version(account, index, version)?, Live::new()))))
+    guard(|| {
+        Ok(Box::new(PqzKey(
+            w.0.pqz_key_version(account, index, version)?,
+            Live::new(),
+        )))
+    })
 }
-fn wallet_export_pqz_leaf_raw_version(w: &Wallet, account: u32, index: u32, version: u64) -> R<Vec<u8>> {
-    guard(|| Ok(w.0.export_pqz_leaf_raw_version(account, index, version, fpqz::AllowSecretExport)?.to_vec()))
+fn wallet_export_pqz_leaf_raw_version(
+    w: &Wallet,
+    account: u32,
+    index: u32,
+    version: u64,
+) -> R<Vec<u8>> {
+    guard(|| {
+        Ok(w.0
+            .export_pqz_leaf_raw_version(account, index, version, fpqz::AllowSecretExport)?
+            .to_vec())
+    })
 }
 
 // --- seed backup -----------------------------------------------------------------------------------------------------------
@@ -550,9 +897,20 @@ fn seed_backup_reveal(b: &SeedBackup) -> R<Vec<u8>> {
     guard(|| Ok(backup(b)?.reveal()?.as_bytes().to_vec()))
 }
 fn seed_backup_challenge(b: &SeedBackup) -> R<Vec<u32>> {
-    guard(|| Ok(backup(b)?.challenge()?.iter().map(|i| u32::try_from(*i).unwrap_or(u32::MAX)).collect()))
+    guard(|| {
+        Ok(backup(b)?
+            .challenge()?
+            .iter()
+            .map(|i| u32::try_from(*i).unwrap_or(u32::MAX))
+            .collect())
+    })
 }
-fn seed_backup_verify(b: &SeedBackup, word1: &mut [u8], word2: &mut [u8], word3: &mut [u8]) -> R<bool> {
+fn seed_backup_verify(
+    b: &SeedBackup,
+    word1: &mut [u8],
+    word2: &mut [u8],
+    word3: &mut [u8],
+) -> R<bool> {
     let r = guard(|| Ok(backup(b)?.verify(&[text(word1)?, text(word2)?, text(word3)?])?));
     wipe(&mut [word1, word2, word3]);
     r
@@ -609,7 +967,11 @@ fn sign_typed_any(k: &Key, typed_data_json: &str) -> R<Vec<u8>> {
     })
 }
 fn sign_transaction(k: &Key, tx_json: &str) -> R<Vec<u8>> {
-    guard(|| Ok(native_key(k)?.sign_transaction(&uw::EvmTx::from_json(tx_json.as_bytes())?)?.raw))
+    guard(|| {
+        Ok(native_key(k)?
+            .sign_transaction(&uw::EvmTx::from_json(tx_json.as_bytes())?)?
+            .raw)
+    })
 }
 fn sign_key_proof(k: &Key, challenge: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(native_key(k)?.sign_key_proof(challenge)?))
@@ -645,14 +1007,35 @@ fn key_ss58_address(k: &Key, prefix: u16) -> R<String> {
     guard(|| Ok(native_key(k)?.ss58_address(prefix)?))
 }
 fn key_witness_program(k: &Key) -> R<Vec<u8>> {
-    guard(|| native_key(k)?.witness_program().map(|(v, p)| [&[v][..], &p].concat()).ok_or_else(argument))
+    guard(|| {
+        native_key(k)?
+            .witness_program()
+            .map(|(v, p)| [&[v][..], &p].concat())
+            .ok_or_else(argument)
+    })
 }
-fn wallet_bitcoin_key(w: &Wallet, net: &str, coin_type: u32, change: u32, index: u32) -> R<Box<Key>> {
+fn wallet_bitcoin_key(
+    w: &Wallet,
+    net: &str,
+    coin_type: u32,
+    change: u32,
+    index: u32,
+) -> R<Box<Key>> {
     let coin = (coin_type != u32::MAX).then_some(coin_type);
-    guard(|| Ok(key(KeyInner::Native(w.0.bitcoin_key(network(net)?, coin, change, index)?))))
+    guard(|| {
+        Ok(key(KeyInner::Native(w.0.bitcoin_key(
+            network(net)?,
+            coin,
+            change,
+            index,
+        )?)))
+    })
 }
 fn native_networks() -> Vec<String> {
-    uw::Network::all().iter().map(|n| n.name().to_string()).collect()
+    uw::Network::all()
+        .iter()
+        .map(|n| n.name().to_string())
+        .collect()
 }
 fn wallet_polkadot_key(w: &Wallet, path: &str) -> R<Box<Key>> {
     guard(|| Ok(key(KeyInner::Native(w.0.polkadot_key(path)?))))
@@ -677,7 +1060,12 @@ fn kem_key(k: &Key, version: u64) -> R<Box<KemKey>> {
 // --- KEM, seal / open, link ------------------------------------------------------------------------------------------------
 
 fn kem_ephemeral() -> R<Box<KemKey>> {
-    guard(|| Ok(Box::new(KemKey(uw::KemKeyPair::generate_ephemeral()?, Live::new()))))
+    guard(|| {
+        Ok(Box::new(KemKey(
+            uw::KemKeyPair::generate_ephemeral()?,
+            Live::new(),
+        )))
+    })
 }
 fn kem_pk(kk: &KemKey) -> Vec<u8> {
     kk.0.kem_pk()
@@ -688,32 +1076,74 @@ fn kem_decaps(kk: &KemKey, mlkem_ct: &[u8], x25519_eph: &[u8]) -> R<Vec<u8>> {
 fn kem_encaps(kem_pk: &[u8]) -> R<ffi::Encapsulated> {
     guard(|| {
         let (ct, e, ss) = uw::kem_encaps(kem_pk)?;
-        Ok(ffi::Encapsulated { mlkem_ct: ct, x25519_eph: e.to_vec(), ss: ss.to_vec() })
+        Ok(ffi::Encapsulated {
+            mlkem_ct: ct,
+            x25519_eph: e.to_vec(),
+            ss: ss.to_vec(),
+        })
     })
 }
 fn seal(kem_pk: &[u8], purpose: &str, aad: &[u8], pt: &[u8]) -> R<ffi::Sealed> {
     guard(|| {
         let s = uw::seal(kem_pk, purpose, aad, pt)?;
-        Ok(ffi::Sealed { mlkem_ct: s.mlkem_ct, x25519_eph: s.x25519_eph.to_vec(), ciphertext: s.ciphertext })
+        Ok(ffi::Sealed {
+            mlkem_ct: s.mlkem_ct,
+            x25519_eph: s.x25519_eph.to_vec(),
+            ciphertext: s.ciphertext,
+        })
     })
 }
-fn open(kk: &KemKey, purpose: &str, aad: &[u8], mlkem_ct: &[u8], x25519_eph: &[u8], ct: &[u8]) -> R<Vec<u8>> {
+fn open(
+    kk: &KemKey,
+    purpose: &str,
+    aad: &[u8],
+    mlkem_ct: &[u8],
+    x25519_eph: &[u8],
+    ct: &[u8],
+) -> R<Vec<u8>> {
     guard(|| {
-        let s = uw::Sealed { version: 1, scheme: 1, mlkem_ct: mlkem_ct.to_vec(), x25519_eph: a(x25519_eph)?, ciphertext: ct.to_vec() };
+        let s = uw::Sealed {
+            version: 1,
+            scheme: 1,
+            mlkem_ct: mlkem_ct.to_vec(),
+            x25519_eph: a(x25519_eph)?,
+            ciphertext: ct.to_vec(),
+        };
         Ok(kk.0.open(purpose, aad, &s)?.to_vec())
     })
 }
-fn open_container(kk: &KemKey, container_json: &str, expect_json: &str, members_json: &str, accepted_json: &str) -> R<Vec<u8>> {
+fn open_container(
+    kk: &KemKey,
+    container_json: &str,
+    expect_json: &str,
+    members_json: &str,
+    accepted_json: &str,
+) -> R<Vec<u8>> {
     guard(|| {
-        let (c, o) = (container(container_json)?, Opening::read(expect_json, members_json, accepted_json)?);
-        Ok(o.with(|e, m, acc| kk.0.open_container(&c, e, m, acc))?.to_vec())
+        let (c, o) = (
+            container(container_json)?,
+            Opening::read(expect_json, members_json, accepted_json)?,
+        );
+        Ok(o.with(|e, m, acc| kk.0.open_container(&c, e, m, acc))?
+            .to_vec())
     })
 }
 fn link_session_new() -> R<Box<LinkSession>> {
-    guard(|| Ok(Box::new(LinkSession(Mutex::new(Some(uw::LinkSession::new()?)), Live::new()))))
+    guard(|| {
+        Ok(Box::new(LinkSession(
+            Mutex::new(Some(uw::LinkSession::new()?)),
+            Live::new(),
+        )))
+    })
 }
 fn session<T>(s: &LinkSession, f: impl FnOnce(&uw::LinkSession) -> T) -> R<T> {
-    guard(|| s.0.lock().map_err(|_| argument())?.as_ref().map(f).ok_or_else(|| UaErr("UAKeyRevoked".into())))
+    guard(|| {
+        s.0.lock()
+            .map_err(|_| argument())?
+            .as_ref()
+            .map(f)
+            .ok_or_else(|| UaErr("UAKeyRevoked".into()))
+    })
 }
 fn link_session_kem_pk(s: &LinkSession) -> R<Vec<u8>> {
     session(s, uw::LinkSession::kem_pk)
@@ -727,16 +1157,36 @@ fn link_session_short_code(s: &LinkSession) -> R<String> {
 fn vault_needs_rewrap(vault_json: &str) -> R<bool> {
     guard(|| Ok(uw::Vault::from_json(vault_json.as_bytes())?.needs_rewrap()))
 }
-fn vault_rewrap_pin(vault_json: &str, old_passphrase: &mut [u8], new_passphrase: &mut [u8]) -> R<String> {
-    let r = guard(|| Ok(uw::Vault::from_json(vault_json.as_bytes())?.rewrap_pin(text(old_passphrase)?, text(new_passphrase)?)?.to_json()));
+fn vault_rewrap_pin(
+    vault_json: &str,
+    old_passphrase: &mut [u8],
+    new_passphrase: &mut [u8],
+) -> R<String> {
+    let r = guard(|| {
+        Ok(uw::Vault::from_json(vault_json.as_bytes())?
+            .rewrap_pin(text(old_passphrase)?, text(new_passphrase)?)?
+            .to_json())
+    });
     wipe(&mut [old_passphrase, new_passphrase]);
     r
 }
-fn vault_enable_prf(vault_json: &str, vault_passphrase: &mut [u8], prf32: &mut [u8], credential_id: &str, salt: &[u8]) -> R<String> {
+fn vault_enable_prf(
+    vault_json: &str,
+    vault_passphrase: &mut [u8],
+    prf32: &mut [u8],
+    credential_id: &str,
+    salt: &[u8],
+) -> R<String> {
     let r = guard(|| {
         let output: &[u8; 32] = (&*prf32).try_into().map_err(|_| argument())?;
-        let prf = uw::PrfEnvelope { output, credential_id, salt };
-        Ok(uw::Vault::from_json(vault_json.as_bytes())?.enable_prf(text(vault_passphrase)?, &prf)?.to_json())
+        let prf = uw::PrfEnvelope {
+            output,
+            credential_id,
+            salt,
+        };
+        Ok(uw::Vault::from_json(vault_json.as_bytes())?
+            .enable_prf(text(vault_passphrase)?, &prf)?
+            .to_json())
     });
     wipe(&mut [vault_passphrase, prf32]);
     r
@@ -766,8 +1216,24 @@ fn hmac_sha256(key: &[u8], data: &[u8]) -> Vec<u8> {
 fn webauthn_challenge(purpose: &[u8], digest: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(uw::webauthn_challenge(&a(purpose)?, &a(digest)?)?.to_vec()))
 }
-fn webauthn_assertion(key_data: &[u8], expected_challenge: &[u8], auth_data: &[u8], client_data_json: &[u8], r: &[u8], s: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(uw::webauthn_assertion(key_data, &a(expected_challenge)?, auth_data, client_data_json, &a(r)?, &a(s)?)?))
+fn webauthn_assertion(
+    key_data: &[u8],
+    expected_challenge: &[u8],
+    auth_data: &[u8],
+    client_data_json: &[u8],
+    r: &[u8],
+    s: &[u8],
+) -> R<Vec<u8>> {
+    guard(|| {
+        Ok(uw::webauthn_assertion(
+            key_data,
+            &a(expected_challenge)?,
+            auth_data,
+            client_data_json,
+            &a(r)?,
+            &a(s)?,
+        )?)
+    })
 }
 
 // --- facades: Zether and PQZ (separate handles; neither calls the other) ---------------------------------------------------
@@ -806,5 +1272,9 @@ fn pqz_check(request_json: &str) -> R<String> {
     guard(|| Ok(fpqz::check_proven(request_json.as_bytes())?))
 }
 fn pqz_check_set(deployed_json: &str) -> R<()> {
-    guard(|| Ok(fpqz::check_set(&fpqz::PqzSet::from_json(deployed_json.as_bytes())?)?))
+    guard(|| {
+        Ok(fpqz::check_set(&fpqz::PqzSet::from_json(
+            deployed_json.as_bytes(),
+        )?)?)
+    })
 }

@@ -86,7 +86,11 @@ pub fn parse_msig(d: &[u8]) -> R<Msig> {
     let mut members: Vec<Member> = Vec::with_capacity(count);
     for i in 0..count {
         let o = 4 + 36 * i;
-        let m = Member { kind: u16be(o), id: d[o + 2..o + 34].try_into().unwrap(), weight: u16be(o + 34) };
+        let m = Member {
+            kind: u16be(o),
+            id: d[o + 2..o + 34].try_into().unwrap(),
+            weight: u16be(o + 34),
+        };
         match m.kind {
             KIND_NEAR_ACCOUNT => {}
             KIND_WEBAUTHN_P256 | KIND_ED25519 | KIND_SECP256K1 if derived_ok(&m.id) => {}
@@ -142,7 +146,8 @@ impl KeyRecord {
     pub fn needs_origin(&self) -> bool {
         match self.kind {
             KIND_WEBAUTHN_P256 => true,
-            KIND_MSIG => parse_msig(&self.key_data).is_ok_and(|m| m.members.iter().any(|x| x.kind == KIND_WEBAUTHN_P256)),
+            KIND_MSIG => parse_msig(&self.key_data)
+                .is_ok_and(|m| m.members.iter().any(|x| x.kind == KIND_WEBAUTHN_P256)),
             _ => false,
         }
     }

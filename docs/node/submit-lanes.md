@@ -376,11 +376,13 @@ venue and the health probe poll), one value per `[[chains]]` table (recheck 2 P2
 nothing lowers it, a restart clears it. It is used only once its `eth_chainId` and block 0 hash are the chain's (the pinned
 `chain_uid`, else the first endpoint's block 0), read at first use and kept; another network (another id, or a reset or forked one
 with the same id) is dropped with a log line, an unreadable id or block 0 is logged as such and asked again (recheck 2 P3-5, 3 R3-3).
-The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The strict-majority option
-stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). PLANNED: this helper and its rules move into the
-shared crate as [CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04) without behaviour change (the lane's nonce, fee and receipt
-reads stay on the first endpoint), and the other families' transaction-building reads take the same failover while their status,
-sequence and fee reads stay on the first endpoint ([scaas-rpc.md](../clients/scaas-rpc.md), SPECIFIED). Each request gets `rpc_timeout_ms` (30 s: a read's, each
+The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The rule itself is
+[CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04), BUILT in `scaas-rpc` (plan T3, T5): `Chain` holds the crate's `EvmPool`, the
+lane's nonce, fee and receipt reads are its first-endpoint reads; this paragraph keeps the node's consequences. The other
+families take it in their adapters (plan T14–T22, BUILT for Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and
+TON): `build`'s reads fail over, a refusal read while the count moved is `FAILOVER_ANSWER` (requeued), and the status,
+`op_consumed`, sequence and fee reads stay on the first endpoint; each network doc's endpoints paragraph names its reads. The
+strict-majority option is the crate's ([CLI-RPC-05](../clients/scaas-rpc.md#CLI-RPC-05), EVM; the node keeps `failover`). Each request gets `rpc_timeout_ms` (30 s: a read's, each
 span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms` (120
 s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0 refused at
 start; an endpoint that accepts and never answers fails the read over (Fable recheck 3 R3-4, recheck 4 R4-3; tests
@@ -472,7 +474,7 @@ moved out of the lane beyond fees, net of excess observed coming back (GRAM forw
 Soroban rent, NEAR storage stake attached as deposit, Algorand MBR payments). So `Breaker::spend(fee + value_out + deposits)`; adapter method `tx_cost(tx_id) → TxCost`
 (`tx_cost(tx_id) -> Option<TxCost { fee, value_out, deposits }>`) for every landed
 terminal status; the three are `outer_tx` cost fields. Status: the EVM path meters every receipt (**BUILT**). The generic
-runner's `fee` is **BUILT** (ua8-soroban B9a): `follow` feeds `Breaker::spend` with `tx_fee` once per landed transaction, for
+runner's `fee` is **BUILT** (ua-portable-soroban B9a): `follow` feeds `Breaker::spend` with `tx_fee` once per landed transaction, for
 `Mined` and for `Reverted`, on every family that reports one (Solana, Aptos, NEAR and Soroban charge a failure and answer
 what they charged; Algorand answers `None` at a pool error because that group paid nothing; Hedera, Sui, Cosmos and TON
 report no fee yet), so a lane burned by failing jobs stops. A failure a family answers as `Rejected` although it landed and
@@ -561,6 +563,8 @@ never `dead` (BUILT, branch `ua-mtx-wraplimit`, group 3l; wrap limits spec 2026-
 | `FeatureNotSet(31)`, `MaxSupplyInvalid`, `MaxWrapSupplyInvalid` | the setters, a creation | `dead`, by name |
 | `MissingRole(30, from)`, `FeatureNotSet(2)` / `(30)`, `GrantExpired`, `GrantExhausted` fields 0, 1, 2, 5, 7 | `mtxBurn` | `dead`, by name (the job's own subject lacks the power) |
 | `GrantExhausted(3)` (the grant's window spent) | a token's `mtxBurn`; the router's `mtxMint`, `mtxMintToUA` | `queued`, `GRANT_WINDOW_REFUSED: <error>`: the next window lifts it |
+| `AuditorNotReady(eta)` | the router's `mtxSetAuditorKey`, `mtxSetAuditorUA` only (a bit-32 confirm before its proposal's `eta`; set-auditor spec §8, [CTR-GOV-31](../decisions.md#CTR-GOV-31); BUILT); on any other op `dead` by name | `queued`, `AUDITOR_NOT_READY: <error>`: the clock lifts it. Such a held confirm is sent again only while `auditorState()` reads status 2 with the job's own `pending` and `proposer`; status 1 with them stays `queued`; anything else (none, expired, void, another proposal) is `dead` `AUDITOR_PROPOSAL_GONE` with zero sends (sent, it would propose afresh, spec §5.1), `consumed` if its nonce is spent. The hold is the node's own: a row of `auditor_hold` in the node store ([store.md §4](store.md#schema)), keyed by chain and job id with the proposal it waits for (token, `pending`, `proposer`), written before the requeue (unwritten, or a lane without a store: `dead` `AUDITOR_HOLD_UNSTORED`, never queued), read before every resend, kept by the startup requeue and every later requeue, dropped only at the job's final verdict; a restarted node gives the same verdict, whatever the client's job row carries (closing review C2, C2b; BUILT, test `submit::tests::a_held_confirm_is_sent_only_while_confirmable`) |
+| `AuditorPending`, `AuditorSame`, `AuditorEpochMismatch`, `AuditorKeyInvalid`, `AuditorConsentInvalid`, `NotProposer(32, …)`, the registry's consent refusals | the same two ops | `dead`, by name |
 
 Two rows are a **rule change**: before 3zb + 3zc no supply-cap and no grant refusal had a class here, so a wrap or a mint
 above `maxSupply` (`MaxSupplyExceeded`) and a mint whose window was spent went `dead`; now they wait in the queue (expiry or the

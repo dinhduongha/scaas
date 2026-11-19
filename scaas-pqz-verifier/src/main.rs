@@ -11,20 +11,36 @@ use scaas_pqz_verifier::{chain::Rpc, http, Config, Service};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
         .init();
-    let path = std::env::args().nth(1).unwrap_or_else(|| "pqz-verifier.toml".into());
-    let cfg = Config::parse(&std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?)?;
+    let path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "pqz-verifier.toml".into());
+    let cfg =
+        Config::parse(&std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?)?;
     let password = std::env::var(&cfg.keystore_password_env)
         .with_context(|| format!("the keystore password: env {}", cfg.keystore_password_env))?;
-    let signer = PrivateKeySigner::decrypt_keystore(&cfg.keystore, password).context("the keystore")?;
-    let rpc = Rpc::connect(&cfg.rpc_urls, cfg.chain_id).await?;
+    let signer =
+        PrivateKeySigner::decrypt_keystore(&cfg.keystore, password).context("the keystore")?;
+    // T13 S11: block 0 of every node is the pinned chain_uid
+    let rpc = Rpc::connect_pinned(&cfg.rpc_urls, cfg.chain_id, cfg.chain_uid).await?;
     scaas_pqz_verifier::check_pins(&rpc, &cfg).await?;
     let chain_id = cfg.chain_id;
-    let svc = Arc::new(Service::new(Arc::new(rpc), Arc::new(scaas_pqz_verifier::offchain), signer, &cfg));
+    let svc = Arc::new(Service::new(
+        Arc::new(rpc),
+        Arc::new(scaas_pqz_verifier::offchain),
+        signer,
+        &cfg,
+    ));
     tracing::info!(verifier = %svc.ua(), set = pqz_ffi::stmt::SET, chain_id, registry = %cfg.registry, bind = %cfg.bind,
         "scaas-pqz-verifier");
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
-    axum::serve(listener, http::router(svc, &cfg).into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        http::router(svc, &cfg).into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }

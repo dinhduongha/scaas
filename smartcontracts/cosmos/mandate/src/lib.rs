@@ -4,8 +4,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, to_json_vec, Addr, Binary, Deps, DepsMut, Env, HexBinary, MessageInfo, Response,
-    StdResult, Uint128, WasmMsg,
+    to_json_binary, to_json_vec, Addr, Binary, Deps, DepsMut, Env, HexBinary, MessageInfo,
+    Response, StdResult, Uint128, WasmMsg,
 };
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
@@ -31,9 +31,17 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExecuteMsg {
     Receive(scaas_metaop::Cw20ReceiveMsg),
-    PayUnderMandate { to: String, amount: Uint128, pay_ref: HexBinary, valid_until: u64, signature: Binary },
+    PayUnderMandate {
+        to: String,
+        amount: Uint128,
+        pay_ref: HexBinary,
+        valid_until: u64,
+        signature: Binary,
+    },
     Revoke {},
-    Withdraw { amount: Uint128 },
+    Withdraw {
+        amount: Uint128,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -73,8 +81,15 @@ pub struct MandatePay {
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 enum TokenMsg {
-    Pay { to: String, amount: Uint128, pay_ref: HexBinary },
-    Transfer { recipient: String, amount: Uint128 },
+    Pay {
+        to: String,
+        amount: Uint128,
+        pay_ref: HexBinary,
+    },
+    Transfer {
+        recipient: String,
+        amount: Uint128,
+    },
 }
 
 const CONFIG: Item<Config> = Item::new("config");
@@ -83,22 +98,37 @@ const PERIOD: Item<(u64, Uint128)> = Item::new("period");
 const USED: Map<&[u8], bool> = Map::new("used");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn instantiate(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InstantiateMsg) -> StdResult<Response> {
-    if msg.delegate_pubkey.len() != 33 || msg.period_secs == 0 || msg.max_per_payment > msg.max_per_period {
+pub fn instantiate(
+    deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    msg: InstantiateMsg,
+) -> StdResult<Response> {
+    if msg.delegate_pubkey.len() != 33
+        || msg.period_secs == 0
+        || msg.max_per_payment > msg.max_per_period
+    {
         return Err(err("mandate: bad configuration"));
     }
-    let payees = msg.payees.iter().map(|p| deps.api.addr_validate(p)).collect::<StdResult<Vec<_>>>()?;
-    CONFIG.save(deps.storage, &Config {
-        owner: deps.api.addr_validate(&msg.owner)?,
-        token: deps.api.addr_validate(&msg.token)?,
-        delegate_pubkey: msg.delegate_pubkey,
-        max_per_payment: msg.max_per_payment,
-        max_per_period: msg.max_per_period,
-        period_secs: msg.period_secs,
-        payees,
-        expires_at: msg.expires_at,
-        revoked: false,
-    })?;
+    let payees = msg
+        .payees
+        .iter()
+        .map(|p| deps.api.addr_validate(p))
+        .collect::<StdResult<Vec<_>>>()?;
+    CONFIG.save(
+        deps.storage,
+        &Config {
+            owner: deps.api.addr_validate(&msg.owner)?,
+            token: deps.api.addr_validate(&msg.token)?,
+            delegate_pubkey: msg.delegate_pubkey,
+            max_per_payment: msg.max_per_payment,
+            max_per_period: msg.max_per_period,
+            period_secs: msg.period_secs,
+            payees,
+            expires_at: msg.expires_at,
+            revoked: false,
+        },
+    )?;
     PERIOD.save(deps.storage, &(0, Uint128::zero()))?;
     Ok(Response::new())
 }
@@ -111,9 +141,17 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             if info.sender != cfg.token {
                 return Err(err("mandate: deposits only in its token"));
             }
-            Ok(Response::new().add_attribute("action", "deposit").add_attribute("amount", r.amount))
+            Ok(Response::new()
+                .add_attribute("action", "deposit")
+                .add_attribute("amount", r.amount))
         }
-        ExecuteMsg::PayUnderMandate { to, amount, pay_ref, valid_until, signature } => {
+        ExecuteMsg::PayUnderMandate {
+            to,
+            amount,
+            pay_ref,
+            valid_until,
+            signature,
+        } => {
             let now = env.block.time.seconds();
             if cfg.revoked || now > cfg.expires_at {
                 return Err(err("mandate: revoked or expired"));
@@ -138,7 +176,11 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
                 valid_until,
             };
             let hash = sha256(&to_json_vec(&m)?);
-            if !deps.api.secp256k1_verify(&hash, &signature, &cfg.delegate_pubkey).map_err(err)? {
+            if !deps
+                .api
+                .secp256k1_verify(&hash, &signature, &cfg.delegate_pubkey)
+                .map_err(err)?
+            {
                 return Err(err("mandate: bad delegate signature"));
             }
             if amount.is_zero() || amount > cfg.max_per_payment {
@@ -152,10 +194,18 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             }
             PERIOD.save(deps.storage, &(start, spent))?;
             USED.save(deps.storage, pay_ref.as_slice(), &true)?;
-            let pay = TokenMsg::Pay { to: payee.to_string(), amount, pay_ref };
+            let pay = TokenMsg::Pay {
+                to: payee.to_string(),
+                amount,
+                pay_ref,
+            };
             Ok(Response::new()
                 .add_attribute("action", "pay_under_mandate")
-                .add_message(WasmMsg::Execute { contract_addr: cfg.token.to_string(), msg: to_json_binary(&pay)?, funds: vec![] }))
+                .add_message(WasmMsg::Execute {
+                    contract_addr: cfg.token.to_string(),
+                    msg: to_json_binary(&pay)?,
+                    funds: vec![],
+                }))
         }
         ExecuteMsg::Revoke {} => {
             if info.sender != cfg.owner {
@@ -169,10 +219,17 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             if info.sender != cfg.owner {
                 return Err(err("unauthorized"));
             }
-            let t = TokenMsg::Transfer { recipient: cfg.owner.to_string(), amount };
+            let t = TokenMsg::Transfer {
+                recipient: cfg.owner.to_string(),
+                amount,
+            };
             Ok(Response::new()
                 .add_attribute("action", "withdraw")
-                .add_message(WasmMsg::Execute { contract_addr: cfg.token.to_string(), msg: to_json_binary(&t)?, funds: vec![] }))
+                .add_message(WasmMsg::Execute {
+                    contract_addr: cfg.token.to_string(),
+                    msg: to_json_binary(&t)?,
+                    funds: vec![],
+                }))
         }
     }
 }

@@ -26,14 +26,17 @@ contract GovBurnerTest is UALedgerBase {
     uint8 internal constant BURNER = GovernanceBits.BURNER;
     uint8 internal constant BURNABLE = GovernanceBits.BURNABLE;
     bytes32 internal constant UA_BURN = keccak256(
-        "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
 
     NormalToken internal bt; // BURNER, admin = this, seat = alice
     uint256 internal salt;
 
     function setUp() public override {
         super.setUp();
-        bt = _make(_cfg((1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (uint256(1) << BURNER), nid(alice)));
+        bt = _make(
+            _cfg((1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (uint256(1) << BURNER), nid(alice))
+        );
         _mintTo(bt, alice, 1_000_000);
         _mintTo(bt, bob, 1_000_000);
         _mintUA(bt, uaP, 500_000);
@@ -50,8 +53,12 @@ contract GovBurnerTest is UALedgerBase {
     }
 
     function _clone() internal returns (NormalToken) {
-        return NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
-            EnvKit.env(chainUidA, REG_L, address(0), false)));
+        return NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
     }
 
     function _make(IFactoryToken.TokenConfig memory c) internal returns (NormalToken t) {
@@ -88,8 +95,9 @@ contract GovBurnerTest is UALedgerBase {
     /// `mtxBurn(amount)` signed by `from` (native: its own key; derived: through the registry), relayed by `RELAYER`.
     function _mtxBurnCall(NormalToken t, bytes32 from, uint256 amount) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _env(t, from);
-        bytes32 sh = keccak256(abi.encode(UA_BURN, e.from, amount, e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee,
-            address(0)));
+        bytes32 sh = keccak256(
+            abi.encode(UA_BURN, e.from, amount, e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+        );
         IUARegistry.UASig memory s = UACall.auth(from, _authFor(from, MtxDigest.typed(address(t), sh)));
         return abi.encodeCall(NormalToken.mtxBurn, (e, amount, s));
     }
@@ -107,7 +115,9 @@ contract GovBurnerTest is UALedgerBase {
 
     function _relayOk(NormalToken t, bytes memory cd) internal {
         (bool ok, bytes memory ret) = _relay(t, cd);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
+        }
     }
 
     function _relayRev(NormalToken t, bytes memory cd, bytes memory err) internal {
@@ -317,7 +327,9 @@ contract GovBurnerTest is UALedgerBase {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, BURNABLE));
         vm.prank(alice);
         bt.burn(1);
-        _relayRev(bt, _mtxBurnCall(bt, nid(alice), 1), abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, BURNABLE));
+        _relayRev(
+            bt, _mtxBurnCall(bt, nid(alice), 1), abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, BURNABLE)
+        );
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, BURNER));
         bt.grantRole(BURNER, nid(bob), _uid(bt));
     }
@@ -343,18 +355,24 @@ contract GovBurnerTest is UALedgerBase {
     // ------------------------------------------------------------------ creation
 
     function test_initExclusive() public {
-        _makeRev(_cfg((uint256(1) << BURNABLE) | (uint256(1) << BURNER), 0),
-            abi.encodeWithSelector(IGovernance.FeatureConflict.selector, BURNER, BURNABLE));
+        _makeRev(
+            _cfg((uint256(1) << BURNABLE) | (uint256(1) << BURNER), 0),
+            abi.encodeWithSelector(IGovernance.FeatureConflict.selector, BURNER, BURNABLE)
+        );
     }
 
     function test_initSeatWithoutBit() public {
-        _makeRev(_cfg(1 << GovernanceBits.MINTABLE, nid(alice)),
-            abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, BURNER));
+        _makeRev(
+            _cfg(1 << GovernanceBits.MINTABLE, nid(alice)),
+            abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, BURNER)
+        );
     }
 
     function test_initBit31OnNormal() public {
-        _makeRev(_cfg(uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE, 0),
-            abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.SUPPLY_CAP_ADJUSTABLE));
+        _makeRev(
+            _cfg(uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE, 0),
+            abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.SUPPLY_CAP_ADJUSTABLE)
+        );
     }
 
     function test_initMaxWrapSupplyOnNormal() public {
@@ -385,13 +403,21 @@ contract GovBurnerTest is UALedgerBase {
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(und), 1, 1);
         c.features = uint256(1) << BURNER;
-        WrappedToken w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
-            EnvKit.env(chainUidA, REG_L, address(0), false)));
+        WrappedToken w = WrappedToken(
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, BURNER));
         w.initialize(nid(address(this)), 1, abi.encode(c));
         (c.features, c.roles.burner) = (0, nid(alice));
-        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
-            EnvKit.env(chainUidA, REG_L, address(0), false)));
+        w = WrappedToken(
+            EnvKit.clone(
+                address(new WrappedToken(address(this), kindArgs(1, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, BURNER));
         w.initialize(nid(address(this)), 1, abi.encode(c));
         us;

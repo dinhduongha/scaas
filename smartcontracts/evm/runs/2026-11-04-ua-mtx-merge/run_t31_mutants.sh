@@ -8,14 +8,21 @@
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.foundry/bin:$PATH"
-git diff --quiet -- src script || { echo "src or script is not clean" >&2; exit 2; }
+git diff --quiet -- src script || {
+    echo "src or script is not clean" >&2
+    exit 2
+}
 # ONLY="a b" runs those mutants alone; the table is written from every mutant's last log.
 for m in ${ONLY:-$(python3 "$here/t31_mutants.py" --list)}; do
-  python3 "$here/t31_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t31-$m.rc.log"; continue; }
-  ../../scripts/capped forge test --match-path 'test/as/confidential/Pqz*.t.sol' \
-    > "$here/mutant-t31-$m.log" 2>&1
-  echo $? > "$here/mutant-t31-$m.rc.log"
-  git checkout -- src script
+    python3 "$here/t31_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t31-$m.rc.log"
+        continue
+    }
+    ../../scripts/capped forge test --match-path 'test/as/confidential/Pqz*.t.sol' \
+        >"$here/mutant-t31-$m.log" 2>&1
+    echo $? >"$here/mutant-t31-$m.rc.log"
+    git checkout -- src script
 done
 python3 - "$here" <<'PY'
 import os, re, sys

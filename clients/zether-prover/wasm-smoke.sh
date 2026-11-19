@@ -10,5 +10,5 @@ F=()
 cargo build --release "${F[@]}" --bin zether-cli
 cargo build --release "${F[@]}" --lib --target wasm32-unknown-unknown
 "${WASM_BINDGEN:-$HOME/.cargo/bin/wasm-bindgen}" --target nodejs --out-dir pkg \
-  target/wasm32-unknown-unknown/release/zether_prover.wasm
+    target/wasm32-unknown-unknown/release/zether_prover.wasm
 "${NODE:-node}" smoke/smoke.cjs

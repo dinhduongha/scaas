@@ -9,24 +9,26 @@
 //! ZK WHIR (src/whirpcs.rs): proves each relation once to read the openings' shapes, then prints every soundness
 //! term (bits) and their union bound (docs/research/pqzh-zk-whir.md §5.5).
 
-use p3_air::BaseAir;
 use p3_air::symbolic::AirLayout;
-use p3_batch_stark::ProverData;
+use p3_air::BaseAir;
 use p3_batch_stark::num_batched_openings;
-use p3_batch_stark::symbolic::{get_log_num_quotient_chunks_for_domain, get_max_constraint_degree, get_symbolic_constraints};
-use p3_field::PrimeCharacteristicRing;
+use p3_batch_stark::symbolic::{
+    get_log_num_quotient_chunks_for_domain, get_max_constraint_degree, get_symbolic_constraints,
+};
+use p3_batch_stark::ProverData;
 use p3_field::coset::TwoAdicMultiplicativeCoset;
+use p3_field::PrimeCharacteristicRing;
 use p3_lookup::LogUpGadget;
 use p3_security::fri::FriRegime;
 use p3_security::grinding::GrindingSites;
-use p3_security::logup::{LogUpAir, security_term};
+use p3_security::logup::{security_term, LogUpAir};
 use p3_security::shape::{InstanceShape, StarkAirParams};
 use p3_security::stark::{conjectured_security_report, proven_security_report};
 use p3_uni_stark::{OpeningShape, StarkGenericConfig};
 
 use pqzh::config::Challenge;
 use pqzh::ring::F;
-use pqzh::{OP_REGISTER, OP_TRANSFER, Params, client, prove, rel};
+use pqzh::{client, prove, rel, Params, OP_REGISTER, OP_TRANSFER};
 
 struct Shape {
     air: StarkAirParams,
@@ -43,9 +45,18 @@ fn shape(op: u8, stmt: &[u8], p: &Params, ext: usize) -> Shape {
     let deg = rel::degrees(&b, p.zk);
     let cfg = p.plain(&[0; 32]);
     // lookups only (the plain config: trace degrees without the ZK bit)
-    let pd = ProverData::from_airs_and_degrees(&cfg, &b.airs, &deg.iter().map(|d| d - zk).collect::<Vec<_>>()).unwrap();
+    let pd = ProverData::from_airs_and_degrees(
+        &cfg,
+        &b.airs,
+        &deg.iter().map(|d| d - zk).collect::<Vec<_>>(),
+    )
+    .unwrap();
     let gadget = LogUpGadget::new();
-    let opening = if p.zk { OpeningShape::hiding(p.random_codewords()) } else { OpeningShape::new() };
+    let opening = if p.zk {
+        OpeningShape::hiding(p.random_codewords())
+    } else {
+        OpeningShape::new()
+    };
     let (mut ncons, mut maxdeg, mut chunks, mut batched, mut width) = (0, 0, 0, 0, 0);
     let mut denoms = 0f64; // sum over AIRs of interactions * rows
     let mut widths = vec![];
@@ -55,36 +66,83 @@ fn shape(op: u8, stmt: &[u8], p: &Params, ext: usize) -> Shape {
         let n = 1usize << (deg[i] - zk);
         let (bc, ec) = get_symbolic_constraints::<F, Challenge, _, _>(air, layout, lk, &gadget);
         ncons += bc.len() + ec.len();
-        maxdeg = maxdeg.max(get_max_constraint_degree::<F, Challenge, _, _>(air, layout, n, lk, &gadget));
+        maxdeg = maxdeg.max(get_max_constraint_degree::<F, Challenge, _, _>(
+            air, layout, n, lk, &gadget,
+        ));
         let dom = TwoAdicMultiplicativeCoset::new(F::ONE, deg[i] - zk).unwrap(); // TwoAdicFriPcs::natural_domain_for_degree
-        let lc = get_log_num_quotient_chunks_for_domain::<F, Challenge, _, _>(air, layout, dom, lk, zk, &gadget);
+        let lc = get_log_num_quotient_chunks_for_domain::<F, Challenge, _, _>(
+            air, layout, dom, lk, zk, &gadget,
+        );
         let c = 1 << (lc + zk);
         chunks = usize::max(chunks, c);
         let next = !air.main_next_row_columns().is_empty();
-        batched += num_batched_openings(air.width(), next, air.preprocessed_width(), false, c, lk.len(), ext, opening);
+        batched += num_batched_openings(
+            air.width(),
+            next,
+            air.preprocessed_width(),
+            false,
+            c,
+            lk.len(),
+            ext,
+            opening,
+        );
         let inter: usize = lk.iter().map(|l| l.elements.len()).sum();
-        width = lk.iter().flat_map(|l| l.elements.iter().map(|e| e.len())).fold(width, usize::max);
+        width = lk
+            .iter()
+            .flat_map(|l| l.elements.iter().map(|e| e.len()))
+            .fold(width, usize::max);
         denoms += inter as f64 * (1u64 << deg[i]) as f64;
         widths.push(air.width());
     }
     let log_n = *deg.iter().max().unwrap();
     Shape {
-        air: StarkAirParams { num_constraints: ncons, max_constraint_degree: maxdeg, num_quotient_chunks: chunks, max_combo: 2 },
+        air: StarkAirParams {
+            num_constraints: ncons,
+            max_constraint_degree: maxdeg,
+            num_quotient_chunks: chunks,
+            max_combo: 2,
+        },
         log_n,
         batched,
-        logup: LogUpAir { num_interactions: (denoms / (1u64 << log_n) as f64).ceil() as usize, max_message_width: width },
+        logup: LogUpAir {
+            num_interactions: (denoms / (1u64 << log_n) as f64).ceil() as usize,
+            max_message_width: width,
+        },
         widths,
     }
 }
 
 /// (bits, binding term) for the proven (best of unique / list decoding) and the conjectured regime
-fn reports(s: &Shape, ext: usize, lb: usize, arity: usize, q: usize, pow: usize, g: &GrindingSites) -> [(f64, &'static str); 2] {
-    let regime = FriRegime { log_blowup: lb, num_queries: q, log_final_poly_len: 3, max_log_arity: arity, commit_pow_bits: 0, query_pow_bits: pow };
-    let inst = InstanceShape { log_trace_length: s.log_n, modulus_bits: 64 * ext, collision_resistance: 128, num_batched_functions: s.batched };
+fn reports(
+    s: &Shape,
+    ext: usize,
+    lb: usize,
+    arity: usize,
+    q: usize,
+    pow: usize,
+    g: &GrindingSites,
+) -> [(f64, &'static str); 2] {
+    let regime = FriRegime {
+        log_blowup: lb,
+        num_queries: q,
+        log_final_poly_len: 3,
+        max_log_arity: arity,
+        commit_pow_bits: 0,
+        query_pow_bits: pow,
+    };
+    let inst = InstanceShape {
+        log_trace_length: s.log_n,
+        modulus_bits: 64 * ext,
+        collision_resistance: 128,
+        num_batched_functions: s.batched,
+    };
     let lt: Vec<_> = security_term(&s.logup, &inst, g).into_iter().collect();
     let pr = proven_security_report(&regime, &s.air, &inst, &lt, g);
     let cr = conjectured_security_report(&regime, &s.air, &inst, &lt, g);
-    [(pr.security_bits(), pr.binding().1.label), (cr.security_bits(), cr.binding().label)]
+    [
+        (pr.security_bits(), pr.binding().1.label),
+        (cr.security_bits(), cr.binding().label),
+    ]
 }
 
 /// ZK WHIR bits per term, union-composed: STARK terms (ALI, DEEP, LogUp) as Schwartz-Zippel over the extracted
@@ -97,17 +155,28 @@ where
     use p3_security::air::composition_error;
     use p3_security::deep::deep_ali_error;
 
-    use pqzh::whirpcs::{LAST_OPENINGS, union_bits};
+    use pqzh::whirpcs::{union_bits, LAST_OPENINGS};
     let fb = EF::bits() - 1;
     let cfg = p.whir_ext::<EF>(&[0; 32], [0; 32]);
     let s = client::setup();
-    for (op, name, st, w) in [(OP_REGISTER, "R_REG", &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, "R_TX", &s.tx_stmt, &s.tx_wit)] {
+    for (op, name, st, w) in [
+        (OP_REGISTER, "R_REG", &s.reg_stmt, &s.reg_wit),
+        (OP_TRANSFER, "R_TX", &s.tx_stmt, &s.tx_wit),
+    ] {
         let sh = shape(op, st, p, ext);
         prove(op, st, w, [1; 32], p).expect("prove");
         let opens = LAST_OPENINGS.lock().unwrap().clone();
-        let inst = InstanceShape { log_trace_length: sh.log_n, modulus_bits: fb, collision_resistance: 128, num_batched_functions: 1 };
+        let inst = InstanceShape {
+            log_trace_length: sh.log_n,
+            modulus_bits: fb,
+            collision_resistance: 128,
+            num_batched_functions: 1,
+        };
         let mut terms: Vec<(String, f64)> = vec![
-            ("ali".into(), composition_error(sh.air.num_constraints, 1.0, fb).bits()),
+            (
+                "ali".into(),
+                composition_error(sh.air.num_constraints, 1.0, fb).bits(),
+            ),
             ("deep".into(), deep_ali_error(&sh.air, &inst, 1.0).bits()),
             ("collision".into(), 128.0),
         ];
@@ -137,7 +206,12 @@ where
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.iter().any(|x| x == "--whir") {
-        let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.parse::<usize>().unwrap());
+        let get = |k: &str| {
+            a.iter()
+                .position(|x| x == k)
+                .and_then(|i| a.get(i + 1))
+                .map(|s| s.parse::<usize>().unwrap())
+        };
         let d = pqzh::config::WhirParams::DEFAULT;
         let mut p = Params::DEFAULT;
         let ext = get("--ext").unwrap_or(5);
@@ -154,9 +228,13 @@ fn main() {
         // one opening's terms only (no proof): --vars N --claims C
         if let (Some(n), Some(c)) = (get("--vars"), get("--claims")) {
             let t = if ext == 5 {
-                p.whir_ext::<pqzh::config::Challenge5>(&[0; 32], [0; 32]).pcs().opening_terms(n, c)
+                p.whir_ext::<pqzh::config::Challenge5>(&[0; 32], [0; 32])
+                    .pcs()
+                    .opening_terms(n, c)
             } else {
-                p.whir_ext::<Challenge>(&[0; 32], [0; 32]).pcs().opening_terms(n, c)
+                p.whir_ext::<Challenge>(&[0; 32], [0; 32])
+                    .pcs()
+                    .opening_terms(n, c)
             };
             match t {
                 Ok(t) => println!(
@@ -169,10 +247,19 @@ fn main() {
             }
             return;
         }
-        if ext == 5 { whir_bits::<pqzh::config::Challenge5>(&p, 5) } else { whir_bits::<Challenge>(&p, 2) }
+        if ext == 5 {
+            whir_bits::<pqzh::config::Challenge5>(&p, 5)
+        } else {
+            whir_bits::<Challenge>(&p, 2)
+        }
         return;
     }
-    let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.parse::<usize>().unwrap());
+    let get = |k: &str| {
+        a.iter()
+            .position(|x| x == k)
+            .and_then(|i| a.get(i + 1))
+            .map(|s| s.parse::<usize>().unwrap())
+    };
     let target = get("--target").unwrap_or(128) as f64;
     let pow = get("--pow").unwrap_or(16);
     let ext = get("--ext").unwrap_or(2);
@@ -184,14 +271,20 @@ fn main() {
         lookup_challenge: get("--lookup-pow").unwrap_or(0),
         ..GrindingSites::NONE
     };
-    assert!(!(measure && g != GrindingSites::NONE), "--measure: the prototype grinds only before the FRI queries");
+    assert!(
+        !(measure && g != GrindingSites::NONE),
+        "--measure: the prototype grinds only before the FRI queries"
+    );
     assert!(ext == 2 || ext == 5, "--ext 2 or 5");
     let mut p = Params::DEFAULT;
     p.zk = a.iter().any(|x| x == "--zk");
     p.query_pow_bits = pow;
     p.ext5 = ext == 5;
     let s = client::setup();
-    for (op, name, st, w) in [(OP_REGISTER, "R_REG", &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, "R_TX", &s.tx_stmt, &s.tx_wit)] {
+    for (op, name, st, w) in [
+        (OP_REGISTER, "R_REG", &s.reg_stmt, &s.reg_wit),
+        (OP_TRANSFER, "R_TX", &s.tx_stmt, &s.tx_wit),
+    ] {
         let sh = shape(op, st, &p, ext);
         println!(
             "{{\"rel\": \"{name}\", \"ext\": {ext}, \"zk\": {}, \"grinding\": \"{g:?}\", \"shape\": {{\"num_constraints\": {}, \"max_constraint_degree\": {}, \"max_quotient_chunks\": {}, \"log_trace\": {}, \"batched_functions\": {}, \"logup_interactions_per_row\": {}, \"logup_width\": {}, \"air_widths\": {:?}}}}}",
@@ -212,7 +305,10 @@ fn main() {
                 );
                 let mut need = [None, None];
                 for q in 1..=400usize {
-                    for (k, (bits, lab)) in reports(&sh, ext, lb, arity, q, pow, &g).into_iter().enumerate() {
+                    for (k, (bits, lab)) in reports(&sh, ext, lb, arity, q, pow, &g)
+                        .into_iter()
+                        .enumerate()
+                    {
                         if need[k].is_none() && bits >= target {
                             need[k] = Some((q, bits, lab));
                         }
@@ -234,7 +330,10 @@ fn main() {
                 }
                 // the prototype default (28 queries) at this setting
                 let [pr, cr] = reports(&sh, ext, lb, arity, p.num_queries, pow, &g);
-                row += &format!(", \"at_q{}\": {{\"proven\": {:.1}, \"conjectured\": {:.1}}}}}", p.num_queries, pr.0, cr.0);
+                row += &format!(
+                    ", \"at_q{}\": {{\"proven\": {:.1}, \"conjectured\": {:.1}}}}}",
+                    p.num_queries, pr.0, cr.0
+                );
                 println!("{row}");
             }
         }

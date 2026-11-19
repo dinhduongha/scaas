@@ -116,7 +116,9 @@ pub fn b64url(b: &[u8]) -> Vec<u8> {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut o = Vec::with_capacity(b.len().div_ceil(3) * 4);
     for c in b.chunks(3) {
-        let n = (c[0] as u32) << 16 | (*c.get(1).unwrap_or(&0) as u32) << 8 | *c.get(2).unwrap_or(&0) as u32;
+        let n = (c[0] as u32) << 16
+            | (*c.get(1).unwrap_or(&0) as u32) << 8
+            | *c.get(2).unwrap_or(&0) as u32;
         let k = c.len() + 1;
         for i in 0..k {
             o.push(T[(n >> (18 - 6 * i) & 63) as usize]);
@@ -137,21 +139,38 @@ fn entry(data: &[u8], sig_index: u8, pk_len: usize) -> Result<(&[u8], &[u8])> {
     let n = *data.first().ok_or(ScaasError::BadPrecompile)?;
     require!(sig_index < n, ScaasError::BadPrecompile);
     let o = 2 + 14 * sig_index as usize;
-    let (sig_off, sig_ix, pk_off, pk_ix) = (u16_at(data, o)?, u16_at(data, o + 2)?, u16_at(data, o + 4)?, u16_at(data, o + 6)?);
-    let (msg_off, msg_len, msg_ix) = (u16_at(data, o + 8)?, u16_at(data, o + 10)?, u16_at(data, o + 12)?);
+    let (sig_off, sig_ix, pk_off, pk_ix) = (
+        u16_at(data, o)?,
+        u16_at(data, o + 2)?,
+        u16_at(data, o + 4)?,
+        u16_at(data, o + 6)?,
+    );
+    let (msg_off, msg_len, msg_ix) = (
+        u16_at(data, o + 8)?,
+        u16_at(data, o + 10)?,
+        u16_at(data, o + 12)?,
+    );
     require!(
         sig_ix == u16::MAX as usize && pk_ix == u16::MAX as usize && msg_ix == u16::MAX as usize,
         ScaasError::BadPrecompile
     );
-    data.get(sig_off..sig_off + 64).ok_or(ScaasError::BadPrecompile)?;
-    let pk = data.get(pk_off..pk_off + pk_len).ok_or(ScaasError::BadPrecompile)?;
-    let msg = data.get(msg_off..msg_off + msg_len).ok_or(ScaasError::BadPrecompile)?;
+    data.get(sig_off..sig_off + 64)
+        .ok_or(ScaasError::BadPrecompile)?;
+    let pk = data
+        .get(pk_off..pk_off + pk_len)
+        .ok_or(ScaasError::BadPrecompile)?;
+    let msg = data
+        .get(msg_off..msg_off + msg_len)
+        .ok_or(ScaasError::BadPrecompile)?;
     Ok((pk, msg))
 }
 
 fn precompile(ix_sysvar: &AccountInfo, auth: &Auth, program: &Pubkey) -> Result<Vec<u8>> {
     let current = load_current_index_checked(ix_sysvar)?;
-    require!((auth.precompile_ix as u16) < current, ScaasError::BadPrecompile);
+    require!(
+        (auth.precompile_ix as u16) < current,
+        ScaasError::BadPrecompile
+    );
     let ix = load_instruction_at_checked(auth.precompile_ix as usize, ix_sysvar)?;
     require_keys_eq!(ix.program_id, *program, ScaasError::BadPrecompile);
     Ok(ix.data)
@@ -165,14 +184,26 @@ fn count(hay: &[u8], needle: &[u8]) -> usize {
 fn origin_of(cdj: &[u8]) -> Result<&[u8]> {
     const K: &[u8] = b"\"origin\":\"";
     require!(count(cdj, K) == 1, ScaasError::BadWebAuthn);
-    let i = cdj.windows(K.len()).position(|w| w == K).ok_or(ScaasError::BadWebAuthn)? + K.len();
-    let j = cdj[i..].iter().position(|c| *c == b'"').ok_or(ScaasError::BadWebAuthn)?;
+    let i = cdj
+        .windows(K.len())
+        .position(|w| w == K)
+        .ok_or(ScaasError::BadWebAuthn)?
+        + K.len();
+    let j = cdj[i..]
+        .iter()
+        .position(|c| *c == b'"')
+        .ok_or(ScaasError::BadWebAuthn)?;
     Ok(&cdj[i..i + j])
 }
 
 /// Assertion WebAuthn qua precompile secp256r1 cho khoá `pk33` và `challenge` (32 byte). Trả `(rpIdHash, origin)`;
 /// người gọi kiểm rpIdHash/origin theo Account.
-pub fn passkey<'a>(ix_sysvar: &AccountInfo, auth: &'a Auth, pk33: &[u8; 33], challenge: &[u8; 32]) -> Result<([u8; 32], &'a [u8])> {
+pub fn passkey<'a>(
+    ix_sysvar: &AccountInfo,
+    auth: &'a Auth,
+    pk33: &[u8; 33],
+    challenge: &[u8; 32],
+) -> Result<([u8; 32], &'a [u8])> {
     require!(auth.kind == KIND_PASSKEY, ScaasError::BadSignature);
     let data = precompile(ix_sysvar, auth, &SECP256R1_PROGRAM)?;
     let (pk, msg) = entry(&data, auth.sig_index, 33)?;
@@ -182,11 +213,17 @@ pub fn passkey<'a>(ix_sysvar: &AccountInfo, auth: &'a Auth, pk33: &[u8; 33], cha
     require!(cd_hash == sha256(&[&auth.cdj]), ScaasError::BadWebAuthn);
     require!(ad[32] & 0x05 == 0x05, ScaasError::BadWebAuthn); // UP | UV
     let cdj = &auth.cdj;
-    require!(count(cdj, b"\"type\":\"webauthn.get\"") == 1, ScaasError::BadWebAuthn);
+    require!(
+        count(cdj, b"\"type\":\"webauthn.get\"") == 1,
+        ScaasError::BadWebAuthn
+    );
     let mut ch = b"\"challenge\":\"".to_vec();
     ch.extend_from_slice(&b64url(challenge));
     ch.push(b'"');
-    require!(count(cdj, b"\"challenge\":\"") == 1 && count(cdj, &ch) == 1, ScaasError::BadWebAuthn);
+    require!(
+        count(cdj, b"\"challenge\":\"") == 1 && count(cdj, &ch) == 1,
+        ScaasError::BadWebAuthn
+    );
     let mut rp = [0u8; 32];
     rp.copy_from_slice(&ad[..32]);
     Ok((rp, origin_of(cdj)?))
@@ -203,7 +240,9 @@ pub fn verify(
     digest: &[u8; 32],
     new_origin: Option<&[u8]>,
 ) -> Result<()> {
-    let key = keys.get(auth.key_index as usize).ok_or(ScaasError::UnknownKey)?;
+    let key = keys
+        .get(auth.key_index as usize)
+        .ok_or(ScaasError::UnknownKey)?;
     match auth.kind {
         KIND_RAW | KIND_OCMS => {
             require!(key.scheme == SCHEME_ED25519, ScaasError::BadSignature);
@@ -211,7 +250,11 @@ pub fn verify(
             let (pk, msg) = entry(&data, auth.sig_index, 32)?;
             require!(pk == &key.pubkey[..32], ScaasError::BadSignature);
             let t = text(label, digest);
-            let ok = if auth.kind == KIND_RAW { msg == t.as_slice() } else { msg == ocms(pk, &t).as_slice() };
+            let ok = if auth.kind == KIND_RAW {
+                msg == t.as_slice()
+            } else {
+                msg == ocms(pk, &t).as_slice()
+            };
             require!(ok, ScaasError::BadSignature);
         }
         KIND_PASSKEY => {
@@ -219,7 +262,10 @@ pub fn verify(
             let (rp, origin) = passkey(ix_sysvar, auth, &key.pubkey, digest)?;
             require!(rp == key.rp_id_hash, ScaasError::BadWebAuthn);
             let listed = origins.iter().any(|o| o.as_bytes() == origin);
-            require!(listed || new_origin == Some(origin), ScaasError::UnknownOrigin);
+            require!(
+                listed || new_origin == Some(origin),
+                ScaasError::UnknownOrigin
+            );
         }
         _ => return err!(ScaasError::BadSignature),
     }

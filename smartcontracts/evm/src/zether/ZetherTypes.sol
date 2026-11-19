@@ -17,15 +17,15 @@ library ZetherTypes {
 
     /// Ai được gộp `pending → acc` (SRS §7.6, canon C5 bản 5). Cờ per (UA, token), chỉ chủ đổi được.
     enum RollOverMode {
-        PUBLIC,     // mặc định: ai cũng gọi được rollOverPublic/rollOverBatch; no-op khi pending rỗng
-        OWNER_ONLY  // treasury / B2B R3–R4: chỉ rollOverSigned
+        PUBLIC, // mặc định: ai cũng gọi được rollOverPublic/rollOverBatch; no-op khi pending rỗng
+        OWNER_ONLY // treasury / B2B R3–R4: chỉ rollOverSigned
     }
 
     /// Nơi giữ bundle tiết lộ của một transfer nhiều người nhận (nằm trong opTag, relayer không đổi được).
     enum TransferMode {
-        HASH,   // commit-reveal (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` trên token COMPACT): R (SSTORE2) +
-                // memo người gửi, R = salt ‖ B_1 ‖ … ‖ B_M lưu bằng SSTORE2 (con trỏ trong slot) và phát trong event
-        BUNDLE  // `mtxConfidentialTransfer` trên token BUNDLE: lưu R inline
+        HASH, // commit-reveal (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` trên token COMPACT): R (SSTORE2) +
+        // memo người gửi, R = salt ‖ B_1 ‖ … ‖ B_M lưu bằng SSTORE2 (con trỏ trong slot) và phát trong event
+        BUNDLE // `mtxConfidentialTransfer` trên token BUNDLE: lưu R inline
     }
 
     /// Cách lưu bundle của token, cố định từ `initialize` (CTR-ZTH-38).
@@ -36,8 +36,8 @@ library ZetherTypes {
 
     /// Auditor của token, cố định từ `initialize` (CTR-ZTH-09, CTR-ZTH-42).
     enum AuditorMode {
-        NONE,    // không khoá auditor: mọi C_aud = O
-        FULL,    // có khoá: mọi transfer phải có auditor (mọi C_aud ≠ O)
+        NONE, // không khoá auditor: mọi C_aud = O
+        FULL, // có khoá: mọi transfer phải có auditor (mọi C_aud ≠ O)
         OPTIONAL // có khoá: người gửi được bỏ auditor theo transfer (mọi C_aud = O hoặc không cái nào)
     }
 

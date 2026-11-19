@@ -13,12 +13,15 @@ contract MockHederaAccountService {
     mapping(address account => address edKey) public edKey;
     mapping(address account => bool) public complexKey;
 
-    function setEdKey(address account, address key) external { edKey[account] = key; }
-    function setComplexKey(address account) external { complexKey[account] = true; }
+    function setEdKey(address account, address key) external {
+        edKey[account] = key;
+    }
 
-    function isAuthorizedRaw(address account, bytes calldata messageHash, bytes calldata sig)
-        external returns (bool)
-    {
+    function setComplexKey(address account) external {
+        complexKey[account] = true;
+    }
+
+    function isAuthorizedRaw(address account, bytes calldata messageHash, bytes calldata sig) external returns (bool) {
         // TSTORE halts in a static frame, like the real system contract. Not SSTORE: under Amsterdam a first write to a
         // slot costs EIP-8037 state gas, which overran the 100,000 gas `HederaAccountAuth.HAS_GAS` forwards (Hedera does not
         // price by Amsterdam; the real call costs 3,000, the `ecrecover` price).
@@ -48,7 +51,9 @@ contract MockHts {
     mapping(address => mapping(address => bool)) public associated;
     int64 public forced;
 
-    function force(int64 rc) external { forced = rc; }
+    function force(int64 rc) external {
+        forced = rc;
+    }
 
     function associateToken(address account, address token) external returns (int64) {
         if (forced != 0) return forced;
@@ -60,32 +65,76 @@ contract MockHts {
 
     // ---- v2 (TW2 §11): `isToken` + `getTokenCustomFees`, cấu hình được để thử từng nhánh fail-closed.
 
-    struct FixedFee { int64 amount; address tokenId; bool useHbarsForPayment; bool useCurrentTokenForPayment; address feeCollector; }
-    struct FractionalFee { int64 numerator; int64 denominator; int64 minimumAmount; int64 maximumAmount; bool netOfTransfers; address feeCollector; }
-    struct RoyaltyFee { int64 numerator; int64 denominator; int64 amount; address tokenId; bool useHbarsForPayment; address feeCollector; }
+    struct FixedFee {
+        int64 amount;
+        address tokenId;
+        bool useHbarsForPayment;
+        bool useCurrentTokenForPayment;
+        address feeCollector;
+    }
 
-    enum Fees { None, Fixed, Fractional, Royalty, Malformed }
+    struct FractionalFee {
+        int64 numerator;
+        int64 denominator;
+        int64 minimumAmount;
+        int64 maximumAmount;
+        bool netOfTransfers;
+        address feeCollector;
+    }
+
+    struct RoyaltyFee {
+        int64 numerator;
+        int64 denominator;
+        int64 amount;
+        address tokenId;
+        bool useHbarsForPayment;
+        address feeCollector;
+    }
+
+    enum Fees {
+        None,
+        Fixed,
+        Fractional,
+        Royalty,
+        Malformed
+    }
 
     mapping(address => bool) public hts;
     mapping(address => int64) public isTokenRc;
     mapping(address => int64) public feesRc;
     mapping(address => Fees) public fees;
 
-    function setHts(address t, bool on) external { hts[t] = on; }
-    function setIsTokenRc(address t, int64 rc) external { isTokenRc[t] = rc; }
-    function setFeesRc(address t, int64 rc) external { feesRc[t] = rc; }
-    function setFees(address t, Fees f) external { fees[t] = f; }
+    function setHts(address t, bool on) external {
+        hts[t] = on;
+    }
+
+    function setIsTokenRc(address t, int64 rc) external {
+        isTokenRc[t] = rc;
+    }
+
+    function setFeesRc(address t, int64 rc) external {
+        feesRc[t] = rc;
+    }
+
+    function setFees(address t, Fees f) external {
+        fees[t] = f;
+    }
 
     function isToken(address t) external view returns (int64, bool) {
         return (isTokenRc[t] == 0 ? int64(22) : isTokenRc[t], hts[t]);
     }
 
     function getTokenCustomFees(address t)
-        external view returns (int64, FixedFee[] memory f, FractionalFee[] memory fr, RoyaltyFee[] memory r)
+        external
+        view
+        returns (int64, FixedFee[] memory f, FractionalFee[] memory fr, RoyaltyFee[] memory r)
     {
         Fees k = fees[t];
         if (k == Fees.Malformed) {
-            assembly { mstore(0, 22) return(0, 64) }
+            assembly {
+                mstore(0, 22)
+                return(0, 64)
+            }
         }
         if (k == Fees.Fixed) f = new FixedFee[](1);
         if (k == Fees.Fractional) fr = new FractionalFee[](1);

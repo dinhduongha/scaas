@@ -81,7 +81,7 @@ module scaas::meta {
     const EEXISTS: u64 = 16;
 
     struct Root has key {
-        extend: ExtendRef,
+        extend: ExtendRef
     }
 
     /// `scheme` 0 = ed25519 (32 byte), 2 = WebAuthn P-256 (65 byte, `rp_id_hash` 32 byte, `table` = `p256::table`
@@ -90,19 +90,19 @@ module scaas::meta {
         scheme: u8,
         public_key: vector<u8>,
         rp_id_hash: vector<u8>,
-        table: vector<u256>,
+        table: vector<u256>
     }
 
     struct Recovery has copy, drop, store {
         key: Key,
         origin: vector<u8>,
-        ready_at: u64,
+        ready_at: u64
     }
 
     /// `valid_until` = max hạn của các op đã dùng lane ⇒ `prune` an toàn sau mốc này (RS11-4).
     struct Lane has copy, drop, store {
         next: u64,
-        valid_until: u64,
+        valid_until: u64
     }
 
     struct Account has key {
@@ -113,7 +113,7 @@ module scaas::meta {
         recovery: Option<Recovery>,
         key_nonce: u64,
         lanes: Table<vector<u8>, Lane>,
-        extend: ExtendRef,
+        extend: ExtendRef
     }
 
     /// Payload ký v1 (spec §4.1, 309 byte BCS). `digest = sha3_256(bcs(MetaOp))`.
@@ -131,7 +131,7 @@ module scaas::meta {
         nonce: u64,
         valid_until: u64,
         relayer: address,
-        extra: vector<u8>,
+        extra: vector<u8>
     }
 
     /// Thao tác vòng đời khoá, ký bởi MỘT khoá hiện có. `nonce` = `key_nonce` của account.
@@ -146,11 +146,15 @@ module scaas::meta {
         origin: vector<u8>,
         guardian: address,
         nonce: u64,
-        valid_until: u64,
+        valid_until: u64
     }
 
     #[event]
-    struct AccountOpened has drop, store { account: address, owner: address, scheme: u8 }
+    struct AccountOpened has drop, store {
+        account: address,
+        owner: address,
+        scheme: u8
+    }
 
     #[event]
     /// `contract` = tài sản (metadata FA = `blockchain.token.address` của Odoo); `account` = object đã kiểm chữ ký
@@ -161,7 +165,7 @@ module scaas::meta {
         from: address,
         digest: vector<u8>,
         lane: vector<u8>,
-        nonce: u64,
+        nonce: u64
     }
 
     #[event]
@@ -169,7 +173,7 @@ module scaas::meta {
     struct PaymentMeta has drop, store {
         contract: address,
         pay_id: vector<u8>,
-        meta: vector<u8>,
+        meta: vector<u8>
     }
 
     #[event]
@@ -178,27 +182,42 @@ module scaas::meta {
         from: address,
         to: address,
         amount: u64,
-        pay_ref: vector<u8>,
+        pay_ref: vector<u8>
     }
 
     #[event]
-    struct KeyOpExecuted has drop, store { account: address, action: u8, nonce: u64 }
+    struct KeyOpExecuted has drop, store {
+        account: address,
+        action: u8,
+        nonce: u64
+    }
 
     #[event]
-    struct RecoveryStarted has drop, store { account: address, guardian: address, ready_at: u64 }
+    struct RecoveryStarted has drop, store {
+        account: address,
+        guardian: address,
+        ready_at: u64
+    }
 
     #[event]
-    struct Recovered has drop, store { account: address, guardian: address }
+    struct Recovered has drop, store {
+        account: address,
+        guardian: address
+    }
 
     fun init_module(publisher: &signer) {
         let c = object::create_named_object(publisher, ROOT_SEED);
-        move_to(&object::generate_signer(&c), Root { extend: object::generate_extend_ref(&c) });
+        move_to(
+            &object::generate_signer(&c),
+            Root { extend: object::generate_extend_ref(&c) }
+        );
     }
 
     // ------------------------------------------------------------------ địa chỉ (cùng công thức Odoo/relayer)
-
     #[view]
-    public fun root(): address { object::create_object_address(&@scaas, ROOT_SEED) }
+    public fun root(): address {
+        object::create_object_address(&@scaas, ROOT_SEED)
+    }
 
     #[view]
     public fun account_of(owner: address): address {
@@ -216,9 +235,10 @@ module scaas::meta {
     /// publish ở tài khoản thường ⇒ admin = chính địa chỉ đó.
     package fun assert_admin(s: &signer) {
         let a = signer::address_of(s);
-        let ok = if (object::is_object(@scaas)) {
-            object::is_owner(object::address_to_object<ObjectCore>(@scaas), a)
-        } else a == @scaas;
+        let ok =
+            if (object::is_object(@scaas)) {
+                object::is_owner(object::address_to_object<ObjectCore>(@scaas), a)
+            } else a == @scaas;
         assert!(ok, ENOT_ADMIN);
     }
 
@@ -240,27 +260,42 @@ module scaas::meta {
         let c = object::create_named_object(&root_signer(), seed);
         let s = object::generate_signer(&c);
         event::emit(AccountOpened { account: addr, owner, scheme: key.scheme });
-        move_to(&s, Account {
-            owner,
-            keys: vector[key],
-            origins: if (origin.is_empty()) vector[] else vector[origin],
-            guardian: @0x0,
-            recovery: option::none(),
-            key_nonce: 0,
-            lanes: table::new(),
-            extend: object::generate_extend_ref(&c),
-        });
+        move_to(
+            &s,
+            Account {
+                owner,
+                keys: vector[key],
+                origins: if (origin.is_empty()) vector[] else vector[origin],
+                guardian: @0x0,
+                recovery: option::none(),
+                key_nonce: 0,
+                lanes: table::new(),
+                extend: object::generate_extend_ref(&c)
+            }
+        );
         addr
     }
 
     /// Lần chi đầu tiên mở account (spec §3.3): khoá ký phải dẫn ra auth key hiện tại của chủ. Passkey: rpIdHash và
     /// origin lấy từ CHÍNH assertion đang được kiểm (chỉ passkey của chủ ký được nó).
     /// `table` = bảng P-256 `pay_checked` đã tính khi kiểm chữ ký (không tính lại — review I5).
-    fun open_lazily(owner: address, public_key: &vector<u8>, envelope: &vector<u8>, table: vector<u256>) acquires Root {
+    fun open_lazily(
+        owner: address, public_key: &vector<u8>, envelope: &vector<u8>, table: vector<u256>
+    ) acquires Root {
         assert!(auth::proves(&account::get_authentication_key(owner), public_key), EFIRST_KEY);
         let scheme = auth::scheme_of(public_key);
-        let (rp, origin) = if (scheme == auth::webauthn()) auth::webauthn_origin(envelope) else (vector[], vector[]);
-        create_account(owner, Key { scheme, public_key: *public_key, rp_id_hash: rp, table }, origin);
+        let (rp, origin) =
+            if (scheme == auth::webauthn()) auth::webauthn_origin(envelope) else (vector[], vector[]);
+        create_account(
+            owner,
+            Key {
+                scheme,
+                public_key: *public_key,
+                rp_id_hash: rp,
+                table
+            },
+            origin
+        );
     }
 
     // ------------------------------------------------------------------ pay
@@ -281,12 +316,40 @@ module scaas::meta {
         extra: vector<u8>,
         public_key: vector<u8>,
         sig: vector<u8>,
-        envelope: vector<u8>,
+        envelope: vector<u8>
     ) acquires Root, Account {
-        let (digest, table) = pay_checked(signer::address_of(lane), owner, asset, to, amount, pay_ref, lane_id, nonce,
-            valid_until, relayer, extra, public_key, sig, envelope);
-        settle(owner, asset, to, amount, pay_ref, lane_id, nonce, valid_until, digest, table, &public_key, &envelope,
-            option::none());
+        let (digest, table) =
+            pay_checked(
+                signer::address_of(lane),
+                owner,
+                asset,
+                to,
+                amount,
+                pay_ref,
+                lane_id,
+                nonce,
+                valid_until,
+                relayer,
+                extra,
+                public_key,
+                sig,
+                envelope
+            );
+        settle(
+            owner,
+            asset,
+            to,
+            amount,
+            pay_ref,
+            lane_id,
+            nonce,
+            valid_until,
+            digest,
+            table,
+            &public_key,
+            &envelope,
+            option::none()
+        );
     }
 
     /// CTR-MTX-26 (spec §6.2): `relay_pay` with `pay_ref = metaPayId(salt, meta)`, `lane = payLane(pay_ref)`,
@@ -305,14 +368,42 @@ module scaas::meta {
         extra: vector<u8>,
         public_key: vector<u8>,
         sig: vector<u8>,
-        envelope: vector<u8>,
+        envelope: vector<u8>
     ) acquires Root, Account {
         let pay_ref = meta_pay_id(salt, meta);
         let lane_id = pay_lane(pay_ref);
-        let (digest, table) = pay_checked(signer::address_of(lane), owner, asset, to, amount, pay_ref, lane_id, 0,
-            valid_until, relayer, extra, public_key, sig, envelope);
-        settle(owner, asset, to, amount, pay_ref, lane_id, 0, valid_until, digest, table, &public_key, &envelope,
-            option::some(meta));
+        let (digest, table) =
+            pay_checked(
+                signer::address_of(lane),
+                owner,
+                asset,
+                to,
+                amount,
+                pay_ref,
+                lane_id,
+                0,
+                valid_until,
+                relayer,
+                extra,
+                public_key,
+                sig,
+                envelope
+            );
+        settle(
+            owner,
+            asset,
+            to,
+            amount,
+            pay_ref,
+            lane_id,
+            0,
+            valid_until,
+            digest,
+            table,
+            &public_key,
+            &envelope,
+            option::some(meta)
+        );
     }
 
     #[view]
@@ -330,11 +421,26 @@ module scaas::meta {
         extra: vector<u8>,
         public_key: vector<u8>,
         sig: vector<u8>,
-        envelope: vector<u8>,
+        envelope: vector<u8>
     ): vector<u8> acquires Account {
         let pay_ref = meta_pay_id(salt, meta);
-        let (digest, _) = pay_checked(lane, owner, asset, to, amount, pay_ref, pay_lane(pay_ref), 0, valid_until,
-            relayer, extra, public_key, sig, envelope);
+        let (digest, _) =
+            pay_checked(
+                lane,
+                owner,
+                asset,
+                to,
+                amount,
+                pay_ref,
+                pay_lane(pay_ref),
+                0,
+                valid_until,
+                relayer,
+                extra,
+                public_key,
+                sig,
+                envelope
+            );
         digest
     }
 
@@ -355,14 +461,42 @@ module scaas::meta {
         extra: vector<u8>,
         public_key: vector<u8>,
         sig: vector<u8>,
-        envelope: vector<u8>,
+        envelope: vector<u8>
     ): address acquires Root, Account {
         let lane_id = pay_lane(pay_ref);
-        let (digest, table) = pay_checked(marker, owner, asset, to, amount, pay_ref, lane_id, 0, valid_until, marker,
-            extra, public_key, sig, envelope);
+        let (digest, table) =
+            pay_checked(
+                marker,
+                owner,
+                asset,
+                to,
+                amount,
+                pay_ref,
+                lane_id,
+                0,
+                valid_until,
+                marker,
+                extra,
+                public_key,
+                sig,
+                envelope
+            );
         let payee = if (to == marker) signer::address_of(lane) else to;
-        settle(owner, asset, payee, amount, pay_ref, lane_id, 0, valid_until, digest, table, &public_key, &envelope,
-            option::none());
+        settle(
+            owner,
+            asset,
+            payee,
+            amount,
+            pay_ref,
+            lane_id,
+            0,
+            valid_until,
+            digest,
+            table,
+            &public_key,
+            &envelope,
+            option::none()
+        );
         payee
     }
 
@@ -380,7 +514,7 @@ module scaas::meta {
         table: vector<u256>,
         public_key: &vector<u8>,
         envelope: &vector<u8>,
-        meta: Option<vector<u8>>,
+        meta: Option<vector<u8>>
     ) acquires Root, Account {
         let addr = account_of(owner);
         if (!exists<Account>(addr)) open_lazily(owner, public_key, envelope, table);
@@ -389,10 +523,17 @@ module scaas::meta {
         l.next = nonce + 1;
         if (valid_until > l.valid_until) l.valid_until = valid_until;
         let amt = amount as u64;
-        primary_fungible_store::transfer(&object::generate_signer_for_extending(&acct.extend), asset, payee, amt);
+        primary_fungible_store::transfer(
+            &object::generate_signer_for_extending(&acct.extend),
+            asset,
+            payee,
+            amt
+        );
         let asset_addr = object::object_address(&asset);
         emit_executed(asset_addr, addr, owner, digest, lane_id, nonce);
-        meta.for_each(|m| event::emit(PaymentMeta { contract: asset_addr, pay_id: pay_ref, meta: m }));
+        meta.for_each(
+            |m| event::emit(PaymentMeta { contract: asset_addr, pay_id: pay_ref, meta: m })
+        );
         emit_settled(asset_addr, owner, payee, amt, pay_ref);
     }
 
@@ -432,10 +573,25 @@ module scaas::meta {
         extra: vector<u8>,
         public_key: vector<u8>,
         sig: vector<u8>,
-        envelope: vector<u8>,
+        envelope: vector<u8>
     ): vector<u8> acquires Account {
-        let (digest, _) = pay_checked(lane, owner, asset, to, amount, pay_ref, lane_id, nonce, valid_until, relayer, extra,
-            public_key, sig, envelope);
+        let (digest, _) =
+            pay_checked(
+                lane,
+                owner,
+                asset,
+                to,
+                amount,
+                pay_ref,
+                lane_id,
+                nonce,
+                valid_until,
+                relayer,
+                extra,
+                public_key,
+                sig,
+                envelope
+            );
         digest
     }
 
@@ -456,31 +612,62 @@ module scaas::meta {
         extra: vector<u8>,
         public_key: vector<u8>,
         sig: vector<u8>,
-        envelope: vector<u8>,
+        envelope: vector<u8>
     ): (vector<u8>, vector<u256>) acquires Account {
         let addr = account_of(owner);
-        let op = new_op(addr, object::object_address(&asset), OP_PAY, owner, to, amount, pay_ref, lane_id, nonce,
-            valid_until, relayer, extra);
-        let digest = check_at(&op, lane);
-        let table = if (exists<Account>(addr)) {
-            let acct = &Account[addr];
-            assert!(verify_by(acct, &public_key, DOMAIN, &digest, &sig, &envelope), EBAD_SIGNATURE);
-            let next = if (acct.lanes.contains(lane_id)) acct.lanes.borrow(lane_id).next else 0;
-            assert!(next == nonce, EBAD_NONCE);
-            vector[]
-        } else {
-            assert!(auth::proves(&account::get_authentication_key(owner), &public_key), EFIRST_KEY);
-            let (rp, origin) = auth::webauthn_origin(&envelope);
-            let origins = if (origin.is_empty()) vector[] else vector[origin];   // ed25519: chưa có origin (M1)
-            let table = if (auth::scheme_of(&public_key) == auth::webauthn()) p256::table(&public_key) else vector[];
-            // Passkey: bảng rỗng (khoá không trên đường cong) ⇒ `auth::verify` tự tính lại rồi trả false.
-            assert!(
-                auth::verify(&public_key, DOMAIN, &digest, &sig, &envelope, &rp, &origins, &table, chain_id::get()),
-                EBAD_SIGNATURE,
+        let op =
+            new_op(
+                addr,
+                object::object_address(&asset),
+                OP_PAY,
+                owner,
+                to,
+                amount,
+                pay_ref,
+                lane_id,
+                nonce,
+                valid_until,
+                relayer,
+                extra
             );
-            assert!(nonce == 0, EBAD_NONCE);
-            table
-        };
+        let digest = check_at(&op, lane);
+        let table =
+            if (exists<Account>(addr)) {
+                let acct = &Account[addr];
+                assert!(
+                    verify_by(acct, &public_key, DOMAIN, &digest, &sig, &envelope),
+                    EBAD_SIGNATURE
+                );
+                let next =
+                    if (acct.lanes.contains(lane_id)) acct.lanes.borrow(lane_id).next else 0;
+                assert!(next == nonce, EBAD_NONCE);
+                vector[]
+            } else {
+                assert!(auth::proves(&account::get_authentication_key(owner), &public_key), EFIRST_KEY);
+                let (rp, origin) = auth::webauthn_origin(&envelope);
+                let origins = if (origin.is_empty()) vector[]
+                else vector[origin]; // ed25519: chưa có origin (M1)
+                let table =
+                    if (auth::scheme_of(&public_key) == auth::webauthn()) p256::table(&public_key)
+                    else vector[];
+                // Passkey: bảng rỗng (khoá không trên đường cong) ⇒ `auth::verify` tự tính lại rồi trả false.
+                assert!(
+                    auth::verify(
+                        &public_key,
+                        DOMAIN,
+                        &digest,
+                        &sig,
+                        &envelope,
+                        &rp,
+                        &origins,
+                        &table,
+                        chain_id::get()
+                    ),
+                    EBAD_SIGNATURE
+                );
+                assert!(nonce == 0, EBAD_NONCE);
+                table
+            };
         assert!(primary_fungible_store::balance(addr, asset) >= amount_u64(amount), EINSUFFICIENT);
         (digest, table)
     }
@@ -491,11 +678,13 @@ module scaas::meta {
     public entry fun prune(owner: address, lanes: vector<vector<u8>>) acquires Account {
         let acct = &mut Account[account_of(owner)];
         let now = timestamp::now_seconds();
-        lanes.for_each(|k| {
-            if (acct.lanes.contains(k) && prunable(acct.lanes.borrow(k).valid_until, now)) {
-                acct.lanes.remove(k);
+        lanes.for_each(
+            |k| {
+                if (acct.lanes.contains(k) && prunable(acct.lanes.borrow(k).valid_until, now)) {
+                    acct.lanes.remove(k);
+                }
             }
-        });
+        );
     }
 
     /// Lane / pay_ref có hạn `valid_until` xoá được lúc `now` (u64: `valid_until` do người ký chọn, không tràn).
@@ -504,7 +693,6 @@ module scaas::meta {
     }
 
     // ------------------------------------------------------------------ package (mandate, dex)
-
     package fun new_op(
         contract: address,
         asset: address,
@@ -517,25 +705,46 @@ module scaas::meta {
         nonce: u64,
         valid_until: u64,
         relayer: address,
-        extra: vector<u8>,
+        extra: vector<u8>
     ): MetaOp {
         MetaOp {
-            domain: DOMAIN, chain_id: chain_id::get(), contract, asset, op, from, to, amount, pay_ref, lane, nonce,
-            valid_until, relayer, extra,
+            domain: DOMAIN,
+            chain_id: chain_id::get(),
+            contract,
+            asset,
+            op,
+            from,
+            to,
+            amount,
+            pay_ref,
+            lane,
+            nonce,
+            valid_until,
+            relayer,
+            extra
         }
     }
 
     /// Độ dài trường, hạn, relayer ⇒ digest của op.
-    package fun check(op: &MetaOp, lane: &signer): vector<u8> { check_at(op, signer::address_of(lane)) }
+    package fun check(op: &MetaOp, lane: &signer): vector<u8> {
+        check_at(op, signer::address_of(lane))
+    }
 
     fun check_at(op: &MetaOp, lane: address): vector<u8> {
-        assert!(op.pay_ref.length() == 32 && op.lane.length() == 32 && op.extra.length() == 32, EBAD_FIELD);
+        assert!(
+            op.pay_ref.length() == 32
+                && op.lane.length() == 32
+                && op.extra.length() == 32,
+            EBAD_FIELD
+        );
         assert!(timestamp::now_seconds() <= op.valid_until, EEXPIRED);
         assert!(op.relayer == @0x0 || op.relayer == lane, EWRONG_RELAYER);
         sha3_256(bcs::to_bytes(op))
     }
 
-    public fun op_digest(op: &MetaOp): vector<u8> { sha3_256(bcs::to_bytes(op)) }
+    public fun op_digest(op: &MetaOp): vector<u8> {
+        sha3_256(bcs::to_bytes(op))
+    }
 
     /// `public_key` phải là một khoá của account và ký `digest` (nhãn `label` trong phong bì signMessage).
     fun verify_by(
@@ -544,11 +753,21 @@ module scaas::meta {
         label: vector<u8>,
         digest: &vector<u8>,
         sig: &vector<u8>,
-        envelope: &vector<u8>,
+        envelope: &vector<u8>
     ): bool {
         let (found, i) = acct.keys.find(|k| k.public_key == *public_key);
-        found && auth::verify(public_key, label, digest, sig, envelope, &acct.keys[i].rp_id_hash, &acct.origins,
-            &acct.keys[i].table, chain_id::get())
+        found
+            && auth::verify(
+                public_key,
+                label,
+                digest,
+                sig,
+                envelope,
+                &acct.keys[i].rp_id_hash,
+                &acct.origins,
+                &acct.keys[i].table,
+                chain_id::get()
+            )
     }
 
     /// Khoá của account `addr` ký `digest` — cho `mandate`/`dex`.
@@ -558,7 +777,7 @@ module scaas::meta {
         label: vector<u8>,
         digest: &vector<u8>,
         sig: &vector<u8>,
-        envelope: &vector<u8>,
+        envelope: &vector<u8>
     ): bool acquires Account {
         exists<Account>(addr) && verify_by(&Account[addr], public_key, label, digest, sig, envelope)
     }
@@ -574,16 +793,21 @@ module scaas::meta {
         amount as u64
     }
 
-    package fun emit_executed(contract: address, account: address, from: address, digest: vector<u8>, lane: vector<u8>, nonce: u64) {
-        event::emit(MetaTransactionExecuted { contract, account, from, digest, lane, nonce });
+    package fun emit_executed(
+        contract: address, account: address, from: address, digest: vector<u8>, lane: vector<u8>, nonce: u64
+    ) {
+        event::emit(
+            MetaTransactionExecuted { contract, account, from, digest, lane, nonce }
+        );
     }
 
-    package fun emit_settled(contract: address, from: address, to: address, amount: u64, pay_ref: vector<u8>) {
+    package fun emit_settled(
+        contract: address, from: address, to: address, amount: u64, pay_ref: vector<u8>
+    ) {
         event::emit(PaymentSettled { contract, from, to, amount, pay_ref });
     }
 
     // ------------------------------------------------------------------ vòng đời khoá (RS11-3)
-
     #[view]
     public fun keyop_digest(
         owner: address,
@@ -593,12 +817,21 @@ module scaas::meta {
         rp_id_hash: vector<u8>,
         origin: vector<u8>,
         guardian: address,
-        valid_until: u64,
+        valid_until: u64
     ): vector<u8> acquires Account {
         let addr = account_of(owner);
         let op = KeyOp {
-            domain: KEYOP_DOMAIN, chain_id: chain_id::get(), account: addr, action, scheme, public_key, rp_id_hash,
-            origin, guardian, nonce: Account[addr].key_nonce, valid_until,
+            domain: KEYOP_DOMAIN,
+            chain_id: chain_id::get(),
+            account: addr,
+            action,
+            scheme,
+            public_key,
+            rp_id_hash,
+            origin,
+            guardian,
+            nonce: Account[addr].key_nonce,
+            valid_until
         };
         sha3_256(bcs::to_bytes(&op))
     }
@@ -615,14 +848,39 @@ module scaas::meta {
         valid_until: u64,
         signer_key: vector<u8>,
         sig: vector<u8>,
-        envelope: vector<u8>,
+        envelope: vector<u8>
     ) acquires Account {
         assert!(timestamp::now_seconds() <= valid_until, EEXPIRED);
         let addr = account_of(owner);
         assert!(exists<Account>(addr), ENO_ACCOUNT);
-        let digest = keyop_digest(owner, action, scheme, public_key, rp_id_hash, origin, guardian, valid_until);
-        assert!(verify_by(&Account[addr], &signer_key, KEYOP_DOMAIN, &digest, &sig, &envelope), EBAD_SIGNATURE);
-        apply(addr, action, key_of(scheme, public_key, rp_id_hash), origin, guardian);
+        let digest = keyop_digest(
+            owner,
+            action,
+            scheme,
+            public_key,
+            rp_id_hash,
+            origin,
+            guardian,
+            valid_until
+        );
+        assert!(
+            verify_by(
+                &Account[addr],
+                &signer_key,
+                KEYOP_DOMAIN,
+                &digest,
+                &sig,
+                &envelope
+            ),
+            EBAD_SIGNATURE
+        );
+        apply(
+            addr,
+            action,
+            key_of(scheme, public_key, rp_id_hash),
+            origin,
+            guardian
+        );
     }
 
     /// Đường 2: chính chủ gửi tx native. Chủ thể có tài khoản Aptos passkey/keyless/MultiKey (khoá không dẫn ra được
@@ -635,13 +893,18 @@ module scaas::meta {
         public_key: vector<u8>,
         rp_id_hash: vector<u8>,
         origin: vector<u8>,
-        guardian: address,
+        guardian: address
     ) acquires Root, Account {
         let o = signer::address_of(owner);
         let addr = account_of(o);
         let key = key_of(scheme, public_key, rp_id_hash);
         if (!exists<Account>(addr)) {
-            assert!(action == ADD_KEY && key_valid(&key) && origin_ok(&key, &origin), EKEY_OP);
+            assert!(
+                action == ADD_KEY
+                    && key_valid(&key)
+                    && origin_ok(&key, &origin),
+                EKEY_OP
+            );
             create_account(o, key, origin);
             return
         };
@@ -652,11 +915,7 @@ module scaas::meta {
     /// (tx native, ký bằng auth key HIỆN TẠI) thay toàn bộ khoá bằng một khoá trong một tx: khoá cũ (có thể đã lộ) và
     /// KeyOp đang chờ của chúng hết hiệu lực, khôi phục đang chờ bị huỷ. Origin giữ nguyên (+ `origin` nếu có).
     public entry fun reset_keys(
-        owner: &signer,
-        scheme: u8,
-        public_key: vector<u8>,
-        rp_id_hash: vector<u8>,
-        origin: vector<u8>,
+        owner: &signer, scheme: u8, public_key: vector<u8>, rp_id_hash: vector<u8>, origin: vector<u8>
     ) acquires Account {
         let addr = account_of(signer::address_of(owner));
         assert!(exists<Account>(addr), ENO_ACCOUNT);
@@ -664,11 +923,17 @@ module scaas::meta {
         acct.keys = vector[];
         acct.recovery = option::none();
         add_key(acct, key_of(scheme, public_key, rp_id_hash), origin);
-        event::emit(KeyOpExecuted { account: addr, action: RESET_KEYS, nonce: acct.key_nonce });
+        event::emit(KeyOpExecuted {
+            account: addr,
+            action: RESET_KEYS,
+            nonce: acct.key_nonce
+        });
         acct.key_nonce += 1;
     }
 
-    fun apply(addr: address, action: u8, key: Key, origin: vector<u8>, guardian: address) acquires Account {
+    fun apply(
+        addr: address, action: u8, key: Key, origin: vector<u8>, guardian: address
+    ) acquires Account {
         let acct = &mut Account[addr];
         if (action == ADD_KEY) {
             add_key(acct, key, origin);
@@ -704,11 +969,14 @@ module scaas::meta {
         scheme: u8,
         public_key: vector<u8>,
         rp_id_hash: vector<u8>,
-        origin: vector<u8>,
+        origin: vector<u8>
     ) acquires Account {
         let addr = account_of(owner);
         let acct = &mut Account[addr];
-        assert!(acct.guardian != @0x0 && signer::address_of(guardian) == acct.guardian, ENOT_GUARDIAN);
+        assert!(
+            acct.guardian != @0x0 && signer::address_of(guardian) == acct.guardian,
+            ENOT_GUARDIAN
+        );
         let key = key_of(scheme, public_key, rp_id_hash);
         assert!(key_valid(&key) && origin_ok(&key, &origin), EKEY_OP);
         let ready_at = timestamp::now_seconds() + RECOVERY_DELAY_S;
@@ -719,8 +987,14 @@ module scaas::meta {
     public entry fun finish_recovery(guardian: &signer, owner: address) acquires Account {
         let addr = account_of(owner);
         let acct = &mut Account[addr];
-        assert!(acct.guardian != @0x0 && signer::address_of(guardian) == acct.guardian, ENOT_GUARDIAN);
-        assert!(acct.recovery.is_some() && timestamp::now_seconds() >= acct.recovery.borrow().ready_at, ERECOVERY);
+        assert!(
+            acct.guardian != @0x0 && signer::address_of(guardian) == acct.guardian,
+            ENOT_GUARDIAN
+        );
+        assert!(
+            acct.recovery.is_some() && timestamp::now_seconds() >= acct.recovery.borrow().ready_at,
+            ERECOVERY
+        );
         let Recovery { key, origin, ready_at: _ } = acct.recovery.extract();
         add_key(acct, key, origin);
         acct.key_nonce += 1; // chữ ký vòng đời đang chờ của khoá cũ hết hiệu lực
@@ -729,25 +1003,33 @@ module scaas::meta {
 
     /// Khoá passkey kèm bảng `p256::table` (rỗng nếu khoá không nằm trên đường cong ⇒ `key_valid` từ chối).
     fun key_of(scheme: u8, public_key: vector<u8>, rp_id_hash: vector<u8>): Key {
-        let table = if (scheme == auth::webauthn()) p256::table(&public_key) else vector[];
+        let table =
+            if (scheme == auth::webauthn()) p256::table(&public_key) else vector[];
         Key { scheme, public_key, rp_id_hash, table }
     }
 
     fun key_valid(k: &Key): bool {
         let s = auth::scheme_of(&k.public_key);
-        s == k.scheme && (s == auth::ed25519() || (s == auth::webauthn() && !k.table.is_empty()))
+        s == k.scheme
+            && (s == auth::ed25519()
+                || (s == auth::webauthn()
+                    && !k.table.is_empty()))
             && k.rp_id_hash.length() == (if (s == auth::webauthn()) 32 else 0)
     }
 
     /// Passkey cần một origin (đã có trong account hoặc đi kèm).
-    fun origin_ok(k: &Key, origin: &vector<u8>): bool { k.scheme != auth::webauthn() || !origin.is_empty() }
+    fun origin_ok(k: &Key, origin: &vector<u8>): bool {
+        k.scheme != auth::webauthn() || !origin.is_empty()
+    }
 
     fun add_key(acct: &mut Account, key: Key, origin: vector<u8>) {
         // Trùng theo public_key, không theo cả Key: `verify_by` lấy entry đầu cùng public_key, nên cùng passkey thêm lại
         // với rpIdHash khác sẽ không bao giờ kiểm được (review L5).
         assert!(
-            key_valid(&key) && !acct.keys.any(|k| k.public_key == key.public_key) && acct.keys.length() < MAX_KEYS,
-            EKEY_OP,
+            key_valid(&key)
+                && !acct.keys.any(|k| k.public_key == key.public_key)
+                && acct.keys.length() < MAX_KEYS,
+            EKEY_OP
         );
         if (!origin.is_empty() && !acct.origins.contains(&origin)) add_origin(acct, origin);
         acct.keys.push_back(key);
@@ -756,27 +1038,38 @@ module scaas::meta {
 
     fun add_origin(acct: &mut Account, origin: vector<u8>) {
         assert!(
-            !origin.is_empty() && origin.length() <= 256 && !origin.contains(&34) && !acct.origins.contains(&origin)
+            !origin.is_empty()
+                && origin.length() <= 256
+                && !origin.contains(&34)
+                && !acct.origins.contains(&origin)
                 && acct.origins.length() < MAX_ORIGINS,
-            EKEY_OP,
+            EKEY_OP
         );
         acct.origins.push_back(origin);
     }
 
     fun check_origins(acct: &Account) {
-        assert!(!acct.origins.is_empty() || !acct.keys.any(|k| k.scheme == auth::webauthn()), ELAST_KEY);
+        assert!(
+            !acct.origins.is_empty() || !acct.keys.any(|k| k.scheme == auth::webauthn()),
+            ELAST_KEY
+        );
     }
 
     // ------------------------------------------------------------------ views
+    #[view]
+    public fun exists_at(owner: address): bool {
+        exists<Account>(account_of(owner))
+    }
 
     #[view]
-    public fun exists_at(owner: address): bool { exists<Account>(account_of(owner)) }
+    public fun owner_of(addr: address): address acquires Account {
+        Account[addr].owner
+    }
 
     #[view]
-    public fun owner_of(addr: address): address acquires Account { Account[addr].owner }
-
-    #[view]
-    public fun key_count(owner: address): u64 acquires Account { Account[account_of(owner)].keys.length() }
+    public fun key_count(owner: address): u64 acquires Account {
+        Account[account_of(owner)].keys.length()
+    }
 
     #[view]
     public fun has_key(owner: address, public_key: vector<u8>): bool acquires Account {
@@ -789,7 +1082,9 @@ module scaas::meta {
     }
 
     #[view]
-    public fun key_nonce(owner: address): u64 acquires Account { Account[account_of(owner)].key_nonce }
+    public fun key_nonce(owner: address): u64 acquires Account {
+        Account[account_of(owner)].key_nonce
+    }
 
     #[view]
     public fun lane_nonce(owner: address, lane: vector<u8>): u64 acquires Account {
@@ -798,18 +1093,26 @@ module scaas::meta {
     }
 
     #[view]
-    public fun guardian(owner: address): address acquires Account { Account[account_of(owner)].guardian }
+    public fun guardian(owner: address): address acquires Account {
+        Account[account_of(owner)].guardian
+    }
 
     #[test_only]
-    public fun init_for_test(publisher: &signer) { init_module(publisher) }
+    public fun init_for_test(publisher: &signer) {
+        init_module(publisher)
+    }
 
     #[test_only]
-    public fun payment_meta_for_testing(contract: address, pay_id: vector<u8>, meta: vector<u8>): PaymentMeta {
+    public fun payment_meta_for_testing(
+        contract: address, pay_id: vector<u8>, meta: vector<u8>
+    ): PaymentMeta {
         PaymentMeta { contract, pay_id, meta }
     }
 
     #[test_only]
-    public fun payment_settled_for_testing(contract: address, from: address, to: address, amount: u64, pay_ref: vector<u8>): PaymentSettled {
+    public fun payment_settled_for_testing(
+        contract: address, from: address, to: address, amount: u64, pay_ref: vector<u8>
+    ): PaymentSettled {
         PaymentSettled { contract, from, to, amount, pay_ref }
     }
 }

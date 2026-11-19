@@ -34,11 +34,27 @@ contract RouterPairsTest is GovRouterFixture {
 
     /// The ABI types of each op's own parameters (after `target`), index = op.
     function _types(uint256 op) internal pure returns (string memory) {
-        string[19] memory t = ["uint8,bytes32,bytes32", "uint8,bytes32,bytes32",
-            "uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32", "uint8,bytes32,bytes32",
+        string[19] memory t = [
+            "uint8,bytes32,bytes32",
+            "uint8,bytes32,bytes32",
+            "uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32",
+            "uint8,bytes32,bytes32",
             "uint8,bytes32",
-            "bytes32,bytes32", "", "bytes32", "uint8,bytes32", "address,uint256", "bytes32,uint256", "address,bytes32", "address,uint96,uint96", "",
-            "", "address,address,bool", "address,bool", "bool", "uint32,address"];
+            "bytes32,bytes32",
+            "",
+            "bytes32",
+            "uint8,bytes32",
+            "address,uint256",
+            "bytes32,uint256",
+            "address,bytes32",
+            "address,uint96,uint96",
+            "",
+            "",
+            "address,address,bool",
+            "address,bool",
+            "bool",
+            "uint32,address"
+        ];
         return t[op];
     }
 
@@ -49,8 +65,15 @@ contract RouterPairsTest is GovRouterFixture {
         if (op >= OP_MINT && keccak256(bytes(env)) == keccak256(bytes(ENV_UA))) {
             ty = bytes(ty).length == 0 ? "bytes32" : string.concat(ty, ",bytes32");
         }
-        return bytes4(keccak256(bytes(string.concat("mtx", rows[op].name, "(", env, ",address",
-            bytes(ty).length == 0 ? "" : ",", ty, ",", sig, ")"))));
+        return bytes4(
+            keccak256(
+                bytes(
+                    string.concat(
+                        "mtx", rows[op].name, "(", env, ",address", bytes(ty).length == 0 ? "" : ",", ty, ",", sig, ")"
+                    )
+                )
+            )
+        );
     }
 
     /// The merged entry's selector.
@@ -64,35 +87,59 @@ contract RouterPairsTest is GovRouterFixture {
     }
 
     function _structHash(uint256 op, bool ua, MetaTxLib.UAEnvelope memory e, address target, bytes memory words)
-        internal view returns (bytes32)
+        internal
+        view
+        returns (bytes32)
     {
-        string memory s = string.concat(ua ? "UA" : "", rows[op].name, ua ? "(bytes32 from" : "(address from",
-            ",address target", rows[op].params, TAIL);
+        string memory s = string.concat(
+            ua ? "UA" : "",
+            rows[op].name,
+            ua ? "(bytes32 from" : "(address from",
+            ",address target",
+            rows[op].params,
+            TAIL
+        );
         if (op == SET_GRANT) s = string.concat(s, TERMS);
-        return keccak256(bytes.concat(abi.encode(keccak256(bytes(s)), e.from, target), words,
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        return keccak256(
+            bytes.concat(
+                abi.encode(keccak256(bytes(s)), e.from, target),
+                words,
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
     }
 
     function _mDigest(GovernanceRouter r, uint256 op, MetaTxLib.UAEnvelope memory e, address target, bytes memory words)
-        internal view returns (bytes32)
+        internal
+        view
+        returns (bytes32)
     {
         return keccak256(abi.encodePacked("\x19\x01", _domain(r), _structHash(op, true, e, target, words)));
     }
 
     /// `sel` with the envelope, `target`, the op's ABI words `args`, then one dynamic signature value (its encoding `sigTail`).
     function _cd(bytes4 sel, MetaTxLib.UAEnvelope memory e, address target, bytes memory args, bytes memory sigTail)
-        internal pure returns (bytes memory)
+        internal
+        pure
+        returns (bytes memory)
     {
         bytes memory head = bytes.concat(abi.encode(e), abi.encode(target), args);
         return bytes.concat(sel, head, abi.encode(head.length + 32), sigTail);
     }
 
     /// The merged call of `op` signed by `from` on `r`, lane `batch`.
-    function _mCall(GovernanceRouter r, uint256 op, bytes32 from, uint256 batch, address target, bytes memory args,
-        bytes memory words) internal view returns (bytes memory)
-    {
+    function _mCall(
+        GovernanceRouter r,
+        uint256 op,
+        bytes32 from,
+        uint256 batch,
+        address target,
+        bytes memory args,
+        bytes memory words
+    ) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e = _envelope(r, from, batch);
-        if (op >= OP_MINT) { // the target's chain word, the op's last field (CTR-GOV-28 Change)
+        if (op >= OP_MINT) {
+            // the target's chain word, the op's last field (CTR-GOV-28 Change)
             args = bytes.concat(args, abi.encode(EnvKit.codeUidOf(target)));
             words = bytes.concat(words, abi.encode(EnvKit.codeUidOf(target)));
         }
@@ -197,8 +244,15 @@ contract RouterPairsTest is GovRouterFixture {
         bytes memory propose = abi.encode(address(usd), uint96(101), uint96(100));
         if (s == pq) {
             WrappedToken w = _wrapped(s, s, wallet);
-            bytes memory cd = _mCall(router, op, s, 0, address(w), op == PROPOSE_RATE ? propose : bytes(""),
-                op == PROPOSE_RATE ? propose : bytes(""));
+            bytes memory cd = _mCall(
+                router,
+                op,
+                s,
+                0,
+                address(w),
+                op == PROPOSE_RATE ? propose : bytes(""),
+                op == PROPOSE_RATE ? propose : bytes("")
+            );
             vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
             _runOn(router, cd);
             assertEq(router.mtxNonce(pq, 0), 0, "the target's refusal reverts the call");
@@ -223,25 +277,81 @@ contract RouterPairsTest is GovRouterFixture {
         }
     }
 
-    function test_routerRow_GrantRole() public { _both(GRANT_ROLE); }
-    function test_routerRow_RevokeRole() public { _both(REVOKE_ROLE); }
-    function test_routerRow_SetGrant() public { _both(SET_GRANT); }
-    function test_routerRow_CancelGrant() public { _both(CANCEL_GRANT); }
-    function test_routerRow_DisableFeature() public { _both(DISABLE_FEATURE); }
-    function test_routerRow_TransferAdmin() public { _both(TRANSFER_ADMIN); }
-    function test_routerRow_AcceptAdmin() public { _both(ACCEPT_ADMIN); }
-    function test_routerRow_RenounceAdmin() public { _both(RENOUNCE_ADMIN); }
-    function test_routerRow_RenounceRole() public { _both(RENOUNCE_ROLE); }
-    function test_routerRow_Mint() public { _both(OP_MINT); }
-    function test_routerRow_MintToUA() public { _both(MINT_TO_UA); }
-    function test_routerRow_DisableWrap() public { _both(DISABLE_WRAP); }
-    function test_routerRow_ProposeRate() public { _both(PROPOSE_RATE); }
-    function test_routerRow_CancelRate() public { _both(CANCEL_RATE); }
-    function test_routerRow_ExecuteRate() public { _both(EXECUTE_RATE); }
-    function test_routerRow_SetMarket() public { _both(SET_MARKET); }
-    function test_routerRow_SetExchangeTarget() public { _both(SET_EXCHANGE_TARGET); }
-    function test_routerRow_SetListedOnly() public { _both(SET_LISTED_ONLY); }
-    function test_routerRow_SetFeeSplit() public { _both(SET_FEE_SPLIT); }
+    function test_routerRow_GrantRole() public {
+        _both(GRANT_ROLE);
+    }
+
+    function test_routerRow_RevokeRole() public {
+        _both(REVOKE_ROLE);
+    }
+
+    function test_routerRow_SetGrant() public {
+        _both(SET_GRANT);
+    }
+
+    function test_routerRow_CancelGrant() public {
+        _both(CANCEL_GRANT);
+    }
+
+    function test_routerRow_DisableFeature() public {
+        _both(DISABLE_FEATURE);
+    }
+
+    function test_routerRow_TransferAdmin() public {
+        _both(TRANSFER_ADMIN);
+    }
+
+    function test_routerRow_AcceptAdmin() public {
+        _both(ACCEPT_ADMIN);
+    }
+
+    function test_routerRow_RenounceAdmin() public {
+        _both(RENOUNCE_ADMIN);
+    }
+
+    function test_routerRow_RenounceRole() public {
+        _both(RENOUNCE_ROLE);
+    }
+
+    function test_routerRow_Mint() public {
+        _both(OP_MINT);
+    }
+
+    function test_routerRow_MintToUA() public {
+        _both(MINT_TO_UA);
+    }
+
+    function test_routerRow_DisableWrap() public {
+        _both(DISABLE_WRAP);
+    }
+
+    function test_routerRow_ProposeRate() public {
+        _both(PROPOSE_RATE);
+    }
+
+    function test_routerRow_CancelRate() public {
+        _both(CANCEL_RATE);
+    }
+
+    function test_routerRow_ExecuteRate() public {
+        _both(EXECUTE_RATE);
+    }
+
+    function test_routerRow_SetMarket() public {
+        _both(SET_MARKET);
+    }
+
+    function test_routerRow_SetExchangeTarget() public {
+        _both(SET_EXCHANGE_TARGET);
+    }
+
+    function test_routerRow_SetListedOnly() public {
+        _both(SET_LISTED_ONLY);
+    }
+
+    function test_routerRow_SetFeeSplit() public {
+        _both(SET_FEE_SPLIT);
+    }
 
     // ------------------------------------------------------------------ the subject, the events, no registry
 
@@ -274,7 +384,8 @@ contract RouterPairsTest is GovRouterFixture {
         NormalToken t = _normal(eoa, eoa, 0);
         _m(OP_MINT, eoa, address(t), abi.encode(BOB, uint256(5)));
         assertEq(t.balanceOf(BOB), 5);
-        bytes memory cd = _mCall(router, OP_MINT, pq, 0, address(t), abi.encode(BOB, uint256(1)), abi.encode(BOB, uint256(1)));
+        bytes memory cd =
+            _mCall(router, OP_MINT, pq, 0, address(t), abi.encode(BOB, uint256(1)), abi.encode(BOB, uint256(1)));
         vm.expectRevert(IUALedger.UALedgerOff.selector);
         _runOn(router, cd);
     }
@@ -292,10 +403,26 @@ contract RouterPairsTest is GovRouterFixture {
     function _cancel(bytes32 who, uint256 batch, uint256 nonce, uint256 lane) internal view returns (bytes memory) {
         MetaTxLib.UAEnvelope memory e =
             MetaTxLib.UAEnvelope(who, batch, nonce, block.timestamp + 1 hours, 0, address(0), 0, address(0));
-        bytes32 d = MtxDigest.typed(address(router), keccak256(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, who, lane,
-            batch, nonce, e.validUntil, uint32(0), address(0), uint256(0), address(0))));
-        return abi.encodeWithSignature(string.concat("mtxCancelNonce(", ENV_UA, ",uint256,", UASIG, ")"), e, lane,
-            _auth(who, d));
+        bytes32 d = MtxDigest.typed(
+            address(router),
+            keccak256(
+                abi.encode(
+                    MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+                    who,
+                    lane,
+                    batch,
+                    nonce,
+                    e.validUntil,
+                    uint32(0),
+                    address(0),
+                    uint256(0),
+                    address(0)
+                )
+            )
+        );
+        return abi.encodeWithSignature(
+            string.concat("mtxCancelNonce(", ENV_UA, ",uint256,", UASIG, ")"), e, lane, _auth(who, d)
+        );
     }
 
     /// A cancel signed at nonce 0 of lane 3, withheld; a newer merged op consumes nonce 0 of lane 3; the cancel then cannot
@@ -320,9 +447,12 @@ contract RouterPairsTest is GovRouterFixture {
     /// same subjects' merged op runs.
     function test_routerGenericEntriesRefuseEveryCall() public {
         NormalToken t = _normal(pq, pq, 0);
-        bytes[4] memory blobs = [abi.encodeCall(IGovernance.grantRole, (MINT, eoa, EnvKit.codeUidOf(address(t)))),
+        bytes[4] memory blobs = [
+            abi.encodeCall(IGovernance.grantRole, (MINT, eoa, EnvKit.codeUidOf(address(t)))),
             _mCall(router, OP_MINT, pq, 0, address(t), abi.encode(BOB, uint256(1)), abi.encode(BOB, uint256(1))),
-            abi.encodeCall(IMetaTx.cancelNonce, (7)), bytes("")];
+            abi.encodeCall(IMetaTx.cancelNonce, (7)),
+            bytes("")
+        ];
         bytes32[2] memory who = [eoa, pq];
         for (uint256 b; b < blobs.length; ++b) {
             bytes4 refused = bytes4(blobs[b]);
@@ -335,8 +465,9 @@ contract RouterPairsTest is GovRouterFixture {
             for (uint256 i; i < 2; ++i) {
                 MetaTxLib.UAMetaTransaction[] memory us = new MetaTxLib.UAMetaTransaction[](1);
                 IUARegistry.UASig[] memory as_ = new IUARegistry.UASig[](1);
-                us[0] = MetaTxLib.UAMetaTransaction(who[i], blobs[b], 0, 0, block.timestamp + 1 hours, 0, address(0), 0,
-                    address(0));
+                us[0] = MetaTxLib.UAMetaTransaction(
+                    who[i], blobs[b], 0, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0)
+                );
                 as_[0] = _auth(who[i], router.mtxDigest(us[0]));
                 vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, refused));
                 router.mtxExecute(us[0], as_[0]);
@@ -357,7 +488,9 @@ contract RouterPairsTest is GovRouterFixture {
     /// same signer's `UA<Op>` signature on the merged entry runs. The target takes every call, so only the router refuses.
     function test_routerOldAddressSignatureHasNoEntry() public {
         address target = address(new AnyTarget());
-        for (uint256 op; op < 19; ++op) _oldHasNoEntry(op, target);
+        for (uint256 op; op < 19; ++op) {
+            _oldHasNoEntry(op, target);
+        }
         assertEq(router.mtxNonce(eoa, 0), 19);
     }
 
@@ -366,12 +499,14 @@ contract RouterPairsTest is GovRouterFixture {
         bytes memory words = args;
         if (op == SET_GRANT) (args, words) = _setGrantArgs(MINT, next, _limited(1), keccak256("a chain word"));
         MetaTxLib.UAEnvelope memory e = _envelope(router, eoa, 0);
-        bytes memory oldSig = _ecdsa(eoa, keccak256(abi.encodePacked("\x19\x01", _domain(router),
-            _structHash(op, false, e, target, words))));
+        bytes memory oldSig = _ecdsa(
+            eoa, keccak256(abi.encodePacked("\x19\x01", _domain(router), _structHash(op, false, e, target, words)))
+        );
         (bool ok, bytes memory ret) = address(router).call(_cd(_old(op), e, target, args, _tail(abi.encode(oldSig))));
         assertFalse(ok, rows[op].name);
         assertEq(ret.length, 0, rows[op].name);
-        if (op >= OP_MINT) { // the merged entry takes the target's chain word last (CTR-GOV-28 Change); any word for AnyTarget
+        if (op >= OP_MINT) {
+            // the merged entry takes the target's chain word last (CTR-GOV-28 Change); any word for AnyTarget
             args = bytes.concat(args, abi.encode(keccak256("a chain word")));
             words = bytes.concat(words, abi.encode(keccak256("a chain word")));
         }
@@ -388,7 +523,9 @@ contract RouterPairsTest is GovRouterFixture {
     function _anyArgs(uint256 op) internal view returns (bytes memory) {
         string memory ty = _types(op);
         if (bytes(ty).length == 0) return "";
-        if (op == GRANT_ROLE || op == REVOKE_ROLE || op == CANCEL_GRANT) return abi.encode(MINT, next, keccak256("a chain word"));
+        if (op == GRANT_ROLE || op == REVOKE_ROLE || op == CANCEL_GRANT) {
+            return abi.encode(MINT, next, keccak256("a chain word"));
+        }
         if (op == DISABLE_FEATURE) return abi.encode(MINT, keccak256("a chain word"));
         if (op == RENOUNCE_ROLE) return abi.encode(MINT, keccak256("a chain word"));
         if (op == TRANSFER_ADMIN) return abi.encode(next, keccak256("a chain word"));

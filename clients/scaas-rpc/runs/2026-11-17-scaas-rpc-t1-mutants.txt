@@ -1,0 +1,8 @@
+# t1 mutants at commit b77670551 (name | outcome | test)
+drop the scheme check | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib a_scheme_other_than_http_is_refused
+compare URLs as strings | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib equal_parsed_urls_are_refused
+accept one endpoint under strict_majority | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib strict_majority_with_one_endpoint_is_refused
+a Debug derive on the URL | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib debug_and_display_carry_no_url_or_secret
+a list-wide credential accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib a_list_wide_credential_is_refused
+depth_within returning Deep for Unbalanced | killed | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features json --test json depth_within_matches_bounded
+6 mutants, 6 killed, 0 survived, 0 not loaded

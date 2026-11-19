@@ -44,7 +44,11 @@ impl Default for Transcript {
 
 impl Transcript {
     pub fn new() -> Self {
-        Self { st: keccak256(b"SCAAS-ZETHER-TRANSCRIPT-V1"), ops: vec![], states: vec![] }
+        Self {
+            st: keccak256(b"SCAAS-ZETHER-TRANSCRIPT-V1"),
+            ops: vec![],
+            states: vec![],
+        }
     }
 
     fn step(&mut self, kind: u8, label: &str, data: Option<&[u8]>) {
@@ -64,13 +68,18 @@ impl Transcript {
 
     pub fn absorb(&mut self, label: &str, data: &[u8]) {
         self.step(0x00, label, Some(data));
-        self.ops.push(Op::Absorb { label: label.into(), data: data.to_vec() });
+        self.ops.push(Op::Absorb {
+            label: label.into(),
+            data: data.to_vec(),
+        });
     }
 
     /// Never zero for a verifier that checks `!= 0`; callers reject a zero challenge.
     pub fn challenge<C: ZCurve>(&mut self, label: &str) -> Fr<C> {
         self.step(0x01, label, None);
-        self.ops.push(Op::Challenge { label: label.into() });
+        self.ops.push(Op::Challenge {
+            label: label.into(),
+        });
         hash_to_scalar::<C>(&self.st)
     }
 

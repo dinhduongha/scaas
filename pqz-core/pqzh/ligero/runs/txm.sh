@@ -15,23 +15,23 @@ set -u
 cd "$(dirname "$0")/.."
 tag=${1:-l16-txm}
 export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-2}
-/usr/bin/time -v cargo test --release --offline -- --nocapture --test-threads 1 > runs/$tag-tests.txt 2>&1 || exit 1
-cargo test --release --offline --features oversize --test multi -- --nocapture --test-threads 1 > runs/$tag-tests-oversize.txt 2>&1 || exit 1
-cargo test --release --offline --no-default-features --lib > runs/$tag-nobench.txt 2>&1 || exit 1
+/usr/bin/time -v cargo test --release --offline -- --nocapture --test-threads 1 >runs/$tag-tests.txt 2>&1 || exit 1
+cargo test --release --offline --features oversize --test multi -- --nocapture --test-threads 1 >runs/$tag-tests-oversize.txt 2>&1 || exit 1
+cargo test --release --offline --no-default-features --lib >runs/$tag-nobench.txt 2>&1 || exit 1
 runs/bench.sh $tag-native-fnv --rel all --regime proven --r431 1 --np 5 --nv 1 --nadv 1 || exit 1
 runs/bench.sh $tag-proven --rel txm --regime proven --r431 1 --np 10 --nv 1000 --nadv 80 || exit 1
-cargo build --release --offline --features oversize --bin ligero_bench --target-dir target/oversize 2> runs/$tag-oversize-build.txt || exit 1
+cargo build --release --offline --features oversize --bin ligero_bench --target-dir target/oversize 2>runs/$tag-oversize-build.txt || exit 1
 /usr/bin/time -v target/oversize/release/ligero_bench --rel txm --regime proven --r431 1 --np 3 --nv 100 --nadv 10 \
-  > runs/$tag-oversize.jsonl 2> runs/$tag-oversize-time.txt || exit 1
-(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown 2> ../runs/$tag-wasm-build.txt) || exit 1
-/usr/bin/time -v node wasm/run_wasm.mjs 2 1000 4 1 1 txm > runs/$tag-proven-wasm.jsonl 2> runs/$tag-proven-wasm-time.txt || exit 1
+    >runs/$tag-oversize.jsonl 2>runs/$tag-oversize-time.txt || exit 1
+(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown 2>../runs/$tag-wasm-build.txt) || exit 1
+/usr/bin/time -v node wasm/run_wasm.mjs 2 1000 4 1 1 txm >runs/$tag-proven-wasm.jsonl 2>runs/$tag-proven-wasm-time.txt || exit 1
 (cd wasm && cargo build --release --offline --target wasm32-unknown-unknown --features oversize --target-dir target/oversize \
-  2> ../runs/$tag-oversize-wasm-build.txt) || exit 1
+    2>../runs/$tag-oversize-wasm-build.txt) || exit 1
 PQZH_WASM_FILE=wasm/target/oversize/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm /usr/bin/time -v \
-  node wasm/run_wasm.mjs 2 100 4 1 1 txm > runs/$tag-oversize-wasm.jsonl 2> runs/$tag-oversize-wasm-time.txt || exit 1
+    node wasm/run_wasm.mjs 2 100 4 1 1 txm >runs/$tag-oversize-wasm.jsonl 2>runs/$tag-oversize-wasm-time.txt || exit 1
 mkdir -p target/xcheck/rust
 cargo run --release --offline --quiet --example dump_setup -- target/xcheck/rust || exit 1
-python3 -I ../xcheck/kat_multi.py target/xcheck/rust > runs/$tag-kat-multi.txt 2>&1 || exit 1
-../xcheck/ligero.sh > runs/$tag-xcheck.txt 2>&1 || exit 1
-(cd ../../ffi && cargo check --offline --all-targets) > runs/$tag-ffi-check.txt 2>&1 || exit 1
+python3 -I ../xcheck/kat_multi.py target/xcheck/rust >runs/$tag-kat-multi.txt 2>&1 || exit 1
+../xcheck/ligero.sh >runs/$tag-xcheck.txt 2>&1 || exit 1
+(cd ../../ffi && cargo check --offline --all-targets) >runs/$tag-ffi-check.txt 2>&1 || exit 1
 echo "txm.sh $tag: ok"

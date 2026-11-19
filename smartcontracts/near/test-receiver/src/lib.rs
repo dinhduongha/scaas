@@ -9,7 +9,12 @@ pub struct Receiver {}
 #[near]
 impl Receiver {
     /// Returns `msg` (a decimal) as the unused amount; `msg == "panic"` fails the call (the token refunds all).
-    pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> PromiseOrValue<U128> {
+    pub fn ft_on_transfer(
+        &mut self,
+        sender_id: AccountId,
+        amount: U128,
+        msg: String,
+    ) -> PromiseOrValue<U128> {
         let _ = (sender_id, amount);
         if msg == "panic" {
             env::panic_str("receiver refuses");

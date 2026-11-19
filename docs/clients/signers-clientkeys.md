@@ -3,7 +3,7 @@
 How a subject's keys are created, stored and used on the client: wallet standards, passkeys, the seed vault, role
 keys, the backup-key switch, family encoders and connectors, Zether keys, and the rules for what a signer may sign.
 `clientkeys` is the JavaScript library shared by the SCaaS app ([clients/app](app.md)) and by any ERP portal; it signs
-on the user's device and never sends secrets anywhere. Status: passkeys, the seed vault (v1), Zether keys, the UA tree with its UA
+on the user's device and never sends secrets anywhere. Status: passkeys, the seed vault (v2), Zether keys, the UA tree with its UA
 signers, the UA KEM key, seal and containers **BUILT** (clientkeys 1.0.0, EVM-only family encoders; §9); everything else here **SPECIFIED** unless marked.
 The one signer of every client other than a browser is `ua-rs` ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)), which reproduces clientkeys' rows.
 
@@ -28,7 +28,7 @@ The one signer of every client other than a browser is `ua-rs` ([CLI-UAL-01](ua-
 
 <a id="scope"></a>
 
-In scope: (1) a deployment switch "backup key required" (default off); (2) vault v2, bound to the device by a
+In scope: (1) a deployment switch "backup key required" (default off); (2) vault v3, bound to the device by a
 non-extractable WebCrypto key; (3) one scrypt cost, with the mobile failure mode handled; (4) Sui verification of added
 and recovered keys (payload encoding in every client language, [NET-SUI-16](../networks/sui.md#NET-SUI-16)); (5) role keys
 (`deriveRoleKey`) and seed signers for Soroban, Aptos and Solana; (6) non-EVM passkey signers; (7) wallet connectors for
@@ -478,9 +478,10 @@ virtual authenticator per family.
 
 <a id="vault"></a>
 
-Several seeds on one device, each a set of v1 vaults below, are kept in the `scaas.keystore` container of
+Several seeds on one device, each a set of v2 vaults below, are kept in the `scaas.keystore` container of
 [CLI-SDK-03](scaas-sdk.md#CLI-SDK-03) (SPECIFIED): the same bytes in clientkeys, `ua-rs`, `scaas-sdk` and scaas-app, each seed's public
-fields authenticated by an index MAC computed in clientkeys and `ua-rs`. The vault v1 format itself does not change.
+fields and vault texts authenticated by an index MAC computed in clientkeys and `ua-rs`; each vault's AAD binds its seed's id
+(vault v2, owner 2026-11-19, scaas-sdk T13b ruling 3).
 
 <a id="CLI-SGN-11"></a>**CLI-SGN-11** — **A non-custodial seed wallet lives on the client, and one subject account holds
 several keys (passkey + seed).** Owner decision ("both passkeys and seed words"). A 24-word BIP-39 mnemonic (256 bits;
@@ -499,8 +500,11 @@ refuses to reuse it in another, so one key never signs raw digests for two famil
 envelope and, when available, a passkey PRF envelope.** A random DEK encrypts the seed with AES-256-GCM (a fresh 12-byte
 IV each time); the DEK is wrapped by the passphrase through scrypt (16-byte salt) **always**, and additionally by a PRF
 envelope (`extensions.prf`) when the passkey supports it — PRF is the **default** when a passkey of the account offers it
-(the passphrase envelope still always exists). Wrapping keys are never stored. v1 format (`vault.js`):
-`{ v: 1, label, data: {iv, ct}, pin: {kdf: 'scrypt', N, r, p, salt, iv, ct}, prf?: {credentialId, salt, iv, ct} }`. BUILT.
+(the passphrase envelope still always exists). Wrapping keys are never stored. v2 format (`vault.js`; owner 2026-11-19,
+scaas-sdk T13b ruling 3): `{ v: 2, id, label, data: {iv, ct}, pin: {kdf: 'scrypt', N, r, p, salt, iv, ct}, prf?: {credentialId,
+salt, iv, ct} }`, `id` a lower-case UUID v4 (a keystore seed's id, else a fresh one), every AAD `<id>|<label>|<part>`; v1 is
+`VaultVersion`, no migration. BUILT. The device-bound outer layer of [CLI-SGN-17](#CLI-SGN-17) (SPECIFIED) is vault v3 (owner
+2026-11-19).
 
 <a id="CLI-SGN-21"></a>**CLI-SGN-21** — **New passphrase envelopes use scrypt `N = 2^17, r = 8, p = 1` (128 MiB; `clients/clientkeys/src/vault.js:14,40-45`; helpers
 `needsRewrap`/`rewrapPin`), replacing the earlier `N = 2^15`; a new
@@ -516,17 +520,17 @@ refused (`dekFrom` bounds check). `SCRYPT = { N: 2^17, r: 8, p: 1, dkLen: 32 }`.
 device locked out by its own upgrade. Cost: very low-memory phones use a paper backup or an extension wallet. BUILT
 (parameters, re-wrap, and the open-time bounds check with its test, 2026-11-05, PR #16 `b3650dbf`; `ua-rs` refuses the same parameters, `VaultParams`); the failure and marker tests SPECIFIED.
 
-<a id="CLI-SGN-17"></a>**CLI-SGN-17** — **Vault v2 is an outer AES-256-GCM layer under a per-origin non-extractable device
-key, wrapped around the unchanged v1 vault.** The device key is WebCrypto `AES-GCM` 256, `extractable: false`, kept as a
+<a id="CLI-SGN-17"></a>**CLI-SGN-17** — **Vault v3 is an outer AES-256-GCM layer under a per-origin non-extractable device
+key, wrapped around the unchanged v2 vault ([CLI-SGN-02](#CLI-SGN-02)).** The device key is WebCrypto `AES-GCM` 256, `extractable: false`, kept as a
 structured clone in IndexedDB; it is the default for new vaults where the IndexedDB/`CryptoKey` probe passes (otherwise a
-v1 vault is written, with a notice); it applies to every label (`seed`, `zether-conf:…`); `kid` exists only for a future
+v2 vault is written, with a notice); it applies to every label (`seed`, `zether-conf:…`); `kid` exists only for a future
 format bump (no rotation flow). Format:
 
 ```json
-{ "v": 2, "label": "seed", "kid": "device-v1", "iv": "<b64url, 12 B>", "ct": "<b64url>" }
+{ "v": 3, "label": "seed", "kid": "device-v1", "iv": "<b64url, 12 B>", "ct": "<b64url>" }
 ```
 
-`ct = AES-256-GCM(deviceKey, iv, utf8(JSON.stringify(v1)), aad = "<label>|device|<kid>")`, a fresh IV per seal; `label`
+`ct = AES-256-GCM(deviceKey, iv, utf8(JSON.stringify(v2)), aad = "<label>|device|<kid>")`, a fresh IV per seal; `label`
 is repeated outside, so a swapped blob fails both the outer and the inner AAD; the device key is required **in addition**
 to the passphrase or PRF.
 
@@ -535,7 +539,7 @@ keys are **not hardware-backed** on Chromium and Firefox (the key bytes sit in t
 wraps them under a Keychain key (stronger). The gain is narrow: a blob that leaks **without** the profile's IndexedDB
 cannot be attacked offline. PRF from a passkey reported as not synced (BE = 0) is preferred, but it is not
 "hardware-bound" either: the PRF output reaches page JS, so a script running during one unlock gets a permanent unwrap key
-for that blob — v2 still demands the device key on top.
+for that blob — v3 still demands the device key on top.
 
 <a id="CLI-SGN-19"></a>**CLI-SGN-19** — **Vault storage, precedence and migration.** The vault and the device key share one
 IndexedDB database (`scaas-clientkeys`, store `kv`), so eviction removes both together:
@@ -543,7 +547,7 @@ IndexedDB database (`scaas-clientkeys`, store `kv`), so eviction removes both to
 | Key | Value |
 |---|---|
 | `device-key:v1` | the `CryptoKey` (`extractable: false`) |
-| `vault:<id>` | v2 (or v1 on fallback); a portal `<id>` = `<portal-prefix>:<subject>`, where `<subject>` is an opaque per-partner tag issued by the server; the app `seed:<account label>`; Zether `zether-conf:<curve>:<coin>:<account>`; PQ Zether `vault:pqz:<account>:<index>` |
+| `vault:<id>` | v3 (or v2 on fallback); a portal `<id>` = `<portal-prefix>:<subject>`, where `<subject>` is an opaque per-partner tag issued by the server; the app `seed:<account label>`; Zether `zether-conf:<curve>:<coin>:<account>`; PQ Zether `vault:pqz:<account>:<index>` |
 | `rewrap-attempt:<id>` | the `N` being attempted |
 | `persist-notice` | `true` once the refusal notice was shown |
 
@@ -553,23 +557,23 @@ silently.
 Precedence: an existing `vault:<id>` in IndexedDB wins, and migration never `put`s over it. A migrated portal
 `localStorage` vault is **replaced by a tombstone** `{ "v": 2, "moved": "indexeddb" }`, not deleted, so old cached portal code
 fails with "Unknown vault version." instead of offering "create a new phrase"; `openDevice` rejects it. The post-write
-check is `openDevice(readBack)` deep-equal to the in-memory v1 object (AES-GCM only: no second scrypt, no second unlock).
+check is `openDevice(readBack)` deep-equal to the in-memory v2 object (AES-GCM only: no second scrypt, no second unlock).
 `navigator.storage.persist()` is requested at creation; a refusal is shown once per device. Migration: (1) new vault:
-`createVault` (v1) → `sealDevice` → `put('vault:<id>')` → `openDevice(get(...))` deep-equals v1 → done; (2) existing v1
+`createVault` (v2) → `sealDevice` → `put('vault:<id>')` → `openDevice(get(...))` deep-equals v2 → done; (2) existing v2
 (app IndexedDB, or a portal `localStorage` vault including the older per-subject key): after a successful `openVault`,
-check whether `vault:<id>` already exists — if so it wins: open it and only write the tombstone; else seal v2 and `put`
+check whether `vault:<id>` already exists — if so it wins: open it and only write the tombstone; else seal v3 and `put`
 it, read it back with `openDevice` and compare, **then** write the tombstone (a failure at the put or the read-back keeps
 the `localStorage` entry); the `2^15` re-wrap is a separate step after the payment; (3) opening: IndexedDB `vault:<id>`
-first, then `localStorage` (v1 ⇒ migrate; tombstone ⇒ "this vault moved; reload"); a v2 blob without the device key means
-a cleared profile — phrase import only; (4) no downgrade to v1 is ever written; `openDevice` output never leaves memory.
+first, then `localStorage` (v2 ⇒ migrate; tombstone ⇒ "this vault moved; reload"); a v3 blob without the device key means
+a cleared profile — phrase import only; (4) no downgrade to v2 is ever written; `openDevice` output never leaves memory.
 Interface (`src/device.js`, exported from `seed-signer.js` and `zether-keys.js`, used inside the app key worker):
 
 ```js
 export async function openStore(indexedDB = globalThis.indexedDB) // → { get, put, del } or null (probe fails)
 export async function deviceKey(store)                             // get, or generate + put
-export async function sealDevice(vaultV1, key)                     // → v2
-export async function openDevice(vaultV2, key)                     // → v1, memory only; tombstone ⇒ throws
-export function needsBinding(stored)                               // stored.v === 1
+export async function sealDevice(vaultV2, key)                     // → v3
+export async function openDevice(vaultV3, key)                     // → v2, memory only; tombstone ⇒ throws
+export function needsBinding(stored)                               // stored.v === 2
 ```
 
 Why: no rollback to a stale weaker blob, no silent new seed, no second 128 MiB KDF.
@@ -582,7 +586,7 @@ and removes the old one. Why: a re-reveal path would undermine "written down" ([
 
 Threat model of the vault:
 
-| Threat | v1 | v2 | Control that actually helps |
+| Threat | v2 | v3 | Control that actually helps |
 |---|---|---|---|
 | Same-origin script: XSS, **or a browser extension with host access** (content scripts reach IndexedDB and `crypto.subtle`) | reads the blob, phishes the passphrase or waits for unlock | same: the device key is a decrypt oracle | CSP, no third-party scripts, key worker ([CLI-APP-15](app.md#CLI-APP-15), [CLI-APP-24](app.md#CLI-APP-24)) |
 | **Portal origin as trusted base**: every theme or module script on the portal origin | as XSS | as XSS | deployment note: serve payments from a dedicated payment subdomain with only the payment bundle |
@@ -594,17 +598,17 @@ Threat model of the vault:
 | PRF output captured by a script during one unlock | permanent unwrap key for that blob | still needs the device key (same origin ⇒ available to that script) | as the XSS row |
 | Device lost, site data cleared, Safari ITP 7-day eviction | phrase re-import | phrase re-import; the blob never opens again | [CLI-SGN-20](#CLI-SGN-20), `persist()` |
 
-Tests: v1 → v2 → v1 round trip with an in-memory store (Node 26 has WebCrypto, no IndexedDB); tampered outer `ct`,
+Tests: v2 → v3 → v2 round trip with an in-memory store (Node 26 has WebCrypto, no IndexedDB); tampered outer `ct`,
 swapped `label`, swapped `kid`, wrong device key, tombstone — each fails and returns nothing; `deviceKey` stable across
-calls, `extractable === false`, `exportKey` rejects; `test/vectors/vault_v2_fixture.json` (a committed v2 blob plus raw
+calls, `extractable === false`, `exportKey` rejects; `test/vectors/vault_v3_fixture.json` (a committed v3 blob plus raw
 device-key bytes imported with `extractable: false`) opens to known entropy; `openStore` returns `null` under a stub
-`indexedDB` that throws on a `CryptoKey` `put` and the caller writes v1; migration failure paths (put fails, read-back
-mismatch, tombstone write fails, both copies present — IndexedDB wins, no overwrite — and a stale v1 next to a newer
-v2); scrypt — a KDF that throws at creation returns no vault, a present marker skips the re-wrap, out-of-bounds
+`indexedDB` that throws on a `CryptoKey` `put` and the caller writes v2; migration failure paths (put fails, read-back
+mismatch, tombstone write fails, both copies present — IndexedDB wins, no overwrite — and a stale v2 next to a newer
+v3); scrypt — a KDF that throws at creation returns no vault, a present marker skips the re-wrap, out-of-bounds
 `N`/`r`/`p` refused on open, a `2^15` vault still opens (`vault.test.js` pins the parameters and the re-wrap); **real
 browsers** — one Playwright run of create → reload → unlock → migrate on Chromium, Firefox and WebKit (a structured-clone
 `CryptoKey` in IndexedDB is not exercised by a `Map` store); a portal tour (a legacy `localStorage` vault unlocks, becomes
-v2 in IndexedDB, leaves a tombstone; the second unlock opens v2); `bundle.test.js` covers the new module.
+v3 in IndexedDB, leaves a tombstone; the second unlock opens v3); `bundle.test.js` covers the new module.
 
 ## 8. Backup-key switch
 
@@ -876,7 +880,7 @@ under two sources is two entries of one `ua`; a present empty list or any mismat
 accepted members ([CTR-UA-37](../contracts/accounts.md#CTR-UA-37)), two levels ([CTR-UA-38](../contracts/accounts.md#CTR-UA-38)), each a single-key UA with
 its own KEM key. The caller reads `msigOf` and `memberAccepted` and expands before `seal`, skipping and reporting a member without a key. BUILT for `kem_key` (it takes a single-key handle; a wallet has
 no `0x0120` handle) and the seal callers (`Recipient::ua` refuses an `msig`, `KemHolder`). PLANNED for the record builders (clientkeys `ua.js` `holds`,
-`registrationArgs`, `kemRecordMessage`; `ua-rs` `ua8.rs`): they refuse together with the registry's own refusal
+`registrationArgs`, `kemRecordMessage`; `ua-rs` `ua_portable.rs`): they refuse together with the registry's own refusal
 ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)) in one step, plan task T66b on branch `ua-mtx-merge`, where the contract e2e, the `portable.json` `msig-pq` and `kemRecords` rows
 and the binding tests move to refusal rows (owner 2026-11-07, who moved it there and confirmed the rule). Until then those builders still build the rows that harnesses read,
 and a registry can still store an `msig` KEM key.

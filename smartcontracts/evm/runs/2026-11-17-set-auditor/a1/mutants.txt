@@ -1,0 +1,8 @@
+delayed-relax-32 | test_bit32_masks_confidentialKinds, test_bit32_stopsAtOnce | 1
+regulated-roles-32 | test_bit32_anyHolder, test_bit32_grantOnKind8_noSuchRole, test_bit32_masks_confidentialKinds, test_bit32_stopsAtOnce | 1
+zether-none-check-dropped | test_bit32_init_zether | 1
+pqz-none-check-dropped | test_bit32_init_refusals | 1
+zether-admin0-dropped | test_bit32_init_zether | 1
+pqz-admin0-dropped | test_bit32_init_refusals | 1
+delegable-accepted | test_bit32_delegableRefused | 1
+enableable-32 | test_bit32_grantOnKind8_noSuchRole, test_bit32_masks_confidentialKinds | 1

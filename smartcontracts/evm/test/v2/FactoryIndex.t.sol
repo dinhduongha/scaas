@@ -42,17 +42,35 @@ contract IndexImpl {
     bool public adminReverts;
     address public nestedImpl; // when set, `initialize` creates one unregistered token of it first
 
-    constructor(address f_, bytes32 u_) { (F, U) = (f_, u_); }
+    constructor(address f_, bytes32 u_) {
+        (F, U) = (f_, u_);
+    }
 
-    function set(bytes32 a, bool r, address nested) external { (adminClaim, adminReverts, nestedImpl) = (a, r, nested); }
+    function set(bytes32 a, bool r, address nested) external {
+        (adminClaim, adminReverts, nestedImpl) = (a, r, nested);
+    }
 
-    function kind() external pure returns (uint8) { return 0; }
-    function factory() external view returns (address) { return F; }
+    function kind() external pure returns (uint8) {
+        return 0;
+    }
+
+    function factory() external view returns (address) {
+        return F;
+    }
     function modules() external pure returns (address[] memory) {} // T66b: no body module
-    function chainUid() external view returns (bytes32) { return U; }
+
+    function chainUid() external view returns (bytes32) {
+        return U;
+    }
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
-    function features() external pure returns (uint256) { return 0; }
-    function lockedFeatures() external pure returns (uint256) { return 0; }
+
+    function features() external pure returns (uint256) {
+        return 0;
+    }
+
+    function lockedFeatures() external pure returns (uint256) {
+        return 0;
+    }
     function underlyings() external pure returns (address[] memory) {}
 
     /// Read through the implementation: a clone has no storage of its own for these.
@@ -78,7 +96,8 @@ contract IndexImpl {
 /// entry of the class's two lists.
 abstract contract IndexAsserts is Test {
     function _assertIndexed(OpenFactory f, address t, bytes32 creatorId, uint16 cls, uint16 kind, uint64 version)
-        internal view
+        internal
+        view
     {
         assertEq(_rawInfo(f, t).length, 7 * 32, "Created: seven words, no owner (3r R1)");
         IOpenFactory.Created memory c = f.infoOf(t);
@@ -126,7 +145,9 @@ abstract contract IndexAsserts is Test {
                 VmSafe.StorageAccess memory s = acc[i].storageAccesses[j];
                 if (s.account != f || !s.isWrite || s.reverted || s.previousValue != 0 || s.newValue == 0) continue;
                 bool dup;
-                for (uint256 k; k < m; ++k) if (seen[k] == s.slot) dup = true;
+                for (uint256 k; k < m; ++k) {
+                    if (seen[k] == s.slot) dup = true;
+                }
                 if (!dup) seen[m++] = s.slot;
             }
         }
@@ -161,10 +182,22 @@ contract FactoryIndexTest is IndexAsserts {
         ureg = new StubUARegistry(UID_);
         Catalogue.plain(f, NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0), false);
         Catalogue.plain(f, WRAPPED, 1, type(WrappedToken).creationCode, address(ureg), address(0), false);
-        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, 1,
-            plainEnv(address(f), address(0), UID_, address(ureg), false), type(NormalRegulatedToken).creationCode, regArgs());
-        Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
-            plainEnv(address(f), address(0), UID_, address(ureg), false), type(WrappedRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.NORMAL_REGULATED,
+            1,
+            plainEnv(address(f), address(0), UID_, address(ureg), false),
+            type(NormalRegulatedToken).creationCode,
+            regArgs()
+        );
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.WRAPPED_REGULATED,
+            1,
+            plainEnv(address(f), address(0), UID_, address(ureg), false),
+            type(WrappedRegulatedToken).creationCode,
+            regArgs()
+        );
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         vm.startPrank(registrar);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(f)));
@@ -204,7 +237,8 @@ contract FactoryIndexTest is IndexAsserts {
     }
 
     function _token(address creator, IOpenFactory.TokenKind k, IFactoryToken.TokenConfig memory c, bytes32 salt)
-        internal returns (address t)
+        internal
+        returns (address t)
     {
         vm.prank(creator);
         t = f.createToken(k, 1, abi.encode(c), salt);
@@ -320,7 +354,9 @@ contract FactoryIndexTest is IndexAsserts {
             assertEq(IGovernance(ts[i]).admin(), admins[i], "the admin is the contract's own answer");
         }
         bytes32 h0 = _noAddr(_rawInfo(f, ts[0]));
-        for (uint256 i = 1; i < 3; ++i) assertEq(_noAddr(_rawInfo(f, ts[i])), h0, "the same record but for addr");
+        for (uint256 i = 1; i < 3; ++i) {
+            assertEq(_noAddr(_rawInfo(f, ts[i])), h0, "the same record but for addr");
+        }
         (, uint256 n) = f.contractsPage(TOKEN, 0, 0);
         assertEq(n, 3, "all three in the class list");
     }
@@ -401,7 +437,9 @@ contract FactoryIndexTest is IndexAsserts {
     /// `k` tokens by `bob` for `alice`.
     function _many(uint256 k) internal returns (address[] memory ts) {
         ts = new address[](k);
-        for (uint256 i; i < k; ++i) ts[i] = _token(bob, NORMAL, _normal(nid(alice)), bytes32(i + 1));
+        for (uint256 i; i < k; ++i) {
+            ts[i] = _token(bob, NORMAL, _normal(nid(alice)), bytes32(i + 1));
+        }
     }
 
     function test_index_page_nZero() public {
@@ -420,7 +458,9 @@ contract FactoryIndexTest is IndexAsserts {
         (IOpenFactory.Created[] memory p, uint256 n) = f.contractsPage(TOKEN, 0, 100);
         assertEq(n, 101);
         assertEq(p.length, 100);
-        for (uint256 i; i < 100; ++i) assertEq(p[i].addr, ts[i], "creation order, oldest first");
+        for (uint256 i; i < 100; ++i) {
+            assertEq(p[i].addr, ts[i], "creation order, oldest first");
+        }
         (p, n) = f.contractsOfCreator(nid(bob), TOKEN, 1, 100);
         assertEq(p.length, 100);
         assertEq(p[0].addr, ts[1]);
@@ -552,14 +592,32 @@ contract FactoryIndexZetherTest is ZetherFixture, IndexAsserts {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1, _zenv(),
-            type(NormalZetherRegulatedToken).creationCode, regArgs());
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
-            type(WrappedZetherRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED,
+            1,
+            _zenv(),
+            type(NormalZetherRegulatedToken).creationCode,
+            regArgs()
+        );
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED,
+            1,
+            _zenv(),
+            type(WrappedZetherRegulatedToken).creationCode,
+            regArgs()
+        );
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory))
+        );
+        factory.setTokenKindEnabled(
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory))
+        );
         vm.stopPrank();
         (issuerZ, complianceZ) = (address(new IxHolder()), address(new IxHolder()));
         usdZ = new MockERC20("USD", "USD", 6);
@@ -585,15 +643,27 @@ contract FactoryIndexZetherTest is ZetherFixture, IndexAsserts {
 
     function _kind(uint8 k, bool wrapped, bool regulated) internal {
         vm.prank(address(0xB0B));
-        address t = factory.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(_z(wrapped, regulated)), bytes32(uint256(k)));
+        address t =
+            factory.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(_z(wrapped, regulated)), bytes32(uint256(k)));
         _assertIndexed(factory, t, nid(address(0xB0B)), 1, k, 1);
         _assertOldViews(factory, t, address(0xB0B), k, 1);
     }
 
-    function test_index_everyKind_2() public { _kind(2, false, false); }
-    function test_index_everyKind_3() public { _kind(3, true, false); }
-    function test_index_everyKind_10() public { _kind(10, false, true); }
-    function test_index_everyKind_11() public { _kind(11, true, true); }
+    function test_index_everyKind_2() public {
+        _kind(2, false, false);
+    }
+
+    function test_index_everyKind_3() public {
+        _kind(3, true, false);
+    }
+
+    function test_index_everyKind_10() public {
+        _kind(10, false, true);
+    }
+
+    function test_index_everyKind_11() public {
+        _kind(11, true, true);
+    }
 }
 
 /// Plan T67, the PQZ kinds 4, 5, 12, 13.
@@ -606,10 +676,22 @@ contract FactoryIndexPqzTest is PqzFixture, IndexAsserts {
         _stack();
         _releaseWrapped();
         IFactoryToken.Env memory e = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1, e,
-            type(NormalPqzRegulatedToken).creationCode, regArgs());
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e,
-            type(WrappedPqzRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED,
+            1,
+            e,
+            type(NormalPqzRegulatedToken).creationCode,
+            regArgs()
+        );
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED,
+            1,
+            e,
+            type(WrappedPqzRegulatedToken).creationCode,
+            regArgs()
+        );
         vm.startPrank(registrar);
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
@@ -638,13 +720,25 @@ contract FactoryIndexPqzTest is PqzFixture, IndexAsserts {
 
     function _kind(uint8 k, bool wrapped, bool regulated) internal {
         vm.prank(address(0xB0B));
-        address t = factory.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(_p(wrapped, regulated)), bytes32(uint256(k)));
+        address t =
+            factory.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(_p(wrapped, regulated)), bytes32(uint256(k)));
         _assertIndexed(factory, t, nid(address(0xB0B)), 1, k, 1);
         _assertOldViews(factory, t, address(0xB0B), k, 1);
     }
 
-    function test_index_everyKind_4() public { _kind(4, false, false); }
-    function test_index_everyKind_5() public { _kind(5, true, false); }
-    function test_index_everyKind_12() public { _kind(12, false, true); }
-    function test_index_everyKind_13() public { _kind(13, true, true); }
+    function test_index_everyKind_4() public {
+        _kind(4, false, false);
+    }
+
+    function test_index_everyKind_5() public {
+        _kind(5, true, false);
+    }
+
+    function test_index_everyKind_12() public {
+        _kind(12, false, true);
+    }
+
+    function test_index_everyKind_13() public {
+        _kind(13, true, true);
+    }
 }

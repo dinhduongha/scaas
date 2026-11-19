@@ -51,7 +51,11 @@ fn same_dom(a: &mut Poly, b: &mut Poly, crt: bool) -> bool {
 }
 
 impl Poly {
-    pub(crate) const ZERO: Poly = Poly { v: [0; D], neg: 0, crt: false };
+    pub(crate) const ZERO: Poly = Poly {
+        v: [0; D],
+        neg: 0,
+        crt: false,
+    };
 
     /// coefficient j (caller ensures the coefficient domain)
     pub(crate) fn c(&self, j: usize) -> Int {
@@ -150,7 +154,11 @@ impl Poly {
 
     pub(crate) fn add(a: &mut Poly, b: &mut Poly, crt: bool) -> Poly {
         if same_dom(a, b, crt) {
-            Poly { v: ntt::add(&a.v, &b.v), neg: 0, crt: true }
+            Poly {
+                v: ntt::add(&a.v, &b.v),
+                neg: 0,
+                crt: true,
+            }
         } else {
             Poly::coeffwise_redc(a, b, Int::add)
         }
@@ -158,7 +166,11 @@ impl Poly {
 
     pub(crate) fn sub(a: &mut Poly, b: &mut Poly, crt: bool) -> Poly {
         if same_dom(a, b, crt) {
-            Poly { v: ntt::sub(&a.v, &b.v), neg: 0, crt: true }
+            Poly {
+                v: ntt::sub(&a.v, &b.v),
+                neg: 0,
+                crt: true,
+            }
         } else {
             Poly::coeffwise_redc(a, b, Int::sub)
         }
@@ -179,7 +191,11 @@ impl Poly {
     /// `poly_neg` (via the coefficient domain)
     pub(crate) fn neg(b: &mut Poly) -> Poly {
         b.fromcrt();
-        Poly { v: b.v, neg: !b.neg, crt: false }
+        Poly {
+            v: b.v,
+            neg: !b.neg,
+            crt: false,
+        }
     }
 
     /// `poly_neg_self` (in the domain it is in)
@@ -240,13 +256,25 @@ impl Poly {
     /// `poly_rrot` (`intvec_rrot`): multiply by X^-n, n < 64
     pub(crate) fn rrot(a: &mut Poly, n: usize) -> Poly {
         a.fromcrt();
-        Poly::from_fn(|i| if i < D - n { a.c(i + n) } else { Int::neg_of(&a.c(i + n - D)) })
+        Poly::from_fn(|i| {
+            if i < D - n {
+                a.c(i + n)
+            } else {
+                Int::neg_of(&a.c(i + n - D))
+            }
+        })
     }
 
     /// `poly_lrot` (`intvec_lrot`): multiply by X^n, n < 64
     pub(crate) fn lrot(a: &mut Poly, n: usize) -> Poly {
         a.fromcrt();
-        Poly::from_fn(|i| if i >= n { a.c(i - n) } else { Int::neg_of(&a.c(D - n + i)) })
+        Poly::from_fn(|i| {
+            if i >= n {
+                a.c(i - n)
+            } else {
+                Int::neg_of(&a.c(D - n + i))
+            }
+        })
     }
 
     /// `poly_eq` (both move to the coefficient domain; `int_eq`: -0 == 0)
@@ -260,7 +288,11 @@ impl Poly {
     pub(crate) fn mul(a: &mut Poly, b: &mut Poly) -> Poly {
         a.tocrt();
         b.tocrt();
-        Poly { v: ntt::basemul(&a.v, &b.v), neg: 0, crt: true }
+        Poly {
+            v: ntt::basemul(&a.v, &b.v),
+            neg: 0,
+            crt: true,
+        }
     }
 
     pub(crate) fn addmul(&mut self, a: &mut Poly, b: &mut Poly, crt: bool) {
@@ -423,14 +455,24 @@ impl Poly {
     }
 
     /// `poly_urandom_bnd (r, lo, hi, seed, dom)`: coefficients uniform in [lo, hi]
-    pub(crate) fn urandom_bnd(lo: &Int, hi: &Int, seed: &[u8; 32], dom: u64) -> Result<Poly, Error> {
+    pub(crate) fn urandom_bnd(
+        lo: &Int,
+        hi: &Int,
+        seed: &[u8; 32],
+        dom: u64,
+    ) -> Result<Poly, Error> {
         let mut v = IntVec::new(D, 1)?;
         crate::rand::urandom::urandom_bnd(&mut v, lo, hi, seed, dom)?;
         Ok(Poly::from_fn(|j| v.get(j)))
     }
 
     /// `poly_urandom_autostable (r, bnd, log2, seed, dom)`: a challenge fixed by X -> X^-1
-    pub(crate) fn urandom_autostable(bnd: i64, log2: u32, seed: &[u8; 32], dom: u64) -> Result<Poly, Error> {
+    pub(crate) fn urandom_autostable(
+        bnd: i64,
+        log2: u32,
+        seed: &[u8; 32],
+        dom: u64,
+    ) -> Result<Poly, Error> {
         let mut v = [0i64; D];
         crate::rand::urandom::urandom_autostable(&mut v, bnd, log2, seed, dom)?;
         let mut r = Poly::ZERO;
@@ -441,7 +483,12 @@ impl Poly {
     /// `poly_urandom_challenge (r, bnd, log2, eta, seed)` (PQZ, review R0-C3): the autostable sample of (seed, dom) for
     /// dom = 0, 1, ... < `CHAL_TRIES`, the first with ||o(c) c||_1 <= eta^2 (the eta-filtered challenge set C of LNP22
     /// and the codegen's |C|); `None` if none passes (the prover tries again, a verifier rejects)
-    pub(crate) fn urandom_challenge(bnd: i64, log2: u32, eta: u64, seed: &[u8; 32]) -> Result<Option<Poly>, Error> {
+    pub(crate) fn urandom_challenge(
+        bnd: i64,
+        log2: u32,
+        eta: u64,
+        seed: &[u8; 32],
+    ) -> Result<Option<Poly>, Error> {
         for dom in 0..CHAL_TRIES {
             let mut c = [0i64; D];
             crate::rand::urandom::urandom_autostable(&mut c, bnd, log2, seed, dom)?;

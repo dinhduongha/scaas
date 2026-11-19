@@ -220,16 +220,28 @@ contract FreezeTest is RegFixture {
         MetaTxLib.UAMetaTransfer memory x;
         (x.from, x.to, x.value, x.batch, x.validUntil) = (from, nid(alice), 1, 1, block.timestamp + 60);
         c[0] = abi.encodeCall(NormalToken.mtxExecuteTransfer, (x, _bad()));
-        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(from, abi.encodeWithSignature("burn(uint256)", 1),
-            1, 0, block.timestamp + 60, 0, address(0), 0, address(0));
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(
+            from, abi.encodeWithSignature("burn(uint256)", 1), 1, 0, block.timestamp + 60, 0, address(0), 0, address(0)
+        );
         c[1] = abi.encodeCall(UAMetaTxBase.mtxExecute, (m, _bad()));
-        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(from, 3, 0, block.timestamp + 60, 0, address(0), 0, address(0));
-        c[2] = t == t8 ? abi.encodeCall(NormalToken.mtxBurn, (e, 1, _bad()))
+        MetaTxLib.UAEnvelope memory e =
+            MetaTxLib.UAEnvelope(from, 3, 0, block.timestamp + 60, 0, address(0), 0, address(0));
+        c[2] = t == t8
+            ? abi.encodeCall(NormalToken.mtxBurn, (e, 1, _bad()))
             : abi.encodeCall(WrappedToken.mtxUnwrap, (e, 1, alice, 0, _bad()));
         c[3] = abi.encodeCall(UAMetaTxBase.mtxCancelNonce, (e, 9, _bad()));
         if (native) {
-            MetaTxLib.MetaTransaction memory am = MetaTxLib.MetaTransaction(address(uint160(uint256(from))),
-                abi.encodeWithSignature("burn(uint256)", 1), 2, 0, block.timestamp + 60, 0, address(0), 0, address(0));
+            MetaTxLib.MetaTransaction memory am = MetaTxLib.MetaTransaction(
+                address(uint160(uint256(from))),
+                abi.encodeWithSignature("burn(uint256)", 1),
+                2,
+                0,
+                block.timestamp + 60,
+                0,
+                address(0),
+                0,
+                address(0)
+            );
             c[4] = abi.encodeCall(IMetaTx.executeMetaTransaction, (am, new bytes(65)));
         }
     }
@@ -245,7 +257,13 @@ contract FreezeTest is RegFixture {
 
     function _cancelNonceFrozen(address t) internal {
         MetaTxLib.UAEnvelope memory e = _env(bob, 0, 0);
-        IUARegistry.UASig memory s = _namedSig(BOB_PK, t, "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)", e, abi.encode(uint256(9)));
+        IUARegistry.UASig memory s = _namedSig(
+            BOB_PK,
+            t,
+            "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+            e,
+            abi.encode(uint256(9))
+        );
         uint256 snap = vm.snapshotState();
         _freeze(t, nid(bob));
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(bob)));

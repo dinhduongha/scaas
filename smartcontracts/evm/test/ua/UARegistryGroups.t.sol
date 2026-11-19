@@ -72,7 +72,13 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
     }
 
     function _popMsg(UARegistry r, uint16 kind, bytes memory keyData) internal view returns (bytes32) {
-        return r.uaMessage(kind, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(r.uaOf(kind, keyData), kind, 0, UAKinds.kemRecordHash(r.uaOf(kind, keyData), 0, ""), 0));
+        return r.uaMessage(
+            kind,
+            UAKinds.PURPOSE_POP_V2,
+            UAKinds.registrationDigest(
+                r.uaOf(kind, keyData), kind, 0, UAKinds.kemRecordHash(r.uaOf(kind, keyData), 0, ""), 0
+            )
+        );
     }
 
     /// Registers `g` on `r` with the groups.json PoP (UA-8: portable, the same bytes on every registry).
@@ -225,7 +231,8 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         Group[4] memory gs = _mains();
         for (uint256 k; k < 4; ++k) {
             bytes32 ua = _reg(reg, gs[k]);
-            bytes memory good = _reqCall(ua, UAKinds.PURPOSE_METATX, DIGEST, _gauth(gs[k], UAKinds.PURPOSE_METATX, DIGEST));
+            bytes memory good =
+                _reqCall(ua, UAKinds.PURPOSE_METATX, DIGEST, _gauth(gs[k], UAKinds.PURPOSE_METATX, DIGEST));
             bool sawGasError;
             bool sawOk;
             for (uint256 gas = 20_000; gas < 120_000; gas += 1_000) {
@@ -259,19 +266,33 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             emit log_named_uint(string.concat("register threshold kind ", vm.toString(g.kind)), found);
             bool sawPoP;
             for (uint256 gas = 20_000; gas < found; gas += gas + 80_000 < found ? 20_000 : 250) {
-                uint256 snap = vm.snapshotState();
-                (bool ok, bytes memory ret) = address(reg).call{gas: gas}(call);
-                if (!ok) {
-                    assertEq(reg.kindOf(g.ua), 0, "no record after a starved register");
-                    assertEq(reg.keyOwner(g.keyHash), 0, "no key owner after a starved register");
-                    if (ret.length == 0) {} // outer out-of-gas
-                    else if (bytes4(ret) == IUARegistry.UAPoP.selector && ret.length == 4) sawPoP = true;
-                    else assertTrue(bytes4(ret) == bytes4(keccak256("SSTORE2WriteFailed()")) && ret.length == 4, "outcome");
-                }
-                vm.revertToState(snap);
+                if (_starvedRegister(g, call, gas)) sawPoP = true;
+            }
+            // pqvault R1: also every 1,000 below 200,000, where each kind's `UAPoP` band lies (musig2-secp256k1 about 8 k wide at
+            // 99,900-107,950; it was 97,800-108,150 before `requirePortableApp`): the 20,000 grid above hit it at one sample only
+            for (uint256 gas = 21_000; gas < 200_000 && gas < found; gas += 1_000) {
+                if (_starvedRegister(g, call, gas)) sawPoP = true;
             }
             assertTrue(sawPoP, "UAPoP seen");
         }
+    }
+
+    /// One starved `register` of `g` at `gas`: no record either way; the outcome an empty revert, `UAPoP` (returns true) or
+    /// `SSTORE2WriteFailed`.
+    function _starvedRegister(Group memory g, bytes memory call, uint256 gas) internal returns (bool pop) {
+        uint256 snap = vm.snapshotState();
+        (bool ok, bytes memory ret) = address(reg).call{gas: gas}(call);
+        if (!ok) {
+            assertEq(reg.kindOf(g.ua), 0, "no record after a starved register");
+            assertEq(reg.keyOwner(g.keyHash), 0, "no key owner after a starved register");
+            if (ret.length == 0) {} // outer out-of-gas
+            else if (bytes4(ret) == IUARegistry.UAPoP.selector && ret.length == 4) {
+                pop = true;
+            } else {
+                assertTrue(bytes4(ret) == bytes4(keccak256("SSTORE2WriteFailed()")) && ret.length == 4, "outcome");
+            }
+        }
+        vm.revertToState(snap);
     }
 
     // ----- generations -----
@@ -379,8 +400,12 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
     function _acceptAll(UARegistry r, bytes memory d, bytes32 ms, Group memory a, Group memory b) internal {
         Group[2] memory g = [a, b];
         for (uint256 i; i < 2; ++i) {
-            bytes memory sig = _gsign(g[i].kind, g[i].secret, g[i].vk,
-                UAKinds.uaMessage(g[i].kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ms, g[i].ua)));
+            bytes memory sig = _gsign(
+                g[i].kind,
+                g[i].secret,
+                g[i].vk,
+                UAKinds.uaMessage(g[i].kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ms, g[i].ua))
+            );
             r.acceptMembership(ms, IUARegistry.MemberSig(_indexOf(d, g[i].ua), new IUARegistry.InnerSig[](0), sig));
         }
         r.acceptMembership(ms, _acceptEoaSig(d, PK_E));
@@ -396,12 +421,17 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         uint16 ib = _indexOf(d, b.ua);
         uint16 ie = _indexOf(d, _pad(vm.addr(PK_E)));
         s[ia] = IUARegistry.MemberSig(
-            ia, new IUARegistry.InnerSig[](0), _gsign(a.kind, a.secret, a.vk, UAKinds.uaMessage(a.kind, UAKinds.PURPOSE_MEMBER, md))
+            ia,
+            new IUARegistry.InnerSig[](0),
+            _gsign(a.kind, a.secret, a.vk, UAKinds.uaMessage(a.kind, UAKinds.PURPOSE_MEMBER, md))
         );
         s[ib] = IUARegistry.MemberSig(
-            ib, new IUARegistry.InnerSig[](0), _gsign(b.kind, b.secret, b.vk, UAKinds.uaMessage(b.kind, UAKinds.PURPOSE_MEMBER, md))
+            ib,
+            new IUARegistry.InnerSig[](0),
+            _gsign(b.kind, b.secret, b.vk, UAKinds.uaMessage(b.kind, UAKinds.PURPOSE_MEMBER, md))
         );
-        s[ie] = IUARegistry.MemberSig(ie, new IUARegistry.InnerSig[](0), _nativeSig(r, PK_E, UAKinds.PURPOSE_MEMBER, md));
+        s[ie] =
+            IUARegistry.MemberSig(ie, new IUARegistry.InnerSig[](0), _nativeSig(r, PK_E, UAKinds.PURPOSE_MEMBER, md));
     }
 
     // ----- T-GAS -----
@@ -454,11 +484,11 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             assertLt(vg.gasTotalUsed, BUDGET / 4, "register (regular gas) well within the budget");
             emit log_named_uint(string.concat(label, " register"), vg.gasTotalUsed);
             emit log_named_int("  state gas (EIP-8037)", vg.gasStateUsed);
-            assertLe(vg.gasStateUsed, int256(_statePin(label)), string.concat(label, ": register state gas over its pin"));
-            bytes memory auth = _gauth(g, UAKinds.PURPOSE_METATX, DIGEST);
-            (bool ok,, uint256 used) = meter.measure(
-                address(reg), _reqCall(g.ua, UAKinds.PURPOSE_METATX, DIGEST, auth)
+            assertLe(
+                vg.gasStateUsed, int256(_statePin(label)), string.concat(label, ": register state gas over its pin")
             );
+            bytes memory auth = _gauth(g, UAKinds.PURPOSE_METATX, DIGEST);
+            (bool ok,, uint256 used) = meter.measure(address(reg), _reqCall(g.ua, UAKinds.PURPOSE_METATX, DIGEST, auth));
             assertTrue(ok, label);
             emit log_named_uint(string.concat(label, " requireAuthorized"), used);
         }
@@ -478,7 +508,13 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         c[0] = UARegistry.KindConfig(kind, address(new BurnVerify()), GROUP_CAP);
         UARegistry r1 = _deploy(at, chainUidA, address(0), false, BUDGET, address(0), true, c);
         UARegistry r2 = _deploy(
-            address(uint160(at) + 1), chainUidA, address(r1), false, BUDGET, address(0), true,
+            address(uint160(at) + 1),
+            chainUidA,
+            address(r1),
+            false,
+            BUDGET,
+            address(0),
+            true,
             new UARegistry.KindConfig[](0)
         );
         Group memory g = _group(kind, 16, 16);
@@ -494,9 +530,8 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             regs[i].acceptMembership(ms, s[0]);
             uint256 bound = GROUP_CAP + 45_000 + 3_500; // MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS (3ze: 2,500 -> 3,500)
             if (i == 1) bound += GROUP_CAP / 63 + 5_000; // gen 1's own hold (register step 4)
-            (bool ok,) = address(regs[i]).call{gas: bound}(
-                _reqCall(ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s))
-            );
+            (bool ok,) =
+                address(regs[i]).call{gas: bound}(_reqCall(ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s)));
             assertTrue(ok, "authorizes within the registration bound");
         }
     }

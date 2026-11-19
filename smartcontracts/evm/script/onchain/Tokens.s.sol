@@ -57,11 +57,13 @@ contract Tokens is OnchainBase {
     string internal constant UA_UNWRAP_TO_UA =
         "UAUnwrapToUA(bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
     bytes32 internal constant UA_RELAY_FEE = keccak256(
-        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)");
+        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"
+    );
     bytes32 internal constant UA_PAY_WITH_TAX = keccak256(
         "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,"
         "bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,"
-        "address feeRecipient)");
+        "address feeRecipient)"
+    );
     uint32 internal constant FIXED_FEE = MetaTxLib.MODE_FEE_FIXED | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
     uint32 internal constant PERCENT_FEE = MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
     uint256 internal constant LANE_FEE = 2; // the relay-fee lane (Smoke.s.sol)
@@ -104,10 +106,14 @@ contract Tokens is OnchainBase {
         _registerMl();
         // the plain normal kinds and the regulated normal kinds
         uint8[4] memory ns = [uint8(0), 2, 8, 10];
-        for (uint256 i; i < 4; ++i) _normalKind(ns[i]);
+        for (uint256 i; i < 4; ++i) {
+            _normalKind(ns[i]);
+        }
         _throwaway();
         uint8[4] memory ws = [uint8(1), 3, 9, 11];
-        for (uint256 i; i < 4; ++i) _wrappedKind(ws[i]);
+        for (uint256 i; i < 4; ++i) {
+            _wrappedKind(ws[i]);
+        }
         _burner(0);
         _burner(8);
         _negatives();
@@ -157,15 +163,18 @@ contract Tokens is OnchainBase {
     function _ml(string memory job) internal returns (bytes memory) {
         string[] memory c = new string[](3);
         (c[0], c[1]) = ("sh", "-c");
-        c[2] = string.concat("printf '%s\\n' '", job,
-            "' | node script/pqz/mldsa.mjs ../../clients/clientkeys | sed 's/^/0x/'");
+        c[2] = string.concat(
+            "printf '%s\\n' '", job, "' | node script/pqz/mldsa.mjs ../../clients/clientkeys | sed 's/^/0x/'"
+        );
         return vm.ffi(c);
     }
 
     function _bare(bytes32 x) internal pure returns (string memory) {
         bytes memory h = bytes(vm.toString(x));
         bytes memory o = new bytes(64);
-        for (uint256 i; i < 64; ++i) o[i] = h[i + 2];
+        for (uint256 i; i < 64; ++i) {
+            o[i] = h[i + 2];
+        }
         return string(o);
     }
 
@@ -189,7 +198,8 @@ contract Tokens is OnchainBase {
         // ML-DSA-65, CTR-UA-39's verifyCached); a FIPS-key verify does not fit the kind's verify cap
         // each asks a fixed 56 M (under 60 M): the fork's estimate undershoots regular + state gas (EIP-8037)
         vm.startBroadcast(k1);
-        if (_mldsaCache(ML65)) { // 3zh: the cache path only (a precompile verifier refuses the cache)
+        if (_mldsaCache(ML65)) {
+            // 3zh: the cache path only (a precompile verifier refuses the cache)
             IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 0);
             IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 1);
         }
@@ -222,7 +232,11 @@ contract Tokens is OnchainBase {
     function _base(uint8 kind, string memory sym) internal view virtual returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol, c.decimals) = (string.concat("Onchain ", _label(kind)), sym, 6);
         c.admin = _pad(a1);
-        if (_zether(kind)) c.conf = IFactoryToken.ConfidentialConfig("", 10_000, uint256(1) << 40, 2, 0, 0, 0, 0, 0, false, 0, 0, 0, false, false);
+        if (_zether(kind)) {
+            c.conf = IFactoryToken.ConfidentialConfig(
+                "", 10_000, uint256(1) << 40, 2, 0, 0, 0, 0, 0, false, 0, 0, 0, false, false
+            );
+        }
     }
 
     /// @dev `KYC` (round 3s, bit 28: the Step 5 ComplianceRegistry, flag 1 denied: nobody attested, so everyone passes) and `TAX` (the
@@ -233,7 +247,11 @@ contract Tokens is OnchainBase {
         c.roles.issuer = _pad(a1);
     }
 
-    function _create(uint8 kind, IFactoryToken.TokenConfig memory c, string memory what) internal virtual returns (address x) {
+    function _create(uint8 kind, IFactoryToken.TokenConfig memory c, string memory what)
+        internal
+        virtual
+        returns (address x)
+    {
         vm.broadcast(k1);
         x = f.createToken(IOpenFactory.TokenKind(kind), 1, abi.encode(c), _salt(what));
         _book(x, _label(kind));
@@ -244,8 +262,8 @@ contract Tokens is OnchainBase {
 
     function _normalCfg(uint8 kind) internal view returns (IFactoryToken.TokenConfig memory c) {
         c = _base(kind, "oN");
-        c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.MINTABLE | 1 << GovernanceBits.BURNABLE
-            | 1 << GovernanceBits.RESCUABLE;
+        c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.MINTABLE | 1 << GovernanceBits.BURNABLE | 1
+            << GovernanceBits.RESCUABLE;
         c.roles.minter = _pad(a1);
         (c.initialSupply, c.initialHolder, c.rescueTo) = (1e15, a1, a3);
         if (_regulated(kind)) _reg(c);
@@ -323,7 +341,8 @@ contract Tokens is OnchainBase {
         _gov();
         // W2: two legs (a MockERC20 and the kind-0 SCaaS ledger token), rate admin `fR`, guardian test key 1
         c = _base(kind, "oW2");
-        c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.RATE_ADJUSTABLE | 1 << GovernanceBits.WRAP_DISABLEABLE;
+        c.features =
+            1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.RATE_ADJUSTABLE | 1 << GovernanceBits.WRAP_DISABLEABLE;
         (c.roles.rateAdmin, c.roles.guardian) = (_pad(address(fR)), _pad(a1));
         c.rate = IFactoryToken.RateConfig(2 days, 100);
         c.legs = new IFactoryToken.Leg[](2);
@@ -401,7 +420,8 @@ contract Tokens is OnchainBase {
     /// @dev Propose and cancel, propose again (left pending: `executeRate` waits the 2-day delay, a negative below), then
     ///      the guardian disables the MockERC20 leg's wrap (one-way).
     function _w2Rate() internal {
-        bytes memory prop = abi.encodeCall(WrappedToken.proposeRate, (address(m2), uint96(1001), uint96(1000), IMetaTx(t).chainUid()));
+        bytes memory prop =
+            abi.encodeCall(WrappedToken.proposeRate, (address(m2), uint96(1001), uint96(1000), IMetaTx(t).chainUid()));
         vm.startBroadcast(k1);
         fR.forwardCall(t, prop);
         fR.forwardCall(t, abi.encodeCall(WrappedToken.cancelRate, (IMetaTx(t).chainUid())));
@@ -410,9 +430,15 @@ contract Tokens is OnchainBase {
         vm.stopBroadcast();
         if (k == 1) {
             (,,, uint64 eta) = WrappedToken(payable(t)).pendingRate();
-            _neg(a1, address(fR), abi.encodeCall(OnchainForwarder.forwardCall, (t, abi.encodeCall(WrappedToken.executeRate, (IMetaTx(t).chainUid())))),
-                IWrappedToken.RateChangeNotReady.selector, string.concat("executeRate before the 2-day delay (eta ",
-                vm.toString(eta), ")"));
+            _neg(
+                a1,
+                address(fR),
+                abi.encodeCall(
+                    OnchainForwarder.forwardCall, (t, abi.encodeCall(WrappedToken.executeRate, (IMetaTx(t).chainUid())))
+                ),
+                IWrappedToken.RateChangeNotReady.selector,
+                string.concat("executeRate before the 2-day delay (eta ", vm.toString(eta), ")")
+            );
         }
     }
 
@@ -488,9 +514,21 @@ contract Tokens is OnchainBase {
     function _executeMeta() internal {
         MetaTxLib.MetaTransaction memory m;
         (m.from, m.data, m.batch, m.nonce, m.validUntil) =
-            (a1, abi.encodeCall(IMetaTx.cancelNonce, (uint256(77))), 5, _nonce(5), vu);
-        bytes32 h = keccak256(abi.encode(MetaTxLib.METATX_TYPEHASH, m.from, keccak256(m.data), m.batch, m.nonce,
-            m.validUntil, m.mode, address(0), m.fee, address(0)));
+        (a1, abi.encodeCall(IMetaTx.cancelNonce, (uint256(77))), 5, _nonce(5), vu);
+        bytes32 h = keccak256(
+            abi.encode(
+                MetaTxLib.METATX_TYPEHASH,
+                m.from,
+                keccak256(m.data),
+                m.batch,
+                m.nonce,
+                m.validUntil,
+                m.mode,
+                address(0),
+                m.fee,
+                address(0)
+            )
+        );
         bytes memory sg = _ecdsa(k1, _digest(t, h));
         vm.broadcast(k2);
         NormalToken(t).executeMetaTransaction(m, sg);
@@ -543,9 +581,13 @@ contract Tokens is OnchainBase {
         n.mtxBatch(ms, ss);
     }
 
-    function _uam(uint256 cancelLane, uint256 lane, uint256 nonce) internal view returns (MetaTxLib.UAMetaTransaction memory m) {
+    function _uam(uint256 cancelLane, uint256 lane, uint256 nonce)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory m)
+    {
         (m.from, m.data, m.batch, m.nonce, m.validUntil) =
-            (_pad(a1), abi.encodeCall(IMetaTx.cancelNonce, (cancelLane)), lane, nonce, vu);
+        (_pad(a1), abi.encodeCall(IMetaTx.cancelNonce, (cancelLane)), lane, nonce, vu);
     }
 
     function _payNo() internal view returns (bytes32) {
@@ -598,12 +640,16 @@ contract Tokens is OnchainBase {
     function _relay() internal {
         NormalToken n = NormalToken(t);
         MetaTxLib.UAMetaTransfer memory x = _tr(_pad(a3), 1, 0);
-        bytes memory cd = abi.encodeCall(NormalToken.mtxTransfer,
-            (x.from, x.to, 1, 0, x.nonce, vu, uint32(0), address(0), _sig(k1, n.mtxTransferDigest(x))));
+        bytes memory cd = abi.encodeCall(
+            NormalToken.mtxTransfer,
+            (x.from, x.to, 1, 0, x.nonce, vu, uint32(0), address(0), _sig(k1, n.mtxTransferDigest(x)))
+        );
         uint256 fn = _nonce(LANE_FEE);
         bytes32 payee = _pad(router);
-        bytes32 d = _digest(t, keccak256(abi.encode(UA_RELAY_FEE, _pad(a1), t, keccak256(cd), payee, uint256(1), LANE_FEE,
-            fn, vu, router)));
+        bytes32 d = _digest(
+            t,
+            keccak256(abi.encode(UA_RELAY_FEE, _pad(a1), t, keccak256(cd), payee, uint256(1), LANE_FEE, fn, vu, router))
+        );
         IUARegistry.UASig memory s = _sig(k1, d);
         vm.broadcast(k2);
         RelayFeeRouter(router).relay(t, cd, t, _pad(a1), payee, 1, LANE_FEE, fn, vu, s);
@@ -644,8 +690,22 @@ contract Tokens is OnchainBase {
         m = _nextMeta(false);
         MetaTxLib.UAMetaTransfer memory x = _tr(_pad(a2), 1_000, 0);
         x.entryRef = _metaId(m);
-        bytes32 sh = keccak256(abi.encode(MetaTxLib.UAMETATRANSFER_TYPEHASH, x.from, x.to, x.value, x.entryRef, x.batch,
-            x.nonce, x.validUntil, x.mode, address(0), x.fee, address(0)));
+        bytes32 sh = keccak256(
+            abi.encode(
+                MetaTxLib.UAMETATRANSFER_TYPEHASH,
+                x.from,
+                x.to,
+                x.value,
+                x.entryRef,
+                x.batch,
+                x.nonce,
+                x.validUntil,
+                x.mode,
+                address(0),
+                x.fee,
+                address(0)
+            )
+        );
         IUARegistry.UASig memory s =
             _sig(k1, _digest(t, keccak256(abi.encode(UA_PAY_WITH_TAX, sh, uint8(2), uint256(7)))));
         vm.broadcast(k2);
@@ -747,20 +807,38 @@ contract Tokens is OnchainBase {
         MetaTxLib.UAEnvelope memory e;
         (e.from, e.batch, e.nonce, e.validUntil) = (uaD, 1, b.mtxNonce(uaD, 1), vu);
         IUARegistry.UASig memory s;
-        (s.keyData, s.signature) = (keyD, _ecdsa(kD, UAKinds.uaMessage(UAKinds.SECP256K1, UAKinds.PURPOSE_METATX,
-            _named(address(b), UA_BURN, abi.encode(uint256(50)), e))));
+        (s.keyData, s.signature) =
+        (
+            keyD,
+            _ecdsa(
+                kD,
+                UAKinds.uaMessage(
+                    UAKinds.SECP256K1, UAKinds.PURPOSE_METATX, _named(address(b), UA_BURN, abi.encode(uint256(50)), e)
+                )
+            )
+        );
         vm.broadcast(k2);
         b.mtxBurn(e, 50, s);
         vm.broadcast(k3);
         b.burn(100); // within the limited grant
-        require(b.balanceOfUA(uaD) == 950 && b.grantOf(b30, _pad(a3)).spentTotal == 100
-            && b.totalSupply() == 1e9 - 160, "BURNER: three burns");
-        _negData(a3, address(b), abi.encodeCall(NormalToken.burn, (uint256(101))),
+        require(
+            b.balanceOfUA(uaD) == 950 && b.grantOf(b30, _pad(a3)).spentTotal == 100 && b.totalSupply() == 1e9 - 160,
+            "BURNER: three burns"
+        );
+        _negData(
+            a3,
+            address(b),
+            abi.encodeCall(NormalToken.burn, (uint256(101))),
             abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(1)),
-            string.concat("burn beyond a limited bit-30 grant (kind ", vm.toString(kind), "): GrantExhausted(1)"));
-        _negData(a2, address(b), abi.encodeCall(NormalToken.burn, (uint256(1))),
+            string.concat("burn beyond a limited bit-30 grant (kind ", vm.toString(kind), "): GrantExhausted(1)")
+        );
+        _negData(
+            a2,
+            address(b),
+            abi.encodeCall(NormalToken.burn, (uint256(1))),
             abi.encodeWithSelector(IGovernance.MissingRole.selector, b30, _pad(a2)),
-            string.concat("burn by a non-holder with a balance (kind ", vm.toString(kind), "): MissingRole(30, id)"));
+            string.concat("burn by a non-holder with a balance (kind ", vm.toString(kind), "): MissingRole(30, id)")
+        );
     }
 
     function _burnerOff(uint8 kind) internal {
@@ -771,12 +849,24 @@ contract Tokens is OnchainBase {
         x.disableFeature(GovernanceBits.BURNER, w);
         vm.stopBroadcast();
         bytes memory off = abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.BURNABLE);
-        _negData(a1, address(x), abi.encodeCall(NormalToken.burn, (uint256(1))), off,
-            string.concat("the seat's burn after disableFeature(30) (kind ", vm.toString(kind), "): FeatureNotSet(2)"));
+        _negData(
+            a1,
+            address(x),
+            abi.encodeCall(NormalToken.burn, (uint256(1))),
+            off,
+            string.concat("the seat's burn after disableFeature(30) (kind ", vm.toString(kind), "): FeatureNotSet(2)")
+        );
         MetaTxLib.UAEnvelope memory e = _env(a1, 1, x.mtxNonce(_pad(a1), 1));
         IUARegistry.UASig memory s = _sig(k1, _named(address(x), UA_BURN, abi.encode(uint256(1)), e));
-        _negData(a1, address(x), abi.encodeCall(NormalToken.mtxBurn, (e, 1, s)), off,
-            string.concat("the seat's mtxBurn after disableFeature(30) (kind ", vm.toString(kind), "): FeatureNotSet(2)"));
+        _negData(
+            a1,
+            address(x),
+            abi.encodeCall(NormalToken.mtxBurn, (e, 1, s)),
+            off,
+            string.concat(
+                "the seat's mtxBurn after disableFeature(30) (kind ", vm.toString(kind), "): FeatureNotSet(2)"
+            )
+        );
     }
 
     // ------------------------------------------------------------------ negatives (eth_call on the final state)
@@ -785,14 +875,38 @@ contract Tokens is OnchainBase {
         t = base;
         MetaTxLib.UAMetaTransfer memory x = _tr(_pad(a3), 1, 0);
         IUARegistry.UASig memory bad = _sig(k2, NormalToken(t).mtxTransferDigest(x)); // signed by another key
-        _neg(a2, t, abi.encodeCall(NormalToken.mtxTransfer, (x.from, x.to, 1, 0, x.nonce, vu, uint32(0), address(0), bad)),
-            IMetaTx.MetaTxBadSignature.selector, "mtxTransfer signed by another key");
-        _neg(a2, t, abi.encodeCall(IERC20.transferFrom, (a1, a2, 1)), IERC20MetaTx.CallerNotContract.selector,
-            "transferFrom by an EOA (CTR-TOK-01)");
-        _neg(a2, t8, abi.encodeCall(NormalToken.mint, (a2, 1, IMetaTx(t8).chainUid())), IGovernance.MissingRole.selector,
-            "mint by a non-minter (kind 8, MINTABLE set)");
+        _neg(
+            a2,
+            t,
+            abi.encodeCall(NormalToken.mtxTransfer, (x.from, x.to, 1, 0, x.nonce, vu, uint32(0), address(0), bad)),
+            IMetaTx.MetaTxBadSignature.selector,
+            "mtxTransfer signed by another key"
+        );
+        _neg(
+            a2,
+            t,
+            abi.encodeCall(IERC20.transferFrom, (a1, a2, 1)),
+            IERC20MetaTx.CallerNotContract.selector,
+            "transferFrom by an EOA (CTR-TOK-01)"
+        );
+        _neg(
+            a2,
+            t8,
+            abi.encodeCall(NormalToken.mint, (a2, 1, IMetaTx(t8).chainUid())),
+            IGovernance.MissingRole.selector,
+            "mint by a non-minter (kind 8, MINTABLE set)"
+        );
         // a wrapped-only selector on a NORMAL clone: no stub, no fallback, so the empty revert (the dispatcher refuses it)
-        vm.writeLine(_negFile(), string.concat(vm.toString(a2), " ", vm.toString(t), " ",
-            vm.toString(abi.encodeWithSignature("wrap(uint256)", uint256(1))), " 0x wrap(uint256) on a NORMAL token: empty revert"));
+        vm.writeLine(
+            _negFile(),
+            string.concat(
+                vm.toString(a2),
+                " ",
+                vm.toString(t),
+                " ",
+                vm.toString(abi.encodeWithSignature("wrap(uint256)", uint256(1))),
+                " 0x wrap(uint256) on a NORMAL token: empty revert"
+            )
+        );
     }
 }

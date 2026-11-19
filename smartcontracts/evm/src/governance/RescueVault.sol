@@ -15,7 +15,8 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 contract RescueVault {
     using SafeERC20 for IERC20;
 
-    bytes32 private constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,string version,address verifyingContract)");
+    bytes32 private constant DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,address verifyingContract)");
     bytes32 public constant SET_RESCUER_TYPEHASH = keccak256("SetRescuer(uint64 seq,address newRescuer)");
     bytes32 public constant ROTATE_ADMIN_TYPEHASH = keccak256("RotateAdmin(uint64 seq,bytes32 newAdmin)");
 
@@ -86,9 +87,17 @@ contract RescueVault {
     }
 
     /// @notice ERC-5267: name, version, verifyingContract (fields 0x0b); no chainId, no salt.
-    function eip712Domain() external view returns (
-            bytes1 fields, string memory name, string memory version, uint256 chainId,
-            address verifyingContract, bytes32 salt, uint256[] memory extensions
+    function eip712Domain()
+        external
+        view
+        returns (
+            bytes1 fields,
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address verifyingContract,
+            bytes32 salt,
+            uint256[] memory extensions
         )
     {
         return (hex"0b", "SCaaS RescueVault", "1", 0, address(this), bytes32(0), new uint256[](0));
@@ -103,7 +112,8 @@ contract RescueVault {
     }
 
     function _digest(bytes32 structHash) private view returns (bytes32) {
-        bytes32 domain = keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256("SCaaS RescueVault"), keccak256("1"), address(this)));
+        bytes32 domain =
+            keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256("SCaaS RescueVault"), keccak256("1"), address(this)));
         return keccak256(abi.encodePacked(hex"1901", domain, structHash));
     }
 

@@ -5,11 +5,25 @@ import {Test} from "forge-std/Test.sol";
 import {G1Bn254} from "../../src/zether/ZetherCurves.sol";
 
 contract Bn254Harness {
-    function add(bytes memory a, bytes memory b) external view returns (bytes memory) { return G1Bn254.add(a, b); }
-    function mul(bytes memory a, uint256 k) external view returns (bytes memory) { return G1Bn254.mul(a, k); }
-    function msm(bytes memory p, uint256[] memory s) external view returns (bytes memory) { return G1Bn254.msm(p, s); }
-    function isValid(bytes memory a) external view returns (bool) { return G1Bn254.isValid(a); }
-    function mapToG1(bytes memory p) external view returns (bytes memory) { return G1Bn254.mapToG1(p); }
+    function add(bytes memory a, bytes memory b) external view returns (bytes memory) {
+        return G1Bn254.add(a, b);
+    }
+
+    function mul(bytes memory a, uint256 k) external view returns (bytes memory) {
+        return G1Bn254.mul(a, k);
+    }
+
+    function msm(bytes memory p, uint256[] memory s) external view returns (bytes memory) {
+        return G1Bn254.msm(p, s);
+    }
+
+    function isValid(bytes memory a) external view returns (bool) {
+        return G1Bn254.isValid(a);
+    }
+
+    function mapToG1(bytes memory p) external view returns (bytes memory) {
+        return G1Bn254.mapToG1(p);
+    }
 }
 
 /// Review W-I (2026-10-19): the bn254 wrappers require the exact return size. A chain without 0x05 / 0x06 / 0x07 answers

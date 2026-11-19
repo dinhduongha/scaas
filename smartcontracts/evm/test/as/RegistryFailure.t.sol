@@ -5,8 +5,14 @@ import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
-import {RevertingRegistry, GasBurningRegistry, ShortReturnRegistry, TwoReturningRegistry, LongReturnRegistry,
-    GasProbeRegistry} from "./RegistryStubs.sol";
+import {
+    RevertingRegistry,
+    GasBurningRegistry,
+    ShortReturnRegistry,
+    TwoReturningRegistry,
+    LongReturnRegistry,
+    GasProbeRegistry
+} from "./RegistryStubs.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {IComplianceRegistry} from "../../src/regulated/IComplianceRegistry.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -46,9 +52,13 @@ contract RegistryFailureTest is RegFixture {
     }
 
     function _stubs() internal returns (bytes[5] memory c) {
-        c = [address(new RevertingRegistry()).code, address(new GasBurningRegistry()).code,
-            address(new ShortReturnRegistry()).code, address(new TwoReturningRegistry()).code,
-            address(new LongReturnRegistry()).code];
+        c = [
+            address(new RevertingRegistry()).code,
+            address(new GasBurningRegistry()).code,
+            address(new ShortReturnRegistry()).code,
+            address(new TwoReturningRegistry()).code,
+            address(new LongReturnRegistry()).code
+        ];
     }
 
     /// `cd` as `who` with 3 M gas (a gas-burning registry without the cap would take all of it).
@@ -60,7 +70,9 @@ contract RegistryFailureTest is RegFixture {
     function _unavailable(address who, address t, bytes memory cd, string memory what) internal {
         (bool ok, bytes memory ret) = _as(who, t, cd);
         assertFalse(ok, what);
-        assertEq(ret, abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryUnavailable.selector, address(creg)), what);
+        assertEq(
+            ret, abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryUnavailable.selector, address(creg)), what
+        );
     }
 
     function test_registryFailureNeverEligible() public {
@@ -72,14 +84,19 @@ contract RegistryFailureTest is RegFixture {
                 _attest(nid(bob), 1, MAX);
                 _attest(nid(feeTo), 1, MAX);
                 bytes memory tr = abi.encodeCall(IERC20.transfer, (bob, 1));
-                bytes memory pay = abi.encodeCall(NormalToken.payWithFee, (bob, 100, FeeMode.FIXED, 1, feeTo, PayMetaKit.ref(keccak256("r")), PayMetaKit.meta(keccak256("r"))));
+                bytes memory pay = abi.encodeCall(
+                    NormalToken.payWithFee,
+                    (bob, 100, FeeMode.FIXED, 1, feeTo, PayMetaKit.ref(keccak256("r")), PayMetaKit.meta(keccak256("r")))
+                );
                 (bool ok,) = _as(alice, t, tr);
                 assertTrue(ok, "control");
                 vm.etch(address(creg), stubs[j]);
                 _unavailable(alice, t, tr, "transfer");
                 _unavailable(alice, t, pay, "fee leg");
                 if (i == 0) {
-                    _unavailable(address(this), t, abi.encodeCall(NormalToken.mint, (bob, 1, EnvKit.codeUidOf(t))), "mint");
+                    _unavailable(
+                        address(this), t, abi.encodeCall(NormalToken.mint, (bob, 1, EnvKit.codeUidOf(t))), "mint"
+                    );
                     vm.prank(alice);
                     NormalToken(t).burn(1);
                 } else {
@@ -90,7 +107,9 @@ contract RegistryFailureTest is RegFixture {
                     vm.prank(alice);
                     WrappedToken(payable(t)).unwrap(1, alice);
                 }
-                vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryUnavailable.selector, address(creg)));
+                vm.expectRevert(
+                    abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryUnavailable.selector, address(creg))
+                );
                 IRegulatedToken(t).canReceive(nid(bob));
                 vm.etch(address(creg), canonical);
             }
@@ -172,8 +191,10 @@ contract RegistryFailureTest is RegFixture {
         }
         (, bool ok, bytes memory ret) = _starvedAt(t, hi);
         emit log_named_uint("first gas limit not starved", hi);
-        assertTrue(ok || ret.length < 4 || bytes4(ret) != IRegulatedToken.ComplianceRegistryUnavailable.selector,
-            "the registry got its whole cap at the line");
+        assertTrue(
+            ok || ret.length < 4 || bytes4(ret) != IRegulatedToken.ComplianceRegistryUnavailable.selector,
+            "the registry got its whole cap at the line"
+        );
     }
 
     /// `COMPLIANCE_REGISTRY_GAS` = 50,000 (the starved error's `cap`), at least twice the canonical `hasFlags` measured cold on its
@@ -197,7 +218,7 @@ contract RegistryFailureTest is RegFixture {
         _attest(nid(address(gc)), 1, MAX);
         vm.prank(alice);
         IERC20(t).transfer(address(gc), 10);
-        (, , bytes memory ret) = _starvedAt(t, 45_000);
+        (,, bytes memory ret) = _starvedAt(t, 45_000);
         (, uint256 cap,) = _decodeStarved(ret);
         assertEq(cap, COMPLIANCE_REGISTRY_GAS, "the token's cap");
     }

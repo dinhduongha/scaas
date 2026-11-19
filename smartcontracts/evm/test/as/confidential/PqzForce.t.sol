@@ -34,8 +34,16 @@ abstract contract PqzForceSuite is PqzRegFixture {
         vm.revertToState(snap);
 
         vm.prank(compliance);
-        _r().recordOrder(keccak256("order"), keccak256("document"), alice, nid(BENEFICIARY), PUBLIC,
-            uint64(block.timestamp + 10 days), EnvKit.codeUidOf(address(_r())));
+        _r()
+            .recordOrder(
+                keccak256("order"),
+                keccak256("document"),
+                alice,
+                nid(BENEFICIARY),
+                PUBLIC,
+                uint64(block.timestamp + 10 days),
+                EnvKit.codeUidOf(address(_r()))
+            );
         bytes32 rid = keccak256(abi.encode(keccak256("order"), alice, nid(BENEFICIARY)));
         vm.prank(issuer);
         _r().freeze(alice, REF, rid, EnvKit.codeUidOf(address(_r())));
@@ -52,7 +60,9 @@ abstract contract PqzForceSuite is PqzRegFixture {
 
         assertEq(tok.balanceOfUA(alice), PUBLIC - 20_000, "the subject's public balance");
         assertEq(tok.balanceOf(BENEFICIARY), 20_000);
-        assertEq(keccak256(abi.encode(tok.pqzAccount(alice, 0))), keccak256(abi.encode(before)), "the Account unchanged");
+        assertEq(
+            keccak256(abi.encode(tok.pqzAccount(alice, 0))), keccak256(abi.encode(before)), "the Account unchanged"
+        );
         assertEq(tok.pqzAcc(alice, 0), acc, "acc unchanged");
         assertEq(tok.pqzPending(alice, 0, 0), p0, "the pending entry unchanged");
         assertEq(tok.totalShielded(), shielded);
@@ -61,9 +71,13 @@ abstract contract PqzForceSuite is PqzRegFixture {
 }
 
 contract PqzForce12Test is PqzForceSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract PqzForce13Test is PqzForceSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

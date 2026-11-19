@@ -216,11 +216,14 @@ contract UARegistryVectorsTest is UARegistryBase {
     function test_vectors_msig() public {
         // members: the derived rows' keys, registered with their PoPs
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
-            UACall.register(reg, uint16(vm.parseJsonUint(sj, _d(i, "kind"))),
+            UACall.register(
+                reg,
+                uint16(vm.parseJsonUint(sj, _d(i, "kind"))),
                 vm.parseJsonBytes(sj, _d(i, "keyData")),
                 _none(),
                 vm.parseJsonBytes(sj, _d(i, "pop.sig")),
-                "");
+                ""
+            );
         }
         bytes memory d = vm.parseJsonBytes(sj, ".msig.keyData");
         uint256 g = gasleft();
@@ -265,8 +268,14 @@ contract UARegistryVectorsTest is UARegistryBase {
         uint256 rows;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             bytes memory k = vm.parseJsonBytes(sj, _d(i, "keyData"));
-            bytes32 ua = UACall.register(reg, uint16(vm.parseJsonUint(sj, _d(i, "kind"))), k, _none(),
-                vm.parseJsonBytes(sj, _d(i, "pop.sig")), "");
+            bytes32 ua = UACall.register(
+                reg,
+                uint16(vm.parseJsonUint(sj, _d(i, "kind"))),
+                k,
+                _none(),
+                vm.parseJsonBytes(sj, _d(i, "pop.sig")),
+                ""
+            );
             bytes32 p = _purposeTag(vm.parseJsonString(sj, _d(i, "sigs[0].purpose")));
             bytes32 dg = vm.parseJsonBytes32(sj, _d(i, "sigs[0].digest"));
             IUARegistry.UASig memory a;
@@ -307,8 +316,14 @@ contract UARegistryVectorsTest is UARegistryBase {
         for (uint256 i; i < 4; ++i) {
             string memory row = string.concat(".memberships[", vm.toString(i), "].");
             assertEq(vm.parseJsonBytes32(j, string.concat(row, "ua")), ua);
-            reg.acceptMembership(ua, IUARegistry.MemberSig(uint16(vm.parseJsonUint(j, string.concat(row, "index"))), new IUARegistry.InnerSig[](0),
-                vm.parseJsonBytes(j, string.concat(row, "sig"))));
+            reg.acceptMembership(
+                ua,
+                IUARegistry.MemberSig(
+                    uint16(vm.parseJsonUint(j, string.concat(row, "index"))),
+                    new IUARegistry.InnerSig[](0),
+                    vm.parseJsonBytes(j, string.concat(row, "sig"))
+                )
+            );
         }
     }
 
@@ -365,8 +380,16 @@ contract UARegistryVectorsTest is UARegistryBase {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, digest);
         for (uint256 i; i < 2; ++i) {
             bytes32 am = UAKinds.uaMessage(m[i].kind, UAKinds.PURPOSE_MEMBER, _membershipMd(ua, m[i].id));
-            reg.acceptMembership(ua, IUARegistry.MemberSig(_indexOf(d, m[i].id), new IUARegistry.InnerSig[](0),
-                m[i].kind == UAKinds.WEBAUTHN_P256 ? _assertion(sk[0], bytes32(_slice32(waKey, 64)), am) : _p256(sk[1], am)));
+            reg.acceptMembership(
+                ua,
+                IUARegistry.MemberSig(
+                    _indexOf(d, m[i].id),
+                    new IUARegistry.InnerSig[](0),
+                    m[i].kind == UAKinds.WEBAUTHN_P256
+                        ? _assertion(sk[0], bytes32(_slice32(waKey, 64)), am)
+                        : _p256(sk[1], am)
+                )
+            );
         }
 
         IUARegistry.MemberSig[] memory s = new IUARegistry.MemberSig[](2);
@@ -393,7 +416,9 @@ contract UARegistryVectorsTest is UARegistryBase {
     function _assertion(uint256 pk, bytes32 rpIdHash, bytes32 m) internal pure returns (bytes memory) {
         bytes memory a = abi.encodePacked(rpIdHash, bytes1(0x05), uint32(1));
         bytes memory c = abi.encodePacked(
-            '{"type":"webauthn.get","challenge":"', Base64.encodeURL(abi.encodePacked(m)), '","origin":"https://m2.example"}'
+            '{"type":"webauthn.get","challenge":"',
+            Base64.encodeURL(abi.encodePacked(m)),
+            '","origin":"https://m2.example"}'
         );
         (bytes32 r, bytes32 s) = _lowS(pk, sha256(abi.encodePacked(a, sha256(c))));
         return abi.encode(a, c, r, s);

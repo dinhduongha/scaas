@@ -3,7 +3,10 @@
 use pqz_ffi::*;
 
 fn main() {
-    let n: u8 = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(20);
+    let n: u8 = std::env::args()
+        .nth(1)
+        .and_then(|a| a.parse().ok())
+        .unwrap_or(20);
     for (name, id) in [("pqzl", PQZL_ID), ("pqzh", PQZH_ID)] {
         for c in fixture::cases(&id).unwrap() {
             for i in 0..n {
@@ -13,7 +16,11 @@ fn main() {
                 let input = stmt::input(c.op(), &c.stmt, &proof);
                 assert_eq!(precompile(&input), Ok(VALID), "{name} {:?} #{i}", c.form);
                 let hex: String = input.iter().map(|b| format!("{b:02x}")).collect();
-                println!("{{\"id\": \"{name}\", \"form\": \"{:?}\", \"op\": {}, \"input\": \"{hex}\"}}", c.form, c.op());
+                println!(
+                    "{{\"id\": \"{name}\", \"form\": \"{:?}\", \"op\": {}, \"input\": \"{hex}\"}}",
+                    c.form,
+                    c.op()
+                );
             }
             eprintln!("{name} {:?}: {n} fresh proofs", c.form);
         }
@@ -26,7 +33,11 @@ fn main() {
                 let input = stmt::input(c.op(), &c.stmt, &proof);
                 assert_eq!(precompile(&input), Ok(VALID), "{name} {} #{i}", c.name());
                 let hex: String = input.iter().map(|b| format!("{b:02x}")).collect();
-                println!("{{\"id\": \"{name}\", \"form\": \"{}\", \"op\": {}, \"input\": \"{hex}\"}}", c.name(), c.op());
+                println!(
+                    "{{\"id\": \"{name}\", \"form\": \"{}\", \"op\": {}, \"input\": \"{hex}\"}}",
+                    c.name(),
+                    c.op()
+                );
             }
             eprintln!("{name} {}: {n} fresh proofs", c.name());
         }

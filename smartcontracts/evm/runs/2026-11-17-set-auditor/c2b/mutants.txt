@@ -1,0 +1,8 @@
+hold-not-persisted | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+startup-requeue-clears | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+mark-from-memory-only | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+release-dropped | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+send-on-expired | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+ignore-proposer | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+gone-not-consumed | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+unstored-queued | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101

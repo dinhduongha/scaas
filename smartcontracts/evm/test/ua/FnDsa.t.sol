@@ -54,10 +54,14 @@ contract FnDsaTest is PqVectors {
         FnHarness h = new FnHarness(9);
         // SHAKE128("") and SHAKE256("") (FIPS 202 examples), and a 200-byte input spanning a SHAKE256 block (noble)
         assertEq(h.shake(168, "", 32), hex"7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26");
-        assertEq(h.shake(136, "", 64),
-            hex"46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762fd75dc4ddd8c0f200cb05019d67b592f6fc821c49479ab48640292eacb3b7c4be");
+        assertEq(
+            h.shake(136, "", 64),
+            hex"46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762fd75dc4ddd8c0f200cb05019d67b592f6fc821c49479ab48640292eacb3b7c4be"
+        );
         bytes memory long = new bytes(200);
-        for (uint256 i; i < 200; ++i) long[i] = bytes1(uint8(i));
+        for (uint256 i; i < 200; ++i) {
+            long[i] = bytes1(uint8(i));
+        }
         assertEq(h.shake(136, long, 32), _b(_kat(), ".shake256_200"));
     }
 
@@ -207,7 +211,9 @@ contract FnDsaTest is PqVectors {
         assertFalse(v.verify(pk, m, bad));
         assertFalse(v.verify(pk, m, bytes.concat(sig, hex"00")), "1,281 B");
         bad = new bytes(1279);
-        for (uint256 i; i < 1279; ++i) bad[i] = sig[i];
+        for (uint256 i; i < 1279; ++i) {
+            bad[i] = sig[i];
+        }
         assertFalse(v.verify(pk, m, bad), "1,279 B");
         (bool negZero, bool unused) = _pinChecks(new FnHarness(10), pk, abi.encodePacked(m), sig);
         assertTrue(negZero || unused);
@@ -237,7 +243,9 @@ contract FnDsaTest is PqVectors {
     /// The checks a valid signature does not reach: each mutant below verifies iff its check is removed from FnDsa.sol.
     /// Returns whether the vector has a zero coefficient (for "−0") and unused bits in its last s2 byte.
     function _pinChecks(FnHarness h, bytes memory pk, bytes memory m, bytes memory sig)
-        internal view returns (bool negZero, bool unused)
+        internal
+        view
+        returns (bool negZero, bool unused)
     {
         assertFalse(h.verify(bytes.concat(pk, hex"00"), m, sig), "pk length + 1");
         bytes memory bad = bytes.concat(pk);
@@ -285,7 +293,9 @@ contract FnDsaTest is PqVectors {
 
     /// `n` bits of `b` at bit position `p`, most significant bit first.
     function _bits(bytes memory b, uint256 p, uint256 n) internal pure returns (uint256 v) {
-        for (uint256 i = p; i < p + n; ++i) v = (v << 1) | ((uint8(b[i / 8]) >> (7 - i % 8)) & 1);
+        for (uint256 i = p; i < p + n; ++i) {
+            v = (v << 1) | ((uint8(b[i / 8]) >> (7 - i % 8)) & 1);
+        }
     }
 
     function _setBits(bytes memory b, uint256 p, uint256 n, uint256 v) internal pure {
@@ -299,6 +309,8 @@ contract FnDsaTest is PqVectors {
 
     function _slice(bytes memory b, uint256 len) internal pure returns (bytes memory s) {
         s = new bytes(len);
-        for (uint256 i; i < len; ++i) s[i] = b[i];
+        for (uint256 i; i < len; ++i) {
+            s[i] = b[i];
+        }
     }
 }

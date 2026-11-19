@@ -15,7 +15,9 @@ import {UACall} from "../../ua/UACall.sol";
 contract SlhStandIn {
     uint256 internal immutable B;
 
-    constructor(uint256 b) { B = b; }
+    constructor(uint256 b) {
+        B = b;
+    }
 
     function verify(bytes calldata, bytes32, bytes calldata) external view returns (bool) {
         _burn();
@@ -70,8 +72,14 @@ abstract contract PqzRegistryBase is PqzMock {
         // (its keccak = the set's selftest.json `register.pqzh.proof_keccak`; the probe pin `PqzSet.PROBE_PQZH` checks it):
         // the 7 MB JSON exceeds forge's per-test gas in memory expansion
         regProof = psid == PQZH_ID && PqzSet.HAS_PQZH
-            ? vm.parseBytes(string.concat("0x", vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqzh/",
-                PqzSet.NAME, "/register_proof.hex"))))
+            ? vm.parseBytes(
+                string.concat(
+                    "0x",
+                    vm.readFile(
+                        string.concat(vm.projectRoot(), "/test/vectors/pqzh/", PqzSet.NAME, "/register_proof.hex")
+                    )
+                )
+            )
             : _vecHex("proof_pqzl.json", ".rows[4].proof");
         _mockSelfTest();
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(0)));
@@ -121,7 +129,12 @@ abstract contract PqzRegistryBase is PqzMock {
 
     /// The portable `R_REG` message of the `mldsa65` UA `ua` holding PQZ key `pk` (no KEM record).
     function _pqzRegMessage(bytes32 ua, bytes memory pk) internal pure returns (bytes32) {
-        return UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
-            UAKinds.portableRecordDigest(ua, UAKinds.MLDSA65, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pk), UAKinds.kemRecordHash(ua, 0, "")));
+        return UAKinds.uaMessage(
+            UAKinds.PQZ_MLWE,
+            UAKinds.PURPOSE_POP_V2,
+            UAKinds.portableRecordDigest(
+                ua, UAKinds.MLDSA65, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pk), UAKinds.kemRecordHash(ua, 0, "")
+            )
+        );
     }
 }

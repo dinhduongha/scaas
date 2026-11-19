@@ -2,7 +2,10 @@
 pragma solidity ^0.8.20;
 
 import {
-    IZetherVerifierCommon, IZetherVerifier, IZetherBurnVerifier, IZetherInnerProductVerifier
+    IZetherVerifierCommon,
+    IZetherVerifier,
+    IZetherBurnVerifier,
+    IZetherInnerProductVerifier
 } from "./IZetherVerifier.sol";
 import {ZetherTranscript as T} from "./ZetherTranscript.sol";
 import {SigCheck} from "../common/SigCheck.sol";
@@ -38,11 +41,21 @@ abstract contract ZetherCurve is IZetherVerifierCommon {
 
     // ------------------------------------------------------------------ views
 
-    function proofSystemId() public pure returns (bytes32) { return keccak256(bytes(_psidLabel())); }
-    function proofSystemIdMulti() public pure returns (bytes32) { return keccak256(abi.encodePacked(_psidLabel(), "/multi")); }
+    function proofSystemId() public pure returns (bytes32) {
+        return keccak256(bytes(_psidLabel()));
+    }
 
-    function groupOrder() external pure returns (uint256) { return _order(); }
-    function g1EncodedBytes() external pure returns (uint256) { return _pointBytes(); }
+    function proofSystemIdMulti() public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(_psidLabel(), "/multi"));
+    }
+
+    function groupOrder() external pure returns (uint256) {
+        return _order();
+    }
+
+    function g1EncodedBytes() external pure returns (uint256) {
+        return _pointBytes();
+    }
 
     /// @notice Blob generator NUMS `h ‖ U ‖ G_0..G_63 ‖ H_0..H_63` (§3).
     function generators() public view returns (bytes memory blob) {
@@ -151,16 +164,16 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
             _put(blob, 66 + i, _gen("H", i), p);
         }
         // SSTORE2: runtime = 0x00 (STOP) ‖ blob, để không ai "gọi" được data contract.
-        bytes memory init = abi.encodePacked(
-            hex"61", uint16(blob.length + 1), hex"80600c6000396000f3", hex"00", blob
-        );
+        bytes memory init = abi.encodePacked(hex"61", uint16(blob.length + 1), hex"80600c6000396000f3", hex"00", blob);
         address store;
         assembly ("memory-safe") { store := create(0, add(init, 32), mload(init)) }
         if (store == address(0)) revert GeneratorStoreFailed();
         generatorStore = store;
     }
 
-    function _store() internal view override returns (address) { return generatorStore; }
+    function _store() internal view override returns (address) {
+        return generatorStore;
+    }
 
     /// @notice One Bulletproof range proof of `n = 64` bits (§9) on the caller's transcript `st`, its two equations folded
     ///         alone under a `ρ` that hashes `proof`: `V` the committed point, `proof` the `16P + 160` bytes
@@ -171,11 +184,18 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
         uint256[] memory commitments = new uint256[](1);
         commitments[0] = SLOT_EXT;
         if (V.length != _pointBytes()) return (false, st);
-        return _fold(st, SigmaFold(_rho(st, bytes.concat(V, proof)), 1, V, new uint256[](SLOT_EXT + 1), commitments), proof);
+        return
+            _fold(
+                st, SigmaFold(_rho(st, bytes.concat(V, proof)), 1, V, new uint256[](SLOT_EXT + 1), commitments), proof
+            );
     }
 
     /// @inheritdoc IZetherInnerProductVerifier
-    function verifyFold(bytes32 st, SigmaFold calldata sigma, bytes calldata rangeProofs) external view returns (bool ok) {
+    function verifyFold(bytes32 st, SigmaFold calldata sigma, bytes calldata rangeProofs)
+        external
+        view
+        returns (bool ok)
+    {
         (ok,) = _fold(st, sigma, rangeProofs);
     }
 
@@ -183,7 +203,11 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
     ///      point stays in `pts` with its scalar, 0 too: G1MSM's subgroup check is what admits it.
     ///      ponytail: the auditor-off `O` points keep their slots (3 points, `1 + 4M` on multi), a few gas-priced no-ops for one
     ///      layout; drop them only by their proven `O`, never by a zero scalar.
-    function _fold(bytes32 st, SigmaFold memory sigma, bytes memory rangeProofs) private view returns (bool ok, bytes32) {
+    function _fold(bytes32 st, SigmaFold memory sigma, bytes memory rangeProofs)
+        private
+        view
+        returns (bool ok, bytes32)
+    {
         BP memory b;
         b.p = _pointBytes();
         b.r = _order();
@@ -195,7 +219,10 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
         b.at = sigma.scalars.length;
         uint256 len = b.sOff + 160;
         uint256 m = sigma.commitments.length;
-        if (b.rho == 0 || b.wt == 0 || rangeProofs.length != m * len || sigma.points.length + SLOT_EXT * b.p != b.at * b.p) {
+        if (
+            b.rho == 0 || b.wt == 0 || rangeProofs.length != m * len
+                || sigma.points.length + SLOT_EXT * b.p != b.at * b.p
+        ) {
             return (false, st);
         }
         bytes memory pts = _foldStart(b, sigma, m);
@@ -215,7 +242,9 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
     function _foldStart(BP memory b, SigmaFold memory sigma, uint256 m) private view returns (bytes memory pts) {
         uint256 ext = sigma.scalars.length;
         b.f = new uint256[](ext + 16 * m);
-        for (uint256 i; i < ext; ++i) b.f[i] = sigma.scalars[i];
+        for (uint256 i; i < ext; ++i) {
+            b.f[i] = sigma.scalars[i];
+        }
         pts = new bytes(b.f.length * b.p);
         _put(pts, SLOT_G, _base(), b.p);
         _copy(pts, SLOT_HB * b.p, generators(), 0, NGEN * b.p);
@@ -229,11 +258,11 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
         uint256 k;
         uint256 sOff;
         uint256 rho;
-        uint256 wt;     // the weight of the next equation
-        uint256 at;     // the slot of this proof's `A`
-        uint256[] f;    // the fold, one scalar per slot
-        bytes pr;       // this proof
-        uint256[5] sc;  // τ_x μ t̂ a b
+        uint256 wt; // the weight of the next equation
+        uint256 at; // the slot of this proof's `A`
+        uint256[] f; // the fold, one scalar per slot
+        bytes pr; // this proof
+        uint256[5] sc; // τ_x μ t̂ a b
         uint256 y;
         uint256 z;
         uint256 x;
@@ -278,11 +307,8 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
             yi = mulmod(yi, b.y, r);
         }
         // δ = (z − z²)·Σy^i − z³·(2^n − 1)
-        uint256 delta = addmod(
-            mulmod(addmod(b.z, r - z2, r), sumY, r),
-            r - mulmod(mulmod(z2, b.z, r), ((1 << b.n) - 1) % r, r),
-            r
-        );
+        uint256 delta =
+            addmod(mulmod(addmod(b.z, r - z2, r), sumY, r), r - mulmod(mulmod(z2, b.z, r), ((1 << b.n) - 1) % r, r), r);
         _term(b.f, SLOT_G, w, addmod(b.sc[2], r - delta, r), r);
         _term(b.f, SLOT_HB, w, b.sc[0], r);
         _term(b.f, v, w, _negS(z2, r), r);
@@ -389,7 +415,9 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         generatorStore = innerProduct_.generatorStore();
     }
 
-    function _store() internal view override returns (address) { return generatorStore; }
+    function _store() internal view override returns (address) {
+        return generatorStore;
+    }
 
     // ------------------------------------------------------------------ verify
 
@@ -418,7 +446,9 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         Ctx memory x = _ctx(statement, proof, sigma, pts);
         if (x.c == 0 || !_sigmaTransferMulti(x, m)) return false;
         uint256[] memory v = new uint256[](m + 1);
-        for (uint256 j; j < m; ++j) v[j] = _lpf(j, 0); // V_vj
+        for (uint256 j; j < m; ++j) {
+            v[j] = _lpf(j, 0); // V_vj
+        }
         v[m] = SLOT_EXT; // V_b
         return _fold(x, v, sigma + (4 + 3 * m) * 32);
     }
@@ -461,18 +491,20 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         uint256 r;
         uint256 c;
         bytes32 st;
-        bytes s;      // statement
-        bytes pr;     // proof
-        uint256 rho;  // the fold challenge (§9.1)
-        uint256 w;    // the weight of the next equation
-        uint256 sAt;  // the slot of the statement's first point
-        bytes pts;    // the proof's Σ points ‖ the statement's points, slots from `SLOT_EXT`
-        uint256[] f;  // the fold, one scalar per slot
+        bytes s; // statement
+        bytes pr; // proof
+        uint256 rho; // the fold challenge (§9.1)
+        uint256 w; // the weight of the next equation
+        uint256 sAt; // the slot of the statement's first point
+        bytes pts; // the proof's Σ points ‖ the statement's points, slots from `SLOT_EXT`
+        uint256[] f; // the fold, one scalar per slot
     }
 
     /// @dev Hấp thụ statement và `sigmaLen` byte đầu của proof, rút challenge `c` (§7), rồi `ρ` (§9.1). `pts`: see `Ctx`.
     function _ctx(bytes calldata statement, bytes calldata proof, uint256 sigmaLen, bytes memory pts)
-        private pure returns (Ctx memory x)
+        private
+        pure
+        returns (Ctx memory x)
     {
         x.p = _pointBytes();
         x.r = _order();
@@ -490,12 +522,16 @@ abstract contract ZetherVerifierBase is ZetherCurve {
 
     /// @dev One equation, `Σ [s_i] at_i`, into the fold under the next power of `ρ`.
     function _e3(Ctx memory x, uint256[3] memory slots, uint256[3] memory s) private pure {
-        for (uint256 i; i < 3; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
+        for (uint256 i; i < 3; ++i) {
+            _term(x.f, slots[i], x.w, s[i], x.r);
+        }
         x.w = mulmod(x.w, x.rho, x.r);
     }
 
     function _e4(Ctx memory x, uint256[4] memory slots, uint256[4] memory s) private pure {
-        for (uint256 i; i < 4; ++i) _term(x.f, slots[i], x.w, s[i], x.r);
+        for (uint256 i; i < 4; ++i) {
+            _term(x.f, slots[i], x.w, s[i], x.r);
+        }
         x.w = mulmod(x.w, x.rho, x.r);
     }
 
@@ -537,8 +573,10 @@ abstract contract ZetherVerifierBase is ZetherCurve {
             (z[i], ok) = _ps(x, 10, i);
             if (!ok) return false;
         }
-        if (_isZero(_sp(x, 6)) || _isZero(_sp(x, 0)) || _isZero(_sp(x, 1))
-            || keccak256(_sp(x, 0)) == keccak256(_sp(x, 1))) return false;
+        if (
+            _isZero(_sp(x, 6)) || _isZero(_sp(x, 0)) || _isZero(_sp(x, 1))
+                || keccak256(_sp(x, 0)) == keccak256(_sp(x, 1))
+        ) return false;
         uint256 r = x.r;
         uint256 nc = r - x.c;
         uint256 s = x.sAt;
@@ -586,7 +624,9 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         if (!_sigmaLegs(x, m, z)) return false;
         // E4  [Σz_vj]G + [z_s]Y_f − [c]C_deb − A_deb
         uint256 zv;
-        for (uint256 j; j < m; ++j) zv = addmod(zv, z[4 + 3 * j], r);
+        for (uint256 j; j < m; ++j) {
+            zv = addmod(zv, z[4 + 3 * j], r);
+        }
         _e4(x, [SLOT_G, s, s + 5, a + 3], [zv, z[1], nc, r - 1]);
         _e5(x, z[2], z[0], [s + 3, s + 4, s + 2, s + 5, a + 4]);
         // E8  [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
@@ -696,7 +736,6 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         _e4(x, [SLOT_G, SLOT_HB, a, a + 3], [z[1], z[2], nc, r - 1]);
         return true;
     }
-
 }
 
 /// @title The transfer verifier of a curve: `verifyTransfer`, `verifyTransferMulti`, and the group operations of
@@ -710,23 +749,38 @@ abstract contract ZetherTransferVerifierBase is ZetherVerifierBase, IZetherVerif
         return _verifyTransferMulti(statement, proof);
     }
 
-    function ringSize() external pure returns (uint256) { return 2; }
-    function identity() external pure returns (bytes memory) { return new bytes(_pointBytes()); }
-    function isValidPoint(bytes calldata a) external view returns (bool) { return _valid(a); }
-    function g1Add(bytes calldata a, bytes calldata b) external view returns (bytes memory) { return _add(a, b); }
+    function ringSize() external pure returns (uint256) {
+        return 2;
+    }
+
+    function identity() external pure returns (bytes memory) {
+        return new bytes(_pointBytes());
+    }
+
+    function isValidPoint(bytes calldata a) external view returns (bool) {
+        return _valid(a);
+    }
+
+    function g1Add(bytes calldata a, bytes calldata b) external view returns (bytes memory) {
+        return _add(a, b);
+    }
+
     function g1Sub(bytes calldata a, bytes calldata b) external view returns (bytes memory) {
         return _add(a, _neg(b));
     }
+
     function g1Mul(bytes calldata a, uint256 k) external view returns (bytes memory) {
         uint256[] memory sc = new uint256[](1);
         sc[0] = k;
         return _msm(a, sc);
     }
+
     function g1MulBase(uint256 k) external view returns (bytes memory) {
         uint256[] memory sc = new uint256[](1);
         sc[0] = k;
         return _msm(_base(), sc);
     }
+
     function g1Msm(bytes calldata pts, uint256[] calldata scalars) external view returns (bytes memory) {
         return _msm(pts, scalars);
     }
@@ -750,7 +804,9 @@ abstract contract ZetherBls12381Curve is ZetherCurve {
         return "scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"; // v3: review C0-1 (per-leg t_j), C0-9 (validUntilBlock)
     }
 
-    function curveName() external pure returns (string memory) { return "bls12-381"; }
+    function curveName() external pure returns (string memory) {
+        return "bls12-381";
+    }
 
     /// @dev Probe cả G1ADD và G1MSM: G + G == [2]G. Precompile vắng mặt trả 0 byte ⇒ false. Then the check the fold rests on
     ///      (zether.md §9.1): G1MSM must refuse the order-3 point `(0, 2)`, alone and at scalar 0 beside a good term. Both
@@ -774,9 +830,17 @@ abstract contract ZetherBls12381Curve is ZetherCurve {
         return !taken;
     }
 
-    function _pointBytes() internal pure override returns (uint256) { return 128; }
-    function _order() internal pure override returns (uint256) { return G1Bls12381.R; }
-    function _base() internal pure override returns (bytes memory) { return G1Bls12381.generator(); }
+    function _pointBytes() internal pure override returns (uint256) {
+        return 128;
+    }
+
+    function _order() internal pure override returns (uint256) {
+        return G1Bls12381.R;
+    }
+
+    function _base() internal pure override returns (bytes memory) {
+        return G1Bls12381.generator();
+    }
 
     function _gen(string memory label, uint32 index) internal view override returns (bytes memory) {
         return G1Bls12381.hashToG1(_genMsg(label, index), GEN_DST);
@@ -790,8 +854,13 @@ abstract contract ZetherBls12381Curve is ZetherCurve {
         return G1Bls12381.add(a, b);
     }
 
-    function _neg(bytes memory a) internal pure override returns (bytes memory) { return G1Bls12381.neg(a); }
-    function _valid(bytes memory a) internal view override returns (bool) { return G1Bls12381.isValid(a); }
+    function _neg(bytes memory a) internal pure override returns (bytes memory) {
+        return G1Bls12381.neg(a);
+    }
+
+    function _valid(bytes memory a) internal view override returns (bool) {
+        return G1Bls12381.isValid(a);
+    }
 }
 
 /// @title The BLS12-381 inner-product (Bulletproof) verifier (CTR-ZTH-20).

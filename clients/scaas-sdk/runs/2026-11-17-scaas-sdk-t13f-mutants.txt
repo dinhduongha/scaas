@@ -1,0 +1,11 @@
+# t13f mutants at commit 73a79b68e (name | outcome | test)
+ua-rs: the AAD without the id | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_vault vault_json
+ua-rs: a v 1 vault read | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_vault vault_json_refusals
+ua-rs: a label vault of another seed opened | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_vault a_label_vault_of_another_seed_is_refused
+SDK: a vault of another seed's id parsed | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test keystore_vectors
+SDK: a vault rewrite leaves the MAC | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test passkey enable_then_unlock_by_passkey
+SDK: a child leaves its parent's MAC | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test children remove_then_derive_never_reuses
+clientkeys: the AAD without the id | killed | ../../scripts/capped node --test test/vault.test.js
+clientkeys: the MAC without the vault texts | killed | ../../scripts/capped node --test test/keystore.test.js
+clientkeys: a vault of another seed's id parsed | killed | ../../scripts/capped node --test test/keystore.test.js
+9 mutants, 9 killed, 0 survived, 0 not loaded

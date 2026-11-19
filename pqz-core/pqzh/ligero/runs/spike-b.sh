@@ -9,16 +9,19 @@ set -u
 cd "$(dirname "$0")/.."
 t=$1
 F=set-n2304-kmax4096,spike-b
-echo "# $t: HEAD $(git rev-parse HEAD), diff sha256 $(git diff HEAD -- . | sha256sum | cut -c1-16)" > runs/$t-head.txt
-cargo test --release --offline --features $F -- --test-threads 1 > runs/$t-tests.txt 2>&1 || echo "tests FAILED"
-cargo test --release --offline --no-default-features --features $F --lib > runs/$t-nobench.txt 2>&1 || echo "nobench FAILED"
+echo "# $t: HEAD $(git rev-parse HEAD), diff sha256 $(git diff HEAD -- . | sha256sum | cut -c1-16)" >runs/$t-head.txt
+cargo test --release --offline --features $F -- --test-threads 1 >runs/$t-tests.txt 2>&1 || echo "tests FAILED"
+cargo test --release --offline --no-default-features --features $F --lib >runs/$t-nobench.txt 2>&1 || echo "nobench FAILED"
 grep -E '^test result' runs/$t-tests.txt runs/$t-nobench.txt
-cargo build --release --offline --features $F --bin ligero_kat 2> runs/$t-kat-build.txt || exit 1
-target/release/ligero_kat setup > runs/$t-kat.jsonl
-target/release/ligero_kat sizes > runs/$t-sizes.jsonl
+cargo build --release --offline --features $F --bin ligero_kat 2>runs/$t-kat-build.txt || exit 1
+target/release/ligero_kat setup >runs/$t-kat.jsonl
+target/release/ligero_kat sizes >runs/$t-sizes.jsonl
 echo "honest proofs verified: $(grep -c '"verify": true' runs/$t-kat.jsonl) / $(grep -c . runs/$t-kat.jsonl)"
-(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown --features set-n2304-kmax4096,spike-b 2> ../runs/$t-wasm-build.txt) || { echo "wasm build FAILED"; exit 1; }
-node wasm/fnv_wasm.mjs n2304-kmax4096 > runs/$t-wasm.jsonl
+(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown --features set-n2304-kmax4096,spike-b 2>../runs/$t-wasm-build.txt) || {
+    echo "wasm build FAILED"
+    exit 1
+}
+node wasm/fnv_wasm.mjs n2304-kmax4096 >runs/$t-wasm.jsonl
 python3 -I -c "
 import json
 n = [json.loads(l) for l in open('runs/$t-kat.jsonl')]
@@ -29,6 +32,6 @@ d = [a['rel'] for a, b in zip(n, wp, strict=True) if k(a) != k(b)]
 mut = [x for x in w if 'mutations' in x]
 print('native = wasm32 (spike b):', 'identical (%d proofs)' % len(n) if not d else 'DIFF %s' % d,
       '; mutations rejected %d / %d' % (sum(x['mutations'] - x['accepted'] for x in mut), sum(x['mutations'] for x in mut)))" | tee runs/$t-native-vs-wasm.txt
-cargo build --release --offline --features spike-count,$F --bin spike_count 2>> runs/$t-kat-build.txt && target/release/spike_count > runs/$t-count.jsonl
-cargo build --release --offline --features spike-count,set-n2304-kmax4096 --bin spike_count 2>> runs/$t-kat-build.txt && target/release/spike_count > runs/$t-count-thepreset.jsonl
+cargo build --release --offline --features spike-count,$F --bin spike_count 2>>runs/$t-kat-build.txt && target/release/spike_count >runs/$t-count.jsonl
+cargo build --release --offline --features spike-count,set-n2304-kmax4096 --bin spike_count 2>>runs/$t-kat-build.txt && target/release/spike_count >runs/$t-count-thepreset.jsonl
 echo done

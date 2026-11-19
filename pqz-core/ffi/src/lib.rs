@@ -25,15 +25,21 @@ compile_error!("pqz-ffi needs panic = \"unwind\" on native targets (catch_unwind
 
 // P6-ANON: pqz-stmt's bench-only `oversize` (op 7 M = 8 / 16 for both ids) must never be in the precompile build;
 // feature unification would carry it in from any crate of the graph, so refuse to compile.
-const _: () = assert!(!pqz_stmt::OVERSIZE, "pqz-stmt feature `oversize` is bench only: not in pqz-ffi's build");
+const _: () = assert!(
+    !pqz_stmt::OVERSIZE,
+    "pqz-stmt feature `oversize` is bench only: not in pqz-ffi's build"
+);
 // pqzh-ligero's research feature `fallback-retry` swaps n2304-kmax4096's preset under the same PQZH_ID (review R3-1 /
 // R4-C5): never in a pqz-ffi build
 #[cfg(feature = "pqzh")]
-const _: () = assert!(!pqzh_ligero::FALLBACK_RETRY, "pqzh-ligero feature `fallback-retry` is research only: not in pqz-ffi's build");
+const _: () = assert!(
+    !pqzh_ligero::FALLBACK_RETRY,
+    "pqzh-ligero feature `fallback-retry` is research only: not in pqz-ffi's build"
+);
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
-pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Word};
+pub use pqz_stmt::{self as stmt, Input, Reject, Word, MAX_INPUT, PQZH_ID, PQZL_ID};
 
 // the parameter set (owner 2026-10-21: one per build): feature `set-<set>`, forwarded to pqz-stmt (which refuses to
 // build without exactly one) and pqzl; `stmt::SET` names it
@@ -43,7 +49,10 @@ pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Wor
 pub const PQZH: bool = cfg!(feature = "pqzh");
 // a set without PQZH (pqz-stmt HAS_PQZH false; n2816-kmax65536: none of the current Ligero radices divides its q - 1)
 // has no PQZH build
-const _: () = assert!(!PQZH || pqz_stmt::HAS_PQZH, "feature pqzh at a set without PQZH (set.toml pqzh = false)");
+const _: () = assert!(
+    !PQZH || pqz_stmt::HAS_PQZH,
+    "feature pqzh at a set without PQZH (set.toml pqzh = false)"
+);
 
 #[cfg(feature = "prove")]
 pub mod fixture;
@@ -85,7 +94,9 @@ pub fn decode(input: &[u8]) -> Result<Input<'_>, Reject> {
 /// Decode and verify one input of op 1..5 or 7: true only for a canonical input whose proof the id's verifier accepts.
 /// Op 6 (self-test) and anything undecodable is false. Panics propagate (callers: [`precompile`] catches them).
 pub fn verify_input(input: &[u8]) -> Result<bool, NodeFault> {
-    let Ok(inp) = decode(input) else { return Ok(false) };
+    let Ok(inp) = decode(input) else {
+        return Ok(false);
+    };
     match inp.stmt.proof_system_id() {
         Some(id) if *id == PQZL_ID => pqzl::verify_fast(inp.op, inp.stmt_bytes, inp.proof),
         Some(id) if *id == PQZH_ID => pqzh::verify(inp.op, inp.stmt_bytes, inp.proof),
@@ -149,7 +160,12 @@ pub const PQZ_FFI_NODE_FAULT: i32 = 4;
 /// # Safety
 /// `input` must point to `len` readable bytes (or be null with `len == 0`), `out` to `out_len` writable bytes.
 #[no_mangle]
-pub unsafe extern "C" fn pqz_precompile(input: *const u8, len: usize, out: *mut u8, out_len: usize) -> i32 {
+pub unsafe extern "C" fn pqz_precompile(
+    input: *const u8,
+    len: usize,
+    out: *mut u8,
+    out_len: usize,
+) -> i32 {
     if (input.is_null() && len > 0) || out.is_null() || out_len < 32 {
         return PQZ_FFI_BAD_ARGS;
     }
@@ -158,7 +174,11 @@ pub unsafe extern "C" fn pqz_precompile(input: *const u8, len: usize, out: *mut 
         std::ptr::write_bytes(out, 0, 32);
         return PQZ_FFI_REVERT;
     }
-    let inp = if len == 0 { &[][..] } else { std::slice::from_raw_parts(input, len) };
+    let inp = if len == 0 {
+        &[][..]
+    } else {
+        std::slice::from_raw_parts(input, len)
+    };
     // a panic outside run()'s own catch (framing, the outcome match) cannot be classified: a node fault
     let (w, rc) = match catch_unwind(AssertUnwindSafe(|| run(inp))).unwrap_or(Outcome::NodeFault) {
         Outcome::Word(w) => (w, PQZ_FFI_OK),
@@ -207,7 +227,9 @@ pub enum ProveError {
 #[cfg(feature = "prove")]
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, ProveError> {
     let st = pqz_stmt::parse(op, stmt).map_err(ProveError::Statement)?;
-    let id = *st.proof_system_id().ok_or(ProveError::Statement(Reject::Op))?;
+    let id = *st
+        .proof_system_id()
+        .ok_or(ProveError::Statement(Reject::Op))?;
     // wasm32: PQZL op 7 up to WASM_PQZL_MAX_LEGS (C backend per set, set.toml [pqzl_c]: the one client arena; Rust backend 8)
     if let pqz_stmt::Stmt::Multi(m) = &st {
         if cfg!(target_arch = "wasm32") && id == PQZL_ID && m.m > pqzl::WASM_PQZL_MAX_LEGS {

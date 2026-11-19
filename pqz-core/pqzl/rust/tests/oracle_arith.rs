@@ -102,7 +102,11 @@ fn int_ops_eq_c() {
             }
         });
         let (r, c) = (int_ops(&inp), c_int_ops(&inp));
-        assert!(c.as_ref().is_ok_and(|c| c.len() > 100), "C shim: {:?}", c.as_ref().err());
+        assert!(
+            c.as_ref().is_ok_and(|c| c.len() > 100),
+            "C shim: {:?}",
+            c.as_ref().err()
+        );
         assert_eq!(r, c, "input {t}: {inp:?}");
     }
 }

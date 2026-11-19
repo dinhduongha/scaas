@@ -10,8 +10,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 for s in n2048-kmax1024 n2304-kmax4096 n2560-kmax16384; do
-  B=build/t8d2b-cwasm-$s PQZ_SET=$s ./build.sh wasm > /dev/null
-  # rel bits: 63 = the six single forms, 1 << 6 / 7 = R_TXM1 / 2, 1 << 10 / 11 = R_TXM1_0 / 2_0
-  PQZ_WASM_FILE=build/t8d2b-cwasm-$s/wasm/pqz.wasm PQZ_ARENA_MB=512 node test/run_wasm.mjs 1 0 3327 \
-    > runs/2026-10-26-t8d2b-cwasm-m2-$s.jsonl || echo "rc $? at $s" >> runs/2026-10-26-t8d2b-cwasm-m2-$s.jsonl
+    B=build/t8d2b-cwasm-$s PQZ_SET=$s ./build.sh wasm >/dev/null
+    # rel bits: 63 = the six single forms, 1 << 6 / 7 = R_TXM1 / 2, 1 << 10 / 11 = R_TXM1_0 / 2_0
+    PQZ_WASM_FILE=build/t8d2b-cwasm-$s/wasm/pqz.wasm PQZ_ARENA_MB=512 node test/run_wasm.mjs 1 0 3327 \
+        >runs/2026-10-26-t8d2b-cwasm-m2-$s.jsonl || echo "rc $? at $s" >>runs/2026-10-26-t8d2b-cwasm-m2-$s.jsonl
 done

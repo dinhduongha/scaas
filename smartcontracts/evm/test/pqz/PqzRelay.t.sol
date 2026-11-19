@@ -35,7 +35,11 @@ contract PqzRelayTest is PqzFixture {
         signer = vm.addr(KEY);
     }
 
-    function _m(bytes memory data, uint256 nonce, uint256 fee) internal view returns (MetaTxLib.MetaTransaction memory m) {
+    function _m(bytes memory data, uint256 nonce, uint256 fee)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m)
+    {
         m.from = signer;
         m.data = data;
         m.nonce = nonce;
@@ -57,11 +61,20 @@ contract PqzRelayTest is PqzFixture {
         vm.etch(at, address(tok).code);
         vm.chainId(7622);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(
-            MetaTxLib.pad(0x1111111111111111111111111111111111111111), hex"c0de", 3, 4, 5,
-            MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, 0x2222222222222222222222222222222222222222, 6,
-            0x3333333333333333333333333333333333333333);
+            MetaTxLib.pad(0x1111111111111111111111111111111111111111),
+            hex"c0de",
+            3,
+            4,
+            5,
+            MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
+            0x2222222222222222222222222222222222222222,
+            6,
+            0x3333333333333333333333333333333333333333
+        );
         assertEq(NormalPqzToken(at).chainUid(), PQZ_UID);
-        assertEq(NormalPqzToken(at).envelopeBinding(m), 0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33);
+        assertEq(
+            NormalPqzToken(at).envelopeBinding(m), 0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33
+        );
     }
 
     /// recheck2 P2-2 (CTR-ACC-02): real wallets, a `SmartKeyAccount` clone and a `MandateWallet`, relay a PQZ shield in
@@ -78,10 +91,13 @@ contract PqzRelayTest is PqzFixture {
         m.from = w;
         bytes32 c = MtxHash.hashStruct(m);
         bytes32 h = MtxDigest.metaTx(address(tok), m);
-        assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(tok)), c)), h, "the kit rebuilds it");
+        assertEq(
+            keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(tok)), c)), h, "the kit rebuilds it"
+        );
         bytes memory raw = Erc7739Kit.raw(0x7739, w, h);
-        bytes memory sig = Erc7739Kit.sign(0x7739, w, address(tok), "MetaTransaction", Erc7739Kit.METATX_TYPE,
-            Erc7739Kit.METATX_TYPE, c);
+        bytes memory sig = Erc7739Kit.sign(
+            0x7739, w, address(tok), "MetaTransaction", Erc7739Kit.METATX_TYPE, Erc7739Kit.METATX_TYPE, c
+        );
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         tok.executeMetaTransaction(m, raw);
@@ -104,12 +120,31 @@ contract PqzRelayTest is PqzFixture {
         // a transfer inside an envelope: the statement carries envelopeBinding(m)
         bytes memory out = _out(1, true);
         bytes memory pl = _payload(1, 0, alice, bob, bytes32(0), out, "");
-        bytes memory data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict()));
+        bytes memory data = abi.encodeCall(
+            IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict())
+        );
         m = _m(data, 1, 0);
         bytes32 b = _addrBinding(tok, m); // the client formula (R36: no address view)
         assertTrue(b != 0);
-        assertEq(b, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), block.chainid, tok.chainUid(), address(tok),
-            signer, uint256(0), uint256(1), m.validUntil, uint32(0), address(0), uint256(0), address(0))));
+        assertEq(
+            b,
+            keccak256(
+                abi.encode(
+                    keccak256("SCAAS-PQZ-ENVELOPE-V1"),
+                    block.chainid,
+                    tok.chainUid(),
+                    address(tok),
+                    signer,
+                    uint256(0),
+                    uint256(1),
+                    m.validUntil,
+                    uint32(0),
+                    address(0),
+                    uint256(0),
+                    address(0)
+                )
+            )
+        );
         bytes memory st = tok.transferSingleStatement(_ts(pl), b);
         assertEq(bytes32(_cut(st, 544, 32)), _relayed(b, ZetherTypes.TransferMode.BUNDLE), "D15: the mode folded in");
         // the proof of the bound statement is valid only there: the mocked precompile accepts exactly that input
@@ -134,7 +169,9 @@ contract PqzRelayTest is PqzFixture {
         m.mode = MetaTxLib.MODE_FEE_PERCENT;
         m.fee = 100;
         bytes memory sg = _sig(m);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, IConfidentialToken.mtxShield.selector, m.mode));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, IConfidentialToken.mtxShield.selector, m.mode)
+        );
         tok.executeMetaTransaction(m, sg);
         // ua-mtx-merge T1: the batch is the merged `mtxBatch` (the address one left tokens, MD-1), the signer's own id
         MetaTxLib.UAMetaTransaction[] memory ms = new MetaTxLib.UAMetaTransaction[](1);
@@ -151,8 +188,9 @@ contract PqzRelayTest is PqzFixture {
 
     function _u(bytes memory data) internal view returns (MetaTxLib.UAMetaTransaction memory u) {
         MetaTxLib.MetaTransaction memory m = _m(data, 0, 0);
-        u = MetaTxLib.UAMetaTransaction(MetaTxLib.pad(m.from), data, m.batch, m.nonce, m.validUntil, m.mode, m.relayer,
-            m.fee, m.feeRecipient);
+        u = MetaTxLib.UAMetaTransaction(
+            MetaTxLib.pad(m.from), data, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient
+        );
     }
 
     function _uSig(MetaTxLib.UAMetaTransaction memory u) internal view returns (IUARegistry.UASig memory a) {
@@ -181,13 +219,32 @@ contract PqzRelayTest is PqzFixture {
         NormalPqzToken(address(tok)).mintToUA(fee, 2 * SCALE, EnvKit.codeUidOf(address(tok)));
         minted += 2 * SCALE;
         bytes memory pl = _payload(1, 2, alice, bob, bytes32(0), _out(2, false), "");
-        m.data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict()));
+        m.data = abi.encodeCall(
+            IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict())
+        );
         m.nonce = 1;
         m.mode = 0;
         m.fee = 0;
         bytes32 b = tok.envelopeBinding(m);
-        assertEq(b, keccak256(abi.encode(keccak256("SCAAS-PQZ-UA-ENVELOPE-V1"), block.chainid, tok.chainUid(), address(tok),
-            fee, uint256(0), uint256(1), m.validUntil, uint32(0), address(0), uint256(0), address(0))));
+        assertEq(
+            b,
+            keccak256(
+                abi.encode(
+                    keccak256("SCAAS-PQZ-UA-ENVELOPE-V1"),
+                    block.chainid,
+                    tok.chainUid(),
+                    address(tok),
+                    fee,
+                    uint256(0),
+                    uint256(1),
+                    m.validUntil,
+                    uint32(0),
+                    address(0),
+                    uint256(0),
+                    address(0)
+                )
+            )
+        );
         bytes memory st = tok.transferSingleStatement(_ts(pl), b);
         _mockOp(1, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(ST_TX0), st, hex"c0de"), abi.encode(uint256(1)));
@@ -202,7 +259,9 @@ contract PqzRelayTest is PqzFixture {
         ms[0] = m;
         bytes[] memory auths = new bytes[](1);
         auths[0] = _mlAuth();
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, IPqzToken.mtxConfidentialTransferSingle.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, IPqzToken.mtxConfidentialTransferSingle.selector)
+        );
         tok.mtxBatch(ms, UACall.auths(ms, auths));
         // UA-6: a holder is a signing UA, so alice (registered with her PQZ key in one call) signs an envelope herself;
         // the same envelope under a signature the `mldsa65` precompile rejects is refused (no `authRef`, no foreign signer)

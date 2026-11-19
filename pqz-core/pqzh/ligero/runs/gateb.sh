@@ -8,8 +8,8 @@
 set -u
 cd "$(dirname "$0")/.."
 tag=${1:-l8}
-/usr/bin/time -v cargo test --release --offline -- --nocapture --test-threads 1 > runs/$tag-tests.txt 2>&1 || exit 1
-cargo test --release --offline --no-default-features --lib > runs/$tag-nobench.txt 2>&1 || exit 1
+/usr/bin/time -v cargo test --release --offline -- --nocapture --test-threads 1 >runs/$tag-tests.txt 2>&1 || exit 1
+cargo test --release --offline --no-default-features --lib >runs/$tag-nobench.txt 2>&1 || exit 1
 runs/bench.sh $tag-native-fnv --rel all --regime proven --r431 1 --np 2 --nv 1 --nadv 1 || exit 1
-(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown 2> ../runs/$tag-wasm-build.txt) || exit 1
-/usr/bin/time -v node wasm/run_wasm.mjs 2 1000 4 1 1 0,1,2,3,4 > runs/$tag-proven-wasm.jsonl 2> runs/$tag-proven-wasm-time.txt
+(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown 2>../runs/$tag-wasm-build.txt) || exit 1
+/usr/bin/time -v node wasm/run_wasm.mjs 2 1000 4 1 1 0,1,2,3,4 >runs/$tag-proven-wasm.jsonl 2>runs/$tag-proven-wasm-time.txt

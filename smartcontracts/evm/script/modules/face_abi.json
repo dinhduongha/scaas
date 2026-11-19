@@ -108,13 +108,50 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "expected",
+       "type": "uint32"
+      },
+      {
+       "internalType": "uint32",
+       "name": "got",
+       "type": "uint32"
+      }
+     ],
+     "name": "AuditorEpochMismatch",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "AuditorForbidden",
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64"
+      }
+     ],
+     "name": "AuditorNotReady",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorPending",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "AuditorRequired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorSame",
      "type": "error"
     },
     {
@@ -218,6 +255,22 @@
     {
      "inputs": [
       {
+       "internalType": "address",
+       "name": "complianceRegistry",
+       "type": "address"
+      },
+      {
+       "internalType": "bytes32",
+       "name": "codehash",
+       "type": "bytes32"
+      }
+     ],
+     "name": "ComplianceRegistryCodeMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "uint8",
        "name": "field",
        "type": "uint8"
@@ -256,6 +309,17 @@
       }
      ],
      "name": "DecoyFeeOutOfRange",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "DelegableRefused",
      "type": "error"
     },
     {
@@ -327,6 +391,17 @@
       }
      ],
      "name": "FeatureLocked",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "FeatureNeedsAdmin",
      "type": "error"
     },
     {
@@ -1138,6 +1213,43 @@
      "inputs": [
       {
        "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "value",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeAmount",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
+       "name": "validUntil",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "nowTs",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeExpired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "PayeeFeeShape",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
        "name": "p",
        "type": "uint256"
       },
@@ -1307,43 +1419,6 @@
     {
      "inputs": [
       {
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "value",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeAmount",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
-       "name": "validUntil",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "nowTs",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeExpired",
-     "type": "error"
-    },
-    {
-     "inputs": [],
-     "name": "PayeeFeeShape",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
        "internalType": "uint64",
        "name": "until",
        "type": "uint64"
@@ -1366,22 +1441,6 @@
       }
      ],
      "name": "RefreshRecipient",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "address",
-       "name": "complianceRegistry",
-       "type": "address"
-      },
-      {
-       "internalType": "bytes32",
-       "name": "codehash",
-       "type": "bytes32"
-      }
-     ],
-     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {
@@ -1848,6 +1907,75 @@
       }
      ],
      "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorProposalCancelled",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "newAuditor",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "proposer",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorUAProposed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "previousAuditor",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "newAuditor",
+       "type": "bytes32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorUASet",
      "type": "event"
     },
     {
@@ -3212,6 +3340,37 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "paymentDigest",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "payee",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "feeRecipient",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      }
+     ],
+     "name": "UAPayeeFeePaid",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "from",
        "type": "bytes32"
       },
@@ -3247,37 +3406,6 @@
       }
      ],
      "name": "UAPaymentSettled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "paymentDigest",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "payee",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "address",
-       "name": "feeRecipient",
-       "type": "address"
-      },
-      {
-       "indexed": false,
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      }
-     ],
-     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -3453,13 +3581,50 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "expected",
+       "type": "uint32"
+      },
+      {
+       "internalType": "uint32",
+       "name": "got",
+       "type": "uint32"
+      }
+     ],
+     "name": "AuditorEpochMismatch",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "AuditorForbidden",
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64"
+      }
+     ],
+     "name": "AuditorNotReady",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorPending",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "AuditorRequired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorSame",
      "type": "error"
     },
     {
@@ -3606,6 +3771,17 @@
     {
      "inputs": [
       {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "DelegableRefused",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "dex",
        "type": "address"
@@ -3672,6 +3848,17 @@
       }
      ],
      "name": "FeatureLocked",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "FeatureNeedsAdmin",
      "type": "error"
     },
     {
@@ -4335,6 +4522,43 @@
      "inputs": [
       {
        "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "value",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeAmount",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
+       "name": "validUntil",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "nowTs",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeExpired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "PayeeFeeShape",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
        "name": "p",
        "type": "uint256"
       },
@@ -4499,43 +4723,6 @@
       }
      ],
      "name": "ProofStoreInvalid",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "value",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeAmount",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
-       "name": "validUntil",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "nowTs",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeExpired",
-     "type": "error"
-    },
-    {
-     "inputs": [],
-     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -4882,6 +5069,75 @@
       }
      ],
      "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorProposalCancelled",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "newAuditor",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "proposer",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorUAProposed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "previousAuditor",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "newAuditor",
+       "type": "bytes32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorUASet",
      "type": "event"
     },
     {
@@ -6016,6 +6272,37 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "paymentDigest",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "payee",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "feeRecipient",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      }
+     ],
+     "name": "UAPayeeFeePaid",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "from",
        "type": "bytes32"
       },
@@ -6051,37 +6338,6 @@
       }
      ],
      "name": "UAPaymentSettled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "paymentDigest",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "payee",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "address",
-       "name": "feeRecipient",
-       "type": "address"
-      },
-      {
-       "indexed": false,
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      }
-     ],
-     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -10503,6 +10759,27 @@
     },
     {
      "inputs": [],
+     "name": "AuditorConsentInvalid",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "expected",
+       "type": "uint32"
+      },
+      {
+       "internalType": "uint32",
+       "name": "got",
+       "type": "uint32"
+      }
+     ],
+     "name": "AuditorEpochMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [],
      "name": "AuditorForbidden",
      "type": "error"
     },
@@ -10513,12 +10790,38 @@
     },
     {
      "inputs": [],
+     "name": "AuditorKeyInvalid",
+     "type": "error"
+    },
+    {
+     "inputs": [],
      "name": "AuditorLegsMixed",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64"
+      }
+     ],
+     "name": "AuditorNotReady",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorPending",
      "type": "error"
     },
     {
      "inputs": [],
      "name": "AuditorRequired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorSame",
      "type": "error"
     },
     {
@@ -10611,6 +10914,22 @@
     {
      "inputs": [
       {
+       "internalType": "address",
+       "name": "complianceRegistry",
+       "type": "address"
+      },
+      {
+       "internalType": "bytes32",
+       "name": "codehash",
+       "type": "bytes32"
+      }
+     ],
+     "name": "ComplianceRegistryCodeMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "uint8",
        "name": "field",
        "type": "uint8"
@@ -10633,6 +10952,17 @@
       }
      ],
      "name": "DecoyFeeOutOfRange",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "DelegableRefused",
      "type": "error"
     },
     {
@@ -10693,6 +11023,17 @@
       }
      ],
      "name": "FeatureLocked",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "FeatureNeedsAdmin",
      "type": "error"
     },
     {
@@ -11461,38 +11802,6 @@
      "inputs": [
       {
        "internalType": "uint256",
-       "name": "expected",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "got",
-       "type": "uint256"
-      }
-     ],
-     "name": "PendingSeqMismatch",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "orderHash",
-       "type": "bytes32"
-      }
-     ],
-     "name": "PriceLimit",
-     "type": "error"
-    },
-    {
-     "inputs": [],
-     "name": "ProofRejected",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
        "name": "fee",
        "type": "uint256"
       },
@@ -11529,6 +11838,38 @@
     {
      "inputs": [
       {
+       "internalType": "uint256",
+       "name": "expected",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "got",
+       "type": "uint256"
+      }
+     ],
+     "name": "PendingSeqMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32"
+      }
+     ],
+     "name": "PriceLimit",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "ProofRejected",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "uint64",
        "name": "until",
        "type": "uint64"
@@ -11540,22 +11881,6 @@
     {
      "inputs": [],
      "name": "RefRequired",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "address",
-       "name": "complianceRegistry",
-       "type": "address"
-      },
-      {
-       "internalType": "bytes32",
-       "name": "codehash",
-       "type": "bytes32"
-      }
-     ],
-     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {
@@ -12050,6 +12375,75 @@
       }
      ],
      "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "newKey",
+       "type": "bytes",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "proposer",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorKeyProposed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "previousKey",
+       "type": "bytes",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "newKey",
+       "type": "bytes",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorKeySet",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorProposalCancelled",
      "type": "event"
     },
     {
@@ -13197,6 +13591,37 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "paymentDigest",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "payee",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "feeRecipient",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      }
+     ],
+     "name": "UAPayeeFeePaid",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "from",
        "type": "bytes32"
       },
@@ -13232,37 +13657,6 @@
       }
      ],
      "name": "UAPaymentSettled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "paymentDigest",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "payee",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "address",
-       "name": "feeRecipient",
-       "type": "address"
-      },
-      {
-       "indexed": false,
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      }
-     ],
-     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -13417,6 +13811,27 @@
     },
     {
      "inputs": [],
+     "name": "AuditorConsentInvalid",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "expected",
+       "type": "uint32"
+      },
+      {
+       "internalType": "uint32",
+       "name": "got",
+       "type": "uint32"
+      }
+     ],
+     "name": "AuditorEpochMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [],
      "name": "AuditorForbidden",
      "type": "error"
     },
@@ -13427,12 +13842,38 @@
     },
     {
      "inputs": [],
+     "name": "AuditorKeyInvalid",
+     "type": "error"
+    },
+    {
+     "inputs": [],
      "name": "AuditorLegsMixed",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64"
+      }
+     ],
+     "name": "AuditorNotReady",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorPending",
      "type": "error"
     },
     {
      "inputs": [],
      "name": "AuditorRequired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorSame",
      "type": "error"
     },
     {
@@ -13552,6 +13993,17 @@
     {
      "inputs": [
       {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "DelegableRefused",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "dex",
        "type": "address"
@@ -13607,6 +14059,17 @@
       }
      ],
      "name": "FeatureLocked",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "FeatureNeedsAdmin",
      "type": "error"
     },
     {
@@ -14227,38 +14690,6 @@
      "inputs": [
       {
        "internalType": "uint256",
-       "name": "expected",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "got",
-       "type": "uint256"
-      }
-     ],
-     "name": "PendingSeqMismatch",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "bytes32",
-       "name": "orderHash",
-       "type": "bytes32"
-      }
-     ],
-     "name": "PriceLimit",
-     "type": "error"
-    },
-    {
-     "inputs": [],
-     "name": "ProofRejected",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
        "name": "fee",
        "type": "uint256"
       },
@@ -14290,6 +14721,38 @@
     {
      "inputs": [],
      "name": "PayeeFeeShape",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
+       "name": "expected",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "got",
+       "type": "uint256"
+      }
+     ],
+     "name": "PendingSeqMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "bytes32",
+       "name": "orderHash",
+       "type": "bytes32"
+      }
+     ],
+     "name": "PriceLimit",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "ProofRejected",
      "type": "error"
     },
     {
@@ -14653,6 +15116,75 @@
       }
      ],
      "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "newKey",
+       "type": "bytes",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "proposer",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorKeyProposed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "previousKey",
+       "type": "bytes",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "newKey",
+       "type": "bytes",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorKeySet",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorProposalCancelled",
      "type": "event"
     },
     {
@@ -15570,6 +16102,37 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "paymentDigest",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "payee",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "feeRecipient",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      }
+     ],
+     "name": "UAPayeeFeePaid",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "from",
        "type": "bytes32"
       },
@@ -15605,37 +16168,6 @@
       }
      ],
      "name": "UAPaymentSettled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "paymentDigest",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "payee",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "address",
-       "name": "feeRecipient",
-       "type": "address"
-      },
-      {
-       "indexed": false,
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      }
-     ],
-     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -15825,13 +16357,50 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "expected",
+       "type": "uint32"
+      },
+      {
+       "internalType": "uint32",
+       "name": "got",
+       "type": "uint32"
+      }
+     ],
+     "name": "AuditorEpochMismatch",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "AuditorForbidden",
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64"
+      }
+     ],
+     "name": "AuditorNotReady",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorPending",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "AuditorRequired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorSame",
      "type": "error"
     },
     {
@@ -15935,6 +16504,22 @@
     {
      "inputs": [
       {
+       "internalType": "address",
+       "name": "complianceRegistry",
+       "type": "address"
+      },
+      {
+       "internalType": "bytes32",
+       "name": "codehash",
+       "type": "bytes32"
+      }
+     ],
+     "name": "ComplianceRegistryCodeMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "uint8",
        "name": "field",
        "type": "uint8"
@@ -15984,6 +16569,17 @@
       }
      ],
      "name": "DecoyFeeOutOfRange",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "DelegableRefused",
      "type": "error"
     },
     {
@@ -16071,6 +16667,17 @@
       }
      ],
      "name": "FeatureLocked",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "FeatureNeedsAdmin",
      "type": "error"
     },
     {
@@ -16992,6 +17599,43 @@
      "inputs": [
       {
        "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "value",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeAmount",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
+       "name": "validUntil",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "nowTs",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeExpired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "PayeeFeeShape",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
        "name": "p",
        "type": "uint256"
       },
@@ -17240,43 +17884,6 @@
     {
      "inputs": [
       {
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "value",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeAmount",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
-       "name": "validUntil",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "nowTs",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeExpired",
-     "type": "error"
-    },
-    {
-     "inputs": [],
-     "name": "PayeeFeeShape",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
        "internalType": "uint64",
        "name": "until",
        "type": "uint64"
@@ -17299,22 +17906,6 @@
       }
      ],
      "name": "RefreshRecipient",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "address",
-       "name": "complianceRegistry",
-       "type": "address"
-      },
-      {
-       "internalType": "bytes32",
-       "name": "codehash",
-       "type": "bytes32"
-      }
-     ],
-     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {
@@ -17947,6 +18538,75 @@
       }
      ],
      "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorProposalCancelled",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "newAuditor",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "proposer",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorUAProposed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "previousAuditor",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "newAuditor",
+       "type": "bytes32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorUASet",
      "type": "event"
     },
     {
@@ -19429,6 +20089,37 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "paymentDigest",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "payee",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "feeRecipient",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      }
+     ],
+     "name": "UAPayeeFeePaid",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "from",
        "type": "bytes32"
       },
@@ -19464,37 +20155,6 @@
       }
      ],
      "name": "UAPaymentSettled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "paymentDigest",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "payee",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "address",
-       "name": "feeRecipient",
-       "type": "address"
-      },
-      {
-       "indexed": false,
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      }
-     ],
-     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -19842,13 +20502,50 @@
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "expected",
+       "type": "uint32"
+      },
+      {
+       "internalType": "uint32",
+       "name": "got",
+       "type": "uint32"
+      }
+     ],
+     "name": "AuditorEpochMismatch",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "AuditorForbidden",
      "type": "error"
     },
     {
+     "inputs": [
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64"
+      }
+     ],
+     "name": "AuditorNotReady",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorPending",
+     "type": "error"
+    },
+    {
      "inputs": [],
      "name": "AuditorRequired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorSame",
      "type": "error"
     },
     {
@@ -20006,6 +20703,17 @@
     {
      "inputs": [
       {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "DelegableRefused",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "dex",
        "type": "address"
@@ -20088,6 +20796,17 @@
       }
      ],
      "name": "FeatureLocked",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "FeatureNeedsAdmin",
      "type": "error"
     },
     {
@@ -20861,6 +21580,43 @@
      "inputs": [
       {
        "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "value",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeAmount",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
+       "name": "validUntil",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "nowTs",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeExpired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "PayeeFeeShape",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
        "name": "p",
        "type": "uint256"
       },
@@ -21104,43 +21860,6 @@
     {
      "inputs": [],
      "name": "RateStepTooLarge",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "value",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeAmount",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
-       "name": "validUntil",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "nowTs",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeExpired",
-     "type": "error"
-    },
-    {
-     "inputs": [],
-     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -21653,6 +22372,75 @@
       }
      ],
      "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorProposalCancelled",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "newAuditor",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "proposer",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorUAProposed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "previousAuditor",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "newAuditor",
+       "type": "bytes32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorUASet",
      "type": "event"
     },
     {
@@ -22905,6 +23693,37 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "paymentDigest",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "payee",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "feeRecipient",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      }
+     ],
+     "name": "UAPayeeFeePaid",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "from",
        "type": "bytes32"
       },
@@ -22940,37 +23759,6 @@
       }
      ],
      "name": "UAPaymentSettled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "paymentDigest",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "payee",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "address",
-       "name": "feeRecipient",
-       "type": "address"
-      },
-      {
-       "indexed": false,
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      }
-     ],
-     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -28908,6 +29696,27 @@
     },
     {
      "inputs": [],
+     "name": "AuditorConsentInvalid",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "expected",
+       "type": "uint32"
+      },
+      {
+       "internalType": "uint32",
+       "name": "got",
+       "type": "uint32"
+      }
+     ],
+     "name": "AuditorEpochMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [],
      "name": "AuditorForbidden",
      "type": "error"
     },
@@ -28918,12 +29727,38 @@
     },
     {
      "inputs": [],
+     "name": "AuditorKeyInvalid",
+     "type": "error"
+    },
+    {
+     "inputs": [],
      "name": "AuditorLegsMixed",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64"
+      }
+     ],
+     "name": "AuditorNotReady",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorPending",
      "type": "error"
     },
     {
      "inputs": [],
      "name": "AuditorRequired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorSame",
      "type": "error"
     },
     {
@@ -29016,6 +29851,22 @@
     {
      "inputs": [
       {
+       "internalType": "address",
+       "name": "complianceRegistry",
+       "type": "address"
+      },
+      {
+       "internalType": "bytes32",
+       "name": "codehash",
+       "type": "bytes32"
+      }
+     ],
+     "name": "ComplianceRegistryCodeMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "uint8",
        "name": "field",
        "type": "uint8"
@@ -29049,6 +29900,17 @@
       }
      ],
      "name": "DecoyFeeOutOfRange",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "DelegableRefused",
      "type": "error"
     },
     {
@@ -29125,6 +29987,17 @@
       }
      ],
      "name": "FeatureLocked",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "FeatureNeedsAdmin",
      "type": "error"
     },
     {
@@ -30003,6 +30876,43 @@
      "inputs": [
       {
        "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "value",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeAmount",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
+       "name": "validUntil",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "nowTs",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeExpired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "PayeeFeeShape",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
        "name": "expected",
        "type": "uint256"
       },
@@ -30113,43 +31023,6 @@
     {
      "inputs": [
       {
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "value",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeAmount",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
-       "name": "validUntil",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "nowTs",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeExpired",
-     "type": "error"
-    },
-    {
-     "inputs": [],
-     "name": "PayeeFeeShape",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
        "internalType": "uint64",
        "name": "until",
        "type": "uint64"
@@ -30161,22 +31034,6 @@
     {
      "inputs": [],
      "name": "RefRequired",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "address",
-       "name": "complianceRegistry",
-       "type": "address"
-      },
-      {
-       "internalType": "bytes32",
-       "name": "codehash",
-       "type": "bytes32"
-      }
-     ],
-     "name": "ComplianceRegistryCodeMismatch",
      "type": "error"
     },
     {
@@ -30837,6 +31694,75 @@
       }
      ],
      "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "newKey",
+       "type": "bytes",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "proposer",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorKeyProposed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "previousKey",
+       "type": "bytes",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "newKey",
+       "type": "bytes",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorKeySet",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorProposalCancelled",
      "type": "event"
     },
     {
@@ -32102,6 +33028,37 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "paymentDigest",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "payee",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "feeRecipient",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      }
+     ],
+     "name": "UAPayeeFeePaid",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "from",
        "type": "bytes32"
       },
@@ -32137,37 +33094,6 @@
       }
      ],
      "name": "UAPaymentSettled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "paymentDigest",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "payee",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "address",
-       "name": "feeRecipient",
-       "type": "address"
-      },
-      {
-       "indexed": false,
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      }
-     ],
-     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {
@@ -32494,6 +33420,27 @@
     },
     {
      "inputs": [],
+     "name": "AuditorConsentInvalid",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "expected",
+       "type": "uint32"
+      },
+      {
+       "internalType": "uint32",
+       "name": "got",
+       "type": "uint32"
+      }
+     ],
+     "name": "AuditorEpochMismatch",
+     "type": "error"
+    },
+    {
+     "inputs": [],
      "name": "AuditorForbidden",
      "type": "error"
     },
@@ -32504,12 +33451,38 @@
     },
     {
      "inputs": [],
+     "name": "AuditorKeyInvalid",
+     "type": "error"
+    },
+    {
+     "inputs": [],
      "name": "AuditorLegsMixed",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64"
+      }
+     ],
+     "name": "AuditorNotReady",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorPending",
      "type": "error"
     },
     {
      "inputs": [],
      "name": "AuditorRequired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "AuditorSame",
      "type": "error"
     },
     {
@@ -32640,6 +33613,17 @@
     {
      "inputs": [
       {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "DelegableRefused",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
        "internalType": "address",
        "name": "dex",
        "type": "address"
@@ -32711,6 +33695,17 @@
       }
      ],
      "name": "FeatureLocked",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint8",
+       "name": "bit",
+       "type": "uint8"
+      }
+     ],
+     "name": "FeatureNeedsAdmin",
      "type": "error"
     },
     {
@@ -33441,6 +34436,43 @@
      "inputs": [
       {
        "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "value",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeAmount",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
+       "name": "validUntil",
+       "type": "uint256"
+      },
+      {
+       "internalType": "uint256",
+       "name": "nowTs",
+       "type": "uint256"
+      }
+     ],
+     "name": "PayeeFeeExpired",
+     "type": "error"
+    },
+    {
+     "inputs": [],
+     "name": "PayeeFeeShape",
+     "type": "error"
+    },
+    {
+     "inputs": [
+      {
+       "internalType": "uint256",
        "name": "expected",
        "type": "uint256"
       },
@@ -33546,43 +34578,6 @@
     {
      "inputs": [],
      "name": "RateStepTooLarge",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "value",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeAmount",
-     "type": "error"
-    },
-    {
-     "inputs": [
-      {
-       "internalType": "uint256",
-       "name": "validUntil",
-       "type": "uint256"
-      },
-      {
-       "internalType": "uint256",
-       "name": "nowTs",
-       "type": "uint256"
-      }
-     ],
-     "name": "PayeeFeeExpired",
-     "type": "error"
-    },
-    {
-     "inputs": [],
-     "name": "PayeeFeeShape",
      "type": "error"
     },
     {
@@ -34112,6 +35107,75 @@
       }
      ],
      "name": "AdminTransferred",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "newKey",
+       "type": "bytes",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes32",
+       "name": "proposer",
+       "type": "bytes32",
+       "indexed": false
+      },
+      {
+       "internalType": "uint64",
+       "name": "eta",
+       "type": "uint64",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorKeyProposed",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "previousKey",
+       "type": "bytes",
+       "indexed": false
+      },
+      {
+       "internalType": "bytes",
+       "name": "newKey",
+       "type": "bytes",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorKeySet",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "internalType": "uint32",
+       "name": "epoch",
+       "type": "uint32",
+       "indexed": false
+      }
+     ],
+     "name": "AuditorProposalCancelled",
      "type": "event"
     },
     {
@@ -35147,6 +36211,37 @@
       {
        "indexed": true,
        "internalType": "bytes32",
+       "name": "paymentDigest",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "bytes32",
+       "name": "payee",
+       "type": "bytes32"
+      },
+      {
+       "indexed": true,
+       "internalType": "address",
+       "name": "feeRecipient",
+       "type": "address"
+      },
+      {
+       "indexed": false,
+       "internalType": "uint256",
+       "name": "fee",
+       "type": "uint256"
+      }
+     ],
+     "name": "UAPayeeFeePaid",
+     "type": "event"
+    },
+    {
+     "anonymous": false,
+     "inputs": [
+      {
+       "indexed": true,
+       "internalType": "bytes32",
        "name": "from",
        "type": "bytes32"
       },
@@ -35182,37 +36277,6 @@
       }
      ],
      "name": "UAPaymentSettled",
-     "type": "event"
-    },
-    {
-     "anonymous": false,
-     "inputs": [
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "paymentDigest",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "bytes32",
-       "name": "payee",
-       "type": "bytes32"
-      },
-      {
-       "indexed": true,
-       "internalType": "address",
-       "name": "feeRecipient",
-       "type": "address"
-      },
-      {
-       "indexed": false,
-       "internalType": "uint256",
-       "name": "fee",
-       "type": "uint256"
-      }
-     ],
-     "name": "UAPayeeFeePaid",
      "type": "event"
     },
     {

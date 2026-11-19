@@ -9,11 +9,14 @@ m_commit=$1
 here=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.foundry/bin:$PATH"
 for m in $(python3 "$here/mutants.py" --list); do
-  python3 "$here/mutants.py" "$m" || { echo "$m: anchor missing" >&2; continue; }
-  FOUNDRY_TEST=test/merge FOUNDRY_SCRIPT=test/merge ../../scripts/capped forge test \
-    --match-path test/merge/MergedEntry.t.sol > "$here/mutant-$m.log" 2>&1
-  echo $? > "$here/mutant-$m.rc"
-  git checkout "$m_commit" -- src
+    python3 "$here/mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        continue
+    }
+    FOUNDRY_TEST=test/merge FOUNDRY_SCRIPT=test/merge ../../scripts/capped forge test \
+        --match-path test/merge/MergedEntry.t.sol >"$here/mutant-$m.log" 2>&1
+    echo $? >"$here/mutant-$m.rc"
+    git checkout "$m_commit" -- src
 done
 python3 - "$here" <<'PY'
 import os, re, sys

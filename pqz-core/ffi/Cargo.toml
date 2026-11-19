@@ -51,9 +51,24 @@ default = ["pqzl-rust", "set-n2304-kmax4096"]
 # --no-default-features --features pqzl-rust,set-<set>. Vectors: smartcontracts/vectors/pqz/<set>/
 # (n2048-kmax1024: smartcontracts/vectors/pqz/).
 # BEGIN gen_set.py sets
-set-n2048-kmax1024 = ["pqz-stmt/set-n2048-kmax1024", "pqzl?/set-n2048-kmax1024", "pqzh-ligero?/set-n2048-kmax1024", "pqzh"]
-set-n2304-kmax4096 = ["pqz-stmt/set-n2304-kmax4096", "pqzl?/set-n2304-kmax4096", "pqzh-ligero?/set-n2304-kmax4096", "pqzh"]
-set-n2560-kmax16384 = ["pqz-stmt/set-n2560-kmax16384", "pqzl?/set-n2560-kmax16384", "pqzh-ligero?/set-n2560-kmax16384", "pqzh"]
+set-n2048-kmax1024 = [
+  "pqz-stmt/set-n2048-kmax1024",
+  "pqzl?/set-n2048-kmax1024",
+  "pqzh-ligero?/set-n2048-kmax1024",
+  "pqzh",
+]
+set-n2304-kmax4096 = [
+  "pqz-stmt/set-n2304-kmax4096",
+  "pqzl?/set-n2304-kmax4096",
+  "pqzh-ligero?/set-n2304-kmax4096",
+  "pqzh",
+]
+set-n2560-kmax16384 = [
+  "pqz-stmt/set-n2560-kmax16384",
+  "pqzl?/set-n2560-kmax16384",
+  "pqzh-ligero?/set-n2560-kmax16384",
+  "pqzh",
+]
 set-n2816-kmax65536 = ["pqz-stmt/set-n2816-kmax65536", "pqzl?/set-n2816-kmax65536"]
 # END gen_set.py sets
 # PQZH (Ligero) compiled in: every set with pqzh (the set lines above)
@@ -66,7 +81,16 @@ pqzl-rust = ["dep:pqzl"]
 pqzl-c = ["dep:cc"]
 # prover side for clients (P6h): keygen, enc, dec, prove (PQZL and PQZH), witness layouts, test fixtures, the op 7
 # memo
-prove = ["dep:hkdf", "dep:sha2", "dep:ml-kem", "dep:curve25519-dalek", "dep:aes-gcm", "dep:aes", "dep:ghash", "dep:polyval"]
+prove = [
+  "dep:hkdf",
+  "dep:sha2",
+  "dep:ml-kem",
+  "dep:curve25519-dalek",
+  "dep:aes-gcm",
+  "dep:aes",
+  "dep:ghash",
+  "dep:polyval",
+]
 # fault-injection and measurement hooks (pqzl::TEST_*, reinit, arena_bytes): tests and the bench only, never in a
 # production build
 test-hooks = ["pqzl?/test-hooks", "pqzh-ligero?/test-hooks"]

@@ -174,7 +174,9 @@ contract EccVerifiersTest is Test {
     {
         // UA-8: the portable PoP (no chain context), the same in every context
         bytes32 kh = UAKinds.kemRecordHash(ua, 0, "");
-        assertEq(UAKinds.portableRecordDigest(ua, kind, 0, kh), vm.parseJsonBytes32(j, string.concat(p, ".popDigest")), p);
+        assertEq(
+            UAKinds.portableRecordDigest(ua, kind, 0, kh), vm.parseJsonBytes32(j, string.concat(p, ".popDigest")), p
+        );
         bytes32 rd = UAKinds.registrationDigest(ua, kind, 0, kh, 0);
         assertEq(rd, vm.parseJsonBytes32(j, string.concat(p, ".registrationDigest")), p);
         bytes32 m = vm.parseJsonBytes32(j, string.concat(p, ".message"));
@@ -424,7 +426,8 @@ contract EccVerifiersTest is Test {
         for (uint256 i; i < 8; ++i) {
             assertFalse(_both(webauthn, key, m, bad[i]), name[i]);
             if (i == 5 || i == 6) continue; // the length words: no decoder reads the canonical fields from these
-            (bytes memory x, bytes memory y, uint256 xr, uint256 xs) = abi.decode(bad[i], (bytes, bytes, uint256, uint256));
+            (bytes memory x, bytes memory y, uint256 xr, uint256 xs) =
+                abi.decode(bad[i], (bytes, bytes, uint256, uint256));
             assertEq(keccak256(abi.encode(x, y, xr, xs)), keccak256(sig), string.concat(name[i], ": same fields"));
         }
     }

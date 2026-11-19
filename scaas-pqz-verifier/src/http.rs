@@ -47,7 +47,8 @@ impl IntoResponse for Refusal {
             "BODY_TOO_LARGE" => StatusCode::PAYLOAD_TOO_LARGE,
             "BODY_TIMEOUT" => StatusCode::REQUEST_TIMEOUT,
             "RATE_LIMITED" => StatusCode::TOO_MANY_REQUESTS,
-            "BUSY" | "RPC_UNAVAILABLE" | "VERIFIER_FAULT" | "SIGNER_FAULT" | "KEY_RECORD_FULL" => StatusCode::SERVICE_UNAVAILABLE,
+            "BUSY" | "RPC_UNAVAILABLE" | "RPC_NO_MAJORITY" | "VERIFIER_FAULT" | "SIGNER_FAULT"
+            | "KEY_RECORD_FULL" => StatusCode::SERVICE_UNAVAILABLE,
             "JSON_TOO_DEEP" | "BAD_REQUEST" | "UNKNOWN_ENTRY" => StatusCode::BAD_REQUEST,
             _ => StatusCode::UNPROCESSABLE_ENTITY,
         };
@@ -65,7 +66,10 @@ impl App {
             }
             let n = r.1.entry(ip).or_insert(0);
             if *n >= self.per_minute {
-                return Err(refuse("RATE_LIMITED", format!("{ip}: {} per minute", self.per_minute)));
+                return Err(refuse(
+                    "RATE_LIMITED",
+                    format!("{ip}: {} per minute", self.per_minute),
+                ));
             }
             *n += 1;
         }
@@ -74,7 +78,10 @@ impl App {
 
     /// A place in the queue (`BUSY` when full), taken once the body is read.
     fn slot(&self) -> Result<OwnedSemaphorePermit, Refusal> {
-        self.queue.clone().try_acquire_owned().map_err(|_| refuse("BUSY", "the queue is full"))
+        self.queue
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| refuse("BUSY", "the queue is full"))
     }
 }
 
@@ -111,26 +118,38 @@ async fn decode<T: serde::de::DeserializeOwned>(b: Body) -> Result<T, Refusal> {
     let limit = body_limit();
     let bytes = tokio::time::timeout(BODY_TIMEOUT, axum::body::to_bytes(b, limit))
         .await
-        .map_err(|_| refuse("BODY_TIMEOUT", format!("the body took over {} s", BODY_TIMEOUT.as_secs())))?
+        .map_err(|_| {
+            refuse(
+                "BODY_TIMEOUT",
+                format!("the body took over {} s", BODY_TIMEOUT.as_secs()),
+            )
+        })?
         .map_err(|_| refuse("BODY_TOO_LARGE", format!("over {limit} B")))?;
     if !depth_ok(&bytes) {
-        return Err(refuse("JSON_TOO_DEEP", format!("nested over {MAX_DEPTH} below the request object")));
+        return Err(refuse(
+            "JSON_TOO_DEEP",
+            format!("nested over {MAX_DEPTH} below the request object"),
+        ));
     }
     serde_json::from_slice(&bytes).map_err(|e| refuse("BAD_REQUEST", e.to_string()))
 }
 
-async fn verdict(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, b: Body)
-    -> Result<Json<Signed>, Refusal>
-{
+async fn verdict(
+    State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    b: Body,
+) -> Result<Json<Signed>, Refusal> {
     app.rate(peer.ip())?;
     let req = decode(b).await?;
     let _slot = app.slot()?;
     Ok(Json(app.svc.verdict(req).await?))
 }
 
-async fn probe(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, b: Body)
-    -> Result<Json<Signed>, Refusal>
-{
+async fn probe(
+    State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    b: Body,
+) -> Result<Json<Signed>, Refusal> {
     app.rate(peer.ip())?;
     let req = decode(b).await?;
     let _slot = app.slot()?;

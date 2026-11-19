@@ -16,6 +16,7 @@ other price stays). Refuses a calibration file with other than one schedule, one
 that schedule on, to MLDSA87_GAS: calibrated 2026-11-15 (TODO 3zd, ../runs/2026-11-15-mldsa87-calib.txt). --mldsa (owner
 2026-11-15) sets all three ML-DSA keys, each calibrated by the same passes (MLDSA65_GAS: owner 2026-11-15, TODO 3zg).
 add-schedule.py --check runs the self-check. Run with python3 -I."""
+
 import copy
 import json
 import os
@@ -25,7 +26,9 @@ import time
 
 SET = os.environ.get("PQZ_SET", "n2304-kmax4096")
 _SJ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../params/sets", SET, "set.json")))
-IDS = {k: "0x" + _SJ[f"{k}_id"] for k in ("pqzl", "pqzh") if f"{k}_id" in _SJ}  # review R4-C3: the set's ids, not v3 / v1
+IDS = {
+    k: "0x" + _SJ[f"{k}_id"] for k in ("pqzl", "pqzh") if f"{k}_id" in _SJ
+}  # review R4-C3: the set's ids, not v3 / v1
 KEY = lambda r: (r["op"], r["id"].lower(), r["stmtLen"], r.get("legs"), r.get("auditorOn"))
 # CTR-UA-39 Q4, TODO 3zd (owner 2026-11-15): Calibrate in the calib image, two passes 135,000 / 123,000, the larger
 # (../runs/2026-11-15-mldsa87-calib.txt); the plugin's MlDsa.Calibrated87Gas. Was the PROVISIONAL estimate 102,000.
@@ -81,14 +84,18 @@ def main(src, cal, ts, out, *flags):
         s["mldsa44Gas"], s["mldsa65Gas"] = MLDSA44_GAS, MLDSA65_GAS
     g2 = copy.deepcopy(g)
     g2["engine"]["Pqz"]["schedules"].append(s)
-    rest = lambda x: {k: v for k, v in x.items() if k != "engine"} | {"engine": {k: v for k, v in x["engine"].items() if k != "Pqz"}}
+    rest = lambda x: (
+        {k: v for k, v in x.items() if k != "engine"} | {"engine": {k: v for k, v in x["engine"].items() if k != "Pqz"}}
+    )
     if rest(g2) != rest(g) or g2["engine"]["Pqz"]["schedules"][:-1] != sch:
         sys.exit("unexpected diff")
     json.dump(g2, open(out, "w"), indent=1)
-    print(f"{out}: schedule {len(sch)} added at {t} = {hex(t)}: {len(s['pqz'])} rows ({len(new_rows)} new of ops {sorted(ops)}"
-          f"{'' if idp == '0x' else f' id {idp[:10]}…'}), "
-          f"selftest {s['selftestGas']}, mldsa44 {s['mldsa44Gas']}, mldsa65 {s['mldsa65Gas']}"
-          + (f", mldsa87 {s['mldsa87Gas']} (calibrated 2026-11-15)" if "mldsa87Gas" in s else ""))
+    print(
+        f"{out}: schedule {len(sch)} added at {t} = {hex(t)}: {len(s['pqz'])} rows ({len(new_rows)} new of ops {sorted(ops)}"
+        f"{'' if idp == '0x' else f' id {idp[:10]}…'}), "
+        f"selftest {s['selftestGas']}, mldsa44 {s['mldsa44Gas']}, mldsa65 {s['mldsa65Gas']}"
+        + (f", mldsa87 {s['mldsa87Gas']} (calibrated 2026-11-15)" if "mldsa87Gas" in s else "")
+    )
     for r in new_rows:
         shape = f" M {r.get('legs')} auditorOn {r.get('auditorOn')}" if r["op"] == 7 else ""
         was = old.get(KEY(r))
@@ -101,7 +108,13 @@ def check():
     """--check: a chainspec with one PQZL and one PQZH row; --id pqzl replaces only the PQZL row."""
     ids = IDS | {"pqzh": IDS.get("pqzh", "0x" + "11" * 32)}  # a set without PQZH: a stand-in second id
     row = lambda i, gas: {"op": 1, "id": ids[i], "stmtLen": 83072, "gas": gas}
-    sched = {"timestamp": "0x0", "pqz": [row("pqzl", 5), row("pqzh", 4)], "selftestGas": 4, "mldsa44Gas": 1, "mldsa65Gas": 2}
+    sched = {
+        "timestamp": "0x0",
+        "pqz": [row("pqzl", 5), row("pqzh", 4)],
+        "selftestGas": 4,
+        "mldsa44Gas": 1,
+        "mldsa65Gas": 2,
+    }
     with tempfile.TemporaryDirectory() as d:
         src, cal, out = (os.path.join(d, f) for f in ("g.json", "c.json", "o.json"))
         json.dump({"params": {}, "engine": {"Pqz": {"schedules": [sched]}}}, open(src, "w"))
@@ -117,10 +130,17 @@ def check():
         assert "mldsa87Gas" not in g["engine"]["Pqz"]["schedules"][1], g
         g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1", "--mldsa87")
         assert g["engine"]["Pqz"]["schedules"][1]["mldsa87Gas"] == MLDSA87_GAS == 135_000, g
-        assert (g["engine"]["Pqz"]["schedules"][1]["mldsa44Gas"], g["engine"]["Pqz"]["schedules"][1]["mldsa65Gas"]) == (1, 2), g
+        assert (g["engine"]["Pqz"]["schedules"][1]["mldsa44Gas"], g["engine"]["Pqz"]["schedules"][1]["mldsa65Gas"]) == (
+            1,
+            2,
+        ), g
         g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1", "--mldsa")
         s1 = g["engine"]["Pqz"]["schedules"][1]
-        assert (s1["mldsa44Gas"], s1["mldsa65Gas"], s1["mldsa87Gas"]) == (MLDSA44_GAS, MLDSA65_GAS, MLDSA87_GAS) == (59_000, 100_000, 135_000), g
+        assert (
+            (s1["mldsa44Gas"], s1["mldsa65Gas"], s1["mldsa87Gas"])
+            == (MLDSA44_GAS, MLDSA65_GAS, MLDSA87_GAS)
+            == (59_000, 100_000, 135_000)
+        ), g
         assert g["engine"]["Pqz"]["schedules"][0]["mldsa44Gas"] == 1, g
         for bad in (["--id", "pqzq"], ["--ops", "2"]):
             try:
@@ -129,9 +149,11 @@ def check():
             except SystemExit as e:
                 assert e.code, bad
         # review W-F: a calibration file that lacks a replaced row, has a duplicate row or more than one schedule
-        for name, cal_s in (("dropped", [dict(sched, pqz=[row("pqzh", 9)])]),
-                            ("duplicate", [dict(sched, pqz=[row("pqzl", 3), row("pqzl", 7), row("pqzh", 9)])]),
-                            ("two schedules", [sched, dict(sched, timestamp="0x1")])):
+        for name, cal_s in (
+            ("dropped", [dict(sched, pqz=[row("pqzh", 9)])]),
+            ("duplicate", [dict(sched, pqz=[row("pqzl", 3), row("pqzl", 7), row("pqzh", 9)])]),
+            ("two schedules", [sched, dict(sched, timestamp="0x1")]),
+        ):
             json.dump({"schedules": cal_s}, open(cal, "w"))
             try:
                 main(src, cal, str(int(time.time()) + 900), out, "--ops", "1")
@@ -140,7 +162,10 @@ def check():
                 assert isinstance(e.code, str) and e.code, name
                 print(f"  refused ({name}): {e.code}")
         # a new shape (no row in the last schedule) is no drop: the op 7 roll-out of 2026-10-17 added its rows so
-        json.dump({"schedules": [dict(sched, pqz=[row("pqzl", 3), row("pqzh", 9), dict(row("pqzl", 8), op=2)])]}, open(cal, "w"))
+        json.dump(
+            {"schedules": [dict(sched, pqz=[row("pqzl", 3), row("pqzh", 9), dict(row("pqzl", 8), op=2)])]},
+            open(cal, "w"),
+        )
         g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1,2")
         assert sorted(r["gas"] for r in g["engine"]["Pqz"]["schedules"][1]["pqz"]) == [3, 8, 9], g
     print(f"add-schedule --check ({SET}, pqzl {IDS['pqzl'][:10]}…): ok")

@@ -20,8 +20,8 @@
 pub use scaas_ua_common::Holder;
 use scaas_ua_common::{op_digest, UaRegistryClient, UaSig, PURPOSE_METATX};
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address,
-    BytesN, Env, IntoVal, TryFromVal, Val, Vec,
+    contract, contractclient, contracterror, contractevent, contractimpl, contracttype,
+    panic_with_error, Address, BytesN, Env, IntoVal, TryFromVal, Val, Vec,
 };
 
 const DAY: u32 = 17_280;
@@ -112,8 +112,22 @@ pub struct PaidUnderMandate {
 /// The part of `scaas-token` the mandate calls.
 #[contractclient(name = "PayTokenClient")]
 pub trait PayToken {
-    fn pay(env: Env, from: Address, to: Address, amount: i128, pay_ref: BytesN<32>, valid_until: u64);
-    fn pay_to_ua(env: Env, from: Address, to: BytesN<32>, amount: i128, pay_ref: BytesN<32>, valid_until: u64);
+    fn pay(
+        env: Env,
+        from: Address,
+        to: Address,
+        amount: i128,
+        pay_ref: BytesN<32>,
+        valid_until: u64,
+    );
+    fn pay_to_ua(
+        env: Env,
+        from: Address,
+        to: BytesN<32>,
+        amount: i128,
+        pay_ref: BytesN<32>,
+        valid_until: u64,
+    );
     fn transfer(env: Env, from: Address, to: Address, amount: i128);
     fn transfer_to_ua(env: Env, from: Address, to: BytesN<32>, amount: i128);
 }
@@ -191,7 +205,12 @@ fn authorize(
             a.require_auth();
         }
         Holder::Ua(ua) => {
-            let reg = match env.storage().instance().get::<_, Option<Address>>(&Key::Registry).flatten() {
+            let reg = match env
+                .storage()
+                .instance()
+                .get::<_, Option<Address>>(&Key::Registry)
+                .flatten()
+            {
                 Some(r) => UaRegistryClient::new(env, &r),
                 None => panic_with_error!(env, Error::UaLedgerOff),
             };
@@ -226,7 +245,10 @@ impl MandateWallet {
     }
 
     pub fn registry(env: Env) -> Option<Address> {
-        env.storage().instance().get::<_, Option<Address>>(&Key::Registry).flatten()
+        env.storage()
+            .instance()
+            .get::<_, Option<Address>>(&Key::Registry)
+            .flatten()
     }
 
     pub fn mandate(env: Env, token: Address) -> Option<Mandate> {
@@ -263,19 +285,51 @@ impl MandateWallet {
         auth: UaSig,
     ) {
         let args = (
-            token.clone(), delegate.clone(), max_per_payment, max_per_period, period_seconds, expiry, lane.clone(), nonce,
-            valid_until, relayer.clone(),
+            token.clone(),
+            delegate.clone(),
+            max_per_payment,
+            max_per_period,
+            period_seconds,
+            expiry,
+            lane.clone(),
+            nonce,
+            valid_until,
+            relayer.clone(),
         );
-        authorize(&env, &owner(&env), "mtx_set_mandate", args.into_val(&env), Some((&lane, nonce)), valid_until, &relayer, &auth);
+        authorize(
+            &env,
+            &owner(&env),
+            "mtx_set_mandate",
+            args.into_val(&env),
+            Some((&lane, nonce)),
+            valid_until,
+            &relayer,
+            &auth,
+        );
         // period_seconds == 0 would reset the period cap on EVERY payment (review W5).
         if period_seconds == 0 || max_per_payment <= 0 || max_per_payment > max_per_period {
             panic_with_error!(&env, Error::BadMandate);
         }
-        let m = Mandate { delegate: delegate.clone(), expiry, period_seconds, period_start: env.ledger().timestamp(),
-                          max_per_payment, max_per_period, spent_in_period: 0 };
+        let m = Mandate {
+            delegate: delegate.clone(),
+            expiry,
+            period_seconds,
+            period_start: env.ledger().timestamp(),
+            max_per_payment,
+            max_per_period,
+            spent_in_period: 0,
+        };
         write(&env, &Key::Mandate(token.clone()), &m);
         bump_epoch(&env, &token);
-        MandateSet { token, delegate, max_per_payment, max_per_period, period_seconds, expiry }.publish(&env);
+        MandateSet {
+            token,
+            delegate,
+            max_per_payment,
+            max_per_period,
+            period_seconds,
+            expiry,
+        }
+        .publish(&env);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -290,8 +344,25 @@ impl MandateWallet {
         relayer: Option<Address>,
         auth: UaSig,
     ) {
-        let args = (token.clone(), payee.clone(), allowed, lane.clone(), nonce, valid_until, relayer.clone());
-        authorize(&env, &owner(&env), "mtx_set_payee", args.into_val(&env), Some((&lane, nonce)), valid_until, &relayer, &auth);
+        let args = (
+            token.clone(),
+            payee.clone(),
+            allowed,
+            lane.clone(),
+            nonce,
+            valid_until,
+            relayer.clone(),
+        );
+        authorize(
+            &env,
+            &owner(&env),
+            "mtx_set_payee",
+            args.into_val(&env),
+            Some((&lane, nonce)),
+            valid_until,
+            &relayer,
+            &auth,
+        );
         let k = Key::Payee(token, payee);
         if allowed {
             write(&env, &k, &true);
@@ -321,9 +392,28 @@ impl MandateWallet {
             }
             check_epoch(&env, &token, epoch);
         }
-        let args = (token.clone(), by.clone(), epoch, lane.clone(), nonce, valid_until, relayer.clone());
-        authorize(&env, &by, "mtx_revoke", args.into_val(&env), Some((&lane, nonce)), valid_until, &relayer, &auth);
-        env.storage().persistent().remove(&Key::Mandate(token.clone()));
+        let args = (
+            token.clone(),
+            by.clone(),
+            epoch,
+            lane.clone(),
+            nonce,
+            valid_until,
+            relayer.clone(),
+        );
+        authorize(
+            &env,
+            &by,
+            "mtx_revoke",
+            args.into_val(&env),
+            Some((&lane, nonce)),
+            valid_until,
+            &relayer,
+            &auth,
+        );
+        env.storage()
+            .persistent()
+            .remove(&Key::Mandate(token.clone()));
         bump_epoch(&env, &token);
         MandateRevoked { token, by }.publish(&env);
     }
@@ -341,9 +431,29 @@ impl MandateWallet {
         relayer: Option<Address>,
         auth: UaSig,
     ) {
-        let args = (token.clone(), to.clone(), amount, lane.clone(), nonce, valid_until, relayer.clone());
-        authorize(&env, &owner(&env), "mtx_withdraw", args.into_val(&env), Some((&lane, nonce)), valid_until, &relayer, &auth);
-        let (t, me) = (PayTokenClient::new(&env, &token), env.current_contract_address());
+        let args = (
+            token.clone(),
+            to.clone(),
+            amount,
+            lane.clone(),
+            nonce,
+            valid_until,
+            relayer.clone(),
+        );
+        authorize(
+            &env,
+            &owner(&env),
+            "mtx_withdraw",
+            args.into_val(&env),
+            Some((&lane, nonce)),
+            valid_until,
+            &relayer,
+            &auth,
+        );
+        let (t, me) = (
+            PayTokenClient::new(&env, &token),
+            env.current_contract_address(),
+        );
         match &to {
             Holder::Ua(u) => t.transfer_to_ua(&me, u, &amount),
             Holder::Addr(a) => t.transfer(&me, a, &amount),
@@ -371,8 +481,25 @@ impl MandateWallet {
             panic_with_error!(&env, Error::RefAlreadyPaid);
         }
         check_epoch(&env, &token, epoch);
-        let args = (token.clone(), payee.clone(), amount, pay_ref.clone(), epoch, valid_until, relayer.clone());
-        authorize(&env, &m.delegate, "mtx_mandate_pay", args.into_val(&env), None, valid_until, &relayer, &auth);
+        let args = (
+            token.clone(),
+            payee.clone(),
+            amount,
+            pay_ref.clone(),
+            epoch,
+            valid_until,
+            relayer.clone(),
+        );
+        authorize(
+            &env,
+            &m.delegate,
+            "mtx_mandate_pay",
+            args.into_val(&env),
+            None,
+            valid_until,
+            &relayer,
+            &auth,
+        );
         let now = env.ledger().timestamp();
         if now > m.expiry {
             panic_with_error!(&env, Error::MandateExpired);
@@ -395,12 +522,21 @@ impl MandateWallet {
         write(&env, &Key::Mandate(token.clone()), &m);
         write(&env, &rk, &true);
         // `self` is `from`, so the token's `require_auth` is met by the direct invoker.
-        let (t, me) = (PayTokenClient::new(&env, &token), env.current_contract_address());
+        let (t, me) = (
+            PayTokenClient::new(&env, &token),
+            env.current_contract_address(),
+        );
         match &payee {
             Holder::Ua(u) => t.pay_to_ua(&me, u, &amount, &pay_ref, &valid_until),
             Holder::Addr(a) => t.pay(&me, a, &amount, &pay_ref, &valid_until),
         }
-        PaidUnderMandate { token, payee, amount, pay_ref }.publish(&env);
+        PaidUnderMandate {
+            token,
+            payee,
+            amount,
+            pay_ref,
+        }
+        .publish(&env);
     }
 }
 

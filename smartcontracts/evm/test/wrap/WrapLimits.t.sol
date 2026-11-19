@@ -181,8 +181,20 @@ contract WrapLimitsTest is WrapLimitsBase {
         _invalid(w, L(0, 0, 60), 0);
         _invalid(w, L(10, 0, uint32(1 << 20) * 60), 0);
         _invalid(w, L(uint24(1 << 19), 0, 60), 3);
-        _set(w, _cfg1(0, 0, L(uint24((1 << 19) - 1), type(uint64).max, uint32((1 << 20) - 1) * 60), OFF(), OFF(),
-            L(uint24((1 << 19) - 1), 0, 60)), false, false, false); // the largest pass
+        _set(
+            w,
+            _cfg1(
+                0,
+                0,
+                L(uint24((1 << 19) - 1), type(uint64).max, uint32((1 << 20) - 1) * 60),
+                OFF(),
+                OFF(),
+                L(uint24((1 << 19) - 1), 0, 60)
+            ),
+            false,
+            false,
+            false
+        ); // the largest pass
         (IWrappedToken.WrapLegLimits[] memory legs,,,,,,,) = w.wrapLimits();
         assertEq(legs[0].wrapShort.period, uint32((1 << 20) - 1) * 60);
         assertEq(legs[0].wrapShort.perUser, (1 << 19) - 1);
@@ -301,17 +313,35 @@ contract WrapLimitsTest is WrapLimitsBase {
     // ------------------------------------------------------------------ rows 10, 11, 38: subjects
 
     function _wrapDigest(WrappedToken w, MetaTxLib.Envelope memory e, uint256 amount) internal view returns (bytes32) {
-        return MtxDigest.typed(address(w), keccak256(abi.encode(keccak256("Wrap(address from,uint256 amount,uint256 batch,"
-            "uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), e.from, amount,
-            e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        return MtxDigest.typed(
+            address(w),
+            keccak256(
+                abi.encode(
+                    keccak256(
+                        "Wrap(address from,uint256 amount,uint256 batch,"
+                        "uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                    ),
+                    e.from,
+                    amount,
+                    e.batch,
+                    e.nonce,
+                    e.validUntil,
+                    e.mode,
+                    address(0),
+                    e.fee,
+                    address(0)
+                )
+            )
+        );
     }
 
     function test_r10_namedWrapCountsTheSigner() public {
         WrappedToken w = _hyb();
         _set(w, _cfg1(0, 0, L(10, 0, DAY), OFF(), OFF(), OFF()), false, false, false);
         _fundW(w, alice, 20);
-        MetaTxLib.Envelope memory e =
-            MetaTxLib.Envelope(alice, 1, w.mtxNonce(_pad(alice), 1), block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.Envelope memory e = MetaTxLib.Envelope(
+            alice, 1, w.mtxNonce(_pad(alice), 1), block.timestamp + 300, 0, address(0), 0, address(0)
+        );
         bytes memory sig = _ecdsa(ALICE_PK, _wrapDigest(w, e, 10));
         vm.prank(RELAYER);
         w.mtxWrap(e, 10, sig);
@@ -330,7 +360,9 @@ contract WrapLimitsTest is WrapLimitsBase {
         ms[0] = _m(address(w), _pad(alice), d);
         ms[1] = _m(address(w), _pad(alice), d);
         ms[1].nonce = ms[0].nonce + 1;
-        for (uint256 i; i < 2; ++i) as_[i] = UACall.auth(ms[i].from, _authM(address(w), ms[i]));
+        for (uint256 i; i < 2; ++i) {
+            as_[i] = UACall.auth(ms[i].from, _authM(address(w), ms[i]));
+        }
         vm.expectRevert(_over(0, alice, 6, 4)); // the second item: 6 + 6 > 10
         vm.prank(RELAYER);
         w.mtxBatch(ms, as_);
@@ -357,7 +389,11 @@ contract WrapLimitsTest is WrapLimitsBase {
         assertEq(w.wrapQuotaOf(MetaTxLib.pad(MetaTxLib.UA_POOL), u).unwrapShort.left, 10);
     }
 
-    function _order(WrappedToken w, uint256 amount, uint256 nonce, bytes32 dest) internal view returns (ITradeToken.UAWrapOrder memory o) {
+    function _order(WrappedToken w, uint256 amount, uint256 nonce, bytes32 dest)
+        internal
+        view
+        returns (ITradeToken.UAWrapOrder memory o)
+    {
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (_pad(alice), address(w), amount, amount, amount);
         (o.relayer, o.batch, o.nonce, o.validUntil, o.destination) = (RELAYER, 1, nonce, block.timestamp + 300, dest);
     }
@@ -375,8 +411,11 @@ contract WrapLimitsTest is WrapLimitsBase {
         _fill(w, _order(w, 10, 1, 0), "");
         assertEq(w.wrapQuotaOf(_pad(alice), address(tok)).wrapShort.left, 0);
         assertEq(w.wrapQuotaOf(_pad(RELAYER), address(tok)).wrapShort.left, 10, "never the submitter");
-        _fill(w, _order(w, 1, 2, 0), abi.encodeWithSelector(IWrappedToken.WrapLimitExceeded.selector, address(tok), uint8(0),
-            _pad(alice), 1, 0));
+        _fill(
+            w,
+            _order(w, 1, 2, 0),
+            abi.encodeWithSelector(IWrappedToken.WrapLimitExceeded.selector, address(tok), uint8(0), _pad(alice), 1, 0)
+        );
     }
 
     /// Rows 11, 38: the credit goes to the destination; with `destination == from` the windows and the credit share one word.
@@ -436,7 +475,9 @@ contract WrapLimitsTest is WrapLimitsBase {
         assertTrue(live);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotReady.selector, WL, bytes32(0), eta));
         vm.prank(OWNER);
-        w.setWrapLimits(_cfg1(0, 0, L(100, 0, 2 * DAY), OFF(), OFF(), OFF()), false, false, false, EnvKit.codeUidOf(address(w)));
+        w.setWrapLimits(
+            _cfg1(0, 0, L(100, 0, 2 * DAY), OFF(), OFF(), OFF()), false, false, false, EnvKit.codeUidOf(address(w))
+        );
         vm.warp(eta);
         _ws(w, L(100, 0, 2 * DAY)); // confirmed
         assertEq(_perUser(w, 0), 100);
@@ -474,7 +515,9 @@ contract WrapLimitsTest is WrapLimitsBase {
         w.acceptAdmin();
         vm.warp(eta);
         vm.prank(next);
-        w.setWrapLimits(_cfg1(0, 0, L(100, 0, DAY), OFF(), OFF(), OFF()), false, false, false, EnvKit.codeUidOf(address(w)));
+        w.setWrapLimits(
+            _cfg1(0, 0, L(100, 0, DAY), OFF(), OFF(), OFF()), false, false, false, EnvKit.codeUidOf(address(w))
+        );
         assertEq(_perUser(w, 0), 50, "proposed again under the new generation, not applied");
     }
 
@@ -529,7 +572,7 @@ contract WrapLimitsTest is WrapLimitsBase {
         assertFalse(_waits(w));
         _us(w, L(200, 0, DAY), 0, false, false); // everything off: at once
         assertFalse(_waits(w));
-        (, bool net, , bool ul,,,,) = w.wrapLimits();
+        (, bool net,, bool ul,,,,) = w.wrapLimits();
         assertFalse(net || ul);
     }
 
@@ -907,7 +950,11 @@ contract WrapLimitsTest is WrapLimitsBase {
         w.transfer(MERCHANT, amount);
     }
 
-    function _terms(uint128 total, uint64 validUntil, bool delegable) internal pure returns (IGovernance.GrantTerms memory t) {
+    function _terms(uint128 total, uint64 validUntil, bool delegable)
+        internal
+        pure
+        returns (IGovernance.GrantTerms memory t)
+    {
         (t.max, t.total, t.validUntil, t.delegable) = (type(uint128).max, total, validUntil, delegable);
     }
 
@@ -1041,7 +1088,7 @@ contract SubjectZeroHarness {
     constructor() {
         WrappedLib.WrappedStorage storage s = WrappedLib.$();
         (s.legs[0].token, s.legs[0].num, s.legs[0].den, s.legs[0].reserve, s.legs[0].ctl) =
-            (address(0xD), 1, 1, 100, WrappedLib.CTL_ULIST);
+        (address(0xD), 1, 1, 100, WrappedLib.CTL_ULIST);
         WrappedLib.wl().member[bytes32(uint256(uint160(0xA11CE)))] = 2;
         s.legCount = 1;
     }

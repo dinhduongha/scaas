@@ -34,11 +34,22 @@ contract ERC20MetaTxTest is MtxFixture {
 
     /// ua-mtx-merge T2: the token's one typed struct, `UAMetaTransfer`, alice and the payee as padded native ids.
     function _t(address to, uint256 value, bytes32 ref, uint256 batch, uint32 mode, uint256 fee, address feeTo)
-        internal view returns (MetaTxLib.UAMetaTransfer memory)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory)
     {
         return MetaTxLib.UAMetaTransfer({
-            from: MetaTxLib.pad(alice), to: MetaTxLib.pad(to), value: value, entryRef: ref, batch: batch, nonce: t.mtxNonce(MetaTxLib.pad(alice), batch),
-            validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: fee, feeRecipient: feeTo
+            from: MetaTxLib.pad(alice),
+            to: MetaTxLib.pad(to),
+            value: value,
+            entryRef: ref,
+            batch: batch,
+            nonce: t.mtxNonce(MetaTxLib.pad(alice), batch),
+            validUntil: block.timestamp + 300,
+            mode: mode,
+            relayer: relayer,
+            fee: fee,
+            feeRecipient: feeTo
         });
     }
 
@@ -48,7 +59,9 @@ contract ERC20MetaTxTest is MtxFixture {
     }
 
     function _call(bytes memory data, uint256 batch, uint32 mode, uint256 fee)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m)
     {
         m = _m(alice, data, batch, t.mtxNonce(MetaTxLib.pad(alice), batch));
         m.mode = mode;
@@ -128,40 +141,55 @@ contract ERC20MetaTxTest is MtxFixture {
     }
 
     function test_fixedFee_cappedAtOnePercentOfValue() public {
-        _xferRevert(_t(shop, 100e6, 0, 1, FIX | RF, 1e6 + 1, feeTaker),
-            abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 1e6 + 1, 1e6));
+        _xferRevert(
+            _t(shop, 100e6, 0, 1, FIX | RF, 1e6 + 1, feeTaker),
+            abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 1e6 + 1, 1e6)
+        );
         _xfer(_t(shop, 100e6, 0, 1, FIX | RF, 1e6, feeTaker));
         assertEq(t.balanceOf(feeTaker), 1e6);
     }
 
     function test_step3Refusals() public {
         _xferRevert(_t(address(0), 1, 0, 1, 0, 0, address(0)), abi.encodeWithSelector(IERC20MetaTx.PayToZero.selector));
-        _xferRevert(_t(address(t), 1, 0, 1, 0, 0, address(0)),
-            abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
+        _xferRevert(
+            _t(address(t), 1, 0, 1, 0, 0, address(0)), abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector)
+        );
         // the payee self-relays with a fee (recipient defaults to msg.sender == to)
         MetaTxLib.UAMetaTransfer memory x = _t(relayer, 100e6, 0, 1, FIX, 1e5, address(0));
         _xferRevert(x, abi.encodeWithSelector(IERC20MetaTx.FeeRecipientIsPayee.selector));
-        _xferRevert(_t(shop, 1_000e6, 0, 1, FIX | RF, 1, feeTaker),
-            abi.encodeWithSelector(IERC20MetaTx.MetaTxInsufficientForFee.selector, 1_000e6 + 1, 1_000e6));
+        _xferRevert(
+            _t(shop, 1_000e6, 0, 1, FIX | RF, 1, feeTaker),
+            abi.encodeWithSelector(IERC20MetaTx.MetaTxInsufficientForFee.selector, 1_000e6 + 1, 1_000e6)
+        );
         assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0); // nothing consumed
     }
 
     /// C5-3: the pools are refused at step 3 (before the balance check and the nonce), like the UA twin.
-function test_C5_3_poolsRefusedAtStep3_typedPath() public {
-        _xferRevert(_t(MetaTxLib.UA_POOL, 2_000e6, 0, 1, 0, 0, address(0)),
-            abi.encodeWithSelector(IUALedger.UAPoolNotPayable.selector));
-        _xferRevert(_t(MetaTxLib.SHIELD_POOL, 2_000e6, 0, 1, 0, 0, address(0)),
-            abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
-        _xferRevert(_t(shop, 1_000e6, 0, 1, FIX | RF, 1, MetaTxLib.UA_POOL),
-            abi.encodeWithSelector(IUALedger.UAPoolNotPayable.selector));
-        _xferRevert(_t(shop, 1_000e6, 0, 1, FIX | RF, 1, MetaTxLib.SHIELD_POOL),
-            abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
+    function test_C5_3_poolsRefusedAtStep3_typedPath() public {
+        _xferRevert(
+            _t(MetaTxLib.UA_POOL, 2_000e6, 0, 1, 0, 0, address(0)),
+            abi.encodeWithSelector(IUALedger.UAPoolNotPayable.selector)
+        );
+        _xferRevert(
+            _t(MetaTxLib.SHIELD_POOL, 2_000e6, 0, 1, 0, 0, address(0)),
+            abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector)
+        );
+        _xferRevert(
+            _t(shop, 1_000e6, 0, 1, FIX | RF, 1, MetaTxLib.UA_POOL),
+            abi.encodeWithSelector(IUALedger.UAPoolNotPayable.selector)
+        );
+        _xferRevert(
+            _t(shop, 1_000e6, 0, 1, FIX | RF, 1, MetaTxLib.SHIELD_POOL),
+            abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector)
+        );
         assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
-function test_feeToTheTokenRefused_typedPath() public {
-        _xferRevert(_t(shop, 100e6, 0, 1, FIX | RF, 1e5, address(t)),
-            abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
+    function test_feeToTheTokenRefused_typedPath() public {
+        _xferRevert(
+            _t(shop, 100e6, 0, 1, FIX | RF, 1e5, address(t)),
+            abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector)
+        );
         assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
@@ -174,10 +202,10 @@ function test_feeToTheTokenRefused_typedPath() public {
     }
 
     function test_oneLaneForBothStructs() public {
-        _xfer(_t(shop, 1e6, 0, 5, RR, 0, address(0)));              // lane 5: nonce 0 → 1
+        _xfer(_t(shop, 1e6, 0, 5, RR, 0, address(0))); // lane 5: nonce 0 → 1
         MetaTxLib.MetaTransaction memory m = _call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 5, RR, 0);
         assertEq(m.nonce, 1);
-        _exec(m);                                                   // lane 5: nonce 1 → 2
+        _exec(m); // lane 5: nonce 1 → 2
         MetaTxLib.UAMetaTransfer memory stale = _t(shop, 1e6, 0, 5, RR, 0, address(0));
         stale.nonce = 1;
         _xferRevert(stale, abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 2, 1));
@@ -196,13 +224,13 @@ function test_feeToTheTokenRefused_typedPath() public {
         assertEq(t.balanceOf(feeTaker), 2e6);
 
         xs[0] = _t(shop, 1e6, 0, 3, RR, 0, address(0));
-        xs[1] = _t(address(0), 1, 0, 4, RR, 0, address(0));         // second item fails
+        xs[1] = _t(address(0), 1, 0, 4, RR, 0, address(0)); // second item fails
         ss[0] = _signT(xs[0]);
         ss[1] = _signT(xs[1]);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.PayToZero.selector));
         t.mtxBatchTransfer(xs, ss);
-        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 3), 0);                          // first item rolled back
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 3), 0); // first item rolled back
 
         vm.expectRevert(IMetaTx.MtxBatchEmpty.selector);
         t.mtxBatchTransfer(new MetaTxLib.UAMetaTransfer[](0), new IUARegistry.UASig[](0));
@@ -224,30 +252,37 @@ function test_feeToTheTokenRefused_typedPath() public {
     }
 
     function test_amountClass_fixedCapped() public {
-        _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.burn, (100e6)), 1, RR | FIX, 1e6 + 1),
-            abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 1e6 + 1, 1e6));
+        _execRevert(
+            _call(abi.encodeCall(ERC20MetaTxHarness.burn, (100e6)), 1, RR | FIX, 1e6 + 1),
+            abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 1e6 + 1, 1e6)
+        );
     }
 
     function test_absoluteClass_fixedUncapped_percentRefused() public {
-        _exec(_call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 1, RR | FIX | RF, 50e6)
-            .withFeeRecipient(feeTaker));
+        _exec(_call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 1, RR | FIX | RF, 50e6).withFeeRecipient(feeTaker));
         assertEq(t.balanceOf(feeTaker), 50e6);
         bytes4 sel = ERC20MetaTxHarness.touch.selector;
-        _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 2, RR | PCT, 1),
-            abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, sel, RR | PCT));
+        _execRevert(
+            _call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 2, RR | PCT, 1),
+            abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, sel, RR | PCT)
+        );
     }
 
     function test_feeToTheTokenRefused_genericPath() public {
-        _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 1, RR | FIX | RF, 1e6)
-            .withFeeRecipient(address(t)), abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
+        _execRevert(
+            _call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 1, RR | FIX | RF, 1e6).withFeeRecipient(address(t)),
+            abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector)
+        );
         assertEq(t.balanceOf(alice), 1_000e6);
         assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
     function test_feeFailureAfterTheCall_revertsTheCall() public {
         // burn everything, then the fee has nothing to come from: the burn is undone, the lane untouched
-        _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.burn, (1_000e6)), 1, RR | PCT, 100),
-            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, 0, 1e5));
+        _execRevert(
+            _call(abi.encodeCall(ERC20MetaTxHarness.burn, (1_000e6)), 1, RR | PCT, 100),
+            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, 0, 1e5)
+        );
         assertEq(t.balanceOf(alice), 1_000e6);
         assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
@@ -260,9 +295,13 @@ function test_feeToTheTokenRefused_typedPath() public {
 
     function test_transferAndApproveNotAllowlisted() public {
         bytes memory data = abi.encodeCall(t.transfer, (shop, 1));
-        _execRevert(_call(data, 1, RR, 0), abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, t.transfer.selector));
+        _execRevert(
+            _call(data, 1, RR, 0), abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, t.transfer.selector)
+        );
         data = abi.encodeCall(t.approve, (address(this), 1));
-        _execRevert(_call(data, 1, RR, 0), abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, t.approve.selector));
+        _execRevert(
+            _call(data, 1, RR, 0), abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, t.approve.selector)
+        );
     }
 
     // ------------------------------------------------------------------ allowance (CTR-TOK-01)
@@ -312,7 +351,10 @@ function test_feeToTheTokenRefused_typedPath() public {
 
 using {withFeeRecipient} for MetaTxLib.MetaTransaction;
 
-function withFeeRecipient(MetaTxLib.MetaTransaction memory m, address r) pure returns (MetaTxLib.MetaTransaction memory) {
+function withFeeRecipient(MetaTxLib.MetaTransaction memory m, address r)
+    pure
+    returns (MetaTxLib.MetaTransaction memory)
+{
     m.feeRecipient = r;
     return m;
 }

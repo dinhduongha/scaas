@@ -30,21 +30,27 @@ abstract contract WrappedPqzRegulatedTokenCore is WrappedPqzTokenCore, Regulated
         RegulatedBase(implArgs)
     {}
 
-
     /// @dev The base kind's env checks, restated for the second base.
-    function _validateEnv(IFactoryToken.ChainEnv calldata env) internal view override(MetaTokenBase, WrappedPqzTokenCore) {
+    function _validateEnv(IFactoryToken.ChainEnv calldata env)
+        internal
+        view
+        override(MetaTokenBase, WrappedPqzTokenCore)
+    {
         WrappedPqzTokenCore._validateEnv(env);
     }
+
     function kind() public pure override(MetaTokenBase, WrappedPqzTokenCore) returns (uint8) {
         return TokenStore.KIND_WRAPPED_PQZ_REGULATED;
     }
 
     function _validBits() internal pure override(GovernanceBaseCore, WrappedPqzTokenCore) returns (uint256) {
-        return GovernanceBits.WRAPPED_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS;
+        return GovernanceBits.WRAPPED_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS
+            | GovernanceBits.AUDITOR_BITS;
     }
 
     function _roleBits() internal pure override(MetaTokenBase, WrappedPqzTokenCore) returns (uint256) {
-        return GovernanceBits.WRAPPED_ROLES | REG_ROLES_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS;
+        return GovernanceBits.WRAPPED_ROLES | REG_ROLES_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS
+            | GovernanceBits.AUDITOR_BITS;
     }
 
     function _contractOnlyBits() internal pure override(MetaTokenBase, WrappedPqzTokenCore) returns (uint256) {
@@ -117,7 +123,11 @@ abstract contract WrappedPqzRegulatedTokenCore is WrappedPqzTokenCore, Regulated
         WrappedLib.rescue(asset);
     }
 
-    function _mtxSelectorsBody() internal pure override(MetaTxBaseCore, WrappedPqzTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        override(MetaTxBaseCore, WrappedPqzTokenCore)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return super._mtxSelectorsBody();
     }
@@ -135,13 +145,19 @@ abstract contract WrappedPqzRegulatedTokenCore is WrappedPqzTokenCore, Regulated
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view override(MetaTxBaseCore, WrappedPqzTokenCore) returns (bytes32)
+        internal
+        view
+        override(MetaTxBaseCore, WrappedPqzTokenCore)
+        returns (bytes32)
     {
         return super._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(UAMetaTxBaseCore, WrappedPqzTokenCore) returns (bytes32)
+        internal
+        view
+        override(UAMetaTxBaseCore, WrappedPqzTokenCore)
+        returns (bytes32)
     {
         return super._uaEnvelopeBinding(m);
     }

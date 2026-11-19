@@ -2,7 +2,9 @@
 //! (`Token::pay_receiver_storage`); `transfer_to_ua` moves a native balance into the UA ledger.
 use crate::{Holder, Token, TokenExt};
 use near_contract_standards::fungible_token::core::FungibleTokenCore;
-use near_contract_standards::fungible_token::metadata::{FungibleTokenMetadata, FungibleTokenMetadataProvider};
+use near_contract_standards::fungible_token::metadata::{
+    FungibleTokenMetadata, FungibleTokenMetadataProvider,
+};
 use near_contract_standards::fungible_token::receiver::ext_ft_receiver;
 use near_contract_standards::fungible_token::resolver::{ext_ft_resolver, FungibleTokenResolver};
 use near_sdk::json_types::U128;
@@ -17,7 +19,12 @@ impl FungibleTokenCore for Token {
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>) {
         let to = Holder::Near(receiver_id);
         self.pay_receiver_storage(&to);
-        self.move_balance(&Holder::Near(env::predecessor_account_id()), &to, amount.0, memo.as_deref());
+        self.move_balance(
+            &Holder::Near(env::predecessor_account_id()),
+            &to,
+            amount.0,
+            memo.as_deref(),
+        );
     }
 
     #[payable]
@@ -31,7 +38,12 @@ impl FungibleTokenCore for Token {
         let sender_id = env::predecessor_account_id();
         let to = Holder::Near(receiver_id.clone());
         self.pay_receiver_storage(&to);
-        self.move_balance(&Holder::Near(sender_id.clone()), &to, amount.0, memo.as_deref());
+        self.move_balance(
+            &Holder::Near(sender_id.clone()),
+            &to,
+            amount.0,
+            memo.as_deref(),
+        );
         ext_ft_receiver::ext(receiver_id.clone())
             .with_unused_gas_weight(1)
             .ft_on_transfer(sender_id.clone(), amount, msg)
@@ -57,8 +69,16 @@ impl FungibleTokenCore for Token {
 impl FungibleTokenResolver for Token {
     /// NEP-141: the unused amount back from the receiver (the sender is always registered: balances are permanent).
     #[private]
-    fn ft_resolve_transfer(&mut self, sender_id: AccountId, receiver_id: AccountId, amount: U128) -> U128 {
-        self.ft.internal_ft_resolve_transfer(&sender_id, receiver_id, amount).0.into()
+    fn ft_resolve_transfer(
+        &mut self,
+        sender_id: AccountId,
+        receiver_id: AccountId,
+        amount: U128,
+    ) -> U128 {
+        self.ft
+            .internal_ft_resolve_transfer(&sender_id, receiver_id, amount)
+            .0
+            .into()
     }
 }
 
@@ -77,6 +97,11 @@ impl Token {
     pub fn transfer_to_ua(&mut self, id: [u8; 32], amount: U128) {
         let to = Holder::Ua(id);
         self.pay_receiver_storage(&to);
-        self.move_balance(&Holder::Near(env::predecessor_account_id()), &to, amount.0, None);
+        self.move_balance(
+            &Holder::Near(env::predecessor_account_id()),
+            &to,
+            amount.0,
+            None,
+        );
     }
 }

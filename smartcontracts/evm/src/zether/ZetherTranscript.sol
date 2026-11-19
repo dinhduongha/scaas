@@ -11,9 +11,7 @@ library ZetherTranscript {
     }
 
     function absorb(bytes32 st, string memory label, bytes memory data) internal pure returns (bytes32) {
-        return keccak256(
-            abi.encodePacked(st, uint8(0), uint8(bytes(label).length), label, uint32(data.length), data)
-        );
+        return keccak256(abi.encodePacked(st, uint8(0), uint8(bytes(label).length), label, uint32(data.length), data));
     }
 
     /// @return st2 trạng thái mới; c challenge trong `[0, r)` (0 ⇒ người gọi phải từ chối proof).

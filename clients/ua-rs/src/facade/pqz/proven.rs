@@ -107,6 +107,27 @@ pub(super) struct Credit {
     proof: Option<Vec<u8>>,
     header: Option<[Word; 20]>,
     call: Option<Call>,
+    /// The entry's auditor (CTR-PQZ-43), resolved from the record's `auditor` words by [`entry_auditor`]; none: the open's
+    /// `auditorUA` (the current epoch's).
+    auditor: Option<Word>,
+}
+
+/// A record's `auditor` words (`auditorMode`, `entryAuditorEpoch`, `auditorUASlot`, `auditorUA`): the entry's auditor at its
+/// epoch's slot, checked as the R6 reader checks it (Fable C1: an entry audited before a replacement keeps its own auditor).
+fn record_auditor(f: &Fields<'_>) -> Result<Option<Word>> {
+    f.has("auditor")
+        .then(|| {
+            entry_auditor(&Fields::new(
+                f.get("auditor")?.as_object().ok_or(Error::Argument)?,
+                &[
+                    "auditorMode",
+                    "entryAuditorEpoch",
+                    "auditorUASlot",
+                    "auditorUA",
+                ],
+            )?)
+        })
+        .transpose()
 }
 
 /// A NONE debit's call fields (§4.14.4 step 4: op 1, op 7).
@@ -134,7 +155,9 @@ pub(super) struct Session {
 
 /// `c = (c + x) mod q` lane-wise (`x` 64-bit lanes, each below `2^B`).
 fn add_mod(c: &mut [u64], x: &[u8]) {
-    c.iter_mut().zip(x.chunks_exact(8)).for_each(|(a, b)| *a = (*a + b.iter().fold(0u64, |s, y| s << 8 | u64::from(*y))) % Q);
+    c.iter_mut()
+        .zip(x.chunks_exact(8))
+        .for_each(|(a, b)| *a = (*a + b.iter().fold(0u64, |s, y| s << 8 | u64::from(*y))) % Q);
 }
 
 /// `c += Trivial(digits(amount))` mod `q`.
@@ -145,7 +168,9 @@ fn add_trivial_mod(c: &mut [u64], amount: u64) {
 
 /// `n` stored bytes at `off` of `d`, unpacked to 64-bit lanes.
 fn part(d: &[u8], off: usize, n: usize) -> Result<Vec<u8>> {
-    d.get(off..off.checked_add(n).ok_or(Error::Argument)?).and_then(unpack).ok_or(Error::Argument)
+    d.get(off..off.checked_add(n).ok_or(Error::Argument)?)
+        .and_then(unpack)
+        .ok_or(Error::Argument)
 }
 
 /// `(u, v_f)` offsets of an own debit's op blob (`PqzCore._uv`, `e2e.py` `acc_of`): a burn, refresh or unwrap has `R = P(u′)`,
@@ -164,7 +189,11 @@ fn entry_of(e: &Word) -> Result<std::result::Result<u64, Slot>> {
     Ok(if v_off == 0 {
         Ok(lo_u64(e, 12, 8)?)
     } else {
-        Err(Slot { ptr: lo_addr(e, 12)?, u_off: lo_u64(e, 10, 2)? as usize, v_off })
+        Err(Slot {
+            ptr: lo_addr(e, 12)?,
+            u_off: lo_u64(e, 10, 2)? as usize,
+            v_off,
+        })
     })
 }
 
@@ -210,7 +239,10 @@ fn open_words(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Open> {
     let (p_last, own, last) = match (a.last_debit, f.has("lastRecord")) {
         (0, false) if a.acc_blob == [0; 20] => (0, None, None),
         (n, true) if n > 0 => {
-            let lr = Fields::new(f.get("lastRecord")?.as_object().ok_or(Error::Argument)?, &["w0", "w1"])?;
+            let lr = Fields::new(
+                f.get("lastRecord")?.as_object().ok_or(Error::Argument)?,
+                &["w0", "w1"],
+            )?;
             let rec = record(&lr.word("w0")?, &lr.word("w1")?, n - 1)?;
             let d = blobs.data(&a.acc_blob)?;
             let (u_at, v_at, t) = uv_of(d)?;
@@ -227,16 +259,26 @@ fn open_words(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Open> {
     };
     // `p` as path (A) chooses it (CTR-PQZ-06); the parts: the own `v_f` and every entry of `[p_last, p)`, with `Trivial(shieldIn)`
     // at most `K_MAX` units
-    let room = (K_MAX as u64).checked_sub(a.units + 1).ok_or(Error::Argument)?;
+    let room = (K_MAX as u64)
+        .checked_sub(a.units + 1)
+        .ok_or(Error::Argument)?;
     let op7 = f.get("forOp7")?.as_bool().ok_or(Error::Argument)?;
-    let inline = if op7 && id == PQZH_ID { INLINE_MAX_PQZH } else { INLINE_MAX };
+    let inline = if op7 && id == PQZH_ID {
+        INLINE_MAX_PQZH
+    } else {
+        INLINE_MAX
+    };
     let p = a.count.min(a.rolled.saturating_add(inline.min(room)));
     if (p - p_last) + u64::from(own.is_some()) + 1 > K_MAX as u64 {
         return Err(Error::Argument);
     }
     let acc_words = f.words("accWords")?;
     let acc = if a.flags & MAT != 0 {
-        let stream: Vec<u8> = acc_words.iter().flat_map(|w| w.map(|b| !b)).take(CTP).collect();
+        let stream: Vec<u8> = acc_words
+            .iter()
+            .flat_map(|w| w.map(|b| !b))
+            .take(CTP)
+            .collect();
         if acc_words.len() != ACC_WORDS || crate::keccak256(&stream) != a.acc_hash {
             return Err(Error::Argument);
         }
@@ -283,7 +325,11 @@ fn open_words(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Open> {
 /// `provenAdd`'s `blobs` (each address once) and `credits` (at most `K_MAX`), typed; a field missing or of another type is
 /// `Argument` for the whole call.
 pub(super) fn credits(f: &Fields<'_>) -> Result<(Codes, Vec<Credit>)> {
-    let blobs = Blobs::new(f)?.0.into_iter().map(|(a, c, _)| (a, c)).collect();
+    let blobs = Blobs::new(f)?
+        .0
+        .into_iter()
+        .map(|(a, c, _)| (a, c))
+        .collect();
     let list = f.list("credits")?;
     if list.len() > K_MAX {
         return Err(Error::Argument);
@@ -293,9 +339,24 @@ pub(super) fn credits(f: &Fields<'_>) -> Result<(Codes, Vec<Credit>)> {
         .map(|c| {
             let c = Fields::new(
                 c.as_object().ok_or(Error::Argument)?,
-                &["index", "fromUA", "sendCounter", "form", "record", "senderPending", "keyRecords", "proof", "header", "call"],
+                &[
+                    "index",
+                    "fromUA",
+                    "sendCounter",
+                    "form",
+                    "record",
+                    "senderPending",
+                    "keyRecords",
+                    "proof",
+                    "header",
+                    "call",
+                    "auditor",
+                ],
             )?;
-            let r = Fields::new(c.get("record")?.as_object().ok_or(Error::Argument)?, &["w0", "w1"])?;
+            let r = Fields::new(
+                c.get("record")?.as_object().ok_or(Error::Argument)?,
+                &["w0", "w1"],
+            )?;
             let multi = match c.get("form")?.as_str() {
                 Some("transfer") => false,
                 Some("transferMulti") => true,
@@ -310,7 +371,10 @@ pub(super) fn credits(f: &Fields<'_>) -> Result<(Codes, Vec<Credit>)> {
                     }
                     l.iter()
                         .map(|e| {
-                            let e = Fields::new(e.as_object().ok_or(Error::Argument)?, &["index", "word"])?;
+                            let e = Fields::new(
+                                e.as_object().ok_or(Error::Argument)?,
+                                &["index", "word"],
+                            )?;
                             Ok((e.u64("index")?, e.word("word")?))
                         })
                         .collect::<Result<Vec<_>>>()
@@ -325,7 +389,10 @@ pub(super) fn credits(f: &Fields<'_>) -> Result<(Codes, Vec<Credit>)> {
                     }
                     l.iter()
                         .map(|e| {
-                            let e = Fields::new(e.as_object().ok_or(Error::Argument)?, &["ua", "version", "word"])?;
+                            let e = Fields::new(
+                                e.as_object().ok_or(Error::Argument)?,
+                                &["ua", "version", "word"],
+                            )?;
                             Ok((e.word("ua")?, e.u64("version")?, e.word("word")?))
                         })
                         .collect::<Result<Vec<_>>>()
@@ -350,6 +417,7 @@ pub(super) fn credits(f: &Fields<'_>) -> Result<(Codes, Vec<Credit>)> {
                 proof: c.has("proof").then(|| c.bytes("proof")).transpose()?,
                 header,
                 call,
+                auditor: record_auditor(&c)?,
             })
         })
         .collect::<Result<_>>()?;
@@ -360,8 +428,19 @@ pub(super) fn credits(f: &Fields<'_>) -> Result<(Codes, Vec<Credit>)> {
 /// and the token's verification (T21 L83): `verificationMode` `PRECOMPILE` or `OFFCHAIN`, never a default (a missing or other
 /// value is `Argument`), and `verifierFee` the fee in force in the fee word (0 on `PRECOMPILE`, else `Argument`).
 fn call(v: &Value) -> Result<Call> {
-    let c = Fields::new(v.as_object().ok_or(Error::Argument)?, &["beneficiaryUA", "fee", "validUntilBlock", "mode", "sealedMemo", "binding",
-        "verificationMode", "verifierFee"])?;
+    let c = Fields::new(
+        v.as_object().ok_or(Error::Argument)?,
+        &[
+            "beneficiaryUA",
+            "fee",
+            "validUntilBlock",
+            "mode",
+            "sealedMemo",
+            "binding",
+            "verificationMode",
+            "verifierFee",
+        ],
+    )?;
     let mode = c.mode()?;
     if c.has("sealedMemo") != (mode == Mode::Hash) {
         return Err(Error::Argument);
@@ -376,7 +455,10 @@ fn call(v: &Value) -> Result<Call> {
         fee: c.u64("fee")?,
         valid_until_block: c.u64("validUntilBlock")?,
         mode,
-        sealed_memo: c.has("sealedMemo").then(|| c.bytes("sealedMemo")).transpose()?,
+        sealed_memo: c
+            .has("sealedMemo")
+            .then(|| c.bytes("sealedMemo"))
+            .transpose()?,
         binding: c.word("binding")?,
         verification,
     })
@@ -408,7 +490,13 @@ fn leg(d: &[u8], multi: bool, ua: &Word, v: u64, slot: &Slot) -> Result<Leg> {
     if (slot.u_off, slot.v_off) != (u_off, v_off) {
         return Err(Error::Argument);
     }
-    Ok(Leg { t, e, j, u_off, v_off })
+    Ok(Leg {
+        t,
+        e,
+        j,
+        u_off,
+        v_off,
+    })
 }
 
 /// A transfer op blob's tail and `R` with its one shape (`n = M + auditorOn`).
@@ -419,7 +507,18 @@ fn shape(d: &[u8]) -> Result<(Tail, Entry)> {
     if t.kv.len() != m + aud as usize {
         return Err(Error::Argument);
     }
-    Ok((t, Entry { r, g, m, aud, entry_ref: [0; 32] }))
+    let kv_a = if aud { t.kv.last().copied() } else { None };
+    Ok((
+        t,
+        Entry {
+            r,
+            g,
+            m,
+            aud,
+            entry_ref: [0; 32],
+            kv_a,
+        },
+    ))
 }
 
 /// `T_k` by the proof-path spec §2.3: `prevBlob`'s `(u, v_f)` (zero without one) `+ Σ` the sender's window `[p − Δp, p)` `+
@@ -451,7 +550,10 @@ fn t_k(rec: &Record, window: &[(u64, Word)], blobs: &mut Blobs) -> Result<Vec<u8
 impl PqzKey {
     /// The session state after a command: the handle's one session, dropped once the handle is revoked (a lock).
     fn session(&self) -> Result<std::sync::MutexGuard<'_, Option<Session>>> {
-        let mut g = self.session.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut g = self
+            .session
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Err(e) = self.secret.with(|_| ()) {
             *g = None;
             return Err(e);
@@ -467,7 +569,12 @@ impl PqzKey {
         let mut parts = Vec::new();
         if let Some((counter, tag, ct)) = &o.own {
             let mut hd = [[0u8; 32]; 20];
-            for (i, w) in [(H_CHAIN_UID, o.chain_uid), (H_TOKEN, addr(&o.token)), (H_FROM, o.ua), (H_SEND_COUNTER, u64_word(*counter))] {
+            for (i, w) in [
+                (H_CHAIN_UID, o.chain_uid),
+                (H_TOKEN, addr(&o.token)),
+                (H_FROM, o.ua),
+                (H_SEND_COUNTER, u64_word(*counter)),
+            ] {
                 *hd.get_mut(i).ok_or(Error::Argument)? = w;
             }
             let (u, v_f) = ct.split_at(PK_BYTES);
@@ -487,20 +594,37 @@ impl PqzKey {
             parts.push((Some(*i), Kind::Trivial));
         }
         let id = os16()?;
-        *g = Some(Session { id, open: o.clone(), sum, below, accepted: BTreeSet::new(), parts });
+        *g = Some(Session {
+            id,
+            open: o.clone(),
+            sum,
+            below,
+            accepted: BTreeSet::new(),
+            parts,
+        });
         let unsealed = o.count - o.p_last;
-        Ok(json!({"session": to_hex(&id), "p": o.p, "sendCounter": o.send_counter, "need": o.need.keys().collect::<Vec<_>>(),
-            "unsealed": unsealed}))
+        Ok(
+            json!({"session": to_hex(&id), "p": o.p, "sendCounter": o.send_counter, "need": o.need.keys().collect::<Vec<_>>(),
+            "unsealed": unsealed}),
+        )
     }
 
     /// `provenAdd`: each credit checked on its own (keyless), `{accepted, refused}`; a refused one leaves the session as it was
     /// (owner ruling 2026-11-09, no-oracle spec §7 item 11).
-    pub(super) fn proven_add(&self, sid: &[u8; 16], codes: &Codes, credits: &[Credit]) -> Result<Value> {
+    pub(super) fn proven_add(
+        &self,
+        sid: &[u8; 16],
+        codes: &Codes,
+        credits: &[Credit],
+    ) -> Result<Value> {
         let mut g = self.session()?;
         let s = g.as_mut().filter(|s| s.id == *sid).ok_or(Error::Argument)?;
         // every verdict first: a call that is `Argument` as a whole leaves the session as it was
         let mut blobs = Blobs(codes.iter().map(|(a, d)| (*a, d.clone(), false)).collect());
-        let verdicts = credits.iter().map(|c| self.check_credit(&s.open, &s.accepted, c, &mut blobs)).collect::<Result<Vec<_>>>()?;
+        let verdicts = credits
+            .iter()
+            .map(|c| self.check_credit(&s.open, &s.accepted, c, &mut blobs))
+            .collect::<Result<Vec<_>>>()?;
         let (mut accepted, mut refused) = (Vec::new(), Vec::new());
         for (c, v) in credits.iter().zip(verdicts) {
             match v {
@@ -540,7 +664,11 @@ impl PqzKey {
         let t: Vec<u8> = s.sum.iter().flat_map(|x| x.to_be_bytes()).collect();
         let t: &[u8; CT_BYTES] = t.as_slice().try_into().map_err(|_| Error::Argument)?;
         let value = self.with_sk(|_, sk| value(pqzl::dec(&sk.0.s, t)))?;
-        let parts: Vec<Value> = s.parts.iter().map(|(i, k)| json!({"index": i, "kind": k.name()})).collect();
+        let parts: Vec<Value> = s
+            .parts
+            .iter()
+            .map(|(i, k)| json!({"index": i, "kind": k.name()}))
+            .collect();
         let unsealed = s.open.count - s.open.p_last;
         let out = json!({"value": value, "p": s.open.p, "sendCounter": s.open.send_counter, "parts": parts, "unsealed": unsealed,
             "sealAdvised": unsealed > 0});
@@ -550,15 +678,37 @@ impl PqzKey {
 
     /// One credit (§4.14.3, §4.14.4): `Some((u ‖ v, kind))` when it passes, `None` refused (the session unchanged); `Argument` for
     /// the whole call when a credit that needs its P lacks the fields of one.
-    fn check_credit(&self, o: &Open, accepted: &BTreeSet<u64>, c: &Credit, blobs: &mut Blobs) -> Result<Option<(Vec<u8>, Kind)>> {
-        let Some(slot) = o.need.get(&c.index).filter(|_| !accepted.contains(&c.index)) else { return Ok(None) };
-        let Ok(rec) = record(&c.record.0, &c.record.1, c.k) else { return Ok(None) };
+    fn check_credit(
+        &self,
+        o: &Open,
+        accepted: &BTreeSet<u64>,
+        c: &Credit,
+        blobs: &mut Blobs,
+    ) -> Result<Option<(Vec<u8>, Kind)>> {
+        let Some(slot) = o
+            .need
+            .get(&c.index)
+            .filter(|_| !accepted.contains(&c.index))
+        else {
+            return Ok(None);
+        };
+        let Ok(rec) = record(&c.record.0, &c.record.1, c.k) else {
+            return Ok(None);
+        };
         // a migration credit (3g KV-11): the holder's own UA from a version below the handle's, re-encrypted from that seed
         if c.from_ua == o.ua && rec.key_version < o.v && !c.multi {
             let _lease = self.secret.lease(); // the old seed's copy, through the re-encryption (T21 L82)
             match self.old_seed(o, &rec, c, blobs) {
-                Some(seed) => return Ok(self.reencrypted(o, c, slot, &seed, blobs).ok().map(|ct| (ct, Kind::Migration))),
-                None => return by_proof(&self.pk, o, &rec, c, slot, blobs).map(|r| r.map(|ct| (ct, Kind::Migration))),
+                Some(seed) => {
+                    return Ok(self
+                        .reencrypted(o, c, slot, &seed, blobs)
+                        .ok()
+                        .map(|ct| (ct, Kind::Migration)))
+                }
+                None => {
+                    return by_proof(&self.pk, o, &rec, c, slot, blobs)
+                        .map(|r| r.map(|ct| (ct, Kind::Migration)))
+                }
             }
         }
         by_proof(&self.pk, o, &rec, c, slot, blobs).map(|r| r.map(|ct| (ct, Kind::Credit)))
@@ -566,30 +716,52 @@ impl PqzKey {
 
     /// The seed of the debited version `rec.keyVersion` from the handle's own store: a derived handle's `(account, index, v_old)`,
     /// an installed one's by the old key's hash (its record in `keyRecords`); `None` when the store holds none.
-    fn old_seed(&self, o: &Open, rec: &Record, c: &Credit, blobs: &mut Blobs) -> Option<Zeroizing<Vec<u8>>> {
+    fn old_seed(
+        &self,
+        o: &Open,
+        rec: &Record,
+        c: &Credit,
+        blobs: &mut Blobs,
+    ) -> Option<Zeroizing<Vec<u8>>> {
         let h = if self.account != u32::MAX {
             let (account, index, v) = (self.account, self.index, rec.key_version);
             self.secret.derive(KeyId::Pqz(account, index, v), |seed| {
-                let seed32 = crate::wallet::derive::hkdf_pq_version(seed, TAG, account, index, v, 32)?;
+                let seed32 =
+                    crate::wallet::derive::hkdf_pq_version(seed, TAG, account, index, v, 32)?;
                 let pk = keygen(&seed32)?.0.pk.to_vec();
                 Ok((seed32, pk))
             })
         } else {
-            let (_, _, w) = c.key_records.as_ref()?.iter().find(|(u, x, _)| *u == o.ua && *x == rec.key_version)?;
+            let (_, _, w) = c
+                .key_records
+                .as_ref()?
+                .iter()
+                .find(|(u, x, _)| *u == o.ua && *x == rec.key_version)?;
             let pk = registered_key(w, blobs).ok()?;
             let kh = crate::key_hash_of(crate::PQZ_SCHEME, &pk).ok()??;
-            self.secret.derive(KeyId::PqzHeld(kh), |_| Err(Error::Argument))
+            self.secret
+                .derive(KeyId::PqzHeld(kh), |_| Err(Error::Argument))
         };
         h.ok()?.0.with(|s| Zeroizing::new(s.to_vec())).ok()
     }
 
     /// A migration credit by re-encryption: CTR-PQZ-19's `seed_enc` of the debit `(ua, k)` from `seed32` of the debited version,
     /// then `u == Aᵀr + e1` and `v − pkᵀr − e2 ∈ Δ·[0, 16)^16` in constant time, `pk` the handle's (op 1 to its own UA).
-    fn reencrypted(&self, o: &Open, c: &Credit, slot: &Slot, seed32: &[u8], blobs: &mut Blobs) -> Result<Vec<u8>> {
+    fn reencrypted(
+        &self,
+        o: &Open,
+        c: &Credit,
+        slot: &Slot,
+        seed32: &[u8],
+        blobs: &mut Blobs,
+    ) -> Result<Vec<u8>> {
         let d = blobs.data(&slot.ptr)?.to_vec();
         let l = leg(&d, false, &o.ua, o.v, slot)?;
         let ct = load(&d, l.u_off, l.v_off)?;
-        let salt: [u8; 16] = d.get(..16).and_then(|s| s.try_into().ok()).ok_or(Error::Argument)?;
+        let salt: [u8; 16] = d
+            .get(..16)
+            .and_then(|s| s.try_into().ok())
+            .ok_or(Error::Argument)?;
         let seed = Zeroizing::new(seed_enc(seed32, &o.chain_uid, &o.token, &o.ua, c.k, &salt)?);
         let mut words = [[0u8; 32]; DISC_WORDS];
         *words.get_mut(1).ok_or(Error::Argument)? = o.id;
@@ -607,8 +779,18 @@ impl PqzKey {
 /// A credit by its sender's P (§4.14.4 steps 1–6), `holder` the key at the holder's leg (the handle's `pk`, or a quorum member's
 /// record of the quorum's): `Some(u_{g(j)} ‖ v_j)` when `pqz_ffi::precompile` accepts the rebuilt statement, `None` when a check
 /// fails; `Argument` when the credit lacks P's fields.
-fn by_proof(holder: &[u8], o: &Open, rec: &Record, c: &Credit, slot: &Slot, blobs: &mut Blobs) -> Result<Option<Vec<u8>>> {
-    let (Some(window), Some(keys), Some(proof)) = (&c.sender_pending, &c.key_records, &c.proof) else { return Err(Error::Argument) };
+fn by_proof(
+    holder: &[u8],
+    o: &Open,
+    rec: &Record,
+    c: &Credit,
+    slot: &Slot,
+    blobs: &mut Blobs,
+) -> Result<Option<Vec<u8>>> {
+    let (Some(window), Some(keys), Some(proof)) = (&c.sender_pending, &c.key_records, &c.proof)
+    else {
+        return Err(Error::Argument);
+    };
     if c.header.is_none() && c.call.is_none() {
         return Err(Error::Argument);
     }
@@ -617,13 +799,23 @@ fn by_proof(holder: &[u8], o: &Open, rec: &Record, c: &Credit, slot: &Slot, blob
 
 /// The key of `(ua, v)` from a credit's `keyRecords` (its code in the request's blobs).
 fn key_of(keys: &[(Word, u64, Word)], blobs: &mut Blobs, ua: &Word, v: u64) -> Result<Vec<u8>> {
-    let (_, _, w) = keys.iter().find(|(u, x, _)| u == ua && *x == v).ok_or(Error::Argument)?;
+    let (_, _, w) = keys
+        .iter()
+        .find(|(u, x, _)| u == ua && *x == v)
+        .ok_or(Error::Argument)?;
     registered_key(w, blobs)
 }
 
 #[allow(clippy::too_many_arguments)]
 fn verified(
-    holder: &[u8], o: &Open, rec: &Record, c: &Credit, slot: &Slot, window: &[(u64, Word)], keys: &[(Word, u64, Word)], proof: &[u8],
+    holder: &[u8],
+    o: &Open,
+    rec: &Record,
+    c: &Credit,
+    slot: &Slot,
+    window: &[(u64, Word)],
+    keys: &[(Word, u64, Word)],
+    proof: &[u8],
     blobs: &mut Blobs,
 ) -> Result<Vec<u8>> {
     // the record's mode names where P is: LOG an event's header, NONE the call
@@ -643,9 +835,28 @@ fn verified(
     let (m, aud) = (l.e.m, l.e.aud);
     let mut pks = Vec::with_capacity(m);
     for j in 0..m {
-        pks.push(if j == l.j { holder.to_vec() } else { key_of(keys, blobs, &l.e.owner(j)?, *l.t.kv.get(j).ok_or(Error::Argument)?)? });
+        pks.push(if j == l.j {
+            holder.to_vec()
+        } else {
+            key_of(
+                keys,
+                blobs,
+                &l.e.owner(j)?,
+                *l.t.kv.get(j).ok_or(Error::Argument)?,
+            )?
+        });
     }
-    let pk_a = if aud { Some(key_of(keys, blobs, &o.auditor_ua, *l.t.kv.get(m).ok_or(Error::Argument)?)?) } else { None };
+    let a = c.auditor.unwrap_or(o.auditor_ua);
+    let pk_a = if aud {
+        Some(key_of(
+            keys,
+            blobs,
+            &a,
+            *l.t.kv.get(m).ok_or(Error::Argument)?,
+        )?)
+    } else {
+        None
+    };
     // step 4: the header, the event's (LOG) or built from the call (NONE)
     let hd = match (&c.header, &c.call) {
         (Some(h), _) => *h,
@@ -653,7 +864,22 @@ fn verified(
         _ => return Err(Error::Argument),
     };
     // steps 5 and 6
-    transfer_proven(o, rec, &c.from_ua, c.k, c.multi, hd, &pk_f, &pks, pk_a.as_deref(), &t, &d, &l.t, &l.e, proof)?;
+    transfer_proven(
+        o,
+        rec,
+        &c.from_ua,
+        c.k,
+        c.multi,
+        hd,
+        &pk_f,
+        &pks,
+        pk_a.as_deref(),
+        &t,
+        &d,
+        &l.t,
+        &l.e,
+        proof,
+    )?;
     Ok(ct)
 }
 
@@ -661,34 +887,116 @@ fn verified(
 /// words the facade knows must be the header's, the keys pairwise distinct (`KeyReused`), `pqz_ffi::precompile` must accept it.
 #[allow(clippy::too_many_arguments)]
 fn transfer_proven(
-    o: &Open, rec: &Record, from: &Word, k: u64, multi: bool, hd: [Word; 20], pk_f: &[u8], pks: &[Vec<u8>], pk_a: Option<&[u8]>,
-    t: &[u8], d: &[u8], tl: &Tail, e: &Entry, proof: &[u8],
+    o: &Open,
+    rec: &Record,
+    from: &Word,
+    k: u64,
+    multi: bool,
+    hd: [Word; 20],
+    pk_f: &[u8],
+    pks: &[Vec<u8>],
+    pk_a: Option<&[u8]>,
+    t: &[u8],
+    d: &[u8],
+    tl: &Tail,
+    e: &Entry,
+    proof: &[u8],
 ) -> Result<()> {
     let (m, aud, r) = (e.m, e.aud, &e.r);
-    distinct(&std::iter::once(pk_f).chain(pks.iter().map(|k| &k[..])).chain(pk_a).collect::<Vec<_>>())?;
-    let op_tag = if multi { OP_TAG_TRANSFER_MULTI } else if aud { Form::Transfer.op_tag() } else { Form::Transfer0.op_tag() };
+    distinct(
+        &std::iter::once(pk_f)
+            .chain(pks.iter().map(|k| &k[..]))
+            .chain(pk_a)
+            .collect::<Vec<_>>(),
+    )?;
+    let op_tag = if multi {
+        OP_TAG_TRANSFER_MULTI
+    } else if aud {
+        Form::Transfer.op_tag()
+    } else {
+        Form::Transfer0.op_tag()
+    };
     known(o, &hd, &op_tag, from, k, rec)?;
     let v_f = part(d, tl.r_len, VP)?;
     let stmt = if multi {
-        let us = (0..e.g).map(|g| part(r, 16 + PKP * g, PKP)).collect::<Result<Vec<_>>>()?.concat();
-        let vs = (0..m).map(|j| part(r, e.leg_at(j), VP)).collect::<Result<Vec<_>>>()?.concat();
-        let v_as = if aud { Some((0..m).map(|j| part(r, e.leg_at(j) + VP, VP)).collect::<Result<Vec<_>>>()?.concat()) } else { None };
+        let us = (0..e.g)
+            .map(|g| part(r, 16 + PKP * g, PKP))
+            .collect::<Result<Vec<_>>>()?
+            .concat();
+        let vs = (0..m)
+            .map(|j| part(r, e.leg_at(j), VP))
+            .collect::<Result<Vec<_>>>()?
+            .concat();
+        let v_as = if aud {
+            Some(
+                (0..m)
+                    .map(|j| part(r, e.leg_at(j) + VP, VP))
+                    .collect::<Result<Vec<_>>>()?
+                    .concat(),
+            )
+        } else {
+            None
+        };
         let pks = pks.concat();
-        Multi { header: hd, m, pk_f, pks: &pks, pk_a, t, us: &us, vs: &vs, v_f: &v_f, v_as: v_as.as_deref() }.encode()
+        Multi {
+            header: hd,
+            m,
+            pk_f,
+            pks: &pks,
+            pk_a,
+            t,
+            us: &us,
+            vs: &vs,
+            v_f: &v_f,
+            v_as: v_as.as_deref(),
+        }
+        .encode()
     } else {
         let (u, v_t) = (part(r, 16, PKP)?, part(r, 16 + PKP, VP)?);
-        let v_a = if aud { Some(part(r, 16 + PKP + VP, VP)?) } else { None };
+        let v_a = if aud {
+            Some(part(r, 16 + PKP + VP, VP)?)
+        } else {
+            None
+        };
         let form = if aud { Form::Transfer } else { Form::Transfer0 };
         let pk_t = pks.first().ok_or(Error::Argument)?;
-        Stmt::Debit(Debit { form, header: hd, pk_f, pk_t: Some(pk_t), pk_a, t, u: &u, v_t: Some(&v_t), v_f: &v_f, v_a: v_a.as_deref(), u_f: None }).encode()
+        Stmt::Debit(Debit {
+            form,
+            header: hd,
+            pk_f,
+            pk_t: Some(pk_t),
+            pk_a,
+            t,
+            u: &u,
+            v_t: Some(&v_t),
+            v_f: &v_f,
+            v_a: v_a.as_deref(),
+            u_f: None,
+        })
+        .encode()
     }
     .map_err(|_| Error::Argument)?;
-    verify_p(if multi { pqz_ffi::stmt::OP_TRANSFER_MULTI } else { Form::Transfer.op() }, &stmt, proof)
+    verify_p(
+        if multi {
+            pqz_ffi::stmt::OP_TRANSFER_MULTI
+        } else {
+            Form::Transfer.op()
+        },
+        &stmt,
+        proof,
+    )
 }
 
 /// The header words the facade knows (§4.14.4 step 4): opTag, the build's id, the token's words, `fromUA`, `k`, the record's `p`
 /// and `shieldIn`.
-fn known(o: &Open, hd: &[Word; 20], op_tag: &Word, from: &Word, k: u64, rec: &Record) -> Result<()> {
+fn known(
+    o: &Open,
+    hd: &[Word; 20],
+    op_tag: &Word,
+    from: &Word,
+    k: u64,
+    rec: &Record,
+) -> Result<()> {
     for (i, w) in [
         (H_OPTAG, *op_tag),
         (H_ID, o.id),
@@ -722,7 +1030,16 @@ fn verify_p(op: u8, stmt: &[u8], proof: &[u8]) -> Result<()> {
 /// `fromUA` and `k`, the token's words, the blob's `salt`, `toUA` or `recipientsHash`, `M` and `auditorOn`; the envelope
 /// binding of the call's mode and `memoHash = keccak256(memo ‖ ownTag_s)`.
 #[allow(clippy::too_many_arguments)]
-fn transfer_header(o: &Open, rec: &Record, from: &Word, k: u64, multi: bool, call: &Call, tl: &Tail, e: &Entry) -> Result<[Word; 20]> {
+fn transfer_header(
+    o: &Open,
+    rec: &Record,
+    from: &Word,
+    k: u64,
+    multi: bool,
+    call: &Call,
+    tl: &Tail,
+    e: &Entry,
+) -> Result<[Word; 20]> {
     let (r, m, aud) = (&e.r, e.m, e.aud);
     let salt = r.get(..16).ok_or(Error::Argument)?;
     let memo = match (&call.sealed_memo, call.mode) {
@@ -732,18 +1049,55 @@ fn transfer_header(o: &Open, rec: &Record, from: &Word, k: u64, multi: bool, cal
     };
     // the token's verification as the call names it (T21 L77, L83)
     let env = bind_mode(&call.binding, call.mode, call.verification);
-    let mut hd = header_of(o, rec, from, k, call.beneficiary_ua, call.fee, call.valid_until_block, env)
-        .fill(if multi { Multi::header(&o.id, m, aud) } else { Debit::header(if aud { Form::Transfer } else { Form::Transfer0 }, &o.id) });
-    let to = if multi { crate::keccak256(&(0..m).map(|j| e.owner(j)).collect::<Result<Vec<_>>>()?.concat()) } else { e.owner(0)? };
+    let mut hd = header_of(
+        o,
+        rec,
+        from,
+        k,
+        call.beneficiary_ua,
+        call.fee,
+        call.valid_until_block,
+        env,
+    )
+    .fill(if multi {
+        Multi::header(&o.id, m, aud)
+    } else {
+        Debit::header(if aud { Form::Transfer } else { Form::Transfer0 }, &o.id)
+    });
+    let to = if multi {
+        crate::keccak256(
+            &(0..m)
+                .map(|j| e.owner(j))
+                .collect::<Result<Vec<_>>>()?
+                .concat(),
+        )
+    } else {
+        e.owner(0)?
+    };
     *hd.get_mut(H_TO).ok_or(Error::Argument)? = to;
-    hd.get_mut(H_SALT).ok_or(Error::Argument)?.iter_mut().skip(16).zip(salt).for_each(|(x, b)| *x = *b);
-    *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = crate::keccak256(&[&memo[..], &tl.own_tag[..]].concat());
+    hd.get_mut(H_SALT)
+        .ok_or(Error::Argument)?
+        .iter_mut()
+        .skip(16)
+        .zip(salt)
+        .for_each(|(x, b)| *x = *b);
+    *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? =
+        crate::keccak256(&[&memo[..], &tl.own_tag[..]].concat());
     Ok(hd)
 }
 
 /// The header words a NONE debit's call and record give, before the form's.
 #[allow(clippy::too_many_arguments)]
-fn header_of(o: &Open, rec: &Record, from: &Word, k: u64, beneficiary_ua: Word, fee: u64, valid_until_block: u64, env: Word) -> Header {
+fn header_of(
+    o: &Open,
+    rec: &Record,
+    from: &Word,
+    k: u64,
+    beneficiary_ua: Word,
+    fee: u64,
+    valid_until_block: u64,
+    env: Word,
+) -> Header {
     Header {
         chain_id: o.chain_id,
         token: o.token,
@@ -763,9 +1117,22 @@ fn header_of(o: &Open, rec: &Record, from: &Word, k: u64, beneficiary_ua: Word, 
 /// A proof-path debit's form fields (§4.14.2: those of `proveTransfer`, `proveTransferMulti`, `proveBurn`, `proveRefresh`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum DebitForm {
-    Transfer { to_ua: Word, pk_t: Vec<u8>, pk_a: Option<Vec<u8>>, amount: u64, mode: Mode },
-    Multi { legs: Vec<(Vec<u8>, Word, u64)>, pk_a: Option<Vec<u8>>, mode: Mode },
-    Burn { amount: u64, recipient: Word },
+    Transfer {
+        to_ua: Word,
+        pk_t: Vec<u8>,
+        pk_a: Option<Vec<u8>>,
+        amount: u64,
+        mode: Mode,
+    },
+    Multi {
+        legs: Vec<(Vec<u8>, Word, u64)>,
+        pk_a: Option<Vec<u8>>,
+        mode: Mode,
+    },
+    Burn {
+        amount: u64,
+        recipient: Word,
+    },
     Refresh,
 }
 
@@ -792,8 +1159,15 @@ pub(super) fn debit_args(cmd: &str, f: &Fields<'_>) -> Result<DebitArgs> {
             amount: f.u64("amount")?,
             mode: f.mode()?,
         },
-        "proveTransferMultiProven" => DebitForm::Multi { legs: f.legs()?, pk_a: f.opt_pk("pkA")?, mode: f.mode()? },
-        "proveBurnProven" => DebitForm::Burn { amount: f.u64("amount")?, recipient: f.word("recipient")? },
+        "proveTransferMultiProven" => DebitForm::Multi {
+            legs: f.legs()?,
+            pk_a: f.opt_pk("pkA")?,
+            mode: f.mode()?,
+        },
+        "proveBurnProven" => DebitForm::Burn {
+            amount: f.u64("amount")?,
+            recipient: f.word("recipient")?,
+        },
         "proveRefreshProven" => DebitForm::Refresh,
         _ => return Err(Error::Argument),
     };
@@ -820,11 +1194,17 @@ impl PqzKey {
             let s = g.as_ref().filter(|s| s.id == *sid).ok_or(Error::Argument)?;
             let o = &s.open;
             let multi = matches!(a.form, DebitForm::Multi { .. });
-            if !o.need.keys().all(|i| s.accepted.contains(i)) || o.op7 != multi || (a.chain_id, a.registry) != (o.chain_id, o.registry) {
+            if !o.need.keys().all(|i| s.accepted.contains(i))
+                || o.op7 != multi
+                || (a.chain_id, a.registry) != (o.chain_id, o.registry)
+            {
                 return Err(Error::Argument);
             }
             let cached = match &o.acc {
-                Some(acc) => acc.chunks_exact(8).map(|c| c.iter().fold(0u64, |x, y| x << 8 | u64::from(*y))).eq(s.below.iter().copied()),
+                Some(acc) => acc
+                    .chunks_exact(8)
+                    .map(|c| c.iter().fold(0u64, |x, y| x << 8 | u64::from(*y)))
+                    .eq(s.below.iter().copied()),
                 None => o.rolled == o.p_last,
             };
             if !cached {
@@ -850,22 +1230,60 @@ impl PqzKey {
             let id = &o.id;
             let v = match &a.form {
                 // KV-8 / KV-9: a stale version only migrates to its own UA, the current one never pays itself
-                DebitForm::Transfer { to_ua, pk_t, pk_a, amount, mode } => {
+                DebitForm::Transfer {
+                    to_ua,
+                    pk_t,
+                    pk_a,
+                    amount,
+                    mode,
+                } => {
                     if o.stale != (*to_ua == o.ua) {
                         return Err(Error::Argument);
                     }
-                    distinct(&[Some(&self.pk[..]), Some(&pk_t[..]), pk_a.as_deref()].into_iter().flatten().collect::<Vec<_>>())?;
+                    distinct(
+                        &[Some(&self.pk[..]), Some(&pk_t[..]), pk_a.as_deref()]
+                            .into_iter()
+                            .flatten()
+                            .collect::<Vec<_>>(),
+                    )?;
                     self.with_sk(|seed32, sk| {
-                        self.transfer(seed32, sk, d, id, &h, to_ua, pk_t, pk_a.as_deref(), &t, *amount, &Memo::Mode(*mode))
+                        self.transfer(
+                            seed32,
+                            sk,
+                            d,
+                            id,
+                            &h,
+                            to_ua,
+                            pk_t,
+                            pk_a.as_deref(),
+                            &t,
+                            *amount,
+                            &Memo::Mode(*mode),
+                        )
                     })?
                 }
                 DebitForm::Multi { legs, pk_a, mode } => {
                     if o.stale {
                         return Err(Error::Argument);
                     }
-                    let keys = std::iter::once(&self.pk[..]).chain(legs.iter().map(|l| &l.0[..])).chain(pk_a.as_deref());
+                    let keys = std::iter::once(&self.pk[..])
+                        .chain(legs.iter().map(|l| &l.0[..]))
+                        .chain(pk_a.as_deref());
                     distinct(&keys.collect::<Vec<_>>())?;
-                    self.with_sk(|seed32, sk| self.multi(seed32, sk, d, id, &h, legs, pk_a.as_deref(), &t, *mode, None))?
+                    self.with_sk(|seed32, sk| {
+                        self.multi(
+                            seed32,
+                            sk,
+                            d,
+                            id,
+                            &h,
+                            legs,
+                            pk_a.as_deref(),
+                            &t,
+                            *mode,
+                            None,
+                        )
+                    })?
                 }
                 DebitForm::Burn { amount, recipient } => {
                     if o.stale {
@@ -874,10 +1292,30 @@ impl PqzKey {
                     let mut hd = h.fill(Debit::header(Form::Burn, id));
                     *hd.get_mut(H_AMOUNT).ok_or(Error::Argument)? = u64_word(*amount);
                     *hd.get_mut(H_RECIPIENT).ok_or(Error::Argument)? = *recipient;
-                    self.with_sk(|seed32, sk| self.debit_own(seed32, sk, d, Form::Burn, hd, &t, amount.checked_add(h.fee), None))?
+                    self.with_sk(|seed32, sk| {
+                        self.debit_own(
+                            seed32,
+                            sk,
+                            d,
+                            Form::Burn,
+                            hd,
+                            &t,
+                            amount.checked_add(h.fee),
+                            None,
+                        )
+                    })?
                 }
                 DebitForm::Refresh => self.with_sk(|seed32, sk| {
-                    self.debit_own(seed32, sk, d, Form::Refresh, h.fill(Debit::header(Form::Refresh, id)), &t, Some(h.fee), None)
+                    self.debit_own(
+                        seed32,
+                        sk,
+                        d,
+                        Form::Refresh,
+                        h.fill(Debit::header(Form::Refresh, id)),
+                        &t,
+                        Some(h.fee),
+                        None,
+                    )
                 })?,
             };
             with_p(v, &h)
@@ -926,6 +1364,8 @@ pub(super) struct OwnDebit {
     header: Option<[Word; 20]>,
     call: Option<Call>,
     burn_call: Option<BurnCall>,
+    /// The debit entry's auditor, as [`Credit`]'s.
+    auditor: Option<Word>,
 }
 
 /// `checkProven`'s request: the account's words (no key word of the quorum), `pk`, `own`, the codes and the credits.
@@ -958,7 +1398,10 @@ fn key_records(l: &[Value]) -> Result<Vec<(Word, u64, Word)>> {
     }
     l.iter()
         .map(|e| {
-            let e = Fields::new(e.as_object().ok_or(Error::Argument)?, &["ua", "version", "word"])?;
+            let e = Fields::new(
+                e.as_object().ok_or(Error::Argument)?,
+                &["ua", "version", "word"],
+            )?;
             Ok((e.word("ua")?, e.u64("version")?, e.word("word")?))
         })
         .collect()
@@ -966,7 +1409,18 @@ fn key_records(l: &[Value]) -> Result<Vec<(Word, u64, Word)>> {
 
 /// `own`'s fields: `{form, senderPending, keyRecords, proof, header | call}`.
 fn own_debit(v: &Value) -> Result<OwnDebit> {
-    let f = Fields::new(v.as_object().ok_or(Error::Argument)?, &["form", "senderPending", "keyRecords", "proof", "header", "call"])?;
+    let f = Fields::new(
+        v.as_object().ok_or(Error::Argument)?,
+        &[
+            "form",
+            "senderPending",
+            "keyRecords",
+            "proof",
+            "header",
+            "call",
+            "auditor",
+        ],
+    )?;
     let form = match f.get("form")?.as_str() {
         Some("transfer") => OwnForm::Transfer,
         Some("transferMulti") => OwnForm::Multi,
@@ -975,11 +1429,17 @@ fn own_debit(v: &Value) -> Result<OwnDebit> {
         Some("unwrap") => OwnForm::Unwrap,
         _ => return Err(Error::Argument),
     };
-    let header: Option<[Word; 20]> = f.has("header").then(|| f.words("header")?.try_into().map_err(|_| Error::Argument)).transpose()?;
+    let header: Option<[Word; 20]> = f
+        .has("header")
+        .then(|| f.words("header")?.try_into().map_err(|_| Error::Argument))
+        .transpose()?;
     let (call, burn_call) = match (f.has("call"), form) {
         (false, _) => (None, None),
         (true, OwnForm::Transfer | OwnForm::Multi) => (Some(call(f.get("call")?)?), None),
-        (true, _) => (None, Some(burn_call(f.get("call")?, form == OwnForm::Unwrap)?)),
+        (true, _) => (
+            None,
+            Some(burn_call(f.get("call")?, form == OwnForm::Unwrap)?),
+        ),
     };
     if header.is_some() == f.has("call") {
         return Err(Error::Argument);
@@ -992,13 +1452,21 @@ fn own_debit(v: &Value) -> Result<OwnDebit> {
         header,
         call,
         burn_call,
+        auditor: record_auditor(&f)?,
     })
 }
 
 /// A burn, refresh or unwrap call: `{beneficiaryUA?, fee, amount, recipient, validUntilBlock, binding}`, an unwrap's
 /// `underlying` and `minOut` too.
 fn burn_call(v: &Value, unwrap: bool) -> Result<BurnCall> {
-    let mut list = vec!["beneficiaryUA", "fee", "amount", "recipient", "validUntilBlock", "binding"];
+    let mut list = vec![
+        "beneficiaryUA",
+        "fee",
+        "amount",
+        "recipient",
+        "validUntilBlock",
+        "binding",
+    ];
     if unwrap {
         list.extend(["underlying", "minOut"]);
     }
@@ -1010,7 +1478,11 @@ fn burn_call(v: &Value, unwrap: bool) -> Result<BurnCall> {
         recipient: c.word("recipient")?,
         valid_until_block: c.u64("validUntilBlock")?,
         binding: c.word("binding")?,
-        unwrap: if unwrap { Some((c.arr("underlying")?, c.u64("minOut")?)) } else { None },
+        unwrap: if unwrap {
+            Some((c.arr("underlying")?, c.u64("minOut")?))
+        } else {
+            None
+        },
     })
 }
 
@@ -1025,7 +1497,13 @@ pub(super) fn check_request(f: &Fields<'_>) -> Result<Check> {
         _ => return Err(Error::Argument),
     };
     let (codes, credits) = credits(f)?;
-    Ok(Check { open, pk, own, codes, credits })
+    Ok(Check {
+        open,
+        pk,
+        own,
+        codes,
+        credits,
+    })
 }
 
 /// `checkProven` (§4.14.8): every part by its P with the member's `pk` at the quorum's leg and as its own debit's `pk_f`; any
@@ -1034,10 +1512,19 @@ pub(super) fn check_request(f: &Fields<'_>) -> Result<Check> {
 /// member's MPC step (later) opens; TRIVIAL entries are public amounts and not in it. It decrypts nothing and uses no key.
 pub(super) fn check(c: &Check) -> Result<Value> {
     let o = &c.open;
-    let mut blobs = Blobs(c.codes.iter().map(|(a, d)| (*a, d.clone(), false)).collect());
+    let mut blobs = Blobs(
+        c.codes
+            .iter()
+            .map(|(a, d)| (*a, d.clone(), false))
+            .collect(),
+    );
     // Fable P1-1: the source names no key the check certifies against
     let ours = |k: &[(Word, u64, Word)]| k.iter().any(|(u, v, _)| *u == o.ua && *v == o.v);
-    if c.own.as_ref().is_some_and(|w| ours(&w.key_records)) || c.credits.iter().any(|x| x.key_records.as_deref().is_some_and(ours)) {
+    if c.own.as_ref().is_some_and(|w| ours(&w.key_records))
+        || c.credits
+            .iter()
+            .any(|x| x.key_records.as_deref().is_some_and(ours))
+    {
         return Err(Error::Argument);
     }
     let mut sum = vec![0u64; CT_BYTES / 8];
@@ -1049,11 +1536,19 @@ pub(super) fn check(c: &Check) -> Result<Value> {
     }
     let mut seen = BTreeSet::new();
     for x in &c.credits {
-        let slot = o.need.get(&x.index).filter(|_| seen.insert(x.index)).ok_or(Error::Argument)?;
+        let slot = o
+            .need
+            .get(&x.index)
+            .filter(|_| seen.insert(x.index))
+            .ok_or(Error::Argument)?;
         let rec = record(&x.record.0, &x.record.1, x.k)?;
         let ct = by_proof(&c.pk, o, &rec, x, slot, &mut blobs)?.ok_or(Error::Argument)?;
         add_mod(&mut sum, &ct);
-        let kind = if x.from_ua == o.ua && rec.key_version < o.v { Kind::Migration } else { Kind::Credit };
+        let kind = if x.from_ua == o.ua && rec.key_version < o.v {
+            Kind::Migration
+        } else {
+            Kind::Credit
+        };
         parts.push(json!({"index": x.index, "kind": kind.name()}));
     }
     let lanes: Vec<u8> = sum.iter().flat_map(|x| x.to_be_bytes()).collect();
@@ -1063,7 +1558,14 @@ pub(super) fn check(c: &Check) -> Result<Value> {
 
 /// The quorum's own last debit `(ua, k)` by its P (§4.14.8): its statement rebuilt as §4.14.4 with `pk_f` the member's `pk`,
 /// `T` by §2.3; no tag (no seed). A transfer's keys from `keyRecords` by the tail's `kv`; a burn, refresh or unwrap has none.
-fn own_proven(pk: &[u8], o: &Open, rec: &Record, k: u64, w: &OwnDebit, blobs: &mut Blobs) -> Result<()> {
+fn own_proven(
+    pk: &[u8],
+    o: &Open,
+    rec: &Record,
+    k: u64,
+    w: &OwnDebit,
+    blobs: &mut Blobs,
+) -> Result<()> {
     if (rec.proof_store == 1) != w.header.is_some() {
         return Err(Error::Argument);
     }
@@ -1076,21 +1578,59 @@ fn own_proven(pk: &[u8], o: &Open, rec: &Record, k: u64, w: &OwnDebit, blobs: &m
             if !multi && e.m != 1 {
                 return Err(Error::Argument);
             }
-            let pks = (0..e.m).map(|j| key_of(&w.key_records, blobs, &e.owner(j)?, *tl.kv.get(j).ok_or(Error::Argument)?)).collect::<Result<Vec<_>>>()?;
-            let pk_a = if e.aud { Some(key_of(&w.key_records, blobs, &o.auditor_ua, *tl.kv.get(e.m).ok_or(Error::Argument)?)?) } else { None };
+            let pks = (0..e.m)
+                .map(|j| {
+                    key_of(
+                        &w.key_records,
+                        blobs,
+                        &e.owner(j)?,
+                        *tl.kv.get(j).ok_or(Error::Argument)?,
+                    )
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let a = w.auditor.unwrap_or(o.auditor_ua);
+            let pk_a = if e.aud {
+                Some(key_of(
+                    &w.key_records,
+                    blobs,
+                    &a,
+                    *tl.kv.get(e.m).ok_or(Error::Argument)?,
+                )?)
+            } else {
+                None
+            };
             let hd = match (&w.header, &w.call) {
                 (Some(h), _) => *h,
                 (None, Some(call)) => transfer_header(o, rec, &o.ua, k, multi, call, &tl, &e)?,
                 _ => return Err(Error::Argument),
             };
-            transfer_proven(o, rec, &o.ua, k, multi, hd, pk, &pks, pk_a.as_deref(), &t, &d, &tl, &e, &w.proof)
+            transfer_proven(
+                o,
+                rec,
+                &o.ua,
+                k,
+                multi,
+                hd,
+                pk,
+                &pks,
+                pk_a.as_deref(),
+                &t,
+                &d,
+                &tl,
+                &e,
+                &w.proof,
+            )
         }
         OwnForm::Burn | OwnForm::Refresh | OwnForm::Unwrap => {
             let tl = tail(&d)?;
             if tl.r_len != PKP || !tl.kv.is_empty() {
                 return Err(Error::Argument);
             }
-            let form = if w.form == OwnForm::Refresh { Form::Refresh } else { Form::Burn };
+            let form = if w.form == OwnForm::Refresh {
+                Form::Refresh
+            } else {
+                Form::Burn
+            };
             let hd = match (&w.header, &w.burn_call) {
                 (Some(h), _) => *h,
                 (None, Some(bc)) => burn_header(o, rec, k, w.form, bc, &tl)?,
@@ -1098,9 +1638,21 @@ fn own_proven(pk: &[u8], o: &Open, rec: &Record, k: u64, w: &OwnDebit, blobs: &m
             };
             known(o, &hd, &form.op_tag(), &o.ua, k, rec)?;
             let (u, v_f) = (part(&d, 0, PKP)?, part(&d, PKP, VP)?);
-            let stmt = Stmt::Debit(Debit { form, header: hd, pk_f: pk, pk_t: None, pk_a: None, t: &t, u: &u, v_t: None, v_f: &v_f, v_a: None, u_f: None })
-                .encode()
-                .map_err(|_| Error::Argument)?;
+            let stmt = Stmt::Debit(Debit {
+                form,
+                header: hd,
+                pk_f: pk,
+                pk_t: None,
+                pk_a: None,
+                t: &t,
+                u: &u,
+                v_t: None,
+                v_f: &v_f,
+                v_a: None,
+                u_f: None,
+            })
+            .encode()
+            .map_err(|_| Error::Argument)?;
             verify_p(form.op(), &stmt, &w.proof)
         }
     }
@@ -1110,11 +1662,29 @@ fn own_proven(pk: &[u8], o: &Open, rec: &Record, k: u64, w: &OwnDebit, blobs: &m
 /// when `amount = 0`, else BURN (a refresh's amount is 0, a burn's and an unwrap's not); `envelopeBinding` the call's `binding`
 /// (burn, refresh) or `unwrapBinding(underlying, minOut)`, relayed `keccak256(abi.encode(binding, unwrapBinding))`; `memoHash
 /// = keccak256(ownTag)`.
-fn burn_header(o: &Open, rec: &Record, k: u64, form: OwnForm, bc: &BurnCall, tl: &Tail) -> Result<[Word; 20]> {
+fn burn_header(
+    o: &Open,
+    rec: &Record,
+    k: u64,
+    form: OwnForm,
+    bc: &BurnCall,
+    tl: &Tail,
+) -> Result<[Word; 20]> {
     let env = match (form, &bc.unwrap) {
         (OwnForm::Unwrap, Some((underlying, min_out))) => {
-            let w = crate::keccak256(&[crate::keccak256(b"SCAAS-PQZ-UNWRAP-V1"), addr(underlying), u64_word(*min_out)].concat());
-            if bc.binding == [0; 32] { w } else { crate::keccak256(&[bc.binding, w].concat()) }
+            let w = crate::keccak256(
+                &[
+                    crate::keccak256(b"SCAAS-PQZ-UNWRAP-V1"),
+                    addr(underlying),
+                    u64_word(*min_out),
+                ]
+                .concat(),
+            );
+            if bc.binding == [0; 32] {
+                w
+            } else {
+                crate::keccak256(&[bc.binding, w].concat())
+            }
         }
         (OwnForm::Burn | OwnForm::Refresh, None) => bc.binding,
         _ => return Err(Error::Argument),
@@ -1122,8 +1692,22 @@ fn burn_header(o: &Open, rec: &Record, k: u64, form: OwnForm, bc: &BurnCall, tl:
     if (form == OwnForm::Refresh) != (bc.amount == 0) {
         return Err(Error::Argument);
     }
-    let f = if bc.amount == 0 { Form::Refresh } else { Form::Burn };
-    let mut hd = header_of(o, rec, &o.ua, k, bc.beneficiary_ua, bc.fee, bc.valid_until_block, env).fill(Debit::header(f, &o.id));
+    let f = if bc.amount == 0 {
+        Form::Refresh
+    } else {
+        Form::Burn
+    };
+    let mut hd = header_of(
+        o,
+        rec,
+        &o.ua,
+        k,
+        bc.beneficiary_ua,
+        bc.fee,
+        bc.valid_until_block,
+        env,
+    )
+    .fill(Debit::header(f, &o.id));
     *hd.get_mut(H_AMOUNT).ok_or(Error::Argument)? = u64_word(bc.amount);
     *hd.get_mut(H_RECIPIENT).ok_or(Error::Argument)? = bc.recipient;
     *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = crate::keccak256(&tl.own_tag);
@@ -1143,7 +1727,10 @@ mod tests {
             "n2048-kmax1024" => "state.json",
             _ => return None,
         };
-        let path = format!("{}/../../smartcontracts/vectors/pqz/{file}", env!("CARGO_MANIFEST_DIR"));
+        let path = format!(
+            "{}/../../smartcontracts/vectors/pqz/{file}",
+            env!("CARGO_MANIFEST_DIR")
+        );
         Some(serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap())
     }
     fn h(v: &Value) -> Vec<u8> {
@@ -1173,16 +1760,51 @@ mod tests {
             let name = r["name"].as_str().unwrap();
             let form = r["form"].as_str().unwrap();
             let o = Open {
-                id: w(&r["psid"]), chain_id: n(&r["chainId"]), registry: h(&r["registry"]).try_into().unwrap(), chain_uid: w(&r["chainUid"]),
-                token: h(&r["token"]).try_into().unwrap(), ua: w(&r["fromUA"]), v: 0, auditor_ua: [0; 32], p: 0, p_last: 0, rolled: 0,
-                count: 0, send_counter: 0, stale: false, op7: false, acc_blob: [0; 20], last: None, own: None, trivial: vec![],
-                need: BTreeMap::new(), acc: None,
+                id: w(&r["psid"]),
+                chain_id: n(&r["chainId"]),
+                registry: h(&r["registry"]).try_into().unwrap(),
+                chain_uid: w(&r["chainUid"]),
+                token: h(&r["token"]).try_into().unwrap(),
+                ua: w(&r["fromUA"]),
+                v: 0,
+                auditor_ua: [0; 32],
+                p: 0,
+                p_last: 0,
+                rolled: 0,
+                count: 0,
+                send_counter: 0,
+                stale: false,
+                op7: false,
+                acc_blob: [0; 20],
+                last: None,
+                own: None,
+                trivial: vec![],
+                need: BTreeMap::new(),
+                acc: None,
             };
-            let rec = Record { prev_blob: [0; 20], p: n(&r["p"]), delta_p: 0, proof_store: 0, shield_in: n(&r["shieldIn"]), key_version: 0,
-                prev_counter: 0, has_prev: false };
-            let tl = Tail { r_len: 0, own_tag: w(&r["ownTag"]), kv: vec![] };
+            let rec = Record {
+                prev_blob: [0; 20],
+                p: n(&r["p"]),
+                delta_p: 0,
+                proof_store: 0,
+                shield_in: n(&r["shieldIn"]),
+                key_version: 0,
+                prev_counter: 0,
+                has_prev: false,
+            };
+            let tl = Tail {
+                r_len: 0,
+                own_tag: w(&r["ownTag"]),
+                kv: vec![],
+            };
             let k = n(&r["sendCounter"]);
-            let fee = |m: u64| (if w(&r["beneficiaryUA"]) == [0; 32] { 0 } else { n(&r["confidentialFee"]) }) + m * n(&r["decoyFee"]);
+            let fee = |m: u64| {
+                (if w(&r["beneficiaryUA"]) == [0; 32] {
+                    0
+                } else {
+                    n(&r["confidentialFee"])
+                }) + m * n(&r["decoyFee"])
+            };
             let got = match form {
                 "op1" | "op7" => {
                     let legs: Vec<Word> = match form {
@@ -1191,30 +1813,78 @@ mod tests {
                     };
                     let (m, aud) = (legs.len(), r["auditorOn"].as_bool().unwrap());
                     let g = m.div_ceil(legs_per_group(aud));
-                    let mut e = Entry { r: vec![0; 16 + PKP * g + (32 + VP * (1 + aud as usize)) * m], g, m, aud, entry_ref: [0; 32] };
+                    let mut e = Entry {
+                        r: vec![0; 16 + PKP * g + (32 + VP * (1 + aud as usize)) * m],
+                        g,
+                        m,
+                        aud,
+                        entry_ref: [0; 32],
+                        kv_a: None,
+                    };
                     e.r[..16].copy_from_slice(&h(&r["salt"]));
                     for (j, ua) in legs.iter().enumerate() {
                         let end = e.leg_at(j + 1);
                         e.r[end - 32..end].copy_from_slice(ua);
                     }
-                    let mode = if n(&r["transferMode"]) == 0 { Mode::Hash } else { Mode::Bundle };
-                    let call = Call { beneficiary_ua: w(&r["beneficiaryUA"]), fee: fee(m as u64), valid_until_block: n(&r["validUntilBlock"]),
-                        mode, sealed_memo: (mode == Mode::Hash).then(|| h(&r["sealedMemo"])), binding: w(&r["envelopeBinding"]),
-                        verification: Verification::Precompile };
-                    assert_eq!(bind_mode(&call.binding, mode, Verification::Precompile), w(&r["binding"]), "{name}: the binding");
+                    let mode = if n(&r["transferMode"]) == 0 {
+                        Mode::Hash
+                    } else {
+                        Mode::Bundle
+                    };
+                    let call = Call {
+                        beneficiary_ua: w(&r["beneficiaryUA"]),
+                        fee: fee(m as u64),
+                        valid_until_block: n(&r["validUntilBlock"]),
+                        mode,
+                        sealed_memo: (mode == Mode::Hash).then(|| h(&r["sealedMemo"])),
+                        binding: w(&r["envelopeBinding"]),
+                        verification: Verification::Precompile,
+                    };
+                    assert_eq!(
+                        bind_mode(&call.binding, mode, Verification::Precompile),
+                        w(&r["binding"]),
+                        "{name}: the binding"
+                    );
                     // T21 L83: the same direct debit on an `OFFCHAIN` token at each forge-written verifier fee: the header is
                     // this row's with the fee word raised by `vf` and word 17 the contract's direct word 544 of (mode, `vf`)
-                    for b in vf.iter().filter(|b| r["path"] != "relayed" && b["pqzVerifyMode"] == "OFFCHAIN" && n(&b["modeByte"]) == n(&r["transferMode"])) {
+                    for b in vf.iter().filter(|b| {
+                        r["path"] != "relayed"
+                            && b["pqzVerifyMode"] == "OFFCHAIN"
+                            && n(&b["modeByte"]) == n(&r["transferMode"])
+                    }) {
                         let fee_vf = n(&b["verifierFee"]);
-                        let off = Call { fee: call.fee + fee_vf, verification: Verification::Offchain { verifier_fee: fee_vf }, ..call.clone() };
+                        let off = Call {
+                            fee: call.fee + fee_vf,
+                            verification: Verification::Offchain {
+                                verifier_fee: fee_vf,
+                            },
+                            ..call.clone()
+                        };
                         let mut want = h(&r["header"]);
                         want[32 * H_FEE..32 * H_FEE + 32].copy_from_slice(&u64_word(off.fee));
-                        want[32 * H_ENVELOPE..32 * H_ENVELOPE + 32].copy_from_slice(&w(&b[if form == "op7" { "op7Word544" } else { "op1Word544" }]));
-                        let got = transfer_header(&o, &rec, &w(&r["fromUA"]), k, form == "op7", &off, &tl, &e).unwrap();
+                        want[32 * H_ENVELOPE..32 * H_ENVELOPE + 32].copy_from_slice(&w(&b[if form
+                            == "op7"
+                        {
+                            "op7Word544"
+                        } else {
+                            "op1Word544"
+                        }]));
+                        let got = transfer_header(
+                            &o,
+                            &rec,
+                            &w(&r["fromUA"]),
+                            k,
+                            form == "op7",
+                            &off,
+                            &tl,
+                            &e,
+                        )
+                        .unwrap();
                         assert_eq!(got.concat(), want, "{name}: OFFCHAIN vf {fee_vf}");
                         offchain += 1;
                     }
-                    transfer_header(&o, &rec, &w(&r["fromUA"]), k, form == "op7", &call, &tl, &e).unwrap()
+                    transfer_header(&o, &rec, &w(&r["fromUA"]), k, form == "op7", &call, &tl, &e)
+                        .unwrap()
                 }
                 _ => {
                     let f = match form {
@@ -1223,12 +1893,26 @@ mod tests {
                         "unwrap" => OwnForm::Unwrap,
                         _ => panic!("{name}: form {form}"),
                     };
-                    let bc = BurnCall { beneficiary_ua: w(&r["beneficiaryUA"]), fee: fee(0), amount: n(&r["amount"]), recipient: w(&r["recipient"]),
-                        valid_until_block: n(&r["validUntilBlock"]), binding: w(&r["envelopeBinding"]),
-                        unwrap: (f == OwnForm::Unwrap).then(|| (h(&r["underlying"]).try_into().unwrap(), n(&r["minOut"]))) };
+                    let bc = BurnCall {
+                        beneficiary_ua: w(&r["beneficiaryUA"]),
+                        fee: fee(0),
+                        amount: n(&r["amount"]),
+                        recipient: w(&r["recipient"]),
+                        valid_until_block: n(&r["validUntilBlock"]),
+                        binding: w(&r["envelopeBinding"]),
+                        unwrap: (f == OwnForm::Unwrap)
+                            .then(|| (h(&r["underlying"]).try_into().unwrap(), n(&r["minOut"]))),
+                    };
                     // one change from the row: a refresh moves no amount, a burn or an unwrap one
-                    let wrong = BurnCall { amount: if f == OwnForm::Refresh { 1 } else { 0 }, ..bc.clone() };
-                    assert_eq!(burn_header(&o, &rec, k, f, &wrong, &tl), Err(Error::Argument), "{name}: the amount of its form");
+                    let wrong = BurnCall {
+                        amount: if f == OwnForm::Refresh { 1 } else { 0 },
+                        ..bc.clone()
+                    };
+                    assert_eq!(
+                        burn_header(&o, &rec, k, f, &wrong, &tl),
+                        Err(Error::Argument),
+                        "{name}: the amount of its form"
+                    );
                     burn_header(&o, &rec, k, f, &bc, &tl).unwrap()
                 }
             };
@@ -1237,7 +1921,10 @@ mod tests {
         }
         assert_eq!(seen.len(), 10, "every form, direct and relayed: {seen:?}");
         if !vf.is_empty() {
-            assert_eq!(offchain, 8, "op 1 and op 7 direct at OFFCHAIN vf 0, 1, 7, 10");
+            assert_eq!(
+                offchain, 8,
+                "op 1 and op 7 direct at OFFCHAIN vf 0, 1, 7, 10"
+            );
         }
     }
 
@@ -1246,7 +1933,10 @@ mod tests {
         if st::SET != "n2304-kmax4096" {
             return vec![];
         }
-        let path = format!("{}/../../smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json", env!("CARGO_MANIFEST_DIR"));
+        let path = format!(
+            "{}/../../smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
         let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
         v["binding"].as_array().unwrap().clone()
     }
@@ -1266,13 +1956,38 @@ mod tests {
             }
             call(&c).map(|c| c.verification)
         };
-        assert_eq!(with(json!("PRECOMPILE"), json!(0)), Ok(Verification::Precompile));
-        assert_eq!(with(json!("OFFCHAIN"), json!(7)), Ok(Verification::Offchain { verifier_fee: 7 }));
-        assert_eq!(with(json!("OFFCHAIN"), json!(0)), Ok(Verification::Offchain { verifier_fee: 0 }));
-        assert_eq!(with(Value::Null, json!(0)), Err(Error::Argument), "verificationMode missing");
-        assert_eq!(with(json!("OFFCHAIN"), Value::Null), Err(Error::Argument), "verifierFee missing");
-        assert_eq!(with(json!("offchain"), json!(7)), Err(Error::Argument), "another spelling");
+        assert_eq!(
+            with(json!("PRECOMPILE"), json!(0)),
+            Ok(Verification::Precompile)
+        );
+        assert_eq!(
+            with(json!("OFFCHAIN"), json!(7)),
+            Ok(Verification::Offchain { verifier_fee: 7 })
+        );
+        assert_eq!(
+            with(json!("OFFCHAIN"), json!(0)),
+            Ok(Verification::Offchain { verifier_fee: 0 })
+        );
+        assert_eq!(
+            with(Value::Null, json!(0)),
+            Err(Error::Argument),
+            "verificationMode missing"
+        );
+        assert_eq!(
+            with(json!("OFFCHAIN"), Value::Null),
+            Err(Error::Argument),
+            "verifierFee missing"
+        );
+        assert_eq!(
+            with(json!("offchain"), json!(7)),
+            Err(Error::Argument),
+            "another spelling"
+        );
         assert_eq!(with(json!(1), json!(7)), Err(Error::Argument), "a number");
-        assert_eq!(with(json!("PRECOMPILE"), json!(1)), Err(Error::Argument), "a fee on PRECOMPILE");
+        assert_eq!(
+            with(json!("PRECOMPILE"), json!(1)),
+            Err(Error::Argument),
+            "a fee on PRECOMPILE"
+        );
     }
 }

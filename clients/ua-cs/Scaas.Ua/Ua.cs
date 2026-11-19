@@ -68,7 +68,7 @@ public static partial class UA
 
     public static readonly string[] Purposes =
         ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
-         "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update", "pqz-verdict"];
+         "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update", "pqz-verdict", "auditor-consent"];
 
     public const string DomainType =
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)";
@@ -88,8 +88,8 @@ public static partial class UA
 
     public static readonly byte[] MsgTag = Keccak256(Utf8("scaas.ua.msg.v1"));
 
-    /// <summary>The governance bits 0-31 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the
-    /// app from smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).</summary>
+    /// <summary>The governance bits 0-32 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the
+    /// app from smartcontracts/vectors/governance/governance_bits.json; bits 33-127 are free, 128-255 the application's bitLabel(bit).</summary>
     public static readonly (string Name, string Type)[] GovernanceBits =
     [
         ("PAYABLE", "capability"), ("MINTABLE", "power"), ("BURNABLE", "capability"), ("RATE_ADJUSTABLE", "power"),
@@ -105,6 +105,8 @@ public static partial class UA
         ("CLOSED_MARKETS", "capability"),
         // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
         ("BURNER", "power"), ("SUPPLY_CAP_ADJUSTABLE", "capability"),
+        // the setAuditor round (CTR-GOV-31): the confidential kinds' auditor replacement
+        ("AUDITOR", "power"),
     ];
 
     public static Kind KindInfo(ushort kind) =>

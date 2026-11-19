@@ -31,7 +31,12 @@ fn load(rel: &str) -> Value {
 /// `pq_kat`'s `pqz_key(0, index)` as the tool's stdin JSON.
 fn kat(index: u32) -> Value {
     let keys = load("smartcontracts/vectors/ua/keys.json");
-    let m = keys["mnemonics"].as_array().unwrap().iter().find(|m| m["id"] == "pq_kat").unwrap();
+    let m = keys["mnemonics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == "pq_kat")
+        .unwrap();
     json!({"mnemonic": m["words"], "passphrase": m["passphrase"], "account": 0, "index": index})
 }
 
@@ -42,7 +47,13 @@ fn cli(args: &[String], key: Option<&Value>) -> Result<Value, String> {
 
 /// [`cli`] with the stdin bytes as given.
 fn cli_raw(args: &[String], input: Option<&[u8]>) -> Result<Value, String> {
-    let mut child = Command::new(CLI).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
+    let mut child = Command::new(CLI)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
     let mut stdin = child.stdin.take().unwrap();
     if let Some(k) = input {
         // a refusal before stdin is read breaks the pipe; the exit status carries the verdict
@@ -66,10 +77,39 @@ fn s(v: &[&str]) -> Vec<String> {
 /// refused by the depth bound.
 #[test]
 fn the_key_json_is_bounded_on_stdin() {
-    let url = format!("http://{}", std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap());
-    let (a20, a32) = ("0x00000000000000000000000000000000000000aa", format!("0x{}", "ab".repeat(32)));
-    let args = s(&["--rpc", &url, "--chain-id", "31337", "--chain-uid", &a32, "--factory", a20, "--registry", a20, "--token", a20, "--ua",
-        &a32, "--depth", "1", "--key-version", "0", "--for-op7", "false"]);
+    let url = format!(
+        "http://{}",
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+    );
+    let (a20, a32) = (
+        "0x00000000000000000000000000000000000000aa",
+        format!("0x{}", "ab".repeat(32)),
+    );
+    let args = s(&[
+        "--rpc",
+        &url,
+        "--chain-id",
+        "31337",
+        "--chain-uid",
+        &a32,
+        "--factory",
+        a20,
+        "--registry",
+        a20,
+        "--token",
+        a20,
+        "--ua",
+        &a32,
+        "--depth",
+        "1",
+        "--key-version",
+        "0",
+        "--for-op7",
+        "false",
+    ]);
     let padded = |n: usize| {
         let mut k = kat(0).to_string().into_bytes();
         k.resize(n, b' ');
@@ -78,8 +118,15 @@ fn the_key_json_is_bounded_on_stdin() {
     let at = cli_raw(&args, Some(&padded(8 << 10))).unwrap_err();
     assert!(!at.contains("stdin:"), "at the cap the key is read: {at}");
     let past = cli_raw(&args, Some(&padded((8 << 10) + 1))).unwrap_err();
-    assert!(past.contains("stdin: the key JSON is over 8192 bytes"), "{past}");
-    let nested = cli_raw(&args, Some(br#"{"mnemonic": ["abandon"], "account": 0, "index": 0}"#)).unwrap_err();
+    assert!(
+        past.contains("stdin: the key JSON is over 8192 bytes"),
+        "{past}"
+    );
+    let nested = cli_raw(
+        &args,
+        Some(br#"{"mnemonic": ["abandon"], "account": 0, "index": 0}"#),
+    )
+    .unwrap_err();
     assert!(nested.contains("stdin: key JSON expected"), "{nested}");
 }
 
@@ -87,43 +134,129 @@ fn the_key_json_is_bounded_on_stdin() {
 /// fails fast); the command's own fields; no key needed to refuse.
 #[test]
 fn the_holders_configuration_is_required() {
-    let url = format!("http://{}", std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap());
-    let (a20, a32) = ("0x00000000000000000000000000000000000000aa", format!("0x{}", "ab".repeat(32)));
-    let full = s(&["--rpc", &url, "--chain-id", "31337", "--chain-uid", &a32, "--factory", a20, "--registry", a20, "--token", a20, "--ua",
-        &a32, "--depth", "1", "--key-version", "0", "--for-op7", "false"]);
-    for missing in ["--rpc", "--chain-id", "--chain-uid", "--factory", "--registry", "--token", "--ua", "--depth"] {
+    let url = format!(
+        "http://{}",
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+    );
+    let (a20, a32) = (
+        "0x00000000000000000000000000000000000000aa",
+        format!("0x{}", "ab".repeat(32)),
+    );
+    let full = s(&[
+        "--rpc",
+        &url,
+        "--chain-id",
+        "31337",
+        "--chain-uid",
+        &a32,
+        "--factory",
+        a20,
+        "--registry",
+        a20,
+        "--token",
+        a20,
+        "--ua",
+        &a32,
+        "--depth",
+        "1",
+        "--key-version",
+        "0",
+        "--for-op7",
+        "false",
+    ]);
+    for missing in [
+        "--rpc",
+        "--chain-id",
+        "--chain-uid",
+        "--factory",
+        "--registry",
+        "--token",
+        "--ua",
+        "--depth",
+    ] {
         let mut a = full.clone();
         let i = a.iter().position(|x| x == missing).unwrap();
         a.drain(i..i + 2);
-        assert!(cli(&a, None).unwrap_err().contains("needs --rpc"), "{missing}");
+        assert!(
+            cli(&a, None).unwrap_err().contains("needs --rpc"),
+            "{missing}"
+        );
     }
     let mut both = full.clone();
     both.push("--finalized".into());
-    assert!(cli(&both, None).unwrap_err().contains("needs --rpc"), "one of --depth / --finalized");
+    assert!(
+        cli(&both, None).unwrap_err().contains("needs --rpc"),
+        "one of --depth / --finalized"
+    );
     let without_op7 = full[..full.len() - 2].to_vec();
-    assert!(cli(&without_op7, None).unwrap_err().contains("--for-op7"), "balance: --for-op7 named, no default");
+    assert!(
+        cli(&without_op7, None).unwrap_err().contains("--for-op7"),
+        "balance: --for-op7 named, no default"
+    );
     let without_version = [&full[..full.len() - 4], &full[full.len() - 2..]].concat();
-    assert!(cli(&without_version, None).unwrap_err().contains("--key-version"), "balance: --key-version named, no default (group 3g)");
+    assert!(
+        cli(&without_version, None)
+            .unwrap_err()
+            .contains("--key-version"),
+        "balance: --key-version named, no default (group 3g)"
+    );
     let mut audit = without_op7.clone();
-    audit.extend(s(&["--command", "auditRead", "--from-ua", &a32, "--send-counter", "0"]));
-    assert!(cli(&audit, None).unwrap_err().contains("auditRead needs"), "auditRead: the entry's three fields");
+    audit.extend(s(&[
+        "--command",
+        "auditRead",
+        "--from-ua",
+        &a32,
+        "--send-counter",
+        "0",
+    ]));
+    assert!(
+        cli(&audit, None).unwrap_err().contains("auditRead needs"),
+        "auditRead: the entry's three fields"
+    );
     let mut other = without_op7.clone();
     other.extend(s(&["--command", "dec"]));
-    assert!(cli(&other, None).unwrap_err().contains("balance or auditRead"), "no other command");
+    assert!(
+        cli(&other, None)
+            .unwrap_err()
+            .contains("balance or auditRead"),
+        "no other command"
+    );
     let mut twice = full.clone();
     twice.extend(s(&["--token", a20]));
-    assert!(cli(&twice, None).unwrap_err().contains("given twice"), "one value each");
+    assert!(
+        cli(&twice, None).unwrap_err().contains("given twice"),
+        "one value each"
+    );
     // R1 (owner 2026-11-08): `--rpc` once or more, each a distinct node the holder names; the same node twice is refused
     let mut nodes = full.clone();
     nodes.extend(s(&["--rpc", "http://127.0.0.1:1", "--rpc-agree"]));
-    assert!(cli(&nodes, None).unwrap_err().contains("key JSON"), "a second node and --rpc-agree accepted, before any request");
+    assert!(
+        cli(&nodes, None).unwrap_err().contains("key JSON"),
+        "a second node and --rpc-agree accepted, before any request"
+    );
     let mut same = full.clone();
     same.extend(s(&["--rpc", &url]));
-    assert!(cli(&same, None).unwrap_err().contains("the same node twice"), "one node named twice");
-    assert!(cli(&full, None).unwrap_err().contains("key JSON"), "the key on stdin, before any request");
+    assert!(
+        cli(&same, None)
+            .unwrap_err()
+            .contains("the same node twice"),
+        "one node named twice"
+    );
+    assert!(
+        cli(&full, None).unwrap_err().contains("key JSON"),
+        "the key on stdin, before any request"
+    );
     if cfg!(feature = "vectors") {
         // T15c2: a `vectors` build (never a release) makes no key handle without the test-only marker, before any request
-        assert!(cli(&full, Some(&kat(0))).unwrap_err().contains("the key: Argument"), "a vectors build");
+        assert!(
+            cli(&full, Some(&kat(0)))
+                .unwrap_err()
+                .contains("the key: Argument"),
+            "a vectors build"
+        );
     }
 }
 
@@ -133,12 +266,28 @@ fn the_holders_configuration_is_required() {
 
 fn rpc(url: &str, method: &str, params: Value) -> Value {
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).to_string();
-    let out = Command::new("curl").args(["-s", "-X", "POST", "-H", "content-type: application/json", "--data-binary", "@-", url])
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().and_then(|mut c| {
+    let out = Command::new("curl")
+        .args([
+            "-s",
+            "-X",
+            "POST",
+            "-H",
+            "content-type: application/json",
+            "--data-binary",
+            "@-",
+            url,
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .and_then(|mut c| {
             c.stdin.take().unwrap().write_all(body.as_bytes())?;
             c.wait_with_output()
-        }).unwrap();
-    serde_json::from_slice::<Value>(&out.stdout).map(|v| v["result"].clone()).unwrap_or(Value::Null)
+        })
+        .unwrap();
+    serde_json::from_slice::<Value>(&out.stdout)
+        .map(|v| v["result"].clone())
+        .unwrap_or(Value::Null)
 }
 
 /// Stops the local anvil when the test ends, whatever the outcome.
@@ -184,12 +333,21 @@ fn word_of(a: &[u8; 20]) -> Word {
 /// `smartcontracts/evm/test/ua/UAStoreLayout.t.sol`: the probe writes one field per slot, `s.<field>…; // <slot>`), never copied
 /// by hand (T20b).
 fn reg_slot(field: &str) -> u64 {
-    let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/ua/UAStoreLayout.t.sol")).unwrap();
+    let pin = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../smartcontracts/evm/test/ua/UAStoreLayout.t.sol"
+    ))
+    .unwrap();
     pin.lines()
         .find_map(|l| {
             let rest = l.trim().strip_prefix("s.")?.strip_prefix(field)?;
             rest.starts_with(['[', '.', ' ']).then_some(())?;
-            rest.rsplit_once("// ")?.1.split_whitespace().next()?.parse().ok()
+            rest.rsplit_once("// ")?
+                .1
+                .split_whitespace()
+                .next()?
+                .parse()
+                .ok()
         })
         .unwrap_or_else(|| panic!("{field}: not in the registry's layout pin"))
 }
@@ -197,9 +355,20 @@ fn reg_slot(field: &str) -> u64 {
 /// `OpenFactory._rec`'s slot, read from the pin ua-mtx-merge keeps for it (`test/zether/ZetherStateVectors.t.sol`, `REC`; T20b
 /// second sync), never copied by hand.
 fn rec_slot() -> u64 {
-    let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/zether/ZetherStateVectors.t.sol"))
-        .unwrap();
-    pin.lines().find_map(|l| l.trim().strip_prefix("uint256 internal constant REC = ")?.strip_suffix(';')?.parse().ok()).expect("REC")
+    let pin = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../smartcontracts/evm/test/zether/ZetherStateVectors.t.sol"
+    ))
+    .unwrap();
+    pin.lines()
+        .find_map(|l| {
+            l.trim()
+                .strip_prefix("uint256 internal constant REC = ")?
+                .strip_suffix(';')?
+                .parse()
+                .ok()
+        })
+        .expect("REC")
 }
 
 struct Node {
@@ -211,11 +380,21 @@ struct Node {
 
 impl Node {
     fn set(&self, addr: &[u8; 20], slot: &Word, w: &Word) {
-        assert_eq!(rpc(&self.url, "anvil_setStorageAt", json!([hx(addr), hx(slot), hx(w)])), json!(true));
+        assert_eq!(
+            rpc(
+                &self.url,
+                "anvil_setStorageAt",
+                json!([hx(addr), hx(slot), hx(w)])
+            ),
+            json!(true)
+        );
     }
     fn code(&self, addr: &[u8; 20], code: &Value) {
         rpc(&self.url, "anvil_setCode", json!([hx(addr), code]));
-        assert_eq!(&rpc(&self.url, "eth_getCode", json!([hx(addr), "latest"])), code);
+        assert_eq!(
+            &rpc(&self.url, "eth_getCode", json!([hx(addr), "latest"])),
+            code
+        );
     }
     /// `OpenFactory._rec[token]` (the factory index, ua-mtx-merge T67; its slot from the layout pin): word 1 (two words since round
     /// 3r R1), from the low end
@@ -236,8 +415,15 @@ impl Node {
     /// [`Node::clone_of`] of the implementation `release` (group 3h: the reader probes the release by `proofStore()`).
     fn clone_with(&self, token: &[u8; 20], registry: &[u8; 20], release: &[u8; 20]) {
         use scaas_ua::factory::{clone_runtime, ChainEnv};
-        let env = ChainEnv { chain_uid: self.uid, registry: *registry, gov_router: [0x33; 20], smart_key_account_impl: [0x44; 20],
-            hedera: false, deps: vec![[0x55; 20]], params: vec![] };
+        let env = ChainEnv {
+            chain_uid: self.uid,
+            registry: *registry,
+            gov_router: [0x33; 20],
+            smart_key_account_impl: [0x44; 20],
+            hedera: false,
+            deps: vec![[0x55; 20]],
+            params: vec![],
+        };
         self.code(token, &json!(hx(&clone_runtime(release, &env))));
     }
     /// A words request's account (`balance`'s shape: the forge rows with [`forge_versions`], the wallet rows, `Chain::bal`)
@@ -253,14 +439,37 @@ impl Node {
             self.set(token, &add(&base, i as u64), &w32(w));
         }
         for e in r["pending"].as_array().unwrap() {
-            self.set(token, &k(&be(e["index"].as_u64().unwrap()), &add(&base, inner("acct[U][7].pending[3]"))), &w32(&e["word"]));
+            self.set(
+                token,
+                &k(
+                    &be(e["index"].as_u64().unwrap()),
+                    &add(&base, inner("acct[U][7].pending[3]")),
+                ),
+                &w32(&e["word"]),
+            );
         }
         for (i, w) in r["accWords"].as_array().unwrap().iter().enumerate() {
-            self.set(token, &add(&base, inner("acct[U][7].accWords[0]") + i as u64), &w32(w));
+            self.set(
+                token,
+                &add(&base, inner("acct[U][7].accWords[0]") + i as u64),
+                &w32(w),
+            );
         }
-        self.set(token, &k(&ua, &add(&self.root, 12)), &w32(&r["sendCounterWord"]));
-        self.set(registry, &k(&v, &k(&ua, &be(reg_slot("pqzKey")))), &w32(&r["keyRecord"]));
-        self.set(registry, &k(&ua, &be(reg_slot("pqzVersions"))), &w32(&r["keyVersions"]));
+        self.set(
+            token,
+            &k(&ua, &add(&self.root, 12)),
+            &w32(&r["sendCounterWord"]),
+        );
+        self.set(
+            registry,
+            &k(&v, &k(&ua, &be(reg_slot("pqzKey")))),
+            &w32(&r["keyRecord"]),
+        );
+        self.set(
+            registry,
+            &k(&ua, &be(reg_slot("pqzVersions"))),
+            &w32(&r["keyVersions"]),
+        );
         for b in r["blobs"].as_array().unwrap() {
             self.code(&a20(b["address"].as_str().unwrap()), &b["code"]);
         }
@@ -268,24 +477,56 @@ impl Node {
     /// `PqzCore.entryRefOf` on this chain.
     fn entry_ref(&self, token: &[u8; 20], from: &Word, counter: u64) -> Word {
         let tag = scaas_ua::keccak256(b"SCAAS-PQZ-ENTRY-V1");
-        scaas_ua::keccak256(&[tag, be(self.chain_id), self.uid, word_of(token), *from, be(counter)].concat())
+        scaas_ua::keccak256(
+            &[
+                tag,
+                be(self.chain_id),
+                self.uid,
+                word_of(token),
+                *from,
+                be(counter),
+            ]
+            .concat(),
+        )
     }
     /// An entry's pointer (at this chain's `entryRef`) and code; the token's auditor words and the auditor's key record.
-    fn entry(&self, token: &[u8; 20], registry: &[u8; 20], from: &Word, counter: u64, blob: &Value, aud: &Value) {
+    fn entry(
+        &self,
+        token: &[u8; 20],
+        registry: &[u8; 20],
+        from: &Word,
+        counter: u64,
+        blob: &Value,
+        aud: &Value,
+    ) {
         let ptr = a20(blob["address"].as_str().unwrap());
-        self.set(token, &k(&self.entry_ref(token, from, counter), &add(&self.root, 9)), &word_of(&ptr));
+        self.set(
+            token,
+            &k(&self.entry_ref(token, from, counter), &add(&self.root, 9)),
+            &word_of(&ptr),
+        );
         self.code(&ptr, &blob["code"]);
         self.set(token, &self.root, &w32(&aud["auditorMode"]));
         self.set(token, &add(&self.root, 7), &w32(&aud["auditorUA"]));
-        self.set(registry, &k(&be(0), &k(&w32(&aud["auditorUA"]), &be(reg_slot("pqzKey")))), &w32(&aud["keyRecord"])); // the auditor's version 0
-        self.code(&a20(aud["key"]["address"].as_str().unwrap()), &aud["key"]["code"]);
+        self.set(
+            registry,
+            &k(&be(0), &k(&w32(&aud["auditorUA"]), &be(reg_slot("pqzKey")))),
+            &w32(&aud["keyRecord"]),
+        ); // the auditor's version 0
+        self.code(
+            &a20(aud["key"]["address"].as_str().unwrap()),
+            &aud["key"]["code"],
+        );
     }
 }
 
 /// A node in front of `upstream` (R1, owner 2026-11-08): each answer passes `f(method, params, result, i)`, `i` this node's
 /// request number from 1; `None` drops the connection (a node that fails). `hits` counts the requests it received.
-fn node(upstream: String, hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
-    f: impl Fn(&str, &Value, Value, usize) -> Option<Value> + Send + 'static) -> String {
+fn node(
+    upstream: String,
+    hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    f: impl Fn(&str, &Value, Value, usize) -> Option<Value> + Send + 'static,
+) -> String {
     use std::io::{BufRead, BufReader, Read, Write};
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", l.local_addr().unwrap());
@@ -309,7 +550,11 @@ fn node(upstream: String, hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
             }
             let req: Value = serde_json::from_slice(&body).unwrap();
             let i = hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
-            let res = rpc(&upstream, req["method"].as_str().unwrap(), req["params"].clone());
+            let res = rpc(
+                &upstream,
+                req["method"].as_str().unwrap(),
+                req["params"].clone(),
+            );
             if let Some(res) = f(req["method"].as_str().unwrap(), &req["params"], res, i) {
                 let out = json!({"jsonrpc": "2.0", "id": 1, "result": res}).to_string();
                 let _ = write!(c, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{out}", out.len());
@@ -343,11 +588,19 @@ fn liar(upstream: String, mode: &'static str) -> String {
             let mut body = vec![0u8; len];
             r.read_exact(&mut body).unwrap();
             let req: Value = serde_json::from_slice(&body).unwrap();
-            let mut res = rpc(&upstream, req["method"].as_str().unwrap(), req["params"].clone());
+            let mut res = rpc(
+                &upstream,
+                req["method"].as_str().unwrap(),
+                req["params"].clone(),
+            );
             if req["method"] == "eth_getBlockByNumber" && req["params"][0] != "0x0" {
                 n += 1;
                 if mode == "number" && n == 1 {
-                    let num = u64::from_str_radix(res["number"].as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+                    let num = u64::from_str_radix(
+                        res["number"].as_str().unwrap().trim_start_matches("0x"),
+                        16,
+                    )
+                    .unwrap();
                     res["number"] = json!(format!("0x{:x}", num + 1));
                 }
                 if (mode == "hash" && n == 2) || (mode == "hash4" && n == 4) {
@@ -392,10 +645,20 @@ fn reading_layer_against_anvil() {
     if st::SET != SET {
         return;
     }
-    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
     let url = format!("http://127.0.0.1:{port}");
     let bin = std::env::var("ANVIL").unwrap_or_else(|_| "anvil".into());
-    let _anvil = Anvil(Command::new(bin).args(["--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().unwrap());
+    let _anvil = Anvil(
+        Command::new(bin)
+            .args(["--port", &port.to_string(), "--silent"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
     let mut up = false;
     for _ in 0..100 {
         if rpc(&url, "eth_chainId", json!([])).is_string() {
@@ -405,28 +668,65 @@ fn reading_layer_against_anvil() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     assert!(up, "anvil did not start");
-    let chain_id = u64::from_str_radix(rpc(&url, "eth_chainId", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
-    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
+    let chain_id = u64::from_str_radix(
+        rpc(&url, "eth_chainId", json!([]))
+            .as_str()
+            .unwrap()
+            .trim_start_matches("0x"),
+        16,
+    )
+    .unwrap();
+    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let forge = load(&format!("smartcontracts/vectors/pqz/{SET}/state.json"));
-    let n = Node { url: url.clone(), root: w32(&forge["layout"]["root"]), chain_id, uid: w32(&json!(genesis)) };
+    let n = Node {
+        url: url.clone(),
+        root: w32(&forge["layout"]["root"]),
+        chain_id,
+        uid: w32(&json!(genesis)),
+    };
     let factory = a20(FACTORY);
     n.code(&IMPL, &json!("0x60206000f3"));
     n.code(&IMPL_PRE_3H, &json!("0x60006000fd"));
 
     // the forge rows: five accounts and the audited op 1 entry, at the rows' token and registry
-    let (ft, fr) = (a20(forge["token"].as_str().unwrap()), a20(forge["registry"].as_str().unwrap()));
+    let (ft, fr) = (
+        a20(forge["token"].as_str().unwrap()),
+        a20(forge["registry"].as_str().unwrap()),
+    );
     n.catalogue(&factory, &ft, 4, true);
     n.clone_of(&ft, &fr);
     for a in forge["accounts"].as_array().unwrap() {
-        n.account(&ft, &fr, &forge["psid"], &merge(a.clone(), forge_versions(a)));
+        n.account(
+            &ft,
+            &fr,
+            &forge["psid"],
+            &merge(a.clone(), forge_versions(a)),
+        );
     }
-    let fe = forge["entries"].as_array().unwrap().iter().find(|e| e["name"] == "op1 carol->alice audited").unwrap();
+    let fe = forge["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "op1 carol->alice audited")
+        .unwrap();
     let faud = json!({"auditorMode": forge["auditorMode"], "auditorUA": forge["auditorUA"], "keyRecord": forge["auditorKeyRecord"],
         "key": forge["auditorKey"]});
-    n.entry(&ft, &fr, &w32(&fe["fromUA"]), fe["sendCounter"].as_u64().unwrap(), &fe["blob"], &faud);
+    n.entry(
+        &ft,
+        &fr,
+        &w32(&fe["fromUA"]),
+        fe["sendCounter"].as_u64().unwrap(),
+        &fe["blob"],
+        &faud,
+    );
 
     // the wallet rows: A (acc a reference into op 1's blob, 750) and B (a pending credit and a TRIVIAL entry, 257)
-    let wallet = load(&format!("smartcontracts/vectors/pqz/{SET}/wallet_state.json"));
+    let wallet = load(&format!(
+        "smartcontracts/vectors/pqz/{SET}/wallet_state.json"
+    ));
     let rows = wallet["rows"].as_array().unwrap();
     let wt = a20(rows[0]["request"]["token"].as_str().unwrap());
     n.catalogue(&factory, &wt, 12, true);
@@ -439,7 +739,11 @@ fn reading_layer_against_anvil() {
     // times (18 pending: the window [0, 16) at INLINE_MAX, [0, 10) at INLINE_MAX_PQZH)
     let w = {
         let m = &kat(0);
-        scaas_ua::wallet::Wallet::from_mnemonic(m["mnemonic"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+        scaas_ua::wallet::Wallet::from_mnemonic(
+            m["mnemonic"].as_str().unwrap(),
+            m["passphrase"].as_str().unwrap(),
+        )
+        .unwrap()
     };
     let (ua_a, ua_b, ua_aud): (Word, Word, Word) = ([0xA1; 32], [0xB0; 32], [0xAD; 32]);
     let keys: Vec<_> = (0..3).map(|i| w.pqz_key(0, i).unwrap()).collect();
@@ -452,11 +756,22 @@ fn reading_layer_against_anvil() {
     }
     c.auditor = Some(ua_aud);
     c.shield(&ua_a, 1000);
-    let req = merge(merge(c.own(&ua_a, 16), c.debit_fields()),
-        json!({"toUA": hx(&ua_b), "pkT": hx(&keys[1].pk()), "pkA": hx(&keys[2].pk()), "amount": 250, "mode": "BUNDLE"}));
-    let p: Value = serde_json::from_str(&keys[0].call("proveTransfer", req.to_string().as_bytes()).unwrap()).unwrap();
+    let req = merge(
+        merge(c.own(&ua_a, 16), c.debit_fields()),
+        json!({"toUA": hx(&ua_b), "pkT": hx(&keys[1].pk()), "pkA": hx(&keys[2].pk()), "amount": 250, "mode": "BUNDLE"}),
+    );
+    let p: Value = serde_json::from_str(
+        &keys[0]
+            .call("proveTransfer", req.to_string().as_bytes())
+            .unwrap(),
+    )
+    .unwrap();
     let stmt = h(&p["stmt"]);
-    assert_eq!(pqz_ffi::precompile(&st::input(1, &stmt, &h(&p["proof"]))), Ok(pqz_ffi::VALID), "op 1 verifies");
+    assert_eq!(
+        pqz_ffi::precompile(&st::input(1, &stmt, &h(&p["proof"]))),
+        Ok(pqz_ffi::VALID),
+        "op 1 verifies"
+    );
     let er = c.settle1(&stmt, None);
     for _ in 0..17 {
         c.shield(&ua_b, 1);
@@ -469,9 +784,21 @@ fn reading_layer_against_anvil() {
     // catalogued PQZ tokens whose code is no clone with an env (owner 2026-11-08): none, and the bare proxy
     n.catalogue(&factory, &a20(NO_CODE), 4, true);
     n.catalogue(&factory, &a20(BARE_PROXY), 4, true);
-    n.code(&a20(BARE_PROXY), &json!(hx(&scaas_ua::factory::clone_runtime(&[0x11; 20], &scaas_ua::factory::ChainEnv {
-        chain_uid: n.uid, registry: a20(WALLET_REG), gov_router: [0; 20], smart_key_account_impl: [0; 20], hedera: false, deps: vec![],
-        params: vec![] })[..45])));
+    n.code(
+        &a20(BARE_PROXY),
+        &json!(hx(&scaas_ua::factory::clone_runtime(
+            &[0x11; 20],
+            &scaas_ua::factory::ChainEnv {
+                chain_uid: n.uid,
+                registry: a20(WALLET_REG),
+                gov_router: [0; 20],
+                smart_key_account_impl: [0; 20],
+                hedera: false,
+                deps: vec![],
+                params: vec![]
+            }
+        )[..45])),
+    );
     for ua in [ua_a, ua_b] {
         let full = c.own(&ua, 1 << 20); // every pending slot, so the tool's window is its own
         n.account(&cw, &creg, &json!(hx(&st::PQZL_ID)), &full);
@@ -479,9 +806,19 @@ fn reading_layer_against_anvil() {
     }
     let ent = &c.entries[&er];
     let aud_ptr = c.key_ptr(&ua_aud);
-    let cw_aud = merge(c.auditor_words(1), json!({"keyRecord": hx(&c.key_record(&ua_aud)),
-        "key": {"address": hx(&aud_ptr), "code": hx(&c.blobs[&aud_ptr])}}));
-    n.entry(&cw, &creg, &ent.from, ent.ctr, &json!({"address": hx(&ent.ptr), "code": hx(&c.blobs[&ent.ptr])}), &cw_aud);
+    let cw_aud = merge(
+        c.auditor_words(1),
+        json!({"keyRecord": hx(&c.key_record(&ua_aud)),
+        "key": {"address": hx(&aud_ptr), "code": hx(&c.blobs[&aud_ptr])}}),
+    );
+    n.entry(
+        &cw,
+        &creg,
+        &ent.from,
+        ent.ctr,
+        &json!({"address": hx(&ent.ptr), "code": hx(&c.blobs[&ent.ptr])}),
+        &cw_aud,
+    );
 
     // catalogued PQZ clones of a release before 3h (owner 2026-11-09): `proofStore()` reverts, or answers nothing
     for (t, release) in [(PRE_3H, IMPL_PRE_3H), (PRE_3H_EMPTY, IMPL_EMPTY)] {
@@ -500,13 +837,35 @@ fn reading_layer_against_anvil() {
     rpc(&url, "anvil_mine", json!(["0x1"]));
 
     let cid = chain_id.to_string();
-    let base = |rpc_url: &str, chain: &str, uid: &str, token: &str, reg: &str, ua: &str, depth: &str| {
-        s(&["--rpc", rpc_url, "--chain-id", chain, "--chain-uid", uid, "--factory", FACTORY, "--registry", reg, "--token", token,
-            "--ua", ua, "--depth", depth])
-    };
+    let base =
+        |rpc_url: &str, chain: &str, uid: &str, token: &str, reg: &str, ua: &str, depth: &str| {
+            s(&[
+                "--rpc",
+                rpc_url,
+                "--chain-id",
+                chain,
+                "--chain-uid",
+                uid,
+                "--factory",
+                FACTORY,
+                "--registry",
+                reg,
+                "--token",
+                token,
+                "--ua",
+                ua,
+                "--depth",
+                depth,
+            ])
+        };
     let on = |token: &str, reg: &str, ua: &str| base(&url, &cid, &genesis, token, reg, ua, "2");
     let balv = |mut a: Vec<String>, version: u64, op7: bool| {
-        a.extend(s(&["--key-version", &version.to_string(), "--for-op7", if op7 { "true" } else { "false" }]));
+        a.extend(s(&[
+            "--key-version",
+            &version.to_string(),
+            "--for-op7",
+            if op7 { "true" } else { "false" },
+        ]));
         a
     };
     let bal = |a: Vec<String>, op7: bool| balv(a, 0, op7);
@@ -516,7 +875,10 @@ fn reading_layer_against_anvil() {
     };
 
     // the words of every forge account, byte for byte (R4: the pinned layout; the facade's window)
-    let (ft_s, fr_s) = (forge["token"].as_str().unwrap(), forge["registry"].as_str().unwrap());
+    let (ft_s, fr_s) = (
+        forge["token"].as_str().unwrap(),
+        forge["registry"].as_str().unwrap(),
+    );
     for a in forge["accounts"].as_array().unwrap() {
         let out = words(bal(on(ft_s, fr_s, a["ua"].as_str().unwrap()), false));
         let r = &out["request"];
@@ -527,33 +889,99 @@ fn reading_layer_against_anvil() {
         for f in ["sendCounterWord", "keyVersion", "keyVersions"] {
             assert_eq!(r[f], fv[f], "{}: {f}", a["name"]);
         }
-        assert_eq!((&r["psid"], &r["ua"], &r["forOp7"]), (&forge["psid"], &a["ua"], &json!(false)), "{}", a["name"]);
+        assert_eq!(
+            (&r["psid"], &r["ua"], &r["forOp7"]),
+            (&forge["psid"], &a["ua"], &json!(false)),
+            "{}",
+            a["name"]
+        );
     }
-    assert!(forge["accounts"].as_array().unwrap().iter().any(|a| !a["accWords"].as_array().unwrap().is_empty()), "a materialised acc");
+    assert!(
+        forge["accounts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| !a["accWords"].as_array().unwrap().is_empty()),
+        "a materialised acc"
+    );
     // auditRead's words of the forge entry
     let mut ar = on(ft_s, fr_s, forge["auditorUA"].as_str().unwrap());
-    ar.extend(s(&["--command", "auditRead", "--key-version", "0", "--from-ua", fe["fromUA"].as_str().unwrap(), "--send-counter", &fe["sendCounter"].to_string(),
-        "--leg", "0"]));
+    ar.extend(s(&[
+        "--command",
+        "auditRead",
+        "--key-version",
+        "0",
+        "--from-ua",
+        fe["fromUA"].as_str().unwrap(),
+        "--send-counter",
+        &fe["sendCounter"].to_string(),
+        "--leg",
+        "0",
+    ]));
     let r = words(ar.clone())["request"].clone();
-    assert_eq!((&r["entryPtr"], &r["auditorMode"], &r["auditorUA"], &r["keyRecord"]),
-        (&fe["entryPtr"], &forge["auditorMode"], &forge["auditorUA"], &forge["auditorKeyRecord"]));
+    assert_eq!(
+        (
+            &r["entryPtr"],
+            &r["auditorMode"],
+            &r["auditorUA"],
+            &r["keyRecord"]
+        ),
+        (
+            &fe["entryPtr"],
+            &forge["auditorMode"],
+            &forge["auditorUA"],
+            &forge["auditorKeyRecord"]
+        )
+    );
     assert_eq!(r["blobs"], json!([fe["blob"], forge["auditorKey"]]));
     let ftw = word_of(&ft);
-    assert_eq!(r["entryRef"], json!(hx(&n.entry_ref(&ft, &w32(&fe["fromUA"]), fe["sendCounter"].as_u64().unwrap()))));
-    assert_eq!((&r["chainId"], &r["chainUid"], &r["token"]), (&json!(chain_id), &json!(genesis), &json!(hx(&ftw[12..]))));
+    assert_eq!(
+        r["entryRef"],
+        json!(hx(&n.entry_ref(
+            &ft,
+            &w32(&fe["fromUA"]),
+            fe["sendCounter"].as_u64().unwrap()
+        )))
+    );
+    assert_eq!(
+        (&r["chainId"], &r["chainUid"], &r["token"]),
+        (&json!(chain_id), &json!(genesis), &json!(hx(&ftw[12..])))
+    );
 
     // the positive control: the wallet rows' balances with their own keys, each at its key version (group 3g: A's version 1
     // is `pqz_key_version(0, 0, 1)` on `acct[A][1]`, its version 0 the stale rest)
     let wt_s = rows[0]["request"]["token"].as_str().unwrap();
     for r in rows {
-        let (i, v) = (r["index"].as_u64().unwrap() as u32, r["version"].as_u64().unwrap());
-        let out = cli(&balv(on(wt_s, WALLET_REG, r["request"]["ua"].as_str().unwrap()), v, false), Some(&kat(i))).unwrap();
+        let (i, v) = (
+            r["index"].as_u64().unwrap() as u32,
+            r["version"].as_u64().unwrap(),
+        );
+        let out = cli(
+            &balv(
+                on(wt_s, WALLET_REG, r["request"]["ua"].as_str().unwrap()),
+                v,
+                false,
+            ),
+            Some(&kat(i)),
+        )
+        .unwrap();
         assert_eq!(out["value"], r["value"], "{}", r["name"]);
         assert!(out["block"].is_u64() && out["blockHash"].is_string());
     }
     assert!(rows.iter().any(|r| r["version"] == 1), "a version-1 row");
-    let w2 = cli(&balv(on(wt_s, WALLET_REG, rows[0]["request"]["ua"].as_str().unwrap()), 2, false), Some(&kat(0))).unwrap_err();
-    assert!(w2.contains("R6"), "a version the registry does not hold: {w2}");
+    let w2 = cli(
+        &balv(
+            on(wt_s, WALLET_REG, rows[0]["request"]["ua"].as_str().unwrap()),
+            2,
+            false,
+        ),
+        Some(&kat(0)),
+    )
+    .unwrap_err();
+    assert!(
+        w2.contains("R6"),
+        "a version the registry does not hold: {w2}"
+    );
     // R3: the head's state is not read at depth 2, and is at depth 0 (positive control)
     let ua_wa = rows[0]["request"]["ua"].as_str().unwrap();
     let head = |mut a: Vec<String>| {
@@ -561,24 +989,66 @@ fn reading_layer_against_anvil() {
         a[i + 1] = "0".into();
         a
     };
-    assert_eq!(words(bal(on(wt_s, WALLET_REG, ua_wa), false))["request"]["psid"], rows[0]["request"]["psid"], "depth 2");
-    assert_eq!(words(head(bal(on(wt_s, WALLET_REG, ua_wa), false)))["request"]["psid"], json!(hx(&[0x5a; 32])), "the head");
+    assert_eq!(
+        words(bal(on(wt_s, WALLET_REG, ua_wa), false))["request"]["psid"],
+        rows[0]["request"]["psid"],
+        "depth 2"
+    );
+    assert_eq!(
+        words(head(bal(on(wt_s, WALLET_REG, ua_wa), false)))["request"]["psid"],
+        json!(hx(&[0x5a; 32])),
+        "the head"
+    );
 
     // tests/pqz_chain: A 750 (acc the reference), B's window, the audited amount on the auditor's key
     let (sa, sb, saud) = (hx(&ua_a), hx(&ua_b), hx(&ua_aud));
     let v = |a: Vec<String>, i: u32| cli(&a, Some(&kat(i))).unwrap();
-    assert_eq!(v(bal(on(CW_TOKEN, CW_REG, &sa), false), 0)["value"], json!(750));
-    assert_eq!(v(bal(on(CW_TOKEN, CW_REG, &sb), false), 1)["value"], json!(250 + 15), "INLINE_MAX: the credit and 15 of 17");
-    assert_eq!(v(bal(on(CW_TOKEN, CW_REG, &sb), true), 1)["value"], json!(250 + 15), "op 7 on a PQZL token: INLINE_MAX");
-    assert_eq!(v(bal(on(CW_PQZH, CW_REG, &sb), true), 1)["value"], json!(250 + 9), "op 7 on a PQZH token: INLINE_MAX_PQZH");
-    assert_eq!(v(bal(on(CW_PQZH, CW_REG, &sb), false), 1)["value"], json!(250 + 15), "op 1 on a PQZH token: INLINE_MAX");
+    assert_eq!(
+        v(bal(on(CW_TOKEN, CW_REG, &sa), false), 0)["value"],
+        json!(750)
+    );
+    assert_eq!(
+        v(bal(on(CW_TOKEN, CW_REG, &sb), false), 1)["value"],
+        json!(250 + 15),
+        "INLINE_MAX: the credit and 15 of 17"
+    );
+    assert_eq!(
+        v(bal(on(CW_TOKEN, CW_REG, &sb), true), 1)["value"],
+        json!(250 + 15),
+        "op 7 on a PQZL token: INLINE_MAX"
+    );
+    assert_eq!(
+        v(bal(on(CW_PQZH, CW_REG, &sb), true), 1)["value"],
+        json!(250 + 9),
+        "op 7 on a PQZH token: INLINE_MAX_PQZH"
+    );
+    assert_eq!(
+        v(bal(on(CW_PQZH, CW_REG, &sb), false), 1)["value"],
+        json!(250 + 15),
+        "op 1 on a PQZH token: INLINE_MAX"
+    );
     let audit = |a: Vec<String>, from: &str, ctr: &str| {
         let mut a = a;
-        a.extend(s(&["--command", "auditRead", "--key-version", "0", "--from-ua", from, "--send-counter", ctr, "--leg", "0"]));
+        a.extend(s(&[
+            "--command",
+            "auditRead",
+            "--key-version",
+            "0",
+            "--from-ua",
+            from,
+            "--send-counter",
+            ctr,
+            "--leg",
+            "0",
+        ]));
         a
     };
     let out = v(audit(on(CW_TOKEN, CW_REG, &saud), &sa, "0"), 2);
-    assert_eq!(out["amount"], json!(250), "the audited amount on the auditor's key");
+    assert_eq!(
+        out["amount"],
+        json!(250),
+        "the audited amount on the auditor's key"
+    );
 
     // the refusals, each named
     let no = |a: Vec<String>, key: Option<u32>, want: &str| {
@@ -587,32 +1057,145 @@ fn reading_layer_against_anvil() {
         assert!(e.contains(want), "want {want}: {e}");
     };
     let wa = || bal(on(wt_s, WALLET_REG, ua_wa), false);
-    no(bal(base(&url, "1", &genesis, wt_s, WALLET_REG, ua_wa, "2"), false), Some(0), "R2: eth_chainId");
-    no(bal(base(&url, &cid, &hx(&[0x24; 32]), wt_s, WALLET_REG, ua_wa, "2"), false), Some(0), "R2: the genesis hash");
-    no(bal(base(&url, &cid, &genesis, wt_s, WALLET_REG, ua_wa, "100"), false), Some(0), "R3: the chain is shorter");
-    no(bal(base(&liar(url.clone(), "number"), &cid, &genesis, wt_s, WALLET_REG, ua_wa, "2"), false), Some(0), "R3: the node answered another block");
-    no(bal(base(&liar(url.clone(), "hash"), &cid, &genesis, wt_s, WALLET_REG, ua_wa, "2"), false), Some(0), "R3: the block changed");
-    assert_eq!(cli(&bal(base(&liar(url.clone(), "none"), &cid, &genesis, wt_s, WALLET_REG, ua_wa, "2"), false), Some(&kat(0))).unwrap()["value"],
-        rows[0]["value"], "the proxy alone changes nothing (positive control)");
+    no(
+        bal(
+            base(&url, "1", &genesis, wt_s, WALLET_REG, ua_wa, "2"),
+            false,
+        ),
+        Some(0),
+        "R2: eth_chainId",
+    );
+    no(
+        bal(
+            base(&url, &cid, &hx(&[0x24; 32]), wt_s, WALLET_REG, ua_wa, "2"),
+            false,
+        ),
+        Some(0),
+        "R2: the genesis hash",
+    );
+    no(
+        bal(
+            base(&url, &cid, &genesis, wt_s, WALLET_REG, ua_wa, "100"),
+            false,
+        ),
+        Some(0),
+        "R3: the chain is shorter",
+    );
+    no(
+        bal(
+            base(
+                &liar(url.clone(), "number"),
+                &cid,
+                &genesis,
+                wt_s,
+                WALLET_REG,
+                ua_wa,
+                "2",
+            ),
+            false,
+        ),
+        Some(0),
+        "R3: the node answered another block",
+    );
+    no(
+        bal(
+            base(
+                &liar(url.clone(), "hash"),
+                &cid,
+                &genesis,
+                wt_s,
+                WALLET_REG,
+                ua_wa,
+                "2",
+            ),
+            false,
+        ),
+        Some(0),
+        "R3: the block changed",
+    );
+    assert_eq!(
+        cli(
+            &bal(
+                base(
+                    &liar(url.clone(), "none"),
+                    &cid,
+                    &genesis,
+                    wt_s,
+                    WALLET_REG,
+                    ua_wa,
+                    "2"
+                ),
+                false
+            ),
+            Some(&kat(0))
+        )
+        .unwrap()["value"],
+        rows[0]["value"],
+        "the proxy alone changes nothing (positive control)"
+    );
     for t in [UNLISTED, NOT_EXISTS, ZETHER_TOKEN] {
-        no(bal(on(t, WALLET_REG, ua_wa), false), Some(0), "R5: the token is not a PQZ token");
+        no(
+            bal(on(t, WALLET_REG, ua_wa), false),
+            Some(0),
+            "R5: the token is not a PQZ token",
+        );
     }
-    no(wa(), Some(1), "R6: the registry's PQZ key of --ua is not this key");
+    no(
+        wa(),
+        Some(1),
+        "R6: the registry's PQZ key of --ua is not this key",
+    );
     // owner 2026-11-08: the token is a clone with a `ChainEnv`, and `--registry` is the registry it names
     for t in [NO_CODE, BARE_PROXY] {
-        no(bal(on(t, WALLET_REG, ua_wa), false), Some(0), "R5: the token is not a clone of a chain-neutral release");
+        no(
+            bal(on(t, WALLET_REG, ua_wa), false),
+            Some(0),
+            "R5: the token is not a clone of a chain-neutral release",
+        );
     }
-    no(bal(on(wt_s, CW_REG, ua_wa), false), Some(0), "R6: --registry is not the token's registry");
+    no(
+        bal(on(wt_s, CW_REG, ua_wa), false),
+        Some(0),
+        "R6: --registry is not the token's registry",
+    );
     // group 3h (owner 2026-11-09): a token of a release before 3h, refused by name for every command
     for t in [PRE_3H, PRE_3H_EMPTY] {
-        no(bal(on(t, WALLET_REG, ua_wa), false), Some(0), "R5: the token is of a release before 3h");
-        no(audit(on(t, WALLET_REG, &saud), &sa, "0"), Some(2), "R5: the token is of a release before 3h");
+        no(
+            bal(on(t, WALLET_REG, ua_wa), false),
+            Some(0),
+            "R5: the token is of a release before 3h",
+        );
+        no(
+            audit(on(t, WALLET_REG, &saud), &sa, "0"),
+            Some(2),
+            "R5: the token is of a release before 3h",
+        );
     }
-    no(audit(on(CW_TOKEN, WALLET_REG, &saud), &sa, "0"), Some(2), "R6: --registry is not the token's registry");
-    no(audit(on(CW_TOKEN, CW_REG, &sb), &sa, "0"), Some(1), "R6: --ua is not the token's auditor");
-    no(audit(head(on(CW_TOKEN, CW_REG, &saud)), &sa, "0"), Some(2), "R6: --ua is not the token's auditor");
-    no(audit(on(CW_TOKEN, CW_REG, &saud), &sa, "1"), Some(2), "no entry of --from-ua");
-    no(audit(on(CW_TOKEN, CW_REG, &saud), &sa, "0"), Some(1), "R6: the registry's PQZ key");
+    no(
+        audit(on(CW_TOKEN, WALLET_REG, &saud), &sa, "0"),
+        Some(2),
+        "R6: --registry is not the token's registry",
+    );
+    no(
+        audit(on(CW_TOKEN, CW_REG, &sb), &sa, "0"),
+        Some(1),
+        "R6: --ua is not the entry's auditor",
+    );
+    no(
+        audit(head(on(CW_TOKEN, CW_REG, &saud)), &sa, "0"),
+        Some(2),
+        "R6: --ua is not the entry's auditor",
+    );
+    no(
+        audit(on(CW_TOKEN, CW_REG, &saud), &sa, "1"),
+        Some(2),
+        "no entry of --from-ua",
+    );
+    no(
+        audit(on(CW_TOKEN, CW_REG, &saud), &sa, "0"),
+        Some(1),
+        "R6: the registry's PQZ key",
+    );
     // ua-rs's own refusal after the reading layer's checks: the auditor reads a leg the entry does not have
     let mut leg1 = audit(on(CW_TOKEN, CW_REG, &saud), &sa, "0");
     *leg1.last_mut().unwrap() = "1".into();
@@ -624,8 +1207,27 @@ fn reading_layer_against_anvil() {
     let w0 = words(bal(on(wt_s, WALLET_REG, ua_s), false));
     let multi = |urls: &[&str], agree: bool| {
         let mut a: Vec<String> = urls.iter().flat_map(|u| s(&["--rpc", u])).collect();
-        a.extend(s(&["--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", WALLET_REG, "--token", wt_s, "--ua",
-            ua_s, "--depth", "2", "--key-version", "0", "--for-op7", "false", "--words"]));
+        a.extend(s(&[
+            "--chain-id",
+            &cid,
+            "--chain-uid",
+            &genesis,
+            "--factory",
+            FACTORY,
+            "--registry",
+            WALLET_REG,
+            "--token",
+            wt_s,
+            "--ua",
+            ua_s,
+            "--depth",
+            "2",
+            "--key-version",
+            "0",
+            "--for-op7",
+            "false",
+            "--words",
+        ]));
         if agree {
             a.push("--rpc-agree".into());
         }
@@ -635,18 +1237,40 @@ fn reading_layer_against_anvil() {
     let psid_slot = hx(&add(&n.root, 2));
     let lie = |byte: u8| {
         let slot = psid_slot.clone();
-        move |m: &str, p: &Value, r: Value, _: usize| Some(if m == "eth_getStorageAt" && p[1] == json!(slot) { json!(hx(&[byte; 32])) } else { r })
+        move |m: &str, p: &Value, r: Value, _: usize| {
+            Some(if m == "eth_getStorageAt" && p[1] == json!(slot) {
+                json!(hx(&[byte; 32]))
+            } else {
+                r
+            })
+        }
     };
     let same = node(url.clone(), hits(), |_, _, r, _| Some(r));
-    let (lie_a, lie_a2, lie_b) = (node(url.clone(), hits(), lie(0xa1)), node(url.clone(), hits(), lie(0xa1)), node(url.clone(), hits(), lie(0xb2)));
+    let (lie_a, lie_a2, lie_b) = (
+        node(url.clone(), hits(), lie(0xa1)),
+        node(url.clone(), hits(), lie(0xa1)),
+        node(url.clone(), hits(), lie(0xb2)),
+    );
     let counted = hits();
     let unused = node(url.clone(), counted.clone(), lie(0xa1));
     // answers its first seven requests (R2, R3, R5, then the lying psid word), then fails
     let dies = {
         let l = lie(0xa1);
-        node(url.clone(), hits(), move |m, p, r, i| if i <= 7 { l(m, p, r, i) } else { None })
+        node(url.clone(), hits(), move |m, p, r, i| {
+            if i <= 7 {
+                l(m, p, r, i)
+            } else {
+                None
+            }
+        })
     };
-    let future = node(url.clone(), hits(), |m, _, r, _| Some(if m == "eth_blockNumber" { json!("0xffffff") } else { r }));
+    let future = node(url.clone(), hits(), |m, _, r, _| {
+        Some(if m == "eth_blockNumber" {
+            json!("0xffffff")
+        } else {
+            r
+        })
+    });
     let other_hash = node(url.clone(), hits(), |m, p, mut r, _| {
         if m == "eth_getBlockByNumber" && p[0] != "0x0" {
             r["hash"] = json!(hx(&[0x5a; 32]));
@@ -657,7 +1281,10 @@ fn reading_layer_against_anvil() {
     let late = {
         let b = blocks.clone();
         node(url.clone(), hits(), move |m, p, mut r, _| {
-            if m == "eth_getBlockByNumber" && p[0] != "0x0" && b.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= 2 {
+            if m == "eth_getBlockByNumber"
+                && p[0] != "0x0"
+                && b.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= 2
+            {
                 r["hash"] = json!(hx(&[0x5b; 32])); // the read's own two looks pass, the one after every node's read does not
             }
             Some(r)
@@ -666,17 +1293,56 @@ fn reading_layer_against_anvil() {
     let (dead, dead2) = ("http://127.0.0.1:1", "http://127.0.0.1:2");
     let req = |v: Result<Value, String>| v.unwrap()["request"].clone();
     // failover
-    assert_eq!(req(multi(&[dead, &url], false)), w0["request"], "failover skips a dead first node");
-    assert_eq!(req(multi(&[&url, &unused], false)), w0["request"], "the first node answered");
-    assert_eq!(counted.load(std::sync::atomic::Ordering::SeqCst), 0, "a second node is not consulted when the first succeeds");
-    assert_eq!(req(multi(&[&dies, &url], false)), w0["request"], "a node dying mid-read: the next re-reads everything, no mix");
-    assert!(multi(&[dead, dead2], false).unwrap_err().contains("R1: no --rpc answered the whole read"), "all fail");
-    assert!(multi(&[&url, &url], false).unwrap_err().contains("the same node twice"));
-    assert_eq!(req(multi(&[&url], true)), w0["request"], "one node: --rpc-agree changes nothing");
+    assert_eq!(
+        req(multi(&[dead, &url], false)),
+        w0["request"],
+        "failover skips a dead first node"
+    );
+    assert_eq!(
+        req(multi(&[&url, &unused], false)),
+        w0["request"],
+        "the first node answered"
+    );
+    assert_eq!(
+        counted.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "a second node is not consulted when the first succeeds"
+    );
+    assert_eq!(
+        req(multi(&[&dies, &url], false)),
+        w0["request"],
+        "a node dying mid-read: the next re-reads everything, no mix"
+    );
+    assert!(
+        multi(&[dead, dead2], false)
+            .unwrap_err()
+            .contains("R1: no --rpc answered the whole read"),
+        "all fail"
+    );
+    assert!(multi(&[&url, &url], false)
+        .unwrap_err()
+        .contains("the same node twice"));
+    assert_eq!(
+        req(multi(&[&url], true)),
+        w0["request"],
+        "one node: --rpc-agree changes nothing"
+    );
     // --rpc-agree: a strict majority of the named nodes, each node over its whole read
-    assert_eq!(req(multi(&[&lie_a, &url, &same], true)), w0["request"], "3 nodes, one differing word: the majority's words");
-    assert_eq!(req(multi(&[dead, &url, &same], true)), w0["request"], "3 nodes, one dead");
-    assert_eq!(multi(&[&url, &same, &future], true).unwrap()["block"], w0["block"], "a far-future block does not move the number");
+    assert_eq!(
+        req(multi(&[&lie_a, &url, &same], true)),
+        w0["request"],
+        "3 nodes, one differing word: the majority's words"
+    );
+    assert_eq!(
+        req(multi(&[dead, &url, &same], true)),
+        w0["request"],
+        "3 nodes, one dead"
+    );
+    assert_eq!(
+        multi(&[&url, &same, &future], true).unwrap()["block"],
+        w0["block"],
+        "a far-future block does not move the number"
+    );
     let refused = |urls: &[&str], what: &str| {
         let e = multi(urls, true).unwrap_err();
         assert!(e.contains("error: R1: no strict majority"), "{what}: {e}");
@@ -686,7 +1352,10 @@ fn reading_layer_against_anvil() {
     refused(&[&url, &same, &lie_a, &lie_a2], "4 nodes split 2-2");
     refused(&[&url, dead], "2 nodes, one dead");
     refused(&[&url, &other_hash], "a node answering another block hash");
-    refused(&[&url, &late], "a node whose block changes after the reads (R3 after every node)");
+    refused(
+        &[&url, &late],
+        "a node whose block changes after the reads (R3 after every node)",
+    );
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
@@ -696,21 +1365,133 @@ fn reading_layer_against_anvil() {
 /// `--command decoys`'s own fields: only with `decoys`, `--count` named, `--decoy-filter` with `--window`, one of two filters.
 #[test]
 fn decoy_arguments() {
-    let (a20, a32) = ("0x00000000000000000000000000000000000000aa", format!("0x{}", "ab".repeat(32)));
-    let base = s(&["--rpc", "http://127.0.0.1:1", "--chain-id", "31337", "--chain-uid", &a32, "--factory", a20, "--registry", a20, "--token",
-        a20, "--ua", &a32]);
+    let (a20, a32) = (
+        "0x00000000000000000000000000000000000000aa",
+        format!("0x{}", "ab".repeat(32)),
+    );
+    let base = s(&[
+        "--rpc",
+        "http://127.0.0.1:1",
+        "--chain-id",
+        "31337",
+        "--chain-uid",
+        &a32,
+        "--factory",
+        a20,
+        "--registry",
+        a20,
+        "--token",
+        a20,
+        "--ua",
+        &a32,
+    ]);
     let with = |x: &[&str]| [base.clone(), s(x)].concat();
     for (args, want) in [
-        (with(&["--depth", "0", "--for-op7", "false", "--count", "1"]), "go with --command decoys only"),
-        (with(&["--depth", "0", "--command", "decoys"]), "decoys needs --count"),
-        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--decoy-filter", "activity"]), "decoys needs --count"),
-        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--window", "4"]), "decoys needs --count"),
-        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--for-op7", "true"]), "decoys needs --count"),
-        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--key-version", "0"]), "decoys needs --count"),
-        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--decoy-filter", "recent", "--window", "4"]), "activity or holder"),
-        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--exclude", "0x01"]), "--exclude: 32 bytes"),
-        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--recipient", "0x01"]), "--recipient: 32 bytes"),
-        (with(&["--depth", "0", "--for-op7", "false", "--recipient", &a32]), "go with --command decoys only"),
+        (
+            with(&["--depth", "0", "--for-op7", "false", "--count", "1"]),
+            "go with --command decoys only",
+        ),
+        (
+            with(&["--depth", "0", "--command", "decoys"]),
+            "decoys needs --count",
+        ),
+        (
+            with(&[
+                "--depth",
+                "0",
+                "--command",
+                "decoys",
+                "--count",
+                "1",
+                "--decoy-filter",
+                "activity",
+            ]),
+            "decoys needs --count",
+        ),
+        (
+            with(&[
+                "--depth",
+                "0",
+                "--command",
+                "decoys",
+                "--count",
+                "1",
+                "--window",
+                "4",
+            ]),
+            "decoys needs --count",
+        ),
+        (
+            with(&[
+                "--depth",
+                "0",
+                "--command",
+                "decoys",
+                "--count",
+                "1",
+                "--for-op7",
+                "true",
+            ]),
+            "decoys needs --count",
+        ),
+        (
+            with(&[
+                "--depth",
+                "0",
+                "--command",
+                "decoys",
+                "--count",
+                "1",
+                "--key-version",
+                "0",
+            ]),
+            "decoys needs --count",
+        ),
+        (
+            with(&[
+                "--depth",
+                "0",
+                "--command",
+                "decoys",
+                "--count",
+                "1",
+                "--decoy-filter",
+                "recent",
+                "--window",
+                "4",
+            ]),
+            "activity or holder",
+        ),
+        (
+            with(&[
+                "--depth",
+                "0",
+                "--command",
+                "decoys",
+                "--count",
+                "1",
+                "--exclude",
+                "0x01",
+            ]),
+            "--exclude: 32 bytes",
+        ),
+        (
+            with(&[
+                "--depth",
+                "0",
+                "--command",
+                "decoys",
+                "--count",
+                "1",
+                "--recipient",
+                "0x01",
+            ]),
+            "--recipient: 32 bytes",
+        ),
+        (
+            with(&["--depth", "0", "--for-op7", "false", "--recipient", &a32]),
+            "go with --command decoys only",
+        ),
     ] {
         let e = cli(&args, None).unwrap_err();
         assert!(e.contains(want), "{args:?}: want {want}: {e}");
@@ -725,22 +1506,56 @@ fn decoy_arguments() {
 #[test]
 #[ignore]
 fn decoys_against_anvil() {
-    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
     let url = format!("http://127.0.0.1:{port}");
     let bin = std::env::var("ANVIL").unwrap_or_else(|_| "anvil".into());
-    let _anvil = Anvil(Command::new(bin).args(["--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().unwrap());
-    assert!((0..100).any(|_| {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        rpc(&url, "eth_chainId", json!([])).is_string()
-    }), "anvil did not start");
-    let chain_id = u64::from_str_radix(rpc(&url, "eth_chainId", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
-    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
-    let root = w32(&json!("0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500"));
-    let n = Node { url: url.clone(), root, chain_id, uid: w32(&json!(genesis)) };
+    let _anvil = Anvil(
+        Command::new(bin)
+            .args(["--port", &port.to_string(), "--silent"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    assert!(
+        (0..100).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            rpc(&url, "eth_chainId", json!([])).is_string()
+        }),
+        "anvil did not start"
+    );
+    let chain_id = u64::from_str_radix(
+        rpc(&url, "eth_chainId", json!([]))
+            .as_str()
+            .unwrap()
+            .trim_start_matches("0x"),
+        16,
+    )
+    .unwrap();
+    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let root = w32(&json!(
+        "0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500"
+    ));
+    let n = Node {
+        url: url.clone(),
+        root,
+        chain_id,
+        uid: w32(&json!(genesis)),
+    };
     n.code(&IMPL, &json!("0x60206000f3"));
     n.code(&IMPL_PRE_3H, &json!("0x60006000fd"));
-    let (factory, token, reg, reg2) = (a20(FACTORY), a20("0x000000000000000000000000000000000000dec1"),
-        a20("0x000000000000000000000000000000000000dec0"), a20("0x000000000000000000000000000000000000dec2"));
+    let (factory, token, reg, reg2) = (
+        a20(FACTORY),
+        a20("0x000000000000000000000000000000000000dec1"),
+        a20("0x000000000000000000000000000000000000dec0"),
+        a20("0x000000000000000000000000000000000000dec2"),
+    );
     n.catalogue(&factory, &token, 4, true);
     n.clone_of(&token, &reg);
     // reg2's token (owner 2026-11-08: `--registry` is the token's): the same kind, its env naming reg2
@@ -751,18 +1566,38 @@ fn decoys_against_anvil() {
     n.catalogue(&factory, &a20(PRE_3H), 4, true);
     n.clone_with(&a20(PRE_3H), &reg, &IMPL_PRE_3H);
     let mine = |b: u64| rpc(&url, "anvil_mine", json!([format!("0x{b:x}")]));
-    let head = || u64::from_str_radix(rpc(&url, "eth_blockNumber", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+    let head = || {
+        u64::from_str_radix(
+            rpc(&url, "eth_blockNumber", json!([]))
+                .as_str()
+                .unwrap()
+                .trim_start_matches("0x"),
+            16,
+        )
+        .unwrap()
+    };
     let ua = |i: u8| [i; 32];
     let list = |r: &[u8; 20], from: u64, uas: std::ops::RangeInclusive<u8>, proven: u8| {
         for (j, i) in uas.clone().enumerate() {
-            n.set(r, &k(&be(from + j as u64), &k(&be(0x0142), &be(reg_slot("uaAt")))), &ua(i));
+            n.set(
+                r,
+                &k(&be(from + j as u64), &k(&be(0x0142), &be(reg_slot("uaAt")))),
+                &ua(i),
+            );
             let ptr = a20(&format!("0x{:040x}", 0xc0de00 + u64::from(i)));
             let mut rec = word_of(&ptr);
             rec[11] = proven;
             n.set(r, &k(&be(0), &k(&ua(i), &be(reg_slot("pqzKey")))), &rec);
-            n.code(&ptr, &json!(hx(&[vec![0u8], vec![i; st::PK_BYTES]].concat())));
+            n.code(
+                &ptr,
+                &json!(hx(&[vec![0u8], vec![i; st::PK_BYTES]].concat())),
+            );
         }
-        n.set(r, &k(&be(0x0142), &be(reg_slot("uaCount"))), &be(from + uas.len() as u64));
+        n.set(
+            r,
+            &k(&be(0x0142), &be(reg_slot("uaCount"))),
+            &be(from + uas.len() as u64),
+        );
     };
     // the account counters of `ua(i)`: `acct[ua][0]` word 0 `pendingCount ‖ rolled` (low end first), the UA's `sendCounter`
     let acct = |i: u8, pending: u64, rolled: u64, sent: u64| {
@@ -806,8 +1641,28 @@ fn decoys_against_anvil() {
 
     let cid = chain_id.to_string();
     let run = |r: &[u8; 20], tok: &str, x: &[&str]| {
-        let mut a = s(&["--rpc", &url, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", &hx(r), "--token", tok,
-            "--ua", &hx(&ua(1)), "--depth", "0", "--command", "decoys", "--exclude", &hx(&ua(2))]);
+        let mut a = s(&[
+            "--rpc",
+            &url,
+            "--chain-id",
+            &cid,
+            "--chain-uid",
+            &genesis,
+            "--factory",
+            FACTORY,
+            "--registry",
+            &hx(r),
+            "--token",
+            tok,
+            "--ua",
+            &hx(&ua(1)),
+            "--depth",
+            "0",
+            "--command",
+            "decoys",
+            "--exclude",
+            &hx(&ua(2)),
+        ]);
         a.extend(s(x));
         cli(&a, None)
     };
@@ -816,98 +1671,391 @@ fn decoys_against_anvil() {
     let range = |r: std::ops::RangeInclusive<u8>| r.map(|i| hx(&ua(i))).collect::<Vec<_>>();
 
     // the candidates (`--words`: pickDecoys's request): the list up to the sync point, less --ua and --exclude; no filter
-    let w = run(&reg, &tok, &["--count", "3", "--sync-block", "1", "--words"]).unwrap();
-    assert_eq!(w["request"], json!({"candidates": range(3..=12), "exclude": [hx(&ua(2)), hx(&ua(1))], "count": 3}), "sync 1");
-    assert_eq!((&w["syncBlock"], &w["listCount"], &w["block"]), (&json!(1), &json!(12), &json!(21)));
+    let w = run(
+        &reg,
+        &tok,
+        &["--count", "3", "--sync-block", "1", "--words"],
+    )
+    .unwrap();
+    assert_eq!(
+        w["request"],
+        json!({"candidates": range(3..=12), "exclude": [hx(&ua(2)), hx(&ua(1))], "count": 3}),
+        "sync 1"
+    );
+    assert_eq!(
+        (&w["syncBlock"], &w["listCount"], &w["block"]),
+        (&json!(1), &json!(12), &json!(21))
+    );
     let w = run(&reg, &tok, &["--count", "3", "--words"]).unwrap();
     let listed = [range(3..=13), range(15..=16)].concat();
-    assert_eq!(uas(&w["request"]["candidates"]), listed, "the read block's list (default sync point), never the pending ua(14)");
+    assert_eq!(
+        uas(&w["request"]["candidates"]),
+        listed,
+        "the read block's list (default sync point), never the pending ua(14)"
+    );
     let d = run(&reg, &tok, &["--count", "13"]).unwrap();
-    let mut got: Vec<String> = d["decoys"].as_array().unwrap().iter().map(|l| l["ua"].as_str().unwrap().to_string()).collect();
+    let mut got: Vec<String> = d["decoys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["ua"].as_str().unwrap().to_string())
+        .collect();
     got.sort();
     assert_eq!(got, listed, "every candidate but the pending one");
     for l in d["decoys"].as_array().unwrap() {
         let i = h(&l["ua"])[0];
-        let want = if i == 16 { vec![0xF0 | i; st::PK_BYTES] } else { vec![i; st::PK_BYTES] };
+        let want = if i == 16 {
+            vec![0xF0 | i; st::PK_BYTES]
+        } else {
+            vec![i; st::PK_BYTES]
+        };
         assert_eq!(h(&l["pk"]), want, "ua({i}): the key of its current version");
     }
-    assert!(run(&reg, &tok, &["--count", "14"]).unwrap_err().contains("pickDecoys: Argument"), "the pending UA never fills the count");
+    assert!(
+        run(&reg, &tok, &["--count", "14"])
+            .unwrap_err()
+            .contains("pickDecoys: Argument"),
+        "the pending UA never fills the count"
+    );
     // every candidate up to the sync point, exactly, when all are needed; one more is too few
     let d = run(&reg, &tok, &["--count", "10", "--sync-block", "1"]).unwrap();
-    let mut got: Vec<String> = d["decoys"].as_array().unwrap().iter().map(|l| l["ua"].as_str().unwrap().to_string()).collect();
+    let mut got: Vec<String> = d["decoys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["ua"].as_str().unwrap().to_string())
+        .collect();
     got.sort();
-    assert_eq!(got, range(3..=12), "never a UA listed after the sync point, never --ua or --exclude");
+    assert_eq!(
+        got,
+        range(3..=12),
+        "never a UA listed after the sync point, never --ua or --exclude"
+    );
     for l in d["decoys"].as_array().unwrap() {
         let i = h(&l["ua"])[0];
-        assert_eq!(h(&l["pk"]), vec![i; st::PK_BYTES], "the decoy's registered key");
+        assert_eq!(
+            h(&l["pk"]),
+            vec![i; st::PK_BYTES],
+            "the decoy's registered key"
+        );
     }
-    assert!(run(&reg, &tok, &["--count", "11", "--sync-block", "1"]).unwrap_err().contains("pickDecoys: Argument"), "too few");
+    assert!(
+        run(&reg, &tok, &["--count", "11", "--sync-block", "1"])
+            .unwrap_err()
+            .contains("pickDecoys: Argument"),
+        "too few"
+    );
     // `--recipient`: excluded, named to the pick; `legs` the recipient once and the decoys, in the pick's shuffled order
-    let w = run(&reg, &tok, &["--count", "2", "--sync-block", "1", "--recipient", &hx(&ua(5)), "--words"]).unwrap();
+    let w = run(
+        &reg,
+        &tok,
+        &[
+            "--count",
+            "2",
+            "--sync-block",
+            "1",
+            "--recipient",
+            &hx(&ua(5)),
+            "--words",
+        ],
+    )
+    .unwrap();
     let cands = [range(3..=4), range(6..=12)].concat();
     let want = json!({"candidates": cands, "exclude": [hx(&ua(2)), hx(&ua(1)), hx(&ua(5))], "count": 2, "recipient": hx(&ua(5))});
     assert_eq!(w["request"], want, "--recipient --words");
-    let d = run(&reg, &tok, &["--count", "9", "--sync-block", "1", "--recipient", &hx(&ua(5))]).unwrap();
+    let d = run(
+        &reg,
+        &tok,
+        &[
+            "--count",
+            "9",
+            "--sync-block",
+            "1",
+            "--recipient",
+            &hx(&ua(5)),
+        ],
+    )
+    .unwrap();
     let mut legs = uas(&d["legs"]);
     legs.sort();
-    assert_eq!(legs, range(3..=12), "the recipient once with every decoy: {d}");
-    assert!(run(&reg, &tok, &["--count", "1"]).unwrap().get("legs").is_none(), "no legs without --recipient");
+    assert_eq!(
+        legs,
+        range(3..=12),
+        "the recipient once with every decoy: {d}"
+    );
+    assert!(
+        run(&reg, &tok, &["--count", "1"])
+            .unwrap()
+            .get("legs")
+            .is_none(),
+        "no legs without --recipient"
+    );
     for _ in 0..8 {
-        let d = uas(&json!(run(&reg, &tok, &["--count", "4"]).unwrap()["decoys"].as_array().unwrap().iter().map(|l| l["ua"].clone()).collect::<Vec<_>>()));
-        assert_eq!(d.iter().collect::<std::collections::BTreeSet<_>>().len(), 4, "distinct");
+        let d = uas(&json!(run(&reg, &tok, &["--count", "4"]).unwrap()
+            ["decoys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|l| l["ua"].clone())
+            .collect::<Vec<_>>()));
+        assert_eq!(
+            d.iter().collect::<std::collections::BTreeSet<_>>().len(),
+            4,
+            "distinct"
+        );
         assert!(d.iter().all(|u| listed.contains(u)), "candidates only");
     }
     // the option: active in the token in the last 10 blocks, weighted by recency
-    let f = |filter: &str| run(&reg, &tok, &["--count", "1", "--decoy-filter", filter, "--window", "10", "--words"]).unwrap()["request"].clone();
+    let f = |filter: &str| {
+        run(
+            &reg,
+            &tok,
+            &[
+                "--count",
+                "1",
+                "--decoy-filter",
+                filter,
+                "--window",
+                "10",
+                "--words",
+            ],
+        )
+        .unwrap()["request"]
+            .clone()
+    };
     let act = f("activity");
-    assert_eq!((uas(&act["candidates"]), &act["weights"]), (range(3..=6), &json!([1, 2, 2, 2])), "activity");
+    assert_eq!(
+        (uas(&act["candidates"]), &act["weights"]),
+        (range(3..=6), &json!([1, 2, 2, 2])),
+        "activity"
+    );
     let hold = f("holder");
-    assert_eq!((uas(&hold["candidates"]), &hold["weights"]), (vec![hx(&ua(3)), hx(&ua(6))], &json!([1, 2])), "holder: sendCounter only");
-    let d = run(&reg, &tok, &["--count", "4", "--decoy-filter", "activity", "--window", "10"]).unwrap();
-    let mut got: Vec<String> = d["decoys"].as_array().unwrap().iter().map(|l| l["ua"].as_str().unwrap().to_string()).collect();
+    assert_eq!(
+        (uas(&hold["candidates"]), &hold["weights"]),
+        (vec![hx(&ua(3)), hx(&ua(6))], &json!([1, 2])),
+        "holder: sendCounter only"
+    );
+    let d = run(
+        &reg,
+        &tok,
+        &[
+            "--count",
+            "4",
+            "--decoy-filter",
+            "activity",
+            "--window",
+            "10",
+        ],
+    )
+    .unwrap();
+    let mut got: Vec<String> = d["decoys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["ua"].as_str().unwrap().to_string())
+        .collect();
     got.sort();
     assert_eq!(got, range(3..=6), "the filter's pick");
-    assert!(run(&reg, &tok, &["--count", "5", "--decoy-filter", "activity", "--window", "10"]).unwrap_err().contains("Argument"), "too few active");
+    assert!(
+        run(
+            &reg,
+            &tok,
+            &[
+                "--count",
+                "5",
+                "--decoy-filter",
+                "activity",
+                "--window",
+                "10"
+            ]
+        )
+        .unwrap_err()
+        .contains("Argument"),
+        "too few active"
+    );
     // refusals
-    assert!(run(&reg2, &tok2, &["--count", "0"]).is_ok(), "count 0 (positive control of the next)");
-    assert!(run(&reg2, &tok2, &["--count", "1"]).unwrap_err().contains("is not a proven key"), "an unproven key");
-    assert!(run(&reg2, &tok, &["--count", "0"]).unwrap_err().contains("R6: --registry is not the token's registry"), "reg2 is not tok's");
-    assert!(run(&reg, &tok, &["--count", "1", "--sync-block", "22"]).unwrap_err().contains("past the read block"));
-    assert!(run(&reg, &tok, &["--count", "1", "--decoy-filter", "activity", "--window", "1"]).unwrap_err().contains("--window"));
-    assert!(run(&reg, &tok, &["--count", "1", "--decoy-filter", "activity", "--window", "22"]).unwrap_err().contains("--window"));
-    assert!(run(&reg, UNLISTED, &["--count", "1"]).unwrap_err().contains("R5"), "the token catalogued");
-    assert!(run(&reg, PRE_3H, &["--count", "1"]).unwrap_err().contains("R5: the token is of a release before 3h"), "release 3h");
+    assert!(
+        run(&reg2, &tok2, &["--count", "0"]).is_ok(),
+        "count 0 (positive control of the next)"
+    );
+    assert!(
+        run(&reg2, &tok2, &["--count", "1"])
+            .unwrap_err()
+            .contains("is not a proven key"),
+        "an unproven key"
+    );
+    assert!(
+        run(&reg2, &tok, &["--count", "0"])
+            .unwrap_err()
+            .contains("R6: --registry is not the token's registry"),
+        "reg2 is not tok's"
+    );
+    assert!(run(&reg, &tok, &["--count", "1", "--sync-block", "22"])
+        .unwrap_err()
+        .contains("past the read block"));
+    assert!(run(
+        &reg,
+        &tok,
+        &[
+            "--count",
+            "1",
+            "--decoy-filter",
+            "activity",
+            "--window",
+            "1"
+        ]
+    )
+    .unwrap_err()
+    .contains("--window"));
+    assert!(run(
+        &reg,
+        &tok,
+        &[
+            "--count",
+            "1",
+            "--decoy-filter",
+            "activity",
+            "--window",
+            "22"
+        ]
+    )
+    .unwrap_err()
+    .contains("--window"));
+    assert!(
+        run(&reg, UNLISTED, &["--count", "1"])
+            .unwrap_err()
+            .contains("R5"),
+        "the token catalogued"
+    );
+    assert!(
+        run(&reg, PRE_3H, &["--count", "1"])
+            .unwrap_err()
+            .contains("R5: the token is of a release before 3h"),
+        "release 3h"
+    );
     // R3: every block read re-checked after the last read (the read block, the sync block), through a proxy that changes the
     // sync block's hash on its re-check; the proxy alone changes nothing (positive control)
     let via = |proxy: String| {
-        let a = s(&["--rpc", &proxy, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", &hx(&reg), "--token",
-            &tok, "--ua", &hx(&ua(1)), "--depth", "0", "--command", "decoys", "--count", "1", "--sync-block", "1", "--words"]);
+        let a = s(&[
+            "--rpc",
+            &proxy,
+            "--chain-id",
+            &cid,
+            "--chain-uid",
+            &genesis,
+            "--factory",
+            FACTORY,
+            "--registry",
+            &hx(&reg),
+            "--token",
+            &tok,
+            "--ua",
+            &hx(&ua(1)),
+            "--depth",
+            "0",
+            "--command",
+            "decoys",
+            "--count",
+            "1",
+            "--sync-block",
+            "1",
+            "--words",
+        ]);
         cli(&a, None)
     };
     assert!(via(liar(url.clone(), "none")).is_ok());
-    assert!(via(liar(url.clone(), "hash4")).unwrap_err().contains("R3: the block changed"), "the sync block re-checked");
+    assert!(
+        via(liar(url.clone(), "hash4"))
+            .unwrap_err()
+            .contains("R3: the block changed"),
+        "the sync block re-checked"
+    );
     // R1 (owner 2026-11-08): the decoys over several nodes, failover and a strict majority
     let hits = || std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let same = node(url.clone(), hits(), |_, _, r, _| Some(r));
     let lists = |urls: &[&str], agree: bool| {
         let mut a: Vec<String> = urls.iter().flat_map(|u| s(&["--rpc", u])).collect();
-        a.extend(s(&["--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", &hx(&reg), "--token", &tok, "--ua",
-            &hx(&ua(1)), "--depth", "0", "--command", "decoys", "--exclude", &hx(&ua(2)), "--count", "3", "--sync-block", "1", "--words"]));
+        a.extend(s(&[
+            "--chain-id",
+            &cid,
+            "--chain-uid",
+            &genesis,
+            "--factory",
+            FACTORY,
+            "--registry",
+            &hx(&reg),
+            "--token",
+            &tok,
+            "--ua",
+            &hx(&ua(1)),
+            "--depth",
+            "0",
+            "--command",
+            "decoys",
+            "--exclude",
+            &hx(&ua(2)),
+            "--count",
+            "3",
+            "--sync-block",
+            "1",
+            "--words",
+        ]));
         if agree {
             a.push("--rpc-agree".into());
         }
         cli(&a, None)
     };
-    let one = run(&reg, &tok, &["--count", "3", "--sync-block", "1", "--words"]).unwrap();
-    assert_eq!(lists(&["http://127.0.0.1:1", &url], false).unwrap()["request"], one["request"], "failover past a dead node");
-    assert_eq!(lists(&[&url, &same], true).unwrap()["request"], one["request"], "two agreeing nodes");
+    let one = run(
+        &reg,
+        &tok,
+        &["--count", "3", "--sync-block", "1", "--words"],
+    )
+    .unwrap();
+    assert_eq!(
+        lists(&["http://127.0.0.1:1", &url], false).unwrap()["request"],
+        one["request"],
+        "failover past a dead node"
+    );
+    assert_eq!(
+        lists(&[&url, &same], true).unwrap()["request"],
+        one["request"],
+        "two agreeing nodes"
+    );
     let d = {
-        let mut a: Vec<String> = [&url, &same].iter().flat_map(|u| s(&["--rpc", u])).collect();
-        a.extend(s(&["--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", &hx(&reg), "--token", &tok, "--ua",
-            &hx(&ua(1)), "--depth", "0", "--command", "decoys", "--exclude", &hx(&ua(2)), "--count", "4", "--rpc-agree"]));
+        let mut a: Vec<String> = [&url, &same]
+            .iter()
+            .flat_map(|u| s(&["--rpc", u]))
+            .collect();
+        a.extend(s(&[
+            "--chain-id",
+            &cid,
+            "--chain-uid",
+            &genesis,
+            "--factory",
+            FACTORY,
+            "--registry",
+            &hx(&reg),
+            "--token",
+            &tok,
+            "--ua",
+            &hx(&ua(1)),
+            "--depth",
+            "0",
+            "--command",
+            "decoys",
+            "--exclude",
+            &hx(&ua(2)),
+            "--count",
+            "4",
+            "--rpc-agree",
+        ]));
         cli(&a, None).unwrap()
     };
-    assert_eq!(d["decoys"].as_array().unwrap().len(), 4, "one pick, the keys a majority returned: {d}");
+    assert_eq!(
+        d["decoys"].as_array().unwrap().len(),
+        4,
+        "one pick, the keys a majority returned: {d}"
+    );
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
@@ -919,7 +2067,8 @@ fn decoys_against_anvil() {
 /// clone, so the token is the emitter). A NONE debit's transaction is its entry's calldata with that tail appended (an ABI
 /// decoder reads by offsets and ignores it), so it carries the call and emits the `Credited` log; a LOG debit's emits its
 /// `PqzDebitProof`. (`Credited` gains a fourth topic, 0: a fixture artefact; the reader filters by three.)
-const EMITTER: &str = "0x60a03610602c5760203603358060203603038181600037506060516040516020516000516080850360\
+const EMITTER: &str =
+    "0x60a03610602c5760203603358060203603038181600037506060516040516020516000516080850360\
 80a4005b60206000f3";
 
 /// A minimal ABI encoder (the test's own, for the fixture's calldata).
@@ -937,7 +2086,10 @@ fn dynamic(t: &T) -> bool {
     }
 }
 fn enc(ts: &[T]) -> Vec<u8> {
-    let head_len: usize = ts.iter().map(|t| if dynamic(t) { 32 } else { enc_one(t).len() }).sum();
+    let head_len: usize = ts
+        .iter()
+        .map(|t| if dynamic(t) { 32 } else { enc_one(t).len() })
+        .sum();
     let (mut head, mut tail) = (Vec::new(), Vec::new());
     for t in ts {
         if dynamic(t) {
@@ -985,7 +2137,12 @@ type Step = (usize, Word, Value, u8, Option<[Word; 8]>, bool);
 /// `tail` (`t0 ‖ t1 ‖ t2 ‖ t3 ‖ data`) as the fixture's log, after `prefix`.
 fn logged(prefix: &[u8], topics: [Word; 4], data: &[u8]) -> Vec<u8> {
     let tail = [topics.concat(), data.to_vec()].concat();
-    [prefix.to_vec(), tail.clone(), be(tail.len() as u64).to_vec()].concat()
+    [
+        prefix.to_vec(),
+        tail.clone(),
+        be(tail.len() as u64).to_vec(),
+    ]
+    .concat()
 }
 
 /// `balanceProven` through the reader over a token whose credits came by LOG and by NONE (a direct op 1 with a memo, a relayed
@@ -999,34 +2156,71 @@ fn balance_proven_against_anvil() {
     if st::SET != SET {
         return;
     }
-    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
     let url = format!("http://127.0.0.1:{port}");
     let bin = std::env::var("ANVIL").unwrap_or_else(|_| "anvil".into());
-    let _anvil = Anvil(Command::new(bin).args(["--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().unwrap());
-    assert!((0..100).any(|_| {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        rpc(&url, "eth_chainId", json!([])).is_string()
-    }), "anvil did not start");
-    let chain_id = u64::from_str_radix(rpc(&url, "eth_chainId", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
-    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
+    let _anvil = Anvil(
+        Command::new(bin)
+            .args(["--port", &port.to_string(), "--silent"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap(),
+    );
+    assert!(
+        (0..100).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            rpc(&url, "eth_chainId", json!([])).is_string()
+        }),
+        "anvil did not start"
+    );
+    let chain_id = u64::from_str_radix(
+        rpc(&url, "eth_chainId", json!([]))
+            .as_str()
+            .unwrap()
+            .trim_start_matches("0x"),
+        16,
+    )
+    .unwrap();
+    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let forge = load(&format!("smartcontracts/vectors/pqz/{SET}/state.json"));
-    let n = Node { url: url.clone(), root: w32(&forge["layout"]["root"]), chain_id, uid: w32(&json!(genesis)) };
+    let n = Node {
+        url: url.clone(),
+        root: w32(&forge["layout"]["root"]),
+        chain_id,
+        uid: w32(&json!(genesis)),
+    };
     let (factory, token, reg) = (a20(FACTORY), a20(CW_TOKEN), a20(CW_REG));
     n.code(&IMPL, &json!(EMITTER));
     n.catalogue(&factory, &token, 5, true);
     n.clone_of(&token, &reg);
     let from = rpc(&url, "eth_accounts", json!([]))[0].clone();
     let send = |data: &[u8]| {
-        let h = rpc(&url, "eth_sendTransaction", json!([{"from": from, "to": hx(&token), "data": hx(data), "gas": "0x1c9c380"}]));
+        let h = rpc(
+            &url,
+            "eth_sendTransaction",
+            json!([{"from": from, "to": hx(&token), "data": hx(data), "gas": "0x1c9c380"}]),
+        );
         assert!(h.is_string(), "the fixture's transaction");
     };
 
     // the model with pq_kat keys, every statement at this chain's words (chainId, chainUid, token)
     let w = {
         let m = &kat(0);
-        scaas_ua::wallet::Wallet::from_mnemonic(m["mnemonic"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+        scaas_ua::wallet::Wallet::from_mnemonic(
+            m["mnemonic"].as_str().unwrap(),
+            m["passphrase"].as_str().unwrap(),
+        )
+        .unwrap()
     };
-    let (ua_a, ua_b, ua_aud, ua_x): (Word, Word, Word, Word) = ([0xA1; 32], [0xB0; 32], [0xAD; 32], [0xC3; 32]);
+    let (ua_a, ua_b, ua_aud, ua_x): (Word, Word, Word, Word) =
+        ([0xA1; 32], [0xB0; 32], [0xAD; 32], [0xC3; 32]);
     let keys: Vec<_> = (0..4).map(|i| w.pqz_key(0, i).unwrap()).collect();
     let mut c = Chain::new();
     for (ua, key) in [ua_a, ua_b, ua_aud, ua_x].iter().zip(&keys) {
@@ -1035,35 +2229,113 @@ fn balance_proven_against_anvil() {
     c.auditor = Some(ua_aud);
     c.shield(&ua_a, 1000);
     c.shield(&ua_x, 200);
-    let here = |v: Value| merge(v, json!({"chainId": chain_id, "chainUid": genesis, "token": hx(&token), "registry": hx(&reg)}));
+    let here = |v: Value| {
+        merge(
+            v,
+            json!({"chainId": chain_id, "chainUid": genesis, "token": hx(&token), "registry": hx(&reg)}),
+        )
+    };
     let bind = |b: &Word, mode: u64| {
-        let b = if *b == [0; 32] { scaas_ua::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1") } else { *b };
+        let b = if *b == [0; 32] {
+            scaas_ua::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1")
+        } else {
+            *b
+        };
         scaas_ua::keccak256(&[b, be(mode)].concat())
     };
     let pk = |i: usize| hx(&keys[i].pk());
     // (sender key, the debit request's extra fields, op, the envelope or none, LOG)
-    let env = [ua_a, be(0), be(1), be(9_999), be(0), [0; 32], be(0), [0; 32]];
-    let env_binding = scaas_ua::keccak256(&[scaas_ua::keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"), be(chain_id), n.uid, word_of(&token), env[0],
-        env[1], env[2], env[3], env[4], env[5], env[6], env[7]].concat());
+    let env = [
+        ua_a,
+        be(0),
+        be(1),
+        be(9_999),
+        be(0),
+        [0; 32],
+        be(0),
+        [0; 32],
+    ];
+    let env_binding = scaas_ua::keccak256(
+        &[
+            scaas_ua::keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"),
+            be(chain_id),
+            n.uid,
+            word_of(&token),
+            env[0],
+            env[1],
+            env[2],
+            env[3],
+            env[4],
+            env[5],
+            env[6],
+            env[7],
+        ]
+        .concat(),
+    );
     let steps: Vec<Step> = vec![
-        (0, ua_a, json!({"toUA": hx(&ua_b), "pkT": pk(1), "pkA": pk(2), "amount": 300, "mode": "BUNDLE"}), 1, None, true),
-        (3, ua_x, json!({"toUA": hx(&ua_b), "pkT": pk(1), "amount": 50, "mode": "HASH"}), 1, None, false),
-        (0, ua_a, json!({"toUA": hx(&ua_b), "pkT": pk(1), "amount": 20, "mode": "BUNDLE"}), 1, Some(env), false),
-        (3, ua_x, json!({"legs": [{"pk": pk(1), "ua": hx(&ua_b), "amount": 7}, {"pk": pk(0), "ua": hx(&ua_a), "amount": 1}], "pkA": pk(2),
-            "mode": "BUNDLE"}), 7, None, true),
+        (
+            0,
+            ua_a,
+            json!({"toUA": hx(&ua_b), "pkT": pk(1), "pkA": pk(2), "amount": 300, "mode": "BUNDLE"}),
+            1,
+            None,
+            true,
+        ),
+        (
+            3,
+            ua_x,
+            json!({"toUA": hx(&ua_b), "pkT": pk(1), "amount": 50, "mode": "HASH"}),
+            1,
+            None,
+            false,
+        ),
+        (
+            0,
+            ua_a,
+            json!({"toUA": hx(&ua_b), "pkT": pk(1), "amount": 20, "mode": "BUNDLE"}),
+            1,
+            Some(env),
+            false,
+        ),
+        (
+            3,
+            ua_x,
+            json!({"legs": [{"pk": pk(1), "ua": hx(&ua_b), "amount": 7}, {"pk": pk(0), "ua": hx(&ua_a), "amount": 1}], "pkA": pk(2),
+            "mode": "BUNDLE"}),
+            7,
+            None,
+            true,
+        ),
     ];
     for (i, ua, extra, op, envelope, log) in steps {
         let mode = (extra["mode"] == "BUNDLE") as u64;
-        let binding = if envelope.is_some() { env_binding } else { [0; 32] };
-        let mut d = here(merge(merge(c.own(&ua, 16), c.debit_fields()), extra.clone()));
+        let binding = if envelope.is_some() {
+            env_binding
+        } else {
+            [0; 32]
+        };
+        let mut d = here(merge(
+            merge(c.own(&ua, 16), c.debit_fields()),
+            extra.clone(),
+        ));
         d["envelopeBinding"] = json!(hx(&bind(&binding, mode)));
-        let cmd = if op == 7 { "proveTransferMulti" } else { "proveTransfer" };
-        let p: Value = serde_json::from_str(&keys[i].call(cmd, d.to_string().as_bytes()).unwrap()).unwrap();
+        let cmd = if op == 7 {
+            "proveTransferMulti"
+        } else {
+            "proveTransfer"
+        };
+        let p: Value =
+            serde_json::from_str(&keys[i].call(cmd, d.to_string().as_bytes()).unwrap()).unwrap();
         let (stmt, proof) = (h(&p["stmt"]), h(&p["proof"]));
-        assert_eq!(pqz_ffi::precompile(&st::input(op, &stmt, &proof)), Ok(pqz_ffi::VALID), "the debit verifies");
+        assert_eq!(
+            pqz_ffi::precompile(&st::input(op, &stmt, &proof)),
+            Ok(pqz_ffi::VALID),
+            "the debit verifies"
+        );
         c.proof_store = log as u8;
         c.own_tag = w32(&p["ownTag"]);
-        let k_ctr = st::word_u64(&stmt[32 * st::H_SEND_COUNTER..][..32].try_into().unwrap()).unwrap();
+        let k_ctr =
+            st::word_u64(&stmt[32 * st::H_SEND_COUNTER..][..32].try_into().unwrap()).unwrap();
         let index = c.accts.get(&(ua_b, 0)).map_or(0, |a| a.count);
         let er = if op == 7 {
             pqz_chain::note_legs(&[ua_b, ua_a]);
@@ -1074,24 +2346,82 @@ fn balance_proven_against_anvil() {
         let blob = c.entries[&er].ptr;
         if log {
             let data = enc(&[T::B(stmt[..640].to_vec()), T::B(proof.clone())]);
-            send(&logged(&[], [scaas_ua::keccak256(b"PqzDebitProof(address,bytes32,uint64,bytes,bytes)"), word_of(&blob), ua, be(k_ctr)], &data));
+            send(&logged(
+                &[],
+                [
+                    scaas_ua::keccak256(b"PqzDebitProof(address,bytes32,uint64,bytes,bytes)"),
+                    word_of(&blob),
+                    ua,
+                    be(k_ctr),
+                ],
+                &data,
+            ));
         } else {
             // the entry's calldata: op 1 single, direct or relayed (its envelope inline first)
-            let memo = p.get("memo").map(h).map(|m| m[16..].to_vec()).unwrap_or_default();
-            let t = T::Tup(vec![T::W(be(0)), T::W(be(d["validUntilBlock"].as_u64().unwrap())), T::W(be(0)), T::W(ua), T::W(be(0)), T::W(ua_b),
-                T::W([0; 32]), T::W([0; 32]), T::W(c.own_tag), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(memo),
-                opening(), opening()]);
+            let memo = p
+                .get("memo")
+                .map(h)
+                .map(|m| m[16..].to_vec())
+                .unwrap_or_default();
+            let t = T::Tup(vec![
+                T::W(be(0)),
+                T::W(be(d["validUntilBlock"].as_u64().unwrap())),
+                T::W(be(0)),
+                T::W(ua),
+                T::W(be(0)),
+                T::W(ua_b),
+                T::W([0; 32]),
+                T::W([0; 32]),
+                T::W(c.own_tag),
+                T::B(vec![]),
+                T::B(vec![]),
+                T::B(vec![]),
+                T::B(vec![]),
+                T::B(vec![]),
+                T::B(memo),
+                opening(),
+                opening(),
+            ]);
             // HASH on this BUNDLE token: the Compact entry (commit-reveal on every token)
-            let name = if mode == 0 { "mtxConfidentialTransferSingleCompact" } else { "mtxConfidentialTransferSingle" };
-            let (sig_s, args) = match envelope {
-                None => (format!("{name}({PA},bytes,{UA_SIG},bytes,{VERDICT})"), vec![t, T::B(proof.clone()), sig(), T::B(vec![]), verdict()]),
-                Some(e) => (format!("{name}({UA_ENV},{PA},bytes,{UA_SIG},bytes,{UA_SIG},{VERDICT})"),
-                    vec![T::Tup(e.iter().map(|w| T::W(*w)).collect()), t, T::B(proof.clone()), sig(), T::B(vec![]), sig(), verdict()]),
+            let name = if mode == 0 {
+                "mtxConfidentialTransferSingleCompact"
+            } else {
+                "mtxConfidentialTransferSingle"
             };
-            let call = [scaas_ua::keccak256(sig_s.as_bytes())[..4].to_vec(), enc(&args)].concat();
+            let (sig_s, args) = match envelope {
+                None => (
+                    format!("{name}({PA},bytes,{UA_SIG},bytes,{VERDICT})"),
+                    vec![t, T::B(proof.clone()), sig(), T::B(vec![]), verdict()],
+                ),
+                Some(e) => (
+                    format!("{name}({UA_ENV},{PA},bytes,{UA_SIG},bytes,{UA_SIG},{VERDICT})"),
+                    vec![
+                        T::Tup(e.iter().map(|w| T::W(*w)).collect()),
+                        t,
+                        T::B(proof.clone()),
+                        sig(),
+                        T::B(vec![]),
+                        sig(),
+                        verdict(),
+                    ],
+                ),
+            };
+            let call = [
+                scaas_ua::keccak256(sig_s.as_bytes())[..4].to_vec(),
+                enc(&args),
+            ]
+            .concat();
             let entry_ref = n.entry_ref(&token, &ua, k_ctr);
-            send(&logged(&call, [scaas_ua::keccak256(b"Credited(bytes32,uint64,uint64,bytes32)"), ua_b, be(index), [0; 32]],
-                &[be(0), entry_ref].concat()));
+            send(&logged(
+                &call,
+                [
+                    scaas_ua::keccak256(b"Credited(bytes32,uint64,uint64,bytes32)"),
+                    ua_b,
+                    be(index),
+                    [0; 32],
+                ],
+                &[be(0), entry_ref].concat(),
+            ));
         }
     }
     c.shield(&ua_b, 4);
@@ -1122,10 +2452,18 @@ fn balance_proven_against_anvil() {
         n.set(&token, &add(&rb, 1), w1);
     }
     for (ua, v) in c.keys.keys() {
-        n.set(&reg, &k(&be(*v), &k(ua, &be(reg_slot("pqzKey")))), &c.key_record_at(ua, *v));
+        n.set(
+            &reg,
+            &k(&be(*v), &k(ua, &be(reg_slot("pqzKey")))),
+            &c.key_record_at(ua, *v),
+        );
     }
     for ua in c.vers.keys() {
-        n.set(&reg, &k(ua, &be(reg_slot("pqzVersions"))), &c.versions_word(ua));
+        n.set(
+            &reg,
+            &k(ua, &be(reg_slot("pqzVersions"))),
+            &c.versions_word(ua),
+        );
     }
     for (a, code) in &c.blobs {
         n.code(a, &json!(hx(code)));
@@ -1134,34 +2472,119 @@ fn balance_proven_against_anvil() {
 
     let cid = chain_id.to_string();
     let args = |rpc_url: &str, command: &str| {
-        s(&["--rpc", rpc_url, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", CW_REG, "--token", CW_TOKEN,
-            "--ua", &hx(&ua_b), "--depth", "0", "--command", command, "--key-version", "0", "--for-op7", "false"])
+        s(&[
+            "--rpc",
+            rpc_url,
+            "--chain-id",
+            &cid,
+            "--chain-uid",
+            &genesis,
+            "--factory",
+            FACTORY,
+            "--registry",
+            CW_REG,
+            "--token",
+            CW_TOKEN,
+            "--ua",
+            &hx(&ua_b),
+            "--depth",
+            "0",
+            "--command",
+            command,
+            "--key-version",
+            "0",
+            "--for-op7",
+            "false",
+        ])
     };
     let a = cli(&args(&url, "balance"), Some(&kat(1))).unwrap();
     assert_eq!(a["value"], json!(381), "path (A)");
     let b = cli(&args(&url, "balanceProven"), Some(&kat(1))).unwrap();
     assert_eq!(b["value"], a["value"], "path (B) equals path (A)");
-    let kinds: Vec<&str> = b["parts"].as_array().unwrap().iter().map(|p| p["kind"].as_str().unwrap()).collect();
+    let kinds: Vec<&str> = b["parts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["kind"].as_str().unwrap())
+        .collect();
     assert_eq!(kinds, ["trivial", "credit", "credit", "credit", "credit"]);
     let mut wa = args(&url, "balanceProven");
     wa.push("--words".into());
     let words = cli(&wa, None).unwrap();
     let cs = words["credits"]["credits"].as_array().unwrap();
-    assert_eq!(cs.iter().map(|c| (c.get("header").is_some(), c.get("call").is_some())).collect::<Vec<_>>(),
-        [(true, false), (false, true), (false, true), (true, false)], "LOG, NONE direct, NONE relayed, LOG");
-    assert_eq!(cs[2]["call"]["binding"], json!(hx(&env_binding)), "the relayed call's envelope binding");
+    assert_eq!(
+        cs.iter()
+            .map(|c| (c.get("header").is_some(), c.get("call").is_some()))
+            .collect::<Vec<_>>(),
+        [(true, false), (false, true), (false, true), (true, false)],
+        "LOG, NONE direct, NONE relayed, LOG"
+    );
+    assert_eq!(
+        cs[2]["call"]["binding"],
+        json!(hx(&env_binding)),
+        "the relayed call's envelope binding"
+    );
     assert_eq!(cs[1]["call"]["mode"], "HASH");
-    assert_eq!((&cs[1]["call"]["verificationMode"], &cs[1]["call"]["verifierFee"]), (&json!("PRECOMPILE"), &json!(0)), "the token's verification");
+    assert_eq!(
+        (
+            &cs[1]["call"]["verificationMode"],
+            &cs[1]["call"]["verifierFee"]
+        ),
+        (&json!("PRECOMPILE"), &json!(0)),
+        "the token's verification"
+    );
+    assert_eq!(
+        cs.iter()
+            .map(|c| c.get("auditor").is_some())
+            .collect::<Vec<_>>(),
+        [true, false, false, true],
+        "the LOG op 1 and the op 7 audited"
+    );
+    // Fable C1 (set-auditor, CTR-PQZ-43): the auditor replaced (epoch 0 to 1, a new auditor at slot 7, the outgoing one at
+    // `auditorUAs[0]`, slot 25): the epoch-0 audited credit keeps its own auditor, read at its epoch's slot, and the value holds
+    let aud0 = k(&be(0), &add(&root, 25));
+    c.replace_auditor([0x5A; 32]);
+    n.set(&token, &root, &w32(&c.auditor_words(1)["auditorMode"]));
+    n.set(&token, &add(&root, 7), &[0x5A; 32]);
+    n.set(&token, &aud0, &ua_aud);
+    rpc(&url, "anvil_mine", json!(["0x1"]));
+    let after = cli(&wa, None).unwrap();
+    let x = &after["credits"]["credits"][3]["auditor"];
+    assert_eq!(
+        (&x["auditorUA"], &x["auditorUASlot"]),
+        (&json!(hx(&ua_aud)), &json!(hx(&aud0))),
+        "the entry's epoch-0 auditor"
+    );
+    let b2 = cli(&args(&url, "balanceProven"), Some(&kat(1))).unwrap();
+    assert_eq!(b2["value"], a["value"], "path (B) after the replacement");
     // a node that hides the proof logs; a credit's transaction sent to another contract (its `to` rewritten)
     let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let ev = hx(&scaas_ua::keccak256(b"PqzDebitProof(address,bytes32,uint64,bytes,bytes)"));
-    let hide = node(url.clone(), hits.clone(), move |m, p, r, _| Some(if m == "eth_getLogs" && p[0]["topics"][0] == json!(ev) { json!([]) } else { r }));
-    assert!(cli(&args(&hide, "balanceProven"), Some(&kat(1))).unwrap_err().contains("no single Credited log"), "hidden LOG");
+    let ev = hx(&scaas_ua::keccak256(
+        b"PqzDebitProof(address,bytes32,uint64,bytes,bytes)",
+    ));
+    let hide = node(url.clone(), hits.clone(), move |m, p, r, _| {
+        Some(if m == "eth_getLogs" && p[0]["topics"][0] == json!(ev) {
+            json!([])
+        } else {
+            r
+        })
+    });
+    assert!(
+        cli(&args(&hide, "balanceProven"), Some(&kat(1)))
+            .unwrap_err()
+            .contains("no single Credited log"),
+        "hidden LOG"
+    );
     let other = node(url.clone(), hits, |m, _, mut r, _| {
         if m == "eth_getTransactionByHash" {
             r["to"] = json!(hx(&[0x77; 20]));
         }
         Some(r)
     });
-    assert!(cli(&args(&other, "balanceProven"), Some(&kat(1))).unwrap_err().contains("needs a trace"), "a call through another contract");
+    assert!(
+        cli(&args(&other, "balanceProven"), Some(&kat(1)))
+            .unwrap_err()
+            .contains("needs a trace"),
+        "a call through another contract"
+    );
 }

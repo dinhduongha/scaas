@@ -10,10 +10,12 @@ use base64::Engine;
 use serde_json::{json, Value};
 
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
+use crate::adapters::evm::{building, BUILDING};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{blake2b256, LocalSigner, Signer};
+use scaas_rpc::family::FamilyError;
 
 pub type Addr = [u8; 32];
 
@@ -39,7 +41,11 @@ impl<'a> Reader<'a> {
         Self { b, i: 0 }
     }
     fn take(&mut self, n: usize) -> Result<&'a [u8]> {
-        let end = self.i.checked_add(n).filter(|e| *e <= self.b.len()).ok_or_else(|| anyhow!("truncated"))?;
+        let end = self
+            .i
+            .checked_add(n)
+            .filter(|e| *e <= self.b.len())
+            .ok_or_else(|| anyhow!("truncated"))?;
         let s = &self.b[self.i..end];
         self.i = end;
         Ok(s)
@@ -108,7 +114,8 @@ pub fn parse_addr(s: &str) -> Result<Addr> {
         bail!("bad Sui address {s}");
     }
     let mut a = [0u8; 32];
-    alloy::hex::decode_to_slice(format!("{h:0>64}"), &mut a).with_context(|| format!("bad Sui address {s}"))?;
+    alloy::hex::decode_to_slice(format!("{h:0>64}"), &mut a)
+        .with_context(|| format!("bad Sui address {s}"))?;
     Ok(a)
 }
 
@@ -201,14 +208,22 @@ pub struct Auth {
 /// `flag ‖ sig64 ‖ pk` (ed25519 32 / secp256k1, secp256r1 33) hoặc passkey `0x06 ‖ bcs(PasskeyAuthenticator)`.
 pub fn parse_signature(b64: &str) -> Result<Auth> {
     let raw = B64.decode(b64.trim())?;
-    let (&flag, rest) = raw.split_first().ok_or_else(|| anyhow!("empty signature"))?;
+    let (&flag, rest) = raw
+        .split_first()
+        .ok_or_else(|| anyhow!("empty signature"))?;
     match flag {
         0..=2 => {
             let pk_len = if flag == FLAG_ED25519 { 32 } else { 33 };
             if rest.len() != 64 + pk_len {
                 bail!("bad signature length");
             }
-            Ok(Auth { flag, sig: rest[..64].to_vec(), public_key: rest[64..].to_vec(), authenticator_data: vec![], client_data_json: vec![] })
+            Ok(Auth {
+                flag,
+                sig: rest[..64].to_vec(),
+                public_key: rest[64..].to_vec(),
+                authenticator_data: vec![],
+                client_data_json: vec![],
+            })
         }
         FLAG_PASSKEY => {
             let mut r = Reader::new(rest);
@@ -217,7 +232,13 @@ pub fn parse_signature(b64: &str) -> Result<Auth> {
             if user.len() != 98 || user[0] != FLAG_SECP256R1 {
                 bail!("bad passkey user signature");
             }
-            Ok(Auth { flag, sig: user[1..65].to_vec(), public_key: user[65..].to_vec(), authenticator_data: ad, client_data_json: cd })
+            Ok(Auth {
+                flag,
+                sig: user[1..65].to_vec(),
+                public_key: user[65..].to_vec(),
+                authenticator_data: ad,
+                client_data_json: cd,
+            })
         }
         f => bail!("unsupported signature scheme {f}"),
     }
@@ -285,7 +306,13 @@ fn result(i: u16) -> [u8; 3] {
     [2u8, i as u8, (i >> 8) as u8]
 }
 
-fn move_call(package: &Addr, module: &str, function: &str, tags: &[&[u8]], args: &[[u8; 3]]) -> Vec<u8> {
+fn move_call(
+    package: &Addr,
+    module: &str,
+    function: &str,
+    tags: &[&[u8]],
+    args: &[[u8; 3]],
+) -> Vec<u8> {
     let mut o = vec![0u8];
     o.extend_from_slice(package);
     vec(&mut o, module.as_bytes());
@@ -298,7 +325,14 @@ fn move_call(package: &Addr, module: &str, function: &str, tags: &[&[u8]], args:
 }
 
 /// `TransactionData::V1(ProgrammableTransaction{inputs, commands})`, sender = gas owner, expiration None.
-fn tx_data(inputs: &[Vec<u8>], commands: &[Vec<u8>], sender: &Addr, gas: &ObjRef, price: u64, budget: u64) -> Vec<u8> {
+fn tx_data(
+    inputs: &[Vec<u8>],
+    commands: &[Vec<u8>],
+    sender: &Addr,
+    gas: &ObjRef,
+    price: u64,
+    budget: u64,
+) -> Vec<u8> {
     let mut o = vec![0u8, 0u8]; // TransactionData::V1, TransactionKind::ProgrammableTransaction
     uleb(&mut o, inputs.len());
     inputs.iter().for_each(|i| o.extend_from_slice(i));
@@ -322,8 +356,19 @@ fn auth_inputs(sig: &[u8], ad: &[u8], cd: &[u8]) -> [Vec<u8>; 3] {
 
 /// `TransactionData::V1(ProgrammableTransaction[auth::new, meta::relay_pay<T>])`, expiration None.
 #[allow(clippy::too_many_arguments)]
-pub fn pay_tx(package: &Addr, op: &MetaOp, auth: &Auth, account_isv: u64, coin_tag: &[u8], sender: &Addr, gas: &ObjRef, price: u64, budget: u64) -> Vec<u8> {
-    let mut inputs = auth_inputs(&auth.sig, &auth.authenticator_data, &auth.client_data_json).to_vec(); // 0..2
+pub fn pay_tx(
+    package: &Addr,
+    op: &MetaOp,
+    auth: &Auth,
+    account_isv: u64,
+    coin_tag: &[u8],
+    sender: &Addr,
+    gas: &ObjRef,
+    price: u64,
+    budget: u64,
+) -> Vec<u8> {
+    let mut inputs =
+        auth_inputs(&auth.sig, &auth.authenticator_data, &auth.client_data_json).to_vec(); // 0..2
     inputs.extend([
         shared(&op.contract, account_isv, true), // 3 account
         pure(&op.to),                            // 4
@@ -337,17 +382,46 @@ pub fn pay_tx(package: &Addr, op: &MetaOp, auth: &Auth, account_isv: u64, coin_t
         clock_input(),                           // 12
     ]);
     let auth_new = move_call(package, "auth", "new", &[], &[input(0), input(1), input(2)]);
-    let relay = move_call(package, "meta", "relay_pay", &[coin_tag], &[
-        input(3), input(4), input(5), input(6), input(7), input(8), input(9), input(10), input(11), result(0), input(12),
-    ]);
+    let relay = move_call(
+        package,
+        "meta",
+        "relay_pay",
+        &[coin_tag],
+        &[
+            input(3),
+            input(4),
+            input(5),
+            input(6),
+            input(7),
+            input(8),
+            input(9),
+            input(10),
+            input(11),
+            result(0),
+            input(12),
+        ],
+    );
     tx_data(&inputs, &[auth_new, relay], sender, gas, price, budget)
 }
 
 /// CTR-MTX-26: `[auth::new, meta::relay_pay_meta<T>(account, to, amount, salt, meta, valid_until, relayer, extra, auth,
 /// clock)]`; `pay_ref`, `lane`, `nonce` are derived on chain.
 #[allow(clippy::too_many_arguments)]
-pub fn pay_meta_tx(package: &Addr, op: &MetaOp, auth: &Auth, salt: &[u8], meta: &[u8], account_isv: u64, coin_tag: &[u8], sender: &Addr, gas: &ObjRef, price: u64, budget: u64) -> Vec<u8> {
-    let mut inputs = auth_inputs(&auth.sig, &auth.authenticator_data, &auth.client_data_json).to_vec(); // 0..2
+pub fn pay_meta_tx(
+    package: &Addr,
+    op: &MetaOp,
+    auth: &Auth,
+    salt: &[u8],
+    meta: &[u8],
+    account_isv: u64,
+    coin_tag: &[u8],
+    sender: &Addr,
+    gas: &ObjRef,
+    price: u64,
+    budget: u64,
+) -> Vec<u8> {
+    let mut inputs =
+        auth_inputs(&auth.sig, &auth.authenticator_data, &auth.client_data_json).to_vec(); // 0..2
     inputs.extend([
         shared(&op.contract, account_isv, true), // 3 account
         pure(&op.to),                            // 4
@@ -360,9 +434,24 @@ pub fn pay_meta_tx(package: &Addr, op: &MetaOp, auth: &Auth, salt: &[u8], meta: 
         clock_input(),                           // 11
     ]);
     let auth_new = move_call(package, "auth", "new", &[], &[input(0), input(1), input(2)]);
-    let relay = move_call(package, "meta", "relay_pay_meta", &[coin_tag], &[
-        input(3), input(4), input(5), input(6), input(7), input(8), input(9), input(10), result(0), input(11),
-    ]);
+    let relay = move_call(
+        package,
+        "meta",
+        "relay_pay_meta",
+        &[coin_tag],
+        &[
+            input(3),
+            input(4),
+            input(5),
+            input(6),
+            input(7),
+            input(8),
+            input(9),
+            input(10),
+            result(0),
+            input(11),
+        ],
+    );
     tx_data(&inputs, &[auth_new, relay], sender, gas, price, budget)
 }
 
@@ -442,10 +531,19 @@ impl Order {
     /// `dex::new_order`'s 13 pure arguments (the domain is set on chain).
     fn inputs(&self) -> Vec<Vec<u8>> {
         vec![
-            pure_vec(&self.network), pure(&self.market), pure(&self.maker), pure(&self.taker), pure_vec(&self.sell_type),
-            pure_vec(&self.buy_type), pure(&self.sell_amount.to_le_bytes()), pure(&self.buy_amount.to_le_bytes()),
-            pure(&self.nonce.to_le_bytes()), pure(&self.expiry.to_le_bytes()), pure(&self.max_fee_ppm.to_le_bytes()),
-            pure(&[self.flags]), pure(&self.relayer),
+            pure_vec(&self.network),
+            pure(&self.market),
+            pure(&self.maker),
+            pure(&self.taker),
+            pure_vec(&self.sell_type),
+            pure_vec(&self.buy_type),
+            pure(&self.sell_amount.to_le_bytes()),
+            pure(&self.buy_amount.to_le_bytes()),
+            pure(&self.nonce.to_le_bytes()),
+            pure(&self.expiry.to_le_bytes()),
+            pure(&self.max_fee_ppm.to_le_bytes()),
+            pure(&[self.flags]),
+            pure(&self.relayer),
         ]
     }
 
@@ -470,10 +568,30 @@ impl Order {
 /// A fee-less signed entry of `scaas` that `scaas::relayfee` wraps (`relay_<entry>`), with its arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Wrapped {
-    Manage { account: Addr, action: u8, scheme: u8, public_key: Vec<u8>, rp_id_hash: Vec<u8>, origin: Vec<u8>, guardian: Addr, valid_until: u64 },
-    RevokeWithSig { mandate: Addr, valid_until: u64 },
-    Cancel { market: Addr, account: Addr, order: Order },
-    InvalidateNonces { market: Addr, account: Addr, min_nonce: u128 },
+    Manage {
+        account: Addr,
+        action: u8,
+        scheme: u8,
+        public_key: Vec<u8>,
+        rp_id_hash: Vec<u8>,
+        origin: Vec<u8>,
+        guardian: Addr,
+        valid_until: u64,
+    },
+    RevokeWithSig {
+        mandate: Addr,
+        valid_until: u64,
+    },
+    Cancel {
+        market: Addr,
+        account: Addr,
+        order: Order,
+    },
+    InvalidateNonces {
+        market: Addr,
+        account: Addr,
+        min_nonce: u128,
+    },
 }
 
 /// The wrapped call: `call = bcs(name) ‖ bcs(each argument)`, the entry's `Auth` last (sig, authenticator_data,
@@ -516,7 +634,16 @@ impl RelayCall {
     pub fn encode(&self) -> Vec<u8> {
         let mut o = Vec::new();
         match &self.entry {
-            Wrapped::Manage { account, action, scheme, public_key, rp_id_hash, origin, guardian, valid_until } => {
+            Wrapped::Manage {
+                account,
+                action,
+                scheme,
+                public_key,
+                rp_id_hash,
+                origin,
+                guardian,
+                valid_until,
+            } => {
                 vec(&mut o, b"meta::manage");
                 o.extend_from_slice(account);
                 o.extend_from_slice(&[*action, *scheme]);
@@ -526,18 +653,29 @@ impl RelayCall {
                 o.extend_from_slice(guardian);
                 o.extend_from_slice(&valid_until.to_le_bytes());
             }
-            Wrapped::RevokeWithSig { mandate, valid_until } => {
+            Wrapped::RevokeWithSig {
+                mandate,
+                valid_until,
+            } => {
                 vec(&mut o, b"mandate::revoke_with_sig");
                 o.extend_from_slice(mandate);
                 o.extend_from_slice(&valid_until.to_le_bytes());
             }
-            Wrapped::Cancel { market, account, order } => {
+            Wrapped::Cancel {
+                market,
+                account,
+                order,
+            } => {
                 vec(&mut o, b"dex::cancel");
                 o.extend_from_slice(market);
                 o.extend_from_slice(account);
                 order.write(&mut o);
             }
-            Wrapped::InvalidateNonces { market, account, min_nonce } => {
+            Wrapped::InvalidateNonces {
+                market,
+                account,
+                min_nonce,
+            } => {
                 vec(&mut o, b"dex::invalidate_nonces");
                 o.extend_from_slice(market);
                 o.extend_from_slice(account);
@@ -553,14 +691,18 @@ impl RelayCall {
         match &self.entry {
             Wrapped::Manage { .. } => None,
             Wrapped::RevokeWithSig { mandate, .. } => Some(*mandate),
-            Wrapped::Cancel { market, .. } | Wrapped::InvalidateNonces { market, .. } => Some(*market),
+            Wrapped::Cancel { market, .. } | Wrapped::InvalidateNonces { market, .. } => {
+                Some(*market)
+            }
         }
     }
 
     /// The account the entry names, which is also the paying account (`None`: revoke, paid from any account).
     pub fn account(&self) -> Option<Addr> {
         match &self.entry {
-            Wrapped::Manage { account, .. } | Wrapped::Cancel { account, .. } | Wrapped::InvalidateNonces { account, .. } => Some(*account),
+            Wrapped::Manage { account, .. }
+            | Wrapped::Cancel { account, .. }
+            | Wrapped::InvalidateNonces { account, .. } => Some(*account),
             Wrapped::RevokeWithSig { .. } => None,
         }
     }
@@ -584,8 +726,21 @@ pub struct FeeObjects {
 /// payer's `Auth`, 3..5 the call's, 6 the router, 7 the paying account, 8 `to`, 9 `amount`, 10 `valid_until`, 11 `extra`,
 /// 12 the clock, then the entry's own.
 #[allow(clippy::too_many_arguments)]
-pub fn fee_tx(package: &Addr, op: &MetaOp, auth: &Auth, call: &RelayCall, account_isv: u64, coin_tag: &[u8], objs: &FeeObjects, sender: &Addr, gas: &ObjRef, price: u64, budget: u64) -> Result<Vec<u8>> {
-    let mut inputs = auth_inputs(&auth.sig, &auth.authenticator_data, &auth.client_data_json).to_vec();
+pub fn fee_tx(
+    package: &Addr,
+    op: &MetaOp,
+    auth: &Auth,
+    call: &RelayCall,
+    account_isv: u64,
+    coin_tag: &[u8],
+    objs: &FeeObjects,
+    sender: &Addr,
+    gas: &ObjRef,
+    price: u64,
+    budget: u64,
+) -> Result<Vec<u8>> {
+    let mut inputs =
+        auth_inputs(&auth.sig, &auth.authenticator_data, &auth.client_data_json).to_vec();
     inputs.extend(auth_inputs(&call.auth[0], &call.auth[1], &call.auth[2]));
     inputs.extend([
         shared(&objs.router.0, objs.router.1, false),
@@ -600,33 +755,82 @@ pub fn fee_tx(package: &Addr, op: &MetaOp, auth: &Auth, call: &RelayCall, accoun
         move_call(package, "auth", "new", &[], &[input(0), input(1), input(2)]),
         move_call(package, "auth", "new", &[], &[input(3), input(4), input(5)]),
     ];
-    let pay = [input(8), input(9), input(10), input(11), result(0), input(12)];
-    let object = || objs.object.ok_or_else(|| anyhow!("the call's shared object is missing"));
+    let pay = [
+        input(8),
+        input(9),
+        input(10),
+        input(11),
+        result(0),
+        input(12),
+    ];
+    let object = || {
+        objs.object
+            .ok_or_else(|| anyhow!("the call's shared object is missing"))
+    };
     let (function, tags, mut args): (&str, Vec<&[u8]>, Vec<[u8; 3]>) = match &call.entry {
-        Wrapped::Manage { action, scheme, public_key, rp_id_hash, origin, guardian, valid_until, .. } => {
+        Wrapped::Manage {
+            action,
+            scheme,
+            public_key,
+            rp_id_hash,
+            origin,
+            guardian,
+            valid_until,
+            ..
+        } => {
             inputs.extend([
-                pure(&[*action]), pure(&[*scheme]), pure_vec(public_key), pure_vec(rp_id_hash), pure_vec(origin), pure(guardian),
+                pure(&[*action]),
+                pure(&[*scheme]),
+                pure_vec(public_key),
+                pure_vec(rp_id_hash),
+                pure_vec(origin),
+                pure(guardian),
                 pure(&valid_until.to_le_bytes()),
             ]);
-            ("relay_manage", vec![coin_tag], [6, 7, 13, 14, 15, 16, 17, 18, 19].map(input).to_vec())
+            (
+                "relay_manage",
+                vec![coin_tag],
+                [6, 7, 13, 14, 15, 16, 17, 18, 19].map(input).to_vec(),
+            )
         }
         Wrapped::RevokeWithSig { valid_until, .. } => {
             let (id, isv) = object()?;
             inputs.extend([shared(&id, isv, true), pure(&valid_until.to_le_bytes())]);
-            let tag = objs.mandate_tag.as_deref().ok_or_else(|| anyhow!("the mandate's coin type is missing"))?;
-            ("relay_revoke_with_sig", vec![tag, coin_tag], vec![input(6), input(13), input(14), result(1), input(7)])
+            let tag = objs
+                .mandate_tag
+                .as_deref()
+                .ok_or_else(|| anyhow!("the mandate's coin type is missing"))?;
+            (
+                "relay_revoke_with_sig",
+                vec![tag, coin_tag],
+                vec![input(6), input(13), input(14), result(1), input(7)],
+            )
         }
         Wrapped::Cancel { order, .. } => {
             let (id, isv) = object()?;
             inputs.push(shared(&id, isv, true));
             inputs.extend(order.inputs()); // 14..26
-            commands.push(move_call(package, "dex", "new_order", &[], &(14..27).map(input).collect::<Vec<_>>()));
-            ("relay_cancel", vec![coin_tag], vec![input(6), input(13), input(7), result(2)])
+            commands.push(move_call(
+                package,
+                "dex",
+                "new_order",
+                &[],
+                &(14..27).map(input).collect::<Vec<_>>(),
+            ));
+            (
+                "relay_cancel",
+                vec![coin_tag],
+                vec![input(6), input(13), input(7), result(2)],
+            )
         }
         Wrapped::InvalidateNonces { min_nonce, .. } => {
             let (id, isv) = object()?;
             inputs.extend([shared(&id, isv, true), pure(&min_nonce.to_le_bytes())]);
-            ("relay_invalidate_nonces", vec![coin_tag], vec![input(6), input(13), input(7), input(14)])
+            (
+                "relay_invalidate_nonces",
+                vec![coin_tag],
+                vec![input(6), input(13), input(7), input(14)],
+            )
         }
     };
     if !matches!(call.entry, Wrapped::RevokeWithSig { .. }) {
@@ -654,15 +858,27 @@ impl RelayFeePolicy {
         let t = cfg.params.get("relay_fee");
         let router = match t.and_then(|t| t.get("router")) {
             None => None,
-            Some(v) => Some(parse_addr(v.as_str().ok_or_else(|| anyhow!("params.relay_fee.router must be a 0x… string"))?)
-                .context("params.relay_fee.router")?),
+            Some(v) => Some(
+                parse_addr(
+                    v.as_str()
+                        .ok_or_else(|| anyhow!("params.relay_fee.router must be a 0x… string"))?,
+                )
+                .context("params.relay_fee.router")?,
+            ),
         };
         let tokens = cfg
             .tokens
             .iter()
-            .map(|t| parse_addr(&t.address).with_context(|| format!("tokens: {} is not a Sui Registry id", t.address)))
+            .map(|t| {
+                parse_addr(&t.address)
+                    .with_context(|| format!("tokens: {} is not a Sui Registry id", t.address))
+            })
             .collect::<Result<_>>()?;
-        Ok(Self { router, tokens, params: cfg.relay_params()? })
+        Ok(Self {
+            router,
+            tokens,
+            params: cfg.relay_params()?,
+        })
     }
 }
 
@@ -690,35 +906,62 @@ fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
 pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
     let kind = crate::adapter::op_kind(o, &crate::adapter::PAY_KINDS)?;
     if kind != Some("relay_fee") && policy.router == Some(op.to) {
-        bail!("a plain pay to the relay-fee router {} would strand the coins", addr_hex(&op.to));
+        bail!(
+            "a plain pay to the relay-fee router {} would strand the coins",
+            addr_hex(&op.to)
+        );
     }
     match kind {
         Some("pay_meta") => {
-            let (salt, meta) = (hex_field(&o["salt"], "salt")?, hex_field(&o["meta"], "meta")?);
+            let (salt, meta) = (
+                hex_field(&o["salt"], "salt")?,
+                hex_field(&o["meta"], "meta")?,
+            );
             if salt.len() != 32 {
                 bail!("op.salt is 32 bytes");
             }
             if meta.len() > policy.params.max_pay_meta_bytes {
-                bail!("meta is {} B, above max_pay_meta_bytes {}", meta.len(), policy.params.max_pay_meta_bytes);
+                bail!(
+                    "meta is {} B, above max_pay_meta_bytes {}",
+                    meta.len(),
+                    policy.params.max_pay_meta_bytes
+                );
             }
             let id = meta_pay_id(&salt, &meta);
             if op.pay_ref != id || op.lane != pay_lane(&id) || op.nonce != 0 {
-                bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0");
+                bail!(
+                    "pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"
+                );
             }
             Ok(Entry::PayMeta { salt, meta })
         }
         Some("relay_fee") => {
-            let Some(router) = policy.router else { bail!("relay-fee jobs need params.relay_fee.router") };
+            let Some(router) = policy.router else {
+                bail!("relay-fee jobs need params.relay_fee.router")
+            };
             if op.relayer != router {
-                bail!("the payment's relayer {} is not the configured params.relay_fee.router", addr_hex(&op.relayer));
+                bail!(
+                    "the payment's relayer {} is not the configured params.relay_fee.router",
+                    addr_hex(&op.relayer)
+                );
             }
             let x = &o["extra"];
-            let registry = parse_addr(x["registry"].as_str().ok_or_else(|| anyhow!("op.extra.registry missing"))?)?;
+            let registry = parse_addr(
+                x["registry"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("op.extra.registry missing"))?,
+            )?;
             if !policy.tokens.contains(&registry) {
-                bail!("token {} is not registered on this chain", addr_hex(&registry));
+                bail!(
+                    "token {} is not registered on this chain",
+                    addr_hex(&registry)
+                );
             }
             if derive_account(&registry, &op.from) != op.contract {
-                bail!("the paying account is not the payer's account of token {}", addr_hex(&registry));
+                bail!(
+                    "the paying account is not the payer's account of token {}",
+                    addr_hex(&registry)
+                );
             }
             let bytes = hex_field(&x["call"], "extra.call")?;
             let call = RelayCall::decode(&bytes)?;
@@ -732,7 +975,10 @@ pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) ->
             if !o["ref"].is_null() && hex_field(&o["ref"], "ref")? != r {
                 bail!("op.ref != relay_ref(call, salt)");
             }
-            Ok(Entry::Fee { call: Box::new(call), router })
+            Ok(Entry::Fee {
+                call: Box::new(call),
+                router,
+            })
         }
         _ => Ok(Entry::Pay),
     }
@@ -742,7 +988,12 @@ pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) ->
 /// marker, which pays the submitting lane) or bound to the lane, and then must be at least `min_amount`; a fee bound
 /// to anyone else only with `relay_bound_payee` (sponsored). Checked per lane in `build`.
 pub fn relay_payee(policy: &RelayFeePolicy, op: &MetaOp, lane: &Addr) -> Result<()> {
-    crate::adapter::relay_fee_ours(policy.router == Some(op.to), op.to == *lane, op.amount, &policy.params)
+    crate::adapter::relay_fee_ours(
+        policy.router == Some(op.to),
+        op.to == *lane,
+        op.amount,
+        &policy.params,
+    )
 }
 
 /// Digest giao dịch Sui (id hiển thị dạng base58).
@@ -769,7 +1020,10 @@ pub fn lane_address(pk: &[u8]) -> Addr {
 
 fn bytes_of(v: &Value) -> Option<Vec<u8>> {
     match v {
-        Value::Array(a) => a.iter().map(|x| x.as_u64().filter(|n| *n < 256).map(|n| n as u8)).collect(),
+        Value::Array(a) => a
+            .iter()
+            .map(|x| x.as_u64().filter(|n| *n < 256).map(|n| n as u8))
+            .collect(),
         Value::String(s) if s.starts_with("0x") => alloy::hex::decode(&s[2..]).ok(),
         Value::String(s) => B64.decode(s).ok(),
         _ => None,
@@ -778,18 +1032,29 @@ fn bytes_of(v: &Value) -> Option<Vec<u8>> {
 
 fn str_or_num(v: &Value) -> Option<String> {
     match v {
-        Value::String(s) if !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()) => Some(s.clone()),
+        Value::String(s) if !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()) => {
+            Some(s.clone())
+        }
         Value::Number(n) => n.as_u64().map(|n| n.to_string()),
         _ => None,
     }
 }
 
 fn canon(v: &Value) -> Option<String> {
-    v.as_str().and_then(|s| parse_addr(s).ok()).map(|a| addr_hex(&a))
+    v.as_str()
+        .and_then(|s| parse_addr(s).ok())
+        .map(|a| addr_hex(&a))
 }
 
-/// Một event JSON-RPC của Sui ⇒ event chuẩn hoá cho Odoo; `None` nếu không phải của ta/registry lạ/hỏng.
-pub fn normalize(package: &Addr, registries: &[String], ev: &Value, block: u64, block_hash: &str, tx_hash: &str) -> Option<Value> {
+/// Một event JSON-RPC của Sui ⇒ event chuẩn hoá cho ExternalPull; `None` nếu không phải của ta/registry lạ/hỏng.
+pub fn normalize(
+    package: &Addr,
+    registries: &[String],
+    ev: &Value,
+    block: u64,
+    block_hash: &str,
+    tx_hash: &str,
+) -> Option<Value> {
     let ty = ev.get("type")?.as_str()?;
     let mut it = ty.splitn(3, "::");
     let (pkg, module, name) = (it.next()?, it.next()?, it.next()?);
@@ -798,15 +1063,25 @@ pub fn normalize(package: &Addr, registries: &[String], ev: &Value, block: u64, 
     }
     let p = ev.get("parsedJson")?;
     // `RelayFeePaid` (the `relayfee` module) names its token; the `meta` events are the token's own
-    let contract = canon(p.get(if module == "relayfee" { "token" } else { "contract" })?)?;
+    let contract = canon(p.get(if module == "relayfee" {
+        "token"
+    } else {
+        "contract"
+    })?)?;
     if !registries.contains(&contract) {
         return None;
     }
-    let log_index = str_or_num(ev.get("id")?.get("eventSeq")?)?.parse::<u64>().ok()?;
+    let log_index = str_or_num(ev.get("id")?.get("eventSeq")?)?
+        .parse::<u64>()
+        .ok()?;
     let mut out = json!({
         "contract": contract, "block_number": block, "block_hash": block_hash, "tx_hash": tx_hash, "log_index": log_index,
     });
-    let b32 = |k: &str| bytes_of(p.get(k)?).filter(|b| b.len() == 32).map(|b| addr_hex(&b));
+    let b32 = |k: &str| {
+        bytes_of(p.get(k)?)
+            .filter(|b| b.len() == 32)
+            .map(|b| addr_hex(&b))
+    };
     match (module, name) {
         ("meta", "PaymentSettled") => {
             out["event"] = json!("PaymentSettled");
@@ -824,7 +1099,10 @@ pub fn normalize(package: &Addr, registries: &[String], ev: &Value, block: u64, 
         ("meta", "PaymentMeta") => {
             out["event"] = json!("PaymentMeta");
             out["entry_ref"] = json!(b32("pay_id")?);
-            out["meta"] = json!(format!("0x{}", alloy::hex::encode(bytes_of(p.get("meta")?)?)));
+            out["meta"] = json!(format!(
+                "0x{}",
+                alloy::hex::encode(bytes_of(p.get("meta")?)?)
+            ));
         }
         ("relayfee", "RelayFeePaid") => {
             out["event"] = json!("RelayFeePaid");
@@ -843,10 +1121,21 @@ pub fn normalize(package: &Addr, registries: &[String], ev: &Value, block: u64, 
 
 /// Event của một lô tx `chunk` (digest base58, checkpoint, hash checkpoint) từ `sui_multiGetTransactionBlocks`.
 /// Mọi tx phải có mặt, đúng thứ tự, có `events`: tx thiếu/bị prune/lỗi ⇒ `Err`, vùng không được chốt (review L5).
-pub fn tx_events(package: &Addr, registries: &[String], chunk: &[(String, u64, String)], r: &Value) -> Result<Vec<Value>> {
-    let blocks = r.as_array().ok_or_else(|| anyhow!("multiGetTransactionBlocks: not a list"))?;
+pub fn tx_events(
+    package: &Addr,
+    registries: &[String],
+    chunk: &[(String, u64, String)],
+    r: &Value,
+) -> Result<Vec<Value>> {
+    let blocks = r
+        .as_array()
+        .ok_or_else(|| anyhow!("multiGetTransactionBlocks: not a list"))?;
     if blocks.len() != chunk.len() {
-        bail!("multiGetTransactionBlocks: {} of {} transactions", blocks.len(), chunk.len());
+        bail!(
+            "multiGetTransactionBlocks: {} of {} transactions",
+            blocks.len(),
+            chunk.len()
+        );
     }
     let mut out = Vec::new();
     for (blk, (d58, seq, ch)) in blocks.iter().zip(chunk) {
@@ -855,7 +1144,12 @@ pub fn tx_events(package: &Addr, registries: &[String], chunk: &[(String, u64, S
             _ => bail!("transaction {d58} not served with its events: {blk}"),
         };
         let tx_hash = addr_hex(&bs58::decode(d58).into_vec()?);
-        out.extend(crate::indexer::join_pay_events(events.iter().filter_map(|ev| normalize(package, registries, ev, *seq, ch, &tx_hash)).collect()));
+        out.extend(crate::indexer::join_pay_events(
+            events
+                .iter()
+                .filter_map(|ev| normalize(package, registries, ev, *seq, ch, &tx_hash))
+                .collect(),
+        ));
     }
     Ok(out)
 }
@@ -864,8 +1158,8 @@ pub fn tx_events(package: &Addr, registries: &[String], chunk: &[(String, u64, S
 
 pub struct SuiAdapter {
     key: String,
-    rpcs: Vec<String>,
-    http: reqwest::Client,
+    /// the RPC endpoints (scaas-rpc T20: the family client, bounded, 20 s per request)
+    net: scaas_rpc::sui::Sui,
     /// Đích lệnh gọi (package mới nhất sau nâng cấp).
     package: Addr,
     /// Id package GỐC: type của event giữ id này qua mọi lần nâng cấp (review L1).
@@ -906,25 +1200,48 @@ fn param_str<'a>(cfg: &'a ChainCfg, k: &str) -> Option<&'a str> {
 impl SuiAdapter {
     pub fn new(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Self> {
         if cfg.rpc_urls.is_empty() || signers.is_empty() {
-            bail!("chain {}: needs rpc_urls and at least one lane", cfg.chain_key());
+            bail!(
+                "chain {}: needs rpc_urls and at least one lane",
+                cfg.chain_key()
+            );
         }
-        let package = parse_addr(param_str(cfg, "package").ok_or_else(|| anyhow!("sui: params.package is required"))?)?;
-        let type_package = param_str(cfg, "type_package").map(parse_addr).transpose()?.unwrap_or(package);
-        let journal = param_str(cfg, "lane_journal")
-            .ok_or_else(|| anyhow!("sui: params.lane_journal (a directory that survives restarts) is required"))?;
+        let package = parse_addr(
+            param_str(cfg, "package").ok_or_else(|| anyhow!("sui: params.package is required"))?,
+        )?;
+        let type_package = param_str(cfg, "type_package")
+            .map(parse_addr)
+            .transpose()?
+            .unwrap_or(package);
+        let journal = param_str(cfg, "lane_journal").ok_or_else(|| {
+            anyhow!("sui: params.lane_journal (a directory that survives restarts) is required")
+        })?;
         std::fs::create_dir_all(journal).with_context(|| format!("sui: lane_journal {journal}"))?;
-        let budget_cap = cfg.params.get("max_gas_budget").and_then(|v| v.as_integer()).map(|v| v as u64).unwrap_or(DEFAULT_BUDGET);
+        let budget_cap = cfg
+            .params
+            .get("max_gas_budget")
+            .and_then(|v| v.as_integer())
+            .map(|v| v as u64)
+            .unwrap_or(DEFAULT_BUDGET);
         let mut own = Vec::new();
         let mut lanes = Vec::new();
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
-            let LocalSigner::Ed(k) = s else { bail!("sui lanes are ed25519") };
-            lanes.push(Lane { index: i, address: addr_hex(&lane_address(&k.verifying_key().to_bytes())) });
+            let LocalSigner::Ed(k) = s else {
+                bail!("sui lanes are ed25519")
+            };
+            lanes.push(Lane {
+                index: i,
+                address: addr_hex(&lane_address(&k.verifying_key().to_bytes())),
+            });
             own.push(LocalSigner::Ed(k.clone()));
         }
         Ok(Self {
             key: cfg.chain_key(),
-            rpcs: cfg.rpc_urls.clone(),
-            http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build()?,
+            // T24.11 (owner 2026-11-18): `params.chain_identifier`, when set, checks every endpoint, endpoint 0 included
+            net: scaas_rpc::sui::Sui::pinned(
+                scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                    .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+                param_str(cfg, "chain_identifier"),
+            ),
             package,
             type_package,
             budget_cap,
@@ -938,7 +1255,10 @@ impl SuiAdapter {
 
     fn journal_path(&self, lane: usize) -> std::path::PathBuf {
         let index = self.lanes.get(lane).map_or(lane as u32, |l| l.index);
-        self.journal.join(format!("{}-lane{index}.json", self.key.replace(|c: char| !c.is_ascii_alphanumeric(), "_")))
+        self.journal.join(format!(
+            "{}-lane{index}.json",
+            self.key.replace(|c: char| !c.is_ascii_alphanumeric(), "_")
+        ))
     }
 
     fn write_pending(&self, lane: usize, p: &Pending) -> Result<()> {
@@ -957,7 +1277,8 @@ impl SuiAdapter {
     async fn previous_gas(&self, lane: usize) -> Result<Option<Addr>> {
         let path = self.journal_path(lane);
         let p: Pending = match std::fs::read(&path) {
-            Ok(b) => serde_json::from_slice(&b).with_context(|| format!("lane journal {}", path.display()))?,
+            Ok(b) => serde_json::from_slice(&b)
+                .with_context(|| format!("lane journal {}", path.display()))?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(e.into()),
         };
@@ -966,8 +1287,11 @@ impl SuiAdapter {
             TxStatus::Mined { .. } | TxStatus::Reverted { .. } => false,
             TxStatus::Pending => true,
             TxStatus::Unknown => {
-                let o = self.rpc("sui_getObject", json!([p.gas, {}])).await?;
-                let v = o["data"]["version"].as_str().and_then(|v| v.parse().ok()).or_else(|| o["data"]["version"].as_u64());
+                let o = self.rpc_first("sui_getObject", json!([p.gas, {}])).await?;
+                let v = o["data"]["version"]
+                    .as_str()
+                    .and_then(|v| v.parse().ok())
+                    .or_else(|| o["data"]["version"].as_u64());
                 let live = v == Some(p.gas_version);
                 if live {
                     if let Err(e) = self.execute(&p.tx, &p.sig).await {
@@ -985,25 +1309,223 @@ impl SuiAdapter {
     }
 
     async fn execute(&self, tx_b64: &str, sig_b64: &str) -> Result<()> {
-        self.rpc("sui_executeTransactionBlock", json!([tx_b64, [sig_b64], {"showEffects": true}])).await.map(|_| ())
+        self.rpc_first(
+            "sui_executeTransactionBlock",
+            json!([tx_b64, [sig_b64], {"showEffects": true}]),
+        )
+        .await
+        .map(|_| ())
     }
 
-    async fn rpc_at(&self, url: &str, method: &str, params: Value) -> Result<Value> {
-        let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-        let v: Value = self.http.post(url).json(&body).send().await?.error_for_status()?.json().await?;
-        if let Some(e) = v.get("error") {
-            bail!("{method}: {e}");
-        }
-        v.get("result").cloned().ok_or_else(|| anyhow!("{method}: no result"))
+    /// One call on endpoint `i` (scaas-rpc T20: the family client); an error answer is `"{method}: {error}"`, as before.
+    async fn rpc_at(&self, i: usize, method: &str, params: Value) -> Result<Value> {
+        self.net
+            .call(i, method, params)
+            .await
+            .map_err(anyhow::Error::from)
     }
 
+    /// A call: `build`'s fail over, any other is endpoint 0's (F3). ARCH-POS-15 (CLI-RPC-04, scaas-rpc T20b): endpoint 0,
+    /// then each next endpoint of this network (`sui_getChainIdentifier` equal to the first endpoint's) not behind the
+    /// checkpoint endpoint 0 last showed. An error answer is endpoint 0's to classify as before, a later endpoint's no verdict
+    /// (the next is asked); every endpoint failing is a transport error without a later endpoint's error text; what a
+    /// failover endpoint's answer refuses `build` requeues. The lane journal's status read and its re-send, inside `build`,
+    /// are endpoint 0's ([`Self::rpc_first`]).
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
-        self.rpc_at(&self.rpcs[0], method, params).await
+        if !building() {
+            return self.rpc_first(method, params).await;
+        }
+        use scaas_rpc::pool::ReadError;
+        let a = self
+            .net
+            .client
+            .failover(&self.net, |i| {
+                let params = params.clone();
+                async move {
+                    self.net.call(i, method, params).await.map_err(|e| match e {
+                        // T24.3: invalid params (-32602: the node's answer to this request) is endpoint 0's; any other error
+                        // object (a rate limit, a server error) is the endpoint's failure and fails over
+                        FamilyError::Rpc { error, .. } if error["code"] == -32602 => {
+                            ReadError::Revert {
+                                data: vec![],
+                                reason: error.to_string(),
+                            }
+                        }
+                        FamilyError::Failure(f) => ReadError::Failure(f),
+                        e => ReadError::Failure(scaas_rpc::EndpointFailure::new(
+                            i,
+                            scaas_rpc::FailureKind::Transport,
+                            &e.to_string(),
+                        )),
+                    })
+                }
+            })
+            .await;
+        match a {
+            Ok(a) => Ok(a.value),
+            // endpoint 0's error answer: as before
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
+                bail!("{method}: {}", scaas_rpc::error::endpoint_text(&reason))
+            }
+            Err(e) => Err(crate::adapters::evm::all_failed(method, &e)),
+        }
+    }
+
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let w = self
+            .work(job)
+            .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let sender = self.lane_addr(lane).map_err(transport)?;
+        if matches!(w.entry, Entry::Fee { .. }) {
+            relay_payee(&self.relay_fee, &w.op, &sender)
+                .map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        }
+        let skip = self.previous_gas(lane).await.map_err(transport)?;
+        let isv = self
+            .shared_version(&w.op.contract)
+            .await
+            .map_err(transport)?
+            .ok_or_else(|| {
+                SimError::Revert(format!(
+                    "account {} does not exist",
+                    addr_hex(&w.op.contract)
+                ))
+            })?;
+        let price = self.gas_price().await.map_err(transport)?;
+        let (gas, balance) = match self.gas_coin(&sender, skip).await {
+            Ok(g) => g,
+            Err(e) => {
+                // ponytail: runner trả job về hàng đợi rồi thử ngay — chậm lại khi chỉ chờ tx cũ của lane.
+                if skip.is_some() {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+                return Err(transport(e));
+            }
+        };
+        let objs = match &w.entry {
+            Entry::Fee { call, router } => {
+                let version = |id: Addr| async move {
+                    self.shared_version(&id)
+                        .await
+                        .map_err(transport)?
+                        .ok_or_else(|| {
+                            SimError::Revert(format!(
+                                "shared object {} does not exist",
+                                addr_hex(&id)
+                            ))
+                        })
+                        .map(|v| (id, v))
+                };
+                let object = match call.object() {
+                    Some(id) => Some(version(id).await?),
+                    None => None,
+                };
+                Some(FeeObjects {
+                    router: version(*router).await?,
+                    object,
+                    mandate_tag: w.mandate_tag.clone(),
+                })
+            }
+            _ => None,
+        };
+        let make = |budget: u64| -> std::result::Result<Vec<u8>, SimError> {
+            Ok(match (&w.entry, &objs) {
+                (Entry::PayMeta { salt, meta }, _) => pay_meta_tx(
+                    &self.package,
+                    &w.op,
+                    &w.auth,
+                    salt,
+                    meta,
+                    isv,
+                    &w.coin_tag,
+                    &sender,
+                    &gas,
+                    price,
+                    budget,
+                ),
+                (Entry::Fee { call, .. }, Some(objs)) => fee_tx(
+                    &self.package,
+                    &w.op,
+                    &w.auth,
+                    call,
+                    isv,
+                    &w.coin_tag,
+                    objs,
+                    &sender,
+                    &gas,
+                    price,
+                    budget,
+                )
+                .map_err(|e| SimError::Revert(format!("{e:#}")))?,
+                (Entry::Pay, _) => pay_tx(
+                    &self.package,
+                    &w.op,
+                    &w.auth,
+                    isv,
+                    &w.coin_tag,
+                    &sender,
+                    &gas,
+                    price,
+                    budget,
+                ),
+                // unreachable (`objs` is `Some` for every `Fee`); never fall back to a plain `relay_pay`
+                (Entry::Fee { .. }, None) => {
+                    return Err(SimError::Revert(
+                        "relay-fee job without its shared objects".into(),
+                    ))
+                }
+            })
+        };
+        let cap = self.budget_cap.min(balance);
+        let tx = make(cap)?;
+        let dry = self
+            .rpc("sui_dryRunTransactionBlock", json!([B64.encode(&tx)]))
+            .await
+            .map_err(transport)?;
+        let st = &dry["effects"]["status"];
+        if st["status"].as_str() != Some("success") {
+            return Err(SimError::Revert(
+                st["error"].as_str().unwrap_or("dry run failed").to_string(),
+            ));
+        }
+        let cost = |k: &str| {
+            dry["effects"]["gasUsed"][k]
+                .as_str()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0)
+        };
+        let used = cost("computationCost") + cost("storageCost");
+        let budget = (used + used / 5).max(price * 1000).min(cap);
+        let tx = make(budget)?;
+        let meta = json!({"budget": budget, "gas": addr_hex(&gas.id), "gas_version": gas.version});
+        Ok(Built {
+            job_id: job.id,
+            body: tx,
+            valid_until: w.op.valid_until,
+            meta,
+        })
+    }
+
+    /// A call on endpoint 0 only (F3: the status, the send, the lane journal's checks).
+    async fn rpc_first(&self, method: &str, params: Value) -> Result<Value> {
+        self.rpc_at(0, method, params).await
+    }
+
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
     }
 
     fn work(&self, job: &Job) -> Result<Work> {
-        let o = job.op.as_ref().ok_or_else(|| anyhow!("not a signed_op job"))?;
-        let payload = alloy::hex::decode(o["payload"].as_str().unwrap_or_default().trim_start_matches("0x"))?;
+        let o = job
+            .op
+            .as_ref()
+            .ok_or_else(|| anyhow!("not a signed_op job"))?;
+        let payload = alloy::hex::decode(
+            o["payload"]
+                .as_str()
+                .unwrap_or_default()
+                .trim_start_matches("0x"),
+        )?;
         let op = MetaOp::decode(&payload)?;
         if op.op != OP_PAY {
             bail!("only pay ops are relayed on Sui");
@@ -1012,56 +1534,109 @@ impl SuiAdapter {
             bail!("payload contract differs from the job contract");
         }
         let auth = parse_signature(o["signature"].as_str().unwrap_or_default())?;
-        let coin_tag = type_tag(o["extra"]["coin_type"].as_str().ok_or_else(|| anyhow!("extra.coin_type missing"))?)?;
+        let coin_tag = type_tag(
+            o["extra"]["coin_type"]
+                .as_str()
+                .ok_or_else(|| anyhow!("extra.coin_type missing"))?,
+        )?;
         // the router's id is in `ref` as the original package (type_package), its module is called on `package`
         let entry = entry(&self.type_package, &self.relay_fee, &op, o)?;
         let mandate_tag = match &entry {
-            Entry::Fee { call, .. } if matches!(call.entry, Wrapped::RevokeWithSig { .. }) => Some(type_tag(
-                o["extra"]["mandate_coin_type"].as_str().ok_or_else(|| anyhow!("extra.mandate_coin_type missing"))?,
-            )?),
+            Entry::Fee { call, .. } if matches!(call.entry, Wrapped::RevokeWithSig { .. }) => {
+                Some(type_tag(
+                    o["extra"]["mandate_coin_type"]
+                        .as_str()
+                        .ok_or_else(|| anyhow!("extra.mandate_coin_type missing"))?,
+                )?)
+            }
             _ => None,
         };
-        Ok(Work { op, auth, coin_tag, entry, mandate_tag })
+        Ok(Work {
+            op,
+            auth,
+            coin_tag,
+            entry,
+            mandate_tag,
+        })
     }
 
     /// `initial_shared_version` của account; `Ok(None)` = không tồn tại / không phải shared.
     async fn shared_version(&self, id: &Addr) -> Result<Option<u64>> {
-        let r = self.rpc("sui_getObject", json!([addr_hex(id), {"showOwner": true}])).await?;
-        Ok(r["data"]["owner"]["Shared"]["initial_shared_version"].as_u64()
-            .or_else(|| r["data"]["owner"]["Shared"]["initial_shared_version"].as_str().and_then(|s| s.parse().ok())))
+        let r = self
+            .rpc("sui_getObject", json!([addr_hex(id), {"showOwner": true}]))
+            .await?;
+        Ok(r["data"]["owner"]["Shared"]["initial_shared_version"]
+            .as_u64()
+            .or_else(|| {
+                r["data"]["owner"]["Shared"]["initial_shared_version"]
+                    .as_str()
+                    .and_then(|s| s.parse().ok())
+            }))
     }
 
     /// Coin SUI lớn nhất của lane (đọc lại mỗi job — lane chỉ có một tx bay nên version luôn mới).
     /// `skip` = coin của tx cũ còn treo (review M3).
     async fn gas_coin(&self, owner: &Addr, skip: Option<Addr>) -> Result<(ObjRef, u64)> {
-        let r = self.rpc("suix_getCoins", json!([addr_hex(owner), "0x2::sui::SUI", null, 50])).await?;
+        let r = self
+            .rpc(
+                "suix_getCoins",
+                json!([addr_hex(owner), "0x2::sui::SUI", null, 50]),
+            )
+            .await?;
         let mut best: Option<(ObjRef, u64)> = None;
         for c in r["data"].as_array().cloned().unwrap_or_default() {
-            let bal: u64 = c["balance"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
+            let bal: u64 = c["balance"]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
             if best.as_ref().is_some_and(|(_, b)| *b >= bal) {
                 continue;
             }
-            if skip.is_some_and(|g| c["coinObjectId"].as_str().and_then(|i| parse_addr(i).ok()) == Some(g)) {
+            if skip.is_some_and(|g| {
+                c["coinObjectId"].as_str().and_then(|i| parse_addr(i).ok()) == Some(g)
+            }) {
                 continue;
             }
             let digest: [u8; 32] = bs58::decode(c["digest"].as_str().unwrap_or_default())
                 .into_vec()?
                 .try_into()
                 .map_err(|_| anyhow!("bad coin digest"))?;
-            let version = c["version"].as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("bad coin version"))?;
-            best = Some((ObjRef { id: parse_addr(c["coinObjectId"].as_str().unwrap_or_default())?, version, digest }, bal));
+            let version = c["version"]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(|| anyhow!("bad coin version"))?;
+            best = Some((
+                ObjRef {
+                    id: parse_addr(c["coinObjectId"].as_str().unwrap_or_default())?,
+                    version,
+                    digest,
+                },
+                bal,
+            ));
         }
-        best.ok_or_else(|| anyhow!("lane {} has no usable SUI for gas (previous tx still pending: {skip:?})", addr_hex(owner)))
+        best.ok_or_else(|| {
+            anyhow!(
+                "lane {} has no usable SUI for gas (previous tx still pending: {skip:?})",
+                addr_hex(owner)
+            )
+        })
     }
 
     async fn gas_price(&self) -> Result<u64> {
         let v = self.rpc("suix_getReferenceGasPrice", json!([])).await?;
-        v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_u64()).ok_or_else(|| anyhow!("bad gas price"))
+        v.as_str()
+            .and_then(|s| s.parse().ok())
+            .or_else(|| v.as_u64())
+            .ok_or_else(|| anyhow!("bad gas price"))
     }
 
-    async fn checkpoint_digest(&self, url: &str, seq: u64) -> Result<String> {
-        let c = self.rpc_at(url, "sui_getCheckpoint", json!([seq.to_string()])).await?;
-        let d = bs58::decode(c["digest"].as_str().unwrap_or_default()).into_vec()?;
+    async fn checkpoint_digest(&self, i: usize, seq: u64) -> Result<String> {
+        let c = self
+            .net
+            .checkpoint_digest(i, seq)
+            .await
+            .map_err(|e| anyhow!("{e}"))?;
+        let d = bs58::decode(c).into_vec()?;
         if d.len() != 32 {
             bail!("bad checkpoint digest");
         }
@@ -1069,7 +1644,13 @@ impl SuiAdapter {
     }
 
     fn lane_addr(&self, lane: usize) -> Result<Addr> {
-        parse_addr(&self.lanes.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.address)
+        parse_addr(
+            &self
+                .lanes
+                .get(lane)
+                .ok_or_else(|| anyhow!("no lane {lane}"))?
+                .address,
+        )
     }
 }
 
@@ -1093,12 +1674,24 @@ impl ChainAdapter for SuiAdapter {
 
     /// R80: `pay` ⇒ `Account.lanes[lane]` (Table, dynamic field; vắng = 0) so với nonce đã ký.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Ok(w) = self.work(job) else { return Ok(None) };
-        let a = self.rpc("sui_getObject", json!([addr_hex(&w.op.contract), {"showContent": true}])).await?;
+        let Ok(w) = self.work(job) else {
+            return Ok(None);
+        };
+        let a = self
+            .rpc_first(
+                "sui_getObject",
+                json!([addr_hex(&w.op.contract), {"showContent": true}]),
+            )
+            .await?;
         let table = a["data"]["content"]["fields"]["lanes"]["fields"]["id"]["id"]
             .as_str()
             .ok_or_else(|| anyhow!("account {} has no lanes table", addr_hex(&w.op.contract)))?;
-        let f = self.rpc("suix_getDynamicFieldObject", json!([table, {"type": "vector<u8>", "value": w.op.lane}])).await?;
+        let f = self
+            .rpc_first(
+                "suix_getDynamicFieldObject",
+                json!([table, {"type": "vector<u8>", "value": w.op.lane}]),
+            )
+            .await?;
         if f["error"]["code"] == "dynamicFieldNotFound" {
             return Ok(Some(false));
         }
@@ -1108,93 +1701,50 @@ impl ChainAdapter for SuiAdapter {
         Ok(Some(next > w.op.nonce))
     }
 
+    /// [`SuiAdapter::build_on`], its reads failed over (scaas-rpc T20b, R4: a refusal read while a failover endpoint answered
+    /// is no verdict).
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
-        let sender = self.lane_addr(lane).map_err(transport)?;
-        if matches!(w.entry, Entry::Fee { .. }) {
-            relay_payee(&self.relay_fee, &w.op, &sender).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        let mark = self.failovers();
+        match BUILDING.scope((), self.build_on(job, lane)).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(
+                crate::adapters::evm::failover_answer(&r),
+            )),
+            r => r,
         }
-        let skip = self.previous_gas(lane).await.map_err(transport)?;
-        let isv = self
-            .shared_version(&w.op.contract)
-            .await
-            .map_err(transport)?
-            .ok_or_else(|| SimError::Revert(format!("account {} does not exist", addr_hex(&w.op.contract))))?;
-        let price = self.gas_price().await.map_err(transport)?;
-        let (gas, balance) = match self.gas_coin(&sender, skip).await {
-            Ok(g) => g,
-            Err(e) => {
-                // ponytail: runner trả job về hàng đợi rồi thử ngay — chậm lại khi chỉ chờ tx cũ của lane.
-                if skip.is_some() {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
-                return Err(transport(e));
-            }
-        };
-        let objs = match &w.entry {
-            Entry::Fee { call, router } => {
-                let version = |id: Addr| async move {
-                    self.shared_version(&id)
-                        .await
-                        .map_err(transport)?
-                        .ok_or_else(|| SimError::Revert(format!("shared object {} does not exist", addr_hex(&id))))
-                        .map(|v| (id, v))
-                };
-                let object = match call.object() {
-                    Some(id) => Some(version(id).await?),
-                    None => None,
-                };
-                Some(FeeObjects { router: version(*router).await?, object, mandate_tag: w.mandate_tag.clone() })
-            }
-            _ => None,
-        };
-        let make = |budget: u64| -> std::result::Result<Vec<u8>, SimError> {
-            Ok(match (&w.entry, &objs) {
-                (Entry::PayMeta { salt, meta }, _) => {
-                    pay_meta_tx(&self.package, &w.op, &w.auth, salt, meta, isv, &w.coin_tag, &sender, &gas, price, budget)
-                }
-                (Entry::Fee { call, .. }, Some(objs)) => {
-                    fee_tx(&self.package, &w.op, &w.auth, call, isv, &w.coin_tag, objs, &sender, &gas, price, budget)
-                        .map_err(|e| SimError::Revert(format!("{e:#}")))?
-                }
-                (Entry::Pay, _) => pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, budget),
-                // unreachable (`objs` is `Some` for every `Fee`); never fall back to a plain `relay_pay`
-                (Entry::Fee { .. }, None) => return Err(SimError::Revert("relay-fee job without its shared objects".into())),
-            })
-        };
-        let cap = self.budget_cap.min(balance);
-        let tx = make(cap)?;
-        let dry = self.rpc("sui_dryRunTransactionBlock", json!([B64.encode(&tx)])).await.map_err(transport)?;
-        let st = &dry["effects"]["status"];
-        if st["status"].as_str() != Some("success") {
-            return Err(SimError::Revert(st["error"].as_str().unwrap_or("dry run failed").to_string()));
-        }
-        let cost = |k: &str| dry["effects"]["gasUsed"][k].as_str().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
-        let used = cost("computationCost") + cost("storageCost");
-        let budget = (used + used / 5).max(price * 1000).min(cap);
-        let tx = make(budget)?;
-        let meta = json!({"budget": budget, "gas": addr_hex(&gas.id), "gas_version": gas.version});
-        Ok(Built { job_id: job.id, body: tx, valid_until: w.op.valid_until, meta })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
-        let s = self.signers.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?;
+        let s = self
+            .signers
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?;
         let sig = s.sign(&tx_signing_digest(&built.body))?;
         let mut raw = built.body.clone();
         raw.push(FLAG_ED25519);
         raw.extend_from_slice(&sig);
         raw.extend_from_slice(&s.public_key());
         let tx_id = addr_hex(&tx_digest(&built.body));
-        // Journal TRƯỚC khi trả (trước `signed` ở Odoo và trước khi gửi) — review M3.
+        // Journal TRƯỚC khi trả (trước `signed` ở ExternalPull và trước khi gửi) — review M3.
         let pending = Pending {
             tx: B64.encode(&built.body),
             sig: B64.encode(&raw[built.body.len()..]),
             digest: tx_id.clone(),
-            gas: built.meta["gas"].as_str().ok_or_else(|| anyhow!("built without gas coin"))?.to_string(),
-            gas_version: built.meta["gas_version"].as_u64().ok_or_else(|| anyhow!("built without gas version"))?,
+            gas: built.meta["gas"]
+                .as_str()
+                .ok_or_else(|| anyhow!("built without gas coin"))?
+                .to_string(),
+            gas_version: built.meta["gas_version"]
+                .as_u64()
+                .ok_or_else(|| anyhow!("built without gas version"))?,
         };
         self.write_pending(lane, &pending).context("lane journal")?;
-        Ok(Signed { job_id: built.job_id, tx_id, raw, valid_until: built.valid_until, sequence })
+        Ok(Signed {
+            job_id: built.job_id,
+            tx_id,
+            raw,
+            valid_until: built.valid_until,
+            sequence,
+        })
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
@@ -1206,18 +1756,47 @@ impl ChainAdapter for SuiAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let d = bs58::encode(parse_addr(tx_id)?).into_string();
-        let r = match self.rpc("sui_getTransactionBlock", json!([d, {"showEffects": true}])).await {
-            Ok(r) => r,
-            Err(e) if format!("{e:#}").contains("Could not find") => return Ok(TxStatus::Unknown),
-            Err(e) => return Err(e),
-        };
-        let height = r["checkpoint"].as_str().and_then(|s| s.parse().ok()).or_else(|| r["checkpoint"].as_u64());
-        Ok(match (r["effects"]["status"]["status"].as_str(), height) {
-            (Some("success"), Some(h)) => TxStatus::Mined { height: h, tx_hash: None },
-            (Some("failure"), _) => TxStatus::Reverted { reason: r["effects"]["status"]["error"].as_str().unwrap_or("failure").into() },
-            _ => TxStatus::Pending,
-        })
+        let st: Result<TxStatus> = async {
+            let d = bs58::encode(parse_addr(tx_id)?).into_string();
+            let r = match self
+                .rpc_first("sui_getTransactionBlock", json!([d, {"showEffects": true}]))
+                .await
+            {
+                Ok(r) => r,
+                // T24.12: "not found" is the error object's invalid-params code (-32602), never a text search
+                Err(e)
+                    if e.downcast_ref::<FamilyError>()
+                        .and_then(FamilyError::rpc_error)
+                        .is_some_and(|x| x["code"] == -32602) =>
+                {
+                    return Ok(TxStatus::Unknown)
+                }
+                Err(e) => return Err(e),
+            };
+            let height = r["checkpoint"]
+                .as_str()
+                .and_then(|s| s.parse().ok())
+                .or_else(|| r["checkpoint"].as_u64());
+            Ok(match (r["effects"]["status"]["status"].as_str(), height) {
+                (Some("success"), Some(h)) => TxStatus::Mined {
+                    height: h,
+                    tx_hash: None,
+                },
+                (Some("failure"), _) => TxStatus::Reverted {
+                    reason: r["effects"]["status"]["error"]
+                        .as_str()
+                        .unwrap_or("failure")
+                        .into(),
+                },
+                _ => TxStatus::Pending,
+            })
+        }
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
+        }
+        st
     }
 
     async fn sequence(&self, _lane: usize) -> Result<u64> {
@@ -1230,12 +1809,18 @@ impl ChainAdapter for SuiAdapter {
     }
 
     async fn final_head(&self) -> Result<Option<Head>> {
-        let v = self.rpc("sui_getLatestCheckpointSequenceNumber", json!([])).await?;
-        let seq: u64 = v.as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("bad checkpoint number"))?;
-        let hash = self.checkpoint_digest(&self.rpcs[0], seq).await?;
+        let v = self
+            .rpc("sui_getLatestCheckpointSequenceNumber", json!([]))
+            .await?;
+        let seq: u64 = v
+            .as_str()
+            .and_then(|s| s.parse().ok())
+            .ok_or_else(|| anyhow!("bad checkpoint number"))?;
+        self.net.client.pool().saw_block(seq); // the failover reads' floor: endpoint 0's checkpoint
+        let hash = self.checkpoint_digest(0, seq).await?;
         let mut agree = 1;
-        for url in &self.rpcs[1..] {
-            if self.checkpoint_digest(url, seq).await.ok().as_deref() == Some(hash.as_str()) {
+        for i in 1..self.net.client.len() {
+            if self.checkpoint_digest(i, seq).await.ok().as_deref() == Some(hash.as_str()) {
                 agree += 1;
             }
         }
@@ -1243,26 +1828,35 @@ impl ChainAdapter for SuiAdapter {
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
-        self.checkpoint_digest(&self.rpcs[0], height).await
+        self.checkpoint_digest(0, height).await
     }
 
-    /// `contracts` = id `Registry<T>` các token Odoo đã đăng ký (review H2: không danh sách tĩnh trong cấu hình node).
+    /// `contracts` = id `Registry<T>` các token ExternalPull đã đăng ký (review H2: không danh sách tĩnh trong cấu hình node).
     /// `ponytail:` quét mọi tx của checkpoint trong vùng — đổi sang gRPC/GraphQL lọc theo package khi tải lớn.
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
-        let registries: Vec<String> = contracts.iter().filter_map(|c| parse_addr(c).ok()).map(|a| addr_hex(&a)).collect();
+        let registries: Vec<String> = contracts
+            .iter()
+            .filter_map(|c| parse_addr(c).ok())
+            .map(|a| addr_hex(&a))
+            .collect();
         if registries.is_empty() || from > to {
             return Ok(vec![]);
         }
         let mut txs: Vec<(String, u64, String)> = Vec::new(); // (tx digest b58, checkpoint, checkpoint hash)
         let mut cursor = from.checked_sub(1).map(|c| c.to_string());
         'pages: loop {
-            let page = self.rpc("sui_getCheckpoints", json!([cursor, 100, false])).await?;
+            let page = self
+                .rpc("sui_getCheckpoints", json!([cursor, 100, false]))
+                .await?;
             let data = page["data"].as_array().cloned().unwrap_or_default();
             if data.is_empty() {
                 break;
             }
             for c in &data {
-                let seq: u64 = c["sequenceNumber"].as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("bad checkpoint"))?;
+                let seq: u64 = c["sequenceNumber"]
+                    .as_str()
+                    .and_then(|s| s.parse().ok())
+                    .ok_or_else(|| anyhow!("bad checkpoint"))?;
                 if seq > to {
                     break 'pages;
                 }
@@ -1283,7 +1877,12 @@ impl ChainAdapter for SuiAdapter {
         let mut out = Vec::new();
         for chunk in txs.chunks(50) {
             let ids: Vec<&str> = chunk.iter().map(|t| t.0.as_str()).collect();
-            let r = self.rpc("sui_multiGetTransactionBlocks", json!([ids, {"showEvents": true}])).await?;
+            let r = self
+                .rpc(
+                    "sui_multiGetTransactionBlocks",
+                    json!([ids, {"showEvents": true}]),
+                )
+                .await?;
             out.extend(tx_events(&self.type_package, &registries, chunk, &r)?);
         }
         Ok(out)
@@ -1307,26 +1906,42 @@ mod tests {
     fn payload_and_digest_match_move_and_python() {
         let b = alloy::hex::decode(PAYLOAD).unwrap();
         let op = MetaOp::decode(&b).unwrap();
-        assert_eq!((op.amount, op.nonce, op.valid_until, op.network.as_slice()), (100, 0, 1000, &b"localnet"[..]));
+        assert_eq!(
+            (op.amount, op.nonce, op.valid_until, op.network.as_slice()),
+            (100, 0, 1000, &b"localnet"[..])
+        );
         assert_eq!(addr_hex(&op.from), ALICE);
         assert_eq!(addr_hex(&op.to), addr_hex(&parse_addr("0xbeef").unwrap()));
         assert_eq!(op.encode(), b);
         assert_eq!(alloy::hex::encode(personal_digest(&b)), DIGEST);
         let a = parse_signature(SIGNATURE).unwrap();
-        assert_eq!((a.flag, addr_hex(&lane_address(&a.public_key))), (0, ALICE.to_string()));
-        let vk = ed25519_dalek::VerifyingKey::from_bytes(&a.public_key.clone().try_into().unwrap()).unwrap();
+        assert_eq!(
+            (a.flag, addr_hex(&lane_address(&a.public_key))),
+            (0, ALICE.to_string())
+        );
+        let vk = ed25519_dalek::VerifyingKey::from_bytes(&a.public_key.clone().try_into().unwrap())
+            .unwrap();
         let sig = ed25519_dalek::Signature::from_slice(&a.sig).unwrap();
-        vk.verify_strict(&alloy::hex::decode(DIGEST).unwrap(), &sig).unwrap();
+        vk.verify_strict(&alloy::hex::decode(DIGEST).unwrap(), &sig)
+            .unwrap();
     }
 
     #[test]
     fn type_tags_and_addresses() {
-        assert_eq!(addr_hex(&parse_addr("0x6").unwrap()), format!("0x{:0>64}", "6"));
+        assert_eq!(
+            addr_hex(&parse_addr("0x6").unwrap()),
+            format!("0x{:0>64}", "6")
+        );
         assert!(parse_addr(&format!("0x{}", "1".repeat(65))).is_err());
         let t = type_tag("0x2::sui::SUI").unwrap();
         assert_eq!(t[0], 7);
         assert_eq!(&t[33..], b"\x03sui\x03SUI\x00");
-        for bad in ["0x2::sui", "0x2::sui::SUI::x", "0x2::s-ui::SUI", "0x2::sui::Coin<T>"] {
+        for bad in [
+            "0x2::sui",
+            "0x2::sui::SUI::x",
+            "0x2::s-ui::SUI",
+            "0x2::sui::Coin<T>",
+        ] {
             assert!(type_tag(bad).is_err(), "{bad}");
         }
     }
@@ -1341,9 +1956,20 @@ mod tests {
         user.extend_from_slice(&[2u8; 33]);
         vec(&mut raw, &user);
         let a = parse_signature(&B64.encode(&raw)).unwrap();
-        assert_eq!((a.flag, a.sig, a.public_key.len(), a.authenticator_data.len()), (6, vec![1u8; 64], 33, 37));
+        assert_eq!(
+            (
+                a.flag,
+                a.sig,
+                a.public_key.len(),
+                a.authenticator_data.len()
+            ),
+            (6, vec![1u8; 64], 33, 37)
+        );
         raw.push(0);
-        assert!(parse_signature(&B64.encode(&raw)).is_err(), "trailing bytes");
+        assert!(
+            parse_signature(&B64.encode(&raw)).is_err(),
+            "trailing bytes"
+        );
     }
 
     #[test]
@@ -1359,12 +1985,41 @@ mod tests {
         let n = normalize(&pkg, regs, &ev("PaymentSettled", "0x7c95"), 5, "0xh", "0xt").unwrap();
         assert_eq!(n["event"], "PaymentSettled");
         assert_eq!(n["contract"], reg);
-        assert_eq!((n["amount"].as_str(), n["log_index"].as_u64(), n["block_number"].as_u64()), (Some("100"), Some(1), Some(5)));
+        assert_eq!(
+            (
+                n["amount"].as_str(),
+                n["log_index"].as_u64(),
+                n["block_number"].as_u64()
+            ),
+            (Some("100"), Some(1), Some(5))
+        );
         assert_eq!(n["entry_ref"], addr_hex(&[1u8; 32]));
-        let m = normalize(&pkg, regs, &ev("MetaTransactionExecuted", "0x7c95"), 5, "0xh", "0xt").unwrap();
+        let m = normalize(
+            &pkg,
+            regs,
+            &ev("MetaTransactionExecuted", "0x7c95"),
+            5,
+            "0xh",
+            "0xt",
+        )
+        .unwrap();
         assert_eq!(m["digest"], addr_hex(&[0xb1u8; 32]));
-        assert!(normalize(&pkg, regs, &ev("PaymentSettled", "0x9999"), 5, "0xh", "0xt").is_none(), "unregistered registry");
-        assert!(normalize(&parse_addr("0xdef").unwrap(), regs, &ev("PaymentSettled", "0x7c95"), 5, "0xh", "0xt").is_none(), "other package");
+        assert!(
+            normalize(&pkg, regs, &ev("PaymentSettled", "0x9999"), 5, "0xh", "0xt").is_none(),
+            "unregistered registry"
+        );
+        assert!(
+            normalize(
+                &parse_addr("0xdef").unwrap(),
+                regs,
+                &ev("PaymentSettled", "0x7c95"),
+                5,
+                "0xh",
+                "0xt"
+            )
+            .is_none(),
+            "other package"
+        );
     }
 
     /// Review L5: tx thiếu/bị prune/lỗi trong `sui_multiGetTransactionBlocks` ⇒ lỗi (vùng KHÔNG được chốt).
@@ -1372,20 +2027,38 @@ mod tests {
     fn missing_or_pruned_tx_fails_the_range() {
         let pkg = parse_addr("0xabc").unwrap();
         let regs = [addr_hex(&parse_addr("0x7c95").unwrap())];
-        let (d1, d2) = (bs58::encode([1u8; 32]).into_string(), bs58::encode([2u8; 32]).into_string());
-        let chunk = vec![(d1.clone(), 5, "0xh".to_string()), (d2.clone(), 5, "0xh".to_string())];
+        let (d1, d2) = (
+            bs58::encode([1u8; 32]).into_string(),
+            bs58::encode([2u8; 32]).into_string(),
+        );
+        let chunk = vec![
+            (d1.clone(), 5, "0xh".to_string()),
+            (d2.clone(), 5, "0xh".to_string()),
+        ];
         let ev = json!({"id": {"eventSeq": "0"}, "type": format!("{}::meta::PaymentSettled", addr_hex(&pkg)),
                         "parsedJson": {"contract": "0x7c95", "from": "0x1", "to": "0x2", "amount": "1", "pay_ref": vec![1u8; 32]}});
         let ok = json!([{"digest": d1, "events": [ev]}, {"digest": d2, "events": []}]);
         assert_eq!(tx_events(&pkg, &regs, &chunk, &ok).unwrap().len(), 1);
         let short = json!([{"digest": d1, "events": []}]);
-        assert!(tx_events(&pkg, &regs, &chunk, &short).is_err(), "short answer");
+        assert!(
+            tx_events(&pkg, &regs, &chunk, &short).is_err(),
+            "short answer"
+        );
         let pruned = json!([{"digest": d1, "events": []}, {"error": {"code": "notExists", "object_id": d2}}]);
-        assert!(tx_events(&pkg, &regs, &chunk, &pruned).is_err(), "error entry");
+        assert!(
+            tx_events(&pkg, &regs, &chunk, &pruned).is_err(),
+            "error entry"
+        );
         let no_events = json!([{"digest": d1, "events": []}, {"digest": d2}]);
-        assert!(tx_events(&pkg, &regs, &chunk, &no_events).is_err(), "events not served");
+        assert!(
+            tx_events(&pkg, &regs, &chunk, &no_events).is_err(),
+            "events not served"
+        );
         let swapped = json!([{"digest": d2, "events": []}, {"digest": d1, "events": []}]);
-        assert!(tx_events(&pkg, &regs, &chunk, &swapped).is_err(), "order differs");
+        assert!(
+            tx_events(&pkg, &regs, &chunk, &swapped).is_err(),
+            "order differs"
+        );
     }
 
     /// Review L1: sau nâng cấp, lệnh gọi trỏ package MỚI còn type event giữ id package GỐC.
@@ -1398,9 +2071,15 @@ mod tests {
         };
         let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
         let a = SuiAdapter::new(&cfg(""), &k).unwrap();
-        assert_eq!((a.package, a.type_package), (parse_addr("0xb").unwrap(), parse_addr("0xb").unwrap()));
+        assert_eq!(
+            (a.package, a.type_package),
+            (parse_addr("0xb").unwrap(), parse_addr("0xb").unwrap())
+        );
         let a = SuiAdapter::new(&cfg(", type_package = \"0xa\""), &k).unwrap();
-        assert_eq!((a.package, a.type_package), (parse_addr("0xb").unwrap(), parse_addr("0xa").unwrap()));
+        assert_eq!(
+            (a.package, a.type_package),
+            (parse_addr("0xb").unwrap(), parse_addr("0xa").unwrap())
+        );
     }
 
     /// Review L4: bytes `TransactionData` của `pay_tx` (vector cố định). Giải độc lập bằng
@@ -1412,8 +2091,22 @@ mod tests {
     fn pay_tx_bytes_vector() {
         let op = MetaOp::decode(&alloy::hex::decode(PAYLOAD).unwrap()).unwrap();
         let auth = parse_signature(SIGNATURE).unwrap();
-        let gas = ObjRef { id: [0xaa; 32], version: 7, digest: [7u8; 32] };
-        let tx = pay_tx(&parse_addr("0xb").unwrap(), &op, &auth, 3, &type_tag("0x2::sui::SUI").unwrap(), &[0x1e; 32], &gas, 1000, 2_000_000);
+        let gas = ObjRef {
+            id: [0xaa; 32],
+            version: 7,
+            digest: [7u8; 32],
+        };
+        let tx = pay_tx(
+            &parse_addr("0xb").unwrap(),
+            &op,
+            &auth,
+            3,
+            &type_tag("0x2::sui::SUI").unwrap(),
+            &[0x1e; 32],
+            &gas,
+            1000,
+            2_000_000,
+        );
         assert_eq!(B64.encode(&tx), TX_B64);
         assert_eq!(addr_hex(&tx_digest(&tx)), TX_DIGEST);
     }
@@ -1428,39 +2121,69 @@ mod tests {
         coins: Vec<(Addr, u64, u64)>,
         executed: Vec<String>,
         dry_runs: u32,
+        /// scaas-rpc T20: the checkpoint digests' byte (`[d; 32]`), the status reads counted, a dry run refused
+        digest: u8,
+        status_reads: u32,
+        dry_fail: bool,
+        /// every request unanswered (503): the endpoint down
+        down: bool,
     }
     type FakeShared = std::sync::Arc<std::sync::Mutex<FakeSui>>;
 
     async fn fake_sui(f: FakeSui) -> (String, FakeShared) {
         use axum::extract::State;
         use axum::Json;
-        async fn h(State(s): State<FakeShared>, Json(b): Json<Value>) -> Json<Value> {
+        async fn h(State(s): State<FakeShared>, Json(b): Json<Value>) -> axum::response::Response {
+            use axum::response::IntoResponse;
             let mut f = s.lock().unwrap();
+            if f.down {
+                return axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
             let p = &b["params"];
             let r = match b["method"].as_str().unwrap_or_default() {
-                "sui_getTransactionBlock" => match f.status {
-                    None => return Json(json!({"error": {"code": -32602, "message": "Could not find the referenced transaction"}})),
-                    Some(st) => json!({"checkpoint": "9", "effects": {"status": {"status": st}}}),
-                },
-                "sui_getObject" if p[0] == addr_hex(&[0xaa; 32]) => json!({"data": {"version": f.gas_version.to_string()}}),
-                "sui_getObject" => json!({"data": {"owner": {"Shared": {"initial_shared_version": 3}}}}),
+                "sui_getChainIdentifier" => json!("4c78adac"),
+                "sui_getLatestCheckpointSequenceNumber" => json!("9"),
+                "sui_getCheckpoint" => {
+                    json!({"digest": bs58::encode([f.digest; 32]).into_string()})
+                }
+                "sui_dryRunTransactionBlock" if f.dry_fail => {
+                    f.dry_runs += 1;
+                    json!({"effects": {"status": {"status": "failure", "error": "MoveAbort(0xb::meta, 3)"}}})
+                }
+                "sui_getTransactionBlock" => {
+                    f.status_reads += 1;
+                    match f.status {
+                        None => return Json(json!({"error": {"code": -32602, "message": "Could not find the referenced transaction"}})).into_response(),
+                        Some(st) => json!({"checkpoint": "9", "effects": {"status": {"status": st}}}),
+                    }
+                }
+                "sui_getObject" if p[0] == addr_hex(&[0xaa; 32]) => {
+                    json!({"data": {"version": f.gas_version.to_string()}})
+                }
+                "sui_getObject" => {
+                    json!({"data": {"owner": {"Shared": {"initial_shared_version": 3}}}})
+                }
                 "sui_executeTransactionBlock" => {
                     f.executed.push(p[0].as_str().unwrap().to_string());
                     json!({"digest": "x"})
                 }
                 "suix_getReferenceGasPrice" => json!("1000"),
-                "suix_getCoins" => json!({"data": f.coins.iter().map(|(id, v, bal)| json!({"coinObjectId": addr_hex(id),
-                    "version": v.to_string(), "digest": bs58::encode([7u8; 32]).into_string(), "balance": bal.to_string()})).collect::<Vec<_>>()}),
+                "suix_getCoins" => {
+                    json!({"data": f.coins.iter().map(|(id, v, bal)| json!({"coinObjectId": addr_hex(id),
+                    "version": v.to_string(), "digest": bs58::encode([7u8; 32]).into_string(), "balance": bal.to_string()})).collect::<Vec<_>>()})
+                }
                 "sui_dryRunTransactionBlock" => {
                     f.dry_runs += 1;
                     json!({"effects": {"status": {"status": "success"}, "gasUsed": {"computationCost": "1000000", "storageCost": "0"}}})
                 }
                 m => panic!("unexpected {m}"),
             };
-            Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}))
+            Json(json!({"jsonrpc": "2.0", "id": 1, "result": r})).into_response()
         }
         let s: FakeShared = std::sync::Arc::new(std::sync::Mutex::new(f));
-        let app = axum::Router::new().route("/", axum::routing::post(h)).with_state(s.clone());
+        let app = axum::Router::new()
+            .route("/", axum::routing::post(h))
+            .with_state(s.clone());
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
@@ -1474,13 +2197,19 @@ mod tests {
             dir.display()
         ))
         .unwrap();
-        SuiAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+        SuiAdapter::new(
+            &cfg,
+            &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()],
+        )
+        .unwrap()
     }
 
     fn pay_job() -> Job {
         let op = MetaOp::decode(&alloy::hex::decode(PAYLOAD).unwrap()).unwrap();
-        serde_json::from_value(json!({"id": 1, "kind": "signed_op", "op": {"payload": PAYLOAD, "signature": SIGNATURE,
-            "contract": addr_hex(&op.contract), "extra": {"coin_type": "0x2::sui::SUI"}}}))
+        serde_json::from_value(
+            json!({"id": 1, "kind": "signed_op", "op": {"payload": PAYLOAD, "signature": SIGNATURE,
+            "contract": addr_hex(&op.contract), "extra": {"coin_type": "0x2::sui::SUI"}}}),
+        )
         .unwrap()
     }
 
@@ -1498,7 +2227,11 @@ mod tests {
 
     /// Ký một tx trên coin 0xaa@7 rồi "chết" trước khi gửi: tx đó nằm trong journal của lane.
     async fn crash_after_sign(dir: &std::path::Path) -> Vec<u8> {
-        let (url, _f) = fake_sui(FakeSui { coins: vec![([0xaa; 32], 7, 5_000_000_000)], ..Default::default() }).await;
+        let (url, _f) = fake_sui(FakeSui {
+            coins: vec![([0xaa; 32], 7, 5_000_000_000)],
+            ..Default::default()
+        })
+        .await;
         let a = journal_adapter(&url, dir);
         let built = a.build(&pay_job(), 0).await.unwrap();
         assert_eq!(gas_of(&built.body), [0xaa; 32]);
@@ -1512,16 +2245,35 @@ mod tests {
     async fn restart_resends_the_journaled_tx_and_never_reuses_its_coin() {
         let dir = tmp_dir("resend");
         let old = crash_after_sign(&dir).await;
-        let (url, f) = fake_sui(FakeSui { gas_version: 7, coins: vec![([0xaa; 32], 7, 5_000_000_000), ([0xbb; 32], 2, 1_000_000_000)],
-                                          ..Default::default() }).await;
+        let (url, f) = fake_sui(FakeSui {
+            gas_version: 7,
+            coins: vec![
+                ([0xaa; 32], 7, 5_000_000_000),
+                ([0xbb; 32], 2, 1_000_000_000),
+            ],
+            ..Default::default()
+        })
+        .await;
         let a = journal_adapter(&url, &dir); // tiến trình mới
         let built = a.build(&pay_job(), 0).await.unwrap();
-        assert_eq!(f.lock().unwrap().executed, [B64.encode(&old)], "old bytes re-sent first");
+        assert_eq!(
+            f.lock().unwrap().executed,
+            [B64.encode(&old)],
+            "old bytes re-sent first"
+        );
         assert_eq!(gas_of(&built.body), [0xbb; 32], "new tx on another coin");
         // Coin duy nhất là coin của tx cũ ⇒ chưa dựng gì (thử lại sau), không dry-run.
-        let (url, f) = fake_sui(FakeSui { gas_version: 7, coins: vec![([0xaa; 32], 7, 5_000_000_000)], ..Default::default() }).await;
+        let (url, f) = fake_sui(FakeSui {
+            gas_version: 7,
+            coins: vec![([0xaa; 32], 7, 5_000_000_000)],
+            ..Default::default()
+        })
+        .await;
         let a = journal_adapter(&url, &dir);
-        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))));
+        assert!(matches!(
+            a.build(&pay_job(), 0).await,
+            Err(SimError::Transport(_))
+        ));
         assert_eq!(f.lock().unwrap().dry_runs, 0);
     }
 
@@ -1531,12 +2283,22 @@ mod tests {
         for (status, version) in [(Some("success"), 7), (Some("failure"), 7), (None, 8)] {
             let dir = tmp_dir("clear");
             crash_after_sign(&dir).await;
-            let (url, f) = fake_sui(FakeSui { status, gas_version: version, coins: vec![([0xaa; 32], 9, 5_000_000_000)], ..Default::default() }).await;
+            let (url, f) = fake_sui(FakeSui {
+                status,
+                gas_version: version,
+                coins: vec![([0xaa; 32], 9, 5_000_000_000)],
+                ..Default::default()
+            })
+            .await;
             let a = journal_adapter(&url, &dir);
             let built = a.build(&pay_job(), 0).await.unwrap();
             assert_eq!(gas_of(&built.body), [0xaa; 32], "{status:?}/{version}");
             assert!(f.lock().unwrap().executed.is_empty());
-            assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0, "journal cleared");
+            assert_eq!(
+                std::fs::read_dir(&dir).unwrap().count(),
+                0,
+                "journal cleared"
+            );
         }
     }
 
@@ -1546,7 +2308,11 @@ mod tests {
                                             finality = { mode = \"instant\" }\nparams = { package = \"0xb\" }")
         .unwrap();
         let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
-        assert!(SuiAdapter::new(&cfg, &k).err().unwrap().to_string().contains("lane_journal"));
+        assert!(SuiAdapter::new(&cfg, &k)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("lane_journal"));
     }
 
     // ---------------------------------------------------------------- CTR-MTX-26 / -27 (spec §6.2, §7.2)
@@ -1555,14 +2321,19 @@ mod tests {
     /// `@0x…` of `public fun <name>()`. Only ed25519 (deterministic) signatures are read.
     fn mv(name: &str) -> Vec<u8> {
         let src = include_str!("../../../smartcontracts/move/sui/tests/vectors.move");
-        let line = src.lines().find(|l| l.starts_with(&format!("public fun {name}()"))).unwrap_or_else(|| panic!("{name}"));
+        let line = src
+            .lines()
+            .find(|l| l.starts_with(&format!("public fun {name}()")))
+            .unwrap_or_else(|| panic!("{name}"));
         let body = &line[line.find('{').unwrap()..];
         if let Some(i) = body.find("x\"") {
             let h = &body[i + 2..];
             return alloy::hex::decode(&h[..h.find('"').unwrap()]).unwrap();
         }
         let a = &body[body.find('@').unwrap() + 1..];
-        parse_addr(a.split_whitespace().next().unwrap()).unwrap().to_vec()
+        parse_addr(a.split_whitespace().next().unwrap())
+            .unwrap()
+            .to_vec()
     }
 
     fn a32(name: &str) -> Addr {
@@ -1572,23 +2343,57 @@ mod tests {
     const REG_SUI: &str = "0x7c9575082976f063e7bfa16aa86ca20e1675b50efa7d5a64d1fa66ce127f5fdf";
 
     fn alice_auth(sig: &str) -> Auth {
-        Auth { flag: 0, sig: mv(sig), public_key: mv("alice_pk"), authenticator_data: vec![], client_data_json: vec![] }
+        Auth {
+            flag: 0,
+            sig: mv(sig),
+            public_key: mv("alice_pk"),
+            authenticator_data: vec![],
+            client_data_json: vec![],
+        }
     }
 
     /// Alice's op as `gen_vectors.py` signed it; the signature must verify over this exact payload.
-    fn alice_op(sig: &str, to: Addr, amount: u128, pay_ref: [u8; 32], valid_until: u64, relayer: Addr, extra: [u8; 32]) -> (MetaOp, Auth) {
+    fn alice_op(
+        sig: &str,
+        to: Addr,
+        amount: u128,
+        pay_ref: [u8; 32],
+        valid_until: u64,
+        relayer: Addr,
+        extra: [u8; 32],
+    ) -> (MetaOp, Auth) {
         let op = MetaOp {
-            network: b"localnet".to_vec(), contract: a32("a_sui_account"), op: OP_PAY, from: a32("alice"), to, amount,
-            pay_ref: pay_ref.to_vec(), lane: pay_lane(&pay_ref).to_vec(), nonce: 0, valid_until, relayer, extra: extra.to_vec(),
+            network: b"localnet".to_vec(),
+            contract: a32("a_sui_account"),
+            op: OP_PAY,
+            from: a32("alice"),
+            to,
+            amount,
+            pay_ref: pay_ref.to_vec(),
+            lane: pay_lane(&pay_ref).to_vec(),
+            nonce: 0,
+            valid_until,
+            relayer,
+            extra: extra.to_vec(),
         };
         let auth = alice_auth(sig);
-        let vk = ed25519_dalek::VerifyingKey::from_bytes(&auth.public_key.clone().try_into().unwrap()).unwrap();
-        vk.verify_strict(&personal_digest(&op.encode()), &ed25519_dalek::Signature::from_slice(&auth.sig).unwrap()).unwrap();
+        let vk =
+            ed25519_dalek::VerifyingKey::from_bytes(&auth.public_key.clone().try_into().unwrap())
+                .unwrap();
+        vk.verify_strict(
+            &personal_digest(&op.encode()),
+            &ed25519_dalek::Signature::from_slice(&auth.sig).unwrap(),
+        )
+        .unwrap();
         (op, auth)
     }
 
     fn gas() -> ObjRef {
-        ObjRef { id: [0xaa; 32], version: 7, digest: [7u8; 32] }
+        ObjRef {
+            id: [0xaa; 32],
+            version: 7,
+            digest: [7u8; 32],
+        }
     }
 
     /// Rule 1 (every row of the shared vectors), the derived account id, and the pay-meta PTB. The PTB decodes with
@@ -1597,23 +2402,66 @@ mod tests {
     /// `0x0::meta::relay_pay_meta<0x2::sui::SUI>(Input 3..10, Result 0, Input 11)`.
     #[test]
     fn sui_pay_meta_job_builds_ptb() {
-        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap();
-        let h = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
+        let rows: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json"
+        ))
+        .unwrap();
+        let h =
+            |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
         assert_eq!(rows.len(), 6);
         for r in &rows {
             let id = meta_pay_id(&h(&r["salt"]), &h(&r["meta"]));
-            assert_eq!((id.to_vec(), pay_lane(&id).to_vec()), (h(&r["payId"]), h(&r["payLane"])), "{}", r["name"]);
+            assert_eq!(
+                (id.to_vec(), pay_lane(&id).to_vec()),
+                (h(&r["payId"]), h(&r["payLane"])),
+                "{}",
+                r["name"]
+            );
         }
-        assert_eq!(derive_account(&parse_addr(REG_SUI).unwrap(), &a32("alice")), a32("a_sui_account"));
+        assert_eq!(
+            derive_account(&parse_addr(REG_SUI).unwrap(), &a32("alice")),
+            a32("a_sui_account")
+        );
         let (salt, meta) = (mv("pm_note_salt"), mv("pm_note_meta"));
         let id: [u8; 32] = mv("pm_note_id").try_into().unwrap();
-        let (op, auth) = alice_op("pm_a_note", parse_addr("0xbeef").unwrap(), 100, id, 1000, [0; 32], [0; 32]);
+        let (op, auth) = alice_op(
+            "pm_a_note",
+            parse_addr("0xbeef").unwrap(),
+            100,
+            id,
+            1000,
+            [0; 32],
+            [0; 32],
+        );
         let job = json!({"kind": "pay_meta", "salt": alloy::hex::encode(&salt), "meta": alloy::hex::encode(&meta)});
         let pkg = parse_addr("0x0").unwrap();
         let pol = RelayFeePolicy::default();
-        assert_eq!(entry(&pkg, &pol, &op, &job).unwrap(), Entry::PayMeta { salt: salt.clone(), meta: meta.clone() });
-        let tx = pay_meta_tx(&pkg, &op, &auth, &salt, &meta, 3, &type_tag("0x2::sui::SUI").unwrap(), &[0x1e; 32], &gas(), 1000, 2_000_000);
-        assert_eq!(addr_hex(&tx_digest(&tx)), "0x5b8b16ae6d289904d4621dccd0a95068989981cc752a27e0197e6881826bc4fa", "{}", B64.encode(&tx));
+        assert_eq!(
+            entry(&pkg, &pol, &op, &job).unwrap(),
+            Entry::PayMeta {
+                salt: salt.clone(),
+                meta: meta.clone()
+            }
+        );
+        let tx = pay_meta_tx(
+            &pkg,
+            &op,
+            &auth,
+            &salt,
+            &meta,
+            3,
+            &type_tag("0x2::sui::SUI").unwrap(),
+            &[0x1e; 32],
+            &gas(),
+            1000,
+            2_000_000,
+        );
+        assert_eq!(
+            addr_hex(&tx_digest(&tx)),
+            "0x5b8b16ae6d289904d4621dccd0a95068989981cc752a27e0197e6881826bc4fa",
+            "{}",
+            B64.encode(&tx)
+        );
         // fail closed before the dry-run
         let bad = |o: &MetaOp, j: &Value| entry(&pkg, &pol, o, j).is_err();
         let mut j = job.clone();
@@ -1624,27 +2472,75 @@ mod tests {
         assert!(bad(&op, &j), "salt does not hash to pay_ref");
         j["salt"] = json!(alloy::hex::encode(&salt[..31]));
         assert!(bad(&op, &j), "salt is 32 bytes");
-        assert!(bad(&op, &json!({"kind": "pay_meta", "meta": job["meta"]})), "no salt");
-        assert!(bad(&MetaOp { nonce: 1, ..op.clone() }, &job), "nonce 1");
-        assert!(bad(&MetaOp { lane: vec![1; 32], ..op.clone() }, &job), "another lane");
+        assert!(
+            bad(&op, &json!({"kind": "pay_meta", "meta": job["meta"]})),
+            "no salt"
+        );
+        assert!(
+            bad(
+                &MetaOp {
+                    nonce: 1,
+                    ..op.clone()
+                },
+                &job
+            ),
+            "nonce 1"
+        );
+        assert!(
+            bad(
+                &MetaOp {
+                    lane: vec![1; 32],
+                    ..op.clone()
+                },
+                &job
+            ),
+            "another lane"
+        );
         let big = vec![0u8; 2049];
         let id = meta_pay_id(&[1; 32], &big);
-        let o = MetaOp { pay_ref: id.to_vec(), lane: pay_lane(&id).to_vec(), ..op.clone() };
+        let o = MetaOp {
+            pay_ref: id.to_vec(),
+            lane: pay_lane(&id).to_vec(),
+            ..op.clone()
+        };
         let bj = json!({"kind": "pay_meta", "salt": alloy::hex::encode([1; 32]), "meta": alloy::hex::encode(&big)});
         assert!(bad(&o, &bj), "over the cap");
-        let wide = RelayFeePolicy { params: crate::config::RelayParams { max_pay_meta_bytes: 4096, ..Default::default() }, ..pol.clone() };
-        assert!(entry(&pkg, &wide, &o, &bj).is_ok(), "params.max_pay_meta_bytes raises it");
+        let wide = RelayFeePolicy {
+            params: crate::config::RelayParams {
+                max_pay_meta_bytes: 4096,
+                ..Default::default()
+            },
+            ..pol.clone()
+        };
+        assert!(
+            entry(&pkg, &wide, &o, &bj).is_ok(),
+            "params.max_pay_meta_bytes raises it"
+        );
     }
 
     fn fee_policy() -> RelayFeePolicy {
-        RelayFeePolicy { router: Some(a32("relay_fee_marker")), tokens: vec![parse_addr(REG_SUI).unwrap()],
-                         params: crate::config::RelayParams { min_amount: 5, ..Default::default() } }
+        RelayFeePolicy {
+            router: Some(a32("relay_fee_marker")),
+            tokens: vec![parse_addr(REG_SUI).unwrap()],
+            params: crate::config::RelayParams {
+                min_amount: 5,
+                ..Default::default()
+            },
+        }
     }
 
     /// Alice's open-mode payment for `relay_manage` (`rf_manage_pay`: 10 SUI, valid until 2000 s, salt 0x51…).
     fn manage_job() -> (MetaOp, Auth, Value) {
         let marker = a32("relay_fee_marker");
-        let (op, auth) = alice_op("rf_manage_pay", marker, 10, a32("rf_manage_ref"), 2000, marker, [0x51; 32]);
+        let (op, auth) = alice_op(
+            "rf_manage_pay",
+            marker,
+            10,
+            a32("rf_manage_ref"),
+            2000,
+            marker,
+            [0x51; 32],
+        );
         let job = json!({"kind": "relay_fee", "ref": alloy::hex::encode(mv("rf_manage_ref")),
                          "extra": {"coin_type": "0x2::sui::SUI", "registry": REG_SUI, "call": alloy::hex::encode(mv("rf_manage_call"))}});
         (op, auth, job)
@@ -1657,39 +2553,140 @@ mod tests {
     #[test]
     fn sui_relay_fee_job_checks_ref() {
         let pkg = parse_addr("0x0").unwrap();
-        for (name, salt) in [("manage", 0x51u8), ("revoke", 0x52), ("cancel", 0x53), ("nonces", 0x54)] {
+        for (name, salt) in [
+            ("manage", 0x51u8),
+            ("revoke", 0x52),
+            ("cancel", 0x53),
+            ("nonces", 0x54),
+        ] {
             let call = mv(&format!("rf_{name}_call"));
-            assert_eq!(relay_ref(b"localnet", &pkg, &call, &[salt; 32]).to_vec(), mv(&format!("rf_{name}_ref")), "{name}");
+            assert_eq!(
+                relay_ref(b"localnet", &pkg, &call, &[salt; 32]).to_vec(),
+                mv(&format!("rf_{name}_ref")),
+                "{name}"
+            );
             assert_eq!(RelayCall::decode(&call).unwrap().encode(), call, "{name}");
         }
         let (op, auth, job) = manage_job();
         let pol = fee_policy();
-        let Entry::Fee { call, router } = entry(&pkg, &pol, &op, &job).unwrap() else { panic!("not a fee entry") };
+        let Entry::Fee { call, router } = entry(&pkg, &pol, &op, &job).unwrap() else {
+            panic!("not a fee entry")
+        };
         assert_eq!(router, a32("relay_fee_marker"));
-        assert!(matches!(call.entry, Wrapped::Manage { action: 4, valid_until: 1000, .. }));
-        let objs = FeeObjects { router: (router, 2), object: None, mandate_tag: None };
-        let tx = fee_tx(&pkg, &op, &auth, &call, 3, &type_tag("0x2::sui::SUI").unwrap(), &objs, &[0x1e; 32], &gas(), 1000, 2_000_000).unwrap();
-        assert_eq!(addr_hex(&tx_digest(&tx)), "0x706178c47a4f92e4d319d4d7e4f5b9f7e5b736270fb36bc862a4ce979f4385ff", "{}", B64.encode(&tx));
+        assert!(matches!(
+            call.entry,
+            Wrapped::Manage {
+                action: 4,
+                valid_until: 1000,
+                ..
+            }
+        ));
+        let objs = FeeObjects {
+            router: (router, 2),
+            object: None,
+            mandate_tag: None,
+        };
+        let tx = fee_tx(
+            &pkg,
+            &op,
+            &auth,
+            &call,
+            3,
+            &type_tag("0x2::sui::SUI").unwrap(),
+            &objs,
+            &[0x1e; 32],
+            &gas(),
+            1000,
+            2_000_000,
+        )
+        .unwrap();
+        assert_eq!(
+            addr_hex(&tx_digest(&tx)),
+            "0x706178c47a4f92e4d319d4d7e4f5b9f7e5b736270fb36bc862a4ce979f4385ff",
+            "{}",
+            B64.encode(&tx)
+        );
 
-        let err = |o: &MetaOp, j: &Value, p: &RelayFeePolicy| format!("{:#}", entry(&pkg, p, o, j).unwrap_err());
+        let err = |o: &MetaOp, j: &Value, p: &RelayFeePolicy| {
+            format!("{:#}", entry(&pkg, p, o, j).unwrap_err())
+        };
         // policy (rule 8): router configured and named as relayer, registered token of the payer, minimum fee
-        assert!(err(&op, &job, &RelayFeePolicy { router: None, ..pol.clone() }).contains("params.relay_fee.router"));
-        assert!(err(&op, &job, &RelayFeePolicy { router: Some([9; 32]), ..pol.clone() }).contains("router"));
-        assert!(err(&op, &job, &RelayFeePolicy { tokens: vec![], ..pol.clone() }).contains("registered"));
+        assert!(err(
+            &op,
+            &job,
+            &RelayFeePolicy {
+                router: None,
+                ..pol.clone()
+            }
+        )
+        .contains("params.relay_fee.router"));
+        assert!(err(
+            &op,
+            &job,
+            &RelayFeePolicy {
+                router: Some([9; 32]),
+                ..pol.clone()
+            }
+        )
+        .contains("router"));
+        assert!(err(
+            &op,
+            &job,
+            &RelayFeePolicy {
+                tokens: vec![],
+                ..pol.clone()
+            }
+        )
+        .contains("registered"));
         // the payee rule (T17), per lane: open mode at min_amount, a fee bound to the lane, elsewhere only sponsored
         let lane = [0x1e; 32];
         relay_payee(&pol, &op, &lane).unwrap();
-        let dear = RelayFeePolicy { params: crate::config::RelayParams { min_amount: 11, ..Default::default() }, ..pol.clone() };
+        let dear = RelayFeePolicy {
+            params: crate::config::RelayParams {
+                min_amount: 11,
+                ..Default::default()
+            },
+            ..pol.clone()
+        };
         assert!(format!("{:#}", relay_payee(&dear, &op, &lane).unwrap_err()).contains("min_amount"));
-        relay_payee(&pol, &MetaOp { to: lane, ..op.clone() }, &lane).unwrap();
-        let elsewhere = MetaOp { to: [0x44; 32], ..op.clone() };
-        assert!(format!("{:#}", relay_payee(&pol, &elsewhere, &lane).unwrap_err()).contains("relay_bound_payee"));
-        let sponsored = RelayFeePolicy { params: crate::config::RelayParams { relay_bound_payee: true, min_amount: 1 << 100, ..Default::default() }, ..pol.clone() };
+        relay_payee(
+            &pol,
+            &MetaOp {
+                to: lane,
+                ..op.clone()
+            },
+            &lane,
+        )
+        .unwrap();
+        let elsewhere = MetaOp {
+            to: [0x44; 32],
+            ..op.clone()
+        };
+        assert!(
+            format!("{:#}", relay_payee(&pol, &elsewhere, &lane).unwrap_err())
+                .contains("relay_bound_payee")
+        );
+        let sponsored = RelayFeePolicy {
+            params: crate::config::RelayParams {
+                relay_bound_payee: true,
+                min_amount: 1 << 100,
+                ..Default::default()
+            },
+            ..pol.clone()
+        };
         relay_payee(&sponsored, &elsewhere, &lane).unwrap();
         let mut j = job.clone();
-        j["extra"]["registry"] = json!("0x168544589e67ec4f3a15a388d1a4ed44eca52abd8ff1c04a1057d2d4f53e3960");
-        assert!(err(&op, &j, &RelayFeePolicy { tokens: vec![parse_addr(j["extra"]["registry"].as_str().unwrap()).unwrap()], ..pol.clone() })
-            .contains("not the payer's account"));
+        j["extra"]["registry"] =
+            json!("0x168544589e67ec4f3a15a388d1a4ed44eca52abd8ff1c04a1057d2d4f53e3960");
+        assert!(err(
+            &op,
+            &j,
+            &RelayFeePolicy {
+                tokens: vec![parse_addr(j["extra"]["registry"].as_str().unwrap()).unwrap()],
+                ..pol.clone()
+            }
+        )
+        .contains("not the payer's account"));
         // binding: other call bytes, another salt, a lane / nonce off the ref, a wrong `ref`, a plain-relayer payment
         let mut c = mv("rf_manage_call");
         let n = c.len();
@@ -1697,21 +2694,62 @@ mod tests {
         j = job.clone();
         j["extra"]["call"] = json!(alloy::hex::encode(&c));
         assert!(entry(&pkg, &pol, &op, &j).is_err(), "another call");
-        assert!(err(&MetaOp { extra: vec![0x52; 32], ..op.clone() }, &job, &pol).contains("not bound"));
-        assert!(err(&MetaOp { nonce: 1, ..op.clone() }, &job, &pol).contains("not bound"));
-        assert!(err(&MetaOp { lane: vec![1; 32], ..op.clone() }, &job, &pol).contains("not bound"));
-        assert!(err(&MetaOp { relayer: [0; 32], ..op.clone() }, &job, &pol).contains("router"));
+        assert!(err(
+            &MetaOp {
+                extra: vec![0x52; 32],
+                ..op.clone()
+            },
+            &job,
+            &pol
+        )
+        .contains("not bound"));
+        assert!(err(
+            &MetaOp {
+                nonce: 1,
+                ..op.clone()
+            },
+            &job,
+            &pol
+        )
+        .contains("not bound"));
+        assert!(err(
+            &MetaOp {
+                lane: vec![1; 32],
+                ..op.clone()
+            },
+            &job,
+            &pol
+        )
+        .contains("not bound"));
+        assert!(err(
+            &MetaOp {
+                relayer: [0; 32],
+                ..op.clone()
+            },
+            &job,
+            &pol
+        )
+        .contains("router"));
         j = job.clone();
         j["ref"] = json!(alloy::hex::encode([1u8; 32]));
         assert!(err(&op, &j, &pol).contains("op.ref"));
-        assert!(err(&op, &json!({"kind": "relay_fee", "extra": {"registry": REG_SUI}}), &pol).contains("extra.call"));
+        assert!(err(
+            &op,
+            &json!({"kind": "relay_fee", "extra": {"registry": REG_SUI}}),
+            &pol
+        )
+        .contains("extra.call"));
         // the call must name the paying account where the wrapper uses one account for both
         let mut other = RelayCall::decode(&mv("rf_nonces_call")).unwrap();
         if let Wrapped::InvalidateNonces { account, .. } = &mut other.entry {
             *account = [3; 32];
         }
         let r = relay_ref(b"localnet", &pkg, &other.encode(), &op.extra);
-        let o = MetaOp { pay_ref: r.to_vec(), lane: pay_lane(&r).to_vec(), ..op.clone() };
+        let o = MetaOp {
+            pay_ref: r.to_vec(),
+            lane: pay_lane(&r).to_vec(),
+            ..op.clone()
+        };
         j = job.clone();
         j["extra"]["call"] = json!(alloy::hex::encode(other.encode()));
         j["ref"] = Value::Null;
@@ -1725,13 +2763,57 @@ mod tests {
         assert!(RelayCall::decode(&c).is_err(), "not wrapped");
 
         // every wrapper builds (revoke needs the mandate's coin type, cancel / nonces the market)
-        for (name, object) in [("revoke", Some(([5; 32], 4))), ("cancel", Some(([6; 32], 4))), ("nonces", Some(([6; 32], 4)))] {
+        for (name, object) in [
+            ("revoke", Some(([5; 32], 4))),
+            ("cancel", Some(([6; 32], 4))),
+            ("nonces", Some(([6; 32], 4))),
+        ] {
             let call = RelayCall::decode(&mv(&format!("rf_{name}_call"))).unwrap();
             let tag = type_tag("0x2::sui::SUI").unwrap();
-            let objs = FeeObjects { router: (router, 2), object, mandate_tag: Some(tag.clone()) };
-            assert!(fee_tx(&pkg, &op, &auth, &call, 3, &tag, &objs, &[0x1e; 32], &gas(), 1000, 2_000_000).is_ok(), "{name}");
-            let objs = FeeObjects { router: (router, 2), object: None, mandate_tag: None };
-            assert!(fee_tx(&pkg, &op, &auth, &call, 3, &tag, &objs, &[0x1e; 32], &gas(), 1000, 2_000_000).is_err(), "{name}");
+            let objs = FeeObjects {
+                router: (router, 2),
+                object,
+                mandate_tag: Some(tag.clone()),
+            };
+            assert!(
+                fee_tx(
+                    &pkg,
+                    &op,
+                    &auth,
+                    &call,
+                    3,
+                    &tag,
+                    &objs,
+                    &[0x1e; 32],
+                    &gas(),
+                    1000,
+                    2_000_000
+                )
+                .is_ok(),
+                "{name}"
+            );
+            let objs = FeeObjects {
+                router: (router, 2),
+                object: None,
+                mandate_tag: None,
+            };
+            assert!(
+                fee_tx(
+                    &pkg,
+                    &op,
+                    &auth,
+                    &call,
+                    3,
+                    &tag,
+                    &objs,
+                    &[0x1e; 32],
+                    &gas(),
+                    1000,
+                    2_000_000
+                )
+                .is_err(),
+                "{name}"
+            );
         }
     }
 
@@ -1742,13 +2824,26 @@ mod tests {
         let (op, _, job) = manage_job(); // op.to == the marker (open mode)
         let pkg = parse_addr("0x0").unwrap();
         let pol = fee_policy();
-        assert!(matches!(entry(&pkg, &pol, &op, &job), Ok(Entry::Fee { .. })), "router open mode");
-        for j in [json!({}), json!({"kind": "pay_meta", "salt": alloy::hex::encode([0u8; 32]), "meta": ""})] {
+        assert!(
+            matches!(entry(&pkg, &pol, &op, &job), Ok(Entry::Fee { .. })),
+            "router open mode"
+        );
+        for j in [
+            json!({}),
+            json!({"kind": "pay_meta", "salt": alloy::hex::encode([0u8; 32]), "meta": ""}),
+        ] {
             let e = format!("{:#}", entry(&pkg, &pol, &op, &j).unwrap_err());
             assert!(e.contains("strand"), "{j}: {e}");
         }
-        assert_eq!(entry(&pkg, &RelayFeePolicy::default(), &op, &json!({})).unwrap(), Entry::Pay, "no router configured");
-        let to_beef = MetaOp { to: parse_addr("0xbeef").unwrap(), ..op };
+        assert_eq!(
+            entry(&pkg, &RelayFeePolicy::default(), &op, &json!({})).unwrap(),
+            Entry::Pay,
+            "no router configured"
+        );
+        let to_beef = MetaOp {
+            to: parse_addr("0xbeef").unwrap(),
+            ..op
+        };
         assert_eq!(entry(&pkg, &pol, &to_beef, &json!({})).unwrap(), Entry::Pay);
     }
 
@@ -1757,14 +2852,46 @@ mod tests {
     #[test]
     fn unknown_job_kind_is_refused() {
         let (op, _, _) = manage_job();
-        let to_beef = MetaOp { to: parse_addr("0xbeef").unwrap(), relayer: [0; 32], ..op };
+        let to_beef = MetaOp {
+            to: parse_addr("0xbeef").unwrap(),
+            relayer: [0; 32],
+            ..op
+        };
         let pkg = parse_addr("0x0").unwrap();
-        assert_eq!(entry(&pkg, &RelayFeePolicy::default(), &to_beef, &json!({})).unwrap(), Entry::Pay);
-        for k in [json!("pay-meta"), json!("pay"), json!(""), json!(7), json!(true), json!({})] {
-            let e = format!("{:#}", entry(&pkg, &RelayFeePolicy::default(), &to_beef, &json!({"kind": k})).unwrap_err());
+        assert_eq!(
+            entry(&pkg, &RelayFeePolicy::default(), &to_beef, &json!({})).unwrap(),
+            Entry::Pay
+        );
+        for k in [
+            json!("pay-meta"),
+            json!("pay"),
+            json!(""),
+            json!(7),
+            json!(true),
+            json!({}),
+        ] {
+            let e = format!(
+                "{:#}",
+                entry(
+                    &pkg,
+                    &RelayFeePolicy::default(),
+                    &to_beef,
+                    &json!({"kind": k})
+                )
+                .unwrap_err()
+            );
             assert!(e.contains("unknown op.kind"), "{k}: {e}");
         }
-        assert!(entry(&pkg, &RelayFeePolicy::default(), &to_beef, &json!({"salt": "00"})).is_err(), "a kind-less job with salt");
+        assert!(
+            entry(
+                &pkg,
+                &RelayFeePolicy::default(),
+                &to_beef,
+                &json!({"salt": "00"})
+            )
+            .is_err(),
+            "a kind-less job with salt"
+        );
     }
 
     /// Fix 2: a malformed `tokens[].address` is a startup error, not a silently dropped token.
@@ -1779,7 +2906,10 @@ mod tests {
         let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
         let e = SuiAdapter::new(&cfg("0xnot-hex"), &k).err().unwrap();
         assert!(format!("{e:#}").contains("tokens"), "{e:#}");
-        assert_eq!(SuiAdapter::new(&cfg(REG_SUI), &k).unwrap().relay_fee.tokens, vec![parse_addr(REG_SUI).unwrap()]);
+        assert_eq!(
+            SuiAdapter::new(&cfg(REG_SUI), &k).unwrap().relay_fee.tokens,
+            vec![parse_addr(REG_SUI).unwrap()]
+        );
     }
 
     /// T17 (G): `meta::PaymentMeta` and `relayfee::RelayFeePaid` decode and join the expected registry's
@@ -1790,23 +2920,60 @@ mod tests {
         let pkg = parse_addr("0xabc").unwrap();
         let reg = addr_hex(&parse_addr("0x7c95").unwrap());
         let regs = std::slice::from_ref(&reg);
-        let ev = |module: &str, name: &str, seq: u32, data: Value| json!({"id": {"txDigest": "x", "eventSeq": seq.to_string()},
-            "type": format!("{}::{module}::{name}", addr_hex(&pkg)), "parsedJson": data});
+        let ev = |module: &str, name: &str, seq: u32, data: Value| {
+            json!({"id": {"txDigest": "x", "eventSeq": seq.to_string()},
+            "type": format!("{}::{module}::{name}", addr_hex(&pkg)), "parsedJson": data})
+        };
         let pid = vec![4u8; 32];
         let evs = [
-            ev("meta", "PaymentMeta", 0, json!({"contract": "0x7c95", "pay_id": pid, "meta": [0xab, 0xcd]})),
-            ev("meta", "PaymentSettled", 1, json!({"contract": "0x7c95", "from": "0x1", "to": "0xbeef", "amount": "100", "pay_ref": pid})),
-            ev("meta", "PaymentSettled", 2, json!({"contract": "0x7c95", "from": "0x1", "to": "0x1e", "amount": "5", "pay_ref": vec![5u8; 32]})),
-            ev("relayfee", "RelayFeePaid", 3, json!({"ref": vec![5u8; 32], "target": "0xabc", "token": "0x7c95", "payer": "0x1",
-                                                     "payee": "0x1e", "amount": "5"})),
-            ev("relayfee", "RelayFeePaid", 4, json!({"ref": vec![5u8; 32], "target": "0xabc", "token": "0x9999", "payer": "0x1",
-                                                     "payee": "0x1e", "amount": "5"})),
+            ev(
+                "meta",
+                "PaymentMeta",
+                0,
+                json!({"contract": "0x7c95", "pay_id": pid, "meta": [0xab, 0xcd]}),
+            ),
+            ev(
+                "meta",
+                "PaymentSettled",
+                1,
+                json!({"contract": "0x7c95", "from": "0x1", "to": "0xbeef", "amount": "100", "pay_ref": pid}),
+            ),
+            ev(
+                "meta",
+                "PaymentSettled",
+                2,
+                json!({"contract": "0x7c95", "from": "0x1", "to": "0x1e", "amount": "5", "pay_ref": vec![5u8; 32]}),
+            ),
+            ev(
+                "relayfee",
+                "RelayFeePaid",
+                3,
+                json!({"ref": vec![5u8; 32], "target": "0xabc", "token": "0x7c95", "payer": "0x1",
+                                                     "payee": "0x1e", "amount": "5"}),
+            ),
+            ev(
+                "relayfee",
+                "RelayFeePaid",
+                4,
+                json!({"ref": vec![5u8; 32], "target": "0xabc", "token": "0x9999", "payer": "0x1",
+                                                     "payee": "0x1e", "amount": "5"}),
+            ),
         ];
-        let out = crate::indexer::join_pay_events(evs.iter().filter_map(|e| normalize(&pkg, regs, e, 5, "0xh", "0xt")).collect());
+        let out = crate::indexer::join_pay_events(
+            evs.iter()
+                .filter_map(|e| normalize(&pkg, regs, e, 5, "0xh", "0xt"))
+                .collect(),
+        );
         assert_eq!(out.len(), 2);
         assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
-        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None));
-        assert_eq!(out[1]["relay_payee"], addr_hex(&parse_addr("0x1e").unwrap()));
+        assert_eq!(
+            (out[0]["meta"].as_str(), out[1]["meta"].as_str()),
+            (Some("0xabcd"), None)
+        );
+        assert_eq!(
+            out[1]["relay_payee"],
+            addr_hex(&parse_addr("0x1e").unwrap())
+        );
         assert!(out[0]["relay_payee"].is_null());
     }
 
@@ -1819,15 +2986,35 @@ mod tests {
             .unwrap()
         };
         let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
-        for (t, what) in [(", relay_fee = { router = \"0xzz\" }", "router"), (", relay_fee = { router = 7 }", "router"),
-                          (", relay_fee = { router = \"0x5\", min_amount = \"9\" }", "min_amount"),
-                          (", relay_fee = { router = \"0x5\", min_amount = -1 }", "min_amount")] {
+        for (t, what) in [
+            (", relay_fee = { router = \"0xzz\" }", "router"),
+            (", relay_fee = { router = 7 }", "router"),
+            (
+                ", relay_fee = { router = \"0x5\", min_amount = \"9\" }",
+                "min_amount",
+            ),
+            (
+                ", relay_fee = { router = \"0x5\", min_amount = -1 }",
+                "min_amount",
+            ),
+        ] {
             let e = SuiAdapter::new(&cfg(t), &k).err().unwrap();
             assert!(format!("{e:#}").contains(what), "{t}: {e:#}");
         }
-        let a = SuiAdapter::new(&cfg(", relay_fee = { router = \"0x5\", min_amount = 9 }"), &k).unwrap();
-        assert_eq!((a.relay_fee.router, a.relay_fee.params.min_amount), (Some(parse_addr("0x5").unwrap()), 9));
-        assert_eq!(SuiAdapter::new(&cfg(""), &k).unwrap().relay_fee.router, None, "no relay_fee: relay-fee jobs refused");
+        let a = SuiAdapter::new(
+            &cfg(", relay_fee = { router = \"0x5\", min_amount = 9 }"),
+            &k,
+        )
+        .unwrap();
+        assert_eq!(
+            (a.relay_fee.router, a.relay_fee.params.min_amount),
+            (Some(parse_addr("0x5").unwrap()), 9)
+        );
+        assert_eq!(
+            SuiAdapter::new(&cfg(""), &k).unwrap().relay_fee.router,
+            None,
+            "no relay_fee: relay-fee jobs refused"
+        );
     }
 
     fn arb_op() -> impl Strategy<Value = MetaOp> {
@@ -1840,10 +3027,22 @@ mod tests {
             any::<[u8; 32]>(),
             any::<(u64, u64)>(),
         )
-            .prop_map(|(network, contract, op, from, amount, r, (nonce, valid_until))| MetaOp {
-                network, contract, op, from, to: r, amount, pay_ref: r.to_vec(), lane: contract.to_vec(), nonce,
-                valid_until, relayer: from, extra: r.to_vec(),
-            })
+            .prop_map(
+                |(network, contract, op, from, amount, r, (nonce, valid_until))| MetaOp {
+                    network,
+                    contract,
+                    op,
+                    from,
+                    to: r,
+                    amount,
+                    pay_ref: r.to_vec(),
+                    lane: contract.to_vec(),
+                    nonce,
+                    valid_until,
+                    relayer: from,
+                    extra: r.to_vec(),
+                },
+            )
     }
 
     proptest! {
@@ -1880,5 +3079,347 @@ mod tests {
             let ev = json!({"type": s, "id": {"eventSeq": n}, "parsedJson": {"contract": s, "from": n}});
             let _ = normalize(&[0u8; 32], &[], &ev, n, "", "");
         }
+    }
+
+    /// scaas-rpc T20a: `final_head`'s quorum reads every endpoint by index, as before: two endpoints agreeing on the
+    /// checkpoint's digest meet quorum 2, a third differing does not count. Control: quorum 3 unmet.
+    #[tokio::test]
+    async fn sui_final_head_quorum_reads_every_endpoint() {
+        let dir = tmp_dir("t20a-head");
+        let (a, _) = fake_sui(FakeSui {
+            digest: 1,
+            ..Default::default()
+        })
+        .await;
+        let (b, _) = fake_sui(FakeSui {
+            digest: 1,
+            ..Default::default()
+        })
+        .await;
+        let (c, _) = fake_sui(FakeSui {
+            digest: 2,
+            ..Default::default()
+        })
+        .await;
+        let cfg = |q: usize| -> ChainCfg {
+            toml::from_str(&format!(
+                "family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"{a}\", \"{c}\", \"{b}\"]\nlanes = [0]\n\
+                 finality = {{ mode = \"instant\", quorum = {q} }}\nparams = {{ package = \"0xb\", lane_journal = \"{}\" }}",
+                dir.display()
+            ))
+            .unwrap()
+        };
+        let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
+        let h = SuiAdapter::new(&cfg(2), &k)
+            .unwrap()
+            .final_head()
+            .await
+            .unwrap()
+            .expect("endpoints 0 and 2 agree");
+        assert_eq!((h.height, h.hash), (9, addr_hex(&[1; 32])));
+        assert!(
+            SuiAdapter::new(&cfg(3), &k)
+                .unwrap()
+                .final_head()
+                .await
+                .unwrap()
+                .is_none(),
+            "control"
+        );
+    }
+
+    // ---- scaas-rpc T20b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    fn adapter_on(urls: &[String], dir: &std::path::Path) -> SuiAdapter {
+        let urls: Vec<String> = urls.iter().map(|u| format!("\"{u}\"")).collect();
+        let cfg: ChainCfg = toml::from_str(&format!(
+            "family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [{}]\nlanes = [0]\nfinality = {{ mode = \"instant\" }}\n\
+             params = {{ package = \"0xb\", lane_journal = \"{}\" }}",
+            urls.join(", "),
+            dir.display()
+        ))
+        .unwrap();
+        SuiAdapter::new(
+            &cfg,
+            &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()],
+        )
+        .unwrap()
+    }
+
+    fn coin() -> FakeSui {
+        FakeSui {
+            coins: vec![([0xaa; 32], 7, 5_000_000_000)],
+            ..Default::default()
+        }
+    }
+
+    /// Endpoint 0 and endpoint 1 (`second`), endpoint 0's chain identifier read once by a build (so a later endpoint could
+    /// answer a failover read), then endpoint 0 down.
+    async fn primed(
+        second: FakeSui,
+        dir: &std::path::Path,
+    ) -> (SuiAdapter, FakeShared, FakeShared) {
+        primed_from(coin(), second, dir).await
+    }
+
+    /// [`primed`] with endpoint 0's own answers.
+    async fn primed_from(
+        first: FakeSui,
+        second: FakeSui,
+        dir: &std::path::Path,
+    ) -> (SuiAdapter, FakeShared, FakeShared) {
+        let (u0, f0) = fake_sui(first).await;
+        let (u1, f1) = fake_sui(second).await;
+        let a = adapter_on(&[u0, u1], dir);
+        let _ = a.build(&pay_job(), 0).await;
+        f0.lock().unwrap().down = true;
+        (a, f0, f1)
+    }
+
+    /// F3: a status and `op_consumed` are endpoint 0's only: with it down each is unread (asked again; a lagging endpoint
+    /// 1's "unknown" is never read, so never `dead`) though endpoint 1, of this network, holds a landed transaction;
+    /// endpoint 1 counts no status read. The lane sequence is 0 (no account nonce). Control: endpoint 0 up again.
+    #[tokio::test]
+    async fn sui_tx_status_and_op_consumed_never_fail_over() {
+        let dir = tmp_dir("t20b-f3");
+        let (a, f0, f1) = primed(
+            FakeSui {
+                status: Some("success"),
+                ..coin()
+            },
+            &dir,
+        )
+        .await;
+        let tx = addr_hex(&[0x11; 32]);
+        assert!(
+            a.tx_status(&tx).await.is_err(),
+            "unread, never Mined from endpoint 1"
+        );
+        assert!(a.op_consumed(&pay_job()).await.is_err());
+        assert_eq!(a.sequence(0).await.unwrap(), 0);
+        assert_eq!((f1.lock().unwrap().status_reads, a.failovers()), (0, 0));
+        {
+            let mut g = f0.lock().unwrap();
+            g.down = false;
+            g.status = Some("success");
+        }
+        assert!(
+            matches!(
+                a.tx_status(&tx).await.unwrap(),
+                TxStatus::Mined { height: 9, .. }
+            ),
+            "control"
+        );
+    }
+
+    /// ARCH-POS-15: `build`'s reads (the account's version, the gas price and coin, the dry run) fail over: endpoint 0 down,
+    /// endpoint 1 builds. A dry run refused there is no verdict (FAILOVER_ANSWER, requeued); the same on endpoint 0 is the
+    /// job's. The lane journal's status read and its re-send inside `build` stay endpoint 0's.
+    #[tokio::test]
+    async fn sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let dir = tmp_dir("t20b-build");
+        // the first endpoint's chain identifier is the reference: read once while it is up, then it goes down
+        let (a, _, _) = primed(coin(), &dir).await;
+        let b = a.build(&pay_job(), 0).await.unwrap();
+        assert_eq!(gas_of(&b.body), [0xaa; 32], "built on endpoint 1");
+        assert!(a.failovers() > 0);
+        assert!(
+            adapter_on(&[DOWN.to_string(), fake_sui(coin()).await.0], &dir)
+                .build(&pay_job(), 0)
+                .await
+                .is_err(),
+            "the first endpoint never read: no later endpoint is this network yet"
+        );
+        let (a, _, _) = primed(
+            FakeSui {
+                dry_fail: true,
+                ..coin()
+            },
+            &dir,
+        )
+        .await;
+        match a.build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(
+                m.starts_with("FAILOVER_ANSWER") && m.contains("MoveAbort"),
+                "{m}"
+            ),
+            r => panic!("{r:?}"),
+        }
+        let (url, _) = fake_sui(FakeSui {
+            dry_fail: true,
+            ..coin()
+        })
+        .await;
+        assert!(
+            matches!(adapter_on(&[url], &dir).build(&pay_job(), 0).await, Err(SimError::Revert(m)) if m.contains("MoveAbort")),
+            "control"
+        );
+        // a journaled transaction: its status read and re-send are endpoint 0's, never endpoint 1's
+        let jdir = tmp_dir("t20b-journal");
+        crash_after_sign(&jdir).await;
+        // endpoint 0 sees the journaled coin unspent: the journal stays (its re-send went to endpoint 0)
+        let (a, _, f) = primed_from(
+            FakeSui {
+                gas_version: 7,
+                ..coin()
+            },
+            FakeSui {
+                gas_version: 7,
+                ..coin()
+            },
+            &jdir,
+        )
+        .await;
+        assert!(a.build(&pay_job(), 0).await.is_err());
+        let g = f.lock().unwrap();
+        assert_eq!((g.status_reads, g.executed.len()), (0, 0));
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's error other than invalid params (a rate limit) is its failure, never its verdict: the read
+    /// fails over and endpoint 1 builds the job (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn sui_endpoint_0_rate_limited_fails_over() {
+        let dir = tmp_dir("t24-3");
+        let first = crate::adapters::testkit::refusing(&fake_sui(coin()).await.0, |_, b| b["method"] == "sui_getChainIdentifier", 429,
+            json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "rate limited"}})).await;
+        let a = adapter_on(&[first, fake_sui(coin()).await.0], &dir);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at checkpoint 20 (or its head there), endpoint 1, at checkpoint 9, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn sui_a_mined_status_and_the_head_raise_the_floor() {
+        let dir = tmp_dir("t24-2");
+        let first = || {
+            crate::adapters::testkit::scripted(true, |m, _| match m {
+                "sui_getChainIdentifier" => Some(json!("4c78adac")),
+                "sui_getTransactionBlock" => {
+                    Some(json!({"checkpoint": "20", "effects": {"status": {"status": "success"}}}))
+                }
+                "sui_getLatestCheckpointSequenceNumber" => Some(json!("20")),
+                _ => None,
+            })
+        };
+        let a = adapter_on(&[first().await, fake_sui(coin()).await.0], &dir);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(matches!(
+            a.tx_status(&addr_hex(&[0x11; 32])).await.unwrap(),
+            TxStatus::Mined { height: 20, .. }
+        ));
+        assert!(
+            matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))),
+            "endpoint 1 below checkpoint 20: skipped"
+        );
+        let a = adapter_on(&[first().await, fake_sui(coin()).await.0], &dir);
+        let _ = a.final_head().await;
+        assert!(
+            matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))),
+            "the head: the same floor"
+        );
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (here its chain identifier unreadable) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn sui_endpoint_0_of_another_network_answers_no_read() {
+        let dir = tmp_dir("t24-8");
+        fn tx(m: &str) -> Option<Value> {
+            (m == "sui_getTransactionBlock")
+                .then(|| json!({"checkpoint": "9", "effects": {"status": {"status": "success"}}}))
+        }
+        let unread = crate::adapters::testkit::scripted(true, |m, _| tx(m)).await;
+        assert!(adapter_on(&[unread], &dir)
+            .tx_status(&addr_hex(&[0x11; 32]))
+            .await
+            .is_err());
+        let this = crate::adapters::testkit::scripted(true, |m, _| {
+            if m == "sui_getChainIdentifier" {
+                Some(json!("4c78adac"))
+            } else {
+                tx(m)
+            }
+        })
+        .await;
+        assert!(
+            matches!(
+                adapter_on(&[this], &dir)
+                    .tx_status(&addr_hex(&[0x11; 32]))
+                    .await
+                    .unwrap(),
+                TxStatus::Mined { .. }
+            ),
+            "control"
+        );
+    }
+
+    /// scaas-rpc T24.12: an unknown transaction is endpoint 0's error code -32602 only, never a text that holds "Could not
+    /// find" (here a server error's): that one is an unread status, never `Unknown`. Control: -32602 is `Unknown`.
+    #[tokio::test]
+    async fn sui_not_found_is_read_from_the_code_never_the_text() {
+        let dir = tmp_dir("t24-12");
+        let tx = addr_hex(&[0x11; 32]);
+        let (url, _) = fake_sui(coin()).await;
+        let pass = |_: &str, b: &Value| b["method"] == "sui_getChainIdentifier";
+        let err = |code: i64| json!({"jsonrpc": "2.0", "id": 1, "error": {"code": code, "message": "Could not find the referenced transaction"}});
+        let busy = crate::adapters::testkit::refusing(&url, pass, 200, err(-32000)).await;
+        assert!(adapter_on(&[busy], &dir).tx_status(&tx).await.is_err());
+        let gone = crate::adapters::testkit::refusing(&url, pass, 200, err(-32602)).await;
+        assert_eq!(
+            adapter_on(&[gone], &dir).tx_status(&tx).await.unwrap(),
+            TxStatus::Unknown,
+            "control"
+        );
+    }
+
+    /// scaas-rpc T24.11 (owner 2026-11-18): with `params.chain_identifier` set, every endpoint, endpoint 0 included, is checked
+    /// against it before its first read: endpoint 0 of another identifier answers nothing. Controls: its own identifier, and
+    /// unset (endpoint 0's identifier is the reference, as before).
+    #[tokio::test]
+    async fn sui_a_configured_chain_identifier_checks_endpoint_0_too() {
+        let dir = tmp_dir("t24-11");
+        let tx = addr_hex(&[0x11; 32]);
+        let (url, _) = fake_sui(FakeSui {
+            status: Some("success"),
+            ..coin()
+        })
+        .await;
+        let on = |id: &str| {
+            let cfg: ChainCfg = toml::from_str(&format!(
+                "family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"{url}\"]\nlanes = [0]\nfinality = {{ mode = \"instant\" }}\n\
+                 params = {{ package = \"0xb\", lane_journal = \"{}\"{id} }}",
+                dir.display()
+            ))
+            .unwrap();
+            SuiAdapter::new(
+                &cfg,
+                &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()],
+            )
+            .unwrap()
+        };
+        assert!(
+            on(", chain_identifier = \"deadbeef\"")
+                .tx_status(&tx)
+                .await
+                .is_err(),
+            "endpoint 0 of another identifier"
+        );
+        assert!(
+            matches!(
+                on(", chain_identifier = \"4c78adac\"")
+                    .tx_status(&tx)
+                    .await
+                    .unwrap(),
+                TxStatus::Mined { .. }
+            ),
+            "control"
+        );
+        assert!(
+            matches!(on("").tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }),
+            "unset: as before"
+        );
     }
 }

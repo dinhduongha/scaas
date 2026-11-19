@@ -13,16 +13,23 @@ root=$(cd "$here/../../../.." && pwd)
 cd "$root" || exit 2
 export PATH="$HOME/.foundry/bin:$PATH"
 paths='scaas-node/src smartcontracts/evm/src smartcontracts/evm/test/vectors'
-git diff --quiet -- $paths || { echo "$paths: not clean (commit first)" >&2; exit 2; }
+git diff --quiet -- $paths || {
+    echo "$paths: not clean (commit first)" >&2
+    exit 2
+}
 for m in ${ONLY:-$(python3 "$here/t35_mutants.py" --list)}; do
-  log="$here/mutant-t35-$m.log"
-  python3 "$here/t35_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t35-$m.rc.log"; continue; }
-  case "$m" in
-    e2e-*) (cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --test e2e -- --ignored --test-threads=1 regulated_transfer_refused_frozen) > "$log" 2>&1 ;;
-    *) (cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --lib) > "$log" 2>&1 ;;
-  esac
-  echo $? > "$here/mutant-t35-$m.rc.log"
-  git checkout -- $paths
+    log="$here/mutant-t35-$m.log"
+    python3 "$here/t35_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t35-$m.rc.log"
+        continue
+    }
+    case "$m" in
+        e2e-*) (cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --test e2e -- --ignored --test-threads=1 regulated_transfer_refused_frozen) >"$log" 2>&1 ;;
+        *) (cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --lib) >"$log" 2>&1 ;;
+    esac
+    echo $? >"$here/mutant-t35-$m.rc.log"
+    git checkout -- $paths
 done
 python3 - "$here" <<'PY'
 import os, re, sys

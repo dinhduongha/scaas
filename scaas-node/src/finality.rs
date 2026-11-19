@@ -1,4 +1,5 @@
-//! Cổng finality — thuần, không I/O. Odoo chỉ thấy log trong vùng `safe_head` trả về.
+//! Cổng finality — thuần, không I/O. ExternalPull chỉ thấy log trong vùng `safe_head` trả về.
+#[cfg(test)]
 use alloy::primitives::B256;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,10 +21,8 @@ pub fn next_range(cursor: u64, safe: u64, max_span: u64) -> Option<(u64, u64)> {
     (safe > cursor).then(|| (cursor + 1, safe.min(cursor + max_span)))
 }
 
-/// Endpoint chính luôn được đếm; `others` là các endpoint độc lập còn lại.
-pub fn quorum_ok(primary: B256, others: &[Option<B256>], quorum: usize) -> bool {
-    1 + others.iter().filter(|h| **h == Some(primary)).count() >= quorum
-}
+/// Endpoint chính luôn được đếm; `others` là các endpoint độc lập còn lại (moved to `scaas_rpc::pool`, NODE-IDX-01).
+pub use scaas_rpc::pool::quorum_ok;
 
 #[cfg(test)]
 mod tests {

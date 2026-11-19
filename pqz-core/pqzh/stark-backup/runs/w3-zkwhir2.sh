@@ -7,10 +7,10 @@ set -eu
 cd "$(dirname "$0")/.."
 cargo build --release --offline --bin pqzh_bench --bin pqzh_security 2>/dev/null
 for c in "96 16" "100 20"; do
-  set -- $c
-  tag=w3-zkwhir2-r3-t$1-pow$2
-  /usr/bin/time -v target/release/pqzh_bench --whir-rate 3 --whir-target $1 --whir-pow $2 --np 3 --nv 100 --nadv 10 \
-    --max-proof 100000000 > runs/$tag.jsonl 2> runs/$tag-time.txt || echo "$tag failed: $?"
-  echo "$tag $(grep -E 'Maximum resident|Elapsed' runs/$tag-time.txt | tr -s ' ')"
-  target/release/pqzh_security --whir --ext 2 --rate 3 --target $1 --pow $2 > runs/$tag-bits.jsonl 2>&1 || echo "$tag bits failed"
+    set -- $c
+    tag=w3-zkwhir2-r3-t$1-pow$2
+    /usr/bin/time -v target/release/pqzh_bench --whir-rate 3 --whir-target $1 --whir-pow $2 --np 3 --nv 100 --nadv 10 \
+        --max-proof 100000000 >runs/$tag.jsonl 2>runs/$tag-time.txt || echo "$tag failed: $?"
+    echo "$tag $(grep -E 'Maximum resident|Elapsed' runs/$tag-time.txt | tr -s ' ')"
+    target/release/pqzh_security --whir --ext 2 --rate 3 --target $1 --pow $2 >runs/$tag-bits.jsonl 2>&1 || echo "$tag bits failed"
 done

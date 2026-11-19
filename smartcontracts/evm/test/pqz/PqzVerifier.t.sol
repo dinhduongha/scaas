@@ -32,8 +32,13 @@ contract PqzVerifierTest is PqzOffchainBase {
         me = nid(address(this));
         fN = new OpenFactory(nid(registrar));
         EnvKit.configure(fN, PQZ_UID, NOTICE, address(0));
-        Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
-            type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            fN,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(fN), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(fN)));
         vm.warp(block.timestamp + NOTICE); // the release usable
@@ -48,14 +53,23 @@ contract PqzVerifierTest is PqzOffchainBase {
 
     /// An OFFCHAIN token with verifier `v` on the factory `f` (owner: this test).
     function _tok(OpenFactory f, bytes32 v, bool fixed_) internal returns (NormalPqzToken t) {
-        t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfgOf(v, fixed_, me)),
-            keccak256(abi.encode(v, fixed_, gasleft()))));
+        t = NormalPqzToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL_PQZ,
+                1,
+                abi.encode(_cfgOf(v, fixed_, me)),
+                keccak256(abi.encode(v, fixed_, gasleft()))
+            )
+        );
         _holders(address(t));
     }
 
     function _tryCreate(bytes32 v) internal returns (bool ok, bytes memory err) {
-        try factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfgOf(v, false, me)),
-            keccak256(abi.encode(v, gasleft()))) returns (address) {
+        try factory.createToken(
+            IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfgOf(v, false, me)), keccak256(abi.encode(v, gasleft()))
+        ) returns (
+            address
+        ) {
             ok = true;
         } catch (bytes memory e) {
             err = e;
@@ -72,7 +86,9 @@ contract PqzVerifierTest is PqzOffchainBase {
     }
 
     /// An `msig` of `members` (kind, id), each weight 1, threshold `k`, the given slots accepted (mocked).
-    function _asMsig(bytes32 id, uint16 k, uint16[] memory kinds, bytes32[] memory ids, bool[] memory accepted) internal {
+    function _asMsig(bytes32 id, uint16 k, uint16[] memory kinds, bytes32[] memory ids, bool[] memory accepted)
+        internal
+    {
         _asKind(id, UAKinds.MSIG);
         IUARegistry.MsigStructure memory m;
         m.threshold = k;
@@ -115,8 +131,13 @@ contract PqzVerifierTest is PqzOffchainBase {
         (ok,) = _tryCreate(_mldsaUA(61));
         assertTrue(ok, "mldsa65");
         bytes32 ms = keccak256("msig 2-of-3");
-        _asMsig(ms, 2, _three(UAKinds.EVM_EOA, UAKinds.SECP256K1, UAKinds.MLDSA65), _ids(vB, keccak256("s"), keccak256("m")),
-            _acc(true, true, false));
+        _asMsig(
+            ms,
+            2,
+            _three(UAKinds.EVM_EOA, UAKinds.SECP256K1, UAKinds.MLDSA65),
+            _ids(vB, keccak256("s"), keccak256("m")),
+            _acc(true, true, false)
+        );
         (ok,) = _tryCreate(ms);
         assertTrue(ok, "2-of-3 msig");
     }
@@ -133,29 +154,51 @@ contract PqzVerifierTest is PqzOffchainBase {
         vm.expectRevert(_kindErr(UAKinds.EVM_CONTRACT));
         _tryCreateStrict(nid(address(0xC0DE)));
         bytes32 ms = keccak256("msig with mldsa87");
-        _asMsig(ms, 2, _three(UAKinds.MLDSA65, UAKinds.MLDSA87, UAKinds.SECP256K1), _ids(keccak256("a"), keccak256("b"),
-            keccak256("c")), _acc(true, true, true));
+        _asMsig(
+            ms,
+            2,
+            _three(UAKinds.MLDSA65, UAKinds.MLDSA87, UAKinds.SECP256K1),
+            _ids(keccak256("a"), keccak256("b"), keccak256("c")),
+            _acc(true, true, true)
+        );
         vm.expectRevert(_kindErr(UAKinds.MLDSA87));
         _tryCreateStrict(ms);
         bytes32 nested = keccak256("nested msig");
-        _asMsig(nested, 1, _three(UAKinds.MLDSA65, UAKinds.MSIG, UAKinds.SECP256K1), _ids(keccak256("a"), ms,
-            keccak256("c")), _acc(true, true, true));
+        _asMsig(
+            nested,
+            1,
+            _three(UAKinds.MLDSA65, UAKinds.MSIG, UAKinds.SECP256K1),
+            _ids(keccak256("a"), ms, keccak256("c")),
+            _acc(true, true, true)
+        );
         vm.expectRevert(_kindErr(UAKinds.MSIG));
         _tryCreateStrict(nested);
         bytes32 withContract = keccak256("msig with a contract member");
-        _asMsig(withContract, 1, _three(UAKinds.MLDSA65, UAKinds.EVM_CONTRACT, UAKinds.SECP256K1), _ids(keccak256("a"),
-            nid(address(0xC0DE)), keccak256("c")), _acc(true, true, true));
+        _asMsig(
+            withContract,
+            1,
+            _three(UAKinds.MLDSA65, UAKinds.EVM_CONTRACT, UAKinds.SECP256K1),
+            _ids(keccak256("a"), nid(address(0xC0DE)), keccak256("c")),
+            _acc(true, true, true)
+        );
         vm.expectRevert(_kindErr(UAKinds.EVM_CONTRACT));
         _tryCreateStrict(withContract);
         bytes32 eoaWithCode = keccak256("msig with an EOA member that has code");
-        _asMsig(eoaWithCode, 1, _three(UAKinds.MLDSA65, UAKinds.EVM_EOA, UAKinds.SECP256K1), _ids(keccak256("a"),
-            nid(address(0xC0DE)), keccak256("c")), _acc(true, true, true));
+        _asMsig(
+            eoaWithCode,
+            1,
+            _three(UAKinds.MLDSA65, UAKinds.EVM_EOA, UAKinds.SECP256K1),
+            _ids(keccak256("a"), nid(address(0xC0DE)), keccak256("c")),
+            _acc(true, true, true)
+        );
         vm.expectRevert(_kindErr(UAKinds.EVM_CONTRACT));
         _tryCreateStrict(eoaWithCode);
     }
 
     function _tryCreateStrict(bytes32 v) internal {
-        factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfgOf(v, false, me)), keccak256(abi.encode(v)));
+        factory.createToken(
+            IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfgOf(v, false, me)), keccak256(abi.encode(v))
+        );
     }
 
     /// An unregistered derived id: `PqzVerifierUnregistered`, at init and at a proposal.
@@ -178,15 +221,24 @@ contract PqzVerifierTest is PqzOffchainBase {
     /// A shape from mocks: a 2-of-3 with an EOA member (`vB`), `secp256k1`, `mldsa65`; the third slot not yet accepted.
     function _msigVerifier() internal returns (bytes32 ms, NormalPqzToken t) {
         ms = keccak256("verifier msig");
-        _asMsig(ms, 2, _three(UAKinds.EVM_EOA, UAKinds.SECP256K1, UAKinds.MLDSA65), _ids(vB, keccak256("s"), keccak256("m")),
-            _acc(true, true, false));
+        _asMsig(
+            ms,
+            2,
+            _three(UAKinds.EVM_EOA, UAKinds.SECP256K1, UAKinds.MLDSA65),
+            _ids(vB, keccak256("s"), keccak256("m")),
+            _acc(true, true, false)
+        );
         t = _tok(factory, ms, false);
         _shieldOn(t, alice, 10);
         // its signature: the registry's msig path is not under test here
         vm.mockCall(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ms), "");
     }
 
-    function _msigOp(NormalPqzToken t) internal view returns (IPqzToken.PqzTransferArgs memory a, IPqzToken.PqzSignedVerdict memory sv) {
+    function _msigOp(NormalPqzToken t)
+        internal
+        view
+        returns (IPqzToken.PqzTransferArgs memory a, IPqzToken.PqzSignedVerdict memory sv)
+    {
         bytes memory st;
         (a, st) = _op1Of(t, alice, bob, 5, true);
         sv.pqzVerdict = _verdict(t, st, VPROOF);
@@ -337,7 +389,9 @@ contract PqzVerifierTest is PqzOffchainBase {
     function test_transfer_precompileRefused() public {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.admin = me;
-        NormalPqzToken t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "precompile-owned"));
+        NormalPqzToken t = NormalPqzToken(
+            factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "precompile-owned")
+        );
         vm.expectRevert(IPqzToken.PqzVerifyConfigInvalid.selector);
         t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(IPqzToken.PqzVerifyConfigInvalid.selector);

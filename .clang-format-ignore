@@ -1,0 +1,24 @@
+# Files clang-format leaves alone (code-format plan, "Excluded"). Patterns are relative to this directory; `*` does
+# not cross a `/` and `**` is not supported, so each depth is listed.
+# legacy code (not edited)
+*/legacy/*
+*/*/legacy/*
+*/*/legacy/*/*
+*/*/*/legacy/*
+*/*/*/legacy/*/*
+# vendored: LaZer (pqz-core/NOTICE), PQClean Falcon
+pqz-core/pqzl/lazer/*
+clients/ua-rs/vendor/*/*
+clients/ua-rs/vendor/*/*/*
+clients/ua-rs/vendor/*/*/*/*
+# generated: the parameter sets' headers (gen_set.py, the LaZer code generator), gen_aes.py, cbindgen
+pqz-core/params/sets/*/*.h
+pqz-core/pqzl/params/*/*.h
+pqz-core/pqzl/src/pqz_aes_gen.h
+clients/ua-c/include/scaas_ua.h
+# text read by a harness (a sed revert / mutant, a header test): formatted once the harness matches the new text
+#   pqz_sv.c: pqzl/sv/check_sv_fixes.sh (gate step sv), pqzl/sv/review/review.sh; pqz_rel.c: artifact/reproduce.sh;
+#   pqz_ffi.h: ffi/tests/ffi.rs header_matches
+pqz-core/pqzl/src/pqz_sv.c
+pqz-core/pqzl/src/pqz_rel.c
+pqz-core/ffi/pqz_ffi.h

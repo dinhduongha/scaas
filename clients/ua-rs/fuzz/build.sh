@@ -18,5 +18,5 @@ export RUSTFLAGS="-C passes=sancov-module -C llvm-args=-sanitizer-coverage-level
 -C llvm-args=-sanitizer-coverage-trace-compares"
 cargo build -j2 --release --locked --offline --target $TRIPLE
 clang-18 -g -O1 -fsanitize=fuzzer,address,undefined -o "$B/ua-fuzz" "$CARGO_TARGET_DIR/$TRIPLE/release/libscaas_ua_fuzz.a" \
-  -lpthread -ldl -lm -lrt -lgcc_s
+    -lpthread -ldl -lm -lrt -lgcc_s
 ls -l "$B/ua-fuzz"

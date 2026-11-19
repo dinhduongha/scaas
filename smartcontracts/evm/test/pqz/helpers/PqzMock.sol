@@ -55,6 +55,8 @@ abstract contract PqzMock is Test {
 
     function _slice(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory r) {
         r = new bytes(len);
-        for (uint256 i; i < len; ++i) r[i] = b[off + i];
+        for (uint256 i; i < len; ++i) {
+            r[i] = b[off + i];
+        }
     }
 }

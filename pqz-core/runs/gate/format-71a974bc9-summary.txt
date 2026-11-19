@@ -1,0 +1,19 @@
+# format-only check of 71a974bc9 (pqz-core core crates, rustfmt 1.9.0 width 100), set n2304-kmax4096, 2026-11-18
+# Affected steps only (owner 2026-11-17: a format-only change never runs the full gate.sh). Baseline: the same steps on
+# a3bd15b48 before the format. pqz-core tree at the check = 71a974bc9 (no later pqz-core change).
+step | commit | rc | counts | against the baseline
+kat | 71a974bc9 | 0 | - | kat-pqz.json byte-identical
+tbox | 71a974bc9 | 0 | - | output identical
+sv | 71a974bc9 | 0 | - | output identical
+fnv | 71a974bc9 | 0 | 16 relations | proofs_fnv C = Rust = wasm32, each identical to the baseline
+rust | 71a974bc9 | 0 | 69 passed | same test list; to_rust.py --check 69 files equal; gen_set.py --all --check 4 sets, 94 files
+stmt | 71a974bc9 | 0 | 16 passed | same count
+ligero | 71a974bc9 | 0 | 45 passed | same count
+xlig | 71a974bc9 | 0 | 18 digests | statement / witness digests identical
+fuzz | 71a974bc9 | 0 | 4 targets x 60 s | no crash (one libFuzzer slow-unit report on mutate, 11 s, as in earlier runs)
+ffi | 71a974bc9 | 0 | 33 passed | proof digests native + wasm and wallet output identical; bench rows identical but timings
+vectors | 71a974bc9 | 0 | 35 passed | pqz-vectors --check and pqz_kat.py --check output identical but timings and peak memory
+gen | 71a974bc9 | 0 | - | gen_set.py --all --check (PqzSet.sol clean), to_rust.py --check, check-provisional-ids.py: ok
+# vectors note: the tamper rows and the sizes list differ only for smartcontracts/vectors/pqz/n2304-kmax4096/state.json,
+# which carried another task's uncommitted edit in the work tree (the committed file is unchanged by 71a974bc9).
+result: PASS, outputs byte-identical to the baseline

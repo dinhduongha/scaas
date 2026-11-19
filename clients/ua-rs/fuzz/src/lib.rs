@@ -31,12 +31,13 @@
 //!
 //! - ua-rs-native T8b: `polkadot_path`, the Polkadot junction path parser and derivation (`Wallet::polkadot_key`): the input as
 //!   UTF-8 (else skipped); the same answer twice; nothing past 512 bytes accepted. UNAUDITED.
-use scaas_ua::wallet::{
-    bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, EvmTx, Expect, KemKeyPair, Manifest, MembersJson,
-    Sealed, SealedContainer, TypedData, UaSigRequest, Vault, Wallet,
-};
 use scaas_ua::facade::pqz::{PqzCmd, PqzKey, COMMANDS as PQZ_COMMANDS};
 use scaas_ua::facade::zether::{ZetherCmd, ZetherKey, COMMANDS};
+use scaas_ua::wallet::{
+    bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, EvmTx, Expect,
+    KemKeyPair, Manifest, MembersJson, Sealed, SealedContainer, TypedData, UaSigRequest, Vault,
+    Wallet,
+};
 use std::fmt::Debug;
 use std::sync::OnceLock;
 
@@ -69,7 +70,10 @@ const JSON_CALLS: [(JsonCall, (usize, usize)); 9] = {
         (pay_digest_json, (1 << 20, 6)),
         (meta_pay_id_json, (1 << 20, 6)),
         (service_pull_json, (64 * 1024, 7)),
-        (|t| inner_json(t).map(|v| v.len().to_string()), (64 * 1024, 1)),
+        (
+            |t| inner_json(t).map(|v| v.len().to_string()),
+            (64 * 1024, 1),
+        ),
     ]
 };
 /// `version ‖ scheme ‖ mlkemCt (1,568) ‖ x25519Eph (32)` and a 16-byte tag.
@@ -78,7 +82,10 @@ const SEALED_MIN: usize = 2 + 1568 + 32 + 16;
 static TARGET: OnceLock<String> = OnceLock::new();
 
 fn die(msg: &str) -> ! {
-    eprintln!("ua-fuzz FINDING ({}): {msg}", TARGET.get().map_or("?", String::as_str));
+    eprintln!(
+        "ua-fuzz FINDING ({}): {msg}",
+        TARGET.get().map_or("?", String::as_str)
+    );
     std::process::abort()
 }
 
@@ -113,7 +120,11 @@ fn depth(b: &[u8]) -> usize {
 }
 
 /// `dec(data)` twice under the caps' oracle; the accepted value.
-fn json<T: PartialEq + Debug>(data: &[u8], (len, deep): (usize, usize), dec: impl Fn(&[u8]) -> scaas_ua::wallet::Result<T>) -> Option<T> {
+fn json<T: PartialEq + Debug>(
+    data: &[u8],
+    (len, deep): (usize, usize),
+    dec: impl Fn(&[u8]) -> scaas_ua::wallet::Result<T>,
+) -> Option<T> {
     let before = bounded::vectors_parsed();
     let r = dec(data);
     let reached = bounded::vectors_parsed() - before;
@@ -121,7 +132,12 @@ fn json<T: PartialEq + Debug>(data: &[u8], (len, deep): (usize, usize), dec: imp
         die(&format!("{reached} parses of one input"));
     }
     if (data.len() > len || depth(data) > deep) && (reached != 0 || r.is_ok()) {
-        die(&format!("past its cap ({} B, depth {}) and {}", data.len(), depth(data), if r.is_ok() { "accepted" } else { "parsed" }));
+        die(&format!(
+            "past its cap ({} B, depth {}) and {}",
+            data.len(),
+            depth(data),
+            if r.is_ok() { "accepted" } else { "parsed" }
+        ));
     }
     if dec(data) != r {
         die("not deterministic");
@@ -131,7 +147,9 @@ fn json<T: PartialEq + Debug>(data: &[u8], (len, deep): (usize, usize), dec: imp
 
 fn same<T: PartialEq + Debug>(a: &T, b: scaas_ua::wallet::Result<T>, what: &str) {
     if b.as_ref() != Ok(a) {
-        die(&format!("{what}: written back and read again differs: {b:?}"));
+        die(&format!(
+            "{what}: written back and read again differs: {b:?}"
+        ));
     }
 }
 
@@ -321,7 +339,11 @@ fn one(t: &str, data: &[u8]) {
 #[no_mangle]
 pub unsafe extern "C" fn LLVMFuzzerTestOneInput(data: *const u8, size: usize) -> i32 {
     let t = TARGET.get_or_init(|| std::env::var("UA_FUZZ_TARGET").unwrap_or_default());
-    let input = if size == 0 { &[][..] } else { std::slice::from_raw_parts(data, size) };
+    let input = if size == 0 {
+        &[][..]
+    } else {
+        std::slice::from_raw_parts(data, size)
+    };
     // T15: the profile unwinds (pqz-ffi refuses panic = "abort" on native targets), so a panic is caught here and is still a
     // finding: abort, which libFuzzer reports as a crash (the panic hook has printed it)
     if std::panic::catch_unwind(|| one(t, input)).is_err() {

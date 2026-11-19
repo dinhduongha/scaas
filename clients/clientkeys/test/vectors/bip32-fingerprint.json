@@ -1,0 +1,8 @@
+{
+  "note": "Outside data: BIP-32's published test vectors 1, 2 and 3 (https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki), each master seed with its first published child (m/0H, m/0, m/0H). The child's parent-fingerprint field is the master key's fingerprint; base58check guards each string. Read by test/keystore-index.test.js and clients/ua-rs/tests/index_mac.rs.",
+  "rows": [
+    { "vector": 1, "seed": "000102030405060708090a0b0c0d0e0f", "child": "xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7" },
+    { "vector": 2, "seed": "fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542", "child": "xprv9vHkqa6EV4sPZHYqZznhT2NPtPCjKuDKGY38FBWLvgaDx45zo9WQRUT3dKYnjwih2yJD9mkrocEZXo1ex8G81dwSM1fwqWpWkeS3v86pgKt" },
+    { "vector": 3, "seed": "4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be", "child": "xprv9uPDJpEQgRQfDcW7BkF7eTya6RPxXeJCqCJGHuCJ4GiRVLzkTXBAJMu2qaMWPrS7AANYqdq6vcBcBUdJCVVFceUvJFjaPdGZ2y9WACViL4L" }
+  ]
+}

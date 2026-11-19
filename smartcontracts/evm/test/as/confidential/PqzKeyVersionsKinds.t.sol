@@ -12,7 +12,9 @@ import {UACall} from "../../ua/UACall.sol";
 abstract contract PqzKeyVersionsKinds is PqzRegFixture {
     function _has(bytes4 sel) internal view returns (bool found) {
         (bytes4[] memory s,,) = IMetaTx(address(tok)).mtxSelectors();
-        for (uint256 i; i < s.length; ++i) if (s[i] == sel) found = true;
+        for (uint256 i; i < s.length; ++i) {
+            if (s[i] == sel) found = true;
+        }
     }
 
     function _selectors() internal view {
@@ -34,13 +36,21 @@ abstract contract PqzKeyVersionsKinds is PqzRegFixture {
 }
 
 contract PqzKeyVersionsKind12Test is PqzKeyVersionsKinds {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 
-    function test_mtxSelectors_pqzver_12() public view { _selectors(); }
+    function test_mtxSelectors_pqzver_12() public view {
+        _selectors();
+    }
 }
 
 contract PqzKeyVersionsKind13Test is PqzKeyVersionsKinds {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
-    function test_mtxSelectors_pqzver_13() public view { _selectors(); }
+    function test_mtxSelectors_pqzver_13() public view {
+        _selectors();
+    }
 }

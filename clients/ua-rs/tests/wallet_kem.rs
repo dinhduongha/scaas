@@ -8,7 +8,10 @@ use scaas_ua::wallet::{is_kem_holder, kem_encaps, Error, KemKeyPair, Wallet};
 use serde_json::Value;
 
 fn path(f: &str) -> String {
-    format!("{}/../../smartcontracts/vectors/ua/{f}", env!("CARGO_MANIFEST_DIR"))
+    format!(
+        "{}/../../smartcontracts/vectors/ua/{f}",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 fn load(f: &str) -> Value {
     serde_json::from_str(&std::fs::read_to_string(path(f)).unwrap()).unwrap()
@@ -31,12 +34,20 @@ fn num(v: &Value) -> u64 {
 fn wallet(id: &str) -> Wallet {
     let k = load("keys.json");
     let m = arr(&k, "mnemonics").iter().find(|m| m["id"] == id).unwrap();
-    Wallet::from_mnemonic(m["words"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+    Wallet::from_mnemonic(
+        m["words"].as_str().unwrap(),
+        m["passphrase"].as_str().unwrap(),
+    )
+    .unwrap()
 }
 /// The KEM key a `{mnemonic, kind, account, index, version}` names, and its wallet (dropping it revokes the key).
 fn kem_of(r: &Value) -> (Wallet, KemKeyPair) {
     let w = wallet(r["mnemonic"].as_str().unwrap());
-    let key = w.ua_key(num(&r["kind"]) as u16, num(&r["account"]) as u32, num(&r["index"]) as u32);
+    let key = w.ua_key(
+        num(&r["kind"]) as u16,
+        num(&r["account"]) as u32,
+        num(&r["index"]) as u32,
+    );
     let kk = key.unwrap().kem_key(num(&r["version"])).unwrap();
     (w, kk)
 }
@@ -48,10 +59,20 @@ fn kem_json_keys() {
     let mut n = 0;
     for r in arr(&v, "keys") {
         let w = wallet(r["mnemonic"].as_str().unwrap());
-        let key = w.ua_key(num(&r["kind"]) as u16, num(&r["account"]) as u32, num(&r["index"]) as u32).unwrap();
+        let key = w
+            .ua_key(
+                num(&r["kind"]) as u16,
+                num(&r["account"]) as u32,
+                num(&r["index"]) as u32,
+            )
+            .unwrap();
         assert_eq!(key.ua().unwrap(), b32(&r["ua"]), "{r}");
         let kk = key.kem_key(num(&r["version"])).unwrap();
-        assert_eq!(hex::encode(kk.kem_pk()), hex::encode(bytes(&r["kemPk"])), "{r}");
+        assert_eq!(
+            hex::encode(kk.kem_pk()),
+            hex::encode(bytes(&r["kemPk"])),
+            "{r}"
+        );
         assert_eq!(keccak256(&kk.kem_pk()), b32(&r["kemPkHash"]), "{r}");
         n += 1;
     }
@@ -75,7 +96,11 @@ fn kem_json_refusals() {
             ("KemHolder", _) => {
                 assert!(!is_kem_holder(kind));
                 let key = w.ua_key(kind, 0, 0).unwrap();
-                assert_eq!(key.kem_key(num(&r["version"])).err(), Some(Error::KemHolder), "{r}");
+                assert_eq!(
+                    key.kem_key(num(&r["version"])).err(),
+                    Some(Error::KemHolder),
+                    "{r}"
+                );
             }
             ("Argument", _) => assert!(r["version"].as_str().unwrap().parse::<u64>().is_err()),
             e => panic!("{e:?}"),
@@ -131,7 +156,11 @@ fn kem_json_encaps_refusals_release() {
     let good = bytes(&arr(&v, "keys")[0]["kemPk"]);
     assert!(kem_encaps(&good).is_ok());
     for r in arr(&v, "encapsRefusals") {
-        assert_eq!(kem_encaps(&bytes(&r["kemPk"])).err(), Some(Error::KemCheck), "{r}");
+        assert_eq!(
+            kem_encaps(&bytes(&r["kemPk"])).err(),
+            Some(Error::KemCheck),
+            "{r}"
+        );
     }
     assert_eq!(kem_encaps(&[]).err(), Some(Error::KemCheck));
 }
@@ -139,21 +168,39 @@ fn kem_json_encaps_refusals_release() {
 /// Ephemeral keys (OS RNG, a store of their own): two differ, each decapsulates what is sealed to it.
 #[test]
 fn ephemeral_round_trip() {
-    let (a, b) = (KemKeyPair::generate_ephemeral().unwrap(), KemKeyPair::generate_ephemeral().unwrap());
+    let (a, b) = (
+        KemKeyPair::generate_ephemeral().unwrap(),
+        KemKeyPair::generate_ephemeral().unwrap(),
+    );
     assert_ne!(a.kem_pk(), b.kem_pk());
     let (ct, eph, ss) = kem_encaps(&a.kem_pk()).unwrap();
     assert_eq!(*a.decaps(&ct, &eph).unwrap(), *ss);
-    assert_ne!(*b.decaps(&ct, &eph).unwrap(), *ss, "implicit rejection: another ss");
+    assert_ne!(
+        *b.decaps(&ct, &eph).unwrap(),
+        *ss,
+        "implicit rejection: another ss"
+    );
 }
 
 /// C-05: a handle of wallet A derives A's KEM key while a wallet B of another mnemonic is unlocked (no call can name B).
 #[test]
 fn kem_key_of_wallet_a_handle_is_a_derivation_while_wallet_b_unlocked() {
     let v = load("kem.json");
-    let row = |m: &str| arr(&v, "keys").iter().find(|r| r["mnemonic"] == m && r["kind"] == 304 && r["version"] == 0).unwrap();
+    let row = |m: &str| {
+        arr(&v, "keys")
+            .iter()
+            .find(|r| r["mnemonic"] == m && r["kind"] == 304 && r["version"] == 0)
+            .unwrap()
+    };
     let (a, b) = (wallet("pq_kat"), wallet("twelve_words"));
-    let (ka, kb) = (a.ua_key(0x0130, 0, 0).unwrap(), b.ua_key(0x0130, 0, 0).unwrap());
-    let (pa, pb) = (ka.kem_key(0).unwrap().kem_pk(), kb.kem_key(0).unwrap().kem_pk());
+    let (ka, kb) = (
+        a.ua_key(0x0130, 0, 0).unwrap(),
+        b.ua_key(0x0130, 0, 0).unwrap(),
+    );
+    let (pa, pb) = (
+        ka.kem_key(0).unwrap().kem_pk(),
+        kb.kem_key(0).unwrap().kem_pk(),
+    );
     assert_eq!(pa, bytes(&row("pq_kat")["kemPk"]));
     assert_eq!(pb, bytes(&row("twelve_words")["kemPk"]));
     assert_ne!(pa, pb);
@@ -175,7 +222,10 @@ fn kem_handles_revoked_by_lock() {
     #[cfg(feature = "vectors")]
     {
         let k = load("keys.json");
-        let m = arr(&k, "mnemonics").iter().find(|m| m["id"] == "pq_kat").unwrap();
+        let m = arr(&k, "mnemonics")
+            .iter()
+            .find(|m| m["id"] == "pq_kat")
+            .unwrap();
         w.vectors_unlock(m["words"].as_str().unwrap(), "").unwrap();
         assert_eq!(key.kem_key(0).err(), Some(Error::KeyRevoked));
         assert_eq!(kk.decaps(&ct, &eph).err(), Some(Error::KeyRevoked));
@@ -201,11 +251,27 @@ mod vectors {
         let mut n = 0;
         for r in arr(&v, "encaps") {
             let rc = &r["recipient"];
-            let (_w, kk) = if rc["ephemeralSeed"].is_string() { (None, eph_key(rc)) } else { let (w, k) = kem_of(rc); (Some(w), k) };
+            let (_w, kk) = if rc["ephemeralSeed"].is_string() {
+                (None, eph_key(rc))
+            } else {
+                let (w, k) = kem_of(rc);
+                (Some(w), k)
+            };
             assert_eq!(kk.kem_pk(), bytes(&r["kemPk"]), "{}", r["id"]);
-            let (ct, eph, ss) = kem::vectors_encaps(&bytes(&r["kemPk"]), &b32(&r["m"]), &b32(&r["e"])).unwrap();
-            assert_eq!(hex::encode(&ct), hex::encode(bytes(&r["mlkemCt"])), "{}", r["id"]);
-            assert_eq!((eph, *ss), (b32(&r["x25519Eph"]), b32(&r["ss"])), "{}", r["id"]);
+            let (ct, eph, ss) =
+                kem::vectors_encaps(&bytes(&r["kemPk"]), &b32(&r["m"]), &b32(&r["e"])).unwrap();
+            assert_eq!(
+                hex::encode(&ct),
+                hex::encode(bytes(&r["mlkemCt"])),
+                "{}",
+                r["id"]
+            );
+            assert_eq!(
+                (eph, *ss),
+                (b32(&r["x25519Eph"]), b32(&r["ss"])),
+                "{}",
+                r["id"]
+            );
             assert_eq!(*kk.decaps(&ct, &eph).unwrap(), *ss, "{}", r["id"]);
             n += 1;
         }
@@ -220,7 +286,12 @@ mod vectors {
         for r in arr(&v, "encapsRefusals") {
             let (m, e) = (b32(&r["m"]), b32(&r["e"]));
             assert!(kem::vectors_encaps(&good, &m, &e).is_ok());
-            assert_eq!(kem::vectors_encaps(&bytes(&r["kemPk"]), &m, &e).err(), Some(Error::KemCheck), "{}", r["id"]);
+            assert_eq!(
+                kem::vectors_encaps(&bytes(&r["kemPk"]), &m, &e).err(),
+                Some(Error::KemCheck),
+                "{}",
+                r["id"]
+            );
         }
     }
 
@@ -243,7 +314,12 @@ mod vectors {
         let cases = arr(&v["acvp_mlkem_keygen"], "cases");
         for c in cases {
             let (ek, dk) = kem::vectors_mlkem_keygen(&b32(&c["d"]), &b32(&c["z"]));
-            assert_eq!((hex::encode(ek), hex::encode(&*dk)), (hex::encode(bytes(&c["ek"])), hex::encode(bytes(&c["dk"]))), "tc {}", c["tc"]);
+            assert_eq!(
+                (hex::encode(ek), hex::encode(&*dk)),
+                (hex::encode(bytes(&c["ek"])), hex::encode(bytes(&c["dk"]))),
+                "tc {}",
+                c["tc"]
+            );
         }
         assert_eq!(cases.len(), 5);
     }
@@ -255,18 +331,38 @@ mod vectors {
         let v = &load("pq_external.json")["acvp_mlkem_encapdecap"];
         for c in arr(v, "encapsulation") {
             let (ct, k) = kem::vectors_mlkem_encaps(&bytes(&c["ek"]), &b32(&c["m"])).unwrap();
-            assert_eq!((hex::encode(ct), *k), (hex::encode(bytes(&c["c"])), b32(&c["k"])), "tc {}", c["tc"]);
+            assert_eq!(
+                (hex::encode(ct), *k),
+                (hex::encode(bytes(&c["c"])), b32(&c["k"])),
+                "tc {}",
+                c["tc"]
+            );
         }
         for c in arr(v, "decapsulation") {
-            assert_eq!(*kem::vectors_mlkem_decaps(&bytes(&c["dk"]), &bytes(&c["c"])).unwrap(), b32(&c["k"]), "tc {}", c["tc"]);
+            assert_eq!(
+                *kem::vectors_mlkem_decaps(&bytes(&c["dk"]), &bytes(&c["c"])).unwrap(),
+                b32(&c["k"]),
+                "tc {}",
+                c["tc"]
+            );
         }
         let (mut dk_ok, mut ek_ok) = (0, 0);
         for c in arr(v, "dkCheck") {
-            assert_eq!(kem::dk_check_ok(&bytes(&c["dk"])), c["valid"].as_bool().unwrap(), "tc {}", c["tc"]);
+            assert_eq!(
+                kem::dk_check_ok(&bytes(&c["dk"])),
+                c["valid"].as_bool().unwrap(),
+                "tc {}",
+                c["tc"]
+            );
             dk_ok += c["valid"].as_bool().unwrap() as usize;
         }
         for c in arr(v, "ekCheck") {
-            assert_eq!(kem::ek_modulus_ok(&bytes(&c["ek"])), c["valid"].as_bool().unwrap(), "tc {}", c["tc"]);
+            assert_eq!(
+                kem::ek_modulus_ok(&bytes(&c["ek"])),
+                c["valid"].as_bool().unwrap(),
+                "tc {}",
+                c["tc"]
+            );
             ek_ok += c["valid"].as_bool().unwrap() as usize;
         }
         assert_eq!((dk_ok, ek_ok), (5, 5));
@@ -314,10 +410,19 @@ mod vectors {
         assert_eq!(a.vectors_kem_self_tests().unwrap(), 3);
         assert_eq!(b.vectors_kem_self_tests().unwrap(), 0);
         b.ua_key(0x0130, 0, 0).unwrap().kem_key(0).unwrap();
-        assert_eq!((a.vectors_kem_self_tests().unwrap(), b.vectors_kem_self_tests().unwrap()), (3, 1));
+        assert_eq!(
+            (
+                a.vectors_kem_self_tests().unwrap(),
+                b.vectors_kem_self_tests().unwrap()
+            ),
+            (3, 1)
+        );
         a.lock();
         let k = load("keys.json");
-        let m = arr(&k, "mnemonics").iter().find(|m| m["id"] == "pq_kat").unwrap();
+        let m = arr(&k, "mnemonics")
+            .iter()
+            .find(|m| m["id"] == "pq_kat")
+            .unwrap();
         a.vectors_unlock(m["words"].as_str().unwrap(), "").unwrap();
         assert_eq!(a.vectors_kem_self_tests().unwrap(), 0);
         a.ua_key(0x0130, 0, 0).unwrap().kem_key(0).unwrap();
@@ -331,7 +436,14 @@ mod vectors {
         let kk = w.ua_key(0x0130, 0, 0).unwrap().kem_key(0).unwrap();
         assert!(kk.vectors_secret_in_arena().unwrap());
         drop(w);
-        assert_eq!(kk.vectors_secret_in_arena().err(), Some(Error::KeyRevoked), "the wallet dropped: its store wiped");
-        assert!(KemKeyPair::generate_ephemeral().unwrap().vectors_secret_in_arena().unwrap());
+        assert_eq!(
+            kk.vectors_secret_in_arena().err(),
+            Some(Error::KeyRevoked),
+            "the wallet dropped: its store wiped"
+        );
+        assert!(KemKeyPair::generate_ephemeral()
+            .unwrap()
+            .vectors_secret_in_arena()
+            .unwrap());
     }
 }

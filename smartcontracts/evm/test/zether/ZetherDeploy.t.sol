@@ -70,7 +70,9 @@ contract ZetherDeployTest is Test {
             assertEq(e.deps[3], _at(h, type(ZetherDisclosure).creationCode));
             e = envClosure(e, rel.implementation); // T66b: the release's body modules pinned after its closure
             assertEq(e.libs.length, closureLibs(IOpenFactory.TokenKind(k)).length); // NORMAL_ZETHER: no WrappedLib, no ZetherWrappedLib
-            for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash);
+            for (uint256 i; i < e.libs.length; ++i) {
+                assertEq(e.libCodeHashes[i], e.libs[i].codehash);
+            }
         }
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_verifier_", key)), tv);
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_burn_verifier_", key)), bv);
@@ -82,10 +84,14 @@ contract ZetherDeployTest is Test {
             assertEq(address(rel.verifier()), address(0));
             assertEq(address(rel.burnVerifier()), address(0));
         }
-        assertEq(vm.parseJsonAddress(json, string.concat(".implementation_normal_zether_", key)),
-            f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, c + 1));
-        assertEq(vm.parseJsonAddress(json, string.concat(".implementation_wrapped_zether_", key)),
-            f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, c + 1));
+        assertEq(
+            vm.parseJsonAddress(json, string.concat(".implementation_normal_zether_", key)),
+            f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, c + 1)
+        );
+        assertEq(
+            vm.parseJsonAddress(json, string.concat(".implementation_wrapped_zether_", key)),
+            f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, c + 1)
+        );
     }
 
     function test_devChain_registersBothConfidentialKinds() public {
@@ -121,8 +127,10 @@ contract ZetherDeployTest is Test {
         // a token from the deployed catalogue, on the deployed verifier
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
-        c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
-        NormalZetherToken t = NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
+        c.conf =
+            IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
+        NormalZetherToken t =
+            NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
         assertEq(t.curve(), "bls12-381");
         assertEq(t.chainUid(), ZUID);
@@ -131,7 +139,11 @@ contract ZetherDeployTest is Test {
         assertEq(NormalToken(address(t)).SMART_KEY_ACCOUNT_IMPL(), ska);
         // minDecoyFee on both layers (owner 2026-10-20): a Zether token takes a non-zero one (bounds: ZetherMulti)
         c.conf.minDecoyFee = 1;
-        assertEq(NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
+        assertEq(
+            NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2"))
+                .minDecoyFee(),
+            1
+        );
     }
 
     /// Q4 (CTR-MTX-30, R40), ua-mtx-merge T10: on a chain that declares the public gate the two Zether releases are each
@@ -145,7 +157,9 @@ contract ZetherDeployTest is Test {
         for (uint8 k = 2; k <= 3; ++k) {
             (uint256 regular, uint256 state) = h.measured(names[k - 2]);
             assertGt(regular, 0, names[k - 2]);
-            assertGe(state, f.implementationOf(IOpenFactory.TokenKind(k), 1).code.length * 1530, "the code deposit is in it");
+            assertGe(
+                state, f.implementationOf(IOpenFactory.TokenKind(k), 1).code.length * 1530, "the code deposit is in it"
+            );
             assertLt((regular + state) * 105 / 100, h.gasNeed(names[k - 2]), "below the testnet formula");
         }
     }
@@ -162,7 +176,9 @@ contract ZetherDeployTest is Test {
             assertFalse(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1), address(0));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1), address(0));
-            assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) == address(0), false, "the public kinds still");
+            assertEq(
+                f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) == address(0), false, "the public kinds still"
+            );
         }
         vm.chainId(298);
         DeployHarness hh = new DeployHarness();
@@ -182,7 +198,9 @@ contract ZetherDeployTest is Test {
             assertTrue(IUARegistry(vm.parseJsonAddress(json, ".ua_registry")).kindEnabled(UAKinds.ZETHER_BLS12381));
             IFactoryToken.TokenConfig memory c;
             (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
-            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
+            c.conf = IFactoryToken.ConfidentialConfig(
+                "", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false
+            );
             assertTrue(f.isRegisteredToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z")));
         }
     }
@@ -241,11 +259,15 @@ contract ZetherDeployTest is Test {
             uint256 txGas = vg.gasTotalUsed * 64 / 63;
             emit log_named_uint("deploy tx regular gas", txGas);
             emit log_named_uint("deploy tx state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
-            assertLt(txGas * 105 * 105 / 10_000, TX_GAS_CAP, "regular gas fits EIP-7825 with --gas-estimate-multiplier 105");
+            assertLt(
+                txGas * 105 * 105 / 10_000, TX_GAS_CAP, "regular gas fits EIP-7825 with --gas-estimate-multiplier 105"
+            );
             // C5-1: regular + state gas against the budget of the deploy gate (NET-EVM-06): runtime x 1,530 + 2^24
-            assertLe(txGas + uint256(int256(vg.gasStateUsed)),
+            assertLe(
+                txGas + uint256(int256(vg.gasStateUsed)),
                 vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".WrappedZetherToken") * 1530 + TX_GAS_CAP,
-                "regular + state gas fits the deploy gate's budget");
+                "regular + state gas fits the deploy gate's budget"
+            );
         }
     }
 }

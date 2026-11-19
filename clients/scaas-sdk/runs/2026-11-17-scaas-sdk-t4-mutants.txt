@@ -1,0 +1,13 @@
+# t4 mutants at commit 380c5cb8d (name | outcome | test)
+drop short_seed for 21 words | killed | ../../scripts/capped cargo test --locked --offline -j2 --test vault import_accepts_12_to_24
+a hidden set emits an event | killed | ../../scripts/capped cargo test --locked --offline -j2 --test vault hidden_set_writes_and_emits_nothing
+skip the MAC check | killed | ../../scripts/capped cargo test --locked --offline -j2 --test vault mac_mismatch_keeps_the_seed_locked
+mark a locked row verified | killed | ../../scripts/capped cargo test --locked --offline -j2 --test vault locked_rows_are_unverified
+accept a 7-character passphrase | killed | ../../scripts/capped cargo test --locked --offline -j2 --test vault vault_passphrase_rule
+import_key without the passphrase check | killed | ../../scripts/capped cargo test --locked --offline -j2 --test vault import_key_refusals
+import_key without the imported_key mark | killed | ../../scripts/capped cargo test --locked --offline -j2 --test vault import_key_seals_a_leaf_and_marks_it
+heavy work without the limit | killed | ../../scripts/capped cargo test --locked --offline -j2 --test vault heavy_work_one_at_a_time
+skip zeroize on lock | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test retained_key lock_zeroizes_the_retained_key
+retain the passphrase | killed | ../../scripts/capped cargo test --locked --offline -j2 --test vault passphrase_not_retained_after_unlock
+open no label vault at a passphrase unlock | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib passphrase_unlock_opens_every_vault
+11 mutants, 11 killed, 0 survived, 0 not loaded

@@ -29,6 +29,7 @@ env:
 Wasm: smartcontracts/near/target/near/<crate>/<crate>.wasm (smartcontracts/scripts/build.sh near first).
 Needs python3 with `cryptography` (as smartcontracts/vectors/metatx/famvec.py).
 """
+
 import base64
 import hashlib
 import json
@@ -81,14 +82,19 @@ class Rpc:
         return self("query", dict(finality="final", **q))
 
     def view(self, account, method, args=b""):
-        r = self.query(request_type="call_function", account_id=account, method_name=method,
-                       args_base64=base64.b64encode(args).decode())
+        r = self.query(
+            request_type="call_function",
+            account_id=account,
+            method_name=method,
+            args_base64=base64.b64encode(args).decode(),
+        )
         if "error" in r:  # a contract panic comes back inside the result
             raise RuntimeError(f"view {account}.{method}: {r['error']}")
         return bytes(r["result"])
 
 
 # ------------------------------------------------------------------ Borsh transaction (nearcore Transaction::V0)
+
 
 def u32(n):
     return struct.pack("<I", n)
@@ -143,11 +149,20 @@ class Key:
 
     def send(self, rpc, receiver, actions, what):
         if self.nonce is None:
-            self.nonce = rpc.query(request_type="view_access_key", account_id=self.account, public_key=self.pk_str())["nonce"]
+            self.nonce = rpc.query(request_type="view_access_key", account_id=self.account, public_key=self.pk_str())[
+                "nonce"
+            ]
         self.nonce += 1
         block = b58d(rpc("block", {"finality": "final"})["header"]["hash"])
-        tx = (bstr(self.account) + pk_borsh(self.pk) + struct.pack("<Q", self.nonce) + bstr(receiver) + block
-              + u32(len(actions)) + b"".join(actions))
+        tx = (
+            bstr(self.account)
+            + pk_borsh(self.pk)
+            + struct.pack("<Q", self.nonce)
+            + bstr(receiver)
+            + block
+            + u32(len(actions))
+            + b"".join(actions)
+        )
         h = hashlib.sha256(tx).digest()
         signed = tx + b"\0" + self.sk.sign(h)
         try:
@@ -156,7 +171,9 @@ class Key:
             if isinstance(e, RuntimeError) and "TIMEOUT_ERROR" not in str(e):
                 raise
             # the transaction may have landed (review I3): ask for it instead of failing; a rerun resumes otherwise
-            r = rpc("EXPERIMENTAL_tx_status", {"tx_hash": b58e(h), "sender_account_id": self.account, "wait_until": "FINAL"})
+            r = rpc(
+                "EXPERIMENTAL_tx_status", {"tx_hash": b58e(h), "sender_account_id": self.account, "wait_until": "FINAL"}
+            )
         failed = [o for o in [r["transaction_outcome"]] + r["receipts_outcome"] if "Failure" in o["outcome"]["status"]]
         if "Failure" in r["status"] or failed:
             raise RuntimeError(f"{what}: {json.dumps(r['status'])} {[f['outcome']['status'] for f in failed]}")
@@ -166,6 +183,7 @@ class Key:
 
 
 # ------------------------------------------------------------------ deploy
+
 
 def wasm(crate):
     p = os.path.join(NEAR_DIR, "target", "near", crate, f"{crate}.wasm")
@@ -203,7 +221,9 @@ def parse_lanes():
     lanes = [x.strip() for x in os.environ.get("NEAR_LANES", "").split(",") if x.strip()]
     bad = [x for x in lanes if not re.fullmatch(r"[0-9a-f]{64}", x)]
     if not lanes or bad:
-        sys.exit(f"NEAR_LANES must list the relayer lanes (implicit account ids, 64 lower-case hex): {bad or 'none given'}")
+        sys.exit(
+            f"NEAR_LANES must list the relayer lanes (implicit account ids, 64 lower-case hex): {bad or 'none given'}"
+        )
     return lanes
 
 
@@ -213,13 +233,24 @@ def parse_tokens(funder_id):
         parts = t.split(":")
         if len(parts) != 3 or not re.fullmatch(r"[A-Za-z0-9]{1,16}", parts[0]) or not parts[2].isdigit():
             sys.exit(f"NEAR_TOKENS entry {t!r}: SYMBOL:Name:decimals")
-        tokens.append({"account": f"{parts[0].lower()}.{funder_id}", "symbol": parts[0], "name": parts[1], "decimals": int(parts[2])})
+        tokens.append(
+            {
+                "account": f"{parts[0].lower()}.{funder_id}",
+                "symbol": parts[0],
+                "name": parts[1],
+                "decimals": int(parts[2]),
+            }
+        )
     return tokens
 
 
 # A view that panics with "not initialized" until `new` ran (near-sdk PanicOnDefault), per crate.
-INIT_VIEW = {"scaas_near_token": ("network", b""), "scaas_near_dex": ("pending", b"\0" * 32),
-             "scaas_near_relayfee": ("executor", b""), "scaas_near_relayexec": ("router", b"")}
+INIT_VIEW = {
+    "scaas_near_token": ("network", b""),
+    "scaas_near_dex": ("pending", b"\0" * 32),
+    "scaas_near_relayfee": ("executor", b""),
+    "scaas_near_relayexec": ("router", b""),
+}
 
 
 def initialised(rpc, account, crate):
@@ -274,14 +305,18 @@ def keep_out_of_git(path):
     """Review N3: a resume file inside the repository must be one git ignores (the default directory's
     `deployments/*.resume.json` is); refused before anything is written or sent."""
     try:
-        top = subprocess.run(["git", "-C", NEAR_DIR, "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
+        top = subprocess.run(
+            ["git", "-C", NEAR_DIR, "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True
+        ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return  # not in a git checkout
     if os.path.commonpath([os.path.realpath(top), os.path.realpath(os.path.dirname(path))]) != os.path.realpath(top):
         return
     if subprocess.run(["git", "-C", top, "check-ignore", "-q", path]).returncode != 0:
-        sys.exit(f"NEAR_DEPLOYMENTS_DIR {os.path.dirname(path)} is inside the repository and git does not ignore "
-                 f"{os.path.basename(path)} (the temporary keys): use smartcontracts/near/deployments or a directory outside it")
+        sys.exit(
+            f"NEAR_DEPLOYMENTS_DIR {os.path.dirname(path)} is inside the repository and git does not ignore "
+            f"{os.path.basename(path)} (the temporary keys): use smartcontracts/near/deployments or a directory outside it"
+        )
 
 
 def deploy(rpc):
@@ -294,13 +329,25 @@ def deploy(rpc):
     genesis = status["genesis_hash"]
     network = b58d(genesis)
     assert len(network) == 32, genesis
-    byte_cost = int(rpc("EXPERIMENTAL_protocol_config", {"finality": "final"})["runtime_config"]["storage_amount_per_byte"])
+    byte_cost = int(
+        rpc("EXPERIMENTAL_protocol_config", {"finality": "final"})["runtime_config"]["storage_amount_per_byte"]
+    )
     fund = int(float(os.environ.get("NEAR_FUND", "2")) * 10**24)
     admin = os.environ.get("NEAR_ADMIN", f.account)
     dex, router, executor = (f"{n}.{f.account}" for n in ("dex", "relayfee", "relayexec"))
-    plan = [(t["account"], "scaas_near_token", network + bstr(admin) + token_metadata(t["name"], t["symbol"], t["decimals"]))
-            for t in tokens]
-    plan += [(dex, "scaas_near_dex", bstr(executor)), (router, "scaas_near_relayfee", bstr(executor)), (executor, "scaas_near_relayexec", bstr(router))]
+    plan = [
+        (
+            t["account"],
+            "scaas_near_token",
+            network + bstr(admin) + token_metadata(t["name"], t["symbol"], t["decimals"]),
+        )
+        for t in tokens
+    ]
+    plan += [
+        (dex, "scaas_near_dex", bstr(executor)),
+        (router, "scaas_near_relayfee", bstr(executor)),
+        (executor, "scaas_near_relayexec", bstr(router)),
+    ]
     d = os.path.abspath(os.environ.get("NEAR_DEPLOYMENTS_DIR") or os.path.join(NEAR_DIR, "deployments"))
     rpath = os.path.join(d, f"{genesis}.{f.account}.resume.json")
     keep_out_of_git(rpath)
@@ -309,10 +356,14 @@ def deploy(rpc):
     # review N2: keys of accounts outside this plan stay with their file (never removed, never orphaned)
     stray = sorted(set(resume.keys) - {p[0] for p in plan})
     if stray:
-        sys.exit(f"{rpath} holds the temporary keys of {stray}, which this run's plan (NEAR_TOKENS) does not include: "
-                 "rerun with the original NEAR_TOKENS / NEAR_ADMIN so the interrupted deployment finishes")
-    print(f"deploy on {status['chain_id']} (genesis {genesis}) from {f.account}: {[p[0] for p in plan]}"
-          + (f" (resuming: {sorted(resume.keys)})" if resume.keys else ""))
+        sys.exit(
+            f"{rpath} holds the temporary keys of {stray}, which this run's plan (NEAR_TOKENS) does not include: "
+            "rerun with the original NEAR_TOKENS / NEAR_ADMIN so the interrupted deployment finishes"
+        )
+    print(
+        f"deploy on {status['chain_id']} (genesis {genesis}) from {f.account}: {[p[0] for p in plan]}"
+        + (f" (resuming: {sorted(resume.keys)})" if resume.keys else "")
+    )
     # review N1: an existing account is adopted only with this code and, for a token, these parameters (before any send)
     meta = {t["account"]: t for t in tokens}
     for account, crate, _ in plan:
@@ -320,25 +371,35 @@ def deploy(rpc):
         if acct is None:
             continue
         if acct["code_hash"] != b58e(hashlib.sha256(wasm(crate)).digest()):
-            sys.exit(f"{account} exists with other code: not this deployment's (another funding account or NEAR_TOKENS)")
+            sys.exit(
+                f"{account} exists with other code: not this deployment's (another funding account or NEAR_TOKENS)"
+            )
         if account in meta and initialised(rpc, account, crate):
             t, m = meta[account], json.loads(rpc.view(account, "ft_metadata"))
             have = (m["name"], m["symbol"], m["decimals"], json.loads(rpc.view(account, "admin")))
             want = (t["name"], t["symbol"], t["decimals"], admin)
             if have != want:
-                sys.exit(f"{account} exists with (name, symbol, decimals, admin) {have}, not this run's {want}: "
-                         "not adopted (change NEAR_TOKENS / NEAR_ADMIN back, or use another funding account)")
+                sys.exit(
+                    f"{account} exists with (name, symbol, decimals, admin) {have}, not this run's {want}: "
+                    "not adopted (change NEAR_TOKENS / NEAR_ADMIN back, or use another funding account)"
+                )
     for account, crate, init in plan:
         code = wasm(crate)
         acct = view_account(rpc, account)
         if acct is None:
             tmp = resume.key(account)
             amount = len(code) * byte_cost + fund
-            f.send(rpc, account, [create_account(), transfer(amount), add_full_key(tmp.pk), deploy_contract(code)],
-                   f"create {account} ({crate}, {len(code)} B, {amount / 10**24:.3f} NEAR)")
+            f.send(
+                rpc,
+                account,
+                [create_account(), transfer(amount), add_full_key(tmp.pk), deploy_contract(code)],
+                f"create {account} ({crate}, {len(code)} B, {amount / 10**24:.3f} NEAR)",
+            )
             acct = view_account(rpc, account)
         if acct is None or acct["code_hash"] != b58e(hashlib.sha256(code).digest()):
-            sys.exit(f"{account} exists with other code: not this deployment's (another funding account or NEAR_TOKENS)")
+            sys.exit(
+                f"{account} exists with other code: not this deployment's (another funding account or NEAR_TOKENS)"
+            )
         if not initialised(rpc, account, crate):
             if account not in resume.keys:
                 sys.exit(f"{account} is not initialised and its key is not in {resume.path}")
@@ -348,11 +409,18 @@ def deploy(rpc):
     for t in tokens:
         bounds = json.loads(rpc.view(t["account"], "storage_balance_bounds"))
         for lane in lanes:
-            if json.loads(rpc.view(t["account"], "storage_balance_of", json.dumps({"account_id": lane}).encode())) is not None:
+            if (
+                json.loads(rpc.view(t["account"], "storage_balance_of", json.dumps({"account_id": lane}).encode()))
+                is not None
+            ):
                 continue
             args = json.dumps({"account_id": lane, "registration_only": True}).encode()
-            f.send(rpc, t["account"], [function_call("storage_deposit", args, 30 * TGAS, int(bounds["min"]))],
-                   f"{t['account']}.storage_deposit({lane})")
+            f.send(
+                rpc,
+                t["account"],
+                [function_call("storage_deposit", args, 30 * TGAS, int(bounds["min"]))],
+                f"{t['account']}.storage_deposit({lane})",
+            )
     for account, _, _ in plan:
         listed = {k["public_key"] for k in rpc.query(request_type="view_access_key_list", account_id=account)["keys"]}
         if account in resume.keys and resume.key(account).pk_str() in listed:
@@ -361,9 +429,15 @@ def deploy(rpc):
     accounts = [p[0] for p in plan]
     gate(rpc, accounts)
     out = {
-        "network": genesis, "chain_id": status["chain_id"], "funder": f.account, "admin": admin,
+        "network": genesis,
+        "chain_id": status["chain_id"],
+        "funder": f.account,
+        "admin": admin,
         "tokens": [{"account": t["account"], "symbol": t["symbol"], "decimals": t["decimals"]} for t in tokens],
-        "dex": dex, "relayfee": router, "relayexec": executor, "lanes": lanes,
+        "dex": dex,
+        "relayfee": router,
+        "relayexec": executor,
+        "lanes": lanes,
         "code_hash": {a: rpc.query(request_type="view_account", account_id=a)["code_hash"] for a in accounts},
         "deployed_at": int(time.time()),
     }

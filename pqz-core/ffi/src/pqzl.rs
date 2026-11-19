@@ -45,7 +45,11 @@ pub static TEST_FAIL_WORKER: AtomicBool = AtomicBool::new(false);
 /// core's wasm32 peak with every relation loaded exceeds the 512 MiB arena at M = 4 at n2816-kmax65536, and the R0
 /// review fix's audited groups raise it at n2048 / n2304). Rust backend 8 = `pqzl::WASM_MAX_LEGS` (port plan Task 12,
 /// owner 2026-10-18 "if it is enough, raise it": run `d6`, the M = 8 wasm32 prove peaks at 117.4 MiB, CTR-PQZ-09).
-pub const WASM_PQZL_MAX_LEGS: usize = if cfg!(feature = "pqzl-rust") { 8 } else { pqz_stmt::C_WASM_MAX_LEGS };
+pub const WASM_PQZL_MAX_LEGS: usize = if cfg!(feature = "pqzl-rust") {
+    8
+} else {
+    pqz_stmt::C_WASM_MAX_LEGS
+};
 /// The worker thread's stack (pqz_bench runs the core on an 8 MiB main thread, the wasm builds on an 8 MiB stack).
 pub const STACK: usize = 16 << 20;
 
@@ -70,7 +74,7 @@ struct Worker {
 /// survives a panicking job).
 #[cfg(not(target_arch = "wasm32"))]
 fn on_worker<R: Send>(w: &mut Option<Worker>, f: impl FnOnce() -> R + Send) -> Option<R> {
-    use std::panic::{AssertUnwindSafe, catch_unwind};
+    use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::mpsc::channel;
     #[cfg(feature = "test-hooks")]
     if TEST_FAIL_WORKER.load(Relaxed) {
@@ -198,7 +202,10 @@ pub fn enc_multi(
     seed_enc: &[u8; 32],
 ) -> Option<EncMulti> {
     let m = legs.len();
-    let keys: Vec<&[u8; PK_BYTES]> = std::iter::once(pk_f).chain(legs.iter().map(|l| l.0)).chain(pk_a).collect();
+    let keys: Vec<&[u8; PK_BYTES]> = std::iter::once(pk_f)
+        .chain(legs.iter().map(|l| l.0))
+        .chain(pk_a)
+        .collect();
     if (1..keys.len()).any(|k| keys[..k].contains(&keys[k])) {
         return None;
     }
@@ -211,9 +218,13 @@ pub fn enc_multi(
         v_a: Vec::new(),
         e2_a: Vec::new(),
     };
-    for (g, grp) in legs.chunks(pqz_stmt::legs_per_group(pk_a.is_some())).enumerate() {
+    for (g, grp) in legs
+        .chunks(pqz_stmt::legs_per_group(pk_a.is_some()))
+        .enumerate()
+    {
         let n = grp.len();
-        let (mut pks, mut msgs): (Vec<&[u8; PK_BYTES]>, Vec<[u8; 16]>) = grp.iter().copied().unzip();
+        let (mut pks, mut msgs): (Vec<&[u8; PK_BYTES]>, Vec<[u8; 16]>) =
+            grp.iter().copied().unzip();
         if g == 0 {
             pks.push(pk_f);
             msgs.push(d_f);

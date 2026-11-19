@@ -40,11 +40,36 @@ pub fn relay_fee_manage_signed<'info>(
         system_program: c.system_program.key(),
     }
     .to_account_metas(None);
-    let data = crate::instruction::ManageSigned { op: op.clone(), auth: auth.clone() }.data();
+    let data = crate::instruction::ManageSigned {
+        op: op.clone(),
+        auth: auth.clone(),
+    }
+    .data();
     let r = wrapper_ref(&ctx.accounts.pay.config.network, &metas, &data, &args)?;
     let a = ctx.accounts;
-    manage_signed(Context::new(ctx.program_id, &mut a.call, ctx.remaining_accounts, ctx.bumps.call), op, auth)?;
-    pay_routed(Context::new(ctx.program_id, &mut a.pay, ctx.remaining_accounts, ctx.bumps.pay), owner, &args, &pay_auth, r, crate::ID)
+    manage_signed(
+        Context::new(
+            ctx.program_id,
+            &mut a.call,
+            ctx.remaining_accounts,
+            ctx.bumps.call,
+        ),
+        op,
+        auth,
+    )?;
+    pay_routed(
+        Context::new(
+            ctx.program_id,
+            &mut a.pay,
+            ctx.remaining_accounts,
+            ctx.bumps.pay,
+        ),
+        owner,
+        &args,
+        &pay_auth,
+        r,
+        crate::ID,
+    )
 }
 
 #[derive(Accounts)]
@@ -71,11 +96,36 @@ pub fn relay_fee_mandate_open<'info>(
         system_program: c.system_program.key(),
     }
     .to_account_metas(None);
-    let data = crate::instruction::MandateOpen { init: init.clone(), auth: auth.clone() }.data();
+    let data = crate::instruction::MandateOpen {
+        init: init.clone(),
+        auth: auth.clone(),
+    }
+    .data();
     let r = wrapper_ref(&ctx.accounts.pay.config.network, &metas, &data, &args)?;
     let a = ctx.accounts;
-    mandate_open(Context::new(ctx.program_id, &mut a.call, ctx.remaining_accounts, ctx.bumps.call), init, auth)?;
-    pay_routed(Context::new(ctx.program_id, &mut a.pay, ctx.remaining_accounts, ctx.bumps.pay), owner, &args, &pay_auth, r, crate::ID)
+    mandate_open(
+        Context::new(
+            ctx.program_id,
+            &mut a.call,
+            ctx.remaining_accounts,
+            ctx.bumps.call,
+        ),
+        init,
+        auth,
+    )?;
+    pay_routed(
+        Context::new(
+            ctx.program_id,
+            &mut a.pay,
+            ctx.remaining_accounts,
+            ctx.bumps.pay,
+        ),
+        owner,
+        &args,
+        &pay_auth,
+        r,
+        crate::ID,
+    )
 }
 
 #[derive(Accounts)]
@@ -100,14 +150,39 @@ pub fn relay_fee_mandate_revoke_signed<'info>(
         instructions: c.instructions.key(),
     }
     .to_account_metas(None);
-    let data = crate::instruction::MandateRevokeSigned { valid_until, auth: auth.clone() }.data();
+    let data = crate::instruction::MandateRevokeSigned {
+        valid_until,
+        auth: auth.clone(),
+    }
+    .data();
     let r = wrapper_ref(&ctx.accounts.pay.config.network, &metas, &data, &args)?;
     // One rule (owner ruling 2026-10-28, as Sui / Aptos / TON): no fee for a no-op. A revoke of a revoked mandate
     // (repeated, front-run) changes nothing: refused, the payer is not charged. The entry itself stays idempotent.
     require!(!c.mandate.revoked, crate::ScaasError::RelayCallNoOp);
     let a = ctx.accounts;
-    mandate_revoke_signed(Context::new(ctx.program_id, &mut a.call, ctx.remaining_accounts, ctx.bumps.call), valid_until, auth)?;
-    pay_routed(Context::new(ctx.program_id, &mut a.pay, ctx.remaining_accounts, ctx.bumps.pay), owner, &args, &pay_auth, r, crate::ID)
+    mandate_revoke_signed(
+        Context::new(
+            ctx.program_id,
+            &mut a.call,
+            ctx.remaining_accounts,
+            ctx.bumps.call,
+        ),
+        valid_until,
+        auth,
+    )?;
+    pay_routed(
+        Context::new(
+            ctx.program_id,
+            &mut a.pay,
+            ctx.remaining_accounts,
+            ctx.bumps.pay,
+        ),
+        owner,
+        &args,
+        &pay_auth,
+        r,
+        crate::ID,
+    )
 }
 
 #[derive(Accounts)]
@@ -139,13 +214,44 @@ pub fn relay_fee_mandate_close_signed<'info>(
     }
     .to_account_metas(None);
     for (i, q) in ctx.remaining_accounts.iter().enumerate() {
-        metas.push(if i % 2 == 0 { AccountMeta::new(q.key(), false) } else { AccountMeta::new_readonly(q.key(), false) });
+        metas.push(if i % 2 == 0 {
+            AccountMeta::new(q.key(), false)
+        } else {
+            AccountMeta::new_readonly(q.key(), false)
+        });
     }
-    let data = crate::instruction::MandateCloseSigned { nonce, valid_until, auth: auth.clone() }.data();
+    let data = crate::instruction::MandateCloseSigned {
+        nonce,
+        valid_until,
+        auth: auth.clone(),
+    }
+    .data();
     let r = wrapper_ref(&ctx.accounts.pay.config.network, &metas, &data, &args)?;
     let a = ctx.accounts;
-    mandate_close_signed(Context::new(ctx.program_id, &mut a.call, ctx.remaining_accounts, ctx.bumps.call), nonce, valid_until, auth)?;
-    pay_routed(Context::new(ctx.program_id, &mut a.pay, ctx.remaining_accounts, ctx.bumps.pay), owner, &args, &pay_auth, r, crate::ID)
+    mandate_close_signed(
+        Context::new(
+            ctx.program_id,
+            &mut a.call,
+            ctx.remaining_accounts,
+            ctx.bumps.call,
+        ),
+        nonce,
+        valid_until,
+        auth,
+    )?;
+    pay_routed(
+        Context::new(
+            ctx.program_id,
+            &mut a.pay,
+            ctx.remaining_accounts,
+            ctx.bumps.pay,
+        ),
+        owner,
+        &args,
+        &pay_auth,
+        r,
+        crate::ID,
+    )
 }
 
 #[derive(Accounts)]
@@ -175,14 +281,44 @@ pub fn relay_fee_cancel_signed<'info>(
         system_program: c.system_program.key(),
     }
     .to_account_metas(None);
-    let data = crate::instruction::CancelSigned { order: order.clone(), order_hash, auth: auth.clone() }.data();
+    let data = crate::instruction::CancelSigned {
+        order: order.clone(),
+        order_hash,
+        auth: auth.clone(),
+    }
+    .data();
     let r = wrapper_ref(&ctx.accounts.pay.config.network, &metas, &data, &args)?;
     // No fee for a no-op (owner ruling 2026-10-28): a cancel of an order already closed (filled, cancelled, front-run)
     // changes nothing: refused, the payer is not charged. The entry itself stays idempotent.
-    require!(c.fill.filled < order.sell_amount, crate::ScaasError::RelayCallNoOp);
+    require!(
+        c.fill.filled < order.sell_amount,
+        crate::ScaasError::RelayCallNoOp
+    );
     let a = ctx.accounts;
-    cancel_signed(Context::new(ctx.program_id, &mut a.call, ctx.remaining_accounts, ctx.bumps.call), order, order_hash, auth)?;
-    pay_routed(Context::new(ctx.program_id, &mut a.pay, ctx.remaining_accounts, ctx.bumps.pay), owner, &args, &pay_auth, r, crate::ID)
+    cancel_signed(
+        Context::new(
+            ctx.program_id,
+            &mut a.call,
+            ctx.remaining_accounts,
+            ctx.bumps.call,
+        ),
+        order,
+        order_hash,
+        auth,
+    )?;
+    pay_routed(
+        Context::new(
+            ctx.program_id,
+            &mut a.pay,
+            ctx.remaining_accounts,
+            ctx.bumps.pay,
+        ),
+        owner,
+        &args,
+        &pay_auth,
+        r,
+        crate::ID,
+    )
 }
 
 #[derive(Accounts)]
@@ -210,9 +346,34 @@ pub fn relay_fee_invalidate_nonces_signed<'info>(
         system_program: c.system_program.key(),
     }
     .to_account_metas(None);
-    let data = crate::instruction::InvalidateNoncesSigned { min_nonce, auth: auth.clone() }.data();
+    let data = crate::instruction::InvalidateNoncesSigned {
+        min_nonce,
+        auth: auth.clone(),
+    }
+    .data();
     let r = wrapper_ref(&ctx.accounts.pay.config.network, &metas, &data, &args)?;
     let a = ctx.accounts;
-    invalidate_nonces_signed(Context::new(ctx.program_id, &mut a.call, ctx.remaining_accounts, ctx.bumps.call), min_nonce, auth)?;
-    pay_routed(Context::new(ctx.program_id, &mut a.pay, ctx.remaining_accounts, ctx.bumps.pay), owner, &args, &pay_auth, r, crate::ID)
+    invalidate_nonces_signed(
+        Context::new(
+            ctx.program_id,
+            &mut a.call,
+            ctx.remaining_accounts,
+            ctx.bumps.call,
+        ),
+        min_nonce,
+        auth,
+    )?;
+    pay_routed(
+        Context::new(
+            ctx.program_id,
+            &mut a.pay,
+            ctx.remaining_accounts,
+            ctx.bumps.pay,
+        ),
+        owner,
+        &args,
+        &pay_auth,
+        r,
+        crate::ID,
+    )
 }

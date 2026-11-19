@@ -22,17 +22,23 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export ZETHER_CLI="${ZETHER_CLI:-$ROOT/clients/zether-prover/target/release/zether-cli}"
-[ -x "$ZETHER_CLI" ] || { echo "no $ZETHER_CLI: cargo build --release --features hazmat --bin zether-cli (clients/zether-prover)" >&2; exit 2; }
+[ -x "$ZETHER_CLI" ] || {
+    echo "no $ZETHER_CLI: cargo build --release --features hazmat --bin zether-cli (clients/zether-prover)" >&2
+    exit 2
+}
 if [ -z "${RPC:-}" ]; then
-  PORT="${PORT:-18545}"
-  RPC="http://127.0.0.1:$PORT"
-  anvil --chain-id 31337 --hardfork amsterdam --gas-limit 200000000 --code-size-limit 131072 --port "$PORT" --silent &
-  ANVIL=$!
-  trap 'kill "$ANVIL" 2>/dev/null || true' EXIT
-  for _ in $(seq 50); do cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break; sleep 0.2; done
-  export PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 # anvil's dev account 0
-  export DEPLOY_NAME=local-31337-testnet # NET-EVM-13: the anvil is not in chain-uids.json; its books by this name
-  DEPLOY_ZETHER=1 "$ROOT/smartcontracts/scripts/deploy.sh" evm "$RPC" --silent >/dev/null
+    PORT="${PORT:-18545}"
+    RPC="http://127.0.0.1:$PORT"
+    anvil --chain-id 31337 --hardfork amsterdam --gas-limit 200000000 --code-size-limit 131072 --port "$PORT" --silent &
+    ANVIL=$!
+    trap 'kill "$ANVIL" 2>/dev/null || true' EXIT
+    for _ in $(seq 50); do
+        cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break
+        sleep 0.2
+    done
+    export PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 # anvil's dev account 0
+    export DEPLOY_NAME=local-31337-testnet                                                # NET-EVM-13: the anvil is not in chain-uids.json; its books by this name
+    DEPLOY_ZETHER=1 "$ROOT/smartcontracts/scripts/deploy.sh" evm "$RPC" --silent >/dev/null
 fi
 : "${PRIVATE_KEY:?PRIVATE_KEY (the deployer of deployments/<key>.json)}"
 cd "$ROOT/smartcontracts/evm"
@@ -40,11 +46,12 @@ CHAIN="$(cast chain-id --rpc-url "$RPC")"
 SENDER="$(cast wallet address --private-key "$PRIVATE_KEY")"
 # forge's output, the Logs section only (all of it on a failure)
 forge_logs() {
-  local out
-  if ! out="$(forge script script/ZetherE2E.s.sol --rpc-url "$RPC" --ffi --disable-code-size-limit "$@" 2>&1)"; then
-    echo "$out" >&2; exit 1
-  fi
-  sed -n '/^== Logs ==/,/^$/{/^== Logs ==/d;/^$/d;s/^  //;p}' <<< "$out"
+    local out
+    if ! out="$(forge script script/ZetherE2E.s.sol --rpc-url "$RPC" --ffi --disable-code-size-limit "$@" 2>&1)"; then
+        echo "$out" >&2
+        exit 1
+    fi
+    sed -n '/^== Logs ==/,/^$/{/^== Logs ==/d;/^$/d;s/^  //;p}' <<<"$out"
 }
 echo "## run (broadcast, chain $CHAIN, sender $SENDER)"
 forge_logs --broadcast --slow --sender "$SENDER"

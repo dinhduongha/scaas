@@ -25,7 +25,9 @@ contract SlhWorstCase {
                 idxLeaf = idxTree & 0x1ff;
                 idxTree >>= 9;
             }
-            node = SlhDsaSha2128s.xmssPk(sig, SlhDsaSha2128s.HT_OFF + j * SlhDsaSha2128s.XMSS_LEN, 0, j, idxTree, idxLeaf, b, t);
+            node = SlhDsaSha2128s.xmssPk(
+                sig, SlhDsaSha2128s.HT_OFF + j * SlhDsaSha2128s.XMSS_LEN, 0, j, idxTree, idxLeaf, b, t
+            );
         }
     }
 }
@@ -33,12 +35,18 @@ contract SlhWorstCase {
 contract Permuter {
     function run(uint256 n) external pure {
         Shake.reserve();
-        for (uint256 i; i < n; ++i) Shake.permute();
+        for (uint256 i; i < n; ++i) {
+            Shake.permute();
+        }
     }
 }
 
 contract MlDsaExpanded {
-    function verify(uint256 level, bytes calldata ek, bytes calldata mprime, bytes calldata sig) external pure returns (bool) {
+    function verify(uint256 level, bytes calldata ek, bytes calldata mprime, bytes calldata sig)
+        external
+        pure
+        returns (bool)
+    {
         Shake.reserve();
         return MlDsa.verifyExpanded(level == 44 ? MlDsa.params44() : MlDsa.params65(), ek, mprime, sig);
     }
@@ -56,8 +64,12 @@ contract PqGasTest is Test {
     /// Gas of `verifier.verify(pk, ua_msg, sig)` for the vector of kind `name` (must be valid).
     function _one(string memory kat, string memory name, address verifier) internal view returns (uint256 used) {
         string memory k = string.concat(".kinds.", name);
-        bytes memory call = abi.encodeWithSignature("verify(bytes,bytes32,bytes)", vm.parseJsonBytes(kat, string.concat(k, ".pk")),
-            bytes32(vm.parseJsonBytes(kat, string.concat(k, ".ua_msg"))), vm.parseJsonBytes(kat, string.concat(k, ".sig")));
+        bytes memory call = abi.encodeWithSignature(
+            "verify(bytes,bytes32,bytes)",
+            vm.parseJsonBytes(kat, string.concat(k, ".pk")),
+            bytes32(vm.parseJsonBytes(kat, string.concat(k, ".ua_msg"))),
+            vm.parseJsonBytes(kat, string.concat(k, ".sig"))
+        );
         uint256 g = gasleft();
         (bool ok, bytes memory ret) = verifier.staticcall(call);
         used = g - gasleft();
@@ -138,24 +150,54 @@ contract PqGasTest is Test {
         c = new Cand[](21);
         string memory k = string.concat(".kinds.", name);
         bytes memory ch = _cacheAt(v, vm.parseJsonBytes(kat, string.concat(k, ".pk")));
-        c[n++] = Cand(ch, bytes32(vm.parseJsonBytes(kat, string.concat(k, ".ua_msg"))), vm.parseJsonBytes(kat, string.concat(k, ".sig")), "pq_kat row");
+        c[n++] = Cand(
+            ch,
+            bytes32(vm.parseJsonBytes(kat, string.concat(k, ".ua_msg"))),
+            vm.parseJsonBytes(kat, string.concat(k, ".sig")),
+            "pq_kat row"
+        );
         uint256 row;
-        while (keccak256(bytes(vm.parseJsonString(pj, string.concat(".kinds[", vm.toString(row), "].name")))) != keccak256(bytes(name))) ++row;
+        while (
+            keccak256(bytes(vm.parseJsonString(pj, string.concat(".kinds[", vm.toString(row), "].name"))))
+                != keccak256(bytes(name))
+        ) ++row;
         string memory r = string.concat(".kinds[", vm.toString(row), "].");
         ch = _cacheAt(v, vm.parseJsonBytes(pj, string.concat(r, "keyData")));
-        c[n++] = Cand(ch, vm.parseJsonBytes32(pj, string.concat(r, "pop.message")), vm.parseJsonBytes(pj, string.concat(r, "pop.sig")), "pq_signatures pop");
+        c[n++] = Cand(
+            ch,
+            vm.parseJsonBytes32(pj, string.concat(r, "pop.message")),
+            vm.parseJsonBytes(pj, string.concat(r, "pop.sig")),
+            "pq_signatures pop"
+        );
         for (uint256 i; i < 2; ++i) {
             string memory sr = string.concat(r, "sigs[", vm.toString(i), "].");
-            c[n++] = Cand(ch, vm.parseJsonBytes32(pj, string.concat(sr, "message")), vm.parseJsonBytes(pj, string.concat(sr, "sig")), "pq_signatures sig");
+            c[n++] = Cand(
+                ch,
+                vm.parseJsonBytes32(pj, string.concat(sr, "message")),
+                vm.parseJsonBytes(pj, string.concat(sr, "sig")),
+                "pq_signatures sig"
+            );
         }
         string memory lv = string.concat(".levels.", name, ".");
         ch = _cacheAt(v, vm.parseJsonBytes(mc, string.concat(lv, "keys[0].pk")));
         for (uint256 i; i < 16; ++i) {
             string memory br = string.concat(lv, "batch[", vm.toString(i), "].");
-            c[n++] = Cand(ch, vm.parseJsonBytes32(mc, string.concat(br, "ua_msg")), vm.parseJsonBytes(mc, string.concat(br, "sig")), "batch");
+            c[n++] = Cand(
+                ch,
+                vm.parseJsonBytes32(mc, string.concat(br, "ua_msg")),
+                vm.parseJsonBytes(mc, string.concat(br, "sig")),
+                "batch"
+            );
         }
-        c[n++] = Cand(ch, vm.parseJsonBytes32(mc, string.concat(lv, "omega_row.ua_msg")), vm.parseJsonBytes(mc, string.concat(lv, "omega_row.sig")), "omega row");
-        require(vm.parseJsonBool(mc, string.concat(lv, "omega_row.valid")), "the omega row is an accepting signature here");
+        c[n++] = Cand(
+            ch,
+            vm.parseJsonBytes32(mc, string.concat(lv, "omega_row.ua_msg")),
+            vm.parseJsonBytes(mc, string.concat(lv, "omega_row.sig")),
+            "omega row"
+        );
+        require(
+            vm.parseJsonBool(mc, string.concat(lv, "omega_row.valid")), "the omega row is an accepting signature here"
+        );
     }
 
     /// The least gas limit at which `verifyCached` still answers true, cold pointers (`verifyCached`'s self-call to
@@ -165,7 +207,9 @@ contract PqGasTest is Test {
         uint256 lo = hi / 2;
         while (hi - lo > 1000) {
             uint256 mid = (lo + hi) / 2;
-            for (uint256 q; q < x.chunks.length / 20; ++q) vm.cool(address(bytes20(_at20(x.chunks, q))));
+            for (uint256 q; q < x.chunks.length / 20; ++q) {
+                vm.cool(address(bytes20(_at20(x.chunks, q))));
+            }
             try v.verifyCached{gas: mid}(x.chunks, x.m, x.sig) returns (bool ok) {
                 if (ok) hi = mid;
                 else lo = mid;
@@ -217,15 +261,20 @@ contract PqGasTest is Test {
             }
             uint256 worst;
             uint256 at;
-            for (uint256 t; t < 3; ++t) { // the three most expensive inputs, bisected
+            for (uint256 t; t < 3; ++t) {
+                // the three most expensive inputs, bisected
                 uint256 top;
-                for (uint256 j; j < n; ++j) if (used[j] > used[top]) top = j;
+                for (uint256 j; j < n; ++j) {
+                    if (used[j] > used[top]) top = j;
+                }
                 uint256 least = _least(v, c[top], 2 * used[top]);
                 console2.log(string.concat(names[i], " least working cap, cold, ", c[top].what), least);
                 if (least > worst) (worst, at) = (least, top);
                 used[top] = 0;
             }
-            console2.log(string.concat(names[i], " worst accepting input, least working cap (cold, +-1000): ", c[at].what), worst);
+            console2.log(
+                string.concat(names[i], " worst accepting input, least working cap (cold, +-1000): ", c[at].what), worst
+            );
             console2.log(string.concat(names[i], " cap"), bound[i]);
             assertLe(worst + 30_000, bound[i], "F-2: the worst accepting input's least working gas + 30,000 <= the cap");
         }

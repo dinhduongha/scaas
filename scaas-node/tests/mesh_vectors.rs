@@ -5,16 +5,19 @@
 use std::collections::HashMap;
 
 use alloy::primitives::Address;
+use ed25519_dalek::SigningKey;
 use scaas_node::adapters::{aptos, solana, sui, ton};
 use scaas_node::mesh::accept::{accept, ChainInfo, Ctx, MeshParams, PolicyRow, Seen, Source};
 use scaas_node::mesh::{envelope, hubsig, PeerClass};
 use scaas_node::metatx::{Domain, Mtx, UaMtx};
 use scaas_node::signer::{Curve, LocalSigner, Signer};
-use ed25519_dalek::SigningKey;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-const FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/vectors/mesh-envelope-v1.3.json");
+const FILE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/vectors/mesh-envelope-v1.3.json"
+);
 const NOW: u64 = 1_800_000_000;
 const FEE_RECIPIENT: &str = "0x000000000000000000000000000000000000c01d";
 const EVM_LANE: &str = "0x000000000000000000000000000000000000beef"; // = relayer của KAT
@@ -31,7 +34,8 @@ const SUI_DIGEST: &str = "0x7bb5df508253396be2eabf2aeff2b94e0cd73161bcf449bde9db
 const SUI_SIGNATURE: &str = "ACKsylwg5X9BqMziO7KEFWzwzBTlNS283xNGHRqQA17HenFdLpHQB2DCcBiR0X5gjk9Km70aCmMzJV16nChXUAXVv0o/zOcXsDiLzCdJ68FIrZlpsj9F7htgX9WHeFdqxA==";
 const SUI_REGISTRY: &str = "0x7c9575082976f063e7bfa16aa86ca20e1675b50efa7d5a64d1fa66ce127f5fdf";
 const SUI_ALICE: &str = "0x6a749c33bda66662e3709eea404a27dbb2b27d7a58bc0a1248d12436fb2fae71";
-const SUI_ALICE_ACCOUNT: &str = "0xd4793a1919a40ebfe5587a3a49fe89bb64c54bd49c75ab2a08ac0d5636706382";
+const SUI_ALICE_ACCOUNT: &str =
+    "0xd4793a1919a40ebfe5587a3a49fe89bb64c54bd49c75ab2a08ac0d5636706382";
 const APTOS_PAYLOAD: &str = "0f73636161732e6d6574616f702e7631041ca0afea08a65090449eac9c077fca180ea47d12664cc7adb773c23ba5e982020f52836b9e4baedcc626ae27b9dbad9b9e1ed624576d899f41168bb985c3a39200376a224a674671b33d8dfb3ba382aca22eeffb39bbcb285ec45e8407cad34faa000000000000000000000000000000000000000000000000000000000000beef6400000000000000000000000000000020010101010101010101010101010101010101010101010101010101010101010120a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a10000000000000000e8030000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000000";
 const APTOS_DIGEST: &str = "0x5b83ca76bf1595dc0edc9aa61d4f0ebf1dd8d606ac19e59d1e02b30945e51353";
 const APTOS_BLOB: &str = "910771997fd6987009daa1361b2546cdfc549cb663142b01e71466129e20a238f37032a98dd451c321ee48b118e22a96e9bdc7e86cc25023d8eef4af0627110b4150544f530a6d6573736167653a2073636161732e6d6574616f702e76313a3078356238336361373662663135393564633065646339616136316434663065626631646438643630366163313965353964316530326233303934356535313335330a6e6f6e63653a2061316131613161316131613161316131613161316131613161316131613161316131613161316131613161316131613161316131613161316131613161316131";
@@ -68,21 +72,33 @@ fn read(path: &str) -> Value {
 
 /// The token's `UAMetaTransfer` KAT (forge `TokenKat.t.sol`, ua-mtx-merge T2): the mesh's token body (R45).
 fn kat() -> Value {
-    read(concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/metatransfer_kat.json"))
+    read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../smartcontracts/evm/test/vectors/metatransfer_kat.json"
+    ))
 }
 
 /// The address `MetaTransfer` KAT (legacy since T2): an old-shape body, refused by name (case 05d).
 fn legacy_kat() -> Value {
-    read(concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/metatransfer_kat.json"))
+    read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/metatransfer_kat.json"
+    ))
 }
 
 fn ton_vectors() -> Value {
-    read(concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/ton/vectors/ton-vectors.json"))
+    read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../smartcontracts/ton/vectors/ton-vectors.json"
+    ))
 }
 
 fn cosmos_vector(k: &str) -> String {
     let v = include_str!("../../smartcontracts/cosmos/tests/tests/vector.txt");
-    v.lines().find_map(|l| l.strip_prefix(&format!("{k}="))).unwrap().to_string()
+    v.lines()
+        .find_map(|l| l.strip_prefix(&format!("{k}=")))
+        .unwrap()
+        .to_string()
 }
 
 // ------------------------------------------------------------------ checker (shared with the generator)
@@ -95,7 +111,11 @@ impl Seen for Nobody {
 }
 
 fn strs(v: &Value) -> Vec<String> {
-    v.as_array().into_iter().flatten().map(|s| s.as_str().unwrap().to_string()).collect()
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .map(|s| s.as_str().unwrap().to_string())
+        .collect()
 }
 
 /// Bảng policy mặc định của file: `full`/`submit` trên mọi token đã đăng ký (R86); case có `policy` thì thay hẳn.
@@ -121,20 +141,26 @@ fn observed(f: &Value, c: &Value) -> Value {
             .into_iter()
             .flatten()
             .map(|(m, w)| {
-                let h: [u8; 32] = alloy::hex::decode(w["hash"].as_str().unwrap()).unwrap().try_into().unwrap();
+                let h: [u8; 32] = alloy::hex::decode(w["hash"].as_str().unwrap())
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
                 (m.clone(), (h, w["depth"].as_u64().unwrap() as u16))
             })
             .collect();
         let evm = key.starts_with("evm:") || key.starts_with("hedera:");
-        chains.insert(key.clone(), ChainInfo {
-            public,
-            tokens: strs(toks),
-            lanes: strs(&f["lanes"][key]),
-            fee_recipient: evm.then(|| f["fee_recipient"].as_str().unwrap().to_string()),
-            program: p["program"].as_str().map(str::to_string),
-            wallet_codes,
-            chain_uid: p["chain_uid"].as_str().map(|u| u.parse().unwrap()),
-        });
+        chains.insert(
+            key.clone(),
+            ChainInfo {
+                public,
+                tokens: strs(toks),
+                lanes: strs(&f["lanes"][key]),
+                fee_recipient: evm.then(|| f["fee_recipient"].as_str().unwrap().to_string()),
+                program: p["program"].as_str().map(str::to_string),
+                wallet_codes,
+                chain_uid: p["chain_uid"].as_str().map(|u| u.parse().unwrap()),
+            },
+        );
     }
     let policies = match c.get("policy") {
         Some(p) => serde_json::from_value(p.clone()).unwrap(),
@@ -147,8 +173,18 @@ fn observed(f: &Value, c: &Value) -> Value {
         max_valid_for_secs: p["max_valid_for_secs"].as_u64().unwrap(),
         exclusive_ms: p["exclusive_ms"].as_u64().unwrap(),
     };
-    let self_id: [u8; 32] = alloy::hex::decode(f["self_id"].as_str().unwrap()).unwrap().try_into().unwrap();
-    let ctx = Ctx { now, params, self_id, chains: &chains, policies: &policies, seen: &Nobody };
+    let self_id: [u8; 32] = alloy::hex::decode(f["self_id"].as_str().unwrap())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let ctx = Ctx {
+        now,
+        params,
+        self_id,
+        chains: &chains,
+        policies: &policies,
+        seen: &Nobody,
+    };
     let class = match c["from_peer_class"].as_str().unwrap() {
         "open" => PeerClass::Open,
         _ => PeerClass::Private,
@@ -164,7 +200,16 @@ fn observed(f: &Value, c: &Value) -> Value {
             let env = &a.envelope;
             let msg = hubsig::env_msg(env, &d.intent_id, &a.body_hash).unwrap();
             // R84: đúng thứ submitter sẽ mã hoá — trường không ràng buộc bị ghi đè, digest giữ nguyên.
-            let submit = d.evm.as_ref().map(|e| e.submit_wire(Some(f["fee_recipient"].as_str().unwrap().parse::<Address>().unwrap())).1);
+            let submit = d.evm.as_ref().map(|e| {
+                e.submit_wire(Some(
+                    f["fee_recipient"]
+                        .as_str()
+                        .unwrap()
+                        .parse::<Address>()
+                        .unwrap(),
+                ))
+                .1
+            });
             json!({
                 "accept": true,
                 "intent_id": hex0x(&d.intent_id),
@@ -186,27 +231,78 @@ fn observed(f: &Value, c: &Value) -> Value {
 
 /// Ghim độc lập với `accept()`: digest của KAT forge, của vector chéo adapter, và body_hash của dạng đã sắp.
 fn pins(f: &Value) {
-    let case = |n: &str| f["cases"].as_array().unwrap().iter().find(|c| c["name"] == n).unwrap_or_else(|| panic!("case {n}"));
+    let case = |n: &str| {
+        f["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == n)
+            .unwrap_or_else(|| panic!("case {n}"))
+    };
     let e = |n: &str, k: &str| case(n)["expect"][k].clone();
-    assert_eq!(e("03a_evm_restrict_relayer_our_lane_kat", "intent_id"), kat()["digest"].as_str().unwrap().to_lowercase());
-    assert_eq!(e("02_evm_garbage_unbound_fields", "intent_id"), e("01_evm_open_fixed_fee", "intent_id"));
+    assert_eq!(
+        e("03a_evm_restrict_relayer_our_lane_kat", "intent_id"),
+        kat()["digest"].as_str().unwrap().to_lowercase()
+    );
+    assert_eq!(
+        e("02_evm_garbage_unbound_fields", "intent_id"),
+        e("01_evm_open_fixed_fee", "intent_id")
+    );
     let s = e("02_evm_garbage_unbound_fields", "submit_meta_tx");
-    assert_eq!((s["feeRecipient"].as_str().unwrap(), s["relayer"].as_str().unwrap()), (FEE_RECIPIENT, &*format!("{:#x}", Address::ZERO)));
-    for (n, d) in [("09_cosmos_pay", COSMOS_DIGEST), ("10a_sui_pay", SUI_DIGEST), ("11a_aptos_pay", APTOS_DIGEST),
-                   ("12a_ton_pay", ton_vectors()["metaop"]["digest"].as_str().unwrap()), ("13a_solana_pay", SOL_DIGEST)] {
+    assert_eq!(
+        (
+            s["feeRecipient"].as_str().unwrap(),
+            s["relayer"].as_str().unwrap()
+        ),
+        (FEE_RECIPIENT, &*format!("{:#x}", Address::ZERO))
+    );
+    for (n, d) in [
+        ("09_cosmos_pay", COSMOS_DIGEST),
+        ("10a_sui_pay", SUI_DIGEST),
+        ("11a_aptos_pay", APTOS_DIGEST),
+        (
+            "12a_ton_pay",
+            ton_vectors()["metaop"]["digest"].as_str().unwrap(),
+        ),
+        ("13a_solana_pay", SOL_DIGEST),
+    ] {
         assert_eq!(e(n, "intent_id"), d, "{n}");
         assert_eq!(e(n, "may_submit"), true, "{n}");
     }
-    for n in ["10b_sui_foreign_account", "11b_aptos_foreign_account", "12b_ton_foreign_wallet", "13b_solana_foreign_account"] {
-        assert_eq!((e(n, "accept"), e(n, "may_submit")), (json!(true), json!(false)), "{n}");
+    for n in [
+        "10b_sui_foreign_account",
+        "11b_aptos_foreign_account",
+        "12b_ton_foreign_wallet",
+        "13b_solana_foreign_account",
+    ] {
+        assert_eq!(
+            (e(n, "accept"), e(n, "may_submit")),
+            (json!(true), json!(false)),
+            "{n}"
+        );
     }
     // vector 32: body_hash = sha256 của dạng ĐÃ SẮP (cùng body với case 01, gửi khoá ngược thứ tự).
-    assert_eq!(case("03a_evm_restrict_relayer_our_lane_kat")["envelope"]["spec"], envelope::SPEC_UA);
-    assert_eq!(e("05d_evm_token_address_transfer_kat", "code"), "OP_KIND_MISMATCH");
+    assert_eq!(
+        case("03a_evm_restrict_relayer_our_lane_kat")["envelope"]["spec"],
+        envelope::SPEC_UA
+    );
+    assert_eq!(
+        e("05d_evm_token_address_transfer_kat", "code"),
+        "OP_KIND_MISMATCH"
+    );
     let body = &case("01_evm_open_fixed_fee")["envelope"]["evm"];
     let sorted = sorted_by_hand(body);
-    assert_eq!(e("32_unsorted_body_keys", "body_hash"), hex0x(&Sha256::digest(sorted.as_bytes())));
-    assert!(case("32_unsorted_body_keys")["envelope_raw"].as_str().unwrap().contains(&unsorted(body)), "wire really unsorted");
+    assert_eq!(
+        e("32_unsorted_body_keys", "body_hash"),
+        hex0x(&Sha256::digest(sorted.as_bytes()))
+    );
+    assert!(
+        case("32_unsorted_body_keys")["envelope_raw"]
+            .as_str()
+            .unwrap()
+            .contains(&unsorted(body)),
+        "wire really unsorted"
+    );
 }
 
 /// Serializer viết tay (không qua `serde_json::to_string`), khoá sắp bytewise — để vector 32 không tự kiểm chính nó.
@@ -215,7 +311,10 @@ fn sorted_by_hand(v: &Value) -> String {
         Value::Object(m) => {
             let mut ks: Vec<&String> = m.keys().collect();
             ks.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
-            let parts: Vec<String> = ks.iter().map(|k| format!("\"{k}\":{}", sorted_by_hand(&m[*k]))).collect();
+            let parts: Vec<String> = ks
+                .iter()
+                .map(|k| format!("\"{k}\":{}", sorted_by_hand(&m[*k])))
+                .collect();
             format!("{{{}}}", parts.join(","))
         }
         Value::String(s) => format!("\"{s}\""), // chỉ hex/decimal/từ khoá ở body EVM: không cần escape
@@ -227,7 +326,11 @@ fn sorted_by_hand(v: &Value) -> String {
 fn unsorted(v: &Value) -> String {
     match v {
         Value::Object(m) => {
-            let parts: Vec<String> = m.iter().rev().map(|(k, x)| format!("\"{k}\":{}", unsorted(x))).collect();
+            let parts: Vec<String> = m
+                .iter()
+                .rev()
+                .map(|(k, x)| format!("\"{k}\":{}", unsorted(x)))
+                .collect();
             format!("{{{}}}", parts.join(","))
         }
         x => x.to_string(),
@@ -239,9 +342,16 @@ fn vectors() {
     let f = read(FILE);
     assert_eq!(f["spec"], envelope::SPEC_UA);
     let cases = f["cases"].as_array().unwrap();
-    let mut numbers: Vec<u32> = cases.iter().map(|c| c["name"].as_str().unwrap()[..2].parse().unwrap()).collect();
+    let mut numbers: Vec<u32> = cases
+        .iter()
+        .map(|c| c["name"].as_str().unwrap()[..2].parse().unwrap())
+        .collect();
     numbers.dedup();
-    assert_eq!(numbers, (1..=32).collect::<Vec<_>>(), "spec §4.6: cases 1–32, in order");
+    assert_eq!(
+        numbers,
+        (1..=32).collect::<Vec<_>>(),
+        "spec §4.6: cases 1–32, in order"
+    );
     for c in cases {
         assert_eq!(observed(&f, c), c["expect"], "case {}", c["name"]);
     }
@@ -267,7 +377,10 @@ fn seal_with(env: &mut Value, key: &SigningKey) {
     let parsed: envelope::Envelope = serde_json::from_value(env.clone()).unwrap();
     let body = parsed.evm.as_ref().or(parsed.op.as_ref()).unwrap();
     let body_hash: [u8; 32] = Sha256::digest(envelope::canonical_body(body).unwrap()).into();
-    let id: [u8; 32] = alloy::hex::decode(&parsed.intent_id).unwrap().try_into().unwrap();
+    let id: [u8; 32] = alloy::hex::decode(&parsed.intent_id)
+        .unwrap()
+        .try_into()
+        .unwrap();
     let msg = hubsig::env_msg(&parsed, &id, &body_hash).unwrap();
     env["hub"]["sig"] = json!(alloy::hex::encode(hubsig::sign(key, &msg)));
 }
@@ -281,7 +394,11 @@ fn alice_evm() -> LocalSigner {
 /// `m` is a wire `UAMetaTransfer` / `MetaTransfer`, or a wire `UAMetaTransaction` / `MetaTransaction` when it has `data`
 /// (`struct = call`).
 fn kind_of(m: &Value) -> &'static str {
-    if m.get("data").is_some() { "call" } else { "transfer" }
+    if m.get("data").is_some() {
+        "call"
+    } else {
+        "transfer"
+    }
 }
 
 fn evm_domain(chain_key: &str, contract: &str, name: &str) -> Domain {
@@ -306,20 +423,51 @@ fn evm_envelope(spec: &str, chain_key: &str, contract: &str, id: &[u8; 32], body
 
 /// The UA body (R45, NODE-MESH-18, `scaas-intent/1.3`): `m` on ids, its intent id the UA digest, `auth` a native signer's
 /// `UASig` (its signature only, R17).
-fn evm_env_named(chain_key: &str, contract: &str, name: &str, m: &Value, sig_kind: &str, signature: Option<String>) -> Value {
-    let id = UaMtx::from_wire(Some(kind_of(m)), m).unwrap().digest(&evm_domain(chain_key, contract, name)).0;
+fn evm_env_named(
+    chain_key: &str,
+    contract: &str,
+    name: &str,
+    m: &Value,
+    sig_kind: &str,
+    signature: Option<String>,
+) -> Value {
+    let id = UaMtx::from_wire(Some(kind_of(m)), m)
+        .unwrap()
+        .digest(&evm_domain(chain_key, contract, name))
+        .0;
     let signature = signature.unwrap_or_else(|| hex0x(&alice_evm().sign(&id).unwrap()));
-    evm_envelope(envelope::SPEC_UA, chain_key, contract, &id, json!({"domain": {"name": name, "version": "1"},
+    evm_envelope(
+        envelope::SPEC_UA,
+        chain_key,
+        contract,
+        &id,
+        json!({"domain": {"name": name, "version": "1"},
         "struct": kind_of(m), "ua_meta_tx": m, "auth": {"keyData": "0x", "signature": signature, "members": []},
-        "sig_kind": sig_kind}))
+        "sig_kind": sig_kind}),
+    )
 }
 
 /// The address body (`scaas-intent/1.2`): `m` on addresses, its intent id the address digest (`SmartKeyAccount`, Q6).
-fn address_env(chain_key: &str, contract: &str, name: &str, m: &Value, signature: Option<String>) -> Value {
-    let id = Mtx::from_wire(Some(kind_of(m)), m).unwrap().digest(&evm_domain(chain_key, contract, name)).0;
+fn address_env(
+    chain_key: &str,
+    contract: &str,
+    name: &str,
+    m: &Value,
+    signature: Option<String>,
+) -> Value {
+    let id = Mtx::from_wire(Some(kind_of(m)), m)
+        .unwrap()
+        .digest(&evm_domain(chain_key, contract, name))
+        .0;
     let signature = signature.unwrap_or_else(|| hex0x(&alice_evm().sign(&id).unwrap()));
-    evm_envelope(envelope::SPEC, chain_key, contract, &id, json!({"domain": {"name": name, "version": "1"},
-        "struct": kind_of(m), "meta_tx": m, "signature": signature, "sig_kind": "eoa"}))
+    evm_envelope(
+        envelope::SPEC,
+        chain_key,
+        contract,
+        &id,
+        json!({"domain": {"name": name, "version": "1"},
+        "struct": kind_of(m), "meta_tx": m, "signature": signature, "sig_kind": "eoa"}),
+    )
 }
 
 fn evm_env(chain_key: &str, contract: &str, m: &Value) -> Value {
@@ -327,7 +475,16 @@ fn evm_env(chain_key: &str, contract: &str, m: &Value) -> Value {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn op_env(chain_key: &str, contract: &str, id: &[u8], payload: &[u8], signature: &str, public_key: Value, extra: Value, now: u64) -> Value {
+fn op_env(
+    chain_key: &str,
+    contract: &str,
+    id: &[u8],
+    payload: &[u8],
+    signature: &str,
+    public_key: Value,
+    extra: Value,
+    now: u64,
+) -> Value {
     let mut env = json!({
         "spec": envelope::SPEC, "intent_id": hex0x(id), "chain_key": chain_key,
         "family": chain_key.split_once(':').unwrap().0, "contract": contract, "visibility": "open",
@@ -372,12 +529,24 @@ fn regenerate() {
     };
     let e1 = evm_env("evm:7622", &token, &base);
     let mut cases = vec![
-        case("01_evm_open_fixed_fee", e1.clone(), json!({"accept": true, "fee_effective": "5000", "selector": "pay",
-             "may_submit": true, "state": "submittable"})),
-        case("02_evm_garbage_unbound_fields", evm_env("evm:7622", &token, &m(&|x| {
-            x["relayer"] = json!("0x00000000000000000000000000000000deadbeef");
-            x["feeRecipient"] = json!("0x000000000000000000000000000000000bad0bad");
-        })), json!({"accept": true, "may_submit": true})),
+        case(
+            "01_evm_open_fixed_fee",
+            e1.clone(),
+            json!({"accept": true, "fee_effective": "5000", "selector": "pay",
+             "may_submit": true, "state": "submittable"}),
+        ),
+        case(
+            "02_evm_garbage_unbound_fields",
+            evm_env(
+                "evm:7622",
+                &token,
+                &m(&|x| {
+                    x["relayer"] = json!("0x00000000000000000000000000000000deadbeef");
+                    x["feeRecipient"] = json!("0x000000000000000000000000000000000bad0bad");
+                }),
+            ),
+            json!({"accept": true, "may_submit": true}),
+        ),
     ];
     // 03a: KAT forge nguyên văn (chữ ký do forge ký) — relayer and fee recipient bound, relayer = lane của ta.
     let kat_m = json!({
@@ -385,29 +554,67 @@ fn regenerate() {
         "nonce": ks("nonce"), "validUntil": ks("valid_until"), "mode": ks("mode").parse::<u32>().unwrap(),
         "relayer": ks("relayer"), "fee": ks("fee"), "feeRecipient": ks("fee_recipient"),
     });
-    cases.push(case("03a_evm_restrict_relayer_our_lane_kat",
-        evm_env_named("evm:7622", &token, k["domain_name"].as_str().unwrap(), &kat_m, "eoa", Some(ks("signature"))),
-        json!({"accept": true, "may_submit": true, "fee_effective": "100000"})));
-    cases.push(case("03b_evm_restrict_relayer_foreign_lane", evm_env("evm:7622", &token, &m(&|x| {
-        x["mode"] = json!(0x21);
-        x["relayer"] = json!("0x000000000000000000000000000000000000cafe");
-    })), json!({"accept": true, "may_submit": false})));
-    cases.push(case("04_evm_restrict_relayer_zero", evm_env("evm:7622", &token, &m(&|x| x["mode"] = json!(0x21))),
-        reject("RELAYER_BOUND_ZERO")));
+    cases.push(case(
+        "03a_evm_restrict_relayer_our_lane_kat",
+        evm_env_named(
+            "evm:7622",
+            &token,
+            k["domain_name"].as_str().unwrap(),
+            &kat_m,
+            "eoa",
+            Some(ks("signature")),
+        ),
+        json!({"accept": true, "may_submit": true, "fee_effective": "100000"}),
+    ));
+    cases.push(case(
+        "03b_evm_restrict_relayer_foreign_lane",
+        evm_env(
+            "evm:7622",
+            &token,
+            &m(&|x| {
+                x["mode"] = json!(0x21);
+                x["relayer"] = json!("0x000000000000000000000000000000000000cafe");
+            }),
+        ),
+        json!({"accept": true, "may_submit": false}),
+    ));
+    cases.push(case(
+        "04_evm_restrict_relayer_zero",
+        evm_env("evm:7622", &token, &m(&|x| x["mode"] = json!(0x21))),
+        reject("RELAYER_BOUND_ZERO"),
+    ));
     // 05: a plain transfer `MetaTransfer` (`entryRef = 0`): selector `transfer` (case 01 is a payment: `pay`).
-    cases.push(case("05_evm_transfer", evm_env("evm:7622", &token,
-        &m(&|x| x["entryRef"] = json!(format!("{:#x}", alloy::primitives::B256::ZERO)))),
-        json!({"accept": true, "selector": "transfer"})));
+    cases.push(case(
+        "05_evm_transfer",
+        evm_env(
+            "evm:7622",
+            &token,
+            &m(&|x| x["entryRef"] = json!(format!("{:#x}", alloy::primitives::B256::ZERO))),
+        ),
+        json!({"accept": true, "selector": "transfer"}),
+    ));
     // 05b: a `MetaTransaction` (`struct = call`, `cancelNonce(1)`): its selector is the call's first 4 bytes.
     let call = json!({"from": ks("from"), "data": format!("0xcfdd7aea{}01", "00".repeat(31)), "batch": ks("batch"),
         "nonce": "0", "validUntil": (NOW + 300).to_string(), "mode": 0x20, "relayer": zero.clone(), "fee": "5000",
         "feeRecipient": zero.clone()});
-    cases.push(case("05b_evm_call", evm_env("evm:7622", &token, &call),
-        json!({"accept": true, "selector": "0xcfdd7aea", "fee_effective": "5000"})));
+    cases.push(case(
+        "05b_evm_call",
+        evm_env("evm:7622", &token, &call),
+        json!({"accept": true, "selector": "0xcfdd7aea", "fee_effective": "5000"}),
+    ));
     // 05c: `SmartKeyAccount` keeps the address body (Q6): a `MetaTransaction` on a contract that is no token of ours.
     let addr_call = with(call.clone(), "from", json!(alice_evm().address_hex()));
-    cases.push(case("05c_evm_account_address_call", address_env("evm:7622", ACCOUNT, "SCaaS SmartKeyAccount", &addr_call, None),
-        json!({"accept": true, "selector": "0xcfdd7aea", "may_submit": false})));
+    cases.push(case(
+        "05c_evm_account_address_call",
+        address_env(
+            "evm:7622",
+            ACCOUNT,
+            "SCaaS SmartKeyAccount",
+            &addr_call,
+            None,
+        ),
+        json!({"accept": true, "selector": "0xcfdd7aea", "may_submit": false}),
+    ));
     // 05d, 05e: a token's address body names an entry no token has (CTR-MTX-30, R45): refused by name. 05d is the
     // legacy address `MetaTransfer` KAT verbatim (forge's signature).
     let lk = legacy_kat();
@@ -415,27 +622,75 @@ fn regenerate() {
     let legacy_m = json!({"from": lks("from"), "to": lks("to"), "value": lks("value"), "entryRef": lks("entry_ref"),
         "batch": lks("batch"), "nonce": lks("nonce"), "validUntil": lks("valid_until"), "mode": lks("mode").parse::<u32>().unwrap(),
         "relayer": lks("relayer"), "fee": lks("fee"), "feeRecipient": lks("fee_recipient")});
-    cases.push(case("05d_evm_token_address_transfer_kat", address_env("evm:7622", &token, lk["domain_name"].as_str().unwrap(),
-        &legacy_m, Some(lks("signature"))), reject("OP_KIND_MISMATCH")));
-    cases.push(case("05e_evm_token_address_call", address_env("evm:7622", &token, "SCaaS MetaToken", &addr_call, None),
-        reject("OP_KIND_MISMATCH")));
+    cases.push(case(
+        "05d_evm_token_address_transfer_kat",
+        address_env(
+            "evm:7622",
+            &token,
+            lk["domain_name"].as_str().unwrap(),
+            &legacy_m,
+            Some(lks("signature")),
+        ),
+        reject("OP_KIND_MISMATCH"),
+    ));
+    cases.push(case(
+        "05e_evm_token_address_call",
+        address_env("evm:7622", &token, "SCaaS MetaToken", &addr_call, None),
+        reject("OP_KIND_MISMATCH"),
+    ));
     // 05f: the mandate wallets' body is the UA structs (Q6): a `UAMetaTransaction` in the wallet's domain.
-    cases.push(case("05f_evm_mandate_wallet_ua_call", evm_env_named("evm:7622", WALLET, "SCaaS MandateWallet", &call, "eoa", None),
-        json!({"accept": true, "selector": "0xcfdd7aea", "token": WALLET, "may_submit": false})));
+    cases.push(case(
+        "05f_evm_mandate_wallet_ua_call",
+        evm_env_named(
+            "evm:7622",
+            WALLET,
+            "SCaaS MandateWallet",
+            &call,
+            "eoa",
+            None,
+        ),
+        json!({"accept": true, "selector": "0xcfdd7aea", "token": WALLET, "may_submit": false}),
+    ));
     // 06b: a derived `from` (MD-10): refused by name. 06c: a native `UASig` with `keyData` (R17).
-    cases.push(case("06b_evm_derived_from", evm_env("evm:7622", &token, &m(&|x| x["from"] = json!(format!("0x{}", "aa".repeat(32))))),
-        reject("DERIVED_FROM_UNSUPPORTED")));
+    cases.push(case(
+        "06b_evm_derived_from",
+        evm_env(
+            "evm:7622",
+            &token,
+            &m(&|x| x["from"] = json!(format!("0x{}", "aa".repeat(32)))),
+        ),
+        reject("DERIVED_FROM_UNSUPPORTED"),
+    ));
     let mut e6c = evm_env("evm:7622", &token, &base);
     e6c["evm"]["auth"]["keyData"] = json!("0x01");
     seal(&mut e6c);
-    cases.push(case("06c_evm_native_auth_with_key_data", e6c, reject("BAD_SIGNATURE")));
+    cases.push(case(
+        "06c_evm_native_auth_with_key_data",
+        e6c,
+        reject("BAD_SIGNATURE"),
+    ));
     let wallet = m(&|x| x["from"] = json!(format!("0x{}1271", "0".repeat(60))));
-    let e6 = evm_env_named("evm:7622", &token, "SCaaS MetaToken", &wallet, "erc1271", Some(format!("0x{}", "ab".repeat(96))));
-    cases.push(case("06_evm_erc1271_no_local_recover", e6.clone(), json!({"accept": true, "may_submit": true})));
+    let e6 = evm_env_named(
+        "evm:7622",
+        &token,
+        "SCaaS MetaToken",
+        &wallet,
+        "erc1271",
+        Some(format!("0x{}", "ab".repeat(96))),
+    );
+    cases.push(case(
+        "06_evm_erc1271_no_local_recover",
+        e6.clone(),
+        json!({"accept": true, "may_submit": true}),
+    ));
     // 07: cùng chữ ký case 01 nhưng s → n − s (v lật): khôi phục đúng người ký, contract vẫn từ chối.
     let mut e7 = e1.clone();
     let sig = alloy::hex::decode(e1["evm"]["auth"]["signature"].as_str().unwrap()).unwrap();
-    let n = alloy::primitives::U256::from_str_radix("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141", 16).unwrap();
+    let n = alloy::primitives::U256::from_str_radix(
+        "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+        16,
+    )
+    .unwrap();
     let s = alloy::primitives::U256::from_be_slice(&sig[32..64]);
     let mut high = sig.clone();
     high[32..64].copy_from_slice(&(n - s).to_be_bytes::<32>());
@@ -443,14 +698,24 @@ fn regenerate() {
     e7["evm"]["auth"]["signature"] = json!(hex0x(&high));
     seal(&mut e7);
     cases.push(case("07_evm_high_s", e7, reject("BAD_SIGNATURE")));
-    cases.push(case("08_hedera_296", evm_env("hedera:296", &token, &base), json!({"accept": true, "may_submit": true})));
+    cases.push(case(
+        "08_hedera_296",
+        evm_env("hedera:296", &token, &base),
+        json!({"accept": true, "may_submit": true}),
+    ));
     // 08b: an EVM chain whose `chain_uid` the receiver does not know: the salt is never taken from the envelope.
-    cases.push(case("08b_evm_chain_without_chain_uid", evm_env("evm:7623", &token, &base), reject("UNKNOWN_CHAIN")));
+    cases.push(case(
+        "08b_evm_chain_without_chain_uid",
+        evm_env("evm:7623", &token, &base),
+        reject("UNKNOWN_CHAIN"),
+    ));
 
     // 09–13: payload/digest của vector chéo adapter; từ 10 đến 13 kèm bản sinh đôi với account của người khác.
     let cosmos_payload = cosmos_vector("payload");
     let cosmos_pk = {
-        let seed = scaas_node::keys::Seed::from_words(&format!("{}art", "abandon ".repeat(23)), None).unwrap();
+        let seed =
+            scaas_node::keys::Seed::from_words(&format!("{}art", "abandon ".repeat(23)), None)
+                .unwrap();
         let (curve, key) = scaas_node::keys::lane_secret(&seed, "cosmos", 0).unwrap();
         alloy::hex::encode(LocalSigner::new(curve, &key).unwrap().public_key())
     };
@@ -461,15 +726,49 @@ fn regenerate() {
 
     let sui_extra = json!({"coin_type": "0x2::sui::SUI", "registry": SUI_REGISTRY});
     let sui_payload = alloy::hex::decode(SUI_PAYLOAD).unwrap();
-    let e10 = op_env("sui:localnet", SUI_ALICE_ACCOUNT, &sui::personal_digest(&sui_payload), &sui_payload, SUI_SIGNATURE,
-        Value::Null, sui_extra.clone(), NOW_EARLY);
-    cases.push(with(case("10a_sui_pay", e10.clone(), json!({"accept": true, "from": SUI_ALICE, "lane": format!("0x{}", "a1".repeat(32)),
-        "nonce": "0", "valid_until": 1000, "token": SUI_REGISTRY})), "now", json!(NOW_EARLY)));
+    let e10 = op_env(
+        "sui:localnet",
+        SUI_ALICE_ACCOUNT,
+        &sui::personal_digest(&sui_payload),
+        &sui_payload,
+        SUI_SIGNATURE,
+        Value::Null,
+        sui_extra.clone(),
+        NOW_EARLY,
+    );
+    cases.push(with(
+        case(
+            "10a_sui_pay",
+            e10.clone(),
+            json!({"accept": true, "from": SUI_ALICE, "lane": format!("0x{}", "a1".repeat(32)),
+        "nonce": "0", "valid_until": 1000, "token": SUI_REGISTRY}),
+        ),
+        "now",
+        json!(NOW_EARLY),
+    ));
     let mut op = sui::MetaOp::decode(&sui_payload).unwrap();
-    op.contract = sui::parse_addr(&scaas_node::mesh::digest::sui_account(SUI_REGISTRY, "0xb0b").unwrap()).unwrap();
+    op.contract =
+        sui::parse_addr(&scaas_node::mesh::digest::sui_account(SUI_REGISTRY, "0xb0b").unwrap())
+            .unwrap();
     let twin = op.encode();
-    cases.push(with(case("10b_sui_foreign_account", op_env("sui:localnet", &sui::addr_hex(&op.contract), &sui::personal_digest(&twin),
-        &twin, SUI_SIGNATURE, Value::Null, sui_extra.clone(), NOW_EARLY), json!({"accept": true, "may_submit": false})), "now", json!(NOW_EARLY)));
+    cases.push(with(
+        case(
+            "10b_sui_foreign_account",
+            op_env(
+                "sui:localnet",
+                &sui::addr_hex(&op.contract),
+                &sui::personal_digest(&twin),
+                &twin,
+                SUI_SIGNATURE,
+                Value::Null,
+                sui_extra.clone(),
+                NOW_EARLY,
+            ),
+            json!({"accept": true, "may_submit": false}),
+        ),
+        "now",
+        json!(NOW_EARLY),
+    ));
 
     let aptos_payload = alloy::hex::decode(APTOS_PAYLOAD).unwrap();
     let mut op = aptos::MetaOp::decode(&aptos_payload).unwrap();
@@ -482,9 +781,24 @@ fn regenerate() {
                "valid_until": 1000, "token": asset})), "now", json!(NOW_EARLY)));
     op.contract = aptos::account_of(&pkg, &aptos::parse_addr("0xb0b0").unwrap());
     let twin = op.encode();
-    cases.push(with(case("11b_aptos_foreign_account", op_env("aptos:4", &aptos::addr_hex(&op.contract), &aptos::sha3(&twin), &twin,
-        APTOS_BLOB, json!(APTOS_ALICE_PK), json!({"asset": asset}), NOW_EARLY), json!({"accept": true, "may_submit": false})),
-        "now", json!(NOW_EARLY)));
+    cases.push(with(
+        case(
+            "11b_aptos_foreign_account",
+            op_env(
+                "aptos:4",
+                &aptos::addr_hex(&op.contract),
+                &aptos::sha3(&twin),
+                &twin,
+                APTOS_BLOB,
+                json!(APTOS_ALICE_PK),
+                json!({"asset": asset}),
+                NOW_EARLY,
+            ),
+            json!({"accept": true, "may_submit": false}),
+        ),
+        "now",
+        json!(NOW_EARLY),
+    ));
 
     let tv = ton_vectors();
     let ts = |p: &str| tv.pointer(p).unwrap().as_str().unwrap().to_string();
@@ -492,9 +806,20 @@ fn regenerate() {
     let cell = ton::boc_parse(&ton_boc).unwrap();
     let mo = ton::parse_metaop(&cell).unwrap();
     let master = ton::Addr::parse(&ts("/jetton/master")).unwrap();
-    let code: [u8; 32] = alloy::hex::decode(ts("/jetton/wallet_code_hash")).unwrap().try_into().unwrap();
-    let depth = tv.pointer("/jetton/wallet_code_depth").unwrap().as_u64().unwrap() as u16;
-    assert_eq!(ton::jetton_wallet_address(&mo.from, &master, &code, depth).unwrap(), mo.contract, "vector: contract = payer's wallet");
+    let code: [u8; 32] = alloy::hex::decode(ts("/jetton/wallet_code_hash"))
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let depth = tv
+        .pointer("/jetton/wallet_code_depth")
+        .unwrap()
+        .as_u64()
+        .unwrap() as u16;
+    assert_eq!(
+        ton::jetton_wallet_address(&mo.from, &master, &code, depth).unwrap(),
+        mo.contract,
+        "vector: contract = payer's wallet"
+    );
     let sig = alloy::hex::decode(ts("/sign_data/signature")).unwrap();
     let ton_sig = json!({"kind": "ton_connect", "signature": ton::b64encode(&sig), "timestamp": tv.pointer("/sign_data/timestamp").unwrap(),
         "domain": ts("/sign_data/domain"), "state_init": ton::b64encode(&alloy::hex::decode(ts("/payer_w5/state_init_boc")).unwrap())}).to_string();
@@ -503,17 +828,63 @@ fn regenerate() {
         json!({"accept": true, "from": mo.from.raw(), "lane": hex0x(&mo.lane), "nonce": "0", "valid_until": NOW + 300,
                "token": master.raw()})));
     let rebuild = |contract: &ton::Addr| {
-        ton::Builder::new().bytes(b"scaas.metaop.v1").int(mo.network as i64, 32).uint(mo.op as u128, 8).uint(mo.amount, 128)
-            .uint(mo.nonce as u128, 64).uint(mo.valid_until as u128, 64).addr(Some(contract))
-            .reference(ton::Builder::new().addr(Some(&mo.from)).addr(Some(&mo.to)).addr(mo.relayer.as_ref()).end().unwrap())
-            .reference(ton::Builder::new().bytes(&mo.pay_ref).bytes(&mo.lane).bytes(&mo.extra).end().unwrap())
-            .end().unwrap()
+        ton::Builder::new()
+            .bytes(b"scaas.metaop.v1")
+            .int(mo.network as i64, 32)
+            .uint(mo.op as u128, 8)
+            .uint(mo.amount, 128)
+            .uint(mo.nonce as u128, 64)
+            .uint(mo.valid_until as u128, 64)
+            .addr(Some(contract))
+            .reference(
+                ton::Builder::new()
+                    .addr(Some(&mo.from))
+                    .addr(Some(&mo.to))
+                    .addr(mo.relayer.as_ref())
+                    .end()
+                    .unwrap(),
+            )
+            .reference(
+                ton::Builder::new()
+                    .bytes(&mo.pay_ref)
+                    .bytes(&mo.lane)
+                    .bytes(&mo.extra)
+                    .end()
+                    .unwrap(),
+            )
+            .end()
+            .unwrap()
     };
-    assert_eq!(rebuild(&mo.contract).hash(), mo.digest, "the TON builder reproduces the vector cell");
-    let other = ton::jetton_wallet_address(&ton::Addr { wc: 0, hash: [0x33; 32] }, &master, &code, depth).unwrap();
+    assert_eq!(
+        rebuild(&mo.contract).hash(),
+        mo.digest,
+        "the TON builder reproduces the vector cell"
+    );
+    let other = ton::jetton_wallet_address(
+        &ton::Addr {
+            wc: 0,
+            hash: [0x33; 32],
+        },
+        &master,
+        &code,
+        depth,
+    )
+    .unwrap();
     let twin = rebuild(&other);
-    cases.push(case("12b_ton_foreign_wallet", op_env("ton:-239", &other.raw(), &twin.hash(), &ton::boc_serialize(&twin), &ton_sig,
-        Value::Null, ton_extra, NOW), json!({"accept": true, "may_submit": false})));
+    cases.push(case(
+        "12b_ton_foreign_wallet",
+        op_env(
+            "ton:-239",
+            &other.raw(),
+            &twin.hash(),
+            &ton::boc_serialize(&twin),
+            &ton_sig,
+            Value::Null,
+            ton_extra,
+            NOW,
+        ),
+        json!({"accept": true, "may_submit": false}),
+    ));
 
     let sol_payload = alloy::hex::decode(SOL_PAYLOAD).unwrap();
     let mut op = solana::MetaOp::decode(&sol_payload).unwrap();
@@ -527,27 +898,89 @@ fn regenerate() {
                "token": SOL_USD})), "now", json!(NOW_EARLY)));
     op.contract = solana::account_of(&program, &solana::key(SOL_BOB).unwrap());
     let twin = op.encode();
-    cases.push(with(case("13b_solana_foreign_account", op_env(&sol_chain, &solana::b58(&op.contract), &Sha256::digest(&twin), &twin,
-        SOL_BLOB, json!(alice_pk), sol_extra, NOW_EARLY), json!({"accept": true, "may_submit": false})), "now", json!(NOW_EARLY)));
+    cases.push(with(
+        case(
+            "13b_solana_foreign_account",
+            op_env(
+                &sol_chain,
+                &solana::b58(&op.contract),
+                &Sha256::digest(&twin),
+                &twin,
+                SOL_BLOB,
+                json!(alice_pk),
+                sol_extra,
+                NOW_EARLY,
+            ),
+            json!({"accept": true, "may_submit": false}),
+        ),
+        "now",
+        json!(NOW_EARLY),
+    ));
 
-    let mut e14 = op_env("soroban:testnet", "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", &[0x5e; 32], b"xdr", "00", Value::Null, json!({}), NOW);
+    let mut e14 = op_env(
+        "soroban:testnet",
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        &[0x5e; 32],
+        b"xdr",
+        "00",
+        Value::Null,
+        json!({}),
+        NOW,
+    );
     e14["family"] = json!("soroban");
-    cases.push(case("14_soroban_not_on_the_bus", e14, reject("FAMILY_NOT_SUPPORTED")));
-    cases.push(case("15a_spec_1_1", with(e1.clone(), "spec", json!("scaas-intent/1.1")), reject("UNSUPPORTED_SPEC")));
-    cases.push(case("15b_spec_2_0", with(e1.clone(), "spec", json!("scaas-intent/2.0")), reject("UNSUPPORTED_SPEC")));
+    cases.push(case(
+        "14_soroban_not_on_the_bus",
+        e14,
+        reject("FAMILY_NOT_SUPPORTED"),
+    ));
+    cases.push(case(
+        "15a_spec_1_1",
+        with(e1.clone(), "spec", json!("scaas-intent/1.1")),
+        reject("UNSUPPORTED_SPEC"),
+    ));
+    cases.push(case(
+        "15b_spec_2_0",
+        with(e1.clone(), "spec", json!("scaas-intent/2.0")),
+        reject("UNSUPPORTED_SPEC"),
+    ));
     // Tên cũ của bản nháp spec: không có node nào từng nói nó.
-    cases.push(case("15c_spec_old_name", with(e1.clone(), "spec", json!("legacy-intent/1.2")), reject("UNSUPPORTED_SPEC")));
+    cases.push(case(
+        "15c_spec_old_name",
+        with(e1.clone(), "spec", json!("legacy-intent/1.2")),
+        reject("UNSUPPORTED_SPEC"),
+    ));
     // 15d: the UA body under 1.2 (NODE-MESH-18: it travels as 1.3).
     let mut e15d = with(e1.clone(), "spec", json!(envelope::SPEC));
     seal(&mut e15d);
     cases.push(case("15d_ua_body_under_1_2", e15d, reject("BAD_ENVELOPE")));
-    cases.push(case("16_unknown_top_level_field", with(e1.clone(), "x_future", json!({"anything": [1, 2]})),
-        json!({"accept": true, "may_submit": true})));
-    cases.push(case("17_hop_limit", with(e1.clone(), "hop_count", json!(4)), reject("HOP_LIMIT")));
-    cases.push(case("18a_valid_too_long", evm_env("evm:7622", &token, &m(&|x| x["validUntil"] = json!((NOW + 3601).to_string()))),
-        reject("VALID_TOO_LONG")));
-    cases.push(case("18b_expired_inside_skew", evm_env("evm:7622", &token, &m(&|x| x["validUntil"] = json!((NOW + 10).to_string()))),
-        reject("EXPIRED")));
+    cases.push(case(
+        "16_unknown_top_level_field",
+        with(e1.clone(), "x_future", json!({"anything": [1, 2]})),
+        json!({"accept": true, "may_submit": true}),
+    ));
+    cases.push(case(
+        "17_hop_limit",
+        with(e1.clone(), "hop_count", json!(4)),
+        reject("HOP_LIMIT"),
+    ));
+    cases.push(case(
+        "18a_valid_too_long",
+        evm_env(
+            "evm:7622",
+            &token,
+            &m(&|x| x["validUntil"] = json!((NOW + 3601).to_string())),
+        ),
+        reject("VALID_TOO_LONG"),
+    ));
+    cases.push(case(
+        "18b_expired_inside_skew",
+        evm_env(
+            "evm:7622",
+            &token,
+            &m(&|x| x["validUntil"] = json!((NOW + 10).to_string())),
+        ),
+        reject("EXPIRED"),
+    ));
     let mut e19 = e1.clone();
     let mut id = alloy::hex::decode(e1["intent_id"].as_str().unwrap()).unwrap();
     id[31] ^= 1;
@@ -556,57 +989,144 @@ fn regenerate() {
     cases.push(case("19_digest_mismatch", e19, reject("DIGEST_MISMATCH")));
     let mut e20 = with(e1.clone(), "visibility", json!("private"));
     seal(&mut e20);
-    cases.push(case("20_visibility_downgraded_after_signing", with(e20.clone(), "visibility", json!("open")), reject("BAD_HUB_SIG")));
-    let other_peer = alloy::hex::encode(hubsig::peer_id(&SigningKey::from_bytes(&[3; 32]).verifying_key().to_bytes()));
-    let mut e21 = with(e1.clone(), "exclusive", json!({"relayer_id": other_peer, "until": NOW + 5}));
+    cases.push(case(
+        "20_visibility_downgraded_after_signing",
+        with(e20.clone(), "visibility", json!("open")),
+        reject("BAD_HUB_SIG"),
+    ));
+    let other_peer = alloy::hex::encode(hubsig::peer_id(
+        &SigningKey::from_bytes(&[3; 32]).verifying_key().to_bytes(),
+    ));
+    let mut e21 = with(
+        e1.clone(),
+        "exclusive",
+        json!({"relayer_id": other_peer, "until": NOW + 5}),
+    );
     seal(&mut e21);
     let mut t21 = e21.clone();
     t21["exclusive"]["until"] = json!(NOW + 6);
-    cases.push(case("21_exclusive_until_changed", t21, reject("BAD_HUB_SIG")));
+    cases.push(case(
+        "21_exclusive_until_changed",
+        t21,
+        reject("BAD_HUB_SIG"),
+    ));
     let mut e22 = e1.clone();
-    e22["hub"]["pubkey"] = json!(alloy::hex::encode(SigningKey::from_bytes(&[3; 32]).verifying_key().to_bytes()));
+    e22["hub"]["pubkey"] = json!(alloy::hex::encode(
+        SigningKey::from_bytes(&[3; 32]).verifying_key().to_bytes()
+    ));
     cases.push(case("22_pubkey_not_hub_id", e22, reject("BAD_HUB_SIG")));
-    cases.push(case("23_private_from_open_peer", e20, reject("PRIVATE_FROM_OPEN_PEER")));
-    let mut e24 = with(e1.clone(), "exclusive", json!({"relayer_id": other_peer, "until": NOW + 11}));
+    cases.push(case(
+        "23_private_from_open_peer",
+        e20,
+        reject("PRIVATE_FROM_OPEN_PEER"),
+    ));
+    let mut e24 = with(
+        e1.clone(),
+        "exclusive",
+        json!({"relayer_id": other_peer, "until": NOW + 11}),
+    );
     seal(&mut e24);
-    cases.push(case("24a_exclusive_over_clamp_ignored", e24, json!({"accept": true, "exclusive_until": null, "state": "submittable"})));
-    cases.push(case("24b_exclusive_for_another_peer_honored", e21,
-        json!({"accept": true, "exclusive_until": NOW + 5, "state": "pooled", "may_submit": true})));
-    cases.push(with(case("25_open_label_on_private_chain", e1.clone(), reject("PRIVATE_FROM_OPEN_PEER")), "chain_profile", json!("private")));
+    cases.push(case(
+        "24a_exclusive_over_clamp_ignored",
+        e24,
+        json!({"accept": true, "exclusive_until": null, "state": "submittable"}),
+    ));
+    cases.push(case(
+        "24b_exclusive_for_another_peer_honored",
+        e21,
+        json!({"accept": true, "exclusive_until": NOW + 5, "state": "pooled", "may_submit": true}),
+    ));
+    cases.push(with(
+        case(
+            "25_open_label_on_private_chain",
+            e1.clone(),
+            reject("PRIVATE_FROM_OPEN_PEER"),
+        ),
+        "chain_profile",
+        json!("private"),
+    ));
     let mut t26 = e1.clone();
     t26["evm"]["sig_kind"] = json!("erc1271");
     cases.push(case("26a_sig_kind_flipped", t26, reject("BAD_HUB_SIG")));
     let mut t26 = e6;
     t26["evm"]["auth"]["signature"] = json!(format!("0x{}", "cd".repeat(96)));
-    cases.push(case("26b_erc1271_signature_swapped", t26, reject("BAD_HUB_SIG")));
+    cases.push(case(
+        "26b_erc1271_signature_swapped",
+        t26,
+        reject("BAD_HUB_SIG"),
+    ));
     let mut t27 = e10;
     t27["op"]["extra"]["coin_type"] = json!("0x2::fake::FAKE");
-    cases.push(with(case("27_non_evm_extra_changed", t27, reject("BAD_HUB_SIG")), "now", json!(NOW_EARLY)));
+    cases.push(with(
+        case("27_non_evm_extra_changed", t27, reject("BAD_HUB_SIG")),
+        "now",
+        json!(NOW_EARLY),
+    ));
     let mut e28 = e1.clone();
     e28["hub"]["published_at"] = json!(NOW - 3000);
     seal(&mut e28);
-    cases.push(case("28a_old_published_at_catch_up", e28, json!({"accept": true, "may_submit": true})));
+    cases.push(case(
+        "28a_old_published_at_catch_up",
+        e28,
+        json!({"accept": true, "may_submit": true}),
+    ));
     let mut e28 = e1.clone();
     e28["hub"]["published_at"] = json!(NOW + 60);
     seal(&mut e28);
-    cases.push(case("28b_published_in_the_future", e28, reject("BAD_ENVELOPE")));
-    let pol = |contract: &str, min_fee: &str| json!([{"chain_key": "evm:7622", "contract": contract, "selector": "*", "support": "full",
-        "submit": true, "pool_visibility": "open", "min_fee": min_fee, "fee_recipient_allow": "any"}]);
-    cases.push(with(case("29_none_mode_huge_fee", evm_env("evm:7622", &token, &m(&|x| {
-        x["mode"] = json!(0x00);
-        x["fee"] = json!(format!("1{}", "0".repeat(30)));
-    })), json!({"accept": true, "fee_effective": "0", "may_submit": false})), "policy", pol(&token, "1")));
+    cases.push(case(
+        "28b_published_in_the_future",
+        e28,
+        reject("BAD_ENVELOPE"),
+    ));
+    let pol = |contract: &str, min_fee: &str| {
+        json!([{"chain_key": "evm:7622", "contract": contract, "selector": "*", "support": "full",
+        "submit": true, "pool_visibility": "open", "min_fee": min_fee, "fee_recipient_allow": "any"}])
+    };
+    cases.push(with(
+        case(
+            "29_none_mode_huge_fee",
+            evm_env(
+                "evm:7622",
+                &token,
+                &m(&|x| {
+                    x["mode"] = json!(0x00);
+                    x["fee"] = json!(format!("1{}", "0".repeat(30)));
+                }),
+            ),
+            json!({"accept": true, "fee_effective": "0", "may_submit": false}),
+        ),
+        "policy",
+        pol(&token, "1"),
+    ));
     // 29b: a PERCENT `call` counts 0 (its basis is a selector argument this layer does not read): under `min_fee = 1`
     // it is accepted and never submittable.
     let mut pct = call.clone();
     pct["mode"] = json!(0x10);
-    cases.push(with(case("29b_percent_call_counts_zero", evm_env("evm:7622", &token, &pct),
-        json!({"accept": true, "fee_effective": "0", "may_submit": false})), "policy", pol(&token, "1")));
-    cases.push(with(case("30_unregistered_contract", evm_env("evm:7622", UNREGISTERED, &base),
-        json!({"accept": true, "token": UNREGISTERED, "may_submit": false})), "policy", pol(UNREGISTERED, "0")));
+    cases.push(with(
+        case(
+            "29b_percent_call_counts_zero",
+            evm_env("evm:7622", &token, &pct),
+            json!({"accept": true, "fee_effective": "0", "may_submit": false}),
+        ),
+        "policy",
+        pol(&token, "1"),
+    ));
+    cases.push(with(
+        case(
+            "30_unregistered_contract",
+            evm_env("evm:7622", UNREGISTERED, &base),
+            json!({"accept": true, "token": UNREGISTERED, "may_submit": false}),
+        ),
+        "policy",
+        pol(UNREGISTERED, "0"),
+    ));
     let mut e31 = evm_env_named("evm:7622", &token, "SCaaS MetaToken", &base, "eoa", None);
     e31["evm"]["domain"]["name"] = json!("SCaaS MetaTokén");
-    cases.push(case("31_non_ascii_body_string", e31, reject("BAD_ENVELOPE")));
+    cases.push(case(
+        "31_non_ascii_body_string",
+        e31,
+        reject("BAD_ENVELOPE"),
+    ));
     // 32: cùng envelope case 01, mọi khoá viết ngược thứ tự trên dây.
     let raw = unsorted(&e1);
     cases.push(json!({"name": "32_unsorted_body_keys", "from_peer_class": "open", "chain_profile": "public",

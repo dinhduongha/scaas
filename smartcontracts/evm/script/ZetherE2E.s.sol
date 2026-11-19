@@ -81,8 +81,12 @@ contract ZetherE2E is DeployBook {
         reg = IUARegistry(dep.readAddress(".zether_registry"));
         fac = OpenFactory(dep.readAddress(".token_factory"));
         dis = ITransferDisclosure(dep.readAddress(".zether_disclosure"));
-        cli = vm.envOr("ZETHER_CLI", string.concat(vm.projectRoot(), "/../../clients/zether-prover/target/release/zether-cli"));
-        for (uint256 i; i < N; ++i) xs[i] = uint256(keccak256(abi.encode("scaas.e2e.zether.x", i))) >> 8; // test keys, < r
+        cli = vm.envOr(
+            "ZETHER_CLI", string.concat(vm.projectRoot(), "/../../clients/zether-prover/target/release/zether-cli")
+        );
+        for (uint256 i; i < N; ++i) {
+            xs[i] = uint256(keccak256(abi.encode("scaas.e2e.zether.x", i))) >> 8; // test keys, < r
+        }
     }
 
     // ------------------------------------------------------------------ ffi
@@ -100,9 +104,15 @@ contract ZetherE2E is DeployBook {
         string[] memory a = new string[](4);
         (a[0], a[1], a[2]) = ("node", "--input-type=module", "-e");
         a[3] = string.concat(
-            "import { zetherPop } from '", vm.projectRoot(), "/../../clients/clientkeys/src/zether.js';",
-            "import { fromHex } from '", vm.projectRoot(), "/../../clients/clientkeys/src/bytes.js';",
-            "const p = zetherPop('bls12381', fromHex('", vm.toString(bytes32(x)), "'));",
+            "import { zetherPop } from '",
+            vm.projectRoot(),
+            "/../../clients/clientkeys/src/zether.js';",
+            "import { fromHex } from '",
+            vm.projectRoot(),
+            "/../../clients/clientkeys/src/bytes.js';",
+            "const p = zetherPop('bls12381', fromHex('",
+            vm.toString(bytes32(x)),
+            "'));",
             "console.log(JSON.stringify({Y: p.Y, UA: p.UA, pop: p.pop}));"
         );
         string memory o = string(vm.ffi(a));
@@ -126,15 +136,37 @@ contract ZetherE2E is DeployBook {
 
     function _decrypt(uint256 i, bytes memory c, bytes memory d) internal returns (uint256) {
         if (c.length == 0) return 0;
-        string memory o = _cli("decrypt", string.concat("{", _key(i), ',"ct":{', _q("C", vm.toString(c)), ",",
-            _q("D", vm.toString(d)), '},"tableBits":18,"boundBits":32}'));
+        string memory o = _cli(
+            "decrypt",
+            string.concat(
+                "{",
+                _key(i),
+                ',"ct":{',
+                _q("C", vm.toString(c)),
+                ",",
+                _q("D", vm.toString(d)),
+                '},"tableBits":18,"boundBits":32}'
+            )
+        );
         return vm.parseUint(o.readString(".amount"));
     }
 
     function _expect(address t, uint256 i, uint256 acc, uint256 pend, string memory what) internal {
         (uint256 a, uint256 p) = _balances(t, i);
-        require(a == acc && p == pend, string.concat(what, ": decrypted acc ", vm.toString(a), " pending ", vm.toString(p),
-            ", expected ", vm.toString(acc), " / ", vm.toString(pend)));
+        require(
+            a == acc && p == pend,
+            string.concat(
+                what,
+                ": decrypted acc ",
+                vm.toString(a),
+                " pending ",
+                vm.toString(p),
+                ", expected ",
+                vm.toString(acc),
+                " / ",
+                vm.toString(pend)
+            )
+        );
         console.log(string.concat("ok    ", what, ": decrypted acc ", vm.toString(a), ", pending ", vm.toString(p)));
     }
 
@@ -142,18 +174,36 @@ contract ZetherE2E is DeployBook {
     function _req(address t, uint256 bal, string memory extra) internal view returns (string memory) {
         IZetherToken.AccountState memory st = IZetherToken(t).accountState(ZetherTypes.UA.wrap(uas[0]));
         return string.concat(
-            "{", _key(0), ',"chainId":', vm.toString(block.chainid), ",", _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))),
-            ",", _q("token", vm.toString(t)), ',"sendCounter":', vm.toString(st.sendCounter), ',"accSeq":',
-            vm.toString(st.accSeq), ',"validUntilBlock":', vm.toString(block.number + 100_000), ',"acc":{',
-            string.concat(_q("C", vm.toString(st.accC)), ",", _q("D", vm.toString(st.accD)), '},"balance":', vm.toString(bal)),
-            ',"fee":0,"disclosureMode":"bundle","auditorMode":"none","yAud":null,"includeWitness":true', extra, "}"
+            "{",
+            _key(0),
+            ',"chainId":',
+            vm.toString(block.chainid),
+            ",",
+            _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))),
+            ",",
+            _q("token", vm.toString(t)),
+            ',"sendCounter":',
+            vm.toString(st.sendCounter),
+            ',"accSeq":',
+            vm.toString(st.accSeq),
+            ',"validUntilBlock":',
+            vm.toString(block.number + 100_000),
+            ',"acc":{',
+            string.concat(
+                _q("C", vm.toString(st.accC)), ",", _q("D", vm.toString(st.accD)), '},"balance":', vm.toString(bal)
+            ),
+            ',"fee":0,"disclosureMode":"bundle","auditorMode":"none","yAud":null,"includeWitness":true',
+            extra,
+            "}"
         );
     }
 
     function _recipients(uint256[] memory who, uint256[] memory amt) internal view returns (string memory r) {
         r = ',"recipients":[';
         for (uint256 j; j < who.length; ++j) {
-            r = string.concat(r, j == 0 ? "{" : ",{", _q("yTo", vm.toString(ys[who[j]])), ',"amount":', vm.toString(amt[j]), "}");
+            r = string.concat(
+                r, j == 0 ? "{" : ",{", _q("yTo", vm.toString(ys[who[j]])), ',"amount":', vm.toString(amt[j]), "}"
+            );
         }
         r = string.concat(r, "]");
     }
@@ -171,8 +221,17 @@ contract ZetherE2E is DeployBook {
     /// fixed fee.
     function _envelope() internal view returns (MetaTxLib.UAMetaTransaction memory m) {
         bytes32 from = MetaTxLib.pad(vm.addr(PAYER_PK));
-        m = MetaTxLib.UAMetaTransaction(from, "", 7, NormalZetherToken(t).mtxNonce(from, 7), block.timestamp + 1 days,
-            MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, me, RELAY_FEE, address(0));
+        m = MetaTxLib.UAMetaTransaction(
+            from,
+            "",
+            7,
+            NormalZetherToken(t).mtxNonce(from, 7),
+            block.timestamp + 1 days,
+            MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
+            me,
+            RELAY_FEE,
+            address(0)
+        );
     }
 
     /// The UA binding of `m` (CTR-ZTH-51, R35: `SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` as `bytes32`, every field but `data`, an
@@ -181,14 +240,48 @@ contract ZetherE2E is DeployBook {
     function _bindingOf(MetaTxLib.UAMetaTransaction memory m) internal returns (string memory) {
         address r = (m.mode & MetaTxLib.MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
         address f = (m.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
-        bytes32 b = keccak256(abi.encode(keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"), block.chainid, dep.readBytes32(".chain_uid"),
-            t, m.from, m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f));
+        bytes32 b = keccak256(
+            abi.encode(
+                keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"),
+                block.chainid,
+                dep.readBytes32(".chain_uid"),
+                t,
+                m.from,
+                m.batch,
+                m.nonce,
+                m.validUntil,
+                m.mode,
+                r,
+                m.fee,
+                f
+            )
+        );
         require(b == IZetherToken(t).envelopeBinding(m), "the UA binding differs from the token's envelopeBinding");
         string memory u = string.concat(
-            '{"chainId":', vm.toString(block.chainid), ",", _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))), ",",
-            _q("token", vm.toString(t)), ',"meta":{', _q("from", vm.toString(m.from)), ",", _q("batch", vm.toString(bytes32(m.batch))));
-        u = string.concat(u, ',"nonce":', vm.toString(m.nonce), ',"validUntil":', vm.toString(m.validUntil), ',"mode":', vm.toString(m.mode),
-            ",", _q("relayer", vm.toString(m.relayer)), ',"fee":', vm.toString(m.fee));
+            '{"chainId":',
+            vm.toString(block.chainid),
+            ",",
+            _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))),
+            ",",
+            _q("token", vm.toString(t)),
+            ',"meta":{',
+            _q("from", vm.toString(m.from)),
+            ",",
+            _q("batch", vm.toString(bytes32(m.batch)))
+        );
+        u = string.concat(
+            u,
+            ',"nonce":',
+            vm.toString(m.nonce),
+            ',"validUntil":',
+            vm.toString(m.validUntil),
+            ',"mode":',
+            vm.toString(m.mode),
+            ",",
+            _q("relayer", vm.toString(m.relayer)),
+            ',"fee":',
+            vm.toString(m.fee)
+        );
         u = _cli("uaEnvelope", string.concat(u, ",", _q("feeRecipient", vm.toString(m.feeRecipient)), "}}"));
         require(u.readBytes32(".binding") == b, "zether-cli uaEnvelope: the UA binding differs");
         return string.concat(",", _q("envelopeBinding", vm.toString(b)));
@@ -198,7 +291,8 @@ contract ZetherE2E is DeployBook {
     /// (R47): the payer signs the token's `mtxDigest` with its own key (an EOA: `UASig.signature`, no registry call, R1 / B),
     /// the deployer submits. Returns the op's own return data.
     function _relay(MetaTxLib.UAMetaTransaction memory m, string memory out, string memory label)
-        internal returns (bytes memory ret)
+        internal
+        returns (bytes memory ret)
     {
         m.data = out.readBytes(".directCalldata");
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, NormalZetherToken(t).mtxDigest(m));
@@ -279,16 +373,25 @@ contract ZetherE2E is DeployBook {
     }
 
     function _transfers() internal {
-        string memory out = _cli("proveTransfer", _req(t, bal, string.concat(",", _q("yTo", vm.toString(ys[1])), ',"amount":100')));
+        string memory out =
+            _cli("proveTransfer", _req(t, bal, string.concat(",", _q("yTo", vm.toString(ys[1])), ',"amount":100')));
         refSingle = _send(t, out, "single transfer alice -> bob 100");
         sSingle = out.readBytes32(".witness.s");
         bal -= SINGLE;
         _expect(t, 0, bal, 0, "alice after the single transfer");
         _expect(t, 1, 0, SINGLE, "bob after the single transfer");
-        require(dis.verifyTransferAmount(t, refSingle, 0, SINGLE, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(sSingle)),
-            "disclosure view");
-        require(!dis.verifyTransferAmount(t, refSingle, 0, SINGLE + 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(sSingle)),
-            "disclosure view (wrong amount)");
+        require(
+            dis.verifyTransferAmount(
+                t, refSingle, 0, SINGLE, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(sSingle)
+            ),
+            "disclosure view"
+        );
+        require(
+            !dis.verifyTransferAmount(
+                t, refSingle, 0, SINGLE + 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(sSingle)
+            ),
+            "disclosure view (wrong amount)"
+        );
         console.log("ok    disclosure view: verifyTransferAmount(single, 100, SENDER_S) = true, 101 = false");
 
         uint256[] memory who = new uint256[](4);
@@ -299,7 +402,9 @@ contract ZetherE2E is DeployBook {
         bal -= MULTI4;
         _expect(t, 0, bal, 0, "alice after the Compact M = 4 transfer");
         _expect(t, 1, 0, SINGLE + MULTI4, "bob after the Compact M = 4 transfer");
-        for (uint256 i = 3; i < N; ++i) _expect(t, i, 0, 0, string.concat("decoy ", vm.toString(i - 2), " (Compact)"));
+        for (uint256 i = 3; i < N; ++i) {
+            _expect(t, i, 0, 0, string.concat("decoy ", vm.toString(i - 2), " (Compact)"));
+        }
 
         who = new uint256[](2);
         amt = new uint256[](2);
@@ -316,7 +421,8 @@ contract ZetherE2E is DeployBook {
 
     function _unshield() internal {
         uint256 pub = IERC20(t).balanceOf(me);
-        string memory out = _cli("proveBurn", _req(t, bal, string.concat(',"amount":200,', _q("recipient", vm.toString(me)))));
+        string memory out =
+            _cli("proveBurn", _req(t, bal, string.concat(',"amount":200,', _q("recipient", vm.toString(me)))));
         (bool ok,) = t.call(out.readBytes(".directCalldata"));
         require(ok, "unshield reverted");
         bal -= UNSHIELD;
@@ -338,15 +444,32 @@ contract ZetherE2E is DeployBook {
         _namedCompact();
         _namedUnshield();
         require(IERC20(t).balanceOf(payer) == 0, "relayed: six fees from the payer");
-        require(IERC20(t).balanceOf(me) == before + RELAYED_UNSHIELD + NAMED_UNSHIELD,
-            "relayed: the fees back to the deployer, the unshields");
-        require(NormalZetherToken(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD, "relayed: totalShielded");
+        require(
+            IERC20(t).balanceOf(me) == before + RELAYED_UNSHIELD + NAMED_UNSHIELD,
+            "relayed: the fees back to the deployer, the unshields"
+        );
+        require(
+            NormalZetherToken(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD,
+            "relayed: totalShielded"
+        );
     }
 
     function _relayedSingle() internal {
         MetaTxLib.UAMetaTransaction memory m = _envelope();
-        string memory out = _cli("proveTransfer", _req(t, bal, string.concat(_bindingOf(m), ',"uaSigner":"ecdsa",', _q("yTo", vm.toString(ys[1])),
-            ',"amount":', vm.toString(RELAYED_SINGLE))));
+        string memory out = _cli(
+            "proveTransfer",
+            _req(
+                t,
+                bal,
+                string.concat(
+                    _bindingOf(m),
+                    ',"uaSigner":"ecdsa",',
+                    _q("yTo", vm.toString(ys[1])),
+                    ',"amount":',
+                    vm.toString(RELAYED_SINGLE)
+                )
+            )
+        );
         bytes memory ret = _relay(m, out, "relayed single transfer alice -> bob 40");
         require(abi.decode(ret, (bytes32)) == out.readBytes32(".entryRef"), "relayed single: entryRef");
         bal -= RELAYED_SINGLE;
@@ -359,8 +482,12 @@ contract ZetherE2E is DeployBook {
         uint256[] memory who = new uint256[](2);
         uint256[] memory amt = new uint256[](2);
         (who[0], who[1], amt[0]) = (1, 3, RELAYED_MULTI);
-        string memory out = _cli("proveTransferMulti", _req(t, bal, string.concat(',"mode":"compact"', _bindingOf(m), ',"uaSigner":"ecdsa"',
-            _recipients(who, amt))));
+        string memory out = _cli(
+            "proveTransferMulti",
+            _req(
+                t, bal, string.concat(',"mode":"compact"', _bindingOf(m), ',"uaSigner":"ecdsa"', _recipients(who, amt))
+            )
+        );
         _relay(m, out, "relayed multi transfer Compact M = 2 (bob 30 + 1 decoy)");
         bal -= RELAYED_MULTI;
         _expect(t, 0, bal, 0, "alice after the relayed Compact transfer");
@@ -370,11 +497,15 @@ contract ZetherE2E is DeployBook {
     function _relayedUnshield() internal {
         MetaTxLib.UAMetaTransaction memory m = _envelope();
         uint256 pub = IERC20(t).balanceOf(me);
-        string memory out = _cli("proveBurn", _req(t, bal, string.concat(_bindingOf(m), ',"amount":20,', _q("recipient", vm.toString(me)))));
+        string memory out = _cli(
+            "proveBurn", _req(t, bal, string.concat(_bindingOf(m), ',"amount":20,', _q("recipient", vm.toString(me))))
+        );
         _relay(m, out, "relayed unshield 20 to the deployer");
         bal -= RELAYED_UNSHIELD;
         _expect(t, 0, bal, 0, "alice after the relayed unshield");
-        require(IERC20(t).balanceOf(me) == pub + RELAYED_UNSHIELD + RELAY_FEE, "relayed unshield: public balance and fee");
+        require(
+            IERC20(t).balanceOf(me) == pub + RELAYED_UNSHIELD + RELAY_FEE, "relayed unshield: public balance and fee"
+        );
     }
 
     function _n(string memory k, uint256 v) internal pure returns (string memory) {
@@ -383,18 +514,56 @@ contract ZetherE2E is DeployBook {
 
     /// `namedCall` of `op` (a merged entry, R35) through the real prover: its digest signed by the payer here (a raw signature:
     /// `UASig{signature}`), then the entry's calldata, submitted by the deployer.
-    function _named(string memory op, MetaTxLib.UAMetaTransaction memory m, string memory out, string memory extra, string memory label)
-        internal returns (bytes memory ret)
-    {
+    function _named(
+        string memory op,
+        MetaTxLib.UAMetaTransaction memory m,
+        string memory out,
+        string memory extra,
+        string memory label
+    ) internal returns (bytes memory ret) {
         string memory q = string.concat(
-            '{"op":"', op, '","chainId":', vm.toString(block.chainid), ",", _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))), ",",
-            _q("token", vm.toString(t)), ',"env":{', _q("from", vm.toString(m.from)), ",", _n("batch", m.batch), ",", _n("nonce", m.nonce));
-        q = string.concat(q, ",", _n("validUntil", m.validUntil), ",", _n("mode", m.mode), ",", _q("relayer", vm.toString(m.relayer)), ",",
-            _n("fee", m.fee), ",", _q("feeRecipient", vm.toString(m.feeRecipient)), "},");
-        q = string.concat(q, _q("payload", vm.toString(out.readBytes(".payload"))), ",", _q("proof", vm.toString(out.readBytes(".proof"))),
-            ",", _q("beneficiary", vm.toString(bytes32(0))), extra);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, _cli("namedCall", string.concat(q, "}")).readBytes32(".digest"));
-        bytes memory cd = _cli("namedCall", string.concat(q, ',"sig":"', vm.toString(abi.encodePacked(r, s, v)), '"}')).readBytes(".calldata");
+            '{"op":"',
+            op,
+            '","chainId":',
+            vm.toString(block.chainid),
+            ",",
+            _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))),
+            ",",
+            _q("token", vm.toString(t)),
+            ',"env":{',
+            _q("from", vm.toString(m.from)),
+            ",",
+            _n("batch", m.batch),
+            ",",
+            _n("nonce", m.nonce)
+        );
+        q = string.concat(
+            q,
+            ",",
+            _n("validUntil", m.validUntil),
+            ",",
+            _n("mode", m.mode),
+            ",",
+            _q("relayer", vm.toString(m.relayer)),
+            ",",
+            _n("fee", m.fee),
+            ",",
+            _q("feeRecipient", vm.toString(m.feeRecipient)),
+            "},"
+        );
+        q = string.concat(
+            q,
+            _q("payload", vm.toString(out.readBytes(".payload"))),
+            ",",
+            _q("proof", vm.toString(out.readBytes(".proof"))),
+            ",",
+            _q("beneficiary", vm.toString(bytes32(0))),
+            extra
+        );
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(PAYER_PK, _cli("namedCall", string.concat(q, "}")).readBytes32(".digest"));
+        bytes memory cd = _cli("namedCall", string.concat(q, ',"sig":"', vm.toString(abi.encodePacked(r, s, v)), '"}'))
+            .readBytes(".calldata");
         bool ok;
         (ok, ret) = t.call(cd);
         require(ok, string.concat(label, " reverted"));
@@ -403,13 +572,27 @@ contract ZetherE2E is DeployBook {
 
     function _namedSingle() internal {
         MetaTxLib.UAMetaTransaction memory m = _envelope();
-        string memory out = _cli("proveTransfer", _req(t, bal, string.concat(_bindingOf(m), ',"uaSigner":"ecdsa",', _q("yTo", vm.toString(ys[1])),
-            ',"amount":', vm.toString(NAMED_SINGLE))));
+        string memory out = _cli(
+            "proveTransfer",
+            _req(
+                t,
+                bal,
+                string.concat(
+                    _bindingOf(m),
+                    ',"uaSigner":"ecdsa",',
+                    _q("yTo", vm.toString(ys[1])),
+                    ',"amount":',
+                    vm.toString(NAMED_SINGLE)
+                )
+            )
+        );
         bytes memory ret = _named("UAZetherTransferSingle", m, out, "", "named single transfer alice -> bob 15");
         require(abi.decode(ret, (bytes32)) == out.readBytes32(".entryRef"), "named single: entryRef");
         bal -= NAMED_SINGLE;
         _expect(t, 0, bal, 0, "alice after the named single transfer");
-        _expect(t, 1, SINGLE + MULTI4, RELAYED_SINGLE + RELAYED_MULTI + NAMED_SINGLE, "bob after the named single transfer");
+        _expect(
+            t, 1, SINGLE + MULTI4, RELAYED_SINGLE + RELAYED_MULTI + NAMED_SINGLE, "bob after the named single transfer"
+        );
     }
 
     function _namedCompact() internal {
@@ -417,20 +600,37 @@ contract ZetherE2E is DeployBook {
         uint256[] memory who = new uint256[](2);
         uint256[] memory amt = new uint256[](2);
         (who[0], who[1], amt[0]) = (1, 3, NAMED_MULTI);
-        string memory out = _cli("proveTransferMulti", _req(t, bal, string.concat(',"mode":"compact"', _bindingOf(m), ',"uaSigner":"ecdsa"',
-            _recipients(who, amt))));
+        string memory out = _cli(
+            "proveTransferMulti",
+            _req(
+                t, bal, string.concat(',"mode":"compact"', _bindingOf(m), ',"uaSigner":"ecdsa"', _recipients(who, amt))
+            )
+        );
         _named("UAZetherTransferCompact", m, out, "", "named multi transfer Compact M = 2 (bob 10 + 1 decoy)");
         bal -= NAMED_MULTI;
         _expect(t, 0, bal, 0, "alice after the named Compact transfer");
-        _expect(t, 1, SINGLE + MULTI4, RELAYED_SINGLE + RELAYED_MULTI + NAMED_SINGLE + NAMED_MULTI, "bob after the named Compact transfer");
+        _expect(
+            t,
+            1,
+            SINGLE + MULTI4,
+            RELAYED_SINGLE + RELAYED_MULTI + NAMED_SINGLE + NAMED_MULTI,
+            "bob after the named Compact transfer"
+        );
     }
 
     function _namedUnshield() internal {
         MetaTxLib.UAMetaTransaction memory m = _envelope();
         uint256 pub = IERC20(t).balanceOf(me);
-        string memory out = _cli("proveBurn", _req(t, bal, string.concat(_bindingOf(m), ',"amount":5,', _q("recipient", vm.toString(me)))));
-        _named("UAZetherUnshield", m, out, string.concat(',"amount":5,', _q("recipient", vm.toString(MetaTxLib.pad(me)))),
-            "named unshield 5 to the deployer");
+        string memory out = _cli(
+            "proveBurn", _req(t, bal, string.concat(_bindingOf(m), ',"amount":5,', _q("recipient", vm.toString(me))))
+        );
+        _named(
+            "UAZetherUnshield",
+            m,
+            out,
+            string.concat(',"amount":5,', _q("recipient", vm.toString(MetaTxLib.pad(me)))),
+            "named unshield 5 to the deployer"
+        );
         bal -= NAMED_UNSHIELD;
         _expect(t, 0, bal, 0, "alice after the named unshield");
         require(IERC20(t).balanceOf(me) == pub + NAMED_UNSHIELD + RELAY_FEE, "named unshield: public balance and fee");
@@ -444,7 +644,8 @@ contract ZetherE2E is DeployBook {
         und = address(m);
         console.log(string.concat("      MockERC20 at ", vm.toString(und)));
         IFactoryToken.TokenConfig memory w;
-        (w.name, w.symbol, w.decimals, w.features, w.conf) = ("Zether wrapped E2E USD", "zweUSD", 6, 1 << GovernanceBits.PAYABLE, _conf());
+        (w.name, w.symbol, w.decimals, w.features, w.conf) =
+        ("Zether wrapped E2E USD", "zweUSD", 6, 1 << GovernanceBits.PAYABLE, _conf());
         w.legs = new IFactoryToken.Leg[](1);
         w.legs[0] = IFactoryToken.Leg(und, 1, 1);
         wt = fac.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(w), salt);
@@ -472,28 +673,62 @@ contract ZetherE2E is DeployBook {
             vm.prank(b.readAddress(string.concat(k, ".transaction.from")));
             (bool ok,) = to.call(b.readBytes(string.concat(k, ".transaction.input")));
             Vm.Gas memory g = vm.lastCallGas();
-            console.log(string.concat(ok ? "ok    " : "FAIL  ", b.readString(string.concat(k, ".function")), " ",
-                vm.toString(h), " regular ", vm.toString(g.gasTotalUsed), " state ", vm.toString(g.gasStateUsed),
-                " refund ", vm.toString(g.gasRefunded), " net ",
-                vm.toString(int256(uint256(g.gasTotalUsed)) + g.gasStateUsed - g.gasRefunded)));
+            console.log(
+                string.concat(
+                    ok ? "ok    " : "FAIL  ",
+                    b.readString(string.concat(k, ".function")),
+                    " ",
+                    vm.toString(h),
+                    " regular ",
+                    vm.toString(g.gasTotalUsed),
+                    " state ",
+                    vm.toString(g.gasStateUsed),
+                    " refund ",
+                    vm.toString(g.gasRefunded),
+                    " net ",
+                    vm.toString(int256(uint256(g.gasTotalUsed)) + g.gasStateUsed - g.gasRefunded)
+                )
+            );
         }
     }
 
     /// The final state on chain (no broadcast): every balance by decryption, the disclosure view.
     function check() external {
         _load();
-        for (uint256 i; i < N; ++i) (ys[i], uas[i],) = _pop(xs[i]);
+        for (uint256 i; i < N; ++i) {
+            (ys[i], uas[i],) = _pop(xs[i]);
+        }
         string memory e = _readBook(bookUid, "-zether-e2e.json");
         (t, wt) = (e.readAddress(".normal_zether_token"), e.readAddress(".wrapped_zether_token"));
-        _expect(t, 0, SHIELDED - SINGLE - MULTI4 - MULTI2 - UNSHIELD - RELAYED_SINGLE - RELAYED_MULTI - RELAYED_UNSHIELD - NAMED_SINGLE
-            - NAMED_MULTI - NAMED_UNSHIELD, 0, "chain: alice");
+        _expect(
+            t,
+            0,
+            SHIELDED - SINGLE - MULTI4 - MULTI2 - UNSHIELD - RELAYED_SINGLE - RELAYED_MULTI - RELAYED_UNSHIELD
+                - NAMED_SINGLE - NAMED_MULTI - NAMED_UNSHIELD,
+            0,
+            "chain: alice"
+        );
         _expect(t, 1, SINGLE + MULTI4, RELAYED_SINGLE + RELAYED_MULTI + NAMED_SINGLE + NAMED_MULTI, "chain: bob");
         _expect(t, 2, 0, MULTI2, "chain: carol");
-        for (uint256 i = 3; i < N; ++i) _expect(t, i, 0, 0, string.concat("chain: decoy ", vm.toString(i - 2)));
-        require(NormalZetherToken(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD, "chain: totalShielded");
+        for (uint256 i = 3; i < N; ++i) {
+            _expect(t, i, 0, 0, string.concat("chain: decoy ", vm.toString(i - 2)));
+        }
+        require(
+            NormalZetherToken(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD,
+            "chain: totalShielded"
+        );
         _expect(wt, 0, WRAPPED, 0, "chain: alice (wrapped)");
-        require(dis.verifyTransferAmount(t, e.readBytes32(".entry_single"), 0, SINGLE, ITransferDisclosure.OpeningKind.SENDER_S,
-            abi.encode(e.readBytes32(".s_single"))), "chain: disclosure view");
+        require(
+            dis.verifyTransferAmount(
+                t,
+                e.readBytes32(".entry_single"),
+                0,
+                SINGLE,
+                ITransferDisclosure.OpeningKind.SENDER_S,
+                abi.encode(e.readBytes32(".s_single"))
+            ),
+            "chain: disclosure view"
+        );
         console.log("ok    chain: disclosure view verifyTransferAmount(single, 100, SENDER_S) = true");
     }
 }

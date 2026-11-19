@@ -55,14 +55,20 @@ contract GovHybridTest is UALedgerBase {
 
     /// `PAYABLE` plus `extra`, owner `OWNER`; a hybrid (`MINTABLE`, minter `MINTER`) iff `cap != 0`; the test is the rate admin
     /// (a contract), `GUARD` the guardian.
-    function _cfg(address[] memory legs, uint256 cap, uint256 extra) internal pure returns (IFactoryToken.TokenConfig memory c) {
+    function _cfg(address[] memory legs, uint256 cap, uint256 extra)
+        internal
+        pure
+        returns (IFactoryToken.TokenConfig memory c)
+    {
         (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, nid(OWNER), cap);
         c.features = 1 | extra | (cap != 0 ? uint256(1) << MINT : 0);
         if (cap != 0) c.roles.minter = nid(MINTER);
         if (extra & RATE != 0) (c.roles.rateAdmin, c.rate) = (nid(address(1)), IFactoryToken.RateConfig(2 days, 1000)); // _make: this
         if (extra & DISABLE != 0) c.roles.guardian = nid(GUARD);
         c.legs = new IFactoryToken.Leg[](legs.length);
-        for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        for (uint256 i; i < legs.length; ++i) {
+            c.legs[i] = IFactoryToken.Leg(legs[i], 1, 1);
+        }
     }
 
     function _clone() internal returns (WrappedToken) {
@@ -143,7 +149,11 @@ contract GovHybridTest is UALedgerBase {
         w.wrapToUA(address(und), 1, uaP);
     }
 
-    function _uaWrapOrder(WrappedToken w, uint256 amount, uint256 nonce) internal view returns (ITradeToken.UAWrapOrder memory o) {
+    function _uaWrapOrder(WrappedToken w, uint256 amount, uint256 nonce)
+        internal
+        view
+        returns (ITradeToken.UAWrapOrder memory o)
+    {
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (_pad(alice), address(w), amount, amount, amount);
         (o.relayer, o.batch, o.nonce, o.validUntil) = (RELAYER, 1, nonce, block.timestamp + 300);
     }
@@ -346,7 +356,9 @@ contract GovHybridTest is UALedgerBase {
     }
 
     function _has(bytes32[] memory a, bytes32 x) internal pure returns (bool) {
-        for (uint256 i; i < a.length; ++i) if (a[i] == x) return true;
+        for (uint256 i; i < a.length; ++i) {
+            if (a[i] == x) return true;
+        }
         return false;
     }
 
@@ -358,9 +370,13 @@ contract GovHybridTest is UALedgerBase {
         bytes32[] memory capped = _wrapReads(_hybrid(address(und), CAP));
         assertFalse(_has(plain, maxSlot), "a non-hybrid wrap reads maxSupply");
         assertTrue(_has(capped, maxSlot), "control: a hybrid wrap reads it");
-        for (uint256 i; i < plain.length; ++i) assertTrue(_has(capped, plain[i]), "a slot only the plain wrap reads");
+        for (uint256 i; i < plain.length; ++i) {
+            assertTrue(_has(capped, plain[i]), "a slot only the plain wrap reads");
+        }
         for (uint256 i; i < capped.length; ++i) {
-            assertTrue(capped[i] == maxSlot || _has(plain, capped[i]), "a slot only the hybrid wrap reads, not maxSupply");
+            assertTrue(
+                capped[i] == maxSlot || _has(plain, capped[i]), "a slot only the hybrid wrap reads, not maxSupply"
+            );
         }
     }
 }
@@ -372,7 +388,9 @@ contract GovHybridZetherTest is ZetherFixture {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
         _users();
     }
 
@@ -384,7 +402,10 @@ contract GovHybridZetherTest is ZetherFixture {
         c.maxSupply = cap;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        return WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), salt)));
+        return
+            WrappedZetherToken(
+                payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), salt))
+            );
     }
 
     function test_capHolds_mtxWrapShieldZether() public {
@@ -470,8 +491,10 @@ contract GovHybridPqzTest is PqzFixture {
 
     function _unshieldUnwrap(WrappedPqzToken w) internal returns (bool ok, bytes memory ret) {
         // an unregistered `fromUA`: whatever runs the burn refuses it
-        bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), bytes32(uint256(0xBAD)), bytes32(0)),
-            _blob(21, PqzCt.CT));
+        bytes memory pl = bytes.concat(
+            abi.encode(uint256(1), block.number + 5, uint256(0), bytes32(uint256(0xBAD)), bytes32(0)),
+            _blob(21, PqzCt.CT)
+        );
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 0);
         try w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "", noVerdict()) {

@@ -368,7 +368,7 @@ public class WalletTests : IDisposable
         return [.. o];
     }
 
-    /// <summary>abi.encode(MemberSig[]) of a UASig JSON's members (ua8.rs encode_member_sigs).</summary>
+    /// <summary>abi.encode(MemberSig[]) of a UASig JSON's members (ua_portable.rs encode_member_sigs).</summary>
     static byte[] MemberSigs(JsonElement ms)
     {
         if (ms.GetArrayLength() == 0) return [];
@@ -401,8 +401,12 @@ public class WalletTests : IDisposable
             foreach (var s in Rows(r, "slots"))
             {
                 if (s.TryGetProperty("members", out var ms))
-                    slots.Add(new JsonObject { ["index"] = s.GetProperty("index").GetInt32(), ["members"] = new JsonArray(ms.EnumerateArray()
-                        .Select(x => (JsonNode)new JsonObject { ["index"] = x.GetProperty("index").GetInt32(), ["key"] = Pos(x) }).ToArray()) });
+                    slots.Add(new JsonObject
+                    {
+                        ["index"] = s.GetProperty("index").GetInt32(),
+                        ["members"] = new JsonArray(ms.EnumerateArray()
+                        .Select(x => (JsonNode)new JsonObject { ["index"] = x.GetProperty("index").GetInt32(), ["key"] = Pos(x) }).ToArray())
+                    });
                 else slots.Add(new JsonObject { ["index"] = s.GetProperty("index").GetInt32(), ["key"] = Pos(s) });
             }
             var m = new JsonObject { ["keyData"] = S(r, "keyData"), ["slots"] = slots };
@@ -549,8 +553,12 @@ public class WalletTests : IDisposable
         var (rk, pk) = (rkey.KeyData(), B(k0.GetProperty("kemPk")));
         var cs = JsonDocument.Parse(w.BackupSeal(sender, [new Recipient(0x0130, rk, 0, pk), new Recipient(0, [], 0, pk, Ephemeral: true)])).RootElement;
         Assert.Equal(2, cs.GetArrayLength());
-        var expect = new JsonObject { ["purpose"] = "scaas/backup/v1", ["sender"] = new JsonObject { ["ua"] = UaOf(0x0102, sender) },
-            ["recipient"] = new JsonObject { ["ua"] = UaOf(0x0130, rkey), ["version"] = 0 } }.ToJsonString();
+        var expect = new JsonObject
+        {
+            ["purpose"] = "scaas/backup/v1",
+            ["sender"] = new JsonObject { ["ua"] = UaOf(0x0102, sender) },
+            ["recipient"] = new JsonObject { ["ua"] = UaOf(0x0130, rkey), ["version"] = 0 }
+        }.ToJsonString();
         var o = Keep(Wallet.RestoreBackup(KemOf(k0), cs[0].GetRawText(), expect)!);
         Assert.Equal(sender.KeyData(), Key(o, 0x0102).KeyData());
         var m = JsonDocument.Parse(o.ManifestJson()).RootElement;
@@ -578,8 +586,12 @@ public class WalletTests : IDisposable
             var (lpk, sc) = (ls.KemPk(), ls.ShortCode());
             if (wrong) sc = sc == "00000000" ? "00000001" : "00000000";
             var c = w.LinkSeal(key, lpk, sc);
-            var ex = new JsonObject { ["purpose"] = "scaas/link/v1", ["sender"] = new JsonObject { ["ua"] = UaOf(0x0102, key) },
-                ["recipient"] = new JsonObject { ["kemPkHash"] = Hx(UA.Keccak256(lpk)) } }.ToJsonString();
+            var ex = new JsonObject
+            {
+                ["purpose"] = "scaas/link/v1",
+                ["sender"] = new JsonObject { ["ua"] = UaOf(0x0102, key) },
+                ["recipient"] = new JsonObject { ["kemPkHash"] = Hx(UA.Keccak256(lpk)) }
+            }.ToJsonString();
             if (wrong) { Assert.Equal("UASealOpen", Code(() => Wallet.FromLink(ls, c, ex))); continue; }
             var o = Keep(Wallet.FromLink(ls, c, ex));
             Assert.Equal(key.KeyData(), Key(o, 0x0102).KeyData());

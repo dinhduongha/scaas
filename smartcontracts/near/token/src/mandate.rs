@@ -79,19 +79,34 @@ struct Signer {
 
 impl Signer {
     fn open_bytes(&self) -> u64 {
-        if self.old == 0 { record_bytes(&self.who, &self.subject) } else { 0 }
+        if self.old == 0 {
+            record_bytes(&self.who, &self.subject)
+        } else {
+            0
+        }
     }
 }
 
 impl Token {
     fn load_mandate(&self, h: &Holder) -> R<([u8; 32], Mandate)> {
-        let Holder::Ua(id) = h else { return Err("no such mandate") };
-        self.mandates.get(id).map(|m| (*id, m.clone())).ok_or("no such mandate")
+        let Holder::Ua(id) = h else {
+            return Err("no such mandate");
+        };
+        self.mandates
+            .get(id)
+            .map(|m| (*id, m.clone()))
+            .ok_or("no such mandate")
     }
 
     /// No write: the open's shape and terms (R9), then the plain value checks (`pay_checks`: the owner's signature,
     /// relayer, value policy, lane nonce, balance). Returns the owner, the new record and every new byte.
-    fn open_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, terms: &MandateTerms) -> R<(Signer, Mandate, u64)> {
+    fn open_plan(
+        &self,
+        caller: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        terms: &MandateTerms,
+    ) -> R<(Signer, Mandate, u64)> {
         if op.op != OP_MANDATE_OPEN {
             return Err("wrong op code");
         }
@@ -118,9 +133,23 @@ impl Token {
             return Err("token refuses a transfer to the token itself");
         }
         let (subject, old, bytes) = self.pay_checks(caller, caller, op, auth, &op.to)?;
-        let m = Mandate { owner: op.from.clone(), terms: terms.clone(), period_start: now_s(), spent: 0, revoked: false };
+        let m = Mandate {
+            owner: op.from.clone(),
+            terms: terms.clone(),
+            period_start: now_s(),
+            spent: 0,
+            revoked: false,
+        };
         let b = bytes + mandate_bytes(&m);
-        Ok((Signer { who: op.from.clone(), subject, old }, m, b))
+        Ok((
+            Signer {
+                who: op.from.clone(),
+                subject,
+                old,
+            },
+            m,
+            b,
+        ))
     }
 
     /// No write: the pay's shape, the mandate's state and limits (the period moved on its grid), the delegate's
@@ -130,7 +159,11 @@ impl Token {
             return Err("wrong op code");
         }
         let (_, mut m) = self.load_mandate(&op.from)?;
-        if op.pay_ref == [0; 32] || op.lane != pay_lane(&op.pay_ref) || op.nonce != 0 || op.extra != no_params() {
+        if op.pay_ref == [0; 32]
+            || op.lane != pay_lane(&op.pay_ref)
+            || op.nonce != 0
+            || op.extra != no_params()
+        {
             return Err("mandate pay shape (pay_ref set, lane = payLane(pay_ref), nonce 0, extra = sha256([]))");
         }
         if m.revoked {
@@ -169,14 +202,28 @@ impl Token {
         if self.balance(&op.from) < op.amount {
             return Err("the mandate's balance is short");
         }
-        let s = Signer { who: m.terms.delegate.clone(), subject, old };
+        let s = Signer {
+            who: m.terms.delegate.clone(),
+            subject,
+            old,
+        };
         let bytes = s.open_bytes() + lane_bytes(&op.from) + self.receiver_bytes(&op.to);
         Ok((s, m, bytes))
     }
 
     /// No write: the revoke's shape, the signer is the owner or the delegate, its signature, the mandate not revoked.
-    fn revoke_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth) -> R<(Signer, [u8; 32], Mandate)> {
-        if op.op != OP_REVOKE || op.amount != 0 || op.pay_ref != [0; 32] || op.lane != [0; 32] || op.nonce != 0 {
+    fn revoke_plan(
+        &self,
+        caller: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+    ) -> R<(Signer, [u8; 32], Mandate)> {
+        if op.op != OP_REVOKE
+            || op.amount != 0
+            || op.pay_ref != [0; 32]
+            || op.lane != [0; 32]
+            || op.nonce != 0
+        {
             return Err("revoke shape (op 3, amount 0, pay_ref, lane and nonce zero)");
         }
         if op.extra != no_params() {
@@ -190,16 +237,31 @@ impl Token {
             return Err("mandate revoked");
         }
         let (subject, old) = self.signed(caller, caller, op, auth)?;
-        Ok((Signer { who: op.from.clone(), subject, old }, id, m))
+        Ok((
+            Signer {
+                who: op.from.clone(),
+                subject,
+                old,
+            },
+            id,
+            m,
+        ))
     }
 
     /// `mandate_open`'s / `revoke`'s checks, no write: the new bytes (Task 9's `relay_fee_*_check`).
-    pub(crate) fn open_bytes(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, terms: &MandateTerms) -> R<u64> {
+    pub(crate) fn open_bytes(
+        &self,
+        caller: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        terms: &MandateTerms,
+    ) -> R<u64> {
         self.open_plan(caller, op, auth, terms).map(|(_, _, b)| b)
     }
 
     pub(crate) fn revoke_bytes(&self, caller: &AccountId, op: &MetaOp, auth: &Auth) -> R<u64> {
-        self.revoke_plan(caller, op, auth).map(|(s, _, _)| s.open_bytes())
+        self.revoke_plan(caller, op, auth)
+            .map(|(s, _, _)| s.open_bytes())
     }
 
     /// The whole balance under the mandate's id back to its owner (registered: it funded the mandate).
@@ -212,19 +274,32 @@ impl Token {
 
     pub(crate) fn mandate_open(&mut self, op: &MetaOp, auth: &Auth, terms: &MandateTerms) {
         let p = env::predecessor_account_id();
-        let (s, m, _) = self.open_plan(&p, op, auth, terms).unwrap_or_else(|e| env::panic_str(e));
-        let Holder::Ua(id) = op.to else { unreachable!() };
+        let (s, m, _) = self
+            .open_plan(&p, op, auth, terms)
+            .unwrap_or_else(|e| env::panic_str(e));
+        let Holder::Ua(id) = op.to else {
+            unreachable!()
+        };
         self.open_lazily(&s.who, s.subject, s.old);
         self.storage_due += mandate_bytes(&m);
         self.mandates.insert(id, m);
         self.settle_pay(op, &op.from, &op.to);
-        Event::Mandate { mandate: x(&id), action: "open".into(), by: op.from.to_string() }.emit();
+        Event::Mandate {
+            mandate: x(&id),
+            action: "open".into(),
+            by: op.from.to_string(),
+        }
+        .emit();
     }
 
     pub(crate) fn mandate_pay(&mut self, op: &MetaOp, auth: &Auth) {
         let p = env::predecessor_account_id();
-        let (s, m, _) = self.pay_plan(&p, op, auth).unwrap_or_else(|e| env::panic_str(e));
-        let Holder::Ua(id) = op.from else { unreachable!() };
+        let (s, m, _) = self
+            .pay_plan(&p, op, auth)
+            .unwrap_or_else(|e| env::panic_str(e));
+        let Holder::Ua(id) = op.from else {
+            unreachable!()
+        };
         self.open_lazily(&s.who, s.subject, s.old);
         self.mandates.insert(id, m);
         self.settle_pay(op, &op.from, &op.to);
@@ -232,12 +307,19 @@ impl Token {
 
     pub(crate) fn revoke(&mut self, op: &MetaOp, auth: &Auth) {
         let p = env::predecessor_account_id();
-        let (s, id, mut m) = self.revoke_plan(&p, op, auth).unwrap_or_else(|e| env::panic_str(e));
+        let (s, id, mut m) = self
+            .revoke_plan(&p, op, auth)
+            .unwrap_or_else(|e| env::panic_str(e));
         self.open_lazily(&s.who, s.subject, s.old);
         m.revoked = true;
         self.sweep(id, &m);
         self.mandates.insert(id, m);
-        Event::Mandate { mandate: x(&id), action: "revoke".into(), by: op.from.to_string() }.emit();
+        Event::Mandate {
+            mandate: x(&id),
+            action: "revoke".into(),
+            by: op.from.to_string(),
+        }
+        .emit();
     }
 }
 
@@ -255,7 +337,11 @@ impl Token {
     }
 
     #[payable]
-    pub fn mtx_mandate_pay(&mut self, #[serializer(borsh)] op: MetaOp, #[serializer(borsh)] auth: Auth) {
+    pub fn mtx_mandate_pay(
+        &mut self,
+        #[serializer(borsh)] op: MetaOp,
+        #[serializer(borsh)] auth: Auth,
+    ) {
         self.mandate_pay(&op, &auth);
         self.charge_storage();
     }
@@ -269,7 +355,9 @@ impl Token {
     /// Anyone, once the mandate is revoked or expired: its balance back to the owner (nothing to attach). A refund that
     /// would move nothing is refused (owner rule: no effect for a no-op; Algorand's T13 rule).
     pub fn mandate_refund(&mut self, #[serializer(borsh)] id: [u8; 32]) {
-        let (_, m) = self.load_mandate(&Holder::Ua(id)).unwrap_or_else(|e| env::panic_str(e));
+        let (_, m) = self
+            .load_mandate(&Holder::Ua(id))
+            .unwrap_or_else(|e| env::panic_str(e));
         if !m.revoked && now_s() <= m.terms.expiry {
             env::panic_str("mandate live: no refund before revocation or expiry");
         }
@@ -326,7 +414,10 @@ mod tests {
 
     fn hx(v: &Value) -> Vec<u8> {
         let s = v.as_str().unwrap().trim_start_matches("0x");
-        (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
     }
 
     fn b32(v: &Value) -> [u8; 32] {
@@ -337,23 +428,56 @@ mod tests {
     fn mandate_vectors_match() {
         let d: Value = serde_json::from_str(&std::fs::read_to_string(VECTORS).unwrap()).unwrap();
         let rows = d["metaops"]["vectors"].as_array().unwrap();
-        let row = |n: &str| rows.iter().find(|r| r["name"] == n).unwrap_or_else(|| panic!("no row {n}"));
-        let (open, pay, rev) = (row("mandate_open"), row("mandate_pay"), row("mandate_revoke"));
+        let row = |n: &str| {
+            rows.iter()
+                .find(|r| r["name"] == n)
+                .unwrap_or_else(|| panic!("no row {n}"))
+        };
+        let (open, pay, rev) = (
+            row("mandate_open"),
+            row("mandate_pay"),
+            row("mandate_revoke"),
+        );
         let terms: MandateTerms = borsh::from_slice(&hx(&open["terms"])).unwrap();
-        assert_eq!(terms.funding.to_string(), open["fields"]["amount"].as_str().unwrap(), "R9: funding = amount");
+        assert_eq!(
+            terms.funding.to_string(),
+            open["fields"]["amount"].as_str().unwrap(),
+            "R9: funding = amount"
+        );
         let from = Holder::Ua(b32(&open["fields"]["from"]["Ua"]));
-        let (lane, nonce) = (b32(&open["fields"]["lane"]), open["fields"]["nonce"].as_u64().unwrap());
+        let (lane, nonce) = (
+            b32(&open["fields"]["lane"]),
+            open["fields"]["nonce"].as_u64().unwrap(),
+        );
         let id = mandate_id(&from, &terms, &lane, nonce);
         assert_eq!(id, b32(&open["mandateId"]));
         assert_eq!(id, b32(&open["fields"]["to"]["Ua"]));
-        assert_eq!(env::sha256_array(borsh::to_vec(&(id, &terms)).unwrap()), b32(&open["fields"]["extra"]));
+        assert_eq!(
+            env::sha256_array(borsh::to_vec(&(id, &terms)).unwrap()),
+            b32(&open["fields"]["extra"])
+        );
         assert_eq!(open["fields"]["op"], OP_MANDATE_OPEN);
-        assert_eq!((b32(&pay["fields"]["from"]["Ua"]), pay["fields"]["op"].as_u64()), (id, Some(OP_MANDATE_PAY as u64)));
-        assert_eq!(b32(&pay["fields"]["lane"]), pay_lane(&b32(&pay["fields"]["pay_ref"])));
+        assert_eq!(
+            (
+                b32(&pay["fields"]["from"]["Ua"]),
+                pay["fields"]["op"].as_u64()
+            ),
+            (id, Some(OP_MANDATE_PAY as u64))
+        );
+        assert_eq!(
+            b32(&pay["fields"]["lane"]),
+            pay_lane(&b32(&pay["fields"]["pay_ref"]))
+        );
         for r in [pay, rev] {
             assert_eq!(b32(&r["fields"]["extra"]), no_params(), "{}", r["name"]);
         }
-        assert_eq!((b32(&rev["fields"]["to"]["Ua"]), rev["fields"]["op"].as_u64()), (id, Some(OP_REVOKE as u64)));
+        assert_eq!(
+            (
+                b32(&rev["fields"]["to"]["Ua"]),
+                rev["fields"]["op"].as_u64()
+            ),
+            (id, Some(OP_REVOKE as u64))
+        );
     }
 
     /// The expiry boundary (review M3; the sandbox clock cannot be set to an exact second): a pay in the second
@@ -365,7 +489,10 @@ mod tests {
         use near_sdk::testing_env;
         let (mut t, relayer) = token();
         let me = env::current_account_id();
-        let dele = Ed(near_crypto::SecretKey::from_seed(near_crypto::KeyType::ED25519, "dele"));
+        let dele = Ed(near_crypto::SecretKey::from_seed(
+            near_crypto::KeyType::ED25519,
+            "dele",
+        ));
         let (id, expiry) = ([0x77; 32], 2_000_000_000u64);
         let payee = Holder::Near("bob.test.near".parse().unwrap());
         let terms = MandateTerms {
@@ -377,7 +504,13 @@ mod tests {
             expiry,
             funding: 10,
         };
-        let m = Mandate { owner: Holder::Ua([0x66; 32]), terms, period_start: expiry - 30, spent: 0, revoked: false };
+        let m = Mandate {
+            owner: Holder::Ua([0x66; 32]),
+            terms,
+            period_start: expiry - 30,
+            spent: 0,
+            revoked: false,
+        };
         t.mandates.insert(id, m);
         t.ua.insert(id, 10);
         let op = MetaOp {
@@ -403,7 +536,10 @@ mod tests {
                 .build())
         };
         at(expiry);
-        assert!(t.pay_plan(&relayer, &op, &a).is_ok(), "now == expiry is allowed");
+        assert!(
+            t.pay_plan(&relayer, &op, &a).is_ok(),
+            "now == expiry is allowed"
+        );
         at(expiry + 1);
         assert_eq!(t.pay_plan(&relayer, &op, &a).err(), Some("mandate expired"));
     }

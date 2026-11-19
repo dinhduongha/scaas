@@ -26,7 +26,9 @@ contract PqzMultiTest is PqzFixture {
     function setUp() public {
         _stack();
         _mockOp(7, 1);
-        for (uint8 i; i < 8; ++i) xs[i] = _pqzUA(_pk(20 + i), 10 + i);
+        for (uint8 i; i < 8; ++i) {
+            xs[i] = _pqzUA(_pk(20 + i), 10 + i);
+        }
         tok = _newToken("pqz");
     }
 
@@ -35,7 +37,9 @@ contract PqzMultiTest is PqzFixture {
     function _legsOf(uint256 m) internal view returns (bytes32[] memory r) {
         r = new bytes32[](m);
         r[0] = bob;
-        for (uint256 j = 1; j < m; ++j) r[j] = xs[j - 1];
+        for (uint256 j = 1; j < m; ++j) {
+            r[j] = xs[j - 1];
+        }
     }
 
     function _mmemo(uint256 m) internal view returns (bytes memory) {
@@ -44,7 +48,8 @@ contract PqzMultiTest is PqzFixture {
 
     /// A direct op 7 transfer at `p = pendingCount`, `shieldIn = 0`; the client's mirror.
     function _multi(NormalPqzToken t, bytes32 from, bytes32 ben, bytes32[] memory rec, uint256 seed, bool aud)
-        internal returns (bytes32 ref, bytes memory out)
+        internal
+        returns (bytes32 ref, bytes memory out)
     {
         out = _blob(seed, _outLen(rec.length, aud));
         ref = t.mtxConfidentialTransfer(_ms(_mplFor(t, from, ben, rec, out)), hex"c0de", _pqAuth(), "", noVerdict());
@@ -53,7 +58,9 @@ contract PqzMultiTest is PqzFixture {
 
     /// The client's payload: `p = pendingCount`, `shieldIn = 0`, the memo on a COMPACT token.
     function _mplFor(NormalPqzToken t, bytes32 from, bytes32 ben, bytes32[] memory rec, bytes memory out)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         bytes memory memo = t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? _mmemo(rec.length) : bytes("");
         return _mpayload(t.pqzAccount(from, 0).pendingCount, 0, from, ben, rec, out, memo);
@@ -65,22 +72,45 @@ contract PqzMultiTest is PqzFixture {
         uint256 us = PqzCt.PK * _groups(m, withAud);
         _afterDebit(from, _cut(out, 0, PqzCt.PK), _cut(out, us + PqzCt.V * m, PqzCt.V));
         for (uint256 j; j < m; ++j) {
-            pend[rec[j]].push(bytes.concat(_cut(out, PqzCt.PK * _groupOf(j, withAud), PqzCt.PK),
-                _cut(out, us + PqzCt.V * j, PqzCt.V)));
+            pend[rec[j]].push(
+                bytes.concat(_cut(out, PqzCt.PK * _groupOf(j, withAud), PqzCt.PK), _cut(out, us + PqzCt.V * j, PqzCt.V))
+            );
         }
     }
 
     /// The §8.1 op 7 layout of alice's M = 4 statement with the auditor and carol as beneficiary.
     function _checkLayout(bytes memory st, bytes32[] memory rec, bytes memory out) internal view {
         bytes memory head = bytes.concat(
-            abi.encode(PqzCore.OP_TRANSFER_MULTI, PQZL_ID, block.chainid, address(tok), address(reg), alice,
-                keccak256(abi.encodePacked(rec)), carol, FEE, uint256(0)),
-            abi.encode(uint256(4), uint256(0), uint256(0), block.number + 100, uint256(1), uint256(1000), PQZ_UID,
-                _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), keccak256(abi.encodePacked(bytes32(0))))
+            abi.encode(
+                PqzCore.OP_TRANSFER_MULTI,
+                PQZL_ID,
+                block.chainid,
+                address(tok),
+                address(reg),
+                alice,
+                keccak256(abi.encodePacked(rec)),
+                carol,
+                FEE,
+                uint256(0)
+            ),
+            abi.encode(
+                uint256(4),
+                uint256(0),
+                uint256(0),
+                block.number + 100,
+                uint256(1),
+                uint256(1000),
+                PQZ_UID,
+                _direct(ZetherTypes.TransferMode.BUNDLE),
+                uint256(uint128(salt)),
+                keccak256(abi.encodePacked(bytes32(0)))
+            )
         ); // group 3h (T59, C3): word 608 `memoHash` = keccak256(ownTag) on BUNDLE, the payload's ownTag 0
         assertEq(_cut(st, 0, 640), head, "header: word 192 recipientsHash, 320 M");
         assertEq(_cut(st, 640, PqzCt.PK), _keyOf(alice), "pk_f");
-        for (uint256 j; j < 4; ++j) assertEq(_cut(st, O_PK1 + PqzCt.PK * j, PqzCt.PK), _keyOf(rec[j]), "pk_j");
+        for (uint256 j; j < 4; ++j) {
+            assertEq(_cut(st, O_PK1 + PqzCt.PK * j, PqzCt.PK), _keyOf(rec[j]), "pk_j");
+        }
         assertEq(_cut(st, O_PK1 + PqzCt.PK * 4, PqzCt.PK), _keyOf(aud), "pk_a");
         assertEq(_cut(st, O_PK1 + PqzCt.PK * 5 + PqzCt.CT, out.length), out, "out after T");
     }
@@ -92,8 +122,12 @@ contract PqzMultiTest is PqzFixture {
         uint256 us = PqzCt.PK * _groups(m, true);
         r = bytes.concat(salt, _packed(_cut(out, 0, us)));
         for (uint256 j; j < m; ++j) {
-            r = bytes.concat(r, _packed(_cut(out, us + PqzCt.V * j, PqzCt.V)),
-                _packed(_cut(out, us + PqzCt.V * (m + 1 + j), PqzCt.V)), rec[j]);
+            r = bytes.concat(
+                r,
+                _packed(_cut(out, us + PqzCt.V * j, PqzCt.V)),
+                _packed(_cut(out, us + PqzCt.V * (m + 1 + j), PqzCt.V)),
+                rec[j]
+            );
         }
     }
 
@@ -121,8 +155,14 @@ contract PqzMultiTest is PqzFixture {
         vm.expectCall(PQZ, abi.encodePacked(uint8(7), uint32(st.length), st, proof));
         for (uint256 j; j < 4; ++j) {
             vm.expectEmit(true, true, false, true, address(tok));
-            emit IPqzToken.Credited(rec[j], 0, 0, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID,
-                address(tok), alice, uint256(0))));
+            emit IPqzToken.Credited(
+                rec[j],
+                0,
+                0,
+                keccak256(
+                    abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID, address(tok), alice, uint256(0))
+                )
+            );
         }
         uint256 g = gasleft();
         bytes32 ref = tok.mtxConfidentialTransfer(_ms(pl), proof, _pqAuth(), "", noVerdict());
@@ -140,7 +180,11 @@ contract PqzMultiTest is PqzFixture {
         assertEq(tok.balanceOfUA(carol), FEE * SCALE, "txFee once, to the beneficiary's public balance");
         assertEq(tok.pqzAccount(carol, 0).pendingCount, 0, "no TRIVIAL fee entry");
         assertEq(tok.totalShielded(), 1000 - FEE, "the fee left the pool");
-        assertEq(tok.transferEntry(ref), _bundleOn(out, rec), "BUNDLE stores R = salt || u_0..u_G-1 || (v_j || v_aj || UA_j)_j");
+        assertEq(
+            tok.transferEntry(ref),
+            _bundleOn(out, rec),
+            "BUNDLE stores R = salt || u_0..u_G-1 || (v_j || v_aj || UA_j)_j"
+        );
         _roll(tok, bob, 1);
         _assertConservation(tok);
     }
@@ -152,9 +196,13 @@ contract PqzMultiTest is PqzFixture {
         uint256 g = gasleft();
         (bytes32 ref, bytes memory out) = _multi(tok, alice, bytes32(0), rec, 9, false);
         console2.log("mtxConfidentialTransfer op 7 M = 8 (BUNDLE, no auditor, mocked proof) gas", g - gasleft());
-        for (uint256 j; j < 8; ++j) assertEq(tok.pqzPendingCt(rec[j], 0, 0), pend[rec[j]][0]);
+        for (uint256 j; j < 8; ++j) {
+            assertEq(tok.pqzPendingCt(rec[j], 0, 0), pend[rec[j]][0]);
+        }
         assertEq(_cut(pend[rec[5]][0], 0, PqzCt.PK), _cut(out, PqzCt.PK, PqzCt.PK), "leg 5 uses u_1");
-        assertEq(tok.transferEntry(ref).length, 16 + 2 * PqzCt.PKP + (PqzCt.VP + 32) * 8, "R of M = 8, no auditor (packed)");
+        assertEq(
+            tok.transferEntry(ref).length, 16 + 2 * PqzCt.PKP + (PqzCt.VP + 32) * 8, "R of M = 8, no auditor (packed)"
+        );
         _roll(tok, rec[7], 1);
         bytes32[] memory back = new bytes32[](1);
         back[0] = alice;
@@ -180,7 +228,9 @@ contract PqzMultiTest is PqzFixture {
 
         bytes32[] memory three = _legsOf(3);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadRecipientCount.selector, 3));
-        tok.mtxConfidentialTransfer(_ms(_mpayload(0, 0, alice, 0, three, _blob(3, _outLen(3, false)), "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransfer(
+            _ms(_mpayload(0, 0, alice, 0, three, _blob(3, _outLen(3, false)), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         bytes32[] memory zero = new bytes32[](0);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadRecipientCount.selector, 0));
         tok.mtxConfidentialTransfer(_ms(_mpayload(0, 0, alice, 0, zero, out, "")), hex"01", _pqAuth(), "", noVerdict());
@@ -198,7 +248,9 @@ contract PqzMultiTest is PqzFixture {
         bytes32[] memory unknown = _legsOf(2);
         unknown[1] = bytes32(uint256(5));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bytes32(uint256(5))));
-        tok.mtxConfidentialTransfer(_ms(_mpayload(0, 0, alice, 0, unknown, out, "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransfer(
+            _ms(_mpayload(0, 0, alice, 0, unknown, out, "")), hex"01", _pqAuth(), "", noVerdict()
+        );
 
         bytes memory nc = bytes.concat(out);
         nc[0] = 0xff;
@@ -219,11 +271,15 @@ contract PqzMultiTest is PqzFixture {
         NormalPqzToken full = _newToken("full");
         bytes32[] memory rec = _legsOf(2);
         vm.expectRevert(IPqzToken.AuditorRequired.selector);
-        full.mtxConfidentialTransfer(_ms(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, false)), "")), hex"01", _pqAuth(), "", noVerdict());
+        full.mtxConfidentialTransfer(
+            _ms(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, false)), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         aMode = uint8(ZetherTypes.AuditorMode.NONE);
         NormalPqzToken noAud = _newToken("noaud");
         vm.expectRevert(IPqzToken.AuditorForbidden.selector);
-        noAud.mtxConfidentialTransfer(_ms(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, true)), "")), hex"01", _pqAuth(), "", noVerdict());
+        noAud.mtxConfidentialTransfer(
+            _ms(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, true)), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
 
         aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
         dMode = uint8(ZetherTypes.DisclosureMode.COMPACT);
@@ -257,12 +313,18 @@ contract PqzMultiTest is PqzFixture {
             assertEq(st.length, ST_DISC);
             assertEq(uint256(bytes32(_cut(st, 256, 32))), 1, "RECEIVER_X kind word: w = 0");
             assertEq(_cut(st, 288, PqzCt.PK), _keyOf(rec[j]), "the leg's key");
-            assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / PqzSet.S_AUD), PqzCt.PK), "u of the leg's group");
+            assertEq(
+                _cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / PqzSet.S_AUD), PqzCt.PK), "u of the leg's group"
+            );
             assertEq(_cut(st, O_DV, 128), _cut(out, us + PqzCt.V * j, PqzCt.V), "v_j");
             st = tok.disclosureStatement(ref, j, 77, 2, 0);
-            assertEq(uint256(bytes32(_cut(st, 256, 32))), 2 + 256 * (j % PqzSet.S_AUD), "AUDITOR kind word: w = j mod S_AUD");
+            assertEq(
+                uint256(bytes32(_cut(st, 256, 32))), 2 + 256 * (j % PqzSet.S_AUD), "AUDITOR kind word: w = j mod S_AUD"
+            );
             assertEq(_cut(st, 288, PqzCt.PK), _keyOf(aud), "the auditor's key");
-            assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / PqzSet.S_AUD), PqzCt.PK), "u of the leg's group");
+            assertEq(
+                _cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / PqzSet.S_AUD), PqzCt.PK), "u of the leg's group"
+            );
             assertEq(_cut(st, O_DV, 128), _cut(out, us + PqzCt.V * (9 + j), PqzCt.V), "v_aj");
         }
         // without the auditor: groups of 4, and no AUDITOR disclosure
@@ -286,7 +348,8 @@ contract PqzMultiTest is PqzFixture {
     /// byte-identical to pqz-stmt's R_DR / R_DA statement).
     function test_multi_disclosureKindWord_vectors() public {
         _fund(tok, alice, 1000);
-        string memory j = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-disclosures/", PqzSet.NAME, ".json"));
+        string memory j =
+            vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-disclosures/", PqzSet.NAME, ".json"));
         for (uint256 i; i < 4; ++i) {
             string memory r = string.concat(".rows[", vm.toString(i), "]");
             uint256 m = vm.parseJsonUint(j, string.concat(r, ".legs"));
@@ -294,7 +357,8 @@ contract PqzMultiTest is PqzFixture {
             bytes memory head = vm.parseBytes(string.concat("0x", vm.parseJsonString(j, string.concat(r, ".head"))));
             uint256 word = uint256(bytes32(_cut(head, 256, 32)));
             (bytes32 ref,) = _multi(tok, alice, bytes32(0), _legsOf(m), 40 + i, true);
-            bytes memory st = tok.disclosureStatement(ref, leg, uint256(bytes32(_cut(head, 224, 32))), uint8(word & 0xff), 0);
+            bytes memory st =
+                tok.disclosureStatement(ref, leg, uint256(bytes32(_cut(head, 224, 32))), uint8(word & 0xff), 0);
             assertEq(_cut(st, 0, 32), _cut(head, 0, 32), "opTag");
             assertEq(_cut(st, 224, 64), _cut(head, 224, 64), "amount and kind words as the vector");
             if (word & 0xff == 2) assertEq(word >> 8, leg % PqzSet.S_AUD, "AUDITOR: w = leg mod S_AUD");
@@ -328,14 +392,24 @@ contract PqzMultiTest is PqzFixture {
         tok.transferStatement(_ms(_mpayload(0, 0, alice, 0, rec, out, "")), 0);
         _fund(tok, aud, 1000);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AuditorAsParty.selector, aud));
-        tok.mtxConfidentialTransfer(_ms(_mpayload(0, 0, aud, 0, _legsOf(2), out, "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransfer(
+            _ms(_mpayload(0, 0, aud, 0, _legsOf(2), out, "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AuditorAsParty.selector, aud));
-        tok.mtxConfidentialTransferSingle(_ts(_payload(0, 0, aud, bob, bytes32(0), _out(4, true), "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(0, 0, aud, bob, bytes32(0), _out(4, true), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AuditorAsParty.selector, aud));
-        tok.mtxConfidentialTransferSingle(_ts(_payload(0, 0, alice, aud, bytes32(0), _out(5, true), "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(0, 0, alice, aud, bytes32(0), _out(5, true), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         // auditor off: no copies, no collision
-        tok.mtxConfidentialTransfer(_ms(_mpayload(0, 0, alice, 0, rec, _blob(6, _outLen(2, false)), "")), hex"01", _pqAuth(), "", noVerdict());
-        tok.mtxConfidentialTransferSingle(_ts(_payload(0, 0, aud, bob, bytes32(0), _out(7, false), "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransfer(
+            _ms(_mpayload(0, 0, alice, 0, rec, _blob(6, _outLen(2, false)), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(0, 0, aud, bob, bytes32(0), _out(7, false), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
     }
 
     // ------------------------------------------------------------------ decoyFee (owner 2026-10-20) and PQZH
@@ -391,7 +465,9 @@ contract PqzMultiTest is PqzFixture {
         t.mtxConfidentialTransfer(_ms(pl), hex"01", _pqAuth(), "", noVerdict());
         decoy = 0;
         _fund(tok, alice, 10);
-        tok.mtxConfidentialTransfer(_ms(_mpayload(1, 0, alice, 0, rec, _blob(5, _outLen(2, true)), "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransfer(
+            _ms(_mpayload(1, 0, alice, 0, rec, _blob(5, _outLen(2, true)), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         assertEq(tok.balanceOfUA(bob), 0);
     }
 
@@ -442,24 +518,37 @@ contract PqzMultiTest is PqzFixture {
         // a PQZH release: its verifier is the env's, an immutable (CTR-ZTH-20)
         pqv = _newPqzVerifier(PQZH_ID);
         factory = EnvKit.factory(registrar, PQZ_UID, 0);
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(factory)));
         NormalPqzToken h = _newToken("pqzh");
         assertEq(h.proofSystemId(), PQZH_ID);
         bytes32[] memory rec = _legsOf(8);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadRecipientCount.selector, 8));
-        h.mtxConfidentialTransfer(_ms(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(8, true)), "")), hex"01", _pqAuth(), "", noVerdict());
+        h.mtxConfidentialTransfer(
+            _ms(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(8, true)), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         // 11 credits to alice, then a debit at p = 11 needs 11 inline credits: refused on op 7, accepted on op 1
         _fund(h, bob, 1000);
-        for (uint256 i; i < 11; ++i) _transferOn(h, bob, alice, 100 + i);
+        for (uint256 i; i < 11; ++i) {
+            _transferOn(h, bob, alice, 100 + i);
+        }
         assertEq(h.pqzAccount(alice, 0).pendingCount, 11);
         bytes32[] memory one = new bytes32[](1);
         one[0] = carol;
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.InlineTooFar.selector, 11));
-        h.mtxConfidentialTransfer(_ms(_mpayload(11, 0, alice, 0, one, _blob(2, _outLen(1, true)), "")), hex"01", _pqAuth(), "", noVerdict());
-        h.mtxConfidentialTransferSingle(_ts(_payload(11, 0, alice, carol, bytes32(0), _out(3, true), "")), hex"01", _pqAuth(), "", noVerdict());
+        h.mtxConfidentialTransfer(
+            _ms(_mpayload(11, 0, alice, 0, one, _blob(2, _outLen(1, true)), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
+        h.mtxConfidentialTransferSingle(
+            _ts(_payload(11, 0, alice, carol, bytes32(0), _out(3, true), "")), hex"01", _pqAuth(), "", noVerdict()
+        );
     }
 
     function _transferOn(NormalPqzToken t, bytes32 from, bytes32 to, uint256 seed) internal {
@@ -471,16 +560,26 @@ contract PqzMultiTest is PqzFixture {
     /// The four transfer selectors are allowlisted `ABSOLUTE` on the relaying paths; the NONE ones are gone (D11).
     function test_multi_allowlisted() public view {
         (bytes4[] memory s,,) = NormalPqzToken(address(tok)).mtxSelectors();
-        bytes4[4] memory want = [IPqzToken.mtxConfidentialTransfer.selector, IPqzToken.mtxConfidentialTransferCompact.selector,
-            IPqzToken.mtxConfidentialTransferSingle.selector, IPqzToken.mtxConfidentialTransferSingleCompact.selector];
+        bytes4[4] memory want = [
+            IPqzToken.mtxConfidentialTransfer.selector,
+            IPqzToken.mtxConfidentialTransferCompact.selector,
+            IPqzToken.mtxConfidentialTransferSingle.selector,
+            IPqzToken.mtxConfidentialTransferSingleCompact.selector
+        ];
         for (uint256 i; i < 4; ++i) {
             bool found;
-            for (uint256 k; k < s.length; ++k) found = found || s[k] == want[i];
+            for (uint256 k; k < s.length; ++k) {
+                found = found || s[k] == want[i];
+            }
             assertTrue(found);
         }
-        bytes4[2] memory gone = [bytes4(keccak256("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)")),
-            bytes4(keccak256("mtxConfidentialTransferSingleNoBundle(bytes,bytes,bytes,bytes32,bytes)"))];
-        for (uint256 k; k < s.length; ++k) assertTrue(s[k] != gone[0] && s[k] != gone[1], "NONE retired");
+        bytes4[2] memory gone = [
+            bytes4(keccak256("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)")),
+            bytes4(keccak256("mtxConfidentialTransferSingleNoBundle(bytes,bytes,bytes,bytes32,bytes)"))
+        ];
+        for (uint256 k; k < s.length; ++k) {
+            assertTrue(s[k] != gone[0] && s[k] != gone[1], "NONE retired");
+        }
     }
 }
 

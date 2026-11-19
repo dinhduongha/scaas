@@ -124,7 +124,10 @@ quorum**: Cosmos `status` + `block` at the min height and the tx events of that 
 jetton wallets' transactions of the range, each from ≥ `quorum` endpoints. Why: a primary provider sees every pending
 payment through the node's own simulate calls and could fabricate a `PaymentSettled` at a real token address or report
 `finalized = latest`. Cost: `quorum ×` reads per range. Status: Aptos **BUILT**; the other families read one endpoint
-today and are **SPECIFIED**.
+today and are **SPECIFIED**. The quorum read helper (`agreed`: endpoint 0's answer, repeated on a picked part by enough further
+endpoints; NEAR, Aptos) is `scaas-rpc`'s (`scaas_rpc::near::Near::agreed`, `scaas_rpc::aptos::Aptos::agreed`, plan T17, T19), and
+every family's final-head and event quorums read each endpoint through the crate's family client
+([scaas-rpc.md §3.1](../clients/scaas-rpc.md#31-readers)); the comparisons are unchanged.
 
 RPC endpoints are independent providers listed in `rpc_urls` (toml-only, [NODE-STO-03](store.md#NODE-STO-03)); the
 quorum is the failover: a failed or lagging endpoint costs liveness only while ≥ `quorum` agree; a lying one is outvoted

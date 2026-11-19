@@ -2,13 +2,13 @@
 //! (tools/env_ref.sh), relayed-binding end to end, and the four disclosure openings (feature `hazmat`: the opening helpers).
 #![cfg_attr(not(feature = "hazmat"), allow(unused_imports, unused_variables))]
 
+use ark_ff::Zero;
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use zether_prover::bulletproofs::Gens;
-use ark_ff::Zero;
-use zether_prover::curve::{Bls12381, Fr, ZCurve, G};
 #[cfg(feature = "bn254")]
 use zether_prover::curve::Bn254;
+use zether_prover::curve::{Bls12381, Fr, ZCurve, G};
 use zether_prover::elgamal::encrypt;
 use zether_prover::envelope::*;
 use zether_prover::keys::ZetherKey;
@@ -19,7 +19,8 @@ use zether_prover::schnorr::{open_chaum_pedersen, open_sender, open_sender_cp};
 use zether_prover::zether::{prove_transfer, verify_transfer, Binding, Header, TransferStatement};
 
 const TOK: [u8; 20] = [0x11; 20];
-const UID: [u8; 32] = hex_literal(b"24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464");
+const UID: [u8; 32] =
+    hex_literal(b"24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464");
 
 const fn hex_literal(s: &[u8; 64]) -> [u8; 32] {
     let mut o = [0u8; 32];
@@ -32,7 +33,11 @@ const fn hex_literal(s: &[u8; 64]) -> [u8; 32] {
 }
 
 const fn nib(c: u8) -> u8 {
-    if c <= b'9' { c - b'0' } else { c - b'a' + 10 }
+    if c <= b'9' {
+        c - b'0'
+    } else {
+        c - b'a' + 10
+    }
 }
 
 fn mtx() -> MetaTx {
@@ -52,29 +57,64 @@ fn mtx() -> MetaTx {
 #[test]
 fn envelope_matches_cast() {
     let m = mtx();
-    assert_eq!(hex::encode(envelope_binding(31337, &UID, &TOK, &m)), "29764986e75d275afefd0f799cae4e8ea5b1c9771e9ed9b43ffa9cc26d81350d");
-    assert_eq!(hex::encode(digest(31337, &UID, &TOK, &m)), "0f6659afa867aae303e5e90723cdc6c803ec597a777d686a91fcd2226e962509");
+    assert_eq!(
+        hex::encode(envelope_binding(31337, &UID, &TOK, &m)),
+        "29764986e75d275afefd0f799cae4e8ea5b1c9771e9ed9b43ffa9cc26d81350d"
+    );
+    assert_eq!(
+        hex::encode(digest(31337, &UID, &TOK, &m)),
+        "0f6659afa867aae303e5e90723cdc6c803ec597a777d686a91fcd2226e962509"
+    );
     // data is outside the binding, inside the digest; chainUid is in both.
     let mut m2 = m.clone();
     m2.data = vec![1];
-    assert_eq!(envelope_binding(31337, &UID, &TOK, &m), envelope_binding(31337, &UID, &TOK, &m2));
-    assert_ne!(digest(31337, &UID, &TOK, &m), digest(31337, &UID, &TOK, &m2));
-    assert_ne!(envelope_binding(31337, &UID, &TOK, &m), envelope_binding(31337, &[0x24; 32], &TOK, &m));
-    assert_ne!(digest(31337, &UID, &TOK, &m), digest(31337, &[0x24; 32], &TOK, &m));
+    assert_eq!(
+        envelope_binding(31337, &UID, &TOK, &m),
+        envelope_binding(31337, &UID, &TOK, &m2)
+    );
+    assert_ne!(
+        digest(31337, &UID, &TOK, &m),
+        digest(31337, &UID, &TOK, &m2)
+    );
+    assert_ne!(
+        envelope_binding(31337, &UID, &TOK, &m),
+        envelope_binding(31337, &[0x24; 32], &TOK, &m)
+    );
+    assert_ne!(
+        digest(31337, &UID, &TOK, &m),
+        digest(31337, &[0x24; 32], &TOK, &m)
+    );
     // Unbound feeRecipient does not move the binding; a bound one does.
     m2.fee_recipient = [0xcd; 20];
-    assert_eq!(envelope_binding(31337, &UID, &TOK, &m), envelope_binding(31337, &UID, &TOK, &m2));
+    assert_eq!(
+        envelope_binding(31337, &UID, &TOK, &m),
+        envelope_binding(31337, &UID, &TOK, &m2)
+    );
     m2.mode |= MODE_RESTRICT_FEE_RECIPIENT;
-    assert_ne!(envelope_binding(31337, &UID, &TOK, &m), envelope_binding(31337, &UID, &TOK, &m2));
+    assert_ne!(
+        envelope_binding(31337, &UID, &TOK, &m),
+        envelope_binding(31337, &UID, &TOK, &m2)
+    );
     // the explicit ABI of `IZetherToken` from packed payloads, against `cast calldata` (tools/env_ref.sh)
-    let head: Vec<u8> = [5u64, 3, 100].iter().flat_map(|w| zether_prover::abi::u256(*w)).collect();
+    let head: Vec<u8> = [5u64, 3, 100]
+        .iter()
+        .flat_map(|w| zether_prover::abi::u256(*w))
+        .collect();
     let single = [head.clone(), vec![0x11; 16], vec![0; 6 * 128]].concat();
     assert_eq!(
         hex::encode(transfer_single_call(&single, &[0xcc, 0xdd, 0xee], &[0x22; 32])),
         "923dc4c90000000000000000000000000000000000000000000000000000000000000005000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000000641111111111111111111111111111111100000000000000000000000000000000222222222222222222222222222222222222222222222222222222222222222200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003c00000000000000000000000000000000000000000000000000000000000000003ccddee0000000000000000000000000000000000000000000000000000000000"
     );
     let memo = [vec![0x11; 16], vec![0xab, 0xcd]].concat();
-    let multi = [head.clone(), vec![0x11; 16], zether_prover::abi::u256(1).to_vec(), zether_prover::abi::u256(7).to_vec(), vec![0; 7 * 128], memo].concat();
+    let multi = [
+        head.clone(),
+        vec![0x11; 16],
+        zether_prover::abi::u256(1).to_vec(),
+        zether_prover::abi::u256(7).to_vec(),
+        vec![0; 7 * 128],
+        memo,
+    ]
+    .concat();
     assert_eq!(
         hex::encode(transfer_multi_call("mtxConfidentialTransfer", &multi, &[0xcc, 0xdd, 0xee], &[0x22; 32])),
         "4245944000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000520000000000000000000000000000000000000000000000000000000000000000500000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000064111111111111111111111111111111110000000000000000000000000000000022222222222222222222222222222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000007000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000028000000000000000000000000000000000000000000000000000000000000004a0000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002abcd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ccddee0000000000000000000000000000000000000000000000000000000000"
@@ -121,7 +161,8 @@ fn relayed_and_disclosure<C: ZCurve>() {
         memo_hash: [0; 32],
         valid_until_block: 100,
     };
-    let (st, p, w) = prove_transfer(&gens, &from, h, to.y, aud.y, acc, 5000, 1234, &mut rng).unwrap();
+    let (st, p, w) =
+        prove_transfer(&gens, &from, h, to.y, aud.y, acc, 5000, 1234, &mut rng).unwrap();
     verify_transfer(&gens, &st, &p).unwrap();
     m.data = transfer_single_call(&st.payload(), &p.encode(), &[0; 32]);
     // Same proof inside a different envelope (other nonce) → different binding → rejected.
@@ -135,7 +176,13 @@ fn relayed_and_disclosure<C: ZCurve>() {
     assert!(verify_transfer(&gens, &st2, &p).is_err());
     st2.header.binding = Binding::Unwrap(binding);
     assert!(verify_transfer(&gens, &st2, &p).is_err());
-    assert_eq!(TransferStatement::<C>::decode(&st2.encode()).unwrap().header.binding, Binding::Unwrap(binding));
+    assert_eq!(
+        TransferStatement::<C>::decode(&st2.encode())
+            .unwrap()
+            .header
+            .binding,
+        Binding::Unwrap(binding)
+    );
     // Another chain with the same chain id (a re-created chain): chainUid differs → rejected.
     let mut st3 = st.clone();
     st3.header.chain_uid[0] ^= 1;
@@ -173,7 +220,11 @@ fn relayed_and_disclosure<C: ZCurve>() {
         assert!(open_chaum_pedersen(&e, 999, OpeningKind::ReceiverX, &to, &mut rng).is_err());
         // Receiver is the auditor (Y_a == Y_t, C_aud == C_out) and the RNG is dead: the RECEIVER_X
         // and AUDITOR openings must still use different nonces, or x = (z1 - z2)/(e1 - e2).
-        let e3 = Entry { y_a: e.y_t, c_aud: e.c_out, ..e };
+        let e3 = Entry {
+            y_a: e.y_t,
+            c_aud: e.c_out,
+            ..e
+        };
         let ro = open_chaum_pedersen(&e3, 1234, OpeningKind::ReceiverX, &to, &mut DeadRng).unwrap();
         let ao = open_chaum_pedersen(&e3, 1234, OpeningKind::Auditor, &to, &mut DeadRng).unwrap();
         verify_opening(&e3, 1234, OpeningKind::ReceiverX, &ro).unwrap();
@@ -190,16 +241,29 @@ fn relayed_and_disclosure<C: ZCurve>() {
         assert!(open_chaum_pedersen(&e, 1234, OpeningKind::SenderCp, &to, &mut rng).is_err());
         // Every kind is bound to the leg index j.
         let ej = Entry { index: 1, ..e };
-        for (kind, o) in [(OpeningKind::ReceiverX, &r_open), (OpeningKind::Auditor, &a_open), (OpeningKind::SenderCp, &cp)] {
-            assert!(verify_opening(&ej, 1234, kind, o).is_err(), "{kind:?} moved to another leg");
+        for (kind, o) in [
+            (OpeningKind::ReceiverX, &r_open),
+            (OpeningKind::Auditor, &a_open),
+            (OpeningKind::SenderCp, &cp),
+        ] {
+            assert!(
+                verify_opening(&ej, 1234, kind, o).is_err(),
+                "{kind:?} moved to another leg"
+            );
         }
         // Auditor left out of this transfer (Z12, C_aud = O): AUDITOR is false, the others still open.
-        let eo = Entry { c_aud: G::<C>::zero(), ..e };
+        let eo = Entry {
+            c_aud: G::<C>::zero(),
+            ..e
+        };
         assert!(verify_opening(&eo, 1234, OpeningKind::Auditor, &a_open).is_err());
         verify_opening(&eo, 1234, OpeningKind::ReceiverX, &r_open).unwrap();
         verify_opening(&eo, 1234, OpeningKind::SenderCp, &cp).unwrap();
         // Opening bound to chainUid (CTR-ZTH-36).
-        let eu = Entry { chain_uid: [0x24; 32], ..e };
+        let eu = Entry {
+            chain_uid: [0x24; 32],
+            ..e
+        };
         assert!(verify_opening(&eu, 1234, OpeningKind::ReceiverX, &r_open).is_err());
         assert!(verify_opening(&eu, 1234, OpeningKind::SenderCp, &cp).is_err());
         // Opening bound to entryRef.
@@ -253,10 +317,29 @@ fn entry_point_selectors_match_the_spec() {
     multi[143] = 1; // M = 1
     let burn = vec![0u8; 96 + 128];
     assert_eq!(head(transfer_single_call(&single, &[], &none)), "923dc4c9");
-    assert_eq!(head(transfer_multi_call("mtxConfidentialTransfer", &multi, &[], &none)), "42459440");
-    assert_eq!(head(transfer_multi_call("mtxConfidentialTransferCompact", &multi, &[], &none)), "3624c406");
+    assert_eq!(
+        head(transfer_multi_call(
+            "mtxConfidentialTransfer",
+            &multi,
+            &[],
+            &none
+        )),
+        "42459440"
+    );
+    assert_eq!(
+        head(transfer_multi_call(
+            "mtxConfidentialTransferCompact",
+            &multi,
+            &[],
+            &none
+        )),
+        "3624c406"
+    );
     assert_eq!(head(unshield_call(&burn, &[], &none, &none, 1)), "52da3629");
-    assert_eq!(hex::encode(selector("mtxShield(bytes32,uint256)")), "e9385800");
+    assert_eq!(
+        hex::encode(selector("mtxShield(bytes32,uint256)")),
+        "e9385800"
+    );
 }
 
 /// Final review m3 (CTR-ZTH-51): an unshield to a derived UA. `proveBurn` takes a 32-byte recipient id as well as a
@@ -275,21 +358,35 @@ fn burn_recipient_address_or_ua() {
     let ua = [0x5au8; 32];
     let mut padded = [0u8; 32];
     padded[12..].fill(0x44);
-    let req = |given: String| json!({
-        "curve": "bls12381", "key": {"x": hx(&encode_scalar::<C>(&from.x))}, "chainId": 31337, "chainUid": hx(&UID),
-        "token": hx(&TOK), "sendCounter": 0, "accSeq": 1, "validUntilBlock": 100, "balance": 5000, "amount": 1000,
-        "recipient": given,
-        "acc": {"C": hx(&encode_point::<C>(&acc.c)), "D": hx(&encode_point::<C>(&acc.d))},
-    });
+    let req = |given: String| {
+        json!({
+            "curve": "bls12381", "key": {"x": hx(&encode_scalar::<C>(&from.x))}, "chainId": 31337, "chainUid": hx(&UID),
+            "token": hx(&TOK), "sendCounter": 0, "accSeq": 1, "validUntilBlock": 100, "balance": 5000, "amount": 1000,
+            "recipient": given,
+            "acc": {"C": hx(&encode_point::<C>(&acc.c)), "D": hx(&encode_point::<C>(&acc.d))},
+        })
+    };
     for (given, id) in [(hx(&[0x44; 20]), padded), (hx(&ua), ua)] {
-        let out: Value = serde_json::from_str(&zether_prover::api::call("proveBurn", &req(given).to_string()).unwrap()).unwrap();
+        let out: Value = serde_json::from_str(
+            &zether_prover::api::call("proveBurn", &req(given).to_string()).unwrap(),
+        )
+        .unwrap();
         let st = hex::decode(&out["statement"].as_str().unwrap()[2..]).unwrap();
         assert_eq!(&st[384..416], &id, "statement word 12");
-        assert_eq!(BurnStatement::<C>::decode(&st).unwrap().header.recipient, id);
+        assert_eq!(
+            BurnStatement::<C>::decode(&st).unwrap().header.recipient,
+            id
+        );
         let cd = hex::decode(&out["directCalldata"].as_str().unwrap()[2..]).unwrap();
-        assert_eq!(&cd[4 + 9 * 32..4 + 10 * 32], &id, "mtxUnshield's recipient argument");
+        assert_eq!(
+            &cd[4 + 9 * 32..4 + 10 * 32],
+            &id,
+            "mtxUnshield's recipient argument"
+        );
         let v = json!({"curve": "bls12381", "statement": out["statement"], "proof": out["proof"]});
-        let ok: Value = serde_json::from_str(&zether_prover::api::call("verifyBurn", &v.to_string()).unwrap()).unwrap();
+        let ok: Value =
+            serde_json::from_str(&zether_prover::api::call("verifyBurn", &v.to_string()).unwrap())
+                .unwrap();
         assert_eq!(ok["ok"], json!(true));
     }
     let err = zether_prover::api::call("proveBurn", &req(hx(&[1; 21])).to_string()).unwrap_err();
@@ -304,30 +401,57 @@ fn burn_recipient_address_or_ua() {
 fn ua_envelope_matches_cast() {
     use serde_json::{json, Value};
     let hx = |b: &[u8]| format!("0x{}", hex::encode(b));
-    let meta = |from: String| json!({
-        "chainId": 31337, "chainUid": hx(&UID), "token": hx(&TOK),
-        "meta": {"from": from, "data": "0xdeadbeef", "batch": hx(&[1; 32]), "nonce": 7, "validUntil": 1_800_000_000u64,
-                 "mode": MODE_RESTRICT_RELAYER | MODE_FEE_FIXED, "relayer": hx(&[0xbb; 20]), "fee": 1000,
-                 "feeRecipient": hx(&[0xcc; 20])},
-    });
-    let run = |cmd: &str, v: &Value| -> Value { serde_json::from_str(&zether_prover::api::call(cmd, &v.to_string()).unwrap()).unwrap() };
+    let meta = |from: String| {
+        json!({
+            "chainId": 31337, "chainUid": hx(&UID), "token": hx(&TOK),
+            "meta": {"from": from, "data": "0xdeadbeef", "batch": hx(&[1; 32]), "nonce": 7, "validUntil": 1_800_000_000u64,
+                     "mode": MODE_RESTRICT_RELAYER | MODE_FEE_FIXED, "relayer": hx(&[0xbb; 20]), "fee": 1000,
+                     "feeRecipient": hx(&[0xcc; 20])},
+        })
+    };
+    let run = |cmd: &str, v: &Value| -> Value {
+        serde_json::from_str(&zether_prover::api::call(cmd, &v.to_string()).unwrap()).unwrap()
+    };
     let mut native = [0u8; 32];
     native[12..].fill(0xaa);
     for (from, binding, digest) in [
-        (native, "0xb8f7b9a52c6c76f58e213299b9cf32673896d46835e62c51b517743ffee8b7ad",
-            "0x1c4316ea302cab30542032c9adeed1bab06689e0349380daaaad9c00eba34ce8"),
-        ([0x7a; 32], "0x28c3b2e82310f89d8e0d0a48bfd2833e2eaa12fba8432b0829145df4d34708ed",
-            "0x2076bd3b06dcfcfa62e5ef3fe6776021ad8de768c76811490dc9f46d88107896"),
+        (
+            native,
+            "0xb8f7b9a52c6c76f58e213299b9cf32673896d46835e62c51b517743ffee8b7ad",
+            "0x1c4316ea302cab30542032c9adeed1bab06689e0349380daaaad9c00eba34ce8",
+        ),
+        (
+            [0x7a; 32],
+            "0x28c3b2e82310f89d8e0d0a48bfd2833e2eaa12fba8432b0829145df4d34708ed",
+            "0x2076bd3b06dcfcfa62e5ef3fe6776021ad8de768c76811490dc9f46d88107896",
+        ),
     ] {
         let out = run("uaEnvelope", &meta(hx(&from)));
-        assert_eq!(out["binding"], json!(binding), "UA binding of {}", hx(&from));
-        assert_eq!(out["digest"], json!(digest), "UAMetaTransaction digest of {}", hx(&from));
+        assert_eq!(
+            out["binding"],
+            json!(binding),
+            "UA binding of {}",
+            hx(&from)
+        );
+        assert_eq!(
+            out["digest"],
+            json!(digest),
+            "UAMetaTransaction digest of {}",
+            hx(&from)
+        );
     }
     // the same native subject on `executeMetaTransaction` binds the address tag: a proof for one path fails on the other
     let addr = run("envelope", &meta(hx(&[0xaa; 20])));
-    assert_eq!(addr["binding"], json!("0x29764986e75d275afefd0f799cae4e8ea5b1c9771e9ed9b43ffa9cc26d81350d"));
-    assert_ne!(addr["binding"], run("uaEnvelope", &meta(hx(&native)))["binding"]);
+    assert_eq!(
+        addr["binding"],
+        json!("0x29764986e75d275afefd0f799cae4e8ea5b1c9771e9ed9b43ffa9cc26d81350d")
+    );
+    assert_ne!(
+        addr["binding"],
+        run("uaEnvelope", &meta(hx(&native)))["binding"]
+    );
     // `from` is the 32-byte id: an address is refused, not padded
-    let err = zether_prover::api::call("uaEnvelope", &meta(hx(&[0xaa; 20])).to_string()).unwrap_err();
+    let err =
+        zether_prover::api::call("uaEnvelope", &meta(hx(&[0xaa; 20])).to_string()).unwrap_err();
     assert!(err.contains("`from` must be 32 bytes"), "{err}");
 }

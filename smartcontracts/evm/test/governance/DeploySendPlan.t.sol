@@ -32,9 +32,8 @@ contract DeploySendPlanTest is Test {
     }
 
     function test_plan_parsesEveryField() public view {
-        (address[] memory to, bytes[] memory input) = ds.plan(
-            _p(_three(F, F, F), _three(A, B, A), '"0x0","0x0","0x0"', '"0x01","0x0203","0x"'), S
-        );
+        (address[] memory to, bytes[] memory input) =
+            ds.plan(_p(_three(F, F, F), _three(A, B, A), '"0x0","0x0","0x0"', '"0x01","0x0203","0x"'), S);
         assertEq(to.length, 3);
         assertEq(to[0], 0x4e59b44847b379578588920cA78FbF26c0B4956C);
         assertEq(to[1], address(0xb0));
@@ -65,7 +64,9 @@ contract DeploySendPlanTest is Test {
 
     function test_plan_refusesArraysThatDoNotLineUp() public {
         vm.expectRevert(
-            abi.encodeWithSelector(DeploySend.PlanTxNotSendable.selector, type(uint256).max, "the plan's fields do not line up")
+            abi.encodeWithSelector(
+                DeploySend.PlanTxNotSendable.selector, type(uint256).max, "the plan's fields do not line up"
+            )
         );
         ds.plan(_p(_three(F, F, F), _three(A, B, A), '"0x0","0x0"', '"0x01","0x02","0x03"'), S);
     }

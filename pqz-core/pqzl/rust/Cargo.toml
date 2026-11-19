@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.97.1"
 license-file = "../../../LICENSE"
-publish = false # crates.io only on an owner ruling (plan D7)
+publish = false                                                                                                    # crates.io only on an owner ruling (plan D7)
 description = "PQZL (the LaZer lattice proof system of SCaaS PQZ) in pure Rust, byte-for-byte equal to the C core"
 
 [dependencies]

@@ -23,12 +23,22 @@ fn falcon() {
     for (logn, dir) in [("9", "falcon-padded-512"), ("10", "falcon-padded-1024")] {
         let d = root.join(dir);
         let mut b = cc::Build::new();
-        b.out_dir(out.join(dir)).include(root).include(&d).define("FNDSA_LOGN", logn).file(root.join("seeded.c"));
-        for f in ["codec.c", "common.c", "fft.c", "fpr.c", "keygen.c", "rng.c", "sign.c", "vrfy.c"] {
+        b.out_dir(out.join(dir))
+            .include(root)
+            .include(&d)
+            .define("FNDSA_LOGN", logn)
+            .file(root.join("seeded.c"));
+        for f in [
+            "codec.c", "common.c", "fft.c", "fpr.c", "keygen.c", "rng.c", "sign.c", "vrfy.c",
+        ] {
             b.file(d.join(f));
         }
         b.compile(&format!("scaas_ua_{}", dir.replace('-', "_")));
     }
-    cc::Build::new().out_dir(out.join("fips202")).include(root).file(root.join("fips202.c")).compile("scaas_ua_fips202");
+    cc::Build::new()
+        .out_dir(out.join("fips202"))
+        .include(root)
+        .file(root.join("fips202.c"))
+        .compile("scaas_ua_fips202");
     println!("cargo::rustc-cfg=scaas_falcon");
 }

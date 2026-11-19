@@ -61,22 +61,46 @@ abstract contract RegFixture is Test {
     uint64 internal constant SANCTIONED = 1 << 16; // an issuer-defined flag (16-63)
     uint64 internal constant ELIGIBLE = 8; // ELIGIBLE_CONTRACT (CTR-AS-16)
 
-    function _hedera() internal view virtual returns (bool) { return false; }
+    function _hedera() internal view virtual returns (bool) {
+        return false;
+    }
 
     /// The chain's governance router the factory names (round 3s's router suite deploys one); 0 = none.
-    function _router() internal virtual returns (address) { return address(0); }
+    function _router() internal virtual returns (address) {
+        return address(0);
+    }
+
+    /// The chain's `SmartKeyAccount` implementation the fixture's releases name (0 = none, this fixture's own setting); the SDK
+    /// gas harness (`test/gas/SdkGasDeploy.sol`, G4) names the one a real deploy names.
+    function _fixtureSka() internal view virtual returns (address) {}
 
     function setUp() public virtual {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0, _router());
         if (address(ureg) == address(0)) ureg = new StubUARegistry(UID); // a router's suite made it first (its registry)
         bool h = _hedera();
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0), h);
-        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(ureg), address(0), h);
-        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(f), address(0), UID, address(ureg), h),
-            type(NormalRegulatedToken).creationCode, regArgs());
-        Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, plainEnv(address(f), address(0), UID, address(ureg), h),
-            type(WrappedRegulatedToken).creationCode, regArgs());
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg), _fixtureSka(), h
+        );
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(ureg), _fixtureSka(), h
+        );
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.NORMAL_REGULATED,
+            1,
+            plainEnv(address(f), _fixtureSka(), UID, address(ureg), h),
+            type(NormalRegulatedToken).creationCode,
+            regArgs()
+        );
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.WRAPPED_REGULATED,
+            1,
+            plainEnv(address(f), _fixtureSka(), UID, address(ureg), h),
+            type(WrappedRegulatedToken).creationCode,
+            regArgs()
+        );
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(f)));
         f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true, EnvKit.uidOf(address(f)));
         issuer = address(new Holder());
@@ -99,8 +123,12 @@ abstract contract RegFixture is Test {
         if (required | denied != 0) c.features |= 1 << GovernanceBits.KYC;
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.deniedFlags) = (address(creg), required, denied);
         _attest(nid(alice), KYC, type(uint64).max);
-        t = f.createToken(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
-            abi.encode(c), salt);
+        t = f.createToken(
+            i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED,
+            1,
+            abi.encode(c),
+            salt
+        );
         if (i == 1) _wrapFor(t, alice, SUPPLY);
     }
 
@@ -122,8 +150,10 @@ abstract contract RegFixture is Test {
     function _countEnd(bytes4 sel) internal returns (uint256 n) {
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         for (uint256 k; k < acc.length; ++k) {
-            if (acc[k].account == address(creg) && acc[k].kind == VmSafe.AccountAccessKind.StaticCall
-                && (sel == 0 || bytes4(acc[k].data) == sel)) ++n;
+            if (
+                acc[k].account == address(creg) && acc[k].kind == VmSafe.AccountAccessKind.StaticCall
+                    && (sel == 0 || bytes4(acc[k].data) == sel)
+            ) ++n;
         }
     }
 
@@ -199,11 +229,19 @@ abstract contract RegFixture is Test {
     }
 
     /// Records order `orderId` against `subject` for `beneficiary`; returns its `recordId`.
-    function _order(address t, bytes32 orderId, bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil)
-        internal returns (bytes32)
-    {
+    function _order(
+        address t,
+        bytes32 orderId,
+        bytes32 subject,
+        bytes32 beneficiary,
+        uint256 maxAmount,
+        uint64 freezeUntil
+    ) internal returns (bytes32) {
         vm.prank(compliance);
-        _r(t).recordOrder(orderId, keccak256("document"), subject, beneficiary, maxAmount, freezeUntil, EnvKit.codeUidOf(t));
+        _r(t)
+            .recordOrder(
+                orderId, keccak256("document"), subject, beneficiary, maxAmount, freezeUntil, EnvKit.codeUidOf(t)
+            );
         return keccak256(abi.encode(orderId, subject, beneficiary));
     }
 
@@ -220,13 +258,17 @@ abstract contract RegFixture is Test {
 
     /// A generic UA meta-transaction of `from` (its native id) on lane 1, nonce 0.
     function _uaTx(address from, bytes memory data, uint32 mode, uint256 fee)
-        internal view returns (MetaTxLib.UAMetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory m)
     {
         m = MetaTxLib.UAMetaTransaction(nid(from), data, 1, 0, block.timestamp + 300, mode, address(0), fee, address(0));
     }
 
     function _uaSig(uint256 pk, address t, MetaTxLib.UAMetaTransaction memory m)
-        internal view returns (IUARegistry.UASig memory s)
+        internal
+        view
+        returns (IUARegistry.UASig memory s)
     {
         (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, NormalToken(t).mtxDigest(m));
         s.signature = abi.encodePacked(r, ss, v);
@@ -234,7 +276,9 @@ abstract contract RegFixture is Test {
 
     /// The address meta-transaction (`executeMetaTransaction`) of `from` on lane 2, nonce 0.
     function _addrTx(address from, bytes memory data, uint32 mode, uint256 fee)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m)
     {
         m = MetaTxLib.MetaTransaction(from, data, 2, 0, block.timestamp + 300, mode, address(0), fee, address(0));
     }
@@ -251,11 +295,20 @@ abstract contract RegFixture is Test {
 
     /// The signature of a named entry over `typehash`, `e.from`, `args` and the envelope (`MtxPipelineLib._namedHash`, no
     /// bound relayer or fee recipient).
-    function _namedSig(uint256 pk, address t, string memory typeString, MetaTxLib.UAEnvelope memory e, bytes memory args)
-        internal view returns (IUARegistry.UASig memory s)
-    {
-        bytes32 h = keccak256(bytes.concat(abi.encode(keccak256(bytes(typeString)), e.from), args,
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+    function _namedSig(
+        uint256 pk,
+        address t,
+        string memory typeString,
+        MetaTxLib.UAEnvelope memory e,
+        bytes memory args
+    ) internal view returns (IUARegistry.UASig memory s) {
+        bytes32 h = keccak256(
+            bytes.concat(
+                abi.encode(keccak256(bytes(typeString)), e.from),
+                args,
+                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
+            )
+        );
         (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, MtxDigest.typed(t, h));
         s.signature = abi.encodePacked(r, ss, v);
     }

@@ -20,7 +20,11 @@ pub struct Fixture {
 impl Fixture {
     #[payable]
     pub fn ok(&mut self) {
-        log!("fixture ok: predecessor {} deposit {}", env::predecessor_account_id(), env::attached_deposit().as_yoctonear());
+        log!(
+            "fixture ok: predecessor {} deposit {}",
+            env::predecessor_account_id(),
+            env::attached_deposit().as_yoctonear()
+        );
     }
 
     #[payable]
@@ -31,7 +35,13 @@ impl Fixture {
     #[payable]
     pub fn spawn_fail(&mut self) {
         Promise::new(env::current_account_id())
-            .function_call_weight("fail", vec![], NearToken::from_yoctonear(0), Gas::from_tgas(3), GasWeight(0))
+            .function_call_weight(
+                "fail",
+                vec![],
+                NearToken::from_yoctonear(0),
+                Gas::from_tgas(3),
+                GasWeight(0),
+            )
             .detach();
         log!("fixture spawned a failing child");
     }
@@ -39,7 +49,13 @@ impl Fixture {
     #[payable]
     pub fn return_fail(&mut self) -> Promise {
         log!("fixture returns a failing child");
-        Promise::new(env::current_account_id()).function_call_weight("fail", vec![], NearToken::from_yoctonear(0), Gas::from_tgas(3), GasWeight(0))
+        Promise::new(env::current_account_id()).function_call_weight(
+            "fail",
+            vec![],
+            NearToken::from_yoctonear(0),
+            Gas::from_tgas(3),
+            GasWeight(0),
+        )
     }
 
     #[payable]
@@ -65,8 +81,14 @@ impl Fixture {
 
     /// Resumes `wait`: `ok` → it succeeds, else it panics.
     pub fn resume(&mut self, ok: bool) {
-        let id = self.yield_id.take().unwrap_or_else(|| env::panic_str("nothing waits"));
-        require!(env::promise_yield_resume(&id, [ok as u8]), "yield not found");
+        let id = self
+            .yield_id
+            .take()
+            .unwrap_or_else(|| env::panic_str("nothing waits"));
+        require!(
+            env::promise_yield_resume(&id, [ok as u8]),
+            "yield not found"
+        );
     }
 
     #[private]

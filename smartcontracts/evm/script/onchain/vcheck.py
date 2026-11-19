@@ -33,6 +33,7 @@ whole-chain scan (a chain of ours only). scaas-testnet defaults: its Blockscout 
 RPC_7622), the scan on. A target without an explorer: VERIFY_NOT_CONFIGURED, exit 1. --config checks that and stops.
 On Etherscan and Sourcify a clone's own code is its link (no proxy link to read there).
 Rows: <state> | <name> | <address> [| note]. Test chains only."""
+
 import glob
 import json
 import os
@@ -49,11 +50,23 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 EVM = os.path.abspath(os.path.join(HERE, "../.."))
 sys.path.insert(0, os.path.join(EVM, "script"))
 import deploybook  # noqa: E402
+
 CLONE_HEAD, CLONE_TAIL = "363d3d373d3d3d363d73", "5af43d82803e903d91602b57fd5bf3"
 DEPLOYER = "0x4e59b44847b379578588920ca78fbf26c0b4956c"  # the deterministic CREATE2 deployer (NET-EVM-05)
 CREATE3_PROXY = "0x363d3d37363d34f0"  # src/factory/Create3.sol: the proxy that CREATEs its calldata
 GENESIS_OURS = "genesis alloc (ours, NET-EVM-14)"
-STATES = ("verified", "verified (partial, harness)", "linked clone", "linked (clone, appended data)", "data", "create3 proxy", GENESIS_OURS, "genesis", "no code", "unverified")
+STATES = (
+    "verified",
+    "verified (partial, harness)",
+    "linked clone",
+    "linked (clone, appended data)",
+    "data",
+    "create3 proxy",
+    GENESIS_OURS,
+    "genesis",
+    "no code",
+    "unverified",
+)
 
 
 def ours_at_genesis(chain):
@@ -62,10 +75,20 @@ def ours_at_genesis(chain):
     CREATE2 deploy of the committed init code), on the chain the vector names; nothing elsewhere."""
     v = json.load(open(os.path.join(EVM, "../vectors/governance/rescue_vault_testnet_alloc.json")))
     return {v["address"].lower(): v["account"]["code"].lower()} if int(chain) == v["chainId"] else {}
+
+
 SEL = {  # cast sig
-    "puller": "2b1826ea", "EXECUTOR": "630dc7cb", "modules": "f7e80e98", "latestDexVersion": "aca84f05",
-    "latestVersion": "7f4782bd", "implementationOf": "c45d1620", "dexImplementationOf": "c4c41b19",
-    "latestTokenEnvVersion": "caf571af", "latestDexEnvVersion": "8ace72a2", "tokenEnvOf": "4ae0f85a", "dexEnvOf": "e3eef243",
+    "puller": "2b1826ea",
+    "EXECUTOR": "630dc7cb",
+    "modules": "f7e80e98",
+    "latestDexVersion": "aca84f05",
+    "latestVersion": "7f4782bd",
+    "implementationOf": "c45d1620",
+    "dexImplementationOf": "c4c41b19",
+    "latestTokenEnvVersion": "caf571af",
+    "latestDexEnvVersion": "8ace72a2",
+    "tokenEnvOf": "4ae0f85a",
+    "dexEnvOf": "e3eef243",
     "contractsPage": "0ca57b48",
 }
 PLACEHOLDER = re.compile(r"__\$[0-9a-fA-F]{34}\$__")
@@ -73,6 +96,7 @@ COMPILES = re.compile(r"Compiling \d+ files|Compiler run|Solc [0-9.]+ finished")
 
 
 # ---------------------------------------------------------------- pure helpers (script/onchain/test_vcheck.py)
+
 
 def clone_impl(code):
     """The implementation of an EIP-1167 clone (data may follow the 45-byte proxy), else None."""
@@ -88,9 +112,9 @@ def cbor(code):
     if len(h) < 8:
         return None
     n = int(h[-4:], 16) * 2
-    if n < 8 or n + 4 > len(h) or not h[-n - 4:-4].startswith("a"):
+    if n < 8 or n + 4 > len(h) or not h[-n - 4 : -4].startswith("a"):
         return None
-    return h[-n - 4:-4]
+    return h[-n - 4 : -4]
 
 
 def init_args(bytecode, init):
@@ -102,7 +126,7 @@ def init_args(bytecode, init):
     i = i[2:] if i.startswith("0x") else i
     segs, pos = PLACEHOLDER.split(b), 0
     for k, s in enumerate(segs):
-        if i[pos:pos + len(s)] != s.lower():
+        if i[pos : pos + len(s)] != s.lower():
             return None
         pos += len(s) + (40 if k < len(segs) - 1 else 0)
     return i[pos:] if len(i) >= pos and b else None
@@ -110,7 +134,11 @@ def init_args(bytecode, init):
 
 def full(sc):
     """Blockscout's smart-contracts answer is a full match."""
-    return sc.get("is_verified") is True and not sc.get("is_partially_verified") and sc.get("is_fully_verified") is not False
+    return (
+        sc.get("is_verified") is True
+        and not sc.get("is_partially_verified")
+        and sc.get("is_fully_verified") is not False
+    )
 
 
 def harness(hit, sc):
@@ -146,10 +174,14 @@ def classify(code, sc, impl_verified=False, genesis=False, harness=False, ours=N
         if ok:
             return "linked clone", f"{sc.get('proxy_type')} of {impl}"
         if extra > 0 and impl_verified:
-            return "linked (clone, appended data)", (f"EIP-1167 proxy of {impl} (verified), {extra} B appended; the explorer: "
-                                                     f"{sc.get('proxy_type') or 'no proxy type'}")
-        return "unverified", (f"{sc.get('proxy_type') or 'no proxy type'} of {impl}: implementations {li}, "
-                              f"implementation verified {bool(impl_verified)}")
+            return "linked (clone, appended data)", (
+                f"EIP-1167 proxy of {impl} (verified), {extra} B appended; the explorer: "
+                f"{sc.get('proxy_type') or 'no proxy type'}"
+            )
+        return "unverified", (
+            f"{sc.get('proxy_type') or 'no proxy type'} of {impl}: implementations {li}, "
+            f"implementation verified {bool(impl_verified)}"
+        )
     if full(sc):
         return "verified", ""
     if harness and sc.get("is_verified") is True and sc.get("is_partially_verified") is True:
@@ -159,7 +191,7 @@ def classify(code, sc, impl_verified=False, genesis=False, harness=False, ours=N
 
 def words(hexdata):
     h = (hexdata or "0x")[2:]
-    return [h[k:k + 64] for k in range(0, len(h) - 63, 64)]
+    return [h[k : k + 64] for k in range(0, len(h) - 63, 64)]
 
 
 def addr_words(hexdata):
@@ -177,7 +209,7 @@ def dyn_addrs(hexdata):
     w = words(hexdata)
     try:
         o = int(w[0], 16) // 32
-        return ["0x" + x[24:] for x in w[o + 1:o + 1 + int(w[o], 16)]]
+        return ["0x" + x[24:] for x in w[o + 1 : o + 1 + int(w[o], 16)]]
     except (IndexError, ValueError):
         return []
 
@@ -190,7 +222,7 @@ def env_addrs(hexdata):
         out = ["0x" + w[t][24:], "0x" + w[t + 1][24:]]
         for f in (3, 5):  # deps, libs (offsets relative to the tuple)
             o = t + int(w[t + f], 16) // 32
-            out += ["0x" + x[24:] for x in w[o + 1:o + 1 + int(w[o], 16)]]
+            out += ["0x" + x[24:] for x in w[o + 1 : o + 1 + int(w[o], 16)]]
         return out
     except (IndexError, ValueError):
         return []
@@ -220,16 +252,23 @@ def config(net, env):
     the env var that holds the API key (never the key in a file or an argument) and whether the whole chain is
     scanned (only a chain of ours: the SCaaS testnet). NotConfigured (VERIFY_NOT_CONFIGURED) when a remote target
     names no explorer."""
-    c = {"kind": env.get("VERIFY_EXPLORER", ""), "url": env.get("VERIFY_URL", ""), "rpc": env.get("VERIFY_RPC", ""),
-         "key_env": env.get("VERIFY_API_KEY_ENV", ""), "scan": env.get("VERIFY_SCAN", "0") == "1"}
+    c = {
+        "kind": env.get("VERIFY_EXPLORER", ""),
+        "url": env.get("VERIFY_URL", ""),
+        "rpc": env.get("VERIFY_RPC", ""),
+        "key_env": env.get("VERIFY_API_KEY_ENV", ""),
+        "scan": env.get("VERIFY_SCAN", "0") == "1",
+    }
     if net == "scaas-testnet":  # its own Blockscout and RPC, loopback (NET-EVM-09)
         c["kind"] = c["kind"] or "blockscout"
         c["url"] = c["url"] or env.get("BLOCKSCOUT_API", "http://127.0.0.1:4000/api")
         c["rpc"] = c["rpc"] or env.get("RPC_7622", "http://127.0.0.1:8545")
         c["scan"] = env.get("VERIFY_SCAN", "1") == "1"
     if not c["kind"]:
-        raise NotConfigured(f"no explorer for target {net}: set VERIFY_EXPLORER ({', '.join(KINDS)}) and VERIFY_URL, "
-                            "or VERIFY=none with VERIFY_REASON")
+        raise NotConfigured(
+            f"no explorer for target {net}: set VERIFY_EXPLORER ({', '.join(KINDS)}) and VERIFY_URL, "
+            "or VERIFY=none with VERIFY_REASON"
+        )
     if c["kind"] not in KINDS:
         raise NotConfigured(f"VERIFY_EXPLORER {c['kind']!r} is not one of {', '.join(KINDS)}")
     if not re.fullmatch(r"https?://\S+", c["url"]):
@@ -250,8 +289,13 @@ def lookup_url(kind, url, chain, a, key=""):
     if kind == "blockscout":
         return f"{url}/v2/smart-contracts/{a}"
     if kind == "etherscan":  # the v2 API: one endpoint, the chain by `chainid`
-        return url + "?" + urllib.parse.urlencode({"chainid": chain, "module": "contract", "action": "getsourcecode",
-                                                   "address": a, "apikey": key})
+        return (
+            url
+            + "?"
+            + urllib.parse.urlencode(
+                {"chainid": chain, "module": "contract", "action": "getsourcecode", "address": a, "apikey": key}
+            )
+        )
     return f"{url}/v2/contract/{chain}/{a}"  # sourcify
 
 
@@ -265,10 +309,18 @@ def normalize(kind, j, code):
         r = j.get("result")
         r = r[0] if isinstance(r, list) and r and isinstance(r[0], dict) else {}
         ok = bool(r.get("SourceCode"))
-        out = {"is_verified": ok, "is_partially_verified": ok and bool(r.get("SimilarMatch")), "name": r.get("ContractName") or None}
+        out = {
+            "is_verified": ok,
+            "is_partially_verified": ok and bool(r.get("SimilarMatch")),
+            "name": r.get("ContractName") or None,
+        }
     else:  # sourcify: exact_match = the metadata hash too (full), match = the bytecode only (partial)
         m = j.get("match")
-        out = {"is_verified": m in ("exact_match", "match"), "is_partially_verified": m == "match", "name": j.get("name")}
+        out = {
+            "is_verified": m in ("exact_match", "match"),
+            "is_partially_verified": m == "match",
+            "name": j.get("name"),
+        }
     if impl:
         out.update(proxy_type="eip1167", implementations=[{"address": impl}])
     return out
@@ -280,7 +332,11 @@ def forge_args(kind, url, chain):
 
 
 def forge_env(env, key):
-    e = {k: v for k, v in env.items() if k not in ("FOUNDRY_OUT", "FOUNDRY_CACHE_PATH", "VERIFIER_API_KEY", "ETHERSCAN_API_KEY")}
+    e = {
+        k: v
+        for k, v in env.items()
+        if k not in ("FOUNDRY_OUT", "FOUNDRY_CACHE_PATH", "VERIFIER_API_KEY", "ETHERSCAN_API_KEY")
+    }
     e["FOUNDRY_PROFILE"] = env.get("FOUNDRY_PROFILE", "scaas-testnet")
     if key:
         e["VERIFIER_API_KEY"] = e["ETHERSCAN_API_KEY"] = key
@@ -288,6 +344,7 @@ def forge_env(env, key):
 
 
 # ---------------------------------------------------------------- chain and explorer
+
 
 def say(msg):
     print(f"[{NET}/verify] {msg}", flush=True)
@@ -297,7 +354,7 @@ def batch(calls, size=100):
     """JSON-RPC batch (the SCaaS testnet's MaxBatchSize is 100); None for an error answer."""
     out = []
     for k in range(0, len(calls), size):
-        body = [{"jsonrpc": "2.0", "id": i, "method": m, "params": p} for i, (m, p) in enumerate(calls[k:k + size])]
+        body = [{"jsonrpc": "2.0", "id": i, "method": m, "params": p} for i, (m, p) in enumerate(calls[k : k + size])]
         for t in range(5):
             try:
                 q = urllib.request.Request(RPC, json.dumps(body).encode(), {"Content-Type": "application/json"})
@@ -360,7 +417,7 @@ def scan(chain, genesis, head):
         busy = [int(b["number"], 16) for b in blocks if b and b["transactions"]]
         txs = []
         for k in range(0, len(busy), 10):
-            for b in batch([("eth_getBlockByNumber", [hex(n), True]) for n in busy[k:k + 10]], 10):
+            for b in batch([("eth_getBlockByNumber", [hex(n), True]) for n in busy[k : k + 10]], 10):
                 txs += b["transactions"]
         for t in txs:
             if t.get("to"):
@@ -374,10 +431,14 @@ def scan(chain, genesis, head):
             else:  # CREATE2 through the deterministic deployer: salt ++ init code
                 inp = t["input"][2:]
                 a = "0x" + keccak("0xff" + DEPLOYER[2:] + inp[:64] + keccak("0x" + inp[64:])[2:])[-40:]
-            st["creates"].setdefault(a, [int(t["blockNumber"], 16), t["hash"], "create" if not t.get("to") else "create2"])
+            st["creates"].setdefault(
+                a, [int(t["blockNumber"], 16), t["hash"], "create" if not t.get("to") else "create2"]
+            )
         for lg in rpc("eth_getLogs", [{"fromBlock": hex(lo), "toBlock": hex(hi)}]) or []:
             n = int(lg["blockNumber"], 16)
-            for a in [lg["address"]] + addr_words("0x" + "".join(x[2:] for x in lg["topics"][1:])) + addr_words(lg["data"]):
+            for a in (
+                [lg["address"]] + addr_words("0x" + "".join(x[2:] for x in lg["topics"][1:])) + addr_words(lg["data"])
+            ):
                 st["seen"].setdefault(a.lower(), n)
         st["next"] = hi + 1
         if (hi // 1000) % 10 == 0 or hi == head:
@@ -388,6 +449,7 @@ def scan(chain, genesis, head):
 
 
 # ---------------------------------------------------------------- discovery
+
 
 def set_books(books, ds):
     """Deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET `all` (verify.sh's default)
@@ -487,7 +549,9 @@ def discover(chain, books, net, head, st):
             u = lambda v: f"{v:064x}"
             ks = list(range(14))
             lv = batch([call(fa, SEL["latestVersion"], u(k)) for k in ks] + [call(fa, SEL["latestDexVersion"])])
-            le = batch([call(fa, SEL["latestTokenEnvVersion"], u(k)) for k in ks] + [call(fa, SEL["latestDexEnvVersion"])])
+            le = batch(
+                [call(fa, SEL["latestTokenEnvVersion"], u(k)) for k in ks] + [call(fa, SEL["latestDexEnvVersion"])]
+            )
             n = lambda r: int(r, 16) if r and r != "0x" else 0
             q = [call(fa, SEL["implementationOf"], u(k) + u(v)) for k in ks for v in range(1, n(lv[k]) + 1)]
             q += [call(fa, SEL["dexImplementationOf"], u(v)) for v in range(1, n(lv[14]) + 1)]
@@ -519,6 +583,7 @@ def discover(chain, books, net, head, st):
 
 # ---------------------------------------------------------------- artifacts and forge
 
+
 def index(roots):
     """metadata CBOR -> (root, artifact json, source, name) over every snapshot's out/."""
     idx = {}
@@ -547,9 +612,31 @@ def tx_init(st, a):
 def forge_verify(a, hit, args, chain):
     """One forge verify-contract; (ok, reason, seconds). Raises SystemExit(2) when forge compiles."""
     root, _, src, name = hit
-    cmd = ["systemd-run", "--user", "--scope", "--quiet", "-p", f"MemoryMax={os.environ.get('VERIFY_MEM', '1G')}",
-           "-p", "MemorySwapMax=0", "--", "forge", "verify-contract", a, f"{src}:{name}", "--root", root]
-    cmd += forge_args(CFG["kind"], CFG["url"], chain) + ["--watch", "--delay", "10", "--retries", "40", "--skip-is-verified-check"]
+    cmd = [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "-p",
+        f"MemoryMax={os.environ.get('VERIFY_MEM', '1G')}",
+        "-p",
+        "MemorySwapMax=0",
+        "--",
+        "forge",
+        "verify-contract",
+        a,
+        f"{src}:{name}",
+        "--root",
+        root,
+    ]
+    cmd += forge_args(CFG["kind"], CFG["url"], chain) + [
+        "--watch",
+        "--delay",
+        "10",
+        "--retries",
+        "40",
+        "--skip-is-verified-check",
+    ]
     cmd += ["--constructor-args", "0x" + args] if args else []
     env = forge_env(os.environ, CFG["key"])
     t0, lim = time.time(), int(os.environ.get("VERIFY_TIMEOUT", "600"))
@@ -575,7 +662,11 @@ def forge_verify(a, hit, args, chain):
     if m:
         raise SystemExit(f"forge recompiled ({m.group(0)}) for {name} {a}: the snapshot build {root} is stale")
     s = int(time.time() - t0)
-    lines = [x for x in text.splitlines() if re.search(r"Details:|Error|error|Reason|Response|Status|GUID", x)] or text.splitlines() or ["?"]
+    lines = (
+        [x for x in text.splitlines() if re.search(r"Details:|Error|error|Reason|Response|Status|GUID", x)]
+        or text.splitlines()
+        or ["?"]
+    )
     tail = lines[-1].strip()[:200]
     return p.returncode == 0, (f"forge ok ({tail})" if p.returncode == 0 else f"forge rc {p.returncode}: {tail}"), s
 
@@ -591,8 +682,11 @@ def main():
         sys.exit(1)
     RPC = CFG["rpc"]
     if "--config" in argv:
-        say(f"explorer {CFG['kind']} {CFG['url']}" + (f", API key from ${CFG['key_env']}" if CFG["key_env"] else "")
-            + (", whole-chain scan" if CFG["scan"] else ""))
+        say(
+            f"explorer {CFG['kind']} {CFG['url']}"
+            + (f", API key from ${CFG['key_env']}" if CFG["key_env"] else "")
+            + (", whole-chain scan" if CFG["scan"] else "")
+        )
         return
     fix = "--fix" in argv
     roots = [os.path.abspath(argv[k + 1]) for k, x in enumerate(argv) if x == "--root"]
@@ -600,7 +694,9 @@ def main():
     chain = int(rpc("eth_chainId", []), 16)
     genesis = rpc("eth_getBlockByNumber", ["0x0", False])["hash"]
     head = int(rpc("eth_blockNumber", []), 16)
-    say(f"chain {chain}, genesis {genesis[:18]}…, head {head}, explorer {CFG['kind']} {CFG['url']}, snapshots {len(roots)}")
+    say(
+        f"chain {chain}, genesis {genesis[:18]}…, head {head}, explorer {CFG['kind']} {CFG['url']}, snapshots {len(roots)}"
+    )
     if CFG["kind"] == "blockscout" and head > 12:  # the explorer indexes this chain, not a copy (same genesis) of it
         n = head - 12  # a block the explorer has indexed; on a copy it lies after the fork once the copy has run
         h = (rpc("eth_getBlockByNumber", [hex(n), False]) or {}).get("hash", "")
@@ -609,8 +705,11 @@ def main():
             sys.exit(1)
     try:  # NET-EVM-13: the chain's books by its key (an unknown chain needs DEPLOY_NAME), headers checked, before the scan
         rel = os.environ.get("RELEASES_JSON") or deploybook.find(
-            chain, genesis, "-t66b-releases.json" if NET == "scaas-testnet" else "-releases.json")
-        books = [deploybook.load(p) for p in (deploybook.find(chain, genesis), rel) if os.path.exists(os.path.join(EVM, p))]
+            chain, genesis, "-t66b-releases.json" if NET == "scaas-testnet" else "-releases.json"
+        )
+        books = [
+            deploybook.load(p) for p in (deploybook.find(chain, genesis), rel) if os.path.exists(os.path.join(EVM, p))
+        ]
         books = set_books(books, os.environ.get("DEPLOY_SET") or "all")
     except deploybook.BookError as e:
         say(f"FAIL {e}")
@@ -622,7 +721,11 @@ def main():
         listed.add(a)
         hint.setdefault(a, "RescueVault (genesis alloc)")
     contracts = sorted(a for a, c in code.items() if c not in ("0x", "0x0") and not c.startswith("0x00"))
-    gen = {a for a, c in zip(contracts, batch([("eth_getCode", [a, "0x0"]) for a in contracts])) if c not in (None, "0x", "0x0")}
+    gen = {
+        a
+        for a, c in zip(contracts, batch([("eth_getCode", [a, "0x0"]) for a in contracts]))
+        if c not in (None, "0x", "0x0")
+    }
     ours = ours_at_genesis(chain)
     say(f"discovery done: {len(code)} addresses, {len(contracts)} contracts with code ({len(gen)} at genesis)")
 
@@ -640,7 +743,9 @@ def main():
         impl = clone_impl(code[a])
         iv = full(sc.get(impl) or lookup(impl, code.get(impl, ""), chain)) if impl else False
         j = sc.get(a, {})
-        return classify(code[a], j, iv, a in gen, harness(idx.get(cbor(code[a])), j), ours.get(a.lower()) if a in gen else None)
+        return classify(
+            code[a], j, iv, a in gen, harness(idx.get(cbor(code[a])), j), ours.get(a.lower()) if a in gen else None
+        )
 
     for a, c in code.items():
         if c in ("0x", "0x0"):
@@ -654,22 +759,31 @@ def main():
 
     rc = 0
     if fix:
-        todo = [a for a, r in rows.items() if r[0] == "unverified" and not clone_impl(code[a]) and (not only or a in only)]
+        todo = [
+            a for a, r in rows.items() if r[0] == "unverified" and not clone_impl(code[a]) and (not only or a in only)
+        ]
         todo.sort(key=lambda a: (first.get(a, head + 1), a))
         say(f"fix: {len(todo)} contracts, one at a time")
         try:
             for n, a in enumerate(todo, 1):
                 hit = idx.get(cbor(code[a]))
                 if not hit:
-                    rows[a] = ("unverified", hint.get(a, "?"),
-                               f"metadata {cbor(code[a]) and cbor(code[a])[18:30]}… matches no artifact of the snapshots: deployed from other sources")
+                    rows[a] = (
+                        "unverified",
+                        hint.get(a, "?"),
+                        f"metadata {cbor(code[a]) and cbor(code[a])[18:30]}… matches no artifact of the snapshots: deployed from other sources",
+                    )
                     say(f"[{n}/{len(todo)}] {rows[a][1]} {a} FAIL {rows[a][2]}")
                     continue
                 bc = json.load(open(hit[1]))["bytecode"]["object"]
                 cands = set(inits.get(a, ())) | ({tx_init(st, a)} if a in st["creates"] else set())
                 args = next((x for x in (init_args(bc, i) for i in cands if i) if x is not None), None)
                 if args is None and a in st["creates"] and st["creates"][a][2] == "create":
-                    rows[a] = ("unverified", hit[3], "its creating transaction's input does not start with the artifact's bytecode")
+                    rows[a] = (
+                        "unverified",
+                        hit[3],
+                        "its creating transaction's input does not start with the artifact's bytecode",
+                    )
                     say(f"[{n}/{len(todo)}] {hit[3]} {a} FAIL {rows[a][2]}")
                     continue
                 for _ in range(5 if CFG["kind"] == "blockscout" else 0):  # Blockscout fetches a child's code on demand
@@ -677,7 +791,10 @@ def main():
                         break
                     time.sleep(3)
                 good = lambda j: classify(code[a], j, harness=harness(hit, j))[0] != "unverified"
-                for attempt in (1, 2):  # forge "Pass - Verified" with nothing on the explorer was seen once per ~10: retry once
+                for attempt in (
+                    1,
+                    2,
+                ):  # forge "Pass - Verified" with nothing on the explorer was seen once per ~10: retry once
                     ok, why, s = forge_verify(a, hit, args or "", chain)
                     j = {}
                     for _ in range(6):
@@ -690,13 +807,31 @@ def main():
                     say(f"{hit[3]} {a}: {why}, not on the explorer; attempt 2")
                 sc[a] = j
                 st_, note = classify(code[a], j, harness=harness(hit, j))
-                rows[a] = (st_, hit[3], note) if st_ != "unverified" else ("unverified", hit[3], why + (
-                    f", the explorer: verified {j.get('is_verified')}, partial {j.get('is_partially_verified')}" if ok else ""))
+                rows[a] = (
+                    (st_, hit[3], note)
+                    if st_ != "unverified"
+                    else (
+                        "unverified",
+                        hit[3],
+                        why
+                        + (
+                            f", the explorer: verified {j.get('is_verified')}, partial {j.get('is_partially_verified')}"
+                            if ok
+                            else ""
+                        ),
+                    )
+                )
                 say(f"[{n}/{len(todo)}] {hit[3]} {a} {'ok' if good(j) else 'FAIL ' + rows[a][2]} ({s}s)")
-            for a in [a for a, r in rows.items() if r[0] == "unverified" and clone_impl(code[a]) and (not only or a in only)]:
+            for a in [
+                a for a, r in rows.items() if r[0] == "unverified" and clone_impl(code[a]) and (not only or a in only)
+            ]:
                 impl = clone_impl(code[a])
                 sc[impl] = lookup(impl, code.get(impl, ""), chain)
-                if CFG["kind"] == "blockscout" and full(sc[impl]) and bs(f"addresses/{a}").get("is_contract") is not True:
+                if (
+                    CFG["kind"] == "blockscout"
+                    and full(sc[impl])
+                    and bs(f"addresses/{a}").get("is_contract") is not True
+                ):
                     hit = idx.get(cbor(code.get(impl) or rpc("eth_getCode", [impl, "latest"])))
                     if hit:  # Blockscout never fetched the clone's code: a request for it makes it fetch (it fails)
                         forge_verify(a, hit, "", chain)
@@ -711,11 +846,15 @@ def main():
         except SystemExit as e:
             say(f"ABORT {e}")
             rc = 2
-    out = os.path.join(EVM, os.environ.get("MATRIX_OUT") or time.strftime("runs/%Y-%m-%d-matrix"), f"verify-{NET}.txt")  # matrix.sh's run dir
+    out = os.path.join(
+        EVM, os.environ.get("MATRIX_OUT") or time.strftime("runs/%Y-%m-%d-matrix"), f"verify-{NET}.txt"
+    )  # matrix.sh's run dir
     c = cnt()
     with open(out, "w") as f:
-        f.write(f"# NET-EVM-09: every contract on chain {chain} ({NET}, head {head}), discovered from a block scan, the books,"
-                " the broadcasts and the getters; script/onchain/vcheck.py\n")
+        f.write(
+            f"# NET-EVM-09: every contract on chain {chain} ({NET}, head {head}), discovered from a block scan, the books,"
+            " the broadcasts and the getters; script/onchain/vcheck.py\n"
+        )
         f.write(" | ".join(f"{k} {v}" for k, v in c.items()) + "\n")
         for a in sorted(rows, key=lambda a: (STATES.index(rows[a][0]), first.get(a, head + 1), a)):
             s, n, w = rows[a]

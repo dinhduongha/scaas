@@ -365,7 +365,7 @@ Vault specifics: IndexedDB `scaas-clientkeys`,
 store `kv`, keys `device-key:v1`, `vault:seed:<account label>`, `vault:zether-conf:<curve>:<coin>:<account>`; at creation
 request `navigator.storage.persist()` and show a refusal if denied, show "clearing this site's data = losing this device"
 before the first device-bound write, and on a scrypt `RangeError` stop with "this device cannot create a passphrase vault"
-and write nothing; a v2 blob without its device key means "this vault belongs to a cleared browser profile" (phrase import only); seed words are
+and write nothing; a v3 blob ([CLI-SGN-17](signers-clientkeys.md#CLI-SGN-17)) without its device key means "this vault belongs to a cleared browser profile" (phrase import only); seed words are
 shown once and are never copyable, and the import field is cleared after parsing. Why: a compromised transitive dependency
 in any SDK chunk could otherwise read an unlocked seed. Residual: a hostile main realm can still request signatures while
 unlocked ([vault threat model](signers-clientkeys.md#vault)).
@@ -810,7 +810,7 @@ Unit (Vitest / `node --test`, no network):
 | EVM encoders | `metatx_kat`, `metatransfer_kat`, `trade_kat`, `dex_order_kat` (relayed calldata too), `hedera_kat`, `wrap_rate_vectors`, `smart_key_account_create2`, `smart_key_account_kat`, `mandate_pay_kat`, `mandate_revoke_kat`, `webauthn_soft` |
 | Non-EVM encoders (clientkeys) | `mesh-envelope-v1.2.json` cross-language payloads (the TON cases of it; `smartcontracts/ton/vectors/ton-vectors.json` belongs to the TON suite, no clientkeys code reads it), `fam_*.json` per family, `sui_vectors.json`, the seed-signed vectors, `solana_derivation.json` |
 | UA (clientkeys) | `smartcontracts/vectors/ua/*`: ids, keyHash, `ua_msg`, PoP, `UAMetaTransaction` digests; `deriveUAKey` paths under `m/22776'` |
-| Backup / vault | `backup_policy.json` plus the de-duplication and `msig` rows; `vault_v2_fixture.json` |
+| Backup / vault | `backup_policy.json` plus the de-duplication and `msig` rows; `vault_v3_fixture.json` |
 | Zether | prover vectors through the WASM `nodejs` build; clientkeys `zether.test.js` |
 | Adapter contract suite | as above, including `decode ∘ signRequest ∘ buildTerms = id` |
 | Config | every validation refusal, including the RPC-secret patterns |

@@ -41,7 +41,11 @@ fn main() {
         }
     };
     b.fast = std::env::var("PQZ_VERIFY").is_ok_and(|v| v == "fast");
-    println!("{{\"init_ms\": {}, \"verify\": \"{}\"}}", ms(t0.elapsed().as_micros()), if b.fast { "fast" } else { "generic" });
+    println!(
+        "{{\"init_ms\": {}, \"verify\": \"{}\"}}",
+        ms(t0.elapsed().as_micros()),
+        if b.fast { "fast" } else { "generic" }
+    );
     let mut fails = 0;
     for tx in (0..NREL).filter(|&t| rels >> t & 1 == 1) {
         let rel = NAMES[tx];

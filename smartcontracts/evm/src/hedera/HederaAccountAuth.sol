@@ -34,9 +34,11 @@ library HederaAccountAuth {
     ///         `mtxWrap*` / `mtxAddReserve` entries; 0x16a writes no state and calls nothing back. ponytail: drop it when
     ///         those checks stop being `view`.
     function asView()
-        internal pure returns (function (address, bytes32, bytes calldata) internal view returns (bool) f)
+        internal
+        pure
+        returns (function(address, bytes32, bytes calldata) internal view returns (bool) f)
     {
-        function (address, bytes32, bytes calldata) internal returns (bool) g = isAuthorizedRaw;
+        function(address, bytes32, bytes calldata) internal returns (bool) g = isAuthorizedRaw;
         assembly ("memory-safe") { f := g }
     }
 }

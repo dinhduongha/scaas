@@ -6,12 +6,21 @@ import {MultiSig} from "../src/common/MultiSig.sol";
 
 contract MultiSigTest is Test {
     function _owners(uint256 n) private pure returns (address[] memory o, uint256[] memory k) {
-        o = new address[](n); k = new uint256[](n);
-        for (uint256 i; i < n; ++i) { k[i] = i + 1; o[i] = vm.addr(k[i]); }
+        o = new address[](n);
+        k = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            k[i] = i + 1;
+            o[i] = vm.addr(k[i]);
+        }
         // sap tang dan theo dia chi
-        for (uint256 i; i < n; ++i)
-            for (uint256 j = i + 1; j < n; ++j)
-                if (o[j] < o[i]) { (o[i],o[j])=(o[j],o[i]); (k[i],k[j])=(k[j],k[i]); }
+        for (uint256 i; i < n; ++i) {
+            for (uint256 j = i + 1; j < n; ++j) {
+                if (o[j] < o[i]) {
+                    (o[i], o[j]) = (o[j], o[i]);
+                    (k[i], k[j]) = (k[j], k[i]);
+                }
+            }
+        }
     }
 
     function _sign(uint256 pk, bytes32 d) private pure returns (bytes memory) {
@@ -34,7 +43,7 @@ contract MultiSigTest is Test {
         bytes32 d = keccak256("x");
         bytes[] memory sigs = new bytes[](2);
         sigs[0] = _sign(k[0], d);
-        sigs[1] = _sign(k[0], d);   // trung
+        sigs[1] = _sign(k[0], d); // trung
         vm.expectRevert(abi.encodeWithSelector(MultiSig.DuplicateOrUnsorted.selector, o[0]));
         this.callQuorum(o, 2, d, sigs);
     }
@@ -52,8 +61,13 @@ contract MultiSigTest is Test {
         uint256 outsider = 99;
         address a = vm.addr(outsider);
         // xep tang dan de qua duoc check thu tu, roi phai bi chan boi check chu so huu
-        if (a < o[0]) { sigs[0] = _sign(outsider, d); sigs[1] = _sign(k[0], d); }
-        else          { sigs[0] = _sign(k[0], d);     sigs[1] = _sign(outsider, d); }
+        if (a < o[0]) {
+            sigs[0] = _sign(outsider, d);
+            sigs[1] = _sign(k[0], d);
+        } else {
+            sigs[0] = _sign(k[0], d);
+            sigs[1] = _sign(outsider, d);
+        }
         vm.expectRevert(abi.encodeWithSelector(MultiSig.NotAnOwner.selector, a));
         this.callQuorum(o, 2, d, sigs);
     }

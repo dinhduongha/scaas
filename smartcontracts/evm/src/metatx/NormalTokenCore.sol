@@ -41,8 +41,18 @@ abstract contract NormalTokenCore is MetaTokenBase {
         _requireUnused(cfg, false, true, true, true);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         // 5-9 are not in the kind's mask: `init` refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3)
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles,
-            _validBits(), _roleBits(), _contractOnlyBits(), _registry());
+        GovernanceLib.init(
+            cfg.features,
+            cfg.lockedFeatures,
+            cfg.admin,
+            cfg.grantDelay,
+            cfg.rescueTo,
+            cfg.roles,
+            _validBits(),
+            _roleBits(),
+            _contractOnlyBits(),
+            _registry()
+        );
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
@@ -64,20 +74,30 @@ abstract contract NormalTokenCore is MetaTokenBase {
     ///         `_govSubject()`), within its grant (scalar = `amount`); else `BURNABLE` (any holder), else `FeatureNotSet(2)`.
     ///         One check for `burn`, `mtxBurn` and the generic `mtxExecute` burn (both reach this body by the self-call).
     function _burnBody(uint256 amount) internal {
-        if (GovernanceLib.hasFeature(GovernanceBits.BURNER)) GovernanceUse.use(GovernanceBits.BURNER, _subject(), amount);
-        else GovernanceLib.requireFeature(GovernanceBits.BURNABLE);
+        if (GovernanceLib.hasFeature(GovernanceBits.BURNER)) {
+            GovernanceUse.use(GovernanceBits.BURNER, _subject(), amount);
+        } else {
+            GovernanceLib.requireFeature(GovernanceBits.BURNABLE);
+        }
         _burn(_msgSender(), amount);
     }
 
     /// @notice The signed `burn(amount)` (TS-D14, ua-mtx-merge R23: today's `uaBurn` under this name), `AMOUNT(0)` as on
     ///         the generic path: a native id by its own key with no registry, a derived UA through the registry.
-    function _mtxBurnBody(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth) internal returns (bytes memory)
+    function _mtxBurnBody(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
+        internal
+        returns (bytes memory)
     {
         return _namedUA(UA_BURN_TYPEHASH, BURN_SELECTOR, e, abi.encode(amount), auth);
     }
 
     /// @notice The allowlist (CTR-MTX-19): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`.
-    function _mtxSelectorsBody() internal pure virtual override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        virtual
+        override
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](2);
         c = new uint8[](2);

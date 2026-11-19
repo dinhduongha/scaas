@@ -46,7 +46,9 @@ contract PqzProofStoreTest is PqzOffchainBase {
     function _logs(address t) internal returns (Vm.Log[] memory out, uint256 n) {
         Vm.Log[] memory all = vm.getRecordedLogs();
         out = new Vm.Log[](all.length);
-        for (uint256 i; i < all.length; ++i) if (all[i].emitter == t && all[i].topics[0] == EV) out[n++] = all[i];
+        for (uint256 i; i < all.length; ++i) {
+            if (all[i].emitter == t && all[i].topics[0] == EV) out[n++] = all[i];
+        }
     }
 
     /// Under `LOG` exactly one event, its header the statement's first 640 bytes (the one the proof was checked over), its
@@ -78,7 +80,8 @@ contract PqzProofStoreTest is PqzOffchainBase {
 
     function _op7(NormalPqzToken t, bool log) internal {
         _shieldT(t, alice, 10);
-        IPqzToken.PqzMultiArgs memory m = _ms(_mpayload(1, 0, alice, bytes32(0), _two(bob, carol), _blob(6, _outLen(2, true)), ""));
+        IPqzToken.PqzMultiArgs memory m =
+            _ms(_mpayload(1, 0, alice, bytes32(0), _two(bob, carol), _blob(6, _outLen(2, true)), ""));
         bytes memory st = t.transferStatement(m, 0);
         vm.recordLogs();
         t.mtxConfidentialTransfer(m, PROOF, _pqAuth(), "", noVerdict());
@@ -87,20 +90,38 @@ contract PqzProofStoreTest is PqzOffchainBase {
 
     function _burn(NormalPqzToken t, bool log) internal {
         _shieldT(t, alice, 10);
-        IPqzToken.PqzBurnArgs memory b = _bs(bytes.concat(abi.encode(uint256(1), block.number + 50, uint256(0), alice, bytes32(0)),
-            _blob(7, PqzCt.CT)));
+        IPqzToken.PqzBurnArgs memory b = _bs(
+            bytes.concat(abi.encode(uint256(1), block.number + 50, uint256(0), alice, bytes32(0)), _blob(7, PqzCt.CT))
+        );
         bytes memory st = t.burnStatement(b, 4, D00D, 0);
         vm.recordLogs();
         t.mtxUnshield(b, 4, D00D, PROOF, _pqAuth(), "", noVerdict());
         _check(t, alice, 0, st, log ? PqzCore.LOG : PqzCore.NONE);
     }
 
-    function test_proofStore_none_op1() public { _op1(tok, false); }
-    function test_proofStore_log_op1() public { _op1(logT, true); }
-    function test_proofStore_none_op7() public { _op7(tok, false); }
-    function test_proofStore_log_op7() public { _op7(logT, true); }
-    function test_proofStore_none_burn() public { _burn(tok, false); }
-    function test_proofStore_log_burn() public { _burn(logT, true); }
+    function test_proofStore_none_op1() public {
+        _op1(tok, false);
+    }
+
+    function test_proofStore_log_op1() public {
+        _op1(logT, true);
+    }
+
+    function test_proofStore_none_op7() public {
+        _op7(tok, false);
+    }
+
+    function test_proofStore_log_op7() public {
+        _op7(logT, true);
+    }
+
+    function test_proofStore_none_burn() public {
+        _burn(tok, false);
+    }
+
+    function test_proofStore_log_burn() public {
+        _burn(logT, true);
+    }
 
     function test_proofStore_view() public view {
         assertEq(abi.encode(tok.proofStore(), logT.proofStore()), abi.encode(PqzCore.NONE, PqzCore.LOG));
@@ -132,8 +153,9 @@ contract PqzProofStoreTest is PqzOffchainBase {
         uint8[3] memory modes = [PqzCore.NONE, PqzCore.LOG, PqzCore.NONE];
         for (uint64 k; k < 3; ++k) {
             _setByte23(tok, modes[k]);
-            tok.mtxConfidentialTransferSingle(_ts(_payload(0, 0, bob, alice, bytes32(0), _out(20 + k, false), "")), PROOF,
-                _pqAuth(), "", noVerdict()); // a credit to alice between her debits
+            tok.mtxConfidentialTransferSingle(
+                _ts(_payload(0, 0, bob, alice, bytes32(0), _out(20 + k, false), "")), PROOF, _pqAuth(), "", noVerdict()
+            ); // a credit to alice between her debits
             uint64 p = tok.pqzAccount(alice, 0).pendingCount;
             IPqzToken.PqzTransferArgs memory a = _ts(_payload(p, 0, alice, carol, bytes32(0), _out(30 + k, false), ""));
             bytes memory st = tok.transferSingleStatement(a, 0);
@@ -141,8 +163,15 @@ contract PqzProofStoreTest is PqzOffchainBase {
             tok.mtxConfidentialTransferSingle(a, PROOF, _pqAuth(), "", noVerdict());
             _check(tok, alice, k, st, modes[k]);
         }
-        assertEq(abi.encode(tok.pqzDebitRecord(alice, 0).proofStore, tok.pqzDebitRecord(alice, 1).proofStore,
-            tok.pqzDebitRecord(alice, 2).proofStore), abi.encode(PqzCore.NONE, PqzCore.LOG, PqzCore.NONE), "each record its own");
+        assertEq(
+            abi.encode(
+                tok.pqzDebitRecord(alice, 0).proofStore,
+                tok.pqzDebitRecord(alice, 1).proofStore,
+                tok.pqzDebitRecord(alice, 2).proofStore
+            ),
+            abi.encode(PqzCore.NONE, PqzCore.LOG, PqzCore.NONE),
+            "each record its own"
+        );
     }
 
     function _setByte23(NormalPqzToken t, uint8 m) internal {
@@ -161,7 +190,6 @@ contract PqzProofStoreTest is PqzOffchainBase {
             factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), bytes32(i + 100));
         }
     }
-
 }
 
 /// T60 (C8): a Zether kind refuses a set `proofStore` with the other kind's field error, in the check 3f's fields have (Zether ≠

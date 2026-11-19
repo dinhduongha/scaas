@@ -104,7 +104,9 @@ contract PqzScopedKeysTest is UARegistryBase {
         b = new bytes(n);
         for (uint256 i; i < n; i += 32) {
             bytes32 w = keccak256(abi.encode(salt, i));
-            for (uint256 j; j < 32 && i + j < n; ++j) b[i + j] = w[j];
+            for (uint256 j; j < 32 && i + j < n; ++j) {
+                b[i + j] = w[j];
+            }
         }
     }
 
@@ -129,12 +131,19 @@ contract PqzScopedKeysTest is UARegistryBase {
     }
 
     function _proofMsg(R memory x) internal pure returns (bytes32) {
-        return UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_SCOPED_KEY,
-            UAKinds.pqzScopedKeyDigest(x.ua, _class(x.scope), x.chainUid, x.scope, x.version, x.h));
+        return UAKinds.uaMessage(
+            UAKinds.PQZ_MLWE,
+            UAKinds.PURPOSE_PQZ_SCOPED_KEY,
+            UAKinds.pqzScopedKeyDigest(x.ua, _class(x.scope), x.chainUid, x.scope, x.version, x.h)
+        );
     }
 
     /// The record of `key` for `(ua, scope, version)`: its `R_REG` over the scoped message, the opening KEM key when `withKem`.
-    function _rec(bytes32 ua, address scope, uint64 version, bytes memory key, bool withKem) internal view returns (R memory x) {
+    function _rec(bytes32 ua, address scope, uint64 version, bytes memory key, bool withKem)
+        internal
+        view
+        returns (R memory x)
+    {
         (x.ua, x.scope, x.version, x.key, x.h, x.until, x.chainUid) = (ua, scope, version, key, _h(key), FAR, chainUidA);
         x.proof = _sig(key, _proofMsg(x));
         x.ph = keccak256(x.proof);
@@ -143,8 +152,17 @@ contract PqzScopedKeysTest is UARegistryBase {
 
     function _rd(R memory x) internal pure returns (bytes32) {
         bytes memory pk = UAKinds.kemPk(x.kem);
-        return UAKinds.pqzScopedKeyRecordDigest(x.ua, _class(x.scope), x.chainUid, x.scope, x.version, x.h, x.ph,
-            pk.length == 0 ? bytes32(0) : keccak256(pk), x.until);
+        return UAKinds.pqzScopedKeyRecordDigest(
+            x.ua,
+            _class(x.scope),
+            x.chainUid,
+            x.scope,
+            x.version,
+            x.h,
+            x.ph,
+            pk.length == 0 ? bytes32(0) : keccak256(pk),
+            x.until
+        );
     }
 
     function _one(bytes memory key, R memory x) internal pure returns (IUARegistry.UASig memory s) {
@@ -186,7 +204,9 @@ contract PqzScopedKeysTest is UARegistryBase {
         d = _msigKey(2, m);
         ua = UAKinds.uaOf(UAKinds.MSIG, d);
         bytes32 rd = _regDigest(ua, UAKinds.MSIG);
-        UACall.register(r, UAKinds.MSIG, d, _none(), abi.encode(_two(d, ml1, ml2, UAKinds.PURPOSE_POP_V2, rd).members), "");
+        UACall.register(
+            r, UAKinds.MSIG, d, _none(), abi.encode(_two(d, ml1, ml2, UAKinds.PURPOSE_POP_V2, rd).members), ""
+        );
     }
 
     function _two(bytes memory d, bytes memory a, bytes memory b, bytes32 purpose, bytes32 digest)
@@ -207,13 +227,23 @@ contract PqzScopedKeysTest is UARegistryBase {
     {
         bytes32 md = _memberDigest(UAKinds.uaOf(UAKinds.MSIG, d), purpose, digest);
         return IUARegistry.MemberSig(
-            _indexOf(d, UAKinds.uaOf(ML, key)), new IUARegistry.InnerSig[](0), _sig(key, UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md))
+            _indexOf(d, UAKinds.uaOf(ML, key)),
+            new IUARegistry.InnerSig[](0),
+            _sig(key, UAKinds.uaMessage(ML, UAKinds.PURPOSE_MEMBER, md))
         );
     }
 
     function _msigSet(UARegistry r, bytes memory d, R memory x) internal {
-        r.setPqzScopedKey(x.ua, x.scope, x.version, x.key, x.ph, x.kem, x.until,
-            _two(d, ml1, ml2, UAKinds.PURPOSE_PQZ_SCOPED_KEY, _rd(x)));
+        r.setPqzScopedKey(
+            x.ua,
+            x.scope,
+            x.version,
+            x.key,
+            x.ph,
+            x.kem,
+            x.until,
+            _two(d, ml1, ml2, UAKinds.PURPOSE_PQZ_SCOPED_KEY, _rd(x))
+        );
     }
 
     function _err(bytes4 sel, bytes32 ua) internal pure returns (bytes memory) {
@@ -232,25 +262,56 @@ contract PqzScopedKeysTest is UARegistryBase {
     // ----- pins -----
 
     function test_scopedTypehashesArePinned() public pure {
-        assertEq(UAKinds.UA_PQZ_SCOPED_KEY_TYPEHASH, keccak256(
-            "UAPqzScopedKey(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash)"
-        ));
+        assertEq(
+            UAKinds.UA_PQZ_SCOPED_KEY_TYPEHASH,
+            keccak256(
+                "UAPqzScopedKey(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash)"
+            )
+        );
         assertEq(UAKinds.UA_PQZ_SCOPED_KEY_TYPEHASH, 0x723f4ada3187b381bd56093531d88191f240abb45021dab25f09594d9fefe70e);
-        assertEq(UAKinds.UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH, keccak256(
-            "UAPqzScopedKeyRecord(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash,bytes32 pqzPopHash,bytes32 openKemHash,uint64 validUntilBlock)"
-        ));
-        assertEq(UAKinds.UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH, 0xf672ed3c480fca7f0350c09663dfe02629420a7724f791624bd048e532fe1eaa);
+        assertEq(
+            UAKinds.UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH,
+            keccak256(
+                "UAPqzScopedKeyRecord(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash,bytes32 pqzPopHash,bytes32 openKemHash,uint64 validUntilBlock)"
+            )
+        );
+        assertEq(
+            UAKinds.UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH,
+            0xf672ed3c480fca7f0350c09663dfe02629420a7724f791624bd048e532fe1eaa
+        );
         assertEq(UAKinds.PURPOSE_PQZ_SCOPED_KEY, keccak256("scaas.ua.purpose.pqz-scoped-key.v1"));
     }
 
     /// The registry's pure digest views answer `UAKinds`' (what clients and vectors reproduce).
     function test_scopedDigestViews() public view {
-        assertEq(pv.pqzScopedKeyDigest(bytes32(uint256(7)), 3, chainUidA, address(tOn), 5, bytes32(uint256(9))),
-            UAKinds.pqzScopedKeyDigest(bytes32(uint256(7)), 3, chainUidA, address(tOn), 5, bytes32(uint256(9))));
-        assertEq(pv.pqzScopedKeyRecordDigest(bytes32(uint256(7)), 2, chainUidA, address(0), 1, bytes32(uint256(9)),
-                bytes32(uint256(10)), bytes32(uint256(11)), 12),
-            UAKinds.pqzScopedKeyRecordDigest(bytes32(uint256(7)), 2, chainUidA, address(0), 1, bytes32(uint256(9)),
-                bytes32(uint256(10)), bytes32(uint256(11)), 12));
+        assertEq(
+            pv.pqzScopedKeyDigest(bytes32(uint256(7)), 3, chainUidA, address(tOn), 5, bytes32(uint256(9))),
+            UAKinds.pqzScopedKeyDigest(bytes32(uint256(7)), 3, chainUidA, address(tOn), 5, bytes32(uint256(9)))
+        );
+        assertEq(
+            pv.pqzScopedKeyRecordDigest(
+                bytes32(uint256(7)),
+                2,
+                chainUidA,
+                address(0),
+                1,
+                bytes32(uint256(9)),
+                bytes32(uint256(10)),
+                bytes32(uint256(11)),
+                12
+            ),
+            UAKinds.pqzScopedKeyRecordDigest(
+                bytes32(uint256(7)),
+                2,
+                chainUidA,
+                address(0),
+                1,
+                bytes32(uint256(9)),
+                bytes32(uint256(10)),
+                bytes32(uint256(11)),
+                12
+            )
+        );
     }
 
     // ----- class 2 (scope 0): positive controls -----
@@ -429,10 +490,18 @@ contract PqzScopedKeysTest is UARegistryBase {
         bytes memory e1 = abi.encodeWithSelector(IUARegistry.UAPqzKeyVersion.selector, ua, uint64(1));
         _setReverts(pv, ml1, _rec(ua, address(0), 1, _pk(1), true), e1); // no version 0
         _set(pv, ml1, _rec(ua, address(0), 0, _pk(0), true));
-        _setReverts(pv, ml1, _rec(ua, address(0), 0, _pk(2), true),
-            abi.encodeWithSelector(IUARegistry.UAPqzKeyVersion.selector, ua, uint64(0))); // version 0 again
-        _setReverts(pv, ml1, _rec(ua, address(0), 2, _pk(2), true),
-            abi.encodeWithSelector(IUARegistry.UAPqzKeyVersion.selector, ua, uint64(2))); // a gap
+        _setReverts(
+            pv,
+            ml1,
+            _rec(ua, address(0), 0, _pk(2), true),
+            abi.encodeWithSelector(IUARegistry.UAPqzKeyVersion.selector, ua, uint64(0))
+        ); // version 0 again
+        _setReverts(
+            pv,
+            ml1,
+            _rec(ua, address(0), 2, _pk(2), true),
+            abi.encodeWithSelector(IUARegistry.UAPqzKeyVersion.selector, ua, uint64(2))
+        ); // a gap
         _set(pv, ml1, _rec(ua, address(0), 1, _pk(1), true)); // control
     }
 
@@ -440,8 +509,12 @@ contract PqzScopedKeysTest is UARegistryBase {
     function test_v1_otherLength_refused() public {
         bytes32 ua = _single(pv, ml1);
         _set(pv, ml1, _rec(ua, address(0), 0, _pk(0), true));
-        _setReverts(pv, ml1, _rec(ua, address(0), 1, _pkOther(1), true),
-            abi.encodeWithSelector(UAKinds.UAKeyData.selector, UAKinds.PQZ_MLWE));
+        _setReverts(
+            pv,
+            ml1,
+            _rec(ua, address(0), 1, _pkOther(1), true),
+            abi.encodeWithSelector(UAKinds.UAKeyData.selector, UAKinds.PQZ_MLWE)
+        );
     }
 
     function test_popHash_zero_refused() public {
@@ -684,7 +757,16 @@ contract PqzScopedKeysTest is UARegistryBase {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
         c[0] = UARegistry.KindConfig(ML, address(mock), 400_000);
         c[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(new SetVerifierStandIn()), 1_000_000);
-        r = _deploy(address(0x5ca0000000000000000000000000000000000043), chainUidA, address(0), false, BUDGET, address(0), true, c);
+        r = _deploy(
+            address(0x5ca0000000000000000000000000000000000043),
+            chainUidA,
+            address(0),
+            false,
+            BUDGET,
+            address(0),
+            true,
+            c
+        );
     }
 
     /// The test's own message check (`_sig` is the base mock's `keccak256(abi.encode(key, message))`).
@@ -764,10 +846,20 @@ contract PqzScopedKeysTest is UARegistryBase {
         R memory x = _rec(ua, address(0), 0, _pk(0), true);
         _set(pv, ml1, x);
         pv.storePqzScopedPop(ua, address(0), 0, x.proof);
-        UARegistry g2 = _deploy(address(0x5Ca0000000000000000000000000000000000044), chainUidA, address(pv), false, BUDGET,
-            address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry g2 = _deploy(
+            address(0x5Ca0000000000000000000000000000000000044),
+            chainUidA,
+            address(pv),
+            false,
+            BUDGET,
+            address(0),
+            true,
+            new UARegistry.KindConfig[](0)
+        );
         (uint64 v, address ptr,, bool pr) = g2.pqzScopedKeyOf(ua, address(0));
-        assertEq(abi.encode(v, SSTORE2.read(ptr), pr), abi.encode(uint64(0), x.key, true), "the key read forwards (control)");
+        assertEq(
+            abi.encode(v, SSTORE2.read(ptr), pr), abi.encode(uint64(0), x.key, true), "the key read forwards (control)"
+        );
         assertEq(pv.pqzScopedCount(address(0)), 1);
         assertEq(g2.pqzScopedCount(address(0)), 1, "the inherited holder is listed");
         assertEq(g2.pqzScopedAt(address(0), 0), ua);

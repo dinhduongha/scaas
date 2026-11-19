@@ -18,7 +18,6 @@
 //! payer): such a job fails on chain and is reported reverted, never retried blindly (Task 9 note).
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
-use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -30,7 +29,7 @@ use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, 
 use crate::addresses::near as near_id;
 use crate::chain::SimError;
 use crate::config::ChainCfg;
-use crate::odoo::Job;
+use crate::external_pull::Job;
 use crate::signer::{LocalSigner, Signer};
 
 pub use super::aptos::{meta_pay_id, pay_lane};
@@ -77,6 +76,8 @@ pub const PASSKEY_FIELD_MAX: usize = 1024;
 pub const RELAY_EXPIRY_MARGIN_S: u64 = 120;
 /// The action fees are re-read this often (review m2).
 const FEES_TTL_S: u64 = 3_600;
+/// `params.max_deposit_per_job`'s default, yoctoNEAR (1 NEAR): the most one job attaches (CLI-RPC-05, scaas-rpc T24.4).
+const DEFAULT_MAX_DEPOSIT: u128 = 1_000_000_000_000_000_000_000_000;
 /// `relay_timeout(ref)`: its receipt, a token settle and a deposit return (`GAS_RELEASE` 5 each), `on_settle` 3; one
 /// `IMPLICIT_TRANSFER_GAS` each for its own `target_deposit` return, the two settlements and `on_settle` (ruling A).
 const GAS_RELAY_TIMEOUT: u64 = 30 * TGAS + 4 * IMPLICIT_TRANSFER_GAS;
@@ -112,7 +113,11 @@ fn b64d(s: &str) -> Result<Vec<u8>> {
 
 /// A NEAR hash (base58 of 32 bytes).
 fn b58_32(s: &str) -> Result<[u8; 32]> {
-    bs58::decode(s).into_vec().ok().and_then(|v| v.try_into().ok()).ok_or_else(|| anyhow!("{s:?} is not a base58 hash"))
+    bs58::decode(s)
+        .into_vec()
+        .ok()
+        .and_then(|v| v.try_into().ok())
+        .ok_or_else(|| anyhow!("{s:?} is not a base58 hash"))
 }
 
 fn now() -> u64 {
@@ -131,7 +136,11 @@ impl<'a> Reader<'a> {
         Self { b, i: 0 }
     }
     fn take(&mut self, n: usize) -> Result<&'a [u8]> {
-        let end = self.i.checked_add(n).filter(|e| *e <= self.b.len()).ok_or_else(|| anyhow!("truncated"))?;
+        let end = self
+            .i
+            .checked_add(n)
+            .filter(|e| *e <= self.b.len())
+            .ok_or_else(|| anyhow!("truncated"))?;
         let s = &self.b[self.i..end];
         self.i = end;
         Ok(s)
@@ -272,7 +281,9 @@ pub struct MetaOp {
 impl MetaOp {
     /// The job's `payload`: `"scaas.metaop.v1"` ‖ Borsh, canonical (account ids valid, tags known, nothing after).
     pub fn decode(b: &[u8]) -> Result<Self> {
-        let body = b.strip_prefix(LABEL).ok_or_else(|| anyhow!("not a scaas.metaop.v1 payload"))?;
+        let body = b
+            .strip_prefix(LABEL)
+            .ok_or_else(|| anyhow!("not a scaas.metaop.v1 payload"))?;
         let mut r = Reader::new(body);
         let op = Self::read(&mut r)?;
         r.end()?;
@@ -337,8 +348,15 @@ pub enum Auth {
     Secp256k1([u8; 64]),
     /// `rp` = the authenticatorData's rpIdHash (its first 32 bytes), `origin` = clientDataJSON's origin as the token
     /// reads it (`origin_of`).
-    Passkey { key: [u8; 64], rp: Option<[u8; 32]>, origin: String },
-    Msig { key_data: Vec<u8>, sigs: Vec<Auth> },
+    Passkey {
+        key: [u8; 64],
+        rp: Option<[u8; 32]>,
+        origin: String,
+    },
+    Msig {
+        key_data: Vec<u8>,
+        sigs: Vec<Auth>,
+    },
 }
 
 /// common/src/webauthn.rs `origin_of`, ported byte for byte (fix 4 N1; `smartcontracts/near/vectors/webauthn-origin.json`
@@ -355,7 +373,13 @@ pub fn origin_of<'a>(cd: &'a [u8], challenge: &[u8; 32]) -> Option<&'a [u8]> {
     let (origin, tail) = (&rest[..end], &rest[end + 1..]);
     let ok = match tail.strip_prefix(br#","crossOrigin":false"#) {
         _ if tail == b"}" => true,
-        Some(t) => t == b"}" || (t.starts_with(b",") && t.ends_with(b"}") && !has(t, br#""topOrigin""#) && !has(t, br#""crossOrigin""#)),
+        Some(t) => {
+            t == b"}"
+                || (t.starts_with(b",")
+                    && t.ends_with(b"}")
+                    && !has(t, br#""topOrigin""#)
+                    && !has(t, br#""crossOrigin""#))
+        }
         None => false,
     };
     (ok && !origin.is_empty() && !origin.contains(&b'\\')).then_some(origin)
@@ -393,7 +417,9 @@ impl Auth {
                 let (ad, cd) = (r.bytes()?, r.bytes()?);
                 r.take(64)?;
                 if ad.len() > PASSKEY_FIELD_MAX || cd.len() > PASSKEY_FIELD_MAX {
-                    bail!("passkey clientDataJSON / authenticatorData over {PASSKEY_FIELD_MAX} bytes");
+                    bail!(
+                        "passkey clientDataJSON / authenticatorData over {PASSKEY_FIELD_MAX} bytes"
+                    );
                 }
                 let rp = ad.get(..32).and_then(|x| x.try_into().ok());
                 // fix 4 N1: as the token reads it (its `webauthn::origin`); a clientDataJSON it cannot parse never verifies
@@ -430,7 +456,10 @@ impl Auth {
         match self {
             Auth::Passkey { .. } => GAS_PASSKEY,
             Auth::Ed25519(_) | Auth::Secp256k1(_) => GAS_KEY_SIG,
-            Auth::Msig { sigs, .. } => sigs.iter().map(Self::attach_gas).fold(0, u64::saturating_add),
+            Auth::Msig { sigs, .. } => sigs
+                .iter()
+                .map(Self::attach_gas)
+                .fold(0, u64::saturating_add),
         }
     }
 
@@ -439,7 +468,10 @@ impl Auth {
         match self {
             Auth::Passkey { .. } => ROUTER_SIG_PASSKEY,
             Auth::Ed25519(_) | Auth::Secp256k1(_) => ROUTER_SIG_KEY,
-            Auth::Msig { sigs, .. } => sigs.iter().map(Self::router_gas).fold(0, u64::saturating_add),
+            Auth::Msig { sigs, .. } => sigs
+                .iter()
+                .map(Self::router_gas)
+                .fold(0, u64::saturating_add),
         }
     }
 
@@ -448,7 +480,9 @@ impl Auth {
         match self {
             Auth::Ed25519(k) => Some((KIND_ED25519, k.to_vec())),
             Auth::Secp256k1(k) => Some((KIND_SECP256K1, k.to_vec())),
-            Auth::Passkey { key, rp, .. } => rp.map(|rp| (KIND_WEBAUTHN_P256, [&key[..], &rp].concat())),
+            Auth::Passkey { key, rp, .. } => {
+                rp.map(|rp| (KIND_WEBAUTHN_P256, [&key[..], &rp].concat()))
+            }
             Auth::Msig { key_data, .. } => Some((KIND_MSIG, key_data.clone())),
         }
     }
@@ -467,9 +501,14 @@ impl Auth {
         match self {
             Auth::Passkey { .. } => true,
             Auth::Msig { key_data, .. } => {
-                let n = key_data.get(2..4).map_or(0, |c| u16::from_be_bytes([c[0], c[1]]) as usize);
-                n > 0 && key_data.len() == 4 + 36 * n
-                    && (0..n).all(|i| key_data[4 + 36 * i..4 + 36 * i + 2] == KIND_WEBAUTHN_P256.to_be_bytes())
+                let n = key_data
+                    .get(2..4)
+                    .map_or(0, |c| u16::from_be_bytes([c[0], c[1]]) as usize);
+                n > 0
+                    && key_data.len() == 4 + 36 * n
+                    && (0..n).all(|i| {
+                        key_data[4 + 36 * i..4 + 36 * i + 2] == KIND_WEBAUTHN_P256.to_be_bytes()
+                    })
             }
             _ => false,
         }
@@ -574,7 +613,10 @@ fn read_param(r: &mut Reader, p: P) -> Result<()> {
 
 /// A wrapped entry's arguments, canonical and complete: `(op, auth, parameters…)`; returns its `auth`.
 fn wrapper_args(entry: &str, args: &[u8]) -> Result<Auth> {
-    let (_, params) = WRAPPED.iter().find(|w| w.0 == entry).ok_or_else(|| anyhow!("{entry} is not a wrapped entry"))?;
+    let (_, params) = WRAPPED
+        .iter()
+        .find(|w| w.0 == entry)
+        .ok_or_else(|| anyhow!("{entry} is not a wrapped entry"))?;
     let mut r = Reader::new(args);
     let op = MetaOp::read(&mut r)?;
     let auth = Auth::read(&mut r, true, &op.digest())?;
@@ -591,7 +633,9 @@ fn parse_wrapper_call(call: &[u8]) -> Result<(String, Vec<u8>)> {
     let n = r.u8()? as usize;
     let entry = std::str::from_utf8(r.take(n)?)?.to_string();
     let args = r.rest().to_vec();
-    wrapper_args(&entry, &args).with_context(|| format!("op.extra.call is not a canonical call of a wrapped entry ({entry})"))?;
+    wrapper_args(&entry, &args).with_context(|| {
+        format!("op.extra.call is not a canonical call of a wrapped entry ({entry})")
+    })?;
     Ok((entry, args))
 }
 
@@ -621,15 +665,29 @@ impl RelayFeePolicy {
     /// is checked at start (`start_check`).
     pub fn from_cfg(cfg: &ChainCfg) -> Result<Self> {
         let params = cfg.relay_params()?;
-        let tokens: Vec<String> = cfg.tokens.iter()
-            .map(|t| near_id(&t.address).with_context(|| format!("tokens: {} is not a NEAR account id", t.address)))
+        let tokens: Vec<String> = cfg
+            .tokens
+            .iter()
+            .map(|t| {
+                near_id(&t.address)
+                    .with_context(|| format!("tokens: {} is not a NEAR account id", t.address))
+            })
             .collect::<Result<_>>()?;
         let t = cfg.params.get("relay_fee").and_then(|v| v.as_table());
-        let router = params.router.as_deref().map(|r| near_id(r).context("params.relay_fee.router")).transpose()?;
+        let router = params
+            .router
+            .as_deref()
+            .map(|r| near_id(r).context("params.relay_fee.router"))
+            .transpose()?;
         let executor = match t.and_then(|t| t.get("executor")) {
             None => None,
-            Some(v) => Some(near_id(v.as_str().ok_or_else(|| anyhow!("params.relay_fee.executor must be a string"))?)
-                .context("params.relay_fee.executor")?),
+            Some(v) => Some(
+                near_id(
+                    v.as_str()
+                        .ok_or_else(|| anyhow!("params.relay_fee.executor must be a string"))?,
+                )
+                .context("params.relay_fee.executor")?,
+            ),
         };
         match (&router, &executor) {
             (Some(_), None) => bail!("params.relay_fee.router needs params.relay_fee.executor (the router's executor account)"),
@@ -642,29 +700,51 @@ impl RelayFeePolicy {
         }
         let dex = match cfg.params.get("dex") {
             None => None,
-            Some(v) => Some(near_id(v.as_str().ok_or_else(|| anyhow!("params.dex must be a string"))?).context("params.dex")?),
+            Some(v) => Some(
+                near_id(
+                    v.as_str()
+                        .ok_or_else(|| anyhow!("params.dex must be a string"))?,
+                )
+                .context("params.dex")?,
+            ),
         };
         // fix 2 f2: `targets = { "<account id>" = ["method", …] }`, strict
         let mut targets = BTreeMap::new();
         if let Some(v) = t.and_then(|t| t.get("targets")) {
-            let table = v.as_table().ok_or_else(|| anyhow!("params.relay_fee.targets must be a table of account id = [methods]"))?;
+            let table = v.as_table().ok_or_else(|| {
+                anyhow!("params.relay_fee.targets must be a table of account id = [methods]")
+            })?;
             for (k, ms) in table {
                 let id = near_id(k).context("params.relay_fee.targets")?;
-                if Some(&id) == router.as_ref() || Some(&id) == executor.as_ref() || tokens.contains(&id) || dex.as_ref() == Some(&id) {
+                if Some(&id) == router.as_ref()
+                    || Some(&id) == executor.as_ref()
+                    || tokens.contains(&id)
+                    || dex.as_ref() == Some(&id)
+                {
                     bail!("params.relay_fee.targets: {id} is the router, its executor, a token or the DEX");
                 }
-                let list = ms.as_array().filter(|l| !l.is_empty())
-                    .ok_or_else(|| anyhow!("params.relay_fee.targets.{k} must be a non-empty list of method names"))?;
-                let methods = list.iter().map(|m| match m.as_str() {
-                    Some(m) if (1..=255).contains(&m.len()) && m != "add_key_native" => Ok(m.to_string()),
-                    _ => Err(anyhow!("params.relay_fee.targets.{k}: {m} is not a method name")),
-                }).collect::<Result<Vec<_>>>()?;
+                let list = ms.as_array().filter(|l| !l.is_empty()).ok_or_else(|| {
+                    anyhow!("params.relay_fee.targets.{k} must be a non-empty list of method names")
+                })?;
+                let methods = list
+                    .iter()
+                    .map(|m| match m.as_str() {
+                        Some(m) if (1..=255).contains(&m.len()) && m != "add_key_native" => {
+                            Ok(m.to_string())
+                        }
+                        _ => Err(anyhow!(
+                            "params.relay_fee.targets.{k}: {m} is not a method name"
+                        )),
+                    })
+                    .collect::<Result<Vec<_>>>()?;
                 targets.insert(id, methods);
             }
         }
         let mut min_yocto_value = HashMap::new();
         if let Some(v) = t.and_then(|t| t.get("min_yocto_value")) {
-            let table = v.as_table().ok_or_else(|| anyhow!("params.relay_fee.min_yocto_value must be a table of token = yoctoNEAR"))?;
+            let table = v.as_table().ok_or_else(|| {
+                anyhow!("params.relay_fee.min_yocto_value must be a table of token = yoctoNEAR")
+            })?;
             for (k, n) in table {
                 if !tokens.contains(k) {
                     bail!("params.relay_fee.min_yocto_value.{k}: not a configured token");
@@ -678,7 +758,15 @@ impl RelayFeePolicy {
                 min_yocto_value.insert(k.clone(), price);
             }
         }
-        Ok(Self { router, executor, tokens, params, min_yocto_value, dex, targets })
+        Ok(Self {
+            router,
+            executor,
+            tokens,
+            params,
+            min_yocto_value,
+            dex,
+            targets,
+        })
     }
 
     /// Final review node I1 (Algorand's `never_paid`): a configured token, the router, its executor or the DEX is never a
@@ -686,7 +774,10 @@ impl RelayFeePolicy {
     /// mandate's `terms.payee`): keyless, each strands what it gets, and the executor's balance anyone can move.
     pub fn never_paid(&self, h: &Holder) -> bool {
         let Holder::Near(a) = h else { return false };
-        self.tokens.contains(a) || [&self.router, &self.executor, &self.dex].iter().any(|x| x.as_ref() == Some(a))
+        self.tokens.contains(a)
+            || [&self.router, &self.executor, &self.dex]
+                .iter()
+                .any(|x| x.as_ref() == Some(a))
     }
 }
 
@@ -694,11 +785,23 @@ impl RelayFeePolicy {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Entry {
     Pay,
-    PayMeta { salt: [u8; 32], meta: Vec<u8> },
+    PayMeta {
+        salt: [u8; 32],
+        meta: Vec<u8>,
+    },
     /// `relay_fee_<entry>` on the token: `entry` = the full wrapped name (`mtx_add_key`), `args` = its Borsh arguments.
-    FeeWrapper { entry: String, args: Vec<u8> },
+    FeeWrapper {
+        entry: String,
+        args: Vec<u8>,
+    },
     /// The router's `relay(target, method, args, target_gas, target_deposit, token, op, auth)`.
-    FeeRouter { target: String, method: String, args: Vec<u8>, target_gas: u64, target_deposit: u128 },
+    FeeRouter {
+        target: String,
+        method: String,
+        args: Vec<u8>,
+        target_gas: u64,
+        target_deposit: u128,
+    },
 }
 
 fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
@@ -708,11 +811,14 @@ fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
 
 /// A u128 amount as JSON: a decimal string only (never a JSON number: an f64 above 2^53 loses digits).
 pub fn dec_u128(v: &Value, what: &str) -> Result<u128> {
-    let s = v.as_str().ok_or_else(|| anyhow!("{what} must be a decimal string, not {v}"))?;
+    let s = v
+        .as_str()
+        .ok_or_else(|| anyhow!("{what} must be a decimal string, not {v}"))?;
     if s.is_empty() || s.len() > 39 || !s.bytes().all(|c| c.is_ascii_digit()) {
         bail!("{what} must be a decimal string, not {s:?}");
     }
-    s.parse().map_err(|_| anyhow!("{what} {s} is above 2^128 - 1"))
+    s.parse()
+        .map_err(|_| anyhow!("{what} {s} is above 2^128 - 1"))
 }
 
 fn dec_u64(v: &Value, what: &str) -> Result<u64> {
@@ -740,19 +846,29 @@ fn pays(op: &MetaOp, who: Option<&String>) -> bool {
 /// the token itself (the wrapper marker) outside the route whose open mode it is (CTR-MTX-27 step 2).
 pub fn entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
     let kind = crate::adapter::op_kind(o, &crate::adapter::PAY_KINDS)?;
-    if kind != Some("relay_fee") && (op.to == Holder::Near(op.contract.clone()) || policy.never_paid(&op.to)) {
+    if kind != Some("relay_fee")
+        && (op.to == Holder::Near(op.contract.clone()) || policy.never_paid(&op.to))
+    {
         bail!("never pay {} (the token itself, a configured token, the relay-fee router, its executor or the DEX): the funds would be stranded", op.to.display());
     }
     match kind {
         Some("pay_meta") => {
-            let salt: [u8; 32] = hex_field(&o["salt"], "salt")?.try_into().map_err(|_| anyhow!("op.salt is 32 bytes"))?;
+            let salt: [u8; 32] = hex_field(&o["salt"], "salt")?
+                .try_into()
+                .map_err(|_| anyhow!("op.salt is 32 bytes"))?;
             let meta = hex_field(&o["meta"], "meta")?;
             if meta.len() > policy.params.max_pay_meta_bytes {
-                bail!("meta is {} B, above max_pay_meta_bytes {}", meta.len(), policy.params.max_pay_meta_bytes);
+                bail!(
+                    "meta is {} B, above max_pay_meta_bytes {}",
+                    meta.len(),
+                    policy.params.max_pay_meta_bytes
+                );
             }
             let id = meta_pay_id(&salt, &meta);
             if op.pay_ref != id || op.lane != pay_lane(&id) || op.nonce != 0 {
-                bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0");
+                bail!(
+                    "pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"
+                );
             }
             Ok(Entry::PayMeta { salt, meta })
         }
@@ -763,23 +879,40 @@ pub fn entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
 
 fn fee_entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
     if !policy.tokens.contains(&op.contract) {
-        bail!("token {} is not a configured token of this chain", op.contract);
+        bail!(
+            "token {} is not a configured token of this chain",
+            op.contract
+        );
     }
-    let route = o["extra"]["route"].as_str().ok_or_else(|| anyhow!("op.extra.route must be \"wrapper\" or \"router\""))?;
+    let route = o["extra"]["route"]
+        .as_str()
+        .ok_or_else(|| anyhow!("op.extra.route must be \"wrapper\" or \"router\""))?;
     let call = hex_field(&o["extra"]["call"], "extra.call")?;
     match route {
         "wrapper" => {
             if op.relayer.as_ref() != Some(&op.contract) {
-                bail!("the payment's relayer {:?} is not the wrapper marker (the token {})", op.relayer, op.contract);
+                bail!(
+                    "the payment's relayer {:?} is not the wrapper marker (the token {})",
+                    op.relayer,
+                    op.contract
+                );
             }
-            bound(op, &relay_ref(&op.network, &len8(&op.contract), &call, &op.extra), o)?;
+            bound(
+                op,
+                &relay_ref(&op.network, &len8(&op.contract), &call, &op.extra),
+                o,
+            )?;
             // open mode pays the token (the marker); any other keyless SCaaS account strands the fee
             if op.to != Holder::Near(op.contract.clone()) && policy.never_paid(&op.to) {
                 bail!("never pay {} (a configured token, the relay-fee router, its executor or the DEX)", op.to.display());
             }
             let (entry, args) = parse_wrapper_call(&call)?;
             if entry == "mtx_mandate_open" {
-                never_paid_payee(policy, &mandate_terms(&args)?.0, "the wrapped mandate's terms.payee")?;
+                never_paid_payee(
+                    policy,
+                    &mandate_terms(&args)?.0,
+                    "the wrapped mandate's terms.payee",
+                )?;
             }
             Ok(Entry::FeeWrapper { entry, args })
         }
@@ -788,10 +921,17 @@ fn fee_entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
                 bail!("router relay-fee jobs need params.relay_fee.router and executor");
             };
             if op.relayer.as_ref() != Some(router) {
-                bail!("the payment's relayer {:?} is not the configured router {router}", op.relayer);
+                bail!(
+                    "the payment's relayer {:?} is not the configured router {router}",
+                    op.relayer
+                );
             }
             let (target, method, args) = parse_router_call(&call)?;
-            bound(op, &relay_ref(&op.network, &len8(&target), &call, &op.extra), o)?;
+            bound(
+                op,
+                &relay_ref(&op.network, &len8(&target), &call, &op.extra),
+                o,
+            )?;
             if target == *router || target == *executor {
                 bail!("the target {target} is the router or its executor");
             }
@@ -800,11 +940,20 @@ fn fee_entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
                 bail!("a relay-fee target method add_key_native is refused (no key is ever registered for the executor)");
             }
             // fix 1 I2: only targets whose calls the node can vouch for (SCaaS, checked in `build`) or the operator lists
-            let allowed = policy.tokens.iter().chain(&policy.dex).chain(policy.targets.keys()).any(|x| *x == target);
+            let allowed = policy
+                .tokens
+                .iter()
+                .chain(&policy.dex)
+                .chain(policy.targets.keys())
+                .any(|x| *x == target);
             if !allowed {
                 bail!("{target} is not an allowed router target (configured tokens, params.dex, params.relay_fee.targets)");
             }
-            if policy.targets.get(&target).is_some_and(|ms| !ms.contains(&method)) {
+            if policy
+                .targets
+                .get(&target)
+                .is_some_and(|ms| !ms.contains(&method))
+            {
                 bail!("{method} is not a listed method of router target {target} (params.relay_fee.targets)");
             }
             // open mode pays the router (the marker); the token itself and every other keyless SCaaS account strand it
@@ -812,7 +961,10 @@ fn fee_entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
                 bail!("never pay the token itself");
             }
             if !pays(op, Some(router)) && policy.never_paid(&op.to) {
-                bail!("never pay {} (a configured token, the router's executor or the DEX)", op.to.display());
+                bail!(
+                    "never pay {} (a configured token, the router's executor or the DEX)",
+                    op.to.display()
+                );
             }
             if policy.tokens.contains(&target) {
                 target_payees(policy, &method, &args)?;
@@ -821,8 +973,15 @@ fn fee_entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
                 bail!("router args are {} B, above {MAX_ARGS_BYTES}", args.len());
             }
             let target_gas = dec_u64(&o["extra"]["target_gas"], "op.extra.target_gas")?;
-            let target_deposit = dec_u128(&o["extra"]["target_deposit"], "op.extra.target_deposit")?;
-            Ok(Entry::FeeRouter { target, method, args, target_gas, target_deposit })
+            let target_deposit =
+                dec_u128(&o["extra"]["target_deposit"], "op.extra.target_deposit")?;
+            Ok(Entry::FeeRouter {
+                target,
+                method,
+                args,
+                target_gas,
+                target_deposit,
+            })
         }
         r => bail!("op.extra.route {r:?} must be \"wrapper\" or \"router\""),
     }
@@ -840,12 +999,19 @@ pub fn job_gas(entry: &Entry, auth: &Auth) -> Result<u64> {
             if n > MAX_WRAPPER_PASSKEYS {
                 bail!("{n} passkey signatures in one wrapper job (entry + payment): at most {MAX_WRAPPER_PASSKEYS} fit 300 Tgas");
             }
-            GAS_JOB_BASE.saturating_add(a.attach_gas()).saturating_add(auth.attach_gas())
+            GAS_JOB_BASE
+                .saturating_add(a.attach_gas())
+                .saturating_add(auth.attach_gas())
         }
-        Entry::FeeRouter { target_gas, .. } => ROUTER_FIXED_GAS.saturating_add(auth.router_gas()).saturating_add(*target_gas),
+        Entry::FeeRouter { target_gas, .. } => ROUTER_FIXED_GAS
+            .saturating_add(auth.router_gas())
+            .saturating_add(*target_gas),
     };
     if gas > MAX_GAS {
-        bail!("the job needs {} Tgas, above the 300 Tgas one transaction may prepay", gas / TGAS);
+        bail!(
+            "the job needs {} Tgas, above the 300 Tgas one transaction may prepay",
+            gas / TGAS
+        );
     }
     Ok(gas)
 }
@@ -862,15 +1028,26 @@ fn marker<'a>(policy: &'a RelayFeePolicy, op: &'a MetaOp, entry: &Entry) -> Opti
 /// T17 payee rule (`adapter::relay_fee_ours`): open mode (`to` = the marker, which pays the submitting lane) or bound
 /// to the lane, at least `min_amount`; bound to anyone else only with `relay_bound_payee` (sponsored).
 pub fn relay_payee(policy: &RelayFeePolicy, op: &MetaOp, entry: &Entry, lane: &str) -> Result<()> {
-    let Some(m) = marker(policy, op, entry) else { return Ok(()) };
-    crate::adapter::relay_fee_ours(pays(op, Some(m)), op.to == Holder::Near(lane.into()), op.amount, &policy.params)
+    let Some(m) = marker(policy, op, entry) else {
+        return Ok(());
+    };
+    crate::adapter::relay_fee_ours(
+        pays(op, Some(m)),
+        op.to == Holder::Near(lane.into()),
+        op.amount,
+        &policy.params,
+    )
 }
 
 /// Spec §5 / T17 fee-covers-cost: a fee that is the node's must be worth, at `min_yocto_value`, at least `quote` = the
 /// job's prepaid gas × the node's gas price + every deposit the job attaches.
 fn fee_covers(policy: &RelayFeePolicy, op: &MetaOp, quote: u128) -> Result<()> {
-    let price = policy.min_yocto_value.get(&op.contract)
-        .ok_or_else(|| anyhow!("params.relay_fee.min_yocto_value has no price for token {}", op.contract))?;
+    let price = policy.min_yocto_value.get(&op.contract).ok_or_else(|| {
+        anyhow!(
+            "params.relay_fee.min_yocto_value has no price for token {}",
+            op.contract
+        )
+    })?;
     let value = op.amount.saturating_mul(*price);
     if value < quote {
         bail!("fee {} × min_yocto_value {price} = {value} yoctoNEAR is below the {quote} yoctoNEAR the job costs (gas at the node's price + deposits)", op.amount);
@@ -922,7 +1099,18 @@ fn settle_legs(b: &[u8]) -> Result<Vec<SettleLeg>> {
         let op = MetaOp::read(&mut r)?;
         let at = r.i;
         let auth = Auth::read(&mut r, true, &op.digest())?;
-        legs.push(SettleLeg { order, sell_token, buy_token, sell_amount, min_buy, expiry, relayer, op, auth_raw: b[at..r.i].to_vec(), auth });
+        legs.push(SettleLeg {
+            order,
+            sell_token,
+            buy_token,
+            sell_amount,
+            min_buy,
+            expiry,
+            relayer,
+            op,
+            auth_raw: b[at..r.i].to_vec(),
+            auth,
+        });
     }
     r.end()?;
     Ok(legs)
@@ -932,7 +1120,11 @@ fn settle_legs(b: &[u8]) -> Result<Vec<SettleLeg>> {
 /// `sell_amount` > 0, `extra = sha256(Borsh(order))`.
 fn dex_leg(l: &SettleLeg, dex: &str) -> std::result::Result<(), &'static str> {
     let me = Holder::Near(dex.into());
-    if l.op.op != 1 || l.op.contract != l.sell_token || l.op.to != me || l.op.relayer.as_deref() != Some(dex) {
+    if l.op.op != 1
+        || l.op.contract != l.sell_token
+        || l.op.to != me
+        || l.op.relayer.as_deref() != Some(dex)
+    {
         return Err("leg: op 1 for the order's sell token, to = relayer = this DEX");
     }
     if l.op.amount != l.sell_amount || l.op.amount == 0 {
@@ -960,15 +1152,35 @@ fn dex_pair(a: &SettleLeg, b: &SettleLeg) -> std::result::Result<(), &'static st
 }
 
 /// The token entries that move value from the op's `from` (`op.amount`; a mandate open: its funding).
-const VALUE_ENTRIES: &[&str] = &["mtx_pay", "mtx_pay_meta", "mtx_transfer", "mtx_execute_transfer", "mtx_mandate_open"];
+const VALUE_ENTRIES: &[&str] = &[
+    "mtx_pay",
+    "mtx_pay_meta",
+    "mtx_transfer",
+    "mtx_execute_transfer",
+    "mtx_mandate_open",
+];
 
 /// The token entries a router job may target: each has a `<method>_check(caller, …same args)` view and takes
 /// `(op, auth, …)` first (token/src/{metatx,account,mandate,trade}.rs). Not `mtx_trade` (re-review N1: via the router its
 /// leg would pay the executor; legs go through the DEX's `settle`).
 const TOKEN_CHECKED: &[&str] = &[
-    "mtx_pay", "mtx_pay_meta", "mtx_transfer", "mtx_execute_transfer", "mtx_add_key", "mtx_remove_key", "mtx_add_origin",
-    "mtx_remove_origin", "mtx_set_guardian", "mtx_set_policy", "mtx_start_recovery", "mtx_finish_recovery",
-    "mtx_cancel_recovery", "mtx_mandate_open", "mtx_mandate_pay", "mtx_revoke", "mtx_cancel",
+    "mtx_pay",
+    "mtx_pay_meta",
+    "mtx_transfer",
+    "mtx_execute_transfer",
+    "mtx_add_key",
+    "mtx_remove_key",
+    "mtx_add_origin",
+    "mtx_remove_origin",
+    "mtx_set_guardian",
+    "mtx_set_policy",
+    "mtx_start_recovery",
+    "mtx_finish_recovery",
+    "mtx_cancel_recovery",
+    "mtx_mandate_open",
+    "mtx_mandate_pay",
+    "mtx_revoke",
+    "mtx_cancel",
     "mtx_invalidate_nonces",
 ];
 /// The DEX `settle` floor (dex/src/lib.rs `settle_gas`): `GAS_SETTLE_SELF` 9 + `GAS_ON_LEGS` 18 + per leg `GAS_LEG_BASE`
@@ -999,7 +1211,9 @@ fn holder_len(h: &Holder) -> u64 {
 /// passkey's origin, or turning on passkey-for-value while the payment is not passkey-signed — when the entry's subject
 /// is the payer.
 pub fn wrapper_conflicts(entry: &Entry, op: &MetaOp, auth: &Auth) -> Result<()> {
-    let Entry::FeeWrapper { entry, args } = entry else { return Ok(()) };
+    let Entry::FeeWrapper { entry, args } = entry else {
+        return Ok(());
+    };
     let mut r = Reader::new(args);
     let eop = MetaOp::read(&mut r)?;
     Auth::read(&mut r, true, &eop.digest())?;
@@ -1060,10 +1274,17 @@ fn target_payees(policy: &RelayFeePolicy, method: &str, args: &[u8]) -> Result<(
         bail!("never pay the executor: a router target token.mtx_trade would move the sell amount to Holder::Near(executor) (legs go through the DEX's settle)");
     }
     if method == "mtx_mandate_open" {
-        return never_paid_payee(policy, &mandate_terms(args).context("router target args of mtx_mandate_open")?.0, "the mandate's terms.payee");
+        return never_paid_payee(
+            policy,
+            &mandate_terms(args)
+                .context("router target args of mtx_mandate_open")?
+                .0,
+            "the mandate's terms.payee",
+        );
     }
     if VALUE_ENTRIES.contains(&method) || method == "mtx_mandate_pay" {
-        let top = MetaOp::read(&mut Reader::new(args)).with_context(|| format!("router target args of {method}"))?;
+        let top = MetaOp::read(&mut Reader::new(args))
+            .with_context(|| format!("router target args of {method}"))?;
         return never_paid_payee(policy, &top.to, &format!("the router target {method}'s to"));
     }
     Ok(())
@@ -1107,22 +1328,54 @@ impl ActionFees {
     pub fn from_protocol_config(pc: &Value) -> Result<Self> {
         let tc = &pc["runtime_config"]["transaction_costs"];
         let item = |v: &Value, what: &str| -> Result<u64> {
-            ["send_sir", "send_not_sir", "execution"].iter().try_fold(0u64, |m, k| {
-                v[k].as_u64().map(|x| m.max(x)).ok_or_else(|| anyhow!("protocol config: no transaction_costs {what}.{k}"))
-            })
+            ["send_sir", "send_not_sir", "execution"]
+                .iter()
+                .try_fold(0u64, |m, k| {
+                    v[k].as_u64()
+                        .map(|x| m.max(x))
+                        .ok_or_else(|| anyhow!("protocol config: no transaction_costs {what}.{k}"))
+                })
         };
         Ok(Self {
-            receipt: item(&tc["action_receipt_creation_config"], "action_receipt_creation_config")?,
-            function_call: item(&tc["action_creation_config"]["function_call_cost"], "function_call_cost")?,
-            per_byte: item(&tc["action_creation_config"]["function_call_cost_per_byte"], "function_call_cost_per_byte")?,
+            receipt: item(
+                &tc["action_receipt_creation_config"],
+                "action_receipt_creation_config",
+            )?,
+            function_call: item(
+                &tc["action_creation_config"]["function_call_cost"],
+                "function_call_cost",
+            )?,
+            per_byte: item(
+                &tc["action_creation_config"]["function_call_cost_per_byte"],
+                "function_call_cost_per_byte",
+            )?,
             implicit_transfer: [
-                (&tc["action_receipt_creation_config"], "action_receipt_creation_config"),
-                (&tc["action_creation_config"]["transfer_cost"], "transfer_cost"),
-                (&tc["action_creation_config"]["create_account_cost"], "create_account_cost"),
-                (&tc["action_creation_config"]["add_key_cost"]["full_access_cost"], "add_key_cost.full_access_cost"),
-            ].iter().try_fold(0u64, |sum, (v, what)| -> Result<u64> {
-                let f = |k: &str| v[k].as_u64().ok_or_else(|| anyhow!("protocol config: no transaction_costs {what}.{k}"));
-                Ok(sum.saturating_add(f("send_not_sir")?).saturating_add(f("execution")?))
+                (
+                    &tc["action_receipt_creation_config"],
+                    "action_receipt_creation_config",
+                ),
+                (
+                    &tc["action_creation_config"]["transfer_cost"],
+                    "transfer_cost",
+                ),
+                (
+                    &tc["action_creation_config"]["create_account_cost"],
+                    "create_account_cost",
+                ),
+                (
+                    &tc["action_creation_config"]["add_key_cost"]["full_access_cost"],
+                    "add_key_cost.full_access_cost",
+                ),
+            ]
+            .iter()
+            .try_fold(0u64, |sum, (v, what)| -> Result<u64> {
+                let f = |k: &str| {
+                    v[k].as_u64()
+                        .ok_or_else(|| anyhow!("protocol config: no transaction_costs {what}.{k}"))
+                };
+                Ok(sum
+                    .saturating_add(f("send_not_sir")?)
+                    .saturating_add(f("execution")?))
             })?,
         })
     }
@@ -1131,12 +1384,22 @@ impl ActionFees {
 /// Fix 1 m5: the gas a lane transaction burns besides its prepaid gas (its action fees).
 pub fn action_fees(fees: &ActionFees, call: &Call) -> u64 {
     let bytes = (call.method.len() as u64).saturating_add(call.args.len() as u64);
-    2u64.saturating_mul(fees.receipt.saturating_add(fees.function_call).saturating_add(fees.per_byte.saturating_mul(bytes)))
+    2u64.saturating_mul(
+        fees.receipt
+            .saturating_add(fees.function_call)
+            .saturating_add(fees.per_byte.saturating_mul(bytes)),
+    )
 }
 
 /// Fix 1 m5: one `relay_timeout(ref)` transaction (prepaid + action fees), which a router job may have to send.
 pub fn timeout_gas(fees: &ActionFees) -> u64 {
-    let c = Call { receiver: String::new(), method: "relay_timeout".into(), args: vec![0; 32], gas: GAS_RELAY_TIMEOUT, deposit: 0 };
+    let c = Call {
+        receiver: String::new(),
+        method: "relay_timeout".into(),
+        args: vec![0; 32],
+        gas: GAS_RELAY_TIMEOUT,
+        deposit: 0,
+    };
     GAS_RELAY_TIMEOUT + action_fees(fees, &c)
 }
 
@@ -1144,8 +1407,14 @@ pub fn timeout_gas(fees: &ActionFees) -> u64 {
 /// contract transfer to the lane is paid from it: `IMPLICIT_TRANSFER_GAS` in each static gas; the system gas refunds
 /// cost the lane nothing, T19 review I1), the action fees and, for a router job, one `relay_timeout`.
 pub fn quote_gas(fees: &ActionFees, entry: &Entry, call: &Call) -> u64 {
-    let resend = if matches!(entry, Entry::FeeRouter { .. }) { timeout_gas(fees) } else { 0 };
-    call.gas.saturating_add(action_fees(fees, call)).saturating_add(resend)
+    let resend = if matches!(entry, Entry::FeeRouter { .. }) {
+        timeout_gas(fees)
+    } else {
+        0
+    };
+    call.gas
+        .saturating_add(action_fees(fees, call))
+        .saturating_add(resend)
 }
 
 /// A subject's keys on one token: `(kind, key_data)`.
@@ -1157,7 +1426,12 @@ pub fn describe_key_sets(sets: &[(String, Option<KeyList>)]) -> (String, bool) {
     let line = sets.iter().map(|(t, k)| match k {
         None => format!("{t}: no account"),
         Some(k) => {
-            let keys: Vec<String> = k.iter().map(|(kind, d)| format!("{kind:#06x}:{}", alloy::hex::encode(&d[..d.len().min(8)]))).collect();
+            let keys: Vec<String> = k
+                .iter()
+                .map(|(kind, d)| {
+                    format!("{kind:#06x}:{}", alloy::hex::encode(&d[..d.len().min(8)]))
+                })
+                .collect();
             format!("{t}: [{}]", keys.join(", "))
         }
     });
@@ -1166,8 +1440,15 @@ pub fn describe_key_sets(sets: &[(String, Option<KeyList>)]) -> (String, bool) {
 
 /// The wrapped key ops (their subject's key set is shown, R9).
 const KEY_OPS: &[&str] = &[
-    "mtx_add_key", "mtx_remove_key", "mtx_add_origin", "mtx_remove_origin", "mtx_set_guardian", "mtx_set_policy",
-    "mtx_start_recovery", "mtx_cancel_recovery", "mtx_finish_recovery",
+    "mtx_add_key",
+    "mtx_remove_key",
+    "mtx_add_origin",
+    "mtx_remove_origin",
+    "mtx_set_guardian",
+    "mtx_set_policy",
+    "mtx_start_recovery",
+    "mtx_cancel_recovery",
+    "mtx_finish_recovery",
 ];
 
 // ------------------------------------------------------------------ transaction (Borsh, hand-encoded)
@@ -1196,11 +1477,26 @@ pub fn call_of(policy: &RelayFeePolicy, entry: &Entry, op: &MetaOp, auth: &[u8])
             (op.contract.clone(), "mtx_pay_meta".into(), a)
         }
         Entry::FeeWrapper { entry, args } => {
-            let short = entry.strip_prefix("mtx_").ok_or_else(|| anyhow!("{entry} is not an mtx_ entry"))?;
-            (op.contract.clone(), format!("relay_fee_{short}"), [args.clone(), pay].concat())
+            let short = entry
+                .strip_prefix("mtx_")
+                .ok_or_else(|| anyhow!("{entry} is not an mtx_ entry"))?;
+            (
+                op.contract.clone(),
+                format!("relay_fee_{short}"),
+                [args.clone(), pay].concat(),
+            )
         }
-        Entry::FeeRouter { target, method, args, target_gas, target_deposit } => {
-            let router = policy.router.clone().ok_or_else(|| anyhow!("no params.relay_fee.router"))?;
+        Entry::FeeRouter {
+            target,
+            method,
+            args,
+            target_gas,
+            target_deposit,
+        } => {
+            let router = policy
+                .router
+                .clone()
+                .ok_or_else(|| anyhow!("no params.relay_fee.router"))?;
             let mut a = borsh_str(target);
             put_str(&mut a, method);
             put_bytes(&mut a, args);
@@ -1211,11 +1507,23 @@ pub fn call_of(policy: &RelayFeePolicy, entry: &Entry, op: &MetaOp, auth: &[u8])
             (router, "relay".into(), a)
         }
     };
-    Ok(Call { receiver, method, args, gas, deposit: 0 })
+    Ok(Call {
+        receiver,
+        method,
+        args,
+        gas,
+        deposit: 0,
+    })
 }
 
 /// `Transaction::V0 { signer_id, public_key (ed25519), nonce, receiver_id, block_hash, actions: [FunctionCall] }`.
-pub fn function_call_tx(signer: &str, pk: &[u8; 32], nonce: u64, block_hash: &[u8; 32], call: &Call) -> Vec<u8> {
+pub fn function_call_tx(
+    signer: &str,
+    pk: &[u8; 32],
+    nonce: u64,
+    block_hash: &[u8; 32],
+    call: &Call,
+) -> Vec<u8> {
     let mut o = borsh_str(signer);
     o.push(0); // KeyType::ED25519
     o.extend_from_slice(pk);
@@ -1286,7 +1594,12 @@ fn decode_pending(b: &[u8]) -> Result<Option<PendingEntry>> {
         let deadline = r.u64()?;
         let stage = r.u8()?;
         r.bool()?;
-        Ok(PendingEntry { token, relayer, deadline, stage })
+        Ok(PendingEntry {
+            token,
+            relayer,
+            deadline,
+            stage,
+        })
     })?;
     r.end()?;
     Ok(p)
@@ -1310,7 +1623,9 @@ fn relay_args_ref(args: &[u8]) -> Result<[u8; 32]> {
 /// A final outcome's `status`: `Ok(Some(value))` / `Ok(None)` (a receipt id) on success, `Err(reason)` on failure.
 fn outcome_status(s: &Value) -> Result<std::result::Result<Option<Vec<u8>>, String>> {
     if let Some(v) = s.get("SuccessValue") {
-        return Ok(Ok(Some(b64d(v.as_str().ok_or_else(|| anyhow!("bad SuccessValue"))?)?)));
+        return Ok(Ok(Some(b64d(
+            v.as_str().ok_or_else(|| anyhow!("bad SuccessValue"))?,
+        )?)));
     }
     if s.get("SuccessReceiptId").is_some() {
         return Ok(Ok(None));
@@ -1323,7 +1638,7 @@ fn outcome_status(s: &Value) -> Result<std::result::Result<Option<Vec<u8>>, Stri
 
 // ------------------------------------------------------------------ events (NEP-297)
 
-/// The ids whose events count: Odoo's registered tokens (`contracts`) and the configured router and DEX.
+/// The ids whose events count: ExternalPull's registered tokens (`contracts`) and the configured router and DEX.
 #[derive(Debug, Clone, Default)]
 pub struct Ids {
     pub tokens: Vec<String>,
@@ -1338,14 +1653,26 @@ fn nep297(log: &str) -> Option<(String, String, Vec<Value>)> {
         d @ Value::Object(_) => vec![d.clone()],
         _ => return None,
     };
-    Some((v["standard"].as_str()?.to_string(), v["event"].as_str()?.to_string(), data))
+    Some((
+        v["standard"].as_str()?.to_string(),
+        v["event"].as_str()?.to_string(),
+        data,
+    ))
 }
 
 /// A holder in its event form: a NEAR account id or `0x` ‖ 64 lower-case hex (a UA id).
 fn holder_s(v: &Value) -> Option<String> {
     let s = v.as_str()?;
-    let ua = s.len() == 66 && s.starts_with("0x") && s[2..].bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f'));
-    if ua { Some(s.to_string()) } else { near_id(s).ok() }
+    let ua = s.len() == 66
+        && s.starts_with("0x")
+        && s[2..]
+            .bytes()
+            .all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f'));
+    if ua {
+        Some(s.to_string())
+    } else {
+        near_id(s).ok()
+    }
 }
 
 fn h32(v: &Value) -> Option<String> {
@@ -1358,14 +1685,16 @@ fn amount(v: &Value) -> Option<String> {
 }
 
 fn succeeded(outcome: &Value) -> bool {
-    outcome["status"].get("SuccessValue").is_some() || outcome["status"].get("SuccessReceiptId").is_some()
+    outcome["status"].get("SuccessValue").is_some()
+        || outcome["status"].get("SuccessReceiptId").is_some()
 }
 
 /// One holder move, `None` when a side is the token itself (its UA pool / relay escrow: the `ua_transfer` or the
 /// payment events tell the holder's side) or a field is malformed.
 fn transfer(token: &str, from: &Value, to: &Value, n: &Value) -> Option<Value> {
     let (from, to, n) = (holder_s(from)?, holder_s(to)?, amount(n)?);
-    (from != token && to != token).then(|| json!({"event": "Transfer", "from": from, "to": to, "amount": n}))
+    (from != token && to != token)
+        .then(|| json!({"event": "Transfer", "from": from, "to": to, "amount": n}))
 }
 
 /// The events of one final transaction outcome, for `chain_event_ingest`: only receipts that SUCCEEDED (a failed
@@ -1377,19 +1706,29 @@ fn transfer(token: &str, from: &Value, to: &Value, n: &Value) -> Option<Value> {
 /// `order_filled` digest (`leg_digest`) and, when the configured DEX's `matched` lists it, `settle_id`; `matched` alone
 /// books nothing (it is emitted before the payouts). `log_index` counts every log of the transaction in outcome order.
 pub fn tx_events(ids: &Ids, tx: &Value, block: u64, block_hash: &str, tx_hash: &str) -> Vec<Value> {
-    let receipts = tx["receipts_outcome"].as_array().cloned().unwrap_or_default();
+    let receipts = tx["receipts_outcome"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     let mut settles: HashMap<String, String> = HashMap::new();
     for rc in &receipts {
         let o = &rc["outcome"];
         if !succeeded(o) || ids.dex.as_deref() != o["executor_id"].as_str() {
             continue;
         }
-        for (std, ev, data) in o["logs"].as_array().into_iter().flatten().filter_map(|l| nep297(l.as_str()?)) {
+        for (std, ev, data) in o["logs"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|l| nep297(l.as_str()?))
+        {
             if (std.as_str(), ev.as_str()) != ("scaas", "matched") {
                 continue;
             }
             for d in &data {
-                let Some(sid) = h32(&d["settle_id"]) else { continue };
+                let Some(sid) = h32(&d["settle_id"]) else {
+                    continue;
+                };
                 for leg in d["legs"].as_array().into_iter().flatten().filter_map(h32) {
                     settles.insert(leg, sid.clone());
                 }
@@ -1411,20 +1750,29 @@ pub fn tx_events(ids: &Ids, tx: &Value, block: u64, block_hash: &str, tx_hash: &
         }
         let (mut receipt_rows, mut leg) = (Vec::new(), None);
         for (i, log) in logs.iter().enumerate() {
-            let Some((std, ev, data)) = log.as_str().and_then(nep297) else { continue };
+            let Some((std, ev, data)) = log.as_str().and_then(nep297) else {
+                continue;
+            };
             for d in &data {
                 let row = match (token, std.as_str(), ev.as_str()) {
                     (true, "scaas", "payment_settled") => settled_row(d),
                     (true, "scaas", "payment_meta") => meta_row(d),
                     (true, "scaas", "meta_transaction_executed") => executed_row(d),
-                    (true, "scaas", "ua_transfer") => transfer(exec, &d["from"], &d["to"], &d["amount"]),
-                    (true, "nep141", "ft_transfer") => transfer(exec, &d["old_owner_id"], &d["new_owner_id"], &d["amount"]),
+                    (true, "scaas", "ua_transfer") => {
+                        transfer(exec, &d["from"], &d["to"], &d["amount"])
+                    }
+                    (true, "nep141", "ft_transfer") => {
+                        transfer(exec, &d["old_owner_id"], &d["new_owner_id"], &d["amount"])
+                    }
                     (true, "scaas", "order_filled") => {
                         leg = h32(&d["digest"]);
                         None
                     }
                     // a wrapper's fee: the token is its own target and marker
-                    (true, "scaas", "relay_fee_paid") if d["token"].as_str() == Some(exec) && d["target"].as_str() == Some(exec) => {
+                    (true, "scaas", "relay_fee_paid")
+                        if d["token"].as_str() == Some(exec)
+                            && d["target"].as_str() == Some(exec) =>
+                    {
                         fee_row(exec, exec, d)
                     }
                     // the router's: only a configured token's, joined to that token's payment_settled
@@ -1458,8 +1806,10 @@ pub fn tx_events(ids: &Ids, tx: &Value, block: u64, block_hash: &str, tx_hash: &
 }
 
 fn settled_row(d: &Value) -> Option<Value> {
-    Some(json!({"event": "PaymentSettled", "from": holder_s(&d["from"])?, "to": holder_s(&d["to"])?,
-                "amount": amount(&d["amount"])?, "entry_ref": h32(&d["pay_ref"])?}))
+    Some(
+        json!({"event": "PaymentSettled", "from": holder_s(&d["from"])?, "to": holder_s(&d["to"])?,
+                "amount": amount(&d["amount"])?, "entry_ref": h32(&d["pay_ref"])?}),
+    )
 }
 
 fn meta_row(d: &Value) -> Option<Value> {
@@ -1468,14 +1818,18 @@ fn meta_row(d: &Value) -> Option<Value> {
 }
 
 fn executed_row(d: &Value) -> Option<Value> {
-    Some(json!({"event": "MetaTransactionExecuted", "from": holder_s(&d["from"])?, "relayer": near_id(d["relayer"].as_str()?).ok()?,
-                "lane": h32(&d["lane"])?, "nonce": d["nonce"].as_u64()?.to_string(), "digest": h32(&d["digest"])?}))
+    Some(
+        json!({"event": "MetaTransactionExecuted", "from": holder_s(&d["from"])?, "relayer": near_id(d["relayer"].as_str()?).ok()?,
+                "lane": h32(&d["lane"])?, "nonce": d["nonce"].as_u64()?.to_string(), "digest": h32(&d["digest"])?}),
+    )
 }
 
 fn fee_row(contract: &str, token: &str, d: &Value) -> Option<Value> {
-    Some(json!({"event": "RelayFeePaid", "contract": contract, "token": token, "entry_ref": h32(&d["ref"])?,
+    Some(
+        json!({"event": "RelayFeePaid", "contract": contract, "token": token, "entry_ref": h32(&d["ref"])?,
                 "target": near_id(d["target"].as_str()?).ok()?, "from": holder_s(&d["payer"])?, "to": holder_s(&d["payee"])?,
-                "amount": amount(&d["amount"])?}))
+                "amount": amount(&d["amount"])?}),
+    )
 }
 
 // ------------------------------------------------------------------ adapter
@@ -1508,17 +1862,46 @@ fn transport(e: anyhow::Error) -> SimError {
 /// job's: retried (the relayer's RPC must allow ≥ 300 Tgas, module doc).
 fn sim(e: anyhow::Error) -> SimError {
     let text = format!("{e:#}");
-    let rpc_limit = text.contains("GasLimitExceeded") || text.contains("Exceeded the maximum amount of gas");
+    let rpc_limit =
+        text.contains("GasLimitExceeded") || text.contains("Exceeded the maximum amount of gas");
     match cause_of(&e) {
         Some("CONTRACT_EXECUTION_ERROR") if !rpc_limit => SimError::Revert(text),
         _ => transport(e),
     }
 }
 
+/// A JSON-RPC error object's cause: `cause.name`, else `name`.
+fn cause_name(error: &Value) -> &str {
+    error
+        .pointer("/cause/name")
+        .or_else(|| error.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or("UNKNOWN")
+}
+
+/// A family client's error as the classifier reads it: a JSON-RPC error object is `RpcError { cause, body }` (`cause/name`,
+/// else `name`), anything else the endpoint's failure.
+fn near_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
+    match e {
+        scaas_rpc::family::FamilyError::Rpc { error, .. } => RpcError {
+            cause: cause_name(&error).to_string(),
+            body: error,
+        }
+        .into(),
+        e => e.into(),
+    }
+}
+
 /// `(height, 0x hash)` of a block.
 fn header(b: &Value) -> Result<(u64, String)> {
-    let height = b["header"]["height"].as_u64().ok_or_else(|| anyhow!("block without height"))?;
-    let hash = b58_32(b["header"]["hash"].as_str().ok_or_else(|| anyhow!("block without hash"))?)?;
+    let height = b["header"]["height"]
+        .as_u64()
+        .ok_or_else(|| anyhow!("block without height"))?;
+    let hash = b58_32(
+        b["header"]["hash"]
+            .as_str()
+            .ok_or_else(|| anyhow!("block without hash"))?,
+    )?;
     Ok((height, hex0x(&hash)))
 }
 
@@ -1526,13 +1909,15 @@ pub struct NearAdapter {
     key: String,
     network: [u8; 32],
     network_b58: String,
-    rpc: Vec<String>,
-    http: reqwest::Client,
+    /// the RPC endpoints (scaas-rpc T17: the family client, bounded, 20 s per request)
+    net: scaas_rpc::near::Near,
     quorum: usize,
     lanes: Vec<Lane>,
     pks: Vec<[u8; 32]>,
     signers: Vec<LocalSigner>,
     relay_fee: RelayFeePolicy,
+    /// the most a job attaches, yoctoNEAR (CLI-RPC-05, scaas-rpc T24.4)
+    max_deposit: u128,
     /// `ref` ⇒ when this node last sent `relay_timeout` for it.
     timeouts: Mutex<HashMap<[u8; 32], u64>>,
     /// The chain's action fees, read once (`start_check`, ruling B).
@@ -1549,15 +1934,27 @@ struct Work {
 impl NearAdapter {
     pub fn new(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Self> {
         if cfg.rpc_urls.is_empty() || signers.is_empty() {
-            bail!("chain {}: needs rpc_urls and at least one lane", cfg.chain_key());
+            bail!(
+                "chain {}: needs rpc_urls and at least one lane",
+                cfg.chain_key()
+            );
         }
-        let net = cfg.network.as_deref().ok_or_else(|| anyhow!("near: network must be the genesis hash (base58)"))?;
-        let network = b58_32(net).context("near: network must be the genesis hash (base58 of 32 bytes)")?;
+        let net = cfg
+            .network
+            .as_deref()
+            .ok_or_else(|| anyhow!("near: network must be the genesis hash (base58)"))?;
+        let network =
+            b58_32(net).context("near: network must be the genesis hash (base58 of 32 bytes)")?;
         let (mut lanes, mut pks, mut own) = (Vec::new(), Vec::new(), Vec::new());
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
-            let LocalSigner::Ed(k) = s else { bail!("near lanes are ed25519") };
+            let LocalSigner::Ed(k) = s else {
+                bail!("near lanes are ed25519")
+            };
             let pk = k.verifying_key().to_bytes();
-            lanes.push(Lane { index: i, address: alloy::hex::encode(pk) });
+            lanes.push(Lane {
+                index: i,
+                address: alloy::hex::encode(pk),
+            });
             pks.push(pk);
             own.push(LocalSigner::Ed(k.clone()));
         }
@@ -1565,13 +1962,23 @@ impl NearAdapter {
             key: cfg.chain_key(),
             network,
             network_b58: net.to_string(),
-            rpc: cfg.rpc_urls.clone(),
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
+            net: scaas_rpc::near::Near::new(
+                scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                    .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+                net,
+            ),
             quorum: cfg.finality.quorum.max(1),
             lanes,
             pks,
             signers: own,
             relay_fee: RelayFeePolicy::from_cfg(cfg)?,
+            max_deposit: match cfg.params.get("max_deposit_per_job") {
+                None => DEFAULT_MAX_DEPOSIT,
+                Some(v) => dec_u128(
+                    &serde_json::to_value(v)?,
+                    "params.max_deposit_per_job (yoctoNEAR)",
+                )?,
+            },
             timeouts: Mutex::new(HashMap::new()),
             fees: Mutex::new(None),
         })
@@ -1586,7 +1993,9 @@ impl NearAdapter {
                 return Ok(f);
             }
         }
-        let pc = self.rpc("EXPERIMENTAL_protocol_config", json!({"finality": "final"})).await?;
+        let pc = self
+            .rpc("EXPERIMENTAL_protocol_config", json!({"finality": "final"}))
+            .await?;
         let f = ActionFees::from_protocol_config(&pc)?;
         if f.implicit_transfer > IMPLICIT_TRANSFER_GAS {
             bail!("a NEAR transfer to an implicit account costs {} gas on this chain, above the contracts' IMPLICIT_TRANSFER_GAS {}: their refunds to the lanes would run out of gas",
@@ -1596,83 +2005,390 @@ impl NearAdapter {
         Ok(f)
     }
 
-    async fn rpc_at(&self, url: &str, method: &str, params: Value) -> Result<Value> {
-        let body = json!({"jsonrpc": "2.0", "id": "scaas", "method": method, "params": params});
-        let v: Value = self.http.post(url).json(&body).send().await?.json().await?;
-        if let Some(e) = v.get("error").filter(|e| !e.is_null()) {
-            let cause = e.pointer("/cause/name").or_else(|| e.get("name")).and_then(Value::as_str).unwrap_or("UNKNOWN").to_string();
-            return Err(RpcError { cause, body: e.clone() }.into());
-        }
-        v.get("result").cloned().ok_or_else(|| anyhow!("{method}: no result"))
+    /// One JSON-RPC call to endpoint `i` (scaas-rpc T17: the family client); an error answer is the classifier's `RpcError`.
+    async fn rpc_at(&self, i: usize, method: &str, params: Value) -> Result<Value> {
+        self.net.call(i, method, params).await.map_err(near_error)
     }
 
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
-        self.rpc_at(&self.rpc[0], method, params).await
+        self.rpc_at(0, method, params).await
+    }
+
+    /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T17b): `build`'s views and price, failed over: endpoint 0, then each next endpoint of
+    /// this network (`status`'s genesis) not behind the final height endpoint 0 last showed. An error answer (a contract's
+    /// refusal, an unknown account) is endpoint 0's to classify as before, a later endpoint's no verdict (the next is asked);
+    /// a transport failure moves on; what a failover endpoint's answer refuses `build` requeues.
+    async fn read(&self, method: &str, params: Value) -> Result<Value> {
+        use scaas_rpc::pool::ReadError;
+        let a = self
+            .net
+            .client
+            .failover(&self.net, |i| {
+                let params = params.clone();
+                async move {
+                    self.net.call(i, method, params).await.map_err(|e| match e {
+                        // T24.3: a contract's refusal or an unknown account (`sim`, `has_code_at`) is endpoint 0's to classify;
+                        // any other error (a rate limit, an unknown block, a server error) fails over
+                        scaas_rpc::family::FamilyError::Rpc { error, .. }
+                            if matches!(
+                                cause_name(&error),
+                                "CONTRACT_EXECUTION_ERROR" | "UNKNOWN_ACCOUNT"
+                            ) =>
+                        {
+                            ReadError::Revert {
+                                data: vec![],
+                                reason: error.to_string(),
+                            }
+                        }
+                        scaas_rpc::family::FamilyError::Failure(f) => ReadError::Failure(f),
+                        e => ReadError::Failure(scaas_rpc::EndpointFailure::new(
+                            i,
+                            scaas_rpc::FailureKind::Transport,
+                            &e.to_string(),
+                        )),
+                    })
+                }
+            })
+            .await;
+        match a {
+            Ok(a) => Ok(a.value),
+            // endpoint 0's error answer: the classifier's, as before
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
+                let error = serde_json::from_str(&reason)
+                    .unwrap_or(json!({"name": "UNKNOWN", "message": reason}));
+                Err(near_error(scaas_rpc::family::FamilyError::Rpc {
+                    method: method.into(),
+                    error,
+                }))
+            }
+            Err(e) => Err(crate::adapters::evm::all_failed(method, &e)),
+        }
+    }
+
+    /// [`ChainAdapter::build`]'s body (scaas-rpc T17b: the wrapper compares the failover counter).
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
+        let w = self
+            .work(job)
+            .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        if w.op.valid_until <= now() {
+            return Err(SimError::Revert("payload expired".into()));
+        }
+        let lane_id = self
+            .lanes
+            .get(lane)
+            .ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?
+            .address
+            .clone();
+        let fee = marker(&self.relay_fee, &w.op, &w.entry).cloned();
+        if fee.is_some() {
+            relay_payee(&self.relay_fee, &w.op, &w.entry, &lane_id).map_err(revert)?;
+        }
+        // fix 2 R1 / R2, fix 3 g2 / N2: the payment (every job), a wrapped entry's op and a wrapped mandate's expiry stay
+        // valid through the relay
+        let (entry_vu, mandate) = match &w.entry {
+            Entry::FeeWrapper { entry, args } => (
+                MetaOp::read(&mut Reader::new(args))
+                    .ok()
+                    .map(|o| o.valid_until),
+                (entry == "mtx_mandate_open")
+                    .then(|| mandate_expiry(args).ok())
+                    .flatten(),
+            ),
+            _ => (None, None),
+        };
+        let soon = now().saturating_add(RELAY_EXPIRY_MARGIN_S);
+        for (vu, what) in [
+            (Some(w.op.valid_until), "the payment"),
+            (entry_vu, "the wrapped entry op"),
+            (mandate, "the mandate"),
+        ] {
+            if vu.is_some_and(|vu| vu <= soon) {
+                return Err(SimError::Revert(format!(
+                    "{what} expires within {RELAY_EXPIRY_MARGIN_S} s: it would expire in transit"
+                )));
+            }
+        }
+        // fix 3 N1: an unopened subject paying for its own wrapped entry: the entry opens it with its own origins, then the
+        // payment's passkey is checked against them
+        if let Entry::FeeWrapper { entry, args } = &w.entry {
+            let pay_origins = w.auth.origins();
+            let (from, origins) = entry_origins(entry, args).map_err(revert)?;
+            if from == w.op.from && !pay_origins.is_empty() {
+                let mut a = Vec::new();
+                from.write(&mut a);
+                let opened = self
+                    .view_at(false, &w.op.contract, "subject", &a)
+                    .await
+                    .map_err(sim)?
+                    .first()
+                    == Some(&1);
+                if let Some(o) = pay_origins.iter().find(|o| !opened && !origins.contains(o)) {
+                    return Err(SimError::Revert(format!(
+                        "the payment's passkey origin {o} is not among the origins the entry opens the subject {} with: the payment must fail",
+                        from.display()
+                    )));
+                }
+            }
+        }
+        // fix 3 g1: a router job's target figures are the node's (relayer-chosen, not in ref)
+        let entry = match &w.entry {
+            Entry::FeeRouter {
+                target,
+                method,
+                args,
+                target_gas,
+                target_deposit,
+            } => {
+                match self.has_code_at(false, target).await.map_err(transport)? {
+                    None => {
+                        return Err(SimError::Revert(format!(
+                            "relay-fee target {target} does not exist"
+                        )))
+                    }
+                    Some(false) => {
+                        return Err(SimError::Revert(format!(
+                            "relay-fee target {target} has no code"
+                        )))
+                    }
+                    Some(true) => {}
+                }
+                let (tg, td) = self
+                    .target_check(
+                        &w.op,
+                        &lane_id,
+                        target,
+                        method,
+                        args,
+                        *target_gas,
+                        *target_deposit,
+                    )
+                    .await?;
+                Entry::FeeRouter {
+                    target: target.clone(),
+                    method: method.clone(),
+                    args: args.clone(),
+                    target_gas: tg,
+                    target_deposit: td,
+                }
+            }
+            e => e.clone(),
+        };
+        let mut call = call_of(&self.relay_fee, &entry, &w.op, &w.auth_raw).map_err(revert)?;
+        call.deposit = match &entry {
+            Entry::FeeRouter { .. } => {
+                let rc = self
+                    .view_at(false, &call.receiver, "relay_check", &call.args)
+                    .await
+                    .map_err(sim)?;
+                let (deposit, gas) = decode_router_check(&rc)
+                    .map_err(transport)?
+                    .map_err(|e| SimError::Revert(format!("relay_check: {e}")))?;
+                if gas != call.gas {
+                    return Err(SimError::Revert(format!(
+                        "router relay_check needs {gas} gas, the node pins {}",
+                        call.gas
+                    )));
+                }
+                let hold = [
+                    borsh_str(&call.receiver),
+                    borsh_str(&lane_id),
+                    w.op.borsh(),
+                    w.auth_raw.clone(),
+                ]
+                .concat();
+                let hc = self
+                    .view_at(false, &w.op.contract, "relay_hold_check", &hold)
+                    .await
+                    .map_err(sim)?;
+                let held = decode_check(&hc)
+                    .map_err(transport)?
+                    .map_err(|e| SimError::Revert(format!("relay_hold_check: {e}")))?;
+                deposit
+                    .checked_add(held)
+                    .ok_or_else(|| SimError::Revert("deposit overflow".into()))?
+            }
+            // + 0 yoctoNEAR: no `mtx_*` / `relay_fee_*` entry has a NEP 1-yocto rule (spec §3.2: authority is the signature)
+            _ => {
+                let args = [borsh_str(&lane_id), call.args.clone()].concat();
+                let c = self
+                    .view_at(
+                        false,
+                        &call.receiver,
+                        &format!("{}_check", call.method),
+                        &args,
+                    )
+                    .await
+                    .map_err(sim)?;
+                decode_check(&c)
+                    .map_err(transport)?
+                    .map_err(|e| SimError::Revert(format!("{}_check: {e}", call.method)))?
+            }
+        };
+        // CLI-RPC-05 (scaas-rpc T24.4): the lane never attaches more than the configured cap, whichever endpoint's check
+        // (`relay_check`, `relay_hold_check`, an entry's `*_check`) reported it
+        if call.deposit > self.max_deposit {
+            return Err(SimError::Transport(format!(
+                "deposit {} above params.max_deposit_per_job {}",
+                call.deposit, self.max_deposit
+            )));
+        }
+        if fee
+            .as_ref()
+            .is_some_and(|m| pays(&w.op, Some(m)) || w.op.to == Holder::Near(lane_id.clone()))
+        {
+            let price = self.gas_price().await.map_err(transport)?;
+            let fees = self.fees().await.map_err(transport)?;
+            // fix 1 m5 / T19 fix 2: action fees, the lane's receipts, a router job's possible relay_timeout
+            let gas = quote_gas(&fees, &entry, &call);
+            let quote = u128::from(gas)
+                .saturating_mul(price)
+                .saturating_add(call.deposit);
+            fee_covers(&self.relay_fee, &w.op, quote).map_err(revert)?;
+        }
+        if let Entry::FeeWrapper { entry, args } = &w.entry {
+            if KEY_OPS.contains(&entry.as_str()) {
+                self.show_key_sets(args).await;
+            }
+        }
+        let meta = json!({"receiver": call.receiver, "method": call.method, "gas": call.gas, "deposit": call.deposit.to_string()});
+        Ok(Built {
+            job_id: job.id,
+            body: call.args,
+            valid_until: w.op.valid_until,
+            meta,
+        })
+    }
+
+    /// The failover answers so far (a refusal read while it moved is no verdict).
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
     }
 
     /// `rpc_urls[0]`'s answer; with `quorum > 1`, further endpoints must return the same `pick` (event bodies follow the
     /// same rule as block hashes, as Aptos review L3).
-    async fn agreed(&self, method: &str, params: Value, pick: fn(&Value) -> Value) -> Result<Value> {
-        let v = self.rpc(method, params.clone()).await?;
-        if self.quorum > 1 {
-            let want = pick(&v);
-            let mut agree = 1;
-            for url in &self.rpc[1..] {
-                if matches!(self.rpc_at(url, method, params.clone()).await, Ok(o) if pick(&o) == want) {
-                    agree += 1;
+    async fn agreed(
+        &self,
+        method: &str,
+        params: Value,
+        pick: fn(&Value) -> Value,
+    ) -> Result<Value> {
+        use scaas_rpc::near::AgreedError;
+        self.net
+            .agreed(method, params, pick, self.quorum)
+            .await
+            .map_err(|e| match e {
+                AgreedError::First(e) => near_error(e),
+                AgreedError::Quorum { agree, quorum } => {
+                    anyhow!("{method}: {agree} endpoint(s) agree, quorum is {quorum}")
                 }
-            }
-            if agree < self.quorum {
-                bail!("{method}: {agree} endpoint(s) agree, quorum is {}", self.quorum);
-            }
-        }
-        Ok(v)
+            })
     }
 
     async fn view(&self, account: &str, method: &str, args: &[u8]) -> Result<Vec<u8>> {
-        let v = self.rpc("query", json!({"request_type": "call_function", "finality": "final", "account_id": account,
-                                         "method_name": method, "args_base64": b64(args)})).await?;
+        self.view_at(true, account, method, args).await
+    }
+
+    /// A view on the first endpoint only (`first`: F3, the follow-ups, the start checks) or failed over (`build`).
+    async fn view_at(
+        &self,
+        first: bool,
+        account: &str,
+        method: &str,
+        args: &[u8],
+    ) -> Result<Vec<u8>> {
+        let q = json!({"request_type": "call_function", "finality": "final", "account_id": account,
+                       "method_name": method, "args_base64": b64(args)});
+        let v = if first {
+            self.rpc("query", q).await?
+        } else {
+            self.read("query", q).await?
+        };
         if let Some(e) = v.get("error").and_then(Value::as_str) {
-            return Err(RpcError { cause: "CONTRACT_EXECUTION_ERROR".into(), body: json!(e) }.into());
+            return Err(RpcError {
+                cause: "CONTRACT_EXECUTION_ERROR".into(),
+                body: json!(e),
+            }
+            .into());
         }
-        v["result"].as_array().ok_or_else(|| anyhow!("view {method}: no result"))?.iter()
-            .map(|x| x.as_u64().and_then(|n| u8::try_from(n).ok()).ok_or_else(|| anyhow!("view {method}: bad result byte")))
+        v["result"]
+            .as_array()
+            .ok_or_else(|| anyhow!("view {method}: no result"))?
+            .iter()
+            .map(|x| {
+                x.as_u64()
+                    .and_then(|n| u8::try_from(n).ok())
+                    .ok_or_else(|| anyhow!("view {method}: bad result byte"))
+            })
             .collect()
     }
 
     /// `None` = no such account; `Some(code deployed)`.
     async fn has_code(&self, account: &str) -> Result<Option<bool>> {
-        match self.rpc("query", json!({"request_type": "view_account", "finality": "final", "account_id": account})).await {
-            Ok(v) => Ok(Some(v["code_hash"].as_str().ok_or_else(|| anyhow!("view_account: no code_hash"))? != NO_CODE)),
+        self.has_code_at(true, account).await
+    }
+
+    /// [`Self::has_code`] on the first endpoint only or failed over (`build`).
+    async fn has_code_at(&self, first: bool, account: &str) -> Result<Option<bool>> {
+        let q = json!({"request_type": "view_account", "finality": "final", "account_id": account});
+        let r = if first {
+            self.rpc("query", q).await
+        } else {
+            self.read("query", q).await
+        };
+        match r {
+            Ok(v) => Ok(Some(
+                v["code_hash"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("view_account: no code_hash"))?
+                    != NO_CODE,
+            )),
             Err(e) if cause_of(&e) == Some("UNKNOWN_ACCOUNT") => Ok(None),
             Err(e) => Err(e),
         }
     }
 
     async fn gas_price(&self) -> Result<u128> {
-        dec_u128(&self.rpc("gas_price", json!([null])).await?["gas_price"], "gas_price")
+        // `build`'s only: failed over (scaas-rpc T17b)
+        dec_u128(
+            &self.read("gas_price", json!([null])).await?["gas_price"],
+            "gas_price",
+        )
     }
 
     async fn final_block(&self) -> Result<[u8; 32]> {
         let b = self.rpc("block", json!({"finality": "final"})).await?;
-        b58_32(b["header"]["hash"].as_str().ok_or_else(|| anyhow!("block without hash"))?)
+        b58_32(
+            b["header"]["hash"]
+                .as_str()
+                .ok_or_else(|| anyhow!("block without hash"))?,
+        )
     }
 
     fn work(&self, job: &Job) -> Result<Work> {
-        let o = job.op.as_ref().ok_or_else(|| anyhow!("not a signed_op job"))?;
+        let o = job
+            .op
+            .as_ref()
+            .ok_or_else(|| anyhow!("not a signed_op job"))?;
         let op = MetaOp::decode(&hex_field(&o["payload"], "payload")?)?;
         if op.op != OP_PAY {
             bail!("only pay ops (op 0) are relayed on NEAR");
         }
         if op.network != self.network {
-            bail!("the payload is for another network than {}", self.network_b58);
+            bail!(
+                "the payload is for another network than {}",
+                self.network_b58
+            );
         }
         if o["contract"].as_str() != Some(op.contract.as_str()) {
             bail!("op.contract is not the payload's token {}", op.contract);
         }
         // a plain job's lane attaches what the token's view asks: only configured (startup-checked) tokens
         if !self.relay_fee.tokens.contains(&op.contract) {
-            bail!("token {} is not a configured token of this chain", op.contract);
+            bail!(
+                "token {} is not a configured token of this chain",
+                op.contract
+            );
         }
         let auth_raw = hex_field(&o["signature"], "signature")?;
         let entry = entry(&self.relay_fee, &op, o)?;
@@ -1684,7 +2400,12 @@ impl NearAdapter {
         }
         job_gas(&pinned, &auth)?;
         wrapper_conflicts(&entry, &op, &auth)?;
-        Ok(Work { op, auth_raw, auth, entry })
+        Ok(Work {
+            op,
+            auth_raw,
+            auth,
+            entry,
+        })
     }
 
     fn lane_of(&self, account: &str) -> Option<usize> {
@@ -1692,22 +2413,34 @@ impl NearAdapter {
     }
 
     async fn sign_call(&self, lane: usize, nonce: u64, call: &Call) -> Result<(String, Vec<u8>)> {
-        let s = self.signers.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?;
-        let tx = function_call_tx(&self.lanes[lane].address, &self.pks[lane], nonce, &self.final_block().await?, call);
+        let s = self
+            .signers
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?;
+        let tx = function_call_tx(
+            &self.lanes[lane].address,
+            &self.pks[lane],
+            nonce,
+            &self.final_block().await?,
+            call,
+        );
         let hash = tx_hash(&tx);
         let sig = s.sign(&hash)?;
         Ok((hex0x(&hash), signed_tx(&tx, &sig)))
     }
 
     async fn block_height_of(&self, hash: &Value) -> Result<u64> {
-        let hash = hash.as_str().ok_or_else(|| anyhow!("outcome without block_hash"))?;
+        let hash = hash
+            .as_str()
+            .ok_or_else(|| anyhow!("outcome without block_hash"))?;
         Ok(header(&self.rpc("block", json!({"block_id": hash})).await?)?.0)
     }
 
     /// The final outcome of `tx_id` (`0x` + 64 hex), asked with each lane as sender (the RPC routes by sender); `None` =
     /// not known to the node.
     async fn find_tx(&self, tx_id: &str) -> Result<Option<Value>> {
-        let hash: [u8; 32] = alloy::hex::decode(tx_id.strip_prefix("0x").unwrap_or(tx_id))?.try_into()
+        let hash: [u8; 32] = alloy::hex::decode(tx_id.strip_prefix("0x").unwrap_or(tx_id))?
+            .try_into()
             .map_err(|_| anyhow!("bad tx id {tx_id}"))?;
         let key = bs58::encode(hash).into_string();
         for lane in &self.lanes {
@@ -1725,27 +2458,55 @@ impl NearAdapter {
     /// and past its `deadline` (no settlement in flight) this node sends `relay_timeout(ref)` itself (anyone may), again
     /// after `RELAY_TIMEOUT_RETRY_S`; `RELAY_STUCK_S` past the deadline the job ends reverted so the lane moves on.
     async fn escrow_status(&self, v: &Value, height: u64) -> Result<TxStatus> {
-        let router = self.relay_fee.router.as_deref().ok_or_else(|| anyhow!("no router configured"))?;
+        let router = self
+            .relay_fee
+            .router
+            .as_deref()
+            .ok_or_else(|| anyhow!("no router configured"))?;
         let value = outcome_status(&v["status"])?;
         if matches!(&value, Ok(Some(b)) if b == &[1]) {
-            return Ok(TxStatus::Mined { height, tx_hash: None });
+            return Ok(TxStatus::Mined {
+                height,
+                tx_hash: None,
+            });
         }
         // fix 1 m1: our relay refused at its own first receipt (e.g. this ref already in flight): nothing of ours is held
-        let first = v.pointer("/transaction_outcome/outcome/status/SuccessReceiptId").and_then(Value::as_str);
-        let tx_failed = v.pointer("/transaction_outcome/outcome/status/Failure").is_some();
-        let first_failed = v["receipts_outcome"].as_array().into_iter().flatten()
+        let first = v
+            .pointer("/transaction_outcome/outcome/status/SuccessReceiptId")
+            .and_then(Value::as_str);
+        let tx_failed = v
+            .pointer("/transaction_outcome/outcome/status/Failure")
+            .is_some();
+        let first_failed = v["receipts_outcome"]
+            .as_array()
+            .into_iter()
+            .flatten()
             .find(|rc| first.is_some() && rc["id"].as_str() == first)
             .is_some_and(|rc| !succeeded(&rc["outcome"]));
         if tx_failed || first_failed {
             let why = value.err().unwrap_or_default();
-            return Ok(TxStatus::Reverted { reason: format!("relay refused at its first receipt: nothing was held ({why})") });
+            return Ok(TxStatus::Reverted {
+                reason: format!("relay refused at its first receipt: nothing was held ({why})"),
+            });
         }
-        let args = b64d(v.pointer("/transaction/actions/0/FunctionCall/args").and_then(Value::as_str).ok_or_else(|| anyhow!("relay without args"))?)?;
+        let args = b64d(
+            v.pointer("/transaction/actions/0/FunctionCall/args")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("relay without args"))?,
+        )?;
         let r = relay_args_ref(&args)?;
-        let signer = v.pointer("/transaction/signer_id").and_then(Value::as_str).unwrap_or_default();
+        let signer = v
+            .pointer("/transaction/signer_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         let entry = decode_pending(&self.view(router, "pending", &r).await?)?;
         if entry.as_ref().is_some_and(|p| p.relayer != signer) {
-            return Ok(TxStatus::Reverted { reason: format!("the escrow entry under {} was staked by another relayer; ours held nothing", hex0x(&r)) });
+            return Ok(TxStatus::Reverted {
+                reason: format!(
+                    "the escrow entry under {} was staked by another relayer; ours held nothing",
+                    hex0x(&r)
+                ),
+            });
         }
         let Some(p) = entry else {
             let why = value.err().map(|f| format!(" ({f})")).unwrap_or_default();
@@ -1758,10 +2519,22 @@ impl NearAdapter {
     /// transaction `INCLUDED_FINAL` / `Started`; past the deadline our entry is timed out here, as in `escrow_due`. No
     /// entry yet, gone, or another relayer's: pending, the final outcome decides (`escrow_status`).
     async fn escrow_in_flight(&self, v: &Value) -> Result<TxStatus> {
-        let router = self.relay_fee.router.as_deref().ok_or_else(|| anyhow!("no router configured"))?;
-        let Some(args) = v.pointer("/transaction/actions/0/FunctionCall/args").and_then(Value::as_str) else { return Ok(TxStatus::Pending) };
+        let router = self
+            .relay_fee
+            .router
+            .as_deref()
+            .ok_or_else(|| anyhow!("no router configured"))?;
+        let Some(args) = v
+            .pointer("/transaction/actions/0/FunctionCall/args")
+            .and_then(Value::as_str)
+        else {
+            return Ok(TxStatus::Pending);
+        };
         let r = relay_args_ref(&b64d(args)?)?;
-        let signer = v.pointer("/transaction/signer_id").and_then(Value::as_str).unwrap_or_default();
+        let signer = v
+            .pointer("/transaction/signer_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         match decode_pending(&self.view(router, "pending", &r).await?)? {
             Some(p) if p.relayer == signer => self.escrow_due(v, r, p).await,
             _ => Ok(TxStatus::Pending),
@@ -1771,8 +2544,17 @@ impl NearAdapter {
     /// Our entry `r` still pending: past its deadline (no settlement in flight) send `relay_timeout(ref)`, again after
     /// `RELAY_TIMEOUT_RETRY_S`; `RELAY_STUCK_S` past it the job ends reverted so the lane moves on.
     async fn escrow_due(&self, v: &Value, r: [u8; 32], p: PendingEntry) -> Result<TxStatus> {
-        let router = self.relay_fee.router.as_deref().ok_or_else(|| anyhow!("no router configured"))?;
-        let PendingEntry { token, deadline, stage, .. } = p;
+        let router = self
+            .relay_fee
+            .router
+            .as_deref()
+            .ok_or_else(|| anyhow!("no router configured"))?;
+        let PendingEntry {
+            token,
+            deadline,
+            stage,
+            ..
+        } = p;
         let now = now();
         if now > deadline.saturating_add(RELAY_STUCK_S) && stage == 2 {
             // fix 1 m2: on_settle failed after a token settle that may have been a release: ask the token
@@ -1788,17 +2570,38 @@ impl NearAdapter {
         if now > deadline.saturating_add(RELAY_STUCK_S) {
             return Ok(TxStatus::Reverted { reason: format!("escrow entry {} still pending {RELAY_STUCK_S} s past its deadline: relay_timeout(ref) settles it", hex0x(&r)) });
         }
-        let due = now > deadline && stage != 2
-            && self.timeouts.lock().ok().and_then(|t| t.get(&r).copied()).is_none_or(|at| now >= at + RELAY_TIMEOUT_RETRY_S);
+        let due = now > deadline
+            && stage != 2
+            && self
+                .timeouts
+                .lock()
+                .ok()
+                .and_then(|t| t.get(&r).copied())
+                .is_none_or(|at| now >= at + RELAY_TIMEOUT_RETRY_S);
         if due {
-            let lane = v.pointer("/transaction/signer_id").and_then(Value::as_str).and_then(|s| self.lane_of(s));
+            let lane = v
+                .pointer("/transaction/signer_id")
+                .and_then(Value::as_str)
+                .and_then(|s| self.lane_of(s));
             match lane {
                 Some(lane) => {
-                    let call = Call { receiver: router.into(), method: "relay_timeout".into(), args: r.to_vec(), gas: GAS_RELAY_TIMEOUT, deposit: 0 };
+                    let call = Call {
+                        receiver: router.into(),
+                        method: "relay_timeout".into(),
+                        args: r.to_vec(),
+                        gas: GAS_RELAY_TIMEOUT,
+                        deposit: 0,
+                    };
                     let sent = async {
-                        let (_, raw) = self.sign_call(lane, self.sequence(lane).await?, &call).await?;
+                        let (_, raw) = self
+                            .sign_call(lane, self.sequence(lane).await?, &call)
+                            .await?;
                         // T19 review m3: INCLUDED as `submit` (NONE drops a stale nonce silently, recorded as sent)
-                        self.rpc("send_tx", json!({"signed_tx_base64": b64(&raw), "wait_until": "INCLUDED"})).await
+                        self.rpc(
+                            "send_tx",
+                            json!({"signed_tx_base64": b64(&raw), "wait_until": "INCLUDED"}),
+                        )
+                        .await
                     };
                     match sent.await {
                         Ok(_) => {
@@ -1806,10 +2609,14 @@ impl NearAdapter {
                                 t.insert(r, now);
                             }
                         }
-                        Err(e) => tracing::warn!(chain = %self.key, "relay_timeout not sent; retry: {e:#}"),
+                        Err(e) => {
+                            tracing::warn!(chain = %self.key, "relay_timeout not sent; retry: {e:#}")
+                        }
                     }
                 }
-                None => tracing::warn!(chain = %self.key, "relay past its deadline was not sent by one of our lanes"),
+                None => {
+                    tracing::warn!(chain = %self.key, "relay past its deadline was not sent by one of our lanes")
+                }
             }
         }
         Ok(TxStatus::Pending)
@@ -1824,28 +2631,58 @@ impl NearAdapter {
     /// `target_deposit` = the settle entry + 2 yoctoNEAR + 2 × max(the larger leg, the DEX's worst-case leg pin). A
     /// listed third-party target: `target_gas` ≥ `GAS_TARGET_MIN` only (the operator vouches for it).
     #[allow(clippy::too_many_arguments)]
-    async fn target_check(&self, pay: &MetaOp, lane: &str, target: &str, method: &str, args: &[u8], gas: u64, deposit: u128) -> std::result::Result<(u64, u128), SimError> {
+    async fn target_check(
+        &self,
+        pay: &MetaOp,
+        lane: &str,
+        target: &str,
+        method: &str,
+        args: &[u8],
+        gas: u64,
+        deposit: u128,
+    ) -> std::result::Result<(u64, u128), SimError> {
         let rv = |m: String| SimError::Revert(m);
-        let executor = self.relay_fee.executor.as_deref().ok_or_else(|| rv("no executor configured".into()))?;
+        let executor = self
+            .relay_fee
+            .executor
+            .as_deref()
+            .ok_or_else(|| rv("no executor configured".into()))?;
         let check = |b: Vec<u8>, what: &str| -> std::result::Result<u128, SimError> {
-            decode_check(&b).map_err(transport)?.map_err(|e| rv(format!("router target {what}: {e}")))
+            decode_check(&b)
+                .map_err(transport)?
+                .map_err(|e| rv(format!("router target {what}: {e}")))
         };
-        let margin = |vu: u64, what: &str| match vu <= now().saturating_add(RELAY_EXPIRY_MARGIN_S) {
+        let margin = |vu: u64, what: &str| {
+            match vu <= now().saturating_add(RELAY_EXPIRY_MARGIN_S) {
             true => Err(rv(format!("{what} expires within {RELAY_EXPIRY_MARGIN_S} s (at {vu}): it would expire in transit"))),
             false => Ok(()),
+        }
         };
         if self.relay_fee.tokens.iter().any(|t| t == target) {
             if !TOKEN_CHECKED.contains(&method) {
                 return Err(rv(format!("router target {target}: {method} is not a relayable token entry (no check view)")));
             }
             let mut r = Reader::new(args);
-            let (auth, top) = MetaOp::read(&mut r).and_then(|op| Ok((Auth::read(&mut r, true, &op.digest())?, op)))
+            let (auth, top) = MetaOp::read(&mut r)
+                .and_then(|op| Ok((Auth::read(&mut r, true, &op.digest())?, op)))
                 .map_err(|e| rv(format!("router target args of {method}: {e:#}")))?;
             margin(top.valid_until, "the target op")?;
             if method == "mtx_mandate_open" {
-                margin(mandate_expiry(args).map_err(|e| rv(format!("router target args of {method}: {e:#}")))?, "the mandate")?;
+                margin(
+                    mandate_expiry(args)
+                        .map_err(|e| rv(format!("router target args of {method}: {e:#}")))?,
+                    "the mandate",
+                )?;
             }
-            let c = self.view(target, &format!("{method}_check"), &[borsh_str(executor), args.to_vec()].concat()).await.map_err(sim)?;
+            let c = self
+                .view_at(
+                    false,
+                    target,
+                    &format!("{method}_check"),
+                    &[borsh_str(executor), args.to_vec()].concat(),
+                )
+                .await
+                .map_err(sim)?;
             let need = check(c, &format!("{method}_check"))?;
             // fix 2 R3: relay_hold debits the fee before the target runs; the target's check read the balance before it
             if target == pay.contract && VALUE_ENTRIES.contains(&method) && top.from == pay.from {
@@ -1861,14 +2698,27 @@ impl NearAdapter {
         }
         if self.relay_fee.dex.as_deref() == Some(target) {
             if method != "settle" {
-                return Err(rv(format!("router target {target}: {method} is not the DEX's settle")));
+                return Err(rv(format!(
+                    "router target {target}: {method} is not the DEX's settle"
+                )));
             }
-            let legs = settle_legs(args).map_err(|e| rv(format!("router target args of settle: {e:#}")))?;
-            if let Some(l) = legs.iter().find(|l| l.relayer.as_deref().is_some_and(|x| x != executor && x != lane)) {
+            let legs = settle_legs(args)
+                .map_err(|e| rv(format!("router target args of settle: {e:#}")))?;
+            if let Some(l) = legs.iter().find(|l| {
+                l.relayer
+                    .as_deref()
+                    .is_some_and(|x| x != executor && x != lane)
+            }) {
                 return Err(rv(format!("order relayer {:?} is neither this lane nor the executor: the DEX refuses it via this relay", l.relayer)));
             }
-            if let Some(l) = legs.iter().find(|l| !self.relay_fee.tokens.contains(&l.sell_token)) {
-                return Err(rv(format!("a settle leg sells {}, not a configured token", l.sell_token)));
+            if let Some(l) = legs
+                .iter()
+                .find(|l| !self.relay_fee.tokens.contains(&l.sell_token))
+            {
+                return Err(rv(format!(
+                    "a settle leg sells {}, not a configured token",
+                    l.sell_token
+                )));
             }
             // fix 2 R4: dex `leg()` and `pair()`, off chain
             for l in &legs {
@@ -1877,35 +2727,78 @@ impl NearAdapter {
                 margin(l.op.valid_until, "a DEX leg op")?;
             }
             dex_pair(&legs[0], &legs[1]).map_err(|e| rv(e.into()))?;
-            let settle_gas = legs.iter().fold(DEX_SETTLE_GAS, |g, l| g.saturating_add(DEX_LEG_GAS).saturating_add(l.auth.router_gas()));
+            let settle_gas = legs.iter().fold(DEX_SETTLE_GAS, |g, l| {
+                g.saturating_add(DEX_LEG_GAS)
+                    .saturating_add(l.auth.router_gas())
+            });
             let (da, db) = (legs[0].op.digest(), legs[1].op.digest());
-            if self.view(target, "pending", &sha256(&[da, db].concat())).await.map_err(transport)?.first() != Some(&0) {
-                return Err(rv("this pair is already pending at the DEX (settle_id(a, b))".into()));
+            if self
+                .view_at(false, target, "pending", &sha256(&[da, db].concat()))
+                .await
+                .map_err(transport)?
+                .first()
+                != Some(&0)
+            {
+                return Err(rv(
+                    "this pair is already pending at the DEX (settle_id(a, b))".into(),
+                ));
             }
             // fix 2 f1: a leg indexed in another settle (e.g. a failed direct settle) panics `settle`
             for d in [da, db] {
-                if self.view(target, "leg_settle", &d).await.map_err(transport)?.first() != Some(&0) {
-                    return Err(rv(format!("leg {} is already in a settle at the DEX", hex0x(&d))));
+                if self
+                    .view_at(false, target, "leg_settle", &d)
+                    .await
+                    .map_err(transport)?
+                    .first()
+                    != Some(&0)
+                {
+                    return Err(rv(format!(
+                        "leg {} is already in a settle at the DEX",
+                        hex0x(&d)
+                    )));
                 }
             }
             let mut larger = 0u128;
             for (i, l) in legs.iter().enumerate() {
                 let receiver = &legs[1 - i].op.from;
-                let mut a = [borsh_str(target), l.op.borsh(), l.auth_raw.clone(), l.order.clone()].concat();
+                let mut a = [
+                    borsh_str(target),
+                    l.op.borsh(),
+                    l.auth_raw.clone(),
+                    l.order.clone(),
+                ]
+                .concat();
                 receiver.write(&mut a);
-                let c = self.view(&l.sell_token, "mtx_trade_check", &a).await.map_err(sim)?;
+                let c = self
+                    .view_at(false, &l.sell_token, "mtx_trade_check", &a)
+                    .await
+                    .map_err(sim)?;
                 larger = larger.max(check(c, "mtx_trade_check")?);
             }
             // Borsh(Settle): per leg token, seller, lane 32, nonce 8, digest 32, amount 16; relayer; deposit 16, expiry 8, done 1
-            let settle = legs.iter().map(|l| 4 + l.sell_token.len() as u64 + holder_len(&l.op.from) + 88).sum::<u64>()
-                + 4 + executor.len() as u64 + 25;
-            let pc = self.rpc("EXPERIMENTAL_protocol_config", json!({"finality": "final"})).await.map_err(transport)?;
-            let cost = dec_u128(&pc["runtime_config"]["storage_amount_per_byte"], "storage_amount_per_byte").map_err(transport)?;
+            let settle = legs
+                .iter()
+                .map(|l| 4 + l.sell_token.len() as u64 + holder_len(&l.op.from) + 88)
+                .sum::<u64>()
+                + 4
+                + executor.len() as u64
+                + 25;
+            let pc = self
+                .rpc("EXPERIMENTAL_protocol_config", json!({"finality": "final"}))
+                .await
+                .map_err(transport)?;
+            let cost = dec_u128(
+                &pc["runtime_config"]["storage_amount_per_byte"],
+                "storage_amount_per_byte",
+            )
+            .map_err(transport)?;
             // fix 2 f3: settle splits the rest evenly between the legs: 2 × the larger leg; final review I1: settle refuses a
             // share below its worst-case leg pin (the excess comes back to the lane, the signer)
             let larger = larger.max(cost.saturating_mul(u128::from(DEX_LEG_STORAGE_MAX_BYTES)));
-            let need = cost.saturating_mul(u128::from(DEX_ENTRY_FIXED_BYTES + settle))
-                .saturating_add(DEX_PAYOUT_YOCTO).saturating_add(larger.saturating_mul(2));
+            let need = cost
+                .saturating_mul(u128::from(DEX_ENTRY_FIXED_BYTES + settle))
+                .saturating_add(DEX_PAYOUT_YOCTO)
+                .saturating_add(larger.saturating_mul(2));
             // fix 3 g1: settle_gas and the floor, set by the node
             return Ok((settle_gas, need));
         }
@@ -1920,14 +2813,24 @@ impl NearAdapter {
             Holder::Near(a) => ("ft_balance_of", json!({"account_id": a})),
             Holder::Ua(id) => ("ua_balance_of", json!({"id": id})),
         };
-        let b = self.view(token, method, &serde_json::to_vec(&args).map_err(|e| transport(e.into()))?).await.map_err(sim)?;
+        let b = self
+            .view_at(
+                false,
+                token,
+                method,
+                &serde_json::to_vec(&args).map_err(|e| transport(e.into()))?,
+            )
+            .await
+            .map_err(sim)?;
         let v: Value = serde_json::from_slice(&b).map_err(|e| transport(e.into()))?;
         dec_u128(&v, method).map_err(transport)
     }
 
     /// Fix 1 m6 (R9): logs the key-op subject's key sets on every configured token; a drift is a warning.
     async fn show_key_sets(&self, args: &[u8]) {
-        let Ok(op) = MetaOp::read(&mut Reader::new(args)) else { return };
+        let Ok(op) = MetaOp::read(&mut Reader::new(args)) else {
+            return;
+        };
         match self.key_sets(&op.from).await {
             Ok(sets) => {
                 let (line, drift) = describe_key_sets(&sets);
@@ -1937,7 +2840,9 @@ impl NearAdapter {
                     tracing::info!(chain = %self.key, subject = %op.from.display(), "key sets: {line}");
                 }
             }
-            Err(e) => tracing::warn!(chain = %self.key, subject = %op.from.display(), "key sets unreadable: {e:#}"),
+            Err(e) => {
+                tracing::warn!(chain = %self.key, subject = %op.from.display(), "key sets unreadable: {e:#}")
+            }
         }
     }
 
@@ -1980,7 +2885,9 @@ impl ChainAdapter for NearAdapter {
 
     /// R80: the payer's lane `(from, lane)` has passed the op's nonce (every NEAR job kind consumes a lane).
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Ok(w) = self.work(job) else { return Ok(None) };
+        let Ok(w) = self.work(job) else {
+            return Ok(None);
+        };
         // fix 1 I1: relay_hold spends the payment lane even when the escrow refunds: the outcome is the escrow's
         if matches!(w.entry, Entry::FeeRouter { .. }) {
             return Ok(None);
@@ -1996,119 +2903,57 @@ impl ChainAdapter for NearAdapter {
     /// The §5 checks, then the entry's `*_check` view as the lane (`Revert` = the job dies with the contract's reason),
     /// the attached deposit = what it reports, and, for a fee that is the node's, the fee floor.
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
-        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
-        if w.op.valid_until <= now() {
-            return Err(SimError::Revert("payload expired".into()));
+        // scaas-rpc T17b (R4): a refusal read while a failover endpoint answered is no verdict
+        let mark = self.failovers();
+        match self.build_on(job, lane).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(
+                crate::adapters::evm::failover_answer(&r),
+            )),
+            r => r,
         }
-        let lane_id = self.lanes.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?.address.clone();
-        let fee = marker(&self.relay_fee, &w.op, &w.entry).cloned();
-        if fee.is_some() {
-            relay_payee(&self.relay_fee, &w.op, &w.entry, &lane_id).map_err(revert)?;
-        }
-        // fix 2 R1 / R2, fix 3 g2 / N2: the payment (every job), a wrapped entry's op and a wrapped mandate's expiry stay
-        // valid through the relay
-        let (entry_vu, mandate) = match &w.entry {
-            Entry::FeeWrapper { entry, args } => (
-                MetaOp::read(&mut Reader::new(args)).ok().map(|o| o.valid_until),
-                (entry == "mtx_mandate_open").then(|| mandate_expiry(args).ok()).flatten(),
-            ),
-            _ => (None, None),
-        };
-        let soon = now().saturating_add(RELAY_EXPIRY_MARGIN_S);
-        for (vu, what) in [(Some(w.op.valid_until), "the payment"), (entry_vu, "the wrapped entry op"), (mandate, "the mandate")] {
-            if vu.is_some_and(|vu| vu <= soon) {
-                return Err(SimError::Revert(format!("{what} expires within {RELAY_EXPIRY_MARGIN_S} s: it would expire in transit")));
-            }
-        }
-        // fix 3 N1: an unopened subject paying for its own wrapped entry: the entry opens it with its own origins, then the
-        // payment's passkey is checked against them
-        if let Entry::FeeWrapper { entry, args } = &w.entry {
-            let pay_origins = w.auth.origins();
-            let (from, origins) = entry_origins(entry, args).map_err(revert)?;
-            if from == w.op.from && !pay_origins.is_empty() {
-                let mut a = Vec::new();
-                from.write(&mut a);
-                let opened = self.view(&w.op.contract, "subject", &a).await.map_err(sim)?.first() == Some(&1);
-                if let Some(o) = pay_origins.iter().find(|o| !opened && !origins.contains(o)) {
-                    return Err(SimError::Revert(format!(
-                        "the payment's passkey origin {o} is not among the origins the entry opens the subject {} with: the payment must fail",
-                        from.display()
-                    )));
-                }
-            }
-        }
-        // fix 3 g1: a router job's target figures are the node's (relayer-chosen, not in ref)
-        let entry = match &w.entry {
-            Entry::FeeRouter { target, method, args, target_gas, target_deposit } => {
-                match self.has_code(target).await.map_err(transport)? {
-                    None => return Err(SimError::Revert(format!("relay-fee target {target} does not exist"))),
-                    Some(false) => return Err(SimError::Revert(format!("relay-fee target {target} has no code"))),
-                    Some(true) => {}
-                }
-                let (tg, td) = self.target_check(&w.op, &lane_id, target, method, args, *target_gas, *target_deposit).await?;
-                Entry::FeeRouter { target: target.clone(), method: method.clone(), args: args.clone(), target_gas: tg, target_deposit: td }
-            }
-            e => e.clone(),
-        };
-        let mut call = call_of(&self.relay_fee, &entry, &w.op, &w.auth_raw).map_err(revert)?;
-        call.deposit = match &entry {
-            Entry::FeeRouter { .. } => {
-                let rc = self.view(&call.receiver, "relay_check", &call.args).await.map_err(sim)?;
-                let (deposit, gas) = decode_router_check(&rc).map_err(transport)?.map_err(|e| SimError::Revert(format!("relay_check: {e}")))?;
-                if gas != call.gas {
-                    return Err(SimError::Revert(format!("router relay_check needs {gas} gas, the node pins {}", call.gas)));
-                }
-                let hold = [borsh_str(&call.receiver), borsh_str(&lane_id), w.op.borsh(), w.auth_raw.clone()].concat();
-                let hc = self.view(&w.op.contract, "relay_hold_check", &hold).await.map_err(sim)?;
-                let held = decode_check(&hc).map_err(transport)?.map_err(|e| SimError::Revert(format!("relay_hold_check: {e}")))?;
-                deposit.checked_add(held).ok_or_else(|| SimError::Revert("deposit overflow".into()))?
-            }
-            // + 0 yoctoNEAR: no `mtx_*` / `relay_fee_*` entry has a NEP 1-yocto rule (spec §3.2: authority is the signature)
-            _ => {
-                let args = [borsh_str(&lane_id), call.args.clone()].concat();
-                let c = self.view(&call.receiver, &format!("{}_check", call.method), &args).await.map_err(sim)?;
-                decode_check(&c).map_err(transport)?.map_err(|e| SimError::Revert(format!("{}_check: {e}", call.method)))?
-            }
-        };
-        if fee.as_ref().is_some_and(|m| pays(&w.op, Some(m)) || w.op.to == Holder::Near(lane_id.clone())) {
-            let price = self.gas_price().await.map_err(transport)?;
-            let fees = self.fees().await.map_err(transport)?;
-            // fix 1 m5 / T19 fix 2: action fees, the lane's receipts, a router job's possible relay_timeout
-            let gas = quote_gas(&fees, &entry, &call);
-            let quote = u128::from(gas).saturating_mul(price).saturating_add(call.deposit);
-            fee_covers(&self.relay_fee, &w.op, quote).map_err(revert)?;
-        }
-        if let Entry::FeeWrapper { entry, args } = &w.entry {
-            if KEY_OPS.contains(&entry.as_str()) {
-                self.show_key_sets(args).await;
-            }
-        }
-        let meta = json!({"receiver": call.receiver, "method": call.method, "gas": call.gas, "deposit": call.deposit.to_string()});
-        Ok(Built { job_id: job.id, body: call.args, valid_until: w.op.valid_until, meta })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
         let m = &built.meta;
-        let s = |k: &str| m[k].as_str().map(str::to_string).ok_or_else(|| anyhow!("built without {k}"));
+        let s = |k: &str| {
+            m[k].as_str()
+                .map(str::to_string)
+                .ok_or_else(|| anyhow!("built without {k}"))
+        };
         let call = Call {
             receiver: s("receiver")?,
             method: s("method")?,
             args: built.body,
-            gas: m["gas"].as_u64().ok_or_else(|| anyhow!("built without gas"))?,
+            gas: m["gas"]
+                .as_u64()
+                .ok_or_else(|| anyhow!("built without gas"))?,
             deposit: dec_u128(&m["deposit"], "deposit")?,
         };
         let (tx_id, raw) = self.sign_call(lane, sequence, &call).await?;
-        Ok(Signed { job_id: built.job_id, tx_id, raw, valid_until: built.valid_until, sequence })
+        Ok(Signed {
+            job_id: built.job_id,
+            tx_id,
+            raw,
+            valid_until: built.valid_until,
+            sequence,
+        })
     }
 
     /// `INVALID_TRANSACTION` (nonce, balance, expired block hash, signature…): the same bytes never pass ⇒ `Rejected`.
     /// T19: `wait_until = INCLUDED` (one block): with `NONE` the RPC accepts a stale nonce and drops the transaction
     /// silently (near-sandbox 2.14), so `Rejected` never comes and the lane waits for the payload to expire.
     async fn submit(&self, signed: &Signed) -> Result<()> {
-        match self.rpc("send_tx", json!({"signed_tx_base64": b64(&signed.raw), "wait_until": "INCLUDED"})).await {
+        match self
+            .rpc(
+                "send_tx",
+                json!({"signed_tx_base64": b64(&signed.raw), "wait_until": "INCLUDED"}),
+            )
+            .await
+        {
             Ok(_) => Ok(()),
-            Err(e) if cause_of(&e) == Some("INVALID_TRANSACTION") => Err(Rejected(format!("{e:#}")).into()),
+            Err(e) if cause_of(&e) == Some("INVALID_TRANSACTION") => {
+                Err(Rejected(format!("{e:#}")).into())
+            }
             Err(e) => Err(e),
         }
     }
@@ -2116,40 +2961,83 @@ impl ChainAdapter for NearAdapter {
     /// Mined / reverted only once every receipt is in a final block (`FINAL`); a failed receipt is reported reverted with
     /// its reason, never retried (the lane nonce moved; the payer's op was not consumed).
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let Some(v) = self.find_tx(tx_id).await? else { return Ok(TxStatus::Unknown) };
-        let relay = v.pointer("/transaction/actions/0/FunctionCall/method_name").and_then(Value::as_str) == Some("relay");
-        let escrow = relay && self.relay_fee.router.is_some() && v["transaction"]["receiver_id"].as_str() == self.relay_fee.router.as_deref();
-        if v["final_execution_status"].as_str() != Some("FINAL") {
-            // T19: a call in flight past its deadline keeps the transaction short of FINAL: its timeout is due now
-            return if escrow { self.escrow_in_flight(&v).await } else { Ok(TxStatus::Pending) };
+        let st: Result<TxStatus> = async {
+            let Some(v) = self.find_tx(tx_id).await? else {
+                return Ok(TxStatus::Unknown);
+            };
+            let relay = v
+                .pointer("/transaction/actions/0/FunctionCall/method_name")
+                .and_then(Value::as_str)
+                == Some("relay");
+            let escrow = relay
+                && self.relay_fee.router.is_some()
+                && v["transaction"]["receiver_id"].as_str() == self.relay_fee.router.as_deref();
+            if v["final_execution_status"].as_str() != Some("FINAL") {
+                // T19: a call in flight past its deadline keeps the transaction short of FINAL: its timeout is due now
+                return if escrow {
+                    self.escrow_in_flight(&v).await
+                } else {
+                    Ok(TxStatus::Pending)
+                };
+            }
+            let height = self
+                .block_height_of(&v["transaction_outcome"]["block_hash"])
+                .await?;
+            if escrow {
+                return self.escrow_status(&v, height).await;
+            }
+            Ok(match outcome_status(&v["status"])? {
+                Ok(_) => TxStatus::Mined {
+                    height,
+                    tx_hash: None,
+                },
+                Err(reason) => TxStatus::Reverted { reason },
+            })
         }
-        let height = self.block_height_of(&v["transaction_outcome"]["block_hash"]).await?;
-        if escrow {
-            return self.escrow_status(&v, height).await;
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
         }
-        Ok(match outcome_status(&v["status"])? {
-            Ok(_) => TxStatus::Mined { height, tx_hash: None },
-            Err(reason) => TxStatus::Reverted { reason },
-        })
+        st
     }
 
     /// The lane's next nonce: its access key's nonce + 1.
     async fn sequence(&self, lane: usize) -> Result<u64> {
-        let pk = self.pks.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?;
+        let pk = self
+            .pks
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?;
         let v = self.rpc("query", json!({"request_type": "view_access_key", "finality": "optimistic",
             "account_id": self.lanes[lane].address, "public_key": format!("ed25519:{}", bs58::encode(pk).into_string())})).await?;
-        v["nonce"].as_u64().and_then(|n| n.checked_add(1)).ok_or_else(|| anyhow!("bad access key nonce"))
+        v["nonce"]
+            .as_u64()
+            .and_then(|n| n.checked_add(1))
+            .ok_or_else(|| anyhow!("bad access key nonce"))
     }
 
     async fn lane_balance(&self, lane: usize) -> Result<Option<u128>> {
-        let a = &self.lanes.get(lane).ok_or_else(|| anyhow!("no lane {lane}"))?.address;
-        let v = self.rpc("query", json!({"request_type": "view_account", "finality": "final", "account_id": a})).await?;
+        let a = &self
+            .lanes
+            .get(lane)
+            .ok_or_else(|| anyhow!("no lane {lane}"))?
+            .address;
+        let v = self
+            .rpc(
+                "query",
+                json!({"request_type": "view_account", "finality": "final", "account_id": a}),
+            )
+            .await?;
         Ok(dec_u128(&v["amount"], "amount").ok())
     }
 
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
-        let v = self.find_tx(tx_id).await?.ok_or_else(|| anyhow!("{tx_id} not found"))?;
-        let burnt = std::iter::once(&v["transaction_outcome"]).chain(v["receipts_outcome"].as_array().into_iter().flatten())
+        let v = self
+            .find_tx(tx_id)
+            .await?
+            .ok_or_else(|| anyhow!("{tx_id} not found"))?;
+        let burnt = std::iter::once(&v["transaction_outcome"])
+            .chain(v["receipts_outcome"].as_array().into_iter().flatten())
             .map(|o| dec_u128(&o["outcome"]["tokens_burnt"], "tokens_burnt").unwrap_or(0))
             .fold(0u128, u128::saturating_add);
         Ok(Some(burnt))
@@ -2158,9 +3046,10 @@ impl ChainAdapter for NearAdapter {
     /// The `final` block; with `quorum > 1` further endpoints must agree on its hash.
     async fn final_head(&self) -> Result<Option<Head>> {
         let (height, hash) = header(&self.rpc("block", json!({"finality": "final"})).await?)?;
+        self.net.client.pool().saw_block(height); // the failover reads' floor: endpoint 0's final height
         let mut agree = 1;
-        for url in &self.rpc[1..] {
-            if let Ok(b) = self.rpc_at(url, "block", json!({"block_id": height})).await {
+        for i in 1..self.net.client.len() {
+            if let Ok(b) = self.rpc_at(i, "block", json!({"block_id": height})).await {
                 if header(&b).ok().map(|h| h.1).as_deref() == Some(hash.as_str()) {
                     agree += 1;
                 }
@@ -2189,33 +3078,68 @@ impl ChainAdapter for NearAdapter {
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
         let tokens: Vec<String> = contracts.iter().filter_map(|c| near_id(c).ok()).collect();
         if tokens.is_empty() && !contracts.is_empty() {
-            bail!("none of the {} registered tokens is a NEAR account id", contracts.len());
+            bail!(
+                "none of the {} registered tokens is a NEAR account id",
+                contracts.len()
+            );
         }
         if tokens.is_empty() || from > to {
             return Ok(vec![]);
         }
         // fix 1 I3: a non-archival RPC answers UNKNOWN_BLOCK for pruned heights too: never read below its horizon
         let st = self.rpc("status", json!([])).await?;
-        let earliest = st.pointer("/sync_info/earliest_block_height").and_then(Value::as_u64)
+        let earliest = st
+            .pointer("/sync_info/earliest_block_height")
+            .and_then(Value::as_u64)
             .ok_or_else(|| anyhow!("status without sync_info.earliest_block_height"))?;
         if from < earliest {
             bail!("range starts at {from}, below the RPC's earliest kept block {earliest} (pruned: use an archival RPC)");
         }
-        let ids = Ids { tokens, router: self.relay_fee.router.clone(), dex: self.relay_fee.dex.clone() };
-        let watched = |a: &str| ids.tokens.iter().chain(&ids.router).chain(&ids.dex).any(|x| x == a);
+        let ids = Ids {
+            tokens,
+            router: self.relay_fee.router.clone(),
+            dex: self.relay_fee.dex.clone(),
+        };
+        let watched = |a: &str| {
+            ids.tokens
+                .iter()
+                .chain(&ids.router)
+                .chain(&ids.dex)
+                .any(|x| x == a)
+        };
         let mut out = Vec::new();
         for h in from..=to {
-            let b = match self.agreed("block", json!({"block_id": h}), |b| json!([b["header"]["hash"], b["chunks"]])).await {
+            let b = match self
+                .agreed("block", json!({"block_id": h}), |b| {
+                    json!([b["header"]["hash"], b["chunks"]])
+                })
+                .await
+            {
                 Ok(b) => b,
                 Err(e) if cause_of(&e) == Some("UNKNOWN_BLOCK") => continue,
                 Err(e) => return Err(e),
             };
             let (_, bh) = header(&b)?;
-            for c in b["chunks"].as_array().into_iter().flatten().filter(|c| c["height_included"].as_u64() == Some(h)) {
-                let id = c["chunk_hash"].as_str().ok_or_else(|| anyhow!("block {h}: chunk without hash"))?;
-                let ch = self.agreed("chunk", json!({"chunk_id": id}), |c| c["transactions"].clone()).await?;
+            for c in b["chunks"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|c| c["height_included"].as_u64() == Some(h))
+            {
+                let id = c["chunk_hash"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("block {h}: chunk without hash"))?;
+                let ch = self
+                    .agreed("chunk", json!({"chunk_id": id}), |c| {
+                        c["transactions"].clone()
+                    })
+                    .await?;
                 for t in ch["transactions"].as_array().into_iter().flatten() {
-                    let (Some(hash), Some(signer), Some(recv)) = (t["hash"].as_str(), t["signer_id"].as_str(), t["receiver_id"].as_str()) else {
+                    let (Some(hash), Some(signer), Some(recv)) = (
+                        t["hash"].as_str(),
+                        t["signer_id"].as_str(),
+                        t["receiver_id"].as_str(),
+                    ) else {
                         bail!("chunk {id}: bad transaction {t}");
                     };
                     if !watched(recv) {
@@ -2239,14 +3163,24 @@ impl ChainAdapter for NearAdapter {
     /// lane is registered (`storage_deposit`) on every token.
     async fn start_check(&self) -> Result<()> {
         let st = self.rpc("status", json!([])).await?;
-        let g = st["genesis_hash"].as_str().ok_or_else(|| anyhow!("status without genesis_hash"))?;
+        let g = st["genesis_hash"]
+            .as_str()
+            .ok_or_else(|| anyhow!("status without genesis_hash"))?;
         if g != self.network_b58 {
-            bail!("the RPC's genesis hash {g} is not the configured network {}", self.network_b58);
+            bail!(
+                "the RPC's genesis hash {g} is not the configured network {}",
+                self.network_b58
+            );
         }
         // ruling B: no assumed fees: without the chain's action fees (or with a too costly implicit transfer, review I2)
         // the node does not start; read after the genesis check (review m2)
         self.fees().await.context("the RPC's EXPERIMENTAL_protocol_config (action fees): the chain does not start without them")?;
-        let mut ids: Vec<(&str, &str)> = self.relay_fee.tokens.iter().map(|t| (t.as_str(), "token")).collect();
+        let mut ids: Vec<(&str, &str)> = self
+            .relay_fee
+            .tokens
+            .iter()
+            .map(|t| (t.as_str(), "token"))
+            .collect();
         ids.extend(self.relay_fee.router.as_deref().map(|r| (r, "router")));
         ids.extend(self.relay_fee.executor.as_deref().map(|e| (e, "executor")));
         ids.extend(self.relay_fee.dex.as_deref().map(|d| (d, "dex")));
@@ -2262,14 +3196,28 @@ impl ChainAdapter for NearAdapter {
             }
         }
         for t in &self.relay_fee.tokens {
-            let net: Vec<u8> = serde_json::from_slice(&self.view(t, "network", &[]).await?).context("token network()")?;
+            let net: Vec<u8> = serde_json::from_slice(&self.view(t, "network", &[]).await?)
+                .context("token network()")?;
             if net != self.network {
-                bail!("token {t} network {} is not this chain's genesis {}", hex0x(&net), hex0x(&self.network));
+                bail!(
+                    "token {t} network {} is not this chain's genesis {}",
+                    hex0x(&net),
+                    hex0x(&self.network)
+                );
             }
             for l in &self.lanes {
-                let b = self.view(t, "storage_balance_of", &serde_json::to_vec(&json!({"account_id": l.address}))?).await?;
+                let b = self
+                    .view(
+                        t,
+                        "storage_balance_of",
+                        &serde_json::to_vec(&json!({"account_id": l.address}))?,
+                    )
+                    .await?;
                 if serde_json::from_slice::<Value>(&b)?.is_null() {
-                    bail!("lane {} is not registered on token {t} (storage_deposit)", l.address);
+                    bail!(
+                        "lane {} is not registered on token {t} (storage_deposit)",
+                        l.address
+                    );
                 }
             }
         }
@@ -2280,15 +3228,24 @@ impl ChainAdapter for NearAdapter {
             }
             // final review I2: the DEX lets a lane-bound order through this executor only
             if let Some(d) = &self.relay_fee.dex {
-                let x: String = serde_json::from_slice(&self.view(d, "executor", &[]).await?).context("dex executor()")?;
+                let x: String = serde_json::from_slice(&self.view(d, "executor", &[]).await?)
+                    .context("dex executor()")?;
                 if x != *e {
                     bail!("dex {d} executor() is {x}, not params.relay_fee.executor {e}");
                 }
             }
         }
         // review I2: the router's / DEX's own transfer pin is the node's (its static gas figures follow it)
-        for (id, what) in self.relay_fee.router.iter().map(|r| (r, "router")).chain(self.relay_fee.dex.iter().map(|d| (d, "dex"))) {
-            let pin: u64 = serde_json::from_slice(&self.view(id, "implicit_transfer_gas", &[]).await?).context("implicit_transfer_gas()")?;
+        for (id, what) in self
+            .relay_fee
+            .router
+            .iter()
+            .map(|r| (r, "router"))
+            .chain(self.relay_fee.dex.iter().map(|d| (d, "dex")))
+        {
+            let pin: u64 =
+                serde_json::from_slice(&self.view(id, "implicit_transfer_gas", &[]).await?)
+                    .context("implicit_transfer_gas()")?;
             if pin != IMPLICIT_TRANSFER_GAS {
                 bail!("{what} {id} implicit_transfer_gas() is {pin}, not the node's IMPLICIT_TRANSFER_GAS {IMPLICIT_TRANSFER_GAS}");
             }
@@ -2305,7 +3262,8 @@ mod tests {
 
     const NV: &str = include_str!("../../../smartcontracts/near/vectors/near-vectors.json");
     const TXV: &str = include_str!("../../../smartcontracts/near/vectors/near-tx.json");
-    const PAYMETA: &str = include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
+    const PAYMETA: &str =
+        include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
     const NET_B58: &str = "68XTWuVmYJkVmj4HM9zFwXdDiS4DE2KX7RbVBdRERiCk";
     const TOKEN: &str = "token.test.near";
     const ROUTER: &str = "relayfee.test.near";
@@ -2317,7 +3275,11 @@ mod tests {
         receipt: 108_059_500_000,
         function_call: 2_319_861_500_000,
         per_byte: 2_235_934,
-        implicit_transfer: 2 * 108_059_500_000 + 2 * 115_123_062_500 + 500_000_000_000 + 7_200_000_000_000 + 2 * 101_765_125_000,
+        implicit_transfer: 2 * 108_059_500_000
+            + 2 * 115_123_062_500
+            + 500_000_000_000
+            + 7_200_000_000_000
+            + 2 * 101_765_125_000,
     };
 
     fn fee_item(g: u64) -> Value {
@@ -2345,7 +3307,13 @@ mod tests {
     }
 
     fn row(name: &str) -> Value {
-        nv()["metaops"]["vectors"].as_array().unwrap().iter().find(|m| m["name"] == name).unwrap_or_else(|| panic!("{name}")).clone()
+        nv()["metaops"]["vectors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| m["name"] == name)
+            .unwrap_or_else(|| panic!("{name}"))
+            .clone()
     }
 
     fn bvec(b: &[u8]) -> Vec<u8> {
@@ -2374,12 +3342,29 @@ mod tests {
     fn auth_bytes(a: &Value) -> Vec<u8> {
         match a["kind"].as_str().unwrap() {
             "ed25519" => [vec![0], hx(&a["key"]), hx(&a["sig"])].concat(),
-            "secp256k1" => [vec![1], hx(&a["key"]), hx(&a["sig"]), vec![a["v"].as_u64().unwrap() as u8]].concat(),
-            "passkey" => [vec![2], hx(&a["key"]), bvec(&hx(&a["authenticatorData"])), bstr(a["clientDataJSON"].as_str().unwrap()), hx(&a["sig"])]
-                .concat(),
+            "secp256k1" => [
+                vec![1],
+                hx(&a["key"]),
+                hx(&a["sig"]),
+                vec![a["v"].as_u64().unwrap() as u8],
+            ]
+            .concat(),
+            "passkey" => [
+                vec![2],
+                hx(&a["key"]),
+                bvec(&hx(&a["authenticatorData"])),
+                bstr(a["clientDataJSON"].as_str().unwrap()),
+                hx(&a["sig"]),
+            ]
+            .concat(),
             "msig" => {
                 let sigs = a["sigs"].as_array().unwrap();
-                let mut b = [vec![3], bvec(&hx(&a["keyData"])), (sigs.len() as u32).to_le_bytes().to_vec()].concat();
+                let mut b = [
+                    vec![3],
+                    bvec(&hx(&a["keyData"])),
+                    (sigs.len() as u32).to_le_bytes().to_vec(),
+                ]
+                .concat();
                 for s in sigs {
                     b.push(s["index"].as_u64().unwrap() as u8);
                     b.extend(auth_bytes(&s["auth"]));
@@ -2405,7 +3390,8 @@ mod tests {
     }
 
     fn o_op(op: &MetaOp, auth: &[u8], extra: Value) -> Value {
-        let mut o = json!({"payload": h(&op.encode()), "signature": h(auth), "contract": op.contract});
+        let mut o =
+            json!({"payload": h(&op.encode()), "signature": h(auth), "contract": op.contract});
         for (k, v) in extra.as_object().unwrap() {
             o[k] = v.clone();
         }
@@ -2413,7 +3399,11 @@ mod tests {
     }
 
     fn job(o: Value) -> Job {
-        Job { id: 1, op: Some(o), ..serde_json::from_value(json!({"id": 1})).unwrap() }
+        Job {
+            id: 1,
+            op: Some(o),
+            ..serde_json::from_value(json!({"id": 1})).unwrap()
+        }
     }
 
     fn pol() -> RelayFeePolicy {
@@ -2421,7 +3411,10 @@ mod tests {
             router: Some(ROUTER.into()),
             executor: Some(EXECUTOR.into()),
             tokens: vec![TOKEN.into()],
-            params: crate::config::RelayParams { min_amount: 1, ..Default::default() },
+            params: crate::config::RelayParams {
+                min_amount: 1,
+                ..Default::default()
+            },
             min_yocto_value: HashMap::from([(TOKEN.to_string(), 1_000)]),
             dex: Some(DEX.into()),
             targets: BTreeMap::new(),
@@ -2429,19 +3422,31 @@ mod tests {
     }
 
     fn rref(name: &str) -> Value {
-        nv()["relayRefs"].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap().clone()
+        nv()["relayRefs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["name"] == name)
+            .unwrap()
+            .clone()
     }
 
     fn wrapper_job(name: &str) -> (MetaOp, Value) {
         let r = rref(name);
-        let o = o_of(r["payment"].as_str().unwrap(), json!({"kind": "relay_fee", "ref": r["ref"], "extra": {"call": r["call"], "route": "wrapper"}}));
+        let o = o_of(
+            r["payment"].as_str().unwrap(),
+            json!({"kind": "relay_fee", "ref": r["ref"], "extra": {"call": r["call"], "route": "wrapper"}}),
+        );
         (op_of(r["payment"].as_str().unwrap()), o)
     }
 
     fn router_job(name: &str, target_gas: &str, target_deposit: &str) -> (MetaOp, Value) {
         let r = rref(name);
-        let o = o_of(r["payment"].as_str().unwrap(), json!({"kind": "relay_fee", "ref": r["ref"],
-            "extra": {"call": r["call"], "route": "router", "target_gas": target_gas, "target_deposit": target_deposit}}));
+        let o = o_of(
+            r["payment"].as_str().unwrap(),
+            json!({"kind": "relay_fee", "ref": r["ref"],
+            "extra": {"call": r["call"], "route": "router", "target_gas": target_gas, "target_deposit": target_deposit}}),
+        );
         (op_of(r["payment"].as_str().unwrap()), o)
     }
 
@@ -2450,7 +3455,14 @@ mod tests {
         router_op_g(target, method, args, to, "30000000000000", "0")
     }
 
-    fn router_op_g(target: &str, method: &str, args: &[u8], to: Holder, tg: &str, td: &str) -> (MetaOp, Value) {
+    fn router_op_g(
+        target: &str,
+        method: &str,
+        args: &[u8],
+        to: Holder,
+        tg: &str,
+        td: &str,
+    ) -> (MetaOp, Value) {
         let mut op = op_of("relay_fee_pay_router_short");
         let call = router_call(target, method, args);
         let tb = [&[target.len() as u8][..], target.as_bytes()].concat();
@@ -2458,8 +3470,12 @@ mod tests {
         op.pay_ref = r;
         op.lane = pay_lane(&r);
         op.to = to;
-        let o = o_op(&op, &auth_bytes(&row("relay_fee_pay_router_short")["auth"]), json!({"kind": "relay_fee",
-            "extra": {"call": h(&call), "route": "router", "target_gas": tg, "target_deposit": td}}));
+        let o = o_op(
+            &op,
+            &auth_bytes(&row("relay_fee_pay_router_short")["auth"]),
+            json!({"kind": "relay_fee",
+            "extra": {"call": h(&call), "route": "router", "target_gas": tg, "target_deposit": td}}),
+        );
         (op, o)
     }
 
@@ -2472,7 +3488,13 @@ mod tests {
     }
 
     fn router_check(storage: u128, deposit: u128, gas: u64) -> Vec<u8> {
-        [vec![0], storage.to_le_bytes().to_vec(), deposit.to_le_bytes().to_vec(), gas.to_le_bytes().to_vec()].concat()
+        [
+            vec![0],
+            storage.to_le_bytes().to_vec(),
+            deposit.to_le_bytes().to_vec(),
+            gas.to_le_bytes().to_vec(),
+        ]
+        .concat()
     }
 
     // ------------------------------------------------------------------------------------------------ fake RPC
@@ -2513,7 +3535,10 @@ mod tests {
         for _ in 0..3 {
             i += 4 + u32::from_le_bytes(b[i..i + 4].try_into().unwrap()) as usize;
         }
-        (u64::from_le_bytes(b[i..i + 8].try_into().unwrap()), u128::from_le_bytes(b[i + 8..i + 24].try_into().unwrap()))
+        (
+            u64::from_le_bytes(b[i..i + 8].try_into().unwrap()),
+            u128::from_le_bytes(b[i + 8..i + 24].try_into().unwrap()),
+        )
     }
 
     fn rpc_err(name: &str) -> Value {
@@ -2526,44 +3551,80 @@ mod tests {
         match method {
             "status" => Ok(json!({"chain_id": "localnet", "genesis_hash": w.genesis,
                                   "sync_info": {"earliest_block_height": w.earliest, "latest_block_height": 100}})),
-            "EXPERIMENTAL_protocol_config" if w.no_fees => Ok(json!({"runtime_config": {"storage_amount_per_byte": w.byte_cost.to_string()}})),
-            "EXPERIMENTAL_protocol_config" => Ok(json!({"runtime_config": {"storage_amount_per_byte": w.byte_cost.to_string(),
+            "EXPERIMENTAL_protocol_config" if w.no_fees => {
+                Ok(json!({"runtime_config": {"storage_amount_per_byte": w.byte_cost.to_string()}}))
+            }
+            "EXPERIMENTAL_protocol_config" => Ok(
+                json!({"runtime_config": {"storage_amount_per_byte": w.byte_cost.to_string(),
                 "transaction_costs": {"action_receipt_creation_config": fee_item(PINNED.receipt),
                     "action_creation_config": {"function_call_cost": fee_item(PINNED.function_call),
                         "function_call_cost_per_byte": fee_item(PINNED.per_byte), "transfer_cost": fee_item(115_123_062_500),
                         "create_account_cost": {"send_sir": 500_000_000_000u64, "send_not_sir": 500_000_000_000u64,
                             "execution": if w.create_exec > 0 { w.create_exec } else { 7_200_000_000_000 }},
-                        "add_key_cost": {"full_access_cost": fee_item(101_765_125_000)}}}}})),
+                        "add_key_cost": {"full_access_cost": fee_item(101_765_125_000)}}}}}),
+            ),
             "gas_price" => Ok(json!({"gas_price": w.gas_price.to_string()})),
             "block" => {
                 let b = match (&p["finality"], &p["block_id"]) {
                     (Value::String(_), _) => w.blocks.last().cloned(),
-                    (_, Value::Number(n)) => w.blocks.iter().find(|b| b["header"]["height"].as_u64() == n.as_u64()).cloned(),
-                    (_, Value::String(x)) => w.blocks.iter().find(|b| b["header"]["hash"] == *x).cloned(),
+                    (_, Value::Number(n)) => w
+                        .blocks
+                        .iter()
+                        .find(|b| b["header"]["height"].as_u64() == n.as_u64())
+                        .cloned(),
+                    (_, Value::String(x)) => {
+                        w.blocks.iter().find(|b| b["header"]["hash"] == *x).cloned()
+                    }
                     _ => None,
                 };
                 b.ok_or_else(|| rpc_err("UNKNOWN_BLOCK"))
             }
-            "chunk" => w.chunks.get(&s("chunk_id")).cloned().ok_or_else(|| rpc_err("UNKNOWN_CHUNK")),
-            "send_tx" => w.send_err.clone().map_or(Ok(json!({"final_execution_status": "NONE"})), Err),
-            "EXPERIMENTAL_tx_status" => w.txs.get(&s("tx_hash")).cloned().ok_or_else(|| rpc_err("UNKNOWN_TRANSACTION")),
+            "chunk" => w
+                .chunks
+                .get(&s("chunk_id"))
+                .cloned()
+                .ok_or_else(|| rpc_err("UNKNOWN_CHUNK")),
+            "send_tx" => w
+                .send_err
+                .clone()
+                .map_or(Ok(json!({"final_execution_status": "NONE"})), Err),
+            "EXPERIMENTAL_tx_status" => w
+                .txs
+                .get(&s("tx_hash"))
+                .cloned()
+                .ok_or_else(|| rpc_err("UNKNOWN_TRANSACTION")),
             "query" => match s("request_type").as_str() {
-                "view_account" if w.code.contains(&s("account_id")) => Ok(json!({"amount": "5000", "code_hash": "E8jZ1giWcVs7nYUmVrvKYV4AsHnjngjNE5mQ4KCi8Ain"})),
-                "view_account" if w.plain.contains(&s("account_id")) => Ok(json!({"amount": "5000", "code_hash": NO_CODE})),
+                "view_account" if w.code.contains(&s("account_id")) => Ok(
+                    json!({"amount": "5000", "code_hash": "E8jZ1giWcVs7nYUmVrvKYV4AsHnjngjNE5mQ4KCi8Ain"}),
+                ),
+                "view_account" if w.plain.contains(&s("account_id")) => {
+                    Ok(json!({"amount": "5000", "code_hash": NO_CODE}))
+                }
                 "view_account" => Err(rpc_err("UNKNOWN_ACCOUNT")),
                 "view_access_key_list" => {
                     let k = w.keyed.contains(&s("account_id"));
-                    Ok(json!({"keys": if k { json!([{"public_key": "ed25519:x", "access_key": {"nonce": 1, "permission": "FullAccess"}}]) } else { json!([]) }}))
+                    Ok(
+                        json!({"keys": if k { json!([{"public_key": "ed25519:x", "access_key": {"nonce": 1, "permission": "FullAccess"}}]) } else { json!([]) }}),
+                    )
                 }
                 "view_access_key" => Ok(json!({"nonce": w.nonce, "permission": "FullAccess"})),
                 "call_function" if w.auto_relay && s("method_name") == "relay_check" => {
-                    let a = base64::engine::general_purpose::STANDARD.decode(s("args_base64")).unwrap();
-                    Ok(json!({"result": router_check(1, 1, ROUTER_FIXED_GAS + TGAS + relay_figures(&a).0), "logs": []}))
+                    let a = base64::engine::general_purpose::STANDARD
+                        .decode(s("args_base64"))
+                        .unwrap();
+                    Ok(
+                        json!({"result": router_check(1, 1, ROUTER_FIXED_GAS + TGAS + relay_figures(&a).0), "logs": []}),
+                    )
                 }
-                "call_function" if w.view_errs.contains_key(&(s("account_id"), s("method_name"))) => {
+                "call_function"
+                    if w.view_errs
+                        .contains_key(&(s("account_id"), s("method_name"))) =>
+                {
                     let m = &w.view_errs[&(s("account_id"), s("method_name"))];
-                    Err(json!({"name": "HANDLER_ERROR", "cause": {"name": "CONTRACT_EXECUTION_ERROR", "info": {"vm_error": m}},
-                               "code": -32000, "message": "Server error", "data": m}))
+                    Err(
+                        json!({"name": "HANDLER_ERROR", "cause": {"name": "CONTRACT_EXECUTION_ERROR", "info": {"vm_error": m}},
+                               "code": -32000, "message": "Server error", "data": m}),
+                    )
                 }
                 "call_function" => match w.views.get(&(s("account_id"), s("method_name"))) {
                     Some(b) => Ok(json!({"result": b, "logs": [], "block_height": 1})),
@@ -2579,7 +3640,11 @@ mod tests {
         use axum::extract::State;
         async fn h(State(w): State<Arc<Mutex<World>>>, body: String) -> axum::Json<Value> {
             let v: Value = serde_json::from_str(&body).unwrap();
-            let r = answer(&mut w.lock().unwrap(), v["method"].as_str().unwrap(), &v["params"]);
+            let r = answer(
+                &mut w.lock().unwrap(),
+                v["method"].as_str().unwrap(),
+                &v["params"],
+            );
             axum::Json(match r {
                 Ok(r) => json!({"jsonrpc": "2.0", "id": v["id"], "result": r}),
                 Err(e) => json!({"jsonrpc": "2.0", "id": v["id"], "error": e}),
@@ -2593,7 +3658,8 @@ mod tests {
     }
 
     fn lane0() -> LocalSigner {
-        let seed = crate::keys::Seed::from_words(&format!("{}art", "abandon ".repeat(23)), None).unwrap();
+        let seed =
+            crate::keys::Seed::from_words(&format!("{}art", "abandon ".repeat(23)), None).unwrap();
         let (c, k) = crate::keys::lane_secret(&seed, "near", 0).unwrap();
         LocalSigner::new(c, &k).unwrap()
     }
@@ -2605,11 +3671,15 @@ mod tests {
     }
 
     fn cfg_tokens(url: &str, relay_fee: &str, tokens: &[&str]) -> ChainCfg {
-        let t: Vec<String> = tokens.iter().map(|t| format!("{{ address = \"{t}\", decimals = 6 }}")).collect();
+        let t: Vec<String> = tokens
+            .iter()
+            .map(|t| format!("{{ address = \"{t}\", decimals = 6 }}"))
+            .collect();
         toml::from_str(&format!(
             "family = \"near\"\nnetwork = \"{NET_B58}\"\nrpc_urls = [\"{url}\"]\nlanes = [0]\n\
              tokens = [{}]\nfinality = {{ mode = \"instant\" }}\n\
-             params = {{ dex = \"{DEX}\"{relay_fee} }}", t.join(", ")
+             params = {{ dex = \"{DEX}\"{relay_fee} }}",
+            t.join(", ")
         ))
         .unwrap()
     }
@@ -2620,18 +3690,37 @@ mod tests {
 
     /// A healthy chain: genesis = the vectors' network, every contract deployed and keyless, lane 0 registered.
     fn world() -> World {
-        let mut w = World { genesis: NET_B58.into(), gas_price: 100_000_000, nonce: 41, byte_cost: 10u128.pow(19), ..Default::default() };
+        let mut w = World {
+            genesis: NET_B58.into(),
+            gas_price: 100_000_000,
+            nonce: 41,
+            byte_cost: 10u128.pow(19),
+            ..Default::default()
+        };
         w.code = [TOKEN, ROUTER, EXECUTOR, DEX].map(String::from).to_vec();
         let net: Vec<u8> = serde_json::to_vec(&b32(&nv()["network"]).to_vec()).unwrap();
         w.views.insert((TOKEN.into(), "network".into()), net);
-        w.views.insert((ROUTER.into(), "executor".into()), bstr(EXECUTOR));
-        w.views.insert((DEX.into(), "executor".into()), serde_json::to_vec(EXECUTOR).unwrap());
-        w.views.insert((TOKEN.into(), "storage_balance_of".into()), br#"{"total":"1250000000000000000000","available":"0"}"#.to_vec());
-        w.views.insert((TOKEN.into(), "ft_balance_of".into()), br#""1000000000000""#.to_vec());
+        w.views
+            .insert((ROUTER.into(), "executor".into()), bstr(EXECUTOR));
+        w.views.insert(
+            (DEX.into(), "executor".into()),
+            serde_json::to_vec(EXECUTOR).unwrap(),
+        );
+        w.views.insert(
+            (TOKEN.into(), "storage_balance_of".into()),
+            br#"{"total":"1250000000000000000000","available":"0"}"#.to_vec(),
+        );
+        w.views.insert(
+            (TOKEN.into(), "ft_balance_of".into()),
+            br#""1000000000000""#.to_vec(),
+        );
         w.views.insert((DEX.into(), "leg_settle".into()), vec![0]);
         w.views.insert((DEX.into(), "pending".into()), vec![0]);
         for c in [ROUTER, DEX] {
-            w.views.insert((c.into(), "implicit_transfer_gas".into()), serde_json::to_vec(&IMPLICIT_TRANSFER_GAS).unwrap());
+            w.views.insert(
+                (c.into(), "implicit_transfer_gas".into()),
+                serde_json::to_vec(&IMPLICIT_TRANSFER_GAS).unwrap(),
+            );
         }
         w.blocks.push(json!({"header": {"height": 100, "hash": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2"}, "chunks": []}));
         w
@@ -2640,7 +3729,10 @@ mod tests {
     async fn adapter(w: World, relay_fee: &str) -> (NearAdapter, Arc<Mutex<World>>) {
         let w = Arc::new(Mutex::new(w));
         let url = serve(w.clone()).await;
-        (NearAdapter::new(&cfg(&url, relay_fee), &[lane0()]).unwrap(), w)
+        (
+            NearAdapter::new(&cfg(&url, relay_fee), &[lane0()]).unwrap(),
+            w,
+        )
     }
 
     /// A landed tx's fee; a tx not found is an `Err`, counted by the runner, never a silent zero.
@@ -2648,21 +3740,41 @@ mod tests {
     async fn tx_fee_reads_the_burn_or_fails() {
         let (a, w) = adapter(world(), "").await;
         let burnt = json!({"transaction_outcome": {"outcome": {"tokens_burnt": "5"}}, "receipts_outcome": [{"outcome": {"tokens_burnt": "2"}}]});
-        w.lock().unwrap().txs.insert(bs58::encode([7u8; 32]).into_string(), burnt);
-        assert_eq!(a.tx_fee(&alloy::hex::encode([7u8; 32])).await.unwrap(), Some(7));
+        w.lock()
+            .unwrap()
+            .txs
+            .insert(bs58::encode([7u8; 32]).into_string(), burnt);
+        assert_eq!(
+            a.tx_fee(&alloy::hex::encode([7u8; 32])).await.unwrap(),
+            Some(7)
+        );
         assert!(a.tx_fee(&alloy::hex::encode([8u8; 32])).await.is_err());
     }
 
     fn sent(w: &Arc<Mutex<World>>) -> Vec<Vec<u8>> {
         let w = w.lock().unwrap();
-        w.calls.iter().filter(|c| c.0 == "send_tx")
-            .map(|c| base64::engine::general_purpose::STANDARD.decode(c.1["signed_tx_base64"].as_str().unwrap()).unwrap()).collect()
+        w.calls
+            .iter()
+            .filter(|c| c.0 == "send_tx")
+            .map(|c| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(c.1["signed_tx_base64"].as_str().unwrap())
+                    .unwrap()
+            })
+            .collect()
     }
 
     fn view_args(w: &Arc<Mutex<World>>, method: &str) -> Vec<u8> {
         let w = w.lock().unwrap();
-        let c = w.calls.iter().rev().find(|c| c.0 == "query" && c.1["method_name"] == method).unwrap_or_else(|| panic!("{method} not called"));
-        base64::engine::general_purpose::STANDARD.decode(c.1["args_base64"].as_str().unwrap()).unwrap()
+        let c = w
+            .calls
+            .iter()
+            .rev()
+            .find(|c| c.0 == "query" && c.1["method_name"] == method)
+            .unwrap_or_else(|| panic!("{method} not called"));
+        base64::engine::general_purpose::STANDARD
+            .decode(c.1["args_base64"].as_str().unwrap())
+            .unwrap()
     }
 
     fn contains(hay: &[u8], needle: &[u8]) -> bool {
@@ -2706,18 +3818,30 @@ mod tests {
             assert_eq!(op.digest().to_vec(), hx(&r["digest"]), "{}", r["name"]);
             assert_eq!(op.borsh(), enc[15..].to_vec());
             if r["auth"].is_object() && r["auth"]["kind"].is_string() {
-                Auth::decode(&auth_bytes(&r["auth"]), &op.digest()).unwrap_or_else(|e| panic!("{} auth: {e:#}", r["name"]));
+                Auth::decode(&auth_bytes(&r["auth"]), &op.digest())
+                    .unwrap_or_else(|e| panic!("{} auth: {e:#}", r["name"]));
                 n_auth += 1;
             }
         }
         assert_eq!(n_auth, rows.len(), "every row's auth decodes");
-        assert!(matches!(Auth::decode(&auth_bytes(&row("set_guardian_msig")["auth"]), &op_of("set_guardian_msig").digest()).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)])));
+        assert!(
+            matches!(Auth::decode(&auth_bytes(&row("set_guardian_msig")["auth"]), &op_of("set_guardian_msig").digest()).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)]))
+        );
         assert_eq!(op_of("pay_ua_ed25519_u128_max").amount, u128::MAX);
-        assert_eq!(Holder::Ua([0xab; 32]).display(), format!("0x{}", "ab".repeat(32)));
-        assert_eq!(Holder::Near("alice.test.near".into()).display(), "alice.test.near");
+        assert_eq!(
+            Holder::Ua([0xab; 32]).display(),
+            format!("0x{}", "ab".repeat(32))
+        );
+        assert_eq!(
+            Holder::Near("alice.test.near".into()).display(),
+            "alice.test.near"
+        );
         let enc = hx(&row("pay")["encoding"]);
         assert!(MetaOp::decode(&enc[..enc.len() - 1]).is_err(), "truncated");
-        assert!(MetaOp::decode(&[&enc[..], &[0]].concat()).is_err(), "trailing");
+        assert!(
+            MetaOp::decode(&[&enc[..], &[0]].concat()).is_err(),
+            "trailing"
+        );
         assert!(MetaOp::decode(&enc[15..]).is_err(), "no label");
         let mut bad = enc.clone();
         bad[15 + 32 + 4] = b'T'; // token.test.near → Token.test.near: not an account id
@@ -2731,12 +3855,35 @@ mod tests {
         let z = [0; 32];
         assert!(Auth::decode(&[&a[..], &[0]].concat(), &z).is_err());
         assert!(Auth::decode(&[&[4u8][..], &a[1..]].concat(), &z).is_err());
-        let msig = |inner: &[u8]| [vec![3], bvec(&[0, 1]), 1u32.to_le_bytes().to_vec(), vec![0], inner.to_vec()].concat();
-        assert!(matches!(Auth::decode(&msig(&a), &z).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)])));
-        assert!(Auth::decode(&msig(&msig(&a)), &z).is_err(), "msig inside msig");
-        let pk = |n: usize| passkey(&cdj(&z, &format!("https://{}", "a".repeat(n - cdj(&z, "https://", "}").len())), "}"));
+        let msig = |inner: &[u8]| {
+            [
+                vec![3],
+                bvec(&[0, 1]),
+                1u32.to_le_bytes().to_vec(),
+                vec![0],
+                inner.to_vec(),
+            ]
+            .concat()
+        };
+        assert!(
+            matches!(Auth::decode(&msig(&a), &z).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)]))
+        );
+        assert!(
+            Auth::decode(&msig(&msig(&a)), &z).is_err(),
+            "msig inside msig"
+        );
+        let pk = |n: usize| {
+            passkey(&cdj(
+                &z,
+                &format!("https://{}", "a".repeat(n - cdj(&z, "https://", "}").len())),
+                "}",
+            ))
+        };
         assert_eq!(Auth::decode(&pk(1024), &z).unwrap().passkeys(), 1);
-        assert!(Auth::decode(&pk(1025), &z).is_err(), "passkey field over 1024 bytes (contract PASSKEY_FIELD_MAX)");
+        assert!(
+            Auth::decode(&pk(1025), &z).is_err(),
+            "passkey field over 1024 bytes (contract PASSKEY_FIELD_MAX)"
+        );
     }
 
     /// The node's hand-encoded Borsh transaction and lane signature equal nearcore's (`near-tx.json`, written by
@@ -2751,8 +3898,15 @@ mod tests {
         let auth = auth_bytes(&row("pay")["auth"]);
         let call = call_of(&pol(), &Entry::Pay, &op, &auth).unwrap();
         assert_eq!(call.args, hx(&v["args"]));
-        let call = Call { gas: v["gas"].as_u64().unwrap(), deposit: dec_u128(&v["deposit"], "deposit").unwrap(), ..call };
-        assert_eq!((call.receiver.as_str(), call.method.as_str()), (TOKEN, "mtx_pay"));
+        let call = Call {
+            gas: v["gas"].as_u64().unwrap(),
+            deposit: dec_u128(&v["deposit"], "deposit").unwrap(),
+            ..call
+        };
+        assert_eq!(
+            (call.receiver.as_str(), call.method.as_str()),
+            (TOKEN, "mtx_pay")
+        );
         let tx = function_call_tx(LANE0, &pk, 7, &b32(&v["block_hash"]), &call);
         assert_eq!(h(&tx), h(&hx(&v["transaction"])));
         assert_eq!(tx_hash(&tx).to_vec(), hx(&v["hash"]));
@@ -2768,16 +3922,40 @@ mod tests {
         let rows: Vec<Value> = serde_json::from_str(PAYMETA).unwrap();
         for r in &rows {
             let id = meta_pay_id(&hx(&r["salt"]), &hx(&r["meta"]));
-            assert_eq!((id.to_vec(), pay_lane(&id).to_vec()), (hx(&r["payId"]), hx(&r["payLane"])), "{}", r["name"]);
+            assert_eq!(
+                (id.to_vec(), pay_lane(&id).to_vec()),
+                (hx(&r["payId"]), hx(&r["payLane"])),
+                "{}",
+                r["name"]
+            );
         }
         let mut n = 0;
-        for v in nv()["metaops"]["vectors"].as_array().unwrap().iter().filter(|v| v["paymetaRow"].is_string()) {
+        for v in nv()["metaops"]["vectors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|v| v["paymetaRow"].is_string())
+        {
             let pm = rows.iter().find(|r| r["name"] == v["paymetaRow"]).unwrap();
             let (salt, meta) = (hx(&pm["salt"]), hx(&pm["meta"]));
             let op = MetaOp::decode(&hx(&v["encoding"])).unwrap();
             let o = json!({"kind": "pay_meta", "salt": h(&salt), "meta": h(&meta)});
-            let wide = RelayFeePolicy { params: crate::config::RelayParams { max_pay_meta_bytes: 8192, ..Default::default() }, ..pol() };
-            assert_eq!(entry(&wide, &op, &o).unwrap(), Entry::PayMeta { salt: salt.clone().try_into().unwrap(), meta: meta.clone() }, "{}", v["name"]);
+            let wide = RelayFeePolicy {
+                params: crate::config::RelayParams {
+                    max_pay_meta_bytes: 8192,
+                    ..Default::default()
+                },
+                ..pol()
+            };
+            assert_eq!(
+                entry(&wide, &op, &o).unwrap(),
+                Entry::PayMeta {
+                    salt: salt.clone().try_into().unwrap(),
+                    meta: meta.clone()
+                },
+                "{}",
+                v["name"]
+            );
             n += 1;
         }
         assert_eq!(n, 6, "every paymeta.json row has a NEAR pay-meta op");
@@ -2794,12 +3972,37 @@ mod tests {
         assert!(bad(&op, &j), "salt does not hash to pay_ref");
         j["salt"] = json!(h(&[0; 31]));
         assert!(bad(&op, &j), "salt is 32 bytes");
-        assert!(bad(&op, &json!({"kind": "pay_meta", "meta": pm["meta"]})), "no salt");
-        assert!(bad(&MetaOp { nonce: 1, ..op.clone() }, &o), "nonce 1");
-        assert!(bad(&MetaOp { lane: [1; 32], ..op.clone() }, &o), "another lane");
+        assert!(
+            bad(&op, &json!({"kind": "pay_meta", "meta": pm["meta"]})),
+            "no salt"
+        );
+        assert!(
+            bad(
+                &MetaOp {
+                    nonce: 1,
+                    ..op.clone()
+                },
+                &o
+            ),
+            "nonce 1"
+        );
+        assert!(
+            bad(
+                &MetaOp {
+                    lane: [1; 32],
+                    ..op.clone()
+                },
+                &o
+            ),
+            "another lane"
+        );
         let big = vec![0u8; 2049];
         let id = meta_pay_id(&[1; 32], &big);
-        let o2 = MetaOp { pay_ref: id, lane: pay_lane(&id), ..op.clone() };
+        let o2 = MetaOp {
+            pay_ref: id,
+            lane: pay_lane(&id),
+            ..op.clone()
+        };
         let bj = json!({"kind": "pay_meta", "salt": h(&[1; 32]), "meta": h(&big)});
         assert!(bad(&o2, &bj), "over max_pay_meta_bytes (2,048 default)");
     }
@@ -2811,44 +4014,155 @@ mod tests {
         let d = nv();
         let net = b32(&d["network"]);
         for r in d["relayRefs"].as_array().unwrap() {
-            assert_eq!(relay_ref(&net, &hx(&r["targetBytes"]), &hx(&r["call"]), &b32(&r["salt"])), b32(&r["ref"]), "{}", r["name"]);
+            assert_eq!(
+                relay_ref(
+                    &net,
+                    &hx(&r["targetBytes"]),
+                    &hx(&r["call"]),
+                    &b32(&r["salt"])
+                ),
+                b32(&r["ref"]),
+                "{}",
+                r["name"]
+            );
             if r["kind"] == "router" {
-                assert_eq!(router_call(r["target"].as_str().unwrap(), r["method"].as_str().unwrap(), &hx(&r["args"])), hx(&r["call"]));
+                assert_eq!(
+                    router_call(
+                        r["target"].as_str().unwrap(),
+                        r["method"].as_str().unwrap(),
+                        &hx(&r["args"])
+                    ),
+                    hx(&r["call"])
+                );
             }
         }
         // wrapper: the real add_key call; the short / 4096 rows carry placeholder args (not a canonical entry call)
         let (op, o) = wrapper_job("wrapper_add_key_real");
         let args = hx(&rref("wrapper_add_key_real")["args"]);
-        assert_eq!(entry(&pol(), &op, &o).unwrap(), Entry::FeeWrapper { entry: "mtx_add_key".into(), args: args.clone() });
-        assert!(entry(&RelayFeePolicy { router: None, executor: None, ..pol() }, &op, &o).is_ok(), "a wrapper needs no router");
+        assert_eq!(
+            entry(&pol(), &op, &o).unwrap(),
+            Entry::FeeWrapper {
+                entry: "mtx_add_key".into(),
+                args: args.clone()
+            }
+        );
+        assert!(
+            entry(
+                &RelayFeePolicy {
+                    router: None,
+                    executor: None,
+                    ..pol()
+                },
+                &op,
+                &o
+            )
+            .is_ok(),
+            "a wrapper needs no router"
+        );
         let (sop, so) = wrapper_job("wrapper_short");
-        assert!(format!("{:#}", entry(&pol(), &sop, &so).unwrap_err()).contains("call"), "placeholder args");
+        assert!(
+            format!("{:#}", entry(&pol(), &sop, &so).unwrap_err()).contains("call"),
+            "placeholder args"
+        );
         // router: open (to = router) and bound payee
         for name in ["router_short", "router_bound"] {
             let (op, o) = router_job(name, "30000000000000", "0");
             let r = rref(name);
-            assert_eq!(entry(&pol(), &op, &o).unwrap(), Entry::FeeRouter {
-                target: DEX.into(), method: "settle".into(), args: hx(&r["args"]), target_gas: 30 * TGAS, target_deposit: 0 }, "{name}");
+            assert_eq!(
+                entry(&pol(), &op, &o).unwrap(),
+                Entry::FeeRouter {
+                    target: DEX.into(),
+                    method: "settle".into(),
+                    args: hx(&r["args"]),
+                    target_gas: 30 * TGAS,
+                    target_deposit: 0
+                },
+                "{name}"
+            );
         }
-        let err = |op: &MetaOp, o: &Value, p: &RelayFeePolicy| format!("{:#}", entry(p, op, o).unwrap_err());
+        let err = |op: &MetaOp, o: &Value, p: &RelayFeePolicy| {
+            format!("{:#}", entry(p, op, o).unwrap_err())
+        };
         // binding: other call bytes, another salt, a nonce / lane off the ref, another network, a wrong `ref`
-        for (op, o) in [wrapper_job("wrapper_add_key_real"), router_job("router_short", "1", "0")] {
+        for (op, o) in [
+            wrapper_job("wrapper_add_key_real"),
+            router_job("router_short", "1", "0"),
+        ] {
             let mut c = hx(&o["extra"]["call"]);
             let n = c.len();
             c[n - 1] ^= 1;
             let mut j = o.clone();
             j["extra"]["call"] = json!(h(&c));
             assert!(err(&op, &j, &pol()).contains("not bound"), "another call");
-            assert!(err(&MetaOp { extra: [0x52; 32], ..op.clone() }, &o, &pol()).contains("not bound"));
-            assert!(err(&MetaOp { nonce: 1, ..op.clone() }, &o, &pol()).contains("not bound"));
-            assert!(err(&MetaOp { lane: [1; 32], ..op.clone() }, &o, &pol()).contains("not bound"));
-            assert!(err(&MetaOp { network: [9; 32], ..op.clone() }, &o, &pol()).contains("not bound"));
-            assert!(err(&MetaOp { relayer: None, ..op.clone() }, &o, &pol()).contains("relayer"));
-            assert!(err(&MetaOp { relayer: Some("relayer.test.near".into()), ..op.clone() }, &o, &pol()).contains("relayer"));
+            assert!(err(
+                &MetaOp {
+                    extra: [0x52; 32],
+                    ..op.clone()
+                },
+                &o,
+                &pol()
+            )
+            .contains("not bound"));
+            assert!(err(
+                &MetaOp {
+                    nonce: 1,
+                    ..op.clone()
+                },
+                &o,
+                &pol()
+            )
+            .contains("not bound"));
+            assert!(err(
+                &MetaOp {
+                    lane: [1; 32],
+                    ..op.clone()
+                },
+                &o,
+                &pol()
+            )
+            .contains("not bound"));
+            assert!(err(
+                &MetaOp {
+                    network: [9; 32],
+                    ..op.clone()
+                },
+                &o,
+                &pol()
+            )
+            .contains("not bound"));
+            assert!(err(
+                &MetaOp {
+                    relayer: None,
+                    ..op.clone()
+                },
+                &o,
+                &pol()
+            )
+            .contains("relayer"));
+            assert!(err(
+                &MetaOp {
+                    relayer: Some("relayer.test.near".into()),
+                    ..op.clone()
+                },
+                &o,
+                &pol()
+            )
+            .contains("relayer"));
             j = o.clone();
             j["ref"] = json!(h(&[1; 32]));
             assert!(err(&op, &j, &pol()).contains("op.ref"));
-            assert!(err(&op, &o, &RelayFeePolicy { tokens: vec![], ..pol() }).contains("configured"), "token not configured");
+            assert!(
+                err(
+                    &op,
+                    &o,
+                    &RelayFeePolicy {
+                        tokens: vec![],
+                        ..pol()
+                    }
+                )
+                .contains("configured"),
+                "token not configured"
+            );
             j = o.clone();
             j["extra"]["route"] = json!("other");
             assert!(err(&op, &j, &pol()).contains("route"));
@@ -2856,7 +4170,19 @@ mod tests {
             assert!(err(&op, &j, &pol()).contains("route"));
         }
         let (op, o) = router_job("router_short", "1", "0");
-        assert!(err(&op, &o, &RelayFeePolicy { router: None, executor: None, ..pol() }).contains("router"), "router not configured");
+        assert!(
+            err(
+                &op,
+                &o,
+                &RelayFeePolicy {
+                    router: None,
+                    executor: None,
+                    ..pol()
+                }
+            )
+            .contains("router"),
+            "router not configured"
+        );
         // amounts are decimal strings, never JSON numbers
         let mut j = o.clone();
         j["extra"]["target_gas"] = json!(30_000_000_000_000u64);
@@ -2882,28 +4208,74 @@ mod tests {
         let alice = Holder::Near("alice.test.near".into());
         for t in [ROUTER, EXECUTOR] {
             let (op, o) = router_op(t, "relay_timeout", &[0; 32], Holder::Near(ROUTER.into()));
-            assert!(format!("{:#}", entry(&pol(), &op, &o).unwrap_err()).contains("router or its executor"), "{t}");
+            assert!(
+                format!("{:#}", entry(&pol(), &op, &o).unwrap_err())
+                    .contains("router or its executor"),
+                "{t}"
+            );
         }
         for t in [TOKEN, "other-token.near"] {
             let (op, o) = router_op(t, "add_key_native", &[0; 8], Holder::Near(ROUTER.into()));
-            assert!(format!("{:#}", entry(&pol(), &op, &o).unwrap_err()).contains("add_key_native"), "{t}");
+            assert!(
+                format!("{:#}", entry(&pol(), &op, &o).unwrap_err()).contains("add_key_native"),
+                "{t}"
+            );
         }
         let (op, o) = router_op(DEX, "settle", &[1; 8], Holder::Near(EXECUTOR.into()));
-        assert!(format!("{:#}", entry(&pol(), &op, &o).unwrap_err()).contains("executor"), "pay the executor");
+        assert!(
+            format!("{:#}", entry(&pol(), &op, &o).unwrap_err()).contains("executor"),
+            "pay the executor"
+        );
         let (op, o) = router_op(DEX, "settle", &[1; 8], Holder::Near(TOKEN.into()));
-        assert!(entry(&pol(), &op, &o).is_err(), "pay the token through the router");
-        assert!(entry(&pol(), &router_op(DEX, "settle", &[1; 8], alice.clone()).0, &router_op(DEX, "settle", &[1; 8], alice).1).is_ok());
+        assert!(
+            entry(&pol(), &op, &o).is_err(),
+            "pay the token through the router"
+        );
+        assert!(entry(
+            &pol(),
+            &router_op(DEX, "settle", &[1; 8], alice.clone()).0,
+            &router_op(DEX, "settle", &[1; 8], alice).1
+        )
+        .is_ok());
         // a plain pay / pay-meta to the router, the executor or the token (marker) strands the funds
         for to in [ROUTER, EXECUTOR, TOKEN] {
-            let op = MetaOp { to: Holder::Near(to.into()), ..op_of("pay") };
-            assert!(format!("{:#}", entry(&pol(), &op, &json!({})).unwrap_err()).contains("never pay"), "{to}");
-            assert!(format!("{:#}", entry(&RelayFeePolicy::default(), &MetaOp { to: Holder::Near(TOKEN.into()), ..op.clone() }, &json!({})).unwrap_err())
-                .contains("never pay"));
+            let op = MetaOp {
+                to: Holder::Near(to.into()),
+                ..op_of("pay")
+            };
+            assert!(
+                format!("{:#}", entry(&pol(), &op, &json!({})).unwrap_err()).contains("never pay"),
+                "{to}"
+            );
+            assert!(format!(
+                "{:#}",
+                entry(
+                    &RelayFeePolicy::default(),
+                    &MetaOp {
+                        to: Holder::Near(TOKEN.into()),
+                        ..op.clone()
+                    },
+                    &json!({})
+                )
+                .unwrap_err()
+            )
+            .contains("never pay"));
         }
         // a wrapper payment to the router / executor
         let (wop, wo) = wrapper_job("wrapper_add_key_real");
         for to in [ROUTER, EXECUTOR] {
-            assert!(entry(&pol(), &MetaOp { to: Holder::Near(to.into()), ..wop.clone() }, &wo).is_err(), "{to}");
+            assert!(
+                entry(
+                    &pol(),
+                    &MetaOp {
+                        to: Holder::Near(to.into()),
+                        ..wop.clone()
+                    },
+                    &wo
+                )
+                .is_err(),
+                "{to}"
+            );
         }
     }
 
@@ -2911,11 +4283,21 @@ mod tests {
     fn unknown_job_kind_is_refused() {
         let op = op_of("pay");
         assert_eq!(entry(&pol(), &op, &json!({})).unwrap(), Entry::Pay);
-        for k in [json!("pay-meta"), json!("pay"), json!(""), json!(7), json!(true), json!({})] {
+        for k in [
+            json!("pay-meta"),
+            json!("pay"),
+            json!(""),
+            json!(7),
+            json!(true),
+            json!({}),
+        ] {
             let e = format!("{:#}", entry(&pol(), &op, &json!({"kind": k})).unwrap_err());
             assert!(e.contains("unknown op.kind"), "{k}: {e}");
         }
-        assert!(entry(&pol(), &op, &json!({"meta": "00"})).is_err(), "a kind-less job with meta");
+        assert!(
+            entry(&pol(), &op, &json!({"meta": "00"})).is_err(),
+            "a kind-less job with meta"
+        );
     }
 
     /// Note 5 / R1: at most 13 passkey signatures per wrapper job (entry + payment), gas within 300 Tgas; note 6: a
@@ -2933,29 +4315,75 @@ mod tests {
             b
         };
         let wrapper = |n: usize| {
-            let call = [&[19u8][..], b"mtx_cancel_recovery", &op_of("cancel_recovery").borsh(), &msig(n)].concat();
-            Entry::FeeWrapper { entry: "mtx_cancel_recovery".into(), args: call[20..].to_vec() }
+            let call = [
+                &[19u8][..],
+                b"mtx_cancel_recovery",
+                &op_of("cancel_recovery").borsh(),
+                &msig(n),
+            ]
+            .concat();
+            Entry::FeeWrapper {
+                entry: "mtx_cancel_recovery".into(),
+                args: call[20..].to_vec(),
+            }
         };
         let pay = Auth::decode(&pk, &ch).unwrap();
-        assert!(job_gas(&wrapper(12), &pay).unwrap() <= MAX_GAS, "12 + 1 passkeys");
-        assert!(format!("{:#}", job_gas(&wrapper(13), &pay).unwrap_err()).contains("13"), "13 + 1 passkeys");
+        assert!(
+            job_gas(&wrapper(12), &pay).unwrap() <= MAX_GAS,
+            "12 + 1 passkeys"
+        );
+        assert!(
+            format!("{:#}", job_gas(&wrapper(13), &pay).unwrap_err()).contains("13"),
+            "13 + 1 passkeys"
+        );
         let ed = Auth::decode(&auth_bytes(&row("pay")["auth"]), &ch).unwrap();
-        assert!(job_gas(&wrapper(13), &ed).is_ok(), "13 passkeys + an ed25519 payment");
-        assert!(job_gas(&Entry::Pay, &ed).unwrap() < job_gas(&Entry::Pay, &pay).unwrap(), "a passkey costs more");
-        let router = |tg: u64| Entry::FeeRouter { target: DEX.into(), method: "settle".into(), args: vec![], target_gas: tg * TGAS, target_deposit: 0 };
-        assert_eq!(job_gas(&router(10), &ed).unwrap(), (36 + 66 + 1 + 10) * TGAS);
+        assert!(
+            job_gas(&wrapper(13), &ed).is_ok(),
+            "13 passkeys + an ed25519 payment"
+        );
+        assert!(
+            job_gas(&Entry::Pay, &ed).unwrap() < job_gas(&Entry::Pay, &pay).unwrap(),
+            "a passkey costs more"
+        );
+        let router = |tg: u64| Entry::FeeRouter {
+            target: DEX.into(),
+            method: "settle".into(),
+            args: vec![],
+            target_gas: tg * TGAS,
+            target_deposit: 0,
+        };
+        assert_eq!(
+            job_gas(&router(10), &ed).unwrap(),
+            (36 + 66 + 1 + 10) * TGAS
+        );
         assert_eq!(job_gas(&router(173), &pay).unwrap(), 300 * TGAS);
         assert!(job_gas(&router(174), &pay).is_err(), "over 300 Tgas");
-        assert!(job_gas(&router(u64::MAX / TGAS), &pay).is_err(), "no overflow");
+        assert!(
+            job_gas(&router(u64::MAX / TGAS), &pay).is_err(),
+            "no overflow"
+        );
     }
 
     /// Startup: a set but malformed / inconsistent `params.relay_fee` or `params.dex` is an error, never ignored.
     #[test]
     fn relay_fee_config_must_parse() {
         let k = [lane0()];
-        let ok = NearAdapter::new(&cfg("http://r", &fee_cfg("170141183460469231731687303715884105729")), &k).unwrap();
+        let ok = NearAdapter::new(
+            &cfg(
+                "http://r",
+                &fee_cfg("170141183460469231731687303715884105729"),
+            ),
+            &k,
+        )
+        .unwrap();
         assert_eq!(ok.relay_fee.min_yocto_value[TOKEN], (1u128 << 127) + 1);
-        assert_eq!((ok.relay_fee.router.as_deref(), ok.relay_fee.executor.as_deref()), (Some(ROUTER), Some(EXECUTOR)));
+        assert_eq!(
+            (
+                ok.relay_fee.router.as_deref(),
+                ok.relay_fee.executor.as_deref()
+            ),
+            (Some(ROUTER), Some(EXECUTOR))
+        );
         assert_eq!(ok.lanes[0].address, LANE0);
         let none = NearAdapter::new(&cfg("http://r", ""), &k).unwrap();
         assert_eq!(none.relay_fee.router, None);
@@ -2985,14 +4413,19 @@ mod tests {
 
     #[tokio::test]
     async fn relay_fee_target_without_code_refused() {
-        for (code, plain) in [(vec![TOKEN, ROUTER, EXECUTOR], vec![DEX]), (vec![TOKEN, ROUTER, EXECUTOR], vec![])] {
+        for (code, plain) in [
+            (vec![TOKEN, ROUTER, EXECUTOR], vec![DEX]),
+            (vec![TOKEN, ROUTER, EXECUTOR], vec![]),
+        ] {
             let mut w = world();
             w.code = code.into_iter().map(String::from).collect();
             w.plain = plain.into_iter().map(String::from).collect();
             let (a, _) = adapter(w, &fee_cfg("1000000000000000000000")).await;
             let (_, o) = router_job("router_short", "30000000000000", "0");
             match a.build(&job(o), 0).await {
-                Err(SimError::Revert(r)) => assert!(r.contains("no code") || r.contains("does not exist"), "{r}"),
+                Err(SimError::Revert(r)) => {
+                    assert!(r.contains("no code") || r.contains("does not exist"), "{r}")
+                }
                 other => panic!("{other:?}"),
             }
         }
@@ -3006,11 +4439,23 @@ mod tests {
         // wrapper (open mode: to = the token, the fee pays the lane)
         let (wop, wo) = wrapper_job("wrapper_add_key_real");
         let storage = 1_160 * 10u128.pow(19);
-        let wcall = call_of(&pol(), &entry(&pol(), &wop, &wo).unwrap(), &wop, &hx(&wo["signature"])).unwrap();
+        let wcall = call_of(
+            &pol(),
+            &entry(&pol(), &wop, &wo).unwrap(),
+            &wop,
+            &hx(&wo["signature"]),
+        )
+        .unwrap();
         let quote = (wcall.gas + action_fees(&PINNED, &wcall)) as u128 * 100_000_000 + storage;
-        for (price, ok) in [(quote.div_ceil(wop.amount), true), ((quote - 1) / wop.amount, false)] {
+        for (price, ok) in [
+            (quote.div_ceil(wop.amount), true),
+            ((quote - 1) / wop.amount, false),
+        ] {
             let mut w = world();
-            w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_ok(storage));
+            w.views.insert(
+                (TOKEN.into(), "relay_fee_add_key_check".into()),
+                check_ok(storage),
+            );
             let (a, _) = adapter(w, &fee_cfg(&price.to_string())).await;
             match (a.build(&job(wo.clone()), 0).await, ok) {
                 (Ok(b), true) => assert_eq!(b.meta["deposit"], json!(storage.to_string())),
@@ -3022,46 +4467,100 @@ mod tests {
         // (a token's mtx_pay as the target: fix 1 I2 checks it as the executor)
         let td = 7 * 10u128.pow(21);
         let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat();
-        let (rop, ro) = router_op_g(TOKEN, "mtx_pay", &pay, Holder::Near(ROUTER.into()), "30000000000000", &td.to_string());
+        let (rop, ro) = router_op_g(
+            TOKEN,
+            "mtx_pay",
+            &pay,
+            Holder::Near(ROUTER.into()),
+            "30000000000000",
+            &td.to_string(),
+        );
         // (fix 3 g1: the node's target figures, the entry's pinned gas 11 Tgas and its storage td)
-        let set = Entry::FeeRouter { target: TOKEN.into(), method: "mtx_pay".into(), args: pay.clone(), target_gas: GAS_JOB_BASE + GAS_KEY_SIG, target_deposit: td };
-        let g = job_gas(&set, &Auth::decode(&hx(&ro["signature"]), &rop.digest()).unwrap()).unwrap();
-        let (entry_dep, hold) = (3_140 * 10u128.pow(18) + 1_250 * 10u128.pow(18) + 2 + td, 2_800 * 10u128.pow(18));
+        let set = Entry::FeeRouter {
+            target: TOKEN.into(),
+            method: "mtx_pay".into(),
+            args: pay.clone(),
+            target_gas: GAS_JOB_BASE + GAS_KEY_SIG,
+            target_deposit: td,
+        };
+        let g = job_gas(
+            &set,
+            &Auth::decode(&hx(&ro["signature"]), &rop.digest()).unwrap(),
+        )
+        .unwrap();
+        let (entry_dep, hold) = (
+            3_140 * 10u128.pow(18) + 1_250 * 10u128.pow(18) + 2 + td,
+            2_800 * 10u128.pow(18),
+        );
         let rcall = call_of(&pol(), &set, &rop, &hx(&ro["signature"])).unwrap();
-        let quote = (g + action_fees(&PINNED, &rcall) + timeout_gas(&PINNED)) as u128 * 100_000_000 + entry_dep + hold;
-        for (price, ok) in [(quote.div_ceil(rop.amount), true), ((quote - 1) / rop.amount, false)] {
+        let quote = (g + action_fees(&PINNED, &rcall) + timeout_gas(&PINNED)) as u128 * 100_000_000
+            + entry_dep
+            + hold;
+        for (price, ok) in [
+            (quote.div_ceil(rop.amount), true),
+            ((quote - 1) / rop.amount, false),
+        ] {
             let mut w = world();
-            w.views.insert((ROUTER.into(), "relay_check".into()), router_check(3_140 * 10u128.pow(18), entry_dep, g));
-            w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(hold));
-            w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(td));
+            w.views.insert(
+                (ROUTER.into(), "relay_check".into()),
+                router_check(3_140 * 10u128.pow(18), entry_dep, g),
+            );
+            w.views
+                .insert((TOKEN.into(), "relay_hold_check".into()), check_ok(hold));
+            w.views
+                .insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(td));
             let (a, _) = adapter(w, &fee_cfg(&price.to_string())).await;
             match (a.build(&job(ro.clone()), 0).await, ok) {
-                (Ok(b), true) => assert_eq!(b.meta["deposit"], json!((entry_dep + hold).to_string())),
+                (Ok(b), true) => {
+                    assert_eq!(b.meta["deposit"], json!((entry_dep + hold).to_string()))
+                }
                 (Err(SimError::Revert(r)), false) => assert!(r.contains("below"), "{r}"),
                 (r, _) => panic!("price {price}: {r:?}"),
             }
         }
         // sponsored: bound to bob (not the lane), relayed only with relay_bound_payee, and then not priced
-        let (_, bo) = router_op_g(TOKEN, "mtx_pay", &pay, Holder::Near("bob.test.near".into()), "30000000000000", "0");
-        let mut w = World { auto_relay: true, ..world() };
-        w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
-        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(0));
+        let (_, bo) = router_op_g(
+            TOKEN,
+            "mtx_pay",
+            &pay,
+            Holder::Near("bob.test.near".into()),
+            "30000000000000",
+            "0",
+        );
+        let mut w = World {
+            auto_relay: true,
+            ..world()
+        };
+        w.views
+            .insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
+        w.views
+            .insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(0));
         let (a, _) = adapter(w, &fee_cfg("1")).await;
         match a.build(&job(bo.clone()), 0).await {
             Err(SimError::Revert(r)) => assert!(r.contains("relay_bound_payee"), "{r}"),
             r => panic!("{r:?}"),
         }
-        let mut w = World { auto_relay: true, ..world() };
-        w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
-        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(0));
+        let mut w = World {
+            auto_relay: true,
+            ..world()
+        };
+        w.views
+            .insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
+        w.views
+            .insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(0));
         let sponsored = format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", relay_bound_payee = true }}");
         let (a, _) = adapter(w, &sponsored).await;
         a.build(&job(bo), 0).await.unwrap();
         // a check view's refusal kills the job (Revert), naming the contract's reason
         let mut w = world();
-        w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_err("wrong lane nonce"));
+        w.views.insert(
+            (TOKEN.into(), "relay_fee_add_key_check".into()),
+            check_err("wrong lane nonce"),
+        );
         let (a, _) = adapter(w, &fee_cfg("1")).await;
-        assert!(matches!(a.build(&job(wo), 0).await, Err(SimError::Revert(r)) if r.contains("wrong lane nonce")));
+        assert!(
+            matches!(a.build(&job(wo), 0).await, Err(SimError::Revert(r)) if r.contains("wrong lane nonce"))
+        );
     }
 
     /// Fix 1 m5: nearcore's action fees (receipt creation + function call base + per byte of method and args, send and
@@ -3069,10 +4568,28 @@ mod tests {
     /// `relay_timeout` transaction more.
     #[test]
     fn action_fees_and_timeout_are_priced() {
-        let c = Call { receiver: TOKEN.into(), method: "mtx_pay".into(), args: vec![0; 100], gas: 1, deposit: 0 };
-        assert_eq!(action_fees(&PINNED, &c), 2 * 108_059_500_000 + 2 * 2_319_861_500_000 + 2 * 2_235_934 * 107);
-        let t = Call { receiver: ROUTER.into(), method: "relay_timeout".into(), args: vec![0; 32], gas: GAS_RELAY_TIMEOUT, deposit: 0 };
-        assert_eq!(timeout_gas(&PINNED), (30 + 44) * TGAS + action_fees(&PINNED, &t));
+        let c = Call {
+            receiver: TOKEN.into(),
+            method: "mtx_pay".into(),
+            args: vec![0; 100],
+            gas: 1,
+            deposit: 0,
+        };
+        assert_eq!(
+            action_fees(&PINNED, &c),
+            2 * 108_059_500_000 + 2 * 2_319_861_500_000 + 2 * 2_235_934 * 107
+        );
+        let t = Call {
+            receiver: ROUTER.into(),
+            method: "relay_timeout".into(),
+            args: vec![0; 32],
+            gas: GAS_RELAY_TIMEOUT,
+            deposit: 0,
+        };
+        assert_eq!(
+            timeout_gas(&PINNED),
+            (30 + 44) * TGAS + action_fees(&PINNED, &t)
+        );
     }
 
     /// §5 Submit: the attached deposit is exactly the check view's `storage_needed` (+ 0 yoctoNEAR: no `mtx_*` /
@@ -3081,24 +4598,65 @@ mod tests {
     async fn deposit_equals_storage_needed_plus_nep_yocto() {
         let s = 1_234_567u128;
         let mut w = world();
-        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(s));
-        w.views.insert((TOKEN.into(), "mtx_pay_meta_check".into()), check_ok(s + 1));
+        w.views
+            .insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(s));
+        w.views
+            .insert((TOKEN.into(), "mtx_pay_meta_check".into()), check_ok(s + 1));
         let (a, w) = adapter(w, "").await;
         let b = a.build(&job(o_of("pay", json!({}))), 0).await.unwrap();
-        assert_eq!((b.meta["receiver"].as_str(), b.meta["method"].as_str(), b.meta["deposit"].as_str()), (Some(TOKEN), Some("mtx_pay"), Some("1234567")));
-        assert_eq!(view_args(&w, "mtx_pay_check")[..4 + 64], bstr(LANE0)[..], "caller = the lane");
+        assert_eq!(
+            (
+                b.meta["receiver"].as_str(),
+                b.meta["method"].as_str(),
+                b.meta["deposit"].as_str()
+            ),
+            (Some(TOKEN), Some("mtx_pay"), Some("1234567"))
+        );
+        assert_eq!(
+            view_args(&w, "mtx_pay_check")[..4 + 64],
+            bstr(LANE0)[..],
+            "caller = the lane"
+        );
         let signed = a.sign(b, 0, 42).await.unwrap();
-        assert!(contains(&signed.raw, &[&2u8.to_le_bytes()[..], &bstr("mtx_pay")].concat()), "a FunctionCall action");
+        assert!(
+            contains(
+                &signed.raw,
+                &[&2u8.to_le_bytes()[..], &bstr("mtx_pay")].concat()
+            ),
+            "a FunctionCall action"
+        );
         assert!(contains(&signed.raw, &s.to_le_bytes()), "the deposit");
-        assert!(contains(&signed.raw, &42u64.to_le_bytes()), "the lane nonce");
+        assert!(
+            contains(&signed.raw, &42u64.to_le_bytes()),
+            "the lane nonce"
+        );
         a.submit(&signed).await.unwrap();
         assert_eq!(sent(&w), vec![signed.raw.clone()]);
-        assert_eq!(signed.tx_id, format!("0x{}", h(&tx_hash(&signed.raw[..signed.raw.len() - 65]))));
+        assert_eq!(
+            signed.tx_id,
+            format!("0x{}", h(&tx_hash(&signed.raw[..signed.raw.len() - 65])))
+        );
         let rows: Vec<Value> = serde_json::from_str(PAYMETA).unwrap();
         let pm = rows.iter().find(|r| r["name"] == "note_utf8").unwrap();
-        let b = a.build(&job(o_of("pay_meta_note_utf8", json!({"kind": "pay_meta", "salt": pm["salt"], "meta": pm["meta"]}))), 0).await.unwrap();
-        assert_eq!((b.meta["method"].as_str(), b.meta["deposit"].as_str()), (Some("mtx_pay_meta"), Some("1234568")));
-        assert!(b.body.ends_with(&[&hx(&pm["salt"])[..], &bvec(&hx(&pm["meta"]))].concat()), "salt, meta after op, auth");
+        let b = a
+            .build(
+                &job(o_of(
+                    "pay_meta_note_utf8",
+                    json!({"kind": "pay_meta", "salt": pm["salt"], "meta": pm["meta"]}),
+                )),
+                0,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            (b.meta["method"].as_str(), b.meta["deposit"].as_str()),
+            (Some("mtx_pay_meta"), Some("1234568"))
+        );
+        assert!(
+            b.body
+                .ends_with(&[&hx(&pm["salt"])[..], &bvec(&hx(&pm["meta"]))].concat()),
+            "salt, meta after op, auth"
+        );
     }
 
     /// Review focus 5: an amount above 2^53 (here 2^127 + 1) survives the job's decode, the `*_check` view's args and the
@@ -3106,26 +4664,71 @@ mod tests {
     #[tokio::test]
     async fn near_amount_above_2_pow_53_round_trips() {
         let big = (1u128 << 127) + 1;
-        let op = MetaOp { amount: big, ..op_of("pay") };
+        let op = MetaOp {
+            amount: big,
+            ..op_of("pay")
+        };
         assert_eq!(MetaOp::decode(&op.encode()).unwrap().amount, big);
         let mut w = world();
-        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(big));
-        let (a, w) = adapter(w, "").await;
-        let b = a.build(&job(o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({}))), 0).await.unwrap();
-        assert!(contains(&view_args(&w, "mtx_pay_check"), &big.to_le_bytes()), "check args");
-        assert_eq!(b.meta["deposit"], json!(big.to_string()), "the deposit as a decimal string");
+        w.views
+            .insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(big));
+        let (mut a, w) = adapter(w, "").await;
+        // T24.4 (fixture correction): this deposit tests the u128 round trip, far above the default cap (1 NEAR)
+        a.max_deposit = u128::MAX;
+        let b = a
+            .build(
+                &job(o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({}))),
+                0,
+            )
+            .await
+            .unwrap();
+        assert!(
+            contains(&view_args(&w, "mtx_pay_check"), &big.to_le_bytes()),
+            "check args"
+        );
+        assert_eq!(
+            b.meta["deposit"],
+            json!(big.to_string()),
+            "the deposit as a decimal string"
+        );
         let signed = a.sign(b, 0, 1).await.unwrap();
-        assert_eq!(signed.raw.windows(16).filter(|x| *x == big.to_le_bytes()).count(), 2, "amount and deposit");
+        assert_eq!(
+            signed
+                .raw
+                .windows(16)
+                .filter(|x| *x == big.to_le_bytes())
+                .count(),
+            2,
+            "amount and deposit"
+        );
         // router: target_deposit 2^127 + 1 from the job's decimal string to relay_check's args
         let (rop, ro) = router_job("router_bound", "30000000000000", &big.to_string());
-        let Entry::FeeRouter { target_deposit, .. } = entry(&pol(), &rop, &ro).unwrap() else { panic!() };
+        let Entry::FeeRouter { target_deposit, .. } = entry(&pol(), &rop, &ro).unwrap() else {
+            panic!()
+        };
         assert_eq!(target_deposit, big);
-        let relay = call_of(&pol(), &entry(&pol(), &rop, &ro).unwrap(), &rop, &hx(&ro["signature"])).unwrap();
+        let relay = call_of(
+            &pol(),
+            &entry(&pol(), &rop, &ro).unwrap(),
+            &rop,
+            &hx(&ro["signature"]),
+        )
+        .unwrap();
         assert!(contains(&relay.args, &big.to_le_bytes()));
         assert_eq!(dec_u128(&json!(big.to_string()), "x").unwrap(), big);
-        assert!(dec_u128(&json!(9007199254740993u64), "x").is_err(), "a JSON number is refused");
-        assert!(dec_u128(&json!("340282366920938463463374607431768211456"), "x").is_err(), "2^128");
-        assert!(dec_u128(&json!("+1"), "x").is_err() && dec_u128(&json!(""), "x").is_err() && dec_u128(&json!(" 1"), "x").is_err());
+        assert!(
+            dec_u128(&json!(9007199254740993u64), "x").is_err(),
+            "a JSON number is refused"
+        );
+        assert!(
+            dec_u128(&json!("340282366920938463463374607431768211456"), "x").is_err(),
+            "2^128"
+        );
+        assert!(
+            dec_u128(&json!("+1"), "x").is_err()
+                && dec_u128(&json!(""), "x").is_err()
+                && dec_u128(&json!(" 1"), "x").is_err()
+        );
     }
 
     // ------------------------------------------------------------------------------------------------ start checks
@@ -3137,14 +4740,19 @@ mod tests {
         let mut w = world();
         w.genesis = "3JF3sEqM796hk5WFqA6EtmEwJQ9quALszsfJyvXNQKy3".into();
         let (a, _) = adapter(w, &fee_cfg("1")).await;
-        assert!(format!("{:#}", a.start_check().await.unwrap_err()).contains("genesis"));
+        // T24.8 (an expectation corrected): endpoint 0 of another genesis is refused by the identity check, before any read
+        assert!(format!("{:#}", a.start_check().await.unwrap_err()).contains("WrongChain"));
         let mut w = world();
-        w.views.insert((TOKEN.into(), "network".into()), serde_json::to_vec(&[7u8; 32].to_vec()).unwrap());
+        w.views.insert(
+            (TOKEN.into(), "network".into()),
+            serde_json::to_vec(&[7u8; 32].to_vec()).unwrap(),
+        );
         let (a, _) = adapter(w, &fee_cfg("1")).await;
         assert!(format!("{:#}", a.start_check().await.unwrap_err()).contains("network"));
         // a router whose executor() is not the configured executor
         let mut w = world();
-        w.views.insert((ROUTER.into(), "executor".into()), bstr("other.near"));
+        w.views
+            .insert((ROUTER.into(), "executor".into()), bstr("other.near"));
         let (a, _) = adapter(w, &fee_cfg("1")).await;
         assert!(format!("{:#}", a.start_check().await.unwrap_err()).contains("executor"));
     }
@@ -3158,7 +4766,10 @@ mod tests {
             w.keyed.push(acct.into());
             let (a, _) = adapter(w, &fee_cfg("1")).await;
             let e = format!("{:#}", a.start_check().await.unwrap_err());
-            assert!(e.contains("access key") && e.contains("halted") && e.contains(acct), "{acct}: {e}");
+            assert!(
+                e.contains("access key") && e.contains("halted") && e.contains(acct),
+                "{acct}: {e}"
+            );
         }
         for acct in [TOKEN, ROUTER, EXECUTOR, DEX] {
             let mut w = world();
@@ -3172,10 +4783,16 @@ mod tests {
     #[tokio::test]
     async fn start_check_lane_unregistered_errors() {
         let mut w = world();
-        w.views.insert((TOKEN.into(), "storage_balance_of".into()), b"null".to_vec());
+        w.views.insert(
+            (TOKEN.into(), "storage_balance_of".into()),
+            b"null".to_vec(),
+        );
         let (a, _) = adapter(w, "").await;
         let e = format!("{:#}", a.start_check().await.unwrap_err());
-        assert!(e.contains("not registered") && e.contains(LANE0) && e.contains(TOKEN), "{e}");
+        assert!(
+            e.contains("not registered") && e.contains(LANE0) && e.contains(TOKEN),
+            "{e}"
+        );
     }
 
     // ------------------------------------------------------------------------------------------------ status / escrow
@@ -3185,7 +4802,11 @@ mod tests {
     }
 
     fn receipt(executor: &str, ok: bool, logs: &[String]) -> Value {
-        let status = if ok { json!({"SuccessValue": ""}) } else { json!({"Failure": {"ActionError": {"index": 0, "kind": {}}}}) };
+        let status = if ok {
+            json!({"SuccessValue": ""})
+        } else {
+            json!({"Failure": {"ActionError": {"index": 0, "kind": {}}}})
+        };
         json!({"id": "r", "block_hash": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2",
                "outcome": {"executor_id": executor, "logs": logs, "status": status, "tokens_burnt": "1000"}})
     }
@@ -3199,9 +4820,21 @@ mod tests {
     }
 
     fn pending(deadline: u64, stage: u8) -> Vec<u8> {
-        [vec![1], 0u64.to_le_bytes().to_vec(), bstr(TOKEN), bstr(DEX), [vec![0], bstr("alice.test.near")].concat(), vec![0],
-         10u128.to_le_bytes().to_vec(), bstr(LANE0), 0u128.to_le_bytes().to_vec(), 3u128.to_le_bytes().to_vec(),
-         deadline.to_le_bytes().to_vec(), vec![stage, 0]].concat()
+        [
+            vec![1],
+            0u64.to_le_bytes().to_vec(),
+            bstr(TOKEN),
+            bstr(DEX),
+            [vec![0], bstr("alice.test.near")].concat(),
+            vec![0],
+            10u128.to_le_bytes().to_vec(),
+            bstr(LANE0),
+            0u128.to_le_bytes().to_vec(),
+            3u128.to_le_bytes().to_vec(),
+            deadline.to_le_bytes().to_vec(),
+            vec![stage, 0],
+        ]
+        .concat()
     }
 
     /// Spec §5 escrow tracking (as TON): a relay that has not released is pending while the router's entry exists; past
@@ -3210,41 +4843,101 @@ mod tests {
     #[tokio::test]
     async fn escrow_tracking_times_out_after_deadline() {
         let (rop, ro) = router_job("router_short", "30000000000000", "0");
-        let relay = call_of(&pol(), &entry(&pol(), &rop, &ro).unwrap(), &rop, &hx(&ro["signature"])).unwrap();
+        let relay = call_of(
+            &pol(),
+            &entry(&pol(), &rop, &ro).unwrap(),
+            &rop,
+            &hx(&ro["signature"]),
+        )
+        .unwrap();
         let hash = [0x33u8; 32];
         let id = format!("0x{}", h(&hash));
         let key = bs58::encode(hash).into_string();
-        let refunded = outcome(ROUTER, fc("relay", &relay.args), json!({"SuccessValue": b64(&[0])}), vec![]);
+        let refunded = outcome(
+            ROUTER,
+            fc("relay", &relay.args),
+            json!({"SuccessValue": b64(&[0])}),
+            vec![],
+        );
         let now = crate::submit::now();
         let mut w = world();
         w.txs.insert(key.clone(), refunded.clone());
-        w.views.insert((ROUTER.into(), "pending".into()), pending(now + 600, 1));
+        w.views
+            .insert((ROUTER.into(), "pending".into()), pending(now + 600, 1));
         let (a, w) = adapter(w, &fee_cfg("1")).await;
-        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending, "before the deadline");
+        assert_eq!(
+            a.tx_status(&id).await.unwrap(),
+            TxStatus::Pending,
+            "before the deadline"
+        );
         assert!(sent(&w).is_empty(), "no timeout before the deadline");
-        w.lock().unwrap().views.insert((ROUTER.into(), "pending".into()), pending(now - 1, 1));
+        w.lock()
+            .unwrap()
+            .views
+            .insert((ROUTER.into(), "pending".into()), pending(now - 1, 1));
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
         let s = sent(&w);
         assert_eq!(s.len(), 1, "relay_timeout sent");
-        assert!(contains(&s[0], &[&bstr("relay_timeout")[..], &bvec(&rop.pay_ref)].concat()), "relay_timeout(ref) on the router");
+        assert!(
+            contains(
+                &s[0],
+                &[&bstr("relay_timeout")[..], &bvec(&rop.pay_ref)].concat()
+            ),
+            "relay_timeout(ref) on the router"
+        );
         assert!(contains(&s[0], &bstr(ROUTER)));
         // review m3: INCLUDED as `submit` (NONE accepts a stale nonce silently and the send would count as done)
-        let modes: Vec<Value> = w.lock().unwrap().calls.iter().filter(|c| c.0 == "send_tx").map(|c| c.1["wait_until"].clone()).collect();
+        let modes: Vec<Value> = w
+            .lock()
+            .unwrap()
+            .calls
+            .iter()
+            .filter(|c| c.0 == "send_tx")
+            .map(|c| c.1["wait_until"].clone())
+            .collect();
         assert_eq!(modes, [json!("INCLUDED")]);
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
         assert_eq!(sent(&w).len(), 1, "not again inside the retry window");
         // the entry is gone: refunded
-        w.lock().unwrap().views.insert((ROUTER.into(), "pending".into()), vec![0]);
-        assert!(matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("refunded")));
+        w.lock()
+            .unwrap()
+            .views
+            .insert((ROUTER.into(), "pending".into()), vec![0]);
+        assert!(
+            matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("refunded"))
+        );
         // released: mined at the block of the transaction
-        let released = outcome(ROUTER, fc("relay", &relay.args), json!({"SuccessValue": b64(&[1])}), vec![]);
+        let released = outcome(
+            ROUTER,
+            fc("relay", &relay.args),
+            json!({"SuccessValue": b64(&[1])}),
+            vec![],
+        );
         w.lock().unwrap().txs.insert(key.clone(), released);
-        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Mined { height: 100, tx_hash: None });
+        assert_eq!(
+            a.tx_status(&id).await.unwrap(),
+            TxStatus::Mined {
+                height: 100,
+                tx_hash: None
+            }
+        );
         // a plain job: success = mined, failure = reverted (never retried blindly, note 5), not final = pending
-        let plain = outcome(TOKEN, fc("mtx_pay", &[1]), json!({"Failure": {"ActionError": {"kind": {"FunctionCallError": {"ExecutionError": "wrong lane nonce"}}}}}), vec![]);
+        let plain = outcome(
+            TOKEN,
+            fc("mtx_pay", &[1]),
+            json!({"Failure": {"ActionError": {"kind": {"FunctionCallError": {"ExecutionError": "wrong lane nonce"}}}}}),
+            vec![],
+        );
         w.lock().unwrap().txs.insert(key.clone(), plain);
-        assert!(matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("wrong lane nonce")));
-        let mut open = outcome(TOKEN, fc("mtx_pay", &[1]), json!({"SuccessValue": ""}), vec![]);
+        assert!(
+            matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("wrong lane nonce"))
+        );
+        let mut open = outcome(
+            TOKEN,
+            fc("mtx_pay", &[1]),
+            json!({"SuccessValue": ""}),
+            vec![],
+        );
         open["final_execution_status"] = json!("EXECUTED_OPTIMISTIC");
         w.lock().unwrap().txs.insert(key.clone(), open);
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
@@ -3256,13 +4949,37 @@ mod tests {
     #[tokio::test]
     async fn submit_errors_are_classified() {
         let (a, w) = adapter(world(), "").await;
-        let signed = Signed { job_id: 1, tx_id: "0x00".into(), raw: vec![1, 2], valid_until: 0, sequence: 0 };
+        let signed = Signed {
+            job_id: 1,
+            tx_id: "0x00".into(),
+            raw: vec![1, 2],
+            valid_until: 0,
+            sequence: 0,
+        };
         a.submit(&signed).await.unwrap();
         w.lock().unwrap().send_err = Some(rpc_err("INVALID_TRANSACTION"));
-        assert!(a.submit(&signed).await.unwrap_err().downcast_ref::<Rejected>().is_some(), "same bytes never pass");
+        assert!(
+            a.submit(&signed)
+                .await
+                .unwrap_err()
+                .downcast_ref::<Rejected>()
+                .is_some(),
+            "same bytes never pass"
+        );
         w.lock().unwrap().send_err = Some(rpc_err("TIMEOUT_ERROR"));
-        assert!(a.submit(&signed).await.unwrap_err().downcast_ref::<Rejected>().is_none(), "retry the same bytes");
-        assert_eq!(a.sequence(0).await.unwrap(), 42, "the access key's nonce + 1");
+        assert!(
+            a.submit(&signed)
+                .await
+                .unwrap_err()
+                .downcast_ref::<Rejected>()
+                .is_none(),
+            "retry the same bytes"
+        );
+        assert_eq!(
+            a.sequence(0).await.unwrap(),
+            42,
+            "the access key's nonce + 1"
+        );
     }
 
     /// T19 ruling B: the action fees come from the RPC's protocol config, each item max(send_sir, send_not_sir,
@@ -3280,39 +4997,115 @@ mod tests {
                 "add_key_cost": {"full_access_cost": {"send_sir": 101_765_125_000u64, "send_not_sir": 101_765_125_000u64, "execution": 101_765_125_000u64}}}}}});
         let f = ActionFees::from_protocol_config(&p88).unwrap();
         // review I2: an implicit transfer = 8.35 Tgas send + exec (measured on near-sandbox), within the 11 Tgas pin
-        assert_eq!(f, ActionFees { receipt: 108_059_500_000, function_call: 780_000_000_000, per_byte: 47_683_715, implicit_transfer: 8_349_895_375_000 });
-        let c = Call { receiver: TOKEN.into(), method: "mtx_pay".into(), args: vec![0; 100], gas: 0, deposit: 0 };
-        assert_eq!(action_fees(&f, &c), 2 * (108_059_500_000 + 780_000_000_000 + 47_683_715 * 107));
+        assert_eq!(
+            f,
+            ActionFees {
+                receipt: 108_059_500_000,
+                function_call: 780_000_000_000,
+                per_byte: 47_683_715,
+                implicit_transfer: 8_349_895_375_000
+            }
+        );
+        let c = Call {
+            receiver: TOKEN.into(),
+            method: "mtx_pay".into(),
+            args: vec![0; 100],
+            gas: 0,
+            deposit: 0,
+        };
+        assert_eq!(
+            action_fees(&f, &c),
+            2 * (108_059_500_000 + 780_000_000_000 + 47_683_715 * 107)
+        );
         let mut gap = p88.clone();
-        gap["runtime_config"]["transaction_costs"]["action_creation_config"]["function_call_cost"]["execution"] = json!(null);
-        assert!(format!("{:#}", ActionFees::from_protocol_config(&gap).unwrap_err()).contains("function_call_cost.execution"));
+        gap["runtime_config"]["transaction_costs"]["action_creation_config"]
+            ["function_call_cost"]["execution"] = json!(null);
+        assert!(
+            format!("{:#}", ActionFees::from_protocol_config(&gap).unwrap_err())
+                .contains("function_call_cost.execution")
+        );
         // the mocked RPC serves the fixture: read once, then cached
         let (a, w) = adapter(world(), &fee_cfg("1")).await;
         a.start_check().await.unwrap();
         assert_eq!(a.fees().await.unwrap(), PINNED);
-        let n = w.lock().unwrap().calls.iter().filter(|c| c.0 == "EXPERIMENTAL_protocol_config").count();
+        let n = w
+            .lock()
+            .unwrap()
+            .calls
+            .iter()
+            .filter(|c| c.0 == "EXPERIMENTAL_protocol_config")
+            .count();
         a.fees().await.unwrap();
-        assert_eq!(w.lock().unwrap().calls.iter().filter(|c| c.0 == "EXPERIMENTAL_protocol_config").count(), n, "cached");
+        assert_eq!(
+            w.lock()
+                .unwrap()
+                .calls
+                .iter()
+                .filter(|c| c.0 == "EXPERIMENTAL_protocol_config")
+                .count(),
+            n,
+            "cached"
+        );
         // without them the node does not start, and a fee job is retried, never priced on assumed fees
-        let (a, _) = adapter(World { no_fees: true, ..world() }, &fee_cfg("1")).await;
+        let (a, _) = adapter(
+            World {
+                no_fees: true,
+                ..world()
+            },
+            &fee_cfg("1"),
+        )
+        .await;
         let e = format!("{:#}", a.start_check().await.unwrap_err());
-        assert!(e.contains("EXPERIMENTAL_protocol_config") && e.contains("transaction_costs"), "{e}");
+        assert!(
+            e.contains("EXPERIMENTAL_protocol_config") && e.contains("transaction_costs"),
+            "{e}"
+        );
         // review m9: a fee job is retried (Transport), never priced on assumed fees
         let (_, wo) = wrapper_job("wrapper_add_key_real");
-        let mut w = World { no_fees: true, ..world() };
-        w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_ok(1));
+        let mut w = World {
+            no_fees: true,
+            ..world()
+        };
+        w.views.insert(
+            (TOKEN.into(), "relay_fee_add_key_check".into()),
+            check_ok(1),
+        );
         let (a, _) = adapter(w, &fee_cfg("1000000000000000000000")).await;
-        assert!(matches!(a.build(&job(wo), 0).await, Err(SimError::Transport(m)) if m.contains("transaction_costs")));
+        assert!(
+            matches!(a.build(&job(wo), 0).await, Err(SimError::Transport(m)) if m.contains("transaction_costs"))
+        );
     }
 
     /// T19 review I1: the quote is the prepaid gas (the contracts' transfers to the lane are paid from it), the action
     /// fees and, for a router job, one `relay_timeout`: no term for the receipts the lane receives.
     #[test]
     fn quote_is_prepaid_fees_and_resend() {
-        let c = Call { receiver: TOKEN.into(), method: "mtx_pay".into(), args: vec![0; 100], gas: 21 * TGAS, deposit: 0 };
+        let c = Call {
+            receiver: TOKEN.into(),
+            method: "mtx_pay".into(),
+            args: vec![0; 100],
+            gas: 21 * TGAS,
+            deposit: 0,
+        };
         let base = c.gas + action_fees(&PINNED, &c);
-        let router = Entry::FeeRouter { target: DEX.into(), method: "settle".into(), args: vec![], target_gas: 0, target_deposit: 0 };
-        for (e, resend) in [(Entry::Pay, 0), (Entry::FeeWrapper { entry: "mtx_add_origin".into(), args: vec![] }, 0), (router, timeout_gas(&PINNED))] {
+        let router = Entry::FeeRouter {
+            target: DEX.into(),
+            method: "settle".into(),
+            args: vec![],
+            target_gas: 0,
+            target_deposit: 0,
+        };
+        for (e, resend) in [
+            (Entry::Pay, 0),
+            (
+                Entry::FeeWrapper {
+                    entry: "mtx_add_origin".into(),
+                    args: vec![],
+                },
+                0,
+            ),
+            (router, timeout_gas(&PINNED)),
+        ] {
             assert_eq!(quote_gas(&PINNED, &e, &c), base + resend, "{e:?}");
         }
     }
@@ -3323,15 +5116,31 @@ mod tests {
     async fn implicit_transfer_pin_checked() {
         let (a, _) = adapter(world(), &fee_cfg("1")).await;
         a.start_check().await.unwrap();
-        let (a, _) = adapter(World { create_exec: 12 * TGAS, ..world() }, &fee_cfg("1")).await;
+        let (a, _) = adapter(
+            World {
+                create_exec: 12 * TGAS,
+                ..world()
+            },
+            &fee_cfg("1"),
+        )
+        .await;
         let e = format!("{:#}", a.start_check().await.unwrap_err());
-        assert!(e.contains("implicit account") && e.contains("IMPLICIT_TRANSFER_GAS"), "{e}");
+        assert!(
+            e.contains("implicit account") && e.contains("IMPLICIT_TRANSFER_GAS"),
+            "{e}"
+        );
         for who in [ROUTER, DEX] {
             let mut w = world();
-            w.views.insert((who.into(), "implicit_transfer_gas".into()), serde_json::to_vec(&(10 * TGAS)).unwrap());
+            w.views.insert(
+                (who.into(), "implicit_transfer_gas".into()),
+                serde_json::to_vec(&(10 * TGAS)).unwrap(),
+            );
             let (a, _) = adapter(w, &fee_cfg("1")).await;
             let e = format!("{:#}", a.start_check().await.unwrap_err());
-            assert!(e.contains(who) && e.contains("implicit_transfer_gas"), "{e}");
+            assert!(
+                e.contains(who) && e.contains("implicit_transfer_gas"),
+                "{e}"
+            );
         }
     }
 
@@ -3341,7 +5150,13 @@ mod tests {
     #[tokio::test]
     async fn submit_waits_until_included() {
         let (a, w) = adapter(world(), "").await;
-        let signed = Signed { job_id: 1, tx_id: "0x00".into(), raw: vec![1, 2], valid_until: 0, sequence: 0 };
+        let signed = Signed {
+            job_id: 1,
+            tx_id: "0x00".into(),
+            raw: vec![1, 2],
+            valid_until: 0,
+            sequence: 0,
+        };
         a.submit(&signed).await.unwrap();
         let w = w.lock().unwrap();
         let send = w.calls.iter().find(|c| c.0 == "send_tx").unwrap();
@@ -3355,7 +5170,13 @@ mod tests {
     #[tokio::test]
     async fn escrow_in_flight_times_out_after_deadline() {
         let (rop, ro) = router_job("router_short", "30000000000000", "0");
-        let relay = call_of(&pol(), &entry(&pol(), &rop, &ro).unwrap(), &rop, &hx(&ro["signature"])).unwrap();
+        let relay = call_of(
+            &pol(),
+            &entry(&pol(), &rop, &ro).unwrap(),
+            &rop,
+            &hx(&ro["signature"]),
+        )
+        .unwrap();
         let hash = [0x34u8; 32];
         let id = format!("0x{}", h(&hash));
         let mut flying = outcome(ROUTER, fc("relay", &relay.args), json!("Started"), vec![]);
@@ -3363,23 +5184,43 @@ mod tests {
         let now = crate::submit::now();
         let mut w = world();
         w.txs.insert(bs58::encode(hash).into_string(), flying);
-        w.views.insert((ROUTER.into(), "pending".into()), pending(now + 600, 1));
+        w.views
+            .insert((ROUTER.into(), "pending".into()), pending(now + 600, 1));
         let (a, w) = adapter(w, &fee_cfg("1")).await;
-        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending, "before the deadline");
+        assert_eq!(
+            a.tx_status(&id).await.unwrap(),
+            TxStatus::Pending,
+            "before the deadline"
+        );
         assert!(sent(&w).is_empty());
-        w.lock().unwrap().views.insert((ROUTER.into(), "pending".into()), pending(now - 1, 1));
+        w.lock()
+            .unwrap()
+            .views
+            .insert((ROUTER.into(), "pending".into()), pending(now - 1, 1));
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
         let s = sent(&w);
         assert_eq!(s.len(), 1, "relay_timeout sent while the call is in flight");
-        assert!(contains(&s[0], &[&bstr("relay_timeout")[..], &bvec(&rop.pay_ref)].concat()));
+        assert!(contains(
+            &s[0],
+            &[&bstr("relay_timeout")[..], &bvec(&rop.pay_ref)].concat()
+        ));
         // refunded meanwhile: still pending until the transaction is final (then `escrow_status` reverts it)
-        w.lock().unwrap().views.insert((ROUTER.into(), "pending".into()), vec![0]);
+        w.lock()
+            .unwrap()
+            .views
+            .insert((ROUTER.into(), "pending".into()), vec![0]);
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
         // another relayer's entry under the same ref: never timed out by us
         let mut other = pending(now - 1, 1);
-        let at = other.windows(4 + LANE0.len()).position(|x| x == bstr(LANE0)).unwrap();
+        let at = other
+            .windows(4 + LANE0.len())
+            .position(|x| x == bstr(LANE0))
+            .unwrap();
         other[at + 4] = b'b';
-        w.lock().unwrap().views.insert((ROUTER.into(), "pending".into()), other);
+        w.lock()
+            .unwrap()
+            .views
+            .insert((ROUTER.into(), "pending".into()), other);
         a.timeouts.lock().unwrap().clear();
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
         assert_eq!(sent(&w).len(), 1);
@@ -3388,15 +5229,26 @@ mod tests {
     // ------------------------------------------------------------------------------------------------ events
 
     fn ev(standard: &str, event: &str, data: Value) -> String {
-        format!("EVENT_JSON:{}", json!({"standard": standard, "version": "1.0.0", "event": event, "data": data}))
+        format!(
+            "EVENT_JSON:{}",
+            json!({"standard": standard, "version": "1.0.0", "event": event, "data": data})
+        )
     }
 
     fn ids() -> Ids {
-        Ids { tokens: vec![TOKEN.into()], router: Some(ROUTER.into()), dex: Some(DEX.into()) }
+        Ids {
+            tokens: vec![TOKEN.into()],
+            router: Some(ROUTER.into()),
+            dex: Some(DEX.into()),
+        }
     }
 
     fn settled(from: &str, to: &str, amount: &str, r: &str) -> String {
-        ev("scaas", "payment_settled", json!({"from": from, "to": to, "amount": amount, "pay_ref": r}))
+        ev(
+            "scaas",
+            "payment_settled",
+            json!({"from": from, "to": to, "amount": amount, "pay_ref": r}),
+        )
     }
 
     /// Note 2 / NET-NEAR-07: only successful receipts (a failed receipt keeps its logs), only configured contracts (a copy
@@ -3405,27 +5257,133 @@ mod tests {
     #[test]
     fn near_events_success_only_configured() {
         let r = format!("0x{}", "01".repeat(32));
-        let ft = |a: &str, b: &str, n: &str| ev("nep141", "ft_transfer", json!([{"old_owner_id": a, "new_owner_id": b, "amount": n}]));
+        let ft = |a: &str, b: &str, n: &str| {
+            ev(
+                "nep141",
+                "ft_transfer",
+                json!([{"old_owner_id": a, "new_owner_id": b, "amount": n}]),
+            )
+        };
         let big = ((1u128 << 127) + 1).to_string();
-        let tx = outcome(TOKEN, fc("mtx_pay", &[]), json!({"SuccessValue": ""}), vec![
-            receipt(TOKEN, true, &[ev("scaas", "meta_transaction_executed", json!({"from": "alice.test.near", "relayer": LANE0,
-                "lane": format!("0x{}", "a1".repeat(32)), "nonce": 0, "digest": format!("0x{}", "dd".repeat(32))})),
-                ft("alice.test.near", "bob.test.near", &big), settled("alice.test.near", "bob.test.near", &big, &r)]),
-            receipt(TOKEN, false, &[settled("alice.test.near", "bob.test.near", "5", &r)]),
-            receipt("copy.test.near", true, &[settled("alice.test.near", "bob.test.near", "6", &r)]),
-            receipt(TOKEN, true, &[ft(TOKEN, "bob.test.near", "8"), ev("scaas", "ua_transfer", json!({"from": format!("0x{}", "ee".repeat(32)), "to": "bob.test.near", "amount": "8"}))]),
-            receipt(TOKEN, true, &["not json".into(), "EVENT_JSON:{".into(), ev("scaas", "payment_settled", json!({"from": "a", "amount": 1.5})), settled("Bad", "b.near", "1", &r)]),
-        ]);
+        let tx = outcome(
+            TOKEN,
+            fc("mtx_pay", &[]),
+            json!({"SuccessValue": ""}),
+            vec![
+                receipt(
+                    TOKEN,
+                    true,
+                    &[
+                        ev(
+                            "scaas",
+                            "meta_transaction_executed",
+                            json!({"from": "alice.test.near", "relayer": LANE0,
+                "lane": format!("0x{}", "a1".repeat(32)), "nonce": 0, "digest": format!("0x{}", "dd".repeat(32))}),
+                        ),
+                        ft("alice.test.near", "bob.test.near", &big),
+                        settled("alice.test.near", "bob.test.near", &big, &r),
+                    ],
+                ),
+                receipt(
+                    TOKEN,
+                    false,
+                    &[settled("alice.test.near", "bob.test.near", "5", &r)],
+                ),
+                receipt(
+                    "copy.test.near",
+                    true,
+                    &[settled("alice.test.near", "bob.test.near", "6", &r)],
+                ),
+                receipt(
+                    TOKEN,
+                    true,
+                    &[
+                        ft(TOKEN, "bob.test.near", "8"),
+                        ev(
+                            "scaas",
+                            "ua_transfer",
+                            json!({"from": format!("0x{}", "ee".repeat(32)), "to": "bob.test.near", "amount": "8"}),
+                        ),
+                    ],
+                ),
+                receipt(
+                    TOKEN,
+                    true,
+                    &[
+                        "not json".into(),
+                        "EVENT_JSON:{".into(),
+                        ev(
+                            "scaas",
+                            "payment_settled",
+                            json!({"from": "a", "amount": 1.5}),
+                        ),
+                        settled("Bad", "b.near", "1", &r),
+                    ],
+                ),
+            ],
+        );
         let rows = tx_events(&ids(), &tx, 100, "0xbb", "0xcc");
         let kinds: Vec<&str> = rows.iter().map(|e| e["event"].as_str().unwrap()).collect();
-        assert_eq!(kinds, ["MetaTransactionExecuted", "Transfer", "PaymentSettled", "Transfer"], "{rows:#?}");
+        assert_eq!(
+            kinds,
+            [
+                "MetaTransactionExecuted",
+                "Transfer",
+                "PaymentSettled",
+                "Transfer"
+            ],
+            "{rows:#?}"
+        );
         let p = &rows[2];
-        assert_eq!((p["contract"].as_str(), p["from"].as_str(), p["to"].as_str(), p["amount"].as_str()), (Some(TOKEN), Some("alice.test.near"), Some("bob.test.near"), Some(big.as_str())));
-        assert_eq!((p["entry_ref"].as_str(), p["block_number"].as_u64(), p["tx_hash"].as_str()), (Some(r.as_str()), Some(100), Some("0xcc")));
-        assert_eq!(rows[3]["from"], json!(format!("0x{}", "ee".repeat(32))), "the UA side of a pool move");
-        let idx: Vec<u64> = rows.iter().map(|e| e["log_index"].as_u64().unwrap()).collect();
-        assert!(idx.windows(2).all(|w| w[0] < w[1]), "log_index increases: {idx:?}");
-        assert!(tx_events(&Ids { tokens: vec![], ..ids() }, &tx, 100, "0xbb", "0xcc").is_empty(), "no configured token");
+        assert_eq!(
+            (
+                p["contract"].as_str(),
+                p["from"].as_str(),
+                p["to"].as_str(),
+                p["amount"].as_str()
+            ),
+            (
+                Some(TOKEN),
+                Some("alice.test.near"),
+                Some("bob.test.near"),
+                Some(big.as_str())
+            )
+        );
+        assert_eq!(
+            (
+                p["entry_ref"].as_str(),
+                p["block_number"].as_u64(),
+                p["tx_hash"].as_str()
+            ),
+            (Some(r.as_str()), Some(100), Some("0xcc"))
+        );
+        assert_eq!(
+            rows[3]["from"],
+            json!(format!("0x{}", "ee".repeat(32))),
+            "the UA side of a pool move"
+        );
+        let idx: Vec<u64> = rows
+            .iter()
+            .map(|e| e["log_index"].as_u64().unwrap())
+            .collect();
+        assert!(
+            idx.windows(2).all(|w| w[0] < w[1]),
+            "log_index increases: {idx:?}"
+        );
+        assert!(
+            tx_events(
+                &Ids {
+                    tokens: vec![],
+                    ..ids()
+                },
+                &tx,
+                100,
+                "0xbb",
+                "0xcc"
+            )
+            .is_empty(),
+            "no configured token"
+        );
     }
 
     /// CTR-MTX-26 / -27 joins (`indexer::join_pay_events`): `payment_meta` gives its meta to the settle; the router's
@@ -3434,60 +5392,209 @@ mod tests {
     #[test]
     fn near_events_join_meta_relay_fee_and_mandate() {
         let r = format!("0x{}", "05".repeat(32));
-        let fee = |token: &str| ev("scaas", "relay_fee_paid", json!({"ref": r, "target": DEX, "token": token, "payer": "alice.test.near", "payee": LANE0, "amount": "10"}));
-        let tx = outcome(ROUTER, fc("relay", &[]), json!({"SuccessValue": b64(&[1])}), vec![
-            receipt(TOKEN, true, &[settled("alice.test.near", LANE0, "10", &r)]),
-            receipt(ROUTER, true, &[fee(TOKEN), fee("fake-token.near")]),
-        ]);
+        let fee = |token: &str| {
+            ev(
+                "scaas",
+                "relay_fee_paid",
+                json!({"ref": r, "target": DEX, "token": token, "payer": "alice.test.near", "payee": LANE0, "amount": "10"}),
+            )
+        };
+        let tx = outcome(
+            ROUTER,
+            fc("relay", &[]),
+            json!({"SuccessValue": b64(&[1])}),
+            vec![
+                receipt(TOKEN, true, &[settled("alice.test.near", LANE0, "10", &r)]),
+                receipt(ROUTER, true, &[fee(TOKEN), fee("fake-token.near")]),
+            ],
+        );
         let rows = tx_events(&ids(), &tx, 7, "0xbb", "0xcc");
         assert_eq!(rows.len(), 1, "{rows:#?}");
-        assert_eq!((rows[0]["relay_payee"].as_str(), rows[0]["relay_target"].as_str()), (Some(LANE0), Some(DEX)));
-        let no_router = tx_events(&Ids { router: None, ..ids() }, &tx, 7, "0xbb", "0xcc");
-        assert!(no_router[0]["relay_payee"].is_null(), "an unconfigured router's event joins nothing");
+        assert_eq!(
+            (
+                rows[0]["relay_payee"].as_str(),
+                rows[0]["relay_target"].as_str()
+            ),
+            (Some(LANE0), Some(DEX))
+        );
+        let no_router = tx_events(
+            &Ids {
+                router: None,
+                ..ids()
+            },
+            &tx,
+            7,
+            "0xbb",
+            "0xcc",
+        );
+        assert!(
+            no_router[0]["relay_payee"].is_null(),
+            "an unconfigured router's event joins nothing"
+        );
         // a fake token's settle with the same ref takes nothing
-        let tx = outcome(ROUTER, fc("relay", &[]), json!({"SuccessValue": b64(&[1])}), vec![
-            receipt("fake-token.near", true, &[settled("alice.test.near", LANE0, "10", &r)]),
-            receipt(ROUTER, true, &[fee("fake-token.near")]),
-        ]);
+        let tx = outcome(
+            ROUTER,
+            fc("relay", &[]),
+            json!({"SuccessValue": b64(&[1])}),
+            vec![
+                receipt(
+                    "fake-token.near",
+                    true,
+                    &[settled("alice.test.near", LANE0, "10", &r)],
+                ),
+                receipt(ROUTER, true, &[fee("fake-token.near")]),
+            ],
+        );
         assert!(tx_events(&ids(), &tx, 7, "0xbb", "0xcc").is_empty());
         // wrapper: the token's own relay_fee_paid; pay-meta
         let pid = format!("0x{}", "04".repeat(32));
-        let tx = outcome(TOKEN, fc("relay_fee_add_key", &[]), json!({"SuccessValue": ""}), vec![receipt(TOKEN, true, &[
-            ev("scaas", "payment_meta", json!({"pay_ref": pid, "meta": "0xabcd"})),
-            settled("alice.test.near", "bob.test.near", "100", &pid),
-            settled("alice.test.near", LANE0, "10", &r),
-            ev("scaas", "relay_fee_paid", json!({"ref": r, "target": TOKEN, "token": TOKEN, "payer": "alice.test.near", "payee": LANE0, "amount": "10"})),
-        ])]);
+        let tx = outcome(
+            TOKEN,
+            fc("relay_fee_add_key", &[]),
+            json!({"SuccessValue": ""}),
+            vec![receipt(
+                TOKEN,
+                true,
+                &[
+                    ev(
+                        "scaas",
+                        "payment_meta",
+                        json!({"pay_ref": pid, "meta": "0xabcd"}),
+                    ),
+                    settled("alice.test.near", "bob.test.near", "100", &pid),
+                    settled("alice.test.near", LANE0, "10", &r),
+                    ev(
+                        "scaas",
+                        "relay_fee_paid",
+                        json!({"ref": r, "target": TOKEN, "token": TOKEN, "payer": "alice.test.near", "payee": LANE0, "amount": "10"}),
+                    ),
+                ],
+            )],
+        );
         let rows = tx_events(&ids(), &tx, 7, "0xbb", "0xcc");
         assert_eq!(rows.len(), 2);
-        assert_eq!((rows[0]["meta"].as_str(), rows[1]["relay_payee"].as_str()), (Some("0xabcd"), Some(LANE0)));
+        assert_eq!(
+            (rows[0]["meta"].as_str(), rows[1]["relay_payee"].as_str()),
+            (Some("0xabcd"), Some(LANE0))
+        );
         // mandate pay: from = 0x<mandate id>, keyed by (token, id)
         let mid = format!("0x{}", "b0".repeat(32));
-        let tx = outcome(TOKEN, fc("mtx_mandate_pay", &[]), json!({"SuccessValue": ""}), vec![receipt(TOKEN, true, &[settled(&mid, "bob.test.near", "100", &r)])]);
+        let tx = outcome(
+            TOKEN,
+            fc("mtx_mandate_pay", &[]),
+            json!({"SuccessValue": ""}),
+            vec![receipt(
+                TOKEN,
+                true,
+                &[settled(&mid, "bob.test.near", "100", &r)],
+            )],
+        );
         let rows = tx_events(&ids(), &tx, 7, "0xbb", "0xcc");
-        assert_eq!((rows[0]["contract"].as_str(), rows[0]["from"].as_str()), (Some(TOKEN), Some(mid.as_str())));
+        assert_eq!(
+            (rows[0]["contract"].as_str(), rows[0]["from"].as_str()),
+            (Some(TOKEN), Some(mid.as_str()))
+        );
     }
 
     /// Note 4: trades are booked from the tokens' transfer events in successful receipts — the legs into the DEX carry
     /// their `order_filled` digest and the configured DEX's `matched` settle id — never from `matched` alone.
     #[test]
     fn near_events_trades_from_transfers() {
-        let (da, db, sid) = (format!("0x{}", "da".repeat(32)), format!("0x{}", "db".repeat(32)), format!("0x{}", "5e".repeat(32)));
-        let leg = |from: &str, d: &str| receipt(TOKEN, true, &[
-            ev("nep141", "ft_transfer", json!([{"old_owner_id": from, "new_owner_id": DEX, "amount": "100"}])),
-            ev("scaas", "order_filled", json!({"from": from, "dex": DEX, "lane": format!("0x{}", "a0".repeat(32)), "nonce": 0, "amount": "100", "digest": d})),
-        ]);
-        let matched = |dex: &str| receipt(dex, true, &[ev("scaas", "matched", json!({"settle_id": sid, "legs": [da, db]}))]);
-        let payout = receipt(TOKEN, true, &[ev("nep141", "ft_transfer", json!([{"old_owner_id": DEX, "new_owner_id": "erin.near", "amount": "100"}]))]);
-        let tx = outcome(DEX, fc("settle", &[]), json!({"SuccessValue": ""}), vec![leg("carol.near", &da), matched(DEX), payout.clone()]);
+        let (da, db, sid) = (
+            format!("0x{}", "da".repeat(32)),
+            format!("0x{}", "db".repeat(32)),
+            format!("0x{}", "5e".repeat(32)),
+        );
+        let leg = |from: &str, d: &str| {
+            receipt(
+                TOKEN,
+                true,
+                &[
+                    ev(
+                        "nep141",
+                        "ft_transfer",
+                        json!([{"old_owner_id": from, "new_owner_id": DEX, "amount": "100"}]),
+                    ),
+                    ev(
+                        "scaas",
+                        "order_filled",
+                        json!({"from": from, "dex": DEX, "lane": format!("0x{}", "a0".repeat(32)), "nonce": 0, "amount": "100", "digest": d}),
+                    ),
+                ],
+            )
+        };
+        let matched = |dex: &str| {
+            receipt(
+                dex,
+                true,
+                &[ev(
+                    "scaas",
+                    "matched",
+                    json!({"settle_id": sid, "legs": [da, db]}),
+                )],
+            )
+        };
+        let payout = receipt(
+            TOKEN,
+            true,
+            &[ev(
+                "nep141",
+                "ft_transfer",
+                json!([{"old_owner_id": DEX, "new_owner_id": "erin.near", "amount": "100"}]),
+            )],
+        );
+        let tx = outcome(
+            DEX,
+            fc("settle", &[]),
+            json!({"SuccessValue": ""}),
+            vec![leg("carol.near", &da), matched(DEX), payout.clone()],
+        );
         let rows = tx_events(&ids(), &tx, 9, "0xbb", "0xcc");
         assert_eq!(rows.len(), 2, "{rows:#?}");
         assert!(rows.iter().all(|e| e["event"] == "Transfer"));
-        assert_eq!((rows[0]["leg_digest"].as_str(), rows[0]["settle_id"].as_str()), (Some(da.as_str()), Some(sid.as_str())));
-        assert_eq!((rows[1]["from"].as_str(), rows[1]["to"].as_str()), (Some(DEX), Some("erin.near")));
-        let other = tx_events(&ids(), &outcome(DEX, fc("settle", &[]), json!({"SuccessValue": ""}), vec![leg("carol.near", &da), matched("fake-dex.near")]), 9, "0xbb", "0xcc");
-        assert!(other[0]["settle_id"].is_null(), "an unconfigured DEX's matched joins nothing");
-        assert!(tx_events(&ids(), &outcome(DEX, fc("settle", &[]), json!({"SuccessValue": ""}), vec![matched(DEX)]), 9, "0xbb", "0xcc").is_empty(), "matched alone books nothing");
+        assert_eq!(
+            (
+                rows[0]["leg_digest"].as_str(),
+                rows[0]["settle_id"].as_str()
+            ),
+            (Some(da.as_str()), Some(sid.as_str()))
+        );
+        assert_eq!(
+            (rows[1]["from"].as_str(), rows[1]["to"].as_str()),
+            (Some(DEX), Some("erin.near"))
+        );
+        let other = tx_events(
+            &ids(),
+            &outcome(
+                DEX,
+                fc("settle", &[]),
+                json!({"SuccessValue": ""}),
+                vec![leg("carol.near", &da), matched("fake-dex.near")],
+            ),
+            9,
+            "0xbb",
+            "0xcc",
+        );
+        assert!(
+            other[0]["settle_id"].is_null(),
+            "an unconfigured DEX's matched joins nothing"
+        );
+        assert!(
+            tx_events(
+                &ids(),
+                &outcome(
+                    DEX,
+                    fc("settle", &[]),
+                    json!({"SuccessValue": ""}),
+                    vec![matched(DEX)]
+                ),
+                9,
+                "0xbb",
+                "0xcc"
+            )
+            .is_empty(),
+            "matched alone books nothing"
+        );
     }
 
     /// `events` scans final blocks' chunks for transactions to configured contracts and reads their final outcomes;
@@ -3497,21 +5604,65 @@ mod tests {
         let r = format!("0x{}", "01".repeat(32));
         let mut w = world();
         let bh = bs58::encode([0xbb; 32]).into_string();
-        w.blocks = vec![json!({"header": {"height": 5, "hash": bh}, "chunks": [{"chunk_hash": "C5", "height_included": 5}, {"chunk_hash": "C4", "height_included": 4}]})];
+        w.blocks = vec![
+            json!({"header": {"height": 5, "hash": bh}, "chunks": [{"chunk_hash": "C5", "height_included": 5}, {"chunk_hash": "C4", "height_included": 4}]}),
+        ];
         let th = bs58::encode([0xcc; 32]).into_string();
         w.chunks.insert("C5".into(), json!({"transactions": [{"hash": th, "signer_id": LANE0, "receiver_id": TOKEN},
                                                               {"hash": "other", "signer_id": LANE0, "receiver_id": "elsewhere.near"}]}));
-        w.txs.insert(th.clone(), outcome(TOKEN, fc("mtx_pay", &[]), json!({"SuccessValue": ""}), vec![receipt(TOKEN, true, &[settled("alice.test.near", "bob.test.near", "1", &r)])]));
+        w.txs.insert(
+            th.clone(),
+            outcome(
+                TOKEN,
+                fc("mtx_pay", &[]),
+                json!({"SuccessValue": ""}),
+                vec![receipt(
+                    TOKEN,
+                    true,
+                    &[settled("alice.test.near", "bob.test.near", "1", &r)],
+                )],
+            ),
+        );
         let (a, w) = adapter(w, "").await;
         let rows = a.events(4, 5, &[TOKEN.into()]).await.unwrap();
         assert_eq!(rows.len(), 1, "{rows:#?}");
-        assert_eq!((rows[0]["block_hash"].as_str(), rows[0]["tx_hash"].as_str()), (Some(format!("0x{}", "bb".repeat(32)).as_str()), Some(format!("0x{}", "cc".repeat(32)).as_str())));
-        assert!(w.lock().unwrap().calls.iter().all(|c| c.1["chunk_id"] != "C4"), "a chunk carried over from height 4 is not re-read");
-        assert_eq!(a.block_hash(6).await.unwrap(), format!("0x{}", "bb".repeat(32)), "skipped height 6: the block produced before it");
-        w.lock().unwrap().txs.get_mut(&th).unwrap()["final_execution_status"] = json!("EXECUTED_OPTIMISTIC");
-        assert!(a.events(5, 5, &[TOKEN.into()]).await.is_err(), "not final: the range stays open");
-        assert_eq!(a.final_head().await.unwrap(), Some(Head { height: 5, hash: format!("0x{}", "bb".repeat(32)) }));
-        assert!(a.events(5, 5, &["Bad".into()]).await.is_err(), "no usable token id: never an empty Ok");
+        assert_eq!(
+            (rows[0]["block_hash"].as_str(), rows[0]["tx_hash"].as_str()),
+            (
+                Some(format!("0x{}", "bb".repeat(32)).as_str()),
+                Some(format!("0x{}", "cc".repeat(32)).as_str())
+            )
+        );
+        assert!(
+            w.lock()
+                .unwrap()
+                .calls
+                .iter()
+                .all(|c| c.1["chunk_id"] != "C4"),
+            "a chunk carried over from height 4 is not re-read"
+        );
+        assert_eq!(
+            a.block_hash(6).await.unwrap(),
+            format!("0x{}", "bb".repeat(32)),
+            "skipped height 6: the block produced before it"
+        );
+        w.lock().unwrap().txs.get_mut(&th).unwrap()["final_execution_status"] =
+            json!("EXECUTED_OPTIMISTIC");
+        assert!(
+            a.events(5, 5, &[TOKEN.into()]).await.is_err(),
+            "not final: the range stays open"
+        );
+        assert_eq!(
+            a.final_head().await.unwrap(),
+            Some(Head {
+                height: 5,
+                hash: format!("0x{}", "bb".repeat(32))
+            })
+        );
+        assert!(
+            a.events(5, 5, &["Bad".into()]).await.is_err(),
+            "no usable token id: never an empty Ok"
+        );
     }
 
     /// R9: the node shows a subject's key set per token (keys drift between tokens: a key op is per token).
@@ -3519,11 +5670,23 @@ mod tests {
     async fn key_sets_per_token() {
         let mut w = world();
         let rec = [258u16.to_le_bytes().to_vec(), bvec(&[7; 32])].concat();
-        let subject = [vec![1], 1u32.to_le_bytes().to_vec(), rec, 0u32.to_le_bytes().to_vec(), vec![0, 0], 3u64.to_le_bytes().to_vec(), vec![0]].concat();
+        let subject = [
+            vec![1],
+            1u32.to_le_bytes().to_vec(),
+            rec,
+            0u32.to_le_bytes().to_vec(),
+            vec![0, 0],
+            3u64.to_le_bytes().to_vec(),
+            vec![0],
+        ]
+        .concat();
         w.views.insert((TOKEN.into(), "subject".into()), subject);
         let (a, _) = adapter(w, "").await;
         let ks = a.key_sets(&Holder::Ua([1; 32])).await.unwrap();
-        assert_eq!(ks, vec![(TOKEN.to_string(), Some(vec![(258u16, vec![7u8; 32])]))]);
+        assert_eq!(
+            ks,
+            vec![(TOKEN.to_string(), Some(vec![(258u16, vec![7u8; 32])]))]
+        );
     }
 
     // ------------------------------------------------------------------------------------------------ fix 1
@@ -3533,13 +5696,19 @@ mod tests {
     #[tokio::test]
     async fn refunded_router_job_is_not_consumed() {
         let mut w = world();
-        w.views.insert((TOKEN.into(), "lane_nonce".into()), 1u64.to_le_bytes().to_vec());
+        w.views.insert(
+            (TOKEN.into(), "lane_nonce".into()),
+            1u64.to_le_bytes().to_vec(),
+        );
         let (a, _) = adapter(w, &fee_cfg("1")).await;
         let (_, ro) = router_job("router_short", "30000000000000", "0");
         assert_eq!(a.op_consumed(&job(ro)).await.unwrap(), None);
         let (_, wo) = wrapper_job("wrapper_add_key_real");
         assert_eq!(a.op_consumed(&job(wo)).await.unwrap(), Some(true));
-        assert_eq!(a.op_consumed(&job(o_of("pay", json!({})))).await.unwrap(), Some(true));
+        assert_eq!(
+            a.op_consumed(&job(o_of("pay", json!({})))).await.unwrap(),
+            Some(true)
+        );
     }
 
     const TOKENB: &str = "tokenb.test.near";
@@ -3550,21 +5719,47 @@ mod tests {
         order_x(sell, buy, amount, min_buy, relayer, FAR)
     }
 
-    fn order_x(sell: &str, buy: &str, amount: u128, min_buy: u128, relayer: Option<&str>, expiry: u64) -> Vec<u8> {
+    fn order_x(
+        sell: &str,
+        buy: &str,
+        amount: u128,
+        min_buy: u128,
+        relayer: Option<&str>,
+        expiry: u64,
+    ) -> Vec<u8> {
         let rel = match relayer {
             None => vec![0],
             Some(r) => [vec![1], bstr(r)].concat(),
         };
-        [bstr(sell), bstr(buy), amount.to_le_bytes().to_vec(), min_buy.to_le_bytes().to_vec(), rel, expiry.to_le_bytes().to_vec()].concat()
+        [
+            bstr(sell),
+            bstr(buy),
+            amount.to_le_bytes().to_vec(),
+            min_buy.to_le_bytes().to_vec(),
+            rel,
+            expiry.to_le_bytes().to_vec(),
+        ]
+        .concat()
     }
 
     /// A shared trade leg op bound to `order` (`extra = sha256(Borsh(order))`, as the DEX's `leg()` checks).
     fn leg_op(name: &str, order: &[u8]) -> MetaOp {
-        MetaOp { extra: sha256(order), ..op_of(name) }
+        MetaOp {
+            extra: sha256(order),
+            ..op_of(name)
+        }
     }
 
     fn settle_with(oa: &[u8], a: &MetaOp, ob: &[u8], b: &MetaOp) -> Vec<u8> {
-        [oa.to_vec(), a.borsh(), auth_bytes(&row("trade_a")["auth"]), ob.to_vec(), b.borsh(), auth_bytes(&row("trade_b")["auth"])].concat()
+        [
+            oa.to_vec(),
+            a.borsh(),
+            auth_bytes(&row("trade_a")["auth"]),
+            ob.to_vec(),
+            b.borsh(),
+            auth_bytes(&row("trade_b")["auth"]),
+        ]
+        .concat()
     }
 
     fn settle_orders(oa: &[u8], ob: &[u8]) -> Vec<u8> {
@@ -3573,34 +5768,90 @@ mod tests {
 
     /// The settle args of the shared trade legs with the given orders' relayers.
     fn settle_args(ra: Option<&str>, rb: Option<&str>) -> Vec<u8> {
-        settle_orders(&order(TOKEN, TOKENB, 100, 50, ra), &order(TOKENB, TOKEN, 60, 100, rb))
+        settle_orders(
+            &order(TOKEN, TOKENB, 100, 50, ra),
+            &order(TOKENB, TOKEN, 60, 100, rb),
+        )
     }
 
     /// A world where the honest router job's views pass.
     fn router_world(g: u64) -> World {
-        let mut w = World { auto_relay: true, ..world() };
-        w.code.extend([TOKENB.to_string(), "app.near".to_string(), "elsewhere.near".to_string()]);
-        w.views.insert((ROUTER.into(), "relay_check".into()), router_check(1, 1, g));
-        w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
-        w.views.insert((TOKEN.into(), "mtx_trade_check".into()), check_ok(5));
-        w.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(5));
-        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(7));
+        let mut w = World {
+            auto_relay: true,
+            ..world()
+        };
+        w.code.extend([
+            TOKENB.to_string(),
+            "app.near".to_string(),
+            "elsewhere.near".to_string(),
+        ]);
+        w.views
+            .insert((ROUTER.into(), "relay_check".into()), router_check(1, 1, g));
+        w.views
+            .insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
+        w.views
+            .insert((TOKEN.into(), "mtx_trade_check".into()), check_ok(5));
+        w.views
+            .insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(5));
+        w.views
+            .insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(7));
         w
     }
 
-    async fn build_router(w: World, relay_fee: &str, target: &str, method: &str, args: &[u8], tg: &str, td: &str) -> (std::result::Result<Built, SimError>, Arc<Mutex<World>>) {
-        let (op, o) = router_op_g(target, method, args, Holder::Near("bob.test.near".into()), tg, td);
+    async fn build_router(
+        w: World,
+        relay_fee: &str,
+        target: &str,
+        method: &str,
+        args: &[u8],
+        tg: &str,
+        td: &str,
+    ) -> (std::result::Result<Built, SimError>, Arc<Mutex<World>>) {
+        let (op, o) = router_op_g(
+            target,
+            method,
+            args,
+            Holder::Near("bob.test.near".into()),
+            tg,
+            td,
+        );
         build_router_op(w, relay_fee, op, o).await
     }
 
-    async fn build_router_op(w: World, relay_fee: &str, op: MetaOp, o: Value) -> (std::result::Result<Built, SimError>, Arc<Mutex<World>>) {
-        let gas = entry(&RelayFeePolicy { dex: Some(DEX.into()), targets: BTreeMap::from([("app.near".to_string(), vec!["anything".to_string()])]), tokens: vec![TOKEN.into(), TOKENB.into()], ..pol() }, &op, &o)
-            .ok().and_then(|e| job_gas(&e, &Auth::decode(&hx(&o["signature"]), &op.digest()).unwrap()).ok()).unwrap_or(0);
+    async fn build_router_op(
+        w: World,
+        relay_fee: &str,
+        op: MetaOp,
+        o: Value,
+    ) -> (std::result::Result<Built, SimError>, Arc<Mutex<World>>) {
+        let gas = entry(
+            &RelayFeePolicy {
+                dex: Some(DEX.into()),
+                targets: BTreeMap::from([("app.near".to_string(), vec!["anything".to_string()])]),
+                tokens: vec![TOKEN.into(), TOKENB.into()],
+                ..pol()
+            },
+            &op,
+            &o,
+        )
+        .ok()
+        .and_then(|e| {
+            job_gas(
+                &e,
+                &Auth::decode(&hx(&o["signature"]), &op.digest()).unwrap(),
+            )
+            .ok()
+        })
+        .unwrap_or(0);
         let mut w = w;
-        w.views.insert((ROUTER.into(), "relay_check".into()), router_check(1, 1, gas));
+        w.views.insert(
+            (ROUTER.into(), "relay_check".into()),
+            router_check(1, 1, gas),
+        );
         let w = Arc::new(Mutex::new(w));
         let url = serve(w.clone()).await;
-        let a = NearAdapter::new(&cfg_tokens(&url, relay_fee, &[TOKEN, TOKENB]), &[lane0()]).unwrap();
+        let a =
+            NearAdapter::new(&cfg_tokens(&url, relay_fee, &[TOKEN, TOKENB]), &[lane0()]).unwrap();
         (a.build(&job(o), 0).await, w)
     }
 
@@ -3615,51 +5866,193 @@ mod tests {
         let refused = |r: &std::result::Result<Built, SimError>, what: &str| matches!(r, Err(SimError::Revert(e)) if e.contains(what));
         let big = "100000000000000000000000";
         // honest: DEX settle of two open orders; a token's mtx_pay as the executor; a listed third-party target
-        let (r, w) = build_router(router_world(0), &sponsored, DEX, "settle", &settle_args(None, Some(EXECUTOR)), "200000000000000", big).await;
+        let (r, w) = build_router(
+            router_world(0),
+            &sponsored,
+            DEX,
+            "settle",
+            &settle_args(None, Some(EXECUTOR)),
+            "200000000000000",
+            big,
+        )
+        .await;
         assert!(ok(&r), "{r:?}");
-        assert_eq!(view_args(&w, "mtx_trade_check")[..4 + DEX.len()], bstr(DEX)[..], "legs checked as the DEX");
+        assert_eq!(
+            view_args(&w, "mtx_trade_check")[..4 + DEX.len()],
+            bstr(DEX)[..],
+            "legs checked as the DEX"
+        );
         let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat();
-        let (r, w) = build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &pay, "20000000000000", "7").await;
+        let (r, w) = build_router(
+            router_world(0),
+            &sponsored,
+            TOKEN,
+            "mtx_pay",
+            &pay,
+            "20000000000000",
+            "7",
+        )
+        .await;
         assert!(ok(&r), "{r:?}");
-        assert_eq!(view_args(&w, "mtx_pay_check"), [bstr(EXECUTOR), pay.clone()].concat(), "the target's check as the executor");
-        let (r, _) = build_router(router_world(0), &sponsored, "app.near", "anything", &[1, 2, 3], "5000000000000", "0").await;
+        assert_eq!(
+            view_args(&w, "mtx_pay_check"),
+            [bstr(EXECUTOR), pay.clone()].concat(),
+            "the target's check as the executor"
+        );
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored,
+            "app.near",
+            "anything",
+            &[1, 2, 3],
+            "5000000000000",
+            "0",
+        )
+        .await;
         assert!(ok(&r), "{r:?}");
         // unlisted target; a method without a check view; garbage args; target_gas below the floor; short deposit
-        let (r, w) = build_router(router_world(0), &sponsored, "elsewhere.near", "anything", &[1], "100000000000000", "0").await;
+        let (r, w) = build_router(
+            router_world(0),
+            &sponsored,
+            "elsewhere.near",
+            "anything",
+            &[1],
+            "100000000000000",
+            "0",
+        )
+        .await;
         assert!(refused(&r, "not an allowed router target"), "{r:?}");
         assert!(sent(&w).is_empty());
-        let (r, _) = build_router(router_world(0), &sponsored, TOKEN, "mtx_nope", &pay, "100000000000000", big).await;
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored,
+            TOKEN,
+            "mtx_nope",
+            &pay,
+            "100000000000000",
+            big,
+        )
+        .await;
         assert!(refused(&r, "mtx_nope"), "{r:?}");
-        let (r, _) = build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &[1, 2, 3], "100000000000000", big).await;
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored,
+            TOKEN,
+            "mtx_pay",
+            &[1, 2, 3],
+            "100000000000000",
+            big,
+        )
+        .await;
         assert!(refused(&r, "args"), "{r:?}");
-        let (r, _) = build_router(router_world(0), &sponsored, DEX, "settle", &[9; 40], "200000000000000", big).await;
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored,
+            DEX,
+            "settle",
+            &[9; 40],
+            "200000000000000",
+            big,
+        )
+        .await;
         assert!(refused(&r, "args"), "{r:?}");
-        let (r, _) = build_router(router_world(0), &sponsored, DEX, "nope", &settle_args(None, None), "200000000000000", big).await;
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored,
+            DEX,
+            "nope",
+            &settle_args(None, None),
+            "200000000000000",
+            big,
+        )
+        .await;
         assert!(refused(&r, "nope"), "{r:?}");
         // fix 3 g1: target_gas / target_deposit are relayer-chosen (not in ref): the node sets the floors itself — the
         // target's pinned gas, a token's exact storage_needed (fix 2 f4: no surplus at the executor), the DEX's floor
-        let figures = |r: &std::result::Result<Built, SimError>| relay_figures(&r.as_ref().unwrap().body);
+        let figures =
+            |r: &std::result::Result<Built, SimError>| relay_figures(&r.as_ref().unwrap().body);
         for (tg, td) in [("0", "6"), ("100000000000000", "8"), ("1", big)] {
-            let (r, _) = build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &pay, tg, td).await;
+            let (r, _) =
+                build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &pay, tg, td).await;
             assert_eq!(figures(&r), (GAS_JOB_BASE + GAS_KEY_SIG, 7), "{tg} {td}");
         }
-        let (r, _) = build_router(router_world(0), &sponsored, DEX, "settle", &settle_args(None, None), "0", "0").await;
-        assert_eq!(figures(&r).0, 27 * TGAS + 2 * (6 + 11 + 1) * TGAS, "settle_gas");
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored,
+            DEX,
+            "settle",
+            &settle_args(None, None),
+            "0",
+            "0",
+        )
+        .await;
+        assert_eq!(
+            figures(&r).0,
+            27 * TGAS + 2 * (6 + 11 + 1) * TGAS,
+            "settle_gas"
+        );
         assert!(figures(&r).1 > 10u128.pow(21), "the settle entry's deposit");
-        let (r, _) = build_router(router_world(0), &sponsored, "app.near", "anything", &[1], "0", "0").await;
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored,
+            "app.near",
+            "anything",
+            &[1],
+            "0",
+            "0",
+        )
+        .await;
         assert_eq!(figures(&r), (GAS_TARGET_MIN, 0), "a third party's floor");
-        let (r, _) = build_router(router_world(0), &sponsored, "app.near", "anything", &[1], "9000000000000", "3").await;
-        assert_eq!(figures(&r), (9 * TGAS, 3), "above its floor: the job's own figures");
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored,
+            "app.near",
+            "anything",
+            &[1],
+            "9000000000000",
+            "3",
+        )
+        .await;
+        assert_eq!(
+            figures(&r),
+            (9 * TGAS, 3),
+            "above its floor: the job's own figures"
+        );
         // the target's own refusal; a leg bound to another relayer (the executor submits); a leg on an unconfigured token
         let mut w = router_world(0);
-        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_err("wrong lane nonce"));
-        let (r, _) = build_router(w, &sponsored, TOKEN, "mtx_pay", &pay, "20000000000000", big).await;
+        w.views.insert(
+            (TOKEN.into(), "mtx_pay_check".into()),
+            check_err("wrong lane nonce"),
+        );
+        let (r, _) =
+            build_router(w, &sponsored, TOKEN, "mtx_pay", &pay, "20000000000000", big).await;
         assert!(refused(&r, "wrong lane nonce"), "{r:?}");
         let mut w = router_world(0);
-        w.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_err("order expired"));
-        let (r, _) = build_router(w, &sponsored, DEX, "settle", &settle_args(None, None), "200000000000000", big).await;
+        w.views.insert(
+            (TOKENB.into(), "mtx_trade_check".into()),
+            check_err("order expired"),
+        );
+        let (r, _) = build_router(
+            w,
+            &sponsored,
+            DEX,
+            "settle",
+            &settle_args(None, None),
+            "200000000000000",
+            big,
+        )
+        .await;
         assert!(refused(&r, "order expired"), "{r:?}");
-        let (r, _) = build_router(router_world(0), &sponsored, DEX, "settle", &settle_args(Some("relayer.test.near"), None), "200000000000000", big).await;
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored,
+            DEX,
+            "settle",
+            &settle_args(Some("relayer.test.near"), None),
+            "200000000000000",
+            big,
+        )
+        .await;
         assert!(refused(&r, "relayer"), "{r:?}");
         // config: targets is a list of account ids, none the router or the executor
         let k = [lane0()];
@@ -3677,7 +6070,13 @@ mod tests {
             assert!(format!("{e:#}").contains(what), "{t}: {e:#}");
         }
         let p = NearAdapter::new(&cfg("http://r", &sponsored), &k).unwrap();
-        assert_eq!((p.relay_fee.targets.clone(), p.relay_fee.dex.as_deref()), (BTreeMap::from([("app.near".to_string(), vec!["anything".to_string()])]), Some(DEX)));
+        assert_eq!(
+            (p.relay_fee.targets.clone(), p.relay_fee.dex.as_deref()),
+            (
+                BTreeMap::from([("app.near".to_string(), vec!["anything".to_string()])]),
+                Some(DEX)
+            )
+        );
     }
 
     /// I3 (review RV3): a non-archival RPC answers UNKNOWN_BLOCK for garbage-collected heights too; a range starting
@@ -3689,7 +6088,10 @@ mod tests {
         let (a, _) = adapter(w, "").await;
         let e = format!("{:#}", a.events(1, 99, &[TOKEN.into()]).await.unwrap_err());
         assert!(e.contains("earliest"), "{e}");
-        assert!(a.events(50, 99, &[TOKEN.into()]).await.unwrap().is_empty(), "skipped heights above the horizon pass");
+        assert!(
+            a.events(50, 99, &[TOKEN.into()]).await.unwrap().is_empty(),
+            "skipped heights above the horizon pass"
+        );
     }
 
     /// m1 (review RV2): our `relay` failed at its first receipt (e.g. "this ref is already in flight") ⇒ reverted at once;
@@ -3697,7 +6099,13 @@ mod tests {
     #[tokio::test]
     async fn escrow_foreign_entry_not_followed() {
         let (rop, ro) = router_job("router_short", "30000000000000", "0");
-        let relay = call_of(&pol(), &entry(&pol(), &rop, &ro).unwrap(), &rop, &hx(&ro["signature"])).unwrap();
+        let relay = call_of(
+            &pol(),
+            &entry(&pol(), &rop, &ro).unwrap(),
+            &rop,
+            &hx(&ro["signature"]),
+        )
+        .unwrap();
         let key = bs58::encode([0x44u8; 32]).into_string();
         let id = format!("0x{}", "44".repeat(32));
         let now = crate::submit::now();
@@ -3707,18 +6115,37 @@ mod tests {
             p.splice(at..at + 4 + LANE0.len(), bstr("other.near"));
             p
         };
-        let mut failed = outcome(ROUTER, fc("relay", &relay.args), json!({"Failure": {"ActionError": {}}}), vec![receipt(ROUTER, false, &[])]);
+        let mut failed = outcome(
+            ROUTER,
+            fc("relay", &relay.args),
+            json!({"Failure": {"ActionError": {}}}),
+            vec![receipt(ROUTER, false, &[])],
+        );
         failed["receipts_outcome"][0]["id"] = json!("r");
         let mut w = world();
         w.txs.insert(key.clone(), failed);
-        w.views.insert((ROUTER.into(), "pending".into()), foreign(now - 10));
+        w.views
+            .insert((ROUTER.into(), "pending".into()), foreign(now - 10));
         let (a, w) = adapter(w, &fee_cfg("1")).await;
-        assert!(matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { .. }));
-        assert!(sent(&w).is_empty(), "no relay_timeout for an entry that is not ours");
-        let mut held = outcome(ROUTER, fc("relay", &relay.args), json!({"SuccessValue": b64(&[0])}), vec![receipt(ROUTER, true, &[])]);
+        assert!(matches!(
+            a.tx_status(&id).await.unwrap(),
+            TxStatus::Reverted { .. }
+        ));
+        assert!(
+            sent(&w).is_empty(),
+            "no relay_timeout for an entry that is not ours"
+        );
+        let mut held = outcome(
+            ROUTER,
+            fc("relay", &relay.args),
+            json!({"SuccessValue": b64(&[0])}),
+            vec![receipt(ROUTER, true, &[])],
+        );
         held["receipts_outcome"][0]["id"] = json!("r");
         w.lock().unwrap().txs.insert(key.clone(), held);
-        assert!(matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("another relayer")));
+        assert!(
+            matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("another relayer"))
+        );
         assert!(sent(&w).is_empty());
     }
 
@@ -3727,20 +6154,58 @@ mod tests {
     #[tokio::test]
     async fn stuck_settle_checks_relay_held() {
         let (rop, ro) = router_job("router_short", "30000000000000", "0");
-        let relay = call_of(&pol(), &entry(&pol(), &rop, &ro).unwrap(), &rop, &hx(&ro["signature"])).unwrap();
+        let relay = call_of(
+            &pol(),
+            &entry(&pol(), &rop, &ro).unwrap(),
+            &rop,
+            &hx(&ro["signature"]),
+        )
+        .unwrap();
         let key = bs58::encode([0x55u8; 32]).into_string();
         let id = format!("0x{}", "55".repeat(32));
         let mut w = world();
-        w.txs.insert(key, outcome(ROUTER, fc("relay", &relay.args), json!({"SuccessValue": b64(&[0])}), vec![]));
-        w.views.insert((ROUTER.into(), "pending".into()), pending(crate::submit::now() - 7_300, 2));
-        let held = [vec![1], vec![0], bstr("alice.test.near"), vec![0], bstr(LANE0), 10u128.to_le_bytes().to_vec(), bstr(LANE0), 3u128.to_le_bytes().to_vec()].concat();
+        w.txs.insert(
+            key,
+            outcome(
+                ROUTER,
+                fc("relay", &relay.args),
+                json!({"SuccessValue": b64(&[0])}),
+                vec![],
+            ),
+        );
+        w.views.insert(
+            (ROUTER.into(), "pending".into()),
+            pending(crate::submit::now() - 7_300, 2),
+        );
+        let held = [
+            vec![1],
+            vec![0],
+            bstr("alice.test.near"),
+            vec![0],
+            bstr(LANE0),
+            10u128.to_le_bytes().to_vec(),
+            bstr(LANE0),
+            3u128.to_le_bytes().to_vec(),
+        ]
+        .concat();
         w.views.insert((TOKEN.into(), "relay_held".into()), held);
         let (a, w) = adapter(w, &fee_cfg("1")).await;
-        assert!(matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("still held")));
-        assert_eq!(view_args(&w, "relay_held"), [bstr(ROUTER), rop.pay_ref.to_vec()].concat());
-        w.lock().unwrap().views.insert((TOKEN.into(), "relay_held".into()), vec![0]);
+        assert!(
+            matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("still held"))
+        );
+        assert_eq!(
+            view_args(&w, "relay_held"),
+            [bstr(ROUTER), rop.pay_ref.to_vec()].concat()
+        );
+        w.lock()
+            .unwrap()
+            .views
+            .insert((TOKEN.into(), "relay_held".into()), vec![0]);
         let st = a.tx_status(&id).await.unwrap();
-        assert!(matches!(&st, TxStatus::Reverted { reason } if reason.contains("settled at the token") && !reason.contains("not charged")), "{st:?}");
+        assert!(
+            matches!(&st, TxStatus::Reverted { reason } if reason.contains("settled at the token") && !reason.contains("not charged")),
+            "{st:?}"
+        );
     }
 
     /// m4: wrapper jobs whose check passes but whose run must fail are refused up front: the entry removes the payment's
@@ -3750,34 +6215,112 @@ mod tests {
         let alice = Holder::Near("alice.test.near".into());
         let pay = op_of("pay");
         let ed = Auth::decode(&auth_bytes(&row("pay")["auth"]), &pay.digest()).unwrap();
-        let pk_auth = Auth::decode(&auth_bytes(&row("pay_ua_passkey")["auth"]), &op_of("pay_ua_passkey").digest()).unwrap();
-        let eop = MetaOp { from: alice.clone(), ..op_of("remove_key") };
+        let pk_auth = Auth::decode(
+            &auth_bytes(&row("pay_ua_passkey")["auth"]),
+            &op_of("pay_ua_passkey").digest(),
+        )
+        .unwrap();
+        let eop = MetaOp {
+            from: alice.clone(),
+            ..op_of("remove_key")
+        };
         let ea = auth_bytes(&row("remove_key")["auth"]);
         let w = |name: &str, params: Vec<u8>, from: &Holder| Entry::FeeWrapper {
-            entry: name.into(), args: [MetaOp { from: from.clone(), ..eop.clone() }.borsh(), ea.clone(), params].concat() };
-        let rec = |a: &Auth| { let (k, d) = a.record().unwrap(); [k.to_le_bytes().to_vec(), bvec(&d)].concat() };
+            entry: name.into(),
+            args: [
+                MetaOp {
+                    from: from.clone(),
+                    ..eop.clone()
+                }
+                .borsh(),
+                ea.clone(),
+                params,
+            ]
+            .concat(),
+        };
+        let rec = |a: &Auth| {
+            let (k, d) = a.record().unwrap();
+            [k.to_le_bytes().to_vec(), bvec(&d)].concat()
+        };
         let bob = Holder::Near("bob.test.near".into());
         let err = |e: &Entry, a: &Auth| wrapper_conflicts(e, &pay, a).map_err(|e| format!("{e:#}"));
-        assert!(err(&w("mtx_remove_key", rec(&ed), &alice), &ed).unwrap_err().contains("remove"));
-        assert!(err(&w("mtx_remove_key", rec(&ed), &bob), &ed).is_ok(), "another subject's key");
-        assert!(err(&w("mtx_remove_key", rec(&pk_auth), &alice), &ed).is_ok(), "another key");
-        let origin = row("pay_ua_passkey")["auth"]["origin"].as_str().unwrap().to_string();
-        assert!(err(&w("mtx_remove_origin", bstr(&origin), &alice), &pk_auth).unwrap_err().contains("origin"));
-        assert!(err(&w("mtx_remove_origin", bstr("https://other.test"), &alice), &pk_auth).is_ok());
-        assert!(err(&w("mtx_set_policy", vec![1], &alice), &ed).unwrap_err().contains("passkey"));
-        assert!(err(&w("mtx_set_policy", vec![1], &alice), &pk_auth).is_ok(), "a passkey payment passes the policy");
+        assert!(err(&w("mtx_remove_key", rec(&ed), &alice), &ed)
+            .unwrap_err()
+            .contains("remove"));
+        assert!(
+            err(&w("mtx_remove_key", rec(&ed), &bob), &ed).is_ok(),
+            "another subject's key"
+        );
+        assert!(
+            err(&w("mtx_remove_key", rec(&pk_auth), &alice), &ed).is_ok(),
+            "another key"
+        );
+        let origin = row("pay_ua_passkey")["auth"]["origin"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            err(&w("mtx_remove_origin", bstr(&origin), &alice), &pk_auth)
+                .unwrap_err()
+                .contains("origin")
+        );
+        assert!(err(
+            &w("mtx_remove_origin", bstr("https://other.test"), &alice),
+            &pk_auth
+        )
+        .is_ok());
+        assert!(err(&w("mtx_set_policy", vec![1], &alice), &ed)
+            .unwrap_err()
+            .contains("passkey"));
+        assert!(
+            err(&w("mtx_set_policy", vec![1], &alice), &pk_auth).is_ok(),
+            "a passkey payment passes the policy"
+        );
         assert!(err(&w("mtx_set_policy", vec![0], &alice), &ed).is_ok());
         assert!(err(&Entry::Pay, &ed).is_ok());
         // and the job is refused before simulation
-        let call = [&[14u8][..], b"mtx_remove_key", &[MetaOp { from: alice.clone(), ..eop.clone() }.borsh(), ea.clone(), rec(&ed)].concat()].concat();
-        let mut op = MetaOp { relayer: Some(TOKEN.into()), to: Holder::Near(TOKEN.into()), extra: [0x51; 32], ..pay.clone() };
-        op.pay_ref = relay_ref(&op.network, &[&[TOKEN.len() as u8][..], TOKEN.as_bytes()].concat(), &call, &op.extra);
+        let call = [
+            &[14u8][..],
+            b"mtx_remove_key",
+            &[
+                MetaOp {
+                    from: alice.clone(),
+                    ..eop.clone()
+                }
+                .borsh(),
+                ea.clone(),
+                rec(&ed),
+            ]
+            .concat(),
+        ]
+        .concat();
+        let mut op = MetaOp {
+            relayer: Some(TOKEN.into()),
+            to: Holder::Near(TOKEN.into()),
+            extra: [0x51; 32],
+            ..pay.clone()
+        };
+        op.pay_ref = relay_ref(
+            &op.network,
+            &[&[TOKEN.len() as u8][..], TOKEN.as_bytes()].concat(),
+            &call,
+            &op.extra,
+        );
         op.lane = pay_lane(&op.pay_ref);
-        let o = o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}));
+        let o = o_op(
+            &op,
+            &auth_bytes(&row("pay")["auth"]),
+            json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}),
+        );
         let mut wd = world();
-        wd.views.insert((TOKEN.into(), "relay_fee_remove_key_check".into()), check_ok(1));
+        wd.views.insert(
+            (TOKEN.into(), "relay_fee_remove_key_check".into()),
+            check_ok(1),
+        );
         let (a, _) = adapter(wd, &fee_cfg("1000000000000000000000000")).await;
-        assert!(matches!(a.build(&job(o), 0).await, Err(SimError::Revert(r)) if r.contains("remove")));
+        assert!(
+            matches!(a.build(&job(o), 0).await, Err(SimError::Revert(r)) if r.contains("remove"))
+        );
     }
 
     /// m6 (R9): a key-op wrapper job shows the subject's key set on every configured token (keys live per token and can
@@ -3788,14 +6331,27 @@ mod tests {
         let (s, drift) = describe_key_sets(&[(TOKEN.into(), one(7)), (TOKENB.into(), one(8))]);
         assert!(drift && s.contains(TOKEN) && s.contains(TOKENB), "{s}");
         assert!(!describe_key_sets(&[(TOKEN.into(), one(7)), (TOKENB.into(), one(7))]).1);
-        assert!(describe_key_sets(&[(TOKEN.into(), one(7)), (TOKENB.into(), None)]).1, "an account on one token only");
+        assert!(
+            describe_key_sets(&[(TOKEN.into(), one(7)), (TOKENB.into(), None)]).1,
+            "an account on one token only"
+        );
         let mut w = world();
-        w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_ok(1));
+        w.views.insert(
+            (TOKEN.into(), "relay_fee_add_key_check".into()),
+            check_ok(1),
+        );
         w.views.insert((TOKEN.into(), "subject".into()), vec![0]);
         let (a, w) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
         let (_, wo) = wrapper_job("wrapper_add_key_real");
         a.build(&job(wo), 0).await.unwrap();
-        assert!(w.lock().unwrap().calls.iter().any(|c| c.1["method_name"] == "subject"), "key sets read for a key op");
+        assert!(
+            w.lock()
+                .unwrap()
+                .calls
+                .iter()
+                .any(|c| c.1["method_name"] == "subject"),
+            "key sets read for a key op"
+        );
     }
 
     /// m7: a view stopped by the RPC's own `max_gas_burnt_view` is the RPC's limit, not the job's: retried (Transport);
@@ -3803,11 +6359,23 @@ mod tests {
     #[tokio::test]
     async fn view_over_gas_cap_is_transport() {
         let mut w = world();
-        w.view_errs.insert((TOKEN.into(), "mtx_pay_check".into()), "wasm execution failed with error: HostError(GasLimitExceeded)".into());
+        w.view_errs.insert(
+            (TOKEN.into(), "mtx_pay_check".into()),
+            "wasm execution failed with error: HostError(GasLimitExceeded)".into(),
+        );
         let (a, w) = adapter(w, "").await;
-        assert!(matches!(a.build(&job(o_of("pay", json!({}))), 0).await, Err(SimError::Transport(_))));
-        w.lock().unwrap().view_errs.insert((TOKEN.into(), "mtx_pay_check".into()), "wasm execution failed with error: Smart contract panicked: x".into());
-        assert!(matches!(a.build(&job(o_of("pay", json!({}))), 0).await, Err(SimError::Revert(_))));
+        assert!(matches!(
+            a.build(&job(o_of("pay", json!({}))), 0).await,
+            Err(SimError::Transport(_))
+        ));
+        w.lock().unwrap().view_errs.insert(
+            (TOKEN.into(), "mtx_pay_check".into()),
+            "wasm execution failed with error: Smart contract panicked: x".into(),
+        );
+        assert!(matches!(
+            a.build(&job(o_of("pay", json!({}))), 0).await,
+            Err(SimError::Revert(_))
+        ));
     }
 
     // ------------------------------------------------------------------------------------------------ fix 2
@@ -3825,25 +6393,94 @@ mod tests {
         let fee = op_of("relay_fee_pay_router_short").amount; // alice's fee on TOKEN
         let bal = |n: u128| {
             let mut w = router_world(0);
-            w.views.insert((TOKEN.into(), "ft_balance_of".into()), format!("\"{n}\"").into_bytes());
+            w.views.insert(
+                (TOKEN.into(), "ft_balance_of".into()),
+                format!("\"{n}\"").into_bytes(),
+            );
             w
         };
-        let (r, w) = build_router(bal(100 + fee - 1), &sponsored_cfg(), TOKEN, "mtx_pay", &pay, "20000000000000", "7").await;
-        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("balance")), "{r:?}");
-        assert_eq!(view_args(&w, "ft_balance_of"), br#"{"account_id":"alice.test.near"}"#.to_vec());
-        let (r, _) = build_router(bal(100 + fee), &sponsored_cfg(), TOKEN, "mtx_pay", &pay, "20000000000000", "7").await;
+        let (r, w) = build_router(
+            bal(100 + fee - 1),
+            &sponsored_cfg(),
+            TOKEN,
+            "mtx_pay",
+            &pay,
+            "20000000000000",
+            "7",
+        )
+        .await;
+        assert!(
+            matches!(&r, Err(SimError::Revert(e)) if e.contains("balance")),
+            "{r:?}"
+        );
+        assert_eq!(
+            view_args(&w, "ft_balance_of"),
+            br#"{"account_id":"alice.test.near"}"#.to_vec()
+        );
+        let (r, _) = build_router(
+            bal(100 + fee),
+            &sponsored_cfg(),
+            TOKEN,
+            "mtx_pay",
+            &pay,
+            "20000000000000",
+            "7",
+        )
+        .await;
         assert!(r.is_ok(), "{r:?}");
         // a UA payer is read through ua_balance_of; another payer's target is not this balance's business
-        let from_bob = [MetaOp { from: Holder::Near("bob.test.near".into()), to: Holder::Near("carol.test.near".into()), ..op_of("pay") }.borsh(),
-                        auth_bytes(&row("pay")["auth"])].concat();
-        let (r, w) = build_router(bal(0), &sponsored_cfg(), TOKEN, "mtx_pay", &from_bob, "20000000000000", "7").await;
+        let from_bob = [
+            MetaOp {
+                from: Holder::Near("bob.test.near".into()),
+                to: Holder::Near("carol.test.near".into()),
+                ..op_of("pay")
+            }
+            .borsh(),
+            auth_bytes(&row("pay")["auth"]),
+        ]
+        .concat();
+        let (r, w) = build_router(
+            bal(0),
+            &sponsored_cfg(),
+            TOKEN,
+            "mtx_pay",
+            &from_bob,
+            "20000000000000",
+            "7",
+        )
+        .await;
         assert!(r.is_ok(), "{r:?}");
-        assert!(!w.lock().unwrap().calls.iter().any(|c| c.1["method_name"] == "ft_balance_of"));
+        assert!(!w
+            .lock()
+            .unwrap()
+            .calls
+            .iter()
+            .any(|c| c.1["method_name"] == "ft_balance_of"));
         // a non-value target (a key op) on the same token by the same payer is not a value target
-        let key_op = [MetaOp { from: Holder::Near("alice.test.near".into()), ..op_of("cancel_recovery") }.borsh(), auth_bytes(&row("cancel_recovery")["auth"])].concat();
+        let key_op = [
+            MetaOp {
+                from: Holder::Near("alice.test.near".into()),
+                ..op_of("cancel_recovery")
+            }
+            .borsh(),
+            auth_bytes(&row("cancel_recovery")["auth"]),
+        ]
+        .concat();
         let mut w = bal(0);
-        w.views.insert((TOKEN.into(), "mtx_cancel_recovery_check".into()), check_ok(0));
-        let (r, _) = build_router(w, &sponsored_cfg(), TOKEN, "mtx_cancel_recovery", &key_op, "20000000000000", "0").await;
+        w.views.insert(
+            (TOKEN.into(), "mtx_cancel_recovery_check".into()),
+            check_ok(0),
+        );
+        let (r, _) = build_router(
+            w,
+            &sponsored_cfg(),
+            TOKEN,
+            "mtx_cancel_recovery",
+            &key_op,
+            "20000000000000",
+            "0",
+        )
+        .await;
         assert!(r.is_ok(), "{r:?}");
     }
 
@@ -3853,36 +6490,111 @@ mod tests {
     #[tokio::test]
     async fn dex_pair_and_index_replicated() {
         let big = "100000000000000000000000";
-        let go = |args: Vec<u8>, w: World| async move { build_router(w, &sponsored_cfg(), DEX, "settle", &args, "200000000000000", big).await.0 };
+        let go = |args: Vec<u8>, w: World| async move {
+            build_router(
+                w,
+                &sponsored_cfg(),
+                DEX,
+                "settle",
+                &args,
+                "200000000000000",
+                big,
+            )
+            .await
+            .0
+        };
         let refused = |r: &std::result::Result<Built, SimError>, what: &str| matches!(r, Err(SimError::Revert(e)) if e.contains(what));
         assert!(go(settle_args(None, None), router_world(0)).await.is_ok());
         let cases: Vec<(Vec<u8>, &str)> = vec![
-            (settle_orders(&order(TOKEN, TOKENB, 100, 61, None), &order(TOKENB, TOKEN, 60, 100, None)), "fill-or-kill"),
-            (settle_orders(&order(TOKEN, TOKENB, 100, 50, None), &order(TOKENB, TOKEN, 60, 101, None)), "fill-or-kill"),
-            (settle_orders(&order(TOKEN, TOKENB, 100, 50, None), &order(TOKENB, TOKENB, 60, 100, None)), "pair"),
-            (settle_orders(&order(TOKEN, TOKEN, 100, 50, None), &order(TOKENB, TOKEN, 60, 100, None)), "pair"),
+            (
+                settle_orders(
+                    &order(TOKEN, TOKENB, 100, 61, None),
+                    &order(TOKENB, TOKEN, 60, 100, None),
+                ),
+                "fill-or-kill",
+            ),
+            (
+                settle_orders(
+                    &order(TOKEN, TOKENB, 100, 50, None),
+                    &order(TOKENB, TOKEN, 60, 101, None),
+                ),
+                "fill-or-kill",
+            ),
+            (
+                settle_orders(
+                    &order(TOKEN, TOKENB, 100, 50, None),
+                    &order(TOKENB, TOKENB, 60, 100, None),
+                ),
+                "pair",
+            ),
+            (
+                settle_orders(
+                    &order(TOKEN, TOKEN, 100, 50, None),
+                    &order(TOKENB, TOKEN, 60, 100, None),
+                ),
+                "pair",
+            ),
         ];
         for (args, what) in cases {
             let r = go(args, router_world(0)).await;
             assert!(refused(&r, what), "{what}: {r:?}");
         }
         // a leg not bound to its order (extra), amount != sell_amount, the same leg twice
-        let (oa, ob) = (order(TOKEN, TOKENB, 100, 50, None), order(TOKENB, TOKEN, 60, 100, None));
-        let r = go(settle_with(&oa, &op_of("trade_a"), &ob, &leg_op("trade_b", &ob)), router_world(0)).await;
+        let (oa, ob) = (
+            order(TOKEN, TOKENB, 100, 50, None),
+            order(TOKENB, TOKEN, 60, 100, None),
+        );
+        let r = go(
+            settle_with(&oa, &op_of("trade_a"), &ob, &leg_op("trade_b", &ob)),
+            router_world(0),
+        )
+        .await;
         assert!(refused(&r, "order"), "{r:?}");
-        let r = go(settle_with(&oa, &MetaOp { amount: 99, ..leg_op("trade_a", &oa) }, &ob, &leg_op("trade_b", &ob)), router_world(0)).await;
+        let r = go(
+            settle_with(
+                &oa,
+                &MetaOp {
+                    amount: 99,
+                    ..leg_op("trade_a", &oa)
+                },
+                &ob,
+                &leg_op("trade_b", &ob),
+            ),
+            router_world(0),
+        )
+        .await;
         assert!(refused(&r, "sell_amount"), "{r:?}");
-        let r = go(settle_with(&oa, &leg_op("trade_a", &oa), &oa, &leg_op("trade_a", &oa)), router_world(0)).await;
+        let r = go(
+            settle_with(&oa, &leg_op("trade_a", &oa), &oa, &leg_op("trade_a", &oa)),
+            router_world(0),
+        )
+        .await;
         assert!(r.is_err(), "the same leg twice: {r:?}");
         // a pair already pending, a leg already indexed in another settle (f1: an attacker's failed direct settle)
         let mut w = router_world(0);
         w.views.insert((DEX.into(), "pending".into()), vec![1, 0]);
-        let (r, w) = build_router(w, &sponsored_cfg(), DEX, "settle", &settle_args(None, None), "200000000000000", big).await;
+        let (r, w) = build_router(
+            w,
+            &sponsored_cfg(),
+            DEX,
+            "settle",
+            &settle_args(None, None),
+            "200000000000000",
+            big,
+        )
+        .await;
         assert!(refused(&r, "pending"), "{r:?}");
         let (a, b) = (leg_op("trade_a", &oa), leg_op("trade_b", &ob));
-        assert_eq!(view_args(&w, "pending"), sha256(&[a.digest(), b.digest()].concat()).to_vec(), "settle_id(a, b)");
+        assert_eq!(
+            view_args(&w, "pending"),
+            sha256(&[a.digest(), b.digest()].concat()).to_vec(),
+            "settle_id(a, b)"
+        );
         let mut w = router_world(0);
-        w.views.insert((DEX.into(), "leg_settle".into()), [vec![1], vec![7; 32]].concat());
+        w.views.insert(
+            (DEX.into(), "leg_settle".into()),
+            [vec![1], vec![7; 32]].concat(),
+        );
         let r = go(settle_args(None, None), w).await;
         assert!(refused(&r, "already in a settle"), "{r:?}");
     }
@@ -3895,46 +6607,138 @@ mod tests {
         let soon = now + RELAY_EXPIRY_MARGIN_S - 5;
         let later = now + RELAY_EXPIRY_MARGIN_S + 60;
         let refused = |r: &std::result::Result<Built, SimError>| matches!(r, Err(SimError::Revert(e)) if e.contains("expires"));
-        let pay = |vu: u64| [MetaOp { valid_until: vu, ..op_of("pay") }.borsh(), auth_bytes(&row("pay")["auth"])].concat();
+        let pay = |vu: u64| {
+            [
+                MetaOp {
+                    valid_until: vu,
+                    ..op_of("pay")
+                }
+                .borsh(),
+                auth_bytes(&row("pay")["auth"]),
+            ]
+            .concat()
+        };
         // the payment
         for (vu, bad) in [(soon, true), (later, false)] {
-            let (mut op, mut o) = router_op_g(TOKEN, "mtx_pay", &pay(FAR), Holder::Near("bob.test.near".into()), "20000000000000", "7");
+            let (mut op, mut o) = router_op_g(
+                TOKEN,
+                "mtx_pay",
+                &pay(FAR),
+                Holder::Near("bob.test.near".into()),
+                "20000000000000",
+                "7",
+            );
             op.valid_until = vu;
             o["payload"] = json!(h(&op.encode()));
             let (r, _) = build_router_op(router_world(0), &sponsored_cfg(), op, o).await;
             assert_eq!(refused(&r), bad, "payment {vu}: {r:?}");
         }
         // the target op
-        let (r, _) = build_router(router_world(0), &sponsored_cfg(), TOKEN, "mtx_pay", &pay(soon), "20000000000000", "7").await;
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored_cfg(),
+            TOKEN,
+            "mtx_pay",
+            &pay(soon),
+            "20000000000000",
+            "7",
+        )
+        .await;
         assert!(refused(&r), "{r:?}");
-        let (r, _) = build_router(router_world(0), &sponsored_cfg(), TOKEN, "mtx_pay", &pay(later), "20000000000000", "7").await;
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored_cfg(),
+            TOKEN,
+            "mtx_pay",
+            &pay(later),
+            "20000000000000",
+            "7",
+        )
+        .await;
         assert!(r.is_ok(), "{r:?}");
         // a DEX order, and a leg op
         let big = "100000000000000000000000";
-        let (oa, ob) = (order_x(TOKEN, TOKENB, 100, 50, None, soon), order(TOKENB, TOKEN, 60, 100, None));
-        let (r, _) = build_router(router_world(0), &sponsored_cfg(), DEX, "settle", &settle_orders(&oa, &ob), "200000000000000", big).await;
+        let (oa, ob) = (
+            order_x(TOKEN, TOKENB, 100, 50, None, soon),
+            order(TOKENB, TOKEN, 60, 100, None),
+        );
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored_cfg(),
+            DEX,
+            "settle",
+            &settle_orders(&oa, &ob),
+            "200000000000000",
+            big,
+        )
+        .await;
         assert!(refused(&r), "{r:?}");
         let oa = order(TOKEN, TOKENB, 100, 50, None);
-        let a = MetaOp { valid_until: soon, ..leg_op("trade_a", &oa) };
-        let (r, _) = build_router(router_world(0), &sponsored_cfg(), DEX, "settle", &settle_with(&oa, &a, &ob, &leg_op("trade_b", &ob)), "200000000000000", big).await;
+        let a = MetaOp {
+            valid_until: soon,
+            ..leg_op("trade_a", &oa)
+        };
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored_cfg(),
+            DEX,
+            "settle",
+            &settle_with(&oa, &a, &ob, &leg_op("trade_b", &ob)),
+            "200000000000000",
+            big,
+        )
+        .await;
         assert!(refused(&r), "{r:?}");
         // a wrapper job: its payment, and its entry op
         let (wop, wo) = wrapper_job("wrapper_add_key_real");
         let mut w = world();
-        w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_ok(1));
+        w.views.insert(
+            (TOKEN.into(), "relay_fee_add_key_check".into()),
+            check_ok(1),
+        );
         let (a, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
         a.build(&job(wo.clone()), 0).await.unwrap();
         let mut j = wo.clone();
-        j["payload"] = json!(h(&MetaOp { valid_until: soon, ..wop.clone() }.encode()));
+        j["payload"] = json!(h(&MetaOp {
+            valid_until: soon,
+            ..wop.clone()
+        }
+        .encode()));
         assert!(refused(&a.build(&job(j), 0).await));
-        let eop = MetaOp { valid_until: soon, ..op_of("cancel_recovery") };
-        let call = [&[19u8][..], b"mtx_cancel_recovery", &eop.borsh(), &auth_bytes(&row("cancel_recovery")["auth"])].concat();
-        let mut op = MetaOp { relayer: Some(TOKEN.into()), to: Holder::Near(TOKEN.into()), extra: [0x51; 32], ..op_of("pay") };
-        op.pay_ref = relay_ref(&op.network, &[&[TOKEN.len() as u8][..], TOKEN.as_bytes()].concat(), &call, &op.extra);
+        let eop = MetaOp {
+            valid_until: soon,
+            ..op_of("cancel_recovery")
+        };
+        let call = [
+            &[19u8][..],
+            b"mtx_cancel_recovery",
+            &eop.borsh(),
+            &auth_bytes(&row("cancel_recovery")["auth"]),
+        ]
+        .concat();
+        let mut op = MetaOp {
+            relayer: Some(TOKEN.into()),
+            to: Holder::Near(TOKEN.into()),
+            extra: [0x51; 32],
+            ..op_of("pay")
+        };
+        op.pay_ref = relay_ref(
+            &op.network,
+            &[&[TOKEN.len() as u8][..], TOKEN.as_bytes()].concat(),
+            &call,
+            &op.extra,
+        );
         op.lane = pay_lane(&op.pay_ref);
-        let o = o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}));
+        let o = o_op(
+            &op,
+            &auth_bytes(&row("pay")["auth"]),
+            json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}),
+        );
         let mut w = world();
-        w.views.insert((TOKEN.into(), "relay_fee_cancel_recovery_check".into()), check_ok(1));
+        w.views.insert(
+            (TOKEN.into(), "relay_fee_cancel_recovery_check".into()),
+            check_ok(1),
+        );
         let (a, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
         assert!(refused(&a.build(&job(o), 0).await));
     }
@@ -3942,10 +6746,31 @@ mod tests {
     /// f2: a listed third-party target accepts only the methods listed for it.
     #[tokio::test]
     async fn third_party_methods_listed() {
-        let (r, _) = build_router(router_world(0), &sponsored_cfg(), "app.near", "anything", &[1], "5000000000000", "0").await;
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored_cfg(),
+            "app.near",
+            "anything",
+            &[1],
+            "5000000000000",
+            "0",
+        )
+        .await;
         assert!(r.is_ok(), "{r:?}");
-        let (r, _) = build_router(router_world(0), &sponsored_cfg(), "app.near", "other_method", &[1], "5000000000000", "0").await;
-        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("other_method")), "{r:?}");
+        let (r, _) = build_router(
+            router_world(0),
+            &sponsored_cfg(),
+            "app.near",
+            "other_method",
+            &[1],
+            "5000000000000",
+            "0",
+        )
+        .await;
+        assert!(
+            matches!(&r, Err(SimError::Revert(e)) if e.contains("other_method")),
+            "{r:?}"
+        );
     }
 
     /// f3: `settle` splits the rest of its deposit evenly between the legs, so the floor is the entry + 2 yoctoNEAR +
@@ -3955,24 +6780,54 @@ mod tests {
     #[tokio::test]
     async fn dex_deposit_floor_covers_the_larger_leg_twice() {
         let mut w = router_world(0);
-        w.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(50));
-        let (oa, ob) = (order(TOKEN, TOKENB, 100, 50, None), order(TOKENB, TOKEN, 60, 100, None));
+        w.views
+            .insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(50));
+        let (oa, ob) = (
+            order(TOKEN, TOKENB, 100, 50, None),
+            order(TOKENB, TOKEN, 60, 100, None),
+        );
         let (a, b) = (leg_op("trade_a", &oa), leg_op("trade_b", &ob));
-        let settle = [(TOKEN, &a), (TOKENB, &b)].iter().map(|(t, l)| 4 + t.len() as u64 + holder_len(&l.from) + 88).sum::<u64>() + 4 + EXECUTOR.len() as u64 + 25;
+        let settle = [(TOKEN, &a), (TOKENB, &b)]
+            .iter()
+            .map(|(t, l)| 4 + t.len() as u64 + holder_len(&l.from) + 88)
+            .sum::<u64>()
+            + 4
+            + EXECUTOR.len() as u64
+            + 25;
         let entry = 10u128.pow(19) * u128::from(283 + settle) + 2;
         let pin = 10u128.pow(19) * 2_200;
         let floor = entry + 2 * pin;
         // fix 3 g1: the node attaches exactly this floor, whatever the job quoted
         for td in [floor, floor - 1, entry + 5 + 50, 0] {
             let mut w2 = router_world(0);
-            w2.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(50));
-            let (r, _) = build_router(w2, &sponsored_cfg(), DEX, "settle", &settle_args(None, None), "200000000000000", &td.to_string()).await;
+            w2.views
+                .insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(50));
+            let (r, _) = build_router(
+                w2,
+                &sponsored_cfg(),
+                DEX,
+                "settle",
+                &settle_args(None, None),
+                "200000000000000",
+                &td.to_string(),
+            )
+            .await;
             assert_eq!(relay_figures(&r.unwrap().body).1, floor, "{td}");
         }
         // a leg above the pin (the contract's pin must then be raised; the node still covers it twice)
         let mut w2 = router_world(0);
-        w2.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(pin + 7));
-        let (r, _) = build_router(w2, &sponsored_cfg(), DEX, "settle", &settle_args(None, None), "200000000000000", "0").await;
+        w2.views
+            .insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(pin + 7));
+        let (r, _) = build_router(
+            w2,
+            &sponsored_cfg(),
+            DEX,
+            "settle",
+            &settle_args(None, None),
+            "200000000000000",
+            "0",
+        )
+        .await;
         assert_eq!(relay_figures(&r.unwrap().body).1, entry + 2 * (pin + 7));
         drop(w);
     }
@@ -3987,12 +6842,41 @@ mod tests {
 
     /// A wrapper job for `entry` with `params` after (op, auth), its op signed `entry_auth`, its payment `pay_auth(digest
     /// of the payment op)`, open mode on TOKEN.
-    fn wrapper_for(entry: &str, eop: MetaOp, entry_auth: &[u8], params: &[u8], pay_from: Holder, pay_auth: impl Fn(&[u8; 32]) -> Vec<u8>) -> Value {
-        let call = [&[entry.len() as u8][..], entry.as_bytes(), &eop.borsh(), entry_auth, params].concat();
-        let mut op = MetaOp { from: pay_from, relayer: Some(TOKEN.into()), to: Holder::Near(TOKEN.into()), extra: [0x51; 32], ..op_of("pay") };
-        op.pay_ref = relay_ref(&op.network, &[&[TOKEN.len() as u8][..], TOKEN.as_bytes()].concat(), &call, &op.extra);
+    fn wrapper_for(
+        entry: &str,
+        eop: MetaOp,
+        entry_auth: &[u8],
+        params: &[u8],
+        pay_from: Holder,
+        pay_auth: impl Fn(&[u8; 32]) -> Vec<u8>,
+    ) -> Value {
+        let call = [
+            &[entry.len() as u8][..],
+            entry.as_bytes(),
+            &eop.borsh(),
+            entry_auth,
+            params,
+        ]
+        .concat();
+        let mut op = MetaOp {
+            from: pay_from,
+            relayer: Some(TOKEN.into()),
+            to: Holder::Near(TOKEN.into()),
+            extra: [0x51; 32],
+            ..op_of("pay")
+        };
+        op.pay_ref = relay_ref(
+            &op.network,
+            &[&[TOKEN.len() as u8][..], TOKEN.as_bytes()].concat(),
+            &call,
+            &op.extra,
+        );
         op.lane = pay_lane(&op.pay_ref);
-        o_op(&op, &pay_auth(&op.digest()), json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}))
+        o_op(
+            &op,
+            &pay_auth(&op.digest()),
+            json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}),
+        )
     }
 
     /// N1 (review RV7): an unopened UA pays for its own wrapped entry; the entry opens the subject with its assertion's
@@ -4002,36 +6886,118 @@ mod tests {
     #[tokio::test]
     async fn unopened_subject_origins() {
         let x = Holder::Ua([0xee; 32]);
-        let eop = MetaOp { from: x.clone(), ..op_of("cancel_recovery") };
-        let opened = [vec![1], 1u32.to_le_bytes().to_vec(), 256u16.to_le_bytes().to_vec(), bvec(&[7; 96]), 1u32.to_le_bytes().to_vec(),
-                      bstr("https://a.test"), vec![0, 0], 0u64.to_le_bytes().to_vec(), vec![0]].concat();
+        let eop = MetaOp {
+            from: x.clone(),
+            ..op_of("cancel_recovery")
+        };
+        let opened = [
+            vec![1],
+            1u32.to_le_bytes().to_vec(),
+            256u16.to_le_bytes().to_vec(),
+            bvec(&[7; 96]),
+            1u32.to_le_bytes().to_vec(),
+            bstr("https://a.test"),
+            vec![0, 0],
+            0u64.to_le_bytes().to_vec(),
+            vec![0],
+        ]
+        .concat();
         let run = |o: Value, subject: Vec<u8>| async move {
             let mut w = world();
-            w.views.insert((TOKEN.into(), "relay_fee_cancel_recovery_check".into()), check_ok(1));
-            w.views.insert((TOKEN.into(), "relay_fee_add_origin_check".into()), check_ok(1));
+            w.views.insert(
+                (TOKEN.into(), "relay_fee_cancel_recovery_check".into()),
+                check_ok(1),
+            );
+            w.views.insert(
+                (TOKEN.into(), "relay_fee_add_origin_check".into()),
+                check_ok(1),
+            );
             w.views.insert((TOKEN.into(), "subject".into()), subject);
             let (a, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
             a.build(&job(o), 0).await
         };
         let pa = passkey_from(&eop.digest(), "https://a.test");
-        let (ra, rb) = (|d: &[u8; 32]| passkey_from(d, "https://a.test"), |d: &[u8; 32]| passkey_from(d, "https://b.test"));
-        let r = run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), rb), vec![0]).await;
-        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("origin")), "{r:?}");
-        assert!(run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), ra), vec![0]).await.is_ok(), "same origin");
-        assert!(run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), rb), opened).await.is_ok(), "opened subject");
-        assert!(run(wrapper_for("mtx_add_origin", eop.clone(), &pa, &bstr("https://b.test"), x.clone(), rb), vec![0]).await.is_ok(),
-                "the entry adds the payment's origin");
+        let (ra, rb) = (
+            |d: &[u8; 32]| passkey_from(d, "https://a.test"),
+            |d: &[u8; 32]| passkey_from(d, "https://b.test"),
+        );
+        let r = run(
+            wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), rb),
+            vec![0],
+        )
+        .await;
+        assert!(
+            matches!(&r, Err(SimError::Revert(e)) if e.contains("origin")),
+            "{r:?}"
+        );
+        assert!(
+            run(
+                wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), ra),
+                vec![0]
+            )
+            .await
+            .is_ok(),
+            "same origin"
+        );
+        assert!(
+            run(
+                wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), rb),
+                opened
+            )
+            .await
+            .is_ok(),
+            "opened subject"
+        );
+        assert!(
+            run(
+                wrapper_for(
+                    "mtx_add_origin",
+                    eop.clone(),
+                    &pa,
+                    &bstr("https://b.test"),
+                    x.clone(),
+                    rb
+                ),
+                vec![0]
+            )
+            .await
+            .is_ok(),
+            "the entry adds the payment's origin"
+        );
         let other = Holder::Ua([0xdd; 32]);
-        assert!(run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], other, rb), vec![0]).await.is_ok(), "another payer");
+        assert!(
+            run(
+                wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], other, rb),
+                vec![0]
+            )
+            .await
+            .is_ok(),
+            "another payer"
+        );
         let ed = auth_bytes(&row("pay")["auth"]);
-        let r = run(wrapper_for("mtx_cancel_recovery", eop, &ed, &[], x, rb), vec![0]).await;
-        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("origin")), "a key-signed entry opens no origin: {r:?}");
+        let r = run(
+            wrapper_for("mtx_cancel_recovery", eop, &ed, &[], x, rb),
+            vec![0],
+        )
+        .await;
+        assert!(
+            matches!(&r, Err(SimError::Revert(e)) if e.contains("origin")),
+            "a key-signed entry opens no origin: {r:?}"
+        );
     }
 
     fn terms(expiry: u64) -> Vec<u8> {
         let delegate = [vec![1], vec![0x10; 32]].concat();
-        [delegate, [vec![0], bstr("bob.test.near")].concat(), 100u128.to_le_bytes().to_vec(), 250u128.to_le_bytes().to_vec(),
-         86_400u64.to_le_bytes().to_vec(), expiry.to_le_bytes().to_vec(), 1_000u128.to_le_bytes().to_vec()].concat()
+        [
+            delegate,
+            [vec![0], bstr("bob.test.near")].concat(),
+            100u128.to_le_bytes().to_vec(),
+            250u128.to_le_bytes().to_vec(),
+            86_400u64.to_le_bytes().to_vec(),
+            expiry.to_le_bytes().to_vec(),
+            1_000u128.to_le_bytes().to_vec(),
+        ]
+        .concat()
     }
 
     /// N2 (review RV8): `MandateTerms.expiry` gets the same margin (`mtx_mandate_open` refuses an expired mandate):
@@ -4039,21 +7005,44 @@ mod tests {
     #[tokio::test]
     async fn mandate_terms_expiry_margin() {
         let now = crate::submit::now();
-        let (soon, later) = (now + RELAY_EXPIRY_MARGIN_S - 5, now + RELAY_EXPIRY_MARGIN_S + 60);
+        let (soon, later) = (
+            now + RELAY_EXPIRY_MARGIN_S - 5,
+            now + RELAY_EXPIRY_MARGIN_S + 60,
+        );
         let mop = op_of("mandate_open");
         let ma = auth_bytes(&row("mandate_open")["auth"]);
         let expires = |r: &std::result::Result<Built, SimError>| matches!(r, Err(SimError::Revert(e)) if e.contains("expires"));
         for (exp, bad) in [(soon, true), (later, false)] {
             let mut w = world();
-            w.views.insert((TOKEN.into(), "relay_fee_mandate_open_check".into()), check_ok(1));
+            w.views.insert(
+                (TOKEN.into(), "relay_fee_mandate_open_check".into()),
+                check_ok(1),
+            );
             let (a, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
-            let o = wrapper_for("mtx_mandate_open", mop.clone(), &ma, &terms(exp), Holder::Near("alice.test.near".into()), |_: &[u8; 32]| auth_bytes(&row("pay")["auth"]));
+            let o = wrapper_for(
+                "mtx_mandate_open",
+                mop.clone(),
+                &ma,
+                &terms(exp),
+                Holder::Near("alice.test.near".into()),
+                |_: &[u8; 32]| auth_bytes(&row("pay")["auth"]),
+            );
             let r = a.build(&job(o), 0).await;
             assert_eq!(expires(&r), bad, "wrapper {exp}: {r:?}");
             let mut w = router_world(0);
-            w.views.insert((TOKEN.into(), "mtx_mandate_open_check".into()), check_ok(0));
+            w.views
+                .insert((TOKEN.into(), "mtx_mandate_open_check".into()), check_ok(0));
             let args = [mop.borsh(), ma.clone(), terms(exp)].concat();
-            let (r, _) = build_router(w, &sponsored_cfg(), TOKEN, "mtx_mandate_open", &args, "20000000000000", "0").await;
+            let (r, _) = build_router(
+                w,
+                &sponsored_cfg(),
+                TOKEN,
+                "mtx_mandate_open",
+                &args,
+                "20000000000000",
+                "0",
+            )
+            .await;
             assert_eq!(expires(&r), bad, "router {exp}: {r:?}");
         }
     }
@@ -4063,16 +7052,39 @@ mod tests {
     #[tokio::test]
     async fn node_target_figures_are_priced() {
         let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat();
-        let (rop, ro) = router_op_g(TOKEN, "mtx_pay", &pay, Holder::Near(ROUTER.into()), "1", "0");
-        let set = Entry::FeeRouter { target: TOKEN.into(), method: "mtx_pay".into(), args: pay.clone(), target_gas: GAS_JOB_BASE + GAS_KEY_SIG, target_deposit: 7 };
+        let (rop, ro) = router_op_g(
+            TOKEN,
+            "mtx_pay",
+            &pay,
+            Holder::Near(ROUTER.into()),
+            "1",
+            "0",
+        );
+        let set = Entry::FeeRouter {
+            target: TOKEN.into(),
+            method: "mtx_pay".into(),
+            args: pay.clone(),
+            target_gas: GAS_JOB_BASE + GAS_KEY_SIG,
+            target_deposit: 7,
+        };
         let call = call_of(&pol(), &set, &rop, &hx(&ro["signature"])).unwrap();
-        let quote = u128::from(call.gas + action_fees(&PINNED, &call) + timeout_gas(&PINNED)) * 100_000_000 + 1 + 1;
-        for (price, ok) in [(quote.div_ceil(rop.amount), true), ((quote - 1) / rop.amount, false)] {
+        let quote = u128::from(call.gas + action_fees(&PINNED, &call) + timeout_gas(&PINNED))
+            * 100_000_000
+            + 1
+            + 1;
+        for (price, ok) in [
+            (quote.div_ceil(rop.amount), true),
+            ((quote - 1) / rop.amount, false),
+        ] {
             let mut w = router_world(0);
-            w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
-            let (r, _) = build_router_op(w, &fee_cfg(&price.to_string()), rop.clone(), ro.clone()).await;
+            w.views
+                .insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
+            let (r, _) =
+                build_router_op(w, &fee_cfg(&price.to_string()), rop.clone(), ro.clone()).await;
             match (r, ok) {
-                (Ok(b), true) => assert_eq!(relay_figures(&b.body), (GAS_JOB_BASE + GAS_KEY_SIG, 7)),
+                (Ok(b), true) => {
+                    assert_eq!(relay_figures(&b.body), (GAS_JOB_BASE + GAS_KEY_SIG, 7))
+                }
                 (Err(SimError::Revert(e)), false) => assert!(e.contains("below"), "{e}"),
                 (r, _) => panic!("{price}: {r:?}"),
             }
@@ -4084,17 +7096,30 @@ mod tests {
     async fn plain_pay_expiry_margin() {
         let soon = crate::submit::now() + RELAY_EXPIRY_MARGIN_S - 5;
         let mut w = world();
-        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(1));
+        w.views
+            .insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(1));
         let (a, _) = adapter(w, "").await;
-        let op = MetaOp { valid_until: soon, ..op_of("pay") };
-        let r = a.build(&job(o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({}))), 0).await;
-        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("expires")), "{r:?}");
+        let op = MetaOp {
+            valid_until: soon,
+            ..op_of("pay")
+        };
+        let r = a
+            .build(
+                &job(o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({}))),
+                0,
+            )
+            .await;
+        assert!(
+            matches!(&r, Err(SimError::Revert(e)) if e.contains("expires")),
+            "{r:?}"
+        );
         a.build(&job(o_of("pay", json!({}))), 0).await.unwrap();
     }
 
     // ------------------------------------------------------------------------------------------------ fix 4
 
-    const ORIGIN_VECTORS: &str = include_str!("../../../smartcontracts/near/vectors/webauthn-origin.json");
+    const ORIGIN_VECTORS: &str =
+        include_str!("../../../smartcontracts/near/vectors/webauthn-origin.json");
 
     /// N1 (fix 3 re-review): the node's `origin_of` is common/src/webauthn.rs's byte for byte. Every
     /// `webauthn-origin.json` row (also run by common/tests/vectors.rs `origin_of_parity_vectors`) gives its `origin`,
@@ -4105,16 +7130,41 @@ mod tests {
         let rows = v["rows"].as_array().unwrap();
         assert_eq!(rows.len(), 31);
         for r in rows {
-            let (cd, ch, want) = (r["clientDataJSON"].as_str().unwrap(), b32(&r["challenge"]), r["origin"].as_str());
-            assert_eq!(origin_of(cd.as_bytes(), &ch).map(|o| std::str::from_utf8(o).unwrap()), want, "{}", r["name"]);
-            let msig = [vec![3], bvec(&[0; 4]), 1u32.to_le_bytes().to_vec(), vec![0], passkey(cd)].concat();
+            let (cd, ch, want) = (
+                r["clientDataJSON"].as_str().unwrap(),
+                b32(&r["challenge"]),
+                r["origin"].as_str(),
+            );
+            assert_eq!(
+                origin_of(cd.as_bytes(), &ch).map(|o| std::str::from_utf8(o).unwrap()),
+                want,
+                "{}",
+                r["name"]
+            );
+            let msig = [
+                vec![3],
+                bvec(&[0; 4]),
+                1u32.to_le_bytes().to_vec(),
+                vec![0],
+                passkey(cd),
+            ]
+            .concat();
             match (Auth::decode(&passkey(cd), &ch), want) {
                 (Ok(a), Some(o)) => {
                     assert_eq!(a.origins(), [o], "{}", r["name"]);
-                    assert_eq!(Auth::decode(&msig, &ch).unwrap().origins(), [o], "{}", r["name"]);
+                    assert_eq!(
+                        Auth::decode(&msig, &ch).unwrap().origins(),
+                        [o],
+                        "{}",
+                        r["name"]
+                    );
                 }
                 (Err(e), None) => {
-                    assert!(format!("{e:#}").contains("clientDataJSON"), "{}: {e:#}", r["name"]);
+                    assert!(
+                        format!("{e:#}").contains("clientDataJSON"),
+                        "{}: {e:#}",
+                        r["name"]
+                    );
                     assert!(Auth::decode(&msig, &ch).is_err(), "{}", r["name"]);
                 }
                 (a, _) => panic!("{}: {a:?}", r["name"]),
@@ -4135,13 +7185,26 @@ mod tests {
         let dup = |o: &str| format!(r#","crossOrigin":false,"origin":"{o}"}}"#);
         let honest = [CHROME_TAIL, extra, "}"];
         let x = Holder::Ua([0xee; 32]);
-        let eop = MetaOp { from: x.clone(), ..op_of("cancel_recovery") };
+        let eop = MetaOp {
+            from: x.clone(),
+            ..op_of("cancel_recovery")
+        };
         type PayCd = Box<dyn Fn(&[u8; 32]) -> String>;
         let run = |entry_cd: String, pay: PayCd| {
-            let o = wrapper_for("mtx_cancel_recovery", eop.clone(), &passkey(&entry_cd), &[], x.clone(), |d| passkey(&pay(d)));
+            let o = wrapper_for(
+                "mtx_cancel_recovery",
+                eop.clone(),
+                &passkey(&entry_cd),
+                &[],
+                x.clone(),
+                |d| passkey(&pay(d)),
+            );
             async move {
                 let mut w = world();
-                w.views.insert((TOKEN.into(), "relay_fee_cancel_recovery_check".into()), check_ok(1));
+                w.views.insert(
+                    (TOKEN.into(), "relay_fee_cancel_recovery_check".into()),
+                    check_ok(1),
+                );
                 w.views.insert((TOKEN.into(), "subject".into()), vec![0]);
                 let (ad, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
                 ad.build(&job(o), 0).await
@@ -4155,15 +7218,31 @@ mod tests {
                 assert!(r.is_ok(), "{te} / {tp}: {r:?}");
             }
         }
-        let r = run(cdj(&ch, a, non_json), Box::new(move |d: &[u8; 32]| cdj(d, a, non_json))).await;
+        let r = run(
+            cdj(&ch, a, non_json),
+            Box::new(move |d: &[u8; 32]| cdj(d, a, non_json)),
+        )
+        .await;
         assert!(r.is_ok(), "the token accepts a non-JSON tail: {r:?}");
         // the token reads b (fix 3 review N1 (a), (b)), and b on the entry's side
         let origin_refused = |r: &std::result::Result<Built, SimError>| matches!(r, Err(SimError::Revert(e)) if e.contains("origin https://"));
-        let r = run(cdj(&ch, a, CHROME_TAIL), Box::new(move |d: &[u8; 32]| cdj(d, b, non_json))).await;
+        let r = run(
+            cdj(&ch, a, CHROME_TAIL),
+            Box::new(move |d: &[u8; 32]| cdj(d, b, non_json)),
+        )
+        .await;
         assert!(origin_refused(&r), "non-JSON tail: {r:?}");
-        let r = run(cdj(&ch, a, CHROME_TAIL), Box::new(move |d: &[u8; 32]| cdj(d, b, &dup(a)))).await;
+        let r = run(
+            cdj(&ch, a, CHROME_TAIL),
+            Box::new(move |d: &[u8; 32]| cdj(d, b, &dup(a))),
+        )
+        .await;
         assert!(origin_refused(&r), "duplicate origin in the payment: {r:?}");
-        let r = run(cdj(&ch, b, &dup(a)), Box::new(move |d: &[u8; 32]| cdj(d, a, CHROME_TAIL))).await;
+        let r = run(
+            cdj(&ch, b, &dup(a)),
+            Box::new(move |d: &[u8; 32]| cdj(d, a, CHROME_TAIL)),
+        )
+        .await;
         assert!(origin_refused(&r), "duplicate origin in the entry: {r:?}");
         // unparseable for the token: refused, on either side
         for i in 0..4 {
@@ -4174,18 +7253,37 @@ mod tests {
                 _ => format!(r#"{{"type":"webauthn.get","challenge":"x","origin":"{a}"}}"#),
             };
             let r = run(cdj(&ch, a, CHROME_TAIL), Box::new(bad)).await;
-            assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("clientDataJSON")), "payment {i}: {r:?}");
+            assert!(
+                matches!(&r, Err(SimError::Revert(e)) if e.contains("clientDataJSON")),
+                "payment {i}: {r:?}"
+            );
         }
-        let r = run(cdj(&ch, a, r#","crossOrigin":true}"#), Box::new(move |d: &[u8; 32]| cdj(d, a, CHROME_TAIL))).await;
-        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("clientDataJSON")), "entry: {r:?}");
+        let r = run(
+            cdj(&ch, a, r#","crossOrigin":true}"#),
+            Box::new(move |d: &[u8; 32]| cdj(d, a, CHROME_TAIL)),
+        )
+        .await;
+        assert!(
+            matches!(&r, Err(SimError::Revert(e)) if e.contains("clientDataJSON")),
+            "entry: {r:?}"
+        );
         // m4: an entry removing b fails a payment the token reads as from b, whatever its tail; a payment from a passes
         let pay = op_of("pay_ua_passkey");
         let pd = pay.digest();
-        let eop = MetaOp { from: pay.from.clone(), ..op_of("remove_origin") };
-        let remove = Entry::FeeWrapper { entry: "mtx_remove_origin".into(), args: [eop.borsh(), auth_bytes(&row("pay")["auth"]), bstr(b)].concat() };
+        let eop = MetaOp {
+            from: pay.from.clone(),
+            ..op_of("remove_origin")
+        };
+        let remove = Entry::FeeWrapper {
+            entry: "mtx_remove_origin".into(),
+            args: [eop.borsh(), auth_bytes(&row("pay")["auth"]), bstr(b)].concat(),
+        };
         for tail in [CHROME_TAIL.to_string(), non_json.into(), dup(a)] {
             let auth = Auth::decode(&passkey(&cdj(&pd, b, &tail)), &pd).unwrap();
-            assert!(format!("{:#}", wrapper_conflicts(&remove, &pay, &auth).unwrap_err()).contains(b), "{tail}");
+            assert!(
+                format!("{:#}", wrapper_conflicts(&remove, &pay, &auth).unwrap_err()).contains(b),
+                "{tail}"
+            );
         }
         for tail in honest {
             let auth = Auth::decode(&passkey(&cdj(&pd, a, tail)), &pd).unwrap();
@@ -4199,9 +7297,22 @@ mod tests {
     async fn router_job_gas_on_node_figures() {
         let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat();
         for tg in ["264000000000000", "18446744073709551615"] {
-            let (r, _) = build_router(router_world(0), &sponsored_cfg(), TOKEN, "mtx_pay", &pay, tg, "0").await;
+            let (r, _) = build_router(
+                router_world(0),
+                &sponsored_cfg(),
+                TOKEN,
+                "mtx_pay",
+                &pay,
+                tg,
+                "0",
+            )
+            .await;
             let b = r.unwrap_or_else(|e| panic!("{tg}: {e:?}"));
-            assert_eq!(relay_figures(&b.body), (GAS_JOB_BASE + GAS_KEY_SIG, 7), "{tg}");
+            assert_eq!(
+                relay_figures(&b.body),
+                (GAS_JOB_BASE + GAS_KEY_SIG, 7),
+                "{tg}"
+            );
         }
     }
 
@@ -4269,8 +7380,16 @@ mod tests {
         let mut p = Vec::new();
         payee.write(&mut p);
         let delegate = [vec![1], vec![0x10; 32]].concat();
-        [delegate, p, 100u128.to_le_bytes().to_vec(), 250u128.to_le_bytes().to_vec(), 86_400u64.to_le_bytes().to_vec(),
-         FAR.to_le_bytes().to_vec(), 1_000u128.to_le_bytes().to_vec()].concat()
+        [
+            delegate,
+            p,
+            100u128.to_le_bytes().to_vec(),
+            250u128.to_le_bytes().to_vec(),
+            86_400u64.to_le_bytes().to_vec(),
+            FAR.to_le_bytes().to_vec(),
+            1_000u128.to_le_bytes().to_vec(),
+        ]
+        .concat()
     }
 
     /// Final review node I1 (Algorand's never-pay rule, one rule): a configured token, the router, its executor and the
@@ -4278,59 +7397,155 @@ mod tests {
     /// own open mode, a wrapped or routed mandate's `terms.payee`, a router target op's `to` (value entries, mandate pay).
     #[test]
     fn never_pay_any_carried_payee() {
-        let p = RelayFeePolicy { tokens: vec![TOKEN.into(), TOKENB.into()], ..pol() };
+        let p = RelayFeePolicy {
+            tokens: vec![TOKEN.into(), TOKENB.into()],
+            ..pol()
+        };
         let never = [TOKEN, TOKENB, ROUTER, EXECUTOR, DEX];
         let bob = Holder::Near("bob.test.near".into());
-        let refused = |r: Result<Entry>, what: &str| assert!(r.as_ref().is_err_and(|e| format!("{e:#}").contains("never pay")), "{what}: {r:?}");
+        let refused = |r: Result<Entry>, what: &str| {
+            assert!(
+                r.as_ref()
+                    .is_err_and(|e| format!("{e:#}").contains("never pay")),
+                "{what}: {r:?}"
+            )
+        };
         // the job's own payment: plain, wrapper (open mode = the token), router (open mode = the router)
         for to in [DEX, TOKENB] {
-            refused(entry(&p, &MetaOp { to: Holder::Near(to.into()), ..op_of("pay") }, &json!({})), &format!("plain pay to {to}"));
+            refused(
+                entry(
+                    &p,
+                    &MetaOp {
+                        to: Holder::Near(to.into()),
+                        ..op_of("pay")
+                    },
+                    &json!({}),
+                ),
+                &format!("plain pay to {to}"),
+            );
             let (wop, wo) = wrapper_job("wrapper_add_key_real");
-            assert!(entry(&p, &MetaOp { to: Holder::Near(to.into()), ..wop }, &wo).is_err(), "wrapper payment to {to}");
+            assert!(
+                entry(
+                    &p,
+                    &MetaOp {
+                        to: Holder::Near(to.into()),
+                        ..wop
+                    },
+                    &wo
+                )
+                .is_err(),
+                "wrapper payment to {to}"
+            );
             let (op, o) = router_op(TOKEN, "mtx_pay", &[0; 8], Holder::Near(to.into()));
             refused(entry(&p, &op, &o), &format!("router payment to {to}"));
         }
         let (wop, wo) = wrapper_job("wrapper_add_key_real");
-        assert!(entry(&p, &wop, &wo).is_ok(), "wrapper open mode pays the token");
+        assert!(
+            entry(&p, &wop, &wo).is_ok(),
+            "wrapper open mode pays the token"
+        );
         // a wrapped mandate open's payee
         let mop = op_of("mandate_open");
         let ma = auth_bytes(&row("mandate_open")["auth"]);
         let pay_auth = |_: &[u8; 32]| auth_bytes(&row("pay")["auth"]);
         let alice = Holder::Near("alice.test.near".into());
         for x in never {
-            let o = wrapper_for("mtx_mandate_open", mop.clone(), &ma, &terms_to(&Holder::Near(x.into())), alice.clone(), pay_auth);
+            let o = wrapper_for(
+                "mtx_mandate_open",
+                mop.clone(),
+                &ma,
+                &terms_to(&Holder::Near(x.into())),
+                alice.clone(),
+                pay_auth,
+            );
             let op = MetaOp::decode(&hx(&o["payload"])).unwrap();
             refused(entry(&p, &op, &o), &format!("wrapped mandate payee {x}"));
         }
-        let o = wrapper_for("mtx_mandate_open", mop.clone(), &ma, &terms_to(&bob), alice.clone(), pay_auth);
-        assert!(entry(&p, &MetaOp::decode(&hx(&o["payload"])).unwrap(), &o).is_ok(), "an honest wrapped mandate");
+        let o = wrapper_for(
+            "mtx_mandate_open",
+            mop.clone(),
+            &ma,
+            &terms_to(&bob),
+            alice.clone(),
+            pay_auth,
+        );
+        assert!(
+            entry(&p, &MetaOp::decode(&hx(&o["payload"])).unwrap(), &o).is_ok(),
+            "an honest wrapped mandate"
+        );
         // a router target op on a configured token
         let auth = auth_bytes(&row("pay")["auth"]);
-        let target_op = |to: &Holder| [MetaOp { to: to.clone(), ..op_of("pay") }.borsh(), auth.clone()].concat();
+        let target_op = |to: &Holder| {
+            [
+                MetaOp {
+                    to: to.clone(),
+                    ..op_of("pay")
+                }
+                .borsh(),
+                auth.clone(),
+            ]
+            .concat()
+        };
         for x in never {
             let h = Holder::Near(x.into());
-            for m in ["mtx_pay", "mtx_transfer", "mtx_execute_transfer", "mtx_mandate_pay"] {
+            for m in [
+                "mtx_pay",
+                "mtx_transfer",
+                "mtx_execute_transfer",
+                "mtx_mandate_pay",
+            ] {
                 let (op, o) = router_op(TOKEN, m, &target_op(&h), bob.clone());
                 refused(entry(&p, &op, &o), &format!("router target {m} to {x}"));
             }
-            let (op, o) = router_op(TOKENB, "mtx_mandate_open", &[mop.borsh(), ma.clone(), terms_to(&h)].concat(), bob.clone());
-            refused(entry(&p, &op, &o), &format!("router target mandate payee {x}"));
+            let (op, o) = router_op(
+                TOKENB,
+                "mtx_mandate_open",
+                &[mop.borsh(), ma.clone(), terms_to(&h)].concat(),
+                bob.clone(),
+            );
+            refused(
+                entry(&p, &op, &o),
+                &format!("router target mandate payee {x}"),
+            );
         }
         for m in ["mtx_transfer", "mtx_mandate_pay"] {
             let (op, o) = router_op(TOKEN, m, &target_op(&bob), bob.clone());
             assert!(entry(&p, &op, &o).is_ok(), "{m} to bob");
         }
-        let (op, o) = router_op(TOKEN, "mtx_mandate_open", &[mop.borsh(), ma, terms_to(&bob)].concat(), bob.clone());
+        let (op, o) = router_op(
+            TOKEN,
+            "mtx_mandate_open",
+            &[mop.borsh(), ma, terms_to(&bob)].concat(),
+            bob.clone(),
+        );
         assert!(entry(&p, &op, &o).is_ok(), "an honest routed mandate");
         // re-review N1: through the router a token's mtx_trade needs to = relayer = its predecessor, the executor, so the
         // sell amount would land at Holder::Near(executor): never a router target, whatever `to` says; the DEX's settle is
-        let trade = |to: &Holder| [MetaOp { op: 1, to: to.clone(), relayer: Some(EXECUTOR.into()), ..op_of("pay") }.borsh(), auth.clone()].concat();
+        let trade = |to: &Holder| {
+            [
+                MetaOp {
+                    op: 1,
+                    to: to.clone(),
+                    relayer: Some(EXECUTOR.into()),
+                    ..op_of("pay")
+                }
+                .borsh(),
+                auth.clone(),
+            ]
+            .concat()
+        };
         for to in [Holder::Near(EXECUTOR.into()), bob.clone()] {
             let (op, o) = router_op(TOKEN, "mtx_trade", &trade(&to), bob.clone());
-            refused(entry(&p, &op, &o), &format!("router target mtx_trade to {}", to.display()));
+            refused(
+                entry(&p, &op, &o),
+                &format!("router target mtx_trade to {}", to.display()),
+            );
         }
         let (op, o) = router_op(DEX, "settle", &[1; 8], bob.clone());
-        assert!(entry(&p, &op, &o).is_ok(), "the DEX's settle via the router");
+        assert!(
+            entry(&p, &op, &o).is_ok(),
+            "the DEX's settle via the router"
+        );
     }
 
     /// Final review I2: the DEX accepts an order bound to the relaying lane through its executor (signer = the lane), so
@@ -4338,23 +7553,276 @@ mod tests {
     #[tokio::test]
     async fn dex_lane_bound_order_via_router() {
         let big = "100000000000000000000000";
-        let go = |args: Vec<u8>| async move { build_router(router_world(0), &sponsored_cfg(), DEX, "settle", &args, "200000000000000", big).await.0 };
-        assert!(go(settle_args(Some(LANE0), None)).await.is_ok(), "bound to this lane");
-        assert!(go(settle_args(None, Some(LANE0))).await.is_ok(), "either side");
-        assert!(go(settle_args(Some(EXECUTOR), None)).await.is_ok(), "bound to the executor");
+        let go = |args: Vec<u8>| async move {
+            build_router(
+                router_world(0),
+                &sponsored_cfg(),
+                DEX,
+                "settle",
+                &args,
+                "200000000000000",
+                big,
+            )
+            .await
+            .0
+        };
+        assert!(
+            go(settle_args(Some(LANE0), None)).await.is_ok(),
+            "bound to this lane"
+        );
+        assert!(
+            go(settle_args(None, Some(LANE0))).await.is_ok(),
+            "either side"
+        );
+        assert!(
+            go(settle_args(Some(EXECUTOR), None)).await.is_ok(),
+            "bound to the executor"
+        );
         let r = go(settle_args(Some("other-lane.test.near"), None)).await;
-        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("neither this lane nor the executor")), "{r:?}");
+        assert!(
+            matches!(&r, Err(SimError::Revert(e)) if e.contains("neither this lane nor the executor")),
+            "{r:?}"
+        );
     }
 
     /// Final review I2: the DEX's `executor()` must be the router's executor (else every lane-bound router settle fails).
     #[tokio::test]
     async fn start_check_dex_executor_mismatch_errors() {
         let mut w = world();
-        w.views.insert((DEX.into(), "executor".into()), serde_json::to_vec("other.near").unwrap());
+        w.views.insert(
+            (DEX.into(), "executor".into()),
+            serde_json::to_vec("other.near").unwrap(),
+        );
         let (a, _) = adapter(w, &fee_cfg("1")).await;
         let e = format!("{:#}", a.start_check().await.unwrap_err());
         assert!(e.contains("dex") && e.contains("executor"), "{e}");
         let (a, _) = adapter(world(), &fee_cfg("1")).await;
         a.start_check().await.unwrap();
+    }
+
+    // ---- scaas-rpc T17b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// [`adapter`] with `first` endpoints before the fake world in `rpc_urls`.
+    async fn adapter_after(w: World, first: &[&str]) -> (NearAdapter, Arc<Mutex<World>>) {
+        let w = Arc::new(Mutex::new(w));
+        let url = serve(w.clone()).await;
+        let mut c = cfg(&url, "");
+        c.rpc_urls = first.iter().map(|u| u.to_string()).chain([url]).collect();
+        (NearAdapter::new(&c, &[lane0()]).unwrap(), w)
+    }
+
+    /// The deposit test's world: the plain pay's check answers its storage.
+    fn pay_world() -> World {
+        let mut w = world();
+        w.views
+            .insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(1_234_567));
+        w.views.insert(
+            (TOKEN.into(), "lane_nonce".into()),
+            0u64.to_le_bytes().to_vec(),
+        );
+        w
+    }
+
+    /// F3: a status, `op_consumed` and the lane sequence are endpoint 0's only: with it down each is unread (asked again; a
+    /// lagging endpoint 1's "unknown" is never read, so never `dead`) and endpoint 1 is never asked. Control: endpoint 0 up.
+    #[tokio::test]
+    async fn near_tx_status_op_consumed_and_the_lane_sequence_never_fail_over() {
+        let job = job(o_of("pay", json!({})));
+        let tx = format!("0x{}", "11".repeat(32));
+        let (a, w) = adapter_after(pay_world(), &[DOWN]).await;
+        assert!(
+            a.tx_status(&tx).await.is_err(),
+            "unread, never Unknown from endpoint 1"
+        );
+        assert!(a.op_consumed(&job).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        assert!(
+            w.lock().unwrap().calls.is_empty(),
+            "endpoint 1 is never asked: {:?}",
+            w.lock().unwrap().calls
+        );
+        let (a, _) = adapter_after(pay_world(), &[]).await;
+        assert!(a.sequence(0).await.is_ok(), "control");
+        assert_eq!(a.op_consumed(&job).await.unwrap(), Some(false), "control");
+    }
+
+    /// ARCH-POS-15: `build`'s views fail over: endpoint 0 down, endpoint 1 answers and the job is built; endpoint 1 of another
+    /// network is asked its `status` only. A check refusal endpoint 1 answers is no verdict: transport (`FAILOVER_ANSWER`); the
+    /// same refusal from endpoint 0 is the job's (`Revert`).
+    #[tokio::test]
+    async fn near_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let job = job(o_of("pay", json!({})));
+        let (a, _) = adapter_after(pay_world(), &[DOWN]).await;
+        let r = a.build(&job, 0).await;
+        assert!(r.is_ok(), "{r:?}");
+        let other = World {
+            genesis: "11111111111111111111111111111111".into(),
+            ..pay_world()
+        };
+        let (a, w) = adapter_after(other, &[DOWN]).await;
+        assert!(matches!(
+            a.build(&job, 0).await,
+            Err(SimError::Transport(_))
+        ));
+        assert!(
+            w.lock().unwrap().calls.iter().all(|c| c.0 == "status"),
+            "another network: its status only"
+        );
+        let refuses = || {
+            let mut w = pay_world();
+            w.view_errs.insert(
+                (TOKEN.into(), "mtx_pay_check".into()),
+                "Smart contract panicked: bad".into(),
+            );
+            w
+        };
+        let (a, _) = adapter_after(refuses(), &[DOWN]).await;
+        let r = a.build(&job, 0).await;
+        // T24.15: every endpoint failed the check (endpoint 0 down, endpoint 1's refusal no verdict): the generic all-failed text
+        assert!(
+            matches!(&r, Err(SimError::Transport(e)) if e.contains("no endpoint answered") && !e.starts_with("FAILOVER_ANSWER")),
+            "{r:?}"
+        );
+        let (a, _) = adapter_after(refuses(), &[]).await;
+        assert!(
+            matches!(a.build(&job, 0).await, Err(SimError::Revert(_))),
+            "control: endpoint 0's refusal"
+        );
+        // the check's own refusal (`Check { error }`) answered by endpoint 1: the counter moved, requeued; endpoint 0's: the job's
+        let says_no = || {
+            let mut w = pay_world();
+            w.views.insert(
+                (TOKEN.into(), "mtx_pay_check".into()),
+                check_err("not enough balance"),
+            );
+            w
+        };
+        let (a, _) = adapter_after(says_no(), &[DOWN]).await;
+        let r = a.build(&job, 0).await;
+        assert!(
+            matches!(&r, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER")),
+            "{r:?}"
+        );
+        let (a, _) = adapter_after(says_no(), &[]).await;
+        assert!(
+            matches!(a.build(&job, 0).await, Err(SimError::Revert(_))),
+            "control"
+        );
+    }
+
+    /// scaas-rpc T24.3: endpoint 0's error other than a contract's refusal or an unknown account (a rate limit) is its failure,
+    /// never its verdict: the read fails over and endpoint 1 builds the job (endpoint 0 passes its identity read).
+    #[tokio::test]
+    async fn near_endpoint_0_rate_limited_fails_over() {
+        let job = job(o_of("pay", json!({})));
+        let first = crate::adapters::testkit::refusing(&serve(Arc::new(Mutex::new(pay_world()))).await, |_, b| b["method"] == "status", 429,
+            json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -429, "name": "TOO_MANY_REQUESTS", "message": "rate limited"}})).await;
+        let (a, _) = adapter_after(pay_world(), &[&first]).await;
+        let r = a.build(&job, 0).await;
+        assert!(r.is_ok(), "{r:?}");
+        assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at height 120 (or its head there), endpoint 1, at height 100, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn near_a_mined_status_and_the_head_raise_the_floor() {
+        let job = job(o_of("pay", json!({})));
+        let first = || {
+            crate::adapters::testkit::scripted(true, |m, _| match m {
+                "status" => Some(
+                    json!({"chain_id": "localnet", "genesis_hash": NET_B58, "sync_info": {"earliest_block_height": 0, "latest_block_height": 120}}),
+                ),
+                "EXPERIMENTAL_tx_status" => Some(outcome(
+                    TOKEN,
+                    json!({"FunctionCall": {"method_name": "mtx_pay", "args": ""}}),
+                    json!({"SuccessValue": ""}),
+                    vec![],
+                )),
+                "block" => Some(
+                    json!({"header": {"height": 120, "hash": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2"}, "chunks": []}),
+                ),
+                _ => None,
+            })
+        };
+        let tx = format!("0x{}", "11".repeat(32));
+        let (a, _) = adapter_after(pay_world(), &[&first().await]).await;
+        let r = a.build(&job, 0).await;
+        assert!(r.is_ok(), "{r:?}");
+        assert!(matches!(
+            a.tx_status(&tx).await.unwrap(),
+            TxStatus::Mined { height: 120, .. }
+        ));
+        assert!(
+            matches!(a.build(&job, 0).await, Err(SimError::Transport(_))),
+            "endpoint 1 below height 120: skipped"
+        );
+        let (a, _) = adapter_after(pay_world(), &[&first().await]).await;
+        let _ = a.final_head().await;
+        assert!(
+            matches!(a.build(&job, 0).await, Err(SimError::Transport(_))),
+            "the head: the same floor"
+        );
+    }
+
+    /// scaas-rpc T24.8 (CLI-RPC-03): endpoint 0 passes its identity before its own reads: one of another network (another genesis hash) answers
+    /// no status read (refused unread). Control: the same endpoint of this network answers it.
+    #[tokio::test]
+    async fn near_endpoint_0_of_another_network_answers_no_read() {
+        fn rpc(m: &str, genesis: &str) -> Option<Value> {
+            match m {
+                "status" => Some(json!({"chain_id": "localnet", "genesis_hash": genesis})),
+                "EXPERIMENTAL_tx_status" => Some(outcome(
+                    TOKEN,
+                    json!({"FunctionCall": {"method_name": "mtx_pay", "args": ""}}),
+                    json!({"SuccessValue": ""}),
+                    vec![],
+                )),
+                "block" => Some(
+                    json!({"header": {"height": 100, "hash": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2"}, "chunks": []}),
+                ),
+                _ => None,
+            }
+        }
+        let tx = format!("0x{}", "11".repeat(32));
+        let other = crate::adapters::testkit::scripted(true, |m, _| {
+            rpc(m, "11111111111111111111111111111111")
+        })
+        .await;
+        assert!(NearAdapter::new(&cfg(&other, ""), &[lane0()])
+            .unwrap()
+            .tx_status(&tx)
+            .await
+            .is_err());
+        let this = crate::adapters::testkit::scripted(true, |m, _| rpc(m, NET_B58)).await;
+        let a = NearAdapter::new(&cfg(&this, ""), &[lane0()]).unwrap();
+        assert!(
+            matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }),
+            "control"
+        );
+    }
+
+    /// scaas-rpc T24.4 (CLI-RPC-05, owner 2026-11-18): a deposit a check reports above `params.max_deposit_per_job` is no
+    /// verdict (`Transport`); at the cap the job is built.
+    #[tokio::test]
+    async fn near_a_deposit_above_the_cap_is_refused() {
+        let job = job(o_of("pay", json!({})));
+        let on = |cap: &'static str| async move {
+            let url = serve(Arc::new(Mutex::new(pay_world()))).await;
+            let mut c = cfg(&url, "");
+            c.params.insert("max_deposit_per_job".into(), cap.into());
+            NearAdapter::new(&c, &[lane0()]).unwrap()
+        };
+        match on("1234566").await.build(&job, 0).await {
+            Err(SimError::Transport(m)) => assert!(m.contains("max_deposit_per_job"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        assert_eq!(
+            on("1234567").await.build(&job, 0).await.unwrap().meta["deposit"],
+            "1234567",
+            "at the cap"
+        );
     }
 }

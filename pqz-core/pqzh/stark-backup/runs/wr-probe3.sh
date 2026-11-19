@@ -5,7 +5,7 @@
 set -eu
 cd "$(dirname "$0")/wr-probe"
 export CARGO_TARGET_DIR="$PWD/../../target"
-cargo build --release --offline > ../wr-probe3-build.txt 2>&1
-/usr/bin/time -v $CARGO_TARGET_DIR/release/wr-probe tx > ../wr-tx3.jsonl 2> ../wr-tx3-spans.txt
-(cd ../.. && cargo test --release --offline --lib whirpcs) > ../wr-probe3-tests.txt 2>&1
+cargo build --release --offline >../wr-probe3-build.txt 2>&1
+/usr/bin/time -v $CARGO_TARGET_DIR/release/wr-probe tx >../wr-tx3.jsonl 2>../wr-tx3-spans.txt
+(cd ../.. && cargo test --release --offline --lib whirpcs) >../wr-probe3-tests.txt 2>&1
 echo done

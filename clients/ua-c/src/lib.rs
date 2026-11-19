@@ -6,7 +6,12 @@
 //! `SCAAS_UA_ERR_INTERNAL` (frost-core's OS-RNG panics included, though no FROST call is exported). Status-returning exports go
 //! through `run`, which also sets the thread-local `scaas_ua_last_error` detail; no detail carries an argument (a wallet error is
 //! its status name). UNAUDITED.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 use scaas_ua as ua;
 use std::cell::RefCell;
 use std::ffi::{c_char, CStr, CString};
@@ -19,7 +24,10 @@ use ua::wallet as uw;
 pub const SCAAS_UA_ABI_VERSION: u32 = 6;
 
 // The shared library never holds the test-only entry points (feature `vectors` of scaas-ua: secrets through hooks, F-01).
-const _: () = assert!(!ua::build::VECTORS, "ua-c must not build scaas-ua with feature `vectors`");
+const _: () = assert!(
+    !ua::build::VECTORS,
+    "ua-c must not build scaas-ua with feature `vectors`"
+);
 
 /// The result of every fallible call: `SCAAS_UA_OK` or one of `SCAAS_UA_ERR_*`.
 pub type ScaasUaStatus = i32;
@@ -115,6 +123,9 @@ pub const SCAAS_UA_ERR_PQZ_SET_MISMATCH: ScaasUaStatus = 40;
 pub const SCAAS_UA_ERR_PQZ_KEY_VERSION: ScaasUaStatus = 41;
 /// "UAKeyInUse": a stored version of the UA holds this PQZ key (group 3g, KV-1; T15o).
 pub const SCAAS_UA_ERR_KEY_IN_USE: ScaasUaStatus = 42;
+/// "UAWebAuthnTooLong": an assertion whose authData and clientDataJSON together exceed 1,024 bytes (owner 2026-11-19, G3:
+/// appended, ABI 6 kept).
+pub const SCAAS_UA_ERR_WEBAUTHN_TOO_LONG: ScaasUaStatus = 43;
 
 /// One row of the kind table. `name` and `group` are static NUL-terminated strings (never freed); `group` is NULL when
 /// the kind has no group. `lengths[0..lengths_len]` are the accepted key-data lengths; `lengths_len == 0` means variable
@@ -163,7 +174,7 @@ impl From<ua::UAError> for Fail {
             MemberUnknown => SCAAS_UA_ERR_MEMBER_UNKNOWN,
             Pop => SCAAS_UA_ERR_POP,
             Unauthorized => SCAAS_UA_ERR_UNAUTHORIZED,
-            NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua8::check_* only, not exported here
+            NotVerifiable => SCAAS_UA_ERR_INTERNAL, // ua_portable::check_* only, not exported here
         };
         Fail(status, e.to_string())
     }
@@ -198,6 +209,7 @@ impl From<uw::Error> for Fail {
             E::WalletMismatch => SCAAS_UA_ERR_WALLET_MISMATCH,
             E::PqzSetMismatch => SCAAS_UA_ERR_PQZ_SET_MISMATCH,
             E::ExternalSignature => SCAAS_UA_ERR_EXTERNAL_SIGNATURE,
+            E::WebAuthnTooLong => SCAAS_UA_ERR_WEBAUTHN_TOO_LONG,
             _ => SCAAS_UA_ERR_INTERNAL, // `#[non_exhaustive]`: a variant added later maps here until it has its status
         };
         fail(status)
@@ -222,7 +234,8 @@ thread_local! {
 
 /// The one `catch_unwind`: a panic becomes `SCAAS_UA_ERR_INTERNAL`.
 fn guard<T>(f: impl FnOnce() -> R<T>) -> R<T> {
-    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| Err(Fail(SCAAS_UA_ERR_INTERNAL, "UAInternal: panic".into())))
+    catch_unwind(AssertUnwindSafe(f))
+        .unwrap_or_else(|_| Err(Fail(SCAAS_UA_ERR_INTERNAL, "UAInternal: panic".into())))
 }
 /// A status-returning export: the status, with the detail ("" on success) stored for `scaas_ua_last_error`.
 fn run(f: impl FnOnce() -> R<()>) -> ScaasUaStatus {
@@ -275,7 +288,10 @@ fn write_var(out: *mut u8, out_len: *mut usize, b: &[u8]) -> R<()> {
     }
     let cap = unsafe { out_len.replace(b.len()) };
     if cap < b.len() {
-        return Err(Fail(SCAAS_UA_ERR_BUFFER, format!("UABuffer: need {}", b.len())));
+        return Err(Fail(
+            SCAAS_UA_ERR_BUFFER,
+            format!("UABuffer: need {}", b.len()),
+        ));
     }
     if b.is_empty() {
         return Ok(()); // an empty output (an empty plaintext) writes nothing: `out` may be NULL
@@ -288,19 +304,34 @@ fn write_var(out: *mut u8, out_len: *mut usize, b: &[u8]) -> R<()> {
 }
 /// `s` NUL-terminated; `*out_len` counts the NUL.
 fn write_str(out: *mut c_char, out_len: *mut usize, s: &str) -> R<()> {
-    write_var(out.cast(), out_len, CString::new(s).unwrap_or_default().as_bytes_with_nul())
+    write_var(
+        out.cast(),
+        out_len,
+        CString::new(s).unwrap_or_default().as_bytes_with_nul(),
+    )
 }
 
 fn kind_row(i: usize) -> R<ScaasUaKind> {
     static STRINGS: OnceLock<Vec<(CString, Option<CString>)>> = OnceLock::new();
     let c = |s: &str| CString::new(s).unwrap_or_default();
-    let strings = STRINGS.get_or_init(|| ua::KINDS.iter().map(|k| (c(k.name), k.group.map(c))).collect());
-    let (k, s) = ua::KINDS.get(i).zip(strings.get(i)).ok_or_else(|| argument("index"))?;
+    let strings = STRINGS.get_or_init(|| {
+        ua::KINDS
+            .iter()
+            .map(|k| (c(k.name), k.group.map(c)))
+            .collect()
+    });
+    let (k, s) = ua::KINDS
+        .get(i)
+        .zip(strings.get(i))
+        .ok_or_else(|| argument("index"))?;
     if k.lengths.len() > 2 {
         return Err(fail(SCAAS_UA_ERR_INTERNAL)); // ScaasUaKind holds two lengths
     }
     let mut lengths = [0u32; 2];
-    lengths.iter_mut().zip(k.lengths).for_each(|(d, l)| *d = *l as u32);
+    lengths
+        .iter_mut()
+        .zip(k.lengths)
+        .for_each(|(d, l)| *d = *l as u32);
     Ok(ScaasUaKind {
         kind: k.kind,
         native: k.native,
@@ -371,6 +402,7 @@ fn status_cstr(status: ScaasUaStatus) -> &'static CStr {
         SCAAS_UA_ERR_PQZ_SET_MISMATCH => c"UAPqzSetMismatch",
         SCAAS_UA_ERR_PQZ_KEY_VERSION => c"UAPqzKeyVersion",
         SCAAS_UA_ERR_KEY_IN_USE => c"UAKeyInUse",
+        SCAAS_UA_ERR_WEBAUTHN_TOO_LONG => c"UAWebAuthnTooLong",
         _ => c"UAStatusUnknown",
     }
 }
@@ -391,16 +423,17 @@ pub extern "C" fn scaas_ua_kind_count() -> usize {
 /// Row `index` (below `scaas_ua_kind_count()`, else `SCAAS_UA_ERR_ARGUMENT`) of the kind table, in table order.
 #[no_mangle]
 pub extern "C" fn scaas_ua_kind_at(index: usize, out: *mut ScaasUaKind) -> ScaasUaStatus {
-    run(|| {
-        put(out, kind_row(index)?)
-    })
+    run(|| put(out, kind_row(index)?))
 }
 
 /// The kind-table row of `kind`.
 #[no_mangle]
 pub extern "C" fn scaas_ua_kind_info(kind: u16, out: *mut ScaasUaKind) -> ScaasUaStatus {
     run(|| {
-        let i = ua::KINDS.iter().position(|k| k.kind == kind).ok_or(ua::UAError::KindUnknown(kind))?;
+        let i = ua::KINDS
+            .iter()
+            .position(|k| k.kind == kind)
+            .ok_or(ua::UAError::KindUnknown(kind))?;
         put(out, kind_row(i)?)
     })
 }
@@ -435,7 +468,11 @@ pub extern "C" fn scaas_ua_is_pqz_holder(kind: u16) -> bool {
 /// `*out = true` iff the `msig` key data is PQ-eligible: its members outside 0x0130-0x0135 weigh less than the threshold. An `msig`
 /// member is `SCAAS_UA_ERR_MEMBER_UNKNOWN` here: `scaas_ua_msig_pqz_eligible_with` reads its record.
 #[no_mangle]
-pub extern "C" fn scaas_ua_msig_pqz_eligible(key_data: *const u8, key_data_len: usize, out: *mut bool) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_msig_pqz_eligible(
+    key_data: *const u8,
+    key_data_len: usize,
+    out: *mut bool,
+) -> ScaasUaStatus {
     scaas_ua_msig_pqz_eligible_with(key_data, key_data_len, ptr::null(), out)
 }
 
@@ -444,7 +481,9 @@ fn inner_of(p: *const c_char) -> R<Vec<([u8; 32], Vec<u8>)>> {
     if p.is_null() {
         return Ok(vec![]);
     }
-    Ok(ua::json::inner_json(std::str::from_utf8(cstr(p)?).map_err(|_| argument("JSON"))?)?)
+    Ok(ua::json::inner_json(
+        std::str::from_utf8(cstr(p)?).map_err(|_| argument("JSON"))?,
+    )?)
 }
 
 /// `scaas_ua_msig_pqz_eligible` with `inner`, the `msig` members' structures: the JSON `{id: keyData}` of `scaas_ua_registration_args`'
@@ -460,7 +499,8 @@ pub extern "C" fn scaas_ua_msig_pqz_eligible_with(
 ) -> ScaasUaStatus {
     run(|| {
         let i = inner_of(inner)?;
-        let eligible = ua::msig_pqz_eligible_with(bytes(key_data, key_data_len)?, &ua::json::lookup(&i))?;
+        let eligible =
+            ua::msig_pqz_eligible_with(bytes(key_data, key_data_len)?, &ua::json::lookup(&i))?;
         put(out, eligible)
     })
 }
@@ -473,27 +513,50 @@ pub extern "C" fn scaas_ua_tag(kind: u16, out32: *mut u8) -> ScaasUaStatus {
 
 /// The tag string of a derived kind or of the PQZ scheme 0x0142 (NUL-terminated; `*out_len` counts the NUL).
 #[no_mangle]
-pub extern "C" fn scaas_ua_kind_tag_string(kind: u16, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_kind_tag_string(
+    kind: u16,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| write_str(out, out_len, &ua::kind_tag_string(kind)?))
 }
 
 /// Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
-/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-31; any other bit is `SCAAS_UA_ERR_ARGUMENT` (32-127 free, 128-255 the
+/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-32; any other bit is `SCAAS_UA_ERR_ARGUMENT` (33-127 free, 128-255 the
 /// application's `bitLabel`).
 #[no_mangle]
-pub extern "C" fn scaas_ua_governance_bit(bit: u8, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
-    run(|| write_str(out, out_len, ua::governance_bit(bit).ok_or_else(|| argument("bit"))?))
+pub extern "C" fn scaas_ua_governance_bit(
+    bit: u8,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        write_str(
+            out,
+            out_len,
+            ua::governance_bit(bit).ok_or_else(|| argument("bit"))?,
+        )
+    })
 }
 
 /// The 32-byte GROUP tag of `group`; `*present = false` (and `out32` untouched) for an unknown or non-UTF-8 group.
 #[no_mangle]
-pub extern "C" fn scaas_ua_group_tag(group: *const c_char, out32: *mut u8, present: *mut bool) -> ScaasUaStatus {
-    run(|| match std::str::from_utf8(cstr(group)?).ok().and_then(ua::group_tag) {
-        Some(t) => {
-            put(present, true)?;
-            put(out32.cast(), t)
+pub extern "C" fn scaas_ua_group_tag(
+    group: *const c_char,
+    out32: *mut u8,
+    present: *mut bool,
+) -> ScaasUaStatus {
+    run(|| {
+        match std::str::from_utf8(cstr(group)?)
+            .ok()
+            .and_then(ua::group_tag)
+        {
+            Some(t) => {
+                put(present, true)?;
+                put(out32.cast(), t)
+            }
+            None => put(present, false),
         }
-        None => put(present, false),
     })
 }
 
@@ -505,12 +568,17 @@ pub extern "C" fn scaas_ua_group_tag_string(
     out_len: *mut usize,
     present: *mut bool,
 ) -> ScaasUaStatus {
-    run(|| match std::str::from_utf8(cstr(group)?).ok().and_then(ua::group_tag_string) {
-        Some(s) => {
-            put(present, true)?;
-            write_str(out, out_len, &s)
+    run(|| {
+        match std::str::from_utf8(cstr(group)?)
+            .ok()
+            .and_then(ua::group_tag_string)
+        {
+            Some(s) => {
+                put(present, true)?;
+                write_str(out, out_len, &s)
+            }
+            None => put(present, false),
         }
-        None => put(present, false),
     })
 }
 
@@ -529,7 +597,11 @@ pub extern "C" fn scaas_ua_purpose_tag(purpose: *const c_char, out32: *mut u8) -
 /// The 32-byte tag of a purpose version: every purpose is v1, `pop` is also v2 (the portable PoP); any other pair is
 /// `SCAAS_UA_ERR_PURPOSE_UNKNOWN`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_purpose_tag_v(purpose: *const c_char, version: u32, out32: *mut u8) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_purpose_tag_v(
+    purpose: *const c_char,
+    version: u32,
+    out32: *mut u8,
+) -> ScaasUaStatus {
     run(|| {
         let p = std::str::from_utf8(cstr(purpose)?).map_err(|_| ua::UAError::PurposeUnknown)?;
         put(out32.cast(), ua::purpose_tag_v(p, version)?)
@@ -538,8 +610,18 @@ pub extern "C" fn scaas_ua_purpose_tag_v(purpose: *const c_char, version: u32, o
 
 /// The 32-byte UA of a derived kind's key data (no member-rule checks; see `scaas_ua_derive_ua`).
 #[no_mangle]
-pub extern "C" fn scaas_ua_ua_of(kind: u16, key_data: *const u8, key_data_len: usize, out32: *mut u8) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua_of(kind, bytes(key_data, key_data_len)?)?))
+pub extern "C" fn scaas_ua_ua_of(
+    kind: u16,
+    key_data: *const u8,
+    key_data_len: usize,
+    out32: *mut u8,
+) -> ScaasUaStatus {
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_of(kind, bytes(key_data, key_data_len)?)?,
+        )
+    })
 }
 
 /// The 32-byte UA after full key-data validation.
@@ -551,12 +633,22 @@ pub extern "C" fn scaas_ua_derive_ua(
     hedera_native: bool,
     out32: *mut u8,
 ) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::derive_ua(kind, bytes(key_data, key_data_len)?, hedera_native)?))
+    run(|| {
+        put(
+            out32.cast(),
+            ua::derive_ua(kind, bytes(key_data, key_data_len)?, hedera_native)?,
+        )
+    })
 }
 
 /// The 32-byte id of a native kind's raw address.
 #[no_mangle]
-pub extern "C" fn scaas_ua_native_id(kind: u16, raw: *const u8, raw_len: usize, out32: *mut u8) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_native_id(
+    kind: u16,
+    raw: *const u8,
+    raw_len: usize,
+    out32: *mut u8,
+) -> ScaasUaStatus {
     run(|| put(out32.cast(), ua::native_id(kind, bytes(raw, raw_len)?)?))
 }
 
@@ -569,13 +661,15 @@ pub extern "C" fn scaas_ua_key_hash_of(
     out32: *mut u8,
     present: *mut bool,
 ) -> ScaasUaStatus {
-    run(|| match ua::key_hash_of(kind, bytes(key_data, key_data_len)?)? {
-        Some(h) => {
-            put(present, true)?;
-            put(out32.cast(), h)
-        }
-        None => put(present, false),
-    })
+    run(
+        || match ua::key_hash_of(kind, bytes(key_data, key_data_len)?)? {
+            Some(h) => {
+                put(present, true)?;
+                put(out32.cast(), h)
+            }
+            None => put(present, false),
+        },
+    )
 }
 
 /// `SCAAS_UA_OK` when the key data is valid for `kind`.
@@ -586,7 +680,13 @@ pub extern "C" fn scaas_ua_validate_key_data(
     key_data_len: usize,
     hedera_native: bool,
 ) -> ScaasUaStatus {
-    run(|| Ok(ua::validate_key_data(kind, bytes(key_data, key_data_len)?, hedera_native)?))
+    run(|| {
+        Ok(ua::validate_key_data(
+            kind,
+            bytes(key_data, key_data_len)?,
+            hedera_native,
+        )?)
+    })
 }
 
 /// Whether the 32-byte id is in the native id space.
@@ -603,7 +703,12 @@ pub extern "C" fn scaas_ua_ua_message(
     digest32: *const u8,
     out32: *mut u8,
 ) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua_message(kind, arr(purpose32)?, arr(digest32)?)?))
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_message(kind, arr(purpose32)?, arr(digest32)?)?,
+        )
+    })
 }
 
 /// The 32-byte chain keyHash.
@@ -614,7 +719,11 @@ pub extern "C" fn scaas_ua_chain_key_hash(chain_id: u64, out32: *mut u8) -> Scaa
 
 /// `keccak256(data)`: what a member checks its own signature bytes against (`memberSigHashOf`, an `msig`'s `popOf`).
 #[no_mangle]
-pub extern "C" fn scaas_ua_keccak256(data: *const u8, data_len: usize, out32: *mut u8) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_keccak256(
+    data: *const u8,
+    data_len: usize,
+    out32: *mut u8,
+) -> ScaasUaStatus {
     run(|| put(out32.cast(), ua::keccak256(bytes(data, data_len)?)))
 }
 
@@ -622,7 +731,7 @@ pub extern "C" fn scaas_ua_keccak256(data: *const u8, data_len: usize, out32: *m
 /// "1"), no chain id, verifying contract or salt; typed-signing TS-D1). Every portable digest is `keccak256(0x1901 ‖ DS_P ‖ hashStruct)`.
 #[no_mangle]
 pub extern "C" fn scaas_ua_portable_domain_separator(out32: *mut u8) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua8::PORTABLE_DOMAIN_SEPARATOR))
+    run(|| put(out32.cast(), ua::ua_portable::PORTABLE_DOMAIN_SEPARATOR))
 }
 
 /// `hashStruct(UAKemRecord{ua, version, scheme: kem_pk[0], kemPkHash: keccak256(kem_pk)})`: the `kem` word of a portable
@@ -636,7 +745,12 @@ pub extern "C" fn scaas_ua_kem_record_hash(
     kem_pk_len: usize,
     out32: *mut u8,
 ) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua8::kem_record_hash(arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?))
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_portable::kem_record_hash(arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?,
+        )
+    })
 }
 
 /// The typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}` digest (what `R_REG` proves over at `register`); every hash input 32
@@ -649,7 +763,17 @@ pub extern "C" fn scaas_ua_portable_record_digest(
     kem_record_hash32: *const u8,
     out32: *mut u8,
 ) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua8::portable_record_digest(arr(ua32)?, kind, arr(pqz_key_hash32)?, arr(kem_record_hash32)?)))
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_portable::portable_record_digest(
+                arr(ua32)?,
+                kind,
+                arr(pqz_key_hash32)?,
+                arr(kem_record_hash32)?,
+            ),
+        )
+    })
 }
 
 /// The typed `UARegistration{UAPortableRecord{ua, kind, pqzKeyHash, kem}, pqzPopHash}` digest: what the signer's `pop` signs
@@ -664,7 +788,13 @@ pub extern "C" fn scaas_ua_registration_digest(
     out32: *mut u8,
 ) -> ScaasUaStatus {
     run(|| {
-        let d = ua::ua8::registration_digest(arr(ua32)?, kind, arr(pqz_key_hash32)?, arr(kem_record_hash32)?, arr(pqz_pop_hash32)?);
+        let d = ua::ua_portable::registration_digest(
+            arr(ua32)?,
+            kind,
+            arr(pqz_key_hash32)?,
+            arr(kem_record_hash32)?,
+            arr(pqz_pop_hash32)?,
+        );
         put(out32.cast(), d)
     })
 }
@@ -679,7 +809,12 @@ pub extern "C" fn scaas_ua_kem_record_digest(
     kem_pk_len: usize,
     out32: *mut u8,
 ) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua8::kem_record_digest(arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?))
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_portable::kem_record_digest(arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?,
+        )
+    })
 }
 
 /// What the UA signs for a KEM record: `ua_message(kind, PURPOSE_KEM, kem_record_digest)`; a kind that holds no KEM key (an msig
@@ -693,7 +828,17 @@ pub extern "C" fn scaas_ua_kem_record_message(
     kem_pk_len: usize,
     out32: *mut u8,
 ) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua8::kem_record_message(kind, arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?))
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_portable::kem_record_message(
+                kind,
+                arr(ua32)?,
+                version,
+                bytes(kem_pk, kem_pk_len)?,
+            )?,
+        )
+    })
 }
 
 /// The portable PoP of a registration, as `scaas_ua_holder_pop_message` writes it (all hashes 32 bytes). `message` is
@@ -749,7 +894,22 @@ pub extern "C" fn scaas_ua_holder_pop_message(
     out: *mut ScaasUaHolderPop,
 ) -> ScaasUaStatus {
     let (p, h) = ((pqz_pop, pqz_pop_len), (pqz_pop_hash, pqz_pop_hash_len));
-    scaas_ua_holder_pop_message_with(kind, ua32, key_data, key_data_len, pqz_key, pqz_key_len, p.0, p.1, h.0, h.1, kem_pk, kem_pk_len, ptr::null(), out)
+    scaas_ua_holder_pop_message_with(
+        kind,
+        ua32,
+        key_data,
+        key_data_len,
+        pqz_key,
+        pqz_key_len,
+        p.0,
+        p.1,
+        h.0,
+        h.1,
+        kem_pk,
+        kem_pk_len,
+        ptr::null(),
+        out,
+    )
 }
 
 /// `scaas_ua_holder_pop_message` for an `msig` with `msig` members: `inner` gives their key data, as in `scaas_ua_msig_pqz_eligible_with`
@@ -774,7 +934,7 @@ pub extern "C" fn scaas_ua_holder_pop_message_with(
 ) -> ScaasUaStatus {
     run(|| {
         let i = inner_of(inner)?;
-        let h = ua::ua8::holder_pop_message_with(
+        let h = ua::ua_portable::holder_pop_message_with(
             kind,
             arr(ua32)?,
             bytes(key_data, key_data_len)?,
@@ -814,15 +974,29 @@ pub extern "C" fn scaas_ua_pqz_reg_message(
     out32: *mut u8,
 ) -> ScaasUaStatus {
     run(|| {
-        let m = ua::pqz_reg_message(kind, arr(ua32)?, bytes(pqz_key, pqz_key_len)?, opt_bytes(kem_pk, kem_pk_len)?)?;
+        let m = ua::pqz_reg_message(
+            kind,
+            arr(ua32)?,
+            bytes(pqz_key, pqz_key_len)?,
+            opt_bytes(kem_pk, kem_pk_len)?,
+        )?;
         put(out32.cast(), m)
     })
 }
 
 /// The typed `UAPqzKey{ua, pqzKeyHash}` digest: what a later PQZ key's `R_REG` proves over.
 #[no_mangle]
-pub extern "C" fn scaas_ua_pqz_key_digest(ua32: *const u8, pqz_key_hash32: *const u8, out32: *mut u8) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua8::pqz_key_digest(arr(ua32)?, arr(pqz_key_hash32)?)))
+pub extern "C" fn scaas_ua_pqz_key_digest(
+    ua32: *const u8,
+    pqz_key_hash32: *const u8,
+    out32: *mut u8,
+) -> ScaasUaStatus {
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_portable::pqz_key_digest(arr(ua32)?, arr(pqz_key_hash32)?),
+        )
+    })
 }
 
 /// The typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}` digest: what `setPqzKey`'s signature signs under
@@ -834,14 +1008,32 @@ pub extern "C" fn scaas_ua_pqz_key_record_digest(
     pqz_pop_hash32: *const u8,
     out32: *mut u8,
 ) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua8::pqz_key_record_digest(arr(ua32)?, arr(pqz_key_hash32)?, arr(pqz_pop_hash32)?)))
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_portable::pqz_key_record_digest(
+                arr(ua32)?,
+                arr(pqz_key_hash32)?,
+                arr(pqz_pop_hash32)?,
+            ),
+        )
+    })
 }
 
 /// The typed `UAMembership{ua, member}` digest: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37): a native
 /// member this digest itself, a derived member `member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_membership_digest(ua32: *const u8, member32: *const u8, out32: *mut u8) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua8::membership_digest(arr(ua32)?, arr(member32)?)))
+pub extern "C" fn scaas_ua_membership_digest(
+    ua32: *const u8,
+    member32: *const u8,
+    out32: *mut u8,
+) -> ScaasUaStatus {
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_portable::membership_digest(arr(ua32)?, arr(member32)?),
+        )
+    })
 }
 
 /// The PQZ key record of `setPqzKey` (ruling A1-I1), as `scaas_ua_pqz_key_record_message` writes it. `message` is what the UA
@@ -878,7 +1070,21 @@ pub extern "C" fn scaas_ua_pqz_key_record_message(
     out: *mut ScaasUaPqzKeyRecord,
 ) -> ScaasUaStatus {
     let (p, h) = ((pqz_pop, pqz_pop_len), (pqz_pop_hash, pqz_pop_hash_len));
-    scaas_ua_pqz_key_record_message_with(kind, ua32, key_data, key_data_len, pqz_key, pqz_key_len, p.0, p.1, h.0, h.1, already_set, ptr::null(), out)
+    scaas_ua_pqz_key_record_message_with(
+        kind,
+        ua32,
+        key_data,
+        key_data_len,
+        pqz_key,
+        pqz_key_len,
+        p.0,
+        p.1,
+        h.0,
+        h.1,
+        already_set,
+        ptr::null(),
+        out,
+    )
 }
 
 /// `scaas_ua_pqz_key_record_message` for an `msig` with `msig` members: `inner` as in `scaas_ua_holder_pop_message_with`.
@@ -901,7 +1107,7 @@ pub extern "C" fn scaas_ua_pqz_key_record_message_with(
 ) -> ScaasUaStatus {
     run(|| {
         let i = inner_of(inner)?;
-        let r = ua::ua8::pqz_key_record_message_with(
+        let r = ua::ua_portable::pqz_key_record_message_with(
             kind,
             arr(ua32)?,
             bytes(key_data, key_data_len)?,
@@ -943,7 +1149,11 @@ pub extern "C" fn scaas_ua_replayed_member_sig(
     out_len: *mut usize,
 ) -> ScaasUaStatus {
     run(|| {
-        let j = ua::json::replayed_member_sig_json(bytes(key_data, key_data_len)?, index, bytes(stored, stored_len)?)?;
+        let j = ua::json::replayed_member_sig_json(
+            bytes(key_data, key_data_len)?,
+            index,
+            bytes(stored, stored_len)?,
+        )?;
         write_str(out, out_len, &j)
     })
 }
@@ -952,11 +1162,21 @@ pub extern "C" fn scaas_ua_replayed_member_sig(
 /// native `msig` member signs the record's typed digest itself (`eth_signTypedData_v4`, TS-D4); every other purpose stays UAAuth.
 #[no_mangle]
 pub extern "C" fn scaas_ua_is_portable_purpose(tag32: *const u8, out: *mut bool) -> ScaasUaStatus {
-    run(|| put(out, ua::ua8::is_portable_purpose(arr(tag32)?)))
+    run(|| put(out, ua::ua_portable::is_portable_purpose(arr(tag32)?)))
 }
 
-fn domain(generation: u32, chain_id: u64, registry20: *const u8, chain_uid32: *const u8) -> R<ua::Domain> {
-    Ok(ua::Domain { generation, chain_id, registry: *arr(registry20)?, chain_uid: *arr(chain_uid32)? })
+fn domain(
+    generation: u32,
+    chain_id: u64,
+    registry20: *const u8,
+    chain_uid32: *const u8,
+) -> R<ua::Domain> {
+    Ok(ua::Domain {
+        generation,
+        chain_id,
+        registry: *arr(registry20)?,
+        chain_uid: *arr(chain_uid32)?,
+    })
 }
 
 /// The 32-byte UARegistry EIP-712 domain separator; `registry20` is 20 bytes, `chain_uid32` 32 bytes.
@@ -968,7 +1188,12 @@ pub extern "C" fn scaas_ua_ua_auth_domain_separator(
     chain_uid32: *const u8,
     out32: *mut u8,
 ) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::ua_auth_domain_separator(&domain(generation, chain_id, registry20, chain_uid32)?)))
+    run(|| {
+        put(
+            out32.cast(),
+            ua::ua_auth_domain_separator(&domain(generation, chain_id, registry20, chain_uid32)?),
+        )
+    })
 }
 
 /// The 32-byte UAAuth digest; `registry20` is 20 bytes, every other input 32 bytes.
@@ -986,19 +1211,35 @@ pub extern "C" fn scaas_ua_ua_auth_digest(
 ) -> ScaasUaStatus {
     run(|| {
         let d = domain(generation, chain_id, registry20, chain_uid32)?;
-        put(out32.cast(), ua::ua_auth_digest(&d, arr(ua32)?, arr(purpose32)?, arr(digest32)?))
+        put(
+            out32.cast(),
+            ua::ua_auth_digest(&d, arr(ua32)?, arr(purpose32)?, arr(digest32)?),
+        )
     })
 }
 
 /// The 32-byte member digest.
 #[no_mangle]
-pub extern "C" fn scaas_ua_member_digest(structure_ua32: *const u8, ua_msg32: *const u8, out32: *mut u8) -> ScaasUaStatus {
-    run(|| put(out32.cast(), ua::member_digest(arr(structure_ua32)?, arr(ua_msg32)?)))
+pub extern "C" fn scaas_ua_member_digest(
+    structure_ua32: *const u8,
+    ua_msg32: *const u8,
+    out32: *mut u8,
+) -> ScaasUaStatus {
+    run(|| {
+        put(
+            out32.cast(),
+            ua::member_digest(arr(structure_ua32)?, arr(ua_msg32)?),
+        )
+    })
 }
 
 /// The canonical form of an id (NUL-terminated); non-UTF-8 text is `SCAAS_UA_ERR_ID_FORMAT`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_canonical_id(text: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_canonical_id(
+    text: *const c_char,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| {
         let t = std::str::from_utf8(cstr(text)?).map_err(|_| ua::UAError::IdFormat)?;
         write_str(out, out_len, &ua::canonical_id(t)?)
@@ -1009,14 +1250,24 @@ pub extern "C" fn scaas_ua_canonical_id(text: *const c_char, out: *mut c_char, o
 /// URN `urn:scaas:ua:v1:<kind name>:<hex32>` under `kind`, the id's registry kind (0 = none known: `SCAAS_UA_ERR_KIND_UNKNOWN`).
 /// `id` is `0x` + 64 hex digits; non-UTF-8 text is `SCAAS_UA_ERR_ID_FORMAT`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_id_display(id: *const c_char, kind: u16, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_id_display(
+    id: *const c_char,
+    kind: u16,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| {
         let t = std::str::from_utf8(cstr(id)?).map_err(|_| ua::UAError::IdFormat)?;
         write_str(out, out_len, ua::id_display(t, kind)?.text())
     })
 }
 
-fn json_call(f: fn(&str) -> ua::json::JsonResult<String>, input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+fn json_call(
+    f: fn(&str) -> ua::json::JsonResult<String>,
+    input: *const c_char,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| {
         let t = std::str::from_utf8(cstr(input)?).map_err(|_| argument("JSON"))?;
         write_str(out, out_len, &f(t)?)
@@ -1032,7 +1283,11 @@ fn json_call(f: fn(&str) -> ua::json::JsonResult<String>, input: *const c_char, 
 /// that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON; a `kemPk` for a kind
 /// that holds no KEM key, an msig among them (CTR-UA-32), `SCAAS_UA_ERR_KEM_HOLDER`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_registration_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_registration_args(
+    input: *const c_char,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     json_call(ua::json::registration_args_json, input, out, out_len)
 }
 
@@ -1040,14 +1295,22 @@ pub extern "C" fn scaas_ua_registration_args(input: *const c_char, out: *mut c_c
 /// the `UASig` `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}` (absent: empty, the version-0 fill of a hash commit).
 /// Out: `{ua, version, kem, sig}`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_set_kem_key_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_set_kem_key_args(
+    input: *const c_char,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     json_call(ua::json::set_kem_key_args_json, input, out, out_len)
 }
 
 /// `setPqzKey`'s explicit arguments, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, pqzKey, pqzPopHash, sig}`,
 /// `sig` as in `scaas_ua_set_kem_key_args`. Out: the same fields, `sig` complete.
 #[no_mangle]
-pub extern "C" fn scaas_ua_set_pqz_key_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_set_pqz_key_args(
+    input: *const c_char,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     json_call(ua::json::set_pqz_key_args_json, input, out, out_len)
 }
 
@@ -1055,14 +1318,22 @@ pub extern "C" fn scaas_ua_set_pqz_key_args(input: *const c_char, out: *mut c_ch
 /// decimal string or number, `sigs` the stored structure's member signatures). Out: `{digest, message, memberDigest, args}`: what a quorum of
 /// the stored structure signs on that one registry, and the named arguments.
 #[no_mangle]
-pub extern "C" fn scaas_ua_msig_update(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_msig_update(
+    input: *const c_char,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     json_call(ua::json::msig_update_json, input, out, out_len)
 }
 
 /// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
 /// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_pay_digest(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_pay_digest(
+    input: *const c_char,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     json_call(ua::json::pay_digest_json, input, out, out_len)
 }
 
@@ -1070,7 +1341,11 @@ pub extern "C" fn scaas_ua_pay_digest(input: *const c_char, out: *mut c_char, ou
 /// absent 0; `save` a bool, absent false), out `{payId, payNo, payNoUuid, save}` (`payNoUuid` the UUID text of a right-aligned
 /// UUIDv7 `payNo`, else null: show the hex); a refused shape (`save` with `payNo` 0 included) is `UAArgument`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_meta_pay_id(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_meta_pay_id(
+    input: *const c_char,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     json_call(ua::json::meta_pay_id_json, input, out, out_len)
 }
 
@@ -1080,7 +1355,11 @@ pub extern "C" fn scaas_ua_meta_pay_id(input: *const c_char, out: *mut c_char, o
 /// validUntil, feeAuth?}`; out `{service, entryRef, typedData, digest, selector, prompt}`, with `auth` `calldata` and `job`, with
 /// `relayFee` its `{relayRef, callDataHash, typedData, digest}` and, with `feeAuth`, `relayCalldata`. A refusal is `UAArgument`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_service_pull(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_service_pull(
+    input: *const c_char,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     json_call(ua::json::service_pull_json, input, out, out_len)
 }
 
@@ -1094,7 +1373,10 @@ pub extern "C" fn scaas_ua_encode_msig(
     out_len: *mut usize,
 ) -> ScaasUaStatus {
     run(|| {
-        let m: Vec<_> = bytes(members, n)?.iter().map(|m| (m.kind, m.id, m.weight)).collect();
+        let m: Vec<_> = bytes(members, n)?
+            .iter()
+            .map(|m| (m.kind, m.id, m.weight))
+            .collect();
         write_var(out, out_len, &ua::encode_msig(threshold, &m))
     })
 }
@@ -1240,7 +1522,12 @@ pub struct ScaasUaRecipient {
 pub struct ScaasUaExternalSigner {
     pub ctx: *mut std::ffi::c_void,
     pub sign: Option<
-        unsafe extern "C" fn(ctx: *mut std::ffi::c_void, request_json: *const c_char, sig: *mut u8, sig_len: *mut usize) -> ScaasUaStatus,
+        unsafe extern "C" fn(
+            ctx: *mut std::ffi::c_void,
+            request_json: *const c_char,
+            sig: *mut u8,
+            sig_len: *mut usize,
+        ) -> ScaasUaStatus,
     >,
     pub release: Option<unsafe extern "C" fn(ctx: *mut std::ffi::c_void)>,
 }
@@ -1322,7 +1609,11 @@ fn signer(k: &ScaasUaKey) -> &dyn uw::Signer {
     }
 }
 fn network(n: u32) -> R<uw::Network> {
-    usize::try_from(n).ok().and_then(|i| NETWORKS.get(i)).and_then(|s| uw::Network::from_name(s)).ok_or_else(|| argument("network"))
+    usize::try_from(n)
+        .ok()
+        .and_then(|i| NETWORKS.get(i))
+        .and_then(|s| uw::Network::from_name(s))
+        .ok_or_else(|| argument("network"))
 }
 /// Exactly one of the two unlock secrets is meant: the PRF secret first when both are given (clientkeys `dekFrom`: the
 /// passphrase is then not tried); neither is SCAAS_UA_ERR_ARGUMENT.
@@ -1330,7 +1621,9 @@ fn unlock<'a>(vault_passphrase: *const c_char, prf32: *const u8) -> R<uw::Unlock
     if !prf32.is_null() {
         return Ok(uw::Unlock::Prf(arr(prf32)?));
     }
-    Ok(uw::Unlock::VaultPassphrase(opt_text(vault_passphrase)?.ok_or_else(|| argument("unlock"))?))
+    Ok(uw::Unlock::VaultPassphrase(
+        opt_text(vault_passphrase)?.ok_or_else(|| argument("unlock"))?,
+    ))
 }
 fn vault(json: *const c_char) -> R<uw::Vault> {
     Ok(uw::Vault::from_json(cstr(json)?)?)
@@ -1346,19 +1639,49 @@ struct Opening {
     accepted: Option<uw::AcceptedJson>,
 }
 impl Opening {
-    fn read(expect_json: *const c_char, members_json: *const c_char, accepted_json: *const c_char) -> R<Opening> {
+    fn read(
+        expect_json: *const c_char,
+        members_json: *const c_char,
+        accepted_json: *const c_char,
+    ) -> R<Opening> {
         if expect_json.is_null() {
             return Err(argument("expect_json"));
         }
-        let members = if members_json.is_null() { uw::MembersJson::default() } else { uw::MembersJson::from_json(cstr(members_json)?)? };
-        let accepted = if accepted_json.is_null() { None } else { Some(uw::AcceptedJson::from_json(cstr(accepted_json)?)?) };
-        Ok(Opening { expect: uw::ContainerExpectJson::from_json(cstr(expect_json)?)?, members, accepted })
+        let members = if members_json.is_null() {
+            uw::MembersJson::default()
+        } else {
+            uw::MembersJson::from_json(cstr(members_json)?)?
+        };
+        let accepted = if accepted_json.is_null() {
+            None
+        } else {
+            Some(uw::AcceptedJson::from_json(cstr(accepted_json)?)?)
+        };
+        Ok(Opening {
+            expect: uw::ContainerExpectJson::from_json(cstr(expect_json)?)?,
+            members,
+            accepted,
+        })
     }
     /// `f(expect, members, accepted)` with the lookups as the opener takes them.
-    fn with<T>(&self, f: impl FnOnce(&uw::ContainerExpect, &ua::ua8::Members, Option<&ua::ua8::Accepted>) -> T) -> T {
+    fn with<T>(
+        &self,
+        f: impl FnOnce(
+            &uw::ContainerExpect,
+            &ua::ua_portable::Members,
+            Option<&ua::ua_portable::Accepted>,
+        ) -> T,
+    ) -> T {
         let members = |id: [u8; 32]| self.members.lookup(id);
-        let accepted = |id: [u8; 32], i: u16| self.accepted.as_ref().is_some_and(|a| a.accepted(id, i));
-        f(&self.expect.get(), &members, self.accepted.as_ref().map(|_| &accepted as &ua::ua8::Accepted))
+        let accepted =
+            |id: [u8; 32], i: u16| self.accepted.as_ref().is_some_and(|a| a.accepted(id, i));
+        f(
+            &self.expect.get(),
+            &members,
+            self.accepted
+                .as_ref()
+                .map(|_| &accepted as &ua::ua_portable::Accepted),
+        )
     }
 }
 
@@ -1379,7 +1702,10 @@ pub extern "C" fn scaas_ua_features() -> u64 {
             | on(b::FALCON, SCAAS_UA_FEATURE_FALCON)
             | on(b::ZETHER, SCAAS_UA_FEATURE_ZETHER)
             | on(b::PQZ, SCAAS_UA_FEATURE_PQZ)
-            | b::PQZ_SETS.iter().zip(sets).fold(0, |a, (x, bit)| a | on(*x, bit))
+            | b::PQZ_SETS
+                .iter()
+                .zip(sets)
+                .fold(0, |a, (x, bit)| a | on(*x, bit))
             | on(b::MLOCK, SCAAS_UA_FEATURE_MLOCK)
             | on(b::VECTORS, SCAAS_UA_FEATURE_VECTORS)
             | on(b::WALLET, SCAAS_UA_FEATURE_NATIVE_NETWORKS)
@@ -1388,7 +1714,10 @@ pub extern "C" fn scaas_ua_features() -> u64 {
 
 /// A new wallet of 24 words (OS entropy, no BIP-39 passphrase) into `*out`, and its recovery phrase into `*backup`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_wallet_generate(out: *mut *mut ScaasUaWallet, backup: *mut *mut ScaasUaSeedBackup) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_wallet_generate(
+    out: *mut *mut ScaasUaWallet,
+    backup: *mut *mut ScaasUaSeedBackup,
+) -> ScaasUaStatus {
     run(|| {
         if out.is_null() || backup.is_null() {
             return Err(argument("NULL"));
@@ -1406,7 +1735,15 @@ pub extern "C" fn scaas_ua_wallet_from_mnemonic(
     bip39_passphrase: *const c_char,
     out: *mut *mut ScaasUaWallet,
 ) -> ScaasUaStatus {
-    run(|| give(out, ScaasUaWallet(uw::Wallet::from_mnemonic(text(words)?, opt_text(bip39_passphrase)?.unwrap_or(""))?)))
+    run(|| {
+        give(
+            out,
+            ScaasUaWallet(uw::Wallet::from_mnemonic(
+                text(words)?,
+                opt_text(bip39_passphrase)?.unwrap_or(""),
+            )?),
+        )
+    })
 }
 
 /// The wallet of a seed vault (clientkeys vault v1 JSON): exactly one of `vault_passphrase` and `prf32` is meant (both: the PRF
@@ -1422,7 +1759,11 @@ pub extern "C" fn scaas_ua_wallet_open_vault(
 ) -> ScaasUaStatus {
     run(|| {
         let v = vault(vault_json)?;
-        let w = uw::Wallet::open_vault(&v, unlock(vault_passphrase, prf32)?, opt_text(bip39_passphrase)?.unwrap_or(""))?;
+        let w = uw::Wallet::open_vault(
+            &v,
+            unlock(vault_passphrase, prf32)?,
+            opt_text(bip39_passphrase)?.unwrap_or(""),
+        )?;
         give(out, ScaasUaWallet(w))
     })
 }
@@ -1440,7 +1781,11 @@ pub extern "C" fn scaas_ua_wallet_unlock(
     run(|| {
         let w = handle(w)?;
         let v = vault(vault_json)?;
-        Ok(w.0.unlock(&v, unlock(vault_passphrase, prf32)?, opt_text(bip39_passphrase)?.unwrap_or(""))?)
+        Ok(w.0.unlock(
+            &v,
+            unlock(vault_passphrase, prf32)?,
+            opt_text(bip39_passphrase)?.unwrap_or(""),
+        )?)
     })
 }
 
@@ -1453,7 +1798,16 @@ pub extern "C" fn scaas_ua_wallet_seal_vault(
     out_json: *mut c_char,
     out_len: *mut usize,
 ) -> ScaasUaStatus {
-    run(|| write_str(out_json, out_len, &handle(w)?.0.seal_vault(text(vault_passphrase)?, None)?.to_json()))
+    run(|| {
+        write_str(
+            out_json,
+            out_len,
+            &handle(w)?
+                .0
+                .seal_vault(text(vault_passphrase)?, None)?
+                .to_json(),
+        )
+    })
 }
 
 /// Waits for calls in flight, wipes the secrets and revokes every child handle (SCAAS_UA_ERR_KEY_REVOKED); the manifest stays.
@@ -1473,10 +1827,20 @@ pub extern "C" fn scaas_ua_wallet_free(w: *mut ScaasUaWallet) {
 
 /// The arena's memory protection now.
 #[no_mangle]
-pub extern "C" fn scaas_ua_wallet_memory_protection(w: *const ScaasUaWallet, out: *mut ScaasUaMemoryProtection) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_wallet_memory_protection(
+    w: *const ScaasUaWallet,
+    out: *mut ScaasUaMemoryProtection,
+) -> ScaasUaStatus {
     run(|| {
         let m = handle(w)?.0.memory_protection();
-        put(out, ScaasUaMemoryProtection { chunks: m.chunks, locked: m.locked, no_dump: m.no_dump })
+        put(
+            out,
+            ScaasUaMemoryProtection {
+                chunks: m.chunks,
+                locked: m.locked,
+                no_dump: m.no_dump,
+            },
+        )
     })
 }
 
@@ -1494,7 +1858,10 @@ pub extern "C" fn scaas_ua_wallet_ua_key(
         if out.is_null() {
             return Err(argument("NULL"));
         }
-        give(out, ScaasUaKey(Key::Ua(handle(w)?.0.ua_key(kind, account, index)?)))
+        give(
+            out,
+            ScaasUaKey(Key::Ua(handle(w)?.0.ua_key(kind, account, index)?)),
+        )
     })
 }
 
@@ -1512,7 +1879,14 @@ pub extern "C" fn scaas_ua_wallet_native_key(
             return Err(argument("NULL"));
         }
         let coin = (coin_type != SCAAS_UA_COIN_DEFAULT).then_some(coin_type);
-        give(out, ScaasUaKey(Key::Native(handle(w)?.0.native_key(self::network(network)?, index, coin)?)))
+        give(
+            out,
+            ScaasUaKey(Key::Native(handle(w)?.0.native_key(
+                self::network(network)?,
+                index,
+                coin,
+            )?)),
+        )
     })
 }
 
@@ -1532,19 +1906,34 @@ pub extern "C" fn scaas_ua_wallet_bitcoin_key(
             return Err(argument("NULL"));
         }
         let coin = (coin_type != SCAAS_UA_COIN_DEFAULT).then_some(coin_type);
-        give(out, ScaasUaKey(Key::Native(handle(w)?.0.bitcoin_key(self::network(network)?, coin, change, index)?)))
+        give(
+            out,
+            ScaasUaKey(Key::Native(handle(w)?.0.bitcoin_key(
+                self::network(network)?,
+                coin,
+                change,
+                index,
+            )?)),
+        )
     })
 }
 
 /// The Polkadot key of the junction path `path` (NUL-terminated UTF-8; "" the bare account): its grammar's refusals and a 65th
 /// path are SCAAS_UA_ERR_ARGUMENT.
 #[no_mangle]
-pub extern "C" fn scaas_ua_wallet_polkadot_key(w: *const ScaasUaWallet, path: *const c_char, out: *mut *mut ScaasUaKey) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_wallet_polkadot_key(
+    w: *const ScaasUaWallet,
+    path: *const c_char,
+    out: *mut *mut ScaasUaKey,
+) -> ScaasUaStatus {
     run(|| {
         if out.is_null() {
             return Err(argument("NULL"));
         }
-        give(out, ScaasUaKey(Key::Native(handle(w)?.0.polkadot_key(text(path)?)?)))
+        give(
+            out,
+            ScaasUaKey(Key::Native(handle(w)?.0.polkadot_key(text(path)?)?)),
+        )
     })
 }
 
@@ -1562,7 +1951,9 @@ pub extern "C" fn scaas_ua_wallet_import_native_key(
         if out.is_null() {
             return Err(argument("NULL"));
         }
-        let k = handle(w)?.0.import_native_key(self::network(network)?, bytes(secret, secret_len)?)?;
+        let k = handle(w)?
+            .0
+            .import_native_key(self::network(network)?, bytes(secret, secret_len)?)?;
         give(out, ScaasUaKey(Key::Native(k)))
     })
 }
@@ -1571,12 +1962,22 @@ pub extern "C" fn scaas_ua_wallet_import_native_key(
 /// SCAAS_UA_ERR_ARGUMENT, as for a key the manifest lists but the wallet does not hold (after unlock: open its label vault first,
 /// `scaas_ua_wallet_open_label_vault`). SCAAS_UA_ERR_WALLET_LOCKED while locked.
 #[no_mangle]
-pub extern "C" fn scaas_ua_wallet_imported_key(w: *const ScaasUaWallet, network: u32, n: u32, out: *mut *mut ScaasUaKey) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_wallet_imported_key(
+    w: *const ScaasUaWallet,
+    network: u32,
+    n: u32,
+    out: *mut *mut ScaasUaKey,
+) -> ScaasUaStatus {
     run(|| {
         if out.is_null() {
             return Err(argument("NULL"));
         }
-        give(out, ScaasUaKey(Key::Native(handle(w)?.0.imported_key(self::network(network)?, n)?)))
+        give(
+            out,
+            ScaasUaKey(Key::Native(
+                handle(w)?.0.imported_key(self::network(network)?, n)?,
+            )),
+        )
     })
 }
 
@@ -1598,7 +1999,14 @@ pub extern "C" fn scaas_ua_wallet_imported_ua_key(
         if out.is_null() {
             return Err(argument("NULL"));
         }
-        give(out, ScaasUaKey(Key::Ua(handle(w)?.0.imported_ua_key(self::network(network)?, n, kind)?)))
+        give(
+            out,
+            ScaasUaKey(Key::Ua(handle(w)?.0.imported_ua_key(
+                self::network(network)?,
+                n,
+                kind,
+            )?)),
+        )
     })
 }
 
@@ -1614,7 +2022,16 @@ pub extern "C" fn scaas_ua_wallet_seal_label_vault(
     out_json: *mut c_char,
     out_len: *mut usize,
 ) -> ScaasUaStatus {
-    run(|| write_str(out_json, out_len, &handle(w)?.0.seal_label_vault(text(label)?, text(vault_passphrase)?, None)?.to_json()))
+    run(|| {
+        write_str(
+            out_json,
+            out_len,
+            &handle(w)?
+                .0
+                .seal_label_vault(text(label)?, text(vault_passphrase)?, None)?
+                .to_json(),
+        )
+    })
 }
 
 /// Opens a vault of `scaas_ua_wallet_seal_label_vault` into this (unlocked) wallet: `manifest` replaces the manifest,
@@ -1640,7 +2057,11 @@ pub extern "C" fn scaas_ua_wallet_open_label_vault(
 /// The public manifest JSON `{v, entries, natives, kem, imports, importedUas, pqzHeld, backupGeneration, backupSenders}` (kept by
 /// lock).
 #[no_mangle]
-pub extern "C" fn scaas_ua_wallet_manifest_json(w: *const ScaasUaWallet, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_wallet_manifest_json(
+    w: *const ScaasUaWallet,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| write_str(out, out_len, &handle(w)?.0.manifest().to_json()))
 }
 
@@ -1657,8 +2078,14 @@ pub extern "C" fn scaas_ua_wallet_discover_candidates(
 ) -> ScaasUaStatus {
     run(|| {
         let c = handle(w)?.0.discover_candidates(kind, account, gap)?;
-        let hex = |u: &[u8; 32]| u.iter().fold(String::from("0x"), |s, b| s + &format!("{b:02x}"));
-        let rows: Vec<String> = c.iter().map(|(i, u)| format!("{{\"index\":{i},\"ua\":\"{}\"}}", hex(u))).collect();
+        let hex = |u: &[u8; 32]| {
+            u.iter()
+                .fold(String::from("0x"), |s, b| s + &format!("{b:02x}"))
+        };
+        let rows: Vec<String> = c
+            .iter()
+            .map(|(i, u)| format!("{{\"index\":{i},\"ua\":\"{}\"}}", hex(u)))
+            .collect();
         write_str(out, out_len, &format!("[{}]", rows.join(",")))
     })
 }
@@ -1680,9 +2107,22 @@ pub extern "C" fn scaas_ua_wallet_backup_seal(
             return Err(argument("NULL"));
         }
         let (w, sender) = (handle(w)?, ua_key(handle(sender)?)?);
-        let rs = bytes(recipients, n)?.iter().map(recipient).collect::<R<Vec<_>>>()?;
+        let rs = bytes(recipients, n)?
+            .iter()
+            .map(recipient)
+            .collect::<R<Vec<_>>>()?;
         let cs = w.0.backup_seal(sender, &rs)?;
-        write_str(out_json, out_len, &format!("[{}]", cs.iter().map(uw::SealedContainer::to_json).collect::<Vec<_>>().join(",")))
+        write_str(
+            out_json,
+            out_len,
+            &format!(
+                "[{}]",
+                cs.iter()
+                    .map(uw::SealedContainer::to_json)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+        )
     })
 }
 
@@ -1692,7 +2132,12 @@ fn recipient(r: &ScaasUaRecipient) -> R<uw::Recipient> {
     if r.ephemeral {
         return Ok(uw::Recipient::ephemeral(pk));
     }
-    Ok(uw::Recipient::ua(r.kind, bytes(r.key_data, r.key_data_len)?, r.version, pk)?)
+    Ok(uw::Recipient::ua(
+        r.kind,
+        bytes(r.key_data, r.key_data_len)?,
+        r.version,
+        pk,
+    )?)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1714,9 +2159,14 @@ fn restore(
         }
         let (kk, c) = (handle(kk)?, container(container_json)?);
         let o = Opening::read(expect_json, members_json, accepted_json)?;
-        let cur = if current.is_null() { None } else { Some(&handle(current)?.0) };
+        let cur = if current.is_null() {
+            None
+        } else {
+            Some(&handle(current)?.0)
+        };
         let pass = opt_text(bip39_passphrase)?.unwrap_or("");
-        let r = o.with(|e, m, a| uw::Wallet::restore_backup(&kk.0, &c, e, m, a, cur, rollback, pass))?;
+        let r =
+            o.with(|e, m, a| uw::Wallet::restore_backup(&kk.0, &c, e, m, a, cur, rollback, pass))?;
         put(installed, r.is_some())?;
         match r {
             Some(w) => give(out, ScaasUaWallet(w)),
@@ -1745,7 +2195,18 @@ pub extern "C" fn scaas_ua_wallet_restore_backup(
     out: *mut *mut ScaasUaWallet,
     installed: *mut bool,
 ) -> ScaasUaStatus {
-    restore(kk, container_json, expect_json, members_json, accepted_json, current, bip39_passphrase, out, installed, None)
+    restore(
+        kk,
+        container_json,
+        expect_json,
+        members_json,
+        accepted_json,
+        current,
+        bip39_passphrase,
+        out,
+        installed,
+        None,
+    )
 }
 
 /// `scaas_ua_wallet_restore_backup` that may install an older backup over newer state (the `AllowRollback` marker): call it only
@@ -1764,7 +2225,18 @@ pub extern "C" fn scaas_ua_wallet_restore_backup_rollback(
     installed: *mut bool,
 ) -> ScaasUaStatus {
     let allow = Some(uw::AllowRollback);
-    restore(kk, container_json, expect_json, members_json, accepted_json, current, bip39_passphrase, out, installed, allow)
+    restore(
+        kk,
+        container_json,
+        expect_json,
+        members_json,
+        accepted_json,
+        current,
+        bip39_passphrase,
+        out,
+        installed,
+        allow,
+    )
 }
 
 /// The existing device's link container (JSON) to a new device's session: `session_kem_pk` (the session's
@@ -1783,7 +2255,11 @@ pub extern "C" fn scaas_ua_wallet_link_seal(
     out_len: *mut usize,
 ) -> ScaasUaStatus {
     run(|| {
-        let c = handle(w)?.0.link_seal(ua_key(handle(sender)?)?, bytes(session_kem_pk, session_kem_pk_len)?, text(short_code)?)?;
+        let c = handle(w)?.0.link_seal(
+            ua_key(handle(sender)?)?,
+            bytes(session_kem_pk, session_kem_pk_len)?,
+            text(short_code)?,
+        )?;
         write_str(out_json, out_len, &c.to_json())
     })
 }
@@ -1808,7 +2284,9 @@ pub extern "C" fn scaas_ua_wallet_from_link(
         let (s, c) = (handle(session)?, container(container_json)?);
         let o = Opening::read(expect_json, members_json, accepted_json)?;
         let pass = opt_text(bip39_passphrase)?.unwrap_or("");
-        let taken = lock(&s.0)?.take().ok_or_else(|| fail(SCAAS_UA_ERR_KEY_REVOKED))?;
+        let taken = lock(&s.0)?
+            .take()
+            .ok_or_else(|| fail(SCAAS_UA_ERR_KEY_REVOKED))?;
         let w = o.with(|e, m, a| uw::Wallet::from_link(taken, &c, e, m, a, pass))?;
         give(out, ScaasUaWallet(w))
     })
@@ -1817,7 +2295,11 @@ pub extern "C" fn scaas_ua_wallet_from_link(
 /// The recovery phrase, once, into a buffer of at least SCAAS_UA_MNEMONIC_MAX bytes (smaller: SCAAS_UA_ERR_BUFFER; `out` NULL:
 /// SCAAS_UA_ERR_ARGUMENT; both with nothing revealed); SCAAS_UA_ERR_ARGUMENT after. The caller zeroizes it.
 #[no_mangle]
-pub extern "C" fn scaas_ua_seed_backup_reveal(b: *const ScaasUaSeedBackup, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_seed_backup_reveal(
+    b: *const ScaasUaSeedBackup,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| {
         let b = handle(b)?;
         need(out_len, SCAAS_UA_MNEMONIC_MAX)?;
@@ -1831,7 +2313,10 @@ pub extern "C" fn scaas_ua_seed_backup_reveal(b: *const ScaasUaSeedBackup, out: 
 
 /// Three word positions to ask, 1-based and ascending, into `out3[3]`; again after a miss. SCAAS_UA_ERR_ARGUMENT before reveal.
 #[no_mangle]
-pub extern "C" fn scaas_ua_seed_backup_challenge(b: *const ScaasUaSeedBackup, out3: *mut u32) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_seed_backup_challenge(
+    b: *const ScaasUaSeedBackup,
+    out3: *mut u32,
+) -> ScaasUaStatus {
     run(|| {
         let b = handle(b)?;
         if out3.is_null() {
@@ -1854,7 +2339,10 @@ pub extern "C" fn scaas_ua_seed_backup_verify(
 ) -> ScaasUaStatus {
     run(|| {
         let b = handle(b)?;
-        let a = bytes(answers, n)?.iter().map(|p| text(*p)).collect::<R<Vec<_>>>()?;
+        let a = bytes(answers, n)?
+            .iter()
+            .map(|p| text(*p))
+            .collect::<R<Vec<_>>>()?;
         let v = lock(&b.0)?.verify(&a)?;
         put(ok, v)
     })
@@ -1900,7 +2388,11 @@ pub extern "C" fn scaas_ua_key_free(k: *mut ScaasUaKey) {
 
 /// A UA key's key data, or a native key's public key (compressed secp256k1 or ed25519). Readable after its wallet is locked.
 #[no_mangle]
-pub extern "C" fn scaas_ua_key_data(k: *const ScaasUaKey, out: *mut u8, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_key_data(
+    k: *const ScaasUaKey,
+    out: *mut u8,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| {
         let d = match &handle(k)?.0 {
             Key::Ua(u) => u.key_data(),
@@ -1920,7 +2412,13 @@ pub extern "C" fn scaas_ua_sign_ua(
     sig: *mut u8,
     sig_len: *mut usize,
 ) -> ScaasUaStatus {
-    run(|| write_var(sig, sig_len, &ua_key(handle(k)?)?.sign_ua(arr(purpose32)?, arr(digest32)?)?))
+    run(|| {
+        write_var(
+            sig,
+            sig_len,
+            &ua_key(handle(k)?)?.sign_ua(arr(purpose32)?, arr(digest32)?)?,
+        )
+    })
 }
 
 /// A UA key's signature as a member of the structure `structure_ua32` over its `ua_msg` (the `member` purpose).
@@ -1932,7 +2430,13 @@ pub extern "C" fn scaas_ua_sign_member(
     sig: *mut u8,
     sig_len: *mut usize,
 ) -> ScaasUaStatus {
-    run(|| write_var(sig, sig_len, &ua_key(handle(k)?)?.sign_member(arr(structure_ua32)?, arr(structure_ua_msg32)?)?))
+    run(|| {
+        write_var(
+            sig,
+            sig_len,
+            &ua_key(handle(k)?)?.sign_member(arr(structure_ua32)?, arr(structure_ua_msg32)?)?,
+        )
+    })
 }
 
 /// A native EVM key's EIP-712 signature (r || s || v) of `typed_data_json` (64 KiB, depth 8), only if it is what `expect_json`
@@ -1948,7 +2452,11 @@ pub extern "C" fn scaas_ua_sign_typed(
     run(|| {
         let k = native_key(handle(k)?)?;
         let td = uw::TypedData::from_json(cstr(typed_data_json)?)?;
-        write_var(sig, sig_len, &k.sign_typed(&td, uw::Expect::from_json(cstr(expect_json)?)?)?)
+        write_var(
+            sig,
+            sig_len,
+            &k.sign_typed(&td, uw::Expect::from_json(cstr(expect_json)?)?)?,
+        )
     })
 }
 
@@ -1964,7 +2472,11 @@ pub extern "C" fn scaas_ua_sign_typed_any(
     run(|| {
         let k = native_key(handle(k)?)?;
         let td = uw::TypedData::from_json(cstr(typed_data_json)?)?;
-        write_var(sig, sig_len, &k.sign_typed(&td, uw::Expect::Any(uw::AllowAnyTypedData))?)
+        write_var(
+            sig,
+            sig_len,
+            &k.sign_typed(&td, uw::Expect::Any(uw::AllowAnyTypedData))?,
+        )
     })
 }
 
@@ -1979,7 +2491,12 @@ pub extern "C" fn scaas_ua_sign_transaction(
 ) -> ScaasUaStatus {
     run(|| {
         let k = native_key(handle(k)?)?;
-        write_var(out, out_len, &k.sign_transaction(&uw::EvmTx::from_json(cstr(tx_json)?)?)?.raw)
+        write_var(
+            out,
+            out_len,
+            &k.sign_transaction(&uw::EvmTx::from_json(cstr(tx_json)?)?)?
+                .raw,
+        )
     })
 }
 
@@ -1992,7 +2509,13 @@ pub extern "C" fn scaas_ua_sign_key_proof(
     sig: *mut u8,
     sig_len: *mut usize,
 ) -> ScaasUaStatus {
-    run(|| write_var(sig, sig_len, &native_key(handle(k)?)?.sign_key_proof(bytes(challenge, challenge_len)?)?))
+    run(|| {
+        write_var(
+            sig,
+            sig_len,
+            &native_key(handle(k)?)?.sign_key_proof(bytes(challenge, challenge_len)?)?,
+        )
+    })
 }
 
 /// A native key's signature of a raw 32-byte digest, by this call's own name (no flag argument); a UA key:
@@ -2006,7 +2529,11 @@ pub extern "C" fn scaas_ua_sign_digest_raw(
 ) -> ScaasUaStatus {
     run(|| match &handle(k)?.0 {
         Key::Ua(_) => Err(fail(SCAAS_UA_ERR_RAW_DIGEST_REFUSED)),
-        Key::Native(n) => write_var(sig, sig_len, &n.sign_digest(arr(digest32)?, uw::AllowRawDigest)?),
+        Key::Native(n) => write_var(
+            sig,
+            sig_len,
+            &n.sign_digest(arr(digest32)?, uw::AllowRawDigest)?,
+        ),
     })
 }
 
@@ -2022,7 +2549,11 @@ pub extern "C" fn scaas_ua_sign_message_raw(
 ) -> ScaasUaStatus {
     run(|| match &handle(k)?.0 {
         Key::Ua(_) => Err(fail(SCAAS_UA_ERR_RAW_DIGEST_REFUSED)),
-        Key::Native(n) => write_var(sig, sig_len, &n.sign_message(bytes(msg, msg_len)?, uw::AllowRawDigest)?),
+        Key::Native(n) => write_var(
+            sig,
+            sig_len,
+            &n.sign_message(bytes(msg, msg_len)?, uw::AllowRawDigest)?,
+        ),
     })
 }
 
@@ -2036,13 +2567,37 @@ fn envelope_key<'a>(k: *const ScaasUaKey) -> R<&'a uw::NativeKey> {
 }
 /// NEAR: ed25519 over `sha256(tx_borsh)`; a NEP-461 tagged payload (first u32, little-endian, >= 2^30): SCAAS_UA_ERR_ARGUMENT.
 #[no_mangle]
-pub extern "C" fn scaas_ua_sign_near_transaction(k: *const ScaasUaKey, tx: *const u8, tx_len: usize, sig: *mut u8, sig_len: *mut usize) -> ScaasUaStatus {
-    run(|| write_var(sig, sig_len, &envelope_key(k)?.sign_near_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?))
+pub extern "C" fn scaas_ua_sign_near_transaction(
+    k: *const ScaasUaKey,
+    tx: *const u8,
+    tx_len: usize,
+    sig: *mut u8,
+    sig_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        write_var(
+            sig,
+            sig_len,
+            &envelope_key(k)?.sign_near_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?,
+        )
+    })
 }
 /// Sui: ed25519 over `blake2b-256(0x00 0x00 0x00 ‖ tx_bcs)`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_sign_sui_transaction(k: *const ScaasUaKey, tx: *const u8, tx_len: usize, sig: *mut u8, sig_len: *mut usize) -> ScaasUaStatus {
-    run(|| write_var(sig, sig_len, &envelope_key(k)?.sign_sui_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?))
+pub extern "C" fn scaas_ua_sign_sui_transaction(
+    k: *const ScaasUaKey,
+    tx: *const u8,
+    tx_len: usize,
+    sig: *mut u8,
+    sig_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        write_var(
+            sig,
+            sig_len,
+            &envelope_key(k)?.sign_sui_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?,
+        )
+    })
 }
 /// Stellar: ed25519 over `sha256(network_id32 ‖ 0x00000002 ‖ tx_xdr)`.
 #[no_mangle]
@@ -2054,33 +2609,79 @@ pub extern "C" fn scaas_ua_sign_stellar_transaction(
     sig: *mut u8,
     sig_len: *mut usize,
 ) -> ScaasUaStatus {
-    run(|| write_var(sig, sig_len, &envelope_key(k)?.sign_stellar_transaction(arr(network_id32)?, bytes(tx, tx_len)?, uw::AllowRawDigest)?))
+    run(|| {
+        write_var(
+            sig,
+            sig_len,
+            &envelope_key(k)?.sign_stellar_transaction(
+                arr(network_id32)?,
+                bytes(tx, tx_len)?,
+                uw::AllowRawDigest,
+            )?,
+        )
+    })
 }
 /// Hedera Ed25519: ed25519 over the transaction's `bodyBytes`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_sign_hedera_transaction(k: *const ScaasUaKey, tx: *const u8, tx_len: usize, sig: *mut u8, sig_len: *mut usize) -> ScaasUaStatus {
-    run(|| write_var(sig, sig_len, &envelope_key(k)?.sign_hedera_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?))
+pub extern "C" fn scaas_ua_sign_hedera_transaction(
+    k: *const ScaasUaKey,
+    tx: *const u8,
+    tx_len: usize,
+    sig: *mut u8,
+    sig_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        write_var(
+            sig,
+            sig_len,
+            &envelope_key(k)?.sign_hedera_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?,
+        )
+    })
 }
 
 /// A native key's address as its network prints it (NUL-terminated); a UA key or a network with no address (`ton`,
 /// `hedera_ed25519`): SCAAS_UA_ERR_ARGUMENT.
 #[no_mangle]
-pub extern "C" fn scaas_ua_key_address(k: *const ScaasUaKey, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
-    run(|| write_str(out, out_len, &native_key(handle(k)?)?.address().ok_or_else(|| argument("no address"))?))
+pub extern "C" fn scaas_ua_key_address(
+    k: *const ScaasUaKey,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        write_str(
+            out,
+            out_len,
+            &native_key(handle(k)?)?
+                .address()
+                .ok_or_else(|| argument("no address"))?,
+        )
+    })
 }
 
 /// A Polkadot key's SS58 address at `prefix` (0 to 16,383, not 46 / 47; NUL-terminated); any other key: SCAAS_UA_ERR_ARGUMENT.
 #[no_mangle]
-pub extern "C" fn scaas_ua_key_ss58_address(k: *const ScaasUaKey, prefix: u16, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_key_ss58_address(
+    k: *const ScaasUaKey,
+    prefix: u16,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| write_str(out, out_len, &native_key(handle(k)?)?.ss58_address(prefix)?))
 }
 
 /// A Bitcoin key's witness program: `*version` 0 and `HASH160(pk)` (P2WPKH) or 1 and `x(Q)` (P2TR); any other key:
 /// SCAAS_UA_ERR_ARGUMENT.
 #[no_mangle]
-pub extern "C" fn scaas_ua_key_witness_program(k: *const ScaasUaKey, version: *mut u8, out: *mut u8, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_key_witness_program(
+    k: *const ScaasUaKey,
+    version: *mut u8,
+    out: *mut u8,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| {
-        let (v, p) = native_key(handle(k)?)?.witness_program().ok_or_else(|| argument("not a Bitcoin key"))?;
+        let (v, p) = native_key(handle(k)?)?
+            .witness_program()
+            .ok_or_else(|| argument("not a Bitcoin key"))?;
         put(version, v)?;
         write_var(out, out_len, &p)
     })
@@ -2103,7 +2704,10 @@ pub extern "C" fn scaas_ua_uasig(
 ) -> ScaasUaStatus {
     run(|| {
         let req = uw::UaSigRequest::from_json(cstr(request_json)?)?;
-        let ks = bytes(keys, n_keys)?.iter().map(|k| handle(*k).map(signer)).collect::<R<Vec<_>>>()?;
+        let ks = bytes(keys, n_keys)?
+            .iter()
+            .map(|k| handle(*k).map(signer))
+            .collect::<R<Vec<_>>>()?;
         write_str(out, out_len, &ua::json::uasig_json(&req.sign(&ks)?))
     })
 }
@@ -2125,12 +2729,19 @@ pub extern "C" fn scaas_ua_external_key_new(
 /// The UA's KEM key of record `version` (0 = the register key), derived through the UA key handle's own store: no wallet
 /// argument. SCAAS_UA_ERR_KEM_HOLDER for a kind that holds none; SCAAS_UA_ERR_KEY_REVOKED once the wallet was locked.
 #[no_mangle]
-pub extern "C" fn scaas_ua_kem_key(ua_key: *const ScaasUaKey, version: u64, out: *mut *mut ScaasUaKemKey) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_kem_key(
+    ua_key: *const ScaasUaKey,
+    version: u64,
+    out: *mut *mut ScaasUaKemKey,
+) -> ScaasUaStatus {
     run(|| {
         if out.is_null() {
             return Err(argument("NULL"));
         }
-        give(out, ScaasUaKemKey(self::ua_key(handle(ua_key)?)?.kem_key(version)?))
+        give(
+            out,
+            ScaasUaKemKey(self::ua_key(handle(ua_key)?)?.kem_key(version)?),
+        )
     })
 }
 
@@ -2154,7 +2765,11 @@ pub extern "C" fn scaas_ua_kem_free(kk: *mut ScaasUaKemKey) {
 #[no_mangle]
 pub extern "C" fn scaas_ua_kem_pk(kk: *const ScaasUaKemKey, out1601: *mut u8) -> ScaasUaStatus {
     run(|| {
-        let pk: [u8; SCAAS_UA_KEM_PK_LEN] = handle(kk)?.0.kem_pk().try_into().map_err(|_| fail(SCAAS_UA_ERR_INTERNAL))?;
+        let pk: [u8; SCAAS_UA_KEM_PK_LEN] = handle(kk)?
+            .0
+            .kem_pk()
+            .try_into()
+            .map_err(|_| fail(SCAAS_UA_ERR_INTERNAL))?;
         put(out1601.cast(), pk)
     })
 }
@@ -2174,7 +2789,8 @@ pub extern "C" fn scaas_ua_kem_decaps(
         if ss32.is_null() {
             return Err(argument("NULL"));
         }
-        let ss = kk.0.decaps(bytes(mlkem_ct, mlkem_ct_len)?, arr(x25519_eph32)?)?;
+        let ss =
+            kk.0.decaps(bytes(mlkem_ct, mlkem_ct_len)?, arr(x25519_eph32)?)?;
         put(ss32.cast::<[u8; 32]>(), *ss)
     })
 }
@@ -2194,7 +2810,8 @@ pub extern "C" fn scaas_ua_kem_encaps(
             return Err(argument("NULL"));
         }
         let (ct, e, ss) = uw::kem_encaps(bytes(kem_pk, kem_pk_len)?)?;
-        let ct: [u8; SCAAS_UA_KEM_CT_LEN] = ct.try_into().map_err(|_| fail(SCAAS_UA_ERR_INTERNAL))?;
+        let ct: [u8; SCAAS_UA_KEM_CT_LEN] =
+            ct.try_into().map_err(|_| fail(SCAAS_UA_ERR_INTERNAL))?;
         put(mlkem_ct1568.cast(), ct)?;
         put(x25519_eph32.cast(), e)?;
         put(ss32.cast::<[u8; 32]>(), *ss)
@@ -2227,7 +2844,12 @@ pub extern "C" fn scaas_ua_seal(
         if x25519_eph32.is_null() {
             return Err(argument("NULL"));
         }
-        let s = uw::seal(bytes(kem_pk, kem_pk_len)?, text(purpose)?, bytes(aad, aad_len)?, bytes(pt, pt_len)?)?;
+        let s = uw::seal(
+            bytes(kem_pk, kem_pk_len)?,
+            text(purpose)?,
+            bytes(aad, aad_len)?,
+            bytes(pt, pt_len)?,
+        )?;
         write_var(mlkem_ct, mlkem_ct_len, &s.mlkem_ct)?;
         put(x25519_eph32.cast(), s.x25519_eph)?;
         write_var(ct, ct_len, &s.ciphertext)
@@ -2261,7 +2883,11 @@ pub extern "C" fn scaas_ua_open(
             x25519_eph: *arr(x25519_eph32)?,
             ciphertext: bytes(ct, ct_len)?.to_vec(),
         };
-        write_var(pt, pt_len, &kk.0.open(text(purpose)?, bytes(aad, aad_len)?, &s)?)
+        write_var(
+            pt,
+            pt_len,
+            &kk.0.open(text(purpose)?, bytes(aad, aad_len)?, &s)?,
+        )
     })
 }
 
@@ -2295,28 +2921,45 @@ pub extern "C" fn scaas_ua_link_session_new(out: *mut *mut ScaasUaLinkSession) -
         if out.is_null() {
             return Err(argument("NULL"));
         }
-        give(out, ScaasUaLinkSession(Mutex::new(Some(uw::LinkSession::new()?))))
+        give(
+            out,
+            ScaasUaLinkSession(Mutex::new(Some(uw::LinkSession::new()?))),
+        )
     })
 }
 
 /// The session's `kemPk`, the key the existing device seals to.
 #[no_mangle]
-pub extern "C" fn scaas_ua_link_session_kem_pk(s: *const ScaasUaLinkSession, out1601: *mut u8) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_link_session_kem_pk(
+    s: *const ScaasUaLinkSession,
+    out1601: *mut u8,
+) -> ScaasUaStatus {
     run(|| {
         let s = handle(s)?;
         let g = lock(&s.0)?;
-        let pk: [u8; SCAAS_UA_KEM_PK_LEN] =
-            g.as_ref().ok_or_else(|| fail(SCAAS_UA_ERR_KEY_REVOKED))?.kem_pk().try_into().map_err(|_| fail(SCAAS_UA_ERR_INTERNAL))?;
+        let pk: [u8; SCAAS_UA_KEM_PK_LEN] = g
+            .as_ref()
+            .ok_or_else(|| fail(SCAAS_UA_ERR_KEY_REVOKED))?
+            .kem_pk()
+            .try_into()
+            .map_err(|_| fail(SCAAS_UA_ERR_INTERNAL))?;
         put(out1601.cast(), pk)
     })
 }
 
 /// The 8-digit short code both screens show (NUL-terminated).
 #[no_mangle]
-pub extern "C" fn scaas_ua_link_session_short_code(s: *const ScaasUaLinkSession, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_link_session_short_code(
+    s: *const ScaasUaLinkSession,
+    out: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| {
         let s = handle(s)?;
-        let code = lock(&s.0)?.as_ref().ok_or_else(|| fail(SCAAS_UA_ERR_KEY_REVOKED))?.short_code();
+        let code = lock(&s.0)?
+            .as_ref()
+            .ok_or_else(|| fail(SCAAS_UA_ERR_KEY_REVOKED))?
+            .short_code();
         write_str(out, out_len, &code)
     })
 }
@@ -2328,7 +2971,10 @@ pub extern "C" fn scaas_ua_link_session_free(s: *mut ScaasUaLinkSession) {
 
 /// `*out = true` iff the vault's pin envelope is weaker than today's parameters (rewrap it on unlock).
 #[no_mangle]
-pub extern "C" fn scaas_ua_vault_needs_rewrap(vault_json: *const c_char, out: *mut bool) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_vault_needs_rewrap(
+    vault_json: *const c_char,
+    out: *mut bool,
+) -> ScaasUaStatus {
     run(|| put(out, vault(vault_json)?.needs_rewrap()))
 }
 
@@ -2342,7 +2988,15 @@ pub extern "C" fn scaas_ua_vault_rewrap_pin(
     out_json: *mut c_char,
     out_len: *mut usize,
 ) -> ScaasUaStatus {
-    run(|| write_str(out_json, out_len, &vault(vault_json)?.rewrap_pin(text(old_passphrase)?, text(new_passphrase)?)?.to_json()))
+    run(|| {
+        write_str(
+            out_json,
+            out_len,
+            &vault(vault_json)?
+                .rewrap_pin(text(old_passphrase)?, text(new_passphrase)?)?
+                .to_json(),
+        )
+    })
 }
 
 /// The vault with a PRF envelope (`prf32` the platform secret, `credential_id` the credential id or key alias, `salt` what the
@@ -2360,8 +3014,18 @@ pub extern "C" fn scaas_ua_vault_enable_prf(
     out_len: *mut usize,
 ) -> ScaasUaStatus {
     run(|| {
-        let prf = uw::PrfEnvelope { output: arr(prf32)?, credential_id: text(credential_id)?, salt: bytes(salt, salt_len)? };
-        write_str(out_json, out_len, &vault(vault_json)?.enable_prf(text(vault_passphrase)?, &prf)?.to_json())
+        let prf = uw::PrfEnvelope {
+            output: arr(prf32)?,
+            credential_id: text(credential_id)?,
+            salt: bytes(salt, salt_len)?,
+        };
+        write_str(
+            out_json,
+            out_len,
+            &vault(vault_json)?
+                .enable_prf(text(vault_passphrase)?, &prf)?
+                .to_json(),
+        )
     })
 }
 
@@ -2389,7 +3053,13 @@ pub extern "C" fn scaas_ua_aead_seal(
 ) -> ScaasUaStatus {
     run(|| {
         need(out_len, data_len.saturating_add(16))?;
-        let c = uw::aead_seal(self::alg(alg)?, arr(key32)?, arr(nonce12)?, bytes(aad, aad_len)?, bytes(data, data_len)?)?;
+        let c = uw::aead_seal(
+            self::alg(alg)?,
+            arr(key32)?,
+            arr(nonce12)?,
+            bytes(aad, aad_len)?,
+            bytes(data, data_len)?,
+        )?;
         write_var(out, out_len, &c)
     })
 }
@@ -2411,7 +3081,13 @@ pub extern "C" fn scaas_ua_aead_open(
 ) -> ScaasUaStatus {
     run(|| {
         need(out_len, data_len.saturating_sub(16))?;
-        let p = uw::aead_open(self::alg(alg)?, arr(key32)?, arr(nonce12)?, bytes(aad, aad_len)?, bytes(data, data_len)?)?;
+        let p = uw::aead_open(
+            self::alg(alg)?,
+            arr(key32)?,
+            arr(nonce12)?,
+            bytes(aad, aad_len)?,
+            bytes(data, data_len)?,
+        )?;
         write_var(out, out_len, &p)
     })
 }
@@ -2430,7 +3106,12 @@ pub extern "C" fn scaas_ua_hkdf_sha256(
     len: usize,
 ) -> ScaasUaStatus {
     run(|| {
-        let k = uw::hkdf_sha256(bytes(ikm, ikm_len)?, bytes(salt, salt_len)?, bytes(info, info_len)?, len)?;
+        let k = uw::hkdf_sha256(
+            bytes(ikm, ikm_len)?,
+            bytes(salt, salt_len)?,
+            bytes(info, info_len)?,
+            len,
+        )?;
         let mut cap = len;
         write_var(out, &mut cap, &k)
     })
@@ -2445,13 +3126,27 @@ pub extern "C" fn scaas_ua_hmac_sha256(
     data_len: usize,
     out32: *mut u8,
 ) -> ScaasUaStatus {
-    run(|| put(out32.cast(), uw::hmac_sha256(bytes(key, key_len)?, bytes(data, data_len)?)))
+    run(|| {
+        put(
+            out32.cast(),
+            uw::hmac_sha256(bytes(key, key_len)?, bytes(data, data_len)?),
+        )
+    })
 }
 
 /// The WebAuthn challenge of `purpose32` (a tag of PURPOSES or pop v2) and `digest32`: `uaMessage(0x0100, purpose, digest)`.
 #[no_mangle]
-pub extern "C" fn scaas_ua_webauthn_challenge(purpose32: *const u8, digest32: *const u8, out32: *mut u8) -> ScaasUaStatus {
-    run(|| put(out32.cast(), uw::webauthn_challenge(arr(purpose32)?, arr(digest32)?)?))
+pub extern "C" fn scaas_ua_webauthn_challenge(
+    purpose32: *const u8,
+    digest32: *const u8,
+    out32: *mut u8,
+) -> ScaasUaStatus {
+    run(|| {
+        put(
+            out32.cast(),
+            uw::webauthn_challenge(arr(purpose32)?, arr(digest32)?)?,
+        )
+    })
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
@@ -2480,7 +3175,10 @@ pub extern "C" fn scaas_ua_wallet_zether_key(
             return Err(argument("NULL"));
         }
         #[cfg(feature = "zether")]
-        return give(out, ScaasUaZetherKey(handle(w)?.0.zether_key(coin, account, key_use)?));
+        return give(
+            out,
+            ScaasUaZetherKey(handle(w)?.0.zether_key(coin, account, key_use)?),
+        );
         #[cfg(not(feature = "zether"))]
         {
             let _ = (w, coin, account, key_use);
@@ -2496,12 +3194,17 @@ pub extern "C" fn scaas_ua_zether_key_free(k: *mut ScaasUaZetherKey) {
 
 /// The key's `Y` (SCAAS_UA_ZETHER_Y_LEN bytes) and its UA (kind 0x0141); public, readable after lock.
 #[no_mangle]
-pub extern "C" fn scaas_ua_zether_public(k: *const ScaasUaZetherKey, y128: *mut u8, ua32: *mut u8) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_zether_public(
+    k: *const ScaasUaZetherKey,
+    y128: *mut u8,
+    ua32: *mut u8,
+) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "zether")]
         {
             let k = zether(k)?;
-            let y: [u8; SCAAS_UA_ZETHER_Y_LEN] = k.y().try_into().map_err(|_| fail(SCAAS_UA_ERR_INTERNAL))?;
+            let y: [u8; SCAAS_UA_ZETHER_Y_LEN] =
+                k.y().try_into().map_err(|_| fail(SCAAS_UA_ERR_INTERNAL))?;
             if y128.is_null() || ua32.is_null() {
                 return Err(argument("NULL"));
             }
@@ -2539,7 +3242,11 @@ pub extern "C" fn scaas_ua_zether_call(
 ) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "zether")]
-        return write_str(out_json, out_len, &zether(k)?.call(text(cmd)?, cstr(request_json)?)?);
+        return write_str(
+            out_json,
+            out_len,
+            &zether(k)?.call(text(cmd)?, cstr(request_json)?)?,
+        );
         #[cfg(not(feature = "zether"))]
         {
             let _ = (k, cmd, request_json, out_json, out_len);
@@ -2560,7 +3267,11 @@ pub extern "C" fn scaas_ua_zether_seal_balance_cache(
 ) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "zether")]
-        return write_str(out_json, out_len, &zether(k)?.seal_balance_cache(bytes(entries_json, entries_json_len)?)?);
+        return write_str(
+            out_json,
+            out_len,
+            &zether(k)?.seal_balance_cache(bytes(entries_json, entries_json_len)?)?,
+        );
         #[cfg(not(feature = "zether"))]
         {
             let _ = (k, entries_json, entries_json_len, out_json, out_len);
@@ -2580,7 +3291,11 @@ pub extern "C" fn scaas_ua_zether_open_balance_cache(
 ) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "zether")]
-        return write_var(out, out_len, &zether(k)?.open_balance_cache(cstr(box_json)?)?);
+        return write_var(
+            out,
+            out_len,
+            &zether(k)?.open_balance_cache(cstr(box_json)?)?,
+        );
         #[cfg(not(feature = "zether"))]
         {
             let _ = (k, box_json, out, out_len);
@@ -2611,7 +3326,12 @@ fn pqz<'a>(k: *const ScaasUaPqzKey) -> R<&'a PqzInner> {
 /// "scaas.ua.pqz-mlwe.v1" || be32(account) || be32(index)) -> pqzl keygen; seed32 stays in the wallet's store (lock and free
 /// revoke the handle: SCAAS_UA_ERR_KEY_REVOKED). SCAAS_UA_ERR_WALLET_LOCKED while locked.
 #[no_mangle]
-pub extern "C" fn scaas_ua_wallet_pqz_key(w: *const ScaasUaWallet, account: u32, index: u32, out: *mut *mut ScaasUaPqzKey) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_wallet_pqz_key(
+    w: *const ScaasUaWallet,
+    account: u32,
+    index: u32,
+    out: *mut *mut ScaasUaPqzKey,
+) -> ScaasUaStatus {
     run(|| {
         if out.is_null() {
             return Err(argument("NULL"));
@@ -2630,14 +3350,21 @@ pub extern "C" fn scaas_ua_wallet_pqz_key(w: *const ScaasUaWallet, account: u32,
 /// scaas_ua_wallet_pqz_key's key, every version v >= 1 appends be64(v) to the HKDF info. Otherwise as scaas_ua_wallet_pqz_key.
 #[no_mangle]
 pub extern "C" fn scaas_ua_wallet_pqz_key_version(
-    w: *const ScaasUaWallet, account: u32, index: u32, version: u64, out: *mut *mut ScaasUaPqzKey,
+    w: *const ScaasUaWallet,
+    account: u32,
+    index: u32,
+    version: u64,
+    out: *mut *mut ScaasUaPqzKey,
 ) -> ScaasUaStatus {
     run(|| {
         if out.is_null() {
             return Err(argument("NULL"));
         }
         #[cfg(feature = "pqz")]
-        return give(out, ScaasUaPqzKey(handle(w)?.0.pqz_key_version(account, index, version)?));
+        return give(
+            out,
+            ScaasUaPqzKey(handle(w)?.0.pqz_key_version(account, index, version)?),
+        );
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (w, account, index, version);
@@ -2653,7 +3380,11 @@ pub extern "C" fn scaas_ua_pqz_key_free(k: *mut ScaasUaPqzKey) {
 
 /// The key's `pk` (the set's `pkLen` bytes, `scaas_ua_pqz_set`); public, readable after lock.
 #[no_mangle]
-pub extern "C" fn scaas_ua_pqz_public(k: *const ScaasUaPqzKey, out: *mut u8, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_pqz_public(
+    k: *const ScaasUaPqzKey,
+    out: *mut u8,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "pqz")]
         return write_var(out, out_len, &pqz(k)?.pk());
@@ -2687,7 +3418,11 @@ pub extern "C" fn scaas_ua_pqz_call(
 ) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "pqz")]
-        return write_str(out_json, out_len, &pqz(k)?.call(text(cmd)?, cstr(request_json)?)?);
+        return write_str(
+            out_json,
+            out_len,
+            &pqz(k)?.call(text(cmd)?, cstr(request_json)?)?,
+        );
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (k, cmd, request_json, out_json, out_len);
@@ -2702,10 +3437,18 @@ pub extern "C" fn scaas_ua_pqz_call(
 /// depth 8) gives `{parts, sum}` in `out_json` (a size query checks again). Any failure, a key record of the quorum at the
 /// version checked among them, is SCAAS_UA_ERR_ARGUMENT (no parts). Decrypts nothing and uses no key.
 #[no_mangle]
-pub extern "C" fn scaas_ua_pqz_check(request_json: *const c_char, out_json: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_pqz_check(
+    request_json: *const c_char,
+    out_json: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "pqz")]
-        return write_str(out_json, out_len, &ua::facade::pqz::check_proven(cstr(request_json)?)?);
+        return write_str(
+            out_json,
+            out_len,
+            &ua::facade::pqz::check_proven(cstr(request_json)?)?,
+        );
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (request_json, out_json, out_len);
@@ -2726,7 +3469,11 @@ pub extern "C" fn scaas_ua_pqz_seal_balance_cache(
 ) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "pqz")]
-        return write_str(out_json, out_len, &pqz(k)?.seal_balance_cache(bytes(entries, entries_len)?)?);
+        return write_str(
+            out_json,
+            out_len,
+            &pqz(k)?.seal_balance_cache(bytes(entries, entries_len)?)?,
+        );
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (k, entries, entries_len, out_json, out_len);
@@ -2775,7 +3522,9 @@ pub extern "C" fn scaas_ua_pqz_set(out_json: *mut c_char, out_len: *mut usize) -
 pub extern "C" fn scaas_ua_pqz_check_set(deployed_json: *const c_char) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "pqz")]
-        return Ok(ua::facade::pqz::check_set(&ua::facade::pqz::PqzSet::from_json(cstr(deployed_json)?)?)?);
+        return Ok(ua::facade::pqz::check_set(
+            &ua::facade::pqz::PqzSet::from_json(cstr(deployed_json)?)?,
+        )?);
         #[cfg(not(feature = "pqz"))]
         {
             let _ = deployed_json;
@@ -2788,10 +3537,22 @@ pub extern "C" fn scaas_ua_pqz_check_set(deployed_json: *const c_char) -> ScaasU
 /// key oracle (spec §8.4); by this call's own name, never logged. The caller zeroizes `out32` (explicit_bzero / SecureZeroMemory).
 /// SCAAS_UA_ERR_WALLET_LOCKED while locked.
 #[no_mangle]
-pub extern "C" fn scaas_ua_export_pqz_leaf_raw(w: *const ScaasUaWallet, account: u32, index: u32, out32: *mut u8) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_export_pqz_leaf_raw(
+    w: *const ScaasUaWallet,
+    account: u32,
+    index: u32,
+    out32: *mut u8,
+) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "pqz")]
-        return put(out32.cast::<[u8; 32]>(), *handle(w)?.0.export_pqz_leaf_raw(account, index, ua::facade::pqz::AllowSecretExport)?);
+        return put(
+            out32.cast::<[u8; 32]>(),
+            *handle(w)?.0.export_pqz_leaf_raw(
+                account,
+                index,
+                ua::facade::pqz::AllowSecretExport,
+            )?,
+        );
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (w, account, index, out32);
@@ -2805,13 +3566,22 @@ pub extern "C" fn scaas_ua_export_pqz_leaf_raw(w: *const ScaasUaWallet, account:
 /// SCAAS_UA_ERR_WALLET_LOCKED while locked.
 #[no_mangle]
 pub extern "C" fn scaas_ua_export_pqz_leaf_raw_version(
-    w: *const ScaasUaWallet, account: u32, index: u32, version: u64, out32: *mut u8,
+    w: *const ScaasUaWallet,
+    account: u32,
+    index: u32,
+    version: u64,
+    out32: *mut u8,
 ) -> ScaasUaStatus {
     run(|| {
         #[cfg(feature = "pqz")]
         return put(
             out32.cast::<[u8; 32]>(),
-            *handle(w)?.0.export_pqz_leaf_raw_version(account, index, version, ua::facade::pqz::AllowSecretExport)?,
+            *handle(w)?.0.export_pqz_leaf_raw_version(
+                account,
+                index,
+                version,
+                ua::facade::pqz::AllowSecretExport,
+            )?,
         );
         #[cfg(not(feature = "pqz"))]
         {
@@ -2837,10 +3607,18 @@ const PQZ_BACKUPS_JSON: usize = 4 << 20;
 
 /// A JSON array (at most `max` bytes, `depth` deep) of items each read by `f` from its own JSON text.
 #[cfg(feature = "pqz")]
-fn json_list<T>(json: *const c_char, max: usize, depth: usize, f: impl Fn(&[u8]) -> uw::Result<T>) -> R<Vec<T>> {
+fn json_list<T>(
+    json: *const c_char,
+    max: usize,
+    depth: usize,
+    f: impl Fn(&[u8]) -> uw::Result<T>,
+) -> R<Vec<T>> {
     let v = uw::bounded::json(cstr(json)?, max, depth)?;
     let items = v.as_array().ok_or_else(|| argument("a JSON array"))?;
-    Ok(items.iter().map(|x| f(x.to_string().as_bytes())).collect::<uw::Result<Vec<_>>>()?)
+    Ok(items
+        .iter()
+        .map(|x| f(x.to_string().as_bytes()))
+        .collect::<uw::Result<Vec<_>>>()?)
 }
 
 /// The k-of-n backup of the PQZ key `k`'s seed32 as the PQZ key of record `version` of the `msig` `msig_key_data` (its
@@ -2870,14 +3648,34 @@ pub extern "C" fn scaas_ua_pqz_seed_backup(
                 return Err(argument("NULL"));
             }
             let (k, sender) = (pqz(k)?, ua_key(handle(sender)?)?);
-            let rs = bytes(recipients, n)?.iter().map(recipient).collect::<R<Vec<_>>>()?;
+            let rs = bytes(recipients, n)?
+                .iter()
+                .map(recipient)
+                .collect::<R<Vec<_>>>()?;
             let t = (threshold != 0).then_some(threshold);
-            let b = k.seal_seed_backup(sender, bytes(msig_key_data, msig_key_data_len)?, version, t, &rs)?;
+            let b = k.seal_seed_backup(
+                sender,
+                bytes(msig_key_data, msig_key_data_len)?,
+                version,
+                t,
+                &rs,
+            )?;
             write_str(out_json, out_len, &b.to_json())
         }
         #[cfg(not(feature = "pqz"))]
         {
-            let _ = (k, sender, msig_key_data, msig_key_data_len, version, threshold, recipients, n, out_json, out_len);
+            let _ = (
+                k,
+                sender,
+                msig_key_data,
+                msig_key_data_len,
+                version,
+                threshold,
+                recipients,
+                n,
+                out_json,
+                out_len,
+            );
             Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
         }
     })
@@ -2906,14 +3704,29 @@ pub extern "C" fn scaas_ua_pqz_share_reseal(
             if out_len.is_null() {
                 return Err(argument("NULL"));
             }
-            let (kk, c, to, sender) = (handle(kk)?, container(container_json)?, recipient(handle(to)?)?, ua_key(handle(sender)?)?);
+            let (kk, c, to, sender) = (
+                handle(kk)?,
+                container(container_json)?,
+                recipient(handle(to)?)?,
+                ua_key(handle(sender)?)?,
+            );
             let o = Opening::read(expect_json, members_json, accepted_json)?;
             let r = o.with(|e, m, a| kk.0.reseal_pqz_share(&c, e, m, a, &to, sender))?;
             write_str(out_json, out_len, &r.to_json())
         }
         #[cfg(not(feature = "pqz"))]
         {
-            let _ = (kk, container_json, expect_json, members_json, accepted_json, to, sender, out_json, out_len);
+            let _ = (
+                kk,
+                container_json,
+                expect_json,
+                members_json,
+                accepted_json,
+                to,
+                sender,
+                out_json,
+                out_len,
+            );
             Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
         }
     })
@@ -2949,14 +3762,32 @@ pub extern "C" fn scaas_ua_wallet_pqz_reconstruct(
             }
             let (w, kk) = (handle(w)?, handle(kk)?);
             let (ua, kh) = (arr(msig_ua32)?, arr(pqz_key_hash32)?);
-            let cs = json_list(containers_json, PQZ_SHARES_JSON, 8, uw::SealedContainer::from_json)?;
+            let cs = json_list(
+                containers_json,
+                PQZ_SHARES_JSON,
+                8,
+                uw::SealedContainer::from_json,
+            )?;
             let o = Opening::read(expect_json, members_json, accepted_json)?;
-            let key = o.with(|e, m, a| w.0.reconstruct_pqz_seed(&kk.0, &cs, e, m, a, ua, version, kh))?;
+            let key = o.with(|e, m, a| {
+                w.0.reconstruct_pqz_seed(&kk.0, &cs, e, m, a, ua, version, kh)
+            })?;
             give(out, ScaasUaPqzKey(key))
         }
         #[cfg(not(feature = "pqz"))]
         {
-            let _ = (w, kk, containers_json, expect_json, members_json, accepted_json, msig_ua32, version, pqz_key_hash32, out);
+            let _ = (
+                w,
+                kk,
+                containers_json,
+                expect_json,
+                members_json,
+                accepted_json,
+                msig_ua32,
+                version,
+                pqz_key_hash32,
+                out,
+            );
             Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
         }
     })
@@ -2966,13 +3797,20 @@ pub extern "C" fn scaas_ua_wallet_pqz_reconstruct(
 /// `pqz_key_hash32`: SCAAS_UA_ERR_ARGUMENT unless the manifest lists it and the wallet holds it (after unlock, open its vault
 /// first); SCAAS_UA_ERR_WALLET_LOCKED while locked. Account and index u32::MAX.
 #[no_mangle]
-pub extern "C" fn scaas_ua_wallet_pqz_held_key(w: *const ScaasUaWallet, pqz_key_hash32: *const u8, out: *mut *mut ScaasUaPqzKey) -> ScaasUaStatus {
+pub extern "C" fn scaas_ua_wallet_pqz_held_key(
+    w: *const ScaasUaWallet,
+    pqz_key_hash32: *const u8,
+    out: *mut *mut ScaasUaPqzKey,
+) -> ScaasUaStatus {
     run(|| {
         if out.is_null() {
             return Err(argument("NULL"));
         }
         #[cfg(feature = "pqz")]
-        return give(out, ScaasUaPqzKey(handle(w)?.0.pqz_held_key(arr(pqz_key_hash32)?)?));
+        return give(
+            out,
+            ScaasUaPqzKey(handle(w)?.0.pqz_held_key(arr(pqz_key_hash32)?)?),
+        );
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (w, pqz_key_hash32);
@@ -3001,21 +3839,41 @@ pub extern "C" fn scaas_ua_pqz_seed_backup_warning(
             let bs = if backups_json.is_null() {
                 vec![]
             } else {
-                json_list(backups_json, PQZ_BACKUPS_JSON, 10, ua::facade::pqz_backup::PqzSeedBackup::from_json)?
+                json_list(
+                    backups_json,
+                    PQZ_BACKUPS_JSON,
+                    10,
+                    ua::facade::pqz_backup::PqzSeedBackup::from_json,
+                )?
             };
-            let w = ua::facade::pqz_backup::seed_backup_warning(kind, arr(ua32)?, version, bytes(pqz_key, pqz_key_len)?, &bs);
+            let w = ua::facade::pqz_backup::seed_backup_warning(
+                kind,
+                arr(ua32)?,
+                version,
+                bytes(pqz_key, pqz_key_len)?,
+                &bs,
+            );
             put(missing, w.is_some())
         }
         #[cfg(not(feature = "pqz"))]
         {
-            let _ = (kind, ua32, version, pqz_key, pqz_key_len, backups_json, missing);
+            let _ = (
+                kind,
+                ua32,
+                version,
+                pqz_key,
+                pqz_key_len,
+                backups_json,
+                missing,
+            );
             Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
         }
     })
 }
 
 /// The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` of an assertion against `expected_challenge32`
-/// (low-s, the chains' clientDataJSON rule), verified with `key_data` before it is written: SCAAS_UA_ERR_WEBAUTHN_ASSERTION.
+/// (low-s, the chains' clientDataJSON rule), verified with `key_data` before it is written: SCAAS_UA_ERR_WEBAUTHN_ASSERTION;
+/// authData and clientDataJSON above 1,024 bytes together: SCAAS_UA_ERR_WEBAUTHN_TOO_LONG.
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn scaas_ua_webauthn_assertion(
@@ -3059,23 +3917,48 @@ mod tests {
     fn features_bits_match_the_build() {
         let f = scaas_ua_features();
         let has = |bit: u64| f & bit != 0;
-        assert!(has(SCAAS_UA_FEATURE_WALLET) && has(SCAAS_UA_FEATURE_PQ), "ua-c always builds the wallet");
-        assert_eq!(has(SCAAS_UA_FEATURE_MLOCK), cfg!(all(unix, feature = "mlock")));
+        assert!(
+            has(SCAAS_UA_FEATURE_WALLET) && has(SCAAS_UA_FEATURE_PQ),
+            "ua-c always builds the wallet"
+        );
+        assert_eq!(
+            has(SCAAS_UA_FEATURE_MLOCK),
+            cfg!(all(unix, feature = "mlock"))
+        );
         assert_eq!(has(SCAAS_UA_FEATURE_ZETHER), cfg!(feature = "zether"));
         assert_eq!(has(SCAAS_UA_FEATURE_PQZ), cfg!(feature = "pqz"));
         let sets = [
-            (SCAAS_UA_FEATURE_PQZ_SET_N2048_KMAX1024, cfg!(feature = "pqz-set-n2048-kmax1024")),
-            (SCAAS_UA_FEATURE_PQZ_SET_N2304_KMAX4096, cfg!(feature = "pqz-set-n2304-kmax4096")),
-            (SCAAS_UA_FEATURE_PQZ_SET_N2560_KMAX16384, cfg!(feature = "pqz-set-n2560-kmax16384")),
-            (SCAAS_UA_FEATURE_PQZ_SET_N2816_KMAX65536, cfg!(feature = "pqz-set-n2816-kmax65536")),
+            (
+                SCAAS_UA_FEATURE_PQZ_SET_N2048_KMAX1024,
+                cfg!(feature = "pqz-set-n2048-kmax1024"),
+            ),
+            (
+                SCAAS_UA_FEATURE_PQZ_SET_N2304_KMAX4096,
+                cfg!(feature = "pqz-set-n2304-kmax4096"),
+            ),
+            (
+                SCAAS_UA_FEATURE_PQZ_SET_N2560_KMAX16384,
+                cfg!(feature = "pqz-set-n2560-kmax16384"),
+            ),
+            (
+                SCAAS_UA_FEATURE_PQZ_SET_N2816_KMAX65536,
+                cfg!(feature = "pqz-set-n2816-kmax65536"),
+            ),
         ];
         sets.iter().for_each(|(bit, on)| assert_eq!(has(*bit), *on));
-        assert!(!has(SCAAS_UA_FEATURE_EXTERNAL), "MD-13: no external key in a release build");
+        assert!(
+            !has(SCAAS_UA_FEATURE_EXTERNAL),
+            "MD-13: no external key in a release build"
+        );
         assert!(!has(SCAAS_UA_FEATURE_VECTORS), "C1: never a vectors build");
         // ua-rs-native (spec §10.2): bit 12 in every wallet build, nothing past it
         assert!(has(SCAAS_UA_FEATURE_NATIVE_NETWORKS), "the native networks");
         assert_eq!(f >> 13, 0, "no bit past SCAAS_UA_FEATURE_NATIVE_NETWORKS");
-        let w = uw::Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap();
+        let w = uw::Wallet::from_mnemonic(
+            "legal winner thank year wave sausage worth useful legal winner thank yellow",
+            "",
+        )
+        .unwrap();
         let falcon = w.ua_key(0x0132, 0, 0);
         assert_eq!(has(SCAAS_UA_FEATURE_FALCON), falcon.is_ok());
         if let Err(e) = falcon {
@@ -3107,6 +3990,8 @@ mod tests {
     }
 
     fn last_error_str() -> String {
-        unsafe { CStr::from_ptr(scaas_ua_last_error()) }.to_string_lossy().into_owned()
+        unsafe { CStr::from_ptr(scaas_ua_last_error()) }
+            .to_string_lossy()
+            .into_owned()
     }
 }

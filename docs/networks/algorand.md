@@ -234,8 +234,10 @@ views).
 
 <a id="NET-ALG-16"></a>**NET-ALG-16** — **Adapter jobs, ids and states.** `[[chains]] network` = the genesis hash in
 base64, chain key `algorand:<b64>`; `params.account_app` (required), `token` app ids in `tokens`, `mandate_app`,
-`dex_app`, `relayfee_app` (no `relay_fee.router`: refused with a pointer), `algod_token_env` (env var of the API
-token); price key `relay_fee.min_microalgo_value = { "<token app id>" = µALGO per base unit }`; listed targets
+`dex_app`, `relayfee_app` (no `relay_fee.router`: refused with a pointer), `algod_token_env` (the env var of the API token: a name,
+endpoint 0's token only, or a list of names, one per `rpc_urls` entry, `""` for none; a later endpoint gets no token unless one
+is configured for it: scaas-rpc T24.10, owner 2026-11-18), `max_min_fee` and `max_fee_per_byte` (µALGO, defaults 10,000 and 100: algod's `min-fee` or `fee` above its cap is
+`Transport`, no verdict, whichever endpoint quoted it; CLI-RPC-05, scaas-rpc T24.4, owner 2026-11-18); price key `relay_fee.min_microalgo_value = { "<token app id>" = µALGO per base unit }`; listed targets
 `relay_fee.targets = { "<app id>" = ["method(args)ret", …] }`, matched by ARC-4 selector (an app of the deployment, an
 empty list or `add_key_native` is a startup error). Job `payload` = hex of label ‖ ARC-4 `MetaOp`, `signature` = hex of
 the entry's `auth`, `contract` = the token app id; a relay fee adds `op.extra.call` and the target's `accounts`,
@@ -277,6 +279,18 @@ tokens = [{ address = "1001", decimals = 6 }]            # token app ids
 params = { account_app = 1004, mandate_app = 1005, dex_app = 1006, relayfee_app = 1002, algod_token_env = "SCAAS_ALGOD_TOKEN",
            relay_fee = { min_amount = 1, min_microalgo_value = { "1001" = 1000 }, targets = { "2001" = ["ping(uint64)void"] } } }
 ```
+
+Endpoints (BUILT, scaas-rpc T18): `rpc_urls` are read through the crate's family client (16 MiB, no redirect, 20 s a
+request; a JSON answer deeper than 64 refused, a msgpack block bounded by the adapter's own reader; the algod token, when
+configured, sent to each endpoint). `build`'s reads (the parameters, the round times, the boxes and apps, the query and
+group simulates) fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next endpoint must answer
+`/v2/transactions/params` with the configured genesis hash and a round at or above the one the first endpoint last
+showed; a status other than 2xx from it decides nothing and a refusal read while it answered requeues the job. From the
+first endpoint only a 404 (an absent box or app) or a 400 to a simulate is its verdict; any other status (a rate limit, a
+5xx) fails over (scaas-rpc T24.3). A later endpoint's 404 decides nothing either: with endpoint 0 down, a box or app
+read that endpoint 1 answers absent is no answer (transport, the job requeued), never "absent" (the families' review, P3
+#13, left as is). The transaction status, the send, the round taken as the lane sequence, the lane balance, `op_consumed` and the start checks
+(the apps' programs, the router's executor) are the first endpoint's only.
 
 ## 9. Finality and events
 

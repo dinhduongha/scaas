@@ -29,17 +29,27 @@ contract DeployHarness is DeployBase {
     }
 
     /// Stands in for `block.gaslimit` at the deploy gate (no cheatcode sets it); 0 = the chain's own.
-    function limitBlockGas(uint256 limit) external { gateLimit = limit; }
+    function limitBlockGas(uint256 limit) external {
+        gateLimit = limit;
+    }
 
     /// Stands in for `CHAIN_CODE_LIMIT` (the process env is shared by parallel tests); 0 = the env, or its default.
-    function limitCode(uint256 limit) external { codeLimit = limit; }
+    function limitCode(uint256 limit) external {
+        codeLimit = limit;
+    }
 
-    function chainCodeLimit() external view returns (uint256) { return _chainCodeLimit(); }
+    function chainCodeLimit() external view returns (uint256) {
+        return _chainCodeLimit();
+    }
 
     /// Stands in for `RELEASE_GAS_GATE` (the process env is shared by parallel tests): 1 = `testnet`, 2 = `public`, 0 = the env.
-    function setGate(uint8 g) external { gate = g; }
+    function setGate(uint8 g) external {
+        gate = g;
+    }
 
-    function publicGate() external view returns (bool) { return _publicGate(); }
+    function publicGate() external view returns (bool) {
+        return _publicGate();
+    }
 
     /// The public gate's figures of release `name` (`[regular, state]`; 0 when the testnet gate ran).
     function measured(string calldata name) external view returns (uint256 regular, uint256 state) {
@@ -51,22 +61,41 @@ contract DeployHarness is DeployBase {
     }
 
     /// `DEPLOY_WRAPPED` for the next `deploy`.
-    function setWrapped(bool w) external { deployWrapped = w; }
+    function setWrapped(bool w) external {
+        deployWrapped = w;
+    }
 
     /// `DEPLOY_REGULATED` for the next `deploy`.
-    function setRegulated(bool r) external { deployRegulated = r; }
+    function setRegulated(bool r) external {
+        deployRegulated = r;
+    }
 
     /// `DEPLOY_PQCHAT` for the next `deploy` (plan 3c T92).
-    function setPqChat(bool on) external { deployPqChat = on; }
+    function setPqChat(bool on) external {
+        deployPqChat = on;
+    }
 
     /// `NOTICE_PERIOD` for the next `deploy` (0: a release is usable at once).
-    function setNotice(uint64 n) external { noticePeriod = n; }
+    function setNotice(uint64 n) external {
+        noticePeriod = n;
+    }
 
     /// `COMPLIANCE_ADMIN` for the next `deploy` (plan T33).
-    function setComplianceAdmin(address a) external { complianceAdmin = bytes32(uint256(uint160(a))); }
-    function setComplianceAdminId(bytes32 a) external { complianceAdmin = a; }
-    function setFactoryAdminNext(bytes32 n) external { factoryAdminNext = n; }
-    function setAccountFactory(address a) external { accountFactory = a; }
+    function setComplianceAdmin(address a) external {
+        complianceAdmin = bytes32(uint256(uint160(a)));
+    }
+
+    function setComplianceAdminId(bytes32 a) external {
+        complianceAdmin = a;
+    }
+
+    function setFactoryAdminNext(bytes32 n) external {
+        factoryAdminNext = n;
+    }
+
+    function setAccountFactory(address a) external {
+        accountFactory = a;
+    }
 
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);
@@ -87,26 +116,40 @@ contract DeployHarness is DeployBase {
         json = vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
-    function gasNeed(string calldata name) external view returns (uint256) { return _releaseGasNeed(name); }
+    function gasNeed(string calldata name) external view returns (uint256) {
+        return _releaseGasNeed(name);
+    }
 
     /// `RELEASES_JSON` / `RELEASES_WRITE` for the next `deploy` (chain-neutral spec §6.2, plan T73); `writeReleases` as
     /// `run()` ends.
-    function setReleases(string calldata path, bool write) external { (releasesPath, releasesWrite) = (path, write); }
+    function setReleases(string calldata path, bool write) external {
+        (releasesPath, releasesWrite) = (path, write);
+    }
 
-    function writeReleases() external { _writeReleases(); }
+    function writeReleases() external {
+        _writeReleases();
+    }
 
     /// NET-EVM-13: a test chain is not in `chain-uids.json`; its books' name stands for `DEPLOY_NAME` (no env in a test).
-    function _deployName() internal pure override returns (string memory) { return "local-testnet"; }
+    function _deployName() internal pure override returns (string memory) {
+        return "local-testnet";
+    }
 
-    function checkGas(string calldata name, uint256 limit) external view { _checkReleaseGas(name, limit); }
+    function checkGas(string calldata name, uint256 limit) external view {
+        _checkReleaseGas(name, limit);
+    }
 
-    function requireGas(string calldata name) external view { _requireReleaseGas(name); }
+    function requireGas(string calldata name) external view {
+        _requireReleaseGas(name);
+    }
 
     function noticeFor(uint256 chainId, uint256 notice) external pure returns (uint64) {
         return _checkedNotice(chainId, notice);
     }
 
-    function pqKindFits(uint64 cap, uint64 budget) external pure returns (bool) { return _pqKindFits(cap, budget); }
+    function pqKindFits(uint64 cap, uint64 budget) external pure returns (bool) {
+        return _pqKindFits(cap, budget);
+    }
 
     function checkGen1Kinds(IUARegistry reg, bool bls, bool hedera) external view {
         _checkGen1Kinds(reg, bls, hedera, false, false);
@@ -117,10 +160,14 @@ contract DeployHarness is DeployBase {
     }
 
     /// The chain's PQ precompile verdict (`_pqPrecompiles`: no RPC in a test), default none.
-    function forcePq(bool pqz, bool ml87) external { (forcedPqz, forcedMl87) = (pqz, ml87); }
+    function forcePq(bool pqz, bool ml87) external {
+        (forcedPqz, forcedMl87) = (pqz, ml87);
+    }
 
     /// The chain's `mldsa44` / `mldsa65` precompile verdict (owner 2026-11-15), default none.
-    function forceMl(bool ml44, bool ml65) external { (forcedMl44, forcedMl65) = (ml44, ml65); }
+    function forceMl(bool ml44, bool ml65) external {
+        (forcedMl44, forcedMl65) = (ml44, ml65);
+    }
 
     /// `DEPLOY_PQZ`, `PQZ_KEY_VERIFIER`, `MLDSA87_VERIFIER` for the next `deploy` (owner 2026-11-15).
     function setPqz(bool on, address pqzVerifier, address ml87Verifier) external {
@@ -133,16 +180,22 @@ contract DeployHarness is DeployBase {
     }
 
     /// MD-5: `_cacheFits` of ML-DSA kind `i` at the (stood-in) block gas limit.
-    function cacheFits(uint256 i) external view returns (bool) { return _cacheFits(i); }
+    function cacheFits(uint256 i) external view returns (bool) {
+        return _cacheFits(i);
+    }
 
     /// MD-15: the real `_pqPrecompiles` (its `eth_call`; a test has no RPC, so the call fails).
-    function realPq() external returns (bool pqz, bool[3] memory ml) { return DeployBase._pqPrecompiles(); }
+    function realPq() external returns (bool pqz, bool[3] memory ml) {
+        return DeployBase._pqPrecompiles();
+    }
 
     function _pqPrecompiles() internal view override returns (bool, bool[3] memory) {
         return (forcedPqz, [forcedMl44, forcedMl65, forcedMl87]);
     }
 
-    function defaultNotice(uint256 chainId) external pure returns (uint256) { return _defaultNotice(chainId); }
+    function defaultNotice(uint256 chainId) external pure returns (uint256) {
+        return _defaultNotice(chainId);
+    }
 
     function _blockGasLimit() internal view override returns (uint256) {
         return gateLimit == 0 ? super._blockGasLimit() : gateLimit;

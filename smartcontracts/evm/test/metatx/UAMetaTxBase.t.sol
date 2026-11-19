@@ -72,10 +72,13 @@ contract UAMetaTxBaseTest is Test {
     }
 
     function _m(bytes32 from, uint256 nonce, uint32 mode, uint256 fee)
-        internal view returns (MetaTxLib.UAMetaTransaction memory)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory)
     {
-        return MetaTxLib.UAMetaTransaction(from, abi.encodeCall(UAOnly.poke, ()), 0, nonce, block.timestamp + 300, mode,
-            address(0), fee, address(0));
+        return MetaTxLib.UAMetaTransaction(
+            from, abi.encodeCall(UAOnly.poke, ()), 0, nonce, block.timestamp + 300, mode, address(0), fee, address(0)
+        );
     }
 
     function _auth(MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes memory) {
@@ -121,8 +124,8 @@ contract UAMetaTxBaseTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, mode));
         c.mtxExecute(u, UACall.auth(u.from, auth));
 
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(signer, data, 0, 0, block.timestamp + 300, mode,
-            address(0), 1, address(0));
+        MetaTxLib.MetaTransaction memory m =
+            MetaTxLib.MetaTransaction(signer, data, 0, 0, block.timestamp + 300, mode, address(0), 1, address(0));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, MtxDigest.metaTx(address(c), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, mode));
         c.executeMetaTransaction(m, abi.encodePacked(r, s, v));
@@ -140,7 +143,8 @@ contract UAMetaTxBaseTest is Test {
         l.mtxExecute(m, UACall.auth(m.from, auth));
         assertEq(l.mtxNonce(MetaTxLib.pad(MetaTxLib.UA_POOL), 9), 0);
 
-        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(UA, 3, 0, block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.UAEnvelope memory e =
+            MetaTxLib.UAEnvelope(UA, 3, 0, block.timestamp + 300, 0, address(0), 0, address(0));
         vm.expectEmit(address(l));
         emit IUALedger.UANonceCancelled(UA, 9, 1);
         l.mtxCancelNonce(e, 9, UACall.auth(UA, auth));
@@ -156,8 +160,9 @@ contract UAMetaTxBaseTest is Test {
         GasBurner1271 impl = new GasBurner1271();
         UAOnly a = new UAOnly(keccak256("chain"), REG, address(impl));
         address[2] memory wallets = [Clones.clone(address(impl)), address(impl)];
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(wallets[0], abi.encodeCall(UAOnly.poke, ()), 0, 0,
-            block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(
+            wallets[0], abi.encodeCall(UAOnly.poke, ()), 0, 0, block.timestamp + 300, 0, address(0), 0, address(0)
+        );
         a.executeMetaTransaction(m, bytes(hex"01"));
         assertEq(a.subject(), MetaTxLib.pad(wallets[0]));
 

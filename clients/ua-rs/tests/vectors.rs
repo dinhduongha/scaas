@@ -4,7 +4,10 @@ use scaas_ua::*;
 use serde_json::Value;
 
 fn load(name: &str) -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/ua/{name}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/ua/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 fn bytes(v: &Value) -> Vec<u8> {
@@ -35,7 +38,10 @@ fn table_groups_purposes_constants() {
         let info = kind_info(n).unwrap();
         assert_eq!(info.name, r["name"]);
         assert_eq!(info.native, r["native"]);
-        let lengths: Vec<usize> = arr(r, "lengths").iter().map(|x| x.as_u64().unwrap() as usize).collect();
+        let lengths: Vec<usize> = arr(r, "lengths")
+            .iter()
+            .map(|x| x.as_u64().unwrap() as usize)
+            .collect();
         assert_eq!(info.lengths, &lengths[..], "{}", info.name);
         assert_eq!(info.group, r["group"].as_str(), "{}", info.name);
         assert_eq!(is_signing(n), r["signing"], "{}", info.name);
@@ -54,17 +60,26 @@ fn table_groups_purposes_constants() {
         let n = kind(&r["kind"]);
         assert_eq!(n, PQZ_SCHEME);
         assert_eq!(SCHEMES[0].name, r["name"]);
-        let lengths: Vec<usize> = arr(r, "lengths").iter().map(|x| x.as_u64().unwrap() as usize).collect();
+        let lengths: Vec<usize> = arr(r, "lengths")
+            .iter()
+            .map(|x| x.as_u64().unwrap() as usize)
+            .collect();
         assert_eq!(SCHEMES[0].lengths, &lengths[..]);
-        assert_eq!(SCHEMES[0].lengths, &ua8::PQZ_KEY_LENGTHS[..]);
+        assert_eq!(SCHEMES[0].lengths, &ua_portable::PQZ_KEY_LENGTHS[..]);
         assert_eq!(kind_tag_string(n).unwrap(), r["tag"]);
         assert_eq!(hx(&tag(n).unwrap()), r["TAG"]);
         assert_eq!(ua_of(n, &[]), Err(UAError::KindNotDerived(n)));
-        assert_eq!(validate_key_data(n, &[], false), Err(UAError::KindNotDerived(n)));
+        assert_eq!(
+            validate_key_data(n, &[], false),
+            Err(UAError::KindNotDerived(n))
+        );
         assert_eq!(derive_ua(n, &[], false), Err(UAError::KindNotDerived(n)));
     }
     let pk = bytes(&k["pqzKey"]);
-    assert_eq!(hx(&key_hash_of(PQZ_SCHEME, &pk).unwrap().unwrap()), k["pqzKeyHash"]);
+    assert_eq!(
+        hx(&key_hash_of(PQZ_SCHEME, &pk).unwrap().unwrap()),
+        k["pqzKeyHash"]
+    );
     for r in arr(&k, "groups") {
         let g = r["group"].as_str().unwrap();
         assert_eq!(group_tag_string(g).unwrap(), r["tag"]);
@@ -73,8 +88,15 @@ fn table_groups_purposes_constants() {
     // 16 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44); `pop` has two versions (v1 legacy, v2 portable), every other purpose is v1
     assert_eq!(arr(&k, "purposes").len(), PURPOSES.len() + 1);
     for r in arr(&k, "purposes") {
-        let (p, v) = (r["purpose"].as_str().unwrap(), r["version"].as_u64().unwrap() as u32);
-        assert_eq!(hx(&purpose_tag_v(p, v).unwrap()), r["purposeTag"], "{p} v{v}");
+        let (p, v) = (
+            r["purpose"].as_str().unwrap(),
+            r["version"].as_u64().unwrap() as u32,
+        );
+        assert_eq!(
+            hx(&purpose_tag_v(p, v).unwrap()),
+            r["purposeTag"],
+            "{p} v{v}"
+        );
         assert!(PURPOSES.contains(&p), "{p}");
     }
     let c = &k["constants"];
@@ -89,10 +111,19 @@ fn table_groups_purposes_constants() {
 fn valid_rows() {
     let k = load("kinds.json");
     for r in arr(&k, "valid") {
-        let (n, d, hn) = (kind(&r["kind"]), bytes(&r["keyData"]), r["hederaNative"].as_bool().unwrap());
+        let (n, d, hn) = (
+            kind(&r["kind"]),
+            bytes(&r["keyData"]),
+            r["hederaNative"].as_bool().unwrap(),
+        );
         let ua = derive_ua(n, &d, hn).unwrap_or_else(|e| panic!("{}: {e}", r["name"]));
         assert_eq!(hx(&ua), r["ua"], "{}", r["name"]);
-        assert_eq!(key_hash_of(n, &d).unwrap().map(|h| hx(&h)), r["keyHash"].as_str().map(String::from), "{}", r["name"]);
+        assert_eq!(
+            key_hash_of(n, &d).unwrap().map(|h| hx(&h)),
+            r["keyHash"].as_str().map(String::from),
+            "{}",
+            r["name"]
+        );
     }
 }
 
@@ -100,8 +131,13 @@ fn valid_rows() {
 fn invalid_rows() {
     let k = load("kinds.json");
     for r in arr(&k, "invalid") {
-        let (n, d, hn) = (kind(&r["kind"]), bytes(&r["keyData"]), r["hederaNative"].as_bool().unwrap());
-        let e = validate_key_data(n, &d, hn).expect_err(&format!("{n:#06x} {} accepted", r["reason"]));
+        let (n, d, hn) = (
+            kind(&r["kind"]),
+            bytes(&r["keyData"]),
+            r["hederaNative"].as_bool().unwrap(),
+        );
+        let e =
+            validate_key_data(n, &d, hn).expect_err(&format!("{n:#06x} {} accepted", r["reason"]));
         assert_eq!(e.code(), r["error"], "{n:#06x} {}", r["reason"]);
     }
 }
@@ -115,7 +151,12 @@ fn natives_native_space_canonical_ids() {
         assert_eq!(canonical_id(&hx(&id)).unwrap(), r["canonical"]);
     }
     for r in arr(&k, "nativeInvalid") {
-        assert_eq!(native_id(kind(&r["kind"]), &bytes(&r["raw"])).unwrap_err().code(), r["error"]);
+        assert_eq!(
+            native_id(kind(&r["kind"]), &bytes(&r["raw"]))
+                .unwrap_err()
+                .code(),
+            r["error"]
+        );
     }
     for r in arr(&k, "nativeSpace") {
         assert_eq!(in_native_space(&b32(&r["id"])), r["inNativeSpace"]);
@@ -136,7 +177,10 @@ fn messages() {
         let ver = r.get("version").map_or(1, |v| v.as_u64().unwrap() as u32);
         let p = purpose_tag_v(r["purpose"].as_str().unwrap(), ver).unwrap();
         assert_eq!(hx(&p), r["purposeTag"]);
-        assert_eq!(hx(&ua_message(kind(&r["kind"]), &p, &b32(&r["digest"])).unwrap()), r["uaMsg"]);
+        assert_eq!(
+            hx(&ua_message(kind(&r["kind"]), &p, &b32(&r["digest"])).unwrap()),
+            r["uaMsg"]
+        );
     }
 }
 
@@ -145,10 +189,21 @@ fn structures() {
     let s = load("structures.json");
     let ctx = |name: &str| &s["contexts"][name];
     for p in arr(&s, "pop") {
-        let (ua, h, kr, ph) = (b32(&p["ua"]), b32(&p["pqzKeyHash"]), b32(&p["kemRecordHash"]), b32(&p["pqzPopHash"]));
+        let (ua, h, kr, ph) = (
+            b32(&p["ua"]),
+            b32(&p["pqzKeyHash"]),
+            b32(&p["kemRecordHash"]),
+            b32(&p["pqzPopHash"]),
+        );
         let k = kind(&p["kind"]);
-        assert_eq!(hx(&ua8::portable_record_digest(&ua, k, &h, &kr)), p["portableRecordDigest"]);
-        assert_eq!(hx(&ua8::registration_digest(&ua, k, &h, &kr, &ph)), p["registrationDigest"]);
+        assert_eq!(
+            hx(&ua_portable::portable_record_digest(&ua, k, &h, &kr)),
+            p["portableRecordDigest"]
+        );
+        assert_eq!(
+            hx(&ua_portable::registration_digest(&ua, k, &h, &kr, &ph)),
+            p["registrationDigest"]
+        );
     }
     let pk = bytes(&load("kinds.json")["pqzKey"]);
     for p in arr(&s, "pqzReg") {
@@ -156,29 +211,65 @@ fn structures() {
         let h = key_hash_of(PQZ_SCHEME, &pk).unwrap().unwrap();
         assert_eq!(hx(&h), p["pqzKeyHash"]);
         let k = kind(&p["kind"]);
-        assert_eq!(hx(&ua8::portable_record_digest(&ua, k, &h, &b32(&p["kemRecordHash"]))), p["portableRecordDigest"]);
+        assert_eq!(
+            hx(&ua_portable::portable_record_digest(
+                &ua,
+                k,
+                &h,
+                &b32(&p["kemRecordHash"])
+            )),
+            p["portableRecordDigest"]
+        );
         let portable = b32(&p["portableRecordDigest"]);
-        assert_eq!(hx(&ua_message(PQZ_SCHEME, &ua8::pop_v2_tag(), &portable).unwrap()), p["pqzRegMessage"]);
-        if b32(&p["kemRecordHash"]) != ua8::kem_record_hash(&ua, 0, &[]).unwrap() {
-            continue; // the row's KEM record hash is opaque (a label); the real records are in portable.json (tests/ua8.rs)
+        assert_eq!(
+            hx(&ua_message(PQZ_SCHEME, &ua_portable::pop_v2_tag(), &portable).unwrap()),
+            p["pqzRegMessage"]
+        );
+        if b32(&p["kemRecordHash"]) != ua_portable::kem_record_hash(&ua, 0, &[]).unwrap() {
+            continue; // the row's KEM record hash is opaque (a label); the real records are in portable.json (tests/ua_portable.rs)
         }
-        assert_eq!(hx(&pqz_reg_message(k, &ua, &pk, None).unwrap()), p["pqzRegMessage"]);
+        assert_eq!(
+            hx(&pqz_reg_message(k, &ua, &pk, None).unwrap()),
+            p["pqzRegMessage"]
+        );
         // a single-key holder carries the key; anything else is refused
         let proof = [7u8; 32];
         let got = holder_pop_message(k, &ua, &[], Some(&pk), None, Some(&proof), None).unwrap();
         assert_eq!(hx(&got.pqz_key_hash), p["pqzKeyHash"]);
         assert_eq!(hx(&got.portable_record_digest), p["portableRecordDigest"]);
         for bad in [0x0101, 0x0133] {
-            assert_eq!(holder_pop_message(bad, &ua, &[], Some(&pk), None, Some(&proof), None), Err(UAError::PqzHolder(bad)));
+            assert_eq!(
+                holder_pop_message(bad, &ua, &[], Some(&pk), None, Some(&proof), None),
+                Err(UAError::PqzHolder(bad))
+            );
         }
     }
     for p in arr(&s, "pqzMsig") {
         let d = bytes(&p["keyData"]);
-        assert_eq!(msig_pqz_eligible(&d).unwrap(), p["eligible"], "{}", p["reason"]);
+        assert_eq!(
+            msig_pqz_eligible(&d).unwrap(),
+            p["eligible"],
+            "{}",
+            p["reason"]
+        );
         assert_eq!(hx(&derive_ua(0x0120, &d, false).unwrap()), p["ua"]);
-        let h = if p["eligible"].as_bool().unwrap() { b32(&load("kinds.json")["pqzKeyHash"]) } else { [0; 32] };
+        let h = if p["eligible"].as_bool().unwrap() {
+            b32(&load("kinds.json")["pqzKeyHash"])
+        } else {
+            [0; 32]
+        };
         let ua = b32(&p["ua"]);
-        assert_eq!(hx(&ua8::portable_record_digest(&ua, 0x0120, &h, &ua8::kem_record_hash(&ua, 0, &[]).unwrap())), p["portableRecordDigest"], "{}", p["reason"]);
+        assert_eq!(
+            hx(&ua_portable::portable_record_digest(
+                &ua,
+                0x0120,
+                &h,
+                &ua_portable::kem_record_hash(&ua, 0, &[]).unwrap()
+            )),
+            p["portableRecordDigest"],
+            "{}",
+            p["reason"]
+        );
     }
     assert!(msig_pqz_eligible(&[0u8; 5]).is_err());
     for a in arr(&s, "uaAuth") {
@@ -190,25 +281,43 @@ fn structures() {
             chain_uid: b32(&c["chainUid"]),
         };
         assert_eq!(hx(&ua_auth_domain_separator(&d)), a["domainSeparator"]);
-        assert_eq!(hx(&ua_auth_digest(&d, &b32(&a["ua"]), &b32(&a["purposeTag"]), &b32(&a["digest"]))), a["uaAuthDigest"]);
+        assert_eq!(
+            hx(&ua_auth_digest(
+                &d,
+                &b32(&a["ua"]),
+                &b32(&a["purposeTag"]),
+                &b32(&a["digest"])
+            )),
+            a["uaAuthDigest"]
+        );
     }
     for m in arr(&s, "member") {
-        assert_eq!(hx(&member_digest(&b32(&m["structureUa"]), &b32(&m["uaMsg"]))), m["memberDigest"]);
+        assert_eq!(
+            hx(&member_digest(&b32(&m["structureUa"]), &b32(&m["uaMsg"]))),
+            m["memberDigest"]
+        );
     }
 }
 
-/// governance T14: `governance_bit` against the file on disk, every row (a stale compiled-in copy fails here), and none past bit 31 (round 3s: bit 28 `KYC`; CTR-DEX-32: bit 29 `CLOSED_MARKETS`; round 3zb + 3zc: bits 30 `BURNER`, 31 `SUPPLY_CAP_ADJUSTABLE`)
+/// governance T14: `governance_bit` against the file on disk, every row (a stale compiled-in copy fails here), and none past bit 32 (CTR-GOV-31: bit 32 `AUDITOR`; round 3s: bit 28 `KYC`; CTR-DEX-32: bit 29 `CLOSED_MARKETS`; round 3zb + 3zc: bits 30 `BURNER`, 31 `SUPPLY_CAP_ADJUSTABLE`)
 /// (ua-mtx-merge T34: bit 22 `OPERATOR_TRANSFER`, CTR-GOV-20; T39 / T41: bit 23 `TAX`; 3h T61: bit 24 `PQZ_PROOF`; 3l: bits 25-27,
 /// the hybrids' wrap controls).
 #[test]
 fn governance_bits_rows() {
-    let path = format!("{}/../../smartcontracts/vectors/governance/governance_bits.json", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/governance/governance_bits.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let rows = v["bits"].as_array().unwrap();
-    assert_eq!(rows.len(), 32); // 3l: 24 -> 28 (bit 24 was already in the file; 25, 26, 27); round 3s: -> 29 (bit 28 KYC); CTR-DEX-32: -> 30 (bit 29 CLOSED_MARKETS); 3zb + 3zc: -> 32 (30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE)
+    assert_eq!(rows.len(), 33); // 3l: 24 -> 28 (bit 24 was already in the file; 25, 26, 27); round 3s: -> 29 (bit 28 KYC); CTR-DEX-32: -> 30 (bit 29 CLOSED_MARKETS); 3zb + 3zc: -> 32 (30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE); CTR-GOV-31: -> 33 (32 AUDITOR)
     for bit in 0..=255u8 {
         match (rows.get(bit as usize), governance_bit(bit)) {
-            (Some(row), Some(ours)) => assert_eq!(&serde_json::from_str::<Value>(ours).unwrap(), row, "bit {bit}"),
+            (Some(row), Some(ours)) => assert_eq!(
+                &serde_json::from_str::<Value>(ours).unwrap(),
+                row,
+                "bit {bit}"
+            ),
             (None, None) => {}
             (want, got) => panic!("bit {bit}: file {want:?}, governance_bit {got:?}"),
         }
@@ -235,11 +344,20 @@ fn id_display_rows() {
         }
     }
     for k in KINDS {
-        let has = |f: &dyn Fn(&Value) -> bool| rows.iter().any(|r| kind(&r["kind"]) == k.kind && f(r));
+        let has =
+            |f: &dyn Fn(&Value) -> bool| rows.iter().any(|r| kind(&r["kind"]) == k.kind && f(r));
         if k.native {
-            assert!(has(&|r| r["error"] == "UAKindNotDerived"), "no row for {}", k.name);
+            assert!(
+                has(&|r| r["error"] == "UAKindNotDerived"),
+                "no row for {}",
+                k.name
+            );
         } else {
-            assert!(has(&|r| r["display"]["urn"].is_string()), "no row for {}", k.name);
+            assert!(
+                has(&|r| r["display"]["urn"].is_string()),
+                "no row for {}",
+                k.name
+            );
         }
     }
 }

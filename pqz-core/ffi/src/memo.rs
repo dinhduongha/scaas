@@ -33,9 +33,14 @@ fn stream(key_seed: &[u8], header: &[Word; 20], salt: &[u8], len: usize) -> Opti
     .concat();
     // the memo key decrypts every memo of this counter: cleared on every exit (review 3w u3-3)
     let mut key = Clear([0u8; 32]);
-    Hkdf::<Sha256>::new(None, key_seed).expand(&info, &mut key.0).ok()?;
+    Hkdf::<Sha256>::new(None, key_seed)
+        .expand(&info, &mut key.0)
+        .ok()?;
     let mut ks = Clear(vec![0u8; len]);
-    Hkdf::<Sha256>::from_prk(&key.0).ok()?.expand(b"PQZ/memo/ks/v1", &mut ks.0).ok()?;
+    Hkdf::<Sha256>::from_prk(&key.0)
+        .ok()?
+        .expand(b"PQZ/memo/ks/v1", &mut ks.0)
+        .ok()?;
     Some(ks)
 }
 
@@ -52,7 +57,12 @@ impl<T: AsMut<[u8]>> Drop for Clear<T> {
 /// The memo of a transfer with `legs` = `(a_j, toUA_j)` in leg order under `header` (its salt, chainUid, token,
 /// fromUA, sendCounter); `None` if `sendCounter ≥ 2^32` or M is 0 or over 203 (the keystream is one HKDF-SHA256
 /// expand, at most 255 · 32 = 8,160 B, and M = 204 needs 2 + 40·M = 8,162 B; review R4-C8; op 7 builds M ≤ 8).
-pub fn seal(key_seed: &[u8], header: &[Word; 20], aud: bool, legs: &[(u64, Word)]) -> Option<Vec<u8>> {
+pub fn seal(
+    key_seed: &[u8],
+    header: &[Word; 20],
+    aud: bool,
+    legs: &[(u64, Word)],
+) -> Option<Vec<u8>> {
     let m = u8::try_from(legs.len()).ok().filter(|&m| m > 0)?;
     let mut plain = Clear(Vec::with_capacity(memo_len(legs.len()) - 16)); // no reallocation: one buffer to clear
     plain.0.extend_from_slice(&[aud as u8, m]);
@@ -75,14 +85,25 @@ pub fn open(key_seed: &[u8], header: &[Word; 20], memo: &[u8]) -> Option<(bool, 
         return None;
     }
     let ks = stream(key_seed, header, &memo[..16], memo.len() - 16)?;
-    let plain = Clear(memo[16..].iter().zip(&ks.0).map(|(c, k)| c ^ k).collect::<Vec<u8>>());
+    let plain = Clear(
+        memo[16..]
+            .iter()
+            .zip(&ks.0)
+            .map(|(c, k)| c ^ k)
+            .collect::<Vec<u8>>(),
+    );
     let (flags, m) = (plain.0[0], plain.0[1] as usize);
     if flags > 1 || memo_len(m) != memo.len() {
         return None;
     }
     let legs = plain.0[2..]
         .chunks_exact(40)
-        .map(|c| (u64::from_be_bytes(c[..8].try_into().unwrap_or_default()), c[8..].try_into().unwrap_or_default()))
+        .map(|c| {
+            (
+                u64::from_be_bytes(c[..8].try_into().unwrap_or_default()),
+                c[8..].try_into().unwrap_or_default(),
+            )
+        })
         .collect();
     Some((flags == 1, legs))
 }

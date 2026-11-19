@@ -68,7 +68,9 @@ contract ServicePullKindsTest is Test {
         bytes memory b = bytes(k);
         bytes memory suffix = bytes("_REGULATED");
         if (b.length < suffix.length) return false;
-        for (uint256 i; i < suffix.length; ++i) if (b[b.length - suffix.length + i] != suffix[i]) return false;
+        for (uint256 i; i < suffix.length; ++i) {
+            if (b[b.length - suffix.length + i] != suffix[i]) return false;
+        }
         return true;
     }
 

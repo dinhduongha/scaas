@@ -23,14 +23,26 @@ contract ConstructorPuller {
 
 /// Ví ERC-1271 giả: `mode` quyết định câu trả lời.
 contract Mock1271Wallet {
-    enum Mode { Valid, WrongMagic, Reverts, Short, Long, DirtyTail, Burn }
+    enum Mode {
+        Valid,
+        WrongMagic,
+        Reverts,
+        Short,
+        Long,
+        DirtyTail,
+        Burn
+    }
 
     Mode public mode;
     address public immutable owner;
 
-    constructor(address owner_) { owner = owner_; }
+    constructor(address owner_) {
+        owner = owner_;
+    }
 
-    function setMode(Mode m) external { mode = m; }
+    function setMode(Mode m) external {
+        mode = m;
+    }
 
     function isValidSignature(bytes32 hash, bytes calldata sig) external view returns (bytes4) {
         if (mode == Mode.Reverts) revert("nope");

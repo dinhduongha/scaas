@@ -12,6 +12,7 @@ within that group, times `factor` (default 1.3: the new sets' larger n and q ver
 a testnet, an under-estimate is not). A key without such a row takes the largest live price of its op and system times
 `factor`. `selftestGas` is scaled the same way; the ML-DSA prices are kept. Output: one schedule at timestamp 0x0 (the
 testnet reset, path B) with only the new rows — the library refuses the retired ids, so their rows would be dead."""
+
 import json
 import os
 import sys
@@ -33,7 +34,7 @@ def small_word(b):
 def key(b):
     legs = aud = 0
     if b[0] == 7:
-        legs, aud = small_word(b[5 + 320:5 + 352]), small_word(b[5 + 448:5 + 480])
+        legs, aud = small_word(b[5 + 320 : 5 + 352]), small_word(b[5 + 448 : 5 + 480])
     return b[0], b[37:69].hex(), int.from_bytes(b[1:5], "big"), legs, aud
 
 
@@ -44,7 +45,9 @@ def main(corpus, engine, out, factor="1.3"):
     for r in live["pqz"]:
         sysname = LIVE.get(r["id"].lower().removeprefix("0x"))
         if sysname:
-            old.setdefault((r["op"], sysname, r.get("legs", 0), r.get("auditorOn", 0)), []).append((r["stmtLen"], r["gas"]))
+            old.setdefault((r["op"], sysname, r.get("legs", 0), r.get("auditorOn", 0)), []).append(
+                (r["stmtLen"], r["gas"])
+            )
     for v in old.values():
         v.sort()
     keys = {}
@@ -72,8 +75,13 @@ def main(corpus, engine, out, factor="1.3"):
                 row["legs"], row["auditorOn"] = g[2], g[3]
             rows.append(row)
             print(f"op {g[0]} {g[1]} legs {g[2]} aud {g[3]} stmtLen {sl:,}: {row['gas']:,} ({src} {base:,} x {f})")
-    sched = {"timestamp": "0x0", "pqz": rows, "selftestGas": int(round(live["selftestGas"] * f / 1000.0)) * 1000,
-             "mldsa44Gas": live["mldsa44Gas"], "mldsa65Gas": live["mldsa65Gas"]}
+    sched = {
+        "timestamp": "0x0",
+        "pqz": rows,
+        "selftestGas": int(round(live["selftestGas"] * f / 1000.0)) * 1000,
+        "mldsa44Gas": live["mldsa44Gas"],
+        "mldsa65Gas": live["mldsa65Gas"],
+    }
     json.dump({"schedules": [sched]}, open(out, "w"), indent=2)
     print(f"{len(rows)} rows, selftestGas {sched['selftestGas']:,} -> {out}")
 

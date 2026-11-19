@@ -2,8 +2,16 @@
 pragma solidity ^0.8.24;
 
 import {Test, console} from "forge-std/Test.sol";
-import {RegCore, RegPublicHandler, RegZetherHandler, RegZetherHandler10, RegZetherHandler11, RegPqzHandler, RegPqzHandler12,
-    RegPqzHandler13} from "./RegulatedHandler.t.sol";
+import {
+    RegCore,
+    RegPublicHandler,
+    RegZetherHandler,
+    RegZetherHandler10,
+    RegZetherHandler11,
+    RegPqzHandler,
+    RegPqzHandler12,
+    RegPqzHandler13
+} from "./RegulatedHandler.t.sol";
 
 interface IRegH {
     function vio(uint256) external view returns (uint256);
@@ -27,12 +35,17 @@ abstract contract RegInvBase is Test {
     function _sel() internal view virtual returns (bytes4[] memory s);
 
     function _core(bytes4[] memory s) internal pure {
-        (s[0], s[1], s[2], s[3]) = (RegCore.freeze.selector, RegCore.unfreeze.selector, RegCore.recordOrder.selector,
-            RegCore.revokeOrder.selector);
-        (s[4], s[5], s[6], s[7]) = (RegCore.forceTransfer.selector, RegCore.pause.selector, RegCore.unpause.selector,
-            RegCore.operatorTransfer.selector);
-        (s[8], s[9], s[10], s[11]) = (RegCore.relax.selector, RegCore.handover.selector, RegCore.attest.selector,
-            RegCore.warp.selector);
+        (s[0], s[1], s[2], s[3]) =
+        (RegCore.freeze.selector, RegCore.unfreeze.selector, RegCore.recordOrder.selector, RegCore.revokeOrder.selector);
+        (s[4], s[5], s[6], s[7]) =
+        (
+            RegCore.forceTransfer.selector,
+            RegCore.pause.selector,
+            RegCore.unpause.selector,
+            RegCore.operatorTransfer.selector
+        );
+        (s[8], s[9], s[10], s[11]) =
+        (RegCore.relax.selector, RegCore.handover.selector, RegCore.attest.selector, RegCore.warp.selector);
     }
 
     function _target(address hh) internal {
@@ -45,21 +58,62 @@ abstract contract RegInvBase is Test {
         assertEq(h.vio(i), 0, h.why());
     }
 
-    function invariant_I1_supplyAndCollateral() public view { _ok(1); }
-    function invariant_I2_forcedTransfers() public view { _ok(2); }
-    function invariant_I3_frozenNeverDebited() public view { _ok(3); }
-    function invariant_I4_pause() public view { _ok(4); }
-    function invariant_I5_receivers() public view { _ok(5); }
-    function invariant_I6_regulatedCallsKeepTheRest() public view { _ok(6); }
-    function invariant_I7_episodes() public view { _ok(7); }
-    function invariant_I8_shieldedUntouched() public view { _ok(8); }
-    function invariant_I9_legsUnread() public view { _ok(9); }
-    function invariant_I10_refusalGas() public view { _ok(10); }
-    function invariant_I12_controlsMirror() public view { _ok(12); }
-    function invariant_I13_pendings() public view { _ok(13); }
+    function invariant_I1_supplyAndCollateral() public view {
+        _ok(1);
+    }
+
+    function invariant_I2_forcedTransfers() public view {
+        _ok(2);
+    }
+
+    function invariant_I3_frozenNeverDebited() public view {
+        _ok(3);
+    }
+
+    function invariant_I4_pause() public view {
+        _ok(4);
+    }
+
+    function invariant_I5_receivers() public view {
+        _ok(5);
+    }
+
+    function invariant_I6_regulatedCallsKeepTheRest() public view {
+        _ok(6);
+    }
+
+    function invariant_I7_episodes() public view {
+        _ok(7);
+    }
+
+    function invariant_I8_shieldedUntouched() public view {
+        _ok(8);
+    }
+
+    function invariant_I9_legsUnread() public view {
+        _ok(9);
+    }
+
+    function invariant_I10_refusalGas() public view {
+        _ok(10);
+    }
+
+    function invariant_I12_controlsMirror() public view {
+        _ok(12);
+    }
+
+    function invariant_I13_pendings() public view {
+        _ok(13);
+    }
+
     /// Round 3s (spec 2026-11-10-token-lists.md §4.5): the lists' parties (from the logs) and the lists' ratchet.
-    function invariant_I14_listParties() public view { _ok(14); }
-    function invariant_I15_listRatchet() public view { _ok(15); }
+    function invariant_I14_listParties() public view {
+        _ok(14);
+    }
+
+    function invariant_I15_listRatchet() public view {
+        _ok(15);
+    }
 
     /// The family's scripted ledger calls between the record (`_force`) and the relaxation (`_end`), and the invariants it
     /// must reach.
@@ -93,16 +147,21 @@ abstract contract RegInvBase is Test {
         for (uint256 k = 1; k <= 15; ++k) {
             if (r & (1 << k) != 0) assertGt(h.hits(k), 0, string.concat("I", vm.toString(k), " reached"));
         }
-        for (uint256 i = 1; i <= 15; ++i) assertEq(h.vio(i), 0, h.why());
+        for (uint256 i = 1; i <= 15; ++i) {
+            assertEq(h.vio(i), 0, h.why());
+        }
     }
 
     function afterInvariant() public view {
         string memory s = "hits";
-        for (uint256 i = 1; i <= 15; ++i) if (i != 11) s = string.concat(s, " I", vm.toString(i), "=", vm.toString(h.hits(i)));
+        for (uint256 i = 1; i <= 15; ++i) {
+            if (i != 11) s = string.concat(s, " I", vm.toString(i), "=", vm.toString(h.hits(i)));
+        }
         console.log(s);
         string memory c = "calls ok/tried";
-        for (uint256 k; k < 8; ++k) c = string.concat(c, " k", vm.toString(k), "=", vm.toString(h.calls(k + 10)), "/",
-            vm.toString(h.calls(k)));
+        for (uint256 k; k < 8; ++k) {
+            c = string.concat(c, " k", vm.toString(k), "=", vm.toString(h.calls(k + 10)), "/", vm.toString(h.calls(k)));
+        }
         console.log(c);
         string memory e = "refusals";
         for (uint256 i; i < h.errsLength(); ++i) {
@@ -141,23 +200,27 @@ abstract contract RegInvPublic is RegInvBase {
         _core(s);
         (s[20], s[21]) = (RegCore.listEdit.selector, RegCore.enableList.selector); // round 3s
         (s[18], s[19]) = (RegCore.forceTransfer.selector, RegCore.recordOrder.selector);
-        (s[12], s[13], s[14]) = (RegPublicHandler.pubTransfer.selector, RegPublicHandler.pubRelayed.selector,
-            RegPublicHandler.pubPay.selector);
-        (s[15], s[16], s[17]) = (RegPublicHandler.pubMint.selector, RegPublicHandler.pubBurn.selector,
-            RegPublicHandler.pubOpenRelayed.selector);
+        (s[12], s[13], s[14]) =
+        (RegPublicHandler.pubTransfer.selector, RegPublicHandler.pubRelayed.selector, RegPublicHandler.pubPay.selector);
+        (s[15], s[16], s[17]) =
+        (RegPublicHandler.pubMint.selector, RegPublicHandler.pubBurn.selector, RegPublicHandler.pubOpenRelayed.selector);
     }
 }
 
 /// forge-config: default.invariant.runs = 64
 /// forge-config: default.invariant.depth = 128
 contract RegInv8Test is RegInvPublic {
-    function _which() internal pure override returns (uint256) { return 0; }
+    function _which() internal pure override returns (uint256) {
+        return 0;
+    }
 }
 
 /// forge-config: default.invariant.runs = 64
 /// forge-config: default.invariant.depth = 128
 contract RegInv9Test is RegInvPublic {
-    function _which() internal pure override returns (uint256) { return 1; }
+    function _which() internal pure override returns (uint256) {
+        return 1;
+    }
 }
 
 /// Zether ≠ PQZ: the Zether suites prove with the test prover (fewer runs, as `ZetherInvariant.t.sol`).
@@ -182,10 +245,10 @@ abstract contract RegInvZether is RegInvBase {
         s = new bytes4[](23);
         _core(s);
         (s[21], s[22]) = (RegCore.listEdit.selector, RegCore.enableList.selector); // round 3s
-        (s[12], s[13], s[14]) = (RegZetherHandler.zShield.selector, RegZetherHandler.zWrapShield.selector,
-            RegZetherHandler.zRoll.selector);
-        (s[15], s[16], s[17]) = (RegZetherHandler.zTransfer.selector, RegZetherHandler.zMulti.selector,
-            RegZetherHandler.zUnshield.selector);
+        (s[12], s[13], s[14]) =
+        (RegZetherHandler.zShield.selector, RegZetherHandler.zWrapShield.selector, RegZetherHandler.zRoll.selector);
+        (s[15], s[16], s[17]) =
+        (RegZetherHandler.zTransfer.selector, RegZetherHandler.zMulti.selector, RegZetherHandler.zUnshield.selector);
         (s[18], s[19]) = (RegZetherHandler.zUnshieldUnwrap.selector, RegZetherHandler.pubTransfer.selector);
         (s[20]) = (RegZetherHandler.zRoll.selector);
     }
@@ -234,12 +297,12 @@ abstract contract RegInvPqz is RegInvBase {
         s = new bytes4[](23);
         _core(s);
         (s[21], s[22]) = (RegCore.listEdit.selector, RegCore.enableList.selector); // round 3s
-        (s[12], s[13], s[14]) = (RegPqzHandler.pqShield.selector, RegPqzHandler.pqWrapShield.selector,
-            RegPqzHandler.pqTransfer.selector);
-        (s[15], s[16], s[17]) = (RegPqzHandler.pqUnshield.selector, RegPqzHandler.pqRefresh.selector,
-            RegPqzHandler.pqUnshieldUnwrap.selector);
-        (s[18], s[19], s[20]) = (RegPqzHandler.pqRoll.selector, RegPqzHandler.pubTransfer.selector,
-            RegPqzHandler.pqTransfer.selector);
+        (s[12], s[13], s[14]) =
+        (RegPqzHandler.pqShield.selector, RegPqzHandler.pqWrapShield.selector, RegPqzHandler.pqTransfer.selector);
+        (s[15], s[16], s[17]) =
+        (RegPqzHandler.pqUnshield.selector, RegPqzHandler.pqRefresh.selector, RegPqzHandler.pqUnshieldUnwrap.selector);
+        (s[18], s[19], s[20]) =
+        (RegPqzHandler.pqRoll.selector, RegPqzHandler.pubTransfer.selector, RegPqzHandler.pqTransfer.selector);
     }
 }
 

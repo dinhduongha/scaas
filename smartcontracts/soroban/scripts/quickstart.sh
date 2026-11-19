@@ -19,38 +19,57 @@ PORT=${QS_PORT:-31980}
 RPC_URL=http://127.0.0.1:$PORT/rpc
 
 case "${1:-}" in
-  up)
-    if docker ps -a --format '{{.Names}}' | grep -qx "$NAME"; then
-      echo "quickstart: container $NAME already exists (one quickstart at a time)" >&2; exit 3
-    fi
-    # a run that fails after creating the container (port taken, start error) removes what it created, by the id docker
-    # wrote to the cidfile: never by name (another process may have created `scaas-stellar` since the check above)
-    cid=$(mktemp -u "${TMPDIR:-/tmp}/scaas-stellar.XXXXXX.cid")
-    docker run -d --rm --cidfile "$cid" --memory 3g --name "$NAME" -p "127.0.0.1:$PORT:8000" "$QS_IMAGE" \
-      --local --protocol-version 30 --limits testnet --enable core,rpc,horizon >/dev/null \
-      || { rc=$?; [ -s "$cid" ] && docker rm -f "$(cat "$cid")" >/dev/null 2>&1; rm -f "$cid"
-           echo "quickstart: up failed (docker run exit $rc)" >&2; exit "$rc"; }
-    rm -f "$cid"
-    echo "quickstart: $NAME up ($QS_IMAGE), rpc $RPC_URL" ;;
-  down)
-    docker rm -f "$NAME" >/dev/null 2>&1 || true ;;
-  wait)
-    for _ in $(seq 1 120); do
-      v=$(curl -s -m 5 -X POST -H 'content-type: application/json' \
-        -d '{"jsonrpc":"2.0","id":1,"method":"getNetwork"}' "$RPC_URL" 2>/dev/null \
-        | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["result"]["protocolVersion"])' 2>/dev/null || true)
-      # protocol 30 comes first; the `--limits testnet` config upgrade lands a few ledgers later (the image's /start
-      # touches this file once it is applied), and only then are the network settings the ones to measure against
-      if [ "$v" = 30 ] && docker exec "$NAME" test -f /opt/stellar/core/.upgrade-config-initialized 2>/dev/null; then
-        echo "quickstart: protocolVersion 30, testnet limits applied"; exit 0
-      fi
-      sleep 5
-    done
-    echo "quickstart: no protocolVersion 30 with testnet limits after 10 min (last version: '${v:-none}')" >&2; exit 1 ;;
-  cli)
-    bin="$STELLAR_CLI_ROOT/bin/stellar"
-    if [ -x "$bin" ]; then echo "$bin"; exit 0; fi
-    echo "missing $bin; install (from the repository): scripts/capped cargo install --locked --git https://github.com/stellar/stellar-cli" \
-      "--rev $STELLAR_CLI_REV stellar-cli --root $STELLAR_CLI_ROOT -j1" >&2; exit 1 ;;
-  *) echo "usage: $0 up|down|wait|cli" >&2; exit 2 ;;
+    up)
+        if docker ps -a --format '{{.Names}}' | grep -qx "$NAME"; then
+            echo "quickstart: container $NAME already exists (one quickstart at a time)" >&2
+            exit 3
+        fi
+        # a run that fails after creating the container (port taken, start error) removes what it created, by the id docker
+        # wrote to the cidfile: never by name (another process may have created `scaas-stellar` since the check above)
+        cid=$(mktemp -u "${TMPDIR:-/tmp}/scaas-stellar.XXXXXX.cid")
+        docker run -d --rm --cidfile "$cid" --memory 3g --name "$NAME" -p "127.0.0.1:$PORT:8000" "$QS_IMAGE" \
+            --local --protocol-version 30 --limits testnet --enable core,rpc,horizon >/dev/null ||
+            {
+                rc=$?
+                [ -s "$cid" ] && docker rm -f "$(cat "$cid")" >/dev/null 2>&1
+                rm -f "$cid"
+                echo "quickstart: up failed (docker run exit $rc)" >&2
+                exit "$rc"
+            }
+        rm -f "$cid"
+        echo "quickstart: $NAME up ($QS_IMAGE), rpc $RPC_URL"
+        ;;
+    down)
+        docker rm -f "$NAME" >/dev/null 2>&1 || true
+        ;;
+    wait)
+        for _ in $(seq 1 120); do
+            v=$(curl -s -m 5 -X POST -H 'content-type: application/json' \
+                -d '{"jsonrpc":"2.0","id":1,"method":"getNetwork"}' "$RPC_URL" 2>/dev/null |
+                python3 -I -c 'import json,sys; print(json.load(sys.stdin)["result"]["protocolVersion"])' 2>/dev/null || true)
+            # protocol 30 comes first; the `--limits testnet` config upgrade lands a few ledgers later (the image's /start
+            # touches this file once it is applied), and only then are the network settings the ones to measure against
+            if [ "$v" = 30 ] && docker exec "$NAME" test -f /opt/stellar/core/.upgrade-config-initialized 2>/dev/null; then
+                echo "quickstart: protocolVersion 30, testnet limits applied"
+                exit 0
+            fi
+            sleep 5
+        done
+        echo "quickstart: no protocolVersion 30 with testnet limits after 10 min (last version: '${v:-none}')" >&2
+        exit 1
+        ;;
+    cli)
+        bin="$STELLAR_CLI_ROOT/bin/stellar"
+        if [ -x "$bin" ]; then
+            echo "$bin"
+            exit 0
+        fi
+        echo "missing $bin; install (from the repository): scripts/capped cargo install --locked --git https://github.com/stellar/stellar-cli" \
+            "--rev $STELLAR_CLI_REV stellar-cli --root $STELLAR_CLI_ROOT -j1" >&2
+        exit 1
+        ;;
+    *)
+        echo "usage: $0 up|down|wait|cli" >&2
+        exit 2
+        ;;
 esac

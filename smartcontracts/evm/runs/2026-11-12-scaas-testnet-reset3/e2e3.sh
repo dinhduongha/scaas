@@ -13,7 +13,7 @@ RPC=${RPC_7622:?set RPC_7622 to the SCaaS testnet RPC (no default)}
 H=runs/2026-11-12-scaas-testnet-reset3
 e=0
 systemd-run --user --scope --quiet -p MemoryMax=1G -p MemorySwapMax=0 -- env EVM_OUT=out/t66b-e2e \
-  python3 -I "$H/e2e3.py" --rpc "$RPC" --split --keys 1,2,3 --log "$H/e2e-pqz-scaas-testnet.txt" || e=$?
+    python3 -I "$H/e2e3.py" --rpc "$RPC" --split --keys 1,2,3 --log "$H/e2e-pqz-scaas-testnet.txt" || e=$?
 [ ! -f deployments/scaas-testnet-pqz.json ] || cp deployments/scaas-testnet-pqz.json "$H/deployments-scaas-testnet-pqz.json"
 echo "e2e.py rc $e"
 exit $e

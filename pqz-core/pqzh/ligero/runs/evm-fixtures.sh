@@ -9,8 +9,8 @@ set -eu
 cd "$(dirname "$0")/.."
 tag=${1:-evm}
 cargo run --release --offline --quiet -j2 --features set-n2048-kmax1024 --bin ligero_export -- \
-  ../../../smartcontracts/evm/test/vectors/pqzh-ligero proven conj johnson > runs/$tag-export-n2048-kmax1024.jsonl
+    ../../../smartcontracts/evm/test/vectors/pqzh-ligero proven conj johnson >runs/$tag-export-n2048-kmax1024.jsonl
 for s in n2048-kmax1024 n2304-kmax4096 n2560-kmax16384; do
-  cargo test --release --offline -j2 --features set-$s --test attacks evm_fixtures > runs/$tag-evm-$s.txt 2>&1
-  tail -3 runs/$tag-evm-$s.txt
+    cargo test --release --offline -j2 --features set-$s --test attacks evm_fixtures >runs/$tag-evm-$s.txt 2>&1
+    tail -3 runs/$tag-evm-$s.txt
 done

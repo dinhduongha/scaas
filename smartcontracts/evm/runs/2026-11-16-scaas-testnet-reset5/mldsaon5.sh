@@ -6,11 +6,17 @@
 # printed. From smartcontracts/evm, outside capped (a remote target, as matrix.sh):
 #   RPC_7622=<rpc> SCAAS_TESTNET_MNEMONIC_FILE=<file> MATRIX_OUT=runs/2026-11-16-matrix sh runs/2026-11-16-scaas-testnet-reset5/mldsaon5.sh
 set -eu
-command -v cast > /dev/null || PATH=$HOME/.foundry/bin:$PATH
+command -v cast >/dev/null || PATH=$HOME/.foundry/bin:$PATH
 RPC=${RPC_7622:?} T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
-(umask 077; sed -n 's/^mnemonic:[[:space:]]*//p' "${SCAAS_TESTNET_MNEMONIC_FILE:?}" > "$T/m")
-[ -s "$T/m" ] || (umask 077; grep -v '^#' "$SCAAS_TESTNET_MNEMONIC_FILE" > "$T/m")
+(
+    umask 077
+    sed -n 's/^mnemonic:[[:space:]]*//p' "${SCAAS_TESTNET_MNEMONIC_FILE:?}" >"$T/m"
+)
+[ -s "$T/m" ] || (
+    umask 077
+    grep -v '^#' "$SCAAS_TESTNET_MNEMONIC_FILE" >"$T/m"
+)
 mk() { cast wallet private-key --mnemonic "$T/m" --mnemonic-index "$1"; }
 ONCHAIN_K1=$(mk 60) ONCHAIN_K2=$(mk 61) ONCHAIN_K3=$(mk 62) FUND_KEY=$(mk 0)
 rm -f "$T/m"

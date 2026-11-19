@@ -6,9 +6,23 @@ import {IUniswapV3Factory} from "./uniswap/IUniswapV3.sol";
 
 /// @notice The view of Uniswap v3's `NonfungiblePositionManager` the reader needs.
 interface IV3PositionManager {
-    function positions(uint256 tokenId) external view returns (uint96 nonce, address operator, address token0,
-        address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint128 liquidity, uint256 feeGrowthInside0LastX128,
-        uint256 feeGrowthInside1LastX128, uint128 tokensOwed0, uint128 tokensOwed1);
+    function positions(uint256 tokenId)
+        external
+        view
+        returns (
+            uint96 nonce,
+            address operator,
+            address token0,
+            address token1,
+            uint24 fee,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            uint256 feeGrowthInside0LastX128,
+            uint256 feeGrowthInside1LastX128,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        );
 }
 
 /// @title The position reader of a Uniswap v3 `NonfungiblePositionManager` (CTR-DEX-31, spec 2026-11-10-dex-liquidity.md
@@ -23,7 +37,9 @@ contract V3PositionReader is IPositionReader {
         (manager, factory) = (npm, v3Factory);
     }
 
-    function position(uint256 tokenId) external view
+    function position(uint256 tokenId)
+        external
+        view
         returns (bytes32 poolId, int24 tickLower, int24 tickUpper, uint128 liquidity, bool encumbered)
     {
         address t0;

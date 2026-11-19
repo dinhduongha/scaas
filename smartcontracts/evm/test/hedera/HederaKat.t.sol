@@ -39,16 +39,31 @@ contract HederaKatTest is Test {
 
     function setUp() public {
         vm.chainId(296);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), true)));
-        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("HBUSD", "HBUSD", 6, 0, address(this), address(this))));
+        tok = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(UID, address(0), address(0), true)
+            )
+        );
+        tok.initialize(
+            nid(address(this)), 1, abi.encode(normalInit("HBUSD", "HBUSD", 6, 0, address(this), address(this)))
+        );
     }
 
     function _transfer() internal view returns (MetaTxLib.UAMetaTransfer memory) {
         bytes32 ref = bytes32(uint256(0x42));
         return MetaTxLib.UAMetaTransfer({
-            from: MetaTxLib.pad(NATIVE), to: MetaTxLib.pad(address(0x5409)), value: 250_000_000, entryRef: ref,
-            batch: tok.payLane(ref), nonce: 0, validUntil: 1_800_000_300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
-            relayer: RELAYER, fee: 0, feeRecipient: address(0xFEE)
+            from: MetaTxLib.pad(NATIVE),
+            to: MetaTxLib.pad(address(0x5409)),
+            value: 250_000_000,
+            entryRef: ref,
+            batch: tok.payLane(ref),
+            nonce: 0,
+            validUntil: 1_800_000_300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: RELAYER,
+            fee: 0,
+            feeRecipient: address(0xFEE)
         });
     }
 
@@ -81,8 +96,11 @@ contract HederaKatTest is Test {
         string[] memory keys = vm.parseJsonKeys(out, "$");
         assertEq(keys.length, 18);
         for (uint256 i; i < keys.length; ++i) {
-            assertEq(vm.parseJsonString(onDisk, string.concat(".", keys[i])),
-                vm.parseJsonString(out, string.concat(".", keys[i])), keys[i]);
+            assertEq(
+                vm.parseJsonString(onDisk, string.concat(".", keys[i])),
+                vm.parseJsonString(out, string.concat(".", keys[i])),
+                keys[i]
+            );
         }
         if (!vm.envOr("WRITE_KAT", false)) assertEq(vm.parseJsonBytes(onDisk, ".ed25519_signature").length, 64);
     }
@@ -97,14 +115,22 @@ contract HederaKatTest is Test {
         bytes32 from = vm.parseJsonBytes32(j, ".from");
         assertEq(from, bytes32(uint256(1_234_567)), "from: the long-zero address of 0.0.1234567, zero-padded");
         MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer({
-            from: from, to: vm.parseJsonBytes32(j, ".to"), value: vm.parseJsonUint(j, ".value"),
-            entryRef: vm.parseJsonBytes32(j, ".entry_ref"), batch: vm.parseJsonUint(j, ".batch"),
-            nonce: vm.parseJsonUint(j, ".nonce"), validUntil: vm.parseJsonUint(j, ".valid_until"),
-            mode: uint32(vm.parseJsonUint(j, ".mode")), relayer: vm.parseJsonAddress(j, ".relayer"),
-            fee: vm.parseJsonUint(j, ".fee"), feeRecipient: vm.parseJsonAddress(j, ".fee_recipient")
+            from: from,
+            to: vm.parseJsonBytes32(j, ".to"),
+            value: vm.parseJsonUint(j, ".value"),
+            entryRef: vm.parseJsonBytes32(j, ".entry_ref"),
+            batch: vm.parseJsonUint(j, ".batch"),
+            nonce: vm.parseJsonUint(j, ".nonce"),
+            validUntil: vm.parseJsonUint(j, ".valid_until"),
+            mode: uint32(vm.parseJsonUint(j, ".mode")),
+            relayer: vm.parseJsonAddress(j, ".relayer"),
+            fee: vm.parseJsonUint(j, ".fee"),
+            feeRecipient: vm.parseJsonAddress(j, ".fee_recipient")
         });
-        assertTrue(t.feeRecipient != address(0) && t.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT == 0,
-            "a non-zero unbound fee recipient (spec 6)");
+        assertTrue(
+            t.feeRecipient != address(0) && t.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT == 0,
+            "a non-zero unbound fee recipient (spec 6)"
+        );
         assertEq(vm.parseJsonBytes32(j, ".struct_hash"), t.hashStruct(), "struct hash");
         assertEq(vm.parseJsonAddress(j, ".verifying_contract"), address(tok));
         bytes32 digest = vm.parseJsonBytes32(j, ".digest");

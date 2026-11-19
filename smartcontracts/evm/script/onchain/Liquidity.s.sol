@@ -15,7 +15,12 @@ import {V4PositionReader} from "../../src/dex/V4PositionReader.sol";
 import {SCaaSDexLiquidityModule} from "../../src/dex/SCaaSDexLiquidityModule.sol";
 import {PoolKey} from "../../src/dex/uniswap/IUniswapV4.sol";
 import {MockERC20} from "../../test/helpers/Mocks.sol";
-import {MockV2Factory, MockV2LiquidityPair, MockPositionManagerV4, MockOldDex} from "../../test/liquidity/LiquidityMocks.sol";
+import {
+    MockV2Factory,
+    MockV2LiquidityPair,
+    MockPositionManagerV4,
+    MockOldDex
+} from "../../test/liquidity/LiquidityMocks.sol";
 
 /// @notice Group `liquidity` (spec 2026-11-10-dex-liquidity.md §15; owner Step 5b rules 2026-11-10): a DEX created by the deployed
 ///         factory, two `NORMAL` tokens, an outside MockERC20, the TEST ONLY v2-style factory and v4-style position manager
@@ -48,7 +53,11 @@ contract Liquidity is OnchainBase {
         f = OpenFactory(_dep("token_factory"));
         _book(address(f), "OpenFactory");
         _setup();
-        console2.log(string.concat("liquidity: DEX ", vm.toString(address(dex)), ", tokens ", vm.toString(A), " ", vm.toString(B)));
+        console2.log(
+            string.concat(
+                "liquidity: DEX ", vm.toString(address(dex)), ", tokens ", vm.toString(A), " ", vm.toString(B)
+            )
+        );
         address pair = _addCreatePair();
         _addOutside();
         _withdraw(pair);
@@ -60,10 +69,16 @@ contract Liquidity is OnchainBase {
     function _setup() internal {
         A = _normal("Onchain Liq A", "oLA");
         B = _normal("Onchain Liq B", "oLB");
-        usdc = MockERC20(_create2(abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain USD L", "oUSDL", uint8(6))), "usdc"));
+        usdc = MockERC20(
+            _create2(
+                abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain USD L", "oUSDL", uint8(6))), "usdc"
+            )
+        );
         v2f = MockV2Factory(_create2(type(MockV2Factory).creationCode, "v2f"));
         posm = MockPositionManagerV4(_create2(type(MockPositionManagerV4).creationCode, "posm"));
-        reader = V4PositionReader(_create2(abi.encodePacked(type(V4PositionReader).creationCode, abi.encode(address(posm))), "reader"));
+        reader = V4PositionReader(
+            _create2(abi.encodePacked(type(V4PositionReader).creationCode, abi.encode(address(posm))), "reader")
+        );
         _book(address(usdc), "MockERC20");
         _book(address(v2f), "MockV2Factory");
         _book(address(posm), "MockPositionManagerV4");
@@ -106,7 +121,7 @@ contract Liquidity is OnchainBase {
 
     function _order(address from, address to) internal returns (ITradeToken.LiquidityOrder memory o) {
         (o.from, o.recipient, o.fee, o.relayer, o.batch, o.nonce, o.validUntil) =
-            (_pad(from), _pad(to), 3_000, a3, 11, ++n, vu);
+        (_pad(from), _pad(to), 3_000, a3, 11, ++n, vu);
     }
 
     function _tk(address t, uint256 amount) internal pure returns (ITradeToken.LiquidityToken memory) {
@@ -114,7 +129,9 @@ contract Liquidity is OnchainBase {
     }
 
     function _plan(ITradeToken.LiquidityOrder memory o, uint256 pk, uint256[] memory pull)
-        internal view returns (ISCaaSDex.LiquidityPlan memory p)
+        internal
+        view
+        returns (ISCaaSDex.LiquidityPlan memory p)
     {
         (p.ref, p.order, p.auth, p.pull) = (_salt(vm.toString(o.nonce)), o, _sig(pk, dex.liquidityOrderDigest(o)), pull);
     }
@@ -147,8 +164,13 @@ contract Liquidity is OnchainBase {
         _send(_plan(o, k1, pull), xs, "D-L1");
         _book(pair, "MockV2LiquidityPair");
         // D-L7: a replay of the same order is refused (OrderClosed), listed as a negative
-        _neg(a3, address(dex), abi.encodeCall(ISCaaSDex.mtxLiquidity, (_plan(o, k1, pull), xs)), ISCaaSDex.OrderClosed.selector,
-            "liquidity: a replay of an executed order");
+        _neg(
+            a3,
+            address(dex),
+            abi.encodeCall(ISCaaSDex.mtxLiquidity, (_plan(o, k1, pull), xs)),
+            ISCaaSDex.OrderClosed.selector,
+            "liquidity: a replay of an executed order"
+        );
     }
 
     /// D-L2: one SCaaS and one outside input (the puller; the DEX verifies), fee 0.3 % split.
@@ -198,14 +220,17 @@ contract Liquidity is OnchainBase {
         ITradeToken.LiquidityOrder memory o = _order(a1, a2);
         o.inputs = new ITradeToken.LiquidityToken[](2);
         (o.inputs[0], o.inputs[1]) = (_tk(A, 5e5), _tk(B, 5e5));
-        (o.positionManager, o.positionReader, o.positionPool) = (address(posm), address(reader), keccak256(abi.encode(_key())));
+        (o.positionManager, o.positionReader, o.positionPool) =
+        (address(posm), address(reader), keccak256(abi.encode(_key())));
         (o.tickLower, o.tickUpper, o.minLiquidity) = (LO, HI, 4e5);
         uint256[] memory pull = new uint256[](2);
         (pull[0], pull[1]) = (5e5, 5e5);
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](3);
         xs[0] = _ix(A, abi.encodeCall(IERC20.transfer, (address(posm), 5e5)));
         xs[1] = _ix(B, abi.encodeCall(IERC20.transfer, (address(posm), 5e5)));
-        xs[2] = _ix(address(posm), abi.encodeCall(MockPositionManagerV4.mint, (_key(), LO, HI, 4e5, address(dex), address(dex))));
+        xs[2] = _ix(
+            address(posm), abi.encodeCall(MockPositionManagerV4.mint, (_key(), LO, HI, 4e5, address(dex), address(dex)))
+        );
         ISCaaSDex.LiquidityPlan memory p = _plan(o, k1, pull);
         p.positionId = id;
         _send(p, xs, "D-L5");
@@ -216,15 +241,21 @@ contract Liquidity is OnchainBase {
         (bad.tickLower, bad.tickUpper, bad.minLiquidity) = (LO, HI, 4e5);
         ISCaaSDex.LiquidityPlan memory bp = _plan(bad, k1, pull);
         bp.positionId = posm.nextId();
-        _neg(a3, address(dex), abi.encodeCall(ISCaaSDex.mtxLiquidity, (bp, xs)), ISCaaSDex.PositionReaderNotListed.selector,
-            "liquidity: an unlisted position reader");
+        _neg(
+            a3,
+            address(dex),
+            abi.encodeCall(ISCaaSDex.mtxLiquidity, (bp, xs)),
+            ISCaaSDex.PositionReaderNotListed.selector,
+            "liquidity: an unlisted position reader"
+        );
         // D-L6: a2 gives the position and receives it back with at least 3e5 (a partial withdraw of 1e5)
         vm.broadcast(k2);
         posm.approve{gas: G}(puller, id);
         ITradeToken.LiquidityOrder memory w = _order(a2, a2);
         w.outputs = new ITradeToken.LiquidityToken[](2);
         (w.outputs[0], w.outputs[1]) = (_tk(A, 9e4), _tk(B, 9e4));
-        (w.positionManager, w.positionReader, w.positionIn, w.positionPool) = (address(posm), address(reader), id, o.positionPool);
+        (w.positionManager, w.positionReader, w.positionIn, w.positionPool) =
+        (address(posm), address(reader), id, o.positionPool);
         (w.tickLower, w.tickUpper, w.minLiquidity) = (LO, HI, 3e5);
         ISCaaSDex.LiquidityPlan memory wp = _plan(w, k2, new uint256[](0));
         wp.positionId = id;
@@ -255,20 +286,40 @@ contract Liquidity is OnchainBase {
         o.outputs = new ITradeToken.LiquidityToken[](1);
         o.outputs[0] = _tk(pair, 1);
         IUARegistry.UASig memory s = _sig(k1, dex.liquidityOrderDigest(o));
-        _neg(a3, ms[1], abi.encodeCall(SCaaSDexLiquidityModule.liquidityOrderDigest, (o)),
-            SCaaSDexLiquidityModule.NotDelegated.selector, "liquidity: the module called directly");
-        _neg(a3, A, abi.encodeCall(ILiquidityPullToken.mtxLiquidityPull, (o, s, 1, a3)), ITradeToken.DexNotContract.selector,
-            "liquidity: a token's mtxLiquidityPull called by an EOA");
+        _neg(
+            a3,
+            ms[1],
+            abi.encodeCall(SCaaSDexLiquidityModule.liquidityOrderDigest, (o)),
+            SCaaSDexLiquidityModule.NotDelegated.selector,
+            "liquidity: the module called directly"
+        );
+        _neg(
+            a3,
+            A,
+            abi.encodeCall(ILiquidityPullToken.mtxLiquidityPull, (o, s, 1, a3)),
+            ITradeToken.DexNotContract.selector,
+            "liquidity: a token's mtxLiquidityPull called by an EOA"
+        );
         address old = _create2(type(MockOldDex).creationCode, "olddex");
         _book(old, "MockOldDex");
-        _neg(a3, old, abi.encodeCall(MockOldDex.run, (A, o, s, 1, a3)), ITradeToken.NotLiquidityDex.selector,
-            "liquidity: a contract without liquidityOrderDigest cannot make a token pull");
+        _neg(
+            a3,
+            old,
+            abi.encodeCall(MockOldDex.run, (A, o, s, 1, a3)),
+            ITradeToken.NotLiquidityDex.selector,
+            "liquidity: a contract without liquidityOrderDigest cannot make a token pull"
+        );
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](1);
         xs[0] = _ix(A, abi.encodeCall(ILiquidityPullToken.mtxLiquidityPull, (o, s, 1, a3)));
         uint256[] memory pull = new uint256[](1);
         pull[0] = 1;
-        _neg(a3, address(dex), abi.encodeCall(ISCaaSDex.mtxLiquidity, (_plan(o, k1, pull), xs)),
-            ISCaaSDex.ForbiddenSelector.selector, "liquidity: mtxLiquidityPull inside an interaction");
+        _neg(
+            a3,
+            address(dex),
+            abi.encodeCall(ISCaaSDex.mtxLiquidity, (_plan(o, k1, pull), xs)),
+            ISCaaSDex.ForbiddenSelector.selector,
+            "liquidity: mtxLiquidityPull inside an interaction"
+        );
     }
 }
 

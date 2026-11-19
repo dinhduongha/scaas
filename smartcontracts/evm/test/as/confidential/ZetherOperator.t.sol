@@ -23,7 +23,8 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
     uint256 internal constant PUBLIC = 50_000;
     address internal constant BENEFICIARY = address(0xBEE);
     address internal constant CLERK = address(0xC1E2);
-    bytes32 internal constant ZETHER_SLOT = keccak256(abi.encode(uint256(keccak256("scaas.zether")) - 1)) & ~bytes32(uint256(0xff));
+    bytes32 internal constant ZETHER_SLOT =
+        keccak256(abi.encode(uint256(keccak256("scaas.zether")) - 1)) & ~bytes32(uint256(0xff));
     uint256 internal constant ACCT_FIELD = 8; // ZetherStorage.acct
     uint256 internal constant FIELDS = 13; // verifier … minDecoyFee
     uint256 internal constant ACCOUNT_SLOTS = 6; // accC, accD, pendC, pendD, the seqs, modeNonce ‖ mode
@@ -35,7 +36,10 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
         c.grantDelay = 0; // the grant applies at once
         tok = NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(c), "zop"));
         vm.prank(ownerA);
-        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK), EnvKit.codeUidOf(address(IGovernance(address(tok)))));
+        IGovernance(address(tok))
+            .grantRole(
+                GovernanceBits.OPERATOR_TRANSFER, nid(CLERK), EnvKit.codeUidOf(address(IGovernance(address(tok))))
+            );
         _funded(300);
         _public(tok, address(this), PUBLIC);
         tok.transferToUA(aId, PUBLIC);
@@ -53,7 +57,9 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         for (uint256 i; i < acc.length; ++i) {
             VmSafe.StorageAccess[] memory sa = acc[i].storageAccesses;
-            for (uint256 j; j < sa.length; ++j) if (sa[j].account == address(tok) && _shieldedSlot(sa[j].slot)) ++n;
+            for (uint256 j; j < sa.length; ++j) {
+                if (sa[j].account == address(tok) && _shieldedSlot(sa[j].slot)) ++n;
+            }
         }
     }
 
@@ -95,9 +101,13 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
 }
 
 contract ZetherOperator10Test is ZetherOperatorSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract ZetherOperator11Test is ZetherOperatorSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

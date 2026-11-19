@@ -59,23 +59,36 @@ abstract contract PqzWalletKit is PqzKeysKit {
     }
 
     function _rec(bytes memory entropy, bytes32 ua, address scope) internal view returns (string memory) {
-        return string.concat('"entropy":"', vm.toString(entropy), '","ua":"', vm.toString(ua), '","chainUid":"',
-            vm.toString(IUARegistry(registry).chainUid()), '","scope":', scope == address(0) ? "null" : string.concat('"',
-            vm.toString(scope), '"'), ',"version":0');
+        return string.concat(
+            '"entropy":"',
+            vm.toString(entropy),
+            '","ua":"',
+            vm.toString(ua),
+            '","chainUid":"',
+            vm.toString(IUARegistry(registry).chainUid()),
+            '","scope":',
+            scope == address(0) ? "null" : string.concat('"', vm.toString(scope), '"'),
+            ',"version":0'
+        );
     }
 
     function _keyOf(bytes32 ua, address scope) internal view returns (bytes memory k) {
         (address p,,) = IUARegistry(registry).pqzScopedKeyAt(ua, scope, 0);
         bytes memory c = p.code;
         k = new bytes(c.length - 1);
-        for (uint256 i; i < k.length; ++i) k[i] = c[i + 1];
+        for (uint256 i; i < k.length; ++i) {
+            k[i] = c[i + 1];
+        }
     }
 
     function _kemOf(bytes32 ua, address scope) internal view returns (bytes memory) {
         return UAKinds.kemPk(IUARegistry(registry).pqzOpenKemAt(ua, scope, 0));
     }
 
-    function _authBy(bytes32 mlSeed_, address t, uint8 op, bytes memory st) internal returns (IUARegistry.UASig memory) {
+    function _authBy(bytes32 mlSeed_, address t, uint8 op, bytes memory st)
+        internal
+        returns (IUARegistry.UASig memory)
+    {
         return _uaSig(mlSeed_, UAKinds.PURPOSE_ZETHER_AUTH, _authDigest(t, op, st));
     }
 
@@ -90,7 +103,8 @@ abstract contract PqzWalletKit is PqzKeysKit {
         bytes memory pop = _mlBy(seed, IUARegistry(registry).uaMessage(ML65, UAKinds.PURPOSE_POP_V2, rd));
         IUARegistry.UAAttrs memory none;
         vm.startBroadcast(k1);
-        if (_mldsaCache(ML65)) { // 3zh: the cache path only (a precompile verifier refuses the cache)
+        if (_mldsaCache(ML65)) {
+            // 3zh: the cache path only (a precompile verifier refuses the cache)
             IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 0);
             IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 1);
         }
@@ -102,7 +116,6 @@ abstract contract PqzWalletKit is PqzKeysKit {
         vm.broadcast(k1);
         NormalPqzToken(t).mtxShield(ua, amount);
     }
-
 }
 
 /// @notice Run 1: the holders, their real scoped keys, the two tokens, bob's credits to dave.
@@ -140,14 +153,24 @@ contract PqzWalletSetup is PqzWalletKit {
         IUARegistry.KemKey memory k;
         k.scheme = 1;
         k.mlkemEk = new bytes(1568);
-        for (uint256 i; i < 1568; ++i) k.mlkemEk[i] = kp[1 + i];
+        for (uint256 i; i < 1568; ++i) {
+            k.mlkemEk[i] = kp[1 + i];
+        }
         bytes32 x;
         assembly ("memory-safe") { x := mload(add(kp, add(32, 1569))) }
         k.x25519 = x;
         bytes memory pop = abi.encodePacked(keccak256(abi.encode(runSalt, ua, scope, "wallet")));
         uint64 vub = uint64(block.number + WIN);
-        RecDigest memory r = RecDigest(ua, scope, 0, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), keccak256(pop), keccak256(kp), vub,
-            IUARegistry(registry).chainUid());
+        RecDigest memory r = RecDigest(
+            ua,
+            scope,
+            0,
+            UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key),
+            keccak256(pop),
+            keccak256(kp),
+            vub,
+            IUARegistry(registry).chainUid()
+        );
         IUARegistry.UASig memory s = _uaSig(mlSeed_, UAKinds.PURPOSE_PQZ_SCOPED_KEY, _rd(r));
         vm.startBroadcast(k1);
         IUARegistry(registry).setPqzScopedKey{gas: 56_000_000}(ua, scope, 0, key, keccak256(pop), k, vub, s);
@@ -167,8 +190,10 @@ contract PqzWalletSetup is PqzWalletKit {
     }
 
     function _rd(RecDigest memory r) internal view returns (bytes32) {
-        return IUARegistry(registry).pqzScopedKeyRecordDigest(r.ua, r.scope == address(0) ? 2 : 3, r.uid, r.scope, r.v,
-            r.keyHash, r.popHash, r.kemHash, r.vub);
+        return IUARegistry(registry)
+            .pqzScopedKeyRecordDigest(
+                r.ua, r.scope == address(0) ? 2 : 3, r.uid, r.scope, r.v, r.keyHash, r.popHash, r.kemHash, r.vub
+            );
     }
 
     /// A kind-4 opening token, auditor erin (`OPTIONAL`), class 3 (`own`) or 2.
@@ -177,10 +202,13 @@ contract PqzWalletSetup is PqzWalletKit {
         (c.name, c.symbol, c.decimals, c.admin) = (string.concat("Onchain PQZ wallet ", what), "oPQW", 6, _pad(a1));
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.PQZ_PROOF);
         (c.initialSupply, c.initialHolder) = (1e15, a1);
-        c.conf = IFactoryToken.ConfidentialConfig(abi.encode(erin), 10_000, uint256(1) << 40, 0, 0, 2, 0, 1, vA, false, 0, 0, 3, own,
-            true);
+        c.conf = IFactoryToken.ConfidentialConfig(
+            abi.encode(erin), 10_000, uint256(1) << 40, 0, 0, 2, 0, 1, vA, false, 0, 0, 3, own, true
+        );
         vm.broadcast(k1);
-        x = fp.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), _salt(string.concat("pqzwallet-", what)));
+        x = fp.createToken(
+            IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), _salt(string.concat("pqzwallet-", what))
+        );
         _book(x, "NormalPqzToken");
     }
 
@@ -189,37 +217,87 @@ contract PqzWalletSetup is PqzWalletKit {
         _shield(t, bob, 200);
         string[4] memory plain = ["honest", "junk", "wrongseed", "craftedv"];
         string[4] memory aud = ["honest", "junk_oa", "junk_ot", "oa_coins"];
-        for (uint256 i; i < (all ? 4 : 2); ++i) _credit(t, plain[i], false, 5);
-        for (uint256 i; i < (all ? 4 : 2); ++i) _credit(t, aud[i], true, 3);
+        for (uint256 i; i < (all ? 4 : 2); ++i) {
+            _credit(t, plain[i], false, 5);
+        }
+        for (uint256 i; i < (all ? 4 : 2); ++i) {
+            _credit(t, aud[i], true, 3);
+        }
     }
 
     function _credit(address t, string memory variant, bool withAud, uint256 amount) internal {
         address sc = _scope(t);
         bytes memory pkF = _keyOf(bob, sc);
-        string memory q = string.concat('{"cmd":"credit","chainUid":"', vm.toString(IUARegistry(registry).chainUid()), '","token":"',
-            vm.toString(t), '","toUA":"', vm.toString(dave), '","toVersion":0,"pkT":"', vm.toString(_keyOf(dave, sc)), '","kemPkT":"',
-            vm.toString(_kemOf(dave, sc)));
-        q = string.concat(q, '","pkF":"', vm.toString(pkF), '","balanceF":0,"amount":', vm.toString(amount), ',"seedEnc":"',
-            vm.toString(keccak256(abi.encode(runSalt, t, variant, withAud))), '","variant":"', variant, '","auditor":',
-            withAud ? string.concat('{"ua":"', vm.toString(erin), '","version":0,"pk":"', vm.toString(_keyOf(erin, sc)), '","kemPk":"',
-                vm.toString(_kemOf(erin, sc)), '"}') : "null", "}");
+        string memory q = string.concat(
+            '{"cmd":"credit","chainUid":"',
+            vm.toString(IUARegistry(registry).chainUid()),
+            '","token":"',
+            vm.toString(t),
+            '","toUA":"',
+            vm.toString(dave),
+            '","toVersion":0,"pkT":"',
+            vm.toString(_keyOf(dave, sc)),
+            '","kemPkT":"',
+            vm.toString(_kemOf(dave, sc))
+        );
+        q = string.concat(
+            q,
+            '","pkF":"',
+            vm.toString(pkF),
+            '","balanceF":0,"amount":',
+            vm.toString(amount),
+            ',"seedEnc":"',
+            vm.toString(keccak256(abi.encode(runSalt, t, variant, withAud))),
+            '","variant":"',
+            variant,
+            '","auditor":',
+            withAud
+                ? string.concat(
+                    '{"ua":"',
+                    vm.toString(erin),
+                    '","version":0,"pk":"',
+                    vm.toString(_keyOf(erin, sc)),
+                    '","kemPk":"',
+                    vm.toString(_kemOf(erin, sc)),
+                    '"}'
+                )
+                : "null",
+            "}"
+        );
         string memory o = _tool(q);
         IPqzToken.PqzTransferArgs memory a;
-        (a.p, a.validUntilBlock, a.fromUA, a.toUA) = (IPqzToken(t).pqzAccount(bob, 0).pendingCount, block.number + WIN, bob, dave);
+        (a.p, a.validUntilBlock, a.fromUA, a.toUA) =
+        (IPqzToken(t).pqzAccount(bob, 0).pendingCount, block.number + WIN, bob, dave);
         a.salt = bytes16(keccak256(abi.encode(runSalt, variant, withAud)));
-        (a.u, a.vTo, a.vFrom, a.uFrom) = (vm.parseJsonBytes(o, ".u"), vm.parseJsonBytes(o, ".vTo"), vm.parseJsonBytes(o, ".vFrom"),
-            vm.parseJsonBytes(o, ".uFrom"));
+        (a.u, a.vTo, a.vFrom, a.uFrom) =
+        (
+            vm.parseJsonBytes(o, ".u"),
+            vm.parseJsonBytes(o, ".vTo"),
+            vm.parseJsonBytes(o, ".vFrom"),
+            vm.parseJsonBytes(o, ".uFrom")
+        );
         if (withAud) a.vAuditor = vm.parseJsonBytes(o, ".vAuditor");
         a.openingTo = _opening(o, ".openingTo");
         if (withAud) a.openingAuditor = _opening(o, ".openingAuditor");
         _send1(t, a, false);
-        console2.log(string.concat("pqzwallet credit ", variant, withAud ? " (auditor)" : "", " to dave at index ",
-            vm.toString(IPqzToken(t).pqzAccount(dave, 0).pendingCount - 1)));
+        console2.log(
+            string.concat(
+                "pqzwallet credit ",
+                variant,
+                withAud ? " (auditor)" : "",
+                " to dave at index ",
+                vm.toString(IPqzToken(t).pqzAccount(dave, 0).pendingCount - 1)
+            )
+        );
     }
 
     function _opening(string memory o, string memory k) internal pure returns (IPqzToken.PqzOpening memory x) {
-        (x.mlkemCt, x.x25519Eph, x.sealedSeed) = (vm.parseJsonBytes(o, string.concat(k, ".mlkemCt")),
-            vm.parseJsonBytes32(o, string.concat(k, ".x25519Eph")), vm.parseJsonBytes(o, string.concat(k, ".sealedSeed")));
+        (x.mlkemCt, x.x25519Eph, x.sealedSeed) =
+        (
+            vm.parseJsonBytes(o, string.concat(k, ".mlkemCt")),
+            vm.parseJsonBytes32(o, string.concat(k, ".x25519Eph")),
+            vm.parseJsonBytes(o, string.concat(k, ".sealedSeed"))
+        );
     }
 
     function _wsave() internal {
@@ -243,8 +321,13 @@ contract PqzWalletRoll is PqzWalletKit {
         registry = _dep("ua_registry");
         string memory j = vm.readFile(_wstate());
         (c2w, c3w) = (vm.parseJsonAddress(j, ".c2w"), vm.parseJsonAddress(j, ".c3w"));
-        (dave, daveMl, erin, erinMl) = (vm.parseJsonBytes32(j, ".dave"), vm.parseJsonBytes32(j, ".daveMl"),
-            vm.parseJsonBytes32(j, ".erin"), vm.parseJsonBytes32(j, ".erinMl"));
+        (dave, daveMl, erin, erinMl) =
+        (
+            vm.parseJsonBytes32(j, ".dave"),
+            vm.parseJsonBytes32(j, ".daveMl"),
+            vm.parseJsonBytes32(j, ".erin"),
+            vm.parseJsonBytes32(j, ".erinMl")
+        );
         (daveEntropy, erinEntropy) = (vm.parseJsonBytes(j, ".daveEntropy"), vm.parseJsonBytes(j, ".erinEntropy"));
         _honest(c2w, 8); // 5 + 3 accepted; six planted credits marked first
         _modified(c3w); // unmarked past its unreadable credit: the auditor's `unreadable, taken`
@@ -253,22 +336,44 @@ contract PqzWalletRoll is PqzWalletKit {
     /// The entries of dave's `[0, pendingCount)` on `t` as the wallet's input (slot, code, the auditor's keys).
     function _wEntries(address t) internal view returns (string memory s) {
         address sc = _scope(t);
-        string memory aud = string.concat('{"ua":"', vm.toString(erin), '","pk":"', vm.toString(_keyOf(erin, sc)), '","kemPk":"',
-            vm.toString(_kemOf(erin, sc)), '"}');
+        string memory aud = string.concat(
+            '{"ua":"',
+            vm.toString(erin),
+            '","pk":"',
+            vm.toString(_keyOf(erin, sc)),
+            '","kemPk":"',
+            vm.toString(_kemOf(erin, sc)),
+            '"}'
+        );
         uint64 n = IPqzToken(t).pqzAccount(dave, 0).pendingCount;
         s = "[";
         for (uint64 i; i < n; ++i) {
             uint256 e = IPqzToken(t).pqzPending(dave, 0, i);
             bytes memory code = uint16(e >> 64) == 0 ? bytes("") : address(uint160(e >> 96)).code;
             bool audited = code.length > 1 && uint8(code[code.length - 1]) == 2;
-            s = string.concat(s, i == 0 ? "" : ",", '{"index":', vm.toString(i), ',"slot":"', vm.toString(bytes32(e)), '","code":"',
-                vm.toString(code), '","auditor":', audited ? aud : "null", "}");
+            s = string.concat(
+                s,
+                i == 0 ? "" : ",",
+                '{"index":',
+                vm.toString(i),
+                ',"slot":"',
+                vm.toString(bytes32(e)),
+                '","code":"',
+                vm.toString(code),
+                '","auditor":',
+                audited ? aud : "null",
+                "}"
+            );
         }
         s = string.concat(s, "]");
     }
 
     /// A refresh of dave at `pendingCount` on `t`: its burn args and statement.
-    function _refreshArgs(address t, uint256 seed) internal view returns (IPqzToken.PqzBurnArgs memory b, bytes memory st) {
+    function _refreshArgs(address t, uint256 seed)
+        internal
+        view
+        returns (IPqzToken.PqzBurnArgs memory b, bytes memory st)
+    {
         b = _burnArgs(t, dave, seed);
         st = NormalPqzToken(t).burnStatement(b, 0, bytes32(0), 0);
     }
@@ -277,17 +382,36 @@ contract PqzWalletRoll is PqzWalletKit {
     function _t(bytes memory st) internal pure returns (bytes memory x) {
         uint256 off = 640 + PqzCt.PK + (st.length > 640 + 2 * PqzCt.PK + PqzCt.CT + PqzCt.V ? PqzCt.PK : 0);
         x = new bytes(PqzCt.CT);
-        for (uint256 i; i < x.length; ++i) x[i] = st[off + i];
+        for (uint256 i; i < x.length; ++i) {
+            x[i] = st[off + i];
+        }
     }
 
     /// The wallet on dave's account of `t` (T21 O5 (b) review, owner decision (a)): the debit opened inside the handle from the
     /// gated parts, the own part (`ownCode`, the last debit's blob) sent once dave has debited; no `T` in the request.
     function _wallet(address t) internal returns (string memory) {
         IPqzToken.AccountState memory s = IPqzToken(t).pqzAccount(dave, 0);
-        return _tool(string.concat('{"cmd":"wallet",', _rec(daveEntropy, dave, _scope(t)), ',"token":"', vm.toString(t), '","entries":',
-            _wEntries(t), ',"reads":{"block":', vm.toString(block.number), ',"finalized":true,"strictMajority":true},"window":{"from":',
-            vm.toString(s.rolled), ',"to":', vm.toString(s.pendingCount), ',"lastDebit":', vm.toString(s.lastDebit),
-            ',"shieldIn":0,"ownCode":"', vm.toString(s.lastDebit > 0 ? s.accBlob.code : bytes("")), '"}}'));
+        return _tool(
+            string.concat(
+                '{"cmd":"wallet",',
+                _rec(daveEntropy, dave, _scope(t)),
+                ',"token":"',
+                vm.toString(t),
+                '","entries":',
+                _wEntries(t),
+                ',"reads":{"block":',
+                vm.toString(block.number),
+                ',"finalized":true,"strictMajority":true},"window":{"from":',
+                vm.toString(s.rolled),
+                ',"to":',
+                vm.toString(s.pendingCount),
+                ',"lastDebit":',
+                vm.toString(s.lastDebit),
+                ',"shieldIn":0,"ownCode":"',
+                vm.toString(s.lastDebit > 0 ? s.accBlob.code : bytes("")),
+                '"}}'
+            )
+        );
     }
 
     function _refresh(address t, IPqzToken.PqzBurnArgs memory b, bytes memory st) internal {
@@ -300,10 +424,29 @@ contract PqzWalletRoll is PqzWalletKit {
     function _audit(address t) internal returns (string memory) {
         address sc = _scope(t);
         IPqzToken.AccountState memory s = IPqzToken(t).pqzAccount(dave, 0);
-        return _tool(string.concat('{"cmd":"audit",', _rec(erinEntropy, erin, sc), ',"pk":"', vm.toString(_keyOf(erin, sc)), '","token":"',
-            vm.toString(t), '","rolled":', vm.toString(s.rolled), ',"floor":', vm.toString(s.floor), ',"recipient":{"ua":"',
-            vm.toString(dave), '","pk":"', vm.toString(_keyOf(dave, sc)), '","kemPk":"', vm.toString(_kemOf(dave, sc)), '"},"entries":',
-            _wEntries(t), "}"));
+        return _tool(
+            string.concat(
+                '{"cmd":"audit",',
+                _rec(erinEntropy, erin, sc),
+                ',"pk":"',
+                vm.toString(_keyOf(erin, sc)),
+                '","token":"',
+                vm.toString(t),
+                '","rolled":',
+                vm.toString(s.rolled),
+                ',"floor":',
+                vm.toString(s.floor),
+                ',"recipient":{"ua":"',
+                vm.toString(dave),
+                '","pk":"',
+                vm.toString(_keyOf(dave, sc)),
+                '","kemPk":"',
+                vm.toString(_kemOf(dave, sc)),
+                '"},"entries":',
+                _wEntries(t),
+                "}"
+            )
+        );
     }
 
     /// The honest wallet on `t`: the window refused (no secret loaded) while skips are unmarked; the marks (n = 0) by dave's
@@ -313,14 +456,20 @@ contract PqzWalletRoll is PqzWalletKit {
         string memory o = _wallet(t);
         console2.log(string.concat("pqzwallet ", vm.toString(t), " check: ", o));
         _outcomes(o, ["accepted", "skip", "skip", "skip", "accepted", "skip", "skip", "skip"]);
-        require(!vm.parseJsonBool(o, ".window.opened") && vm.parseJsonUint(o, ".secretLoads") == 0, "window refused, no secret");
+        require(
+            !vm.parseJsonBool(o, ".window.opened") && vm.parseJsonUint(o, ".secretLoads") == 0,
+            "window refused, no secret"
+        );
         _mark(t, vm.parseJsonUintArray(o, ".marks"));
         (b, st) = _refreshArgs(t, 0x9a01);
         o = _wallet(t);
         console2.log(string.concat("pqzwallet ", vm.toString(t), " after the marks: ", o));
         require(vm.parseJsonBool(o, ".window.opened") && vm.parseJsonUint(o, ".secretLoads") == 1, "window opened once");
         require(vm.parseJsonUint(o, ".window.balance") == want, "the balance decrypted = the accepted amounts");
-        require(keccak256(vm.parseJsonBytes(o, ".window.t")) == keccak256(_t(st)), "the handle's T = the debit statement's T");
+        require(
+            keccak256(vm.parseJsonBytes(o, ".window.t")) == keccak256(_t(st)),
+            "the handle's T = the debit statement's T"
+        );
         _refresh(t, b, st);
         // the own branch on chain: the matrix's refresh (a verdict over stand-in bytes) wrote an own part no key of dave's tagged,
         // so the next debit is refused by its ownTag, the secret not used
@@ -330,28 +479,46 @@ contract PqzWalletRoll is PqzWalletKit {
         require(keccak256(bytes(vm.parseJsonString(o, ".window.why"))) == keccak256("OwnTag"), "refused by its ownTag");
         o = _audit(t);
         console2.log(string.concat("pqzwallet ", vm.toString(t), " auditor: ", o));
-        _outcomes(o, ["no auditor leg", "no auditor leg", "no auditor leg", "no auditor leg", "read", "unreadable",
-            "recipient-unreadable", "unreadable"]);
+        _outcomes(
+            o,
+            [
+                "no auditor leg",
+                "no auditor leg",
+                "no auditor leg",
+                "no auditor leg",
+                "read",
+                "unreadable",
+                "recipient-unreadable",
+                "unreadable"
+            ]
+        );
     }
 
     function _eq(string memory o, uint256 i, string memory want) internal pure returns (bool) {
-        return keccak256(bytes(vm.parseJsonString(o, string.concat(".entries[", vm.toString(i), "].outcome")))) == keccak256(bytes(want));
+        return keccak256(bytes(vm.parseJsonString(o, string.concat(".entries[", vm.toString(i), "].outcome"))))
+            == keccak256(bytes(want));
     }
 
     function _outcomes(string memory o, string[8] memory want) internal pure {
-        for (uint256 i; i < 8; ++i) require(_eq(o, i, want[i]), string.concat("entry ", vm.toString(i), ": ", want[i]));
+        for (uint256 i; i < 8; ++i) {
+            require(_eq(o, i, want[i]), string.concat("entry ", vm.toString(i), ": ", want[i]));
+        }
     }
 
     /// The wallet's marks by dave's signed mark-only rollover (`n = 0`, relayed by test key 2).
     function _mark(address t, uint256[] memory m) internal {
         uint64[] memory skip = new uint64[](m.length);
-        for (uint256 i; i < m.length; ++i) skip[i] = uint64(m[i]);
+        for (uint256 i; i < m.length; ++i) {
+            skip[i] = uint64(m[i]);
+        }
         uint64 vub = uint64(block.number + WIN);
         bytes32 d = _rollDigest(t, dave, 0, skip, vub, _entries(t, dave, 0, skip));
         IUARegistry.UASig memory rs = _uaSig(daveMl, UAKinds.PURPOSE_ZETHER_AUTH, d);
         vm.broadcast(k2);
         IPqzToken(t).mtxRollOverSigned(dave, 0, 0, skip, vub, rs);
-        for (uint256 i; i < skip.length; ++i) require(IPqzToken(t).pqzSkipped(dave, 0, skip[i]), "marked");
+        for (uint256 i; i < skip.length; ++i) {
+            require(IPqzToken(t).pqzSkipped(dave, 0, skip[i]), "marked");
+        }
     }
 
     /// A modified wallet on `t`: it refreshes past the credits without the check (no marks); the auditor tool then reports the
@@ -362,6 +529,8 @@ contract PqzWalletRoll is PqzWalletKit {
         string memory o = _audit(t);
         console2.log(string.concat("pqzwallet ", vm.toString(t), " auditor after a modified wallet: ", o));
         string[4] memory want = ["no auditor leg", "no auditor leg", "read", "unreadable, taken"];
-        for (uint256 i; i < 4; ++i) require(_eq(o, i, want[i]), want[i]);
+        for (uint256 i; i < 4; ++i) {
+            require(_eq(o, i, want[i]), want[i]);
+        }
     }
 }

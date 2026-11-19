@@ -9,9 +9,9 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::time::Instant;
 
-use pqzh_ligero::client::{self, KINDS, R, mutate, rel_name};
+use pqzh_ligero::client::{self, mutate, rel_name, KINDS, R};
 use pqzh_ligero::ligero::VERIFY_PANICS;
-use pqzh_ligero::{Params, RELS, Rel, breakdown, multi_rels, prove, soundness, verify};
+use pqzh_ligero::{breakdown, multi_rels, prove, soundness, verify, Params, Rel, RELS};
 
 struct Track;
 static LIVE: AtomicIsize = AtomicIsize::new(0);
@@ -63,23 +63,36 @@ fn stats(v: &mut [f64]) -> String {
 }
 
 fn fnv(b: &[u8]) -> u32 {
-    b.iter().fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619))
+    b.iter()
+        .fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619))
 }
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
-    let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.as_str());
+    let get = |k: &str| {
+        a.iter()
+            .position(|x| x == k)
+            .and_then(|i| a.get(i + 1))
+            .map(|s| s.as_str())
+    };
     let num = |k: &str, d: usize| get(k).map_or(d, |s| s.parse().unwrap());
     let regime = get("--regime").unwrap_or("proven");
     let proven = regime != "conj";
     let r431 = num("--r431", 1) != 0;
     let (np, nv, nadv) = (num("--np", 3), num("--nv", 100), num("--nadv", 40));
-    let all: Vec<Rel> = RELS.iter().map(|&f| Rel::Form(f)).chain(multi_rels()).collect();
+    let all: Vec<Rel> = RELS
+        .iter()
+        .map(|&f| Rel::Form(f))
+        .chain(multi_rels())
+        .collect();
     let forms: Vec<Rel> = match get("--rel").unwrap_or("both") {
         "all" => RELS.iter().map(|&f| Rel::Form(f)).collect(),
         "both" => all[..2].to_vec(),
         "txm" => multi_rels(),
-        r => vec![*all.iter().find(|&&f| rel_name(f)[2..].eq_ignore_ascii_case(r)).expect("--rel")],
+        r => vec![*all
+            .iter()
+            .find(|&&f| rel_name(f)[2..].eq_ignore_ascii_case(r))
+            .expect("--rel")],
     };
     std::panic::set_hook(Box::new(|_| {})); // verify counts caught panics; keep stderr quiet
     let s = client::setup();
@@ -92,7 +105,10 @@ fn main() {
         };
         let (st, w) = client::inputs(&s, f);
         let (st, w) = (&st, &w);
-        let bits: Vec<String> = soundness(op, st, &p).iter().map(|(k, v)| format!("\"{k}\": {v:.1}")).collect();
+        let bits: Vec<String> = soundness(op, st, &p)
+            .iter()
+            .map(|(k, v)| format!("\"{k}\": {v:.1}"))
+            .collect();
         println!(
             "{{\"rel\": \"{name}\", \"params\": {{\"n\": {}, \"k\": {}, \"ell\": {}, \"t\": {}, \"n2\": {}, \"pow_bits\": {}, \"proven\": {}, \"johnson\": {}, \"rate\": {:.5}}}, \"soundness_bits\": {{{}}}}}",
             p.n, p.k, p.ell, p.t, p.n2(), p.pow_bits, p.proven, p.johnson, p.k as f64 / p.n as f64, bits.join(", ")
@@ -116,7 +132,10 @@ fn main() {
             lens.push(pt.len());
             fnvs.push(format!("\"{:08x}\"", fnv(&pt)));
         }
-        let bd: Vec<String> = breakdown(f, &pt, &p).iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
+        let bd: Vec<String> = breakdown(f, &pt, &p)
+            .iter()
+            .map(|(k, v)| format!("\"{k}\": {v}"))
+            .collect();
         println!(
             "{{\"rel\": \"{name}\", \"proof_bytes\": {}, \"proof_bytes_min\": {}, \"proof_bytes_max\": {}, \"max_len_exact\": {}, \"max_len_verifier\": {}, \"fnv_last\": \"{:08x}\", \"fnv_by_seed\": [{}], \"breakdown\": {{{}}}}}",
             pt.len(),
@@ -167,6 +186,9 @@ fn main() {
             println!("{{\"rel\": \"{name}\", \"kind\": \"{}\", \"cases\": {nadv}, \"accepted\": {acc}, \"panics\": {}, \"stats\": {}}}", KINDS[k], VERIFY_PANICS.load(Ordering::Relaxed) - p0, stats(&mut tk));
             assert_eq!(acc, 0, "mutated input accepted");
         }
-        println!("{{\"rel\": \"{name}\", \"timing\": \"verify_adversarial\", \"stats\": {}}}", stats(&mut tall));
+        println!(
+            "{{\"rel\": \"{name}\", \"timing\": \"verify_adversarial\", \"stats\": {}}}",
+            stats(&mut tall)
+        );
     }
 }

@@ -172,7 +172,8 @@ contract GovBurnerKind4Test is PqzFixture {
         NormalPqzToken t = _b4("u4");
         _fund(t, alice, 1_000);
         uint256 s0 = t.totalSupply();
-        bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(31, PqzCt.CT));
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(31, PqzCt.CT));
         t.mtxUnshield(_bs(pl), 100, bytes32(uint256(uint160(address(0xD00D)))), hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(t.balanceOf(address(0xD00D)), 100 * SCALE, "unshielded by a non-holder");
         assertEq(t.totalSupply(), s0, "an unshield is not a burn");
@@ -183,7 +184,9 @@ contract GovBurnerKind4Test is PqzFixture {
 }
 
 contract GovBurnerKind10Test is ZetherRegFixture {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 
     function test_kind10_seatBurnsNonHolderRefused() public {
         IFactoryToken.TokenConfig memory c = _regCfg(false, uint256(1) << 40);
@@ -212,7 +215,9 @@ contract GovBurnerKind10Test is ZetherRegFixture {
 }
 
 contract GovBurnerKind12Test is PqzRegFixture {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 
     function test_kind12_seatBurnsNonHolderRefused() public {
         IFactoryToken.TokenConfig memory c = _regCfg();

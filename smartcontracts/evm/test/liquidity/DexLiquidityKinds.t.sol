@@ -70,19 +70,39 @@ contract DexLiquidityKindsTest is Test {
         bytes32 th = keccak256("LiquidityToken(address token,uint256 amount)");
         bytes32 hi = keccak256(abi.encodePacked(keccak256(abi.encode(th, o.inputs[0].token, o.inputs[0].amount))));
         bytes32 ho = keccak256(abi.encodePacked(keccak256(abi.encode(th, o.outputs[0].token, o.outputs[0].amount))));
-        bytes32 ot = keccak256(bytes.concat("LiquidityOrder(bytes32 from,LiquidityToken[] inputs,LiquidityToken[] outputs,",
-            "address positionManager,address positionReader,uint256 positionIn,bytes32 positionPool,int24 tickLower,",
-            "int24 tickUpper,uint128 minLiquidity,bytes32 recipient,uint256 fee,address relayer,uint8 flags,uint256 batch,",
-            "uint256 nonce,uint256 validUntil)LiquidityToken(address token,uint256 amount)"));
-        return keccak256(bytes.concat(abi.encode(ot, o.from, hi, ho, o.positionManager, o.positionReader, o.positionIn,
-            o.positionPool, o.tickLower), abi.encode(o.tickUpper, o.minLiquidity, o.recipient, o.fee, o.relayer, o.flags,
-            o.batch, o.nonce, o.validUntil)));
+        bytes32 ot = keccak256(
+            bytes.concat(
+                "LiquidityOrder(bytes32 from,LiquidityToken[] inputs,LiquidityToken[] outputs,",
+                "address positionManager,address positionReader,uint256 positionIn,bytes32 positionPool,int24 tickLower,",
+                "int24 tickUpper,uint128 minLiquidity,bytes32 recipient,uint256 fee,address relayer,uint8 flags,uint256 batch,",
+                "uint256 nonce,uint256 validUntil)LiquidityToken(address token,uint256 amount)"
+            )
+        );
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    ot, o.from, hi, ho, o.positionManager, o.positionReader, o.positionIn, o.positionPool, o.tickLower
+                ),
+                abi.encode(
+                    o.tickUpper, o.minLiquidity, o.recipient, o.fee, o.relayer, o.flags, o.batch, o.nonce, o.validUntil
+                )
+            )
+        );
     }
 
     function _digest(ITradeToken.LiquidityOrder memory o, address dex, address t) internal view returns (bytes32) {
-        bytes32 sep = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS Dex"), keccak256("1"), block.chainid, dex, NormalToken(t).chainUid()));
+        bytes32 sep = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS Dex"),
+                keccak256("1"),
+                block.chainid,
+                dex,
+                NormalToken(t).chainUid()
+            )
+        );
         return keccak256(abi.encodePacked(hex"1901", sep, _hashOrder(o)));
     }
 

@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# scaas-sdk T3 spike: the probe's sync control through uniffi-bindgen-cpp (cmake -B build && cmake --build build && ctest)
+cmake_minimum_required(VERSION 3.20)
+project(sdk_spike_cpp CXX)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(PROBE ${CMAKE_CURRENT_SOURCE_DIR}/../probe/target/debug)
+add_executable(harness harness.cpp generated-sync/sdk_spike_probe.cpp)
+target_include_directories(harness PRIVATE generated-sync)
+target_link_libraries(harness PRIVATE ${PROBE}/libsdk_spike_probe.so)
+set_target_properties(harness PROPERTIES BUILD_RPATH ${PROBE})
+enable_testing()
+add_test(NAME sync_control COMMAND harness)

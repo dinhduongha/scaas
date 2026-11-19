@@ -32,7 +32,11 @@ impl AuthKey {
     pub fn ed25519(pk: [u8; 32]) -> Self {
         let mut pubkey = [0u8; 33];
         pubkey[..32].copy_from_slice(&pk);
-        Self { scheme: SCHEME_ED25519, pubkey, rp_id_hash: [0; 32] }
+        Self {
+            scheme: SCHEME_ED25519,
+            pubkey,
+            rp_id_hash: [0; 32],
+        }
     }
 
     pub fn well_formed(&self) -> bool {
@@ -76,16 +80,28 @@ impl SmartKeyAccount {
 
     /// Thao tác giá trị khi chính sách bật mà không còn backup ⇒ abort.
     pub fn check_policy(&self) -> Result<()> {
-        require!(self.policy & POLICY_BACKUP_REQUIRED == 0 || self.has_backup(), crate::ScaasError::NoBackup);
+        require!(
+            self.policy & POLICY_BACKUP_REQUIRED == 0 || self.has_backup(),
+            crate::ScaasError::NoBackup
+        );
         Ok(())
     }
 
     /// Không bao giờ "gạch" Account: ≥ 1 khoá; còn khoá P-256 thì còn ≥ 1 origin.
     pub fn check_usable(&self) -> Result<()> {
-        require!(!self.keys.is_empty() && self.keys.len() <= MAX_KEYS, crate::ScaasError::WouldBrick);
+        require!(
+            !self.keys.is_empty() && self.keys.len() <= MAX_KEYS,
+            crate::ScaasError::WouldBrick
+        );
         let p256 = self.keys.iter().any(|k| k.scheme == SCHEME_P256);
-        require!(!p256 || !self.origins.is_empty(), crate::ScaasError::WouldBrick);
-        require!(self.origins.len() <= MAX_ORIGINS, crate::ScaasError::TooMany);
+        require!(
+            !p256 || !self.origins.is_empty(),
+            crate::ScaasError::WouldBrick
+        );
+        require!(
+            self.origins.len() <= MAX_ORIGINS,
+            crate::ScaasError::TooMany
+        );
         Ok(())
     }
 }

@@ -6,8 +6,8 @@
 #![allow(deprecated)] // events().publish
 
 use soroban_sdk::{
-    contract, contractclient, contractimpl, contracttype, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, IntoVal, Symbol,
-    Val, Vec,
+    contract, contractclient, contractimpl, contracttype, vec, xdr::ToXdr, Address, Bytes, BytesN,
+    Env, IntoVal, Symbol, Val, Vec,
 };
 
 const DAY: u32 = 17_280;
@@ -28,7 +28,13 @@ pub enum DataKey {
 
 #[contractclient(name = "RegistryClient")]
 pub trait Registry {
-    fn require_authorized(env: Env, ua: BytesN<32>, purpose: BytesN<32>, digest: BytesN<32>, auth: Bytes);
+    fn require_authorized(
+        env: Env,
+        ua: BytesN<32>,
+        purpose: BytesN<32>,
+        digest: BytesN<32>,
+        auth: Bytes,
+    );
     fn receivable(env: Env, ua: BytesN<32>) -> bool;
 }
 
@@ -99,7 +105,11 @@ impl UaSpikeToken {
         valid_until: u64,
         relayer: Option<Address>,
     ) -> BytesN<32> {
-        op_digest(&env, "ua_pay", pay_args(&env, &from, &to, amount, &pay_ref, valid_until, &relayer))
+        op_digest(
+            &env,
+            "ua_pay",
+            pay_args(&env, &from, &to, amount, &pay_ref, valid_until, &relayer),
+        )
     }
 
     /// `ua_pay(from, to, amount, pay_ref, valid_until, relayer, auth)` of spec §5.1.
@@ -118,10 +128,17 @@ impl UaSpikeToken {
         if let Some(r) = &relayer {
             r.require_auth();
         }
-        let digest = op_digest(&env, "ua_pay", pay_args(&env, &from, &to, amount, &pay_ref, valid_until, &relayer));
+        let digest = op_digest(
+            &env,
+            "ua_pay",
+            pay_args(&env, &from, &to, amount, &pay_ref, valid_until, &relayer),
+        );
         let registry: Address = env.storage().instance().get(&DataKey::Registry).unwrap();
         let reg = RegistryClient::new(&env, &registry);
-        let purpose = h(&env, &Bytes::from_slice(&env, b"scaas.ua.purpose.metatx.v1"));
+        let purpose = h(
+            &env,
+            &Bytes::from_slice(&env, b"scaas.ua.purpose.metatx.v1"),
+        );
         reg.require_authorized(&from, &purpose, &digest, &auth);
         let to_ua = match &to {
             Holder::Ua(u) => u.clone(),
@@ -145,13 +162,25 @@ impl UaSpikeToken {
         put(&env, &tk, &(tb + amount));
         let e = env.events();
         let fh = Holder::Ua(from.clone());
-        e.publish((Symbol::new(&env, "UaTransfer"),), (fh.clone(), to.clone(), amount));
-        e.publish((Symbol::new(&env, "UaPaymentSettled"),), (fh, to, amount, pay_ref));
-        e.publish((Symbol::new(&env, "UaMetaTransactionExecuted"),), (from, digest));
+        e.publish(
+            (Symbol::new(&env, "UaTransfer"),),
+            (fh.clone(), to.clone(), amount),
+        );
+        e.publish(
+            (Symbol::new(&env, "UaPaymentSettled"),),
+            (fh, to, amount, pay_ref),
+        );
+        e.publish(
+            (Symbol::new(&env, "UaMetaTransactionExecuted"),),
+            (from, digest),
+        );
     }
 
     pub fn ua_balance(env: Env, ua: BytesN<32>) -> i128 {
-        env.storage().persistent().get(&DataKey::UaBal(ua)).unwrap_or(0)
+        env.storage()
+            .persistent()
+            .get(&DataKey::UaBal(ua))
+            .unwrap_or(0)
     }
 }
 

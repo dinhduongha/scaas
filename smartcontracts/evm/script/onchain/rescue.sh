@@ -15,27 +15,40 @@ shift
 RPC=${ONCHAIN_RPC:?ONCHAIN_RPC}
 V=0xd33d17991f57BefB4CcBb3E57c477c10BdE5B465
 case $net in
-local) ;;
-scaas-testnet)
-  want=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["account"]["code"].lower())' \
-    ../vectors/governance/rescue_vault_testnet_alloc.json)
-  [ "$(cast code --rpc-url "$RPC" "$V" | tr 'A-F' 'a-f')" = "$want" ] ||
-    { echo "[$net/rescue] FAIL the code at $V is not the genesis alloc's (NET-EVM-14)"; exit 1; }
-  echo "[$net/rescue] vault $V from the genesis alloc: code = the vector's"
-  exec sh script/onchain/run.sh "$net" Rescue --tc Rescue "$@" ;;
-*) echo "[$net/rescue] FAIL local and scaas-testnet only (elsewhere the vault's admin is the real dev admin, NET-EVM-14)"; exit 1 ;;
+    local) ;;
+    scaas-testnet)
+        want=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["account"]["code"].lower())' \
+            ../vectors/governance/rescue_vault_testnet_alloc.json)
+        [ "$(cast code --rpc-url "$RPC" "$V" | tr 'A-F' 'a-f')" = "$want" ] ||
+            {
+                echo "[$net/rescue] FAIL the code at $V is not the genesis alloc's (NET-EVM-14)"
+                exit 1
+            }
+        echo "[$net/rescue] vault $V from the genesis alloc: code = the vector's"
+        exec sh script/onchain/run.sh "$net" Rescue --tc Rescue "$@"
+        ;;
+    *)
+        echo "[$net/rescue] FAIL local and scaas-testnet only (elsewhere the vault's admin is the real dev admin, NET-EVM-14)"
+        exit 1
+        ;;
 esac
 OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix}
 mkdir -p "$OUTD"
 L=$OUTD/rescue-deploy-$net.log
 echo "[$net/rescue] DeployRescueVault.s.sol …"
 forge script script/DeployRescueVault.s.sol --rpc-url "$RPC" --broadcast --slow --private-key "$PRIVATE_KEY" \
-  --out out/onchain-rescue --cache-path cache/onchain-rescue > "$L" 2>&1 ||
-  { echo "[$net/rescue] FAIL DeployRescueVault: $(grep -E 'Error|revert' "$L" | tail -1 | cut -c1-160)"; exit 1; }
-[ "$(cast code --rpc-url "$RPC" "$V")" != 0x ] || { echo "[$net/rescue] FAIL no code at $V"; exit 1; }
+    --out out/onchain-rescue --cache-path cache/onchain-rescue >"$L" 2>&1 ||
+    {
+        echo "[$net/rescue] FAIL DeployRescueVault: $(grep -E 'Error|revert' "$L" | tail -1 | cut -c1-160)"
+        exit 1
+    }
+[ "$(cast code --rpc-url "$RPC" "$V")" != 0x ] || {
+    echo "[$net/rescue] FAIL no code at $V"
+    exit 1
+}
 w1=$(cast abi-encode "f(address)" "$(cast wallet address --private-key "$ONCHAIN_K1")")
 w2=$(cast abi-encode "f(address)" "$(cast wallet address --private-key "$ONCHAIN_K2")")
-cast rpc --rpc-url "$RPC" anvil_setStorageAt "$V" 0x0 "$w1" > /dev/null
-cast rpc --rpc-url "$RPC" anvil_setStorageAt "$V" 0x1 "$w2" > /dev/null
+cast rpc --rpc-url "$RPC" anvil_setStorageAt "$V" 0x0 "$w1" >/dev/null
+cast rpc --rpc-url "$RPC" anvil_setStorageAt "$V" 0x1 "$w2" >/dev/null
 echo "[$net/rescue] vault $V: admin key 1, rescuer key 2 (anvil_setStorageAt)"
 exec sh script/onchain/run.sh "$net" Rescue --tc Rescue "$@"

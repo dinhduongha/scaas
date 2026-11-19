@@ -19,8 +19,16 @@ abstract contract PqzRefreshSuite is PqzRegFixture {
     }
 
     function _refresh(uint256 shieldIn, uint256 seed) internal view returns (bytes memory) {
-        return abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(0, shieldIn, seed), 0, bytes32(0), PROOF,
-            _pqAuth(), bytes(""), noVerdict());
+        return abi.encodeWithSelector(
+            IPqzToken.mtxUnshield.selector,
+            _burnArgs(0, shieldIn, seed),
+            0,
+            bytes32(0),
+            PROOF,
+            _pqAuth(),
+            bytes(""),
+            noVerdict()
+        );
     }
 
     /// The refresh of a frozen `alice` passes under `P` (its debit is written: a new `acc`); the control: the same account's
@@ -30,7 +38,9 @@ abstract contract PqzRefreshSuite is PqzRegFixture {
         uint64 until = _pause();
         (bool ok0, bytes memory r0) = address(tok).call(_opCall(4, 0, 0));
         assertFalse(ok0);
-        assertEq(r0, abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until), "control: the unshield is refused");
+        assertEq(
+            r0, abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until), "control: the unshield is refused"
+        );
         bytes memory before = tok.pqzAcc(alice, 0);
         (bool ok,) = address(tok).call(_refresh(0, 90));
         assertTrue(ok, "the refresh is open under F and P");
@@ -42,8 +52,16 @@ abstract contract PqzRefreshSuite is PqzRegFixture {
     /// unfrozen and unpaused it passes; with no beneficiary (no fee) the refresh stays open (the test above).
     function test_refreshWithFeeChecksTheSender() public {
         assertTrue(tok.confidentialFee() != 0, "the fixture's fee");
-        bytes memory cd = abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(bob, 0, 92), 0, bytes32(0), PROOF,
-            _pqAuth(), bytes(""), noVerdict());
+        bytes memory cd = abi.encodeWithSelector(
+            IPqzToken.mtxUnshield.selector,
+            _burnArgs(bob, 0, 92),
+            0,
+            bytes32(0),
+            PROOF,
+            _pqAuth(),
+            bytes(""),
+            noVerdict()
+        );
         uint256 snap = vm.snapshotState();
         (bool ok,) = address(tok).call(cd);
         assertTrue(ok, "control: a refresh with a fee");
@@ -82,9 +100,13 @@ abstract contract PqzRefreshSuite is PqzRegFixture {
 }
 
 contract PqzRefresh12Test is PqzRefreshSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract PqzRefresh13Test is PqzRefreshSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

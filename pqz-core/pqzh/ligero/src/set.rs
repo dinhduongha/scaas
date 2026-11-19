@@ -14,14 +14,17 @@ const _: () = assert!(
 
 #[cfg(feature = "set-n2304-kmax4096")]
 #[path = "../../../params/sets/n2304-kmax4096/rust/set.rs"]
+#[rustfmt::skip]
 mod lattice;
 // n2304-kmax4096: preset B (radices 7 / 17, n 45,752, k 952, t 120; owner 2026-10-22); feature `fallback-retry`: THE
 // preset with the prover's retry under MAX_PROOF_PQZH (fallback A, docs/research/pqzh-set-a-proof-limit.md)
 #[cfg(all(feature = "set-n2304-kmax4096", not(feature = "fallback-retry")))]
 #[path = "../../../params/sets/n2304-kmax4096/pqzh_set.rs"]
+#[rustfmt::skip]
 mod pqzh;
 #[cfg(all(feature = "set-n2304-kmax4096", feature = "fallback-retry"))]
 #[path = "../../../params/sets/n2304-kmax4096/pqzh_set_fallback.rs"]
+#[rustfmt::skip]
 mod pqzh;
 const _: () = assert!(
     !cfg!(feature = "fallback-retry") || cfg!(feature = "set-n2304-kmax4096"),
@@ -30,16 +33,20 @@ const _: () = assert!(
 
 #[cfg(feature = "set-n2560-kmax16384")]
 #[path = "../../../params/sets/n2560-kmax16384/rust/set.rs"]
+#[rustfmt::skip]
 mod lattice;
 #[cfg(feature = "set-n2560-kmax16384")]
 #[path = "../../../params/sets/n2560-kmax16384/pqzh_set.rs"]
+#[rustfmt::skip]
 mod pqzh;
 
 #[cfg(not(any(feature = "set-n2304-kmax4096", feature = "set-n2560-kmax16384")))]
 #[path = "../../../params/sets/n2048-kmax1024/rust/set.rs"]
+#[rustfmt::skip]
 mod lattice;
 #[cfg(not(any(feature = "set-n2304-kmax4096", feature = "set-n2560-kmax16384")))]
 #[path = "../../../params/sets/n2048-kmax1024/pqzh_set.rs"]
+#[rustfmt::skip]
 mod pqzh;
 
 // the Ligero build's set is pqz-stmt's (a dependent enabling pqz-stmt/set-X without pqzh-ligero/set-X would otherwise
@@ -58,7 +65,10 @@ const fn same(a: &str, b: &str) -> bool {
     }
     true
 }
-const _: () = assert!(same(lattice::SET_NAME, pqz_stmt::SET), "pqzh-ligero's set-<set> must be pqz-stmt's");
+const _: () = assert!(
+    same(lattice::SET_NAME, pqz_stmt::SET),
+    "pqzh-ligero's set-<set> must be pqz-stmt's"
+);
 
 pub(crate) use lattice::*;
 pub(crate) use pqzh::*;

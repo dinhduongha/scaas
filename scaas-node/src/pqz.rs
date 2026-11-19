@@ -45,8 +45,14 @@ pub struct Verifier {
 
 /// The `pqzVerifyConfig()` of an `OFFCHAIN` token; `None` for a `PRECOMPILE` one or a contract without the view (no `OFFCHAIN`
 /// token lacks it). A transport error is transient.
-async fn offchain_config(chain: &Chain, token: alloy::primitives::Address) -> Result<Option<IPqzToken::PqzVerifyConfig>, Refusal> {
-    match chain.call_view(token, IPqzToken::pqzVerifyConfigCall {}).await {
+async fn offchain_config(
+    chain: &Chain,
+    token: alloy::primitives::Address,
+) -> Result<Option<IPqzToken::PqzVerifyConfig>, Refusal> {
+    match chain
+        .call_view(token, IPqzToken::pqzVerifyConfigCall {})
+        .await
+    {
         Ok(c) if c.pqzVerifyMode == PQZ_OFFCHAIN => Ok(Some(c)),
         Ok(_) | Err(SimError::Revert(_)) => Ok(None),
         Err(SimError::Transport(e)) => Err(Refusal::Transport(format!("pqzVerifyConfig(): {e}"))),
@@ -56,11 +62,22 @@ async fn offchain_config(chain: &Chain, token: alloy::primitives::Address) -> Re
 /// CTR-PQZ-37 (NODE-JOB-28): the key class of a PQZ token, as its `_keyOf`: `OFFCHAIN` reads scoped keys, scope `token` with
 /// `pqzOwnKey` (class 3) else 0 (class 2); `PRECOMPILE`, or a contract without the view, the registry key (`None`). With the
 /// token's `pqzOpening`.
-pub async fn key_scope(chain: &Chain, token: alloy::primitives::Address)
-    -> Result<(Option<alloy::primitives::Address>, bool), SimError> {
-    match chain.call_view(token, IPqzToken::pqzVerifyConfigCall {}).await {
-        Ok(c) if c.pqzVerifyMode == PQZ_OFFCHAIN =>
-            Ok((Some(if c.pqzOwnKey { token } else { alloy::primitives::Address::ZERO }), c.pqzOpening)),
+pub async fn key_scope(
+    chain: &Chain,
+    token: alloy::primitives::Address,
+) -> Result<(Option<alloy::primitives::Address>, bool), SimError> {
+    match chain
+        .call_view(token, IPqzToken::pqzVerifyConfigCall {})
+        .await
+    {
+        Ok(c) if c.pqzVerifyMode == PQZ_OFFCHAIN => Ok((
+            Some(if c.pqzOwnKey {
+                token
+            } else {
+                alloy::primitives::Address::ZERO
+            }),
+            c.pqzOpening,
+        )),
         Ok(c) => Ok((None, c.pqzOpening)),
         Err(SimError::Revert(_)) => Ok((None, false)),
         Err(e) => Err(e),
@@ -84,11 +101,28 @@ fn debit_row(w: &Work) -> Option<&'static Row> {
 fn view_of(row: &str) -> Option<(String, &'static [&'static str])> {
     let (b, u) = (typed::abi_of("PqzBurnArgs"), typed::abi_of("Unwrap"));
     Some(match row {
-        "UAPqzTransferSingle" | "UAPqzTransferSingleCompact" =>
-            (format!("transferSingleStatement({},bytes32)", typed::abi_of("PqzTransferArgs")), &["args"]),
-        "UAPqzTransfer" | "UAPqzTransferCompact" => (format!("transferStatement({},bytes32)", typed::abi_of("PqzMultiArgs")), &["args"]),
-        "UAPqzUnshield" => (format!("burnStatement({b},uint256,bytes32,bytes32)"), &["args", "amount", "recipient"]),
-        "UAPqzUnshieldUnwrap" => (format!("unshieldUnwrapStatement({b},{u},bytes32)"), &["args", "unwrap"]),
+        "UAPqzTransferSingle" | "UAPqzTransferSingleCompact" => (
+            format!(
+                "transferSingleStatement({},bytes32)",
+                typed::abi_of("PqzTransferArgs")
+            ),
+            &["args"],
+        ),
+        "UAPqzTransfer" | "UAPqzTransferCompact" => (
+            format!(
+                "transferStatement({},bytes32)",
+                typed::abi_of("PqzMultiArgs")
+            ),
+            &["args"],
+        ),
+        "UAPqzUnshield" => (
+            format!("burnStatement({b},uint256,bytes32,bytes32)"),
+            &["args", "amount", "recipient"],
+        ),
+        "UAPqzUnshieldUnwrap" => (
+            format!("unshieldUnwrapStatement({b},{u},bytes32)"),
+            &["args", "unwrap"],
+        ),
         _ => return None,
     })
 }
@@ -105,19 +139,42 @@ fn hex(b: &[u8]) -> String {
 /// The statement the token's own view builds for debit `row`'s named arguments and its envelope's binding, and `op` as the
 /// reference verifier reads it (scaas-pqz-verifier `Op`: `args`, `amount` / `recipient` or `unwrap`, `binding`; the sol types'
 /// serde form, small uints as numbers). `None`: the view refused the op (its own refusal; the entry's simulation names it).
-async fn statement_of(chain: &Chain, token: alloy::primitives::Address, row: &'static Row, vals: &[Val])
-    -> Result<Option<(Bytes, Map<String, Value>)>, Refusal>
-{
-    let arg = |n: &str| typed::arg_of(row, vals, n).ok_or_else(|| Refusal::Policy(format!("BAD_PAYLOAD: no {n}")));
-    let (word, num, at) = (|v: Val| v.as_fixed_bytes().map(|x| B256::from_slice(x.0)).unwrap_or_default(),
-        |v: Val| v.as_uint().map(|x| x.0).unwrap_or_default(), |v: Val| v.as_address().unwrap_or_default());
-    let m = UAMetaTransaction { from: word(arg("from")?.1), data: Bytes::new(), batch: num(arg("batch")?.1),
-        nonce: num(arg("nonce")?.1), validUntil: num(arg("validUntil")?.1), mode: num(arg("mode")?.1).saturating_to(),
-        relayer: at(arg("relayer")?.1), fee: num(arg("fee")?.1), feeRecipient: at(arg("feeRecipient")?.1) };
-    let binding = chain.call_view(token, IPqzToken::envelopeBindingCall { m }).await.map_err(|e| match e {
-        SimError::Transport(e) => Refusal::Transport(format!("envelopeBinding(): {e}")),
-        SimError::Revert(e) => Refusal::Policy(format!("envelopeBinding(): {e}")),
-    })?;
+async fn statement_of(
+    chain: &Chain,
+    token: alloy::primitives::Address,
+    row: &'static Row,
+    vals: &[Val],
+) -> Result<Option<(Bytes, Map<String, Value>)>, Refusal> {
+    let arg = |n: &str| {
+        typed::arg_of(row, vals, n).ok_or_else(|| Refusal::Policy(format!("BAD_PAYLOAD: no {n}")))
+    };
+    let (word, num, at) = (
+        |v: Val| {
+            v.as_fixed_bytes()
+                .map(|x| B256::from_slice(x.0))
+                .unwrap_or_default()
+        },
+        |v: Val| v.as_uint().map(|x| x.0).unwrap_or_default(),
+        |v: Val| v.as_address().unwrap_or_default(),
+    );
+    let m = UAMetaTransaction {
+        from: word(arg("from")?.1),
+        data: Bytes::new(),
+        batch: num(arg("batch")?.1),
+        nonce: num(arg("nonce")?.1),
+        validUntil: num(arg("validUntil")?.1),
+        mode: num(arg("mode")?.1).saturating_to(),
+        relayer: at(arg("relayer")?.1),
+        fee: num(arg("fee")?.1),
+        feeRecipient: at(arg("feeRecipient")?.1),
+    };
+    let binding = chain
+        .call_view(token, IPqzToken::envelopeBindingCall { m })
+        .await
+        .map_err(|e| match e {
+            SimError::Transport(e) => Refusal::Transport(format!("envelopeBinding(): {e}")),
+            SimError::Revert(e) => Refusal::Policy(format!("envelopeBinding(): {e}")),
+        })?;
     let (sig, names) = view_of(row.name).expect("a debit row has a statement view");
     let (mut params, mut op) = (Vec::new(), Map::new());
     op.insert("entry".into(), json!(row.entry));
@@ -128,9 +185,17 @@ async fn statement_of(chain: &Chain, token: alloy::primitives::Address, row: &'s
     }
     op.insert("binding".into(), json!(format!("{binding:#x}")));
     params.push(Val::FixedBytes(binding, 32));
-    let call = [&keccak256(sig.as_bytes())[..4], &Val::Tuple(params).abi_encode_sequence().unwrap_or_default()].concat();
+    let call = [
+        &keccak256(sig.as_bytes())[..4],
+        &Val::Tuple(params).abi_encode_sequence().unwrap_or_default(),
+    ]
+    .concat();
     match chain.call_raw(token, call.into()).await {
-        Ok(out) => Ok(Some((<Bytes as SolValue>::abi_decode(&out).map_err(|e| Refusal::Policy(format!("{sig}: decode: {e}")))?, op))),
+        Ok(out) => Ok(Some((
+            <Bytes as SolValue>::abi_decode(&out)
+                .map_err(|e| Refusal::Policy(format!("{sig}: decode: {e}")))?,
+            op,
+        ))),
         Err(SimError::Revert(_)) => Ok(None),
         Err(SimError::Transport(e)) => Err(Refusal::Transport(format!("{sig}: {e}"))),
     }
@@ -140,14 +205,30 @@ async fn statement_of(chain: &Chain, token: alloy::primitives::Address, row: &'s
 /// view). A mismatch is `PQZ_FEE_MISMATCH` with the word's three terms (`txFee` by the header's beneficiary word 224 and the
 /// token's `confidentialFee()`, the verifier fee `vf` in force, `M·d` the rest), zero sends; `Transport`, so the lane keeps the
 /// job in the queue until its deadline (a decrease may restore the word) and never reports it `dead`; the gateway answers 422.
-pub async fn fee_check(chain: &Chain, token: alloy::primitives::Address, p: u64, statement: &[u8], vf: u64) -> Result<(), Refusal> {
-    let w = |o: usize| statement.get(o..o + 32).map(U256::from_be_slice).unwrap_or_default();
+pub async fn fee_check(
+    chain: &Chain,
+    token: alloy::primitives::Address,
+    p: u64,
+    statement: &[u8],
+    vf: u64,
+) -> Result<(), Refusal> {
+    let w = |o: usize| {
+        statement
+            .get(o..o + 32)
+            .map(U256::from_be_slice)
+            .unwrap_or_default()
+    };
     let e = w(256);
     if e == U256::from(p) {
         return Ok(());
     }
-    let tx = if w(224).is_zero() { U256::ZERO } else {
-        chain.call_view(token, IPqzToken::confidentialFeeCall {}).await.unwrap_or_default()
+    let tx = if w(224).is_zero() {
+        U256::ZERO
+    } else {
+        chain
+            .call_view(token, IPqzToken::confidentialFeeCall {})
+            .await
+            .unwrap_or_default()
     };
     let md = e.saturating_sub(tx).saturating_sub(U256::from(vf));
     Err(Refusal::Transport(fee_mismatch(p, e, tx, vf, md)))
@@ -161,14 +242,23 @@ pub fn fee_mismatch(p: u64, e: U256, tx: U256, vf: u64, md: U256) -> String {
 
 impl Verifier {
     pub fn new(cfg: &PqzVerifierCfg) -> anyhow::Result<Self> {
-        let http = reqwest::Client::builder().timeout(Duration::from_millis(cfg.timeout_ms)).build()?;
+        let http = reqwest::Client::builder()
+            .timeout(Duration::from_millis(cfg.timeout_ms))
+            .build()?;
         let backoff = ENDPOINT_BACKOFF.max(Duration::from_millis(cfg.timeout_ms.saturating_mul(4)));
-        Ok(Self { cfg: cfg.clone(), http, resting: Default::default(), backoff })
+        Ok(Self {
+            cfg: cfg.clone(),
+            http,
+            resting: Default::default(),
+            backoff,
+        })
     }
 
     /// Endpoint `i` failed by transport within the last [`ENDPOINT_BACKOFF`]: it is not asked.
     fn resting(&self, i: usize) -> bool {
-        self.resting.lock().is_ok_and(|m| m.get(&i).is_some_and(|t| *t > Instant::now()))
+        self.resting
+            .lock()
+            .is_ok_and(|m| m.get(&i).is_some_and(|t| *t > Instant::now()))
     }
 
     fn rest(&self, i: usize) {
@@ -182,7 +272,9 @@ impl Verifier {
     /// Change): first the fee pre-check, `args.pqz_fee` against word 256 of the statement the token's view builds
     /// ([`fee_check`]): required on an `OFFCHAIN` token, on a `PRECOMPILE` one checked when named (one view call).
     pub async fn fill(&self, chain: &Chain, w: &mut Work) -> Result<(), Refusal> {
-        let Some(row) = debit_row(w) else { return Ok(()) };
+        let Some(row) = debit_row(w) else {
+            return Ok(());
+        };
         let slot = typed::verdict_slot(row).expect("a debit row");
         let bad = |e: anyhow::Error| Refusal::Policy(format!("{e:#}"));
         let mut vals = typed::call_values(row, &w.data).map_err(bad)?;
@@ -201,46 +293,76 @@ impl Verifier {
             return Ok(()); // the empty verdict of the parse
         };
         if c.verifier == B256::ZERO {
-            return Err(Refusal::Transport(format!("PQZ_VERDICT_REFUSED: PqzVerifierRevoked: {:#x}'s verifier is revoked (epoch {}); \
-                its proofs wait for a new verifier through a transfer", w.to, c.pqzVerifierEpoch)));
+            return Err(Refusal::Transport(format!(
+                "PQZ_VERDICT_REFUSED: PqzVerifierRevoked: {:#x}'s verifier is revoked (epoch {}); \
+                its proofs wait for a new verifier through a transfer",
+                w.to, c.pqzVerifierEpoch
+            )));
         }
-        let psid = chain.call_view(w.to, IPqzToken::proofSystemIdCall {}).await.map_err(|e| match e {
-            SimError::Transport(e) => Refusal::Transport(format!("proofSystemId(): {e}")),
-            SimError::Revert(e) => Refusal::Policy(format!("proofSystemId(): {e}")),
-        })?;
+        let psid = chain
+            .call_view(w.to, IPqzToken::proofSystemIdCall {})
+            .await
+            .map_err(|e| match e {
+                SimError::Transport(e) => Refusal::Transport(format!("proofSystemId(): {e}")),
+                SimError::Revert(e) => Refusal::Policy(format!("proofSystemId(): {e}")),
+            })?;
         // the op's own refusal (expired, malformed, a stale key version): the entry's simulation names it, never with a verdict
-        let Some((statement, op)) = statement_of(chain, w.to, row, &vals).await? else { return Ok(()) };
+        let Some((statement, op)) = statement_of(chain, w.to, row, &vals).await? else {
+            return Ok(());
+        };
         let Some(p) = pqz_fee else {
             return Err(Refusal::Policy(format!("BAD_PAYLOAD: no pqz_fee: a debit of the OFFCHAIN token {:#x} names its proved fee \
                 word (args.pqz_fee, a decimal string; its verifier fee is {})", w.to, c.verifierFee)));
         };
         fee_check(chain, w.to, p, &statement, c.verifierFee).await?;
-        let arg = |n: &str| typed::arg_of(row, &vals, n).ok_or_else(|| Refusal::Policy(format!("BAD_PAYLOAD: no {n}")));
+        let arg = |n: &str| {
+            typed::arg_of(row, &vals, n)
+                .ok_or_else(|| Refusal::Policy(format!("BAD_PAYLOAD: no {n}")))
+        };
         let proof = arg("proof")?.1.as_bytes().unwrap_or_default().to_vec();
         let req = json!({"token": format!("{:#x}", w.to), "chainId": chain.number, "op": Value::Object(op),
             "statement": hex(&statement), "proof": hex(&proof), "pqzVerifierEpoch": c.pqzVerifierEpoch});
-        let usable = |v: &PqzVerdictArgs| v.epoch == c.pqzVerifierEpoch && v.valid_until >= now() + self.cfg.valid_margin_secs;
+        let usable = |v: &PqzVerdictArgs| {
+            v.epoch == c.pqzVerifierEpoch && v.valid_until >= now() + self.cfg.valid_margin_secs
+        };
         // a fetch, and one re-fetch on a mismatch (spec §11.1); a job's own verdict is the first answer
         let (mut v, mut fetches) = (job.clone(), if job.is_some() { 1 } else { 2 });
         while !v.as_ref().is_some_and(usable) {
             let why = match &v {
-                Some(x) => format!("a verdict at epoch {} until {}, the token's epoch {} (margin {} s)", x.epoch, x.valid_until,
-                    c.pqzVerifierEpoch, self.cfg.valid_margin_secs),
+                Some(x) => format!(
+                    "a verdict at epoch {} until {}, the token's epoch {} (margin {} s)",
+                    x.epoch, x.valid_until, c.pqzVerifierEpoch, self.cfg.valid_margin_secs
+                ),
                 None => "the job names no pqz_verdict".into(),
             };
             if self.cfg.endpoints.is_empty() {
-                return Err(Refusal::Policy(format!("PQZ_VERDICT_MISSING: {why}; no [pqz_verifier] endpoints on this node")));
+                return Err(Refusal::Policy(format!(
+                    "PQZ_VERDICT_MISSING: {why}; no [pqz_verifier] endpoints on this node"
+                )));
             }
             if fetches == 0 {
-                return Err(Refusal::Transport(format!("PQZ_VERDICT_MISSING: {why}, after one re-fetch")));
+                return Err(Refusal::Transport(format!(
+                    "PQZ_VERDICT_MISSING: {why}, after one re-fetch"
+                )));
             }
             fetches -= 1;
-            v = Some(self.fetch(&req).await.map_err(|e| Refusal::Transport(format!("PQZ_VERDICT_MISSING: no endpoint answered ({e})")))?);
+            v = Some(self.fetch(&req).await.map_err(|e| {
+                Refusal::Transport(format!("PQZ_VERDICT_MISSING: no endpoint answered ({e})"))
+            })?);
         }
         let v = v.expect("usable");
-        let sv = IPqzToken::PqzSignedVerdict { pqzVerdict: IPqzToken::PqzVerdict { token: w.to, chainId: U256::from(chain.number),
-            proofSystemId: psid, statementHash: keccak256(&statement), proofHash: keccak256(&proof), pqzVerifierEpoch: v.epoch,
-            validUntil: v.valid_until }, sig: v.auth.clone() };
+        let sv = IPqzToken::PqzSignedVerdict {
+            pqzVerdict: IPqzToken::PqzVerdict {
+                token: w.to,
+                chainId: U256::from(chain.number),
+                proofSystemId: psid,
+                statementHash: keccak256(&statement),
+                proofHash: keccak256(&proof),
+                pqzVerifierEpoch: v.epoch,
+                validUntil: v.valid_until,
+            },
+            sig: v.auth.clone(),
+        };
         vals[slot] = typed::value_of("PqzSignedVerdict", &sv.abi_encode()).map_err(bad)?;
         w.data = typed::call_data(row, vals).into();
         // a replacement past the verdict's life would revert: the work's deadline is the sooner one, of the op's own deadline
@@ -258,7 +380,11 @@ impl Verifier {
         let mut errs = Vec::new();
         for (i, e) in self.cfg.endpoints.iter().enumerate() {
             if self.resting(i) {
-                errs.push(format!("endpoint {}: skipped, it did not answer in the last {} s", i + 1, self.backoff.as_secs()));
+                errs.push(format!(
+                    "endpoint {}: skipped, it did not answer in the last {} s",
+                    i + 1,
+                    self.backoff.as_secs()
+                ));
                 continue;
             }
             // Fable recheck 3 R3-5: an answer rests nothing, however slow; only a timeout, a dropped connection or a 5xx does
@@ -269,7 +395,11 @@ impl Verifier {
                     if down {
                         self.rest(i);
                     }
-                    errs.push(format!("endpoint {}: {}", i + 1, crate::chain::redact_urls(&x)));
+                    errs.push(format!(
+                        "endpoint {}: {}",
+                        i + 1,
+                        crate::chain::redact_urls(&x)
+                    ));
                 }
             }
         }
@@ -282,7 +412,13 @@ impl Verifier {
     /// `Err((true, _))`: the endpoint did not answer (transport, 5xx), [`Verifier::rest`]s it.
     async fn ask(&self, endpoint: &str, body: &Value) -> Result<PqzVerdictArgs, (bool, String)> {
         let url = format!("{}{ROUTE}", endpoint.trim_end_matches('/'));
-        let mut r = self.http.post(url).json(body).send().await.map_err(|e| (true, e.without_url().to_string()))?;
+        let mut r = self
+            .http
+            .post(url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| (true, e.without_url().to_string()))?;
         if !r.status().is_success() {
             return Err((r.status().is_server_error(), format!("HTTP {}", r.status())));
         }
@@ -292,16 +428,25 @@ impl Verifier {
             return Err(over());
         }
         let mut buf = Vec::new();
-        while let Some(c) = r.chunk().await.map_err(|e| (true, e.without_url().to_string()))? {
+        while let Some(c) = r
+            .chunk()
+            .await
+            .map_err(|e| (true, e.without_url().to_string()))?
+        {
             if buf.len() + c.len() > max {
                 return Err(over());
             }
             buf.extend_from_slice(&c);
         }
-        let v: Value = serde_json::from_slice(&buf).map_err(|e| (false, format!("not JSON: {e}")))?;
+        let v: Value =
+            serde_json::from_slice(&buf).map_err(|e| (false, format!("not JSON: {e}")))?;
         let (pv, sig) = (&v["pqzVerdict"], &v["pqzVerdictSig"]);
-        let until = pv["validUntil"].as_u64().map(|n| json!(n.to_string())).unwrap_or_else(|| pv["validUntil"].clone());
-        let picked = json!({"pqzVerifierEpoch": pv["pqzVerifierEpoch"], "validUntil": until, "auth": sig});
+        let until = pv["validUntil"]
+            .as_u64()
+            .map(|n| json!(n.to_string()))
+            .unwrap_or_else(|| pv["validUntil"].clone());
+        let picked =
+            json!({"pqzVerifierEpoch": pv["pqzVerifierEpoch"], "validUntil": until, "auth": sig});
         typed::pqz_verdict_of(&picked, "answer").map_err(|e| (false, format!("{e:#}")))
     }
 
@@ -309,26 +454,44 @@ impl Verifier {
     /// or that no endpoint serves is refused `PQZ_VERIFIER_UNREACHABLE`, for every consumer; a probe that did not get through is
     /// `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue (Fable E N-2); off by default.
     pub async fn check_shield(&self, chain: &Chain, w: &Work) -> Result<(), Refusal> {
-        if !self.cfg.refuse_shield_when_unserved || w.typed.as_ref().is_none_or(|t| t.contract != "pqz") {
+        if !self.cfg.refuse_shield_when_unserved
+            || w.typed.as_ref().is_none_or(|t| t.contract != "pqz")
+        {
             return Ok(());
         }
-        let shield = w.data.get(..4).and_then(|s| crate::guard::row(s.try_into().ok()?, "pqz"))
+        let shield = w
+            .data
+            .get(..4)
+            .and_then(|s| crate::guard::row(s.try_into().ok()?, "pqz"))
             .is_some_and(|r| matches!(r.name, "UAShield" | "WrapShield"));
         if !shield {
             return Ok(());
         }
-        let Some(c) = offchain_config(chain, w.to).await? else { return Ok(()) };
-        let unserved = |why: String| Err(Refusal::Policy(format!("PQZ_VERIFIER_UNREACHABLE: {:#x}: {why}; this node refuses shields \
-            into a pool nobody serves (refuse_shield_when_unserved)", w.to)));
+        let Some(c) = offchain_config(chain, w.to).await? else {
+            return Ok(());
+        };
+        let unserved = |why: String| {
+            Err(Refusal::Policy(format!(
+                "PQZ_VERIFIER_UNREACHABLE: {:#x}: {why}; this node refuses shields \
+            into a pool nobody serves (refuse_shield_when_unserved)",
+                w.to
+            )))
+        };
         if c.verifier == B256::ZERO {
-            return unserved(format!("its verifier is revoked (epoch {})", c.pqzVerifierEpoch));
+            return unserved(format!(
+                "its verifier is revoked (epoch {})",
+                c.pqzVerifierEpoch
+            ));
         }
         match self.serves(chain, w.to).await {
             Some(true) => Ok(()),
             Some(false) => unserved("no [pqz_verifier] endpoint serves it (its probe)".into()),
             // Fable E N-2: a probe that did not get through says nothing about the pool: back in the queue, never `dead`
-            None => Err(Refusal::Transport(format!("PQZ_VERIFIER_PROBE_UNREAD: {:#x}: no [pqz_verifier] endpoint serves it and \
-                one did not answer its probe (transport); retried", w.to))),
+            None => Err(Refusal::Transport(format!(
+                "PQZ_VERIFIER_PROBE_UNREAD: {:#x}: no [pqz_verifier] endpoint serves it and \
+                one did not answer its probe (transport); retried",
+                w.to
+            ))),
         }
     }
 
@@ -368,10 +531,10 @@ impl Verifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy::primitives::{keccak256, Address, B256};
-    use alloy::sol_types::SolCall;
     use crate::abi::IPqzToken;
     use crate::typed::{parse, struct_hash_of};
+    use alloy::primitives::{keccak256, Address, B256};
+    use alloy::sol_types::SolCall;
 
     /// The views the node rebuilds a verdict from are the contract's: the forge artifact's selectors (`out/`, T45's ABI; group 3h
     /// T59: the three args tuples with `ownTag`, the four statement views moved, 0x3a3bb45a -> 0x931415ee, 0xffdee909 -> 0x8a2161ba,
@@ -379,12 +542,26 @@ mod tests {
     /// `PqzTransferArgs`, 0x931415ee -> 0x50f9be2f).
     #[test]
     fn views_are_the_contracts() {
-        assert_eq!(IPqzToken::pqzVerifyConfigCall::SELECTOR, [0xdc, 0x59, 0xc6, 0x6e]);
-        assert_eq!(IPqzToken::proofSystemIdCall::SELECTOR, [0x1f, 0x3b, 0x28, 0xf2]);
-        assert_eq!(IPqzToken::envelopeBindingCall::SELECTOR, [0x35, 0xad, 0x08, 0xaa]);
-        for (row, sel) in [("UAPqzTransferSingle", [0x50, 0xf9, 0xbe, 0x2f]), ("UAPqzTransferSingleCompact", [0x50, 0xf9, 0xbe, 0x2f]),
-            ("UAPqzTransfer", [0x8a, 0x21, 0x61, 0xba]), ("UAPqzTransferCompact", [0x8a, 0x21, 0x61, 0xba]),
-            ("UAPqzUnshield", [0xda, 0x8c, 0x9e, 0xed]), ("UAPqzUnshieldUnwrap", [0x8e, 0x4c, 0xcf, 0x2e])] {
+        assert_eq!(
+            IPqzToken::pqzVerifyConfigCall::SELECTOR,
+            [0xdc, 0x59, 0xc6, 0x6e]
+        );
+        assert_eq!(
+            IPqzToken::proofSystemIdCall::SELECTOR,
+            [0x1f, 0x3b, 0x28, 0xf2]
+        );
+        assert_eq!(
+            IPqzToken::envelopeBindingCall::SELECTOR,
+            [0x35, 0xad, 0x08, 0xaa]
+        );
+        for (row, sel) in [
+            ("UAPqzTransferSingle", [0x50, 0xf9, 0xbe, 0x2f]),
+            ("UAPqzTransferSingleCompact", [0x50, 0xf9, 0xbe, 0x2f]),
+            ("UAPqzTransfer", [0x8a, 0x21, 0x61, 0xba]),
+            ("UAPqzTransferCompact", [0x8a, 0x21, 0x61, 0xba]),
+            ("UAPqzUnshield", [0xda, 0x8c, 0x9e, 0xed]),
+            ("UAPqzUnshieldUnwrap", [0x8e, 0x4c, 0xcf, 0x2e]),
+        ] {
             let v = statement_view(row).unwrap_or_else(|| panic!("{row}: no statement view"));
             assert_eq!(keccak256(v.as_bytes())[..4], sel, "{row}: {v}");
         }
@@ -395,14 +572,27 @@ mod tests {
     /// real token ops): every row's word is `txFee + vf + M·d`, and a mismatch names the three terms.
     #[test]
     fn verifier_fee_vectors_and_the_mismatch() {
-        let p = format!("{}/../smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json", env!("CARGO_MANIFEST_DIR"));
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let p = format!(
+            "{}/../smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let rows = v["rows"].as_array().unwrap();
         assert_eq!(rows.len() as u64, v["rowCount"].as_u64().unwrap());
         for r in rows {
             let n = |k: &str| r[k].as_u64().unwrap();
-            let tx = if r["beneficiary"].as_bool().unwrap() { n("confidentialFee") } else { 0 };
-            assert_eq!(tx + n("verifierFee") + n("legs") * n("decoyFee"), n("feeWord"), "{}", r["form"]);
+            let tx = if r["beneficiary"].as_bool().unwrap() {
+                n("confidentialFee")
+            } else {
+                0
+            };
+            assert_eq!(
+                tx + n("verifierFee") + n("legs") * n("decoyFee"),
+                n("feeWord"),
+                "{}",
+                r["form"]
+            );
         }
         let m = fee_mismatch(5, U256::from(7u8), U256::from(3u8), 2, U256::from(2u8));
         assert!(m.starts_with("PQZ_FEE_MISMATCH: proved 5, the token's fee word is 7 (txFee 3, verifierFee 2, M·d 2)"), "{m}");
@@ -413,14 +603,25 @@ mod tests {
     /// signature recovers over the registry's `uaAuthDigest` (what the e2e test signs; the node itself signs nothing).
     #[test]
     fn pqz_verdict_vectors_digest() {
-        let p = format!("{}/../smartcontracts/vectors/pqz/n2304-kmax4096/verdict.json", env!("CARGO_MANIFEST_DIR"));
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let p = format!(
+            "{}/../smartcontracts/vectors/pqz/n2304-kmax4096/verdict.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let ty = "PqzVerdict(address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil)";
         assert_eq!(v["typeString"].as_str(), Some(ty));
-        assert_eq!(format!("{:#x}", keccak256(ty)), v["typehash"].as_str().unwrap());
+        assert_eq!(
+            format!("{:#x}", keccak256(ty)),
+            v["typehash"].as_str().unwrap()
+        );
         let d = &v["domain"];
         let g = |k: &str| d[k].as_str().unwrap();
-        let (chain, at, salt): (u64, Address, B256) = (d["chainId"].as_u64().unwrap(), g("verifyingContract").parse().unwrap(), g("salt").parse().unwrap());
+        let (chain, at, salt): (u64, Address, B256) = (
+            d["chainId"].as_u64().unwrap(),
+            g("verifyingContract").parse().unwrap(),
+            g("salt").parse().unwrap(),
+        );
         assert_eq!(g("name"), "SCaaS PqzToken");
         let sep = crate::dex::domain("SCaaS PqzToken", chain, at, salt).separator();
         assert_eq!(format!("{sep:#x}"), g("separator"));
@@ -431,9 +632,19 @@ mod tests {
                 "statementHash": r["statementHash"], "proofHash": r["proofHash"], "pqzVerifierEpoch": r["pqzVerifierEpoch"],
                 "validUntil": r["validUntil"].as_u64().unwrap().to_string()});
             let h = struct_hash_of("PqzVerdict", &parse("PqzVerdict", &pv, "v").unwrap()).unwrap();
-            assert_eq!(format!("{h:#x}"), r["structHash"].as_str().unwrap(), "{}", r["form"]);
+            assert_eq!(
+                format!("{h:#x}"),
+                r["structHash"].as_str().unwrap(),
+                "{}",
+                r["form"]
+            );
             let digest = keccak256([&[0x19, 0x01][..], sep.as_slice(), h.as_slice()].concat());
-            assert_eq!(format!("{digest:#x}"), r["digest"].as_str().unwrap(), "{}", r["form"]);
+            assert_eq!(
+                format!("{digest:#x}"),
+                r["digest"].as_str().unwrap(),
+                "{}",
+                r["form"]
+            );
             let ua: B256 = r["uaAuthDigest"].as_str().unwrap().parse().unwrap();
             let sig = alloy::hex::decode(&r["signature"].as_str().unwrap()[2..]).unwrap();
             assert!(crate::typed::recovers(ua, &sig, verifier), "{}", r["form"]);
@@ -457,13 +668,23 @@ mod tests {
                     tokio::time::sleep(Duration::from_millis(1_000)).await; // a slow answer, well inside a 4 s timeout
                 }
                 if mode == 2 {
-                    return (axum::http::StatusCode::UNPROCESSABLE_ENTITY, axum::Json(json!({"error": "refused"})));
+                    return (
+                        axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                        axum::Json(json!({"error": "refused"})),
+                    );
                 }
-                (axum::http::StatusCode::OK, axum::Json(json!({"pqzVerdict": {"pqzVerifierEpoch": 2, "validUntil": 1_800_000_000u64},
-                    "pqzVerdictSig": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}})))
+                (
+                    axum::http::StatusCode::OK,
+                    axum::Json(
+                        json!({"pqzVerdict": {"pqzVerifierEpoch": 2, "validUntil": 1_800_000_000u64},
+                    "pqzVerdictSig": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}}),
+                    ),
+                )
             }
         };
-        let app = axum::Router::new().route(ROUTE, axum::routing::post(h.clone())).route(&format!("{ROUTE}/probe"), axum::routing::post(h));
+        let app = axum::Router::new()
+            .route(ROUTE, axum::routing::post(h.clone()))
+            .route(&format!("{ROUTE}/probe"), axum::routing::post(h));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
@@ -479,40 +700,107 @@ mod tests {
         let (slow, slow_n) = endpoint(1).await;
         let (good, good_n) = endpoint(0).await;
         let (no, no_n) = endpoint(2).await;
-        let cfg = PqzVerifierCfg { endpoints: vec![slow.clone(), no, good], timeout_ms: 500, ..Default::default() };
+        let cfg = PqzVerifierCfg {
+            endpoints: vec![slow.clone(), no, good],
+            timeout_ms: 500,
+            ..Default::default()
+        };
         let v = Verifier::new(&cfg).unwrap();
         let t = Instant::now();
         for _ in 0..5 {
             assert_eq!(v.fetch(&json!({})).await.unwrap().epoch, 2);
         }
-        assert!(t.elapsed() < Duration::from_millis(2_000), "one 500 ms timeout, not five: {:?}", t.elapsed());
-        assert_eq!((slow_n.load(SeqCst), no_n.load(SeqCst), good_n.load(SeqCst)), (1, 5, 5));
-        let chain = Chain::with_signer(&crate::config::ChainCfg { evm_chain_number: 1, rpc_urls: vec!["http://127.0.0.1:9".into()],
-            ..Default::default() }, alloy::signers::local::PrivateKeySigner::random()).unwrap();
-        let only_slow = Verifier { cfg: PqzVerifierCfg { endpoints: vec![slow.clone()], timeout_ms: 500, ..Default::default() },
-            http: v.http.clone(), resting: Mutex::new(v.resting.lock().unwrap().clone()), backoff: ENDPOINT_BACKOFF };
-        assert_eq!(only_slow.serves(&chain, Address::ZERO).await, None, "resting: unknown");
+        assert!(
+            t.elapsed() < Duration::from_millis(2_000),
+            "one 500 ms timeout, not five: {:?}",
+            t.elapsed()
+        );
+        assert_eq!(
+            (slow_n.load(SeqCst), no_n.load(SeqCst), good_n.load(SeqCst)),
+            (1, 5, 5)
+        );
+        let chain = Chain::with_signer(
+            &crate::config::ChainCfg {
+                evm_chain_number: 1,
+                rpc_urls: vec!["http://127.0.0.1:9".into()],
+                ..Default::default()
+            },
+            alloy::signers::local::PrivateKeySigner::random(),
+        )
+        .unwrap();
+        let only_slow = Verifier {
+            cfg: PqzVerifierCfg {
+                endpoints: vec![slow.clone()],
+                timeout_ms: 500,
+                ..Default::default()
+            },
+            http: v.http.clone(),
+            resting: Mutex::new(v.resting.lock().unwrap().clone()),
+            backoff: ENDPOINT_BACKOFF,
+        };
+        assert_eq!(
+            only_slow.serves(&chain, Address::ZERO).await,
+            None,
+            "resting: unknown"
+        );
         assert_eq!(slow_n.load(SeqCst), 1, "the probe did not ask it");
         let mut c = Verifier::new(&cfg).unwrap();
         c.backoff = Duration::ZERO;
         for _ in 0..3 {
             c.fetch(&json!({})).await.unwrap();
         }
-        assert_eq!(slow_n.load(SeqCst), 4, "control: no backoff, asked every time");
+        assert_eq!(
+            slow_n.load(SeqCst),
+            4,
+            "control: no backoff, asked every time"
+        );
         // Fable recheck 3 R3-5: a slow answer (a heavy set's normal verdict) is used and rests nothing, so it serves every job, not
         // one per window (the timeout above is the control: it rests); the window follows `timeout_ms`
         let (late, late_n) = endpoint(3).await;
         let (good2, good2_n) = endpoint(0).await;
-        let v = Verifier::new(&PqzVerifierCfg { endpoints: vec![late.clone(), good2], timeout_ms: 4_000, ..Default::default() }).unwrap();
+        let v = Verifier::new(&PqzVerifierCfg {
+            endpoints: vec![late.clone(), good2],
+            timeout_ms: 4_000,
+            ..Default::default()
+        })
+        .unwrap();
         for _ in 0..2 {
             assert_eq!(v.fetch(&json!({})).await.unwrap().epoch, 2);
         }
-        assert_eq!((late_n.load(SeqCst), good2_n.load(SeqCst)), (2, 0), "the slow endpoint answered every job");
+        assert_eq!(
+            (late_n.load(SeqCst), good2_n.load(SeqCst)),
+            (2, 0),
+            "the slow endpoint answered every job"
+        );
         assert!(!v.resting(0));
-        let probe = Verifier::new(&PqzVerifierCfg { endpoints: vec![late], timeout_ms: 4_000, ..Default::default() }).unwrap();
+        let probe = Verifier::new(&PqzVerifierCfg {
+            endpoints: vec![late],
+            timeout_ms: 4_000,
+            ..Default::default()
+        })
+        .unwrap();
         assert_eq!(probe.serves(&chain, Address::ZERO).await, Some(true));
-        assert!(!probe.resting(0), "a slow probe answer rests nothing either");
-        assert_eq!(Verifier::new(&PqzVerifierCfg { timeout_ms: 20_000, ..Default::default() }).unwrap().backoff, Duration::from_secs(80));
-        assert_eq!(Verifier::new(&PqzVerifierCfg { timeout_ms: 200, ..Default::default() }).unwrap().backoff, ENDPOINT_BACKOFF);
+        assert!(
+            !probe.resting(0),
+            "a slow probe answer rests nothing either"
+        );
+        assert_eq!(
+            Verifier::new(&PqzVerifierCfg {
+                timeout_ms: 20_000,
+                ..Default::default()
+            })
+            .unwrap()
+            .backoff,
+            Duration::from_secs(80)
+        );
+        assert_eq!(
+            Verifier::new(&PqzVerifierCfg {
+                timeout_ms: 200,
+                ..Default::default()
+            })
+            .unwrap()
+            .backoff,
+            ENDPOINT_BACKOFF
+        );
     }
 }

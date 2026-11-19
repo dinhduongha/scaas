@@ -5,13 +5,13 @@
 //! + hạn ledger). Relayer là source của tx, trả phí bằng sequence của chính lane. Contract tự tính digest thao
 //! tác (cùng công thức với Odoo/adapter) và phát trong `MetaTransactionExecuted` để Odoo chốt op.
 #![no_std]
+use scaas_ua_common::meta_pay_id;
+/// The op digest (`MetaOp` v1, NET-SOR-16) and `meta_pay_id` (CTR-MTX-26), shared with the UA-Soroban contracts.
+pub use scaas_ua_common::op_digest;
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address,
     Bytes, BytesN, Env, Executable, MuxedAddress, String,
 };
-/// The op digest (`MetaOp` v1, NET-SOR-16) and `meta_pay_id` (CTR-MTX-26), shared with the UA-Soroban contracts.
-pub use scaas_ua_common::op_digest;
-use scaas_ua_common::meta_pay_id;
 
 const DAY: u32 = 17_280;
 const TTL_BUMP: u32 = 60 * DAY;
@@ -157,7 +157,11 @@ fn move_funds(env: &Env, from: &Address, to: &Address, amount: i128) {
 }
 
 fn allowance_of(env: &Env, from: &Address, spender: &Address) -> i128 {
-    match env.storage().temporary().get::<_, Allowance>(&Key::Allowance(from.clone(), spender.clone())) {
+    match env
+        .storage()
+        .temporary()
+        .get::<_, Allowance>(&Key::Allowance(from.clone(), spender.clone()))
+    {
         Some(a) if a.expiration_ledger >= env.ledger().sequence() => a.amount,
         _ => 0,
     }
@@ -165,11 +169,20 @@ fn allowance_of(env: &Env, from: &Address, spender: &Address) -> i128 {
 
 fn spend_allowance(env: &Env, from: &Address, spender: &Address, amount: i128) {
     let k = Key::Allowance(from.clone(), spender.clone());
-    let a: Allowance = env.storage().temporary().get(&k).unwrap_or(Allowance { amount: 0, expiration_ledger: 0 });
+    let a: Allowance = env.storage().temporary().get(&k).unwrap_or(Allowance {
+        amount: 0,
+        expiration_ledger: 0,
+    });
     if a.expiration_ledger < env.ledger().sequence() || a.amount < amount {
         panic_with_error!(env, Error::InsufficientAllowance);
     }
-    env.storage().temporary().set(&k, &Allowance { amount: a.amount - amount, ..a });
+    env.storage().temporary().set(
+        &k,
+        &Allowance {
+            amount: a.amount - amount,
+            ..a
+        },
+    );
 }
 
 /// Spec §5.1: the UA pool is the token's own address; no native path pays it (CTR-MTX-18).
@@ -192,7 +205,14 @@ pub struct Token;
 
 #[contractimpl]
 impl Token {
-    pub fn __constructor(env: Env, admin: Address, decimals: u32, name: String, symbol: String, registry: Option<Address>) {
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        decimals: u32,
+        name: String,
+        symbol: String,
+        registry: Option<Address>,
+    ) {
         let s = env.storage().instance();
         s.set(&Key::Registry, &registry);
         s.set(&Key::Admin, &admin);
@@ -216,23 +236,52 @@ impl Token {
 
     /// Thanh toán có `pay_ref` (entryRef của Odoo): mỗi `pay_ref` một lần, có hạn theo giờ ledger. Gọi qua relayer
     /// với auth entry chủ thể đã ký (R30) hoặc trực tiếp bởi contract (mandate) — `require_auth` như nhau.
-    pub fn pay(env: Env, from: Address, to: Address, amount: i128, pay_ref: BytesN<32>, valid_until: u64) {
+    pub fn pay(
+        env: Env,
+        from: Address,
+        to: Address,
+        amount: i128,
+        pay_ref: BytesN<32>,
+        valid_until: u64,
+    ) {
         from.require_auth();
         Self::settle_pay(&env, &from, &to, amount, &pay_ref, valid_until);
         let args = (from.clone(), to, amount, pay_ref, valid_until);
-        let digest = op_digest(&env, &env.current_contract_address(), "pay", soroban_sdk::IntoVal::into_val(&args, &env));
+        let digest = op_digest(
+            &env,
+            &env.current_contract_address(),
+            "pay",
+            soroban_sdk::IntoVal::into_val(&args, &env),
+        );
         MetaTransactionExecuted { from, digest }.publish(&env);
     }
 
     /// CTR-MTX-26: như `pay` với `pay_ref = meta_pay_id(salt, meta)`. Auth entry phủ cả `salt` và `meta`.
     /// Không có lane trên Soroban: bộ `PayRef` của `settle_pay` đảm bảo mỗi `(token, from, pay_ref)` một lần (như lane theo payer trên EVM: người khác không đốt được ref của payer).
-    pub fn pay_meta(env: Env, from: Address, to: Address, amount: i128, salt: BytesN<32>, meta: Bytes, valid_until: u64) {
+    pub fn pay_meta(
+        env: Env,
+        from: Address,
+        to: Address,
+        amount: i128,
+        salt: BytesN<32>,
+        meta: Bytes,
+        valid_until: u64,
+    ) {
         from.require_auth();
         let pay_ref = meta_pay_id(&env, &salt, &meta);
-        PaymentMeta { pay_id: pay_ref.clone(), meta: meta.clone() }.publish(&env);
+        PaymentMeta {
+            pay_id: pay_ref.clone(),
+            meta: meta.clone(),
+        }
+        .publish(&env);
         Self::settle_pay(&env, &from, &to, amount, &pay_ref, valid_until);
         let args = (from.clone(), to, amount, salt, meta, valid_until);
-        let digest = op_digest(&env, &env.current_contract_address(), "pay_meta", soroban_sdk::IntoVal::into_val(&args, &env));
+        let digest = op_digest(
+            &env,
+            &env.current_contract_address(),
+            "pay_meta",
+            soroban_sdk::IntoVal::into_val(&args, &env),
+        );
         MetaTransactionExecuted { from, digest }.publish(&env);
     }
 
@@ -252,7 +301,13 @@ impl Token {
         allowance_of(&env, &from, &spender)
     }
 
-    pub fn approve(env: Env, from: Address, spender: Address, amount: i128, expiration_ledger: u32) {
+    pub fn approve(
+        env: Env,
+        from: Address,
+        spender: Address,
+        amount: i128,
+        expiration_ledger: u32,
+    ) {
         from.require_auth();
         check_amount(&env, amount);
         require_contract(&env, &spender);
@@ -260,12 +315,24 @@ impl Token {
             panic_with_error!(&env, Error::BadExpiration);
         }
         let k = Key::Allowance(from.clone(), spender.clone());
-        env.storage().temporary().set(&k, &Allowance { amount, expiration_ledger });
+        env.storage().temporary().set(
+            &k,
+            &Allowance {
+                amount,
+                expiration_ledger,
+            },
+        );
         if amount > 0 {
             let live = expiration_ledger - env.ledger().sequence();
             env.storage().temporary().extend_ttl(&k, live, live);
         }
-        Approve { from, spender, amount, expiration_ledger }.publish(&env);
+        Approve {
+            from,
+            spender,
+            amount,
+            expiration_ledger,
+        }
+        .publish(&env);
     }
 
     pub fn balance(env: Env, id: Address) -> i128 {
@@ -316,11 +383,24 @@ impl Token {
 
 impl Token {
     /// Thân chung của `pay` / `pay_meta`: hạn, `PayRef` một lần, chuyển tiền, `PaymentSettled`.
-    fn settle_pay(env: &Env, from: &Address, to: &Address, amount: i128, pay_ref: &BytesN<32>, valid_until: u64) {
+    fn settle_pay(
+        env: &Env,
+        from: &Address,
+        to: &Address,
+        amount: i128,
+        pay_ref: &BytesN<32>,
+        valid_until: u64,
+    ) {
         not_pool(env, to);
         Self::use_pay_ref(env, from, pay_ref, valid_until);
         move_funds(env, from, to, amount);
-        PaymentSettled { from: from.clone(), to: to.clone(), amount, pay_ref: pay_ref.clone() }.publish(env);
+        PaymentSettled {
+            from: from.clone(),
+            to: to.clone(),
+            amount,
+            pay_ref: pay_ref.clone(),
+        }
+        .publish(env);
     }
 
     /// Expiry and `PayRef(from, pay_ref)` once (NET-SOR-09), shared by `pay`, `pay_meta` and `pay_to_ua`.

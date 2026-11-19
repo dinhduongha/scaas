@@ -8,6 +8,7 @@ under its kind's label, so a traced DELEGATECALL into it counts for the kind. Bo
 (deployments/<key>.json, NET-EVM-13; matrix.sh sets them), their headers checked.
   DEPLOY_JSON=… RELEASES_JSON=… [PLAN=…] [NOTE=…] python3 -I script/onchain/basebook.py <net>
 (the SCaaS testnet: NOTE=runs/2026-11-10-ua-mtx-merge-t66b-step5-7622.txt, the Step 5 deploy rows)"""
+
 import json
 import os
 import re
@@ -22,8 +23,11 @@ import deploybook  # noqa: E402
 def main():
     net = sys.argv[1]
     labels = {c["label"] for cs in json.load(open(os.path.join(HERE, "groups.json")))["groups"].values() for c in cs}
-    kinds = sorted((c["label"] for c in json.load(open(os.path.join(HERE, "groups.json")))["groups"]["tokens"]), key=len,
-                   reverse=True)
+    kinds = sorted(
+        (c["label"] for c in json.load(open(os.path.join(HERE, "groups.json")))["groups"]["tokens"]),
+        key=len,
+        reverse=True,
+    )
 
     def label(name):
         if name in labels:
@@ -46,23 +50,35 @@ def main():
     else:
         plan = os.environ.get("PLAN", f"broadcast/Deploy.s.sol/{dep['chainId']}/dry-run/run-latest.json")
         tx = json.load(open(os.path.join(EVM, plan)))["transactions"]
-        rows = [(x["contractName"], x["contractAddress"]) for x in tx if x.get("contractName") and x.get("contractAddress")]
+        rows = [
+            (x["contractName"], x["contractAddress"]) for x in tx if x.get("contractName") and x.get("contractAddress")
+        ]
     for name, a in rows:
         if label(name):
             book[a.lower()] = label(name)
     for name, v in rel.items():
         if isinstance(v, dict) and "address" in v and label(name):
             book[v["address"].lower()] = label(name)
-    for key, name in (("ua_registry", "UARegistry"), ("ua_registry_core_lib", "UARegistryCoreLib"),
-                      ("ua_registry_aux_lib", "UARegistryAuxLib"), ("governance_router", "GovernanceRouter"),
-                      ("token_factory", "OpenFactory"), ("relay_fee_router", "RelayFeeRouter"),
-                      ("relay_fee_executor", "RelayFeeExecutor"), ("compliance_registry", "ComplianceRegistry"),
-                      ("smart_key_account_factory", "SmartKeyAccountFactory"),
-                      ("smart_key_account_implementation", "SmartKeyAccount"), ("zether_disclosure", "ZetherDisclosure"),
-                      ("zether_statements", "ZetherStatements"), ("zether_verifier_bls12381", "ZetherTransferVerifierBls12381"),
-                      ("zether_burn_verifier_bls12381", "ZetherBurnVerifierBls12381"),
-                      ("zether_inner_product_verifier_bls12381", "ZetherInnerProductVerifierBls12381"),
-                      ("dex_implementation", "SCaaSDex"), ("demo_token", "NormalToken"), ("demo_token_2", "NormalToken")):
+    for key, name in (
+        ("ua_registry", "UARegistry"),
+        ("ua_registry_core_lib", "UARegistryCoreLib"),
+        ("ua_registry_aux_lib", "UARegistryAuxLib"),
+        ("governance_router", "GovernanceRouter"),
+        ("token_factory", "OpenFactory"),
+        ("relay_fee_router", "RelayFeeRouter"),
+        ("relay_fee_executor", "RelayFeeExecutor"),
+        ("compliance_registry", "ComplianceRegistry"),
+        ("smart_key_account_factory", "SmartKeyAccountFactory"),
+        ("smart_key_account_implementation", "SmartKeyAccount"),
+        ("zether_disclosure", "ZetherDisclosure"),
+        ("zether_statements", "ZetherStatements"),
+        ("zether_verifier_bls12381", "ZetherTransferVerifierBls12381"),
+        ("zether_burn_verifier_bls12381", "ZetherBurnVerifierBls12381"),
+        ("zether_inner_product_verifier_bls12381", "ZetherInnerProductVerifierBls12381"),
+        ("dex_implementation", "SCaaSDex"),
+        ("demo_token", "NormalToken"),
+        ("demo_token_2", "NormalToken"),
+    ):
         if key in dep:
             book[dep[key].lower()] = name
     with open(os.path.join(EVM, f"deployments/onchain-{net}-base.json"), "w") as f:

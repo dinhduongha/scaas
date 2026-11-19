@@ -81,7 +81,11 @@ impl Tree {
 }
 
 /// recompute the root from (index, leaf) pairs (sorted, distinct) and sibling digests taken from `sib`
-pub fn root_from(mut cur: Vec<(usize, H)>, depth: usize, mut sib: impl FnMut() -> Option<H>) -> Option<H> {
+pub fn root_from(
+    mut cur: Vec<(usize, H)>,
+    depth: usize,
+    mut sib: impl FnMut() -> Option<H>,
+) -> Option<H> {
     for _ in 0..depth {
         let mut next = Vec::with_capacity(cur.len());
         let mut i = 0;
@@ -92,7 +96,14 @@ pub fn root_from(mut cur: Vec<(usize, H)>, depth: usize, mut sib: impl FnMut() -
                 i += 2;
             } else {
                 let s = sib()?;
-                next.push((x / 2, if x % 2 == 0 { node(&h, &s) } else { node(&s, &h) }));
+                next.push((
+                    x / 2,
+                    if x % 2 == 0 {
+                        node(&h, &s)
+                    } else {
+                        node(&s, &h)
+                    },
+                ));
                 i += 1;
             }
         }
@@ -110,10 +121,18 @@ mod tests {
         let n = 1000;
         let leaves: Vec<H> = (0..n as u32).map(|i| keccak(&[&i.to_be_bytes()])).collect();
         let t = Tree::new(leaves.clone());
-        for idx in [vec![0usize], vec![3, 4, 5, 999], (0..n).step_by(7).collect::<Vec<_>>()] {
+        for idx in [
+            vec![0usize],
+            vec![3, 4, 5, 999],
+            (0..n).step_by(7).collect::<Vec<_>>(),
+        ] {
             let mp = t.multiproof(&idx);
             let mut it = mp.iter().copied();
-            let r = root_from(idx.iter().map(|&i| (i, leaves[i])).collect(), depth(n), || it.next());
+            let r = root_from(
+                idx.iter().map(|&i| (i, leaves[i])).collect(),
+                depth(n),
+                || it.next(),
+            );
             assert_eq!(r, Some(t.root()));
             assert!(it.next().is_none());
             let mut bad = leaves[idx[0]];
@@ -139,6 +158,11 @@ mod tests {
         assert_ne!(t.root(), keccak(&[&[TAG_ABSORB], &l, &r]));
         assert_ne!(t.root(), leaf(&l, &r));
         let tags = [TAG_LEAF, TAG_NODE, TAG_ABSORB, TAG_SQUEEZE, TAG_POW];
-        assert!(tags.iter().enumerate().all(|(i, a)| tags[i + 1..].iter().all(|b| a != b)) && !tags.contains(&b'S'));
+        assert!(
+            tags.iter()
+                .enumerate()
+                .all(|(i, a)| tags[i + 1..].iter().all(|b| a != b))
+                && !tags.contains(&b'S')
+        );
     }
 }

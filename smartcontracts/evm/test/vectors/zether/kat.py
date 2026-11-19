@@ -5,6 +5,7 @@ Chạy (cần py_ecc>=8 cho hash_to_G1): python3 test/vectors/zether/kat.py   (t
 schnorr_*.json cạnh file này. Forge test (ZetherKat.t.sol) đọc lại và so từng byte với Solidity.
 `--check`: không ghi gì, so file đã commit với bản sinh lại (exit 1 nếu lệch).
 """
+
 import hashlib
 import json
 import os
@@ -19,7 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 BN_P = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 BN_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617
-BLS_R = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
+BLS_R = 0x73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001
 GEN_DST = b"SCAAS-ZETHER-GEN-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_"
 
 
@@ -102,11 +103,18 @@ def generators(curve):
     H = [g("H", i) for i in range(64)]
     blob = h + u + b"".join(G) + b"".join(H)
     psid = keccak(
-        b"scaas/zether/sigma-bullets/bn254/n64-n64/v3" if curve == "bn254"
-        else b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v3")  # n_v = n_b = 64 (RS-NV64-1); v3: the 512-byte header with validUntilBlock, per-leg auditor randomness (review C0-1, C0-9)
+        b"scaas/zether/sigma-bullets/bn254/n64-n64/v3"
+        if curve == "bn254"
+        else b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"
+    )  # n_v = n_b = 64 (RS-NV64-1); v3: the 512-byte header with validUntilBlock, per-leg auditor randomness (review C0-1, C0-9)
     return {
-        "curve": curve, "proofSystemId": hx(psid), "h": hx(h), "U": hx(u),
-        "G": [hx(p) for p in G], "H": [hx(p) for p in H], "blobKeccak": hx(keccak(blob)),
+        "curve": curve,
+        "proofSystemId": hx(psid),
+        "h": hx(h),
+        "U": hx(u),
+        "G": [hx(p) for p in G],
+        "H": [hx(p) for p in H],
+        "blobKeccak": hx(keccak(blob)),
     }
 
 
@@ -120,8 +128,16 @@ def schnorr(curve, x, k, msg32):
     R = enc(mul(G, k))
     e = hash_to_scalar(keccak(b"SCAAS-ZETHER-SCHNORR-V1" + R + Y + msg32), r)
     z = (k + e * x) % r
-    return {"x": hx(be(x)), "Y": hx(Y), "msg": hx(msg32), "k": hx(be(k)), "R": hx(R),
-            "e": hx(be(e)), "z": hx(be(z)), "sig": hx(R + be(z))}
+    return {
+        "x": hx(be(x)),
+        "Y": hx(Y),
+        "msg": hx(msg32),
+        "k": hx(be(k)),
+        "R": hx(R),
+        "e": hx(be(e)),
+        "z": hx(be(z)),
+        "sig": hx(R + be(z)),
+    }
 
 
 def transcript_cases():
@@ -147,8 +163,10 @@ def transcript_cases():
             states.append(hx(st))
         cases.append({"curve": curve, "init": hx(t_init()), "ops": ops, "states": states, "challenges": chals})
     seeds = [bytes(32), b"\xff" * 32, keccak(b"scaas")]
-    h2s = [{"seed": hx(s), "bn254": hx(be(hash_to_scalar(s, BN_R))),
-            "bls12381": hx(be(hash_to_scalar(s, BLS_R)))} for s in seeds]
+    h2s = [
+        {"seed": hx(s), "bn254": hx(be(hash_to_scalar(s, BN_R))), "bls12381": hx(be(hash_to_scalar(s, BLS_R)))}
+        for s in seeds
+    ]
     return {"cases": cases, "hashToScalar": h2s}
 
 
@@ -157,7 +175,7 @@ def bls_non_subgroup():
     p = bls.field_modulus
     x = 5
     while True:
-        rhs = (x ** 3 + 4) % p
+        rhs = (x**3 + 4) % p
         y = pow(rhs, (p + 1) // 4, p)
         if y * y % p == rhs:
             pt = (bls.FQ(x), bls.FQ(y), bls.FQ(1))
@@ -193,10 +211,16 @@ if __name__ == "__main__":
     dump("generators_bls12381.json", generators("bls12381"))
     dump("transcript.json", transcript_cases())
     msg = keccak(b"scaas zether schnorr kat")
-    dump("schnorr_bn254.json", schnorr("bn254", 0x1234567890abcdef, 0xfeedface, msg))
-    dump("schnorr_bls12381.json", schnorr("bls12381", 0x1234567890abcdef, 0xfeedface, msg))
-    dump("curve_misc.json", {"blsNonSubgroup": hx(bls_non_subgroup()),
-                             "bn254G2Sk": hx(be(0xB15B254)), "bn254G2Pk": hx(bn254_g2_pubkey(0xB15B254))})
+    dump("schnorr_bn254.json", schnorr("bn254", 0x1234567890ABCDEF, 0xFEEDFACE, msg))
+    dump("schnorr_bls12381.json", schnorr("bls12381", 0x1234567890ABCDEF, 0xFEEDFACE, msg))
+    dump(
+        "curve_misc.json",
+        {
+            "blsNonSubgroup": hx(bls_non_subgroup()),
+            "bn254G2Sk": hx(be(0xB15B254)),
+            "bn254G2Pk": hx(bn254_g2_pubkey(0xB15B254)),
+        },
+    )
     if STALE:
         sys.exit("stale: " + ", ".join(STALE))
     print("ok")

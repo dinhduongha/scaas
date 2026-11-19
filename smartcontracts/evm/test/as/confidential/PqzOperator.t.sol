@@ -33,7 +33,10 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
         tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(c), "pop"));
         w = WrappedPqzToken(payable(address(tok)));
         vm.prank(ownerA);
-        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK), EnvKit.codeUidOf(address(IGovernance(address(tok)))));
+        IGovernance(address(tok))
+            .grantRole(
+                GovernanceBits.OPERATOR_TRANSFER, nid(CLERK), EnvKit.codeUidOf(address(IGovernance(address(tok))))
+            );
         _shieldTo(alice, 300);
         _pub(address(this), PUBLIC);
         tok.transferToUA(alice, PUBLIC);
@@ -59,7 +62,9 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
 
         assertEq(tok.balanceOfUA(alice), PUBLIC - 20_000, "the public balance");
         assertEq(tok.balanceOf(BENEFICIARY), 20_000);
-        assertEq(keccak256(abi.encode(tok.pqzAccount(alice, 0))), keccak256(abi.encode(before)), "the Account unchanged");
+        assertEq(
+            keccak256(abi.encode(tok.pqzAccount(alice, 0))), keccak256(abi.encode(before)), "the Account unchanged"
+        );
         assertEq(tok.pqzAcc(alice, 0), acc, "acc unchanged");
         assertEq(tok.pqzPending(alice, 0, 0), p0, "the pending entry unchanged");
         assertEq(tok.totalShielded(), shielded);
@@ -79,9 +84,13 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
 }
 
 contract PqzOperator12Test is PqzOperatorSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract PqzOperator13Test is PqzOperatorSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

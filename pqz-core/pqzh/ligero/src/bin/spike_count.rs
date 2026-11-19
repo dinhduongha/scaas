@@ -6,12 +6,20 @@
 
 use pqzh_ligero::client::{inputs, rel_name, setup};
 use pqzh_ligero::fq::spike_count;
-use pqzh_ligero::{Params, RELS, Rel, multi_rels, prove, verify};
+use pqzh_ligero::{multi_rels, prove, verify, Params, Rel, RELS};
 
 fn main() {
     let p = Params::proven();
     let s = setup();
-    println!("{{\"set\": \"{}\", \"n\": {}, \"k\": {}, \"t\": {}, \"ell\": {}, \"n2\": {}}}", pqzh_ligero::set::NAME, p.n, p.k, p.t, p.ell, p.n2());
+    println!(
+        "{{\"set\": \"{}\", \"n\": {}, \"k\": {}, \"t\": {}, \"ell\": {}, \"n2\": {}}}",
+        pqzh_ligero::set::NAME,
+        p.n,
+        p.k,
+        p.t,
+        p.ell,
+        p.n2()
+    );
     for r in RELS.iter().map(|&f| Rel::Form(f)).chain(multi_rels()) {
         let (st, w) = inputs(&s, r);
         spike_count::take();

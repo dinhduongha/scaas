@@ -4,10 +4,28 @@
 `scripts/gen_vectors.py` (306 bytes with the label). Native signature: `ed25519verify_bare` over the wallet sign-bytes
 form `SIGN_PREFIX ‖ text` by the address's current authority. `payId` / `payLane` / `ref`: the EVM derivation.
 """
+
 import typing
 
-from algopy import (Account, Application, BigUInt, Bytes, FixedBytes, Global, OpUpFeeSource, TransactionType, Txn, UInt64, arc4,
-                    ensure_budget, gtxn, itxn, op, subroutine, urange)
+from algopy import (
+    Account,
+    Application,
+    BigUInt,
+    Bytes,
+    FixedBytes,
+    Global,
+    OpUpFeeSource,
+    TransactionType,
+    Txn,
+    UInt64,
+    arc4,
+    ensure_budget,
+    gtxn,
+    itxn,
+    op,
+    subroutine,
+    urange,
+)
 
 Bytes32 = FixedBytes[typing.Literal[32]]
 
@@ -19,7 +37,7 @@ SIGN_PREFIX = b"MX"  # the wallet sign-bytes prefix (ARC-60 style), the one plac
 # group's fee credit (the relayer's fee pooling), never from an app's balance. Costs measured (limits log).
 TAIL = 1000
 COST_NATIVE = 2300  # "MX" ‖ text(d) and ed25519verify_bare (1,900)
-COST_ENTRY = 1500   # an account entry's work before its first signature check (op digest, record, key data)
+COST_ENTRY = 1500  # an account entry's work before its first signature check (op digest, record, key data)
 
 KIND_ADDRESS = 0  # holder kinds (vectors: 0 = a native address, its 32-byte key; 1 = a UA id)
 KIND_UA = 1
@@ -40,10 +58,12 @@ OP_CANCEL_RECOVERY = 12
 OP_CANCEL = 14
 OP_INVALIDATE_NONCES = 15
 ARC4_TRUE = b"\x15\x1f\x7c\x75\x80"  # an ABI `bool` return log: the return prefix ‖ true
-VERIFY = "verify(uint8,byte[32],byte[32],byte[])bool"          # a value op (POLICY_PASSKEY_FOR_VALUE)
+VERIFY = "verify(uint8,byte[32],byte[32],byte[])bool"  # a value op (POLICY_PASSKEY_FOR_VALUE)
 VERIFY_KEY = "verify_key(uint8,byte[32],byte[32],byte[])bool"  # an op that moves no value (revoke, cancel, invalidate)
-METAOP_ABI = ("(byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],uint64,"
-              "uint64,byte[32])")
+METAOP_ABI = (
+    "(byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],uint64,"
+    "uint64,byte[32])"
+)
 MTX_PAY = "mtx_pay(" + METAOP_ABI + ",byte[],address)void"
 RELAY = "relay(uint64," + METAOP_ABI + ",byte[])void"  # the router's entry (T15): the executor's next transaction
 
@@ -73,6 +93,7 @@ class Order(arc4.Struct, frozen=True):
     =` the DEX app address, `amount = sell_amount`, `extra = sha256(ARC-4(order))`. Fill-or-kill: a fill moves the
     whole `sell_amount` and pays at least `min_buy` of `buy_token`. `relayer`: the settle submitter (CTR-DEX-09), zero
     = any. `expiry` in seconds; no leg moves after it."""
+
     sell_token: arc4.UInt64  # token app ids
     buy_token: arc4.UInt64
     sell_amount: arc4.UInt128
@@ -166,8 +187,9 @@ def mbr_payment() -> UInt64:
     if Txn.group_index > 0:
         p = gtxn.Transaction(Txn.group_index - 1)
         if p.type == TransactionType.Payment and p.receiver == Global.current_application_address:
-            assert p.close_remainder_to == Global.zero_address and p.rekey_to == Global.zero_address, \
+            assert p.close_remainder_to == Global.zero_address and p.rekey_to == Global.zero_address, (
                 "MBR payment must not close or rekey"
+            )
             assert p.amount > 0, "MBR payment must equal the new boxes' MBR exactly"
             return p.amount
     return UInt64(0)
@@ -196,8 +218,8 @@ def account_call(account_app: UInt64, method: Bytes, h: Holder, d: Bytes32, auth
     forwarded MBR payment when there is one; the call must answer true."""
     app = Application(account_app)
     call = itxn.ApplicationCall(
-        app_id=app, fee=0,
-        app_args=(method, h.kind.bytes, h.id.bytes, d.bytes, arc4.DynamicBytes(auth).bytes))
+        app_id=app, fee=0, app_args=(method, h.kind.bytes, h.id.bytes, d.bytes, arc4.DynamicBytes(auth).bytes)
+    )
     if forwarded:
         _pay, res = itxn.submit_txns(itxn.Payment(receiver=app.address, amount=forwarded, fee=0), call)
         assert res.last_log == ARC4_TRUE, "bad signature"

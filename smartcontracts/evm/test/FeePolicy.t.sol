@@ -21,9 +21,7 @@ contract FeePolicyTest is Test {
     function test_fixedFeeObeysTheOnePercentCap() public {
         assertEq(FeePolicy.compute(FeeMode.FIXED, 1_000_000, 10_000), 10_000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000)
-        );
+        vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000));
         this.callCompute(FeeMode.FIXED, 1_000_000, 10_001);
     }
 
@@ -32,9 +30,7 @@ contract FeePolicyTest is Test {
         // thành nhánh duy nhất được bảo vệ.
         assertEq(FeePolicy.compute(FeeMode.PERCENT, 1_000_000, 10_000), 10_000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000)
-        );
+        vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000));
         this.callCompute(FeeMode.PERCENT, 1_000_000, 10_001);
     }
 
@@ -57,13 +53,12 @@ contract FeePolicyTest is Test {
     /// revert — nếu không thì `0x30` hôm nay bị bỏ qua và ngữ nghĩa của nó ngày mai
     /// bị khoá chết bởi những chữ ký đã phát hành.
     function test_feeModeLivesInTheSecondNibble() public pure {
-        assertEq(uint8(MetaTxLib.feeModeOf(MetaTxLib.MODE_FEE_NONE)),    uint8(FeeMode.NONE));
+        assertEq(uint8(MetaTxLib.feeModeOf(MetaTxLib.MODE_FEE_NONE)), uint8(FeeMode.NONE));
         assertEq(uint8(MetaTxLib.feeModeOf(MetaTxLib.MODE_FEE_PERCENT)), uint8(FeeMode.PERCENT));
-        assertEq(uint8(MetaTxLib.feeModeOf(MetaTxLib.MODE_FEE_FIXED)),   uint8(FeeMode.FIXED));
+        assertEq(uint8(MetaTxLib.feeModeOf(MetaTxLib.MODE_FEE_FIXED)), uint8(FeeMode.FIXED));
         // Nửa byte đầu không ảnh hưởng nửa byte sau, và ngược lại.
         assertEq(
-            uint8(MetaTxLib.feeModeOf(MetaTxLib.MODE_FEE_FIXED | MetaTxLib.MODE_RESTRICT_RELAYER)),
-            uint8(FeeMode.FIXED)
+            uint8(MetaTxLib.feeModeOf(MetaTxLib.MODE_FEE_FIXED | MetaTxLib.MODE_RESTRICT_RELAYER)), uint8(FeeMode.FIXED)
         );
     }
 
@@ -81,7 +76,9 @@ contract FeePolicyTest is Test {
         this.callCheckEnvelope(MetaTxLib.MODE_FEE_FIXED); // control: a known mode passes
     }
 
-    function callFeeModeOf(uint32 m) external pure returns (FeeMode) { return MetaTxLib.feeModeOf(m); }
+    function callFeeModeOf(uint32 m) external pure returns (FeeMode) {
+        return MetaTxLib.feeModeOf(m);
+    }
 
     function callCheckEnvelope(uint32 m) external view {
         MtxPipelineLib._checkEnvelope(bytes32(uint256(1)), 0, 0, type(uint256).max, m, address(0));

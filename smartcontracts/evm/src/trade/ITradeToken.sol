@@ -15,18 +15,18 @@ interface ITradeToken {
     ///         token takes it (T6). `nonce` is not consumed per fill: it is the cancel handle of its lane (`batch`,
     ///         distinct from the meta-tx lane of the same name).
     struct TradeOrder {
-        address from;          // signer; this token's balance is sold
-        address receiveToken;  // what the signer receives
-        uint256 amount;        // at most this much of THIS token in total
+        address from; // signer; this token's balance is sold
+        address receiveToken; // what the signer receives
+        uint256 amount; // at most this much of THIS token in total
         uint256 receiveAmount; // signed price limit: `amount` for at least `receiveAmount` (gross, before the DEX fee)
-        uint256 minFill;       // per settlement, unless the fill closes the remainder; = amount => fill-or-kill (CTR-DEX-14)
-        uint256 fee;           // DEX fee rate in ppm on what the signer receives; <= 10 000 (1 %)
-        address relayer;       // the only submitter allowed (0 = anyone)
-        address dex;           // the only contract that may pull, and the only recipient; a contract
-        address destination;   // receives the proceeds in receiveToken; 0 = from
-        uint8 flags;           // IOC 1 | ESCROW 2 (Path B; implies IOC) | LISTED_POOLS 4 (not read by the token)
-        uint256 batch;         // order lane (minNonce)
-        uint256 nonce;         // valid while nonce >= minNonce[from][batch]
+        uint256 minFill; // per settlement, unless the fill closes the remainder; = amount => fill-or-kill (CTR-DEX-14)
+        uint256 fee; // DEX fee rate in ppm on what the signer receives; <= 10 000 (1 %)
+        address relayer; // the only submitter allowed (0 = anyone)
+        address dex; // the only contract that may pull, and the only recipient; a contract
+        address destination; // receives the proceeds in receiveToken; 0 = from
+        uint8 flags; // IOC 1 | ESCROW 2 (Path B; implies IOC) | LISTED_POOLS 4 (not read by the token)
+        uint256 batch; // order lane (minNonce)
+        uint256 nonce; // valid while nonce >= minNonce[from][batch]
         uint256 validUntil;
     }
 
@@ -46,7 +46,7 @@ interface ITradeToken {
         address dex;
         bytes32 destination; // receives the proceeds in receiveToken (a derived id: by `transferToUA`); 0 = from
         uint8 flags;
-        uint256 batch;       // order lane: one `minNonce` per id
+        uint256 batch; // order lane: one `minNonce` per id
         uint256 nonce;
         uint256 validUntil;
     }
@@ -88,33 +88,35 @@ interface ITradeToken {
     ///         address zero-padded). Executes once, whole; every SCaaS input token recomputes the digest with
     ///         `verifyingContract = msg.sender` and verifies it itself (`mtxLiquidityPull`).
     struct LiquidityOrder {
-        bytes32 from;              // the signer
-        LiquidityToken[] inputs;   // ERC-20s the signer gives: each pulled at most `amount` (> 0); 0..8, distinct
-        LiquidityToken[] outputs;  // ERC-20s the signer receives: each at least `amount` at the DEX after the fee; 0..8
-        address positionManager;   // the ERC-721 position contract; 0 = no position in this order
-        address positionReader;    // the listed reader of `positionManager`; set iff a position is received
-        uint256 positionIn;        // a position the signer gives; 0 = none
-        bytes32 positionPool;      // the pool of the position received, in the reader's terms; 0 = none received
-        int24 tickLower;           // its range; both 0 when none is received
+        bytes32 from; // the signer
+        LiquidityToken[] inputs; // ERC-20s the signer gives: each pulled at most `amount` (> 0); 0..8, distinct
+        LiquidityToken[] outputs; // ERC-20s the signer receives: each at least `amount` at the DEX after the fee; 0..8
+        address positionManager; // the ERC-721 position contract; 0 = no position in this order
+        address positionReader; // the listed reader of `positionManager`; set iff a position is received
+        uint256 positionIn; // a position the signer gives; 0 = none
+        bytes32 positionPool; // the pool of the position received, in the reader's terms; 0 = none received
+        int24 tickLower; // its range; both 0 when none is received
         int24 tickUpper;
-        uint128 minLiquidity;      // its liquidity after the plan, at least this; > 0 when a position is received
-        bytes32 recipient;         // receives every output and the received position; 0 = from
-        uint256 fee;               // DEX fee rate in ppm on every ERC-20 output; <= 10 000 (1 %)
-        address relayer;           // the only submitter allowed (0 = anyone)
-        uint8 flags;               // LISTED_POOLS (4) only
-        uint256 batch;             // order lane: the DEX's and each SCaaS input token's `minNonce[from][batch]`
-        uint256 nonce;             // valid while >= every lane floor it is checked against; < 2^128
+        uint128 minLiquidity; // its liquidity after the plan, at least this; > 0 when a position is received
+        bytes32 recipient; // receives every output and the received position; 0 = from
+        uint256 fee; // DEX fee rate in ppm on every ERC-20 output; <= 10 000 (1 %)
+        address relayer; // the only submitter allowed (0 = anyone)
+        uint8 flags; // LISTED_POOLS (4) only
+        uint256 batch; // order lane: the DEX's and each SCaaS input token's `minNonce[from][batch]`
+        uint256 nonce; // valid while >= every lane floor it is checked against; < 2^128
         uint256 validUntil;
     }
 
     /// @notice Raised by `TradeLib` on the DEX's outside legs only (no SCaaS token emits them after T6, R18).
-    event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
-        uint256 dexFee);
+    event TradeFilled(
+        bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee
+    );
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
     /// @notice The token's trade events (R18): every subject, a native signer zero-padded.
-    event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill,
-        uint256 dexFee);
+    event UATradeFilled(
+        bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee
+    );
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
     event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
     /// @notice `o.dex` gave back `amount` of what it pulled for `h` in this transaction (DX7: a hybrid's unsold
@@ -184,8 +186,12 @@ interface ILiquidityPullToken {
     /// @notice Only a liquidity-capable DEX calls (a direct read of the caller, T1, T7); moves exactly `amount` of this token
     ///         from `o.from` to the caller, once per order (`pulled[h]`), after the UA rule under purpose `trade` over the
     ///         digest this token computes itself with `verifyingContract = msg.sender`.
-    function mtxLiquidityPull(ITradeToken.LiquidityOrder calldata o, IUARegistry.UASig calldata auth, uint256 amount,
-        address submitter) external;
+    function mtxLiquidityPull(
+        ITradeToken.LiquidityOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        uint256 amount,
+        address submitter
+    ) external;
 }
 
 /// @title The DEX's digest view of a liquidity order, read by a token's capability check (T7). It takes no guard.

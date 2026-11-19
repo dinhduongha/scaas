@@ -11,7 +11,10 @@
 //! `vectors` only. UNAUDITED.
 //!
 //! [`Wallet::pqz_scoped_key`]: crate::wallet::Wallet::pqz_scoped_key
-use super::{entry_hash, open_kem_seed, opening_blob, own_tag, scoped_key_seed, slot_marked, slot_trivial, Layout};
+use super::{
+    entry_hash, open_kem_seed, opening_blob, own_tag, scoped_key_seed, slot_marked, slot_trivial,
+    Layout,
+};
 use crate::facade::pqz_pack::{unpack, B};
 use crate::keccak;
 use crate::wallet::{self, Error, Handle, KeyId, SecretStore};
@@ -190,7 +193,9 @@ pub struct Registration {
 }
 
 /// See the module. Made by [`crate::wallet::Wallet::pqz_scoped_key`] (and, under `vectors`, by its test constructors).
-#[cfg_attr(not(feature = "vectors"), doc = r#"
+#[cfg_attr(
+    not(feature = "vectors"),
+    doc = r#"
 A release build names no raw-seed entry point and no closure that takes the seed (T21 O5; positive control first):
 ```
 let s = scaas_ua::pqz3k::Scope { account: 0, index: 0, ua: [0; 32], chain_uid: [0; 32], token: None, version: 0 };
@@ -218,7 +223,8 @@ let _ = scaas_ua::pqz3k::open_kem_seed(&[0; 64], &[0; 32], &[0; 32], None, 0);
 ```compile_fail,E0603
 let _ = scaas_ua::pqz3k::pqz_token_key_seed_without_opening(&[0; 64], 0, 0, &[0; 32], &[0; 20], 0);
 ```
-"#)]
+"#
+)]
 pub struct PqzKeyHandle {
     class: KeyClass,
     scope: [u8; 20],
@@ -243,8 +249,14 @@ fn secrets(seed: &[u8; 64], s: &Scope) -> Zeroizing<Vec<u8>> {
 
 /// `pk ‖ kemPk` of a slot's secrets (public).
 fn publics(secret: &[u8]) -> wallet::Result<Vec<u8>> {
-    let seed32: &[u8; 32] = secret.get(SEED).and_then(|s| s.try_into().ok()).ok_or(Error::Argument)?;
-    let ok: &[u8; 96] = secret.get(OPEN_KEM).and_then(|s| s.try_into().ok()).ok_or(Error::Argument)?;
+    let seed32: &[u8; 32] = secret
+        .get(SEED)
+        .and_then(|s| s.try_into().ok())
+        .ok_or(Error::Argument)?;
+    let ok: &[u8; 96] = secret
+        .get(OPEN_KEM)
+        .and_then(|s| s.try_into().ok())
+        .ok_or(Error::Argument)?;
     let key = pqzl::keygen(seed32).ok_or(Error::Argument)?;
     Ok([&key.pk[..], &op::open_kem_pk(ok)].concat())
 }
@@ -262,27 +274,41 @@ pub(crate) fn derive(store: &Arc<SecretStore>, s: &Scope) -> wallet::Result<PqzK
 }
 
 fn amount(d: &[u8; 16]) -> u64 {
-    d.iter().enumerate().map(|(i, x)| u64::from(*x) << (4 * i)).sum()
+    d.iter()
+        .enumerate()
+        .map(|(i, x)| u64::from(*x) << (4 * i))
+        .sum()
 }
 
 /// The 64-bit lanes of a stored part, exactly `L` bytes of them.
 fn lanes<const L: usize>(p: &[u8], what: &'static str) -> Result<Box<[u8; L]>, Refused> {
-    unpack(p).and_then(|v| v.into_boxed_slice().try_into().ok()).ok_or(Refused::Input(what))
+    unpack(p)
+        .and_then(|v| v.into_boxed_slice().try_into().ok())
+        .ok_or(Refused::Input(what))
 }
 
 /// `(uOff, vOff)` of a pending slot word `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`.
 fn offsets(slot: &[u8; 32]) -> (usize, usize) {
-    (usize::from(u16::from_be_bytes([slot[20], slot[21]])), usize::from(u16::from_be_bytes([slot[22], slot[23]])))
+    (
+        usize::from(u16::from_be_bytes([slot[20], slot[21]])),
+        usize::from(u16::from_be_bytes([slot[22], slot[23]])),
+    )
 }
 
 /// `c += x` lane-wise mod q (`x` 64-bit lanes, `< 2^B`).
 fn add(c: &mut [u64], x: &[u8]) {
-    c.iter_mut().zip(x.chunks_exact(8)).for_each(|(a, b)| *a = (*a + u64::from_be_bytes(b.try_into().expect("8 bytes"))) % Q);
+    c.iter_mut()
+        .zip(x.chunks_exact(8))
+        .for_each(|(a, b)| *a = (*a + u64::from_be_bytes(b.try_into().expect("8 bytes"))) % Q);
 }
 /// `c += Trivial(digits(amount))`: `v[i] += Δ·digit_i` mod q (`PqzCt.addTrivial`).
 fn add_trivial(c: &mut [u64], amount: u64) {
     let delta = DELTA.unsigned_abs();
-    c.iter_mut().skip(PK_BYTES / 8).take(16).enumerate().for_each(|(i, a)| *a = (*a + delta * ((amount >> (4 * i)) & 15)) % Q);
+    c.iter_mut()
+        .skip(PK_BYTES / 8)
+        .take(16)
+        .enumerate()
+        .for_each(|(i, a)| *a = (*a + delta * ((amount >> (4 * i)) & 15)) % Q);
 }
 
 impl PqzKeyHandle {
@@ -295,11 +321,31 @@ impl PqzKeyHandle {
         // the review's Codex 1 / Fable F7: the id binds the keys (pk, kemPk), the derivation path and the class, so an
         // acceptance of one handle is no acceptance of another key's
         let class_byte = [u8::from(class == KeyClass::OffchainToken) + 2];
-        let id = keccak(&[b"scaas.pqz3k.handle.v2", &class_byte, &s.account.to_be_bytes(), &s.index.to_be_bytes(), &s.chain_uid,
-            &scope, &s.ua, &s.version.to_be_bytes(), &keccak(&[pk]), &keccak(&[kem_pk])]);
-        Ok(Self { class, scope, ua: s.ua, chain_uid: s.chain_uid, version: s.version, id,
-            pk: Box::new(pk.try_into().map_err(|_| Error::Argument)?), kem_pk: kem_pk.to_vec(), secret,
-            loads: AtomicU32::new(0), keygens: AtomicU32::new(0) })
+        let id = keccak(&[
+            b"scaas.pqz3k.handle.v2",
+            &class_byte,
+            &s.account.to_be_bytes(),
+            &s.index.to_be_bytes(),
+            &s.chain_uid,
+            &scope,
+            &s.ua,
+            &s.version.to_be_bytes(),
+            &keccak(&[pk]),
+            &keccak(&[kem_pk]),
+        ]);
+        Ok(Self {
+            class,
+            scope,
+            ua: s.ua,
+            chain_uid: s.chain_uid,
+            version: s.version,
+            id,
+            pk: Box::new(pk.try_into().map_err(|_| Error::Argument)?),
+            kem_pk: kem_pk.to_vec(),
+            secret,
+            loads: AtomicU32::new(0),
+            keygens: AtomicU32::new(0),
+        })
     }
 
     pub fn class(&self) -> KeyClass {
@@ -336,9 +382,18 @@ impl PqzKeyHandle {
     /// `f` over a copy of `at` of the slot, under a read lease of the store for the copy's whole use (T21 L82): `lock()` waits
     /// for it; the copy is wiped, then the lease ends. `KeyRevoked` once the wallet was locked. `f` must not lock this wallet
     /// (it would wait for its own lease).
-    fn leased<R>(&self, at: core::ops::Range<usize>, f: impl FnOnce(&[u8]) -> Result<R, Refused>) -> Result<R, Refused> {
+    fn leased<R>(
+        &self,
+        at: core::ops::Range<usize>,
+        f: impl FnOnce(&[u8]) -> Result<R, Refused>,
+    ) -> Result<R, Refused> {
         let _lease = self.secret.lease();
-        let copy = self.secret.with(|s| s.get(at).map(|b| Zeroizing::new(b.to_vec()))).ok().flatten().ok_or(Refused::KeyRevoked)?;
+        let copy = self
+            .secret
+            .with(|s| s.get(at).map(|b| Zeroizing::new(b.to_vec())))
+            .ok()
+            .flatten()
+            .ok_or(Refused::KeyRevoked)?;
         wallet::copied();
         f(&copy)
     }
@@ -365,12 +420,15 @@ impl PqzKeyHandle {
             return Err(Refused::Input("a TRIVIAL entry: accepted without a check"));
         }
         if offsets(&c.slot) != (U_OFF, V_OFF) {
-            return Err(Refused::Input("the slot's offsets are not an op 1 credit's (16, 16 + P(u))"));
+            return Err(Refused::Input(
+                "the slot's offsets are not an op 1 credit's (16, 16 + P(u))",
+            ));
         }
         let Some((&0, data)) = c.code.split_first() else {
             return Err(Refused::Input("the blob's code starts with STOP"));
         };
-        let blob = opening_blob(data, LAYOUT).ok_or(Refused::Input("not an opening op 1 blob of this set"))?;
+        let blob = opening_blob(data, LAYOUT)
+            .ok_or(Refused::Input("not an opening op 1 blob of this set"))?;
         if !self.token_ok(&c.token) || blob.to_ua != self.ua || blob.kv[0] != self.version {
             return Err(Refused::NotThisHandle);
         }
@@ -379,30 +437,72 @@ impl PqzKeyHandle {
         let auditor = match (blob.pva, blob.o_a, c.auditor) {
             (Some(pva), Some(o_a), Some(a)) => {
                 let pk: Box<[u8; PK_BYTES]> =
-                    a.pk.to_vec().into_boxed_slice().try_into().map_err(|_| Refused::Input("the auditor's PQZ key length"))?;
+                    a.pk.to_vec()
+                        .into_boxed_slice()
+                        .try_into()
+                        .map_err(|_| Refused::Input("the auditor's PQZ key length"))?;
                 Some((a, pk, lanes::<128>(pva, "P(v_a)")?, o_a))
             }
-            (Some(_), _, None) => return Err(Refused::Input("an audited leg without the auditor's keys")),
+            (Some(_), _, None) => {
+                return Err(Refused::Input("an audited leg without the auditor's keys"))
+            }
             _ => None,
         };
         let content = entry_hash(c.index, &c.slot, Some(c.code));
         let digits = self.leased(OPEN_KEM, |ok| {
             let ok: &[u8; 96] = ok.try_into().map_err(|_| Refused::KeyRevoked)?;
-            let to = Party { ua: &self.ua, key_version: self.version, pk: &self.pk, kem_pk: &self.kem_pk, v: &v_t, opening: blob.o_t };
-            let aud = auditor.as_ref().map(|(a, pk, v_a, o_a)| Party { ua: &a.ua, key_version: blob.kv[1], pk, kem_pk: a.kem_pk, v: v_a,
-                opening: o_a });
-            Ok(op::check_recipient(ok, &op::Credit { chain_uid: &self.chain_uid, token: &c.token, u: &u, to, auditor: aud }))
+            let to = Party {
+                ua: &self.ua,
+                key_version: self.version,
+                pk: &self.pk,
+                kem_pk: &self.kem_pk,
+                v: &v_t,
+                opening: blob.o_t,
+            };
+            let aud = auditor.as_ref().map(|(a, pk, v_a, o_a)| Party {
+                ua: &a.ua,
+                key_version: blob.kv[1],
+                pk,
+                kem_pk: a.kem_pk,
+                v: v_a,
+                opening: o_a,
+            });
+            Ok(op::check_recipient(
+                ok,
+                &op::Credit {
+                    chain_uid: &self.chain_uid,
+                    token: &c.token,
+                    u: &u,
+                    to,
+                    auditor: aud,
+                },
+            ))
         })?;
         Ok(match digits {
-            Some(d) => Checked::Accepted(Accepted { handle: self.id, token: c.token, index: c.index, content }, amount(&d)),
-            None => Checked::Skip(Skip { index: c.index, entry_hash: content, reads: c.reads }),
+            Some(d) => Checked::Accepted(
+                Accepted {
+                    handle: self.id,
+                    token: c.token,
+                    index: c.index,
+                    content,
+                },
+                amount(&d),
+            ),
+            None => Checked::Skip(Skip {
+                index: c.index,
+                entry_hash: content,
+                reads: c.reads,
+            }),
         })
     }
 
     /// The skip marks a wallet may sign (Fable P2-1): every skip reproduced with reads at a finalized block from the node list in
     /// strict-majority mode, ascending; else `Unconfirmed` and no mark.
     pub fn marks(skips: &[Skip]) -> Result<Vec<u64>, Refused> {
-        if skips.iter().any(|s| !(s.reads.finalized && s.reads.strict_majority)) {
+        if skips
+            .iter()
+            .any(|s| !(s.reads.finalized && s.reads.strict_majority))
+        {
             return Err(Refused::Unconfirmed);
         }
         let mut m: Vec<u64> = skips.iter().map(|s| s.index).collect();
@@ -424,15 +524,24 @@ impl PqzKeyHandle {
             return Err(Refused::NotThisHandle);
         }
         let counter = match (d.last_debit, &d.own) {
-            (0, Some(_)) => return Err(Refused::Input("an own part on an account that never debited")),
-            (0, None) if d.window.is_empty() && d.shield_in == 0 => return Err(Refused::EmptyDebit),
+            (0, Some(_)) => {
+                return Err(Refused::Input(
+                    "an own part on an account that never debited",
+                ))
+            }
+            (0, None) if d.window.is_empty() && d.shield_in == 0 => {
+                return Err(Refused::EmptyDebit)
+            }
             (0, None) => None,
             (_, None) => return Err(Refused::OwnRequired),
             (n, Some(o)) => {
                 if o.pu.len() != LAYOUT.pkp || o.pvf.len() != LAYOUT.vp {
                     return Err(Refused::Input("the own part's P(u), P(v_f) lengths"));
                 }
-                Some(u32::try_from(n - 1).map_err(|_| Refused::Input("lastDebit − 1 at or above 2^32"))?)
+                Some(
+                    u32::try_from(n - 1)
+                        .map_err(|_| Refused::Input("lastDebit − 1 at or above 2^32"))?,
+                )
             }
         };
         if d.window.len() + 2 > K_MAX {
@@ -461,33 +570,61 @@ impl PqzKeyHandle {
     fn total(d: &Debit) -> Result<Vec<u8>, Refused> {
         let mut c = vec![0u64; CT_BYTES / 8];
         if let Some(o) = &d.own {
-            add(&mut c, &[&lanes::<PK_BYTES>(o.pu, "P(u_f)")?[..], &lanes::<128>(o.pvf, "P(v_f)")?[..]].concat());
+            add(
+                &mut c,
+                &[
+                    &lanes::<PK_BYTES>(o.pu, "P(u_f)")?[..],
+                    &lanes::<128>(o.pvf, "P(v_f)")?[..],
+                ]
+                .concat(),
+            );
         }
         for e in d.window {
             if slot_marked(&e.slot) {
                 continue;
             }
             if slot_trivial(&e.slot) {
-                add_trivial(&mut c, u64::from_be_bytes(e.slot[12..20].try_into().expect("8 bytes")));
+                add_trivial(
+                    &mut c,
+                    u64::from_be_bytes(e.slot[12..20].try_into().expect("8 bytes")),
+                );
                 continue;
             }
             let data = e.code.and_then(|c| c.get(1..)).ok_or(Refused::Window)?;
             let part = |at: usize, n: usize| data.get(at..at + n).ok_or(Refused::Window);
-            add(&mut c, &[&lanes::<PK_BYTES>(part(U_OFF, LAYOUT.pkp)?, "P(u)")?[..], &lanes::<128>(part(V_OFF, LAYOUT.vp)?, "P(v_t)")?[..]]
-                .concat());
+            add(
+                &mut c,
+                &[
+                    &lanes::<PK_BYTES>(part(U_OFF, LAYOUT.pkp)?, "P(u)")?[..],
+                    &lanes::<128>(part(V_OFF, LAYOUT.vp)?, "P(v_t)")?[..],
+                ]
+                .concat(),
+            );
         }
         add_trivial(&mut c, d.shield_in);
         Ok(c.iter().flat_map(|x| x.to_be_bytes()).collect())
     }
 
     /// The gates, `T`, then under the lease the own part's `ownTag` (constant time, T21 L42) and `f(seed32, T)`, counted.
-    fn debit<R>(&self, d: &Debit, f: impl FnOnce(&[u8; 32], &[u8]) -> Result<R, Refused>) -> Result<R, Refused> {
+    fn debit<R>(
+        &self,
+        d: &Debit,
+        f: impl FnOnce(&[u8; 32], &[u8]) -> Result<R, Refused>,
+    ) -> Result<R, Refused> {
         let counter = self.gate(d)?;
         let t = Self::total(d)?;
         self.leased(SEED, |s| {
             let seed: &[u8; 32] = s.try_into().map_err(|_| Refused::KeyRevoked)?;
             if let (Some(own), Some(ctr)) = (&d.own, counter) {
-                let want = own_tag(seed, &self.chain_uid, &d.token, &self.ua, ctr, own.pu, own.pvf);
+                let want = own_tag(
+                    seed,
+                    &self.chain_uid,
+                    &d.token,
+                    &self.ua,
+                    ctr,
+                    own.pu,
+                    own.pvf,
+                );
                 if !bool::from(want.ct_eq(&own.own_tag)) {
                     return Err(Refused::OwnTag);
                 }
@@ -505,11 +642,19 @@ impl PqzKeyHandle {
         self.debit(d, |seed, t| {
             let key = pqzl::keygen(seed).ok_or(Refused::Input("the key"))?;
             let ct: &[u8; CT_BYTES] = t.try_into().map_err(|_| Refused::Input("T"))?;
-            let (m, mut noise) = pqzl::dec(&key.s, ct).ok_or(Refused::Input("T does not decrypt to an amount"))?;
+            let (m, mut noise) =
+                pqzl::dec(&key.s, ct).ok_or(Refused::Input("T does not decrypt to an amount"))?;
             noise.zeroize();
-            let balance = m.iter().rev().try_fold(0i128, |a, &x| a.checked_mul(16)?.checked_add(i128::from(x)))
-                .and_then(|v| u64::try_from(v).ok()).ok_or(Refused::Input("T does not decrypt to an amount"))?;
-            Ok(OpenedDebit { t: t.to_vec(), balance })
+            let balance = m
+                .iter()
+                .rev()
+                .try_fold(0i128, |a, &x| a.checked_mul(16)?.checked_add(i128::from(x)))
+                .and_then(|v| u64::try_from(v).ok())
+                .ok_or(Refused::Input("T does not decrypt to an amount"))?;
+            Ok(OpenedDebit {
+                t: t.to_vec(),
+                balance,
+            })
         })
     }
 
@@ -519,21 +664,43 @@ impl PqzKeyHandle {
     /// `Input`) with randomness from the OS RNG. Counted in [`Self::keygens`].
     pub fn prove_reg(&self, proof_system_id: &[u8; 32]) -> Result<Registration, Refused> {
         self.live()?;
-        let rnd = crate::facade::pqz::os32().map_err(|_| Refused::Input("the OS random number generator"))?;
+        let rnd = crate::facade::pqz::os32()
+            .map_err(|_| Refused::Input("the OS random number generator"))?;
         self.reg(proof_system_id, &rnd)
     }
 
     fn reg(&self, id: &[u8; 32], rnd: &[u8; 32]) -> Result<Registration, Refused> {
         self.live()?;
-        let pqz_key_hash = crate::key_hash_of(crate::PQZ_SCHEME, &self.pk[..]).ok().flatten().ok_or(Refused::Input("the PQZ key"))?;
-        let class = if self.class == KeyClass::OffchainToken { 3 } else { 2 };
-        let digest = super::scoped_key_digest(&self.ua, class, &self.chain_uid, &self.scope, self.version, &pqz_key_hash);
-        let message = crate::ua_message(crate::PQZ_SCHEME, &super::purpose_pqz_scoped_key(), &digest).map_err(|_| Refused::Input("the message"))?;
+        let pqz_key_hash = crate::key_hash_of(crate::PQZ_SCHEME, &self.pk[..])
+            .ok()
+            .flatten()
+            .ok_or(Refused::Input("the PQZ key"))?;
+        let class = if self.class == KeyClass::OffchainToken {
+            3
+        } else {
+            2
+        };
+        let digest = super::scoped_key_digest(
+            &self.ua,
+            class,
+            &self.chain_uid,
+            &self.scope,
+            self.version,
+            &pqz_key_hash,
+        );
+        let message =
+            crate::ua_message(crate::PQZ_SCHEME, &super::purpose_pqz_scoped_key(), &digest)
+                .map_err(|_| Refused::Input("the message"))?;
         self.leased(SEED, |s| {
             let (stmt, proof) = crate::facade::pqz::register_proof(s, id, &message, rnd)
                 .map_err(|_| Refused::Input("a proof system of another build"))?;
             self.keygens.fetch_add(1, Ordering::SeqCst);
-            Ok(Registration { pqz_key_hash, message, stmt, proof })
+            Ok(Registration {
+                pqz_key_hash,
+                message,
+                stmt,
+                proof,
+            })
         })
     }
 }
@@ -548,14 +715,25 @@ impl PqzKeyHandle {
     pub fn vectors_from_seed(seed: &[u8; 64], s: &Scope) -> wallet::Result<Self> {
         Self::vectors_of(secrets(seed, s), s)
     }
-    pub fn vectors_from_secrets(seed32: &[u8; 32], open_kem_seed: &[u8; 96], s: &Scope) -> wallet::Result<Self> {
-        Self::vectors_of(Zeroizing::new([&seed32[..], &open_kem_seed[..]].concat()), s)
+    pub fn vectors_from_secrets(
+        seed32: &[u8; 32],
+        open_kem_seed: &[u8; 96],
+        s: &Scope,
+    ) -> wallet::Result<Self> {
+        Self::vectors_of(
+            Zeroizing::new([&seed32[..], &open_kem_seed[..]].concat()),
+            s,
+        )
     }
     fn vectors_of(sec: Zeroizing<Vec<u8>>, s: &Scope) -> wallet::Result<Self> {
         let public = publics(&sec)?;
         Self::of(SecretStore::single(&sec)?, &public, s)
     }
-    pub fn with_secret_debit<R>(&self, d: &Debit, f: impl FnOnce(&[u8; 32], &[u8]) -> R) -> Result<R, Refused> {
+    pub fn with_secret_debit<R>(
+        &self,
+        d: &Debit,
+        f: impl FnOnce(&[u8; 32], &[u8]) -> R,
+    ) -> Result<R, Refused> {
         self.debit(d, |s, t| Ok(f(s, t)))
     }
     pub fn with_secret_keygen<R>(&self, f: impl FnOnce(&[u8; 32]) -> R) -> Result<R, Refused> {
@@ -566,14 +744,21 @@ impl PqzKeyHandle {
             Ok(f(seed))
         })
     }
-    pub fn vectors_prove_reg(&self, proof_system_id: &[u8; 32], rnd32: &[u8; 32]) -> Result<Registration, Refused> {
+    pub fn vectors_prove_reg(
+        &self,
+        proof_system_id: &[u8; 32],
+        rnd32: &[u8; 32],
+    ) -> Result<Registration, Refused> {
         self.reg(proof_system_id, rnd32)
     }
 }
 
 impl core::fmt::Debug for PqzKeyHandle {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("PqzKeyHandle").field("class", &self.class).field("scope", &self.scope).field("version", &self.version)
+        f.debug_struct("PqzKeyHandle")
+            .field("class", &self.class)
+            .field("scope", &self.scope)
+            .field("version", &self.version)
             .finish_non_exhaustive()
     }
 }

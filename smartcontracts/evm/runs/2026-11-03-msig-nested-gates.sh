@@ -14,7 +14,8 @@ STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n28
 FAMILIES="ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban"
 # "<step>|<form>|<name>": every test added from origin/main (73494fe9) to HEAD in the contracts, node and ua-rs (test functions found in the diff), clientkeys'
 # new titles, in the tool's pass form (forms: see the base runner). The ua-py ... ua-dart-frb rows are the client round's own.
-NEW_TESTS=$(cat <<'NAMES'
+NEW_TESTS=$(
+    cat <<'NAMES'
 forge|forge|test_authorize_registryWithoutCodeRefuses
 forge|forge|test_authorize_lowLevelAnswersAsTheTypedCall
 forge|forge|test_groupKindIsAnMsigMember

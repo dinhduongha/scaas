@@ -36,13 +36,18 @@ contract AdminChainWordTest is Test {
     // ------------------------------------------------------------------ fixtures (`AdminNames.t.sol`'s)
 
     function _clone(address impl) internal returns (address) {
-        return EnvKit.clone(impl, EnvKit.env(UID, address(0x5Ca0000000000000000000000000000000000003),
-            address(0), false, address(0)));
+        return EnvKit.clone(
+            impl, EnvKit.env(UID, address(0x5Ca0000000000000000000000000000000000003), address(0), false, address(0))
+        );
     }
 
     function _kind(string memory name, uint8 kind) internal returns (address t) {
         bytes memory core = kind >= 8 ? regArgs() : bytes("");
-        t = _clone(vm.deployCode(string.concat(name, ".sol:", name), abi.encode(address(this), kindArgs(kind, address(this), core))));
+        t = _clone(
+            vm.deployCode(
+                string.concat(name, ".sol:", name), abi.encode(address(this), kindArgs(kind, address(this), core))
+            )
+        );
     }
 
     function _dex() internal returns (address) {
@@ -96,31 +101,56 @@ contract AdminChainWordTest is Test {
         _seat(t, bit);
         IGovernance g = IGovernance(t);
         // grantRole: the admin, then the word
-        _refused(string.concat(name, " grantRole stranger"), t, STRANGER,
-            abi.encodeCall(g.grantRole, (bit, H, SIB)), _notAdmin(STRANGER));
+        _refused(
+            string.concat(name, " grantRole stranger"),
+            t,
+            STRANGER,
+            abi.encodeCall(g.grantRole, (bit, H, SIB)),
+            _notAdmin(STRANGER)
+        );
         _refused(string.concat(name, " grantRole"), t, A1, abi.encodeCall(g.grantRole, (bit, H, SIB)), _mismatch());
         assertFalse(g.hasRole(bit, H), string.concat(name, ": nothing granted"));
         _noOld(string.concat(name, " grantRole"), t, "grantRole(uint8,bytes32)");
         _ok(string.concat(name, " grantRole"), t, A1, abi.encodeCall(g.grantRole, (bit, H, UID)));
         assertTrue(g.hasRole(bit, H), string.concat(name, ": granted with the own word"));
         // setGrant: a stranger NotAdmin first, the admin's word
-        _refused(string.concat(name, " setGrant stranger"), t, STRANGER,
-            abi.encodeCall(g.setGrant, (bit, L, _open(), SIB)), _notAdmin(STRANGER));
-        _refused(string.concat(name, " setGrant"), t, A1, abi.encodeCall(g.setGrant, (bit, L, _open(), SIB)), _mismatch());
+        _refused(
+            string.concat(name, " setGrant stranger"),
+            t,
+            STRANGER,
+            abi.encodeCall(g.setGrant, (bit, L, _open(), SIB)),
+            _notAdmin(STRANGER)
+        );
+        _refused(
+            string.concat(name, " setGrant"), t, A1, abi.encodeCall(g.setGrant, (bit, L, _open(), SIB)), _mismatch()
+        );
         assertFalse(g.hasRole(bit, L), string.concat(name, ": nothing set"));
-        _noOld(string.concat(name, " setGrant"), t,
-            "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))");
+        _noOld(
+            string.concat(name, " setGrant"),
+            t,
+            "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))"
+        );
         _ok(string.concat(name, " setGrant"), t, A1, abi.encodeCall(g.setGrant, (bit, L, _open(), UID)));
         assertTrue(g.hasRole(bit, L), string.concat(name, ": set with the own word"));
         // cancelGrant (no pending: a no-op once the word passes)
-        _refused(string.concat(name, " cancelGrant stranger"), t, STRANGER,
-            abi.encodeCall(g.cancelGrant, (bit, H, SIB)), _notAdmin(STRANGER));
+        _refused(
+            string.concat(name, " cancelGrant stranger"),
+            t,
+            STRANGER,
+            abi.encodeCall(g.cancelGrant, (bit, H, SIB)),
+            _notAdmin(STRANGER)
+        );
         _refused(string.concat(name, " cancelGrant"), t, A1, abi.encodeCall(g.cancelGrant, (bit, H, SIB)), _mismatch());
         _noOld(string.concat(name, " cancelGrant"), t, "cancelGrant(uint8,bytes32)");
         _ok(string.concat(name, " cancelGrant"), t, A1, abi.encodeCall(g.cancelGrant, (bit, H, UID)));
         // revokeRole
-        _refused(string.concat(name, " revokeRole stranger"), t, STRANGER,
-            abi.encodeCall(g.revokeRole, (bit, H, SIB)), _notAdmin(STRANGER));
+        _refused(
+            string.concat(name, " revokeRole stranger"),
+            t,
+            STRANGER,
+            abi.encodeCall(g.revokeRole, (bit, H, SIB)),
+            _notAdmin(STRANGER)
+        );
         _refused(string.concat(name, " revokeRole"), t, A1, abi.encodeCall(g.revokeRole, (bit, H, SIB)), _mismatch());
         assertTrue(g.hasRole(bit, H), string.concat(name, ": nothing revoked"));
         _noOld(string.concat(name, " revokeRole"), t, "revokeRole(uint8,bytes32)");
@@ -130,17 +160,29 @@ contract AdminChainWordTest is Test {
         // renounceRole: the holder's own; a caller without the bit MissingRole first, then the holder's word
         _ok(string.concat(name, " renounceRole's holder"), t, A1, abi.encodeCall(g.grantRole, (bit, K, UID)));
         address k = address(uint160(uint256(K)));
-        _refused(string.concat(name, " renounceRole stranger"), t, STRANGER, abi.encodeCall(g.renounceRole, (bit, SIB)),
-            abi.encodeWithSelector(IGovernance.MissingRole.selector, bit, nid(STRANGER)));
+        _refused(
+            string.concat(name, " renounceRole stranger"),
+            t,
+            STRANGER,
+            abi.encodeCall(g.renounceRole, (bit, SIB)),
+            abi.encodeWithSelector(IGovernance.MissingRole.selector, bit, nid(STRANGER))
+        );
         _refused(string.concat(name, " renounceRole"), t, k, abi.encodeCall(g.renounceRole, (bit, SIB)), _mismatch());
         assertTrue(g.hasRole(bit, K), string.concat(name, ": nothing renounced"));
         _noOld(string.concat(name, " renounceRole"), t, "renounceRole(uint8)");
         _ok(string.concat(name, " renounceRole"), t, k, abi.encodeCall(g.renounceRole, (bit, UID)));
         assertFalse(g.hasRole(bit, K), string.concat(name, ": renounced with the own word"));
         // disableFeature, one-way
-        _refused(string.concat(name, " disableFeature stranger"), t, STRANGER,
-            abi.encodeCall(g.disableFeature, (bit, SIB)), _notAdmin(STRANGER));
-        _refused(string.concat(name, " disableFeature"), t, A1, abi.encodeCall(g.disableFeature, (bit, SIB)), _mismatch());
+        _refused(
+            string.concat(name, " disableFeature stranger"),
+            t,
+            STRANGER,
+            abi.encodeCall(g.disableFeature, (bit, SIB)),
+            _notAdmin(STRANGER)
+        );
+        _refused(
+            string.concat(name, " disableFeature"), t, A1, abi.encodeCall(g.disableFeature, (bit, SIB)), _mismatch()
+        );
         assertEq(g.features(), uint256(1) << bit, string.concat(name, ": the feature stays"));
         _noOld(string.concat(name, " disableFeature"), t, "disableFeature(uint8)");
         _ok(string.concat(name, " disableFeature"), t, A1, abi.encodeCall(g.disableFeature, (bit, UID)));
@@ -157,11 +199,15 @@ contract AdminChainWordTest is Test {
         IGovernance.GrantTerms memory leaf = _open();
         leaf.total = 10;
         address h = address(uint160(uint256(H)));
-        _refused(string.concat(name, " a holder's leaf"), t, h, abi.encodeCall(g.setGrant, (bit, L, leaf, SIB)), _mismatch());
+        _refused(
+            string.concat(name, " a holder's leaf"), t, h, abi.encodeCall(g.setGrant, (bit, L, leaf, SIB)), _mismatch()
+        );
         assertFalse(g.hasRole(bit, L), string.concat(name, ": no leaf"));
         _ok(string.concat(name, " a holder's leaf"), t, h, abi.encodeCall(g.setGrant, (bit, L, leaf, UID)));
         assertTrue(g.hasRole(bit, L), string.concat(name, ": the leaf with the own word"));
-        _refused(string.concat(name, " a grantor's revoke"), t, h, abi.encodeCall(g.revokeRole, (bit, L, SIB)), _mismatch());
+        _refused(
+            string.concat(name, " a grantor's revoke"), t, h, abi.encodeCall(g.revokeRole, (bit, L, SIB)), _mismatch()
+        );
         assertTrue(g.hasRole(bit, L), string.concat(name, ": the leaf stays"));
         _ok(string.concat(name, " a grantor's revoke"), t, h, abi.encodeCall(g.revokeRole, (bit, L, UID)));
         assertFalse(g.hasRole(bit, L), string.concat(name, ": revoked by its grantor with the own word"));
@@ -172,10 +218,20 @@ contract AdminChainWordTest is Test {
         _seat(t, GovernanceBits.MINTABLE);
         uint8 bit = GovernanceBits.DENYLIST;
         _ok(string.concat(name, " the list's holder"), t, A1, abi.encodeCall(IGovernance.grantRole, (bit, H, UID)));
-        _refused(string.concat(name, " enableFeature stranger"), t, STRANGER,
-            abi.encodeCall(IRegulatedToken.enableFeature, (bit, SIB)), _notAdmin(STRANGER));
-        _refused(string.concat(name, " enableFeature"), t, A1, abi.encodeCall(IRegulatedToken.enableFeature, (bit, SIB)),
-            _mismatch());
+        _refused(
+            string.concat(name, " enableFeature stranger"),
+            t,
+            STRANGER,
+            abi.encodeCall(IRegulatedToken.enableFeature, (bit, SIB)),
+            _notAdmin(STRANGER)
+        );
+        _refused(
+            string.concat(name, " enableFeature"),
+            t,
+            A1,
+            abi.encodeCall(IRegulatedToken.enableFeature, (bit, SIB)),
+            _mismatch()
+        );
         assertEq(IGovernance(t).features() & (uint256(1) << bit), 0, string.concat(name, ": still off"));
         _noOld(string.concat(name, " enableFeature"), t, "enableFeature(uint8)");
         _ok(string.concat(name, " enableFeature"), t, A1, abi.encodeCall(IRegulatedToken.enableFeature, (bit, UID)));
@@ -188,13 +244,20 @@ contract AdminChainWordTest is Test {
         _seat(t, GovernanceBits.MINTABLE);
         bytes memory invalid = abi.encodeWithSelector(IPqzToken.PqzVerifyConfigInvalid.selector);
         bytes32 v = bytes32(uint256(0xFE));
-        bytes[4] memory sib = [abi.encodeCall(IPqzToken.pqzSetVerifier, (v, SIB)),
-            abi.encodeCall(IPqzToken.pqzCancelVerifier, (SIB)), abi.encodeCall(IPqzToken.pqzRevokeVerifier, (SIB)),
-            abi.encodeCall(IPqzToken.setVerifierFee, (1, SIB))];
-        bytes[4] memory own = [abi.encodeCall(IPqzToken.pqzSetVerifier, (v, UID)),
-            abi.encodeCall(IPqzToken.pqzCancelVerifier, (UID)), abi.encodeCall(IPqzToken.pqzRevokeVerifier, (UID)),
-            abi.encodeCall(IPqzToken.setVerifierFee, (1, UID))];
-        string[4] memory old = ["pqzSetVerifier(bytes32)", "pqzCancelVerifier()", "pqzRevokeVerifier()", "setVerifierFee(uint64)"];
+        bytes[4] memory sib = [
+            abi.encodeCall(IPqzToken.pqzSetVerifier, (v, SIB)),
+            abi.encodeCall(IPqzToken.pqzCancelVerifier, (SIB)),
+            abi.encodeCall(IPqzToken.pqzRevokeVerifier, (SIB)),
+            abi.encodeCall(IPqzToken.setVerifierFee, (1, SIB))
+        ];
+        bytes[4] memory own = [
+            abi.encodeCall(IPqzToken.pqzSetVerifier, (v, UID)),
+            abi.encodeCall(IPqzToken.pqzCancelVerifier, (UID)),
+            abi.encodeCall(IPqzToken.pqzRevokeVerifier, (UID)),
+            abi.encodeCall(IPqzToken.setVerifierFee, (1, UID))
+        ];
+        string[4] memory old =
+            ["pqzSetVerifier(bytes32)", "pqzCancelVerifier()", "pqzRevokeVerifier()", "setVerifierFee(uint64)"];
         for (uint256 i; i < 4; ++i) {
             string memory w = string.concat(name, " ", old[i]);
             _refused(string.concat(w, " stranger"), t, STRANGER, sib[i], _notAdmin(STRANGER));
@@ -217,29 +280,53 @@ contract AdminChainWordTest is Test {
         if (kind == 4 || kind == 5 || kind == 12 || kind == 13) _pqz(name, _kind(name, kind));
     }
 
-    function test_kind0_NormalToken() public { _token("NormalToken", 0); }
+    function test_kind0_NormalToken() public {
+        _token("NormalToken", 0);
+    }
 
-    function test_kind1_WrappedToken() public { _token("WrappedToken", 1); }
+    function test_kind1_WrappedToken() public {
+        _token("WrappedToken", 1);
+    }
 
-    function test_kind2_NormalZetherToken() public { _token("NormalZetherToken", 2); }
+    function test_kind2_NormalZetherToken() public {
+        _token("NormalZetherToken", 2);
+    }
 
-    function test_kind3_WrappedZetherToken() public { _token("WrappedZetherToken", 3); }
+    function test_kind3_WrappedZetherToken() public {
+        _token("WrappedZetherToken", 3);
+    }
 
-    function test_kind4_NormalPqzToken() public { _token("NormalPqzToken", 4); }
+    function test_kind4_NormalPqzToken() public {
+        _token("NormalPqzToken", 4);
+    }
 
-    function test_kind5_WrappedPqzToken() public { _token("WrappedPqzToken", 5); }
+    function test_kind5_WrappedPqzToken() public {
+        _token("WrappedPqzToken", 5);
+    }
 
-    function test_kind8_NormalRegulatedToken() public { _token("NormalRegulatedToken", 8); }
+    function test_kind8_NormalRegulatedToken() public {
+        _token("NormalRegulatedToken", 8);
+    }
 
-    function test_kind9_WrappedRegulatedToken() public { _token("WrappedRegulatedToken", 9); }
+    function test_kind9_WrappedRegulatedToken() public {
+        _token("WrappedRegulatedToken", 9);
+    }
 
-    function test_kind10_NormalZetherRegulatedToken() public { _token("NormalZetherRegulatedToken", 10); }
+    function test_kind10_NormalZetherRegulatedToken() public {
+        _token("NormalZetherRegulatedToken", 10);
+    }
 
-    function test_kind11_WrappedZetherRegulatedToken() public { _token("WrappedZetherRegulatedToken", 11); }
+    function test_kind11_WrappedZetherRegulatedToken() public {
+        _token("WrappedZetherRegulatedToken", 11);
+    }
 
-    function test_kind12_NormalPqzRegulatedToken() public { _token("NormalPqzRegulatedToken", 12); }
+    function test_kind12_NormalPqzRegulatedToken() public {
+        _token("NormalPqzRegulatedToken", 12);
+    }
 
-    function test_kind13_WrappedPqzRegulatedToken() public { _token("WrappedPqzRegulatedToken", 13); }
+    function test_kind13_WrappedPqzRegulatedToken() public {
+        _token("WrappedPqzRegulatedToken", 13);
+    }
 
     /// A proposer's own `cancelGrant` (not the admin): kind 8 with a `grantDelay`, `H` a whole holder of `FREEZE` (5, a
     /// delayed relaxation on 8-13) whose `renounceRole(5)` proposes; its cancel with a sibling's word is refused after its

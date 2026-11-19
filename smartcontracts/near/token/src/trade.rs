@@ -39,7 +39,8 @@ pub enum OrderClose {
 }
 
 pub fn order_bytes(h: &Holder, c: &OrderClose) -> u64 {
-    TRADE_RECORD_OVERHEAD + (borsh::to_vec(h).unwrap().len() + borsh::to_vec(c).unwrap().len()) as u64
+    TRADE_RECORD_OVERHEAD
+        + (borsh::to_vec(h).unwrap().len() + borsh::to_vec(c).unwrap().len()) as u64
 }
 
 pub fn min_nonce_bytes(h: &Holder) -> u64 {
@@ -48,7 +49,13 @@ pub fn min_nonce_bytes(h: &Holder) -> u64 {
 
 /// The shape of a cancel / invalidate: `to = from`, amount, `pay_ref`, lane and nonce zero, `extra` = the params.
 fn admin_shape(op: &MetaOp, code: u8, params: &[u8], err: &'static str) -> R<()> {
-    if op.op != code || op.to != op.from || op.amount != 0 || op.pay_ref != [0; 32] || op.lane != [0; 32] || op.nonce != 0 {
+    if op.op != code
+        || op.to != op.from
+        || op.amount != 0
+        || op.pay_ref != [0; 32]
+        || op.lane != [0; 32]
+        || op.nonce != 0
+    {
         return Err(err);
     }
     if op.extra != env::sha256_array(params) {
@@ -63,11 +70,20 @@ impl Token {
     }
 
     fn min_nonce_of(&self, h: &Holder, lane: &[u8; 32]) -> u64 {
-        self.min_nonces.get(&(h.clone(), *lane)).copied().unwrap_or(0)
+        self.min_nonces
+            .get(&(h.clone(), *lane))
+            .copied()
+            .unwrap_or(0)
     }
 
     /// The order `(h, lane, nonce)` is still open: not closed, not below `min_nonce`.
-    fn open_order(&self, h: &Holder, lane: &[u8; 32], nonce: u64, filled_err: &'static str) -> R<()> {
+    fn open_order(
+        &self,
+        h: &Holder,
+        lane: &[u8; 32],
+        nonce: u64,
+        filled_err: &'static str,
+    ) -> R<()> {
         match self.closed(h, lane, nonce) {
             Some(OrderClose::Filled(_)) => return Err(filled_err),
             Some(OrderClose::Cancelled) => return Err("order cancelled"),
@@ -80,7 +96,14 @@ impl Token {
     }
 
     /// No write: every check of a leg, cheap first; returns the signer's record, its old size and the new bytes.
-    fn trade_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, order: &Order, receiver: &Holder) -> R<(Subject, u64, u64)> {
+    fn trade_plan(
+        &self,
+        caller: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        order: &Order,
+        receiver: &Holder,
+    ) -> R<(Subject, u64, u64)> {
         let me = env::current_account_id();
         if op.op != OP_TRADE {
             return Err("wrong op code");
@@ -116,26 +139,62 @@ impl Token {
                 Holder::Ua(_) => "The UA doesn't have enough balance",
             });
         }
-        let open = if old == 0 { record_bytes(&op.from, &s) } else { 0 };
+        let open = if old == 0 {
+            record_bytes(&op.from, &s)
+        } else {
+            0
+        };
         let rec = order_bytes(&op.from, &OrderClose::Filled([0; 32]));
-        Ok((s, old, open + rec + self.receiver_bytes(&dex) + self.receiver_bytes(receiver)))
+        Ok((
+            s,
+            old,
+            open + rec + self.receiver_bytes(&dex) + self.receiver_bytes(receiver),
+        ))
     }
 
-    pub(crate) fn cancel_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, lane: &[u8; 32], nonce: u64) -> R<(Subject, u64, u64)> {
+    pub(crate) fn cancel_plan(
+        &self,
+        caller: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        lane: &[u8; 32],
+        nonce: u64,
+    ) -> R<(Subject, u64, u64)> {
         let shape = "cancel shape (op 14, to = from, amount, pay_ref, lane and nonce zero)";
-        admin_shape(op, OP_CANCEL, &borsh::to_vec(&(lane, nonce)).unwrap(), shape)?;
+        admin_shape(
+            op,
+            OP_CANCEL,
+            &borsh::to_vec(&(lane, nonce)).unwrap(),
+            shape,
+        )?;
         if let Some(OrderClose::Cancelled) = self.closed(&op.from, lane, nonce) {
             return Err("order already cancelled");
         }
         self.open_order(&op.from, lane, nonce, "order filled: cancel refused")?;
         let (s, old) = self.signed(caller, caller, op, auth)?;
-        let open = if old == 0 { record_bytes(&op.from, &s) } else { 0 };
+        let open = if old == 0 {
+            record_bytes(&op.from, &s)
+        } else {
+            0
+        };
         Ok((s, old, open + order_bytes(&op.from, &OrderClose::Cancelled)))
     }
 
-    pub(crate) fn invalidate_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, lane: &[u8; 32], min_nonce: u64) -> R<(Subject, u64, u64)> {
+    pub(crate) fn invalidate_plan(
+        &self,
+        caller: &AccountId,
+        op: &MetaOp,
+        auth: &Auth,
+        lane: &[u8; 32],
+        min_nonce: u64,
+    ) -> R<(Subject, u64, u64)> {
         let shape = "invalidate shape (op 15, to = from, amount, pay_ref, lane and nonce zero)";
-        admin_shape(op, OP_INVALIDATE_NONCES, &borsh::to_vec(&(lane, min_nonce)).unwrap(), shape)?;
+        admin_shape(
+            op,
+            OP_INVALIDATE_NONCES,
+            &borsh::to_vec(&(lane, min_nonce)).unwrap(),
+            shape,
+        )?;
         if min_nonce >= MIN_NONCE_CAP {
             return Err("min_nonce must be below 2^63");
         }
@@ -143,30 +202,63 @@ impl Token {
             return Err("min_nonce only increases");
         }
         let (s, old) = self.signed(caller, caller, op, auth)?;
-        let open = if old == 0 { record_bytes(&op.from, &s) } else { 0 };
-        let new = if self.min_nonces.contains_key(&(op.from.clone(), *lane)) { 0 } else { min_nonce_bytes(&op.from) };
+        let open = if old == 0 {
+            record_bytes(&op.from, &s)
+        } else {
+            0
+        };
+        let new = if self.min_nonces.contains_key(&(op.from.clone(), *lane)) {
+            0
+        } else {
+            min_nonce_bytes(&op.from)
+        };
         Ok((s, old, open + new))
     }
 
     /// `mtx_cancel`'s body (also Task 9's wrapper): panics on a refusal; the new bytes go to `storage_due`.
     pub(crate) fn cancel(&mut self, op: &MetaOp, auth: &Auth, lane: &[u8; 32], nonce: u64) {
         let p = env::predecessor_account_id();
-        let (s, old, _) = self.cancel_plan(&p, op, auth, lane, nonce).unwrap_or_else(|e| env::panic_str(e));
+        let (s, old, _) = self
+            .cancel_plan(&p, op, auth, lane, nonce)
+            .unwrap_or_else(|e| env::panic_str(e));
         self.open_lazily(&op.from, s, old);
         self.storage_due += order_bytes(&op.from, &OrderClose::Cancelled);
-        self.orders.insert((op.from.clone(), *lane, nonce), OrderClose::Cancelled);
-        crate::Event::OrderCancelled { from: op.from.to_string(), lane: x(lane), nonce }.emit();
+        self.orders
+            .insert((op.from.clone(), *lane, nonce), OrderClose::Cancelled);
+        crate::Event::OrderCancelled {
+            from: op.from.to_string(),
+            lane: x(lane),
+            nonce,
+        }
+        .emit();
     }
 
     /// `mtx_invalidate_nonces`'s body (also Task 9's wrapper): panics on a refusal; new bytes go to `storage_due`.
-    pub(crate) fn invalidate_nonces(&mut self, op: &MetaOp, auth: &Auth, lane: &[u8; 32], min_nonce: u64) {
+    pub(crate) fn invalidate_nonces(
+        &mut self,
+        op: &MetaOp,
+        auth: &Auth,
+        lane: &[u8; 32],
+        min_nonce: u64,
+    ) {
         let p = env::predecessor_account_id();
-        let (s, old, _) = self.invalidate_plan(&p, op, auth, lane, min_nonce).unwrap_or_else(|e| env::panic_str(e));
+        let (s, old, _) = self
+            .invalidate_plan(&p, op, auth, lane, min_nonce)
+            .unwrap_or_else(|e| env::panic_str(e));
         self.open_lazily(&op.from, s, old);
-        if self.min_nonces.insert((op.from.clone(), *lane), min_nonce).is_none() {
+        if self
+            .min_nonces
+            .insert((op.from.clone(), *lane), min_nonce)
+            .is_none()
+        {
             self.storage_due += min_nonce_bytes(&op.from);
         }
-        crate::Event::NoncesInvalidated { from: op.from.to_string(), lane: x(lane), min_nonce }.emit();
+        crate::Event::NoncesInvalidated {
+            from: op.from.to_string(),
+            lane: x(lane),
+            min_nonce,
+        }
+        .emit();
     }
 }
 
@@ -183,12 +275,16 @@ impl Token {
         #[serializer(borsh)] receiver: Holder,
     ) -> bool {
         let p = env::predecessor_account_id();
-        let plan = self.trade_plan(&p, &op, &auth, &order, &receiver).and_then(|(s, old, bytes)| {
-            match env::attached_deposit() >= env::storage_byte_cost().saturating_mul(bytes.into()) {
-                true => Ok((s, old)),
-                false => Err("the attached deposit is short of the leg's storage"),
-            }
-        });
+        let plan =
+            self.trade_plan(&p, &op, &auth, &order, &receiver)
+                .and_then(|(s, old, bytes)| {
+                    match env::attached_deposit()
+                        >= env::storage_byte_cost().saturating_mul(bytes.into())
+                    {
+                        true => Ok((s, old)),
+                        false => Err("the attached deposit is short of the leg's storage"),
+                    }
+                });
         let (s, old) = match plan {
             Ok(v) => v,
             Err(e) => {
@@ -207,7 +303,10 @@ impl Token {
         // this leg's amount, but the order stays `Filled` (it never re-opens): the maker re-signs. Clients bind orders to
         // a relayer (`Order.relayer = Some`, CTR-DEX-09) by default so only the chosen relayer can pair them.
         self.storage_due += order_bytes(&op.from, &OrderClose::Filled(digest));
-        self.orders.insert((op.from.clone(), op.lane, op.nonce), OrderClose::Filled(digest));
+        self.orders.insert(
+            (op.from.clone(), op.lane, op.nonce),
+            OrderClose::Filled(digest),
+        );
         self.storage_due += self.register(&dex) + self.register(&receiver);
         crate::Event::OrderFilled {
             from: op.from.to_string(),
@@ -219,7 +318,10 @@ impl Token {
         }
         .emit();
         self.move_balance(&op.from, &dex, op.amount, None);
-        charge(std::mem::take(&mut self.storage_due), env::signer_account_id());
+        charge(
+            std::mem::take(&mut self.storage_due),
+            env::signer_account_id(),
+        );
         true
     }
 
@@ -249,8 +351,16 @@ impl Token {
 
     /// The order `(holder, lane, nonce)` was filled (by any leg op).
     #[result_serializer(borsh)]
-    pub fn filled(&self, #[serializer(borsh)] holder: Holder, #[serializer(borsh)] lane: [u8; 32], #[serializer(borsh)] nonce: u64) -> bool {
-        matches!(self.closed(&holder, &lane, nonce), Some(OrderClose::Filled(_)))
+    pub fn filled(
+        &self,
+        #[serializer(borsh)] holder: Holder,
+        #[serializer(borsh)] lane: [u8; 32],
+        #[serializer(borsh)] nonce: u64,
+    ) -> bool {
+        matches!(
+            self.closed(&holder, &lane, nonce),
+            Some(OrderClose::Filled(_))
+        )
     }
 
     /// How the order closed (the filling leg op's digest, or cancelled); `None` while open. The DEX's `refund_expired`
@@ -266,7 +376,11 @@ impl Token {
     }
 
     #[result_serializer(borsh)]
-    pub fn min_nonce(&self, #[serializer(borsh)] holder: Holder, #[serializer(borsh)] lane: [u8; 32]) -> u64 {
+    pub fn min_nonce(
+        &self,
+        #[serializer(borsh)] holder: Holder,
+        #[serializer(borsh)] lane: [u8; 32],
+    ) -> u64 {
         self.min_nonce_of(&holder, &lane)
     }
 
@@ -280,7 +394,10 @@ impl Token {
         #[serializer(borsh)] order: Order,
         #[serializer(borsh)] receiver: Holder,
     ) -> Check {
-        check(self.trade_plan(&caller, &op, &auth, &order, &receiver).map(|(_, _, b)| b))
+        check(
+            self.trade_plan(&caller, &op, &auth, &order, &receiver)
+                .map(|(_, _, b)| b),
+        )
     }
 
     #[result_serializer(borsh)]
@@ -292,7 +409,10 @@ impl Token {
         #[serializer(borsh)] target_lane: [u8; 32],
         #[serializer(borsh)] target_nonce: u64,
     ) -> Check {
-        check(self.cancel_plan(&caller, &op, &auth, &target_lane, target_nonce).map(|(_, _, b)| b))
+        check(
+            self.cancel_plan(&caller, &op, &auth, &target_lane, target_nonce)
+                .map(|(_, _, b)| b),
+        )
     }
 
     #[result_serializer(borsh)]
@@ -304,7 +424,10 @@ impl Token {
         #[serializer(borsh)] lane: [u8; 32],
         #[serializer(borsh)] min_nonce: u64,
     ) -> Check {
-        check(self.invalidate_plan(&caller, &op, &auth, &lane, min_nonce).map(|(_, _, b)| b))
+        check(
+            self.invalidate_plan(&caller, &op, &auth, &lane, min_nonce)
+                .map(|(_, _, b)| b),
+        )
     }
 }
 
@@ -319,7 +442,10 @@ mod tests {
 
     fn hx(v: &Value) -> Vec<u8> {
         let s = v.as_str().unwrap().trim_start_matches("0x");
-        (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
     }
 
     fn b32(v: &Value) -> [u8; 32] {
@@ -330,25 +456,47 @@ mod tests {
     fn dex_vectors_match() {
         let d: Value = serde_json::from_str(&std::fs::read_to_string(VECTORS).unwrap()).unwrap();
         let rows = d["metaops"]["vectors"].as_array().unwrap();
-        let row = |n: &str| rows.iter().find(|r| r["name"] == n).unwrap_or_else(|| panic!("no row {n}"));
+        let row = |n: &str| {
+            rows.iter()
+                .find(|r| r["name"] == n)
+                .unwrap_or_else(|| panic!("no row {n}"))
+        };
         for n in ["trade_a", "trade_b"] {
             let r = row(n);
             let order: Order = borsh::from_slice(&hx(&r["order"])).unwrap();
             let f = &r["fields"];
             assert_eq!(f["op"], OP_TRADE);
-            assert_eq!(order.hash(), b32(&f["extra"]), "{n}: extra = sha256(Borsh(Order))");
-            assert_eq!(order.sell_amount.to_string(), f["amount"].as_str().unwrap(), "{n}: amount = sell_amount");
-            assert_eq!(order.sell_token.as_str(), f["contract"].as_str().unwrap(), "{n}: the leg's token sells");
+            assert_eq!(
+                order.hash(),
+                b32(&f["extra"]),
+                "{n}: extra = sha256(Borsh(Order))"
+            );
+            assert_eq!(
+                order.sell_amount.to_string(),
+                f["amount"].as_str().unwrap(),
+                "{n}: amount = sell_amount"
+            );
+            assert_eq!(
+                order.sell_token.as_str(),
+                f["contract"].as_str().unwrap(),
+                "{n}: the leg's token sells"
+            );
             assert_eq!(f["to"]["Near"], f["relayer"], "{n}: to = relayer = dex");
         }
         let c = row("cancel");
         let (lane, nonce): ([u8; 32], u64) = borsh::from_slice(&hx(&c["params"])).unwrap();
-        assert_eq!(env::sha256_array(borsh::to_vec(&(lane, nonce)).unwrap()), b32(&c["fields"]["extra"]));
+        assert_eq!(
+            env::sha256_array(borsh::to_vec(&(lane, nonce)).unwrap()),
+            b32(&c["fields"]["extra"])
+        );
         assert_eq!(c["fields"]["op"], OP_CANCEL);
         let i = row("invalidate_nonces");
         let (lane, min): ([u8; 32], u64) = borsh::from_slice(&hx(&i["params"])).unwrap();
         assert!(min < MIN_NONCE_CAP);
-        assert_eq!(env::sha256_array(borsh::to_vec(&(lane, min)).unwrap()), b32(&i["fields"]["extra"]));
+        assert_eq!(
+            env::sha256_array(borsh::to_vec(&(lane, min)).unwrap()),
+            b32(&i["fields"]["extra"])
+        );
         assert_eq!(i["fields"]["op"], OP_INVALIDATE_NONCES);
     }
 }

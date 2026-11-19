@@ -10,38 +10,42 @@
 # and its summary leave them out; `--only summary` lists every at-set step that has a log.
 # A fresh worktree needs smartcontracts/evm/lib and clients/clientkeys/node_modules as real directories.
 P=2026-11-03-governance
-LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
+LOGEXT=log                   # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
 CAPPED_MEM=${CAPPED_MEM:-4G} # capped's own default; the base would lower it to 3G
-ZETHER_CROSS_N=10 # test/zether/ZetherProverCross.t.sol: 10 tests, none skipped
+ZETHER_CROSS_N=10            # test/zether/ZetherProverCross.t.sol: 10 tests, none skipped
 FORGE_DIRS="ua zether pqz governance v2"
 SETS="n2048-kmax1024 n2304-kmax4096 n2560-kmax16384 n2816-kmax65536"
 # cargo-scaas-node is the whole node suite: 6 GB, alone (AGENTS.md "Machine"): CAPPED_MEM=6G with nothing else heavy running
 STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-rest forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover cargo-scaas-node node-e2e-anvil ua-rs ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt chainspec-check zether-e2e node-e2e-hedera docs named-tests summary"
 if [ "$1" = "--only" ]; then
-  case $2 in
-    at-set-*|summary) for s in $SETS; do
-        [ "$2" = "at-set-$s" ] || [ -f "$(dirname "$0")/$P-at-set-$s.$LOGEXT" ] && STEPS="${STEPS% summary} at-set-$s summary"
-      done ;;
-  esac
+    case $2 in
+        at-set-* | summary) for s in $SETS; do
+            [ "$2" = "at-set-$s" ] || [ -f "$(dirname "$0")/$P-at-set-$s.$LOGEXT" ] && STEPS="${STEPS% summary} at-set-$s summary"
+        done ;;
+    esac
 fi
 FAMILIES=""
 extra_step() {
-  case $1 in
-    build) cd smartcontracts/evm && ../../scripts/capped forge build ;;
-    forge-rest) cd smartcontracts/evm && ../../scripts/capped forge test --no-match-path "test/{${FORGE_DIRS// /,}}/**" ;;
-    forge-*) cd smartcontracts/evm && ../../scripts/capped forge test --match-path "test/${1#forge-}/**" ;;
-    # AT_SET_MATCH: a --match-path for the step (T19: 'test/{ua,pqz,v2}/*' after a WrappedLib change); at-set.sh logs the forge line
-    at-set-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#at-set-}" test ${AT_SET_MATCH:+--match-path "$AT_SET_MATCH"} ;;
-    chainspec-check) python3 -I pqz-core/nethermind/chain/patch-chainspec.py --check && # T16: the next reset's chainspec
-      python3 -I pqz-core/nethermind/chain/e2e.py selftest ;; # T19 (review I-1): the RUNBOOK's codesize wait at a 200 M block
-    zether-e2e) PORT=18545 scripts/capped scripts/e2e-zether.sh ;;
-    node-e2e-hedera) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_hedera -- --ignored --test-threads=1 ;;
-    *) echo "unknown step $1"; return 2 ;;
-  esac
+    case $1 in
+        build) cd smartcontracts/evm && ../../scripts/capped forge build ;;
+        forge-rest) cd smartcontracts/evm && ../../scripts/capped forge test --no-match-path "test/{${FORGE_DIRS// /,}}/**" ;;
+        forge-*) cd smartcontracts/evm && ../../scripts/capped forge test --match-path "test/${1#forge-}/**" ;;
+        # AT_SET_MATCH: a --match-path for the step (T19: 'test/{ua,pqz,v2}/*' after a WrappedLib change); at-set.sh logs the forge line
+        at-set-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#at-set-}" test ${AT_SET_MATCH:+--match-path "$AT_SET_MATCH"} ;;
+        chainspec-check) python3 -I pqz-core/nethermind/chain/patch-chainspec.py --check && # T16: the next reset's chainspec
+            python3 -I pqz-core/nethermind/chain/e2e.py selftest ;;                         # T19 (review I-1): the RUNBOOK's codesize wait at a 200 M block
+        zether-e2e) PORT=18545 scripts/capped scripts/e2e-zether.sh ;;
+        node-e2e-hedera) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_hedera -- --ignored --test-threads=1 ;;
+        *)
+            echo "unknown step $1"
+            return 2
+            ;;
+    esac
 }
 # "<step>|<form>|<name>": every test function added from main (b25796b6) to HEAD in smartcontracts/evm/test, a test_attack_* fixed by a task
 # under its test_fixed_* name (forms: see the base runner).
-NEW_TESTS=$(cat <<'NAMES'
+NEW_TESTS=$(
+    cat <<'NAMES'
 forge|forge|test_createAboveSixtyFourKiBDeploys
 forge|forge|test_releaseAboveTheChainLimitIsRefusedByName
 forge|forge|test_chainCodeLimitDefaultsToEip7954

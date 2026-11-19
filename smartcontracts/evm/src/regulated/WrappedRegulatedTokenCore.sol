@@ -19,10 +19,7 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         (T28). The wrap payer and the wrap order reach the regulated hooks through `WrappedToken`'s seats.
 abstract contract WrappedRegulatedTokenCore is WrappedTokenCore, RegulatedBase {
     /// @dev `implArgs = abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` (plan T29).
-    constructor(address factory_, bytes memory implArgs)
-        WrappedTokenCore(factory_, implArgs)
-        RegulatedBase(implArgs)
-    {}
+    constructor(address factory_, bytes memory implArgs) WrappedTokenCore(factory_, implArgs) RegulatedBase(implArgs) {}
 
     function kind() public pure override(MetaTokenBase, WrappedTokenCore) returns (uint8) {
         return TokenStore.KIND_WRAPPED_REGULATED;
@@ -96,7 +93,11 @@ abstract contract WrappedRegulatedTokenCore is WrappedTokenCore, RegulatedBase {
         WrappedLib.rescue(asset);
     }
 
-    function _mtxSelectorsBody() internal pure override(MetaTxBaseCore, WrappedTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal
+        pure
+        override(MetaTxBaseCore, WrappedTokenCore)
+        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return super._mtxSelectorsBody();
     }

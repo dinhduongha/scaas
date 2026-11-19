@@ -58,7 +58,9 @@ contract UALedgerNamedTest is UALedgerBase {
         (t.mode, t.fee, t.feeRecipient) = (RR | RF | PCT, 5_000, FEE_TO);
         bytes memory a = _authT(address(tok), t);
         vm.prank(RELAYER);
-        tok.mtxTransferWithFee(uaP, _pad(bob), 1_000, 1, 0, t.validUntil, t.mode, RELAYER, 5_000, FEE_TO, UACall.auth(uaP, a));
+        tok.mtxTransferWithFee(
+            uaP, _pad(bob), 1_000, 1, 0, t.validUntil, t.mode, RELAYER, 5_000, FEE_TO, UACall.auth(uaP, a)
+        );
         assertEq(tok.balanceOf(FEE_TO), 5);
         assertEq(tok.balanceOf(bob), 1_000);
         // the fee shape: a fee mode and a bound, non-zero recipient
@@ -86,7 +88,12 @@ contract UALedgerNamedTest is UALedgerBase {
     function test_uaPay_needsPayable() public {
         IFactoryToken.TokenConfig memory c = normalInit("NoPay", "NP", 6, 0, address(0), address(this));
         c.features = 1 << GovernanceBits.MINTABLE;
-        NormalToken np = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        NormalToken np = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         np.initialize(nid(address(this)), 1, abi.encode(c));
         MetaTxLib.UAMetaTransfer memory g = _t(uaP, uaB, 1);
         g.entryRef = PayMetaKit.ref("p");
@@ -118,7 +125,8 @@ contract UALedgerNamedTest is UALedgerBase {
         _wrapFor(alice, 1_000);
         vm.prank(alice);
         wrp.transferToUA(uaP, 1_000);
-        bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 10, POOL, 0);
+        bytes memory data =
+            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 10, POOL, 0);
         MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
         bytes memory a = _authM(address(wrp), m);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, POOL));
@@ -131,8 +139,9 @@ contract UALedgerNamedTest is UALedgerBase {
         _wrapFor(alice, 1_000);
         vm.prank(alice);
         wrp.transferToUA(uaP, 1_000);
-        bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 10,
-            MetaTxLib.SHIELD_POOL, 0);
+        bytes memory data = abi.encodeWithSignature(
+            "unwrap(address,uint256,address,uint256)", address(und), 10, MetaTxLib.SHIELD_POOL, 0
+        );
         MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
         bytes memory a = _authM(address(wrp), m);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, MetaTxLib.SHIELD_POOL));

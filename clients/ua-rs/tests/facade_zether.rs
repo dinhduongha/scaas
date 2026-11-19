@@ -31,10 +31,15 @@ fn h(v: &Value) -> Vec<u8> {
 /// The zether-prover vectors' wallet: their mnemonic, no BIP-39 passphrase (r33_keys.json).
 fn wallet() -> Wallet {
     let r = zv("r33_keys.json");
-    Wallet::from_mnemonic(r["mnemonic"].as_str().unwrap(), r["passphrase"].as_str().unwrap()).unwrap()
+    Wallet::from_mnemonic(
+        r["mnemonic"].as_str().unwrap(),
+        r["passphrase"].as_str().unwrap(),
+    )
+    .unwrap()
 }
 fn call(k: &scaas_ua::facade::zether::ZetherKey, cmd: &str, v: &Value) -> Result<Value, Error> {
-    k.call(cmd, v.to_string().as_bytes()).map(|s| serde_json::from_str(&s).unwrap())
+    k.call(cmd, v.to_string().as_bytes())
+        .map(|s| serde_json::from_str(&s).unwrap())
 }
 /// A vector file's request without its key and witness flag (what a facade caller sends).
 fn request(file: &str) -> Value {
@@ -49,10 +54,19 @@ fn request(file: &str) -> Value {
 fn conf_and_viewing_keys_are_r33_keys() {
     unlock();
     let w = wallet();
-    let rows = zv("r33_keys.json")["bls12381"]["keys"].as_array().unwrap().clone();
+    let rows = zv("r33_keys.json")["bls12381"]["keys"]
+        .as_array()
+        .unwrap()
+        .clone();
     assert_eq!(rows.len(), 4);
     for r in rows {
-        let p: Vec<u32> = r["path"].as_str().unwrap().split('/').skip(1).map(|x| x.parse().unwrap()).collect();
+        let p: Vec<u32> = r["path"]
+            .as_str()
+            .unwrap()
+            .split('/')
+            .skip(1)
+            .map(|x| x.parse().unwrap())
+            .collect();
         assert_eq!(p[0], 12381);
         let k = w.zether_key(p[1], p[2], p[3]).unwrap();
         assert_eq!(k.y(), h(&r["Y"]), "{}", r["path"]);
@@ -65,9 +79,16 @@ fn conf_and_viewing_keys_are_r33_keys() {
 fn key_use_other_than_conf_or_viewing_is_refused() {
     unlock();
     let w = wallet();
-    assert!(w.zether_key(60, 0, 7).is_ok() && w.zether_key(60, 0, 8).is_ok(), "positive control");
+    assert!(
+        w.zether_key(60, 0, 7).is_ok() && w.zether_key(60, 0, 8).is_ok(),
+        "positive control"
+    );
     for u in [0, 6, 9, u32::MAX] {
-        assert_eq!(w.zether_key(60, 0, u).err(), Some(Error::Argument), "use {u}");
+        assert_eq!(
+            w.zether_key(60, 0, u).err(),
+            Some(Error::Argument),
+            "use {u}"
+        );
     }
 }
 
@@ -85,10 +106,21 @@ fn zether_handle_KeyRevoked_after_lock() {
     #[cfg(feature = "vectors")]
     {
         let t = request("transfer_bls12381.json");
-        assert_eq!(call(&k, "rawCheckBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).err(), Some(Error::KeyRevoked));
+        assert_eq!(
+            call(
+                &k,
+                "rawCheckBalance",
+                &json!({"acc": t["acc"], "balance": t["balance"]})
+            )
+            .err(),
+            Some(Error::KeyRevoked)
+        );
     }
     assert_eq!(k.seal_balance_cache(b"{}").err(), Some(Error::KeyRevoked));
-    assert_eq!(k.open_balance_cache(cache.as_bytes()).err(), Some(Error::KeyRevoked));
+    assert_eq!(
+        k.open_balance_cache(cache.as_bytes()).err(),
+        Some(Error::KeyRevoked)
+    );
     assert_eq!(w.zether_key(60, 0, 7).err(), Some(Error::WalletLocked));
     // the public part stays readable
     assert_eq!(k.y().len(), 128);
@@ -107,9 +139,13 @@ fn unlock_does_not_revive_a_zether_handle() {
     let w = wallet();
     let k = w.zether_key(60, 0, 7).unwrap();
     w.lock();
-    w.vectors_unlock(r["mnemonic"].as_str().unwrap(), "").unwrap();
+    w.vectors_unlock(r["mnemonic"].as_str().unwrap(), "")
+        .unwrap();
     assert_eq!(call(&k, "pop", &json!({})).err(), Some(Error::KeyRevoked));
-    assert!(call(&w.zether_key(60, 0, 7).unwrap(), "pop", &json!({})).is_ok(), "a new handle works");
+    assert!(
+        call(&w.zether_key(60, 0, 7).unwrap(), "pop", &json!({})).is_ok(),
+        "a new handle works"
+    );
 }
 
 /// ARCH-POS-13 (T15c, T14b; F6 / F7 / F8): a release build lists none of the raw commands and refuses each, with its vector
@@ -118,17 +154,54 @@ fn unlock_does_not_revive_a_zether_handle() {
 #[test]
 fn release_has_no_raw_decrypt() {
     unlock();
-    let raw = ["decrypt", "decryptPending", "rawCheckBalance", "rawProveTransfer", "rawProveTransferMulti", "rawProveBurn", "rawOpenMemo",
-        "rawRecoverTransfer", "rawOpenDisclosure"];
-    let release = ["encrypt", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "uaEnvelope", "typedDigest", "namedCall", "balance",
-        "pendingBalance", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure", "pickDecoys"];
+    let raw = [
+        "decrypt",
+        "decryptPending",
+        "rawCheckBalance",
+        "rawProveTransfer",
+        "rawProveTransferMulti",
+        "rawProveBurn",
+        "rawOpenMemo",
+        "rawRecoverTransfer",
+        "rawOpenDisclosure",
+    ];
+    let release = [
+        "encrypt",
+        "pop",
+        "auditorPop",
+        "ownerAuth",
+        "uaSig",
+        "shieldCalldata",
+        "envelope",
+        "uaEnvelope",
+        "typedDigest",
+        "namedCall",
+        "balance",
+        "pendingBalance",
+        "checkBalance",
+        "proveTransfer",
+        "proveTransferMulti",
+        "proveBurn",
+        "openMemo",
+        "recoverTransfer",
+        "openDisclosure",
+        "pickDecoys",
+    ];
     for cmd in release {
         assert!(COMMANDS.contains(&cmd), "{cmd}");
     }
     for cmd in raw {
         assert_eq!(COMMANDS.contains(&cmd), cfg!(feature = "vectors"), "{cmd}");
     }
-    assert_eq!(COMMANDS.len(), release.len() + if cfg!(feature = "vectors") { raw.len() } else { 0 });
+    assert_eq!(
+        COMMANDS.len(),
+        release.len()
+            + if cfg!(feature = "vectors") {
+                raw.len()
+            } else {
+                0
+            }
+    );
     let w = wallet();
     let k = w.zether_key(60, 0, 7).unwrap();
     let t = request("transfer_bls12381.json");
@@ -139,21 +212,52 @@ fn release_has_no_raw_decrypt() {
             "decrypt" => json!({"ct": t["acc"], "tableBits": 18, "boundBits": 20}),
             _ => json!({}),
         };
-        let got = (ZetherCmd::from_json(cmd, req.to_string().as_bytes()).err(), call(&k, cmd, &req).err());
+        let got = (
+            ZetherCmd::from_json(cmd, req.to_string().as_bytes()).err(),
+            call(&k, cmd, &req).err(),
+        );
         if cfg!(feature = "vectors") {
             assert_eq!(got.0, None, "{cmd}: a vectors build has it");
         } else {
-            assert_eq!(got, (Some(Error::Argument), Some(Error::Argument)), "{cmd}: refused in a release build");
+            assert_eq!(
+                got,
+                (Some(Error::Argument), Some(Error::Argument)),
+                "{cmd}: refused in a release build"
+            );
         }
     }
     if cfg!(feature = "vectors") {
-        assert_eq!(call(&k, "rawCheckBalance", &json!({"acc": t["acc"], "balance": t["balance"]})), Ok(json!({"ok": true})), "hazmat on");
+        assert_eq!(
+            call(
+                &k,
+                "rawCheckBalance",
+                &json!({"acc": t["acc"], "balance": t["balance"]})
+            ),
+            Ok(json!({"ok": true})),
+            "hazmat on"
+        );
     }
     for (cmd, f, x) in [
-        ("checkBalance", "acc", json!({"C": t["acc"]["C"], "D": t["acc"]["D"]})),
-        ("balance", "ct", json!({"C": t["acc"]["C"], "D": t["acc"]["D"]})),
-        ("pendingBalance", "pending", json!({"C": t["acc"]["C"], "D": t["acc"]["D"]})),
-        ("proveTransfer", "acc", json!({"C": t["acc"]["C"], "D": t["acc"]["D"]})),
+        (
+            "checkBalance",
+            "acc",
+            json!({"C": t["acc"]["C"], "D": t["acc"]["D"]}),
+        ),
+        (
+            "balance",
+            "ct",
+            json!({"C": t["acc"]["C"], "D": t["acc"]["D"]}),
+        ),
+        (
+            "pendingBalance",
+            "pending",
+            json!({"C": t["acc"]["C"], "D": t["acc"]["D"]}),
+        ),
+        (
+            "proveTransfer",
+            "acc",
+            json!({"C": t["acc"]["C"], "D": t["acc"]["D"]}),
+        ),
         ("proveBurn", "accSeq", json!(1)),
         ("openMemo", "memo", json!("0x00")),
         ("recoverTransfer", "payload", json!("0x00")),
@@ -161,12 +265,22 @@ fn release_has_no_raw_decrypt() {
         ("openDisclosure", "amount", json!(1)),
     ] {
         let mut r = json!({});
-        assert!(ZetherCmd::from_json(cmd, r.to_string().as_bytes()).is_ok(), "{cmd}: positive control");
+        assert!(
+            ZetherCmd::from_json(cmd, r.to_string().as_bytes()).is_ok(),
+            "{cmd}: positive control"
+        );
         r[f] = x;
-        assert_eq!(ZetherCmd::from_json(cmd, r.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd} with {f}");
+        assert_eq!(
+            ZetherCmd::from_json(cmd, r.to_string().as_bytes()).err(),
+            Some(Error::Argument),
+            "{cmd} with {f}"
+        );
     }
     for cmd in release {
-        assert!(ZetherCmd::from_json(cmd, b"{}").is_ok(), "{cmd}: positive control");
+        assert!(
+            ZetherCmd::from_json(cmd, b"{}").is_ok(),
+            "{cmd}: positive control"
+        );
     }
 }
 
@@ -186,23 +300,45 @@ fn a_key_field_in_command_json_is_refused() {
             "rawProveBurn" => request("burn_bls12381.json"),
             _ => json!({}),
         };
-        assert!(ZetherCmd::from_json(cmd, base.to_string().as_bytes()).is_ok(), "{cmd}: positive control");
+        assert!(
+            ZetherCmd::from_json(cmd, base.to_string().as_bytes()).is_ok(),
+            "{cmd}: positive control"
+        );
         let mut top = base.clone();
         top["key"] = secret_key.clone();
-        assert_eq!(ZetherCmd::from_json(cmd, top.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd}: top-level key");
-        assert_eq!(call(&k, cmd, &top).err(), Some(Error::Argument), "{cmd}: call with key");
+        assert_eq!(
+            ZetherCmd::from_json(cmd, top.to_string().as_bytes()).err(),
+            Some(Error::Argument),
+            "{cmd}: top-level key"
+        );
+        assert_eq!(
+            call(&k, cmd, &top).err(),
+            Some(Error::Argument),
+            "{cmd}: call with key"
+        );
     }
     // T18: `acc` is the request form's (`rawProveTransfer`, feature `vectors`; its positive control is the loop's); the words
     // form `proveTransfer` refuses `acc` whatever is inside it
     if cfg!(feature = "vectors") {
         let mut nested = t.clone();
         nested["acc"]["key"] = secret_key.clone();
-        assert_eq!(ZetherCmd::from_json("rawProveTransfer", nested.to_string().as_bytes()).err(), Some(Error::Argument), "key inside acc");
+        assert_eq!(
+            ZetherCmd::from_json("rawProveTransfer", nested.to_string().as_bytes()).err(),
+            Some(Error::Argument),
+            "key inside acc"
+        );
     }
     let mut msg = json!({"op": "ZetherRollOver", "chainId": 1, "chainUid": t["chainUid"], "token": t["token"], "message": {"key": secret_key}});
-    assert_eq!(ZetherCmd::from_json("typedDigest", msg.to_string().as_bytes()).err(), Some(Error::Argument), "key inside message");
+    assert_eq!(
+        ZetherCmd::from_json("typedDigest", msg.to_string().as_bytes()).err(),
+        Some(Error::Argument),
+        "key inside message"
+    );
     msg["message"] = json!({"ua": t["chainUid"]});
-    assert!(ZetherCmd::from_json("typedDigest", msg.to_string().as_bytes()).is_ok(), "message without key");
+    assert!(
+        ZetherCmd::from_json("typedDigest", msg.to_string().as_bytes()).is_ok(),
+        "message without key"
+    );
 }
 
 /// The allow-list, not a deny-list: the prover's secret-revealing flags and any unknown field are refused; so are another
@@ -215,7 +351,13 @@ fn fields_outside_the_allow_list_are_refused() {
     // request form is `rawProveTransfer` (feature `vectors`). Positive controls: every base below is accepted as it is, so
     // each refusal is the named field's.
     let vectors = cfg!(feature = "vectors");
-    let base = |cmd: &str| if cmd == "rawProveTransfer" { t.clone() } else { json!({}) };
+    let base = |cmd: &str| {
+        if cmd == "rawProveTransfer" {
+            t.clone()
+        } else {
+            json!({})
+        }
+    };
     let rows = [
         ("proveTransfer", "includeWitness", json!(true)),
         ("rawProveTransfer", "includeWitness", json!(true)),
@@ -229,28 +371,67 @@ fn fields_outside_the_allow_list_are_refused() {
         ("checkBalance", "yTo", json!("0x01")),
         ("encrypt", "acc", json!({"C": "0x", "D": "0x"})),
     ];
-    for (cmd, f, x) in rows.into_iter().filter(|r| vectors || !r.0.starts_with("raw")) {
-        assert!(ZetherCmd::from_json(cmd, base(cmd).to_string().as_bytes()).is_ok(), "{cmd}: positive control");
+    for (cmd, f, x) in rows
+        .into_iter()
+        .filter(|r| vectors || !r.0.starts_with("raw"))
+    {
+        assert!(
+            ZetherCmd::from_json(cmd, base(cmd).to_string().as_bytes()).is_ok(),
+            "{cmd}: positive control"
+        );
         let mut r = base(cmd);
         r[f] = x;
-        assert_eq!(ZetherCmd::from_json(cmd, r.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd} with {f}");
+        assert_eq!(
+            ZetherCmd::from_json(cmd, r.to_string().as_bytes()).err(),
+            Some(Error::Argument),
+            "{cmd} with {f}"
+        );
     }
     if vectors {
         let mut c = t.clone();
         c["acc"]["E"] = json!("0x00");
-        assert_eq!(ZetherCmd::from_json("rawProveTransfer", c.to_string().as_bytes()).err(), Some(Error::Argument), "acc with E");
+        assert_eq!(
+            ZetherCmd::from_json("rawProveTransfer", c.to_string().as_bytes()).err(),
+            Some(Error::Argument),
+            "acc with E"
+        );
     }
-    for cmd in ["proveTransfer", "rawProveTransfer"].into_iter().filter(|c| vectors || !c.starts_with("raw")) {
+    for cmd in ["proveTransfer", "rawProveTransfer"]
+        .into_iter()
+        .filter(|c| vectors || !c.starts_with("raw"))
+    {
         let mut bn = base(cmd);
         bn["curve"] = json!("bls12381");
-        assert!(ZetherCmd::from_json(cmd, bn.to_string().as_bytes()).is_ok(), "{cmd}: bls12381 (positive control)");
+        assert!(
+            ZetherCmd::from_json(cmd, bn.to_string().as_bytes()).is_ok(),
+            "{cmd}: bls12381 (positive control)"
+        );
         bn["curve"] = json!("bn254");
-        assert_eq!(ZetherCmd::from_json(cmd, bn.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd}: bn254");
+        assert_eq!(
+            ZetherCmd::from_json(cmd, bn.to_string().as_bytes()).err(),
+            Some(Error::Argument),
+            "{cmd}: bn254"
+        );
     }
-    for cmd in ["keygen", "verifyTransfer", "verifyBurn", "verifyTransferMulti", "vectors", ""] {
-        assert_eq!(ZetherCmd::from_json(cmd, b"{}").err(), Some(Error::Argument), "{cmd}");
+    for cmd in [
+        "keygen",
+        "verifyTransfer",
+        "verifyBurn",
+        "verifyTransferMulti",
+        "vectors",
+        "",
+    ] {
+        assert_eq!(
+            ZetherCmd::from_json(cmd, b"{}").err(),
+            Some(Error::Argument),
+            "{cmd}"
+        );
     }
-    assert_eq!(ZetherCmd::from_json("pop", b"[]").err(), Some(Error::Argument), "not an object");
+    assert_eq!(
+        ZetherCmd::from_json("pop", b"[]").err(),
+        Some(Error::Argument),
+        "not an object"
+    );
 }
 
 /// Numbers are `u64` or refused (the prover reads no other; a float does not read back to itself: the fuzz target's
@@ -258,28 +439,63 @@ fn fields_outside_the_allow_list_are_refused() {
 #[test]
 fn numbers_other_than_u64_are_refused() {
     unlock();
-    let y = json!(format!("0x{}", hex::encode(wallet().zether_key(60, 0, 7).unwrap().y())));
-    assert!(ZetherCmd::from_json("encrypt", json!({"Y": y, "amount": 5}).to_string().as_bytes()).is_ok(), "positive control");
+    let y = json!(format!(
+        "0x{}",
+        hex::encode(wallet().zether_key(60, 0, 7).unwrap().y())
+    ));
+    assert!(
+        ZetherCmd::from_json(
+            "encrypt",
+            json!({"Y": y, "amount": 5}).to_string().as_bytes()
+        )
+        .is_ok(),
+        "positive control"
+    );
     for bad in ["1.5", "-1", "1e22", "17592189870442189000000"] {
         let r = format!("{{\"Y\":{y},\"amount\":{bad}}}");
-        assert_eq!(ZetherCmd::from_json("encrypt", r.as_bytes()).err(), Some(Error::Argument), "{bad}");
+        assert_eq!(
+            ZetherCmd::from_json("encrypt", r.as_bytes()).err(),
+            Some(Error::Argument),
+            "{bad}"
+        );
     }
     let m = r#"{"op":"ZetherRollOver","message":{"accSeq":1.5}}"#;
-    assert_eq!(ZetherCmd::from_json("typedDigest", m.as_bytes()).err(), Some(Error::Argument), "a float in the message");
+    assert_eq!(
+        ZetherCmd::from_json("typedDigest", m.as_bytes()).err(),
+        Some(Error::Argument),
+        "a float in the message"
+    );
 }
 
 #[test]
 fn command_json_is_bounded_by_length_and_depth() {
     unlock();
     // the top object, `message`, then n - 2 arrays: depth n
-    let deep = |n: usize| format!("{{\"op\":\"ZetherRollOver\",\"message\":{{\"a\":{}0{}}}}}", "[".repeat(n - 2), "]".repeat(n - 2));
-    assert!(ZetherCmd::from_json("typedDigest", deep(8).as_bytes()).is_ok(), "depth 8");
-    assert_eq!(ZetherCmd::from_json("typedDigest", deep(9).as_bytes()).err(), Some(Error::Argument), "depth 9");
+    let deep = |n: usize| {
+        format!(
+            "{{\"op\":\"ZetherRollOver\",\"message\":{{\"a\":{}0{}}}}}",
+            "[".repeat(n - 2),
+            "]".repeat(n - 2)
+        )
+    };
+    assert!(
+        ZetherCmd::from_json("typedDigest", deep(8).as_bytes()).is_ok(),
+        "depth 8"
+    );
+    assert_eq!(
+        ZetherCmd::from_json("typedDigest", deep(9).as_bytes()).err(),
+        Some(Error::Argument),
+        "depth 9"
+    );
     let mut b = br#"{"curve":"bls12381"}"#.to_vec();
     b.resize(1 << 20, b' ');
     assert!(ZetherCmd::from_json("pop", &b).is_ok(), "1 MiB");
     b.push(b' ');
-    assert_eq!(ZetherCmd::from_json("pop", &b).err(), Some(Error::Argument), "1 MiB + 1");
+    assert_eq!(
+        ZetherCmd::from_json("pop", &b).err(),
+        Some(Error::Argument),
+        "1 MiB + 1"
+    );
 }
 
 #[test]
@@ -297,22 +513,58 @@ fn pop_and_check_balance_through_the_facade() {
     }
     // the PoP verifies under ua-rs's own 0x0141 verifier (verify.rs), not the prover's
     let msg: [u8; 32] = h(&pop["uaMsg"]).try_into().unwrap();
-    assert!(scaas_ua::verify::verify(0x0141, &k.y(), &msg, &h(&pop["pop"]), true));
+    assert!(scaas_ua::verify::verify(
+        0x0141,
+        &k.y(),
+        &msg,
+        &h(&pop["pop"]),
+        true
+    ));
     #[cfg(feature = "vectors")]
     {
         let t = request("transfer_bls12381.json");
-        assert_eq!(call(&k, "rawCheckBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": true}));
+        assert_eq!(
+            call(
+                &k,
+                "rawCheckBalance",
+                &json!({"acc": t["acc"], "balance": t["balance"]})
+            )
+            .unwrap(),
+            json!({"ok": true})
+        );
         let more = t["balance"].as_u64().unwrap() + 1;
-        assert_eq!(call(&k, "rawCheckBalance", &json!({"acc": t["acc"], "balance": more})).unwrap(), json!({"ok": false}));
+        assert_eq!(
+            call(
+                &k,
+                "rawCheckBalance",
+                &json!({"acc": t["acc"], "balance": more})
+            )
+            .unwrap(),
+            json!({"ok": false})
+        );
         // another account's handle does not open it
         let other = w.zether_key(60, 1, 7).unwrap();
-        assert_eq!(call(&other, "rawCheckBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": false}));
+        assert_eq!(
+            call(
+                &other,
+                "rawCheckBalance",
+                &json!({"acc": t["acc"], "balance": t["balance"]})
+            )
+            .unwrap(),
+            json!({"ok": false})
+        );
     }
     // a uaSig verifies too
     let d = "0x".to_string() + &"5a".repeat(32);
     let s = call(&k, "uaSig", &json!({"purpose": "metatx", "digest": d})).unwrap();
     let m: [u8; 32] = h(&s["uaMsg"]).try_into().unwrap();
-    assert!(scaas_ua::verify::verify(0x0141, &k.y(), &m, &h(&s["sig"]), false));
+    assert!(scaas_ua::verify::verify(
+        0x0141,
+        &k.y(),
+        &m,
+        &h(&s["sig"]),
+        false
+    ));
 }
 
 /// clientkeys' `sealBalanceCache` / `openBalanceCache` (zether.json): the box opens here, a wrong key or a changed box or
@@ -322,11 +574,29 @@ fn cache_box_equals_clientkeys() {
     unlock();
     let z = ua_vec("zether.json");
     let keys = ua_vec("keys.json");
-    let words = |id: &Value| keys["mnemonics"].as_array().unwrap().iter().find(|m| &m["id"] == id).unwrap().clone();
+    let words = |id: &Value| {
+        keys["mnemonics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|m| &m["id"] == id)
+            .unwrap()
+            .clone()
+    };
     let handle = |r: &Value| {
         let m = words(&r["mnemonic"]);
-        let w = Wallet::from_mnemonic(m["words"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap();
-        let k = w.zether_key(r["coin"].as_u64().unwrap() as u32, r["account"].as_u64().unwrap() as u32, r["use"].as_u64().unwrap() as u32).unwrap();
+        let w = Wallet::from_mnemonic(
+            m["words"].as_str().unwrap(),
+            m["passphrase"].as_str().unwrap(),
+        )
+        .unwrap();
+        let k = w
+            .zether_key(
+                r["coin"].as_u64().unwrap() as u32,
+                r["account"].as_u64().unwrap() as u32,
+                r["use"].as_u64().unwrap() as u32,
+            )
+            .unwrap();
         (w, k)
     };
     let rows = z["cacheBox"].as_array().unwrap();
@@ -334,15 +604,32 @@ fn cache_box_equals_clientkeys() {
     for r in rows {
         let (_w, k) = handle(r);
         assert_eq!(k.y(), h(&r["Y"]), "{}", r["id"]);
-        let pt = k.open_balance_cache(r["box"].to_string().as_bytes()).unwrap();
+        let pt = k
+            .open_balance_cache(r["box"].to_string().as_bytes())
+            .unwrap();
         assert_eq!(&pt[..], &h(&r["plaintext"])[..], "{}", r["id"]);
         let again: Value = serde_json::from_str(&k.seal_balance_cache(&pt).unwrap()).unwrap();
-        assert_eq!(&k.open_balance_cache(again.to_string().as_bytes()).unwrap()[..], &pt[..], "{}: round trip", r["id"]);
-        assert_ne!(again["iv"], r["box"]["iv"], "{}: a fresh iv per seal", r["id"]);
+        assert_eq!(
+            &k.open_balance_cache(again.to_string().as_bytes()).unwrap()[..],
+            &pt[..],
+            "{}: round trip",
+            r["id"]
+        );
+        assert_ne!(
+            again["iv"], r["box"]["iv"],
+            "{}: a fresh iv per seal",
+            r["id"]
+        );
         #[cfg(feature = "vectors")]
         {
-            let iv: [u8; 12] = <base64ct::Base64UrlUnpadded as base64ct::Encoding>::decode_vec(r["box"]["iv"].as_str().unwrap()).unwrap().try_into().unwrap();
-            let fixed: Value = serde_json::from_str(&k.vectors_seal_balance_cache(&pt, &iv).unwrap()).unwrap();
+            let iv: [u8; 12] = <base64ct::Base64UrlUnpadded as base64ct::Encoding>::decode_vec(
+                r["box"]["iv"].as_str().unwrap(),
+            )
+            .unwrap()
+            .try_into()
+            .unwrap();
+            let fixed: Value =
+                serde_json::from_str(&k.vectors_seal_balance_cache(&pt, &iv).unwrap()).unwrap();
             assert_eq!(fixed, r["box"], "{}: the same bytes as clientkeys", r["id"]);
         }
     }
@@ -350,11 +637,26 @@ fn cache_box_equals_clientkeys() {
     assert!(refusals.len() >= 3);
     for r in refusals {
         let (_w, k) = handle(r);
-        assert_eq!(k.open_balance_cache(r["box"].to_string().as_bytes()).err(), Some(Error::Aead), "{}", r["id"]);
+        assert_eq!(
+            k.open_balance_cache(r["box"].to_string().as_bytes()).err(),
+            Some(Error::Aead),
+            "{}",
+            r["id"]
+        );
     }
     let (_w, k) = handle(&rows[0]);
-    for bad in [&b"[]"[..], b"{\"iv\":\"AAAA\",\"ct\":\"AAAA\"}", b"{\"iv\":1}", b"not json"] {
-        assert_eq!(k.open_balance_cache(bad).err(), Some(Error::Argument), "{}", String::from_utf8_lossy(bad));
+    for bad in [
+        &b"[]"[..],
+        b"{\"iv\":\"AAAA\",\"ct\":\"AAAA\"}",
+        b"{\"iv\":1}",
+        b"not json",
+    ] {
+        assert_eq!(
+            k.open_balance_cache(bad).err(),
+            Some(Error::Argument),
+            "{}",
+            String::from_utf8_lossy(bad)
+        );
     }
 }
 
@@ -370,8 +672,16 @@ fn zether_prover_vectors_through_the_facade() {
     let r33 = zv("r33_keys.json");
     let w = wallet();
     let aud_w = Wallet::from_mnemonic(r33["mnemonic"].as_str().unwrap(), "auditor").unwrap();
-    let (from, to, aud) = (w.zether_key(60, 0, 7).unwrap(), w.zether_key(60, 1, 7).unwrap(), aud_w.zether_key(60, 0, 7).unwrap());
-    let run = |k: &scaas_ua::facade::zether::ZetherKey, cmd: &str, v: &Value, rng: &mut ChaCha20Rng| -> Value {
+    let (from, to, aud) = (
+        w.zether_key(60, 0, 7).unwrap(),
+        w.zether_key(60, 1, 7).unwrap(),
+        aud_w.zether_key(60, 0, 7).unwrap(),
+    );
+    let run = |k: &scaas_ua::facade::zether::ZetherKey,
+               cmd: &str,
+               v: &Value,
+               rng: &mut ChaCha20Rng|
+     -> Value {
         serde_json::from_str(&k.vectors_call(cmd, v.to_string().as_bytes(), rng).unwrap()).unwrap()
     };
     let same = |name: &str, got: &Value| {
@@ -382,18 +692,32 @@ fn zether_prover_vectors_through_the_facade() {
             }
         }
     };
-    let cases = zv("disclosure_bls12381.json")["cases"].as_array().unwrap().clone();
-    let disclose = |k: &scaas_ua::facade::zether::ZetherKey, c: &Value, kind: &str, rng: &mut ChaCha20Rng| {
-        let mut q = c.clone();
-        let o = q.as_object_mut().unwrap();
-        o.remove("opening");
-        o.remove("expect");
-        o.insert("kind".into(), json!(kind));
-        assert_eq!(run(k, "rawOpenDisclosure", &q, rng)["opening"], c["opening"], "{kind} opening, leg {}", c["index"]);
-    };
+    let cases = zv("disclosure_bls12381.json")["cases"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let disclose =
+        |k: &scaas_ua::facade::zether::ZetherKey, c: &Value, kind: &str, rng: &mut ChaCha20Rng| {
+            let mut q = c.clone();
+            let o = q.as_object_mut().unwrap();
+            o.remove("opening");
+            o.remove("expect");
+            o.insert("kind".into(), json!(kind));
+            assert_eq!(
+                run(k, "rawOpenDisclosure", &q, rng)["opening"],
+                c["opening"],
+                "{kind} opening, leg {}",
+                c["index"]
+            );
+        };
     let mut rng = ChaCha20Rng::seed_from_u64(0x5a37_4e72);
     let mut cp_rng = ChaCha20Rng::seed_from_u64(0x5e9d_e7c9);
-    let t = run(&from, "rawProveTransfer", &request("transfer_bls12381.json"), &mut rng);
+    let t = run(
+        &from,
+        "rawProveTransfer",
+        &request("transfer_bls12381.json"),
+        &mut rng,
+    );
     same("transfer_bls12381.json", &t);
     disclose(&to, &cases[1], "receiver", &mut rng);
     disclose(&aud, &cases[2], "auditor", &mut rng);
@@ -408,20 +732,60 @@ fn zether_prover_vectors_through_the_facade() {
     );
     assert_eq!(rec["senderS"], cases[0]["opening"]);
     assert_eq!(rec["senderCp"][0], cases[3]["opening"]);
-    same("transfer_noaud_bls12381.json", &run(&from, "rawProveTransfer", &request("transfer_noaud_bls12381.json"), &mut rng));
-    same("burn_bls12381.json", &run(&from, "rawProveBurn", &request("burn_bls12381.json"), &mut rng));
+    same(
+        "transfer_noaud_bls12381.json",
+        &run(
+            &from,
+            "rawProveTransfer",
+            &request("transfer_noaud_bls12381.json"),
+            &mut rng,
+        ),
+    );
+    same(
+        "burn_bls12381.json",
+        &run(
+            &from,
+            "rawProveBurn",
+            &request("burn_bls12381.json"),
+            &mut rng,
+        ),
+    );
     // schnorr_bls12381.json is a fixed-nonce row (no facade call takes a nonce): its key is this handle's
     let s = zv("schnorr_bls12381.json");
     assert_eq!(from.y(), h(&s["Y"]));
-    same("transfer_multi_bls12381.json", &run(&from, "rawProveTransferMulti", &request("transfer_multi_bls12381.json"), &mut rng));
+    same(
+        "transfer_multi_bls12381.json",
+        &run(
+            &from,
+            "rawProveTransferMulti",
+            &request("transfer_multi_bls12381.json"),
+            &mut rng,
+        ),
+    );
     disclose(&to, &cases[5], "receiver", &mut cp_rng);
     disclose(&aud, &cases[6], "auditor", &mut cp_rng);
-    same("transfer_multi_noaud_bls12381.json", &run(&from, "rawProveTransferMulti", &request("transfer_multi_noaud_bls12381.json"), &mut rng));
+    same(
+        "transfer_multi_noaud_bls12381.json",
+        &run(
+            &from,
+            "rawProveTransferMulti",
+            &request("transfer_multi_noaud_bls12381.json"),
+            &mut rng,
+        ),
+    );
     // r33_keys.json's PoPs: seed 33, account 0 then account 1
     let mut pop_rng = ChaCha20Rng::seed_from_u64(33);
     for (i, account) in [(0, 0u32), (2, 1)] {
-        let p = run(&w.zether_key(60, account, 7).unwrap(), "pop", &json!({}), &mut pop_rng);
-        assert_eq!(p["pop"], r33["bls12381"]["keys"][i]["pop"]["pop"], "pop of account {account}");
+        let p = run(
+            &w.zether_key(60, account, 7).unwrap(),
+            "pop",
+            &json!({}),
+            &mut pop_rng,
+        );
+        assert_eq!(
+            p["pop"], r33["bls12381"]["keys"][i]["pop"]["pop"],
+            "pop of account {account}"
+        );
     }
 }
 
@@ -433,23 +797,44 @@ fn pick_decoys() {
     unlock();
     let w = wallet();
     let k = w.zether_key(60, 0, 7).unwrap();
-    let c: Vec<String> = (1u8..=5).map(|i| format!("0x{}", hex::encode([i; 32]))).collect();
+    let c: Vec<String> = (1u8..=5)
+        .map(|i| format!("0x{}", hex::encode([i; 32])))
+        .collect();
     let r = json!({"candidates": c, "exclude": [c[4]], "count": 4});
-    let mut d: Vec<String> = serde_json::from_value(call(&k, "pickDecoys", &r).unwrap()["decoys"].clone()).unwrap();
+    let mut d: Vec<String> =
+        serde_json::from_value(call(&k, "pickDecoys", &r).unwrap()["decoys"].clone()).unwrap();
     d.sort();
     assert_eq!(d, c[..4], "every eligible one, once");
     // `recipient` (excluded implicitly): `legs` the recipient and the decoys, the recipient once
-    let o = call(&k, "pickDecoys", &json!({"candidates": c, "exclude": [c[4]], "count": 3, "recipient": c[0]})).unwrap();
+    let o = call(
+        &k,
+        "pickDecoys",
+        &json!({"candidates": c, "exclude": [c[4]], "count": 3, "recipient": c[0]}),
+    )
+    .unwrap();
     let mut legs: Vec<String> = serde_json::from_value(o["legs"].clone()).unwrap();
     legs.sort();
     assert_eq!(legs, c[..4], "{o}");
     let mut more = r.clone();
     more["count"] = json!(5);
-    assert_eq!(call(&k, "pickDecoys", &more).err(), Some(Error::Argument), "too few");
-    for (f, x) in [("weights", json!([1, "2"])), ("candidates", json!([{"ua": c[0]}])), ("count", json!(1.5)), ("key", json!({}))] {
+    assert_eq!(
+        call(&k, "pickDecoys", &more).err(),
+        Some(Error::Argument),
+        "too few"
+    );
+    for (f, x) in [
+        ("weights", json!([1, "2"])),
+        ("candidates", json!([{"ua": c[0]}])),
+        ("count", json!(1.5)),
+        ("key", json!({})),
+    ] {
         let mut bad = r.clone();
         bad[f] = x;
-        assert_eq!(call(&k, "pickDecoys", &bad).err(), Some(Error::Argument), "{f}");
+        assert_eq!(
+            call(&k, "pickDecoys", &bad).err(),
+            Some(Error::Argument),
+            "{f}"
+        );
     }
     w.lock();
     assert!(call(&k, "pickDecoys", &r).is_ok(), "no key used");
@@ -465,23 +850,95 @@ fn ua_envelope_through_the_facade() {
     let w = wallet();
     let k = w.zether_key(60, 0, 7).unwrap();
     let hx = |b: &[u8]| format!("0x{}", hex::encode(b));
-    let meta = |from: String| json!({
-        "chainId": 31337, "chainUid": hx(&[0x11; 32]), "token": hx(&[0x22; 20]),
-        "meta": {"from": from, "data": "0xdeadbeef", "batch": hx(&[1; 32]), "nonce": 7, "validUntil": 1_800_000_000u64,
-                 "mode": 1 | 0x20, "relayer": hx(&[0xbb; 20]), "fee": 1000, "feeRecipient": hx(&[0xcc; 20])},
-    });
+    let meta = |from: String| {
+        json!({
+            "chainId": 31337, "chainUid": hx(&[0x11; 32]), "token": hx(&[0x22; 20]),
+            "meta": {"from": from, "data": "0xdeadbeef", "batch": hx(&[1; 32]), "nonce": 7, "validUntil": 1_800_000_000u64,
+                     "mode": 1 | 0x20, "relayer": hx(&[0xbb; 20]), "fee": 1000, "feeRecipient": hx(&[0xcc; 20])},
+        })
+    };
     let mut native = [0u8; 32];
     native[12..].fill(0xaa);
-    let prover = |v: &Value| -> Value { serde_json::from_str(&zether_prover::api::call("uaEnvelope", &v.to_string()).unwrap()).unwrap() };
+    let prover = |v: &Value| -> Value {
+        serde_json::from_str(&zether_prover::api::call("uaEnvelope", &v.to_string()).unwrap())
+            .unwrap()
+    };
     for from in [native, [0x7a; 32]] {
         let v = meta(hx(&from));
-        assert_eq!(call(&k, "uaEnvelope", &v).unwrap(), prover(&v), "the prover's binding and digest of {}", hx(&from));
+        assert_eq!(
+            call(&k, "uaEnvelope", &v).unwrap(),
+            prover(&v),
+            "the prover's binding and digest of {}",
+            hx(&from)
+        );
     }
     let mut keyed = meta(hx(&native));
     keyed["key"] = json!({"x": "0x01"});
-    assert_eq!(call(&k, "uaEnvelope", &keyed).err(), Some(Error::Argument), "a key object");
+    assert_eq!(
+        call(&k, "uaEnvelope", &keyed).err(),
+        Some(Error::Argument),
+        "a key object"
+    );
     let mut extra = meta(hx(&native));
     extra["revealSecret"] = json!(true);
-    assert_eq!(call(&k, "uaEnvelope", &extra).err(), Some(Error::Argument), "a field off the list");
-    assert!(call(&k, "uaEnvelope", &meta(hx(&[0xaa; 20]))).is_err(), "an address from");
+    assert_eq!(
+        call(&k, "uaEnvelope", &extra).err(),
+        Some(Error::Argument),
+        "a field off the list"
+    );
+    assert!(
+        call(&k, "uaEnvelope", &meta(hx(&[0xaa; 20]))).is_err(),
+        "an address from"
+    );
+}
+
+/// Set-auditor (CTR-ZTH-95, spec §5.2): the handle's `auditorPop` over the token's typed `AuditorConsent` of its own UA (from named
+/// fields; the digest the prover builds for that message), verifying under its `Y` and only over that digest; a caller's digest or
+/// key object is not a field of the command.
+#[test]
+fn auditor_pop_from_named_fields() {
+    unlock();
+    let w = wallet();
+    let k = w.zether_key(60, 0, 8).unwrap();
+    let (token, uid) = (
+        "0x5ca00000000000000000000000000000000000a2",
+        format!("0x{}", "c1".repeat(32)),
+    );
+    let r =
+        json!({"curve": "bls12381", "chainId": 7622, "chainUid": uid, "token": token, "epoch": 2});
+    let out = call(&k, "auditorPop", &r).unwrap();
+    let m = json!({"token": token, "auditor": format!("0x{}", hex::encode(k.ua())), "epoch": 2, "chainUid": uid});
+    let t: Value = serde_json::from_str(
+        &zether_prover::api::call(
+            "typedDigest",
+            &json!({"op": "AuditorConsent", "chainId": 7622,
+        "chainUid": uid, "token": token, "message": m})
+            .to_string(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(out["digest"], t["digest"]);
+    let y = zether_prover::curve::decode_point::<zether_prover::curve::Bls12381>(&k.y()).unwrap();
+    let d: [u8; 32] = h(&out["digest"]).try_into().unwrap();
+    zether_prover::schnorr::verify_auditor_pop::<zether_prover::curve::Bls12381>(
+        &y,
+        &d,
+        &h(&out["pop"]),
+    )
+    .unwrap();
+    for bad in [
+        json!({"digest": t["digest"]}),
+        json!({"key": {"x": "0x01"}}),
+    ] {
+        let mut x = r.clone();
+        x.as_object_mut()
+            .unwrap()
+            .extend(bad.as_object().unwrap().clone());
+        assert_eq!(
+            call(&k, "auditorPop", &x).err(),
+            Some(Error::Argument),
+            "{bad}"
+        );
+    }
 }

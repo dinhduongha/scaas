@@ -1,0 +1,5 @@
+# Move formatting for the Aptos packages (smartcontracts/move/aptos): movefmt 1.5.3 (aptos-labs/movefmt release, the
+# version Aptos CLI 9.6.0 installs; sha256 checked by scripts/format.sh's CI install). Width 120 like every language but
+# Rust (owner 2026-11-17); the other settings are movefmt's defaults. Sui's Move is formatted by Prettier's Move plugin.
+max_width = 120
+indent_size = 4

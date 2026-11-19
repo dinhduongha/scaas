@@ -41,20 +41,34 @@ contract ZetherRelayTest is ZetherFixture {
     }
 
     function _mt(bytes memory data, uint256 batch, uint32 mode, uint256 fee)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m)
     {
         m = MetaTxLib.MetaTransaction({
-            from: payer, data: data, batch: batch, nonce: tok.mtxNonce(MetaTxLib.pad(payer), batch),
-            validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: fee, feeRecipient: address(0)
+            from: payer,
+            data: data,
+            batch: batch,
+            nonce: tok.mtxNonce(MetaTxLib.pad(payer), batch),
+            validUntil: block.timestamp + 300,
+            mode: mode,
+            relayer: relayer,
+            fee: fee,
+            feeRecipient: address(0)
         });
     }
 
     function _ua(MetaTxLib.MetaTransaction memory m) internal pure returns (MetaTxLib.UAMetaTransaction memory) {
-        return MetaTxLib.UAMetaTransaction(MetaTxLib.pad(m.from), m.data, m.batch, m.nonce, m.validUntil, m.mode, m.relayer,
-            m.fee, m.feeRecipient);
+        return MetaTxLib.UAMetaTransaction(
+            MetaTxLib.pad(m.from), m.data, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient
+        );
     }
 
-    function _uaSign(uint256 pk, MetaTxLib.UAMetaTransaction memory m) internal view returns (IUARegistry.UASig memory a) {
+    function _uaSign(uint256 pk, MetaTxLib.UAMetaTransaction memory m)
+        internal
+        view
+        returns (IUARegistry.UASig memory a)
+    {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, tok.mtxDigest(m));
         a.signature = abi.encodePacked(r, s, v);
     }
@@ -71,7 +85,11 @@ contract ZetherRelayTest is ZetherFixture {
 
     /// The proof binds the envelope: build the statement with the address binding of `m` first (`_addrBinding`, what
     /// `executeMetaTransaction` binds), then sign `m` with the proof.
-    function _relayedSingle(uint256 batch, uint256 fee) internal view returns (MetaTxLib.MetaTransaction memory m, Tx memory t) {
+    function _relayedSingle(uint256 batch, uint256 fee)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m, Tx memory t)
+    {
         m = _mt("", batch, RR | FIX, fee);
         t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, _addrBinding(tok, m));
         m.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof));
@@ -93,7 +111,9 @@ contract ZetherRelayTest is ZetherFixture {
         assertGt(tok.transferEntry(_ref(tok, alice, 0)).length, 0, "the entry at the entryRef");
         assertEq(tok.balanceOf(relayer), 25, "outer fee: public units to the relayer");
         assertEq(tok.balanceOf(payer), 975);
-        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "inner fee: public units to the beneficiary");
+        assertEq(
+            tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "inner fee: public units to the beneficiary"
+        );
         assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
         assertTrue(_holds(tok, alice, 500 - 100 - FEE, true));
         assertTrue(_holds(tok, bob, 100, false));
@@ -115,8 +135,11 @@ contract ZetherRelayTest is ZetherFixture {
         assertTrue(_holds(tok, alice, 460, true));
         // mtxUnshield, relayed: public units minted to the statement's recipient
         m = _mt("", 2, RR | FIX, 3);
-        (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 60, 460, address(0xB0C), carol.ua, _addrBinding(tok, m));
-        m.data = abi.encodeCall(IZetherToken.mtxUnshield, (_zBurn(pl, carol.ua), 60, bytes32(uint256(uint160(address(0xB0C)))), pr));
+        (bytes memory pl, bytes memory pr) =
+            _proveUnshield(tok, alice, 60, 460, address(0xB0C), carol.ua, _addrBinding(tok, m));
+        m.data = abi.encodeCall(
+            IZetherToken.mtxUnshield, (_zBurn(pl, carol.ua), 60, bytes32(uint256(uint160(address(0xB0C)))), pr)
+        );
         // lifted out and called directly: DIRECT statement ⇒ refused
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.mtxUnshield(_zBurn(pl, carol.ua), 60, bytes32(uint256(uint160(address(0xB0C)))), pr);
@@ -208,14 +231,20 @@ contract ZetherRelayTest is ZetherFixture {
         uint256 bal = 500;
         for (uint256 i; i < s.length; ++i) {
             // the owner-signed pair has its own relayed tests (ZetherUA5c)
-            if (s[i] == IZetherToken.mtxRollOverSigned.selector || s[i] == IZetherToken.mtxSetRollOverMode.selector) continue;
+            if (s[i] == IZetherToken.mtxRollOverSigned.selector || s[i] == IZetherToken.mtxSetRollOverMode.selector) {
+                continue;
+            }
             MetaTxLib.MetaTransaction memory m = _mt("", 200 + i, RR, 0);
-            if (s[i] == IMetaTx.cancelNonce.selector) m.data = abi.encodeCall(IMetaTx.cancelNonce, (55));
-            else if (s[i] == NormalToken.burn.selector) m.data = abi.encodeCall(NormalToken.burn, (7));
-            else {
+            if (s[i] == IMetaTx.cancelNonce.selector) {
+                m.data = abi.encodeCall(IMetaTx.cancelNonce, (55));
+            } else if (s[i] == NormalToken.burn.selector) {
+                m.data = abi.encodeCall(NormalToken.burn, (7));
+            } else {
                 m.data = _zetherOpCall(s[i], bal, _addrBinding(tok, m));
-                if (s[i] != IConfidentialToken.mtxShield.selector && s[i] != IZetherToken.mtxRollOver.selector
-                    && s[i] != IZetherToken.mtxRollOverBatch.selector) bal -= 10;
+                if (
+                    s[i] != IConfidentialToken.mtxShield.selector && s[i] != IZetherToken.mtxRollOver.selector
+                        && s[i] != IZetherToken.mtxRollOverBatch.selector
+                ) bal -= 10;
             }
             _exec(m, _sign(PAYER_PK, m));
         }
@@ -230,8 +259,12 @@ contract ZetherRelayTest is ZetherFixture {
     /// A direct proof (binding 0) put into an envelope: the statement is RELAYED there ⇒ refused.
     function test_directProofInsideAnEnvelopeRejected() public {
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, 0);
-        MetaTxLib.MetaTransaction memory m =
-            _mt(abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof)), 9, RR, 0);
+        MetaTxLib.MetaTransaction memory m = _mt(
+            abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof)),
+            9,
+            RR,
+            0
+        );
         bytes memory sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
@@ -245,7 +278,11 @@ contract ZetherRelayTest is ZetherFixture {
         m.mode = RR | PCT;
         bytes memory sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, IZetherToken.mtxConfidentialTransferSingle.selector, m.mode));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IMetaTx.MtxFeeClass.selector, IZetherToken.mtxConfidentialTransferSingle.selector, m.mode
+            )
+        );
         tok.executeMetaTransaction(m, sig);
     }
 
@@ -279,11 +316,17 @@ contract ZetherRelayTest is ZetherFixture {
     function test_allowlistPinned() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = tok.mtxSelectors();
         bytes4[11] memory want = [
-            IMetaTx.cancelNonce.selector, NormalToken.burn.selector, IConfidentialToken.mtxShield.selector,
-            IZetherToken.mtxConfidentialTransfer.selector, IZetherToken.mtxConfidentialTransferCompact.selector,
+            IMetaTx.cancelNonce.selector,
+            NormalToken.burn.selector,
+            IConfidentialToken.mtxShield.selector,
+            IZetherToken.mtxConfidentialTransfer.selector,
+            IZetherToken.mtxConfidentialTransferCompact.selector,
             IZetherToken.mtxConfidentialTransferSingle.selector,
-            IZetherToken.mtxUnshield.selector, IZetherToken.mtxRollOver.selector, IZetherToken.mtxRollOverBatch.selector,
-            IZetherToken.mtxRollOverSigned.selector, IZetherToken.mtxSetRollOverMode.selector
+            IZetherToken.mtxUnshield.selector,
+            IZetherToken.mtxRollOver.selector,
+            IZetherToken.mtxRollOverBatch.selector,
+            IZetherToken.mtxRollOverSigned.selector,
+            IZetherToken.mtxSetRollOverMode.selector
         ];
         assertEq(s.length, 11);
         for (uint256 i; i < 11; ++i) {
@@ -293,14 +336,40 @@ contract ZetherRelayTest is ZetherFixture {
         }
         assertEq(bytes4(keccak256("mtxShield(bytes32,uint256)")), IConfidentialToken.mtxShield.selector);
         string memory p = "(bytes32,bytes32,bytes32,bytes32)";
-        string memory multi = string.concat("(uint64,uint64,uint256,bytes16,bytes32,uint256,", p, ",", p, ",", p, ",(", p, ",", p, ",", p, ",", p, ")[],bytes)");
-        assertEq(bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", multi, ",bytes)")))), IZetherToken.mtxConfidentialTransfer.selector);
-        assertEq(bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", multi, ",bytes)")))), IZetherToken.mtxConfidentialTransferCompact.selector);
-        assertEq(bytes4(keccak256(bytes(string.concat("mtxUnshield((uint64,uint64,uint256,bytes32,", p, "),uint256,bytes32,bytes)")))),
-            IZetherToken.mtxUnshield.selector);
-        bytes[1] memory refused = [
-            abi.encodeCall(NormalToken.mint, (payer, 1, EnvKit.codeUidOf(address(tok))))
-        ];
+        string memory multi = string.concat(
+            "(uint64,uint64,uint256,bytes16,bytes32,uint256,",
+            p,
+            ",",
+            p,
+            ",",
+            p,
+            ",(",
+            p,
+            ",",
+            p,
+            ",",
+            p,
+            ",",
+            p,
+            ")[],bytes)"
+        );
+        assertEq(
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", multi, ",bytes)")))),
+            IZetherToken.mtxConfidentialTransfer.selector
+        );
+        assertEq(
+            bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", multi, ",bytes)")))),
+            IZetherToken.mtxConfidentialTransferCompact.selector
+        );
+        assertEq(
+            bytes4(
+                keccak256(
+                    bytes(string.concat("mtxUnshield((uint64,uint64,uint256,bytes32,", p, "),uint256,bytes32,bytes)"))
+                )
+            ),
+            IZetherToken.mtxUnshield.selector
+        );
+        bytes[1] memory refused = [abi.encodeCall(NormalToken.mint, (payer, 1, EnvKit.codeUidOf(address(tok))))];
         for (uint256 i; i < refused.length; ++i) {
             MetaTxLib.MetaTransaction memory m = _mt(refused[i], 100 + i, RR, 0);
             bytes memory sig = _sign(PAYER_PK, m);
@@ -334,7 +403,8 @@ contract ZetherRelayTest is ZetherFixture {
         uint256 ownerPk = 0x0DD;
         Mock1271Wallet w = new Mock1271Wallet(vm.addr(ownerPk));
         _public(tok, address(w), 3 * SCALE);
-        MetaTxLib.MetaTransaction memory m = _mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3)), 1, RR, 0);
+        MetaTxLib.MetaTransaction memory m =
+            _mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3)), 1, RR, 0);
         m.from = address(w);
         bytes memory sig = _sign(ownerPk, m);
         vm.prank(relayer);
@@ -353,14 +423,18 @@ contract ZetherRelayTest is ZetherFixture {
 
     function _shield7739(address w) internal {
         _public(tok, w, 3 * SCALE);
-        MetaTxLib.MetaTransaction memory m = _mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3)), 1, RR, 0);
+        MetaTxLib.MetaTransaction memory m =
+            _mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3)), 1, RR, 0);
         (m.from, m.nonce) = (w, tok.mtxNonce(MetaTxLib.pad(w), 1));
         bytes32 c = MtxHash.hashStruct(m);
         bytes32 h = MtxDigest.metaTx(address(tok), m);
-        assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(tok)), c)), h, "the kit rebuilds it");
+        assertEq(
+            keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(tok)), c)), h, "the kit rebuilds it"
+        );
         bytes memory raw = Erc7739Kit.raw(0x7739, w, h);
-        bytes memory sig = Erc7739Kit.sign(0x7739, w, address(tok), "MetaTransaction", Erc7739Kit.METATX_TYPE,
-            Erc7739Kit.METATX_TYPE, c);
+        bytes memory sig = Erc7739Kit.sign(
+            0x7739, w, address(tok), "MetaTransaction", Erc7739Kit.METATX_TYPE, Erc7739Kit.METATX_TYPE, c
+        );
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         tok.executeMetaTransaction(m, raw);
@@ -376,9 +450,15 @@ contract ZetherRelayTest is ZetherFixture {
     function test_envelopeBindingAndDigestKat() public view {
         string memory j = vm.readFile("test/vectors/zether/s3/envelope.json");
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
-            from: j.readAddress(".meta.from"), data: j.readBytes(".meta.data"), batch: uint256(j.readBytes32(".meta.batch")),
-            nonce: j.readUint(".meta.nonce"), validUntil: j.readUint(".meta.validUntil"), mode: uint32(j.readUint(".meta.mode")),
-            relayer: j.readAddress(".meta.relayer"), fee: j.readUint(".meta.fee"), feeRecipient: j.readAddress(".meta.feeRecipient")
+            from: j.readAddress(".meta.from"),
+            data: j.readBytes(".meta.data"),
+            batch: uint256(j.readBytes32(".meta.batch")),
+            nonce: j.readUint(".meta.nonce"),
+            validUntil: j.readUint(".meta.validUntil"),
+            mode: uint32(j.readUint(".meta.mode")),
+            relayer: j.readAddress(".meta.relayer"),
+            fee: j.readUint(".meta.fee"),
+            feeRecipient: j.readAddress(".meta.feeRecipient")
         });
         uint256 chainId = j.readUint(".chainId");
         bytes32 uid = j.readBytes32(".chainUid");
@@ -391,26 +471,42 @@ contract ZetherRelayTest is ZetherFixture {
 
     function _slice(bytes memory a, uint256 off, uint256 len) internal pure returns (bytes memory out) {
         out = new bytes(len);
-        for (uint256 i; i < len; ++i) out[i] = a[off + i];
+        for (uint256 i; i < len; ++i) {
+            out[i] = a[off + i];
+        }
     }
 
     function _binding(MetaTxLib.MetaTransaction memory m, uint256 chainId, bytes32 uid, address token)
-        internal pure returns (bytes32)
+        internal
+        pure
+        returns (bytes32)
     {
         (address r, address f) = MetaTxLib.canon(m);
-        return keccak256(bytes.concat(
-            abi.encode(keccak256("SCAAS-ZETHER-ENVELOPE-V1"), chainId, uid, token, m.from, m.batch),
-            abi.encode(m.nonce, m.validUntil, m.mode, r, m.fee, f)
-        ));
+        return keccak256(
+            bytes.concat(
+                abi.encode(keccak256("SCAAS-ZETHER-ENVELOPE-V1"), chainId, uid, token, m.from, m.batch),
+                abi.encode(m.nonce, m.validUntil, m.mode, r, m.fee, f)
+            )
+        );
     }
 
     function _digest(MetaTxLib.MetaTransaction memory m, uint256 chainId, bytes32 uid, address token)
-        internal pure returns (bytes32)
+        internal
+        pure
+        returns (bytes32)
     {
-        bytes32 ds = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS ZetherToken"), keccak256("1"), chainId, token, uid
-        ));
+        bytes32 ds = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS ZetherToken"),
+                keccak256("1"),
+                chainId,
+                token,
+                uid
+            )
+        );
         return keccak256(abi.encodePacked(hex"1901", ds, MtxHash.hashStruct(m)));
     }
 }

@@ -7,9 +7,9 @@
 #include <cstdlib>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <nlohmann/json.hpp>
-#include <iterator>
 #include <set>
 #include <sstream>
 #include <tuple>
@@ -22,15 +22,15 @@ using nlohmann::json;
 using namespace scaas::ua;
 
 static int failures = 0;
-#define CHECK(c, ctx)                                                                                    \
-    do {                                                                                                 \
-        if (!(c)) {                                                                                      \
-            std::fprintf(stderr, "%s:%d: %s [%s]\n", __FILE__, __LINE__, #c, std::string(ctx).c_str()); \
-            ++failures;                                                                                  \
-        }                                                                                                \
+#define CHECK(c, ctx)                                                                                                  \
+    do {                                                                                                               \
+        if (!(c)) {                                                                                                    \
+            std::fprintf(stderr, "%s:%d: %s [%s]\n", __FILE__, __LINE__, #c, std::string(ctx).c_str());                \
+            ++failures;                                                                                                \
+        }                                                                                                              \
     } while (0)
 
-static json load_json(const std::string& path) {
+static json load_json(const std::string &path) {
     std::ifstream f(path);
     if (!f) {
         std::fprintf(stderr, "cannot open %s\n", path.c_str());
@@ -38,16 +38,18 @@ static json load_json(const std::string& path) {
     }
     return json::parse(f);
 }
-static json vec(const char* name) { return load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/" + name); }
-static Bytes bytes(const json& v) {
+static json vec(const char *name) { return load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/" + name); }
+static Bytes bytes(const json &v) {
     std::string h = v.get<std::string>();
-    if (h.rfind("0x", 0) == 0) h = h.substr(2);
+    if (h.rfind("0x", 0) == 0)
+        h = h.substr(2);
     Bytes out;
-    for (size_t i = 0; i + 1 < h.size(); i += 2) out.push_back(uint8_t(std::stoi(h.substr(i, 2), nullptr, 16)));
+    for (size_t i = 0; i + 1 < h.size(); i += 2)
+        out.push_back(uint8_t(std::stoi(h.substr(i, 2), nullptr, 16)));
     return out;
 }
-static std::string hx(const Bytes& b) {
-    static const char* d = "0123456789abcdef";
+static std::string hx(const Bytes &b) {
+    static const char *d = "0123456789abcdef";
     std::string s = "0x";
     for (auto c : b) {
         s += d[c >> 4];
@@ -55,57 +57,65 @@ static std::string hx(const Bytes& b) {
     }
     return s;
 }
-static Bytes str(const std::string& s) { return Bytes(s.begin(), s.end()); }
-static std::string code_of(const std::function<void()>& f) {
+static Bytes str(const std::string &s) { return Bytes(s.begin(), s.end()); }
+static std::string code_of(const std::function<void()> &f) {
     try {
         f();
-    } catch (const Error& e) {
+    } catch (const Error &e) {
         return e.code();
     }
     return "";
 }
-static bool all_zero(const uint8_t* p, size_t n) { return std::all_of(p, p + n, [](uint8_t b) { return b == 0; }); }
-static std::string dump(const json& v) { return v.is_null() ? std::string() : v.dump(); }
+static bool all_zero(const uint8_t *p, size_t n) {
+    return std::all_of(p, p + n, [](uint8_t b) { return b == 0; });
+}
+static std::string dump(const json &v) { return v.is_null() ? std::string() : v.dump(); }
 
 static json KEYS = vec("keys.json");
 static std::map<std::string, json> mnemonics() {
     std::map<std::string, json> m;
-    for (auto& r : KEYS["mnemonics"]) m[r["id"].get<std::string>()] = r;
+    for (auto &r : KEYS["mnemonics"])
+        m[r["id"].get<std::string>()] = r;
     return m;
 }
 static std::map<std::string, json> MN = mnemonics();
 static const std::set<uint16_t> DETERMINISTIC = {0x0101, 0x0102, 0x0106, 0x0107, 0x0108};
 static bool falcon() { return features() & feature::kFalcon; }
 
-static Wallet wallet_of(const std::string& id) {
+static Wallet wallet_of(const std::string &id) {
     Secret w(MN.at(id)["words"].get<std::string>()), p(MN.at(id)["passphrase"].get<std::string>());
     return Wallet::fromMnemonic(w, p);
 }
 // one wallet per mnemonic, kept for the run
-static const Wallet& W(const std::string& id) {
+static const Wallet &W(const std::string &id) {
     static std::map<std::string, Wallet> cache;
     auto it = cache.find(id);
-    if (it == cache.end()) it = cache.emplace(id, wallet_of(id)).first;
+    if (it == cache.end())
+        it = cache.emplace(id, wallet_of(id)).first;
     return it->second;
 }
 // a number, or its decimal string (kem.json writes versions as strings: one row is 2^64)
-static uint64_t u64(const json& v) { return v.is_string() ? std::stoull(v.get<std::string>()) : v.get<uint64_t>(); }
-static KemKey kem_of(const json& r, const Wallet* w = nullptr) {
+static uint64_t u64(const json &v) { return v.is_string() ? std::stoull(v.get<std::string>()) : v.get<uint64_t>(); }
+static KemKey kem_of(const json &r, const Wallet *w = nullptr) {
     std::string mid = r.contains("mnemonic") && !r["mnemonic"].is_null() ? r["mnemonic"].get<std::string>() : "pq_kat";
-    const Wallet& ww = w ? *w : W(mid);
-    return ww.uaKey(uint16_t(u64(r["kind"])), uint32_t(u64(r["account"])), uint32_t(u64(r["index"]))).kemKey(u64(r["version"]));
+    const Wallet &ww = w ? *w : W(mid);
+    return ww.uaKey(uint16_t(u64(r["kind"])), uint32_t(u64(r["account"])), uint32_t(u64(r["index"])))
+        .kemKey(u64(r["version"]));
 }
 
 // --- load, secrets, handles ------------------------------------------------------------------------------------------------
 
 static void load_refuses_wrong_abi_or_features() {
-    load();  // positive control: the linked core is this header's
+    load(); // positive control: the linked core is this header's
     CHECK((features() & kRequiredFeatures) == kRequiredFeatures, "required features");
     auto abi = detail::reportedAbiVersion;
     auto feat = detail::reportedFeatures;
-    detail::reportedAbiVersion = [] { return 5u; };  // an older core
+    detail::reportedAbiVersion = [] { return 5u; }; // an older core
     CHECK(code_of([] { load(); }) == "UAAbiMismatch", "abi 5");
-    CHECK(code_of([] { Secret w(MN.at("pq_kat")["words"].get<std::string>()), p; Wallet::fromMnemonic(w, p); }) == "UAAbiMismatch",
+    CHECK(code_of([] {
+              Secret w(MN.at("pq_kat")["words"].get<std::string>()), p;
+              Wallet::fromMnemonic(w, p);
+          }) == "UAAbiMismatch",
           "a factory refuses before it runs");
     CHECK(code_of([] { KemKey::ephemeral(); }) == "UAAbiMismatch", "kem ephemeral");
     CHECK(code_of([] { LinkSession::create(); }) == "UAAbiMismatch", "link session");
@@ -117,7 +127,7 @@ static void load_refuses_wrong_abi_or_features() {
     CHECK(code_of([] { load(); }) == "UAAbiMismatch", "features without pqz");
     detail::reportedFeatures = [] { return kRequiredFeatures & ~feature::kPqzSetN2304Kmax4096; };
     CHECK(code_of([] { load(); }) == "UAAbiMismatch", "another pqz set");
-    detail::reportedFeatures = [] { return kRequiredFeatures | feature::kVectors; };  // Codex C1: a test build
+    detail::reportedFeatures = [] { return kRequiredFeatures | feature::kVectors; }; // Codex C1: a test build
     CHECK(code_of([] { load(); }) == "UAAbiMismatch", "a vectors build");
     CHECK(code_of([] { KemKey::ephemeral(); }) == "UAAbiMismatch", "a vectors build: kem ephemeral");
     detail::reportedFeatures = feat;
@@ -142,7 +152,8 @@ static void secret_buffer_wiped_after_call() {
     Wallet w2 = Wallet::openVault(v, pin2, prf, b39);
     CHECK(all_zero(pin2.data(), pin2.size()), "open_vault passphrase wiped");
     Bytes raw(32);
-    for (size_t i = 0; i < 32; ++i) raw[i] = uint8_t(i + 1);
+    for (size_t i = 0; i < 32; ++i)
+        raw[i] = uint8_t(i + 1);
     Secret imp(raw);
     w2.importNativeKey("evm", imp);
     CHECK(all_zero(imp.data(), 32), "imported key wiped");
@@ -153,7 +164,7 @@ static void secret_buffer_wiped_after_call() {
     auto [gw, sb] = Wallet::generate();
     Secret phrase = sb.reveal();
     CHECK(phrase.size() > 100, "24 words");
-    const uint8_t* q = phrase.data();
+    const uint8_t *q = phrase.data();
     size_t m = phrase.size();
     phrase.wipe();
     CHECK(all_zero(q, m), "revealed phrase wiped");
@@ -175,7 +186,7 @@ static void handle_freed_once() {
         v.push_back(std::move(k2));
         v.push_back(w.uaKey(0x0101, 0, 0));
         Key k3 = std::move(v[0]);
-        k3 = std::move(v[1]);  // the old key of k3 is freed here, once
+        k3 = std::move(v[1]); // the old key of k3 is freed here, once
         KemKey kk = w.uaKey(0x0130, 0, 0).kemKey(0);
         KemKey kk2(std::move(kk));
         Wallet w2 = std::move(w);
@@ -188,27 +199,31 @@ static void handle_freed_once() {
 
 static void keys_json() {
     size_t n = 0;
-    for (auto& r : KEYS["ua"]) {
+    for (auto &r : KEYS["ua"]) {
         uint16_t kind = r["kind"].get<uint16_t>();
-        if ((kind == 0x0132 || kind == 0x0135) && !falcon()) continue;
-        Key k = W(r["mnemonic"].get<std::string>()).uaKey(kind, r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
+        if ((kind == 0x0132 || kind == 0x0135) && !falcon())
+            continue;
+        Key k =
+            W(r["mnemonic"].get<std::string>()).uaKey(kind, r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
         CHECK(hx(k.keyData()) == r["keyData"].get<std::string>(), r["name"].get<std::string>());
-        if (!r["ua"].is_null() && kind != 0x0110 && kind != 0x0112) CHECK(hx(k.ua()) == r["ua"].get<std::string>(), r["name"].get<std::string>());
+        if (!r["ua"].is_null() && kind != 0x0110 && kind != 0x0112)
+            CHECK(hx(k.ua()) == r["ua"].get<std::string>(), r["name"].get<std::string>());
         ++n;
     }
     CHECK(n >= 184, "ua rows");
-    for (auto& r : KEYS["native"]) {
+    for (auto &r : KEYS["native"]) {
         uint32_t coin = r["coinType"].is_null() ? kCoinDefault : r["coinType"].get<uint32_t>();
-        Key k = W(r["mnemonic"].get<std::string>()).nativeKey(r["network"].get<std::string>(), r["index"].get<uint32_t>(), coin);
+        Key k = W(r["mnemonic"].get<std::string>())
+                    .nativeKey(r["network"].get<std::string>(), r["index"].get<uint32_t>(), coin);
         CHECK(hx(k.keyData()) == "0x" + r["publicKey"].get<std::string>(), r["network"].get<std::string>());
         if (r["address"].is_null())
             CHECK(code_of([&] { k.address(); }) == "UAArgument", r["network"].get<std::string>() + ": no address");
         else
             CHECK(k.address() == r["address"].get<std::string>(), r["network"].get<std::string>());
     }
-    for (auto& r : KEYS["refusals"]) {
+    for (auto &r : KEYS["refusals"]) {
         std::string got = code_of([&] {
-            const Wallet& w = W(r["mnemonic"].get<std::string>());
+            const Wallet &w = W(r["mnemonic"].get<std::string>());
             if (r["what"] == "ua")
                 w.uaKey(r["kind"].get<uint16_t>(), r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
             else
@@ -225,10 +240,12 @@ static void keys_json() {
 static void sign_json() {
     json S = vec("sign.json");
     size_t exact = 0;
-    for (auto& r : S["ua"]) {
+    for (auto &r : S["ua"]) {
         uint16_t kind = r["kind"].get<uint16_t>();
-        if ((kind == 0x0132 || kind == 0x0135) && !falcon()) continue;
-        Key k = W(r["mnemonic"].get<std::string>()).uaKey(kind, r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
+        if ((kind == 0x0132 || kind == 0x0135) && !falcon())
+            continue;
+        Key k =
+            W(r["mnemonic"].get<std::string>()).uaKey(kind, r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
         Bytes sig = k.signUa(bytes(r["purposeTag"]), bytes(r["digest"]));
         if (DETERMINISTIC.count(kind)) {
             CHECK(hx(sig) == r["signature"].get<std::string>(), r["name"].get<std::string>());
@@ -238,9 +255,10 @@ static void sign_json() {
         }
     }
     CHECK(exact >= 10, "deterministic rows");
-    for (auto& r : S["member"]) {
+    for (auto &r : S["member"]) {
         uint16_t kind = r["kind"].get<uint16_t>();
-        Key k = W(r["mnemonic"].get<std::string>()).uaKey(kind, r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
+        Key k =
+            W(r["mnemonic"].get<std::string>()).uaKey(kind, r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
         Bytes sig = k.signMember(bytes(r["structureUa"]), bytes(r["structureUaMsg"]));
         if (DETERMINISTIC.count(kind))
             CHECK(hx(sig) == r["signature"].get<std::string>(), r["name"].get<std::string>());
@@ -249,65 +267,75 @@ static void sign_json() {
     }
     Key evm = W("pq_kat").nativeKey("evm", 0);
     int signed_ = 0, refused = 0;
-    for (auto& r : S["policy"]) {
+    for (auto &r : S["policy"]) {
         if (r.contains("refused")) {
-            CHECK(code_of([&] { evm.signTyped(r["td"].dump(), r["expect"].dump()); }) == "UAPolicyRefused", r["id"].get<std::string>());
+            CHECK(code_of([&] { evm.signTyped(r["td"].dump(), r["expect"].dump()); }) == "UAPolicyRefused",
+                  r["id"].get<std::string>());
             ++refused;
         } else {
-            CHECK(evm.signTyped(r["td"].dump(), r["expect"].dump()) == evm.signDigestRaw(bytes(r["digest"])), r["id"].get<std::string>());
+            CHECK(evm.signTyped(r["td"].dump(), r["expect"].dump()) == evm.signDigestRaw(bytes(r["digest"])),
+                  r["id"].get<std::string>());
             ++signed_;
         }
     }
     CHECK(signed_ == 10 && refused == 14, "policy rows");
-    for (auto& r : S["typed"]["generic"])
+    for (auto &r : S["typed"]["generic"])
         CHECK(evm.signTypedAny(r["td"].dump()) == evm.signDigestRaw(bytes(r["digest"])), r["id"].get<std::string>());
-    for (auto& r : S["typed"]["refusals"])
+    for (auto &r : S["typed"]["refusals"])
         CHECK(code_of([&] { evm.signTypedAny(r["td"].dump()); }) == "UAArgument", r["id"].get<std::string>());
-    for (auto& r : S["tx"]["rows"]) {
-        auto& s = r["signer"];
-        Key k = W(s["mnemonic"].get<std::string>()).nativeKey(s["network"].get<std::string>(), s["index"].get<uint32_t>());
+    for (auto &r : S["tx"]["rows"]) {
+        auto &s = r["signer"];
+        Key k =
+            W(s["mnemonic"].get<std::string>()).nativeKey(s["network"].get<std::string>(), s["index"].get<uint32_t>());
         CHECK(hx(k.signTransaction(r["tx"].dump())) == r["raw"].get<std::string>(), r["tx"]["type"].dump());
     }
-    for (auto& r : S["tx"]["refusals"])
+    for (auto &r : S["tx"]["refusals"])
         CHECK(code_of([&] { evm.signTransaction(r["tx"].dump()); }) == "UAArgument", r["id"].get<std::string>());
-    for (auto& r : S["webauthn"]["accepted"]) {
-        CHECK(webauthnChallenge(bytes(r["purposeTag"]), bytes(r["digest"])) == bytes(r["expectedChallenge"]), "challenge");
-        CHECK(webauthnAssertion(bytes(r["keyData"]), bytes(r["expectedChallenge"]), bytes(r["authData"]), bytes(r["clientDataJSON"]),
-                                bytes(r["r"]), bytes(r["s"])) == bytes(r["assertion"]),
+    for (auto &r : S["webauthn"]["accepted"]) {
+        CHECK(webauthnChallenge(bytes(r["purposeTag"]), bytes(r["digest"])) == bytes(r["expectedChallenge"]),
+              "challenge");
+        CHECK(webauthnAssertion(bytes(r["keyData"]), bytes(r["expectedChallenge"]), bytes(r["authData"]),
+                                bytes(r["clientDataJSON"]), bytes(r["r"]), bytes(r["s"])) == bytes(r["assertion"]),
               "assertion");
     }
-    for (auto& r : S["webauthn"]["refusals"])
+    for (auto &r : S["webauthn"]["refusals"])
         CHECK(code_of([&] {
-                  webauthnAssertion(bytes(r["keyData"]), bytes(r["expectedChallenge"]), bytes(r["authData"]), bytes(r["clientDataJSON"]),
-                                    bytes(r["r"]), bytes(r["s"]));
+                  webauthnAssertion(bytes(r["keyData"]), bytes(r["expectedChallenge"]), bytes(r["authData"]),
+                                    bytes(r["clientDataJSON"]), bytes(r["r"]), bytes(r["s"]));
               }) == "UA" + r["error"].get<std::string>(),
               r["case"].get<std::string>());
     // msig through the UASig builder: keys by position
     int built = 0, mrefused = 0;
-    for (auto& r : S["msig"]) {
+    for (auto &r : S["msig"]) {
         std::vector<Key> keys;
-        auto pos = [&](const json& x) {
-            auto& k = x["key"];
-            keys.push_back(W(k["mnemonic"].get<std::string>()).uaKey(k["kind"].get<uint16_t>(), k["account"].get<uint32_t>(), k["index"].get<uint32_t>()));
+        auto pos = [&](const json &x) {
+            auto &k = x["key"];
+            keys.push_back(
+                W(k["mnemonic"].get<std::string>())
+                    .uaKey(k["kind"].get<uint16_t>(), k["account"].get<uint32_t>(), k["index"].get<uint32_t>()));
             return keys.size() - 1;
         };
         json slots = json::array();
-        for (auto& s : r["slots"]) {
+        for (auto &s : r["slots"]) {
             if (s.contains("members")) {
                 json ms = json::array();
-                for (auto& x : s["members"]) ms.push_back({{"index", x["index"]}, {"key", pos(x)}});
+                for (auto &x : s["members"])
+                    ms.push_back({{"index", x["index"]}, {"key", pos(x)}});
                 slots.push_back({{"index", s["index"]}, {"members", ms}});
             } else {
                 slots.push_back({{"index", s["index"]}, {"key", pos(s)}});
             }
         }
         json m = {{"keyData", r["keyData"]}, {"slots", slots}};
-        if (r.contains("inner")) m["inner"] = r["inner"];
+        if (r.contains("inner"))
+            m["inner"] = r["inner"];
         json req = {{"purpose", r["purposeTag"]}, {"digest", r["digest"]}, {"msig", m}};
-        std::vector<const Key*> ptrs;
-        for (auto& k : keys) ptrs.push_back(&k);
+        std::vector<const Key *> ptrs;
+        for (auto &k : keys)
+            ptrs.push_back(&k);
         if (r.contains("refused")) {
-            CHECK(code_of([&] { uaSig(req.dump(), ptrs); }) == r["refused"].get<std::string>(), r["case"].get<std::string>());
+            CHECK(code_of([&] { uaSig(req.dump(), ptrs); }) == r["refused"].get<std::string>(),
+                  r["case"].get<std::string>());
             ++mrefused;
         } else {
             json sig = json::parse(uaSig(req.dump(), ptrs));
@@ -318,12 +346,17 @@ static void sign_json() {
     }
     CHECK(built == 3 && mrefused == 4, "msig rows");
     // a single key through the builder is sign_ua; a position past the keys is UAArgument
-    for (auto& r : S["ua"]) {
-        if (r["kind"] != 0x0101) continue;
+    for (auto &r : S["ua"]) {
+        if (r["kind"] != 0x0101)
+            continue;
         Key k = W(r["mnemonic"].get<std::string>()).uaKey(0x0101, 0, 0);
-        json got = json::parse(uaSig(json{{"purpose", r["purposeTag"]}, {"digest", r["digest"]}, {"key", 0}}.dump(), {&k}));
-        CHECK(got == (json{{"keyData", r["keyData"]}, {"signature", r["signature"]}, {"members", json::array()}}), "uasig single");
-        CHECK(code_of([&] { uaSig(json{{"purpose", r["purposeTag"]}, {"digest", r["digest"]}, {"key", 1}}.dump(), {&k}); }) == "UAArgument",
+        json got =
+            json::parse(uaSig(json{{"purpose", r["purposeTag"]}, {"digest", r["digest"]}, {"key", 0}}.dump(), {&k}));
+        CHECK(got == (json{{"keyData", r["keyData"]}, {"signature", r["signature"]}, {"members", json::array()}}),
+              "uasig single");
+        CHECK(code_of([&] {
+                  uaSig(json{{"purpose", r["purposeTag"]}, {"digest", r["digest"]}, {"key", 1}}.dump(), {&k});
+              }) == "UAArgument",
               "key position");
         break;
     }
@@ -331,22 +364,26 @@ static void sign_json() {
     CHECK(code_of([&] { uak.signDigestRaw(Bytes(32)); }) == "UARawDigestRefused", "raw digest on a UA key");
     CHECK(evm.signDigestRaw(Bytes(32)).size() == 65, "raw digest on a native key");
     CHECK(evm.signKeyProof(str("challenge")).size() == 65, "key proof");
-    CHECK(code_of([&] { W("pq_kat").uaKey(0x0101, 0, 0).signKeyProof(str("challenge")); }) == "UAArgument", "key proof on a UA key");
+    CHECK(code_of([&] { W("pq_kat").uaKey(0x0101, 0, 0).signKeyProof(str("challenge")); }) == "UAArgument",
+          "key proof on a UA key");
     CHECK(code_of([&] { evm.signUa(Bytes(32), Bytes(32)); }) == "UAArgument", "sign_ua on a native key");
 }
 
 // rs_signatures.json: release signatures of ua-rs over the sign.json verify rows; the keys are the binding's own
 static void rs_signatures_json() {
     json R = vec("rs_signatures.json");
-    for (auto& r : R["rows"]) {
+    for (auto &r : R["rows"]) {
         uint16_t kind = r["kind"].get<uint16_t>();
-        if ((kind == 0x0132 || kind == 0x0135) && !falcon()) continue;
-        Key k = W(r["mnemonic"].get<std::string>()).uaKey(kind, r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
+        if ((kind == 0x0132 || kind == 0x0135) && !falcon())
+            continue;
+        Key k =
+            W(r["mnemonic"].get<std::string>()).uaKey(kind, r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
         std::string ctx = r["name"].get<std::string>() + " " + r["role"].get<std::string>();
         CHECK(hx(k.keyData()) == r["keyData"].get<std::string>(), ctx);
         CHECK(hx(uaMessage(kind, bytes(r["purposeTag"]), bytes(r["digest"]))) == r["uaMsg"].get<std::string>(), ctx);
         Bytes sig = k.signUa(bytes(r["purposeTag"]), bytes(r["digest"]));
-        if (kind != 0x0132 && kind != 0x0135) CHECK(sig.size() == bytes(r["signature"]).size(), ctx);
+        if (kind != 0x0132 && kind != 0x0135)
+            CHECK(sig.size() == bytes(r["signature"]).size(), ctx);
         CHECK(sig != bytes(r["signature"]) || DETERMINISTIC.count(kind), ctx + ": randomized");
     }
 }
@@ -355,30 +392,37 @@ static void rs_signatures_json() {
 
 static void kem_json() {
     json K = vec("kem.json");
-    for (auto& r : K["keys"]) CHECK(hx(kem_of(r).kemPk()) == r["kemPk"].get<std::string>(), r["kind"].dump());
+    for (auto &r : K["keys"])
+        CHECK(hx(kem_of(r).kemPk()) == r["kemPk"].get<std::string>(), r["kind"].dump());
     int refusals = 0;
-    for (auto& r : K["refusals"]) {  // decimal strings (a version may be 2^64)
-        auto num = [&](const char* f) { return u64(r[f]); };
+    for (auto &r : K["refusals"]) { // decimal strings (a version may be 2^64)
+        auto num = [&](const char *f) { return u64(r[f]); };
         if (!r.contains("mnemonic") || (r["version"].is_string() && r["version"].get<std::string>().size() > 19))
-            continue;  // the msig row: no wallet handle; 2^64: no uint64_t
-        Key k = W(r["mnemonic"].get<std::string>()).uaKey(uint16_t(num("kind")), uint32_t(num("account")), uint32_t(num("index")));
-        CHECK(code_of([&] { k.kemKey(num("version")); }) == "UA" + r["error"].get<std::string>(), r["reason"].get<std::string>());
+            continue; // the msig row: no wallet handle; 2^64: no uint64_t
+        Key k = W(r["mnemonic"].get<std::string>())
+                    .uaKey(uint16_t(num("kind")), uint32_t(num("account")), uint32_t(num("index")));
+        CHECK(code_of([&] { k.kemKey(num("version")); }) == "UA" + r["error"].get<std::string>(),
+              r["reason"].get<std::string>());
         ++refusals;
     }
     CHECK(refusals == 9, "kem refusal rows");
-    for (auto& r : K["encapsRefusals"])
-        CHECK(code_of([&] { kemEncaps(bytes(r["kemPk"])); }) == "UA" + r["error"].get<std::string>(), r["id"].get<std::string>());
+    for (auto &r : K["encapsRefusals"])
+        CHECK(code_of([&] { kemEncaps(bytes(r["kemPk"])); }) == "UA" + r["error"].get<std::string>(),
+              r["id"].get<std::string>());
     KemKey kk = kem_of(K["keys"][0]);
     Encapsulated e = kemEncaps(bytes(K["keys"][0]["kemPk"]));
     CHECK(e.mlkemCt.size() == 1568 && e.x25519Eph.size() == 32, "encaps lengths");
     Secret ss = kk.decaps(e.mlkemCt, e.x25519Eph);
     CHECK(ss.copy() == e.ss.copy(), "encaps / decaps round trip");
-    for (auto& r : K["decaps"]) {
+    for (auto &r : K["decaps"]) {
         Bytes eph = bytes(r["x25519Eph"]);
         std::string id = r["id"].get<std::string>();
-        if (eph.size() != 32) continue;  // a 31-byte E: the binding's length check (UAArgument) runs first
+        if (eph.size() != 32)
+            continue; // a 31-byte E: the binding's length check (UAArgument) runs first
         if (r.contains("error") && !r["error"].is_null()) {
-            CHECK(code_of([&] { kem_of(r["key"]).decaps(bytes(r["mlkemCt"]), eph); }) == "UA" + r["error"].get<std::string>(), id);
+            CHECK(code_of([&] { kem_of(r["key"]).decaps(bytes(r["mlkemCt"]), eph); }) ==
+                      "UA" + r["error"].get<std::string>(),
+                  id);
         } else {
             CHECK(hx(kem_of(r["key"]).decaps(bytes(r["mlkemCt"]), eph).copy()) == r["ss"].get<std::string>(), id);
         }
@@ -391,8 +435,9 @@ static void kem_json() {
 
 static void seal_json() {
     json S = vec("seal.json");
-    for (auto& r : S["seal"]) {
-        if (!r["recipient"].contains("kind")) continue;  // an ephemeral recipient from a fixed seed: under `vectors` only
+    for (auto &r : S["seal"]) {
+        if (!r["recipient"].contains("kind"))
+            continue; // an ephemeral recipient from a fixed seed: under `vectors` only
         KemKey kk = kem_of(r["recipient"]);
         std::string id = r["id"].get<std::string>();
         Sealed s{bytes(r["mlkemCt"]), bytes(r["x25519Eph"]), bytes(r["ciphertext"])};
@@ -402,38 +447,47 @@ static void seal_json() {
         CHECK(kk.open(r["purpose"], bytes(r["aad"]), fresh).copy() == bytes(r["pt"]), id + ": fresh seal");
     }
     json base;
-    for (auto& r : S["seal"])
-        if (r["id"] == S["refusals"]["base"]) base = r;
-    for (auto& r : S["refusals"]["rows"]) {
+    for (auto &r : S["seal"])
+        if (r["id"] == S["refusals"]["base"])
+            base = r;
+    for (auto &r : S["refusals"]["rows"]) {
         Bytes wire = bytes(r.value("wire", base["wire"]));
-        if (wire[0] != 1 || wire[1] != 1) continue;  // version / scheme 2: the named fields carry neither
+        if (wire[0] != 1 || wire[1] != 1)
+            continue; // version / scheme 2: the named fields carry neither
         KemKey kk = kem_of(r.value("key", S["refusals"]["key"]));
         Bytes aad = bytes(r.value("aad", base["aad"]));
-        Sealed s{Bytes(wire.begin() + 2, wire.begin() + 2 + 1568), Bytes(wire.begin() + 1570, wire.begin() + 1602), Bytes(wire.begin() + 1602, wire.end())};
-        CHECK(code_of([&] { kk.open(r.value("purpose", base["purpose"].get<std::string>()), aad, s); }) == "UA" + r["error"].get<std::string>(),
-              r["id"].get<std::string>());
-    }
-    for (auto& r : S["argumentRefusals"])
-        CHECK(code_of([&] { seal(bytes(S["seal"][0]["kemPk"]), r["purpose"], {}, Bytes(r["ptLength"].get<size_t>())); }) ==
+        Sealed s{Bytes(wire.begin() + 2, wire.begin() + 2 + 1568), Bytes(wire.begin() + 1570, wire.begin() + 1602),
+                 Bytes(wire.begin() + 1602, wire.end())};
+        CHECK(code_of([&] { kk.open(r.value("purpose", base["purpose"].get<std::string>()), aad, s); }) ==
                   "UA" + r["error"].get<std::string>(),
               r["id"].get<std::string>());
+    }
+    for (auto &r : S["argumentRefusals"])
+        CHECK(code_of([&] {
+                  seal(bytes(S["seal"][0]["kemPk"]), r["purpose"], {}, Bytes(r["ptLength"].get<size_t>()));
+              }) == "UA" + r["error"].get<std::string>(),
+              r["id"].get<std::string>());
     int n = 0;
-    for (auto& r : S["containers"]) {
-        if (r["opener"].contains("session")) continue;
+    for (auto &r : S["containers"]) {
+        if (r["opener"].contains("session"))
+            continue;
         KemKey kk = kem_of(r["opener"]["kem"]);
-        CHECK(kk.openContainer(r["container"].dump(), r["expect"].dump(), dump(r.value("members", json())), dump(r.value("accepted", json()))).copy() ==
-                  bytes(r["pt"]),
+        CHECK(kk.openContainer(r["container"].dump(), r["expect"].dump(), dump(r.value("members", json())),
+                               dump(r.value("accepted", json())))
+                      .copy() == bytes(r["pt"]),
               r["id"].get<std::string>());
         if (r.contains("accepted"))
-            CHECK(code_of([&] { kk.openContainer(r["container"].dump(), r["expect"].dump(), dump(r.value("members", json())), ""); }) ==
-                      "UAContainerSender",
+            CHECK(code_of([&] {
+                      kk.openContainer(r["container"].dump(), r["expect"].dump(), dump(r.value("members", json())), "");
+                  }) == "UAContainerSender",
                   "msig without accepted");
         ++n;
     }
     CHECK(n == 3, "containers");
     n = 0;
-    for (auto& r : S["acceptance"]) {
-        if (r.contains("link")) continue;
+    for (auto &r : S["acceptance"]) {
+        if (r.contains("link"))
+            continue;
         KemKey kk = kem_of(r["opener"]["kem"]);
         std::string members = dump(r.value("members", json())), accepted = dump(r.value("accepted", json()));
         std::string got = code_of([&] {
@@ -458,9 +512,12 @@ static void backup_link_restore() {
     w.uaKey(0x0101, 0, 1);
     Key rec = W("pq_kat").uaKey(0x0130, 0, 0);
     Bytes pk = bytes(K["keys"][0]["kemPk"]);
-    std::vector<std::string> cs = w.backupSeal(sender, {Recipient{0x0130, rec.keyData(), 0, pk, false}, Recipient{0, {}, 0, pk, true}});
+    std::vector<std::string> cs =
+        w.backupSeal(sender, {Recipient{0x0130, rec.keyData(), 0, pk, false}, Recipient{0, {}, 0, pk, true}});
     CHECK(cs.size() == 2, "two containers");
-    json expect = {{"purpose", "scaas/backup/v1"}, {"sender", {{"ua", hx(sender.ua())}}}, {"recipient", {{"ua", hx(rec.ua())}, {"version", 0}}}};
+    json expect = {{"purpose", "scaas/backup/v1"},
+                   {"sender", {{"ua", hx(sender.ua())}}},
+                   {"recipient", {{"ua", hx(rec.ua())}, {"version", 0}}}};
     Secret b39;
     auto r = Wallet::restoreBackup(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b39);
     CHECK(r.has_value(), "installed");
@@ -468,69 +525,89 @@ static void backup_link_restore() {
     json m = json::parse(r->manifestJson());
     CHECK(m["backupGeneration"] == 1 && m["entries"].size() == 2, "manifest");
     Secret b2;
-    CHECK(!r->restoreBackupOver(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b2).has_value(), "an equal generation installs nothing");
-    w.backupSeal(sender, {Recipient{0x0130, rec.keyData(), 0, pk, false}});  // generation 2 on w
+    CHECK(!r->restoreBackupOver(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b2).has_value(),
+          "an equal generation installs nothing");
+    w.backupSeal(sender, {Recipient{0x0130, rec.keyData(), 0, pk, false}}); // generation 2 on w
     Secret b3;
-    CHECK(code_of([&] { w.restoreBackupOver(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b3); }) == "UABackupRollback", "rollback");
+    CHECK(code_of([&] { w.restoreBackupOver(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b3); }) ==
+              "UABackupRollback",
+          "rollback");
     Secret b4;
-    CHECK(w.restoreBackupRollback(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b4).has_value(), "rollback by its own name");
-    CHECK(code_of([&] { w.backupSeal(W("pq_kat").nativeKey("evm", 0), {Recipient{0, {}, 0, pk, true}}); }) == "UAArgument", "native sender");
+    CHECK(w.restoreBackupRollback(kem_of(K["keys"][0]), cs[0], expect.dump(), "", "", b4).has_value(),
+          "rollback by its own name");
+    CHECK(code_of([&] { w.backupSeal(W("pq_kat").nativeKey("evm", 0), {Recipient{0, {}, 0, pk, true}}); }) ==
+              "UAArgument",
+          "native sender");
     // link: the existing device seals, the new device installs once
     LinkSession s = LinkSession::create();
     CHECK(s.kemPk().size() == 1601 && s.shortCode().size() == 8, "session");
     std::string c = w.linkSeal(sender, s.kemPk(), s.shortCode());
-    json lexp = {{"purpose", "scaas/link/v1"}, {"sender", {{"ua", hx(sender.ua())}}}, {"recipient", {{"kemPkHash", hx(keccak256(s.kemPk()))}}}};
+    json lexp = {{"purpose", "scaas/link/v1"},
+                 {"sender", {{"ua", hx(sender.ua())}}},
+                 {"recipient", {{"kemPkHash", hx(keccak256(s.kemPk()))}}}};
     Secret b5;
     Wallet linked = Wallet::fromLink(s, c, lexp.dump(), "", "", b5);
     CHECK(linked.uaKey(0x0102, 0, 0).keyData() == sender.keyData(), "linked key");
     Secret b6;
-    CHECK(code_of([&] { Wallet::fromLink(s, c, lexp.dump(), "", "", b6); }) == "UAKeyRevoked", "the session is consumed");
+    CHECK(code_of([&] { Wallet::fromLink(s, c, lexp.dump(), "", "", b6); }) == "UAKeyRevoked",
+          "the session is consumed");
     CHECK(code_of([&] { s.kemPk(); }) == "UAKeyRevoked", "consumed session");
     LinkSession s2 = LinkSession::create();
     std::string wrong = s2.shortCode() == "00000000" ? "00000001" : "00000000";
     std::string c2 = w.linkSeal(sender, s2.kemPk(), wrong);
-    json lexp2 = {{"purpose", "scaas/link/v1"}, {"sender", {{"ua", hx(sender.ua())}}}, {"recipient", {{"kemPkHash", hx(keccak256(s2.kemPk()))}}}};
+    json lexp2 = {{"purpose", "scaas/link/v1"},
+                  {"sender", {{"ua", hx(sender.ua())}}},
+                  {"recipient", {{"kemPkHash", hx(keccak256(s2.kemPk()))}}}};
     Secret b7;
     CHECK(code_of([&] { Wallet::fromLink(s2, c2, lexp2.dump(), "", "", b7); }) == "UASealOpen", "a wrong short code");
-    for (auto& r : S["containers"]) {
-        if (!r["opener"].contains("session")) continue;
+    for (auto &r : S["containers"]) {
+        if (!r["opener"].contains("session"))
+            continue;
         LinkSession s3 = LinkSession::create();
         json e3 = r["expect"];
         e3["recipient"] = {{"kemPkHash", hx(keccak256(s3.kemPk()))}};
         Secret b8;
-        CHECK(code_of([&] { Wallet::fromLink(s3, r["container"].dump(), e3.dump(), "", "", b8); }) == "UAContainerReplay", "outside the window");
+        CHECK(code_of([&] { Wallet::fromLink(s3, r["container"].dump(), e3.dump(), "", "", b8); }) ==
+                  "UAContainerReplay",
+              "outside the window");
     }
 }
 
 // --- vault.json, rs_vault.json ---------------------------------------------------------------------------------------------
 
-static Wallet open_row(const json& v, const json& u) {
-    Secret pin(u.contains("pin") ? u["pin"].get<std::string>() : ""), prf(u.contains("prfOutput") ? bytes(u["prfOutput"]) : Bytes()), b39;
+static Wallet open_row(const json &v, const json &u) {
+    Secret pin(u.contains("pin") ? u["pin"].get<std::string>() : ""),
+        prf(u.contains("prfOutput") ? bytes(u["prfOutput"]) : Bytes()), b39;
     return Wallet::openVault(v.dump(), pin, prf, b39);
 }
 static void vault_json() {
     json V = vec("vault.json");
     std::map<std::string, std::string> by_entropy;
-    for (auto& m : KEYS["mnemonics"])
-        if (m["passphrase"] == "") by_entropy[m["entropy"].get<std::string>()] = m["id"].get<std::string>();
-    for (auto& r : V["vaults"]) {
+    for (auto &m : KEYS["mnemonics"])
+        if (m["passphrase"] == "")
+            by_entropy[m["entropy"].get<std::string>()] = m["id"].get<std::string>();
+    for (auto &r : V["vaults"]) {
         Wallet w = open_row(r["vault"], r["unlock"]);
-        CHECK(w.uaKey(0x0102, 0, 0).keyData() == W(by_entropy.at(r["plaintext"].get<std::string>())).uaKey(0x0102, 0, 0).keyData(),
+        CHECK(w.uaKey(0x0102, 0, 0).keyData() ==
+                  W(by_entropy.at(r["plaintext"].get<std::string>())).uaKey(0x0102, 0, 0).keyData(),
               r["id"].get<std::string>());
     }
-    for (auto& r : V["refusals"])
-        CHECK(code_of([&] { open_row(r["vault"], r["unlock"]); }) == "UA" + r["error"].get<std::string>(), r["id"].get<std::string>());
+    for (auto &r : V["refusals"])
+        CHECK(code_of([&] { open_row(r["vault"], r["unlock"]); }) == "UA" + r["error"].get<std::string>(),
+              r["id"].get<std::string>());
     json prfRow, pinRow = V["vaults"][0];
-    for (auto& r : V["vaults"])
-        if (r["unlock"].contains("prfOutput")) prfRow = r;
+    for (auto &r : V["vaults"])
+        if (r["unlock"].contains("prfOutput"))
+            prfRow = r;
     Secret n1, n2, n3;
     CHECK(code_of([&] { Wallet::openVault(prfRow["vault"].dump(), n1, n2, n3); }) == "UAArgument", "neither");
     Secret p1("not the passphrase"), f1(bytes(prfRow["unlock"]["prfOutput"])), z1;
-    Wallet::openVault(prfRow["vault"].dump(), p1, f1, z1);  // both: PRF first
+    Wallet::openVault(prfRow["vault"].dump(), p1, f1, z1); // both: PRF first
     Secret p2(pinRow["unlock"]["pin"].get<std::string>()), f2(Bytes(32)), z2;
-    CHECK(code_of([&] { Wallet::openVault(prfRow["vault"].dump(), p2, f2, z2); }) == "UAVaultOpen", "both: a wrong PRF");
+    CHECK(code_of([&] { Wallet::openVault(prfRow["vault"].dump(), p2, f2, z2); }) == "UAVaultOpen",
+          "both: a wrong PRF");
     // seal, rewrap, enable PRF
-    const Wallet& w = W("twelve_words");
+    const Wallet &w = W("twelve_words");
     Secret s1("correct horse 9");
     std::string v = w.sealVault(s1);
     Secret weak("12345678");
@@ -539,29 +616,37 @@ static void vault_json() {
     Secret o("correct horse 9"), nw("battery staple 7");
     std::string v2 = vault::rewrapPin(v, o, nw);
     Bytes prf32(32);
-    for (size_t i = 0; i < 32; ++i) prf32[i] = uint8_t(i);
+    for (size_t i = 0; i < 32; ++i)
+        prf32[i] = uint8_t(i);
     Secret pp("battery staple 7"), pf(prf32);
     std::string v3 = vault::enablePrf(v2, pp, pf, "cred-1", str("salt"));
     Bytes want = W("twelve_words").uaKey(0x0102, 0, 0).keyData();
     CHECK(open_row(json::parse(v), {{"pin", "correct horse 9"}}).uaKey(0x0102, 0, 0).keyData() == want, "sealed");
     CHECK(open_row(json::parse(v2), {{"pin", "battery staple 7"}}).uaKey(0x0102, 0, 0).keyData() == want, "rewrapped");
     CHECK(open_row(json::parse(v3), {{"prfOutput", hx(prf32)}}).uaKey(0x0102, 0, 0).keyData() == want, "PRF");
-    CHECK(code_of([&] { open_row(json::parse(v2), {{"pin", "correct horse 9"}}); }) == "UAVaultOpen", "the old passphrase");
+    CHECK(code_of([&] { open_row(json::parse(v2), {{"pin", "correct horse 9"}}); }) == "UAVaultOpen",
+          "the old passphrase");
 }
 
 static void rs_vault_json() {
     json R = vec("rs_vault.json"), K = vec("kem.json");
-    for (auto& r : R["vaults"]) {
+    for (auto &r : R["vaults"]) {
         Wallet w = open_row(r["vault"], r["unlock"]);
-        CHECK(w.uaKey(0x0102, 0, 0).keyData() == W(r["mnemonic"].get<std::string>()).uaKey(0x0102, 0, 0).keyData(), r["id"].get<std::string>());
+        CHECK(w.uaKey(0x0102, 0, 0).keyData() == W(r["mnemonic"].get<std::string>()).uaKey(0x0102, 0, 0).keyData(),
+              r["id"].get<std::string>());
     }
-    for (auto& b : R["backups"]) {
-        auto& s = b["sender"];
-        Key sender = W(s["mnemonic"].get<std::string>()).uaKey(s["kind"].get<uint16_t>(), s["account"].get<uint32_t>(), s["index"].get<uint32_t>());
+    for (auto &b : R["backups"]) {
+        auto &s = b["sender"];
+        Key sender = W(s["mnemonic"].get<std::string>())
+                         .uaKey(s["kind"].get<uint16_t>(), s["account"].get<uint32_t>(), s["index"].get<uint32_t>());
         CHECK(hx(sender.ua()) == b["senderUa"].get<std::string>(), "sender");
         KemKey kk = kem_of(b["opener"]["kem"]);
-        Bytes rua = W(b["opener"]["kem"]["mnemonic"].get<std::string>()).uaKey(b["opener"]["kem"]["kind"].get<uint16_t>(), 0, 0).ua();
-        json expect = {{"purpose", "scaas/backup/v1"}, {"sender", {{"ua", b["senderUa"]}}}, {"recipient", {{"ua", hx(rua)}, {"version", 0}}}};
+        Bytes rua = W(b["opener"]["kem"]["mnemonic"].get<std::string>())
+                        .uaKey(b["opener"]["kem"]["kind"].get<uint16_t>(), 0, 0)
+                        .ua();
+        json expect = {{"purpose", "scaas/backup/v1"},
+                       {"sender", {{"ua", b["senderUa"]}}},
+                       {"recipient", {{"ua", hx(rua)}, {"version", 0}}}};
         Secret b39;
         auto w = Wallet::restoreBackup(kk, b["container"].dump(), expect.dump(), "", "", b39);
         CHECK(w.has_value(), b["id"].get<std::string>());
@@ -595,7 +680,8 @@ static void custody() {
     CHECK(code_of([&] { w.unlock(v, p3, f3, b3); }) == "UAArgument", "already unlocked");
     // imported key: back after unlock through its label vault
     Bytes raw(32);
-    for (size_t i = 0; i < 32; ++i) raw[i] = uint8_t(i + 1);
+    for (size_t i = 0; i < 32; ++i)
+        raw[i] = uint8_t(i + 1);
     Secret imp(raw);
     Key ik = w.importNativeKey("evm", imp);
     Bytes d(32, 7);
@@ -634,11 +720,13 @@ static void custody() {
     // memory protection, manifest, discover
     auto m2 = W("pq_kat").memoryProtection();
     CHECK(m2.chunks >= 1 && m2.locked <= m2.chunks && m2.noDump <= m2.chunks, "memory protection");
-    if (features() & feature::kMlock) CHECK(m2.noDump == m2.chunks, "no-dump");
+    if (features() & feature::kMlock)
+        CHECK(m2.noDump == m2.chunks, "no-dump");
     json disc = json::parse(W("pq_kat").discoverCandidates(0x0102, 0, 3));
     CHECK(disc.size() == 3 && disc[0]["index"] == 0, "discover");
-    for (auto& r : KEYS["ua"])
-        if (r["mnemonic"] == "pq_kat" && r["kind"] == 0x0102 && r["account"] == 0 && r["index"] == 0) CHECK(disc[0]["ua"] == r["ua"], "discover ua");
+    for (auto &r : KEYS["ua"])
+        if (r["mnemonic"] == "pq_kat" && r["kind"] == 0x0102 && r["account"] == 0 && r["index"] == 0)
+            CHECK(disc[0]["ua"] == r["ua"], "discover ua");
 }
 
 static void seed_backup_sequence() {
@@ -648,7 +736,8 @@ static void seed_backup_sequence() {
     std::string s(phrase.view());
     for (size_t p = 0, q; p < s.size(); p = q + 1) {
         q = s.find(' ', p);
-        if (q == std::string::npos) q = s.size();
+        if (q == std::string::npos)
+            q = s.size();
         words.push_back(s.substr(p, q - p));
     }
     CHECK(words.size() == 24, "24 words");
@@ -673,41 +762,58 @@ static void seed_backup_sequence() {
 // --- errors never echo an input ---------------------------------------------------------------------------------------------
 
 static void error_strings_never_contain_an_input() {
-    const std::vector<std::string> secrets = {"zebrasecretword", "Pa55-word-Secret", "SECRETvalue0xdead", "deadbeefcafe1234"};
-    const Wallet& w = W("pq_kat");
+    const std::vector<std::string> secrets = {"zebrasecretword", "Pa55-word-Secret", "SECRETvalue0xdead",
+                                              "deadbeefcafe1234"};
+    const Wallet &w = W("pq_kat");
     Key evm = w.nativeKey("evm", 0);
     auto words = MN.at("pq_kat")["words"].get<std::string>();
     std::vector<std::function<void()>> calls = {
-        [&] { Secret a(words.substr(0, words.rfind(' ')) + " zebrasecretword"), b("Pa55-word-Secret"); Wallet::fromMnemonic(a, b); },
-        [&] { Secret a("Pa55-word-Secret"), b, c("zebrasecretword"); Wallet::openVault(R"({"v":1,"label":"Pa55-word-Secret"})", a, b, c); },
-        [&] { evm.signTyped(R"({"types":{"EIP712Domain":[]},"primaryType":"SECRETvalue0xdead","domain":{},"message":{}})",
-                            R"({"check":"Payment","account":"0xdeadbeefcafe1234"})"); },
+        [&] {
+            Secret a(words.substr(0, words.rfind(' ')) + " zebrasecretword"), b("Pa55-word-Secret");
+            Wallet::fromMnemonic(a, b);
+        },
+        [&] {
+            Secret a("Pa55-word-Secret"), b, c("zebrasecretword");
+            Wallet::openVault(R"({"v":1,"label":"Pa55-word-Secret"})", a, b, c);
+        },
+        [&] {
+            evm.signTyped(R"({"types":{"EIP712Domain":[]},"primaryType":"SECRETvalue0xdead","domain":{},"message":{}})",
+                          R"({"check":"Payment","account":"0xdeadbeefcafe1234"})");
+        },
         [&] { evm.signTransaction(R"({"type":2,"chainId":"SECRETvalue0xdead"})"); },
         [&] { w.zetherKey(60, 0, 7).call("zebrasecretword", "{}"); },
         [&] { w.pqzKey(0, 0).call("dec", R"({"ct":"0xdeadbeefcafe1234","window":"SECRETvalue0xdead"})"); },
-        [&] { Secret s(str("deadbeefcafe1234")); w.importNativeKey("evm", s); },
+        [&] {
+            Secret s(str("deadbeefcafe1234"));
+            w.importNativeKey("evm", s);
+        },
         [&] { uaSig(R"({"purpose":"zebrasecretword"})", {}); },
     };
     for (size_t i = 0; i < calls.size(); ++i) {
         std::string what;
         try {
             calls[i]();
-        } catch (const Error& e) {
+        } catch (const Error &e) {
             what = e.what();
         }
         CHECK(!what.empty(), "call " + std::to_string(i) + " fails");
-        for (auto& s : secrets)
-            for (size_t j = 0; j + 6 <= s.size(); ++j) CHECK(what.find(s.substr(j, 6)) == std::string::npos, what);
+        for (auto &s : secrets)
+            for (size_t j = 0; j + 6 <= s.size(); ++j)
+                CHECK(what.find(s.substr(j, 6)) == std::string::npos, what);
     }
 }
 
 // --- AEAD, HKDF, HMAC ------------------------------------------------------------------------------------------------------
 
 static void aead_hkdf_hmac() {
-    CHECK(hx(hmacSha256(Bytes(20, 0x0b), str("Hi There"))) == "0xb0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7", "RFC 4231");
+    CHECK(hx(hmacSha256(Bytes(20, 0x0b), str("Hi There"))) ==
+              "0xb0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",
+          "RFC 4231");
     Bytes salt, info;
-    for (int i = 0; i < 13; ++i) salt.push_back(uint8_t(i));
-    for (int i = 0xf0; i < 0xfa; ++i) info.push_back(uint8_t(i));
+    for (int i = 0; i < 13; ++i)
+        salt.push_back(uint8_t(i));
+    for (int i = 0xf0; i < 0xfa; ++i)
+        info.push_back(uint8_t(i));
     CHECK(hx(hkdfSha256(Bytes(22, 0x0b), salt, info, 42).copy()) ==
               "0x3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
           "RFC 5869 A.1");
@@ -731,14 +837,16 @@ static void zether_facade() {
     json R33 = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../../../clients/zether-prover/vectors/r33_keys.json");
     Secret mw(R33["mnemonic"].get<std::string>()), mp;
     Wallet w = Wallet::fromMnemonic(mw, mp);
-    for (auto& r : R33["bls12381"]["keys"]) {
-        std::string path = r["path"];  // m/12381/coin/account/use
+    for (auto &r : R33["bls12381"]["keys"]) {
+        std::string path = r["path"]; // m/12381/coin/account/use
         std::vector<uint32_t> part;
         for (size_t p = 0, q; p <= path.size(); p = q + 1) {
             q = path.find('/', p);
-            if (q == std::string::npos) q = path.size();
+            if (q == std::string::npos)
+                q = path.size();
             std::string t = path.substr(p, q - p);
-            if (!t.empty() && std::isdigit(uint8_t(t[0]))) part.push_back(uint32_t(std::stoul(t)));
+            if (!t.empty() && std::isdigit(uint8_t(t[0])))
+                part.push_back(uint32_t(std::stoul(t)));
         }
         CHECK(part.size() == 4, path);
         ZetherKey k = w.zetherKey(part[1], part[2], part[3]);
@@ -747,8 +855,10 @@ static void zether_facade() {
     CHECK(code_of([&] { w.zetherKey(60, 0, 9); }) == "UAArgument", "use 9");
     ZetherKey k = w.zetherKey(60, 0, kZetherUseConf);
     json pop = json::parse(k.call("pop", R"({"curve":"bls12381"})"));
-    for (auto f : {"popDigest", "registrationDigest", "uaMsg"}) CHECK(pop[f] == R33["bls12381"]["keys"][0]["pop"][f], f);
-    CHECK(code_of([&] { k.call("pop", R"({"key":{"seed":"0x11","coin":60,"account":0}})"); }) == "UAArgument", "a key field");
+    for (auto f : {"popDigest", "registrationDigest", "uaMsg"})
+        CHECK(pop[f] == R33["bls12381"]["keys"][0]["pop"][f], f);
+    CHECK(code_of([&] { k.call("pop", R"({"key":{"seed":"0x11","coin":60,"account":0}})"); }) == "UAArgument",
+          "a key field");
     CHECK(code_of([&] { k.call("verifyTransfer", "{}"); }) == "UAArgument", "verifiers are not exposed");
     // ARCH-POS-13 (T15c2, Fable P2-5): a release build has no raw decrypt; a well-formed `decrypt` / `checkBalance` of a
     // ciphertext is an unknown command
@@ -756,21 +866,27 @@ static void zether_facade() {
     CHECK(ct.contains("C") && ct.contains("D"), "encrypt (positive control)");
     CHECK(code_of([&] { k.call("decrypt", json{{"curve", "bls12381"}, {"ct", ct}}.dump()); }) == "UAArgument",
           "no decrypt in a release build");
-    CHECK(code_of([&] { k.call("checkBalance", json{{"curve", "bls12381"}, {"acc", ct}, {"balance", 5}}.dump()); }) == "UAArgument",
+    CHECK(code_of([&] { k.call("checkBalance", json{{"curve", "bls12381"}, {"acc", ct}, {"balance", 5}}.dump()); }) ==
+              "UAArgument",
           "no checkBalance in a release build");
-    for (auto& r : Z["cacheBox"]) {
-        Secret a(MN.at(r["mnemonic"])["words"].get<std::string>()), b(MN.at(r["mnemonic"])["passphrase"].get<std::string>());
+    for (auto &r : Z["cacheBox"]) {
+        Secret a(MN.at(r["mnemonic"])["words"].get<std::string>()),
+            b(MN.at(r["mnemonic"])["passphrase"].get<std::string>());
         Wallet zw = Wallet::fromMnemonic(a, b);
         ZetherKey zk = zw.zetherKey(r["coin"], r["account"], r["use"]);
-        CHECK(hx(zk.y()) == r["Y"].get<std::string>() && hx(zk.ua()) == r["UA"].get<std::string>(), r["id"].get<std::string>());
+        CHECK(hx(zk.y()) == r["Y"].get<std::string>() && hx(zk.ua()) == r["UA"].get<std::string>(),
+              r["id"].get<std::string>());
         Secret pt = zk.openBalanceCache(r["box"].dump());
         CHECK(hx(pt.copy()) == r["plaintext"].get<std::string>(), r["id"].get<std::string>());
         CHECK(zk.openBalanceCache(zk.sealBalanceCache(pt.copy())).copy() == pt.copy(), "round trip");
     }
-    for (auto& r : Z["cacheRefusals"]) {
-        Secret a(MN.at(r["mnemonic"])["words"].get<std::string>()), b(MN.at(r["mnemonic"])["passphrase"].get<std::string>());
+    for (auto &r : Z["cacheRefusals"]) {
+        Secret a(MN.at(r["mnemonic"])["words"].get<std::string>()),
+            b(MN.at(r["mnemonic"])["passphrase"].get<std::string>());
         Wallet zw = Wallet::fromMnemonic(a, b);
-        CHECK(code_of([&] { zw.zetherKey(r["coin"], r["account"], r["use"]).openBalanceCache(r["box"].dump()); }) == "UAAead", r["id"].get<std::string>());
+        CHECK(code_of([&] { zw.zetherKey(r["coin"], r["account"], r["use"]).openBalanceCache(r["box"].dump()); }) ==
+                  "UAAead",
+              r["id"].get<std::string>());
     }
     Bytes y = k.y();
     w.lock();
@@ -780,7 +896,7 @@ static void zether_facade() {
 
 // scaas-ua `facade::<name>::COMMANDS` read from its source (T15g): {the release commands, the `vectors`-only raw forms}. A
 // test asserts that a command is in it, never that it equals a list (spec no-decryption-oracle §4.13).
-static std::pair<std::vector<std::string>, std::vector<std::string>> commands(const std::string& name) {
+static std::pair<std::vector<std::string>, std::vector<std::string>> commands(const std::string &name) {
     std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../../../clients/ua-rs/src/facade/" + name + ".rs");
     std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     std::string body = src.substr(src.find("pub const COMMANDS: &[&str] = &["));
@@ -788,7 +904,7 @@ static std::pair<std::vector<std::string>, std::vector<std::string>> commands(co
     std::pair<std::vector<std::string>, std::vector<std::string>> out;
     bool gated = false;
     std::string ln;
-    std::getline(in, ln);  // the declaration
+    std::getline(in, ln); // the declaration
     while (std::getline(in, ln)) {
         ln.erase(0, ln.find_first_not_of(" \t"));
         if (ln.rfind("#[cfg(feature = \"vectors\")]", 0) == 0) {
@@ -800,7 +916,9 @@ static std::pair<std::vector<std::string>, std::vector<std::string>> commands(co
     }
     return out;
 }
-static bool member(const std::vector<std::string>& v, const std::string& s) { return std::find(v.begin(), v.end(), s) != v.end(); }
+static bool member(const std::vector<std::string> &v, const std::string &s) {
+    return std::find(v.begin(), v.end(), s) != v.end();
+}
 
 // T15g (ARCH-POS-13): the words commands on the forge rows (smartcontracts/vectors/zether/state.json; the holders are
 // r33_keys.json's): each in COMMANDS, the balances the contract's; another holder's words refused before the key (ua-rs
@@ -811,14 +929,18 @@ static void zether_words() {
     CHECK(member(raw, "decrypt") && member(raw, "decryptPending"), "the raw forms only under vectors");
     json st = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../zether/state.json");
     std::map<std::string, json> row;
-    for (auto& r : st["accounts"]) {
+    for (auto &r : st["accounts"]) {
         std::string n = r["name"];
         row[n.substr(0, n.find(':'))] = r;
     }
-    auto words = [&](const std::string& name) {
-        json o = {{"ua", row[name]["ua"]}, {"account", row[name]["account"]}, {"accountData", row[name]["accountData"]},
-                  {"tableBits", 18}, {"boundBits", 20}};
-        for (auto f : {"family", "chainId", "chainUid", "token", "block", "psid"}) o[f] = st[f];
+    auto words = [&](const std::string &name) {
+        json o = {{"ua", row[name]["ua"]},
+                  {"account", row[name]["account"]},
+                  {"accountData", row[name]["accountData"]},
+                  {"tableBits", 18},
+                  {"boundBits", 20}};
+        for (auto f : {"family", "chainId", "chainUid", "token", "block", "psid"})
+            o[f] = st[f];
         return o.dump();
     };
     json R33 = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../../../clients/zether-prover/vectors/r33_keys.json");
@@ -826,12 +948,15 @@ static void zether_words() {
     Wallet w = Wallet::fromMnemonic(mw, mp);
     ZetherKey alice = w.zetherKey(60, 0, kZetherUseConf);
     ZetherKey bob = w.zetherKey(60, 1, kZetherUseConf);
-    CHECK(json::parse(alice.call("balance", words("alice")))["amount"] == std::to_string(row["alice"]["balance"].get<uint64_t>()),
+    CHECK(json::parse(alice.call("balance", words("alice")))["amount"] ==
+              std::to_string(row["alice"]["balance"].get<uint64_t>()),
           "alice's balance");
-    CHECK(json::parse(bob.call("pendingBalance", words("bob")))["amount"] == std::to_string(row["bob"]["pending"].get<uint64_t>()),
+    CHECK(json::parse(bob.call("pendingBalance", words("bob")))["amount"] ==
+              std::to_string(row["bob"]["pending"].get<uint64_t>()),
           "bob's pending balance");
     CHECK(code_of([&] { bob.call("balance", words("alice")); }) == "UAArgument", "another holder's words");
-    for (auto& c : raw) CHECK(code_of([&] { alice.call(c, "{}"); }) == "UAArgument", c);
+    for (auto &c : raw)
+        CHECK(code_of([&] { alice.call(c, "{}"); }) == "UAArgument", c);
 }
 
 // T15g (ARCH-POS-13): `balance` on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json): in COMMANDS; the forge
@@ -845,7 +970,8 @@ static void pqz_words() {
     json st = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../pqz/n2304-kmax4096/state.json");
     json a = st["accounts"][0];
     json words = {{"chainUid", st["chainUid"]}, {"token", st["token"]}, {"psid", st["psid"]}};
-    for (auto f : {"ua", "block", "account", "pending", "accWords", "blobs", "keyRecord"}) words[f] = a[f];
+    for (auto f : {"ua", "block", "account", "pending", "accWords", "blobs", "keyRecord"})
+        words[f] = a[f];
     words["forOp7"] = false;
     // group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
     char ctr[67];
@@ -856,20 +982,22 @@ static void pqz_words() {
     Wallet w = wallet_of("pq_kat");
     PqzKey k = w.pqzKey(0, 0);
     CHECK(code_of([&] { k.call("balance", words.dump()); }) == "UAArgument", "a forge row: no wallet key");
-    words["psid"] = "0xa626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee";  // n2048-kmax1024
+    words["psid"] = "0xa626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee"; // n2048-kmax1024
     CHECK(code_of([&] { k.call("balance", words.dump()); }) == "UAPqzSetMismatch", "the other set's psid");
-    for (auto& c : raw) CHECK(code_of([&] { k.call(c, "{}"); }) == "UAArgument", c);
+    for (auto &c : raw)
+        CHECK(code_of([&] { k.call(c, "{}"); }) == "UAArgument", c);
     // T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs under
     // `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
     json ws = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../pqz/n2304-kmax4096/wallet_state.json");
-    for (auto& r : ws["rows"]) {
+    for (auto &r : ws["rows"]) {
         PqzKey q = w.pqzKey(r["account"].get<uint32_t>(), r["index"].get<uint32_t>(), r["version"].get<uint64_t>());
         CHECK(json::parse(q.call("balance", r["request"].dump()))["value"] == r["value"], r["name"].get<std::string>());
     }
     // T20d9 (C-PP-8): the proof path's commands are in COMMANDS; each proven row end to end, the quorum's row by pqzCheck
-    for (const char* c : {"provenOpen", "provenAdd", "provenCancel", "balanceProven", "proveTransferProven", "proveTransferMultiProven", "proveBurnProven", "proveRefreshProven"})
+    for (const char *c : {"provenOpen", "provenAdd", "provenCancel", "balanceProven", "proveTransferProven",
+                          "proveTransferMultiProven", "proveBurnProven", "proveRefreshProven"})
         CHECK(std::find(release.begin(), release.end(), std::string(c)) != release.end(), c);
-    for (auto& r : ws["proven"]) {
+    for (auto &r : ws["proven"]) {
         PqzKey q = w.pqzKey(r["account"].get<uint32_t>(), r["index"].get<uint32_t>(), r["version"].get<uint64_t>());
         json o = json::parse(q.call("provenOpen", r["open"].dump()));
         json add = r["add"];
@@ -877,10 +1005,11 @@ static void pqz_words() {
         CHECK(json::parse(q.call("provenAdd", add.dump()))["accepted"] == o["need"], r["name"].get<std::string>());
         json b = json::parse(q.call("balanceProven", json{{"session", o["session"]}}.dump()));
         json kinds = json::array();
-        for (auto& p : b["parts"]) kinds.push_back(p["kind"]);
+        for (auto &p : b["parts"])
+            kinds.push_back(p["kind"]);
         CHECK(b["value"] == r["value"] && kinds == r["kinds"], r["name"].get<std::string>());
     }
-    for (auto& r : ws["check"]) {
+    for (auto &r : ws["check"]) {
         CHECK(json::parse(pqzCheck(r["request"].dump())) == r["answer"], r["name"].get<std::string>());
         json bad = r["request"];
         bad["keyRecord"] = "0x" + std::string(64, '0');
@@ -894,8 +1023,9 @@ static void pqz_key_versions() {
     json kat = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/pq_kat.json");
     Wallet w = wallet_of("pq_kat");
     std::set<Bytes> pks;
-    for (auto& r : kat["pqzSeeds"]) {
-        auto [a, i, v] = std::tuple{r["account"].get<uint32_t>(), r["index"].get<uint32_t>(), r["version"].get<uint64_t>()};
+    for (auto &r : kat["pqzSeeds"]) {
+        auto [a, i, v] =
+            std::tuple{r["account"].get<uint32_t>(), r["index"].get<uint32_t>(), r["version"].get<uint64_t>()};
         Secret leaf = w.exportPqzLeafRaw(a, i, v);
         CHECK(hx(leaf.copy()) == r["seed32"].get<std::string>(), "seed32 of a version");
         pks.insert(w.pqzKey(a, i, v).pk());
@@ -926,7 +1056,8 @@ static void pqz_facade() {
     bad = req;
     bad["key"] = {{"seed32", hx(Bytes(32, 0x11))}};
     CHECK(code_of([&] { k.call("proveRegister", bad.dump()); }) == "UAArgument", "a key field");
-    json e = json::parse(k.call("enc", json{{"pks", json::array({hx(k.pk())})}, {"values", json::array({123456})}}.dump()));
+    json e =
+        json::parse(k.call("enc", json{{"pks", json::array({hx(k.pk())})}, {"values", json::array({123456})}}.dump()));
     // ARCH-POS-13 (T15c): a release build has no raw decrypt; a well-formed `dec` is an unknown command
     std::string ct = e["u"].get<std::string>() + e["vs"][0].get<std::string>().substr(2);
     CHECK(code_of([&] { k.call("dec", json{{"ct", ct}}.dump()); }) == "UAArgument", "no dec in a release build");
@@ -944,8 +1075,9 @@ static void pqz_facade() {
 static void imported_ua_key() {
     json S = vec("sign.json");
     std::map<std::string, json> sign;
-    for (auto& x : S["imported"]["rows"]) sign[x["id"].get<std::string>()] = x;
-    for (auto& r : KEYS["imported"]["rows"]) {
+    for (auto &x : S["imported"]["rows"])
+        sign[x["id"].get<std::string>()] = x;
+    for (auto &r : KEYS["imported"]["rows"]) {
         std::string net = r["network"].get<std::string>();
         Wallet w = wallet_of("twelve_words");
         Secret sk(bytes(r["secret"]));
@@ -953,109 +1085,138 @@ static void imported_ua_key() {
         Key k = w.importedUaKey(net, 0, uint16_t(r["kind"].get<int>()));
         CHECK(hx(k.keyData()) == r["keyData"].get<std::string>(), net + ": key data");
         CHECK(json::parse(w.manifestJson())["importedUas"][0]["ua"] == r["ua"], net + ": importedUas");
-        for (const char* what : {"pop", "metatx"}) {
+        for (const char *what : {"pop", "metatx"}) {
             auto it = sign.find(net + " " + what);
-            if (it == sign.end()) continue;
-            CHECK(hx(k.signUa(bytes(it->second["purposeTag"]), bytes(it->second["digest"]))) == it->second["signature"].get<std::string>(),
+            if (it == sign.end())
+                continue;
+            CHECK(hx(k.signUa(bytes(it->second["purposeTag"]), bytes(it->second["digest"]))) ==
+                      it->second["signature"].get<std::string>(),
                   it->first);
         }
         CHECK(code_of([&] { k.kemKey(0); }) == "UAKemHolder", net + ": no KEM key");
     }
-    for (auto& x : KEYS["imported"]["refusals"]) {
+    for (auto &x : KEYS["imported"]["refusals"]) {
         std::string net = x["network"].get<std::string>();
         json r;
-        for (auto& y : KEYS["imported"]["rows"]) if (y["network"] == x["network"]) r = y;
+        for (auto &y : KEYS["imported"]["rows"])
+            if (y["network"] == x["network"])
+                r = y;
         Wallet w = wallet_of("twelve_words");
         Secret sk(bytes(r["secret"]));
         w.importNativeKey(net, sk);
-        CHECK(code_of([&] { w.importedUaKey(net, 0, uint16_t(x["kind"].get<int>())); }) == "UAArgument", x["reason"].get<std::string>());
+        CHECK(code_of([&] { w.importedUaKey(net, 0, uint16_t(x["kind"].get<int>())); }) == "UAArgument",
+              x["reason"].get<std::string>());
         CHECK(code_of([&] { w.importedUaKey(net, 0, uint16_t(r["kind"].get<int>())); }).empty(), "positive control");
     }
 }
 
 // --- native.json (ua-rs-native T11a): the four native networks, raw messages, the envelope calls -------------------------
 
-static const json& NATIVE_ROWS() {
+static const json &NATIVE_ROWS() {
     static json j = vec("../native/native.json");
     return j;
 }
-static Bytes nmsg(const json& r) {
+static Bytes nmsg(const json &r) {
     if (r.contains("messageRepeat"))
-        return Bytes(r["messageRepeat"]["length"].get<size_t>(), static_cast<uint8_t>(std::stoi(r["messageRepeat"]["byte"].get<std::string>(), nullptr, 16)));
+        return Bytes(r["messageRepeat"]["length"].get<size_t>(),
+                     static_cast<uint8_t>(std::stoi(r["messageRepeat"]["byte"].get<std::string>(), nullptr, 16)));
     return bytes(r["message"]);
 }
-static const Wallet& NW(const std::string& id) {
+static const Wallet &NW(const std::string &id) {
     static std::map<std::string, Wallet> ws;
     auto it = ws.find(id);
-    if (it != ws.end()) return it->second;
-    for (auto& m : NATIVE_ROWS()["mnemonics"])
+    if (it != ws.end())
+        return it->second;
+    for (auto &m : NATIVE_ROWS()["mnemonics"])
         if (m["id"] == id) {
             Secret w(m["words"].get<std::string>()), p(m["passphrase"].get<std::string>());
             return ws.emplace(id, Wallet::fromMnemonic(w, p)).first->second;
         }
     throw std::runtime_error("mnemonic " + id);
 }
-static Key nkey(const json& r) {
-    const Wallet& w = NW(r["mnemonic"].get<std::string>());
+static Key nkey(const json &r) {
+    const Wallet &w = NW(r["mnemonic"].get<std::string>());
     std::string net = r["network"].get<std::string>();
     uint32_t coin = r.contains("coinType") && !r["coinType"].is_null() ? r["coinType"].get<uint32_t>() : kCoinDefault;
-    if (net == "polkadot") return w.polkadotKey(r.contains("path") ? r["path"].get<std::string>() : "");
-    if (net.rfind("bitcoin", 0) == 0 && r.contains("change") && !r["change"].is_null()) return w.bitcoinKey(net, coin, r["change"].get<uint32_t>(), r["index"].get<uint32_t>());
+    if (net == "polkadot")
+        return w.polkadotKey(r.contains("path") ? r["path"].get<std::string>() : "");
+    if (net.rfind("bitcoin", 0) == 0 && r.contains("change") && !r["change"].is_null())
+        return w.bitcoinKey(net, coin, r["change"].get<uint32_t>(), r["index"].get<uint32_t>());
     return w.nativeKey(net, r["index"].get<uint32_t>(), coin);
 }
 
 static void native_json() {
-    const json& N = NATIVE_ROWS();
+    const json &N = NATIVE_ROWS();
     size_t n = 0;
-    for (auto& r : N["addresses"]) {
+    for (auto &r : N["addresses"]) {
         Key k = nkey(r);
         CHECK(hx(k.keyData()) == "0x" + r["publicKey"].get<std::string>(), r["network"].get<std::string>());
         CHECK(k.address() == r["address"].get<std::string>(), r["network"].get<std::string>());
         if (!r["witnessProgram"].is_null()) {
             Bytes wp = k.witnessProgram();
             CHECK(wp.size() > 1 && wp[0] == r["witnessProgram"]["version"].get<uint8_t>(), "witness version");
-            CHECK(hx(Bytes(wp.begin() + 1, wp.end())) == "0x" + r["witnessProgram"]["program"].get<std::string>(), "witness program");
+            CHECK(hx(Bytes(wp.begin() + 1, wp.end())) == "0x" + r["witnessProgram"]["program"].get<std::string>(),
+                  "witness program");
         }
         if (r.contains("ss58"))
-            for (auto& [p, a] : r["ss58"].items()) CHECK(k.ss58Address(static_cast<uint16_t>(std::stoi(p))) == a.get<std::string>(), "ss58 " + p);
+            for (auto &[p, a] : r["ss58"].items())
+                CHECK(k.ss58Address(static_cast<uint16_t>(std::stoi(p))) == a.get<std::string>(), "ss58 " + p);
         ++n;
     }
     CHECK(n == 114, "address rows");
-    for (auto& r : N["polkadotPaths"])
-        CHECK(hx(NW(r["mnemonic"].get<std::string>()).polkadotKey(r["path"].get<std::string>()).keyData()) == "0x" + r["publicKey"].get<std::string>(), r["path"].get<std::string>());
+    for (auto &r : N["polkadotPaths"])
+        CHECK(hx(NW(r["mnemonic"].get<std::string>()).polkadotKey(r["path"].get<std::string>()).keyData()) ==
+                  "0x" + r["publicKey"].get<std::string>(),
+              r["path"].get<std::string>());
     n = 0;
-    for (const char* sec : {"signatures", "envelopes"})
-        for (auto& r : N[sec]) {
-            if (r["mode"] != "deterministic") continue;
+    for (const char *sec : {"signatures", "envelopes"})
+        for (auto &r : N[sec]) {
+            if (r["mode"] != "deterministic")
+                continue;
             Key k = nkey(r);
             Bytes m = nmsg(r), sig;
             std::string c = r["call"].get<std::string>();
-            if (c == "sign_digest") sig = k.signDigestRaw(m);
-            else if (c == "sign_message") sig = k.signMessageRaw(m);
-            else if (c == "sign_near_transaction") sig = k.signNearTransaction(m);
-            else if (c == "sign_sui_transaction") sig = k.signSuiTransaction(m);
-            else if (c == "sign_stellar_transaction") sig = k.signStellarTransaction(bytes(r["networkId"]), m);
-            else sig = k.signHederaTransaction(m);
+            if (c == "sign_digest")
+                sig = k.signDigestRaw(m);
+            else if (c == "sign_message")
+                sig = k.signMessageRaw(m);
+            else if (c == "sign_near_transaction")
+                sig = k.signNearTransaction(m);
+            else if (c == "sign_sui_transaction")
+                sig = k.signSuiTransaction(m);
+            else if (c == "sign_stellar_transaction")
+                sig = k.signStellarTransaction(bytes(r["networkId"]), m);
+            else
+                sig = k.signHederaTransaction(m);
             CHECK(hx(sig) == "0x" + r["signature"].get<std::string>(), r["id"].get<std::string>());
             ++n;
         }
     CHECK(n == 45, "3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest, 12 envelopes");
     n = 0;
-    for (auto& r : N["refusals"]) {
+    for (auto &r : N["refusals"]) {
         std::string c = r["call"].get<std::string>();
-        auto run = [&](const json& a) {
+        auto run = [&](const json &a) {
             return code_of([&] {
-                if (c == "sign_message") nkey(a).signMessageRaw(nmsg(a));
-                else if (c == "polkadot_key") NW(a["mnemonic"].get<std::string>()).polkadotKey(a["path"].get<std::string>());
-                else if (c == "bitcoin_key") NW(a["mnemonic"].get<std::string>()).bitcoinKey(a["network"].get<std::string>(), kCoinDefault, a["change"].get<uint32_t>(), 0);
-                else if (c == "sign_near_transaction") nkey(a).signNearTransaction(nmsg(a));
-                else if (c == "sign_sui_transaction") nkey(a).signSuiTransaction(nmsg(a));
-                else if (c == "sign_hedera_transaction") nkey(a).signHederaTransaction(nmsg(a));
-                else if (c == "sign_stellar_transaction") nkey(a).signStellarTransaction(bytes(a["networkId"]), nmsg(a));
+                if (c == "sign_message")
+                    nkey(a).signMessageRaw(nmsg(a));
+                else if (c == "polkadot_key")
+                    NW(a["mnemonic"].get<std::string>()).polkadotKey(a["path"].get<std::string>());
+                else if (c == "bitcoin_key")
+                    NW(a["mnemonic"].get<std::string>())
+                        .bitcoinKey(a["network"].get<std::string>(), kCoinDefault, a["change"].get<uint32_t>(), 0);
+                else if (c == "sign_near_transaction")
+                    nkey(a).signNearTransaction(nmsg(a));
+                else if (c == "sign_sui_transaction")
+                    nkey(a).signSuiTransaction(nmsg(a));
+                else if (c == "sign_hedera_transaction")
+                    nkey(a).signHederaTransaction(nmsg(a));
+                else if (c == "sign_stellar_transaction")
+                    nkey(a).signStellarTransaction(bytes(a["networkId"]), nmsg(a));
             });
         };
         bool tx = c.size() > 12 && c.compare(c.size() - 12, 12, "_transaction") == 0;
-        if (c != "sign_message" && c != "polkadot_key" && c != "bitcoin_key" && !tx) continue;
+        if (c != "sign_message" && c != "polkadot_key" && c != "bitcoin_key" && !tx)
+            continue;
         CHECK(run(r["args"]) == "UAArgument", r["id"].get<std::string>());
         CHECK(run(r["accepted"]).empty(), "neighbour of " + r["id"].get<std::string>());
         ++n;
@@ -1065,11 +1226,12 @@ static void native_json() {
     CHECK(code_of([&] { ua.signMessageRaw(Bytes{1}); }) == "UARawDigestRefused", "a UA key: no raw message");
     CHECK(code_of([&] { ua.signNearTransaction(Bytes{1}); }) == "UARawDigestRefused", "a UA key: no envelope call");
     std::vector<std::string> nets;
-    for (auto& s : N["networks"]) nets.push_back(s.get<std::string>());
+    for (auto &s : N["networks"])
+        nets.push_back(s.get<std::string>());
     CHECK(nets == networks(), "the network list");
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     std::map<std::string, void (*)()> tests{
         {"load_refuses_wrong_abi_or_features", load_refuses_wrong_abi_or_features},
         {"secret_buffer_wiped_after_call", secret_buffer_wiped_after_call},
@@ -1099,7 +1261,7 @@ int main(int argc, char** argv) {
     }
     try {
         tests[argv[1]]();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stderr, "exception: %s\n", e.what());
         return 1;
     }

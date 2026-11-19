@@ -18,15 +18,39 @@ creation (`verify`, which also opens a UA record lazily and enforces POLICY_PASS
 payment then covers this app's new boxes plus the record: the part beyond this app's own boxes is forwarded to the
 account app by an inner payment immediately before the inner `verify` (its own exact-MBR check).
 """
+
 import typing
 
-from algopy import (Account, BigUInt, Bytes, BoxMap, FixedBytes, Global, GlobalState, Txn, UInt64, arc4,
-                    op, subroutine)
+from algopy import Account, BigUInt, Bytes, BoxMap, FixedBytes, Global, GlobalState, Txn, UInt64, arc4, op, subroutine
 
-from common import (KIND_ADDRESS, KIND_UA, OP_CANCEL, OP_EXECUTE_TRANSFER, OP_INVALIDATE_NONCES, OP_PAY, OP_TRADE,
-                    OP_TRANSFER, VERIFY, VERIFY_KEY, Bytes32, Holder, MetaOp, Order, account_verify, check_envelope,
-                    digest, lane_key, mbr_paid, mbr_payment, meta_pay_id, pay_lane, rest, signed_by, verify_native,
-                    zero)
+from common import (
+    KIND_ADDRESS,
+    KIND_UA,
+    OP_CANCEL,
+    OP_EXECUTE_TRANSFER,
+    OP_INVALIDATE_NONCES,
+    OP_PAY,
+    OP_TRADE,
+    OP_TRANSFER,
+    VERIFY,
+    VERIFY_KEY,
+    Bytes32,
+    Holder,
+    MetaOp,
+    Order,
+    account_verify,
+    check_envelope,
+    digest,
+    lane_key,
+    mbr_paid,
+    mbr_payment,
+    meta_pay_id,
+    pay_lane,
+    rest,
+    signed_by,
+    verify_native,
+    zero,
+)
 
 Bytes8 = FixedBytes[typing.Literal[8]]
 U128_MAX = 2**128 - 1
@@ -57,8 +81,9 @@ class Token(arc4.ARC4Contract):
         self.min_nonces = BoxMap(Bytes32, UInt64, key_prefix=b"n")
 
     @arc4.abimethod(create="require")
-    def create(self, name: Bytes32, symbol: Bytes8, decimals: arc4.UInt8, admin: Account,
-               account_app: arc4.UInt64) -> None:
+    def create(
+        self, name: Bytes32, symbol: Bytes8, decimals: arc4.UInt8, admin: Account, account_app: arc4.UInt64
+    ) -> None:
         """`account_app`: the deployment's `account` app (fixed: no method changes it)."""
         self.account_app.value = account_app.as_uint64()
         self.name.value = name
@@ -162,8 +187,12 @@ class Token(arc4.ARC4Contract):
         its address (the router), `open_payee` (the relayer that submitted the outer group) is paid; else `op.to`."""
         before = Global.current_application_address.min_balance
         payee = op.to
-        if (called_by_app() and op.to.kind.as_uint64() == KIND_ADDRESS and op.to.id == op.relayer
-                and op.relayer.bytes == Txn.sender.bytes):
+        if (
+            called_by_app()
+            and op.to.kind.as_uint64() == KIND_ADDRESS
+            and op.to.id == op.relayer
+            and op.relayer.bytes == Txn.sender.bytes
+        ):
             payee = addr_holder(open_payee)
         forwarded = self._value(op, auth, UInt64(OP_PAY), payee)
         mbr_paid(before, forwarded)
@@ -173,8 +202,9 @@ class Token(arc4.ARC4Contract):
         """CTR-MTX-26: the plain pay of `pay_ref = metaPayId(salt, meta)` on `payLane(pay_ref)` at nonce 0; `meta`
         never parsed, logged in `PaymentMeta` before `PaymentSettled`."""
         before = Global.current_application_address.min_balance
-        assert (op.pay_ref == meta_pay_id(salt, meta) and op.lane == pay_lane(op.pay_ref)
-                and op.nonce.as_uint64() == 0), "pay-meta shape (pay_ref = metaPayId(salt, meta), lane = payLane, nonce 0)"
+        assert (
+            op.pay_ref == meta_pay_id(salt, meta) and op.lane == pay_lane(op.pay_ref) and op.nonce.as_uint64() == 0
+        ), "pay-meta shape (pay_ref = metaPayId(salt, meta), lane = payLane, nonce 0)"
         arc4.emit("PaymentMeta", op.pay_ref, arc4.DynamicBytes(meta))
         forwarded = self._value(op, auth, UInt64(OP_PAY), op.to)
         mbr_paid(before, forwarded)
@@ -212,8 +242,9 @@ class Token(arc4.ARC4Contract):
         assert called_by_app(), "a leg is pulled only by an app, the order's DEX"
         dex = addr_holder(Txn.sender)
         assert op.op.as_uint64() == OP_TRADE, "wrong op code"
-        assert op.to == dex and op.relayer.bytes == Txn.sender.bytes, \
+        assert op.to == dex and op.relayer.bytes == Txn.sender.bytes, (
             "a leg is pulled only by the order's DEX (to = relayer = caller)"
+        )
         assert order.sell_token.as_uint64() == Global.current_application_id.id, "order sells another token"
         amount = op.amount.as_biguint()
         assert amount == order.sell_amount.as_biguint() and amount > 0, "fill-or-kill: op amount = sell_amount"
@@ -223,8 +254,9 @@ class Token(arc4.ARC4Contract):
         check_envelope(op)
         key = self._open_order(op.from_, op.lane, op.nonce.as_uint64())
         d = digest(op)
-        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY), op.from_, d, auth,
-                        rest(self._trade_need(dex)))
+        fwd = signed_by(
+            self.account_app.value, arc4.arc4_signature(VERIFY), op.from_, d, auth, rest(self._trade_need(dex))
+        )
         self.orders[key] = arc4.UInt8(FILLED)
         arc4.emit("OrderFilled", op.from_, arc4.Address(Txn.sender), op.lane, op.nonce, arc4.UInt256(amount), d)
         self._move(op.from_, dex, amount)
@@ -237,8 +269,14 @@ class Token(arc4.ARC4Contract):
         before = Global.current_application_address.min_balance
         admin_shape(op, UInt64(OP_CANCEL), target_lane.bytes + target_nonce.bytes)
         key = self._open_order(op.from_, target_lane, target_nonce.as_uint64())
-        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY_KEY), op.from_, digest(op), auth,
-                        rest(UInt64(MBR_ORDER_BOX)))
+        fwd = signed_by(
+            self.account_app.value,
+            arc4.arc4_signature(VERIFY_KEY),
+            op.from_,
+            digest(op),
+            auth,
+            rest(UInt64(MBR_ORDER_BOX)),
+        )
         self.orders[key] = arc4.UInt8(CANCELLED)
         arc4.emit("OrderCancelled", op.from_, target_lane, target_nonce)
         mbr_paid(before, fwd)
@@ -254,8 +292,7 @@ class Token(arc4.ARC4Contract):
         key = lane_key(op.from_, lane)
         assert n > self.min_nonces.get(key, default=UInt64(0)), "min_nonce only increases"
         need = UInt64(0) if key in self.min_nonces else UInt64(MBR_LANE_BOX)
-        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY_KEY), op.from_, digest(op), auth,
-                        rest(need))
+        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY_KEY), op.from_, digest(op), auth, rest(need))
         self.min_nonces[key] = n
         arc4.emit("NoncesInvalidated", op.from_, lane, min_nonce)
         mbr_paid(before, fwd)
@@ -407,9 +444,14 @@ def order_hash(o: Order) -> Bytes32:
 def admin_shape(o: MetaOp, code: UInt64, params: Bytes) -> None:
     """A cancel / invalidate (as the revoke): `to = from`; amount, pay_ref, lane and nonce zero; `extra` = sha256 of
     the ARC-4 parameters; rules 1, 2, 7. A replay is refused by the state (closed order, min_nonce not raised)."""
-    assert (o.op.as_uint64() == code and o.to == o.from_ and o.amount.as_biguint() == 0 and o.pay_ref == zero()
-            and o.lane == zero() and o.nonce.as_uint64() == 0), \
-        "cancel / invalidate shape (to = from; amount, pay_ref, lane and nonce zero)"
+    assert (
+        o.op.as_uint64() == code
+        and o.to == o.from_
+        and o.amount.as_biguint() == 0
+        and o.pay_ref == zero()
+        and o.lane == zero()
+        and o.nonce.as_uint64() == 0
+    ), "cancel / invalidate shape (to = from; amount, pay_ref, lane and nonce zero)"
     assert o.extra.bytes == op.sha256(params), "extra is not sha256 of the parameters"
     check_envelope(o)
 

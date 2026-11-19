@@ -74,8 +74,13 @@ contract PqzNormalTest is PqzFixture {
         assertEq(tok.pqzPendingCt(bob, 0, 0), _cut(out, 0, PqzCt.CT));
         assertEq(tok.balanceOfUA(carol), FEE * SCALE, "txFee: the beneficiary's public balance (D19)");
         assertEq(tok.pqzAccount(carol, 0).pendingCount, 0, "no TRIVIAL fee entry");
-        assertEq(ref, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID, address(tok), alice,
-            uint256(0))), "entryRef");
+        assertEq(
+            ref,
+            keccak256(
+                abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID, address(tok), alice, uint256(0))
+            ),
+            "entryRef"
+        );
         bytes memory r = _rOf(out, bob);
         assertEq(tok.transferEntry(ref), r, "BUNDLE stores R");
         assertEq(tok.transferCiphertextHash(ref), keccak256(r));
@@ -134,10 +139,30 @@ contract PqzNormalTest is PqzFixture {
         assertEq(st.length, ST_TX);
         assertEq(_cut(st, 640, ST_TX - 640), _cut(txStmt, 640, ST_TX - 640), "body = vector body");
         bytes memory head = bytes.concat(
-            abi.encode(PqzCore.OP_TRANSFER, PQZL_ID, block.chainid, address(tok), address(reg), alice, bob, carol, FEE,
-                uint256(0)),
-            abi.encode(uint256(0), uint256(0), uint256(1), block.number + 100, uint256(1), uint256(1000), PQZ_UID,
-                _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), keccak256(abi.encodePacked(bytes32(0))))
+            abi.encode(
+                PqzCore.OP_TRANSFER,
+                PQZL_ID,
+                block.chainid,
+                address(tok),
+                address(reg),
+                alice,
+                bob,
+                carol,
+                FEE,
+                uint256(0)
+            ),
+            abi.encode(
+                uint256(0),
+                uint256(0),
+                uint256(1),
+                block.number + 100,
+                uint256(1),
+                uint256(1000),
+                PQZ_UID,
+                _direct(ZetherTypes.TransferMode.BUNDLE),
+                uint256(uint128(salt)),
+                keccak256(abi.encodePacked(bytes32(0)))
+            )
         ); // group 3h (T59, C3): word 608 `memoHash` = keccak256(ownTag) on BUNDLE (the payload's ownTag 0); the body is the vector's
         assertEq(_cut(st, 0, 640), head, "header");
         bytes memory proof = hex"0102030405";
@@ -172,7 +197,9 @@ contract PqzNormalTest is PqzFixture {
     // ------------------------------------------------------------------ inline credits on both sides of `rolled`
 
     function _credits(bytes32 ua, uint256 n) internal {
-        for (uint256 i; i < n; ++i) _transfer(tok, carol, ua, bytes32(0), 100 + i, false);
+        for (uint256 i; i < n; ++i) {
+            _transfer(tok, carol, ua, bytes32(0), 100 + i, false);
+        }
     }
 
     function test_inlineAboveRolled() public {
@@ -246,21 +273,33 @@ contract PqzNormalTest is PqzFixture {
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
         // self, unregistered receiver and beneficiary
         vm.expectRevert(IPqzToken.SelfTransfer.selector);
-        tok.mtxConfidentialTransferSingle(_ts(_payload(1, 0, alice, alice, bytes32(0), out, "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(1, 0, alice, alice, bytes32(0), out, "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bytes32(uint256(5))));
-        tok.mtxConfidentialTransferSingle(_ts(_payload(1, 0, alice, bytes32(uint256(5)), bytes32(0), out, "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(1, 0, alice, bytes32(uint256(5)), bytes32(0), out, "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bytes32(uint256(6))));
-        tok.mtxConfidentialTransferSingle(_ts(_payload(1, 0, alice, bob, bytes32(uint256(6)), out, "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(1, 0, alice, bob, bytes32(uint256(6)), out, "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         // shieldIn over the balance, range
         vm.expectRevert();
-        tok.mtxConfidentialTransferSingle(_ts(_payload(1, 1, alice, bob, bytes32(0), out, "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(1, 1, alice, bob, bytes32(0), out, "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PendingRange.selector, 2, 0, 1));
-        tok.mtxConfidentialTransferSingle(_ts(_payload(2, 0, alice, bob, bytes32(0), out, "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(2, 0, alice, bob, bytes32(0), out, "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         // non-canonical out, bad length
         bytes memory nc = bytes.concat(out);
         nc[0] = 0xff;
         vm.expectRevert(IPqzToken.NonCanonical.selector);
-        tok.mtxConfidentialTransferSingle(_ts(_payload(1, 0, alice, bob, bytes32(0), nc, "")), hex"01", _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(1, 0, alice, bob, bytes32(0), nc, "")), hex"01", _pqAuth(), "", noVerdict()
+        );
         IPqzToken.PqzTransferArgs memory bad = _ts(_payload(1, 0, alice, bob, bytes32(0), out, ""));
         bad.vFrom = _cut(bad.vFrom, 0, 96);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, 96));
@@ -272,7 +311,9 @@ contract PqzNormalTest is PqzFixture {
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
         _mockOp(1, 1);
         vm.expectRevert(IPqzToken.AuthRejected.selector);
-        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", IUARegistry.UASig("x", new bytes(3309), new IUARegistry.MemberSig[](0)), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(pl), hex"01", IUARegistry.UASig("x", new bytes(3309), new IUARegistry.MemberSig[](0)), "", noVerdict()
+        );
         vm.mockCall(ML65, bytes(""), abi.encode(uint256(0)));
         vm.expectRevert(IPqzToken.AuthRejected.selector);
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
@@ -343,27 +384,51 @@ contract PqzNormalTest is PqzFixture {
         bytes memory memo = _memo();
         pl = _payload(0, 0, alice, bob, bytes32(0), out, memo);
         bytes memory st = cpt.transferSingleStatement(_ts(pl), 0);
-        assertEq(bytes32(_cut(st, 608, 32)), keccak256(bytes.concat(memo, bytes32(0))), "memoHash: keccak256(memo || ownTag) (group 3h)");
+        assertEq(
+            bytes32(_cut(st, 608, 32)),
+            keccak256(bytes.concat(memo, bytes32(0))),
+            "memoHash: keccak256(memo || ownTag) (group 3h)"
+        );
         assertEq(bytes32(_cut(st, 544, 32)), _direct(ZetherTypes.TransferMode.HASH), "direct commit-reveal binding");
         bytes32 ref = cpt.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
         bytes memory r = _rOf(out, bob);
         assertEq(cpt.transferEntry(ref), bytes.concat(keccak256(r), memo), "hash || memo");
         assertEq(cpt.transferCiphertextHash(ref), keccak256(r));
         // group 3h (T59, C5): then the tail, ownTag 0 ‖ kv (bob 0, the auditor 0) ‖ u8(2)
-        assertEq(cpt.pqzEntryBlob(ref), bytes.concat(r, _packed(_cut(out, PqzCt.CT, 128)), bytes32(0), bytes16(0), bytes1(0x02)),
-            "the op blob: R || P(v_f) || ownTag || kv || n");
+        assertEq(
+            cpt.pqzEntryBlob(ref),
+            bytes.concat(r, _packed(_cut(out, PqzCt.CT, 128)), bytes32(0), bytes16(0), bytes1(0x02)),
+            "the op blob: R || P(v_f) || ownTag || kv || n"
+        );
         // disclosure of a COMPACT entry reads R from the blob: no bundle argument
         assertEq(_cut(cpt.disclosureStatement(ref, 0, 5, 1, 0), O_DU, PqzCt.CT), _cut(out, 0, PqzCt.CT), "u || v_t");
         // BUNDLE token: the commit-reveal form, same hash
-        ref = tok.mtxConfidentialTransferSingleCompact(_ts(_payload(0, 0, alice, bob, bytes32(0), out, memo)), hex"01", _pqAuth(), "", noVerdict());
+        ref = tok.mtxConfidentialTransferSingleCompact(
+            _ts(_payload(0, 0, alice, bob, bytes32(0), out, memo)), hex"01", _pqAuth(), "", noVerdict()
+        );
         assertEq(tok.transferCiphertextHash(ref), keccak256(r));
         // the NONE entry points are gone
-        bytes memory d = abi.encodeWithSignature("mtxConfidentialTransferSingleNoBundle(bytes,bytes,bytes,bytes32,bytes)",
-            _payload(1, 0, alice, bob, bytes32(0), out, ""), hex"01", _mlAuth(), bytes32(0), bytes(""));
+        bytes memory d = abi.encodeWithSignature(
+            "mtxConfidentialTransferSingleNoBundle(bytes,bytes,bytes,bytes32,bytes)",
+            _payload(1, 0, alice, bob, bytes32(0), out, ""),
+            hex"01",
+            _mlAuth(),
+            bytes32(0),
+            bytes("")
+        );
         (bool ok,) = address(tok).call(d);
         assertFalse(ok, "no single no-bundle entry on PQZ");
-        (ok,) = address(tok).call(abi.encodeWithSignature("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)",
-            bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")));
+        (ok,) = address(tok)
+            .call(
+                abi.encodeWithSignature(
+                    "mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)",
+                    bytes(""),
+                    bytes(""),
+                    bytes(""),
+                    bytes32(0),
+                    bytes("")
+                )
+            );
         assertFalse(ok, "mtxConfidentialTransferNoBundle is Zether-only (PQZ NONE retired)");
         assertEq(tok.pqzEntryBlob(keccak256("unknown")), "", "no entry: empty");
     }
@@ -376,8 +441,20 @@ contract PqzNormalTest is PqzFixture {
         (bytes32 ref, bytes memory out) = _transfer(tok, alice, bob, bytes32(0), 95, true);
         bytes memory st = tok.disclosureStatement(ref, 0, 123, 1, 0);
         assertEq(st.length, ST_DISC);
-        assertEq(_cut(st, 0, 288), abi.encode(PqzCore.OP_DR, PQZL_ID, block.chainid, PQZ_UID, address(tok), address(reg),
-            ref, uint256(123), uint256(1)));
+        assertEq(
+            _cut(st, 0, 288),
+            abi.encode(
+                PqzCore.OP_DR,
+                PQZL_ID,
+                block.chainid,
+                PQZ_UID,
+                address(tok),
+                address(reg),
+                ref,
+                uint256(123),
+                uint256(1)
+            )
+        );
         assertEq(_cut(st, 288, PqzCt.PK), _cut(txStmt, O_PK1, PqzCt.PK), "pk_t (bob)");
         assertEq(_cut(st, O_DU, PqzCt.PK + 128), _cut(out, 0, PqzCt.CT), "u || v_t");
         st = tok.disclosureStatement(ref, 0, 123, 2, 0);
@@ -403,13 +480,22 @@ contract PqzNormalTest is PqzFixture {
     function test_factoryGate() public {
         bytes memory code = type(NormalPqzToken).creationCode;
         vm.prank(registrar);
-        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployTokenImplementation.selector, uint8(6), 1, 1, code, "",
-            EnvKit.uidOf(address(factory))));
+        (bool ok,) = address(factory)
+            .call(
+                abi.encodeWithSelector(
+                    factory.deployTokenImplementation.selector, uint8(6), 1, 1, code, "", EnvKit.uidOf(address(factory))
+                )
+            );
         assertFalse(ok, "kind 6 (dropped, D21) fails ABI decoding");
         // an unregistered PQZ implementation cannot be cloned at all (owner 2026-10-19)
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
-            IOpenFactory.TokenKind.NORMAL_PQZ));
-        factory.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL_PQZ, address(normalImpl), abi.encode(_cfg(1 << 40)), "g2");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IOpenFactory.UnregisteredConfidentialKind.selector, IOpenFactory.TokenKind.NORMAL_PQZ
+            )
+        );
+        factory.createTokenUnregistered(
+            IOpenFactory.TokenKind.NORMAL_PQZ, address(normalImpl), abi.encode(_cfg(1 << 40)), "g2"
+        );
         // the self-test failing now: the token's initialize refuses (plan 5g-Z2: the chain gates are the implementation's)
         vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0)));
         vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
@@ -433,12 +519,18 @@ contract PqzNormalTest is PqzFixture {
         PqzKeyVerifier fresh = _newPqzVerifier(PQZL_ID);
         assertTrue(address(fresh) != address(old));
         uint16 v1 = factory.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ);
-        address impl2 = Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 2,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(fresh)), type(NormalPqzToken).creationCode);
+        address impl2 = Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            2,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(fresh)),
+            type(NormalPqzToken).creationCode
+        );
         assertEq(factory.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ), v1 + 1, "the next env version");
         assertEq(factory.releaseOf(IOpenFactory.TokenKind.NORMAL_PQZ, 2).envVersion, v1 + 1);
         assertEq(factory.releaseOf(IOpenFactory.TokenKind.NORMAL_PQZ, 1).envVersion, v1, "release 1 keeps its env");
-        NormalPqzToken t2 = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(1 << 40)), "r2"));
+        NormalPqzToken t2 =
+            NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(1 << 40)), "r2"));
         assertEq(t2.verifier(), address(fresh));
         assertEq(NormalPqzToken(impl2).verifier(), address(0), "chain-neutral: the release carries no env (plan T72)");
         assertEq(tok.verifier(), address(old), "release 1's tokens keep theirs");
@@ -454,27 +546,34 @@ contract PqzNormalTest is PqzFixture {
     function test_constructorChecksTheEnv() public {
         bytes memory code = type(NormalPqzToken).creationCode;
         IFactoryToken.Env[6] memory bad;
-        for (uint256 i; i < bad.length; ++i) bad[i] = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
+        for (uint256 i; i < bad.length; ++i) {
+            bad[i] = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
+        }
         // owner ruling 2026-10-30 (D5): an EIP-7702 designator is not a dependency, even one delegating to the real one
         (address dVer, address dReg) = (address(0xD7702), address(0xD7703));
         vm.etch(dVer, abi.encodePacked(hex"ef0100", address(pqv)));
         vm.etch(dReg, abi.encodePacked(hex"ef0100", address(reg)));
-        bad[4].deps[0] = dVer;                                           // a designator verifier
-        bad[5].registry = dReg;                                          // a designator registry
-        bad[0].deps = new address[](0);                                  // no verifier
-        bad[1].deps = new address[](2);                                  // two
+        bad[4].deps[0] = dVer; // a designator verifier
+        bad[5].registry = dReg; // a designator registry
+        bad[0].deps = new address[](0); // no verifier
+        bad[1].deps = new address[](2); // two
         (bad[1].deps[0], bad[1].deps[1]) = (address(pqv), address(pqv));
-        bad[2].hedera = true;                                            // never on Hedera
-        bad[3].deps[0] = address(0x1234);                                // a verifier without code
+        bad[2].hedera = true; // never on Hedera
+        bad[3].deps[0] = address(0x1234); // a verifier without code
         // T66b: release 1's body modules, named in implArgs and pinned in each env (the release constructs; its env is refused)
         bytes memory args = Catalogue.argsOn(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1, "");
         address[] memory ms = Catalogue.modulesOn(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1);
         for (uint256 i; i < bad.length; ++i) {
-            uint16 ev = Catalogue.env(factory, IOpenFactory.TokenKind.NORMAL_PQZ,
-                withModules(pinned(bad[i], IOpenFactory.TokenKind.NORMAL_PQZ), ms));
+            uint16 ev = Catalogue.env(
+                factory,
+                IOpenFactory.TokenKind.NORMAL_PQZ,
+                withModules(pinned(bad[i], IOpenFactory.TokenKind.NORMAL_PQZ), ms)
+            );
             vm.prank(registrar);
             vm.expectRevert(IPqzToken.BadInit.selector);
-            factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args, EnvKit.uidOf(address(factory)));
+            factory.deployTokenImplementation(
+                IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args, EnvKit.uidOf(address(factory))
+            );
         }
     }
 
@@ -486,8 +585,13 @@ contract PqzNormalTest is PqzFixture {
         for (uint256 i; i < ids.length; ++i) {
             vm.chainId(ids[i]);
             _mockSelfTest();
-            assertTrue(factory.isRegisteredToken(
-                factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(1 << 40)), bytes32(ids[i]))));
+            assertTrue(
+                factory.isRegisteredToken(
+                    factory.createToken(
+                        IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(1 << 40)), bytes32(ids[i])
+                    )
+                )
+            );
             vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0)));
             vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
             factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(1 << 40)), bytes32(ids[i] + 1));
@@ -558,8 +662,9 @@ contract PqzNormalTest is PqzFixture {
         tok.mtxShield(bytes32(uint256(1)), 1);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AmountOutOfRange.selector, 0, (uint256(1) << 40)));
         tok.mtxShield(alice, 0);
-        bytes memory err = abi.encodeWithSignature("ERC20InsufficientBalance(address,uint256,uint256)", address(this),
-            10 * SCALE, 11 * SCALE);
+        bytes memory err = abi.encodeWithSignature(
+            "ERC20InsufficientBalance(address,uint256,uint256)", address(this), 10 * SCALE, 11 * SCALE
+        );
         vm.expectRevert(err);
         tok.mtxShield(alice, 11);
         uint256 g = gasleft();
@@ -601,13 +706,21 @@ contract PqzNormalTest is PqzFixture {
         for (uint256 i; i < 3; ++i) {
             address fv = address(new FakePqzVerifier(pre[i], ids[i]));
             OpenFactory g = EnvKit.factory(registrar, PQZ_UID, 0);
-            Catalogue.release(g, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(g), PQZ_UID, address(reg), fv),
-                type(NormalPqzToken).creationCode);
+            Catalogue.release(
+                g,
+                IOpenFactory.TokenKind.NORMAL_PQZ,
+                1,
+                pqzEnv(address(g), PQZ_UID, address(reg), fv),
+                type(NormalPqzToken).creationCode
+            );
             vm.prank(registrar);
             g.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(g)));
             if (i == 2) vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0))); // the real pair, self-test failing
-            vm.expectRevert(i == 2 ? abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ)
-                : abi.encodeWithSelector(PqzSafety.NotPqz.selector, pre[i], ids[i]));
+            vm.expectRevert(
+                i == 2
+                    ? abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ)
+                    : abi.encodeWithSelector(PqzSafety.NotPqz.selector, pre[i], ids[i])
+            );
             g.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(1 << 40)), "w");
         }
         _mockSelfTest();
@@ -627,9 +740,13 @@ contract PqzNormalTest is PqzFixture {
         for (uint256 i; i < 16; ++i) {
             uint256 o = PqzCt.PK + 8 * i;
             uint256 x;
-            for (uint256 k; k < 8; ++k) x = (x << 8) | uint8(r[o + k]);
+            for (uint256 k; k < 8; ++k) {
+                x = (x << 8) | uint8(r[o + k]);
+            }
             x = (x + PqzCt.Q - (PqzCt.DELTA * ((m >> (4 * i)) & 15)) % PqzCt.Q) % PqzCt.Q;
-            for (uint256 k; k < 8; ++k) r[o + k] = bytes1(uint8(x >> (8 * (7 - k))));
+            for (uint256 k; k < 8; ++k) {
+                r[o + k] = bytes1(uint8(x >> (8 * (7 - k))));
+            }
         }
     }
 }

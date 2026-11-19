@@ -4,11 +4,12 @@
 
 use serde_json::Value;
 use zether_prover::bulletproofs::Gens;
-use zether_prover::curve::{
-    decode_point, decode_scalar, encode_point, encode_scalar, keccak256, proof_system_id, Bls12381, ZCurve,
-};
 #[cfg(feature = "bn254")]
 use zether_prover::curve::Bn254;
+use zether_prover::curve::{
+    decode_point, decode_scalar, encode_point, encode_scalar, keccak256, proof_system_id, Bls12381,
+    ZCurve,
+};
 use zether_prover::schnorr::{sign_with_k, verify};
 use zether_prover::transcript::{hash_to_scalar, Transcript};
 
@@ -73,8 +74,14 @@ fn transcript_matches_s2() {
     for h in v["hashToScalar"].as_array().unwrap() {
         let seed: [u8; 32] = hx(&h["seed"]).try_into().unwrap();
         #[cfg(feature = "bn254")]
-        assert_eq!(hx(&h["bn254"]), encode_scalar::<Bn254>(&hash_to_scalar::<Bn254>(&seed)));
-        assert_eq!(hx(&h["bls12381"]), encode_scalar::<Bls12381>(&hash_to_scalar::<Bls12381>(&seed)));
+        assert_eq!(
+            hx(&h["bn254"]),
+            encode_scalar::<Bn254>(&hash_to_scalar::<Bn254>(&seed))
+        );
+        assert_eq!(
+            hx(&h["bls12381"]),
+            encode_scalar::<Bls12381>(&hash_to_scalar::<Bls12381>(&seed))
+        );
     }
 }
 

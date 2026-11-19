@@ -41,12 +41,19 @@ abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
     ///         HIP-632 path.
     bool private immutable _IS_HEDERA;
 
-    constructor(string memory domainName, bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
-        MetaTxBaseCore(domainName, chainUid_)
-    {
+    constructor(
+        string memory domainName,
+        bytes32 chainUid_,
+        address registry_,
+        address smartKeyAccountImpl_,
+        bool hedera_
+    ) MetaTxBaseCore(domainName, chainUid_) {
         _REGISTRY = registry_;
-        _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
-            hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
+        _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0)
+            ? bytes32(0)
+            : keccak256(
+                abi.encodePacked(hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3")
+            );
         _IS_HEDERA = hedera_;
     }
 
@@ -61,9 +68,13 @@ abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
         return _hedera();
     }
 
-    function _registry() internal view virtual returns (address) { return _REGISTRY; }
+    function _registry() internal view virtual returns (address) {
+        return _REGISTRY;
+    }
 
-    function _hedera() internal view virtual returns (bool) { return _IS_HEDERA; }
+    function _hedera() internal view virtual returns (bool) {
+        return _IS_HEDERA;
+    }
 
     /// @notice The one nonce map (CTR-UA-26), keyed by id: a native address zero-padded, a derived UA as itself.
     function _mtxNonceBody(bytes32 from, uint256 batch) internal view virtual returns (uint256) {
@@ -77,13 +88,19 @@ abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
     // ------------------------------------------------------------------ entry points
 
     /// @notice The generic entry (R47: an explicit `UASig`, no packed `bytes auth`).
-    function _mtxExecuteBody(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth) internal virtual returns (bytes memory)
+    function _mtxExecuteBody(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth)
+        internal
+        virtual
+        returns (bytes memory)
     {
         return _uaExecute(m, auth);
     }
 
     /// @notice Atomic: items run in order, each with a fresh ticket; any failure reverts all (CTR-MTX-11).
-    function _mtxBatchBody(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths) internal virtual returns (bool)
+    function _mtxBatchBody(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths)
+        internal
+        virtual
+        returns (bool)
     {
         uint256 n = ms.length;
         if (n == 0) revert IMetaTx.MtxBatchEmpty();
@@ -99,14 +116,24 @@ abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
     ///         `preNamedUA` like every named op, so nonce-ordered on its own lane `e.batch`, relayer-bound by the mode,
     ///         fee 0 or more, native and derived alike, under the named op's purpose (MD-5). The body bumps `lane` for
     ///         `e.from` itself: no self-call of `cancelNonce`, which refuses a derived subject (`UA_POOL` there).
-    function _mtxCancelNonceBody(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth) internal virtual returns (bytes memory)
+    function _mtxCancelNonceBody(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
+        internal
+        virtual
+        returns (bytes memory)
     {
         MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, abi.encodeCall(IMetaTx.cancelNonce, (lane)));
         _regPre(m.from, IMetaTx.cancelNonce.selector, m.mode);
         // the facts of `cancelNonce(lane)`, fixed: no self-call follows, so no allowlist is asked (a derived id too)
-        MtxPipelineLib.Out memory o = _pipePreNamedUA(_mtxCtx(), MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
-            _uaEnvelopeOf(m, 0), abi.encode(lane), MtxPipelineLib.CallFacts(IMetaTx.cancelNonce.selector, 36,
-            FEE_CLASS_ABSOLUTE, 0, 36, 0, true, _supportedModesBody()), auth);
+        MtxPipelineLib.Out memory o = _pipePreNamedUA(
+            _mtxCtx(),
+            MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+            _uaEnvelopeOf(m, 0),
+            abi.encode(lane),
+            MtxPipelineLib.CallFacts(
+                IMetaTx.cancelNonce.selector, 36, FEE_CLASS_ABSOLUTE, 0, 36, 0, true, _supportedModesBody()
+            ),
+            auth
+        );
         _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
         emit IUALedger.UANonceCancelled(e.from, lane, _bumpNonce(e.from, lane));
         if (o.fee != 0) _uaChargeFee(m, o.feeTo, o.fee);
@@ -120,99 +147,124 @@ abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
     ///      the wallets, the token modules W, Z, Q). A token's module P overrides them with the library's internal
     ///      twins, T the trade authorisation, A the payment views (spec 2026-11-09-t66b-library-organisation.md §4.1
     ///      rule 4; generated by script/modules/gen_faces.py).
-    function _pipePreCall(MtxPipelineLib.Ctx memory c, MtxPipelineLib.Envelope memory e,
-        MtxPipelineLib.CallFacts memory f, bytes calldata sig)
-        internal virtual returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreCall(
+        MtxPipelineLib.Ctx memory c,
+        MtxPipelineLib.Envelope memory e,
+        MtxPipelineLib.CallFacts memory f,
+        bytes calldata sig
+    ) internal virtual returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib.preCall(c, e, f, sig);
     }
 
-    function _pipePreCallUA(MtxPipelineLib.Ctx memory c, MtxPipelineLib.Envelope memory e,
-        MtxPipelineLib.CallFacts memory f, IUARegistry.UASig calldata auth)
-        internal virtual returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreCallUA(
+        MtxPipelineLib.Ctx memory c,
+        MtxPipelineLib.Envelope memory e,
+        MtxPipelineLib.CallFacts memory f,
+        IUARegistry.UASig calldata auth
+    ) internal virtual returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib.preCallUA(c, e, f, auth);
     }
 
-    function _pipePreNamed(MtxPipelineLib.Ctx memory c, bytes32 typehash, MtxPipelineLib.Envelope memory e,
-        bytes memory args, MtxPipelineLib.CallFacts memory f, bytes calldata sig)
-        internal virtual returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreNamed(
+        MtxPipelineLib.Ctx memory c,
+        bytes32 typehash,
+        MtxPipelineLib.Envelope memory e,
+        bytes memory args,
+        MtxPipelineLib.CallFacts memory f,
+        bytes calldata sig
+    ) internal virtual returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib.preNamed(c, typehash, e, args, f, sig);
     }
 
-    function _pipePreNamedUA(MtxPipelineLib.Ctx memory c, bytes32 typehash, MtxPipelineLib.Envelope memory e,
-        bytes memory args, MtxPipelineLib.CallFacts memory f, IUARegistry.UASig calldata auth)
-        internal virtual returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreNamedUA(
+        MtxPipelineLib.Ctx memory c,
+        bytes32 typehash,
+        MtxPipelineLib.Envelope memory e,
+        bytes memory args,
+        MtxPipelineLib.CallFacts memory f,
+        IUARegistry.UASig calldata auth
+    ) internal virtual returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib.preNamedUA(c, typehash, e, args, f, auth);
     }
 
-    function _pipePreTransferUA(MtxPipelineLib.Ctx memory c, MetaTxLib.UAMetaTransfer memory t, bytes32 signed,
-        uint256 have, IUARegistry.UASig calldata auth)
-        internal virtual returns (MtxPipelineLib.Out memory)
-    {
+    function _pipePreTransferUA(
+        MtxPipelineLib.Ctx memory c,
+        MetaTxLib.UAMetaTransfer memory t,
+        bytes32 signed,
+        uint256 have,
+        IUARegistry.UASig calldata auth
+    ) internal virtual returns (MtxPipelineLib.Out memory) {
         return MtxPipelineLib.preTransferUA(c, t, signed, have, auth);
     }
 
-    function _pipeAuthorize(MtxPipelineLib.Ctx memory c, bytes32 from, bytes32 purpose, bytes32 digest,
-        IUARegistry.UASig calldata auth)
-        internal view virtual
-    {
+    function _pipeAuthorize(
+        MtxPipelineLib.Ctx memory c,
+        bytes32 from,
+        bytes32 purpose,
+        bytes32 digest,
+        IUARegistry.UASig calldata auth
+    ) internal view virtual {
         MtxPipelineLib.authorize(c, from, purpose, digest, auth);
     }
 
     function _pipeCallDigest(bytes32 domainSeparator, bytes32 typehash, MtxPipelineLib.Envelope memory e)
-        internal pure virtual returns (bytes32)
+        internal
+        pure
+        virtual
+        returns (bytes32)
     {
         return MtxPipelineLib.callDigest(domainSeparator, typehash, e);
     }
 
     function _pipeTransferDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t)
-        internal pure virtual returns (bytes32)
+        internal
+        pure
+        virtual
+        returns (bytes32)
     {
         return MtxPipelineLib.transferDigest(domainSeparator, t);
     }
 
-    function _pipePayeeFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
-        address feeRecipient, uint256 validUntil)
-        internal pure virtual returns (bytes32)
-    {
+    function _pipePayeeFeeDigest(
+        bytes32 domainSeparator,
+        MetaTxLib.UAMetaTransfer calldata t,
+        uint256 fee,
+        address feeRecipient,
+        uint256 validUntil
+    ) internal pure virtual returns (bytes32) {
         return MtxPipelineLib.payeeFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
     }
 
     function _pipePayWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax)
-        internal pure virtual returns (bytes32)
+        internal
+        pure
+        virtual
+        returns (bytes32)
     {
         return MtxPipelineLib.payWithTaxHash(t, taxMode, tax);
     }
 
-    function _pipeMetaPayId(MetaTxLib.PayMeta calldata m)
-        internal pure virtual returns (bytes32)
-    {
+    function _pipeMetaPayId(MetaTxLib.PayMeta calldata m) internal pure virtual returns (bytes32) {
         return MtxPipelineLib.metaPayId(m);
     }
 
-    function _pipePayMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m)
-        internal virtual
-    {
+    function _pipePayMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m) internal virtual {
         MtxPipelineLib.payMeta(entryRef, m);
     }
 
-    function _pipePayRecord(bytes32 payNo, bytes32 to, uint256 amount)
-        internal virtual
-    {
+    function _pipePayRecord(bytes32 payNo, bytes32 to, uint256 amount) internal virtual {
         MtxPipelineLib.payRecord(payNo, to, amount);
     }
 
-    function _pipePaymentCount(bytes32 payNo)
-        internal view virtual returns (uint256)
-    {
+    function _pipePaymentCount(bytes32 payNo) internal view virtual returns (uint256) {
         return MtxPipelineLib.paymentCount(payNo);
     }
 
     function _pipePaymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
-        internal view virtual returns (MetaTxLib.PayRecord[] memory)
+        internal
+        view
+        virtual
+        returns (MetaTxLib.PayRecord[] memory)
     {
         return MtxPipelineLib.paymentsOf(payNo, offset, limit);
     }
@@ -252,59 +304,79 @@ abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
     ///      2 authorization, 3 the allowlist (`_uaAllowed` for a derived id, `MetaTxUnknownOp`; `_mtxRule` for every id),
     ///      shape, fee class and the fee amount, 4 nonce; then 5 self-call under the id, 6 the fee hook, 7 event.
     function _uaExecute(MetaTxLib.UAMetaTransaction memory m, IUARegistry.UASig calldata auth)
-        internal returns (bytes memory)
+        internal
+        returns (bytes memory)
     {
         _regPre(m.from, bytes4(m.data), m.mode);
         return _uaSettle(m, _pipePreCallUA(_mtxCtx(), _uaEnvelopeOf(m), _callFacts(m.data, true), auth));
     }
 
     /// @dev `_uaExecute` of a named `ua*` entry (TS-D14), the twin of `_named`.
-    function _namedUA(bytes32 typehash, bytes4 sel, MetaTxLib.UAEnvelope calldata e, bytes memory args,
-        IUARegistry.UASig calldata auth) internal returns (bytes memory)
-    {
+    function _namedUA(
+        bytes32 typehash,
+        bytes4 sel,
+        MetaTxLib.UAEnvelope calldata e,
+        bytes memory args,
+        IUARegistry.UASig calldata auth
+    ) internal returns (bytes memory) {
         return _namedCallUA(typehash, e, args, abi.encodePacked(sel, args), auth);
     }
 
     /// @dev `_namedUA` where the struct's words are not the call's arguments (`ERC20MetaTx._namedCall`).
-    function _namedCallUA(bytes32 typehash, MetaTxLib.UAEnvelope calldata e, bytes memory words, bytes memory data,
-        IUARegistry.UASig calldata auth) internal returns (bytes memory)
-    {
+    function _namedCallUA(
+        bytes32 typehash,
+        MetaTxLib.UAEnvelope calldata e,
+        bytes memory words,
+        bytes memory data,
+        IUARegistry.UASig calldata auth
+    ) internal returns (bytes memory) {
         MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, data);
         _regPre(m.from, bytes4(data), m.mode);
-        return _uaSettle(m, _pipePreNamedUA(
-            _mtxCtx(), typehash, _uaEnvelopeOf(m, 0), words, _callFacts(m.data, true), auth));
+        return
+            _uaSettle(
+                m, _pipePreNamedUA(_mtxCtx(), typehash, _uaEnvelopeOf(m, 0), words, _callFacts(m.data, true), auth)
+            );
     }
 
     /// @dev The `UAMetaTransaction` a named entry runs as (the binding hooks and the fee read it).
     function _uaMetaOf(MetaTxLib.UAEnvelope calldata e, bytes memory data)
-        private pure returns (MetaTxLib.UAMetaTransaction memory)
+        private
+        pure
+        returns (MetaTxLib.UAMetaTransaction memory)
     {
-        return MetaTxLib.UAMetaTransaction(e.from, data, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee,
-            e.feeRecipient);
+        return MetaTxLib.UAMetaTransaction(
+            e.from, data, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient
+        );
     }
 
     /// @dev Steps 5-7 of the UA path.
     function _uaSettle(MetaTxLib.UAMetaTransaction memory m, MtxPipelineLib.Out memory o)
-        private returns (bytes memory ret)
+        private
+        returns (bytes memory ret)
     {
         _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
-        ret = _selfCall(m.from, m.data, _uaEnvelopeBinding(m));                                         // 5
-        if (o.fee != 0) _uaChargeFee(m, o.feeTo, o.fee);                                                // 6
+        ret = _selfCall(m.from, m.data, _uaEnvelopeBinding(m)); // 5
+        if (o.fee != 0) _uaChargeFee(m, o.feeTo, o.fee); // 6
         emit IUALedger.UAMetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee); // 7
     }
 
     /// @dev The envelope of `m` for the library: `data` as its hash (over this memory copy).
     function _uaEnvelopeOf(MetaTxLib.UAMetaTransaction memory m)
-        internal pure returns (MtxPipelineLib.Envelope memory)
+        internal
+        pure
+        returns (MtxPipelineLib.Envelope memory)
     {
         return _uaEnvelopeOf(m, keccak256(m.data));
     }
 
     function _uaEnvelopeOf(MetaTxLib.UAMetaTransaction memory m, bytes32 dataHash)
-        internal pure returns (MtxPipelineLib.Envelope memory)
+        internal
+        pure
+        returns (MtxPipelineLib.Envelope memory)
     {
-        return MtxPipelineLib.Envelope(m.from, dataHash, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee,
-            m.feeRecipient);
+        return MtxPipelineLib.Envelope(
+            m.from, dataHash, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient
+        );
     }
 
     function _uaOn() internal view {
@@ -351,12 +423,28 @@ abstract contract UAMetaTxBaseCore is MetaTxBaseCore {
     ///         already holds (F-10). Before `MtxPipelineLib.pre*` on `_uaExecute`, `_namedCallUA`, `mtxCancelNonce`,
     ///         `_execute`, `_namedCall` (`from` padded), `_uaExecuteTransfer` (`sel` 0): `sel` the inner op's selector,
     ///         `mode` the envelope's.
-    function _regPre(bytes32 /* from */, bytes4 /* sel */, uint32 /* mode */) internal view virtual {}
+    function _regPre(
+        bytes32,
+        /* from */
+        bytes4,
+        /* sel */
+        uint32 /* mode */
+    )
+        internal
+        view
+        virtual {}
 
     /// @notice Empty here (as `_regPre`). After `pre*` and before the self-call or move of the same seats, with the
     ///         pipeline's `feeTo` and `fee`; and the fee legs of `payWithFee`, `payWithFeeToUA`, `mtxPayWithPayeeFee`,
     ///         `mtxRelayFee`, `mtxWrapOrder`.
-    function _regFeeTo(bytes32 /* feeTo */, uint256 /* fee */) internal view virtual {}
+    function _regFeeTo(
+        bytes32,
+        /* feeTo */
+        uint256 /* fee */
+    )
+        internal
+        view
+        virtual {}
 }
 
 /// @notice `UAMetaTxBaseCore` with its external entries, each calling its body (T66b, spec 2026-11-09-t66b-library-organisation.md §4.4):
@@ -378,15 +466,30 @@ abstract contract UAMetaTxBase is UAMetaTxBaseCore, IERC5267, IMetaTx {
         return _mtxDigestBody(m);
     }
 
-    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth) public virtual nonReentrant returns (bytes memory) {
+    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth)
+        public
+        virtual
+        nonReentrant
+        returns (bytes memory)
+    {
         return _mtxExecuteBody(m, auth);
     }
 
-    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths) public virtual nonReentrant returns (bool) {
+    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths)
+        public
+        virtual
+        nonReentrant
+        returns (bool)
+    {
         return _mtxBatchBody(ms, auths);
     }
 
-    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth) public virtual nonReentrant returns (bytes memory) {
+    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
+        public
+        virtual
+        nonReentrant
+        returns (bytes memory)
+    {
         return _mtxCancelNonceBody(e, lane, auth);
     }
 
@@ -398,11 +501,22 @@ abstract contract UAMetaTxBase is UAMetaTxBaseCore, IERC5267, IMetaTx {
         return _supportedModesBody();
     }
 
-    function mtxSelectors() public view virtual override returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg) {
+    function mtxSelectors()
+        public
+        view
+        virtual
+        override
+        returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg)
+    {
         return _mtxSelectorsBody();
     }
 
-    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external override nonReentrant returns (bool) {
+    function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+        external
+        override
+        nonReentrant
+        returns (bool)
+    {
         return _executeMetaTransactionBody(m, signature);
     }
 
@@ -410,10 +524,21 @@ abstract contract UAMetaTxBase is UAMetaTxBaseCore, IERC5267, IMetaTx {
         _cancelNonceBody(batch);
     }
 
-    function eip712Domain() public view virtual override returns (
-            bytes1 fields, string memory name, string memory version, uint256 chainId,
-            address verifyingContract, bytes32 salt, uint256[] memory extensions
-        ) {
+    function eip712Domain()
+        public
+        view
+        virtual
+        override
+        returns (
+            bytes1 fields,
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address verifyingContract,
+            bytes32 salt,
+            uint256[] memory extensions
+        )
+    {
         return _eip712DomainBody();
     }
 }

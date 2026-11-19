@@ -13,21 +13,21 @@ L=$1
 shift
 rc_all=0
 for d in "$@"; do
-  n=$(echo "$d" | tr '/' '-')
-  log=runs/2026-11-08-ua-mtx-merge-t66a-$L-$n.log
-  if [ "${RERUN:-0}" != 1 ] && [ -f "$log" ] && grep -q "^Ran .* 0 failed" "$log"; then
-    echo "$d: done ($(grep '^Ran ' "$log" | tail -1))"
-    continue
-  fi
-  if [ "$d" = top ]; then
-    FOUNDRY_SPARSE_MODE=true FOUNDRY_OUT=out/t66a-$n FOUNDRY_CACHE_PATH=cache/t66a-$n \
-      ~/.foundry/bin/forge test -j 2 --match-path 'test/*.t.sol' ${FORGE_ARGS:-} > "$log" 2>&1
-  else
-    FOUNDRY_TEST=$d FOUNDRY_OUT=out/t66a-$n FOUNDRY_CACHE_PATH=cache/t66a-$n \
-      ~/.foundry/bin/forge test -j 2 ${FORGE_ARGS:-} > "$log" 2>&1
-  fi
-  rc=$?
-  [ $rc -eq 0 ] || rc_all=1
-  echo "$d: rc $rc | $(grep '^Ran ' "$log" | tail -1)"
+    n=$(echo "$d" | tr '/' '-')
+    log=runs/2026-11-08-ua-mtx-merge-t66a-$L-$n.log
+    if [ "${RERUN:-0}" != 1 ] && [ -f "$log" ] && grep -q "^Ran .* 0 failed" "$log"; then
+        echo "$d: done ($(grep '^Ran ' "$log" | tail -1))"
+        continue
+    fi
+    if [ "$d" = top ]; then
+        FOUNDRY_SPARSE_MODE=true FOUNDRY_OUT=out/t66a-$n FOUNDRY_CACHE_PATH=cache/t66a-$n \
+            ~/.foundry/bin/forge test -j 2 --match-path 'test/*.t.sol' ${FORGE_ARGS:-} >"$log" 2>&1
+    else
+        FOUNDRY_TEST=$d FOUNDRY_OUT=out/t66a-$n FOUNDRY_CACHE_PATH=cache/t66a-$n \
+            ~/.foundry/bin/forge test -j 2 ${FORGE_ARGS:-} >"$log" 2>&1
+    fi
+    rc=$?
+    [ $rc -eq 0 ] || rc_all=1
+    echo "$d: rc $rc | $(grep '^Ran ' "$log" | tail -1)"
 done
 exit $rc_all

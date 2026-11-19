@@ -5,14 +5,14 @@
 //     purpose: metatx | trade | metatx-cancel | member | pop (= the portable pop v2: digest = registrationDigest)
 //   → {"ua": "0x…", "keyData": "0x…", "auth": "0x…", "authXdr": "0x…", "sig": {key_data, signature, members}}
 //     (authXdr: the UaSig ScVal the entries take; sig: the same UaSig as a node `ua_metatx` job writes it)
-import { hex, fromHex } from '../src/bytes.js';
-import { signer, authFor } from './soroban-ua-ops-vectors.mjs';
+import { hex, fromHex } from "../src/bytes.js";
+import { signer, authFor } from "./soroban-ua-ops-vectors.mjs";
 
 const [kind, index, digest, purpose] = process.argv.slice(2);
 if (!purpose || !/^\d+$/.test(index) || !/^(0x)?[0-9a-fA-F]{64}$/.test(digest)) {
-  console.error('usage: soroban-sign.mjs <kind> <keyIndex> <hex digest (32 bytes)> <purpose>');
+  console.error("usage: soroban-sign.mjs <kind> <keyIndex> <hex digest (32 bytes)> <purpose>");
   process.exit(2);
 }
-const sg = signer(kind, ...(kind === 'msig' ? [] : [Number(index)]));
+const sg = signer(kind, ...(kind === "msig" ? [] : [Number(index)]));
 const { auth, authXdr, sig } = authFor(sg, purpose, fromHex(digest));
 console.log(JSON.stringify({ ua: hex(sg.ua), keyData: hex(sg.keyData), auth: hex(auth), authXdr: hex(authXdr), sig }));

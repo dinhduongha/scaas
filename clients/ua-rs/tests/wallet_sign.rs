@@ -10,7 +10,10 @@ use scaas_ua::{keccak256, member_digest, purpose_tag, purpose_tag_v, ua_message,
 use serde_json::Value;
 
 fn load(path: &str) -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/ua/{path}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/ua/{path}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 fn arr<'a>(v: &'a Value, k: &str) -> &'a Vec<Value> {
@@ -28,7 +31,11 @@ fn u32_of(v: &Value) -> u32 {
 fn wallet(id: &str) -> Wallet {
     let k = load("keys.json");
     let m = arr(&k, "mnemonics").iter().find(|m| m["id"] == id).unwrap();
-    Wallet::from_mnemonic(m["words"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+    Wallet::from_mnemonic(
+        m["words"].as_str().unwrap(),
+        m["passphrase"].as_str().unwrap(),
+    )
+    .unwrap()
 }
 /// The kinds T3a signs.
 const T3A: [u16; 4] = [0x0101, 0x0102, 0x0103, 0x0108];
@@ -37,8 +44,16 @@ const SECP_HALF_N: &str = "7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92
 const P256_HALF_N: &str = "7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a8";
 
 fn low_s(kind: u16, sig: &[u8]) {
-    let half = if kind == 0x0101 { P256_HALF_N } else { SECP_HALF_N };
-    assert!(hex::encode(&sig[32..64]).as_str() <= half, "high s: {}", hex::encode(sig));
+    let half = if kind == 0x0101 {
+        P256_HALF_N
+    } else {
+        SECP_HALF_N
+    };
+    assert!(
+        hex::encode(&sig[32..64]).as_str() <= half,
+        "high s: {}",
+        hex::encode(sig)
+    );
 }
 
 /// Every `sign.json` `ua` row of the T3a kinds: key data, `ua_msg`, the role, the signed bytes; `compare: bytes` byte-equal
@@ -49,16 +64,25 @@ fn sign_json_ua_rows() {
     let s = load("sign.json");
     let w = wallet("pq_kat");
     let mut n = 0;
-    for r in arr(&s, "ua").iter().filter(|r| T3A.contains(&(r["kind"].as_u64().unwrap() as u16))) {
+    for r in arr(&s, "ua")
+        .iter()
+        .filter(|r| T3A.contains(&(r["kind"].as_u64().unwrap() as u16)))
+    {
         let kind = r["kind"].as_u64().unwrap() as u16;
         assert_eq!(r["mnemonic"], "pq_kat");
-        let key = w.ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"])).unwrap();
+        let key = w
+            .ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"]))
+            .unwrap();
         assert_eq!(key.key_data(), bytes(&r["keyData"]), "{r}");
         let (purpose, digest) = (b32(&r["purposeTag"]), b32(&r["digest"]));
         let ua_msg = ua_message(kind, &purpose, &digest).unwrap();
         assert_eq!(ua_msg, b32(&r["uaMsg"]), "{r}");
         // what the scheme signs: sha256(ua_msg) for 0x0101, ua_msg itself for the rest (no prehash on 0x0108)
-        let signed = if kind == 0x0101 { sha256(&ua_msg).to_vec() } else { ua_msg.to_vec() };
+        let signed = if kind == 0x0101 {
+            sha256(&ua_msg).to_vec()
+        } else {
+            ua_msg.to_vec()
+        };
         assert_eq!(signed, bytes(&r["signed"]), "{r}");
         let pop = r["role"] == "pop";
         let sig = bytes(&r["signature"]);
@@ -67,7 +91,9 @@ fn sign_json_ua_rows() {
         assert!(verify(kind, &key.key_data(), &ua_msg, &mine, pop), "{r}");
         match (r["compare"].as_str().unwrap(), r["fixed"]["aux"].as_str()) {
             ("bytes", None) => assert_eq!(hex::encode(&mine), hex::encode(&sig), "{r}"),
-            ("bytes", Some(_)) => fixed_aux(&key, &purpose, &digest, &b32(&r["fixed"]["aux"]), &sig),
+            ("bytes", Some(_)) => {
+                fixed_aux(&key, &purpose, &digest, &b32(&r["fixed"]["aux"]), &sig)
+            }
             ("verify", _) => assert_eq!(kind, 0x0103, "{r}"),
             other => panic!("{other:?}"),
         }
@@ -80,8 +106,17 @@ fn sign_json_ua_rows() {
 }
 
 #[cfg(feature = "vectors")]
-fn fixed_aux(key: &scaas_ua::wallet::UaKey, purpose: &[u8; 32], digest: &[u8; 32], aux: &[u8; 32], sig: &[u8]) {
-    assert_eq!(hex::encode(key.vectors_sign_ua_fixed(purpose, digest, aux).unwrap()), hex::encode(sig));
+fn fixed_aux(
+    key: &scaas_ua::wallet::UaKey,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    aux: &[u8; 32],
+    sig: &[u8],
+) {
+    assert_eq!(
+        hex::encode(key.vectors_sign_ua_fixed(purpose, digest, aux).unwrap()),
+        hex::encode(sig)
+    );
 }
 #[cfg(not(feature = "vectors"))]
 fn fixed_aux(_: &scaas_ua::wallet::UaKey, _: &[u8; 32], _: &[u8; 32], _: &[u8; 32], _: &[u8]) {}
@@ -98,14 +133,31 @@ fn sign_json_member_rows() {
     let s = load("sign.json");
     let w = wallet("pq_kat");
     let mut n = 0;
-    for r in arr(&s, "member").iter().filter(|r| T3A.contains(&(r["kind"].as_u64().unwrap() as u16))) {
+    for r in arr(&s, "member")
+        .iter()
+        .filter(|r| T3A.contains(&(r["kind"].as_u64().unwrap() as u16)))
+    {
         let kind = r["kind"].as_u64().unwrap() as u16;
-        let key = w.ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"])).unwrap();
+        let key = w
+            .ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"]))
+            .unwrap();
         let (sua, smsg) = (b32(&r["structureUa"]), b32(&r["structureUaMsg"]));
         assert_eq!(member_digest(&sua, &smsg), b32(&r["memberDigest"]));
-        assert_eq!(ua_message(kind, &purpose_tag("member").unwrap(), &member_digest(&sua, &smsg)).unwrap(), b32(&r["uaMsg"]));
+        assert_eq!(
+            ua_message(
+                kind,
+                &purpose_tag("member").unwrap(),
+                &member_digest(&sua, &smsg)
+            )
+            .unwrap(),
+            b32(&r["uaMsg"])
+        );
         assert_eq!(r["role"], "authorization");
-        assert_eq!(hex::encode(key.sign_member(&sua, &smsg).unwrap()), hex::encode(bytes(&r["signature"])), "{r}");
+        assert_eq!(
+            hex::encode(key.sign_member(&sua, &smsg).unwrap()),
+            hex::encode(bytes(&r["signature"])),
+            "{r}"
+        );
         n += 1;
     }
     assert_eq!(n, 3);
@@ -119,16 +171,31 @@ fn chain_separation_rows() {
     let cs = &s["chainSeparation"];
     let w = wallet("pq_kat");
     let k = &cs["key"];
-    let key = w.ua_key(k["kind"].as_u64().unwrap() as u16, u32_of(&k["account"]), u32_of(&k["index"])).unwrap();
-    let evm = w.native_key(Network::Evm, u32_of(&k["evm"]["index"]), None).unwrap();
+    let key = w
+        .ua_key(
+            k["kind"].as_u64().unwrap() as u16,
+            u32_of(&k["account"]),
+            u32_of(&k["index"]),
+        )
+        .unwrap();
+    let evm = w
+        .native_key(Network::Evm, u32_of(&k["evm"]["index"]), None)
+        .unwrap();
     assert_eq!(evm.address().as_deref(), k["evm"]["address"].as_str());
     let metatx = purpose_tag("metatx").unwrap();
     let mut sigs = Vec::new();
     for r in arr(cs, "typed") {
         let digest = b32(&r["digest"]);
-        assert_eq!(ua_message(0x0108, &metatx, &digest).unwrap(), b32(&r["uaMsg"]));
+        assert_eq!(
+            ua_message(0x0108, &metatx, &digest).unwrap(),
+            b32(&r["uaMsg"])
+        );
         let sig = key.sign_ua(&metatx, &digest).unwrap();
-        assert_eq!(hex::encode(&sig), hex::encode(bytes(&r["signature"])), "{r}");
+        assert_eq!(
+            hex::encode(&sig),
+            hex::encode(bytes(&r["signature"])),
+            "{r}"
+        );
         sigs.push(sig);
     }
     assert_eq!(sigs.len(), 2);
@@ -141,11 +208,22 @@ fn chain_separation_rows() {
 fn keys_json_native_addresses() {
     let k = load("keys.json");
     let mut n = 0;
-    for id in ["pq_kat", "bip39_test", "twelve_words", "non_ascii_passphrase"] {
+    for id in [
+        "pq_kat",
+        "bip39_test",
+        "twelve_words",
+        "non_ascii_passphrase",
+    ] {
         let w = wallet(id);
         for r in arr(&k, "native").iter().filter(|r| r["mnemonic"] == id) {
             let net = Network::from_name(r["network"].as_str().unwrap()).unwrap();
-            let key = w.native_key(net, u32_of(&r["index"]), r["coinType"].as_u64().map(|c| c as u32)).unwrap();
+            let key = w
+                .native_key(
+                    net,
+                    u32_of(&r["index"]),
+                    r["coinType"].as_u64().map(|c| c as u32),
+                )
+                .unwrap();
             assert_eq!(key.address().as_deref(), r["address"].as_str(), "{r}");
             n += 1;
         }
@@ -156,7 +234,11 @@ fn keys_json_native_addresses() {
 /// The EIP-55 checksum is case-exact: the lower-case form of an EVM row is another string.
 #[test]
 fn evm_address_is_checksummed() {
-    let a = wallet("pq_kat").native_key(Network::Evm, 0, None).unwrap().address().unwrap();
+    let a = wallet("pq_kat")
+        .native_key(Network::Evm, 0, None)
+        .unwrap()
+        .address()
+        .unwrap();
     assert_ne!(a, a.to_lowercase());
     assert!(a.starts_with("0x") && a.len() == 42);
 }
@@ -172,24 +254,54 @@ fn native_key_proof_and_raw_digest() {
     for net in [Network::Evm, Network::Cosmos, Network::HederaEcdsa] {
         let key = w.native_key(net, 0, None).unwrap();
         let addr = evm_address_of(&key.public_key());
-        for (sig, d) in [(key.sign_key_proof(challenge).unwrap(), proof), (key.sign_digest(&digest, AllowRawDigest).unwrap(), digest)] {
+        for (sig, d) in [
+            (key.sign_key_proof(challenge).unwrap(), proof),
+            (key.sign_digest(&digest, AllowRawDigest).unwrap(), digest),
+        ] {
             assert!(native_ecdsa(&addr, &d, &sig), "{net:?}");
             low_s(0x0108, &sig);
         }
-        assert_eq!(key.sign_key_proof(challenge).unwrap(), key.sign_key_proof(challenge).unwrap());
-        assert!(!native_ecdsa(&addr, &digest, &key.sign_key_proof(challenge).unwrap())); // positive control's negative
+        assert_eq!(
+            key.sign_key_proof(challenge).unwrap(),
+            key.sign_key_proof(challenge).unwrap()
+        );
+        assert!(!native_ecdsa(
+            &addr,
+            &digest,
+            &key.sign_key_proof(challenge).unwrap()
+        )); // positive control's negative
     }
-    for net in [Network::Solana, Network::Stellar, Network::HederaEd25519, Network::Sui, Network::Ton, Network::Aptos] {
+    for net in [
+        Network::Solana,
+        Network::Stellar,
+        Network::HederaEd25519,
+        Network::Sui,
+        Network::Ton,
+        Network::Aptos,
+    ] {
         let key = w.native_key(net, 0, None).unwrap();
-        assert!(scaas_ua::verify::ed25519(&key.public_key(), &proof, &key.sign_key_proof(challenge).unwrap()), "{net:?}");
-        assert!(scaas_ua::verify::ed25519(&key.public_key(), &digest, &key.sign_digest(&digest, AllowRawDigest).unwrap()));
+        assert!(
+            scaas_ua::verify::ed25519(
+                &key.public_key(),
+                &proof,
+                &key.sign_key_proof(challenge).unwrap()
+            ),
+            "{net:?}"
+        );
+        assert!(scaas_ua::verify::ed25519(
+            &key.public_key(),
+            &digest,
+            &key.sign_digest(&digest, AllowRawDigest).unwrap()
+        ));
     }
 }
 
 fn evm_address_of(compressed: &[u8]) -> [u8; 20] {
     use k256::elliptic_curve::sec1::ToSec1Point;
     let pk = k256::PublicKey::from_sec1_bytes(compressed).unwrap();
-    keccak256(&pk.to_sec1_point(false).as_bytes()[1..])[12..].try_into().unwrap()
+    keccak256(&pk.to_sec1_point(false).as_bytes()[1..])[12..]
+        .try_into()
+        .unwrap()
 }
 
 /// `purpose` must be a tag of `PURPOSES` (v1) or `pop` v2; the off-chain seal purpose is the container builder's only (T8).
@@ -200,8 +312,16 @@ fn purpose_not_in_purposes_refused() {
     let d = [7u8; 32];
     assert!(key.sign_ua(&purpose_tag("metatx").unwrap(), &d).is_ok()); // positive control
     assert!(key.sign_ua(&purpose_tag_v("pop", 2).unwrap(), &d).is_ok());
-    for bad in [keccak256(b"scaas.ua.purpose.seal.v1"), keccak256(b"scaas.ua.purpose.metatx.v2"), [0u8; 32], d] {
-        assert_eq!(key.sign_ua(&bad, &d).err(), Some(Error::Ua(UAError::PurposeUnknown)));
+    for bad in [
+        keccak256(b"scaas.ua.purpose.seal.v1"),
+        keccak256(b"scaas.ua.purpose.metatx.v2"),
+        [0u8; 32],
+        d,
+    ] {
+        assert_eq!(
+            key.sign_ua(&bad, &d).err(),
+            Some(Error::Ua(UAError::PurposeUnknown))
+        );
     }
 }
 
@@ -212,7 +332,11 @@ fn other_kinds_not_signed_here() {
     let w = wallet("pq_kat");
     let (p, d) = (purpose_tag("metatx").unwrap(), [1u8; 32]);
     for kind in [0x0110, 0x0112] {
-        assert_eq!(w.ua_key(kind, 0, 0).unwrap().sign_ua(&p, &d).err(), Some(Error::Argument), "{kind:#06x}");
+        assert_eq!(
+            w.ua_key(kind, 0, 0).unwrap().sign_ua(&p, &d).err(),
+            Some(Error::Argument),
+            "{kind:#06x}"
+        );
     }
 }
 
@@ -225,7 +349,10 @@ fn bip340_release_aux_is_random() {
     let (a, b) = (key.sign_ua(&p, &d).unwrap(), key.sign_ua(&p, &d).unwrap());
     assert_ne!(a, b);
     let m = ua_message(0x0103, &p, &d).unwrap();
-    assert!(verify(0x0103, &key.key_data(), &m, &a, false) && verify(0x0103, &key.key_data(), &m, &b, false));
+    assert!(
+        verify(0x0103, &key.key_data(), &m, &a, false)
+            && verify(0x0103, &key.key_data(), &m, &b, false)
+    );
 }
 
 /// A revoked handle signs nothing.
@@ -254,8 +381,21 @@ fn signer_trait_key_ref() {
         other => panic!("{other:?}"),
     }
     match signers[1].key_ref() {
-        KeyRef::Native { network, coin_type, address, public_key } => {
-            assert_eq!((network, coin_type, address, public_key), (Network::Evm, Some(60), native.address(), native.public_key()))
+        KeyRef::Native {
+            network,
+            coin_type,
+            address,
+            public_key,
+        } => {
+            assert_eq!(
+                (network, coin_type, address, public_key),
+                (
+                    Network::Evm,
+                    Some(60),
+                    native.address(),
+                    native.public_key()
+                )
+            )
         }
         other => panic!("{other:?}"),
     }
@@ -278,10 +418,24 @@ mod vectors {
         let mut n = 0;
         for r in arr(&s, "ua") {
             let kind = r["kind"].as_u64().unwrap() as u16;
-            let key = w.ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"])).unwrap();
-            let want = if r["role"] == "pop" { SigRole::Pop } else { SigRole::Authorization };
-            match key.vectors_request(&b32(&r["purposeTag"]), &b32(&r["digest"])).unwrap() {
-                SignRequest::UaMsg { kind: k, ua_msg, role, .. } => {
+            let key = w
+                .ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"]))
+                .unwrap();
+            let want = if r["role"] == "pop" {
+                SigRole::Pop
+            } else {
+                SigRole::Authorization
+            };
+            match key
+                .vectors_request(&b32(&r["purposeTag"]), &b32(&r["digest"]))
+                .unwrap()
+            {
+                SignRequest::UaMsg {
+                    kind: k,
+                    ua_msg,
+                    role,
+                    ..
+                } => {
                     assert_eq!((k, ua_msg, role), (kind, b32(&r["uaMsg"]), want), "{r}");
                 }
                 other => panic!("{other:?}"),
@@ -291,40 +445,82 @@ mod vectors {
         assert_eq!(n, arr(&s, "ua").len()); // every kind, Falcon's 4 rows included (T3b)
         let key = w.ua_key(0x0106, 0, 0).unwrap();
         for p in PURPOSES {
-            let want = if matches!(*p, "kem" | "pqz-key") { SigRole::Pop } else { SigRole::Authorization };
-            let SignRequest::UaMsg { role, .. } = key.vectors_request(&purpose_tag(p).unwrap(), &[0; 32]).unwrap() else { panic!() };
+            let want = if matches!(*p, "kem" | "pqz-key") {
+                SigRole::Pop
+            } else {
+                SigRole::Authorization
+            };
+            let SignRequest::UaMsg { role, .. } = key
+                .vectors_request(&purpose_tag(p).unwrap(), &[0; 32])
+                .unwrap()
+            else {
+                panic!()
+            };
             assert_eq!(role, want, "{p}");
         }
-        let SignRequest::UaMsg { role, .. } = key.vectors_request(&purpose_tag_v("pop", 2).unwrap(), &[0; 32]).unwrap() else {
+        let SignRequest::UaMsg { role, .. } = key
+            .vectors_request(&purpose_tag_v("pop", 2).unwrap(), &[0; 32])
+            .unwrap()
+        else {
             panic!()
         };
         assert_eq!(role, SigRole::Pop);
-        let SignRequest::UaMsg { role, .. } = key.vectors_member_request(&[1; 32], &[2; 32]).unwrap() else { panic!() };
+        let SignRequest::UaMsg { role, .. } =
+            key.vectors_member_request(&[1; 32], &[2; 32]).unwrap()
+        else {
+            panic!()
+        };
         assert_eq!(role, SigRole::Authorization);
         // T21 L03: the portable record purposes as the contract lists them (`UARegistryCoreLib._portablePurpose`, each tag's
         // string from `UAKinds.sol`): every one but `pqchat` (its round is PLANNED) signs with role Pop, BLS under the PoP domain
-        let src = |f: &str| std::fs::read_to_string(format!("{}/../../smartcontracts/evm/src/ua/{f}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let src = |f: &str| {
+            std::fs::read_to_string(format!(
+                "{}/../../smartcontracts/evm/src/ua/{f}",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap()
+        };
         let (core, kinds) = (src("UARegistryCoreLib.sol"), src("UAKinds.sol"));
         let body = &core[core.find("function _portablePurpose").unwrap()..];
         let body = &body[..body.find("revert").unwrap()];
-        let names: Vec<&str> = body.split("UAKinds.").skip(1).map(|t| t.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).next().unwrap()).collect();
+        let names: Vec<&str> = body
+            .split("UAKinds.")
+            .skip(1)
+            .map(|t| {
+                t.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                    .next()
+                    .unwrap()
+            })
+            .collect();
         let tag = |name: &str| {
-            let at = kinds.find(&format!("constant {name} = keccak256(\"")).unwrap_or_else(|| panic!("{name}"));
+            let at = kinds
+                .find(&format!("constant {name} = keccak256(\""))
+                .unwrap_or_else(|| panic!("{name}"));
             let rest = &kinds[at..];
             let s = &rest[rest.find('"').unwrap() + 1..];
             keccak256(&s.as_bytes()[..s.find('"').unwrap()])
         };
-        let contract: Vec<[u8; 32]> = names.iter().filter(|n| **n != "PURPOSE_PQCHAT").map(|n| tag(n)).collect();
+        let contract: Vec<[u8; 32]> = names
+            .iter()
+            .filter(|n| **n != "PURPOSE_PQCHAT")
+            .map(|n| tag(n))
+            .collect();
         assert_eq!(names.len(), 5, "{names:?}");
-        let mut ours = scaas_ua::ua8::portable_record_purposes().to_vec();
+        let mut ours = scaas_ua::ua_portable::portable_record_purposes().to_vec();
         let mut theirs = contract.clone();
         ours.sort();
         theirs.sort();
-        assert_eq!(ours, theirs, "the portable record purposes drifted from the contract's {names:?}");
+        assert_eq!(
+            ours, theirs,
+            "the portable record purposes drifted from the contract's {names:?}"
+        );
         for k in [0x0106u16, 0x0107, 0x0108] {
             let key = w.ua_key(k, 0, 0).unwrap();
             for t in &contract {
-                let SignRequest::UaMsg { role, .. } = key.vectors_request(t, &[0; 32]).unwrap() else { panic!() };
+                let SignRequest::UaMsg { role, .. } = key.vectors_request(t, &[0; 32]).unwrap()
+                else {
+                    panic!()
+                };
                 assert_eq!(role, SigRole::Pop, "{k:#06x}");
             }
         }
@@ -354,10 +550,15 @@ mod vectors {
         let n = hex::decode(P256_N).unwrap();
         let mut rows = 0;
         for r in arr(e, "rows").iter().filter(|r| r["hash"] == "SHA-256") {
-            let sig = sign_raw(0x0101, &x, r["message"].as_str().unwrap().as_bytes(), None).unwrap();
+            let sig =
+                sign_raw(0x0101, &x, r["message"].as_str().unwrap().as_bytes(), None).unwrap();
             assert_eq!(hex::encode(&sig[..32]), hex::encode(bytes(&r["r"])), "{r}");
             let s = bytes(&r["s"]);
-            let low = if hex::encode(&s).as_str() > P256_HALF_N { sub(&n, &s) } else { s };
+            let low = if hex::encode(&s).as_str() > P256_HALF_N {
+                sub(&n, &s)
+            } else {
+                s
+            };
             assert_eq!(hex::encode(&sig[32..]), hex::encode(low), "{r}");
             low_s(0x0101, &sig);
             rows += 1;
@@ -385,8 +586,16 @@ mod vectors {
         let mut n = 0;
         for r in arr(e, "rows") {
             let sig = sign_raw(0x0108, &bytes(&r["d"]), &bytes(&r["m"]), None).unwrap();
-            assert_eq!(hex::encode(&sig[..64]), r["signature"].as_str().unwrap(), "{r}");
-            assert_eq!(u64::from(sig[64] - 27), r["recoveryId"].as_u64().unwrap(), "{r}");
+            assert_eq!(
+                hex::encode(&sig[..64]),
+                r["signature"].as_str().unwrap(),
+                "{r}"
+            );
+            assert_eq!(
+                u64::from(sig[64] - 27),
+                r["recoveryId"].as_u64().unwrap(),
+                "{r}"
+            );
             n += 1;
         }
         assert_eq!(n, 20);
@@ -400,7 +609,11 @@ mod vectors {
         let mut rows = 0;
         for r in arr(n, "sigs") {
             let sig = sign_raw(0x0001, &secret, &bytes(&r["uaAuthDigest"]), None).unwrap();
-            assert_eq!(hex::encode(sig), r["sig"].as_str().unwrap().trim_start_matches("0x"), "{r}");
+            assert_eq!(
+                hex::encode(sig),
+                r["sig"].as_str().unwrap().trim_start_matches("0x"),
+                "{r}"
+            );
             rows += 1;
         }
         assert!(rows > 0);
@@ -411,9 +624,160 @@ mod vectors {
     fn sign_raw_refusals() {
         let sk = [1u8; 32];
         assert!(sign_raw(0x0108, &sk, &[2u8; 32], None).is_ok());
-        assert_eq!(sign_raw(0x0108, &sk, &[2u8; 31], None).err(), Some(Error::Argument));
-        assert_eq!(sign_raw(0x0001, &sk, &[2u8; 33], None).err(), Some(Error::Argument));
-        assert_eq!(sign_raw(0x0103, &sk, &[2u8; 32], None).err(), Some(Error::Argument)); // BIP-340 needs its aux here
-        assert_eq!(sign_raw(0x0104, &sk, &[2u8; 32], None).err(), Some(Error::Argument)); // a pairing kind (T3c: pairing.rs)
+        assert_eq!(
+            sign_raw(0x0108, &sk, &[2u8; 31], None).err(),
+            Some(Error::Argument)
+        );
+        assert_eq!(
+            sign_raw(0x0001, &sk, &[2u8; 33], None).err(),
+            Some(Error::Argument)
+        );
+        assert_eq!(
+            sign_raw(0x0103, &sk, &[2u8; 32], None).err(),
+            Some(Error::Argument)
+        ); // BIP-340 needs its aux here
+        assert_eq!(
+            sign_raw(0x0104, &sk, &[2u8; 32], None).err(),
+            Some(Error::Argument)
+        ); // a pairing kind (T3c: pairing.rs)
+    }
+}
+
+/// CTR-UA-46 (pqvault plan R2): the open portable app namespace against sign.json `portableApp` (written by clientkeys): each app's
+/// purpose, `app_id` 0 refused, every row's `ua_msg`; `ua_sig_app` signs it with role Pop (keyData and members empty) and the
+/// signature fails under the other app; a native key has no portable record. An `msig` by `msig_sig_app`: the derived members'
+/// signatures byte-equal, a native member over the app record itself (byte-equal: RFC 6979), the record's domain exactly
+/// `name, version, salt = app_id`.
+#[test]
+fn portable_app_rows() {
+    use scaas_ua::ua_portable::{app_purpose, app_purpose_ns, MsigMember, MsigStructure};
+    use scaas_ua::wallet::{msig_sig_app, ua_sig_app, Slot, TypedData};
+    let p = &load("sign.json")["portableApp"];
+    let w = wallet("pq_kat");
+    assert_eq!(app_purpose_ns(), b32(&p["namespace"]));
+    let apps = arr(p, "apps");
+    for a in apps {
+        assert_eq!(
+            keccak256(a["appIdString"].as_str().unwrap().as_bytes()),
+            b32(&a["appId"])
+        );
+        assert_eq!(
+            app_purpose(&b32(&a["appId"])).unwrap(),
+            b32(&a["purposeTag"])
+        );
+    }
+    for x in arr(p, "refusals") {
+        assert_eq!(
+            app_purpose(&b32(&x["appId"])).err(),
+            Some(UAError::Unauthorized)
+        );
+        assert!(ua_sig_app(
+            &w.ua_key(0x0108, 0, 0).unwrap(),
+            &b32(&x["appId"]),
+            &[0; 32]
+        )
+        .is_err());
+    }
+    let other = |id: &Value| b32(&apps.iter().find(|a| a["appId"] != *id).unwrap()["appId"]);
+    let td = |v: &Value| TypedData::from_json(&serde_json::to_vec(v).unwrap()).unwrap();
+    for r in arr(p, "rows") {
+        let kind = r["kind"].as_u64().unwrap() as u16;
+        let (app_id, digest) = (b32(&r["appId"]), b32(&r["digest"]));
+        assert_eq!(
+            td(&r["typedData"]).digest().unwrap(),
+            digest,
+            "{}",
+            r["name"]
+        );
+        assert_eq!(
+            ua_message(kind, &app_purpose(&app_id).unwrap(), &digest).unwrap(),
+            b32(&r["uaMsg"])
+        );
+        let key = w.ua_key(kind, 0, 0).unwrap();
+        let s = ua_sig_app(&key, &app_id, &digest).unwrap();
+        assert!(s.key_data.is_empty() && s.members.is_empty());
+        assert!(
+            verify(kind, &key.key_data(), &b32(&r["uaMsg"]), &s.signature, true),
+            "{}",
+            r["name"]
+        );
+        let theirs = ua_message(kind, &app_purpose(&other(&r["appId"])).unwrap(), &digest).unwrap();
+        assert!(
+            !verify(kind, &key.key_data(), &theirs, &s.signature, true),
+            "{}: under the other app",
+            r["name"]
+        );
+    }
+    assert_eq!(arr(p, "rows").len(), 28);
+    let native = w.native_key(Network::Evm, 0, None).unwrap();
+    assert_eq!(
+        ua_sig_app(&native, &b32(&apps[0]["appId"]), &[0; 32]).err(),
+        Some(Error::Argument)
+    );
+    for (m, n) in arr(p, "member").iter().zip(arr(p, "native")) {
+        for x in arr(m, "members") {
+            let key = w.ua_key(x["kind"].as_u64().unwrap() as u16, 0, 0).unwrap();
+            let sig = key
+                .sign_member(&b32(&m["structureUa"]), &b32(&m["structureUaMsg"]))
+                .unwrap();
+            assert_eq!(
+                hex::encode(sig),
+                hex::encode(bytes(&x["signature"])),
+                "{} {}",
+                m["app"],
+                x["name"]
+            );
+        }
+        let app_id = b32(&n["appId"]);
+        let addr: [u8; 20] = bytes(&n["address"]).try_into().unwrap();
+        let mut id = [0u8; 32];
+        id[12..].copy_from_slice(&addr);
+        let kd = MsigStructure {
+            threshold: 1,
+            members: vec![MsigMember {
+                kind: 0x0001,
+                id,
+                weight: 1,
+            }],
+        }
+        .key_data();
+        let slots = [Slot::Member {
+            index: 0,
+            key: &native,
+        }];
+        let record = td(&n["typedData"]);
+        let s = msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &record, &slots).unwrap();
+        assert!(s.key_data.is_empty() && s.signature.is_empty() && s.members.len() == 1);
+        assert_eq!(
+            hex::encode(&s.members[0].sig),
+            hex::encode(bytes(&n["signature"])),
+            "{}",
+            n["app"]
+        );
+        assert!(native_ecdsa(&addr, &b32(&n["digest"]), &s.members[0].sig));
+        // the domain: not this app's salt, no salt (the SCaaS portable domain), a field more
+        let mut v = n["typedData"].clone();
+        v["domain"]["salt"] = Value::String(format!("0x{}", hex::encode(other(&n["appId"]))));
+        assert_eq!(
+            msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &td(&v), &slots).err(),
+            Some(Error::Argument)
+        );
+        let mut v = n["typedData"].clone();
+        v["domain"].as_object_mut().unwrap().remove("salt");
+        v["types"]["EIP712Domain"].as_array_mut().unwrap().pop();
+        assert_eq!(
+            msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &td(&v), &slots).err(),
+            Some(Error::Argument)
+        );
+        let mut v = n["typedData"].clone();
+        v["domain"]["chainId"] = Value::from(7622);
+        v["types"]["EIP712Domain"]
+            .as_array_mut()
+            .unwrap()
+            .insert(2, serde_json::json!({"name": "chainId", "type": "uint256"}));
+        assert_eq!(
+            msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &td(&v), &slots).err(),
+            Some(Error::Argument)
+        );
     }
 }

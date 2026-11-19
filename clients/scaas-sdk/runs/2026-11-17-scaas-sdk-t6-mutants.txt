@@ -1,0 +1,6 @@
+# t6 mutants at commit 9a53e7a42 (name | outcome | test)
+skip the double-signature comparison | killed | ../../scripts/capped cargo test --locked --offline -j2 --features roots --test roots root_c_rows_and_refusals
+hash r || s || v | killed | ../../scripts/capped cargo test --locked --offline -j2 --features roots --test roots root_c_rows_and_refusals
+passphrase floor 10 -> 9 | killed | ../../scripts/capped cargo test --locked --offline -j2 --features roots --test roots passphrase_floor
+a failed signature check passed through as ExternalSignature | killed | ../../scripts/capped cargo test --locked --offline -j2 --features classical-roots --test roots root_c_refusals_each_with_its_control
+4 mutants, 4 killed, 0 survived, 0 not loaded

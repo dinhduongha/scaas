@@ -45,11 +45,17 @@ library UARegistryAuxLib {
         }
     }
 
-    function _portableOk(uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest,
-        IUARegistry.UASig calldata sig) private returns (bool)
-    {
+    function _portableOk(
+        uint16 kind,
+        bytes memory d,
+        bytes32 ua,
+        bytes32 purpose,
+        bytes32 digest,
+        IUARegistry.UASig calldata sig
+    ) private returns (bool) {
         return abi.decode(
-            _core(abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector, kind, d, ua, purpose, digest, sig)), (bool)
+            _core(abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector, kind, d, ua, purpose, digest, sig)),
+            (bool)
         );
     }
 
@@ -134,7 +140,10 @@ library UARegistryAuxLib {
     /// hash is 0). On a host without its own record, gen 1's (from its `register` or `setPqzKey`), proven in this generation
     /// (ruling A6-I1, host rule 3) and copied here: from then on the host answers this version from its own record,
     /// whatever gen 1 writes later (host rule 2).
-    function _pqzRecord(bytes32 ua, uint64 version, bool host, bytes32 popHash) private returns (UAStore.PqzKey memory k) {
+    function _pqzRecord(bytes32 ua, uint64 version, bool host, bytes32 popHash)
+        private
+        returns (UAStore.PqzKey memory k)
+    {
         UAStore.Layout storage s = UAStore.layout();
         k = s.pqzKey[ua][version];
         bytes32 ph = s.pqzPopHash[ua][version];
@@ -184,20 +193,29 @@ library UARegistryAuxLib {
     function _host(bytes32 ua) private view returns (bool) {
         UAStore.Layout storage s = UAStore.layout();
         if (s.records[ua].kind != 0) return false;
-        if (UARegistryCoreLib._pred() != address(0) && uint160(UARegistryCoreLib._cfgPqz()) != 0 && UARegistryCoreLib._kindOf(ua) != 0) return true;
+        if (
+            UARegistryCoreLib._pred() != address(0) && uint160(UARegistryCoreLib._cfgPqz()) != 0
+                && UARegistryCoreLib._kindOf(ua) != 0
+        ) return true;
         revert IUARegistry.UAUnauthorized(ua);
     }
 
-    function setPqzKey(bytes32 ua, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash,
-        IUARegistry.UASig calldata sig) external
-    {
+    function setPqzKey(
+        bytes32 ua,
+        uint64 version,
+        bytes calldata pqzKey,
+        bytes32 pqzPopHash,
+        IUARegistry.UASig calldata sig
+    ) external {
         UAStore.Layout storage s = UAStore.layout();
         (uint16 kind, bytes memory d, bool host) = _holderOf(ua);
         _core(abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector, kind, d, ua, host));
         _pqzNext(ua, version, host);
         bytes32 h = UARegistryCoreLib._pqzKeyHash(pqzKey);
         // KV-1 (Codex #1): no two versions of one UA hold the same key, before any proof exists; a host reads gen 1's too
-        if (s.pqzKeyUsed[ua][h] || (host && IUARegistry(UARegistryCoreLib._pred()).pqzKeyUsed(ua, h))) revert IUARegistry.UAKeyInUse(h, ua);
+        if (s.pqzKeyUsed[ua][h] || (host && IUARegistry(UARegistryCoreLib._pred()).pqzKeyUsed(ua, h))) {
+            revert IUARegistry.UAKeyInUse(h, ua);
+        }
         if (pqzPopHash == 0 || pqzPopHash == UARegistryCoreLib.EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
         bytes32 rd = version == 0
             ? UAKinds.pqzKeyRecordDigest(ua, h, pqzPopHash)
@@ -239,9 +257,15 @@ library UARegistryAuxLib {
 
     /// `IUARegistry.updateMsig` (CTR-UA-44), its check order (spec rows 1–13), then the blob (MM-6) behind the record's `keyPtr`
     /// (MM-7). Nothing reads an event; the id, `registrationOf`, `popOf`, `popSlotsOf` keep the first structure (MM-1).
-    function updateMsig(bytes32 ua, uint64 version, IUARegistry.MsigStructure calldata structure, uint256 enabled,
-        uint64 validUntilBlock, IUARegistry.MemberSig[] calldata sigs, bytes32 chainUid_) external
-    {
+    function updateMsig(
+        bytes32 ua,
+        uint64 version,
+        IUARegistry.MsigStructure calldata structure,
+        uint256 enabled,
+        uint64 validUntilBlock,
+        IUARegistry.MemberSig[] calldata sigs,
+        bytes32 chainUid_
+    ) external {
         Update memory u;
         (u.ua, u.chainUid) = (ua, _chainUid());
         if (chainUid_ != u.chainUid) revert IUARegistry.ChainUidMismatch(u.chainUid, chainUid_); // 1
@@ -250,7 +274,9 @@ library UARegistryAuxLib {
         u.st = structure;
         _target(u, enabled); // 5–8
         u.t = UAStore.blob(u.st, enabled, version);
-        _quorumSigned(u, UAKinds.msigUpdateDigest(ua, u.chainUid, address(this), version, u.st, enabled, validUntilBlock), sigs);
+        _quorumSigned(
+            u, UAKinds.msigUpdateDigest(ua, u.chainUid, address(this), version, u.st, enabled, validUntilBlock), sigs
+        );
         _fresh(u); // 10
         _core(abi.encodeWithSelector(UARegistryCoreLib.msigBound.selector, ua, u.t, u.stored)); // 11–13
         UAStore.layout().records[ua].keyPtr = SSTORE2.write(u.t);
@@ -277,7 +303,9 @@ library UARegistryAuxLib {
         uint256 n = m.length;
         uint256 sn = UAStore.u16(u.stored, 2);
         uint256 on;
-        for (uint256 b = enabled; b != 0; b &= b - 1) ++on;
+        for (uint256 b = enabled; b != 0; b &= b - 1) {
+            ++on;
+        }
         if (n < sn || n > 256 || (n != 256 && enabled >> n != 0) || on > 16) revert IUARegistry.UAMsigSlots(n);
         for (uint256 i; i < sn; ++i) {
             uint256 o = 4 + 36 * i;
@@ -291,7 +319,9 @@ library UARegistryAuxLib {
         for (uint256 i; i < n; ++i) {
             IUARegistry.MsigMember memory x = m[i];
             bool en = enabled >> i & 1 != 0;
-            if (x.weight == 0 || (en && x.kind == UAKinds.MSIG && x.id == u.ua)) revert IUARegistry.UAKeyData(UAKinds.MSIG);
+            if (x.weight == 0 || (en && x.kind == UAKinds.MSIG && x.id == u.ua)) {
+                revert IUARegistry.UAKeyData(UAKinds.MSIG);
+            }
             if (i >= sn) {
                 if (!UAKinds.isMember(x.kind, true) || UAKinds.isNative(x.kind) != UAKinds.inNativeSpace(x.id)) {
                     revert IUARegistry.UAKeyData(UAKinds.MSIG);
@@ -370,9 +400,16 @@ library UARegistryAuxLib {
     }
 
     /// `IUARegistry.setPqzScopedKey` (K3-3), its check order.
-    function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash,
-        IUARegistry.KemKey calldata openKem, uint64 validUntilBlock, IUARegistry.UASig calldata sig) external
-    {
+    function setPqzScopedKey(
+        bytes32 ua,
+        address scope,
+        uint64 version,
+        bytes calldata pqzKey,
+        bytes32 pqzPopHash,
+        IUARegistry.KemKey calldata openKem,
+        uint64 validUntilBlock,
+        IUARegistry.UASig calldata sig
+    ) external {
         if (block.number > validUntilBlock) revert IUARegistry.UAPqzRecordExpired(ua);
         Scoped memory c;
         (c.kind, c.d, c.host) = _holderOf(ua);
@@ -384,9 +421,20 @@ library UARegistryAuxLib {
         c.kemPk = UAKinds.kemPk(openKem);
         if ((c.kemPk.length != 0) != _opening(scope)) revert IUARegistry.UAPqzOpenKem(scope);
         if (c.kemPk.length != 0) UARegistryCoreLib._checkKemPk(c.kemPk);
-        bytes32 rd = UAKinds.pqzScopedKeyRecordDigest(ua, _class(scope), _chainUid(), scope, version, c.h, pqzPopHash,
-            c.kemPk.length == 0 ? bytes32(0) : keccak256(c.kemPk), validUntilBlock);
-        if (!_portableOk(c.kind, c.d, ua, UAKinds.PURPOSE_PQZ_SCOPED_KEY, rd, sig)) revert IUARegistry.UAUnauthorized(ua);
+        bytes32 rd = UAKinds.pqzScopedKeyRecordDigest(
+            ua,
+            _class(scope),
+            _chainUid(),
+            scope,
+            version,
+            c.h,
+            pqzPopHash,
+            c.kemPk.length == 0 ? bytes32(0) : keccak256(c.kemPk),
+            validUntilBlock
+        );
+        if (!_portableOk(c.kind, c.d, ua, UAKinds.PURPOSE_PQZ_SCOPED_KEY, rd, sig)) {
+            revert IUARegistry.UAUnauthorized(ua);
+        }
         UAStore.Layout storage s = UAStore.layout();
         s.scopedKey[ua][scope][version].ptr = SSTORE2.write(pqzKey);
         s.scopedPopHash[ua][scope][version] = pqzPopHash;
@@ -477,8 +525,11 @@ library UARegistryAuxLib {
         uint256 cfg = UARegistryCoreLib._cfgPqz();
         if (uint160(cfg) == 0 || key.length != PqzSet.PK) return false;
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key);
-        bytes32 m = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_SCOPED_KEY,
-            UAKinds.pqzScopedKeyDigest(ua, _class(scope), _chainUid(), scope, version, h));
+        bytes32 m = UAKinds.uaMessage(
+            UAKinds.PQZ_MLWE,
+            UAKinds.PURPOSE_PQZ_SCOPED_KEY,
+            UAKinds.pqzScopedKeyDigest(ua, _class(scope), _chainUid(), scope, version, h)
+        );
         bytes memory data = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, key, m, pqzPop);
         if (!UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true)) revert IUARegistry.UAPoP();
         bytes32 owner = UARegistryCoreLib._keyOwner(h);
@@ -551,15 +602,28 @@ library UARegistryAuxLib {
         return UAStore.layout().scopedAt[scope][j];
     }
 
-    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
-        bytes32 pqzKeyHash) external pure returns (bytes32)
-    {
+    function pqzScopedKeyDigest(
+        bytes32 ua,
+        uint8 keyClass,
+        bytes32 chainUid,
+        address token,
+        uint64 version,
+        bytes32 pqzKeyHash
+    ) external pure returns (bytes32) {
         return UAKinds.pqzScopedKeyDigest(ua, keyClass, chainUid, token, version, pqzKeyHash);
     }
 
-    function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
-        bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32)
-    {
+    function pqzScopedKeyRecordDigest(
+        bytes32 ua,
+        uint8 keyClass,
+        bytes32 chainUid,
+        address token,
+        uint64 version,
+        bytes32 pqzKeyHash,
+        bytes32 pqzPopHash,
+        bytes32 openKemHash,
+        uint64 validUntilBlock
+    ) external pure returns (bytes32) {
         return UAKinds.pqzScopedKeyRecordDigest(
             ua, keyClass, chainUid, token, version, pqzKeyHash, pqzPopHash, openKemHash, validUntilBlock
         );
@@ -592,7 +656,9 @@ library UARegistryAuxLib {
 
     // ----- KEM records (P4, P5, P7; UA8-D3–D5, D11, D12) -----
 
-    function setKemKey(bytes32 ua, uint64 version, IUARegistry.KemKey calldata kem, IUARegistry.UASig calldata sig) external {
+    function setKemKey(bytes32 ua, uint64 version, IUARegistry.KemKey calldata kem, IUARegistry.UASig calldata sig)
+        external
+    {
         UAStore.Layout storage s = UAStore.layout();
         IUARegistry.Record memory r = s.records[ua];
         // UA8-D11 before `_sigOk`: its gen-1 fallback would verify a gen-1 holder's record here (A6 re-review)
@@ -628,7 +694,9 @@ library UARegistryAuxLib {
         if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).popSlotsOf(ua);
         uint256 bits = UAStore.layout().popSlots[ua];
         uint256 n;
-        for (uint256 b = bits; b != 0; b &= b - 1) ++n;
+        for (uint256 b = bits; b != 0; b &= b - 1) {
+            ++n;
+        }
         (index, hash) = (new uint16[](n), new bytes32[](n));
         n = 0;
         for (uint256 i; bits >> i != 0; ++i) {
@@ -645,13 +713,16 @@ library UARegistryAuxLib {
         if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).webAuthnKeyOf(ua);
         if (UAStore.layout().records[ua].kind != UAKinds.WEBAUTHN_P256) return k;
         bytes memory d = UAStore.keyRest(ua);
-        (k.x, k.y, k.rpIdHash) = (bytes32(UAStore.word(d, 0)), bytes32(UAStore.word(d, 32)), bytes32(UAStore.word(d, 64)));
+        (k.x, k.y, k.rpIdHash) =
+        (bytes32(UAStore.word(d, 0)), bytes32(UAStore.word(d, 32)), bytes32(UAStore.word(d, 64)));
     }
 
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
 
     function pqzPopOf(bytes32 ua, uint64 version) external returns (bytes memory) {
-        if (UAStore.layout().pqzKey[ua][version].ptr == address(0) && UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).pqzPopOf(ua, version);
+        if (UAStore.layout().pqzKey[ua][version].ptr == address(0) && UARegistryCoreLib._elsewhere(ua)) {
+            return IUARegistry(UARegistryCoreLib._pred()).pqzPopOf(ua, version);
+        }
         return SSTORE2.readChunks(UAStore.layout().pqzPop[ua][version]);
     }
 
@@ -682,7 +753,9 @@ library UARegistryAuxLib {
 
     function uaIndex(bytes32 ua) external returns (uint256) {
         IUARegistry.Record memory r = UAStore.layout().records[ua];
-        if (r.kind == 0 && UARegistryCoreLib._pred() != address(0)) return IUARegistry(UARegistryCoreLib._pred()).uaIndex(ua);
+        if (r.kind == 0 && UARegistryCoreLib._pred() != address(0)) {
+            return IUARegistry(UARegistryCoreLib._pred()).uaIndex(ua);
+        }
         if (r.kind == 0) revert IUARegistry.UANotIndexed(ua);
         return r.index;
     }
@@ -700,7 +773,13 @@ library UARegistryAuxLib {
 
     function registrationOf(bytes32 ua)
         external
-        returns (uint16 kind, bytes memory keyData, IUARegistry.UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
+        returns (
+            uint16 kind,
+            bytes memory keyData,
+            IUARegistry.UAAttrs memory attrs,
+            bytes memory pop,
+            bytes memory pqzPop
+        )
     {
         if (UARegistryCoreLib._elsewhere(ua)) {
             (kind, keyData, attrs, pop, pqzPop) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);

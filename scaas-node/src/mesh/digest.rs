@@ -10,7 +10,10 @@ use super::accept::ChainInfo;
 use super::envelope::Envelope;
 use super::Code;
 use crate::adapters::{aptos, solana, sui, ton};
-use crate::metatx::{native, Domain, Mtx, UASig, UaMtx, MODE_FEE_MASK, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
+use crate::metatx::{
+    native, Domain, Mtx, UASig, UaMtx, MODE_FEE_MASK, MODE_RESTRICT_FEE_RECIPIENT,
+    MODE_RESTRICT_RELAYER,
+};
 
 const METAOP_DOMAIN: &str = "scaas.metaop.v1";
 
@@ -264,20 +267,28 @@ fn evm(env: &Envelope, chain: &ChainInfo) -> Result<Decoded, Code> {
         lane: both!(&meta, batch).to_string(),
         nonce: both!(&meta, nonce).to_string(),
         valid_until: u64::try_from(both!(&meta, valid_until)).unwrap_or(u64::MAX),
-        relayer: (mode & MODE_RESTRICT_RELAYER != 0).then(|| format!("{:#x}", both!(&meta, relayer))),
-        fee_recipient: (mode & MODE_RESTRICT_FEE_RECIPIENT != 0).then(|| format!("{:#x}", both!(&meta, fee_recipient))),
+        relayer: (mode & MODE_RESTRICT_RELAYER != 0)
+            .then(|| format!("{:#x}", both!(&meta, relayer))),
+        fee_recipient: (mode & MODE_RESTRICT_FEE_RECIPIENT != 0)
+            .then(|| format!("{:#x}", both!(&meta, fee_recipient))),
         fee_effective: fee_effective(mode, transfer.map(|t| t.0), both!(&meta, fee)),
         selector,
         token: env.contract.clone(),
         account_ok: true,
-        evm: Some(Evm { meta, signer, signature, eoa }),
+        evm: Some(Evm {
+            meta,
+            signer,
+            signature,
+            eoa,
+        }),
     })
 }
 
 /// L2 EVM sau kiểm hạn (§4.4): relayer ràng buộc mà bằng 0 là intent chết; `eoa` ⇒ `ecrecover == from`, low-s,
 /// `v ∈ {27, 28}` như `ECDSA.tryRecover` của contract.
 pub fn check_evm(e: &Evm, intent_id: &[u8; 32]) -> Result<(), Code> {
-    if both!(&e.meta, mode) & MODE_RESTRICT_RELAYER != 0 && both!(&e.meta, relayer) == Address::ZERO {
+    if both!(&e.meta, mode) & MODE_RESTRICT_RELAYER != 0 && both!(&e.meta, relayer) == Address::ZERO
+    {
         return Err(Code::RelayerBoundZero);
     }
     if !e.eoa {
@@ -287,7 +298,11 @@ pub fn check_evm(e: &Evm, intent_id: &[u8; 32]) -> Result<(), Code> {
     let ok = s.len() == 65
         && matches!(s[64], 27 | 28)
         && Signature::try_from(s.as_ref()).is_ok_and(|sig| {
-            sig.normalize_s().is_none() && sig.recover_address_from_prehash(&B256::from(*intent_id)).ok() == Some(e.signer)
+            sig.normalize_s().is_none()
+                && sig
+                    .recover_address_from_prehash(&B256::from(*intent_id))
+                    .ok()
+                    == Some(e.signer)
         });
     ok.then_some(()).ok_or(Code::BadSignature)
 }
@@ -295,7 +310,11 @@ pub fn check_evm(e: &Evm, intent_id: &[u8; 32]) -> Result<(), Code> {
 fn cosmos(env: &Envelope, payload: &[u8]) -> Result<Decoded, Code> {
     let op: CosmosMetaOp = serde_json::from_slice(payload).map_err(|_| BAD)?;
     let lane = super::envelope::hex_n(&op.lane, 32, false).ok_or(BAD)?;
-    if op.domain != METAOP_DOMAIN || op.network != env.network() || op.contract != env.contract || op.op != "pay" {
+    if op.domain != METAOP_DOMAIN
+        || op.network != env.network()
+        || op.contract != env.contract
+        || op.op != "pay"
+    {
         return Err(BAD);
     }
     Ok(Decoded {
@@ -315,7 +334,16 @@ fn cosmos(env: &Envelope, payload: &[u8]) -> Result<Decoded, Code> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn op_fields(intent_id: [u8; 32], from: String, lane: &[u8], nonce: u64, valid_until: u64, relayer: Option<String>, token: String, account_ok: bool) -> Decoded {
+fn op_fields(
+    intent_id: [u8; 32],
+    from: String,
+    lane: &[u8],
+    nonce: u64,
+    valid_until: u64,
+    relayer: Option<String>,
+    token: String,
+    account_ok: bool,
+) -> Decoded {
     Decoded {
         intent_id,
         from,
@@ -334,50 +362,117 @@ fn op_fields(intent_id: [u8; 32], from: String, lane: &[u8], nonce: u64, valid_u
 
 fn sui_op(env: &Envelope, payload: &[u8], registry: Option<&str>) -> Result<Decoded, Code> {
     let op = sui::MetaOp::decode(payload).map_err(|_| BAD)?;
-    if op.op != 0 || op.network != env.network().as_bytes() || sui::addr_hex(&op.contract) != env.contract {
+    if op.op != 0
+        || op.network != env.network().as_bytes()
+        || sui::addr_hex(&op.contract) != env.contract
+    {
         return Err(BAD);
     }
     let from = sui::addr_hex(&op.from);
-    let token = registry.and_then(|r| sui::parse_addr(r).ok()).map(|r| sui::addr_hex(&r)).unwrap_or_default();
-    let account_ok = !token.is_empty() && sui_account(&token, &from).is_ok_and(|a| a == env.contract);
+    let token = registry
+        .and_then(|r| sui::parse_addr(r).ok())
+        .map(|r| sui::addr_hex(&r))
+        .unwrap_or_default();
+    let account_ok =
+        !token.is_empty() && sui_account(&token, &from).is_ok_and(|a| a == env.contract);
     let relayer = nonzero(&op.relayer, |a| sui::addr_hex(a));
-    Ok(op_fields(sui::personal_digest(payload), from, &op.lane, op.nonce, op.valid_until, relayer, token, account_ok))
+    Ok(op_fields(
+        sui::personal_digest(payload),
+        from,
+        &op.lane,
+        op.nonce,
+        op.valid_until,
+        relayer,
+        token,
+        account_ok,
+    ))
 }
 
 fn aptos_op(env: &Envelope, payload: &[u8], chain: &ChainInfo) -> Result<Decoded, Code> {
     let op = aptos::MetaOp::decode(payload).map_err(|_| BAD)?;
-    if op.op != 0 || op.chain_id.to_string() != env.network() || aptos::addr_hex(&op.contract) != env.contract {
+    if op.op != 0
+        || op.chain_id.to_string() != env.network()
+        || aptos::addr_hex(&op.contract) != env.contract
+    {
         return Err(BAD);
     }
-    let package = chain.program.as_deref().and_then(|p| aptos::parse_addr(p).ok());
+    let package = chain
+        .program
+        .as_deref()
+        .and_then(|p| aptos::parse_addr(p).ok());
     let account_ok = package.is_some_and(|p| aptos::account_of(&p, &op.from) == op.contract);
     let relayer = nonzero(&op.relayer, |a| aptos::addr_hex(a));
-    Ok(op_fields(aptos::sha3(payload), aptos::addr_hex(&op.from), &op.lane, op.nonce, op.valid_until, relayer, aptos::addr_hex(&op.asset), account_ok))
+    Ok(op_fields(
+        aptos::sha3(payload),
+        aptos::addr_hex(&op.from),
+        &op.lane,
+        op.nonce,
+        op.valid_until,
+        relayer,
+        aptos::addr_hex(&op.asset),
+        account_ok,
+    ))
 }
 
-fn ton_op(env: &Envelope, payload: &[u8], master: Option<&str>, chain: &ChainInfo) -> Result<Decoded, Code> {
-    let m = ton::boc_parse(payload).and_then(|c| ton::parse_metaop(&c)).map_err(|_| BAD)?;
+fn ton_op(
+    env: &Envelope,
+    payload: &[u8],
+    master: Option<&str>,
+    chain: &ChainInfo,
+) -> Result<Decoded, Code> {
+    let m = ton::boc_parse(payload)
+        .and_then(|c| ton::parse_metaop(&c))
+        .map_err(|_| BAD)?;
     if m.op != 1 || m.network.to_string() != env.network() || m.contract.raw() != env.contract {
         return Err(BAD);
     }
     let master = master.and_then(|s| ton::Addr::parse(s).ok());
     let token = master.map(|a| a.raw()).unwrap_or_default();
     let account_ok = master.is_some_and(|ma| {
-        chain.wallet_codes.get(&token).is_some_and(|(h, d)| ton::jetton_wallet_address(&m.from, &ma, h, *d).ok() == Some(m.contract))
+        chain.wallet_codes.get(&token).is_some_and(|(h, d)| {
+            ton::jetton_wallet_address(&m.from, &ma, h, *d).ok() == Some(m.contract)
+        })
     });
-    Ok(op_fields(m.digest, m.from.raw(), &m.lane, m.nonce, m.valid_until, m.relayer.map(|a| a.raw()), token, account_ok))
+    Ok(op_fields(
+        m.digest,
+        m.from.raw(),
+        &m.lane,
+        m.nonce,
+        m.valid_until,
+        m.relayer.map(|a| a.raw()),
+        token,
+        account_ok,
+    ))
 }
 
-fn solana_op(env: &Envelope, payload: &[u8], asset: Option<&str>, chain: &ChainInfo) -> Result<Decoded, Code> {
+fn solana_op(
+    env: &Envelope,
+    payload: &[u8],
+    asset: Option<&str>,
+    chain: &ChainInfo,
+) -> Result<Decoded, Code> {
     let op = solana::MetaOp::decode(payload).map_err(|_| BAD)?;
-    if op.op != 0 || solana::b58(&op.network) != env.network() || solana::b58(&op.contract) != env.contract {
+    if op.op != 0
+        || solana::b58(&op.network) != env.network()
+        || solana::b58(&op.contract) != env.contract
+    {
         return Err(BAD);
     }
     let token = solana::b58(&op.asset);
     let program = chain.program.as_deref().and_then(|p| solana::key(p).ok());
-    let account_ok = asset == Some(token.as_str()) && program.is_some_and(|p| solana::account_of(&p, &op.from) == op.contract);
+    let account_ok = asset == Some(token.as_str())
+        && program.is_some_and(|p| solana::account_of(&p, &op.from) == op.contract);
     let relayer = nonzero(&op.relayer, |a| solana::b58(a));
-    Ok(op_fields(Sha256::digest(payload).into(), solana::b58(&op.from), &op.lane, op.nonce, op.valid_until, relayer, token, account_ok))
+    Ok(op_fields(
+        Sha256::digest(payload).into(),
+        solana::b58(&op.from),
+        &op.lane,
+        op.nonce,
+        op.valid_until,
+        relayer,
+        token,
+        account_ok,
+    ))
 }
 
 #[cfg(test)]
@@ -388,17 +483,25 @@ mod tests {
     #[test]
     fn sui_account_matches_python_and_move() {
         // dms_blockchain/tests/test_fam_sui.py: REG_SUI, ALICE → ALICE_ACCOUNT.
-        let a = sui_account("0x7c9575082976f063e7bfa16aa86ca20e1675b50efa7d5a64d1fa66ce127f5fdf",
-                            "0x6a749c33bda66662e3709eea404a27dbb2b27d7a58bc0a1248d12436fb2fae71").unwrap();
-        assert_eq!(a, "0xd4793a1919a40ebfe5587a3a49fe89bb64c54bd49c75ab2a08ac0d5636706382");
+        let a = sui_account(
+            "0x7c9575082976f063e7bfa16aa86ca20e1675b50efa7d5a64d1fa66ce127f5fdf",
+            "0x6a749c33bda66662e3709eea404a27dbb2b27d7a58bc0a1248d12436fb2fae71",
+        )
+        .unwrap();
+        assert_eq!(
+            a,
+            "0xd4793a1919a40ebfe5587a3a49fe89bb64c54bd49c75ab2a08ac0d5636706382"
+        );
     }
 
     #[test]
     fn effective_fee_per_mode() {
         let z = format!("{:#x}", Address::ZERO);
-        let w = |mode: u32| serde_json::json!({"from": z, "to": z, "value": "2000000",
+        let w = |mode: u32| {
+            serde_json::json!({"from": z, "to": z, "value": "2000000",
             "entryRef": format!("{:#x}", B256::ZERO), "batch": "0", "nonce": "0", "validUntil": "1", "mode": mode,
-            "relayer": z, "fee": if mode == 0 { "1000000000000000000000000000000" } else { "2500" }, "feeRecipient": z});
+            "relayer": z, "fee": if mode == 0 { "1000000000000000000000000000000" } else { "2500" }, "feeRecipient": z})
+        };
         let t = |mode| match Mtx::from_wire(Some("transfer"), &w(mode)).unwrap() {
             Mtx::Transfer(t) => fee_effective(t.mode, Some(t.value), t.fee),
             _ => unreachable!(),
@@ -407,7 +510,11 @@ mod tests {
         assert_eq!(t(0x10), U256::from(5000u64), "PERCENT: 2e6 × 2500 / 1e6");
         assert_eq!(t(0x20), U256::from(2500u64));
         let call = |mode: u32| fee_effective(mode, None, U256::from(2500u64));
-        assert_eq!(call(0x10), U256::ZERO, "a PERCENT call's basis is not read here");
+        assert_eq!(
+            call(0x10),
+            U256::ZERO,
+            "a PERCENT call's basis is not read here"
+        );
         assert_eq!(call(0x20), U256::from(2500u64));
     }
 

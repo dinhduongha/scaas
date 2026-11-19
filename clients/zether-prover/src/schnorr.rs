@@ -6,8 +6,8 @@ use rand_core::{CryptoRng, RngCore};
 
 use crate::abi::{self, Tok};
 use crate::curve::{
-    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, zether_kind, zether_tag, secret_mul,
-    Fr, ZCurve, G,
+    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len,
+    secret_mul, ua_of, zether_kind, zether_tag, Fr, ZCurve, G,
 };
 use crate::keys::ZetherKey;
 use crate::nonce::Nonces;
@@ -32,7 +32,11 @@ pub fn sign_with_k<C: ZCurve>(x: &Fr<C>, msg: &[u8; 32], k: &Fr<C>) -> (G<C>, Fr
 }
 
 /// `sig = R ‖ be32(z)`, hedged nonce (`k = H(x ‖ msg ‖ CSPRNG)`).
-pub fn sign<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, msg: &[u8; 32], rng: &mut R) -> Vec<u8> {
+pub fn sign<C: ZCurve, R: RngCore + CryptoRng>(
+    key: &ZetherKey<C>,
+    msg: &[u8; 32],
+    rng: &mut R,
+) -> Vec<u8> {
     let mut secret = zeroize::Zeroizing::new(encode_scalar::<C>(&key.x).to_vec());
     secret.extend_from_slice(msg);
     let k = Nonces::new(&secret, rng).next::<C>();
@@ -77,15 +81,25 @@ pub fn pop_tag() -> [u8; 32] {
 /// `ua_msg = keccak256(MSG_TAG ‖ TAG(kind) ‖ purposeTag ‖ digest)` of this curve's Zether kind (CTR-UA-12) — what the
 /// Zether key signs; the registry's `uaMessage(kind, purposeTag, digest)`.
 pub fn ua_message<C: ZCurve>(purpose: &[u8; 32], digest: &[u8; 32]) -> [u8; 32] {
-    keccak256(&[keccak256(b"scaas.ua.msg.v1"), zether_tag::<C>(), *purpose, *digest].concat())
+    keccak256(
+        &[
+            keccak256(b"scaas.ua.msg.v1"),
+            zether_tag::<C>(),
+            *purpose,
+            *digest,
+        ]
+        .concat(),
+    )
 }
 
-// ---- The portable records as typed EIP-712 structs (typed-signing TS-D1 / TS-D3; ua-rs `ua8`, clientkeys `ua.js`) ----
+// ---- The portable records as typed EIP-712 structs (typed-signing TS-D1 / TS-D3; ua-rs `ua_portable`, clientkeys `ua.js`) ----
 // The raw digests before typed-signing are in legacy/typed-signing/portable_raw.rs.
 
 const DOMAIN_TYPE: &str = "EIP712Domain(string name,string version)";
-const KEM_RECORD_TYPE: &str = "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)";
-const PORTABLE_RECORD_TYPE: &str = "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)\
+const KEM_RECORD_TYPE: &str =
+    "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)";
+const PORTABLE_RECORD_TYPE: &str =
+    "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)\
 UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)";
 const REGISTRATION_TYPE: &str = "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)\
 UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)\
@@ -93,7 +107,14 @@ UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)";
 
 /// `DS_P` of the portable domain `{name: "SCaaS UA Portable", version: "1"}`: no chainId / verifyingContract / salt.
 pub fn portable_domain_separator() -> [u8; 32] {
-    keccak256(&[keccak256(DOMAIN_TYPE.as_bytes()), keccak256(b"SCaaS UA Portable"), keccak256(b"1")].concat())
+    keccak256(
+        &[
+            keccak256(DOMAIN_TYPE.as_bytes()),
+            keccak256(b"SCaaS UA Portable"),
+            keccak256(b"1"),
+        ]
+        .concat(),
+    )
 }
 
 fn typed(struct_hash: &[u8; 32]) -> [u8; 32] {
@@ -102,22 +123,68 @@ fn typed(struct_hash: &[u8; 32]) -> [u8; 32] {
 
 /// `hashStruct(UAKemRecord{ua, 0, 0, 0})`: "no KEM record" (TS-D2), the `kem` of a Zether UA's record.
 pub fn no_kem_record_hash(ua: &[u8; 32]) -> [u8; 32] {
-    keccak256(&[keccak256(KEM_RECORD_TYPE.as_bytes()), *ua, [0u8; 32], [0u8; 32], [0u8; 32]].concat())
+    keccak256(
+        &[
+            keccak256(KEM_RECORD_TYPE.as_bytes()),
+            *ua,
+            [0u8; 32],
+            [0u8; 32],
+            [0u8; 32],
+        ]
+        .concat(),
+    )
 }
 
-fn portable_record_hash(ua: &[u8; 32], kind: u16, pqz_key_hash: &[u8; 32], kem_record_hash: &[u8; 32]) -> [u8; 32] {
-    keccak256(&[keccak256(PORTABLE_RECORD_TYPE.as_bytes()), *ua, abi::u256(kind as u64), *pqz_key_hash, *kem_record_hash].concat())
+fn portable_record_hash(
+    ua: &[u8; 32],
+    kind: u16,
+    pqz_key_hash: &[u8; 32],
+    kem_record_hash: &[u8; 32],
+) -> [u8; 32] {
+    keccak256(
+        &[
+            keccak256(PORTABLE_RECORD_TYPE.as_bytes()),
+            *ua,
+            abi::u256(kind as u64),
+            *pqz_key_hash,
+            *kem_record_hash,
+        ]
+        .concat(),
+    )
 }
 
 /// The typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}` digest (`kem_record_hash` = `hashStruct(UAKemRecord)`).
-pub fn portable_record_digest(ua: &[u8; 32], kind: u16, pqz_key_hash: &[u8; 32], kem_record_hash: &[u8; 32]) -> [u8; 32] {
-    typed(&portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash))
+pub fn portable_record_digest(
+    ua: &[u8; 32],
+    kind: u16,
+    pqz_key_hash: &[u8; 32],
+    kem_record_hash: &[u8; 32],
+) -> [u8; 32] {
+    typed(&portable_record_hash(
+        ua,
+        kind,
+        pqz_key_hash,
+        kem_record_hash,
+    ))
 }
 
 /// The typed `UARegistration{record, pqzPopHash}` digest: what `ua_message(kind, POP_V2, ·)` is taken over.
-pub fn registration_digest(ua: &[u8; 32], kind: u16, pqz_key_hash: &[u8; 32], kem_record_hash: &[u8; 32], pqz_pop_hash: &[u8; 32]) -> [u8; 32] {
+pub fn registration_digest(
+    ua: &[u8; 32],
+    kind: u16,
+    pqz_key_hash: &[u8; 32],
+    kem_record_hash: &[u8; 32],
+    pqz_pop_hash: &[u8; 32],
+) -> [u8; 32] {
     let record = portable_record_hash(ua, kind, pqz_key_hash, kem_record_hash);
-    typed(&keccak256(&[keccak256(REGISTRATION_TYPE.as_bytes()), record, *pqz_pop_hash].concat()))
+    typed(&keccak256(
+        &[
+            keccak256(REGISTRATION_TYPE.as_bytes()),
+            record,
+            *pqz_pop_hash,
+        ]
+        .concat(),
+    ))
 }
 
 /// The typed `UAPortableRecord{UA, kind, 0, UAKemRecord{UA, 0, 0, 0}}` digest of a Zether UA (no PQZ key, no KEM record).
@@ -128,26 +195,56 @@ pub fn zether_record_digest<C: ZCurve>(ua: &[u8; 32]) -> [u8; 32] {
 /// The typed `UARegistration{UAPortableRecord{UA, kind, 0, UAKemRecord{UA, 0, 0, 0}}, 0}` digest of a Zether UA (TS-D3):
 /// it holds no PQZ key, KEM record or PQZ proof.
 pub fn zether_registration_digest<C: ZCurve>(ua: &[u8; 32]) -> [u8; 32] {
-    registration_digest(ua, zether_kind::<C>(), &[0u8; 32], &no_kem_record_hash(ua), &[0u8; 32])
+    registration_digest(
+        ua,
+        zether_kind::<C>(),
+        &[0u8; 32],
+        &no_kem_record_hash(ua),
+        &[0u8; 32],
+    )
 }
 
 /// The `pop` of `register(0x0141, Y, …)` (UA-8 P1, portable: no chain, chainUid or registry): Schnorr by `x` under the
 /// Zether tag over `ua_message(POP_V2, zether_registration_digest(UA(Y)))`.
 pub fn zether_pop<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, rng: &mut R) -> Vec<u8> {
-    sign(key, &ua_message::<C>(&pop_tag(), &zether_registration_digest::<C>(&key.ua())), rng)
+    sign(
+        key,
+        &ua_message::<C>(&pop_tag(), &zether_registration_digest::<C>(&key.ua())),
+        rng,
+    )
 }
 
 pub fn verify_pop<C: ZCurve>(y: &G<C>, pop: &[u8]) -> Result<(), ZError> {
-    verify(y, &ua_message::<C>(&pop_tag(), &zether_registration_digest::<C>(&ua_of::<C>(y))), pop)
+    verify(
+        y,
+        &ua_message::<C>(&pop_tag(), &zether_registration_digest::<C>(&ua_of::<C>(y))),
+        pop,
+    )
 }
 
 // ---- Legacy (backup, not delete): the chain-bound PoP before UA-8 (pop.v1) ----
 
 /// `pop_digest = keccak256(abi.encode(POP_TAG, keccak256("evm:" ‖ decimal(chainId)), chainUid, registry, ua, pqzKeyHash))`
 /// (CTR-UA-07) — the pre-UA-8 registry's `popDigest(ua, pqzKeyHash)`.
-pub fn pop_digest_v1(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key_hash: &[u8; 32]) -> [u8; 32] {
+pub fn pop_digest_v1(
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    registry: &[u8; 20],
+    ua: &[u8; 32],
+    pqz_key_hash: &[u8; 32],
+) -> [u8; 32] {
     let chain_key = keccak256(format!("evm:{chain_id}").as_bytes());
-    keccak256(&[purpose_tag("pop"), chain_key, *chain_uid, abi::addr(registry), *ua, *pqz_key_hash].concat())
+    keccak256(
+        &[
+            purpose_tag("pop"),
+            chain_key,
+            *chain_uid,
+            abi::addr(registry),
+            *ua,
+            *pqz_key_hash,
+        ]
+        .concat(),
+    )
 }
 
 /// The pre-UA-8 `pop`: Schnorr by `x` over `ua_message(pop.v1, pop_digest_v1(…, UA(Y), 0))`.
@@ -162,15 +259,85 @@ pub fn zether_pop_v1<C: ZCurve, R: RngCore + CryptoRng>(
     sign(key, &ua_message::<C>(&purpose_tag("pop"), &d), rng)
 }
 
-pub fn verify_pop_v1<C: ZCurve>(y: &G<C>, chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], pop: &[u8]) -> Result<(), ZError> {
+pub fn verify_pop_v1<C: ZCurve>(
+    y: &G<C>,
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    registry: &[u8; 20],
+    pop: &[u8],
+) -> Result<(), ZError> {
     let d = pop_digest_v1(chain_id, chain_uid, registry, &ua_of::<C>(y), &[0u8; 32]);
     verify(y, &ua_message::<C>(&purpose_tag("pop"), &d), pop)
 }
 
 /// `UASig.signature` of an owner op (`mtxRollOverSigned`, `mtxSetRollOverMode`): the raw Schnorr by x over
 /// `ua_message(zether-owner, digest)`; `keyData` stays empty, the registry reads `Y` from its record.
-pub fn owner_auth<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, digest: &[u8; 32], rng: &mut R) -> Vec<u8> {
-    sign(key, &ua_message::<C>(&purpose_tag("zether-owner"), digest), rng)
+pub fn owner_auth<C: ZCurve, R: RngCore + CryptoRng>(
+    key: &ZetherKey<C>,
+    digest: &[u8; 32],
+    rng: &mut R,
+) -> Vec<u8> {
+    sign(
+        key,
+        &ua_message::<C>(&purpose_tag("zether-owner"), digest),
+        rng,
+    )
+}
+
+// ---------------------------------------------------------------------------------------------
+// The auditor's proof of possession (bit 32, CTR-ZTH-95; set-auditor spec §5.2)
+// ---------------------------------------------------------------------------------------------
+
+/// `c = hashToScalar(keccak256("SCAAS-ZETHER-AUDITOR-POP-V1" ‖ d ‖ G ‖ Y_a ‖ R))`: strong Fiat-Shamir over the statement points
+/// and the commitment; `d` the token's typed `AuditorConsent` digest (token, the key's UA, epoch, chain word).
+pub fn auditor_pop_challenge<C: ZCurve>(d: &[u8; 32], y: &G<C>, r: &G<C>) -> Fr<C> {
+    let mut b = b"SCAAS-ZETHER-AUDITOR-POP-V1".to_vec();
+    b.extend_from_slice(d);
+    b.extend(encode_point::<C>(&generator::<C>()));
+    b.extend(encode_point::<C>(y));
+    b.extend(encode_point::<C>(r));
+    hash_to_scalar::<C>(&keccak256(&b))
+}
+
+/// The proof with an explicit nonce: `R = [k]G`, `z = k + c·x`, `pop = R ‖ be32(z)`. Only for vectors and [`auditor_pop`].
+#[doc(hidden)]
+pub fn auditor_pop_with_k<C: ZCurve>(x: &Fr<C>, d: &[u8; 32], k: &Fr<C>) -> Vec<u8> {
+    let g = generator::<C>();
+    let r = g * k;
+    let c = auditor_pop_challenge::<C>(d, &(g * x), &r);
+    let mut pop = encode_point::<C>(&r);
+    pop.extend(encode_scalar::<C>(&(*k + c * x)));
+    pop
+}
+
+/// `setAuditorKey`'s `pop` by the new auditor's key over `d`, hedged nonce (`k = H(x ‖ d ‖ CSPRNG)`, as every opening's).
+pub fn auditor_pop<C: ZCurve, R: RngCore + CryptoRng>(
+    key: &ZetherKey<C>,
+    d: &[u8; 32],
+    rng: &mut R,
+) -> Vec<u8> {
+    let mut secret = zeroize::Zeroizing::new(encode_scalar::<C>(&key.x).to_vec());
+    secret.extend_from_slice(d);
+    let k = Nonces::new(&secret, rng).next::<C>();
+    auditor_pop_with_k::<C>(&key.x, d, &k)
+}
+
+/// `ZetherLib.popHolds`: the exact length, `R` a valid point, `z < r`, `c ≠ 0`, `[z]G − R − [c]Y_a == O`; `Y_a ≠ O`.
+pub fn verify_auditor_pop<C: ZCurve>(y: &G<C>, d: &[u8; 32], pop: &[u8]) -> Result<(), ZError> {
+    let pl = point_len::<C>();
+    if pop.len() != pl + 32 {
+        return Err(ZError::Verify("auditor pop: length"));
+    }
+    let r = decode_point::<C>(&pop[..pl])?;
+    let z = decode_scalar::<C>(&pop[pl..])?;
+    if y.is_zero() {
+        return Err(ZError::Verify("auditor pop: Y is O"));
+    }
+    let c = auditor_pop_challenge::<C>(d, y, &r);
+    if c.is_zero() || generator::<C>() * z - r - *y * c != G::<C>::zero() {
+        return Err(ZError::Verify("auditor pop"));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -189,7 +356,13 @@ pub enum OpeningKind {
 }
 
 /// `entryRef = keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), chainid, chainUid, token, fromUA, sendCounter))`.
-pub fn entry_ref(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], from_ua: &[u8; 32], send_counter: u64) -> [u8; 32] {
+pub fn entry_ref(
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    token: &[u8; 20],
+    from_ua: &[u8; 32],
+    send_counter: u64,
+) -> [u8; 32] {
     keccak256(
         &[
             keccak256(b"SCAAS-ZETHER-ENTRY-V1"),
@@ -243,7 +416,13 @@ fn cp_prefix<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind) -> Vec<u8>
 
 /// `e = hashToScalar(keccak256(pre ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2))` (review C0-4): the statement points are absorbed, in
 /// the contract's G1 encoding, so `e` cannot be known before `s` is chosen.
-fn cp_challenge<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, a1: &[u8], a2: &[u8]) -> Fr<C> {
+fn cp_challenge<C: ZCurve>(
+    e: &Entry<C>,
+    amount: u64,
+    kind: OpeningKind,
+    a1: &[u8],
+    a2: &[u8],
+) -> Fr<C> {
     let (k, m, bb) = kmb(e, kind);
     let mut b = cp_prefix(e, amount, kind);
     for p in [generator::<C>(), k, bb, m] {
@@ -280,7 +459,11 @@ fn cp_open<C: ZCurve, R: RngCore + CryptoRng>(
     let a2 = encode_point::<C>(&secret_mul(&b, &k)?);
     let c = cp_challenge(e, amount, kind, &a1, &a2);
     let z = k + c * x;
-    Ok(abi::encode(&[Tok::Bytes(a1), Tok::Bytes(a2), Tok::Word(encode_scalar::<C>(&z))]))
+    Ok(abi::encode(&[
+        Tok::Bytes(a1),
+        Tok::Bytes(a2),
+        Tok::Word(encode_scalar::<C>(&z)),
+    ]))
 }
 
 hazmat_pub! {
@@ -330,7 +513,12 @@ fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>(
 }
 
 /// Mirror of `verifyTransferAmount`.
-pub fn verify_opening<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, opening: &[u8]) -> Result<(), ZError> {
+pub fn verify_opening<C: ZCurve>(
+    e: &Entry<C>,
+    amount: u64,
+    kind: OpeningKind,
+    opening: &[u8],
+) -> Result<(), ZError> {
     let g = generator::<C>();
     let va = g * Fr::<C>::from(amount);
     let bad = ZError::Verify("disclosure");
@@ -364,14 +552,20 @@ pub fn verify_opening<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, o
             }
             let a1b = &opening[96 + 32..96 + 32 + pl];
             let a2b = &opening[96 + 64 + padl..96 + 64 + padl + pl];
-            let (a1, a2, z) = (decode_point::<C>(a1b)?, decode_point::<C>(a2b)?, decode_scalar::<C>(&opening[64..96])?);
+            let (a1, a2, z) = (
+                decode_point::<C>(a1b)?,
+                decode_point::<C>(a2b)?,
+                decode_scalar::<C>(&opening[64..96])?,
+            );
             let (k_pt, m, b) = kmb(e, kind);
             // AUDITOR is false when the token has no auditor or the sender left it out (C_aud = O, Z12).
             if k_pt.is_zero() || (kind == OpeningKind::Auditor && e.c_aud.is_zero()) {
                 return Err(bad);
             }
             let c = cp_challenge(e, amount, kind, a1b, a2b);
-            if g * z - a1 - k_pt * c == G::<C>::zero() && b * z - a2 - (m - va) * c == G::<C>::zero() {
+            if g * z - a1 - k_pt * c == G::<C>::zero()
+                && b * z - a2 - (m - va) * c == G::<C>::zero()
+            {
                 Ok(())
             } else {
                 Err(bad)
@@ -418,8 +612,17 @@ mod tests {
         // the owner op signs zether-owner: not a PoP, not the raw digest
         let d = keccak256(b"rollover");
         let sig = owner_auth(&k1, &d, &mut rng);
-        assert_eq!(sig.len(), point_len::<C>() + 32, "raw R || z, no abi wrapping");
-        verify(&k1.y, &ua_message::<C>(&purpose_tag("zether-owner"), &d), &sig).unwrap();
+        assert_eq!(
+            sig.len(),
+            point_len::<C>() + 32,
+            "raw R || z, no abi wrapping"
+        );
+        verify(
+            &k1.y,
+            &ua_message::<C>(&purpose_tag("zether-owner"), &d),
+            &sig,
+        )
+        .unwrap();
         assert!(verify(&k1.y, &d, &sig).is_err());
 
         // Nonce reuse leaks x: (z1 - z2)/(e1 - e2) — the reason nonces are hedged.
@@ -439,17 +642,38 @@ mod tests {
     #[test]
     fn zether_registration_digest_pinned() {
         type C = Bls12381;
-        assert_eq!(hex::encode(portable_domain_separator()), "9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1");
+        assert_eq!(
+            hex::encode(portable_domain_separator()),
+            "9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1"
+        );
         for (t, want) in [
-            (KEM_RECORD_TYPE, "0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201"),
-            (PORTABLE_RECORD_TYPE, "0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f"),
-            (REGISTRATION_TYPE, "c78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e"),
+            (
+                KEM_RECORD_TYPE,
+                "0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201",
+            ),
+            (
+                PORTABLE_RECORD_TYPE,
+                "0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f",
+            ),
+            (
+                REGISTRATION_TYPE,
+                "c78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e",
+            ),
         ] {
             assert_eq!(hex::encode(keccak256(t.as_bytes())), want, "{t}");
         }
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/ua/portable.json");
-        let pj: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        let r = pj["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "zether-bls12381").unwrap();
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../smartcontracts/vectors/ua/portable.json"
+        );
+        let pj: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let r = pj["registrations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["name"] == "zether-bls12381")
+            .unwrap();
         let h = |f: &str| hex::decode(&r[f].as_str().unwrap()[2..]).unwrap();
         let h32 = |f: &str| -> [u8; 32] { h(f).try_into().unwrap() };
         let ua = h32("ua");
@@ -470,20 +694,42 @@ mod tests {
         let g = generator::<C>();
         let p = |n: u64| g * Fr::<C>::from(n);
         let mk = |pts: [G<C>; 6]| Entry::<C> {
-            chain_id: 1, chain_uid: [2; 32], token: [3; 20], entry_ref: [4; 32], index: 0,
-            y_t: pts[0], c_out: pts[1], d_out: pts[2], y_a: pts[3], c_aud: pts[4], d_aud: pts[5],
+            chain_id: 1,
+            chain_uid: [2; 32],
+            token: [3; 20],
+            entry_ref: [4; 32],
+            index: 0,
+            y_t: pts[0],
+            c_out: pts[1],
+            d_out: pts[2],
+            y_a: pts[3],
+            c_aud: pts[4],
+            d_aud: pts[5],
         };
         let pts: [G<C>; 6] = [p(5), p(6), p(7), p(8), p(9), p(10)];
         let e0 = mk(pts);
         let (a1, a2) = (encode_point::<C>(&p(11)), encode_point::<C>(&p(12)));
-        for kind in [OpeningKind::ReceiverX, OpeningKind::Auditor, OpeningKind::SenderCp] {
+        for kind in [
+            OpeningKind::ReceiverX,
+            OpeningKind::Auditor,
+            OpeningKind::SenderCp,
+        ] {
             let base = cp_challenge(&e0, 1, kind, &a1, &a2);
             let (k, m, b) = kmb(&e0, kind);
             let mut seen = vec![base];
             for (n, src) in [k, m, b].into_iter().enumerate() {
                 // replace the one point that plays K, M or B for this kind by another
-                let c = cp_challenge(&mk(pts.map(|q| if q == src { p(99) } else { q })), 1, kind, &a1, &a2);
-                assert!(!seen.contains(&c), "{kind:?}: statement point {n} is not bound");
+                let c = cp_challenge(
+                    &mk(pts.map(|q| if q == src { p(99) } else { q })),
+                    1,
+                    kind,
+                    &a1,
+                    &a2,
+                );
+                assert!(
+                    !seen.contains(&c),
+                    "{kind:?}: statement point {n} is not bound"
+                );
                 seen.push(c);
             }
         }

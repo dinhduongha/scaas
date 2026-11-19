@@ -27,15 +27,31 @@ fn h0x(b: &[u8]) -> String {
 #[test]
 fn node_tx_vector() {
     let d: Value = serde_json::from_str(&std::fs::read_to_string(VECTORS).unwrap()).unwrap();
-    let pay = d["metaops"]["vectors"].as_array().unwrap().iter().find(|m| m["name"] == "pay").unwrap();
+    let pay = d["metaops"]["vectors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["name"] == "pay")
+        .unwrap();
     let auth = &pay["auth"];
     // mtx_pay args: Borsh(MetaOp) (the encoding without the 15-byte label) ‖ Borsh(Auth::Ed25519 { key, sig })
-    let args = [&hx(&pay["encoding"])[15..], &[0u8], &hx(&auth["key"]), &hx(&auth["sig"])].concat();
+    let args = [
+        &hx(&pay["encoding"])[15..],
+        &[0u8],
+        &hx(&auth["key"]),
+        &hx(&auth["sig"]),
+    ]
+    .concat();
 
     let mut v: Value = serde_json::from_str(&std::fs::read_to_string(TX).unwrap()).unwrap();
     let (seed, pk) = (hx(&v["seed"]), hx(&v["public_key"]));
-    let sk = SecretKey::ED25519(ED25519SecretKey([&seed[..], &pk[..]].concat().try_into().unwrap()));
-    assert_eq!(sk.public_key(), PublicKey::ED25519(pk.as_slice().try_into().unwrap()));
+    let sk = SecretKey::ED25519(ED25519SecretKey(
+        [&seed[..], &pk[..]].concat().try_into().unwrap(),
+    ));
+    assert_eq!(
+        sk.public_key(),
+        PublicKey::ED25519(pk.as_slice().try_into().unwrap())
+    );
     let signer = hex::encode(&pk); // implicit account
     assert_eq!(v["signer"].as_str(), Some(signer.as_str()));
     let deposit: u128 = v["deposit"].as_str().unwrap().parse().unwrap();

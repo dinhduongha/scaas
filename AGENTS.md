@@ -43,6 +43,9 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - **Every state-changing `mtx*` is relayable**, with a fee of 0 too.
 - **No EIP-7702.** An EOA signs with its own key and runs no code.
 - **No assumptions about a chain:** no gas price 0, no block limit of ours. The precompile may ship to customer chains.
+- **Maximal support** ([ARCH-POS-18](docs/decisions.md#ARCH-POS-18)): a missing precompile or host function never disables a kind;
+  run the check in software, same checks and caps. A hard limit it cannot fit goes to the owner with numbers; disabling a kind
+  on a chain needs the owner's explicit confirmation.
 - **One rule on every chain.** Never split a rule by L1, L2 or chain kind.
 - **Every RPC consumer takes a list of nodes** ([ARCH-POS-15](docs/decisions.md#ARCH-POS-15)): named, default or discovered; reads
   fail over by default, never mixing nodes; an option asks a strict majority to agree; writes send the same signed bytes; a read that
@@ -52,7 +55,7 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - **Nothing deployed is upgraded.** Contracts are immutable; versions live in the factory's catalogue.
 - **Backup, do not delete.** Superseded code moves to `legacy/`. Never drop an API because nothing calls it yet.
 - Keep apart in code and prose: **Zether ≠ PQZ**, **NEAR ≠ Algorand**. Name sets `n2304-kmax4096`, never "v3" or "16k". Rounds are
-  `ua-<family>`, `ua8-<family>`, `zether-<family>`. 7622 is `scaas-testnet` in ids, "SCaaS testnet" in prose.
+  `ua-<family>`, `ua-portable-<family>`, `zether-<family>`. 7622 is `scaas-testnet` in ids, "SCaaS testnet" in prose.
 
 ## Security
 
@@ -92,6 +95,10 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
   `docs/research/evm-size-levers.md`.
 - **Gas pins move only with old → new figures in the commit.** A set-parameter change is the owner's.
 - **Storage layout is pinned** (`test/v2/layout/`); so are typehashes (`*TypehashIsPinned`).
+- **A format-only Solidity commit** (formatter output only, with `bytecode_hash = "none"` in force) needs no forge suite:
+  rebuild `src` before and after, require every contract's runtime and init bytecode byte-identical, and run the size gate
+  (owner 2026-11-17). PR CI still runs everything. A format-only commit to a family contract (Rust) runs that family's own
+  tests: panic locations move its wasm, so its bytes cannot be compared.
 - A library split is not free: check DELEGATECALL storage, `this`, `msg.sender`, return data, reentrancy guards and `LinkClosure` release pins.
 - **EIP-8037:** a transaction fits only if regular + state gas fits the block limit. `gas_used = max(...)` is accounting, not inclusion. Do not
   conclude from it that a large deploy fits.
@@ -104,6 +111,9 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - Full gate (`PQZ_SET=<set> scripts/capped pqz-core/gate.sh`, hours per set): only when `pqzl`, `pqzh/ligero/src`, `stmt`, `ffi/src` or set
   parameters change (code compiled only under feature `test-hooks` excepted: its affected steps, owner 2026-11-16). It resumes
   per step; read `runs/gate/last` first. Otherwise run the affected steps.
+- A format-only commit (formatter output only, no hand edit) in those paths never needs the full gate: run the affected steps
+  (kat, tbox, sv, fnv, rust, fuzz, `pqz-vectors --check`, `pqz_kat.py --check`) and require outputs byte-identical to the
+  baseline (owner 2026-11-17). Rust is formatted at rustfmt's default width (100), the other languages at 120.
 - **Gate once, on the final core tree.** Any edit to the paths above, the gate scripts or the files its steps read (harnesses, vectors,
   `negative.json`) restarts the gate. Before starting it, walk every remaining step of the plan and pull those edits forward, gate-script
   counts included (e.g. the relation count). Contract, client and node work runs beside it. A run on an older tree is only a scout.
@@ -149,6 +159,10 @@ notes start with the research banner. Prefer Mermaid for flows; SVG overviews wh
 State what you ran and its result. Report a failure with its output; do not edit a pin, a bound or a test to go green. A small change: edit, one
 test, the touched gates. Multi-step gates log per step and resume. Full output stays in git-ignored `.log` files; commit one
 `step | commit | rc | counts` summary and short evidence a doc quotes, with no absolute paths.
+A round of several tasks on one branch (owner 2026-11-18): each task runs its own suites at the default set, its mutants and
+every pin it moves (old → new); the full matrix (every forge directory, the set-sensitive tests at the four sets, node and e2e,
+clients, vectors) runs once at the round's end, before the merge, on the final tree. The rules above still decide what that
+matrix holds.
 
 ## Git
 
@@ -183,3 +197,6 @@ Oversized jobs get the terminal killed by `systemd-oomd`, and every agent with i
 - `pay_ref`, `signature` and other job fields can go `dead` silently for a consumer on an old shape: job shape changes need a note for operators.
 - Mesh has no Soroban arm (`FAMILY_NOT_SUPPORTED`).
 - `size-baseline.json` is a ratchet, not a target: moving it needs a reason.
+- A shell hook (rtk) may rewrite git commands: `git add --` with an empty path list once staged every file of a shared
+  worktree. Build the path list first and refuse an empty one; commit with `git commit --only -- <explicit paths>` (through
+  `rtk proxy git …` where the hook would rewrite it), and check `git diff --cached --name-only` before every commit.

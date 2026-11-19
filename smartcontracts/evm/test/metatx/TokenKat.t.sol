@@ -41,15 +41,31 @@ contract TokenKatTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
-        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
+        tok = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(UID, address(0), address(0), false)
+            )
+        );
+        tok.initialize(
+            nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this)))
+        );
         tok.mint(vm.addr(ALICE_PK), 1_000e6, EnvKit.codeUidOf(address(tok)));
     }
 
     function _domainSep() internal view returns (bytes32) {
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS MetaToken"), keccak256("1"), uint256(7622), address(tok), UID));
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS MetaToken"),
+                keccak256("1"),
+                uint256(7622),
+                address(tok),
+                UID
+            )
+        );
     }
 
     /// The EOA's `UASig`: its own ECDSA signature only (R17).
@@ -68,9 +84,14 @@ contract TokenKatTest is Test {
         vm.serializeString(k, "signer", vm.toString(vm.addr(ALICE_PK)));
     }
 
-    function _check(string memory path, bytes32 typeHash, bytes32 structHash, bytes32 digest, bytes memory sig,
-        bytes memory data) internal view
-    {
+    function _check(
+        string memory path,
+        bytes32 typeHash,
+        bytes32 structHash,
+        bytes32 digest,
+        bytes memory sig,
+        bytes memory data
+    ) internal view {
         string memory onDisk = vm.readFile(path);
         assertEq(vm.parseJsonBytes(onDisk, ".calldata"), data);
         assertEq(vm.parseJsonBytes32(onDisk, ".type_hash"), typeHash);
@@ -83,9 +104,15 @@ contract TokenKatTest is Test {
 
     function test_metaTxKat() public {
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
-            from: MetaTxLib.pad(vm.addr(ALICE_PK)), data: abi.encodeCall(IMetaTx.cancelNonce, (42)),
-            batch: 7, nonce: 0, validUntil: 1_800_000_300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
-            relayer: RELAYER, fee: 0, feeRecipient: address(0xFEE)       // flag off: hashed as 0
+            from: MetaTxLib.pad(vm.addr(ALICE_PK)),
+            data: abi.encodeCall(IMetaTx.cancelNonce, (42)),
+            batch: 7,
+            nonce: 0,
+            validUntil: 1_800_000_300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: RELAYER,
+            fee: 0,
+            feeRecipient: address(0xFEE) // flag off: hashed as 0
         });
         bytes32 structHash = m.hashStruct();
         bytes32 domainSep = _domainSep();
@@ -122,10 +149,17 @@ contract TokenKatTest is Test {
     function test_metaTransferKat() public {
         bytes32 ref = keccak256("scaas.kat.entryRef");
         MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer({
-            from: MetaTxLib.pad(vm.addr(ALICE_PK)), to: MetaTxLib.pad(address(0x5409)), value: 100e6, entryRef: ref,
-            batch: tok.payLane(ref), nonce: 0, validUntil: 1_800_000_300,
+            from: MetaTxLib.pad(vm.addr(ALICE_PK)),
+            to: MetaTxLib.pad(address(0x5409)),
+            value: 100e6,
+            entryRef: ref,
+            batch: tok.payLane(ref),
+            nonce: 0,
+            validUntil: 1_800_000_300,
             mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_FIXED,
-            relayer: RELAYER, fee: 1e5, feeRecipient: address(0xFEE)
+            relayer: RELAYER,
+            fee: 1e5,
+            feeRecipient: address(0xFEE)
         });
         bytes32 structHash = t.hashStruct();
         bytes32 domainSep = _domainSep();

@@ -33,33 +33,42 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 CORE=$(cd "$HERE/../.." && pwd)
 REPO=$(cd "$CORE/.." && pwd)
 CAP="$REPO/scripts/capped"
-IMG=sagemath/sagemath@sha256:4f5589eb6c565949a006f8665de2876b8414410daf5ac554f4434a15d4f3d528   # tag 10.7
-[ $# -ge 2 ] || { sed -n '2,26p' "$0"; exit 2; }
+IMG=sagemath/sagemath@sha256:4f5589eb6c565949a006f8665de2876b8414410daf5ac554f4434a15d4f3d528 # tag 10.7
+[ $# -ge 2 ] || {
+    sed -n '2,26p' "$0"
+    exit 2
+}
 S=$1
 shift
 D=$HERE/$S
-[ -f "$D/set.toml" ] || { echo "make.sh: no $D/set.toml" >&2; exit 2; }
+[ -f "$D/set.toml" ] || {
+    echo "make.sh: no $D/set.toml" >&2
+    exit 2
+}
 RELS="reg tx tx0 txs txs0 burn ds dr txm2 txm20 txm4 txm40 txm8 txm80 txm16 txm160"
 tomlget() { python3 -I -c "import tomllib, sys; t = tomllib.load(open(sys.argv[1], 'rb')); print(t.get(sys.argv[2], ''))" "$D/set.toml" "$1"; }
 CORE_ONLY=$(tomlget core_only)
 FROZEN=$(tomlget frozen)
-tools() { [ -n "${PQZ_TOOLS:-}" ] && [ -d "$PQZ_TOOLS/$1" ] || { echo "PQZ_TOOLS must hold $1 (see the header)" >&2; return 1; }; }
+tools() { [ -n "${PQZ_TOOLS:-}" ] && [ -d "$PQZ_TOOLS/$1" ] || {
+    echo "PQZ_TOOLS must hold $1 (see the header)" >&2
+    return 1
+}; }
 
 step_specs() { python3 -I "$HERE/gen_set.py" "$S"; }
 
 # e_s1: every spec through e_s1_n.sage, then the agreement with set.toml
 step_e_s1() {
-  tools lk && tools le && tools lz || return 1
-  T=$(cd "$PQZ_TOOLS" && pwd)
-  specs=$(for r in $RELS; do printf '/set/%s_params.sage ' "$r"; done)
-  "$CAP" docker run --rm --tmpfs /w --network none --memory 5g --cpus 2 -e PYTHONPATH=/le -e LE_COMMIT=53da5982597709ba0fdf94ea37a84d822310fd84 \
-    -e LK_COMMIT=0a9caf8bf0f80097724e0c6147194c52c6b90f86 -e PYTHONUNBUFFERED=1 -v "$T/le":/le:ro -v "$T/lz/third_party":/lz/third_party:ro \
-    -v "$CORE/pqzl/params/n-study":/p:ro -v "$CORE/pqzl/params":/params:ro -v "$D":/set:ro --entrypoint /bin/sh "$IMG" -c \
-    "cp -r /params/codegen /w/ && ln -s /lz/third_party /w/third_party && cp /p/*.sage /w/ &&
-     cd /w/codegen && sage /w/e_s1_n.sage $specs" > "$D/.e-s1.txt.new" 2> "$D/.e-s1.err" || return 1
-  rm -f "$D/.e-s1.err" # the estimator's stderr (kept only when the run fails)
-  # the committed e-s1.txt is replaced only by a complete run that passes the check (review R2-C8)
-  python3 -I - "$D" <<'EOF' && mv "$D/.e-s1.txt.new" "$D/e-s1.txt"
+    tools lk && tools le && tools lz || return 1
+    T=$(cd "$PQZ_TOOLS" && pwd)
+    specs=$(for r in $RELS; do printf '/set/%s_params.sage ' "$r"; done)
+    "$CAP" docker run --rm --tmpfs /w --network none --memory 5g --cpus 2 -e PYTHONPATH=/le -e LE_COMMIT=53da5982597709ba0fdf94ea37a84d822310fd84 \
+        -e LK_COMMIT=0a9caf8bf0f80097724e0c6147194c52c6b90f86 -e PYTHONUNBUFFERED=1 -v "$T/le":/le:ro -v "$T/lz/third_party":/lz/third_party:ro \
+        -v "$CORE/pqzl/params/n-study":/p:ro -v "$CORE/pqzl/params":/params:ro -v "$D":/set:ro --entrypoint /bin/sh "$IMG" -c \
+        "cp -r /params/codegen /w/ && ln -s /lz/third_party /w/third_party && cp /p/*.sage /w/ &&
+     cd /w/codegen && sage /w/e_s1_n.sage $specs" >"$D/.e-s1.txt.new" 2>"$D/.e-s1.err" || return 1
+    rm -f "$D/.e-s1.err" # the estimator's stderr (kept only when the run fails)
+    # the committed e-s1.txt is replaced only by a complete run that passes the check (review R2-C8)
+    python3 -I - "$D" <<'EOF' && mv "$D/.e-s1.txt.new" "$D/e-s1.txt"
 import os, re, sys, tomllib
 d = sys.argv[1]
 t = tomllib.load(open(os.path.join(d, "set.toml"), "rb"))
@@ -77,86 +86,110 @@ EOF
 
 # codegen: LaZer's codegen per spec (as the earlier per-set regen.sh, now set-generic)
 step_codegen() {
-  tools lz || return 1
-  LZ=$(cd "$PQZ_TOOLS/lz" && pwd)
-  [ "$(git -C "$LZ" rev-parse HEAD)" = 3330e487228f633eceb322807b13a596b516770f ] || { echo "LaZer must be at 3330e48" >&2; return 1; }
-  O=$D/.codegen
-  rm -rf "$O" && mkdir -p "$O"
-  rc=0
-  { echo "LaZer $(git -C "$LZ" rev-parse HEAD); image $IMG; set $S"
-    for r in $RELS; do
-      "$CAP" docker run --rm --tmpfs /w --network none --memory 2g --cpus 1 -v "$LZ/third_party":/lz/third_party:ro \
-        -v "$CORE/pqzl/params/codegen":/lz/codegen:ro -v "$D/${r}_params.sage":/lz/params.sage:ro --entrypoint /bin/sh "$IMG" -c \
-        'cp -r /lz/codegen /w/ && ln -s /lz/third_party /w/third_party && cd /w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage' \
-        > "$O/pqz_${r}_params.h" 2> "$O/$r.err" || rc=1
-      echo "== $r: $(wc -c < "$O/pqz_${r}_params.h") B, sha256 $(sha256sum < "$O/pqz_${r}_params.h" | cut -c1-16)"
-      sed -n -e '3,5p' -e '/^\/\/ Proof size/{n;p}' "$O/pqz_${r}_params.h" | sed 's/^/   /'
-      grep -v 'rop: ' "$O/$r.err" | sed 's/^/   stderr: /' | head -20
-      rm -f "$O/$r.err"
-      if [ "$FROZEN" = True ]; then
-        if cmp -s "$O/pqz_${r}_params.h" "$D/pqz_${r}_params.h"; then echo "   identical to the frozen header"; else echo "   DIFFERENT from the frozen header"; rc=1; fi
-      fi
-    done
-    echo "codegen rc=$rc"
-  } > "$O/codegen.txt" 2>&1
-  if [ "$FROZEN" = True ]; then
-    cp "$O/codegen.txt" "$D/codegen-check.txt"; rm -rf "$O"
-  elif [ $rc = 0 ]; then
-    mv "$O"/pqz_*_params.h "$O/codegen.txt" "$D/" && rm -rf "$O"
-  else
-    echo "codegen failed: the committed headers are unchanged; outputs in $O (codegen.txt)" >&2
-  fi
-  return $rc
+    tools lz || return 1
+    LZ=$(cd "$PQZ_TOOLS/lz" && pwd)
+    [ "$(git -C "$LZ" rev-parse HEAD)" = 3330e487228f633eceb322807b13a596b516770f ] || {
+        echo "LaZer must be at 3330e48" >&2
+        return 1
+    }
+    O=$D/.codegen
+    rm -rf "$O" && mkdir -p "$O"
+    rc=0
+    {
+        echo "LaZer $(git -C "$LZ" rev-parse HEAD); image $IMG; set $S"
+        for r in $RELS; do
+            "$CAP" docker run --rm --tmpfs /w --network none --memory 2g --cpus 1 -v "$LZ/third_party":/lz/third_party:ro \
+                -v "$CORE/pqzl/params/codegen":/lz/codegen:ro -v "$D/${r}_params.sage":/lz/params.sage:ro --entrypoint /bin/sh "$IMG" -c \
+                'cp -r /lz/codegen /w/ && ln -s /lz/third_party /w/third_party && cd /w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage' \
+                >"$O/pqz_${r}_params.h" 2>"$O/$r.err" || rc=1
+            echo "== $r: $(wc -c <"$O/pqz_${r}_params.h") B, sha256 $(sha256sum <"$O/pqz_${r}_params.h" | cut -c1-16)"
+            sed -n -e '3,5p' -e '/^\/\/ Proof size/{n;p}' "$O/pqz_${r}_params.h" | sed 's/^/   /'
+            grep -v 'rop: ' "$O/$r.err" | sed 's/^/   stderr: /' | head -20
+            rm -f "$O/$r.err"
+            if [ "$FROZEN" = True ]; then
+                if cmp -s "$O/pqz_${r}_params.h" "$D/pqz_${r}_params.h"; then echo "   identical to the frozen header"; else
+                    echo "   DIFFERENT from the frozen header"
+                    rc=1
+                fi
+            fi
+        done
+        echo "codegen rc=$rc"
+    } >"$O/codegen.txt" 2>&1
+    if [ "$FROZEN" = True ]; then
+        cp "$O/codegen.txt" "$D/codegen-check.txt"
+        rm -rf "$O"
+    elif [ $rc = 0 ]; then
+        mv "$O"/pqz_*_params.h "$O/codegen.txt" "$D/" && rm -rf "$O"
+    else
+        echo "codegen failed: the committed headers are unchanged; outputs in $O (codegen.txt)" >&2
+    fi
+    return $rc
 }
 
 step_rust() { python3 -I "$CORE/pqzl/params/to_rust.py" "$S"; }
 
 # (written beside, moved over the committed e-s0.txt only when the gate line says MET: review R2-C8)
-step_e_s0() { SET=$S "$CAP" "$HERE/run_e_s0_set.sh" > "$D/.e-s0.txt.new" && grep -q "GATE .*: MET" "$D/.e-s0.txt.new" &&
-  mv "$D/.e-s0.txt.new" "$D/e-s0.txt"; }
+step_e_s0() { SET=$S "$CAP" "$HERE/run_e_s0_set.sh" >"$D/.e-s0.txt.new" && grep -q "GATE .*: MET" "$D/.e-s0.txt.new" &&
+    mv "$D/.e-s0.txt.new" "$D/e-s0.txt"; }
 
 step_kat() {
-  [ -n "${PQZ_WORK:-}" ] || { echo "PQZ_WORK: a work directory for the KAT build" >&2; return 1; }
-  W=$PQZ_WORK/lazer-kat-$S
-  PQZ_SET=$S "$CAP" "$CORE/pqzl/kat/build-lazer-dump.sh" "$W" v3 > "$W.log" 2>&1 || { echo "see $W.log" >&2; return 1; }
-  "$W/lazer_dump-v3" > "$D/lazer-3330e48-kat.json" && cp "$W/build-info-v3.txt" "$D/lazer-3330e48-kat-build.txt" &&
-    (cd "$CORE/pqzl" && export B="${B:-build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG}}" && # build.sh's directory rule (8b re-review N2)
-     PQZ_SET=$S "$CAP" sh -c './build.sh native && "$B/native/kat_dump" > "$B/native/kat-pqz.json"' &&
-     python3 -I kat/check.py "$D/lazer-3330e48-kat.json" "$B/native/kat-pqz.json")
+    [ -n "${PQZ_WORK:-}" ] || {
+        echo "PQZ_WORK: a work directory for the KAT build" >&2
+        return 1
+    }
+    W=$PQZ_WORK/lazer-kat-$S
+    PQZ_SET=$S "$CAP" "$CORE/pqzl/kat/build-lazer-dump.sh" "$W" v3 >"$W.log" 2>&1 || {
+        echo "see $W.log" >&2
+        return 1
+    }
+    "$W/lazer_dump-v3" >"$D/lazer-3330e48-kat.json" && cp "$W/build-info-v3.txt" "$D/lazer-3330e48-kat-build.txt" &&
+        (cd "$CORE/pqzl" && export B="${B:-build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG}}" && # build.sh's directory rule (8b re-review N2)
+            PQZ_SET=$S "$CAP" sh -c './build.sh native && "$B/native/kat_dump" > "$B/native/kat-pqz.json"' &&
+            python3 -I kat/check.py "$D/lazer-3330e48-kat.json" "$B/native/kat-pqz.json")
 }
 
 step_fixtures() { PQZ_SET=$S "$CAP" "$CORE/pqzl/rust/tests/fixtures/cheating/export.sh"; }
 
 step_vectors() {
-  [ "$CORE_ONLY" = True ] && { echo "skipped (core_only set: no pqz-stmt / precompile vectors)"; return 0; }
-  PQZ_SET=$S "$CAP" "$CORE/ffi/vectors/run.sh" "$S-$(date -u +%Y%m%d)" write
+    [ "$CORE_ONLY" = True ] && {
+        echo "skipped (core_only set: no pqz-stmt / precompile vectors)"
+        return 0
+    }
+    PQZ_SET=$S "$CAP" "$CORE/ffi/vectors/run.sh" "$S-$(date -u +%Y%m%d)" write
 }
 
 step_sol() {
-  [ "$CORE_ONLY" = True ] && { echo "skipped (core_only set: no contracts)"; return 0; }
-  T=$D/.solcheck
-  V=$(sed -n 's/^solc_version = "\(.*\)"$/\1/p' "$REPO/smartcontracts/evm/foundry.toml" | head -1)
-  rm -rf "$T" && mkdir -p "$T/src" && cp "$D/PqzSet.sol" "$T/src/" &&
-    (cd "$T" && "$CAP" forge build --root "$T" --offline --use "$V")
-  rc=$?
-  rm -rf "$T"
-  [ $rc = 0 ] || return 1
-  if [ "${PQZ_SOL_INSTALL:-0}" = 1 ]; then
-    cp "$D/PqzSet.sol" "$REPO/smartcontracts/evm/src/pqz/PqzSet.sol" && echo "installed as smartcontracts/evm/src/pqz/PqzSet.sol"
-  else
-    echo "compiled; smartcontracts/evm/src/pqz/PqzSet.sol unchanged (PQZ_SOL_INSTALL=1 installs it)"
-  fi
+    [ "$CORE_ONLY" = True ] && {
+        echo "skipped (core_only set: no contracts)"
+        return 0
+    }
+    T=$D/.solcheck
+    V=$(sed -n 's/^solc_version = "\(.*\)"$/\1/p' "$REPO/smartcontracts/evm/foundry.toml" | head -1)
+    rm -rf "$T" && mkdir -p "$T/src" && cp "$D/PqzSet.sol" "$T/src/" &&
+        (cd "$T" && "$CAP" forge build --root "$T" --offline --use "$V")
+    rc=$?
+    rm -rf "$T"
+    [ $rc = 0 ] || return 1
+    if [ "${PQZ_SOL_INSTALL:-0}" = 1 ]; then
+        cp "$D/PqzSet.sol" "$REPO/smartcontracts/evm/src/pqz/PqzSet.sol" && echo "installed as smartcontracts/evm/src/pqz/PqzSet.sol"
+    else
+        echo "compiled; smartcontracts/evm/src/pqz/PqzSet.sol unchanged (PQZ_SOL_INSTALL=1 installs it)"
+    fi
 }
 
 step_gate() { PQZ_SET=$S "$CAP" "$CORE/gate.sh"; }
 
 [ "$1" = all ] && set -- specs e_s1 codegen rust e_s0 kat fixtures vectors sol gate
 for st in "$@"; do
-  case $st in specs | e_s1 | codegen | rust | e_s0 | kat | fixtures | vectors | sol | gate) ;; *) echo "make.sh: unknown step $st" >&2; exit 2 ;; esac
-  echo "== $S: $st"
-  if ! "step_$st"; then
-    echo "make.sh $S: step $st FAILED (logs: $D/, pqz-core/runs/gate/, pqz-core/ffi/vectors/runs/)"
-    exit 1
-  fi
+    case $st in specs | e_s1 | codegen | rust | e_s0 | kat | fixtures | vectors | sol | gate) ;; *)
+        echo "make.sh: unknown step $st" >&2
+        exit 2
+        ;;
+    esac
+    echo "== $S: $st"
+    if ! "step_$st"; then
+        echo "make.sh $S: step $st FAILED (logs: $D/, pqz-core/runs/gate/, pqz-core/ffi/vectors/runs/)"
+        exit 1
+    fi
 done
 echo "make.sh $S: $* done"

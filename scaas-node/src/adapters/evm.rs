@@ -12,10 +12,10 @@ use serde_json::{json, Value};
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
+use crate::external_pull::Job;
 use crate::finality::{quorum_ok, safe_head, Mode};
 use crate::guard::{self, Guard};
 use crate::indexer::{pay_events, pay_filter};
-use crate::odoo::Job;
 use crate::submit::job_digest;
 
 pub struct EvmAdapter {
@@ -26,7 +26,7 @@ pub struct EvmAdapter {
     mode: Mode,
     quorum: usize,
     max_gas: u64,
-    /// Token đã đăng ký (làm mới từ `node_config`); event của contract lạ không bao giờ gửi Odoo.
+    /// Token đã đăng ký (làm mới từ `node_config`); event của contract lạ không bao giờ gửi ExternalPull.
     pub tokens: Arc<RwLock<Vec<Address>>>,
     /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
     guard: Guard,
@@ -35,20 +35,35 @@ pub struct EvmAdapter {
 }
 
 impl EvmAdapter {
-    pub fn new(cfg: &ChainCfg, chains: Vec<Chain>, tokens: Arc<RwLock<Vec<Address>>>) -> Result<Self> {
+    pub fn new(
+        cfg: &ChainCfg,
+        chains: Vec<Chain>,
+        tokens: Arc<RwLock<Vec<Address>>>,
+    ) -> Result<Self> {
         if chains.is_empty() {
             return Err(anyhow!("chain {}: no lane", cfg.chain_key()));
         }
         let lanes = chains
             .iter()
             .zip(&cfg.lanes)
-            .map(|(c, &i)| Lane { index: i, address: format!("{:#x}", c.address()) })
+            .map(|(c, &i)| Lane {
+                index: i,
+                address: format!("{:#x}", c.address()),
+            })
             .collect();
-        let mode = if cfg.finality.mode == "tag" { Mode::Tag } else { Mode::Depth(cfg.finality.depth) };
+        let mode = if cfg.finality.mode == "tag" {
+            Mode::Tag
+        } else {
+            Mode::Depth(cfg.finality.depth)
+        };
         Ok(Self {
             guard: Guard::new(cfg, tokens.clone())?,
             key: cfg.chain_key(),
-            family: if cfg.family == "hedera" { Family::Hedera } else { Family::Evm },
+            family: if cfg.family == "hedera" {
+                Family::Hedera
+            } else {
+                Family::Evm
+            },
             chains,
             lanes,
             mode,
@@ -64,7 +79,10 @@ impl EvmAdapter {
     }
     /// [`ChainAdapter::build`] on `chain`: the guard, the fill, the simulation, the relay fee's price.
     async fn build_on(&self, job: &Job, chain: &Chain) -> std::result::Result<Built, SimError> {
-        let mut w = self.guard.work(job, self.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let mut w = self
+            .guard
+            .work(job, self.fee_recipient)
+            .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         self.guard.check(chain, &w).await?;
         self.guard.pqz_fill(chain, &mut w).await?; // group 3f: a PQZ debit's verdict, before the simulation
         let gas = guard::gas(chain, &w, self.max_gas).await?;
@@ -76,11 +94,20 @@ impl EvmAdapter {
                 return Err(SimError::Revert("RELAY_FEE_REFUSED: the generic lane runner does not price an OP-stack L1 data fee \
                                              (the EVM submitter does)".into()));
             }
-            let fees = chain.fees().await.map_err(|e| SimError::Transport(format!("fees: {e:#}")))?;
-            self.guard.relay_covers(chain.address(), &w, gas, guard::fee_ceiling(fees.0), 0)?;
+            let fees = chain
+                .fees()
+                .await
+                .map_err(|e| SimError::Transport(format!("fees: {e:#}")))?;
+            self.guard
+                .relay_covers(chain.address(), &w, gas, guard::fee_ceiling(fees.0), 0)?;
             meta["fees"] = json!([fees.0.to_string(), fees.1.to_string()]);
         }
-        Ok(Built { job_id: job.id, body: w.data.to_vec(), valid_until: w.valid_until, meta })
+        Ok(Built {
+            job_id: job.id,
+            body: w.data.to_vec(),
+            valid_until: w.valid_until,
+            meta,
+        })
     }
 }
 
@@ -89,6 +116,27 @@ pub fn failover_answer(reason: &str) -> String {
     format!("FAILOVER_ANSWER: refused on a failover endpoint's answer (the first endpoint did not answer); retried: {reason}")
 }
 
+tokio::task_local! {
+    /// scaas-rpc T18b / T19b: set while a family adapter's `build` runs (ARCH-POS-15: its reads fail over); every other read
+    /// of that adapter is endpoint 0's (F3).
+    pub(crate) static BUILDING: ();
+}
+
+/// scaas-rpc T24.1: every endpoint failed a family read. The error names the read and the crate's code only: no endpoint's
+/// text (a later endpoint's refusal, or its body quoted by a failed identity read) reaches a classifier that reads text; the
+/// detail goes to the log (redacted by the crate, CLI-RPC-11).
+pub(crate) fn all_failed(what: &str, e: &scaas_rpc::RpcError) -> anyhow::Error {
+    tracing::warn!(read = what, "no endpoint answered: {e}");
+    anyhow::anyhow!(
+        "{what}: no endpoint answered ({}); a failover endpoint's answer decides nothing",
+        e.code()
+    )
+}
+
+/// Whether this read is a family adapter's `build`'s.
+pub(crate) fn building() -> bool {
+    BUILDING.try_with(|_| ()).is_ok()
+}
 
 #[async_trait]
 impl ChainAdapter for EvmAdapter {
@@ -112,14 +160,20 @@ impl ChainAdapter for EvmAdapter {
         self.guard.load_services(&self.chains[0]).await
     }
 
-    fn refresh_tokens(&self, nc: &crate::odoo::NodeConfig) {
+    fn refresh_tokens(&self, nc: &crate::external_pull::NodeConfig) {
         if let Ok(mut t) = self.tokens.write() {
-            *t = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
+            *t = nc
+                .tokens
+                .iter()
+                .filter_map(crate::external_pull::TokenCfg::evm)
+                .collect();
         }
     }
 
     fn already_done(&self, job: &Job, reason: &str) -> bool {
-        self.guard.work(job, self.fee_recipient).is_ok_and(|w| guard::already_invalidated(&w.data, reason))
+        self.guard
+            .work(job, self.fee_recipient)
+            .is_ok_and(|w| guard::already_invalidated(&w.data, reason))
     }
 
     /// Fable E N-1: the `Submitter`'s classifier ([`guard::revert_verdict`]); a job that does not parse is `dead` as built.
@@ -130,7 +184,9 @@ impl ChainAdapter for EvmAdapter {
         };
         let mark = chain.failover_answers();
         match guard::revert_verdict(chain, &w, reason).await {
-            guard::Verdict::Dead(r) if chain.failover_answers() != mark => guard::Verdict::Requeue(failover_answer(&r)),
+            guard::Verdict::Dead(r) if chain.failover_answers() != mark => {
+                guard::Verdict::Requeue(failover_answer(&r))
+            }
             v => v,
         }
     }
@@ -141,8 +197,12 @@ impl ChainAdapter for EvmAdapter {
     }
 
     async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
-        let Ok(mut w) = self.guard.work(job, self.fee_recipient) else { return Ok(None) };
-        let chain = self.lane(0).map_err(|e| SimError::Transport(e.to_string()))?;
+        let Ok(mut w) = self.guard.work(job, self.fee_recipient) else {
+            return Ok(None);
+        };
+        let chain = self
+            .lane(0)
+            .map_err(|e| SimError::Transport(e.to_string()))?;
         guard::fill_digest(chain, &mut w).await?;
         Ok(w.digest().or_else(|| job_digest(job)))
     }
@@ -150,10 +210,14 @@ impl ChainAdapter for EvmAdapter {
     /// Fable recheck 5 R5-1 (the rule of the pipelined lane, R4-1, on this runner): a refusal read while a failover endpoint
     /// answered is a transport error (`FAILOVER_ANSWER`, back in the queue), never `dead`.
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let chain = self.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
+        let chain = self
+            .lane(lane)
+            .map_err(|e| SimError::Transport(e.to_string()))?;
         let mark = chain.failover_answers();
         match self.build_on(job, chain).await {
-            Err(SimError::Revert(r)) if chain.failover_answers() != mark => Err(SimError::Transport(failover_answer(&r))),
+            Err(SimError::Revert(r)) if chain.failover_answers() != mark => {
+                Err(SimError::Transport(failover_answer(&r)))
+            }
             r => r,
         }
     }
@@ -162,29 +226,55 @@ impl ChainAdapter for EvmAdapter {
         let chain = self.lane(lane)?;
         let to: Address = built.meta["to"].as_str().unwrap_or_default().parse()?;
         let gas = built.meta["gas"].as_u64().unwrap_or(self.max_gas);
-        let fee = |i: usize| built.meta["fees"][i].as_str().and_then(|f| f.parse::<u128>().ok());
+        let fee = |i: usize| {
+            built.meta["fees"][i]
+                .as_str()
+                .and_then(|f| f.parse::<u128>().ok())
+        };
         let fees = match (fee(0), fee(1)) {
             (Some(max), Some(tip)) => (max, tip),
             _ => chain.fees().await?,
         };
-        let (raw, hash) = chain.sign(sequence, to, Bytes::from(built.body), gas, fees).await?;
-        Ok(Signed { job_id: built.job_id, tx_id: format!("{hash:#x}"), raw: raw.to_vec(), valid_until: built.valid_until, sequence })
+        let (raw, hash) = chain
+            .sign(sequence, to, Bytes::from(built.body), gas, fees)
+            .await?;
+        Ok(Signed {
+            job_id: built.job_id,
+            tx_id: format!("{hash:#x}"),
+            raw: raw.to_vec(),
+            valid_until: built.valid_until,
+            sequence,
+        })
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
-        self.chains[0].send_raw(&Bytes::from(signed.raw.clone())).await
+        self.chains[0]
+            .send_raw(&Bytes::from(signed.raw.clone()))
+            .await
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let hash: B256 = tx_id.parse()?;
-        let rc = self.chains[0].primary().get_transaction_receipt(hash).await?;
+        let rc = self.chains[0]
+            .primary()
+            .get_transaction_receipt(hash)
+            .await?;
         if let Some(n) = rc.as_ref().and_then(|r| r.block_number) {
             self.chains[0].saw_block(n); // Fable recheck 2 P2-1
         }
         Ok(match rc {
-            Some(rc) if rc.status() => TxStatus::Mined { height: rc.block_number.unwrap_or_default(), tx_hash: None },
-            Some(_) => TxStatus::Reverted { reason: "execution reverted".into() },
-            None => match self.chains[0].primary().get_transaction_by_hash(hash).await? {
+            Some(rc) if rc.status() => TxStatus::Mined {
+                height: rc.block_number.unwrap_or_default(),
+                tx_hash: None,
+            },
+            Some(_) => TxStatus::Reverted {
+                reason: "execution reverted".into(),
+            },
+            None => match self.chains[0]
+                .primary()
+                .get_transaction_by_hash(hash)
+                .await?
+            {
                 Some(_) => TxStatus::Pending,
                 None => TxStatus::Unknown,
             },
@@ -192,21 +282,30 @@ impl ChainAdapter for EvmAdapter {
     }
 
     fn subject(&self, job: &Job) -> Option<(B256, bool)> {
-        self.guard.subject(&self.guard.work(job, self.fee_recipient).ok()?)
+        self.guard
+            .subject(&self.guard.work(job, self.fee_recipient).ok()?)
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
-        let chain = self.lane(lane)?;
-        Ok(chain.primary().get_transaction_count(chain.address()).latest().await?)
+        // F3: endpoint 0 only, its identity checked (scaas-rpc `first_nonce_at`, T14b)
+        self.lane(lane)?.nonce_at().await
     }
 
     async fn final_head(&self) -> Result<Option<Head>> {
         let c = &self.chains[0];
         let latest = c.primary().get_block_number().await?;
         c.saw_block(latest); // Fable recheck 3 R3-1: the health probe's first-endpoint head feeds the shared head
-        let finalized = if self.mode == Mode::Tag { c.finalized_number().await? } else { None };
-        let Some(safe) = safe_head(&self.mode, latest, finalized) else { return Ok(None) };
-        let Some(hash) = Chain::block_hash(c.primary(), safe).await else { return Ok(None) };
+        let finalized = if self.mode == Mode::Tag {
+            c.finalized_number().await?
+        } else {
+            None
+        };
+        let Some(safe) = safe_head(&self.mode, latest, finalized) else {
+            return Ok(None);
+        };
+        let Some(hash) = Chain::block_hash(c.primary(), safe).await else {
+            return Ok(None);
+        };
         let mut others = Vec::new();
         for p in c.others() {
             others.push(Chain::block_hash(p, safe).await);
@@ -214,7 +313,10 @@ impl ChainAdapter for EvmAdapter {
         if !quorum_ok(hash, &others, self.quorum) {
             return Ok(None);
         }
-        Ok(Some(Head { height: safe, hash: format!("{hash:#x}") }))
+        Ok(Some(Head {
+            height: safe,
+            hash: format!("{hash:#x}"),
+        }))
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
@@ -230,12 +332,20 @@ impl ChainAdapter for EvmAdapter {
             return Ok(vec![]);
         }
         let router = self.guard.router();
-        Ok(pay_events(&self.chains[0].primary().get_logs(&pay_filter(from, to, addrs, router)).await?, router))
+        Ok(pay_events(
+            &self.chains[0]
+                .primary()
+                .get_logs(&pay_filter(from, to, addrs, router))
+                .await?,
+            router,
+        ))
     }
 
     async fn lane_balance(&self, lane: usize) -> Result<Option<u128>> {
         let c = self.lane(lane)?;
-        Ok(Some(c.primary().get_balance(c.address()).await?.saturating_to()))
+        Ok(Some(
+            c.primary().get_balance(c.address()).await?.saturating_to(),
+        ))
     }
 
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
@@ -259,10 +369,17 @@ mod tests {
         let (url, _) = crate::chain::tests::fake_rpc(|r| match r["method"].as_str() {
             Some("eth_blockNumber") => json!({"result": "0x64"}),
             _ => json!({"error": {"code": -32000, "message": "busy"}}),
-        }).await;
-        let cfg = ChainCfg { evm_chain_number: 296, rpc_urls: vec![url], ..Default::default() };
-        let lane = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
-        let probe = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
+        })
+        .await;
+        let cfg = ChainCfg {
+            evm_chain_number: 296,
+            rpc_urls: vec![url],
+            ..Default::default()
+        };
+        let lane =
+            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
+        let probe =
+            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
         let a = EvmAdapter::new(&cfg, vec![probe], Default::default()).unwrap();
         assert_eq!(lane.seen_head(), 0, "control");
         let _ = a.final_head().await;

@@ -718,8 +718,16 @@ public sealed unsafe class Wallet : IDisposable
         for (var i = 0; i < recipients.Count; i++)
         {
             var r = recipients[i];
-            rs[i] = new RecipientC { Kind = r.Kind, KeyData = a.Pin(r.KeyData), KeyDataLen = (nuint)r.KeyData.Length, Version = r.Version,
-                KemPk = a.Pin(r.KemPk), KemPkLen = (nuint)r.KemPk.Length, Ephemeral = (byte)(r.Ephemeral ? 1 : 0) };
+            rs[i] = new RecipientC
+            {
+                Kind = r.Kind,
+                KeyData = a.Pin(r.KeyData),
+                KeyDataLen = (nuint)r.KeyData.Length,
+                Version = r.Version,
+                KemPk = a.Pin(r.KemPk),
+                KemPkLen = (nuint)r.KemPk.Length,
+                Ephemeral = (byte)(r.Ephemeral ? 1 : 0)
+            };
         }
         fixed (RecipientC* p = rs)
         {

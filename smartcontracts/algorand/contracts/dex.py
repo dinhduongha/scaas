@@ -27,15 +27,33 @@ settles both legs in one call, so nothing is held between transactions).
 Inner fees are 0 (the relayer pools them); no inner transaction rekeys or closes. No local state; one global, the router app id
 fixed at creation (OptIn refused); Update / Delete refused (the ARC-4 router accepts neither).
 """
+
 import typing
 
-from algopy import (Account, Application, Bytes, Global, GlobalState, OnCompleteAction, TransactionType, Txn, UInt64, arc4,
-                    gtxn, itxn, op, subroutine, urange)
+from algopy import (
+    Account,
+    Application,
+    Bytes,
+    Global,
+    GlobalState,
+    OnCompleteAction,
+    TransactionType,
+    Txn,
+    UInt64,
+    arc4,
+    gtxn,
+    itxn,
+    op,
+    subroutine,
+    urange,
+)
 
 from common import RELAY, Bytes32, MetaOp, Order, digest, mbr_paid, send, zero
 
-MTX_TRADE = ("mtx_trade((byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],"
-             "uint64,uint64,byte[32]),byte[],(uint64,uint64,uint128,uint128,byte[32],uint64))void")
+MTX_TRADE = (
+    "mtx_trade((byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],"
+    "uint64,uint64,byte[32]),byte[],(uint64,uint64,uint128,uint128,byte[32],uint64))void"
+)
 
 
 class Dex(arc4.ARC4Contract):
@@ -56,17 +74,29 @@ class Dex(arc4.ARC4Contract):
         """Holds a leg's auth for the `settle` before it in the group (see the module docstring); does nothing."""
 
     @arc4.abimethod
-    def settle(self, order_a: Order, op_a: MetaOp, auth_a: Bytes, order_b: Order, op_b: MetaOp, auth_b: Bytes,
-               mbr: arc4.StaticArray[arc4.UInt64, typing.Literal[4]]) -> None:
+    def settle(
+        self,
+        order_a: Order,
+        op_a: MetaOp,
+        auth_a: Bytes,
+        order_b: Order,
+        op_b: MetaOp,
+        auth_b: Bytes,
+        mbr: arc4.StaticArray[arc4.UInt64, typing.Literal[4]],
+    ) -> None:
         before = Global.current_application_address.min_balance
         by = submitter(self.router_app.value)
         bound(order_a, by)
         bound(order_b, by)
-        assert (order_a.sell_token == order_b.buy_token and order_b.sell_token == order_a.buy_token
-                and order_a.sell_token != order_a.buy_token), "orders do not pair (each buys what the other sells)"
-        assert (order_a.sell_amount.as_biguint() >= order_b.min_buy.as_biguint()
-                and order_b.sell_amount.as_biguint() >= order_a.min_buy.as_biguint()), \
-            "fill-or-kill: each side's sell_amount covers the other's min_buy"
+        assert (
+            order_a.sell_token == order_b.buy_token
+            and order_b.sell_token == order_a.buy_token
+            and order_a.sell_token != order_a.buy_token
+        ), "orders do not pair (each buys what the other sells)"
+        assert (
+            order_a.sell_amount.as_biguint() >= order_b.min_buy.as_biguint()
+            and order_b.sell_amount.as_biguint() >= order_a.min_buy.as_biguint()
+        ), "fill-or-kill: each side's sell_amount covers the other's min_buy"
         at = Txn.group_index + 1  # this settle's carries follow it (several settles may share a group)
         a = auth_a
         if not a:
@@ -80,8 +110,14 @@ class Dex(arc4.ARC4Contract):
         send(order_b.sell_token.as_uint64(), op_a.from_, order_b.sell_amount.as_biguint(), mbr[3].as_uint64())
         da = digest(op_a)
         db = digest(op_b)
-        arc4.emit("Matched", Bytes32.from_bytes(op.sha256(da.bytes + db.bytes)), order_a.sell_token,
-                  order_b.sell_token, da, db)
+        arc4.emit(
+            "Matched",
+            Bytes32.from_bytes(op.sha256(da.bytes + db.bytes)),
+            order_a.sell_token,
+            order_b.sell_token,
+            da,
+            db,
+        )
         mbr_paid(before, mbr[0].as_uint64() + mbr[1].as_uint64() + mbr[2].as_uint64() + mbr[3].as_uint64())
 
 
@@ -98,9 +134,13 @@ def submitter(router: UInt64) -> Account:
     i = Txn.group_index + 1
     if i < Global.group_size:
         n = gtxn.Transaction(i)
-        if (n.type == TransactionType.ApplicationCall and n.app_id.id == router
-                and n.on_completion == OnCompleteAction.NoOp and n.num_app_args > 0
-                and n.app_args(0) == arc4.arc4_signature(RELAY)):
+        if (
+            n.type == TransactionType.ApplicationCall
+            and n.app_id.id == router
+            and n.on_completion == OnCompleteAction.NoOp
+            and n.num_app_args > 0
+            and n.app_args(0) == arc4.arc4_signature(RELAY)
+        ):
             return n.sender
     return Txn.sender
 
@@ -111,8 +151,11 @@ def carried(start: UInt64) -> tuple[Bytes, UInt64]:
     (other calls may sit between: the T15 relay shape puts the router call right after `settle`)."""
     for i in urange(start, Global.group_size):
         t = gtxn.Transaction(i)
-        if (t.type == TransactionType.ApplicationCall and t.app_id == Global.current_application_id
-                and t.num_app_args == 2):  # this app's only 2-argument method is `carry`
+        if (
+            t.type == TransactionType.ApplicationCall
+            and t.app_id == Global.current_application_id
+            and t.num_app_args == 2
+        ):  # this app's only 2-argument method is `carry`
             return arc4.DynamicBytes.from_bytes(t.app_args(1)).native, i + 1
     op.err("a carried auth needs a carry call to this DEX")
 
@@ -121,8 +164,11 @@ def carried(start: UInt64) -> tuple[Bytes, UInt64]:
 def pull(order: Order, o: MetaOp, auth: Bytes, forwarded: UInt64) -> None:
     """Inner `[Payment forwarded → token][token.mtx_trade(o, auth, order)]` on the order's sell token."""
     app = Application(order.sell_token.as_uint64())
-    call = itxn.ApplicationCall(app_id=app, fee=0, app_args=(arc4.arc4_signature(MTX_TRADE), o.bytes,
-                                                             arc4.DynamicBytes(auth).bytes, order.bytes))
+    call = itxn.ApplicationCall(
+        app_id=app,
+        fee=0,
+        app_args=(arc4.arc4_signature(MTX_TRADE), o.bytes, arc4.DynamicBytes(auth).bytes, order.bytes),
+    )
     if forwarded:
         itxn.submit_txns(itxn.Payment(receiver=app.address, amount=forwarded, fee=0), call)
     else:

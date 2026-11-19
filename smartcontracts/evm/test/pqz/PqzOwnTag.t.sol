@@ -39,21 +39,31 @@ contract PqzOwnTagTest is PqzFixture {
     }
 
     function _op1(bytes32 from, bytes32 to, uint64 p, bool aud, bytes32 tag, uint256 seed)
-        internal view returns (IPqzToken.PqzTransferArgs memory t)
+        internal
+        view
+        returns (IPqzToken.PqzTransferArgs memory t)
     {
         t = _ts(_payload(p, 0, from, to, bytes32(0), _out(seed, aud), ""));
         t.ownTag = tag;
     }
 
     function _op7(bytes32 from, bytes32[] memory legs, uint64 p, bool aud, bytes32 tag, uint256 seed)
-        internal view returns (IPqzToken.PqzMultiArgs memory t)
+        internal
+        view
+        returns (IPqzToken.PqzMultiArgs memory t)
     {
         t = _ms(_mpayload(p, 0, from, bytes32(0), legs, _blob(seed, _outLen(legs.length, aud)), ""));
         t.ownTag = tag;
     }
 
-    function _burnArgs(bytes32 from, uint64 p, bytes32 tag, uint256 seed) internal view returns (IPqzToken.PqzBurnArgs memory b) {
-        b = _bs(bytes.concat(abi.encode(uint256(p), block.number + 50, uint256(0), from, bytes32(0)), _blob(seed, PqzCt.CT)));
+    function _burnArgs(bytes32 from, uint64 p, bytes32 tag, uint256 seed)
+        internal
+        view
+        returns (IPqzToken.PqzBurnArgs memory b)
+    {
+        b = _bs(
+            bytes.concat(abi.encode(uint256(p), block.number + 50, uint256(0), from, bytes32(0)), _blob(seed, PqzCt.CT))
+        );
         b.ownTag = tag;
     }
 
@@ -66,7 +76,9 @@ contract PqzOwnTagTest is PqzFixture {
     function _tail(bytes memory b) internal pure returns (bytes32 tag, uint64[] memory kv, bytes memory r) {
         uint256 n = uint8(b[b.length - 1]);
         kv = new uint64[](n);
-        for (uint256 i; i < n; ++i) kv[i] = uint64(bytes8(_cut(b, b.length - 1 - 8 * n + 8 * i, 8)));
+        for (uint256 i; i < n; ++i) {
+            kv[i] = uint64(bytes8(_cut(b, b.length - 1 - 8 * n + 8 * i, 8)));
+        }
         tag = bytes32(_cut(b, b.length - 33 - 8 * n, 32));
         r = _cut(b, 0, b.length - 33 - 8 * n - PqzCt.VP);
     }
@@ -133,14 +145,16 @@ contract PqzOwnTagTest is PqzFixture {
     function test_kv_op1() public {
         _shield(alice, 10);
         _rotate(bob, 1, _pk(31));
-        bytes32 ref = tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, false, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
+        bytes32 ref =
+            tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, false, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
         (, uint64[] memory kv,) = _tail(tok.pqzEntryBlob(ref));
         assertEq(abi.encode(kv), abi.encode(_kv1(1)), "the receiver's current version, read in the call");
     }
 
     function test_kv_op1Auditor() public {
         _shield(alice, 10);
-        bytes32 ref = tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, true, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
+        bytes32 ref =
+            tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, true, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
         (, uint64[] memory kv, bytes memory r) = _tail(tok.pqzEntryBlob(ref));
         assertEq(abi.encode(kv), abi.encode(_kv2(0, 0)), "pk_t, then pk_a");
         assertEq(r, _rOf(_out(5, true), bob), "R with the auditor copy");
@@ -148,7 +162,9 @@ contract PqzOwnTagTest is PqzFixture {
 
     function test_kv_op7() public {
         _shield(alice, 10);
-        bytes32 ref = tok.mtxConfidentialTransfer(_op7(alice, _two(bob, carol), 1, true, TAG, 6), PROOF, _pqAuth(), "", noVerdict());
+        bytes32 ref = tok.mtxConfidentialTransfer(
+            _op7(alice, _two(bob, carol), 1, true, TAG, 6), PROOF, _pqAuth(), "", noVerdict()
+        );
         (, uint64[] memory kv,) = _tail(tok.pqzEntryBlob(ref));
         uint64[] memory want = new uint64[](3);
         assertEq(abi.encode(kv), abi.encode(want), "every leg, then the auditor");
@@ -161,11 +177,15 @@ contract PqzOwnTagTest is PqzFixture {
         _rotate(carol, 1, _pk(32));
         _rotate(carol, 2, _pk(33));
         _rotate(bob, 1, _pk(31));
-        bytes32 ref = tok.mtxConfidentialTransfer(_op7(alice, _two(carol, bob), 1, false, TAG, 6), PROOF, _pqAuth(), "", noVerdict());
+        bytes32 ref = tok.mtxConfidentialTransfer(
+            _op7(alice, _two(carol, bob), 1, false, TAG, 6), PROOF, _pqAuth(), "", noVerdict()
+        );
         (, uint64[] memory kv,) = _tail(tok.pqzEntryBlob(ref));
         assertEq(abi.encode(kv), abi.encode(_kv2(2, 1)), "carol 2, bob 1, as the legs");
         _shield(alice, 3);
-        ref = tok.mtxConfidentialTransfer(_op7(alice, _two(bob, carol), 2, false, TAG, 7), PROOF, _pqAuth(), "", noVerdict());
+        ref = tok.mtxConfidentialTransfer(
+            _op7(alice, _two(bob, carol), 2, false, TAG, 7), PROOF, _pqAuth(), "", noVerdict()
+        );
         (, kv,) = _tail(tok.pqzEntryBlob(ref));
         assertEq(abi.encode(kv), abi.encode(_kv2(1, 2)), "bob 1, carol 2, as the legs");
     }
@@ -173,10 +193,12 @@ contract PqzOwnTagTest is PqzFixture {
     /// The auditor rotated between two debits: each blob names the version read in its own call.
     function test_kv_auditorRotated() public {
         _shield(alice, 10);
-        bytes32 r0 = tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, true, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
+        bytes32 r0 =
+            tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, true, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
         _rotate(aud, 1, _pk(36));
         _shield(alice, 3);
-        bytes32 r1 = tok.mtxConfidentialTransferSingle(_op1(alice, bob, 2, true, TAG, 6), PROOF, _pqAuth(), "", noVerdict());
+        bytes32 r1 =
+            tok.mtxConfidentialTransferSingle(_op1(alice, bob, 2, true, TAG, 6), PROOF, _pqAuth(), "", noVerdict());
         (, uint64[] memory k0,) = _tail(tok.pqzEntryBlob(r0));
         (, uint64[] memory k1,) = _tail(tok.pqzEntryBlob(r1));
         assertEq(abi.encode(k0), abi.encode(_kv2(0, 0)), "before the rotation");
@@ -187,12 +209,16 @@ contract PqzOwnTagTest is PqzFixture {
 
     function test_rOf_op1() public {
         _shield(alice, 10);
-        bytes32 ref = tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, true, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
+        bytes32 ref =
+            tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, true, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
         address p = tok.pqzAccount(alice, 0).accBlob;
         assertEq(PqzCore.rOf(p), _rOf(_out(5, true), bob));
         assertEq(tok.transferEntry(ref), _rOf(_out(5, true), bob), "transferEntry = R");
-        assertEq(tok.pqzAcc(alice, 0), bytes.concat(_cut(_out(5, true), 0, PqzCt.PK), _cut(_out(5, true), PqzCt.CT, PqzCt.V)),
-            "acc = (u, v_f) at the offsets the tail leaves");
+        assertEq(
+            tok.pqzAcc(alice, 0),
+            bytes.concat(_cut(_out(5, true), 0, PqzCt.PK), _cut(_out(5, true), PqzCt.CT, PqzCt.V)),
+            "acc = (u, v_f) at the offsets the tail leaves"
+        );
     }
 
     function test_rOf_op7() public {
@@ -221,7 +247,9 @@ contract PqzOwnTagTest is PqzFixture {
         IPqzToken.PqzTransferArgs memory t = _ts(_payload(1, 0, alice, bob, bytes32(0), _out(5, false), _memo()));
         t.ownTag = TAG;
         bytes memory st = tok.transferSingleStatement(t, 0);
-        assertEq(bytes32(_cut(st, 608, 32)), keccak256(bytes.concat(_memo(), TAG)), "keccak256(salt || sealedMemo || ownTag)");
+        assertEq(
+            bytes32(_cut(st, 608, 32)), keccak256(bytes.concat(_memo(), TAG)), "keccak256(salt || sealedMemo || ownTag)"
+        );
     }
 
     function test_memoHash_bundle() public {
@@ -259,7 +287,8 @@ contract PqzOwnTagTest is PqzFixture {
     /// storage forms; a commit-reveal entry `keccak256(R) ‖ memo`.
     function test_transferEntry_unchanged() public {
         _shield(alice, 10);
-        bytes32 ref = tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, false, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
+        bytes32 ref =
+            tok.mtxConfidentialTransferSingle(_op1(alice, bob, 1, false, TAG, 5), PROOF, _pqAuth(), "", noVerdict());
         bytes memory r = _rOf(_out(5, false), bob);
         assertEq(tok.transferEntry(ref), r);
         assertEq(tok.transferCiphertextHash(ref), keccak256(r));

@@ -5,7 +5,9 @@
 use ark_ec::{CurveGroup, VariableBaseMSM};
 use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
 
-use crate::curve::{decode_point, decode_scalar, encode_point, encode_scalar, generator, point_len, Fr, ZCurve, G};
+use crate::curve::{
+    decode_point, decode_scalar, encode_point, encode_scalar, generator, point_len, Fr, ZCurve, G,
+};
 use crate::nonce::Nonces;
 use crate::transcript::Transcript;
 use crate::ZError;
@@ -37,7 +39,11 @@ impl<C: ZCurve> Gens<C> {
     /// `Hb ‖ U ‖ G_0 … G_63 ‖ H_0 … H_63` — the verifier's SSTORE2 blob.
     pub fn blob(&self) -> Vec<u8> {
         let mut b = Vec::with_capacity(130 * point_len::<C>());
-        for p in [&self.h, &self.u].into_iter().chain(&self.gs).chain(&self.hs) {
+        for p in [&self.h, &self.u]
+            .into_iter()
+            .chain(&self.gs)
+            .chain(&self.hs)
+        {
             b.extend_from_slice(&encode_point::<C>(p));
         }
         b
@@ -173,7 +179,9 @@ pub fn prove_unchecked<C: ZCurve>(
     assert!(n == 32 || n == 64);
     let one = Fr::<C>::one();
     let bits = v.into_bigint().to_bits_le();
-    let a_l: Vec<Fr<C>> = (0..n).map(|i| if bits[i] { one } else { Fr::<C>::zero() }).collect();
+    let a_l: Vec<Fr<C>> = (0..n)
+        .map(|i| if bits[i] { one } else { Fr::<C>::zero() })
+        .collect();
     let a_r: Vec<Fr<C>> = a_l.iter().map(|b| *b - one).collect();
     let (gs, hs) = (&gens.gs[..n], &gens.hs[..n]);
 
@@ -197,7 +205,9 @@ pub fn prove_unchecked<C: ZCurve>(
     let z2 = z * z;
     let l0: Vec<Fr<C>> = a_l.iter().map(|x| *x - z).collect();
     let l1 = s_l;
-    let r0: Vec<Fr<C>> = (0..n).map(|i| yn[i] * (a_r[i] + z) + z2 * twon[i]).collect();
+    let r0: Vec<Fr<C>> = (0..n)
+        .map(|i| yn[i] * (a_r[i] + z) + z2 * twon[i])
+        .collect();
     let r1: Vec<Fr<C>> = (0..n).map(|i| yn[i] * s_r[i]).collect();
     let t1 = inner::<C>(&l0, &r1) + inner::<C>(&l1, &r0);
     let t2 = inner::<C>(&l1, &r1);
@@ -247,7 +257,19 @@ pub fn prove_unchecked<C: ZCurve>(
         rs.push(rp);
         (av, bv, gv, hv) = (na, nb, ng, nh);
     }
-    Ok(RangeProof { a, s, t1: t1p, t2: t2p, ls, rs, taux, mu, t_hat, ipa_a: av[0], ipa_b: bv[0] })
+    Ok(RangeProof {
+        a,
+        s,
+        t1: t1p,
+        t2: t2p,
+        ls,
+        rs,
+        taux,
+        mu,
+        t_hat,
+        ipa_a: av[0],
+        ipa_b: bv[0],
+    })
 }
 
 /// Verify against commitment `v_com` (BP-1 and BP-2 of §8.2). Absorbs exactly what the
@@ -308,7 +330,11 @@ pub fn verify<C: ZCurve>(
     let mut s = vec![Fr::<C>::one(); n];
     for (i, si) in s.iter_mut().enumerate() {
         for j in 0..k {
-            *si *= if (i >> (k - 1 - j)) & 1 == 1 { us[j] } else { uinv[j] };
+            *si *= if (i >> (k - 1 - j)) & 1 == 1 {
+                us[j]
+            } else {
+                uinv[j]
+            };
         }
     }
     let yinvn = powers::<C>(y.inverse().expect("y != 0"), n);
@@ -357,10 +383,18 @@ mod tests {
         let gamma = Fr::<C>::rand(&mut rng);
         let vc = gens.g * v + gens.h * gamma;
         let mut nonces = Nonces::new(b"t", &mut rng);
-        (vc, prove_unchecked(&mut stmt::<C>(&vc, b"s"), gens, n, &v, &gamma, &mut nonces).unwrap())
+        (
+            vc,
+            prove_unchecked(&mut stmt::<C>(&vc, b"s"), gens, n, &v, &gamma, &mut nonces).unwrap(),
+        )
     }
 
-    fn check<C: ZCurve>(gens: &Gens<C>, n: usize, vc: &G<C>, p: &RangeProof<C>) -> Result<(), ZError> {
+    fn check<C: ZCurve>(
+        gens: &Gens<C>,
+        n: usize,
+        vc: &G<C>,
+        p: &RangeProof<C>,
+    ) -> Result<(), ZError> {
         verify(&mut stmt::<C>(vc, b"s"), gens, n, vc, p)
     }
 
@@ -379,7 +413,14 @@ mod tests {
             for bad in [Fr::<C>::from(1u128 << n), -Fr::<C>::one()] {
                 let mut rng = ChaCha20Rng::seed_from_u64(1);
                 let mut nn = Nonces::new(b"t", &mut rng);
-                let r = prove(&mut Transcript::new(), &g, n, &bad, &Fr::<C>::one(), &mut nn);
+                let r = prove(
+                    &mut Transcript::new(),
+                    &g,
+                    n,
+                    &bad,
+                    &Fr::<C>::one(),
+                    &mut nn,
+                );
                 assert!(matches!(r, Err(ZError::OutOfRange)));
                 let (vc, p) = setup::<C>(&g, n, bad);
                 assert!(check(&g, n, &vc, &p).is_err());
@@ -413,7 +454,6 @@ mod tests {
     }
 
     #[cfg(feature = "bn254")]
-
     #[test]
     fn bulletproofs_bn254() {
         suite::<Bn254>();

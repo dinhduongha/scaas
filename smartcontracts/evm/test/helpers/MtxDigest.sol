@@ -5,8 +5,10 @@ import {MtxHash} from "./MtxHash.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 interface ISaltedDomain {
-    function eip712Domain() external view returns (bytes1, string memory, string memory, uint256, address, bytes32,
-        uint256[] memory);
+    function eip712Domain()
+        external
+        view
+        returns (bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory);
 }
 
 /// The EIP-712 digests a test signs, computed from the type strings and the contract's `eip712Domain()` (ERC-5267). A
@@ -16,9 +18,18 @@ library MtxDigest {
     function domainSeparator(address c) internal view returns (bytes32) {
         (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) =
             ISaltedDomain(c).eip712Domain();
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                vc,
+                salt
+            )
+        );
     }
 
     function typed(address c, bytes32 structHash) internal view returns (bytes32) {

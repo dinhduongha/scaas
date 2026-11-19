@@ -23,7 +23,9 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 /// A "token" whose `payWithFee` answers false without moving anything.
 contract FalsePayToken {
     function payWithFee(address, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata)
-        external pure returns (bool)
+        external
+        pure
+        returns (bool)
     {
         return false;
     }
@@ -90,20 +92,38 @@ abstract contract MandateFixture is V2Fixture {
         e.validUntil = block.timestamp + 300;
     }
 
-    function _payDigest(MandateWallet c, MetaTxLib.UAEnvelope memory e, address token, address payee, uint256 amount,
-        bytes32 ref, uint64 ep) internal view returns (bytes32)
-    {
+    function _payDigest(
+        MandateWallet c,
+        MetaTxLib.UAEnvelope memory e,
+        address token,
+        address payee,
+        uint256 amount,
+        bytes32 ref,
+        uint64 ep
+    ) internal view returns (bytes32) {
         return uaDigest(address(c), UA_PAY_UNDER_MANDATE, e, abi.encode(token, _id(payee), amount, _ref(ref), ep));
     }
 
     /// The generic `UAMetaTransaction` of the delegate's pay on its pay lane (the same op as the named entry).
-    function _payM(address payee, uint256 amount, bytes32 ref) internal view returns (MetaTxLib.UAMetaTransaction memory m) {
-        m = _gen(_id(delegate), abi.encodeCall(MandateWallet.payUnderMandate, (address(t), _id(payee), amount, _ref(ref), _e(), _meta(ref))),
-            w.mandatePayLane(ref), 0);
+    function _payM(address payee, uint256 amount, bytes32 ref)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory m)
+    {
+        m = _gen(
+            _id(delegate),
+            abi.encodeCall(
+                MandateWallet.payUnderMandate, (address(t), _id(payee), amount, _ref(ref), _e(), _meta(ref))
+            ),
+            w.mandatePayLane(ref),
+            0
+        );
     }
 
     function _gen(bytes32 from, bytes memory data, uint256 batch, uint256 nonce)
-        internal view returns (MetaTxLib.UAMetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory m)
     {
         (m.from, m.data, m.batch, m.nonce, m.validUntil) = (from, data, batch, nonce, block.timestamp + 300);
     }
@@ -175,8 +195,11 @@ contract MandateWalletTest is MandateFixture {
         uint64 ep = _e();
         IUARegistry.UASig memory a = _ua(DELEGATE_PK, _payDigest(w, e, address(t), npp, 10, keccak256("mm"), ep));
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, _ref(keccak256("mm")),
-            _ref(keccak256("other"))));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IMetaTokenV2.PayMetaMismatch.selector, _ref(keccak256("mm")), _ref(keccak256("other"))
+            )
+        );
         w.mtxPayUnderMandate(e, address(t), _id(npp), 10, _ref(keccak256("mm")), ep, a, _meta(keccak256("other")));
         assertFalse(w.refUsed(_ref(keccak256("mm"))));
         vm.prank(relayer);
@@ -200,7 +223,9 @@ contract MandateWalletTest is MandateFixture {
     }
 
     function test_per_payment_cap_and_zero() public {
-        _payExpect(npp, 1_001, keccak256("big"), abi.encodeWithSelector(MandateWallet.OverPaymentCap.selector, 1_001, 1_000));
+        _payExpect(
+            npp, 1_001, keccak256("big"), abi.encodeWithSelector(MandateWallet.OverPaymentCap.selector, 1_001, 1_000)
+        );
         _payExpect(npp, 0, keccak256("zero"), abi.encodeWithSelector(MandateWallet.OverPaymentCap.selector, 0, 1_000));
         _pay(npp, 1_000, keccak256("exact"));
     }
@@ -209,10 +234,10 @@ contract MandateWalletTest is MandateFixture {
         _pay(npp, 1_000, keccak256("a"));
         _pay(npp, 1_000, keccak256("b"));
         _payExpect(npp, 600, keccak256("c"), abi.encodeWithSelector(MandateWallet.OverPeriodCap.selector, 2_600, 2_500));
-        _pay(npp, 500, keccak256("d"));                       // exactly the cap
+        _pay(npp, 500, keccak256("d")); // exactly the cap
         vm.warp(block.timestamp + 1 days - 1);
         _payExpect(npp, 1, keccak256("e"), abi.encodeWithSelector(MandateWallet.OverPeriodCap.selector, 2_501, 2_500));
-        vm.warp(block.timestamp + 1);                        // the period ends at periodStart + periodSeconds
+        vm.warp(block.timestamp + 1); // the period ends at periodStart + periodSeconds
         _pay(npp, 600, keccak256("c"));
         (,,, uint64 start,,, uint128 spent) = w.mandates(address(t));
         assertEq(start, block.timestamp);
@@ -221,7 +246,9 @@ contract MandateWalletTest is MandateFixture {
     }
 
     function test_payee_not_allowed_and_removed() public {
-        _payExpect(stranger, 10, keccak256("x"), abi.encodeWithSelector(MandateWallet.PayeeNotAllowed.selector, _id(stranger)));
+        _payExpect(
+            stranger, 10, keccak256("x"), abi.encodeWithSelector(MandateWallet.PayeeNotAllowed.selector, _id(stranger))
+        );
         _owner(abi.encodeCall(MandateWallet.setPayee, (address(t), _id(npp), false)));
         _payExpect(npp, 10, keccak256("y"), abi.encodeWithSelector(MandateWallet.PayeeNotAllowed.selector, _id(npp)));
     }
@@ -231,15 +258,21 @@ contract MandateWalletTest is MandateFixture {
         t2.mint(address(w), 100, EnvKit.codeUidOf(address(t2)));
         vm.prank(owner);
         w.setMandate(address(t2), _id(delegate), 10, 10, 1 days, uint64(block.timestamp + 1 days));
-        MetaTxLib.UAMetaTransaction memory m = _gen(_id(delegate),
-            abi.encodeCall(MandateWallet.payUnderMandate, (address(t2), _id(npp), 5, _ref(bytes32("t2")), 1, _meta(bytes32("t2")))), w.mandatePayLane("t2"), 0);
+        MetaTxLib.UAMetaTransaction memory m = _gen(
+            _id(delegate),
+            abi.encodeCall(
+                MandateWallet.payUnderMandate, (address(t2), _id(npp), 5, _ref(bytes32("t2")), 1, _meta(bytes32("t2")))
+            ),
+            w.mandatePayLane("t2"),
+            0
+        );
         IUARegistry.UASig memory a = _ua(DELEGATE_PK, w.mtxDigest(m));
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.PayeeNotAllowed.selector, _id(npp)));
         w.mtxExecute(m, a);
     }
 
     function test_expired_mandate() public {
-        vm.warp(block.timestamp + 30 days);                  // at the expiry: still live
+        vm.warp(block.timestamp + 30 days); // at the expiry: still live
         _pay(npp, 10, keccak256("last"));
         vm.warp(block.timestamp + 1);
         _payExpect(npp, 10, keccak256("x"), abi.encodeWithSelector(MandateWallet.MandateExpired.selector));
@@ -293,7 +326,7 @@ contract MandateWalletTest is MandateFixture {
         w.setPayee(address(t), _id(stranger), true);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         w.mtxPayUnderMandate(e, address(t), _id(stranger), 10, _ref(keccak256("x")), 1, a, _meta(keccak256("x")));
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);  // another ref: another digest
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // another ref: another digest
         w.mtxPayUnderMandate(e, address(t), _id(npp), 10, _ref(keccak256("y")), 1, a, _meta(keccak256("y")));
         NormalToken t2 = _normal(address(this), 0, address(this));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
@@ -322,9 +355,17 @@ contract MandateWalletTest is MandateFixture {
     }
 
     /// The generic `revoke(token, epoch)` of the delegate on the revoke lane.
-    function _revokeM(uint64 ep) internal view returns (MetaTxLib.UAMetaTransaction memory m, IUARegistry.UASig memory a) {
-        m = _gen(_id(delegate), abi.encodeWithSignature("revoke(address,uint64)", address(t), ep),
-            w.mandateRevokeLane(address(t), ep), 0);
+    function _revokeM(uint64 ep)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory m, IUARegistry.UASig memory a)
+    {
+        m = _gen(
+            _id(delegate),
+            abi.encodeWithSignature("revoke(address,uint64)", address(t), ep),
+            w.mandateRevokeLane(address(t), ep),
+            0
+        );
         a = _ua(DELEGATE_PK, w.mtxDigest(m));
     }
 
@@ -371,8 +412,8 @@ contract MandateWalletTest is MandateFixture {
         (MetaTxLib.UAEnvelope memory e, IUARegistry.UASig memory a) = _revokeSig(1);
         (MetaTxLib.UAMetaTransaction memory m, IUARegistry.UASig memory ga) = _revokeM(1);
         vm.startPrank(owner);
-        w.revoke(address(t));                                                     // epoch 2
-        w.setMandate(address(t), _id(delegate), 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));  // epoch 3
+        w.revoke(address(t)); // epoch 2
+        w.setMandate(address(t), _id(delegate), 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days)); // epoch 3
         vm.stopPrank();
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
         w.mtxDelegateRevoke(e, address(t), 1, a);
@@ -383,7 +424,7 @@ contract MandateWalletTest is MandateFixture {
         (e, a) = _revokeSig(3);
         w.mtxDelegateRevoke(e, address(t), 3, a);
         vm.prank(owner);
-        w.setMandate(address(t), _id(delegate), 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));  // epoch 5
+        w.setMandate(address(t), _id(delegate), 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days)); // epoch 5
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         w.mtxDelegateRevoke(e, address(t), 3, a);
     }
@@ -396,19 +437,23 @@ contract MandateWalletTest is MandateFixture {
         MetaTxLib.UAMetaTransaction memory m = _payM(npp, 900, keccak256("pending"));
         IUARegistry.UASig memory ga = _ua(DELEGATE_PK, w.mtxDigest(m));
         vm.startPrank(owner);
-        w.revoke(address(t));                                                     // epoch 2
-        w.setMandate(address(t), _id(delegate), 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));  // epoch 3
+        w.revoke(address(t)); // epoch 2
+        w.setMandate(address(t), _id(delegate), 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days)); // epoch 3
         vm.stopPrank();
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
-        w.mtxPayUnderMandate(e, address(t), _id(npp), 900, _ref(keccak256("pending")), 1, a, _meta(keccak256("pending")));
+        w.mtxPayUnderMandate(
+            e, address(t), _id(npp), 900, _ref(keccak256("pending")), 1, a, _meta(keccak256("pending"))
+        );
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
         w.mtxExecute(m, ga);
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);                    // the relayer cannot restamp it
-        w.mtxPayUnderMandate(e, address(t), _id(npp), 900, _ref(keccak256("pending")), 3, a, _meta(keccak256("pending")));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // the relayer cannot restamp it
+        w.mtxPayUnderMandate(
+            e, address(t), _id(npp), 900, _ref(keccak256("pending")), 3, a, _meta(keccak256("pending"))
+        );
         vm.prank(delegate);
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 2));
         w.payUnderMandate(address(t), _id(npp), 900, _ref(keccak256("pending")), 2, _meta(keccak256("pending")));
-        _pay(npp, 900, keccak256("pending"));                                     // re-signed under epoch 3
+        _pay(npp, 900, keccak256("pending")); // re-signed under epoch 3
         assertEq(t.balanceOf(npp), 900);
     }
 
@@ -419,7 +464,7 @@ contract MandateWalletTest is MandateFixture {
     /// that holds `now` (not a window starting at `now`), so the delegate cannot choose where a boundary falls.
     function test_period_windows_stay_on_the_grid() public {
         (uint64 p0,) = _period();
-        vm.warp(p0 + 2 days + 12 hours);                     // idle for two and a half periods
+        vm.warp(p0 + 2 days + 12 hours); // idle for two and a half periods
         _pay(npp, 1_000, keccak256("a"));
         (uint64 ps, uint128 spent) = _period();
         assertEq(ps, p0 + 2 days);
@@ -428,8 +473,8 @@ contract MandateWalletTest is MandateFixture {
         _pay(npp, 500, keccak256("c"));
         vm.warp(p0 + 3 days - 1);
         _payExpect(npp, 1, keccak256("d"), abi.encodeWithSelector(MandateWallet.OverPeriodCap.selector, 2_501, 2_500));
-        vm.warp(p0 + 3 days);                                // the grid boundary (a window opened on demand at
-        _pay(npp, 1, keccak256("d"));                        // p0 + 2.5 days would still be full here)
+        vm.warp(p0 + 3 days); // the grid boundary (a window opened on demand at
+        _pay(npp, 1, keccak256("d")); // p0 + 2.5 days would still be full here)
         (ps, spent) = _period();
         assertEq(ps, p0 + 3 days);
         assertEq(spent, 1);
@@ -440,14 +485,14 @@ contract MandateWalletTest is MandateFixture {
         _pay(npp, 1_000, keccak256("b"));
         uint64 start = uint64(block.timestamp);
         vm.warp(block.timestamp + 1 hours);
-        vm.prank(owner);                                                          // a later expiry, higher caps
+        vm.prank(owner); // a later expiry, higher caps
         w.setMandate(address(t), _id(delegate), 1_000, 3_000, 1 days, uint64(block.timestamp + 60 days));
         (uint64 ps, uint128 spent) = _period();
         assertEq(ps, start);
         assertEq(spent, 2_000);
         _pay(npp, 1_000, keccak256("c"));
         _payExpect(npp, 1, keccak256("d"), abi.encodeWithSelector(MandateWallet.OverPeriodCap.selector, 3_001, 3_000));
-        vm.warp(start + 1 days);                                                  // the period still ends on time
+        vm.warp(start + 1 days); // the period still ends on time
         _pay(npp, 1_000, keccak256("d"));
         assertEq(t.balanceOf(npp), 4_000);
     }
@@ -493,7 +538,8 @@ contract MandateWalletTest is MandateFixture {
         vm.expectRevert(MandateWallet.NotDelegate.selector);
         w.revoke(address(t), 1);
         (MetaTxLib.UAEnvelope memory e,) = _revokeSig(1);
-        IUARegistry.UASig memory bad = _ua(0xBAD, uaDigest(address(w), UA_DELEGATE_REVOKE, e, abi.encode(address(t), uint64(1))));
+        IUARegistry.UASig memory bad =
+            _ua(0xBAD, uaDigest(address(w), UA_DELEGATE_REVOKE, e, abi.encode(address(t), uint64(1))));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         w.mtxDelegateRevoke(e, address(t), 1, bad);
     }
@@ -561,8 +607,11 @@ contract MandateWalletTest is MandateFixture {
         MetaTxLib.UAMetaTransaction memory m =
             _gen(_id(owner), abi.encodeCall(MandateWallet.execute, (address(w), 0, inner)), 0, 1);
         IUARegistry.UASig memory a = _ua(OWNER_PK, w.mtxDigest(m));
-        vm.expectRevert(abi.encodeWithSelector(MandateWallet.CallFailed.selector,
-            abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                MandateWallet.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)
+            )
+        );
         w.mtxExecute(m, a);
     }
 
@@ -586,7 +635,9 @@ contract MandateWalletTest is MandateFixture {
     function _sig7739(uint256 pk, MetaTxLib.UAMetaTransfer memory x) internal view returns (bytes memory) {
         bytes32 app = Erc7739Kit.separator(address(t));
         bytes32 c = MtxHash.hashStruct(x);
-        assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), t.mtxTransferDigest(x), "the kit rebuilds the token digest");
+        assertEq(
+            keccak256(abi.encodePacked(hex"1901", app, c)), t.mtxTransferDigest(x), "the kit rebuilds the token digest"
+        );
         bytes32 m = Erc7739Kit.nested(address(w), app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c);
         return Erc7739Kit.wrap(_sig(pk, m), app, c, Erc7739Kit.UA_TRANSFER_TYPE);
     }
@@ -598,8 +649,8 @@ contract MandateWalletTest is MandateFixture {
         bytes4[4] memory banned = [bytes4(0x095ea7b3), 0x23b872dd, 0xd505accf, 0x39509351];
         for (uint256 b = 0; b < banned.length; b++) {
             for (uint256 i = 0; i + 4 <= code.length; i++) {
-                bool hit = code[i] == banned[b][0] && code[i + 1] == banned[b][1]
-                    && code[i + 2] == banned[b][2] && code[i + 3] == banned[b][3];
+                bool hit = code[i] == banned[b][0] && code[i + 1] == banned[b][1] && code[i + 2] == banned[b][2]
+                    && code[i + 3] == banned[b][3];
                 assertFalse(hit, "allowance selector in MandateWallet bytecode");
             }
         }
@@ -609,13 +660,17 @@ contract MandateWalletTest is MandateFixture {
 
     function test_allowlistPinned() public view {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = w.mtxSelectors();
-        bytes4[7] memory want = [IMetaTx.cancelNonce.selector,
-            bytes4(keccak256("payUnderMandate(address,bytes32,uint256,bytes32,uint64,(bytes32,bytes32,bool,uint16,bytes))")),
+        bytes4[7] memory want = [
+            IMetaTx.cancelNonce.selector,
+            bytes4(
+                keccak256("payUnderMandate(address,bytes32,uint256,bytes32,uint64,(bytes32,bytes32,bool,uint16,bytes))")
+            ),
             bytes4(keccak256("revoke(address,uint64)")),
             bytes4(keccak256("setMandate(address,bytes32,uint128,uint128,uint64,uint64)")),
             bytes4(keccak256("setPayee(address,bytes32,bool)")),
             bytes4(keccak256("revoke(address)")),
-            bytes4(keccak256("execute(address,uint256,bytes)"))];
+            bytes4(keccak256("execute(address,uint256,bytes)"))
+        ];
         assertEq(s.length, 7);
         for (uint256 i; i < 7; ++i) {
             assertEq(s[i], want[i]);
@@ -684,11 +739,17 @@ contract MandateWalletTest is MandateFixture {
         assertEq(vc, address(w));
         assertEq(salt_, UID_);
         assertEq(w.chainUid(), UID_);
-        assertEq(w.mandatePayLane(keccak256("r")), uint256(keccak256(abi.encodePacked("scaas.mandate.pay", keccak256("r")))));
-        assertEq(w.mandateRevokeLane(address(t), 3),
-            uint256(keccak256(abi.encodePacked("scaas.mandate.revoke", address(t), uint64(3)))));
-        assertEq(w.mandateRevokeLane(address(t), 3), uint256(keccak256(bytes.concat(
-            bytes("scaas.mandate.revoke"), bytes20(address(t)), bytes8(uint64(3))))));
+        assertEq(
+            w.mandatePayLane(keccak256("r")), uint256(keccak256(abi.encodePacked("scaas.mandate.pay", keccak256("r"))))
+        );
+        assertEq(
+            w.mandateRevokeLane(address(t), 3),
+            uint256(keccak256(abi.encodePacked("scaas.mandate.revoke", address(t), uint64(3))))
+        );
+        assertEq(
+            w.mandateRevokeLane(address(t), 3),
+            uint256(keccak256(bytes.concat(bytes("scaas.mandate.revoke"), bytes20(address(t)), bytes8(uint64(3)))))
+        );
     }
 
     /// After a revoke, a validly signed pay or delegate revoke reaches the op and finds no mandate.
@@ -747,8 +808,13 @@ contract HederaMandateWalletTest is MandateFixture {
     }
 
     function test_ed25519OwnerSetsMandateAndPaysByHand() public {
-        MetaTxLib.UAMetaTransaction memory m = _edOwnerCall(abi.encodeCall(MandateWallet.setMandate,
-            (address(t), _id(delegate), 100, 300, 1 days, uint64(block.timestamp + 30 days))), 0);
+        MetaTxLib.UAMetaTransaction memory m = _edOwnerCall(
+            abi.encodeCall(
+                MandateWallet.setMandate,
+                (address(t), _id(delegate), 100, 300, 1 days, uint64(block.timestamp + 30 days))
+            ),
+            0
+        );
         IUARegistry.UASig memory a = _edAs(ED_KEY, hw.mtxDigest(m));
         vm.prank(relayer);
         hw.mtxExecute(m, a);
@@ -757,7 +823,10 @@ contract HederaMandateWalletTest is MandateFixture {
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         hw.mtxExecute(m, a);
         // pays by hand: an owner call `execute(token, payWithFee…)`, on the same lane
-        bytes memory pay = abi.encodeCall(IERC20Payment.payWithFee, (npp, 40, FeeMode.NONE, 0, address(0), _ref(keccak256("hand")), _meta(keccak256("hand"))));
+        bytes memory pay = abi.encodeCall(
+            IERC20Payment.payWithFee,
+            (npp, 40, FeeMode.NONE, 0, address(0), _ref(keccak256("hand")), _meta(keccak256("hand")))
+        );
         _ownerRaw(abi.encodeCall(MandateWallet.execute, (address(t), 0, pay)), 1);
         assertEq(t.balanceOf(npp), 40);
     }
@@ -785,8 +854,13 @@ contract HederaMandateWalletTest is MandateFixture {
     }
 
     function test_delegatePaysUnderMandateSetByEd25519Owner() public {
-        _ownerRaw(abi.encodeCall(MandateWallet.setMandate,
-            (address(t), _id(delegate), 100, 300, 1 days, uint64(block.timestamp + 30 days))), 0);
+        _ownerRaw(
+            abi.encodeCall(
+                MandateWallet.setMandate,
+                (address(t), _id(delegate), 100, 300, 1 days, uint64(block.timestamp + 30 days))
+            ),
+            0
+        );
         _ownerRaw(abi.encodeCall(MandateWallet.setPayee, (address(t), _id(npp), true)), 1);
         bytes32 ref = bytes32(uint256(7));
         MetaTxLib.UAEnvelope memory e = _payEnv(ref);
@@ -820,8 +894,12 @@ contract HederaMandateWalletTest is MandateFixture {
 
     /// A mandate on `t` for `d` (100 per payment, 300 per day) with `npp` approved, set by the ED25519 owner.
     function _mandateFor(address d) internal {
-        _ownerRaw(abi.encodeCall(MandateWallet.setMandate, (address(t), _id(d), 100, 300, 1 days,
-            uint64(block.timestamp + 1 days))), 0);
+        _ownerRaw(
+            abi.encodeCall(
+                MandateWallet.setMandate, (address(t), _id(d), 100, 300, 1 days, uint64(block.timestamp + 1 days))
+            ),
+            0
+        );
         _ownerRaw(abi.encodeCall(MandateWallet.setPayee, (address(t), _id(npp), true)), 1);
     }
 
@@ -836,8 +914,15 @@ contract HederaMandateWalletTest is MandateFixture {
         IUARegistry.UASig memory a = _edAs(ED_DEL, _payDigest(hw, p, address(t), npp, 50, "e", 1));
         hw.mtxPayUnderMandate(p, address(t), _id(npp), 50, _ref("e"), 1, a, _meta("e"));
         assertEq(t.balanceOf(npp), 50);
-        MetaTxLib.UAMetaTransaction memory late = _gen(_id(edDel),
-            abi.encodeCall(MandateWallet.payUnderMandate, (address(t), _id(npp), 50, _ref(bytes32("late")), 1, _meta(bytes32("late")))), hw.mandatePayLane("late"), 0);
+        MetaTxLib.UAMetaTransaction memory late = _gen(
+            _id(edDel),
+            abi.encodeCall(
+                MandateWallet.payUnderMandate,
+                (address(t), _id(npp), 50, _ref(bytes32("late")), 1, _meta(bytes32("late")))
+            ),
+            hw.mandatePayLane("late"),
+            0
+        );
         IUARegistry.UASig memory lateSig = _edAs(ED_DEL, hw.mtxDigest(late));
         MetaTxLib.UAEnvelope memory r = _edPayEnv(edDel, "r");
         r.batch = hw.mandateRevokeLane(address(t), 1);
@@ -845,8 +930,12 @@ contract HederaMandateWalletTest is MandateFixture {
         hw.mtxDelegateRevoke(r, address(t), 1, a);
         (bytes32 d,,,,,,) = hw.mandates(address(t));
         assertEq(d, bytes32(0));
-        _ownerRaw(abi.encodeCall(MandateWallet.setMandate, (address(t), _id(edDel), 100, 300, 1 days,
-            uint64(block.timestamp + 1 days))), 2);                                // same delegate, epoch 3
+        _ownerRaw(
+            abi.encodeCall(
+                MandateWallet.setMandate, (address(t), _id(edDel), 100, 300, 1 days, uint64(block.timestamp + 1 days))
+            ),
+            2
+        ); // same delegate, epoch 3
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
         hw.mtxExecute(late, lateSig);
     }
@@ -873,7 +962,7 @@ contract HederaMandateWalletTest is MandateFixture {
         assertTrue(hw.payeeAllowed(address(t), _id(npp)));
         MetaTxLib.MetaTransaction memory old;
         (old.from, old.data, old.batch, old.nonce, old.validUntil) =
-            (edOwner, abi.encodeCall(MandateWallet.setPayee, (address(t), _id(npp), false)), 9, 1, block.timestamp + 300);
+        (edOwner, abi.encodeCall(MandateWallet.setPayee, (address(t), _id(npp), false)), 9, 1, block.timestamp + 300);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, MandateWallet.setPayee.selector));
         hw.executeMetaTransaction(old, "");
         MetaTxLib.UAMetaTransaction memory m = _gen(_id(owner), abi.encodeCall(IMetaTx.cancelNonce, (1)), 0, 0);

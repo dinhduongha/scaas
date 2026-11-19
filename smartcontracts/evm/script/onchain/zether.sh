@@ -14,75 +14,104 @@
 set -eu
 # --slow (one transaction per receipt) on a local chain only; a remote target sends each forge run at once (owner 2026-11-15:
 # a run is one unit, the groups stay sequential)
-SLOW=--slow; [ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
-. script/onchain/fee.sh  # a remote target: a fee with headroom, before each forge run (fee.sh)
-command -v anvil > /dev/null || PATH=$HOME/.foundry/bin:$PATH
+SLOW=--slow
+[ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
+. script/onchain/fee.sh # a remote target: a fee with headroom, before each forge run (fee.sh)
+command -v anvil >/dev/null || PATH=$HOME/.foundry/bin:$PATH
 : "${RPC:?}" "${NET:?}" "${PRIVATE_KEY:?}"
 export FOUNDRY_OUT=out/onchain-zether FOUNDRY_CACHE_PATH=cache/onchain-zether
 OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix} # matrix.sh's run dir (MATRIX_OUT), else today's
 mkdir -p "$OUTD"
 CHAIN=$(cast chain-id --rpc-url "$RPC")
 GENESIS=$(cast block 0 --field hash --rpc-url "$RPC")
-python3 -I script/deploybook.py path "$CHAIN" "$GENESIS" > /dev/null  # NET-EVM-13: DEPLOY_NAME_REQUIRED, BOOK_OLD_NAME first
+python3 -I script/deploybook.py path "$CHAIN" "$GENESIS" >/dev/null # NET-EVM-13: DEPLOY_NAME_REQUIRED, BOOK_OLD_NAME first
 SENDER=$(cast wallet address --private-key "$PRIVATE_KEY")
 rc=0
 PARTS=" ${ZETHER_PARTS:-plain reg more} "
-has() { case "$PARTS" in *" $1 "*) return 0 ;; esac; return 1; }
+has() {
+    case "$PARTS" in *" $1 "*) return 0 ;; esac
+    return 1
+}
 python3 -I script/onchain/zether_reg.py gen
+# the prover every part calls (ZETHER_CLI, as ZetherE2E and e2e-zether.sh): refused by name when missing, older than its
+# sources (clients/zether-prover, clients/scaas-ct) or built without `hazmat` (`decrypt` refused)
+ZCLI=${ZETHER_CLI:-../../clients/zether-prover/target/release/zether-cli}
+ZB="cargo build --release --features hazmat --bin zether-cli (clients/zether-prover)"
+[ -x "$ZCLI" ] || {
+    echo "ZETHER_CLI_MISSING: $ZCLI; $ZB"
+    exit 2
+}
+[ -z "$(find ../../clients/zether-prover/src ../../clients/zether-prover/Cargo.toml ../../clients/zether-prover/Cargo.lock \
+    ../../clients/scaas-ct/src ../../clients/scaas-ct/Cargo.toml -newer "$ZCLI" | head -1)" ] ||
+    {
+        echo "ZETHER_CLI_STALE: $ZCLI is older than its sources; $ZB"
+        exit 2
+    }
+case $(printf '{}' | "$ZCLI" decrypt 2>&1) in *hazmat*)
+    echo "ZETHER_CLI_NO_HAZMAT: $ZCLI; $ZB"
+    exit 2
+    ;;
+esac
 if has plain; then
-  rm -f "broadcast/ZetherE2E.s.sol/$CHAIN/run-latest.json"
-  remote_fee "$RPC"
-  RPC=$RPC ../../scripts/e2e-zether.sh > "$OUTD/zether-$NET.log" 2>&1 || rc=1
-  tail -5 "$OUTD/zether-$NET.log"
+    rm -f "broadcast/ZetherE2E.s.sol/$CHAIN/run-latest.json"
+    remote_fee "$RPC"
+    RPC=$RPC ../../scripts/e2e-zether.sh >"$OUTD/zether-$NET.log" 2>&1 || rc=1
+    tail -5 "$OUTD/zether-$NET.log"
 fi
 # one forge script run: <file> <log> [forge args]
 fs() {
-  f=$1 l=$2
-  shift 2
-  n0=$(grep -c 'No files changed, compilation skipped' "$l" || true) c0=$(grep -c '^Compiling' "$l" || true)
-  remote_fee "$RPC"
-  forge script "$f" --rpc-url "$RPC" --ffi --disable-code-size-limit "$@" >> "$l" 2>&1 &
-  p=$!
-  # a remote target (ONCHAIN_REMOTE=1, matrix.sh): compiled under scripts/capped first; a recompile here is killed
-  while kill -0 "$p" 2> /dev/null; do
-    sleep 1
-    [ "${ONCHAIN_REMOTE:-0}" != 1 ] || [ "$(grep -c '^Compiling' "$l" || true)" = "$c0" ] || { kill "$p" 2> /dev/null; break; }
-  done
-  wait "$p" || return 1
-  [ "${ONCHAIN_REMOTE:-0}" != 1 ] || [ "$(grep -c 'No files changed, compilation skipped' "$l" || true)" -gt "$n0" ] ||
-    { echo "FAIL forge did not skip compilation ($f): a remote run compiles under scripts/capped first"; return 1; }
+    f=$1 l=$2
+    shift 2
+    n0=$(grep -c 'No files changed, compilation skipped' "$l" || true) c0=$(grep -c '^Compiling' "$l" || true)
+    remote_fee "$RPC"
+    forge script "$f" --rpc-url "$RPC" --ffi --disable-code-size-limit "$@" >>"$l" 2>&1 &
+    p=$!
+    # a remote target (ONCHAIN_REMOTE=1, matrix.sh): compiled under scripts/capped first; a recompile here is killed
+    while kill -0 "$p" 2>/dev/null; do
+        sleep 1
+        [ "${ONCHAIN_REMOTE:-0}" != 1 ] || [ "$(grep -c '^Compiling' "$l" || true)" = "$c0" ] || {
+            kill "$p" 2>/dev/null
+            break
+        }
+    done
+    wait "$p" || return 1
+    [ "${ONCHAIN_REMOTE:-0}" != 1 ] || [ "$(grep -c 'No files changed, compilation skipped' "$l" || true)" -gt "$n0" ] ||
+        {
+            echo "FAIL forge did not skip compilation ($f): a remote run compiles under scripts/capped first"
+            return 1
+        }
 }
 if has reg; then
-  rm -f "broadcast/ZetherRegE2E.s.sol/$CHAIN/run-latest.json"
-  : > "$OUTD/zether-reg-$NET.log"
-  { fs script/onchain/build/ZetherRegE2E.s.sol "$OUTD/zether-reg-$NET.log" --broadcast $SLOW --sender "$SENDER" &&
-    fs script/onchain/build/ZetherRegE2E.s.sol "$OUTD/zether-reg-$NET.log" --sig 'check()'; } || rc=1
-  tail -5 "$OUTD/zether-reg-$NET.log"
+    rm -f "broadcast/ZetherRegE2E.s.sol/$CHAIN/run-latest.json"
+    : >"$OUTD/zether-reg-$NET.log"
+    { fs script/onchain/build/ZetherRegE2E.s.sol "$OUTD/zether-reg-$NET.log" --broadcast $SLOW --sender "$SENDER" &&
+        fs script/onchain/build/ZetherRegE2E.s.sol "$OUTD/zether-reg-$NET.log" --sig 'check()'; } || rc=1
+    tail -5 "$OUTD/zether-reg-$NET.log"
 fi
 if has more; then
-  for f in script/onchain/ZetherMore.s.sol script/onchain/build/ZetherRegMore.s.sol; do
-    b=$(basename "$f" .s.sol)
-    l=$OUTD/$(echo "$b" | tr 'A-Z' 'a-z')-$NET.log
-    rm -f "broadcast/$b.s.sol/$CHAIN/more-latest.json"
-    : > "$l"
-    fs "$f" "$l" --tc "$b" --sig 'more()' --broadcast $SLOW --sender "$SENDER" || rc=1
-    tail -5 "$l"
-  done
+    for f in script/onchain/ZetherMore.s.sol script/onchain/build/ZetherRegMore.s.sol; do
+        b=$(basename "$f" .s.sol)
+        l=$OUTD/$(echo "$b" | tr 'A-Z' 'a-z')-$NET.log
+        rm -f "broadcast/$b.s.sol/$CHAIN/more-latest.json"
+        : >"$l"
+        fs "$f" "$l" --tc "$b" --sig 'more()' --broadcast $SLOW --sender "$SENDER" || rc=1
+        tail -5 "$l"
+    done
 fi
 for s in ZetherE2E:plain:run ZetherRegE2E:reg:run ZetherMore:more:more ZetherRegMore:more:more; do
-  n=${s%%:*} p=${s#*:}
-  f=${p#*:} p=${p%%:*}
-  has "$p" || continue
-  B=broadcast/$n.s.sol/$CHAIN/$f-latest.json
-  [ -f "$B" ] || continue
-  lc=$(echo "$n" | tr 'A-Z' 'a-z')
-  CHAIN=$CHAIN GENESIS=$GENESIS python3 -I script/onchain/zether_reg.py book "$NET" "$n"
-  python3 -I script/onchain/coverage.py forge "$NET" "deployments/onchain-$NET-$lc.json" "$B"
-  [ "$NET" != local ] || python3 -I script/onchain/coverage.py trace "$NET" "$lc" "$RPC"
-  # the negatives a script listed (ZetherMore's BURNER token, round 3zb), by eth_call on the final state
-  if [ -f "deployments/onchain-$NET-$lc-neg.txt" ]; then
-    python3 -I script/onchain/coverage.py neg "$NET" "$lc" "$RPC" > "$OUTD/$lc-neg-$NET.log" 2>&1 || rc=1
-    grep -E '^BAD|^negatives' "$OUTD/$lc-neg-$NET.log" || true
-  fi
+    n=${s%%:*} p=${s#*:}
+    f=${p#*:} p=${p%%:*}
+    has "$p" || continue
+    B=broadcast/$n.s.sol/$CHAIN/$f-latest.json
+    [ -f "$B" ] || continue
+    lc=$(echo "$n" | tr 'A-Z' 'a-z')
+    CHAIN=$CHAIN GENESIS=$GENESIS python3 -I script/onchain/zether_reg.py book "$NET" "$n"
+    python3 -I script/onchain/coverage.py forge "$NET" "deployments/onchain-$NET-$lc.json" "$B"
+    [ "$NET" != local ] || python3 -I script/onchain/coverage.py trace "$NET" "$lc" "$RPC"
+    # the negatives a script listed (ZetherMore's BURNER token, round 3zb), by eth_call on the final state
+    if [ -f "deployments/onchain-$NET-$lc-neg.txt" ]; then
+        python3 -I script/onchain/coverage.py neg "$NET" "$lc" "$RPC" >"$OUTD/$lc-neg-$NET.log" 2>&1 || rc=1
+        grep -E '^BAD|^negatives' "$OUTD/$lc-neg-$NET.log" || true
+    fi
 done
 exit $rc

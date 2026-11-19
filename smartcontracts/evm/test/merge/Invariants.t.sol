@@ -109,8 +109,23 @@ contract MergeInvariantsTest is MergeBase {
     function test_clientSigningNonZeroUnboundIsRefused() public {
         MetaTxLib.UAMetaTransaction memory m = _burn(_pad(alice), 0);
         (m.mode, m.fee, m.feeRecipient, m.relayer) = (MODE_FIX, 10, FEE_TO, RELAYER);
-        bytes32 raw = _dig(address(tok), keccak256(abi.encode(MetaTxLib.UAMETATX_TYPEHASH, m.from, keccak256(m.data),
-            m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient)));
+        bytes32 raw = _dig(
+            address(tok),
+            keccak256(
+                abi.encode(
+                    MetaTxLib.UAMETATX_TYPEHASH,
+                    m.from,
+                    keccak256(m.data),
+                    m.batch,
+                    m.nonce,
+                    m.validUntil,
+                    m.mode,
+                    m.relayer,
+                    m.fee,
+                    m.feeRecipient
+                )
+            )
+        );
         (bool ok, bytes memory ret) = _relay(address(tok), _execCd(m, _sig(ALICE_PK, raw)));
         assertFalse(ok);
         assertEq(ret, abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector));
@@ -146,8 +161,9 @@ contract MergeInvariantsTest is MergeBase {
     }
 
     function _copy(MetaTxLib.UAMetaTransaction memory m) internal pure returns (MetaTxLib.UAMetaTransaction memory) {
-        return MetaTxLib.UAMetaTransaction(m.from, m.data, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee,
-            m.feeRecipient);
+        return MetaTxLib.UAMetaTransaction(
+            m.from, m.data, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient
+        );
     }
 
     // ----- invariant 3: retired and retained forms -----
@@ -155,9 +171,17 @@ contract MergeInvariantsTest is MergeBase {
     /// R3: a `MetaTransaction` signed for the old address `mtxExecute` runs through `executeMetaTransaction` (same struct,
     /// same domain); the address `mtxExecute` has no entry on a token.
     function test_oldMtxExecuteSignatureRunsThroughExecuteMetaTransaction() public {
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
-            data: abi.encodeCall(IMetaTx.cancelNonce, (5)), batch: 1, nonce: 0, validUntil: block.timestamp + 600, mode: 0,
-            relayer: address(0), fee: 0, feeRecipient: address(0)});
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+            from: alice,
+            data: abi.encodeCall(IMetaTx.cancelNonce, (5)),
+            batch: 1,
+            nonce: 0,
+            validUntil: block.timestamp + 600,
+            mode: 0,
+            relayer: address(0),
+            fee: 0,
+            feeRecipient: address(0)
+        });
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, _dig(address(tok), MtxHash.hashStruct(m)));
         bytes memory sig = abi.encodePacked(r, s, v);
         uint256 snap = vm.snapshotState();
@@ -166,7 +190,8 @@ contract MergeInvariantsTest is MergeBase {
         assertEq(_m(address(tok)).mtxNonce(_pad(alice), 5), 1);
         vm.revertToState(snap);
         bytes memory old = abi.encodeWithSignature(
-            "mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, sig);
+            "mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, sig
+        );
         (bool ok,) = _relay(address(tok), old);
         assertFalse(ok, "no address mtxExecute on a token");
         assertEq(_m(address(tok)).mtxNonce(_pad(alice), 5), 0);
@@ -176,11 +201,23 @@ contract MergeInvariantsTest is MergeBase {
     /// no entry: the old selector reverts and an old-type signature does not verify on the new cancel.
     function test_oldUACancelNonceSignatureHasNoEntry() public {
         uint256 until = block.timestamp + 600;
-        bytes32 oldD = _dig(address(tok), keccak256(abi.encode(
-            keccak256("UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)"), uaP, 9, until)));
+        bytes32 oldD = _dig(
+            address(tok),
+            keccak256(
+                abi.encode(keccak256("UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)"), uaP, 9, until)
+            )
+        );
         IUARegistry.UASig memory oldA = _authOf(uaP, oldD);
-        (bool ok,) = _relay(address(tok), abi.encodeWithSignature(
-            "uaCancelNonce(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", uaP, 9, until, oldA));
+        (bool ok,) = _relay(
+            address(tok),
+            abi.encodeWithSignature(
+                "uaCancelNonce(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+                uaP,
+                9,
+                until,
+                oldA
+            )
+        );
         assertFalse(ok, "old selector");
         MetaTxLib.UAEnvelope memory e = _env(uaP, 3, 0);
         (ok,) = _relay(address(tok), _cancelCd(e, 9, oldA));
@@ -232,7 +269,9 @@ contract MergeInvariantsTest is MergeBase {
             bytes memory ret;
             (ok, ret) = _relay(address(tok), _execCd(late, _authOf(who[i], _callDigest(address(tok), late))));
             assertFalse(ok);
-            assertEq(ret, abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0), "an op signed for the old nonce");
+            assertEq(
+                ret, abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0), "an op signed for the old nonce"
+            );
         }
     }
 

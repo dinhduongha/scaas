@@ -42,8 +42,14 @@ contract TaxTest is RegFixture {
         super.setUp();
         t8t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(_taxCfg8(nid(taxTo))), "tax8");
         fN = EnvKit.factory(address(this), UID, NOTICE);
-        Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(fN), address(0), UID,
-            address(ureg), false), type(NormalRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            fN,
+            IOpenFactory.TokenKind.NORMAL_REGULATED,
+            1,
+            plainEnv(address(fN), address(0), UID, address(ureg), false),
+            type(NormalRegulatedToken).creationCode,
+            regArgs()
+        );
         fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(fN)));
         vm.warp(block.timestamp + NOTICE); // the release is usable after the factory's notice period
         t8n = fN.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(_taxCfg8(nid(taxTo))), "tax8n");
@@ -214,7 +220,7 @@ contract TaxTest is RegFixture {
         _attest(nid(alice), KYC, type(uint64).max);
         IFactoryToken.TokenConfig memory c = _taxCfg8(nid(taxTo));
         (c.features, c.reg.complianceRegistry, c.reg.requiredFlags) =
-            (c.features | (1 << GovernanceBits.KYC), address(creg), KYC);
+        (c.features | (1 << GovernanceBits.KYC), address(creg), KYC);
         _attest(nid(taxTo), KYC, type(uint64).max);
         c.reg.taxRecipient = nid(taxTo);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "tl2");
@@ -236,26 +242,43 @@ contract TaxTest is RegFixture {
         assertEq(_cfgOf(t8t).taxRecipient, r);
     }
 
-
     // ------------------------------------------------------------------ T40: mtxPayWithTax, payWithTax (spec §5)
 
     uint32 internal constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
     bytes32 internal constant UA_PAY_WITH_TAX = keccak256(
-        "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
     uint256 internal constant V = 1_000;
 
     /// alice -> bob `v` on lane 5, relayer bound, `PayMetaKit.meta(seed)`.
     function _tx(address t, bytes32 seed, uint256 v) internal view returns (MetaTxLib.UAMetaTransfer memory x) {
-        x = MetaTxLib.UAMetaTransfer(nid(alice), nid(bob), v, PayMetaKit.ref(seed), 5,
-            NormalToken(t).mtxNonce(nid(alice), 5), block.timestamp + 300, RR, relayer, 0, address(0));
+        x = MetaTxLib.UAMetaTransfer(
+            nid(alice),
+            nid(bob),
+            v,
+            PayMetaKit.ref(seed),
+            5,
+            NormalToken(t).mtxNonce(nid(alice), 5),
+            block.timestamp + 300,
+            RR,
+            relayer,
+            0,
+            address(0)
+        );
     }
 
-    function _taxDigest(address t, MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax) internal view returns (bytes32) {
+    function _taxDigest(address t, MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax)
+        internal
+        view
+        returns (bytes32)
+    {
         return MtxDigest.typed(t, keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax)));
     }
 
     function _taxSig(address t, MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax)
-        internal view returns (IUARegistry.UASig memory s)
+        internal
+        view
+        returns (IUARegistry.UASig memory s)
     {
         (uint8 v, bytes32 r, bytes32 ss) = vm.sign(ALICE_PK, _taxDigest(t, x, mode, tax));
         s.signature = abi.encodePacked(r, ss, v);
@@ -346,7 +369,7 @@ contract TaxTest is RegFixture {
         _attest(nid(taxTo), KYC, type(uint64).max);
         IFactoryToken.TokenConfig memory c = _taxCfg8(nid(taxTo));
         (c.features, c.reg.complianceRegistry, c.reg.requiredFlags) =
-            (c.features | (1 << GovernanceBits.KYC), address(creg), KYC);
+        (c.features | (1 << GovernanceBits.KYC), address(creg), KYC);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "tl3");
         _payTax(t, "pu", V, 2, 1, ""); // control: attested
         _attest(nid(taxTo), 0, type(uint64).max);
@@ -363,7 +386,8 @@ contract TaxTest is RegFixture {
     /// J3 with coinciding roles: the fee recipient is the tax recipient; the deltas add.
     function test_payWithTax_books() public {
         MetaTxLib.UAMetaTransfer memory x = _tx(t8t, "pd", V);
-        (x.mode, x.fee, x.feeRecipient) = (RR | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_FIXED, 3, taxTo);
+        (x.mode, x.fee, x.feeRecipient) =
+        (RR | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_FIXED, 3, taxTo);
         IUARegistry.UASig memory s = _taxSig(t8t, x, 2, 40);
         uint256 a0 = IERC20(t8t).balanceOf(alice);
         uint256 s0 = IERC20(t8t).totalSupply();
@@ -415,8 +439,22 @@ contract TaxTest is RegFixture {
         (x.relayer, x.feeRecipient) = (address(0xDEAD), address(0xBEEF));
         MetaTxLib.UAMetaTransfer memory z = x;
         (z.relayer, z.feeRecipient) = (address(0), address(0));
-        bytes32 raw = keccak256(abi.encode(MetaTxLib.UAMETATRANSFER_TYPEHASH, x.from, x.to, x.value, x.entryRef, x.batch,
-            x.nonce, x.validUntil, x.mode, address(0), x.fee, address(0)));
+        bytes32 raw = keccak256(
+            abi.encode(
+                MetaTxLib.UAMETATRANSFER_TYPEHASH,
+                x.from,
+                x.to,
+                x.value,
+                x.entryRef,
+                x.batch,
+                x.nonce,
+                x.validUntil,
+                x.mode,
+                address(0),
+                x.fee,
+                address(0)
+            )
+        );
         assertEq(MtxHash.hashStruct(x), raw, "zeroed");
         IUARegistry.UASig memory s = _taxSig(t8t, z, 2, 1); // signed over the zeroed form
         vm.prank(address(0xF00));
@@ -456,8 +494,9 @@ contract TaxTest is RegFixture {
 
     function test_directPayWithTax_mismatchedMeta() public {
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, PayMetaKit.ref("q4"),
-            PayMetaKit.ref("other")));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, PayMetaKit.ref("q4"), PayMetaKit.ref("other"))
+        );
         IRegulatedToken(t8t).payWithTax(nid(bob), V, 2, 1, PayMetaKit.ref("q4"), PayMetaKit.meta("other"));
     }
 
@@ -466,11 +505,29 @@ contract TaxTest is RegFixture {
         _set10pct(t8t);
         _direct(t8t, nid(bob), V, 1, 101, "r1", _mismatch(100, 101));
         _direct(t8t, nid(bob), V, 1, 99, "r2", _mismatch(100, 99));
-        _direct(t8t, nid(bob), V, 2, V + 1, "r3", abi.encodeWithSelector(IRegulatedToken.TaxExceedsAmount.selector, V + 1, V));
+        _direct(
+            t8t,
+            nid(bob),
+            V,
+            2,
+            V + 1,
+            "r3",
+            abi.encodeWithSelector(IRegulatedToken.TaxExceedsAmount.selector, V + 1, V)
+        );
         _direct(t8t, nid(taxTo), V, 2, 1, "r4", abi.encodeWithSelector(IRegulatedToken.TaxRecipientIsPayee.selector));
-        _direct(t8, nid(bob), V, 2, 1, "r5", abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.TAX));
+        _direct(
+            t8, nid(bob), V, 2, 1, "r5", abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.TAX)
+        );
         _freeze(t8t, nid(taxTo));
-        _direct(t8t, nid(bob), V, 2, 1, "r6", abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(taxTo)));
+        _direct(
+            t8t,
+            nid(bob),
+            V,
+            2,
+            1,
+            "r6",
+            abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(taxTo))
+        );
         _unfreeze(t8t, nid(taxTo));
         _direct(t8t, nid(bob), V, 1, 100, "r7", ""); // control
         assertEq(IERC20(t8t).balanceOf(taxTo), 100);
@@ -509,7 +566,9 @@ contract TaxTest is RegFixture {
         assertEq(NormalToken(t8t).paymentCount(0), 0);
     }
 
-    function _direct(address t, bytes32 to, uint256 v, uint8 mode, uint256 tax, bytes32 seed, bytes memory err) internal {
+    function _direct(address t, bytes32 to, uint256 v, uint8 mode, uint256 tax, bytes32 seed, bytes memory err)
+        internal
+    {
         vm.prank(alice);
         if (err.length != 0) vm.expectRevert(err);
         IRegulatedToken(t).payWithTax(to, v, mode, tax, PayMetaKit.ref(seed), PayMetaKit.meta(seed));
@@ -543,8 +602,14 @@ contract TaxTest is RegFixture {
         uint256 n;
         for (uint256 i; i < 4; ++i) {
             for (uint256 j; j < 4; ++j) {
-                r[n++] = TaxRow(string.concat("percent_", vm.toString(rates[i]), "_", vm.toString(amts[j])), 1, rates[i],
-                    amts[j], Math.mulDiv(amts[j], rates[i], 1_000_000), "");
+                r[n++] = TaxRow(
+                    string.concat("percent_", vm.toString(rates[i]), "_", vm.toString(amts[j])),
+                    1,
+                    rates[i],
+                    amts[j],
+                    Math.mulDiv(amts[j], rates[i], 1_000_000),
+                    ""
+                );
             }
         }
         r[n++] = TaxRow("percent_floor_not_half_up", 1, 100_000, 1_005, 100, ""); // 100.5: half-up 101
@@ -558,26 +623,83 @@ contract TaxTest is RegFixture {
     }
 
     function _taxRowJson(TaxRow memory r) internal pure returns (string memory) {
-        return string.concat('  {"name":"', r.name, '","taxMode":', vm.toString(r.mode), ',"ratePpm":', vm.toString(r.ratePpm),
-            ',"amount":"', vm.toString(r.amount), '","tax":"', vm.toString(r.tax), '","refused":"', r.refused, '"}');
+        return string.concat(
+            '  {"name":"',
+            r.name,
+            '","taxMode":',
+            vm.toString(r.mode),
+            ',"ratePpm":',
+            vm.toString(r.ratePpm),
+            ',"amount":"',
+            vm.toString(r.amount),
+            '","tax":"',
+            vm.toString(r.tax),
+            '","refused":"',
+            r.refused,
+            '"}'
+        );
     }
 
     /// The `UAPayWithTax` digest row: non-zero `relayer` / `feeRecipient` in the input, unbound (mode 0), so zeroed.
-    function _digestRowJson(MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax) internal view returns (string memory) {
+    function _digestRowJson(MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax)
+        internal
+        view
+        returns (string memory)
+    {
         bytes32 sh = keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax));
-        string memory d = string.concat(',"typehash":"', vm.toString(UA_PAY_WITH_TAX), '","paymentHash":"',
-            vm.toString(MtxHash.hashStruct(x)), '","structHash":"', vm.toString(sh), '","digest":"',
-            vm.toString(_vecDigest(sh)), '"}');
-        return string.concat('  {"name":"digest_unbound_relayer_fee_recipient",', _payJson(x), ',"taxMode":',
-            vm.toString(mode), ',"tax":"', vm.toString(tax), '",', _domainJson(), d);
+        string memory d = string.concat(
+            ',"typehash":"',
+            vm.toString(UA_PAY_WITH_TAX),
+            '","paymentHash":"',
+            vm.toString(MtxHash.hashStruct(x)),
+            '","structHash":"',
+            vm.toString(sh),
+            '","digest":"',
+            vm.toString(_vecDigest(sh)),
+            '"}'
+        );
+        return string.concat(
+            '  {"name":"digest_unbound_relayer_fee_recipient",',
+            _payJson(x),
+            ',"taxMode":',
+            vm.toString(mode),
+            ',"tax":"',
+            vm.toString(tax),
+            '",',
+            _domainJson(),
+            d
+        );
     }
 
     function _payJson(MetaTxLib.UAMetaTransfer memory x) internal pure returns (string memory) {
-        string memory a = string.concat('"from":"', vm.toString(x.from), '","to":"', vm.toString(x.to), '","value":"',
-            vm.toString(x.value), '","entryRef":"', vm.toString(x.entryRef), '","batch":"', vm.toString(x.batch));
-        return string.concat(a, '","nonce":"', vm.toString(x.nonce), '","validUntil":"', vm.toString(x.validUntil),
-            '","mode":', vm.toString(x.mode), ',"relayer":"', vm.toString(x.relayer), '","fee":"', vm.toString(x.fee),
-            '","feeRecipient":"', vm.toString(x.feeRecipient), '"');
+        string memory a = string.concat(
+            '"from":"',
+            vm.toString(x.from),
+            '","to":"',
+            vm.toString(x.to),
+            '","value":"',
+            vm.toString(x.value),
+            '","entryRef":"',
+            vm.toString(x.entryRef),
+            '","batch":"',
+            vm.toString(x.batch)
+        );
+        return string.concat(
+            a,
+            '","nonce":"',
+            vm.toString(x.nonce),
+            '","validUntil":"',
+            vm.toString(x.validUntil),
+            '","mode":',
+            vm.toString(x.mode),
+            ',"relayer":"',
+            vm.toString(x.relayer),
+            '","fee":"',
+            vm.toString(x.fee),
+            '","feeRecipient":"',
+            vm.toString(x.feeRecipient),
+            '"'
+        );
     }
 
     /// The vector's fixed domain (a token's shape: name, version, chainId, verifyingContract, salt), so the row does not move
@@ -588,27 +710,58 @@ contract TaxTest is RegFixture {
     bytes32 internal constant VEC_SALT = keccak256("scaas.paytax.vector");
 
     function _vecDigest(bytes32 sh) internal pure returns (bytes32) {
-        bytes32 ds = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(VEC_NAME)), keccak256("1"), VEC_CHAIN, VEC_TOKEN, VEC_SALT));
+        bytes32 ds = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(VEC_NAME)),
+                keccak256("1"),
+                VEC_CHAIN,
+                VEC_TOKEN,
+                VEC_SALT
+            )
+        );
         return keccak256(abi.encodePacked(hex"1901", ds, sh));
     }
 
     function _domainJson() internal pure returns (string memory) {
-        return string.concat('"domain":{"name":"', VEC_NAME, '","version":"1","chainId":', vm.toString(VEC_CHAIN),
-            ',"verifyingContract":"', vm.toString(VEC_TOKEN), '","salt":"', vm.toString(VEC_SALT), '"}');
+        return string.concat(
+            '"domain":{"name":"',
+            VEC_NAME,
+            '","version":"1","chainId":',
+            vm.toString(VEC_CHAIN),
+            ',"verifyingContract":"',
+            vm.toString(VEC_TOKEN),
+            '","salt":"',
+            vm.toString(VEC_SALT),
+            '"}'
+        );
     }
 
     function _digestInput() internal view returns (MetaTxLib.UAMetaTransfer memory x) {
-        x = MetaTxLib.UAMetaTransfer(nid(alice), nid(bob), 1_000, PayMetaKit.ref("vec"), 7, 3, 1_900_000_000, 0,
-            address(0xDEAD), 0, address(0xBEEF));
+        x = MetaTxLib.UAMetaTransfer(
+            nid(alice),
+            nid(bob),
+            1_000,
+            PayMetaKit.ref("vec"),
+            7,
+            3,
+            1_900_000_000,
+            0,
+            address(0xDEAD),
+            0,
+            address(0xBEEF)
+        );
     }
 
     function test_payTaxVectors() public {
         TaxRow[] memory rows = _taxRows();
         if (vm.envOr("PAYTAX_WRITE", false)) {
             string memory j = "[\n";
-            for (uint256 i; i < rows.length; ++i) j = string.concat(j, i == 0 ? "" : ",\n", _taxRowJson(rows[i]));
+            for (uint256 i; i < rows.length; ++i) {
+                j = string.concat(j, i == 0 ? "" : ",\n", _taxRowJson(rows[i]));
+            }
             j = string.concat(j, ",\n", _digestRowJson(_digestInput(), 2, 50));
             vm.writeFile(PAYTAX, string.concat(j, "\n]\n"));
         }
@@ -632,9 +785,11 @@ contract TaxTest is RegFixture {
             _rate(t8t, rate);
             bytes memory err;
             if (refused) {
-                err = mode != 1 && mode != 2 ? abi.encodeWithSelector(IRegulatedToken.TaxModeInvalid.selector, mode)
-                    : tax > amount ? abi.encodeWithSelector(IRegulatedToken.TaxExceedsAmount.selector, tax, amount)
-                    : _mismatch(Math.mulDiv(amount, rate, 1_000_000), tax);
+                err = mode != 1 && mode != 2
+                    ? abi.encodeWithSelector(IRegulatedToken.TaxModeInvalid.selector, mode)
+                    : tax > amount
+                        ? abi.encodeWithSelector(IRegulatedToken.TaxExceedsAmount.selector, tax, amount)
+                        : _mismatch(Math.mulDiv(amount, rate, 1_000_000), tax);
             }
             _payTax(t8t, keccak256(bytes(rows[i].name)), amount, mode, tax, err);
             vm.revertToState(snap);
@@ -678,16 +833,25 @@ contract TaxTest is RegFixture {
         MetaTxLib.UAMetaTransfer memory x = _rowPayment(j, ".ops.UAPayWithTax.message.payment.");
         uint8 mode = uint8(vm.parseJsonUint(j, ".ops.UAPayWithTax.message.taxMode"));
         uint256 tax = vm.parseJsonUint(j, ".ops.UAPayWithTax.message.tax");
-        assertEq(keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax)),
-            vm.parseJsonBytes32(j, ".ops.UAPayWithTax.structHash"), "struct hash");
-        assertEq(vm.parseJsonBytes32(j, ".ops.UAPayWithTax.typehash"), keccak256(bytes(vm.parseJsonString(j, ".ops.UAPayWithTax.typeString"))));
+        assertEq(
+            keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax)),
+            vm.parseJsonBytes32(j, ".ops.UAPayWithTax.structHash"),
+            "struct hash"
+        );
+        assertEq(
+            vm.parseJsonBytes32(j, ".ops.UAPayWithTax.typehash"),
+            keccak256(bytes(vm.parseJsonString(j, ".ops.UAPayWithTax.typeString")))
+        );
         assertEq(vm.parseJsonBytes32(j, ".ops.UAPayWithTax.typehash"), UA_PAY_WITH_TAX, "UAPayWithTax typehash");
         MetaTxLib.PayMeta memory m = _rowMeta(j, ".ops.UAPayWithTax.domains.token.extra.meta.");
         assertEq(PayMetaKit.id(m), x.entryRef, "the row's entryRef commits to its PayMeta");
         IUARegistry.UASig memory rowSig;
         rowSig.signature = vm.parseJsonBytes(j, ".ops.UAPayWithTax.domains.token.signature");
-        assertEq(keccak256(abi.encodeCall(IRegulatedToken.mtxPayWithTax, (x, mode, tax, rowSig, m))),
-            keccak256(vm.parseJsonBytes(j, ".ops.UAPayWithTax.domains.token.calldata")), "the row's calldata");
+        assertEq(
+            keccak256(abi.encodeCall(IRegulatedToken.mtxPayWithTax, (x, mode, tax, rowSig, m))),
+            keccak256(vm.parseJsonBytes(j, ".ops.UAPayWithTax.domains.token.calldata")),
+            "the row's calldata"
+        );
         uint256 pk = vm.parseJsonUint(j, ".key.private");
         assertEq(x.from, nid(vm.addr(pk)));
         NormalToken(t8t).mint(vm.addr(pk), x.value, EnvKit.codeUidOf(address(t8t))); // this test is the kind-8 token's minter

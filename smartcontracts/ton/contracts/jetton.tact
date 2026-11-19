@@ -113,8 +113,8 @@ contract ScaasJettonWallet(
     owner: Address,
     master: Address,
     balance: Int as coins,
-    pubkey: Int as uint256,          // owner's Ed25519 key; 0 = not bound yet (R10-5)
-    passkey: Cell?,                  // PasskeyRecord (R10-6)
+    pubkey: Int as uint256, // owner's Ed25519 key; 0 = not bound yet (R10-5)
+    passkey: Cell?, // PasskeyRecord (R10-6)
     // Per-contract lane -> next nonce (R30, R9), in two generations rotated every LANE_TTL (review M4): an entry
     // written at t is kept until >= t + LANE_TTL, and no MetaOp executed at t is valid past t + LANE_TTL, so a
     // dropped entry can never be replayed. A lane unused for two windows starts again at nonce 0.
@@ -125,12 +125,18 @@ contract ScaasJettonWallet(
     oldCount: Int as uint32,
 ) {
     // ---------------------------------------------------------------- TEP-74
-
     receive(msg: JettonTransfer) {
         throwUnless(E_SENDER, sender() == self.owner);
         throwUnless(E_VALUE, context().value > msg.forwardTonAmount + MIN_TRANSFER_TON);
-        self.sendOut(msg.destination, msg.amount, msg.queryId, msg.responseDestination,
-                     msg.forwardTonAmount, msg.forwardPayload, SendRemainingValue);
+        self.sendOut(
+            msg.destination,
+            msg.amount,
+            msg.queryId,
+            msg.responseDestination,
+            msg.forwardTonAmount,
+            msg.forwardPayload,
+            SendRemainingValue,
+        );
     }
 
     receive(msg: JettonTransferInternal) {
@@ -257,8 +263,15 @@ contract ScaasJettonWallet(
                 .storeRef(msg.params!!)
                 .storeUint(msg.matchWith, 256)
                 .endCell();
-            self.sendOut(m.to, m.amount, 0, msg.responseDestination, msg.forwardTon,
-                         beginCell().storeBit(true).storeRef(leg).asSlice(), SendRemainingBalance);
+            self.sendOut(
+                m.to,
+                m.amount,
+                0,
+                msg.responseDestination,
+                msg.forwardTon,
+                beginCell().storeBit(true).storeRef(leg).asSlice(),
+                SendRemainingBalance,
+            );
         } else if (m.op == OP_REVOKE) {
             relayAck(ctx.sender, m.digest);
             if (next == m.nonce) {
@@ -266,9 +279,15 @@ contract ScaasJettonWallet(
                 self.excessTo(msg.responseDestination);
             } else {
                 throwUnless(E_VALUE, msg.forwardTon >= CANCEL_TON);
-                self.sendOut(m.to, 0, 0, msg.responseDestination, msg.forwardTon,
-                             beginCell().storeBit(true).storeRef(beginCell().storeUint(CANCEL_TAG, 32).storeUint(m.extra, 256).endCell()).asSlice(),
-                             SendRemainingBalance);
+                self.sendOut(
+                    m.to,
+                    0,
+                    0,
+                    msg.responseDestination,
+                    msg.forwardTon,
+                    beginCell().storeBit(true).storeRef(beginCell().storeUint(CANCEL_TAG, 32).storeUint(m.extra, 256).endCell()).asSlice(),
+                    SendRemainingBalance,
+                );
             }
         } else if (m.op == OP_SET_KEY) {
             if (m.extra == 0) {

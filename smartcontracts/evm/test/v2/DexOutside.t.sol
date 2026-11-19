@@ -28,7 +28,9 @@ import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 /// ERC-1271 wallet that needs ~100 k gas to say "valid": passes under 400 k (a `SmartKeyAccount` clone), not under 50 k.
 contract Work1271 {
     function isValidSignature(bytes32 d, bytes calldata) external pure returns (bytes4) {
-        for (uint256 i; i < 600; i++) d = keccak256(abi.encode(d, i));
+        for (uint256 i; i < 600; i++) {
+            d = keccak256(abi.encode(d, i));
+        }
         return d == bytes32(0) ? bytes4(0) : bytes4(0x1626ba7e);
     }
 }
@@ -36,6 +38,7 @@ contract Work1271 {
 /// Credits the recipient 1 % more than sent (a positive rebase on transfer).
 contract RebaseUpERC20 is MockERC20 {
     constructor() MockERC20("Up", "UP", 18) {}
+
     function _update(address from, address to, uint256 v) internal override {
         super._update(from, to, v);
         if (from != address(0) && to != address(0)) super._update(address(0), to, v / 100);
@@ -46,9 +49,20 @@ contract RebaseUpERC20 is MockERC20 {
 contract NoReturnERC20 {
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
-    function mint(address to, uint256 v) external { balanceOf[to] += v; }
-    function approve(address s, uint256 v) external { allowance[msg.sender][s] = v; }
-    function transfer(address to, uint256 v) external { balanceOf[msg.sender] -= v; balanceOf[to] += v; }
+
+    function mint(address to, uint256 v) external {
+        balanceOf[to] += v;
+    }
+
+    function approve(address s, uint256 v) external {
+        allowance[msg.sender][s] = v;
+    }
+
+    function transfer(address to, uint256 v) external {
+        balanceOf[msg.sender] -= v;
+        balanceOf[to] += v;
+    }
+
     function transferFrom(address from, address to, uint256 v) external {
         allowance[from][msg.sender] -= v;
         balanceOf[from] -= v;
@@ -58,7 +72,10 @@ contract NoReturnERC20 {
 
 /// Reverts every pull with 320 000 bytes of revert data.
 contract BombERC20 {
-    function balanceOf(address) external pure returns (uint256) { return 0; }
+    function balanceOf(address) external pure returns (uint256) {
+        return 0;
+    }
+
     function transferFrom(address, address, uint256) external pure returns (bool) {
         assembly { revert(0, 320000) }
     }
@@ -73,22 +90,34 @@ contract ForgeStarvedERC20 is MockERC20 {
     address public dex;
     bool public starve;
     constructor() MockERC20("Forge", "FG", 18) {}
-    function set(uint8 m, bytes calldata e, address d) external { (mode, err, dex) = (m, e, d); }
-    function setStarve(bool b) external { starve = b; }
+
+    function set(uint8 m, bytes calldata e, address d) external {
+        (mode, err, dex) = (m, e, d);
+    }
+
+    function setStarve(bool b) external {
+        starve = b;
+    }
+
     function transferFrom(address from, address to, uint256 v) public override returns (bool) {
         if (mode == 1) _forge();
         return super.transferFrom(from, to, v);
     }
+
     function transfer(address to, uint256 v) public override returns (bool) {
         if (mode == 2) _forge();
         return super.transfer(to, v);
     }
+
     function balanceOf(address a) public view override returns (uint256) {
         if (mode == 3 && msg.sender == dex) _forge();
         return super.balanceOf(a);
     }
+
     function _forge() private view {
-        if (starve) while (true) {}
+        if (starve) {
+            while (true) {}
+        }
         bytes memory e = err;
         assembly { revert(add(e, 0x20), mload(e)) }
     }
@@ -103,7 +132,11 @@ contract FallbackOnly {
 contract HookERC20 is MockERC20 {
     address public hookTarget;
     constructor() MockERC20("Hook", "HK", 18) {}
-    function setHook(address h) external { hookTarget = h; }
+
+    function setHook(address h) external {
+        hookTarget = h;
+    }
+
     function _update(address from, address to, uint256 v) internal override {
         super._update(from, to, v);
         if (from != address(0) && hookTarget != address(0)) Reenter(hookTarget).hook();
@@ -114,20 +147,50 @@ contract HookERC20 is MockERC20 {
 contract Reenter {
     ISCaaSDex immutable dex;
     bytes4[] public errs;
-    constructor(ISCaaSDex d) { dex = d; }
-    function n() external view returns (uint256) { return errs.length; }
+
+    constructor(ISCaaSDex d) {
+        dex = d;
+    }
+
+    function n() external view returns (uint256) {
+        return errs.length;
+    }
+
     function hook() external {
         if (errs.length != 0) return;
         DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](0);
-        try dex.mtxSettle(DexLegs.wire(ss)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.mtxCancelOrders(new ISCaaSDex.DexOrder[](0), new bytes[](0)) { errs.push(0); }
-        catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.mtxInvalidateNonces(address(1), 0, 1, "") { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.mtxSettle(DexLegs.wire(ss)) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.mtxCancelOrders(new ISCaaSDex.DexOrder[](0), new bytes[](0)) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.mtxInvalidateNonces(address(1), 0, 1, "") {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
         DexLegs.Settlement memory st;
-        try SCaaSDex(address(dex)).settleOne(DexLegs.wire(st), address(this)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try SCaaSDex(address(dex)).settleOne(DexLegs.wire(st), address(this)) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
         DexLegs.ExchangePlan memory ep;
-        try dex.mtxExchange(DexLegs.wire(ep), new ISCaaSDex.Interaction[](0)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.mtxExchangeVia(DexLegs.wire(ep), address(this), "") { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.mtxExchange(DexLegs.wire(ep), new ISCaaSDex.Interaction[](0)) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.mtxExchangeVia(DexLegs.wire(ep), address(this), "") {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
     }
 }
 
@@ -137,15 +200,38 @@ contract Reenter {
 contract ReenterPowers {
     ISCaaSDex immutable dex;
     bytes4[] public errs;
-    constructor(ISCaaSDex d) { dex = d; }
-    function n() external view returns (uint256) { return errs.length; }
+
+    constructor(ISCaaSDex d) {
+        dex = d;
+    }
+
+    function n() external view returns (uint256) {
+        return errs.length;
+    }
+
     function hook() external {
         if (errs.length != 0) return;
         bytes32 u = bytes32(0);
-        try dex.setMarket(address(1), address(2), true, u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setExchangeTarget(address(1), true, u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setListedOnly(true, u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setFeeSplit(1, address(1), u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setMarket(address(1), address(2), true, u) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.setExchangeTarget(address(1), true, u) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.setListedOnly(true, u) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
+        try dex.setFeeSplit(1, address(1), u) {
+            errs.push(0);
+        } catch (bytes memory r) {
+            errs.push(bytes4(r));
+        }
     }
 }
 
@@ -166,17 +252,23 @@ contract DexOutsideTest is Test {
     address relayer = address(0xBEEF);
     OpenFactory f;
     SCaaSDex dex;
-    address work;             // the "SmartKeyAccount implementation" of this chain
-    NormalToken a;      // SCaaS: Alice, the taker, sells it
-    MockERC20 usdc;           // outside: Dave, the maker, sells it
+    address work; // the "SmartKeyAccount implementation" of this chain
+    NormalToken a; // SCaaS: Alice, the taker, sells it
+    MockERC20 usdc; // outside: Dave, the maker, sells it
 
     function setUp() public {
         work = address(new Work1271());
         f = EnvKit.factory(address(this), UID_, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), work, false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, work);
-        a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "dex"));
+        a = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"
+            )
+        );
+        dex = SCaaSDex(
+            f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "dex")
+        );
         usdc = _list(new MockERC20("USD Coin", "USDC", 6));
         _fund(usdc, dave);
     }
@@ -198,7 +290,9 @@ contract DexOutsideTest is Test {
     }
 
     function _order(address from, address receiveToken, uint256 amount, uint256 receiveAmount, uint256 nonce)
-        internal view returns (ITradeToken.TradeOrder memory o)
+        internal
+        view
+        returns (ITradeToken.TradeOrder memory o)
     {
         o.from = from;
         o.receiveToken = receiveToken;
@@ -211,7 +305,9 @@ contract DexOutsideTest is Test {
     }
 
     function _outsideLeg(uint256 pk, address token, ITradeToken.TradeOrder memory o, uint256 fill)
-        internal view returns (DexLegs.Leg memory)
+        internal
+        view
+        returns (DexLegs.Leg memory)
     {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, dex.dexOrderDigest(token, o));
         return DexLegs.Leg(token, o, abi.encodePacked(r, s, v), fill);
@@ -224,7 +320,9 @@ contract DexOutsideTest is Test {
 
     /// Alice sells 1000 A for at least 2000 of the maker's token, filled at the maker's price.
     function _settlement(DexLegs.Leg memory maker, uint256 takerNonce)
-        internal view returns (DexLegs.Settlement memory s)
+        internal
+        view
+        returns (DexLegs.Settlement memory s)
     {
         s.ref = bytes32(takerNonce);
         s.makers = new DexLegs.Leg[](1);
@@ -242,7 +340,9 @@ contract DexOutsideTest is Test {
     }
 
     function _two(DexLegs.Settlement memory s0, DexLegs.Settlement memory s1)
-        internal pure returns (DexLegs.Settlement[] memory ss)
+        internal
+        pure
+        returns (DexLegs.Settlement[] memory ss)
     {
         ss = new DexLegs.Settlement[](2);
         ss[0] = s0;
@@ -317,8 +417,8 @@ contract DexOutsideTest is Test {
         s.taker = _taker(_order(alice, address(usdc), 499, 998, 1), 499);
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, dex.dexOrderDigest(address(usdc), dm)));
         bytes32 h = dex.dexOrderDigest(address(usdc), _order(dave, address(a), 2000, 1000, 1));
-        DexLegs.Settlement[] memory ss = _two(
-            _settlement(_dave(address(usdc), 1, 1000), 1), _settlement(_dave(address(usdc), 1, 1000), 2));
+        DexLegs.Settlement[] memory ss =
+            _two(_settlement(_dave(address(usdc), 1, 1000), 1), _settlement(_dave(address(usdc), 1, 1000), 2));
         vm.prank(relayer);
         dex.mtxSettle(DexLegs.wire(ss));
         assertEq(dex.pulled(h), 2000);
@@ -339,28 +439,66 @@ contract DexOutsideTest is Test {
     /// The digest is EIP-712 over the DEX's salted domain and binds the sell token.
     function test_dexOrderDigest_isEip712OverTheDexDomain_andBindsTheSellToken() public {
         ITradeToken.TradeOrder memory o = _order(dave, address(a), 2000, 1000, 1);
-        bytes32 domain = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS Dex"), keccak256("1"), block.chainid, address(dex), UID_));
-        bytes32 orderStruct = keccak256(abi.encode(keccak256(
-            "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
-            "uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,"
-            "uint256 validUntil)"), o));
+        bytes32 domain = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS Dex"),
+                keccak256("1"),
+                block.chainid,
+                address(dex),
+                UID_
+            )
+        );
+        bytes32 orderStruct = keccak256(
+            abi.encode(
+                keccak256(
+                    "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
+                    "uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,"
+                    "uint256 validUntil)"
+                ),
+                o
+            )
+        );
         bytes32 dexOrderType = keccak256(
             "DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,"
             "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,"
-            "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)");
-        bytes32 h = keccak256(abi.encodePacked(
-            "\x19\x01", domain, keccak256(abi.encode(dexOrderType, address(usdc), orderStruct))));
+            "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+        );
+        bytes32 h = keccak256(
+            abi.encodePacked("\x19\x01", domain, keccak256(abi.encode(dexOrderType, address(usdc), orderStruct)))
+        );
         assertEq(dex.dexOrderDigest(address(usdc), o), h);
         bytes32 cancelType = keccak256(
             "CancelDexOrder(DexOrder order)DexOrder(address sellToken,TradeOrder order)TradeOrder(address from,address receiveToken,"
             "uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,"
-            "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)");
-        assertEq(dex.cancelDexOrderDigest(address(usdc), o), keccak256(abi.encodePacked("\x19\x01", domain, keccak256(abi.encode(
-            cancelType, keccak256(abi.encode(dexOrderType, address(usdc), orderStruct)))))));
-        assertEq(dex.invalidateNoncesDigest(dave, 1, 5), keccak256(abi.encodePacked("\x19\x01", domain, keccak256(
-            abi.encode(keccak256("InvalidateNonces(address from,uint256 batch,uint256 minNonce)"), dave, 1, 5)))));
+            "uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+        );
+        assertEq(
+            dex.cancelDexOrderDigest(address(usdc), o),
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    domain,
+                    keccak256(abi.encode(cancelType, keccak256(abi.encode(dexOrderType, address(usdc), orderStruct))))
+                )
+            )
+        );
+        assertEq(
+            dex.invalidateNoncesDigest(dave, 1, 5),
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    domain,
+                    keccak256(
+                        abi.encode(
+                            keccak256("InvalidateNonces(address from,uint256 batch,uint256 minNonce)"), dave, 1, 5
+                        )
+                    )
+                )
+            )
+        );
         // signed for another sell token: refused
         DexLegs.Settlement memory s = _settlement(_dave(address(usdc), 1, 2000), 1);
         s.makers[0].sig = _sig(DAVE_PK, dex.dexOrderDigest(address(a), o));
@@ -454,7 +592,8 @@ contract DexOutsideTest is Test {
         mo.validUntil = block.timestamp - 1;
         bytes32 h = dex.dexOrderDigest(address(usdc), mo);
         DexLegs.Settlement[] memory ss = _two(
-            _settlement(_outsideLeg(DAVE_PK, address(usdc), mo, 2000), 1), _settlement(_dave(address(usdc), 2, 2000), 2));
+            _settlement(_outsideLeg(DAVE_PK, address(usdc), mo, 2000), 1), _settlement(_dave(address(usdc), 2, 2000), 2)
+        );
         vm.expectEmit(address(dex));
         emit ISCaaSDex.MatchFailed(bytes32(uint256(1)), abi.encodeWithSelector(ITradeToken.OrderExpired.selector, h));
         vm.prank(relayer);
@@ -470,8 +609,8 @@ contract DexOutsideTest is Test {
         address bomb = address(new BombERC20());
         vm.prank(admin);
         dex.setMarket(address(a), bomb, true, EnvKit.codeUidOf(address(dex)));
-        DexLegs.Settlement[] memory ss = _two(
-            _settlement(_dave(bomb, 1, 2000), 1), _settlement(_dave(address(usdc), 2, 2000), 2));
+        DexLegs.Settlement[] memory ss =
+            _two(_settlement(_dave(bomb, 1, 2000), 1), _settlement(_dave(address(usdc), 2, 2000), 2));
         vm.recordLogs();
         vm.prank(relayer);
         bool[] memory ok = dex.mtxSettle{gas: 3_000_000}(DexLegs.wire(ss));
@@ -501,10 +640,12 @@ contract DexOutsideTest is Test {
                 fg.set(m, errs[e], address(dex));
                 uint256 n = 10 * m + e;
                 DexLegs.Settlement[] memory ss = _two(
-                    _settlement(_dave(address(fg), n, 2000), n), _settlement(_dave(address(usdc), n, 2000), n + 100));
+                    _settlement(_dave(address(fg), n, 2000), n), _settlement(_dave(address(usdc), n, 2000), n + 100)
+                );
                 vm.expectEmit(address(dex));
                 emit ISCaaSDex.MatchFailed(
-                    bytes32(n), abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(fg)));
+                    bytes32(n), abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(fg))
+                );
                 vm.prank(relayer);
                 bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
                 assertFalse(ok[0]);
@@ -524,8 +665,8 @@ contract DexOutsideTest is Test {
         for (uint8 m = 1; m <= 3; ++m) {
             fg.set(m, "", address(dex));
             uint256 n = 10 * m;
-            DexLegs.Settlement[] memory ss = _two(
-                _settlement(_dave(address(usdc), n, 2000), n + 100), _settlement(_dave(address(fg), n, 2000), n));
+            DexLegs.Settlement[] memory ss =
+                _two(_settlement(_dave(address(usdc), n, 2000), n + 100), _settlement(_dave(address(fg), n, 2000), n));
             vm.expectEmit(address(dex));
             emit ISCaaSDex.MatchFailed(bytes32(n), "");
             vm.prank(relayer);
@@ -546,8 +687,8 @@ contract DexOutsideTest is Test {
         for (uint8 m = 1; m <= 3; ++m) {
             fg.set(m, "", address(dex));
             uint256 n = 10 * m;
-            DexLegs.Settlement[] memory ss = _two(
-                _settlement(_dave(address(fg), n, 2000), n), _settlement(_dave(address(usdc), n, 2000), n + 100));
+            DexLegs.Settlement[] memory ss =
+                _two(_settlement(_dave(address(fg), n, 2000), n), _settlement(_dave(address(usdc), n, 2000), n + 100));
             vm.prank(relayer);
             bool[] memory ok = dex.mtxSettle{gas: 3_000_000}(DexLegs.wire(ss));
             assertFalse(ok[0]);
@@ -584,12 +725,18 @@ contract DexOutsideTest is Test {
             _fund(usdc, w);
             ITradeToken.TradeOrder memory mo = _order(w, address(a), 2000, 1000, 1);
             bytes32 h = dex.dexOrderDigest(address(usdc), mo);
-            bytes32 c = keccak256(abi.encode(keccak256(bytes(Erc7739Kit.DEX_ORDER_TYPE)), address(usdc), TradeLib.hashStruct(mo)));
-            assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(dex)), c)), h, "the kit rebuilds it");
-            DexLegs.Settlement memory st = _settlement(DexLegs.Leg(address(usdc), mo, Erc7739Kit.raw(pk, w, h), 2000), 10 + i);
+            bytes32 c = keccak256(
+                abi.encode(keccak256(bytes(Erc7739Kit.DEX_ORDER_TYPE)), address(usdc), TradeLib.hashStruct(mo))
+            );
+            assertEq(
+                keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(dex)), c)), h, "the kit rebuilds it"
+            );
+            DexLegs.Settlement memory st =
+                _settlement(DexLegs.Leg(address(usdc), mo, Erc7739Kit.raw(pk, w, h), 2000), 10 + i);
             _expectOne(st, abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
-            st.makers[0].sig = Erc7739Kit.sign(pk, w, address(dex), "DexOrder", Erc7739Kit.DEX_ORDER_TYPE,
-                Erc7739Kit.DEX_ORDER_TYPE, c);
+            st.makers[0].sig = Erc7739Kit.sign(
+                pk, w, address(dex), "DexOrder", Erc7739Kit.DEX_ORDER_TYPE, Erc7739Kit.DEX_ORDER_TYPE, c
+            );
             vm.prank(relayer);
             dex.mtxSettle(DexLegs.wire(_one(st)));
             assertEq(a.balanceOf(w), 1000, "positive control: the ERC-7739 order settles");
@@ -637,8 +784,8 @@ contract DexOutsideTest is Test {
         _fund(usdc, clone);
         ITradeToken.TradeOrder memory co = _order(clone, address(a), 2000, 1000, 1);
         DexLegs.Settlement[] memory ss = _two(
-            _settlement(_dave(address(usdc), 1, 2000), 1),
-            _settlement(DexLegs.Leg(address(usdc), co, hex"00", 2000), 2));
+            _settlement(_dave(address(usdc), 1, 2000), 1), _settlement(DexLegs.Leg(address(usdc), co, hex"00", 2000), 2)
+        );
         // F185: was `dex.mtxSettle{gas: 700_000}`. Under Amsterdam EIP-8037 moves the writes' state gas out of the call's
         // regular gas, so 700,000 leaves enough for the check and nothing starves, and the window that settles the first
         // settlement but starves the second one's check (620,000 to 650,000) is narrow and moves with the schedule: scan
@@ -661,15 +808,21 @@ contract DexOutsideTest is Test {
     function _hostileMaker(address w) internal {
         DexLegs.Settlement[] memory ss = _two(
             _settlement(DexLegs.Leg(address(usdc), _order(w, address(a), 2000, 1000, 1), hex"00", 2000), 1),
-            _settlement(_dave(address(usdc), 1, 2000), 2));
+            _settlement(_dave(address(usdc), 1, 2000), 2)
+        );
         vm.prank(relayer);
         bool[] memory ok = dex.mtxSettle{gas: 3_000_000}(DexLegs.wire(ss));
         assertFalse(ok[0]);
         assertTrue(ok[1]);
     }
 
-    function test_gasBurning1271OutsideMaker_othersStillSettle() public { _hostileMaker(address(new Burner1271())); }
-    function test_returndataBomb1271OutsideMaker_othersStillSettle() public { _hostileMaker(address(new Bomb1271())); }
+    function test_gasBurning1271OutsideMaker_othersStillSettle() public {
+        _hostileMaker(address(new Burner1271()));
+    }
+
+    function test_returndataBomb1271OutsideMaker_othersStillSettle() public {
+        _hostileMaker(address(new Bomb1271()));
+    }
 
     // ------------------------------------------------------------------ cancels (CTR-DEX-02, CTR-DEX-18)
 
@@ -683,8 +836,16 @@ contract DexOutsideTest is Test {
         ISCaaSDex.DexOrder[] memory os = new ISCaaSDex.DexOrder[](1);
         os[0] = ISCaaSDex.DexOrder(address(usdc), o);
         bytes[] memory sigs = new bytes[](1);
-        sigs[0] = _sig(DAVE_PK, keccak256(abi.encodePacked("\x19\x01", domainOf(address(dex)),
-            keccak256(abi.encode(keccak256("CancelOrder(bytes32 orderHash)"), h)))));
+        sigs[0] = _sig(
+            DAVE_PK,
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    domainOf(address(dex)),
+                    keccak256(abi.encode(keccak256("CancelOrder(bytes32 orderHash)"), h))
+                )
+            )
+        );
         dex.mtxCancelOrders(os, sigs);
         assertEq(dex.pulled(h), 0, "the flat form is skipped");
         sigs[0] = _sig(DAVE_PK, wallet);
@@ -809,7 +970,9 @@ contract DexOutsideTest is Test {
         assertTrue(ok[0]);
         assertEq(r.n(), 4);
         bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
-        for (uint256 i; i < 4; ++i) assertEq(r.errs(i), guard, "a power entry inside a settlement (O8)");
+        for (uint256 i; i < 4; ++i) {
+            assertEq(r.errs(i), guard, "a power entry inside a settlement (O8)");
+        }
     }
 
     /// `SigCheckGasStarved` raised by a SCaaS token's own check (Path A taker that is a `SmartKeyAccount` clone, so the

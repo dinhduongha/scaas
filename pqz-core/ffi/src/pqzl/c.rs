@@ -17,9 +17,9 @@
 //! only in the specialised verifier's own allocations; inside LaZer (keys, A, the prover, the generic verifier) the
 //! core traps and the process stops (review round 2, Q-C: no write may follow a failed allocation), so the arenas
 //! below are sized from measurement with margin.
-use std::sync::Mutex;
 #[cfg(feature = "test-hooks")]
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};
+use std::sync::Mutex;
 
 use super::{on_worker, Enc, Key, NodeFault, Worker, CT_BYTES, N, PK_BYTES};
 
@@ -40,7 +40,11 @@ pub const ARENA_SMALL: usize = 512 << 20;
 /// Prover and generic-verifier arena: native per set (set.toml [pqzl_c] prove_arena_mib, pqz-stmt `C_PROVE_ARENA`; review
 /// R1-C2 / R4-C1: 1 GiB for every set before, below the C peaks at n2560-kmax16384 / n2816-kmax65536; ≥ 1.5 × the gate's
 /// peak with every relation's keys loaded); wasm32 = `ARENA_SMALL` (one arena, `WASM_PQZL_MAX_LEGS`).
-pub const ARENA_BIG: usize = if cfg!(target_arch = "wasm32") { ARENA_SMALL } else { pqz_stmt::C_PROVE_ARENA };
+pub const ARENA_BIG: usize = if cfg!(target_arch = "wasm32") {
+    ARENA_SMALL
+} else {
+    pqz_stmt::C_PROVE_ARENA
+};
 
 extern "C" {
     /// written by the core (sticky error of the last call); read only through `addr_of!(..).read_volatile()`
@@ -48,8 +52,20 @@ extern "C" {
     fn pqz_init(arena: *mut u8, len: usize) -> i32;
     fn pqz_arena_peak_bytes() -> usize;
     fn pqz_arena_used() -> usize;
-    fn pqz_verify(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
-    fn pqz_verify_fast(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
+    fn pqz_verify(
+        op: u8,
+        stmt: *const u8,
+        stmt_len: usize,
+        proof: *const u8,
+        proof_len: usize,
+    ) -> i32;
+    fn pqz_verify_fast(
+        op: u8,
+        stmt: *const u8,
+        stmt_len: usize,
+        proof: *const u8,
+        proof_len: usize,
+    ) -> i32;
     fn pqz_keypair_from_secret(s: *const i8, e: *const i16, pk: *mut u8) -> i32;
     fn pqz_keygen(seed32: *const u8, pk: *mut u8, s: *mut i8, e: *mut i16, ctr: *mut u32) -> i32;
     fn pqz_enc_seed_win(
@@ -81,7 +97,16 @@ extern "C" {
     fn pqz_enc_group_seed(seed_enc: *const u8, g: u32, out: *mut u8);
     fn pqz_enc_leg_seed(seed_enc: *const u8, to_ua: *const u8, pkt_hash: *const u8, out: *mut u8);
     #[cfg(feature = "fuzz")]
-    fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8, outlen: *mut usize) -> i32;
+    fn pqz_test_mutate(
+        op: u8,
+        proof: *const u8,
+        len: usize,
+        kind: u32,
+        r1: u64,
+        r2: u64,
+        out: *mut u8,
+        outlen: *mut usize,
+    ) -> i32;
     #[cfg(feature = "prove")]
     fn pqz_prove(
         op: u8,
@@ -106,7 +131,10 @@ struct State {
     worker: Option<Worker>,
 }
 
-static STATE: Mutex<State> = Mutex::new(State { core: None, worker: None });
+static STATE: Mutex<State> = Mutex::new(State {
+    core: None,
+    worker: None,
+});
 
 /// Runs `f` under the lock, on the worker, with the core initialised on an arena of at least `need` bytes.
 /// `Err(NodeFault)` if the core or the worker cannot be set up, `f` panicked, or the core ran out of arena; the core is
@@ -173,7 +201,12 @@ pub fn arena_used() -> usize {
 /// The size of the arena the core runs on (0 before the first call). Test hook.
 #[cfg(feature = "test-hooks")]
 pub fn arena_bytes() -> usize {
-    STATE.lock().unwrap_or_else(|e| e.into_inner()).core.as_ref().map_or(0, |c| c.arena.capacity() * 16)
+    STATE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .core
+        .as_ref()
+        .map_or(0, |c| c.arena.capacity() * 16)
 }
 
 /// The precompile path (plan R5): the specialised verifier. `stmt` / `proof` are passed through as given; the caller
@@ -192,18 +225,35 @@ pub fn verify_fast(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFault>
 #[doc(hidden)]
 pub fn verify_fast_on_caller(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
     let g = STATE.lock().unwrap_or_else(|e| e.into_inner());
-    g.core.is_some() && unsafe { pqz_verify_fast(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len()) } == 1
+    g.core.is_some()
+        && unsafe { pqz_verify_fast(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len()) }
+            == 1
 }
 
 /// `pqz_test_mutate` (pqz_rel.c test hook, feature `fuzz` only): decode `proof` for relation `rel` (an op, or 0x81
 /// for `R_TX0`) with the precompile's decoder, change one field (`kind` 0..14 with `r1` / `r2`; any other kind changes
 /// nothing) and re-encode. `Ok(None)`: the proof does not decode.
 #[cfg(feature = "fuzz")]
-pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, NodeFault> {
+pub fn test_mutate(
+    rel: u8,
+    proof: &[u8],
+    kind: u32,
+    r1: u64,
+    r2: u64,
+) -> Result<Option<Vec<u8>>, NodeFault> {
     let mut out = vec![0u8; 2 * super::MAX_PROOF];
     let mut n = out.len();
     let ok = with_core(ARENA_SMALL, || unsafe {
-        pqz_test_mutate(rel, proof.as_ptr(), proof.len(), kind, r1, r2, out.as_mut_ptr(), &mut n)
+        pqz_test_mutate(
+            rel,
+            proof.as_ptr(),
+            proof.len(),
+            kind,
+            r1,
+            r2,
+            out.as_mut_ptr(),
+            &mut n,
+        )
     })?;
     out.truncate(n);
     Ok((ok == 1).then_some(out))
@@ -211,21 +261,37 @@ pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result
 
 /// The generic verifier (LaZer's), the reference for differential tests; never on the precompile path.
 pub fn verify_generic(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFault> {
-    with_core(ARENA_BIG, || unsafe { pqz_verify(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len()) })
-        .map(|r| r == 1)
+    with_core(ARENA_BIG, || unsafe {
+        pqz_verify(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len())
+    })
+    .map(|r| r == 1)
 }
 
 /// pk = A·s + e (`pqz_keypair_from_secret`; no norm check): the self-test reads the columns of A with it.
 pub fn keypair_from_secret(s: &[i8; N], e: &[i16; N]) -> Option<Box<[u8; PK_BYTES]>> {
     let mut pk = Box::new([0u8; PK_BYTES]);
-    let rc = with_core(ARENA_SMALL, || unsafe { pqz_keypair_from_secret(s.as_ptr(), e.as_ptr(), pk.as_mut_ptr()) }).ok()?;
+    let rc = with_core(ARENA_SMALL, || unsafe {
+        pqz_keypair_from_secret(s.as_ptr(), e.as_ptr(), pk.as_mut_ptr())
+    })
+    .ok()?;
     (rc == 0).then_some(pk)
 }
 
 pub fn keygen(seed32: &[u8; 32]) -> Option<Key> {
-    let mut k = Key { pk: Box::new([0; PK_BYTES]), s: Box::new([0; N]), e: Box::new([0; N]), ctr: 0 };
+    let mut k = Key {
+        pk: Box::new([0; PK_BYTES]),
+        s: Box::new([0; N]),
+        e: Box::new([0; N]),
+        ctr: 0,
+    };
     let rc = with_core(ARENA_SMALL, || unsafe {
-        pqz_keygen(seed32.as_ptr(), k.pk.as_mut_ptr(), k.s.as_mut_ptr(), k.e.as_mut_ptr(), &mut k.ctr)
+        pqz_keygen(
+            seed32.as_ptr(),
+            k.pk.as_mut_ptr(),
+            k.s.as_mut_ptr(),
+            k.e.as_mut_ptr(),
+            &mut k.ctr,
+        )
     })
     .ok()?;
     (rc == 0).then_some(k)
@@ -236,7 +302,12 @@ pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> O
 }
 
 /// `pqz_enc_seed_win`: recipient j's v at window `win[j]` < 4 (None: every window 0; R0-1)
-pub fn enc_win(pks: &[&[u8; PK_BYTES]], win: Option<&[u8]>, msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Option<Enc> {
+pub fn enc_win(
+    pks: &[&[u8; PK_BYTES]],
+    win: Option<&[u8]>,
+    msgs: &[[u8; 16]],
+    seed_enc: &[u8; 32],
+) -> Option<Enc> {
     let n = pks.len();
     if n == 0 || msgs.len() != n || win.is_some_and(|w| w.len() != n) {
         return None;
@@ -282,7 +353,14 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: usize) -> [u8; 32] {
 pub fn enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
     let mut out = [0u8; 32];
     // SAFETY: three 32-byte inputs and a 32-byte output; no global state
-    unsafe { pqz_enc_leg_seed(seed_enc.as_ptr(), to_ua.as_ptr(), pkt_hash.as_ptr(), out.as_mut_ptr()) };
+    unsafe {
+        pqz_enc_leg_seed(
+            seed_enc.as_ptr(),
+            to_ua.as_ptr(),
+            pkt_hash.as_ptr(),
+            out.as_mut_ptr(),
+        )
+    };
     out
 }
 
@@ -295,8 +373,16 @@ pub fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Option<([i64; 16], [i64; 16])> {
 pub fn dec_win(s: &[i8; N], ct: &[u8; CT_BYTES], win: usize) -> Option<([i64; 16], [i64; 16])> {
     let (mut m, mut noise) = ([0i64; 16], [0i64; 16]);
     let w = u32::try_from(win).ok()?;
-    let rc = with_core(ARENA_SMALL, || unsafe { pqz_dec_win(s.as_ptr(), ct.as_ptr(), w, m.as_mut_ptr(), noise.as_mut_ptr()) })
-        .ok()?;
+    let rc = with_core(ARENA_SMALL, || unsafe {
+        pqz_dec_win(
+            s.as_ptr(),
+            ct.as_ptr(),
+            w,
+            m.as_mut_ptr(),
+            noise.as_mut_ptr(),
+        )
+    })
+    .ok()?;
     (rc == 0).then_some((m, noise))
 }
 
@@ -306,7 +392,16 @@ pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8
     let mut proof = vec![0u8; super::MAX_PROOF];
     let mut len = proof.len();
     let rc = with_core(ARENA_BIG, || unsafe {
-        pqz_prove(op, stmt.as_ptr(), stmt.len(), wit.as_ptr(), wit.len(), rnd32.as_ptr(), proof.as_mut_ptr(), &mut len)
+        pqz_prove(
+            op,
+            stmt.as_ptr(),
+            stmt.len(),
+            wit.as_ptr(),
+            wit.len(),
+            rnd32.as_ptr(),
+            proof.as_mut_ptr(),
+            &mut len,
+        )
     })
     .unwrap_or(-1);
     if rc != 0 {
@@ -347,7 +442,17 @@ pub fn encrypt_win(
     let rc = with_core(ARENA_SMALL, || unsafe {
         let ptrs: Vec<*const u8> = pks.iter().map(|p| p.as_ptr()).collect();
         let w = win.map_or(std::ptr::null(), |w| w.as_ptr());
-        pqz_encrypt_win(ptrs.as_ptr(), n as u32, w, msgs.as_ptr(), r.as_ptr(), e1.as_ptr(), e2.as_ptr(), u.as_mut_ptr(), vs.as_mut_ptr())
+        pqz_encrypt_win(
+            ptrs.as_ptr(),
+            n as u32,
+            w,
+            msgs.as_ptr(),
+            r.as_ptr(),
+            e1.as_ptr(),
+            e2.as_ptr(),
+            u.as_mut_ptr(),
+            vs.as_mut_ptr(),
+        )
     })
     .ok()?;
     (rc == 0).then_some((u, vs))

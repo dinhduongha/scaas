@@ -7,13 +7,20 @@ set -u
 cd "$(dirname "$0")/../.."
 SETS=${*:-n2048-kmax1024 n2304-kmax4096 n2560-kmax16384 n2816-kmax65536}
 step() { # name, forge args...
-  L=runs/2026-11-08-ua-mtx-merge-t49-$1.log; shift
-  if [ -f "$L" ] && grep -qE "^Ran [0-9]+ test suites?" "$L"; then echo "skip $L"; return; fi
-  FOUNDRY_TEST=test/pqz FOUNDRY_SCRIPT=test/pqz ../../scripts/capped script/pqz/at-set.sh "$@" > "$L" 2>&1
-  echo "$L rc=$? $(grep -E '^Ran [0-9]+ test suites?' "$L" | tail -1)"
-  git diff --quiet HEAD -- src/pqz/PqzSet.sol || { echo "PqzSet.sol not restored"; exit 1; }
+    L=runs/2026-11-08-ua-mtx-merge-t49-$1.log
+    shift
+    if [ -f "$L" ] && grep -qE "^Ran [0-9]+ test suites?" "$L"; then
+        echo "skip $L"
+        return
+    fi
+    FOUNDRY_TEST=test/pqz FOUNDRY_SCRIPT=test/pqz ../../scripts/capped script/pqz/at-set.sh "$@" >"$L" 2>&1
+    echo "$L rc=$? $(grep -E '^Ran [0-9]+ test suites?' "$L" | tail -1)"
+    git diff --quiet HEAD -- src/pqz/PqzSet.sol || {
+        echo "PqzSet.sol not restored"
+        exit 1
+    }
 }
 for S in $SETS; do
-  step "inv-$S" "$S" test --match-path test/pqz/invariant/PqzVerdictInvariants.t.sol
-  [ "$S" = n2048-kmax1024 ] && step "pqzh-fit-$S" "$S" test --match-test test_pqzhN2048FitsBothPaths
+    step "inv-$S" "$S" test --match-path test/pqz/invariant/PqzVerdictInvariants.t.sol
+    [ "$S" = n2048-kmax1024 ] && step "pqzh-fit-$S" "$S" test --match-test test_pqzhN2048FitsBothPaths
 done

@@ -7,12 +7,19 @@
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 export PATH="$HOME/.foundry/bin:$PATH"
-git diff --quiet -- script || { echo "script is not clean" >&2; exit 2; }
+git diff --quiet -- script || {
+    echo "script is not clean" >&2
+    exit 2
+}
 for m in $(python3 "$here/t10_mutants.py" --list); do
-  python3 "$here/t10_mutants.py" "$m" || { echo "$m: anchor missing" >&2; echo 99 > "$here/mutant-t10-$m.rc.log"; continue; }
-  ../../scripts/capped forge test --match-path 'test/{governance/GovDeploy,ua/UADeploy,zether/ZetherDeploy,governance/CodeCeiling}.t.sol' > "$here/mutant-t10-$m.log" 2>&1
-  echo $? > "$here/mutant-t10-$m.rc.log"
-  git checkout -- script
+    python3 "$here/t10_mutants.py" "$m" || {
+        echo "$m: anchor missing" >&2
+        echo 99 >"$here/mutant-t10-$m.rc.log"
+        continue
+    }
+    ../../scripts/capped forge test --match-path 'test/{governance/GovDeploy,ua/UADeploy,zether/ZetherDeploy,governance/CodeCeiling}.t.sol' >"$here/mutant-t10-$m.log" 2>&1
+    echo $? >"$here/mutant-t10-$m.rc.log"
+    git checkout -- script
 done
 python3 - "$here" <<'PY'
 import os, re, sys

@@ -651,7 +651,7 @@ explicit gas limit ([NET-EVM-11](../networks/evm.md#NET-EVM-11): the part's esti
 gas limit, else `TX_EXCEEDS_CHAIN_LIMIT`, and within `max_gas_per_tx`; 40–48 M), and puts the `register` back `queued` under
 `UA_KEY_NOT_CACHED` (its status names the parts sent now and the parts in flight, never a part whose send gave up); the `register`
 is sent only once its simulation passes, i.e. after every part landed. Before the first part (T21, owner 2026-11-16, O7): the
-node checks the `register`'s `pop` and attributes off chain (`scaas-ua` `ua8::check_registration`, the registry's own check once the
+node checks the `register`'s `pop` and attributes off chain (`scaas-ua` `ua_portable::check_registration`, the registry's own check once the
 key is cached; an extra check, the contract stays the guard); refused, the registration is `dead` as `UA_REGISTER_POP_REFUSED: …`
 and no part is sent. The parts are the `call` share of the EVM spend breaker: past `breaker.call_budget_pct` of
 `gas_budget_per_hour` no part is sent and the `register` waits `UA_KEY_NOT_CACHED` (payments run to the whole budget). The share counts
@@ -690,7 +690,7 @@ and the cache-then-register order for a subject that sends them itself: `clientk
 <a id="NODE-JOB-15"></a>**NODE-JOB-15** (open; default applied) — The namespace created for an ERP client that
 migrates from the legacy pull path gets `allow_call = true` (mandates and subject accounts need it).
 
-<a id="soroban-call-jobs"></a>**Soroban `call` jobs** (UA-8 Part B, `ua8-soroban` B6; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23),
+<a id="soroban-call-jobs"></a>**Soroban `call` jobs** (UA-8 Part B, `ua-portable-soroban` B6; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23),
 [NET-SOR-27](../networks/soroban.md#NET-SOR-27); the owner's explicit-parameter rule of 2026-10-31 replaced the plan's
 `op.extra.call` XDR). The Soroban `call` job has no selector table: its target is the chain's UA registry only, and its
 function one of the registry's writes. Payload: `{kind: "call", op: {contract, function, args, valid_until}}`, every
@@ -718,7 +718,7 @@ field required and any other field refused at every level (no XDR, `auth`, `extr
 
 Rules at `build`: `relayer` must be null or this lane, and this lane only when it is in the registry's `relayers()` (read once
 and kept: the list is immutable); a part the chain cannot verify needs a `relayer` (refused before simulation otherwise) and is
-checked off chain first (`scaas_ua::ua8::check_*`, feature `pq`), a part the chain verifies is not; the transaction carries one
+checked off chain first (`scaas_ua::ua_portable::check_*`, feature `pq`), a part the chain verifies is not; the transaction carries one
 `SourceAccount` entry (the relayer's attestation over `attest_digest` of the call's arguments) only when a relayer is named; a
 simulation that records any other signer is refused before signing; a finished transaction over `tx_max_size_bytes`, or a largest
 entry over the entry limit, is `Revert`: the job is `dead` on one claim and nothing is signed. A failed `relayers()` read holds
@@ -729,7 +729,7 @@ only the relayer-mode jobs, never payments. The `UA_REGISTER_SPLIT` rule is EVM'
 `pqz_pop_of` first: a proof already stored is `dead`, unsent, since on chain it is a no-op on the lane's fee. A `call` job that carries the call in a field other than `op` is `job without op` and fails closed; consumers
 follow this interface.
 
-<a id="soroban-ua-metatx-jobs"></a>**Soroban `ua_metatx` jobs** (`ua8-soroban` N2; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23); the
+<a id="soroban-ua-metatx-jobs"></a>**Soroban `ua_metatx` jobs** (`ua-portable-soroban` N2; BUILT; [NET-SOR-23](../networks/soroban.md#NET-SOR-23); the
 owner's explicit-parameter rule of 2026-10-31 replaced hex XDR `op.args`). Payload: `{kind: "ua_metatx", op: {contract, function,
 args, auth?, valid_until?}}`, any other field refused. The node builds the `InvokeContractArgs` from `args`, in the contract's
 order, and takes the op digest (the job id), `valid_until` and every check from that one value.
@@ -769,7 +769,7 @@ order, and takes the op digest (the job id), `valid_until` and every check from 
 | mandate | `mtx_mandate_pay` | `token, payee, amount, pay_ref, epoch, valid_until, relayer, auth` |
 | registry | `accept_membership` | `ua, member_sig, relayer` |
 
-<a id="soroban-accept-membership"></a>`accept_membership` ([NET-SOR-28](../networks/soroban.md#NET-SOR-28), `ua8-soroban` MA-S; BUILT): a member of an `msig` accepts its
+<a id="soroban-accept-membership"></a>`accept_membership` ([NET-SOR-28](../networks/soroban.md#NET-SOR-28), `ua-portable-soroban` MA-S; BUILT): a member of an `msig` accepts its
 slot and holds no XLM: the member signs, the lane submits. `contract` must equal `params.ua_registry` (unset: refused); this function
 is a `ua_metatx` so that `op.auth` can carry a `G…` member's entry, which a `call` job cannot, and it is the only `ua_metatx` on the
 registry: a `signed_op` still never runs there, and `call` jobs stay the registry's writes. `op.valid_until` is required, after now and at most
@@ -782,13 +782,13 @@ registry: a `signed_op` still never runs there, and `call` jobs stay the registr
 | `G…` | `0x` | null | the member's entry over `(ua, PURPOSE_MEMBERSHIP, typed)` (`clientkeys`: `membershipInvocation`, `signedAuth`) |
 | a relayer-checked kind | as a `Chain` kind | this lane, listed in `relayers()` | none |
 
-Rules at `build`, as a `call` job's: a slot the chain cannot verify needs a `relayer` and passes `scaas_ua::ua8::check_membership` before
+Rules at `build`, as a `call` job's: a slot the chain cannot verify needs a `relayer` and passes `scaas_ua::ua_portable::check_membership` before
 simulation, a refused one is `dead` and nothing is sent; the lane's one entry is over `attest_digest` of `(ua, member_sig, relayer)`; an
 `evm-contract` slot is `NotVerifiable` here, no off-chain check reaches ERC-1271. With no `op.auth`, a simulation that records another
 signer is refused before signing. The job has no op digest (the job's own id), is free to the client and counts in the call share
 (`call_budget_pct`, [NET-SOR-14](../networks/soroban.md#NET-SOR-14)). `build` reads `member_accepted` first: a slot already accepted is `consumed`, nothing simulated or sent, since on chain it is a no-op on the lane's fee. A relayer-checked slot beside a `G…` member is `UAKeyData`, `dead`: see [NET-SOR-28](../networks/soroban.md#NET-SOR-28).
 
-<a id="soroban-signed-op"></a>**Soroban `signed_op`** (`ua8-soroban` N2 review, owner rulings of 2026-11-02; BUILT). Payload: `{kind: "signed_op", op: {payload,
+<a id="soroban-signed-op"></a>**Soroban `signed_op`** (`ua-portable-soroban` N2 review, owner rulings of 2026-11-02; BUILT). Payload: `{kind: "signed_op", op: {payload,
 from, signature, contract, valid_until, kind?, extra?}}`.
 
 - `payload`: `{nonce, expiry, invocation}`, `nonce` the `i64` of the auth entry, `expiry` the `u32` signature expiration ledger, and
@@ -924,7 +924,7 @@ is `422 HEX_ARGS_REFUSED`.
 | `VestingGrant.release`; `Distribution.claim`, `claimMany` | runtime code = EIP-1167 clone of the registered asset-suite implementation (codehash checked at lease, cached) | client asset-suite flows ([contracts/asset-suite.md](../contracts/asset-suite.md)) |
 | `ExchangeOffer.exchange(MetaTransaction,bytes)` | EIP-1167 clone of the registered `ExchangeOffer` implementation (like `SCaaSDex.mtxSettle`: the leg carries the holder's own signature) | client corporate actions |
 | `Safe.execTransaction` | a registered role-holder contract (`chain_contract.kind = role_holder`); the owners' signatures are inside the calldata | issuer / compliance / buyer role holders |
-| `GovernanceRouter.mtx<Op>` (the `typed.rs` rows of contract kind `gov_router`, 35 at `26586d2e`; group 3f adds `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` ([NODE-JOB-22](#NODE-JOB-22)), group 3h `mtxSetProofStore`, group 3l `mtxSetWrapLimits`, `mtxSetWrapMember`; CTR-GOV-23 adds the eleven admin ops of `OpenFactory` and a `ComplianceRegistry`, `mtxPublishTokenEnv`, `mtxPublishDexEnv`, `mtxPublishClassEnv`, `mtxDeprecateToken`, `mtxDeprecateDex`, `mtxDeprecateRelease`, `mtxSetTokenKindEnabled`, `mtxSetClassKindEnabled`, `mtxSetKycProvider`, `mtxSetCompliance`, `mtxSetChainEntries`, an `Env` at most 4 deps, 2 params and 32 libs with one code hash each, the compliance arrays of one length at most 256; the four release approvals and the three open deploys are no row: release management is not a node job, owner 2026-11-10; owner 2026-11-12 adds the creations `mtxCreateToken`, `mtxCreateDex`, [NODE-JOB-26](#NODE-JOB-26), and `mtxCreateInstance`, [NODE-JOB-27](#NODE-JOB-27); the five deprecations and kind switches (fix2, Fable D P3-2) and `mtxRenounceAdmin` ([CTR-GOV-27](../decisions.md#CTR-GOV-27)), then `mtxTransferAdmin`, the three `mtxPublish*Env` and `mtxSetChainEntries` (CTR-GOV-27's Change) take a named field `chainUid`, the target's chain word, signed in the struct; a job without it is refused `BAD_PAYLOAD`; `mtxSetChainEntries` takes `args.entries`, a named `ChainEntries` object of nine fields (a blob is refused `BAD_PAYLOAD`), its EIP-712 struct hash the signed word; [CTR-GOV-28](../decisions.md#CTR-GOV-28) gives the twelve admin ops of a token, the DEX and a `ComplianceRegistry` the same named `chainUid`, the last op field: `mtxGrantRole`, `mtxRevokeRole`, `mtxSetGrant`, `mtxCancelGrant`, `mtxDisableFeature`, `mtxEnableFeature`, `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier`, `mtxSetVerifierFee`, `mtxSetKycProvider`, `mtxSetCompliance`); build 3zb + 3zc adds `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` and gives 25 more ops the named `chainUid` ([below](#holder-chain-word))) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | admins and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0. The first call of a delayed `mtxSetWrapLimits` lands and changes nothing (`WrapLimitsProposed`, its `eta`): an operator reads `landed` as proposed, not applied; naming it in the job's result is SPECIFIED, not built. The same holds for `mtxSetMaxSupply` / `mtxSetMaxWrapSupply` under a non-zero `grantDelay` (`MaxSupplyProposed` / `MaxWrapSupplyProposed`, then the same op again in the window: `…Set`) |
+| `GovernanceRouter.mtx<Op>` (the `typed.rs` rows of contract kind `gov_router`, 35 at `26586d2e`; group 3f adds `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` ([NODE-JOB-22](#NODE-JOB-22)), group 3h `mtxSetProofStore`, group 3l `mtxSetWrapLimits`, `mtxSetWrapMember`; set-auditor (CTR-GOV-31, BUILT) `mtxSetAuditorKey` (`UASetAuditorKey(bytes32 from,address target,bytes newKey,uint32 epoch,bytes32 chainUid,…)`, the new key's `pop` a named unsigned field `pop` beside the struct) and `mtxSetAuditorUA` (`UASetAuditorUA(…,bytes32 newAuditor,uint32 epoch,bytes32 chainUid,…)`, the new auditor's `consent` a named `UASig`), fee mode `NONE`; CTR-GOV-23 adds the eleven admin ops of `OpenFactory` and a `ComplianceRegistry`, `mtxPublishTokenEnv`, `mtxPublishDexEnv`, `mtxPublishClassEnv`, `mtxDeprecateToken`, `mtxDeprecateDex`, `mtxDeprecateRelease`, `mtxSetTokenKindEnabled`, `mtxSetClassKindEnabled`, `mtxSetKycProvider`, `mtxSetCompliance`, `mtxSetChainEntries`, an `Env` at most 4 deps, 2 params and 32 libs with one code hash each, the compliance arrays of one length at most 256; the four release approvals and the three open deploys are no row: release management is not a node job, owner 2026-11-10; owner 2026-11-12 adds the creations `mtxCreateToken`, `mtxCreateDex`, [NODE-JOB-26](#NODE-JOB-26), and `mtxCreateInstance`, [NODE-JOB-27](#NODE-JOB-27); the five deprecations and kind switches (fix2, Fable D P3-2) and `mtxRenounceAdmin` ([CTR-GOV-27](../decisions.md#CTR-GOV-27)), then `mtxTransferAdmin`, the three `mtxPublish*Env` and `mtxSetChainEntries` (CTR-GOV-27's Change) take a named field `chainUid`, the target's chain word, signed in the struct; a job without it is refused `BAD_PAYLOAD`; `mtxSetChainEntries` takes `args.entries`, a named `ChainEntries` object of nine fields (a blob is refused `BAD_PAYLOAD`), its EIP-712 struct hash the signed word; [CTR-GOV-28](../decisions.md#CTR-GOV-28) gives the twelve admin ops of a token, the DEX and a `ComplianceRegistry` the same named `chainUid`, the last op field: `mtxGrantRole`, `mtxRevokeRole`, `mtxSetGrant`, `mtxCancelGrant`, `mtxDisableFeature`, `mtxEnableFeature`, `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier`, `mtxSetVerifierFee`, `mtxSetKycProvider`, `mtxSetCompliance`); build 3zb + 3zc adds `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` and gives 25 more ops the named `chainUid` ([below](#holder-chain-word))) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | admins and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0. The first call of a delayed `mtxSetWrapLimits` lands and changes nothing (`WrapLimitsProposed`, its `eta`): an operator reads `landed` as proposed, not applied; naming it in the job's result is SPECIFIED, not built. The same holds for `mtxSetMaxSupply` / `mtxSetMaxWrapSupply` under a non-zero `grantDelay` (`MaxSupplyProposed` / `MaxWrapSupplyProposed`, then the same op again in the window: `…Set`) |
 | `PqChat` writes (12, `typed.rs` contract kind `pqchat`, [above](#pqchat-calls)) | `Rule::FactoryClass(3)`: `token_factory`'s `infoOf` lists it as class 3, `version ≠ 0` (unset ⇒ refused); `storeMessage` / `addWraps` only paid or under `relay_unsigned_pqchat` | PqChat clients (sessions, messages, public topics), any relayer |
 | A configured service's declared entries `<op>(<Op>, UAMetaTransfer, UASig)` (contract kind `service`, [NODE-JOB-25](#NODE-JOB-25)) | `[[chains.services]]` of this chain, equal to its `servicePullEntries()` both directions; one kind per address | payers of a service pull, any relayer |
 
@@ -1230,7 +1230,7 @@ code (orientation only; line numbers as of 2026-10-07):
 
 | Concept here | Reference client name |
 |---|---|
-| Legacy node client module (Rust) | `odoo.rs` (`odoo::Odoo`, `odoo::Job`, `odoo.rs:90-108`), config section `[odoo]`, marked with `// legacy(…)` comments until removal |
+| Legacy node client module (Rust) | `external_pull.rs` (`external_pull::ExternalPull`, `external_pull::Job`; before 2026-11-18 `odoo.rs`, `odoo::Odoo`, `odoo::Job`, `odoo.rs:90-108`), config section `[external_pull]` (`[odoo]` until 2026-11-18), marked with `// legacy(…)` comments until removal |
 | Per-chain flag | `blockchain.chain.node_transport ∈ pull|push`; cutover `action_switch_to_push` sets `node_transport = 'push'`, rollback `node_transport = 'pull'` |
 | Chain, its key and profile, DEX cursor, readiness counts | `blockchain.chain`, `blockchain.chain.chain_key`, `blockchain.chain.chain_profile`, `blockchain.chain.dex_indexed_block`, `blockchain.chain.relay_stats(chain_key)` |
 | RPC endpoints (moved to `node.toml`) | `blockchain.rpc.endpoint` |

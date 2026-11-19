@@ -61,5 +61,13 @@ pub enum ZError {
     #[error("verification failed: {0}")]
     Verify(&'static str),
     #[error("{what}, M = {m}: about {gas} gas (zether.md §19, measured; under Amsterdam the transfer's regular gas, state gas on top) is over the EIP-7825 per-transaction cap {cap} less the prover's {margin} margin; send at most {max_m} recipients in this form, or at M = {m} a cheaper form: {alternatives} (`bundle` needs a BUNDLE token, leaving the auditor out an OPTIONAL one)")]
-    GasCap { what: String, m: usize, gas: u64, cap: u64, margin: u64, max_m: usize, alternatives: String },
+    GasCap {
+        what: String,
+        m: usize,
+        gas: u64,
+        cap: u64,
+        margin: u64,
+        max_m: usize,
+        alternatives: String,
+    },
 }

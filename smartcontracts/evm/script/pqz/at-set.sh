@@ -17,50 +17,72 @@
 #   <set> = others  runs the given scope at every set except the committed one, one after another.
 # The tests read the set's vectors (smartcontracts/vectors/pqz[/<set>], PqzSet.NAME) and its self-test / probe hashes.
 set -eu
-[ $# -ge 1 ] || { sed -n '2,16p' "$0"; exit 2; }
+[ $# -ge 1 ] || {
+    sed -n '2,16p' "$0"
+    exit 2
+}
 S=$1
 shift
 EVM=$(cd "$(dirname "$0")/../.." && pwd)
 SETS=$EVM/../../pqz-core/params/sets
 if [ "$S" = others ] && [ "${1:-}" != list ]; then
-  COMMITTED=$(sed -n 's/.*string internal constant NAME = "\(.*\)";/\1/p' "$EVM/src/pqz/PqzSet.sol")
-  rc=0
-  for d in "$SETS"/n*-kmax*/; do
-    s=$(basename "$d"); [ "$s" = "$COMMITTED" ] && continue
-    sh "$0" "$s" "$@" || rc=1
-  done
-  exit $rc
+    COMMITTED=$(sed -n 's/.*string internal constant NAME = "\(.*\)";/\1/p' "$EVM/src/pqz/PqzSet.sol")
+    rc=0
+    for d in "$SETS"/n*-kmax*/; do
+        s=$(basename "$d")
+        [ "$s" = "$COMMITTED" ] && continue
+        sh "$0" "$s" "$@" || rc=1
+    done
+    exit $rc
 fi
 # The set-sensitive test files, computed (not hand-listed, so a new set-reading test is never missed).
 sensitive() {
-  cd "$EVM"
-  pat='PqzSet\.|kmax[0-9]|PQZ_SET'
-  helpers=$(grep -rlE "$pat" test --include='*.sol' | grep -v -E '\.t\.sol$|/legacy/' | sed 's|.*/||; s|\.sol$||' | sort -u)
-  {
-    grep -rlE "$pat" test --include='*.t.sol' | grep -v /legacy/
-    for h in $helpers; do grep -rlE "import .*[/\"]$h\.sol" test --include='*.t.sol' | grep -v /legacy/ || true; done
-  } | grep -v -E '^test/(pqzh?|modules)/' | sort -u
+    cd "$EVM"
+    pat='PqzSet\.|kmax[0-9]|PQZ_SET'
+    helpers=$(grep -rlE "$pat" test --include='*.sol' | grep -v -E '\.t\.sol$|/legacy/' | sed 's|.*/||; s|\.sol$||' | sort -u)
+    {
+        grep -rlE "$pat" test --include='*.t.sol' | grep -v /legacy/
+        for h in $helpers; do grep -rlE "import .*[/\"]$h\.sol" test --include='*.t.sol' | grep -v /legacy/ || true; done
+    } | grep -v -E '^test/(pqzh?|modules)/' | sort -u
 }
-if [ "${1:-}" = list ]; then echo 'test/pqz/*'; echo 'test/pqzh/*'; sensitive; exit 0; fi
+if [ "${1:-}" = list ]; then
+    echo 'test/pqz/*'
+    echo 'test/pqzh/*'
+    sensitive
+    exit 0
+fi
 MODULES=
-if [ "${1:-}" = modules ]; then shift; MODULES=1; set -- test --match-path 'test/modules/*' "$@"; fi
+if [ "${1:-}" = modules ]; then
+    shift
+    MODULES=1
+    set -- test --match-path 'test/modules/*' "$@"
+fi
 if [ "${1:-}" = sensitive ]; then
-  shift
-  set -- test --match-path "{test/pqz/*,test/pqzh/*,$(sensitive | paste -sd, -)}" "$@"
+    shift
+    set -- test --match-path "{test/pqz/*,test/pqzh/*,$(sensitive | paste -sd, -)}" "$@"
 fi
 SRC=$SETS/$S/PqzSet.sol
 DST=$EVM/src/pqz/PqzSet.sol
-[ -f "$SRC" ] || { echo "at-set.sh: no PqzSet.sol for set $S ($SRC)" >&2; exit 2; }
+[ -f "$SRC" ] || {
+    echo "at-set.sh: no PqzSet.sol for set $S ($SRC)" >&2
+    exit 2
+}
 # T21 L67: the gas table's inputs (test/vectors/pqz-gas/<set>.json) equal what gas-inputs.py makes of the precompile rows
-python3 -I "$EVM/script/pqz/gas-inputs.py" --check || { echo "at-set.sh: run gas-inputs.py and commit the pqz-gas files" >&2; exit 1; }
+python3 -I "$EVM/script/pqz/gas-inputs.py" --check || {
+    echo "at-set.sh: run gas-inputs.py and commit the pqz-gas files" >&2
+    exit 1
+}
 git -C "$EVM" diff --quiet HEAD -- src/pqz/PqzSet.sol ||
-  { echo "at-set.sh: src/pqz/PqzSet.sol is not the committed one (another run, or one killed?)" >&2; exit 2; }
+    {
+        echo "at-set.sh: src/pqz/PqzSet.sol is not the committed one (another run, or one killed?)" >&2
+        exit 2
+    }
 LEG=$EVM/runs/2026-11-11-stacked-gate/legacy-at-set.sh
 if [ -n "$MODULES" ]; then
-  trap 'git -C "$EVM" checkout -q HEAD -- src/pqz/PqzSet.sol; sh "$LEG" default' EXIT
-  sh "$LEG" "$S"
+    trap 'git -C "$EVM" checkout -q HEAD -- src/pqz/PqzSet.sol; sh "$LEG" default' EXIT
+    sh "$LEG" "$S"
 else
-  trap 'git -C "$EVM" checkout -q HEAD -- src/pqz/PqzSet.sol' EXIT
+    trap 'git -C "$EVM" checkout -q HEAD -- src/pqz/PqzSet.sol' EXIT
 fi
 trap 'exit 130' HUP INT TERM
 cp "$SRC" "$DST"

@@ -5,6 +5,7 @@ with its rnd32, compare keccak(proof) with the row's proof_keccak, and verify th
 
   python3 -I pqz-core/pqzh/ligero/runs/replay_vectors.py <ligero_kat binary> > runs/<tag>-replay.txt
 """
+
 import json
 import os
 import subprocess
@@ -34,8 +35,10 @@ def main():
     for r, g in zip(d["rows"], got, strict=True):
         ok = g["keccak"] == r["proof_keccak"] and g["proof_bytes"] == r["proof_bytes"] and g["verify_stored"]
         bad += not ok
-        print(f"{r['form']:<18} {r.get('case', ''):<16} bytes {g['proof_bytes']:>7} keccak {'same' if ok else 'DIFF'} "
-              f"verify_stored {g['verify_stored']}")
+        print(
+            f"{r['form']:<18} {r.get('case', ''):<16} bytes {g['proof_bytes']:>7} keccak {'same' if ok else 'DIFF'} "
+            f"verify_stored {g['verify_stored']}"
+        )
     print(f"rows {len(got)}, byte-identical and stored proof verified: {len(got) - bad}, failures: {bad}")
     sys.exit(1 if bad else 0)
 

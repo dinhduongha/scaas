@@ -16,6 +16,8 @@ fn process(id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Result<(), Pro
         return Err(ProgramError::InvalidAccountData);
     }
     let mut d = rec.try_borrow_mut_data()?;
-    d.get_mut(..data.len()).ok_or(ProgramError::AccountDataTooSmall)?.copy_from_slice(data);
+    d.get_mut(..data.len())
+        .ok_or(ProgramError::AccountDataTooSmall)?
+        .copy_from_slice(data);
     Ok(())
 }

@@ -37,7 +37,18 @@ import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
-import {VM, TYPED_OPS, TYPED_OPS_LEGACY, checkRow, onChain, domainOf, domainField, ecdsa, rowKey, rowEnvelope2} from "./NamedEntry.t.sol";
+import {
+    VM,
+    TYPED_OPS,
+    TYPED_OPS_LEGACY,
+    checkRow,
+    onChain,
+    domainOf,
+    domainField,
+    ecdsa,
+    rowKey,
+    rowEnvelope2
+} from "./NamedEntry.t.sol";
 import {swap, tryRowAs, UA_CANCEL_NONCE, rowMeta} from "./TypedOps.t.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
@@ -169,7 +180,10 @@ abstract contract OrderRows is Test {
     }
 
     /// The signer funded on a token at the row's own domain address, a 1:1 wrapper of it at the row's `wrappedToken`.
-    function _wrapPair(string memory op, address signer, address wrapper, uint256 amount) private returns (NormalToken u, WrappedToken w) {
+    function _wrapPair(string memory op, address signer, address wrapper, uint256 amount)
+        private
+        returns (NormalToken u, WrappedToken w)
+    {
         address at = vm.parseJsonAddress(j, domainField(op, _kind(), "domain.verifyingContract"));
         _at(address(_normalKind()), at);
         u = NormalToken(at);
@@ -183,21 +197,51 @@ abstract contract OrderRows is Test {
     function test_typedOpsVectors_WrapOrderRowHasNoEntry() public {
         j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row retired
         ITradeToken.UATradeOrder memory c = _wrapAt(_f("WrapOrder", ""));
-        LegacyWrapOrder memory o = LegacyWrapOrder(address(uint160(uint256(c.from))), c.receiveToken, c.amount,
-            c.receiveAmount, c.minFill, c.fee, c.relayer, address(uint160(uint256(c.destination))), c.flags, c.batch, c.nonce,
-            c.validUntil);
+        LegacyWrapOrder memory o = LegacyWrapOrder(
+            address(uint160(uint256(c.from))),
+            c.receiveToken,
+            c.amount,
+            c.receiveAmount,
+            c.minFill,
+            c.fee,
+            c.relayer,
+            address(uint160(uint256(c.destination))),
+            c.flags,
+            c.batch,
+            c.nonce,
+            c.validUntil
+        );
         (NormalToken u, WrappedToken w) = _wrapPair("WrapOrder", o.from, o.wrappedToken, o.amount);
-        _rowHasNoEntry("WrapOrder", address(w), abi.encodeWithSignature(
-            "mtxWrapOrder(address,(address,address,uint256,uint256,uint256,uint256,address,address,uint8,uint256,uint256,uint256),bytes)",
-            address(u), o, _sigOf("WrapOrder")));
+        _rowHasNoEntry(
+            "WrapOrder",
+            address(w),
+            abi.encodeWithSignature(
+                "mtxWrapOrder(address,(address,address,uint256,uint256,uint256,uint256,address,address,uint8,uint256,uint256,uint256),bytes)",
+                address(u),
+                o,
+                _sigOf("WrapOrder")
+            )
+        );
         assertEq(w.totalSupply(), 0);
     }
 
     function test_typedOpsVectors_UAWrapOrderRow() public {
         j = vm.readFile(TYPED_OPS);
         ITradeToken.UATradeOrder memory c = _wrapAt(_f("UAWrapOrder", ""));
-        ITradeToken.UAWrapOrder memory o = ITradeToken.UAWrapOrder(c.from, c.receiveToken, c.amount, c.receiveAmount, c.minFill, c.fee,
-            c.relayer, c.destination, c.flags, c.batch, c.nonce, c.validUntil);
+        ITradeToken.UAWrapOrder memory o = ITradeToken.UAWrapOrder(
+            c.from,
+            c.receiveToken,
+            c.amount,
+            c.receiveAmount,
+            c.minFill,
+            c.fee,
+            c.relayer,
+            c.destination,
+            c.flags,
+            c.batch,
+            c.nonce,
+            c.validUntil
+        );
         address signer = address(uint160(uint256(o.from)));
         (NormalToken u, WrappedToken w) = _wrapPair("UAWrapOrder", signer, o.wrappedToken, o.amount);
         bytes memory built = abi.encodeCall(IWrappedToken.mtxWrapOrder, (address(u), o, _uaSig("UAWrapOrder")));
@@ -222,8 +266,14 @@ abstract contract OrderRows is Test {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         ITradeToken.UATradeOrder memory o = _order("CancelUAOrder");
-        _runRenamed("CancelUAOrder", address(t), address(t), ANYONE,
-            abi.encodeWithSignature(UA_CANCEL_ORDER, o, _uaSig("CancelUAOrder")), ITradeToken.mtxCancelOrder.selector);
+        _runRenamed(
+            "CancelUAOrder",
+            address(t),
+            address(t),
+            ANYONE,
+            abi.encodeWithSignature(UA_CANCEL_ORDER, o, _uaSig("CancelUAOrder")),
+            ITradeToken.mtxCancelOrder.selector
+        );
         assertEq(t.pulled(t.tradeOrderDigest(o)), o.amount);
     }
 
@@ -233,7 +283,9 @@ abstract contract OrderRows is Test {
         j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row retired
         NormalToken t = _normalKind();
         ITradeToken.TradeOrder memory o = _native(_wrapAt(_f("CancelWrapOrder", "order.")));
-        _rowHasNoEntry("CancelWrapOrder", address(t), abi.encodeWithSignature(OLD_CANCEL_ORDER, o, _sigOf("CancelWrapOrder")));
+        _rowHasNoEntry(
+            "CancelWrapOrder", address(t), abi.encodeWithSignature(OLD_CANCEL_ORDER, o, _sigOf("CancelWrapOrder"))
+        );
         assertEq(t.pulled(t.tradeOrderDigest(DexLegs.ua(o))), 0);
     }
 
@@ -241,8 +293,14 @@ abstract contract OrderRows is Test {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         ITradeToken.UATradeOrder memory o = _wrapAt(_f("CancelUAWrapOrder", "order."));
-        _runRenamed("CancelUAWrapOrder", address(t), address(t), ANYONE,
-            abi.encodeWithSignature(UA_CANCEL_ORDER, o, _uaSig("CancelUAWrapOrder")), ITradeToken.mtxCancelOrder.selector);
+        _runRenamed(
+            "CancelUAWrapOrder",
+            address(t),
+            address(t),
+            ANYONE,
+            abi.encodeWithSignature(UA_CANCEL_ORDER, o, _uaSig("CancelUAWrapOrder")),
+            ITradeToken.mtxCancelOrder.selector
+        );
         assertEq(t.pulled(t.tradeOrderDigest(o)), o.amount);
     }
 
@@ -260,9 +318,20 @@ abstract contract OrderRows is Test {
         address payee = vm.parseJsonAddress(j, _f("RelayFee", "payee"));
         uint256 value = _u(_f("RelayFee", "value"));
         (address tgt, bytes32 cdh) = _callOf("RelayFee");
-        _rowHasNoEntry("RelayFee", address(t), abi.encodeWithSignature(
-            "mtxRelayFee(address,address,bytes32,address,uint256,uint256,bytes)",
-            from, tgt, cdh, payee, value, _u(_f("RelayFee", "validUntil")), _sigOf("RelayFee")));
+        _rowHasNoEntry(
+            "RelayFee",
+            address(t),
+            abi.encodeWithSignature(
+                "mtxRelayFee(address,address,bytes32,address,uint256,uint256,bytes)",
+                from,
+                tgt,
+                cdh,
+                payee,
+                value,
+                _u(_f("RelayFee", "validUntil")),
+                _sigOf("RelayFee")
+            )
+        );
         assertEq(t.balanceOf(payee), 0);
     }
 
@@ -275,10 +344,28 @@ abstract contract OrderRows is Test {
         bytes32 payee = vm.parseJsonBytes32(j, _f("UARelayFee", "payee"));
         uint256 value = _u(_f("UARelayFee", "value"));
         (address tgt, bytes32 cdh) = _callOf("UARelayFee");
-        bytes memory built = abi.encodeCall(IERC20MetaTx.mtxRelayFee, (from, tgt, cdh, payee, value, _u(_f("UARelayFee", "batch")),
-            _u(_f("UARelayFee", "nonce")), _u(_f("UARelayFee", "validUntil")), _uaSig("UARelayFee")));
-        _runRenamed("UARelayFee", address(t), address(t), vm.parseJsonAddress(j, _f("UARelayFee", "relayer")), built,
-            IERC20MetaTx.mtxRelayFee.selector);
+        bytes memory built = abi.encodeCall(
+            IERC20MetaTx.mtxRelayFee,
+            (
+                from,
+                tgt,
+                cdh,
+                payee,
+                value,
+                _u(_f("UARelayFee", "batch")),
+                _u(_f("UARelayFee", "nonce")),
+                _u(_f("UARelayFee", "validUntil")),
+                _uaSig("UARelayFee")
+            )
+        );
+        _runRenamed(
+            "UARelayFee",
+            address(t),
+            address(t),
+            vm.parseJsonAddress(j, _f("UARelayFee", "relayer")),
+            built,
+            IERC20MetaTx.mtxRelayFee.selector
+        );
         assertEq(t.balanceOf(address(uint160(uint256(payee)))), value);
         assertEq(t.mtxNonce(from, _u(_f("UARelayFee", "batch"))), _u(_f("UARelayFee", "nonce")) + 1, "the payer's lane");
     }
@@ -297,14 +384,24 @@ abstract contract OrderRows is Test {
 
     /// The row's two signatures, the payer's and the payee's, re-made under `t`'s domain; the payee a wallet of the row's key.
     /// ua-mtx-merge T2 / T11: the row names the merged `mtxPayWithPayeeFee` (owner 2026-11-12: the payee-fee names).
-    function _payeeFee(string memory op, NormalToken t, MetaTxLib.UAMetaTransfer memory x, bytes32 paymentDigest, bytes memory built) private {
+    function _payeeFee(
+        string memory op,
+        NormalToken t,
+        MetaTxLib.UAMetaTransfer memory x,
+        bytes32 paymentDigest,
+        bytes memory built
+    ) private {
         checkRow(j, op, _kind());
         bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
         assertEq(keccak256(built), keccak256(cd), "calldata");
         swap(cd, vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig")), ecdsa(rowKey(j), paymentDigest));
         swap(cd, _sigOf(op), onChain(j, op, address(t)));
         assertEq(bytes4(cd), IMetaTokenV2.mtxPayWithPayeeFee.selector, "the row names the merged mtx entry");
-        deployCodeTo("WalletMocks.sol:Mock1271Wallet", abi.encode(vm.parseJsonAddress(j, ".key.address")), address(uint160(uint256(x.to))));
+        deployCodeTo(
+            "WalletMocks.sol:Mock1271Wallet",
+            abi.encode(vm.parseJsonAddress(j, ".key.address")),
+            address(uint160(uint256(x.to)))
+        );
         t.mint(address(uint160(uint256(x.from))), FUNDS * 100, EnvKit.codeUidOf(address(t)));
         vm.prank(x.relayer);
         (bool ok, bytes memory ret) = address(t).call(cd);
@@ -318,13 +415,33 @@ abstract contract OrderRows is Test {
         string memory op = "ReceiverFee";
         NormalToken t = _normalKind();
         MetaTxLib.UAMetaTransfer memory u = _payment(op);
-        LegacyMetaTransfer.MetaTransfer memory x = LegacyMetaTransfer.MetaTransfer(address(uint160(uint256(u.from))),
-            address(uint160(uint256(u.to))), u.value, u.entryRef, u.batch, 0, u.validUntil, u.mode, u.relayer, 0, address(0));
+        LegacyMetaTransfer.MetaTransfer memory x = LegacyMetaTransfer.MetaTransfer(
+            address(uint160(uint256(u.from))),
+            address(uint160(uint256(u.to))),
+            u.value,
+            u.entryRef,
+            u.batch,
+            0,
+            u.validUntil,
+            u.mode,
+            u.relayer,
+            0,
+            address(0)
+        );
         address feeTo = vm.parseJsonAddress(j, _f(op, "feeRecipient"));
-        _rowHasNoEntry(op, address(t), abi.encodeWithSignature(
-            "mtxPayReceiverFee((address,address,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes,uint256,address,uint256,bytes)",
-            x, vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig")), _u(_f(op, "fee")), feeTo,
-            _u(_f(op, "validUntil")), _sigOf(op)));
+        _rowHasNoEntry(
+            op,
+            address(t),
+            abi.encodeWithSignature(
+                "mtxPayReceiverFee((address,address,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes,uint256,address,uint256,bytes)",
+                x,
+                vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig")),
+                _u(_f(op, "fee")),
+                feeTo,
+                _u(_f(op, "validUntil")),
+                _sigOf(op)
+            )
+        );
         assertEq(t.balanceOf(feeTo), 0);
     }
 
@@ -338,8 +455,10 @@ abstract contract OrderRows is Test {
         uint256 fee = _u(_f(op, "fee"));
         address feeTo = vm.parseJsonAddress(j, _f(op, "feeRecipient"));
         // pay-meta-tax T41: the row's `PayMeta` (`extra.meta`) the entry's last parameter, `entryRef` its commitment
-        bytes memory built = abi.encodeCall(IMetaTokenV2.mtxPayWithPayeeFee, (x, payer, fee, feeTo, _u(_f(op, "validUntil")),
-            _uaSig(op), rowMeta(j, op, _kind())));
+        bytes memory built = abi.encodeCall(
+            IMetaTokenV2.mtxPayWithPayeeFee,
+            (x, payer, fee, feeTo, _u(_f(op, "validUntil")), _uaSig(op), rowMeta(j, op, _kind()))
+        );
         _payeeFee(op, t, x, t.mtxTransferDigest(x), built);
         assertEq(t.balanceOf(feeTo), fee);
     }
@@ -357,9 +476,19 @@ abstract contract OrderRows is Test {
         IUARegistry.UASig memory s = _uaSig(op);
         checkRow(j, op, _kind());
         bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
-        assertEq(keccak256(abi.encodeWithSignature(
-            "uaCancelNonce(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", ua, batch, until, s)),
-            keccak256(cd), "the row: the old calldata");
+        assertEq(
+            keccak256(
+                abi.encodeWithSignature(
+                    "uaCancelNonce(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+                    ua,
+                    batch,
+                    until,
+                    s
+                )
+            ),
+            keccak256(cd),
+            "the row: the old calldata"
+        );
         (bool ok, bytes memory ret) = address(t).call(cd);
         assertFalse(ok);
         assertEq(ret.length, 0, "no such function");
@@ -373,11 +502,25 @@ abstract contract OrderRows is Test {
         string memory op = "UACancelNonce";
         NormalToken t = _normalKind();
         MetaTxLib.Envelope memory r = rowEnvelope2(j, op);
-        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(vm.parseJsonBytes32(j, _f(op, "from")), r.batch, r.nonce, r.validUntil,
-            r.mode, r.relayer, r.fee, r.feeRecipient);
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(
+            vm.parseJsonBytes32(j, _f(op, "from")),
+            r.batch,
+            r.nonce,
+            r.validUntil,
+            r.mode,
+            r.relayer,
+            r.fee,
+            r.feeRecipient
+        );
         uint256 lane = _u(_f(op, "lane"));
-        _runRenamed(op, address(t), address(t), e.relayer, abi.encodeWithSignature(UA_CANCEL_NONCE, e, lane, _uaSig(op)),
-            bytes4(keccak256(bytes(UA_CANCEL_NONCE))));
+        _runRenamed(
+            op,
+            address(t),
+            address(t),
+            e.relayer,
+            abi.encodeWithSignature(UA_CANCEL_NONCE, e, lane, _uaSig(op)),
+            bytes4(keccak256(bytes(UA_CANCEL_NONCE)))
+        );
         assertEq(t.mtxNonce(e.from, lane), 1);
         assertEq(t.mtxNonce(e.from, e.batch), 1);
     }
@@ -394,7 +537,12 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
 
     /// A fresh clone: `vm.copyStorage` copies what this test has touched, not `setUp`'s account.
     function _normalKind() internal override returns (NormalToken t) {
-        t = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        t = NormalToken(
+            EnvKit.clone(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(chainUidA, REG_L, address(0), false)
+            )
+        );
         t.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
     }
 
@@ -406,25 +554,54 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
     function test_typedOpsVectors_CancelDexOrderRow() public {
         j = vm.readFile(TYPED_OPS);
         string memory op = "CancelDexOrder";
-        SCaaSDex dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), EnvKit.env(chainUidA, address(0), address(0), false)));
-        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0), 0, 0)));
+        SCaaSDex dex = SCaaSDex(
+            EnvKit.clone(
+                address(new SCaaSDex(address(this), dexArgs(address(this)))),
+                EnvKit.env(chainUidA, address(0), address(0), false)
+            )
+        );
+        dex.initialize(
+            nid(address(this)),
+            1,
+            abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0), 0, 0))
+        );
         string memory p = ".ops.CancelDexOrder.message.order.";
         address sell = vm.parseJsonAddress(j, string.concat(p, "sellToken"));
         string memory q = string.concat(p, "order.");
-        ITradeToken.TradeOrder memory o = ITradeToken.TradeOrder(vm.parseJsonAddress(j, string.concat(q, "from")),
-            vm.parseJsonAddress(j, string.concat(q, "receiveToken")), vm.parseJsonUint(j, string.concat(q, "amount")),
-            vm.parseJsonUint(j, string.concat(q, "receiveAmount")), vm.parseJsonUint(j, string.concat(q, "minFill")),
-            vm.parseJsonUint(j, string.concat(q, "fee")), vm.parseJsonAddress(j, string.concat(q, "relayer")),
-            vm.parseJsonAddress(j, string.concat(q, "dex")), vm.parseJsonAddress(j, string.concat(q, "destination")),
-            uint8(vm.parseJsonUint(j, string.concat(q, "flags"))), vm.parseJsonUint(j, string.concat(q, "batch")),
-            vm.parseJsonUint(j, string.concat(q, "nonce")), vm.parseJsonUint(j, string.concat(q, "validUntil")));
+        ITradeToken.TradeOrder memory o = ITradeToken.TradeOrder(
+            vm.parseJsonAddress(j, string.concat(q, "from")),
+            vm.parseJsonAddress(j, string.concat(q, "receiveToken")),
+            vm.parseJsonUint(j, string.concat(q, "amount")),
+            vm.parseJsonUint(j, string.concat(q, "receiveAmount")),
+            vm.parseJsonUint(j, string.concat(q, "minFill")),
+            vm.parseJsonUint(j, string.concat(q, "fee")),
+            vm.parseJsonAddress(j, string.concat(q, "relayer")),
+            vm.parseJsonAddress(j, string.concat(q, "dex")),
+            vm.parseJsonAddress(j, string.concat(q, "destination")),
+            uint8(vm.parseJsonUint(j, string.concat(q, "flags"))),
+            vm.parseJsonUint(j, string.concat(q, "batch")),
+            vm.parseJsonUint(j, string.concat(q, "nonce")),
+            vm.parseJsonUint(j, string.concat(q, "validUntil"))
+        );
         ISCaaSDex.DexOrder[] memory os = new ISCaaSDex.DexOrder[](1);
         os[0] = ISCaaSDex.DexOrder(sell, o);
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = vm.parseJsonBytes(j, domainField(op, "dex", "signature"));
-        (bool ok, bytes memory ret) = tryRowAs(j, op, "dex", address(dex), address(dex), address(0x0BEE), abi.encodeCall(ISCaaSDex.mtxCancelOrders, (os, sigs)));
+        (bool ok, bytes memory ret) = tryRowAs(
+            j,
+            op,
+            "dex",
+            address(dex),
+            address(dex),
+            address(0x0BEE),
+            abi.encodeCall(ISCaaSDex.mtxCancelOrders, (os, sigs))
+        );
         assertTrue(ok, vm.toString(ret));
-        assertEq(dex.pulled(dex.dexOrderDigest(sell, o)), o.amount, "the row's signature cancels: a bad one is a skipped item");
+        assertEq(
+            dex.pulled(dex.dexOrderDigest(sell, o)),
+            o.amount,
+            "the row's signature cancels: a bad one is a skipped item"
+        );
     }
 
     /// Relaying these entries: each has its own signature and a direct caller, so none is on the allowlist. A validly signed
@@ -433,26 +610,47 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
     /// on the merged `mtxExecute` a native signer reads `_mtxRule` (B): `MtxSelectorNotAllowed`, no longer `MetaTxUnknownOp`;
     /// the cancel listed is the merged `mtxCancelNonce`.)
     function test_c6EntriesNotAllowlisted() public {
-        bytes4[13] memory sels = [ITradeToken.mtxTrade.selector, ITradeToken.mtxTrade.selector, ITradeToken.mtxCancelOrder.selector,
-            ITradeToken.mtxCancelOrder.selector, ITradeToken.mtxInvalidateNonces.selector, ITradeToken.mtxInvalidateNonces.selector,
-            IERC20MetaTx.mtxRelayFee.selector, IERC20MetaTx.mtxRelayFee.selector, IMetaTokenV2.mtxPayWithPayeeFee.selector,
-            IMetaTokenV2.mtxPayWithPayeeFee.selector, IWrappedToken.mtxWrapOrder.selector, IWrappedToken.mtxWrapOrder.selector,
-            UAMetaTxBase.mtxCancelNonce.selector];
+        bytes4[13] memory sels = [
+            ITradeToken.mtxTrade.selector,
+            ITradeToken.mtxTrade.selector,
+            ITradeToken.mtxCancelOrder.selector,
+            ITradeToken.mtxCancelOrder.selector,
+            ITradeToken.mtxInvalidateNonces.selector,
+            ITradeToken.mtxInvalidateNonces.selector,
+            IERC20MetaTx.mtxRelayFee.selector,
+            IERC20MetaTx.mtxRelayFee.selector,
+            IMetaTokenV2.mtxPayWithPayeeFee.selector,
+            IMetaTokenV2.mtxPayWithPayeeFee.selector,
+            IWrappedToken.mtxWrapOrder.selector,
+            IWrappedToken.mtxWrapOrder.selector,
+            UAMetaTxBase.mtxCancelNonce.selector
+        ];
         bytes32 me = _pad(alice);
         for (uint256 i; i < sels.length; ++i) {
-            MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(alice, abi.encodeWithSelector(sels[i], uint256(0)), 5, 0,
-                block.timestamp + 300, 0, address(0), 0, address(0));
+            MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(
+                alice,
+                abi.encodeWithSelector(sels[i], uint256(0)),
+                5,
+                0,
+                block.timestamp + 300,
+                0,
+                address(0),
+                0,
+                address(0)
+            );
             bytes memory sig = ecdsa(ALICE_PK, MtxDigest.metaTx(address(wrpL), m));
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sels[i]));
             wrpL.executeMetaTransaction(m, sig);
-            MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(me, m.data, 5, 0, m.validUntil, 0, address(0), 0, address(0));
+            MetaTxLib.UAMetaTransaction memory u =
+                MetaTxLib.UAMetaTransaction(me, m.data, 5, 0, m.validUntil, 0, address(0), 0, address(0));
             bytes memory auth = ecdsa(ALICE_PK, wrpL.mtxDigest(u));
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sels[i]));
             wrpL.mtxExecute(u, UACall.auth(u.from, auth));
         }
         // the positive control: one thing differs, the call
-        MetaTxLib.MetaTransaction memory ok = MetaTxLib.MetaTransaction(alice, abi.encodeCall(IMetaTx.cancelNonce, (9)), 5, 0,
-            block.timestamp + 300, 0, address(0), 0, address(0));
+        MetaTxLib.MetaTransaction memory ok = MetaTxLib.MetaTransaction(
+            alice, abi.encodeCall(IMetaTx.cancelNonce, (9)), 5, 0, block.timestamp + 300, 0, address(0), 0, address(0)
+        );
         wrpL.executeMetaTransaction(ok, ecdsa(ALICE_PK, MtxDigest.metaTx(address(wrpL), ok)));
         assertEq(wrpL.mtxNonce(MetaTxLib.pad(alice), 9), 1);
     }
@@ -490,7 +688,9 @@ contract OrderRowsZetherTest is OrderRows, ZetherFixture {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
     }
 
     function _kind() internal pure override returns (string memory) {
@@ -508,6 +708,7 @@ contract OrderRowsZetherTest is OrderRows, ZetherFixture {
         c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
-        return WrappedToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "row")));
+        return
+            WrappedToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "row")));
     }
 }

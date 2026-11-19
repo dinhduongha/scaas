@@ -5,12 +5,21 @@ extern crate std;
 use std::{vec, vec::Vec as StdVec};
 
 use ed25519_dalek::Signer as _;
-use scaas_ua_common::{h32, meta_pay_id, pay_lane, Holder, MemberSig, MsigMember, MsigStructure, Order, UaAttrs, UaSig, PURPOSE_METATX, PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, PURPOSE_TRADE, kem_record_hash, portable_record_hash, registration_digest};
+use scaas_ua_common::{
+    h32, kem_record_hash, meta_pay_id, pay_lane, portable_record_hash, registration_digest, Holder,
+    MemberSig, MsigMember, MsigStructure, Order, UaAttrs, UaSig, PURPOSE_METATX,
+    PURPOSE_METATX_CANCEL, PURPOSE_POP_V2, PURPOSE_TRADE,
+};
 use scaas_ua_registry::{UaRegistry, UaRegistryClient as RegClient};
 use serde_json::Value;
-use soroban_sdk::testutils::{storage::Persistent as _, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke};
+use soroban_sdk::testutils::{
+    storage::Persistent as _, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke,
+};
 use soroban_sdk::xdr::{self, Limits, ReadXdr as _, ScVal};
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, IntoVal, MuxedAddress, String, Symbol, TryFromVal, Val, Vec as SVec};
+use soroban_sdk::{
+    contract, contractimpl, Address, Bytes, BytesN, Env, IntoVal, MuxedAddress, String, Symbol,
+    TryFromVal, Val, Vec as SVec,
+};
 
 use crate::{op_digest, Error, Key, Token, TokenClient};
 
@@ -27,7 +36,10 @@ const ED_TAG: [u8; 32] = h32("65ca73d2d290503a4785188712dd0b971b5fbf3113c1dc8718
 
 fn hx(v: &Value) -> StdVec<u8> {
     let s = v.as_str().unwrap().trim_start_matches("0x");
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
 }
 
 fn n(env: &Env, a: [u8; 32]) -> BytesN<32> {
@@ -56,12 +68,24 @@ fn setup_with(on: bool) -> T {
         l.network_id = hx(&o["network"]["networkId"]).try_into().unwrap();
     });
     let id = |k: &str| Address::from_str(&env, o["contracts"][k].as_str().unwrap());
-    let reg = RegClient::new(&env, &env.register_at(&id("registry"), UaRegistry, (SVec::<Address>::new(&env),)));
+    let reg = RegClient::new(
+        &env,
+        &env.register_at(&id("registry"), UaRegistry, (SVec::<Address>::new(&env),)),
+    );
     let admin = Address::generate(&env);
     let r = if on { Some(reg.address.clone()) } else { None };
     let s = |x: &str| String::from_str(&env, x);
-    let t = env.register_at(&id("token"), Token, (admin.clone(), 7u32, s("SCaaS"), s("BMB"), r));
-    T { t: TokenClient::new(&env, &t), reg, admin, env }
+    let t = env.register_at(
+        &id("token"),
+        Token,
+        (admin.clone(), 7u32, s("SCaaS"), s("BMB"), r),
+    );
+    T {
+        t: TokenClient::new(&env, &t),
+        reg,
+        admin,
+        env,
+    }
 }
 
 fn setup() -> T {
@@ -70,11 +94,21 @@ fn setup() -> T {
 
 /// Mocks exactly `who`'s authorisation of `contract.f(args)` for the next call.
 fn allow(env: &Env, who: &Address, contract: &Address, f: &str, args: SVec<Val>) {
-    env.mock_auths(&[MockAuth { address: who, invoke: &MockAuthInvoke { contract, fn_name: f, args, sub_invokes: &[] } }]);
+    env.mock_auths(&[MockAuth {
+        address: who,
+        invoke: &MockAuthInvoke {
+            contract,
+            fn_name: f,
+            args,
+            sub_invokes: &[],
+        },
+    }]);
 }
 
 /// The contract error of a failed call.
-fn err<V: core::fmt::Debug, C: core::fmt::Debug>(r: Result<V, Result<soroban_sdk::Error, C>>) -> Error {
+fn err<V: core::fmt::Debug, C: core::fmt::Debug>(
+    r: Result<V, Result<soroban_sdk::Error, C>>,
+) -> Error {
     match r {
         Err(Ok(e)) => Error::try_from(e).unwrap_or_else(|_| panic!("host error {e:?}")),
         other => panic!("not a contract error: {other:?}"),
@@ -108,40 +142,101 @@ impl T {
         let z = BytesN::from_array(env, &[0u8; 32]);
         let rec = portable_record_hash(env, &id, ED25519, &z, &kem_record_hash(env, &id, 0, 0, &z));
         let reg_digest = registration_digest(env, &rec, &z).to_array();
-        let pop = sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest])).to_bytes();
-        self.reg.register(&ED25519, &kd, &no_attrs(env), &Bytes::from_array(env, &pop), &Bytes::new(env), &None);
+        let pop = sk
+            .sign(&keccak(
+                env,
+                &[&MSG_TAG, &ED_TAG, &PURPOSE_POP_V2, &reg_digest],
+            ))
+            .to_bytes();
+        self.reg.register(
+            &ED25519,
+            &kd,
+            &no_attrs(env),
+            &Bytes::from_array(env, &pop),
+            &Bytes::new(env),
+            &None,
+        );
         Ua { sk, id }
     }
 
     /// The UA's signature over `op_digest(token, f, args)` under `purpose`.
     fn sign(&self, u: &Ua, purpose: [u8; 32], f: &str, args: SVec<Val>) -> UaSig {
         let d = op_digest(&self.env, &self.t.address, f, args).to_array();
-        UaSig::single(&self.env, Bytes::from_array(&self.env, &u.sk.sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d])).to_bytes()))
+        UaSig::single(
+            &self.env,
+            Bytes::from_array(
+                &self.env,
+                &u.sk
+                    .sign(&keccak(&self.env, &[&MSG_TAG, &ED_TAG, &purpose, &d]))
+                    .to_bytes(),
+            ),
+        )
     }
 
     fn mint(&self, to: &Address, amount: i128) {
-        allow(&self.env, &self.admin, &self.t.address, "mint", (to, amount).into_val(&self.env));
+        allow(
+            &self.env,
+            &self.admin,
+            &self.t.address,
+            "mint",
+            (to, amount).into_val(&self.env),
+        );
         self.t.mint(to, &amount);
     }
 
     fn mint_ua(&self, to: &BytesN<32>, amount: i128) {
-        allow(&self.env, &self.admin, &self.t.address, "mint_to_ua", (to, amount).into_val(&self.env));
+        allow(
+            &self.env,
+            &self.admin,
+            &self.t.address,
+            "mint_to_ua",
+            (to, amount).into_val(&self.env),
+        );
         self.t.mint_to_ua(to, &amount);
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn transfer(&self, u: &Ua, to: &Holder, amount: i128, lane: [u8; 32], nonce: u64, vu: u64, relayer: &Option<Address>) -> Result<(), Error> {
+    fn transfer(
+        &self,
+        u: &Ua,
+        to: &Holder,
+        amount: i128,
+        lane: [u8; 32],
+        nonce: u64,
+        vu: u64,
+        relayer: &Option<Address>,
+    ) -> Result<(), Error> {
         let (env, lane) = (&self.env, n(&self.env, lane));
-        let auth = self.sign(u, PURPOSE_METATX, "ua_transfer", (&u.id, to, amount, &lane, nonce, vu, relayer).into_val(env));
-        match self.t.try_ua_transfer(&u.id, to, &amount, &lane, &nonce, &vu, relayer, &auth) {
+        let auth = self.sign(
+            u,
+            PURPOSE_METATX,
+            "ua_transfer",
+            (&u.id, to, amount, &lane, nonce, vu, relayer).into_val(env),
+        );
+        match self
+            .t
+            .try_ua_transfer(&u.id, to, &amount, &lane, &nonce, &vu, relayer, &auth)
+        {
             Ok(_) => Ok(()),
             Err(e) => Err(err::<(), _>(Err(e))),
         }
     }
 
-    fn pay(&self, u: &Ua, to: &Holder, amount: i128, pay_ref: [u8; 32], vu: u64) -> Result<(), Error> {
+    fn pay(
+        &self,
+        u: &Ua,
+        to: &Holder,
+        amount: i128,
+        pay_ref: [u8; 32],
+        vu: u64,
+    ) -> Result<(), Error> {
         let (env, r) = (&self.env, n(&self.env, pay_ref));
-        let auth = self.sign(u, PURPOSE_METATX, "ua_pay", (&u.id, to, amount, &r, vu, None::<Address>).into_val(env));
+        let auth = self.sign(
+            u,
+            PURPOSE_METATX,
+            "ua_pay",
+            (&u.id, to, amount, &r, vu, None::<Address>).into_val(env),
+        );
         match self.t.try_ua_pay(&u.id, to, &amount, &r, &vu, &None, &auth) {
             Ok(_) => Ok(()),
             Err(e) => Err(err::<(), _>(Err(e))),
@@ -150,8 +245,16 @@ impl T {
 
     fn burn(&self, u: &Ua, amount: i128, lane: [u8; 32], nonce: u64, vu: u64) -> Result<(), Error> {
         let (env, lane) = (&self.env, n(&self.env, lane));
-        let auth = self.sign(u, PURPOSE_METATX, "ua_burn", (&u.id, amount, &lane, nonce, vu, None::<Address>).into_val(env));
-        match self.t.try_ua_burn(&u.id, &amount, &lane, &nonce, &vu, &None, &auth) {
+        let auth = self.sign(
+            u,
+            PURPOSE_METATX,
+            "ua_burn",
+            (&u.id, amount, &lane, nonce, vu, None::<Address>).into_val(env),
+        );
+        match self
+            .t
+            .try_ua_burn(&u.id, &amount, &lane, &nonce, &vu, &None, &auth)
+        {
             Ok(_) => Ok(()),
             Err(e) => Err(err::<(), _>(Err(e))),
         }
@@ -159,12 +262,23 @@ impl T {
 
     fn cancel(&self, u: &Ua, lane: [u8; 32], vu: u64, purpose: [u8; 32]) -> bool {
         let lane = n(&self.env, lane);
-        let auth = self.sign(u, purpose, "ua_cancel_nonce", (&u.id, &lane, vu).into_val(&self.env));
+        let auth = self.sign(
+            u,
+            purpose,
+            "ua_cancel_nonce",
+            (&u.id, &lane, vu).into_val(&self.env),
+        );
         self.t.try_ua_cancel_nonce(&u.id, &lane, &vu, &auth).is_ok()
     }
 
     fn transfer_to_ua(&self, from: &Address, to: &BytesN<32>, amount: i128) {
-        allow(&self.env, from, &self.t.address, "transfer_to_ua", (from, to, amount).into_val(&self.env));
+        allow(
+            &self.env,
+            from,
+            &self.t.address,
+            "transfer_to_ua",
+            (from, to, amount).into_val(&self.env),
+        );
         self.t.transfer_to_ua(from, to, &amount);
     }
 
@@ -193,26 +307,73 @@ impl T {
 /// #10; the token's own #10 is about a receiver, and `to` is an address), before any balance; a `Chain` UA with no funds
 /// passes that step and stops at its balance.
 #[test]
-fn ua8_relayer_checked_ua_authorises_nothing() {
+fn ua_portable_relayer_checked_ua_authorises_nothing() {
     let s = setup();
     let env = &s.env;
     let relayer = Address::generate(env);
-    let reg = RegClient::new(env, &env.register(UaRegistry, (SVec::from_array(env, [relayer.clone()]),)));
+    let reg = RegClient::new(
+        env,
+        &env.register(UaRegistry, (SVec::from_array(env, [relayer.clone()]),)),
+    );
     let name = |x: &str| String::from_str(env, x);
-    let t = TokenClient::new(env, &env.register(Token, (s.admin.clone(), 7u32, name("SCaaS"), name("BMB"), Some(reg.address.clone()))));
+    let t = TokenClient::new(
+        env,
+        &env.register(
+            Token,
+            (
+                s.admin.clone(),
+                7u32,
+                name("SCaaS"),
+                name("BMB"),
+                Some(reg.address.clone()),
+            ),
+        ),
+    );
     let portable: Value = serde_json::from_str(PORTABLE).unwrap();
-    let row = portable["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "slhdsa128s").unwrap();
-    let (kd, pop, none) = (Bytes::from_slice(env, &hx(&row["keyData"])), Bytes::from_slice(env, &hx(&row["pop"])), Bytes::new(env));
+    let row = portable["registrations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "slhdsa128s")
+        .unwrap();
+    let (kd, pop, none) = (
+        Bytes::from_slice(env, &hx(&row["keyData"])),
+        Bytes::from_slice(env, &hx(&row["pop"])),
+        Bytes::new(env),
+    );
     let by = Some(relayer.clone());
-    let digest = scaas_ua_common::attest_digest(env, &reg.address, "register", (0x0133u32, &kd, no_attrs(env), &pop, &none, &by).into_val(env));
-    allow(env, &relayer, &reg.address, "register", (digest,).into_val(env));
+    let digest = scaas_ua_common::attest_digest(
+        env,
+        &reg.address,
+        "register",
+        (0x0133u32, &kd, no_attrs(env), &pop, &none, &by).into_val(env),
+    );
+    allow(
+        env,
+        &relayer,
+        &reg.address,
+        "register",
+        (digest,).into_val(env),
+    );
     let ua = reg.register(&0x0133, &kd, &no_attrs(env), &pop, &none, &by);
     assert!(!reg.receivable(&ua));
 
     let to = Holder::Addr(Address::generate(env));
-    let got = t.try_ua_transfer(&ua, &to, &1, &n(env, [9; 32]), &0, &(NOW + 10), &None, &UaSig::single(env, pop));
+    let got = t.try_ua_transfer(
+        &ua,
+        &to,
+        &1,
+        &n(env, [9; 32]),
+        &0,
+        &(NOW + 10),
+        &None,
+        &UaSig::single(env, pop),
+    );
     assert_eq!(got, Err(Ok(soroban_sdk::Error::from_contract_error(10))));
-    assert_eq!(s.transfer(&s.ua(3), &to, 1, [9; 32], 0, NOW + 10, &None), Err(Error::InsufficientBalance));
+    assert_eq!(
+        s.transfer(&s.ua(3), &to, 1, [9; 32], 0, NOW + 10, &None),
+        Err(Error::InsufficientBalance)
+    );
 }
 
 #[test]
@@ -225,17 +386,75 @@ fn transfer_to_ua_then_ua_transfer() {
     s.transfer_to_ua(&a, &u1.id, 100);
     assert_eq!(env.auths()[0].0, a, "transfer_to_ua needs from");
     assert_eq!(s.event_names(), ["transfer", "UaTransfer"]);
-    assert_eq!((s.t.balance(&a), s.t.balance(&s.t.address), s.t.ua_balance(&u1.id)), (400, 100, 100));
+    assert_eq!(
+        (
+            s.t.balance(&a),
+            s.t.balance(&s.t.address),
+            s.t.ua_balance(&u1.id)
+        ),
+        (400, 100, 100)
+    );
     assert_eq!(s.t.registry(), Some(s.reg.address.clone()));
 
-    s.transfer(&u1, &Holder::Ua(u2.id.clone()), 30, [9; 32], 0, NOW + 10, &None).unwrap();
+    s.transfer(
+        &u1,
+        &Holder::Ua(u2.id.clone()),
+        30,
+        [9; 32],
+        0,
+        NOW + 10,
+        &None,
+    )
+    .unwrap();
     assert_eq!(s.event_names(), ["UaTransfer", "UaMetaTransactionExecuted"]);
-    s.transfer(&u1, &Holder::Addr(b.clone()), 20, [9; 32], 1, NOW + 10, &None).unwrap();
-    assert_eq!(s.event_names(), ["transfer", "UaTransfer", "UaMetaTransactionExecuted"]);
-    assert_eq!((s.t.ua_balance(&u1.id), s.t.ua_balance(&u2.id), s.t.balance(&b), s.t.balance(&s.t.address)), (50, 30, 20, 80));
+    s.transfer(
+        &u1,
+        &Holder::Addr(b.clone()),
+        20,
+        [9; 32],
+        1,
+        NOW + 10,
+        &None,
+    )
+    .unwrap();
+    assert_eq!(
+        s.event_names(),
+        ["transfer", "UaTransfer", "UaMetaTransactionExecuted"]
+    );
+    assert_eq!(
+        (
+            s.t.ua_balance(&u1.id),
+            s.t.ua_balance(&u2.id),
+            s.t.balance(&b),
+            s.t.balance(&s.t.address)
+        ),
+        (50, 30, 20, 80)
+    );
     assert_eq!(s.t.ua_nonce(&u1.id, &n(env, [9; 32])), 2);
-    assert_eq!(s.transfer(&u1, &Holder::Ua(u2.id.clone()), 51, [9; 32], 2, NOW + 10, &None), Err(Error::InsufficientBalance));
-    assert_eq!(s.transfer(&u1, &Holder::Ua(u2.id.clone()), -1, [9; 32], 2, NOW + 10, &None), Err(Error::NegativeAmount));
+    assert_eq!(
+        s.transfer(
+            &u1,
+            &Holder::Ua(u2.id.clone()),
+            51,
+            [9; 32],
+            2,
+            NOW + 10,
+            &None
+        ),
+        Err(Error::InsufficientBalance)
+    );
+    assert_eq!(
+        s.transfer(
+            &u1,
+            &Holder::Ua(u2.id.clone()),
+            -1,
+            [9; 32],
+            2,
+            NOW + 10,
+            &None
+        ),
+        Err(Error::NegativeAmount)
+    );
 }
 
 #[test]
@@ -250,19 +469,54 @@ fn ua_transfer_replay_refused() {
     let auth = s.sign(&u1, PURPOSE_METATX, "ua_transfer", args.into_val(env));
     s.t.ua_transfer(&u1.id, &to, &10, &lane, &0, &(NOW + 10), &None, &auth);
     // The same signed entry again: its nonce is spent.
-    assert_eq!(err(s.t.try_ua_transfer(&u1.id, &to, &10, &lane, &0, &(NOW + 10), &None, &auth)), Error::BadNonce);
+    assert_eq!(
+        err(s
+            .t
+            .try_ua_transfer(&u1.id, &to, &10, &lane, &0, &(NOW + 10), &None, &auth)),
+        Error::BadNonce
+    );
     // A nonce ahead of the lane.
-    assert_eq!(s.transfer(&u1, &to, 1, [3; 32], 2, NOW + 10, &None), Err(Error::BadNonce));
+    assert_eq!(
+        s.transfer(&u1, &to, 1, [3; 32], 2, NOW + 10, &None),
+        Err(Error::BadNonce)
+    );
     // The old signature over other arguments, and another UA's signature, are refused by the registry.
-    assert!(s.t.try_ua_transfer(&u1.id, &to, &11, &lane, &1, &(NOW + 10), &None, &auth).is_err());
-    let other = s.sign(&u2, PURPOSE_METATX, "ua_transfer", (&u1.id, &to, 1i128, &lane, 1u64, NOW + 10, None::<Address>).into_val(env));
-    assert!(s.t.try_ua_transfer(&u1.id, &to, &1, &lane, &1, &(NOW + 10), &None, &other).is_err());
+    assert!(s
+        .t
+        .try_ua_transfer(&u1.id, &to, &11, &lane, &1, &(NOW + 10), &None, &auth)
+        .is_err());
+    let other = s.sign(
+        &u2,
+        PURPOSE_METATX,
+        "ua_transfer",
+        (&u1.id, &to, 1i128, &lane, 1u64, NOW + 10, None::<Address>).into_val(env),
+    );
+    assert!(s
+        .t
+        .try_ua_transfer(&u1.id, &to, &1, &lane, &1, &(NOW + 10), &None, &other)
+        .is_err());
     // A signature under another purpose.
-    let cancel = s.sign(&u1, PURPOSE_METATX_CANCEL, "ua_transfer", (&u1.id, &to, 1i128, &lane, 1u64, NOW + 10, None::<Address>).into_val(env));
-    assert!(s.t.try_ua_transfer(&u1.id, &to, &1, &lane, &1, &(NOW + 10), &None, &cancel).is_err());
-    assert_eq!((s.t.ua_nonce(&u1.id, &lane), s.t.ua_balance(&u1.id), s.t.ua_balance(&u2.id)), (1, 90, 10));
+    let cancel = s.sign(
+        &u1,
+        PURPOSE_METATX_CANCEL,
+        "ua_transfer",
+        (&u1.id, &to, 1i128, &lane, 1u64, NOW + 10, None::<Address>).into_val(env),
+    );
+    assert!(s
+        .t
+        .try_ua_transfer(&u1.id, &to, &1, &lane, &1, &(NOW + 10), &None, &cancel)
+        .is_err());
+    assert_eq!(
+        (
+            s.t.ua_nonce(&u1.id, &lane),
+            s.t.ua_balance(&u1.id),
+            s.t.ua_balance(&u2.id)
+        ),
+        (1, 90, 10)
+    );
     // Other lanes are independent.
-    s.transfer(&u1, &to, 1, [4; 32], 0, NOW + 10, &None).unwrap();
+    s.transfer(&u1, &to, 1, [4; 32], 0, NOW + 10, &None)
+        .unwrap();
 }
 
 #[test]
@@ -273,19 +527,40 @@ fn ua_pay_once_per_ref() {
     s.mint_ua(&u1.id, 100);
     let r = n(env, [0x11; 32]);
     assert!(!s.t.ua_ref_used(&u1.id, &r));
-    s.pay(&u1, &Holder::Ua(u2.id.clone()), 40, [0x11; 32], NOW + 10).unwrap();
-    assert_eq!(s.event_names(), ["UaTransfer", "UaPaymentSettled", "UaMetaTransactionExecuted"]);
+    s.pay(&u1, &Holder::Ua(u2.id.clone()), 40, [0x11; 32], NOW + 10)
+        .unwrap();
+    assert_eq!(
+        s.event_names(),
+        [
+            "UaTransfer",
+            "UaPaymentSettled",
+            "UaMetaTransactionExecuted"
+        ]
+    );
     assert!(s.t.ua_ref_used(&u1.id, &r));
     assert!(!s.t.ua_ref_used(&u2.id, &r), "per payer");
     assert_eq!(s.t.ua_nonce(&u1.id, &pay_lane(env, &r)), 1);
     // A fresh signature for the same ref (other amount): the pay lane is past nonce 0.
-    assert_eq!(s.pay(&u1, &Holder::Ua(u2.id.clone()), 1, [0x11; 32], NOW + 10), Err(Error::BadNonce));
+    assert_eq!(
+        s.pay(&u1, &Holder::Ua(u2.id.clone()), 1, [0x11; 32], NOW + 10),
+        Err(Error::BadNonce)
+    );
     // Another ref pays a native receiver out of the pool.
     let b = Address::generate(env);
-    s.pay(&u1, &Holder::Addr(b.clone()), 25, [0x12; 32], NOW + 10).unwrap();
-    assert_eq!((s.t.ua_balance(&u1.id), s.t.ua_balance(&u2.id), s.t.balance(&b), s.t.balance(&s.t.address)), (35, 40, 25, 75));
+    s.pay(&u1, &Holder::Addr(b.clone()), 25, [0x12; 32], NOW + 10)
+        .unwrap();
+    assert_eq!(
+        (
+            s.t.ua_balance(&u1.id),
+            s.t.ua_balance(&u2.id),
+            s.t.balance(&b),
+            s.t.balance(&s.t.address)
+        ),
+        (35, 40, 25, 75)
+    );
     // A self-pay (the `ua-ops.json` p256 row's form) settles and changes nothing but the lane.
-    s.pay(&u2, &Holder::Ua(u2.id.clone()), 5, [0x13; 32], NOW + 10).unwrap();
+    s.pay(&u2, &Holder::Ua(u2.id.clone()), 5, [0x13; 32], NOW + 10)
+        .unwrap();
     assert_eq!(s.t.ua_balance(&u2.id), 40);
 }
 
@@ -298,16 +573,40 @@ fn pay_to_ua_ref_once_per_payer() {
     s.mint(&a, 100);
     let r = n(env, [0x21; 32]);
     let call = |amount: i128| {
-        allow(env, &a, &s.t.address, "pay_to_ua", (&a, &u.id, amount, &r, NOW + 10).into_val(env));
+        allow(
+            env,
+            &a,
+            &s.t.address,
+            "pay_to_ua",
+            (&a, &u.id, amount, &r, NOW + 10).into_val(env),
+        );
         s.t.try_pay_to_ua(&a, &u.id, &amount, &r, &(NOW + 10))
     };
     call(30).unwrap().unwrap();
-    assert_eq!(s.event_names(), ["transfer", "UaTransfer", "UaPaymentSettled", "MetaTransactionExecuted"]);
+    assert_eq!(
+        s.event_names(),
+        [
+            "transfer",
+            "UaTransfer",
+            "UaPaymentSettled",
+            "MetaTransactionExecuted"
+        ]
+    );
     assert!(s.t.ref_used(&a, &r));
-    assert_eq!((s.t.balance(&a), s.t.ua_balance(&u.id), s.t.balance(&s.t.address)), (70, 30, 30));
+    assert_eq!(
+        (
+            s.t.balance(&a),
+            s.t.ua_balance(&u.id),
+            s.t.balance(&s.t.address)
+        ),
+        (70, 30, 30)
+    );
     assert_eq!(err(call(1)), Error::RefUsed);
     // Without the payer's authorisation.
-    assert!(s.t.try_pay_to_ua(&a, &u.id, &1, &n(env, [0x22; 32]), &(NOW + 10)).is_err());
+    assert!(s
+        .t
+        .try_pay_to_ua(&a, &u.id, &1, &n(env, [0x22; 32]), &(NOW + 10))
+        .is_err());
 }
 
 #[test]
@@ -316,18 +615,37 @@ fn ua_pay_meta_emits_meta_first() {
     let env = &s.env;
     let (u1, u2) = (s.ua(1), s.ua(2));
     s.mint_ua(&u1.id, 100);
-    let (salt, meta) = (n(env, [0x5a; 32]), Bytes::from_slice(env, b"{\"invoice\":\"INV-1\"}"));
+    let (salt, meta) = (
+        n(env, [0x5a; 32]),
+        Bytes::from_slice(env, b"{\"invoice\":\"INV-1\"}"),
+    );
     let to = Holder::Ua(u2.id.clone());
     let args = (&u1.id, &to, 40i128, &salt, &meta, NOW + 10, None::<Address>);
     let auth = s.sign(&u1, PURPOSE_METATX, "ua_pay_meta", args.into_val(env));
     s.t.ua_pay_meta(&u1.id, &to, &40, &salt, &meta, &(NOW + 10), &None, &auth);
-    assert_eq!(s.event_names(), ["PaymentMeta", "UaTransfer", "UaPaymentSettled", "UaMetaTransactionExecuted"]);
+    assert_eq!(
+        s.event_names(),
+        [
+            "PaymentMeta",
+            "UaTransfer",
+            "UaPaymentSettled",
+            "UaMetaTransactionExecuted"
+        ]
+    );
     let id = meta_pay_id(env, &salt, &meta);
     assert!(s.t.ua_ref_used(&u1.id, &id));
     assert_eq!((s.t.ua_balance(&u1.id), s.t.ua_balance(&u2.id)), (60, 40));
     // The same (salt, meta) again, and a plain ua_pay of the committed id: one pay lane.
-    assert_eq!(err(s.t.try_ua_pay_meta(&u1.id, &to, &40, &salt, &meta, &(NOW + 10), &None, &auth)), Error::BadNonce);
-    assert_eq!(s.pay(&u1, &to, 1, id.to_array(), NOW + 10), Err(Error::BadNonce));
+    assert_eq!(
+        err(s
+            .t
+            .try_ua_pay_meta(&u1.id, &to, &40, &salt, &meta, &(NOW + 10), &None, &auth)),
+        Error::BadNonce
+    );
+    assert_eq!(
+        s.pay(&u1, &to, 1, id.to_array(), NOW + 10),
+        Err(Error::BadNonce)
+    );
 }
 
 #[test]
@@ -337,25 +655,62 @@ fn ua_burn_and_cancel_nonce() {
     let u = s.ua(1);
     s.mint_ua(&u.id, 100);
     s.burn(&u, 30, [7; 32], 0, NOW + 10).unwrap();
-    assert_eq!(s.event_names(), ["burn", "UaTransfer", "UaMetaTransactionExecuted"]);
-    assert_eq!((s.t.ua_balance(&u.id), s.t.balance(&s.t.address), s.t.ua_nonce(&u.id, &n(env, [7; 32]))), (70, 70, 1));
-    assert_eq!(s.burn(&u, 71, [7; 32], 1, NOW + 10), Err(Error::InsufficientBalance));
+    assert_eq!(
+        s.event_names(),
+        ["burn", "UaTransfer", "UaMetaTransactionExecuted"]
+    );
+    assert_eq!(
+        (
+            s.t.ua_balance(&u.id),
+            s.t.balance(&s.t.address),
+            s.t.ua_nonce(&u.id, &n(env, [7; 32]))
+        ),
+        (70, 70, 1)
+    );
+    assert_eq!(
+        s.burn(&u, 71, [7; 32], 1, NOW + 10),
+        Err(Error::InsufficientBalance)
+    );
 
     // Cancel lane 8 at nonce 0: a transfer signed at nonce 0 can no longer run.
     let to = Holder::Ua(s.ua(2).id);
     let lane = n(env, [8; 32]);
-    let pending = s.sign(&u, PURPOSE_METATX, "ua_transfer", (&u.id, &to, 5i128, &lane, 0u64, NOW + 10, None::<Address>).into_val(env));
-    assert!(!s.cancel(&u, [8; 32], NOW + 10, PURPOSE_METATX), "cancel needs purpose metatx-cancel");
+    let pending = s.sign(
+        &u,
+        PURPOSE_METATX,
+        "ua_transfer",
+        (&u.id, &to, 5i128, &lane, 0u64, NOW + 10, None::<Address>).into_val(env),
+    );
+    assert!(
+        !s.cancel(&u, [8; 32], NOW + 10, PURPOSE_METATX),
+        "cancel needs purpose metatx-cancel"
+    );
     assert!(s.cancel(&u, [8; 32], NOW + 10, PURPOSE_METATX_CANCEL));
-    assert_eq!(s.event_names(), ["UaNonceCancelled", "UaMetaTransactionExecuted"]);
+    assert_eq!(
+        s.event_names(),
+        ["UaNonceCancelled", "UaMetaTransactionExecuted"]
+    );
     let last = env.events().all().filter_by_contract(&s.t.address).events()[0].clone();
     let xdr::ContractEventBody::V0(b) = last.body;
     assert_eq!(b.data, ScVal::U64(1), "new_nonce");
     assert_eq!(s.t.ua_nonce(&u.id, &lane), 1);
-    assert_eq!(err(s.t.try_ua_transfer(&u.id, &to, &5, &lane, &0, &(NOW + 10), &None, &pending)), Error::BadNonce);
+    assert_eq!(
+        err(s
+            .t
+            .try_ua_transfer(&u.id, &to, &5, &lane, &0, &(NOW + 10), &None, &pending)),
+        Error::BadNonce
+    );
     // The cancel signature names no nonce: replayed, it is refused (EVM `cancelUsed`), the lane stays at 1.
-    let again = s.sign(&u, PURPOSE_METATX_CANCEL, "ua_cancel_nonce", (&u.id, &lane, NOW + 10).into_val(env));
-    assert_eq!(err(s.t.try_ua_cancel_nonce(&u.id, &lane, &(NOW + 10), &again)), Error::BadNonce);
+    let again = s.sign(
+        &u,
+        PURPOSE_METATX_CANCEL,
+        "ua_cancel_nonce",
+        (&u.id, &lane, NOW + 10).into_val(env),
+    );
+    assert_eq!(
+        err(s.t.try_ua_cancel_nonce(&u.id, &lane, &(NOW + 10), &again)),
+        Error::BadNonce
+    );
     assert_eq!(s.t.ua_nonce(&u.id, &lane), 1);
     // Another valid_until is another digest: a second cancel.
     assert!(s.cancel(&u, [8; 32], NOW + 11, PURPOSE_METATX_CANCEL));
@@ -369,13 +724,26 @@ fn ua_expired_refused() {
     let (u, v) = (s.ua(1), s.ua(2));
     s.mint_ua(&u.id, 100);
     let to = Holder::Ua(v.id.clone());
-    assert_eq!(s.transfer(&u, &to, 1, [1; 32], 0, NOW - 1, &None), Err(Error::Expired));
+    assert_eq!(
+        s.transfer(&u, &to, 1, [1; 32], 0, NOW - 1, &None),
+        Err(Error::Expired)
+    );
     assert_eq!(s.pay(&u, &to, 1, [2; 32], NOW - 1), Err(Error::Expired));
     assert_eq!(s.burn(&u, 1, [1; 32], 0, NOW - 1), Err(Error::Expired));
     assert!(!s.cancel(&u, [1; 32], NOW - 1, PURPOSE_METATX_CANCEL));
     let (salt, meta) = (n(env, [3; 32]), Bytes::new(env));
-    let auth = s.sign(&u, PURPOSE_METATX, "ua_pay_meta", (&u.id, &to, 1i128, &salt, &meta, NOW - 1, None::<Address>).into_val(env));
-    assert_eq!(err(s.t.try_ua_pay_meta(&u.id, &to, &1, &salt, &meta, &(NOW - 1), &None, &auth)), Error::Expired);
+    let auth = s.sign(
+        &u,
+        PURPOSE_METATX,
+        "ua_pay_meta",
+        (&u.id, &to, 1i128, &salt, &meta, NOW - 1, None::<Address>).into_val(env),
+    );
+    assert_eq!(
+        err(s
+            .t
+            .try_ua_pay_meta(&u.id, &to, &1, &salt, &meta, &(NOW - 1), &None, &auth)),
+        Error::Expired
+    );
     // valid_until == now still runs.
     s.transfer(&u, &to, 1, [1; 32], 0, NOW, &None).unwrap();
     assert_eq!(s.t.ua_nonce(&u.id, &n(env, [1; 32])), 1);
@@ -391,7 +759,8 @@ fn ua_entry_archived_nonce_restored_not_reset() {
     s.mint_ua(&u.id, 100);
     let to = Holder::Ua(v.id.clone());
     for nonce in 0..3 {
-        s.transfer(&u, &to, 1, [5; 32], nonce, u64::MAX, &None).unwrap();
+        s.transfer(&u, &to, 1, [5; 32], nonce, u64::MAX, &None)
+            .unwrap();
     }
     let k = Key::UaNonce(u.id.clone(), n(env, [5; 32]));
     let ttl = env.as_contract(&s.t.address, || env.storage().persistent().get_ttl(&k));
@@ -401,12 +770,21 @@ fn ua_entry_archived_nonce_restored_not_reset() {
         l.timestamp += (ttl as u64 + 1) * 5;
     });
     // Archived now; the spent nonce 0 (and 2) is refused after the restore, not accepted as a fresh lane.
-    assert_eq!(s.transfer(&u, &to, 1, [5; 32], 0, u64::MAX, &None), Err(Error::BadNonce));
-    assert_eq!(s.transfer(&u, &to, 1, [5; 32], 2, u64::MAX, &None), Err(Error::BadNonce));
+    assert_eq!(
+        s.transfer(&u, &to, 1, [5; 32], 0, u64::MAX, &None),
+        Err(Error::BadNonce)
+    );
+    assert_eq!(
+        s.transfer(&u, &to, 1, [5; 32], 2, u64::MAX, &None),
+        Err(Error::BadNonce)
+    );
     assert_eq!(s.t.ua_nonce(&u.id, &n(env, [5; 32])), 3);
     s.transfer(&u, &to, 1, [5; 32], 3, u64::MAX, &None).unwrap();
     assert_eq!(s.t.ua_nonce(&u.id, &n(env, [5; 32])), 4);
-    assert_eq!(env.as_contract(&s.t.address, || env.storage().persistent().get_ttl(&k)), 60 * DAY);
+    assert_eq!(
+        env.as_contract(&s.t.address, || env.storage().persistent().get_ttl(&k)),
+        60 * DAY
+    );
 }
 
 /// Spec §5.1: no native path pays the token's own address, and no UA entry names it as receiver.
@@ -420,28 +798,85 @@ fn pool_address_not_payable() {
     s.mint_ua(&u.id, 50);
 
     allow(env, &a, &pool, "transfer", (&a, &pool, 1i128).into_val(env));
-    assert_eq!(err(s.t.try_transfer(&a, &MuxedAddress::from(pool.clone()), &1)), Error::UaPoolNotPayable);
+    assert_eq!(
+        err(s.t.try_transfer(&a, &MuxedAddress::from(pool.clone()), &1)),
+        Error::UaPoolNotPayable
+    );
     let r = n(env, [1; 32]);
-    allow(env, &a, &pool, "pay", (&a, &pool, 1i128, &r, NOW + 10).into_val(env));
-    assert_eq!(err(s.t.try_pay(&a, &pool, &1, &r, &(NOW + 10))), Error::UaPoolNotPayable);
+    allow(
+        env,
+        &a,
+        &pool,
+        "pay",
+        (&a, &pool, 1i128, &r, NOW + 10).into_val(env),
+    );
+    assert_eq!(
+        err(s.t.try_pay(&a, &pool, &1, &r, &(NOW + 10))),
+        Error::UaPoolNotPayable
+    );
     let meta = Bytes::new(env);
-    allow(env, &a, &pool, "pay_meta", (&a, &pool, 1i128, &r, &meta, NOW + 10).into_val(env));
-    assert_eq!(err(s.t.try_pay_meta(&a, &pool, &1, &r, &meta, &(NOW + 10))), Error::UaPoolNotPayable);
+    allow(
+        env,
+        &a,
+        &pool,
+        "pay_meta",
+        (&a, &pool, 1i128, &r, &meta, NOW + 10).into_val(env),
+    );
+    assert_eq!(
+        err(s.t.try_pay_meta(&a, &pool, &1, &r, &meta, &(NOW + 10))),
+        Error::UaPoolNotPayable
+    );
     allow(env, &s.admin, &pool, "mint", (&pool, 1i128).into_val(env));
     assert_eq!(err(s.t.try_mint(&pool, &1)), Error::UaPoolNotPayable);
     // transfer_from to the pool, through a contract spender.
-    let spender = env.register(Token, (s.admin.clone(), 7u32, String::from_str(env, "X"), String::from_str(env, "X"), None::<Address>));
-    allow(env, &a, &pool, "approve", (&a, &spender, 10i128, 200u32).into_val(env));
+    let spender = env.register(
+        Token,
+        (
+            s.admin.clone(),
+            7u32,
+            String::from_str(env, "X"),
+            String::from_str(env, "X"),
+            None::<Address>,
+        ),
+    );
+    allow(
+        env,
+        &a,
+        &pool,
+        "approve",
+        (&a, &spender, 10i128, 200u32).into_val(env),
+    );
     s.t.approve(&a, &spender, &10, &200);
-    allow(env, &spender, &pool, "transfer_from", (&spender, &a, &pool, 1i128).into_val(env));
-    assert_eq!(err(s.t.try_transfer_from(&spender, &a, &pool, &1)), Error::UaPoolNotPayable);
+    allow(
+        env,
+        &spender,
+        &pool,
+        "transfer_from",
+        (&spender, &a, &pool, 1i128).into_val(env),
+    );
+    assert_eq!(
+        err(s.t.try_transfer_from(&spender, &a, &pool, &1)),
+        Error::UaPoolNotPayable
+    );
     // transfer_to_ua from the pool (refused before any authorisation: no contract authorises itself).
-    assert_eq!(err(s.t.try_transfer_to_ua(&pool, &u.id, &1)), Error::UaPoolNotPayable);
+    assert_eq!(
+        err(s.t.try_transfer_to_ua(&pool, &u.id, &1)),
+        Error::UaPoolNotPayable
+    );
     // A UA entry naming the pool as receiver.
     let to = Holder::Addr(pool.clone());
-    assert_eq!(s.transfer(&u, &to, 1, [1; 32], 0, NOW + 10, &None), Err(Error::UaPoolNotPayable));
-    assert_eq!(s.pay(&u, &to, 1, [2; 32], NOW + 10), Err(Error::UaPoolNotPayable));
-    assert_eq!((s.t.balance(&a), s.t.balance(&pool), s.t.ua_balance(&u.id)), (100, 50, 50));
+    assert_eq!(
+        s.transfer(&u, &to, 1, [1; 32], 0, NOW + 10, &None),
+        Err(Error::UaPoolNotPayable)
+    );
+    assert_eq!(
+        s.pay(&u, &to, 1, [2; 32], NOW + 10),
+        Err(Error::UaPoolNotPayable)
+    );
+    assert_eq!(
+        (s.t.balance(&a), s.t.balance(&pool), s.t.ua_balance(&u.id)),
+        (100, 50, 50)
+    );
 }
 
 /// Spec §5.1: replaying the SEP-41 `transfer` / `mint` / `burn` events gives every `balance()`, the pool included, and
@@ -460,8 +895,11 @@ fn sep41_events_match_balance_with_ua_moves() {
         };
         for e in env.events().all().filter_by_contract(&s.t.address).events() {
             let xdr::ContractEventBody::V0(body) = &e.body;
-            let ScVal::Symbol(name) = &body.topics[0] else { panic!() };
-            let amount = || i128::try_from_val(env, &Val::try_from_val(env, &body.data).unwrap()).unwrap();
+            let ScVal::Symbol(name) = &body.topics[0] else {
+                panic!()
+            };
+            let amount =
+                || i128::try_from_val(env, &Val::try_from_val(env, &body.data).unwrap()).unwrap();
             match name.to_utf8_string_lossy().as_str() {
                 "transfer" => {
                     add(&body.topics[1], -amount());
@@ -478,20 +916,51 @@ fn sep41_events_match_balance_with_ua_moves() {
     s.transfer_to_ua(&a, &u1.id, 300);
     replay(env);
     let r = n(env, [0x31; 32]);
-    allow(env, &a, &s.t.address, "pay_to_ua", (&a, &u2.id, 50i128, &r, NOW + 10).into_val(env));
+    allow(
+        env,
+        &a,
+        &s.t.address,
+        "pay_to_ua",
+        (&a, &u2.id, 50i128, &r, NOW + 10).into_val(env),
+    );
     s.t.pay_to_ua(&a, &u2.id, &50, &r, &(NOW + 10));
     replay(env);
     s.mint_ua(&u1.id, 70);
     replay(env);
-    s.transfer(&u1, &Holder::Ua(u2.id.clone()), 40, [1; 32], 0, NOW + 10, &None).unwrap();
+    s.transfer(
+        &u1,
+        &Holder::Ua(u2.id.clone()),
+        40,
+        [1; 32],
+        0,
+        NOW + 10,
+        &None,
+    )
+    .unwrap();
     replay(env);
-    s.transfer(&u1, &Holder::Addr(b.clone()), 60, [1; 32], 1, NOW + 10, &None).unwrap();
+    s.transfer(
+        &u1,
+        &Holder::Addr(b.clone()),
+        60,
+        [1; 32],
+        1,
+        NOW + 10,
+        &None,
+    )
+    .unwrap();
     replay(env);
-    s.pay(&u2, &Holder::Addr(a.clone()), 25, [0x32; 32], NOW + 10).unwrap();
+    s.pay(&u2, &Holder::Addr(a.clone()), 25, [0x32; 32], NOW + 10)
+        .unwrap();
     replay(env);
     s.burn(&u1, 10, [2; 32], 0, NOW + 10).unwrap();
     replay(env);
-    allow(env, &a, &s.t.address, "transfer", (&a, &b, 5i128).into_val(env));
+    allow(
+        env,
+        &a,
+        &s.t.address,
+        "transfer",
+        (&a, &b, 5i128).into_val(env),
+    );
     s.t.transfer(&a, &MuxedAddress::from(b.clone()), &5);
     replay(env);
     allow(env, &b, &s.t.address, "burn", (&b, 1i128).into_val(env));
@@ -499,7 +968,10 @@ fn sep41_events_match_balance_with_ua_moves() {
     replay(env);
 
     let pool_key = ScVal::try_from_val(env, &s.t.address.to_val()).unwrap();
-    assert!(book.iter().any(|(k, _)| *k == pool_key), "the pool appears in the events");
+    assert!(
+        book.iter().any(|(k, _)| *k == pool_key),
+        "the pool appears in the events"
+    );
     assert_eq!(book.len(), 3);
     for (k, v) in &book {
         let addr = Address::try_from_val(env, &Val::try_from_val(env, k).unwrap()).unwrap();
@@ -520,17 +992,33 @@ fn relayer_bound_needs_auth() {
     let (r, other) = (Some(Address::generate(env)), Address::generate(env));
     let to = Holder::Ua(v.id.clone());
     let lane = n(env, [1; 32]);
-    let auth = s.sign(&u, PURPOSE_METATX, "ua_transfer", (&u.id, &to, 5i128, &lane, 0u64, NOW + 10, &r).into_val(env));
+    let auth = s.sign(
+        &u,
+        PURPOSE_METATX,
+        "ua_transfer",
+        (&u.id, &to, 5i128, &lane, 0u64, NOW + 10, &r).into_val(env),
+    );
     let all: SVec<Val> = (&u.id, &to, 5i128, &lane, 0u64, NOW + 10, &r, &auth).into_val(env);
-    assert!(s.t.try_ua_transfer(&u.id, &to, &5, &lane, &0, &(NOW + 10), &r, &auth).is_err(), "no relayer auth");
+    assert!(
+        s.t.try_ua_transfer(&u.id, &to, &5, &lane, &0, &(NOW + 10), &r, &auth)
+            .is_err(),
+        "no relayer auth"
+    );
     allow(env, &other, &s.t.address, "ua_transfer", all.clone());
-    assert!(s.t.try_ua_transfer(&u.id, &to, &5, &lane, &0, &(NOW + 10), &r, &auth).is_err(), "another address's auth");
+    assert!(
+        s.t.try_ua_transfer(&u.id, &to, &5, &lane, &0, &(NOW + 10), &r, &auth)
+            .is_err(),
+        "another address's auth"
+    );
     assert_eq!(s.t.ua_nonce(&u.id, &lane), 0);
     allow(env, r.as_ref().unwrap(), &s.t.address, "ua_transfer", all);
     s.t.ua_transfer(&u.id, &to, &5, &lane, &0, &(NOW + 10), &r, &auth);
     assert_eq!(env.auths()[0].0, r.clone().unwrap());
     // The signature binds the relayer: the same entry with None is another digest.
-    assert!(s.t.try_ua_transfer(&u.id, &to, &5, &lane, &1, &(NOW + 10), &None, &auth).is_err());
+    assert!(s
+        .t
+        .try_ua_transfer(&u.id, &to, &5, &lane, &1, &(NOW + 10), &None, &auth)
+        .is_err());
     s.transfer(&u, &to, 5, [1; 32], 1, NOW + 10, &None).unwrap();
     assert!(env.auths().is_empty(), "None asks nobody");
     assert_eq!(s.t.ua_balance(&v.id), 10);
@@ -547,20 +1035,64 @@ fn ua_ledger_off_refused() {
     let pool = &s.t.address;
     let (r, z, no) = (n(env, [1; 32]), Bytes::new(env), UaSig::none(env));
     let to = Holder::Ua(u.id.clone());
-    allow(env, &a, pool, "transfer_to_ua", (&a, &u.id, 1i128).into_val(env));
-    assert_eq!(err(s.t.try_transfer_to_ua(&a, &u.id, &1)), Error::UaLedgerOff);
-    allow(env, &a, pool, "pay_to_ua", (&a, &u.id, 1i128, &r, NOW + 10).into_val(env));
-    assert_eq!(err(s.t.try_pay_to_ua(&a, &u.id, &1, &r, &(NOW + 10))), Error::UaLedgerOff);
-    allow(env, &s.admin, pool, "mint_to_ua", (&u.id, 1i128).into_val(env));
+    allow(
+        env,
+        &a,
+        pool,
+        "transfer_to_ua",
+        (&a, &u.id, 1i128).into_val(env),
+    );
+    assert_eq!(
+        err(s.t.try_transfer_to_ua(&a, &u.id, &1)),
+        Error::UaLedgerOff
+    );
+    allow(
+        env,
+        &a,
+        pool,
+        "pay_to_ua",
+        (&a, &u.id, 1i128, &r, NOW + 10).into_val(env),
+    );
+    assert_eq!(
+        err(s.t.try_pay_to_ua(&a, &u.id, &1, &r, &(NOW + 10))),
+        Error::UaLedgerOff
+    );
+    allow(
+        env,
+        &s.admin,
+        pool,
+        "mint_to_ua",
+        (&u.id, 1i128).into_val(env),
+    );
     assert_eq!(err(s.t.try_mint_to_ua(&u.id, &1)), Error::UaLedgerOff);
-    assert_eq!(s.transfer(&u, &to, 1, [1; 32], 0, NOW + 10, &None), Err(Error::UaLedgerOff));
-    assert_eq!(s.pay(&u, &to, 1, [1; 32], NOW + 10), Err(Error::UaLedgerOff));
-    assert_eq!(err(s.t.try_ua_pay_meta(&u.id, &to, &1, &r, &z, &(NOW + 10), &None, &no)), Error::UaLedgerOff);
+    assert_eq!(
+        s.transfer(&u, &to, 1, [1; 32], 0, NOW + 10, &None),
+        Err(Error::UaLedgerOff)
+    );
+    assert_eq!(
+        s.pay(&u, &to, 1, [1; 32], NOW + 10),
+        Err(Error::UaLedgerOff)
+    );
+    assert_eq!(
+        err(s
+            .t
+            .try_ua_pay_meta(&u.id, &to, &1, &r, &z, &(NOW + 10), &None, &no)),
+        Error::UaLedgerOff
+    );
     assert_eq!(s.burn(&u, 1, [1; 32], 0, NOW + 10), Err(Error::UaLedgerOff));
-    assert_eq!(err(s.t.try_ua_cancel_nonce(&u.id, &r, &(NOW + 10), &no)), Error::UaLedgerOff);
+    assert_eq!(
+        err(s.t.try_ua_cancel_nonce(&u.id, &r, &(NOW + 10), &no)),
+        Error::UaLedgerOff
+    );
     let dex = Address::generate(env);
     let o = order(env, &u.id, pool, 10);
-    allow(env, &dex, pool, "ua_trade", (&dex, &o, &no, 1i128).into_val(env));
+    allow(
+        env,
+        &dex,
+        pool,
+        "ua_trade",
+        (&dex, &o, &no, 1i128).into_val(env),
+    );
     assert_eq!(err(s.t.try_ua_trade(&dex, &o, &no, &1)), Error::UaLedgerOff);
     assert_eq!(s.t.balance(&a), 100);
 }
@@ -571,7 +1103,15 @@ fn ua_receiver_not_registered_or_not_receivable() {
     let s = setup();
     let env = &s.env;
     let p: Value = serde_json::from_str(PORTABLE).unwrap();
-    let row = |name: &str| p["registrations"].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap().clone();
+    let row = |name: &str| {
+        p["registrations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["name"] == name)
+            .unwrap()
+            .clone()
+    };
     register_row(env, &s.reg, &row("mldsa65#1"));
     let unspendable = register_row(env, &s.reg, &row("msig-pq-native"));
     assert!(!s.reg.receivable(&unspendable));
@@ -580,18 +1120,52 @@ fn ua_receiver_not_registered_or_not_receivable() {
     s.mint_ua(&u.id, 100);
     let a = Address::generate(env);
     s.mint(&a, 100);
-    for (id, want) in [(&ghost, Error::UaNotRegistered), (&unspendable, Error::UaNotReceivable)] {
-        assert_eq!(s.transfer(&u, &Holder::Ua(id.clone()), 1, [1; 32], 0, NOW + 10, &None), Err(want));
-        assert_eq!(s.pay(&u, &Holder::Ua(id.clone()), 1, [2; 32], NOW + 10), Err(want));
-        allow(env, &s.admin, &s.t.address, "mint_to_ua", (id, 1i128).into_val(env));
+    for (id, want) in [
+        (&ghost, Error::UaNotRegistered),
+        (&unspendable, Error::UaNotReceivable),
+    ] {
+        assert_eq!(
+            s.transfer(&u, &Holder::Ua(id.clone()), 1, [1; 32], 0, NOW + 10, &None),
+            Err(want)
+        );
+        assert_eq!(
+            s.pay(&u, &Holder::Ua(id.clone()), 1, [2; 32], NOW + 10),
+            Err(want)
+        );
+        allow(
+            env,
+            &s.admin,
+            &s.t.address,
+            "mint_to_ua",
+            (id, 1i128).into_val(env),
+        );
         assert_eq!(err(s.t.try_mint_to_ua(id, &1)), want);
-        allow(env, &a, &s.t.address, "transfer_to_ua", (&a, id, 1i128).into_val(env));
+        allow(
+            env,
+            &a,
+            &s.t.address,
+            "transfer_to_ua",
+            (&a, id, 1i128).into_val(env),
+        );
         assert_eq!(err(s.t.try_transfer_to_ua(&a, id, &1)), want);
         let r = n(env, [3; 32]);
-        allow(env, &a, &s.t.address, "pay_to_ua", (&a, id, 1i128, &r, NOW + 10).into_val(env));
+        allow(
+            env,
+            &a,
+            &s.t.address,
+            "pay_to_ua",
+            (&a, id, 1i128, &r, NOW + 10).into_val(env),
+        );
         assert_eq!(err(s.t.try_pay_to_ua(&a, id, &1, &r, &(NOW + 10))), want);
     }
-    assert_eq!((s.t.ua_balance(&u.id), s.t.balance(&a), s.t.balance(&s.t.address)), (100, 100, 100));
+    assert_eq!(
+        (
+            s.t.ua_balance(&u.id),
+            s.t.balance(&a),
+            s.t.balance(&s.t.address)
+        ),
+        (100, 100, 100)
+    );
 }
 
 #[test]
@@ -601,13 +1175,25 @@ fn mint_to_ua_admin_only() {
     let u = s.ua(1);
     assert!(s.t.try_mint_to_ua(&u.id, &10).is_err(), "no auth");
     let other = Address::generate(env);
-    allow(env, &other, &s.t.address, "mint_to_ua", (&u.id, 10i128).into_val(env));
+    allow(
+        env,
+        &other,
+        &s.t.address,
+        "mint_to_ua",
+        (&u.id, 10i128).into_val(env),
+    );
     assert!(s.t.try_mint_to_ua(&u.id, &10).is_err(), "not the admin");
     s.mint_ua(&u.id, 10);
     assert_eq!(env.auths()[0].0, s.admin);
     assert_eq!(s.event_names(), ["mint", "UaTransfer"]);
     assert_eq!((s.t.ua_balance(&u.id), s.t.balance(&s.t.address)), (10, 10));
-    allow(env, &s.admin, &s.t.address, "mint_to_ua", (&u.id, -1i128).into_val(env));
+    allow(
+        env,
+        &s.admin,
+        &s.t.address,
+        "mint_to_ua",
+        (&u.id, -1i128).into_val(env),
+    );
     assert_eq!(err(s.t.try_mint_to_ua(&u.id, &-1)), Error::NegativeAmount);
 }
 
@@ -619,9 +1205,22 @@ fn ua_entries_extend_ttl() {
     let (u, v) = (s.ua(1), s.ua(2));
     s.mint_ua(&u.id, 100);
     s.mint_ua(&v.id, 1);
-    s.transfer(&u, &Holder::Ua(v.id.clone()), 1, [1; 32], 0, u64::MAX, &None).unwrap();
+    s.transfer(
+        &u,
+        &Holder::Ua(v.id.clone()),
+        1,
+        [1; 32],
+        0,
+        u64::MAX,
+        &None,
+    )
+    .unwrap();
     let ttl = |k: &Key| env.as_contract(&s.t.address, || env.storage().persistent().get_ttl(k));
-    let (bu, bv, nu) = (Key::UaBalance(u.id.clone()), Key::UaBalance(v.id.clone()), Key::UaNonce(u.id.clone(), n(env, [1; 32])));
+    let (bu, bv, nu) = (
+        Key::UaBalance(u.id.clone()),
+        Key::UaBalance(v.id.clone()),
+        Key::UaNonce(u.id.clone(), n(env, [1; 32])),
+    );
     for k in [&bu, &bv, &nu] {
         assert_eq!(ttl(k), 60 * DAY);
     }
@@ -631,7 +1230,10 @@ fn ua_entries_extend_ttl() {
     }
     // A burn reads and writes `UaBalance(u)` and the lane; `UaBalance(v)` is not touched.
     s.burn(&u, 1, [1; 32], 1, u64::MAX).unwrap();
-    assert_eq!((ttl(&bu), ttl(&nu), ttl(&bv)), (60 * DAY, 60 * DAY, 29 * DAY));
+    assert_eq!(
+        (ttl(&bu), ttl(&nu), ttl(&bv)),
+        (60 * DAY, 60 * DAY, 29 * DAY)
+    );
     // A read inside a transaction extends the entry too.
     env.as_contract(&s.t.address, || {
         let _ = Token::ua_balance(env.clone(), v.id.clone());
@@ -674,7 +1276,10 @@ fn ua_trade_only_named_dex() {
     let u = s.ua(1);
     s.mint_ua(&u.id, 100);
     let (dex, dex2) = (env.register(FakeDex, ()), env.register(FakeDex, ()));
-    let (d1, d2) = (FakeDexClient::new(env, &dex), FakeDexClient::new(env, &dex2));
+    let (d1, d2) = (
+        FakeDexClient::new(env, &dex),
+        FakeDexClient::new(env, &dex2),
+    );
     let o = order(env, &u.id, &s.t.address, 60);
     let auth = s.sign(&u, PURPOSE_TRADE, "ua_order", (&dex, &o).into_val(env));
     // Another DEX naming the signed one (no authority as it), or naming itself (another digest).
@@ -685,7 +1290,14 @@ fn ua_trade_only_named_dex() {
     // The named DEX fills partially, twice, with one signature.
     d1.take(&s.t.address, &dex, &o, &auth, &25);
     d1.take(&s.t.address, &dex, &o, &auth, &35);
-    assert_eq!((s.t.ua_balance(&u.id), s.t.balance(&dex), s.t.balance(&s.t.address)), (40, 60, 40));
+    assert_eq!(
+        (
+            s.t.ua_balance(&u.id),
+            s.t.balance(&dex),
+            s.t.balance(&s.t.address)
+        ),
+        (40, 60, 40)
+    );
     // Purpose metatx over the same digest is not a trade signature.
     let wrong = s.sign(&u, PURPOSE_METATX, "ua_order", (&dex, &o).into_val(env));
     assert!(d1.try_take(&s.t.address, &dex, &o, &wrong, &1).is_err());
@@ -693,14 +1305,38 @@ fn ua_trade_only_named_dex() {
     let mut native = o.clone();
     native.maker = Holder::Addr(Address::generate(env));
     assert!(d1.try_take(&s.t.address, &dex, &native, &auth, &1).is_err());
-    allow(env, &dex, &s.t.address, "ua_trade", (&dex, &native, &auth, 1i128).into_val(env));
-    assert_eq!(err(s.t.try_ua_trade(&dex, &native, &auth, &1)), Error::BadOrder);
+    allow(
+        env,
+        &dex,
+        &s.t.address,
+        "ua_trade",
+        (&dex, &native, &auth, 1i128).into_val(env),
+    );
+    assert_eq!(
+        err(s.t.try_ua_trade(&dex, &native, &auth, &1)),
+        Error::BadOrder
+    );
     let mut other = o.clone();
     other.sell_token = Address::generate(env);
-    allow(env, &dex, &s.t.address, "ua_trade", (&dex, &other, &auth, 1i128).into_val(env));
-    assert_eq!(err(s.t.try_ua_trade(&dex, &other, &auth, &1)), Error::BadOrder);
+    allow(
+        env,
+        &dex,
+        &s.t.address,
+        "ua_trade",
+        (&dex, &other, &auth, 1i128).into_val(env),
+    );
+    assert_eq!(
+        err(s.t.try_ua_trade(&dex, &other, &auth, &1)),
+        Error::BadOrder
+    );
     env.ledger().with_mut(|l| l.timestamp = o.expiry + 1);
-    allow(env, &dex, &s.t.address, "ua_trade", (&dex, &o, &auth, 1i128).into_val(env));
+    allow(
+        env,
+        &dex,
+        &s.t.address,
+        "ua_trade",
+        (&dex, &o, &auth, 1i128).into_val(env),
+    );
     assert_eq!(err(s.t.try_ua_trade(&dex, &o, &auth, &1)), Error::Expired);
 }
 
@@ -721,7 +1357,10 @@ fn trade_fixture() -> (T, Ua, Address, Order, UaSig) {
 fn ua_trade_over_pull_one_call_refused() {
     let (s, u, dex, o, auth) = trade_fixture();
     let d = FakeDexClient::new(&s.env, &dex);
-    assert_eq!(err(d.try_take(&s.t.address, &dex, &o, &auth, &61)), Error::BadOrder);
+    assert_eq!(
+        err(d.try_take(&s.t.address, &dex, &o, &auth, &61)),
+        Error::BadOrder
+    );
     assert_eq!(s.t.ua_balance(&u.id), 1_000);
 }
 
@@ -732,11 +1371,22 @@ fn ua_trade_pulled_total_bounded() {
     let env = &s.env;
     let d = FakeDexClient::new(env, &dex);
     d.take(&s.t.address, &dex, &o, &auth, &40);
-    assert_eq!(err(d.try_take(&s.t.address, &dex, &o, &auth, &21)), Error::BadOrder);
+    assert_eq!(
+        err(d.try_take(&s.t.address, &dex, &o, &auth, &21)),
+        Error::BadOrder
+    );
     d.take(&s.t.address, &dex, &o, &auth, &20);
-    assert_eq!(err(d.try_take(&s.t.address, &dex, &o, &auth, &1)), Error::BadOrder);
+    assert_eq!(
+        err(d.try_take(&s.t.address, &dex, &o, &auth, &1)),
+        Error::BadOrder
+    );
     assert_eq!((s.t.ua_balance(&u.id), s.t.balance(&dex)), (940, 60));
-    let k = Key::UaPulled(op_digest(env, &s.t.address, "ua_order", (&dex, &o).into_val(env)));
+    let k = Key::UaPulled(op_digest(
+        env,
+        &s.t.address,
+        "ua_order",
+        (&dex, &o).into_val(env),
+    ));
     env.as_contract(&s.t.address, || {
         assert_eq!(env.storage().persistent().get::<_, i128>(&k), Some(60));
         assert_eq!(env.storage().persistent().get_ttl(&k), 60 * DAY);
@@ -748,11 +1398,20 @@ fn ua_trade_pulled_total_bounded() {
 fn ua_trade_dex_must_be_contract() {
     let (s, u, _, _, _) = trade_fixture();
     let env = &s.env;
-    for acct in [Address::from_str(env, "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6"), Address::generate(env)] {
+    for acct in [
+        Address::from_str(
+            env,
+            "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6",
+        ),
+        Address::generate(env),
+    ] {
         let o = order(env, &u.id, &s.t.address, 60);
         let auth = s.sign(&u, PURPOSE_TRADE, "ua_order", (&acct, &o).into_val(env));
         // Refused before its authorisation is asked for.
-        assert_eq!(err(s.t.try_ua_trade(&acct, &o, &auth, &10)), Error::BadOrder);
+        assert_eq!(
+            err(s.t.try_ua_trade(&acct, &o, &auth, &10)),
+            Error::BadOrder
+        );
     }
     assert_eq!(s.t.ua_balance(&u.id), 1_000);
 }
@@ -778,8 +1437,16 @@ fn register_row(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
 /// Every `memberships` row of a registration: the member's own `accept_membership`.
 fn accept_row(env: &Env, reg: &RegClient, r: &Value) {
     for m in r["memberships"].as_array().into_iter().flatten() {
-        let slot = MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: Bytes::new(env), sig: Bytes::from_slice(env, &hx(&m["sig"])) };
-        reg.accept_membership(&BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()), &slot, &None);
+        let slot = MemberSig {
+            index: m["index"].as_u64().unwrap() as u32,
+            key_data: Bytes::new(env),
+            sig: Bytes::from_slice(env, &hx(&m["sig"])),
+        };
+        reg.accept_membership(
+            &BytesN::from_array(env, &hx(&r["ua"]).try_into().unwrap()),
+            &slot,
+            &None,
+        );
     }
 }
 
@@ -788,24 +1455,46 @@ fn accept_row(env: &Env, reg: &RegClient, r: &Value) {
 fn register_listed(env: &Env, reg: &RegClient, r: &Value) -> BytesN<32> {
     let (kind, none) = (r["kind"].as_u64().unwrap() as u32, Bytes::new(env));
     if kind != 0x0120 {
-        return reg.register(&kind, &Bytes::from_slice(env, &hx(&r["keyData"])), &UaAttrs::none(env), &Bytes::from_slice(env, &hx(&r["pop"])), &none, &None);
+        return reg.register(
+            &kind,
+            &Bytes::from_slice(env, &hx(&r["keyData"])),
+            &UaAttrs::none(env),
+            &Bytes::from_slice(env, &hx(&r["pop"])),
+            &none,
+            &None,
+        );
     }
     let mut members = SVec::new(env);
     for m in r["members"].as_array().unwrap() {
-        let (kind, weight) = (m["kind"].as_u64().unwrap() as u32, m["weight"].as_u64().unwrap() as u32);
-        members.push_back(MsigMember { kind, id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()), weight });
+        let (kind, weight) = (
+            m["kind"].as_u64().unwrap() as u32,
+            m["weight"].as_u64().unwrap() as u32,
+        );
+        members.push_back(MsigMember {
+            kind,
+            id: BytesN::from_array(env, &hx(&m["id"]).try_into().unwrap()),
+            weight,
+        });
     }
-    let s = MsigStructure { threshold: r["threshold"].as_u64().unwrap() as u32, members };
+    let s = MsigStructure {
+        threshold: r["threshold"].as_u64().unwrap() as u32,
+        members,
+    };
     let mut pop = SVec::new(env);
     for m in r["args"]["pop"].as_array().into_iter().flatten() {
-        pop.push_back(MemberSig { index: m["index"].as_u64().unwrap() as u32, key_data: none.clone(), sig: Bytes::from_slice(env, &hx(&m["sig"])) });
+        pop.push_back(MemberSig {
+            index: m["index"].as_u64().unwrap() as u32,
+            key_data: none.clone(),
+            sig: Bytes::from_slice(env, &hx(&m["sig"])),
+        });
     }
     reg.register_msig(&s, &UaAttrs::none(env), &pop, &none, &None)
 }
 
 /// A vector's `authXdr`: the `UaSig` the entry takes.
 fn auth_of(env: &Env, p: &Value) -> UaSig {
-    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"]))).unwrap()
+    <UaSig as soroban_sdk::xdr::FromXdr>::from_xdr(env, &Bytes::from_slice(env, &hx(&p["authXdr"])))
+        .unwrap()
 }
 
 /// SOR-D12: the token at `ua-ops.json`'s id and network id; every token row's digest is recomputed, and each `perKind`
@@ -827,18 +1516,38 @@ fn ua_ops_vectors_token_rows() {
             continue;
         }
         let f = e["fn"].as_str().unwrap();
-        let run = (e["name"] == f || e["name"] == "ua_pay_lane") && ["ua_transfer", "ua_pay", "ua_pay_meta", "ua_burn", "ua_cancel_nonce"].contains(&f);
+        let run = (e["name"] == f || e["name"] == "ua_pay_lane")
+            && [
+                "ua_transfer",
+                "ua_pay",
+                "ua_pay_meta",
+                "ua_burn",
+                "ua_cancel_nonce",
+            ]
+            .contains(&f);
         if e["name"] == "ua_pay_lane" {
             env.mock_all_auths(); // the lane's own authority, the transaction source's on chain; the UA's `auth` still decides
         }
         for p in e["perKind"].as_array().unwrap() {
             let args = arg_vals(env, p);
-            assert_eq!(op_digest(env, &s.t.address, f, args.clone()).to_array().to_vec(), hx(&p["digest"]), "{} {}", e["name"], p["kind"]);
+            assert_eq!(
+                op_digest(env, &s.t.address, f, args.clone())
+                    .to_array()
+                    .to_vec(),
+                hx(&p["digest"]),
+                "{} {}",
+                e["name"],
+                p["kind"]
+            );
             digests += 1;
             if run {
                 let mut all = args;
                 all.push_back(auth_of(env, p).into_val(env));
-                let r = env.try_invoke_contract::<(), soroban_sdk::Error>(&s.t.address, &Symbol::new(env, f), all);
+                let r = env.try_invoke_contract::<(), soroban_sdk::Error>(
+                    &s.t.address,
+                    &Symbol::new(env, f),
+                    all,
+                );
                 assert!(r.is_ok(), "{} {}: {r:?}", e["name"], p["kind"]);
                 calls += 1;
             }
@@ -864,13 +1573,32 @@ fn ua_ops_msig_authorizes_nothing_until_accepted() {
     let mut calls = StdVec::new();
     for e in o["entries"].as_array().unwrap() {
         let f = e["fn"].as_str().unwrap();
-        if e["contract"] != o["contracts"]["token"] || e["name"] != f || !["ua_transfer", "ua_pay", "ua_pay_meta", "ua_burn", "ua_cancel_nonce"].contains(&f) {
+        if e["contract"] != o["contracts"]["token"]
+            || e["name"] != f
+            || ![
+                "ua_transfer",
+                "ua_pay",
+                "ua_pay_meta",
+                "ua_burn",
+                "ua_cancel_nonce",
+            ]
+            .contains(&f)
+        {
             continue;
         }
-        let p = e["perKind"].as_array().unwrap().iter().find(|p| p["kind"] == "msig").unwrap();
+        let p = e["perKind"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["kind"] == "msig")
+            .unwrap();
         let mut all = arg_vals(env, p);
         all.push_back(auth_of(env, p).into_val(env));
-        let r = env.try_invoke_contract::<(), soroban_sdk::Error>(&s.t.address, &Symbol::new(env, f), all.clone());
+        let r = env.try_invoke_contract::<(), soroban_sdk::Error>(
+            &s.t.address,
+            &Symbol::new(env, f),
+            all.clone(),
+        );
         assert!(r.is_err(), "{f}: a listed msig authorizes nothing");
         assert_eq!(s.t.ua_balance(&id), 1_000_000, "{f}");
         calls.push((f, all));
@@ -878,7 +1606,11 @@ fn ua_ops_msig_authorizes_nothing_until_accepted() {
     assert_eq!(calls.len(), 5);
     accept_row(env, &s.reg, ms);
     for (f, all) in calls {
-        let r = env.try_invoke_contract::<(), soroban_sdk::Error>(&s.t.address, &Symbol::new(env, f), all);
+        let r = env.try_invoke_contract::<(), soroban_sdk::Error>(
+            &s.t.address,
+            &Symbol::new(env, f),
+            all,
+        );
         assert!(r.is_ok(), "{f}: {r:?}");
     }
 }
@@ -887,7 +1619,8 @@ fn ua_ops_msig_authorizes_nothing_until_accepted() {
 
 /// `TAG(msig)` and purpose `member` (CTR-UA-12 / -23).
 const MSIG_TAG: [u8; 32] = h32("0c74d89236d93351f72ba09e86363f0ce977ca1f492ea24ebf6314231157fdd4");
-const PURPOSE_MEMBER_R: [u8; 32] = h32("fbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a");
+const PURPOSE_MEMBER_R: [u8; 32] =
+    h32("fbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a");
 
 /// Final review A-I1 (the reviewer's repro): a 1-of-2 `msig` of (ed25519 UA, the token's `C…`) was registered by the
 /// ed25519 member's `pop` and then drained by anyone through `ua_transfer`, the token's empty slot met by Soroban
@@ -901,7 +1634,10 @@ fn msig_member_equal_to_token_refused() {
     let tx = s.t.address.clone().to_xdr(env);
     let mut tid = [0u8; 32];
     tx.slice(tx.len() - 32..).copy_into_slice(&mut tid);
-    let mut m = vec![(ED25519 as u16, u1.id.to_array(), 1u16), (0x0012u16, tid, 1u16)];
+    let mut m = vec![
+        (ED25519 as u16, u1.id.to_array(), 1u16),
+        (0x0012u16, tid, 1u16),
+    ];
     m.sort_by_key(|x| x.1);
     let mut kd = 1u16.to_be_bytes().to_vec();
     kd.extend_from_slice(&2u16.to_be_bytes());
@@ -913,17 +1649,51 @@ fn msig_member_equal_to_token_refused() {
     let ua = s.reg.ua_of(&0x0120, &Bytes::from_slice(env, &kd));
     let mut members = SVec::new(env);
     for (k, id, w) in &m {
-        members.push_back(MsigMember { kind: *k as u32, id: n(env, *id), weight: *w as u32 });
+        members.push_back(MsigMember {
+            kind: *k as u32,
+            id: n(env, *id),
+            weight: *w as u32,
+        });
     }
     let idx = |id: &[u8; 32]| m.iter().position(|x| &x.1 == id).unwrap() as u32;
     let z = BytesN::from_array(env, &[0u8; 32]);
-    let rd = registration_digest(env, &portable_record_hash(env, &ua, 0x0120, &z, &kem_record_hash(env, &ua, 0, 0, &z)), &z).to_array();
-    let md = keccak(env, &[&ua.to_array(), &keccak(env, &[&MSG_TAG, &MSIG_TAG, &PURPOSE_POP_V2, &rd])]);
-    let sig = Bytes::from_array(env, &u1.sk.sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_MEMBER_R, &md])).to_bytes());
+    let rd = registration_digest(
+        env,
+        &portable_record_hash(env, &ua, 0x0120, &z, &kem_record_hash(env, &ua, 0, 0, &z)),
+        &z,
+    )
+    .to_array();
+    let md = keccak(
+        env,
+        &[
+            &ua.to_array(),
+            &keccak(env, &[&MSG_TAG, &MSIG_TAG, &PURPOSE_POP_V2, &rd]),
+        ],
+    );
+    let sig = Bytes::from_array(
+        env,
+        &u1.sk
+            .sign(&keccak(env, &[&MSG_TAG, &ED_TAG, &PURPOSE_MEMBER_R, &md]))
+            .to_bytes(),
+    );
     let mut pop = SVec::new(env);
-    pop.push_back(MemberSig { index: idx(&u1.id.to_array()), key_data: Bytes::new(env), sig });
-    let structure = MsigStructure { threshold: 1, members };
-    let r = s.reg.try_register_msig(&structure, &no_attrs(env), &pop, &Bytes::new(env), &None);
-    assert_eq!(r.err(), Some(Ok(soroban_sdk::Error::from_contract_error(scaas_ua_registry::Error::MemberUnknown as u32))));
+    pop.push_back(MemberSig {
+        index: idx(&u1.id.to_array()),
+        key_data: Bytes::new(env),
+        sig,
+    });
+    let structure = MsigStructure {
+        threshold: 1,
+        members,
+    };
+    let r = s
+        .reg
+        .try_register_msig(&structure, &no_attrs(env), &pop, &Bytes::new(env), &None);
+    assert_eq!(
+        r.err(),
+        Some(Ok(soroban_sdk::Error::from_contract_error(
+            scaas_ua_registry::Error::MemberUnknown as u32
+        )))
+    );
     assert!(!s.reg.receivable(&ua));
 }

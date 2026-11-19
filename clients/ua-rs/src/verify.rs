@@ -4,7 +4,9 @@
 //! ([`crate::validate_key_data`]) and matched against the id; signatures are untrusted: anything malformed is `false`,
 //! never a panic. UNAUDITED.
 use crate::keccak;
-use ark_ec::hashing::{curve_maps::wb::WBMap, map_to_curve_hasher::MapToCurveBasedHasher, HashToCurve};
+use ark_ec::hashing::{
+    curve_maps::wb::WBMap, map_to_curve_hasher::MapToCurveBasedHasher, HashToCurve,
+};
 use ark_ec::pairing::Pairing;
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ec::AffineRepr;
@@ -30,15 +32,26 @@ pub const BN254_LABEL_POP: &[u8] = b"SCAAS-UA-BLS-BN254-POP-V1";
 pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: bool) -> bool {
     match kind {
         0x0100 => webauthn_p256(key_data, message, sig),
-        0x0101 => sig.len() == 64 && key_data.len() == 64 && p256_ok(key_data, &sha256(&[message]), sig),
+        0x0101 => {
+            sig.len() == 64 && key_data.len() == 64 && p256_ok(key_data, &sha256(&[message]), sig)
+        }
         0x0102 => ed25519(key_data, message, sig),
         0x0103 => bip340(key_data, message, sig),
         0x0104 => schnorr::<ark_bn254::g1::Config>(key_data, message, sig, 32),
         0x0105 => schnorr::<ark_bls12_381::g1::Config>(key_data, message, sig, 64),
-        0x0141 => schnorr_tagged::<ark_bls12_381::g1::Config>(ZETHER_SCHNORR_TAG, key_data, message, sig, 64),
+        0x0141 => schnorr_tagged::<ark_bls12_381::g1::Config>(
+            ZETHER_SCHNORR_TAG,
+            key_data,
+            message,
+            sig,
+            64,
+        ),
         0x0106 => bls12381_minsig(key_data, message, sig, pop),
         0x0107 => bls_bn254_minsig(key_data, message, sig, pop),
-        0x0108 => key_data.len() == 64 && native_ecdsa(keccak(&[key_data])[12..].try_into().unwrap(), message, sig),
+        0x0108 => {
+            key_data.len() == 64
+                && native_ecdsa(keccak(&[key_data])[12..].try_into().unwrap(), message, sig)
+        }
         0x0110..=0x0113 => crate::groups::verify(kind, key_data, message, sig, pop),
         #[cfg(feature = "pq")]
         0x0130..=0x0135 => crate::pq::verify(kind, key_data, message, sig),
@@ -52,12 +65,18 @@ pub fn native_ecdsa(address: &[u8; 20], digest: &[u8; 32], sig: &[u8]) -> bool {
     if sig.len() != 65 || !(sig[64] == 27 || sig[64] == 28) {
         return false;
     }
-    let Ok(s) = Signature::from_slice(&sig[..64]) else { return false };
+    let Ok(s) = Signature::from_slice(&sig[..64]) else {
+        return false;
+    };
     if s.normalize_s() != s {
         return false; // high s
     }
-    let Some(rec) = RecoveryId::from_byte(sig[64] - 27) else { return false };
-    let Ok(vk) = VerifyingKey::recover_from_prehash(digest, &s, rec) else { return false };
+    let Some(rec) = RecoveryId::from_byte(sig[64] - 27) else {
+        return false;
+    };
+    let Ok(vk) = VerifyingKey::recover_from_prehash(digest, &s, rec) else {
+        return false;
+    };
     let pt = vk.to_sec1_point(false);
     keccak(&[&pt.as_bytes()[1..]])[12..] == address[..]
 }
@@ -76,7 +95,12 @@ fn p256_ok(xy: &[u8], hash: &[u8; 32], rs: &[u8]) -> bool {
     use p256::ecdsa::{Signature, VerifyingKey};
     let mut sec1 = [4u8; 65];
     sec1[1..].copy_from_slice(xy);
-    let (Ok(vk), Ok(s)) = (VerifyingKey::from_sec1_bytes(&sec1), Signature::from_slice(rs)) else { return false };
+    let (Ok(vk), Ok(s)) = (
+        VerifyingKey::from_sec1_bytes(&sec1),
+        Signature::from_slice(rs),
+    ) else {
+        return false;
+    };
     s.normalize_s() == s && vk.verify_prehash(hash, &s).is_ok()
 }
 
@@ -94,7 +118,7 @@ pub(crate) fn word_usize(b: &[u8], o: usize) -> Option<usize> {
 /// `(authenticatorData, clientDataJSON)` of the WebAuthn blob, only if `sig` is their canonical
 /// `abi.encode(authenticatorData, clientDataJSON, r, s)` (owner 2026-10-30, CTR-UA-33 C; `WebAuthnP256Verifier._fields`):
 /// heads 0x80 and 0xa0 + pad32(len a), each field its length word ‖ data ‖ zero padding, no trailing bytes.
-fn webauthn_fields(sig: &[u8]) -> Option<(&[u8], &[u8])> {
+pub(crate) fn webauthn_fields(sig: &[u8]) -> Option<(&[u8], &[u8])> {
     let pad = |n: usize| n.checked_add(31).map(|x| x / 32 * 32);
     let n = sig.len();
     let la = word_usize(sig, 0x80).filter(|x| *x <= n)?;
@@ -112,7 +136,10 @@ fn base64url(data: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::new();
     for c in data.chunks(3) {
-        let n = c.iter().enumerate().fold(0u32, |a, (i, x)| a | (*x as u32) << (16 - 8 * i));
+        let n = c
+            .iter()
+            .enumerate()
+            .fold(0u32, |a, (i, x)| a | (*x as u32) << (16 - 8 * i));
         for i in 0..=c.len() {
             out.push(A[(n >> (18 - 6 * i) & 63) as usize] as char);
         }
@@ -123,12 +150,17 @@ fn base64url(data: &[u8]) -> String {
 /// `SmartKeyAccount._clientDataOk` without the origin comparison: the fixed prefix with type and challenge, any origin up
 /// to the next `"`, then `}` at the end, or `,"crossOrigin":false` followed by `}` at the end or by `,` with `}` at the end.
 pub(crate) fn client_data_ok(cd: &[u8], challenge: &[u8; 32]) -> bool {
-    let prefix = format!("{{\"type\":\"webauthn.get\",\"challenge\":\"{}\",\"origin\":\"", base64url(challenge));
+    let prefix = format!(
+        "{{\"type\":\"webauthn.get\",\"challenge\":\"{}\",\"origin\":\"",
+        base64url(challenge)
+    );
     let (p, n) = (prefix.len(), cd.len());
     if n < p + 2 || &cd[..p] != prefix.as_bytes() {
         return false;
     }
-    let Some(end) = cd[p..].iter().position(|c| *c == b'"').map(|i| p + i) else { return false };
+    let Some(end) = cd[p..].iter().position(|c| *c == b'"').map(|i| p + i) else {
+        return false;
+    };
     if end + 1 >= n {
         return false;
     }
@@ -141,16 +173,31 @@ pub(crate) fn client_data_ok(cd: &[u8], challenge: &[u8; 32]) -> bool {
         return false;
     }
     // C1-2 (`WebAuthnClientData.sol`): after `,"crossOrigin":false,` the object must still close (T21 L05)
-    if cd[after] == b'}' { after + 1 == n } else { cd[after] == b',' && cd[n - 1] == b'}' }
+    if cd[after] == b'}' {
+        after + 1 == n
+    } else {
+        cd[after] == b',' && cd[n - 1] == b'}'
+    }
 }
 
 /// `abi.encode(bytes authenticatorData, string clientDataJSON, uint256 r, uint256 s)`, canonical only (checked first).
 fn webauthn_p256(key_data: &[u8], message: &[u8; 32], sig: &[u8]) -> bool {
-    let Some((auth, cd)) = webauthn_fields(sig) else { return false };
-    if key_data.len() != 96 || auth.len() < 37 || auth[..32] != key_data[64..96] || auth[32] & 0x05 != 0x05 {
+    let Some((auth, cd)) = webauthn_fields(sig) else {
+        return false;
+    };
+    if key_data.len() != 96
+        || auth.len() < 37
+        || auth[..32] != key_data[64..96]
+        || auth[32] & 0x05 != 0x05
+    {
         return false;
     }
-    client_data_ok(cd, message) && p256_ok(&key_data[..64], &sha256(&[auth, &sha256(&[cd])]), &sig[64..128])
+    client_data_ok(cd, message)
+        && p256_ok(
+            &key_data[..64],
+            &sha256(&[auth, &sha256(&[cd])]),
+            &sig[64..128],
+        )
 }
 
 // --- ed25519 ---
@@ -160,16 +207,28 @@ fn webauthn_p256(key_data: &[u8], message: &[u8; 32], sig: &[u8]) -> bool {
 /// (dalek-cryptography/curve25519-dalek#626; such keys have no known discrete log, so no vector can tell the difference).
 pub fn ed25519(pk: &[u8], message: &[u8], sig: &[u8]) -> bool {
     use curve25519_dalek::edwards::CompressedEdwardsY;
-    let (Ok(pk), Ok(sig)) = (<[u8; 32]>::try_from(pk), ed25519_dalek::Signature::from_slice(sig)) else { return false };
-    let canonical = CompressedEdwardsY(pk).decompress().is_some_and(|p| p.compress().to_bytes() == pk);
-    let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&pk) else { return false };
+    let (Ok(pk), Ok(sig)) = (
+        <[u8; 32]>::try_from(pk),
+        ed25519_dalek::Signature::from_slice(sig),
+    ) else {
+        return false;
+    };
+    let canonical = CompressedEdwardsY(pk)
+        .decompress()
+        .is_some_and(|p| p.compress().to_bytes() == pk);
+    let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&pk) else {
+        return false;
+    };
     canonical && vk.verify_strict(message, &sig).is_ok()
 }
 
 // --- BIP-340 ---
 
 pub(crate) fn bip340(key_data: &[u8], message: &[u8; 32], sig: &[u8]) -> bool {
-    let (Ok(vk), Ok(s)) = (k256::schnorr::VerifyingKey::from_slice(key_data), k256::schnorr::Signature::try_from(sig)) else {
+    let (Ok(vk), Ok(s)) = (
+        k256::schnorr::VerifyingKey::from_slice(key_data),
+        k256::schnorr::Signature::try_from(sig),
+    ) else {
         return false;
     };
     vk.verify_raw(message, &s).is_ok()
@@ -217,14 +276,25 @@ pub(crate) fn hash_to_scalar_wide(s: &[u8; 32], out: &mut [u8; 64]) {
 
 /// scaas Schnorr: `R ‖ z`, `e = hashToScalar(keccak256(tag ‖ R ‖ Y ‖ m))` ([`hash_to_scalar`]); accept iff `z < r`, `R ≠ O`,
 /// `e ≠ 0`, `[z]G == R + [e]Y`.
-pub(crate) fn schnorr<P: SWCurveConfig>(key_data: &[u8], message: &[u8; 32], sig: &[u8], w: usize) -> bool
+pub(crate) fn schnorr<P: SWCurveConfig>(
+    key_data: &[u8],
+    message: &[u8; 32],
+    sig: &[u8],
+    w: usize,
+) -> bool
 where
     P::BaseField: PrimeField,
 {
     schnorr_tagged::<P>(SCHNORR_TAG, key_data, message, sig, w)
 }
 
-fn schnorr_tagged<P: SWCurveConfig>(tag: &[u8], key_data: &[u8], message: &[u8; 32], sig: &[u8], w: usize) -> bool
+fn schnorr_tagged<P: SWCurveConfig>(
+    tag: &[u8],
+    key_data: &[u8],
+    message: &[u8; 32],
+    sig: &[u8],
+    w: usize,
+) -> bool
 where
     P::BaseField: PrimeField,
 {
@@ -232,7 +302,13 @@ where
         return false;
     }
     let (rb, zb) = sig.split_at(2 * w);
-    let (Some(r), Some(y), Some(z)) = (g1::<P>(rb, w), g1::<P>(key_data, w), fe::<P::ScalarField>(zb)) else { return false };
+    let (Some(r), Some(y), Some(z)) = (
+        g1::<P>(rb, w),
+        g1::<P>(key_data, w),
+        fe::<P::ScalarField>(zb),
+    ) else {
+        return false;
+    };
     let e: P::ScalarField = hash_to_scalar(&keccak(&[tag, rb, key_data, message]));
     !e.is_zero() && Affine::<P>::generator() * z == r.into_group() + y * e
 }
@@ -252,7 +328,10 @@ pub fn map_to_g1_bn254(prefix: &[u8]) -> ark_bn254::G1Affine {
         let rhs = x * x * x + Fq::from(3u64);
         let y = rhs.pow(exp);
         if y.square() == rhs {
-            return ark_bn254::G1Affine::new_unchecked(x, if y.into_bigint().is_odd() { -y } else { y });
+            return ark_bn254::G1Affine::new_unchecked(
+                x,
+                if y.into_bigint().is_odd() { -y } else { y },
+            );
         }
     }
     unreachable!("half of all x lift")
@@ -260,40 +339,71 @@ pub fn map_to_g1_bn254(prefix: &[u8]) -> ark_bn254::G1Affine {
 
 fn bls_bn254_minsig(key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: bool) -> bool {
     use ark_bn254::{Bn254, Fq, Fq2, G2Affine};
-    let Some(s) = g1::<ark_bn254::g1::Config>(sig, 32) else { return false };
+    let Some(s) = g1::<ark_bn254::g1::Config>(sig, 32) else {
+        return false;
+    };
     if key_data.len() != 128 {
         return false;
     }
     let w: Vec<Option<Fq>> = (0..4).map(|i| fe(&key_data[32 * i..32 * i + 32])).collect();
-    let (Some(xi), Some(xr), Some(yi), Some(yr)) = (w[0], w[1], w[2], w[3]) else { return false };
+    let (Some(xi), Some(xr), Some(yi), Some(yr)) = (w[0], w[1], w[2], w[3]) else {
+        return false;
+    };
     let pk = G2Affine::new_unchecked(Fq2::new(xr, xi), Fq2::new(yr, yi)); // EIP-197: imaginary part first
     if !pk.is_on_curve() || !pk.is_in_correct_subgroup_assuming_on_curve() {
         return false;
     }
-    let h = map_to_g1_bn254(&[if pop { BN254_LABEL_POP } else { BN254_LABEL_SIG }, message].concat());
+    let h = map_to_g1_bn254(
+        &[
+            if pop {
+                BN254_LABEL_POP
+            } else {
+                BN254_LABEL_SIG
+            },
+            message,
+        ]
+        .concat(),
+    );
     Bn254::pairing(s, G2Affine::generator()) == Bn254::pairing(h, pk)
 }
 
 /// RFC 9380 `BLS12381G1_XMD:SHA-256_SSWU_RO_` with the given DST.
 pub fn hash_to_g1_bls12381(msg: &[u8], dst: &[u8]) -> ark_bls12_381::G1Affine {
-    MapToCurveBasedHasher::<ark_bls12_381::G1Projective, DefaultFieldHasher<Sha256, 128>, WBMap<ark_bls12_381::g1::Config>>::new(dst)
-        .and_then(|h| h.hash(msg))
-        .expect("RFC 9380 hasher")
+    MapToCurveBasedHasher::<
+        ark_bls12_381::G1Projective,
+        DefaultFieldHasher<Sha256, 128>,
+        WBMap<ark_bls12_381::g1::Config>,
+    >::new(dst)
+    .and_then(|h| h.hash(msg))
+    .expect("RFC 9380 hasher")
 }
 
 fn bls12381_minsig(key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: bool) -> bool {
     use ark_bls12_381::{Bls12_381, Fq, Fq2, G2Affine};
-    let Some(s) = g1::<ark_bls12_381::g1::Config>(sig, 64) else { return false };
+    let Some(s) = g1::<ark_bls12_381::g1::Config>(sig, 64) else {
+        return false;
+    };
     if key_data.len() != 256 {
         return false;
     }
-    let w: Vec<Option<Fq>> = (0..4).map(|i| coord(&key_data[64 * i..64 * i + 64], 64)).collect();
-    let (Some(x0), Some(x1), Some(y0), Some(y1)) = (w[0], w[1], w[2], w[3]) else { return false };
+    let w: Vec<Option<Fq>> = (0..4)
+        .map(|i| coord(&key_data[64 * i..64 * i + 64], 64))
+        .collect();
+    let (Some(x0), Some(x1), Some(y0), Some(y1)) = (w[0], w[1], w[2], w[3]) else {
+        return false;
+    };
     let pk = G2Affine::new_unchecked(Fq2::new(x0, x1), Fq2::new(y0, y1)); // EIP-2537: c0 first
     if !pk.is_on_curve() || !pk.is_in_correct_subgroup_assuming_on_curve() {
         return false;
     }
-    let h = hash_to_g1_bls12381(message, if pop { BLS12381_DST_POP } else { BLS12381_DST_SIG });
+    let h = hash_to_g1_bls12381(
+        message,
+        if pop {
+            BLS12381_DST_POP
+        } else {
+            BLS12381_DST_SIG
+        },
+    );
     Bls12_381::pairing(s, G2Affine::generator()) == Bls12_381::pairing(h, pk)
 }
 

@@ -13,7 +13,8 @@ contract LigeroUnits is LigeroVerifier {
         a = new uint256[](n);
         for (uint256 i; i < n; ++i) {
             uint256 r = uint256(keccak256(abi.encode(seed, i)));
-            a[i] = packed ? (r & 0x000003ffffffffff000003ffffffffff000003ffffffffff000003ffffffffff) % (1 << 255) : r % Q;
+            a[i] =
+                packed ? (r & 0x000003ffffffffff000003ffffffffff000003ffffffffff000003ffffffffff) % (1 << 255) : r % Q;
         }
     }
 
@@ -36,39 +37,66 @@ contract LigeroUnits is LigeroVerifier {
             let e := add(p, mul(n, 32))
             let a02 := 0
             let a13 := 0
-            for {} lt(p, e) { p := add(p, 256) q := add(q, 256) } {
+            for {} lt(p, e) {
+                p := add(p, 256)
+                q := add(q, 256)
+            } {
                 let x := mload(q)
                 let w := mload(p)
                 a02 := add(a02, mul(and(w, 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
-                a13 := add(a13, mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
+                a13 := add(
+                    a13,
+                    mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x)
+                )
                 x := mload(add(q, 32))
                 w := mload(add(p, 32))
                 a02 := add(a02, mul(and(w, 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
-                a13 := add(a13, mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
+                a13 := add(
+                    a13,
+                    mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x)
+                )
                 x := mload(add(q, 64))
                 w := mload(add(p, 64))
                 a02 := add(a02, mul(and(w, 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
-                a13 := add(a13, mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
+                a13 := add(
+                    a13,
+                    mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x)
+                )
                 x := mload(add(q, 96))
                 w := mload(add(p, 96))
                 a02 := add(a02, mul(and(w, 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
-                a13 := add(a13, mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
+                a13 := add(
+                    a13,
+                    mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x)
+                )
                 x := mload(add(q, 128))
                 w := mload(add(p, 128))
                 a02 := add(a02, mul(and(w, 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
-                a13 := add(a13, mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
+                a13 := add(
+                    a13,
+                    mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x)
+                )
                 x := mload(add(q, 160))
                 w := mload(add(p, 160))
                 a02 := add(a02, mul(and(w, 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
-                a13 := add(a13, mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
+                a13 := add(
+                    a13,
+                    mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x)
+                )
                 x := mload(add(q, 192))
                 w := mload(add(p, 192))
                 a02 := add(a02, mul(and(w, 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
-                a13 := add(a13, mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
+                a13 := add(
+                    a13,
+                    mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x)
+                )
                 x := mload(add(q, 224))
                 w := mload(add(p, 224))
                 a02 := add(a02, mul(and(w, 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
-                a13 := add(a13, mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x))
+                a13 := add(
+                    a13,
+                    mul(and(shr(64, w), 0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff), x)
+                )
             }
             r := xor(a02, a13)
         }
@@ -111,7 +139,9 @@ contract LigeroUnits is LigeroVerifier {
     function gQuad(bytes calldata col, uint256 nt) external view returns (uint256 g) {
         V memory v;
         v.tri = new uint256[](nt);
-        for (uint256 i; i < nt; ++i) v.tri[i] = (i % 100) | ((i * 7) % 100) << 32 | ((i * 13) % 100) << 64;
+        for (uint256 i; i < nt; ++i) {
+            v.tri[i] = (i % 100) | ((i * 7) % 100) << 32 | ((i * 13) % 100) << 64;
+        }
         v.rq = fill(nt, 5, true);
         uint256 o = pOffOf(col);
         g = gasleft();
@@ -122,7 +152,9 @@ contract LigeroUnits is LigeroVerifier {
     function gEm(uint256 n) external view returns (uint256 g) {
         uint256 a = 0x0000012345678901000002345678901200000345678901230000045678901234;
         g = gasleft();
-        for (uint256 i; i < n; ++i) a = em(a, a);
+        for (uint256 i; i < n; ++i) {
+            a = em(a, a);
+        }
         g -= gasleft();
         a;
     }
@@ -131,7 +163,9 @@ contract LigeroUnits is LigeroVerifier {
         uint256 a = 0x0000012345678901000002345678901200000345678901230000045678901234;
         uint256 b = 0x0000022345678901000003345678901200000445678901230000015678901234;
         g = gasleft();
-        for (uint256 i; i < n; ++i) a = es(ea(a, b), b);
+        for (uint256 i; i < n; ++i) {
+            a = es(ea(a, b), b);
+        }
         g -= gasleft();
         a;
     }
@@ -181,15 +215,31 @@ contract LigeroUnitsTest is Test {
         }
         (uint256 t1,) = u.gTunedMac(1024);
         (uint256 t2,) = u.gTunedMac(4096);
-        console2.log(string.concat('{"unit": "own_mac_this_code", "gas": ', per(u.gRowEval(1024), u.gRowEval(4096), 1024, 4096), "}"));
+        console2.log(
+            string.concat(
+                '{"unit": "own_mac_this_code", "gas": ', per(u.gRowEval(1024), u.gRowEval(4096), 1024, 4096), "}"
+            )
+        );
         console2.log(string.concat('{"unit": "own_mac_tuned_8x", "gas": ', per(t1, t2, 1024, 4096), "}"));
-        console2.log(string.concat('{"unit": "poly_coeff_eval", "gas": ', per(u.gEvalP(big, 1024), u.gEvalP(big, 4096), 1024, 4096), "}"));
+        console2.log(
+            string.concat(
+                '{"unit": "poly_coeff_eval", "gas": ', per(u.gEvalP(big, 1024), u.gEvalP(big, 4096), 1024, 4096), "}"
+            )
+        );
         console2.log(string.concat('{"unit": "power", "gas": ', per(u.gPowers(1024), u.gPowers(4096), 1024, 4096), "}"));
-        console2.log(string.concat('{"unit": "lagrange_slot", "gas": ', per(u.gLagrange(256), u.gLagrange(1024), 256, 1024), "}"));
-        console2.log(string.concat('{"unit": "dotU_row", "gas": ', per(u.gDotU(big, 64), u.gDotU(big, 512), 64, 512), "}"));
-        console2.log(string.concat('{"unit": "quad_triple", "gas": ', per(u.gQuad(big, 64), u.gQuad(big, 512), 64, 512), "}"));
+        console2.log(
+            string.concat('{"unit": "lagrange_slot", "gas": ', per(u.gLagrange(256), u.gLagrange(1024), 256, 1024), "}")
+        );
+        console2.log(
+            string.concat('{"unit": "dotU_row", "gas": ', per(u.gDotU(big, 64), u.gDotU(big, 512), 64, 512), "}")
+        );
+        console2.log(
+            string.concat('{"unit": "quad_triple", "gas": ', per(u.gQuad(big, 64), u.gQuad(big, 512), 64, 512), "}")
+        );
         console2.log(string.concat('{"unit": "ext_mul", "gas": ', per(u.gEm(16), u.gEm(256), 16, 256), "}"));
-        console2.log(string.concat('{"unit": "ext_add_sub_pair", "gas": ', per(u.gEaEs(16), u.gEaEs(256), 16, 256), "}"));
+        console2.log(
+            string.concat('{"unit": "ext_add_sub_pair", "gas": ', per(u.gEaEs(16), u.gEaEs(256), 16, 256), "}")
+        );
         console2.log(string.concat('{"unit": "a_pass_term", "gas": ', per(0, u.gAPass(), 0, 2048), "}"));
         console2.log(string.concat('{"unit": "ring_step_k64", "gas": ', per(0, u.gRingJ(), 0, 64), "}"));
     }

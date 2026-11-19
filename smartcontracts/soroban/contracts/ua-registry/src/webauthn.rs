@@ -40,10 +40,16 @@ fn client_data_ok(cd: &[u8], ua_msg: &[u8; 32]) -> bool {
     const CROSS_FALSE: &[u8] = b",\"crossOrigin\":false";
     let p = P1.len() + 43 + P2.len();
     let n = cd.len();
-    if n < p + 2 || &cd[..P1.len()] != P1 || cd[P1.len()..P1.len() + 43] != b64url32(ua_msg) || &cd[P1.len() + 43..p] != P2 {
+    if n < p + 2
+        || &cd[..P1.len()] != P1
+        || cd[P1.len()..P1.len() + 43] != b64url32(ua_msg)
+        || &cd[P1.len() + 43..p] != P2
+    {
         return false;
     }
-    let Some(end) = cd[p..].iter().position(|c| *c == b'"').map(|i| p + i) else { return false };
+    let Some(end) = cd[p..].iter().position(|c| *c == b'"').map(|i| p + i) else {
+        return false;
+    };
     if contains(&cd[end..], b"\"topOrigin\"") || end + 1 >= n {
         return false;
     }
@@ -71,7 +77,10 @@ pub fn check(env: &Env, key_data: &Bytes, ua_msg: &Hash<32>, sig: &Bytes, e: Err
     }
     let auth_data = bytes_at(env, sig, 0, 0, e);
     let client_data = bytes_at(env, sig, 0, 32, e);
-    let rs: BytesN<64> = sig.slice(64..128).try_into().unwrap_or_else(|_| panic_with_error!(env, e));
+    let rs: BytesN<64> = sig
+        .slice(64..128)
+        .try_into()
+        .unwrap_or_else(|_| panic_with_error!(env, e));
     // Canonical encoding only (owner 2026-10-30): re-encode and compare, so `pop` bytes (and `pop_hash`) are unique.
     let mut enc = Bytes::new(env);
     put_word(&mut enc, 128);
@@ -83,7 +92,10 @@ pub fn check(env: &Env, key_data: &Bytes, ua_msg: &Hash<32>, sig: &Bytes, e: Err
         panic_with_error!(env, e);
     }
     let n = client_data.len() as usize;
-    if auth_data.len() < 37 || auth_data.slice(0..32) != key_data.slice(64..96) || n > MAX_CLIENT_DATA {
+    if auth_data.len() < 37
+        || auth_data.slice(0..32) != key_data.slice(64..96)
+        || n > MAX_CLIENT_DATA
+    {
         panic_with_error!(env, e);
     }
     if auth_data.get_unchecked(32) & (FLAG_UP | FLAG_UV) != FLAG_UP | FLAG_UV {
@@ -96,8 +108,11 @@ pub fn check(env: &Env, key_data: &Bytes, ua_msg: &Hash<32>, sig: &Bytes, e: Err
     }
     let mut key = Bytes::from_array(env, &[4u8]);
     key.append(&key_data.slice(0..64));
-    let key: BytesN<65> = key.try_into().unwrap_or_else(|_| panic_with_error!(env, Error::KeyData));
+    let key: BytesN<65> = key
+        .try_into()
+        .unwrap_or_else(|_| panic_with_error!(env, Error::KeyData));
     let mut signed = auth_data;
     signed.append(&env.crypto().sha256(&client_data).into());
-    env.crypto().secp256r1_verify(&key, &env.crypto().sha256(&signed), &rs);
+    env.crypto()
+        .secp256r1_verify(&key, &env.crypto().sha256(&signed), &rs);
 }

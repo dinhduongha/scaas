@@ -262,7 +262,10 @@ present → pending, and past the deadline the relaying lane sends `relay_timeou
 flight, `INCLUDED_FINAL` with status `Started`; `wait_until = INCLUDED`; retried every 120 s); 3,600 s past the
 deadline the job is reported reverted to free the lane. Price key `params.relay_fee.min_yocto_value = { "<token>" =
 "<yocto per base unit>" }`; router targets: configured tokens, `params.dex`, and `params.relay_fee.targets = { "<id>" =
-["method", …] }` (strict, per method). The adapter logs a subject's key set per token for account key-op jobs. BUILT.
+["method", …] }` (strict, per method). What a job attaches, as its check reports it (`relay_check` + `relay_hold_check`,
+an entry's `*_check`), is capped by `params.max_deposit_per_job` (yoctoNEAR, a decimal string, default 1 NEAR): above it
+`Transport`, no verdict, whichever endpoint answered (CLI-RPC-05, scaas-rpc T24.4, owner 2026-11-18). The adapter logs a
+subject's key set per token for account key-op jobs. BUILT.
 
 <a id="NET-NEAR-26"></a>**NET-NEAR-26** — **Relay-fee jobs are checked against every known relayer-loss path before
 the call.** Fee shape (ref from the call bytes, lane, nonce 0, relayer = the marker, payee ≠ executor); router target ∈
@@ -318,6 +321,15 @@ balance decrease per job kind (§13). BUILT.
 
 Config shape: the `near` row of `scaas-node/node.example.toml` (`tokens`, `params.dex`, `params.relay_fee.{router,
 executor, min_amount, min_yocto_value, targets}`).
+
+Endpoints (BUILT, scaas-rpc T17): `rpc_urls` are read through the crate's family client (16 MiB, depth 64, no redirect,
+20 s a request). `build`'s views (the entry's `*_check`, `relay_check`, `relay_hold_check`, the subject, the target's
+code and checks, balances) and the gas price fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next
+endpoint must answer `status` with the configured genesis hash and a final height at or above the one the first endpoint
+last showed; an error answer from it decides nothing and a refusal read while it answered requeues the job. From the
+first endpoint only `CONTRACT_EXECUTION_ERROR` and `UNKNOWN_ACCOUNT` are its verdict; any other error (a rate limit, an
+unknown block) fails over (scaas-rpc T24.3). The transaction status and its escrow follow-up, the landed fee, the lane's access-key nonce, `op_consumed`, the action fees
+(kept a while) and the start checks are the first endpoint's only.
 
 ## 9. Finality and events
 
@@ -409,6 +421,11 @@ refused ("not adopted"). Key deletion and the gate run last; then `deployments/<
 funder, admin, tokens, dex, relayfee, relayexec, lanes, code hashes, time) is written and the resume file removed.
 `devnet.sh near up|down` runs the near-sandbox binary near-workspaces downloaded (no docker; RPC 32060, p2p 32061;
 `--max-gas-burnt-view "300 Tgas"`, validity period 600, `gc_num_epochs_to_keep` 100000). BUILT.
+
+**Formatted build (2026-11-18).** The contracts' Rust was formatted (rustfmt, code-format plan F1); panic locations
+moved, so the wasm of `scaas_near_token`, `scaas_near_dex`, `scaas_near_relayfee` and the test fixtures
+(`spike_p256`, `target_fixture`, `test_receiver`) from `build.sh near` differ from the earlier build
+(`scaas_near_relayexec` unchanged); no hash of them is pinned. The next redeploy carries the formatted build.
 
 ## 13. Conformance
 

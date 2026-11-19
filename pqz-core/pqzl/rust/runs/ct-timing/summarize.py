@@ -2,6 +2,7 @@
 """Fix E timing table: base (0dc869d) vs new (fix E) from ct-timing.sh's jsonl files.
 Per (mode, relation, step): p50 = mean of the rounds' p50, p99 = max of the rounds' p99; ratio = new / base.
 Usage: python3 -I summarize.py <dir>  (prints a Markdown table)"""
+
 import json
 import sys
 from collections import defaultdict

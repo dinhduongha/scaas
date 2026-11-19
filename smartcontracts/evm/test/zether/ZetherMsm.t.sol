@@ -19,7 +19,10 @@ contract FoldProbe is ZetherInnerProductVerifierBls12381 {
     error Folded(bytes sum, uint256 points);
 
     function _msm(bytes memory pts, uint256[] memory sc)
-        internal view override(ZetherCurve, ZetherBls12381Curve) returns (bytes memory)
+        internal
+        view
+        override(ZetherCurve, ZetherBls12381Curve)
+        returns (bytes memory)
     {
         revert Folded(super._msm(pts, sc), sc.length);
     }
@@ -47,7 +50,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
     /// @dev The verdict of `op` (0 transfer, 1 multi, 2 burn) on the canonical verifiers. A revert is a refusal only as
     ///      `BadPoint`: out of gas or a `Panic` must not read as one.
     function _ok(uint8 op, bytes memory st, bytes memory pr) internal view returns (bool) {
-        try this.call_{gas: GAS}(op, st, pr) returns (bool ok) { return ok; } catch (bytes memory e) {
+        try this.call_{gas: GAS}(op, st, pr) returns (bool ok) {
+            return ok;
+        } catch (bytes memory e) {
             assertTrue(e.length == 4 && bytes4(e) == G1Bls12381.BadPoint.selector, "a revert other than BadPoint");
             return false;
         }
@@ -58,14 +63,24 @@ contract ZetherMsmTest is ZetherMsmCorpus {
     }
 
     /// @dev The fold's sum and point count, through the probe.
-    function _fold(uint8 op, bytes memory st, bytes memory pr) internal view returns (bytes memory sum, uint256 points) {
-        try this.probe_(op, st, pr) { revert("no fold"); } catch (bytes memory e) { return _folded(e); }
+    function _fold(uint8 op, bytes memory st, bytes memory pr)
+        internal
+        view
+        returns (bytes memory sum, uint256 points)
+    {
+        try this.probe_(op, st, pr) {
+            revert("no fold");
+        } catch (bytes memory e) {
+            return _folded(e);
+        }
     }
 
     function _folded(bytes memory e) internal pure returns (bytes memory sum, uint256 points) {
         require(bytes4(e) == FoldProbe.Folded.selector, "not a fold");
         bytes memory args = new bytes(e.length - 4);
-        for (uint256 i; i < args.length; ++i) args[i] = e[4 + i];
+        for (uint256 i; i < args.length; ++i) {
+            args[i] = e[4 + i];
+        }
         (sum, points) = abi.decode(args, (bytes, uint256));
     }
 
@@ -86,7 +101,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
 
     function _pow(uint256 a, uint256 e) internal pure returns (uint256 acc) {
         acc = 1;
-        for (uint256 i; i < e; ++i) acc = mulmod(acc, a, R);
+        for (uint256 i; i < e; ++i) {
+            acc = mulmod(acc, a, R);
+        }
     }
 
     // ------------------------------------------------------------------ one MSM, its size
@@ -142,7 +159,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
 
     /// @dev The state after `sigma.c` and `ρ` of a proof, as zether.md §9.1 derives them.
     function _rho(bytes memory st, bytes memory pr, uint256 sigmaLen) internal pure returns (bytes32 s1, uint256 rho) {
-        (s1,) = T.challenge(T.absorb(T.absorb(T.init(), "statement", st), "sigma.commit", _head(pr, sigmaLen)), "sigma.c", R);
+        (s1,) = T.challenge(
+            T.absorb(T.absorb(T.init(), "statement", st), "sigma.commit", _head(pr, sigmaLen)), "sigma.c", R
+        );
         (, rho) = T.challenge(T.absorb(s1, "fold.proof", pr), "fold.rho", R);
     }
 
@@ -212,7 +231,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
     function test_eachTransferEquationAloneRefused() public {
         (bytes memory st,) = _transfer(true);
         // A_y A_D A_out A_deb A_bal A_aud A_Vv A_Vb: E1 .. E8
-        for (uint256 i; i < 8; ++i) _broken(0, 3 + i, i, st, 10 * P);
+        for (uint256 i; i < 8; ++i) {
+            _broken(0, 3 + i, i, st, 10 * P);
+        }
     }
 
     function test_eachTransferEquationAloneRefused_noAuditor() public {
@@ -236,7 +257,7 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         Form memory f = Form(1, st, (6 + 5 * 2) * P, (4 + 3 * 2) * 32, 13);
         _rangePin(f, 0, 100); // BP(v_1)
         _rangePin(f, 1, 101); // BP(v_2)
-        _rangePin(f, 2, 64);  // BP(b')
+        _rangePin(f, 2, 64); // BP(b')
     }
 
     function test_rangeEquationsAloneRefused_burn() public {
@@ -277,7 +298,7 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         _broken(1, 3, 1, st, sig); // A_D, E2
         for (uint256 j; j < 2; ++j) {
             uint256 e = 2 + 4 * j;
-            _broken(1, 6 + 5 * j + 2, e, st, sig);     // A_out_j, E3_j
+            _broken(1, 6 + 5 * j + 2, e, st, sig); // A_out_j, E3_j
             _broken(1, 6 + 5 * j + 3, e + 1, st, sig); // A_aud_j, E6_j
             _broken(1, 6 + 5 * j + 4, e + 2, st, sig); // A_Daud_j, E6′_j
             _broken(1, 6 + 5 * j + 5, e + 3, st, sig); // A_Vvj, E7_j
@@ -301,7 +322,7 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         assertEq(sum, new bytes(P), "honest: O");
         Form memory f = Form(1, st, (6 + 5 * 16) * P, (4 + 3 * 16) * 32, eqs);
         _rangePin(f, 15, 115); // BP(v_16)
-        _rangePin(f, 16, 64);  // BP(b'), the last two of the `e` equations
+        _rangePin(f, 16, 64); // BP(b'), the last two of the `e` equations
     }
 
     /// `e` = 103: E1 E2, 4 × 16 leg equations, E4 E5 E8, 2 × 17 range equations.
@@ -312,8 +333,8 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         _broken(1, 6 + 5 * 15 + 3, 63, st, sig); // A_aud_16, E6
         _broken(1, 6 + 5 * 15 + 4, 64, st, sig); // A_Daud_16, E6′
         _broken(1, 6 + 5 * 15 + 5, 65, st, sig); // A_Vv16, E7
-        _broken(1, 4, 66, st, sig);              // A_deb, E4
-        _broken(1, 6, 68, st, sig);              // A_Vb, E8
+        _broken(1, 4, 66, st, sig); // A_deb, E4
+        _broken(1, 6, 68, st, sig); // A_Vb, E8
     }
 
     /// `e` = 71: no E6, no E6′.
@@ -322,7 +343,7 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         uint256 sig = (6 + 5 * 16) * P;
         _broken(1, 6 + 5 * 15 + 2, 32, st, sig); // A_out_16, E3
         _broken(1, 6 + 5 * 15 + 5, 33, st, sig); // A_Vv16, E7
-        _broken(1, 5, 35, st, sig);              // A_bal, E5
+        _broken(1, 5, 35, st, sig); // A_bal, E5
     }
 
     // ------------------------------------------------------------------ auditor off: the fields no equation reads
@@ -363,12 +384,12 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         assertTrue(_ok(1, st, pr), "the row without junk");
         for (uint256 j; j < m; ++j) {
             uint256 leg = HEADER + 6 * P + 32 + 4 * P * j;
-            _multiLegJunk(st, vs, total, leg + 2 * P);             // C_aud_j
-            _multiLegJunk(st, vs, total, leg + 3 * P);             // D_aud_j
-            _multiCommitJunk(st, vs, total, 6 + 5 * j + 3);        // A_aud_j
-            _multiCommitJunk(st, vs, total, 6 + 5 * j + 4);        // A_Daud_j
+            _multiLegJunk(st, vs, total, leg + 2 * P); // C_aud_j
+            _multiLegJunk(st, vs, total, leg + 3 * P); // D_aud_j
+            _multiCommitJunk(st, vs, total, 6 + 5 * j + 3); // A_aud_j
+            _multiCommitJunk(st, vs, total, 6 + 5 * j + 4); // A_Daud_j
             bytes memory t = bytes.concat(pr);
-            _setWord(t, (6 + 5 * m) * P + (6 + 3 * j) * 32, 1);    // z_tj, in no equation and no challenge
+            _setWord(t, (6 + 5 * m) * P + (6 + 3 * j) * 32, 1); // z_tj, in no equation and no challenge
             assertFalse(_ok(1, st, t), "z_tj");
         }
     }
@@ -406,7 +427,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         at[0] = 131;
         bytes memory bp = _at(pr, 10 * P + 192, BP_LEN);
         _setWord(bp, BP_LEN - 32, addmod(_word(bp, BP_LEN - 32), 1, R));
-        return ip.verifyFold(s1, IZetherInnerProductVerifier.SigmaFold(rho, weight, _point(pr, 0), new uint256[](132), at), bp);
+        return ip.verifyFold(
+            s1, IZetherInnerProductVerifier.SigmaFold(rho, weight, _point(pr, 0), new uint256[](132), at), bp
+        );
     }
 
     /// `ρ ≡ 0` would keep only the first range equation: refused by the check, not by luck, in both spellings.
@@ -436,10 +459,13 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         bytes memory bp = _at(pr, 10 * P + 192, BP_LEN);
         bytes memory pts = bytes.concat(v.g1MulBase(1), v.generators(), _point(pr, 0));
         uint256[] memory sc = new uint256[](131 + 132);
-        for (uint256 i; i < 131; ++i) (sc[i], sc[131 + i]) = (R - 1, 1);
+        for (uint256 i; i < 131; ++i) {
+            (sc[i], sc[131 + i]) = (R - 1, 1);
+        }
         uint256[] memory at = new uint256[](1);
         at[0] = 131 + 131;
-        IZetherInnerProductVerifier.SigmaFold memory f = IZetherInnerProductVerifier.SigmaFold(0xABCDEF, 0xFEDCBA, pts, sc, at);
+        IZetherInnerProductVerifier.SigmaFold memory f =
+            IZetherInnerProductVerifier.SigmaFold(0xABCDEF, 0xFEDCBA, pts, sc, at);
         assertTrue(ip.verifyFold(s1, f, bp), "shared slots near r");
         _setWord(bp, BP_LEN - 32, addmod(_word(bp, BP_LEN - 32), 1, R));
         assertFalse(ip.verifyFold(s1, f, bp), "a broken proof stays broken");
@@ -471,7 +497,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         bytes memory V = _point(bad, 0);
         bytes memory bp = _at(bad, 10 * P + 192, BP_LEN);
         (, uint256 rho) = T.challenge(T.absorb(s1, "fold.proof", bytes.concat(V, bp)), "fold.rho", R);
-        try probe.verifyRange(s1, V, bp) { revert("no fold"); } catch (bytes memory e) {
+        try probe.verifyRange(s1, V, bp) {
+            revert("no fold");
+        } catch (bytes memory e) {
             (bytes memory sum,) = _folded(e);
             assertEq(sum, v.g1MulBase(rho));
         }
@@ -494,7 +522,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         }
         (ok,) = address(0x0c).staticcall{gas: GAS}(abi.encodePacked(g, uint256(1), t, uint256(0)));
         assertFalse(ok, "at any position of the input");
-        (ok,) = address(0x0c).staticcall{gas: GAS}(abi.encodePacked(uint256(0), uint256(1), uint256(0), uint256(1), uint256(0)));
+        (ok,) = address(0x0c).staticcall{gas: GAS}(
+            abi.encodePacked(uint256(0), uint256(1), uint256(0), uint256(1), uint256(0))
+        );
         assertFalse(ok, "off the curve, scalar 0");
     }
 
@@ -512,7 +542,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         bytes memory g = G1Bls12381.generator();
         assertTrue(v.isSupportedOnThisChain(), "a compliant chain");
         assertFalse(_supportedWhenAccepted(abi.encodePacked(t, uint256(1)), t), "G1MSM(T, 1) accepted");
-        assertFalse(_supportedWhenAccepted(abi.encodePacked(g, uint256(1), t, uint256(0)), g), "G1MSM(G, 1, T, 0) accepted");
+        assertFalse(
+            _supportedWhenAccepted(abi.encodePacked(g, uint256(1), t, uint256(0)), g), "G1MSM(G, 1, T, 0) accepted"
+        );
         assertTrue(v.isSupportedOnThisChain(), "compliant again");
     }
 
@@ -561,7 +593,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
     }
 
     /// Each of `n` points at `off`: moved out of the subgroup by the order-3 point, it must reach G1MSM and revert.
-    function _everyPointReachesMsm(uint8 op, bytes memory st, bytes memory pr, bool inStatement, uint256 off, uint256 n) internal {
+    function _everyPointReachesMsm(uint8 op, bytes memory st, bytes memory pr, bool inStatement, uint256 off, uint256 n)
+        internal
+    {
         for (uint256 i; i < n; ++i) {
             (bytes memory a, bytes memory b) = (bytes.concat(st), bytes.concat(pr));
             _outOfSubgroup(inStatement ? a : b, off + i * P);
@@ -578,7 +612,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         (bytes memory st, bytes memory pr) = _transfer(true);
         _everyPointReachesMsm(0, st, pr, true, HEADER, 9);
         _everyPointReachesMsm(0, st, pr, false, 0, 10);
-        for (uint256 k; k < 2; ++k) _everyPointReachesMsm(0, st, pr, false, 10 * P + 192 + k * BP_LEN, 16);
+        for (uint256 k; k < 2; ++k) {
+            _everyPointReachesMsm(0, st, pr, false, 10 * P + 192 + k * BP_LEN, 16);
+        }
     }
 
     function test_everyBurnPointReachesTheMsm() public {
@@ -595,7 +631,9 @@ contract ZetherMsmTest is ZetherMsmCorpus {
         _everyPointReachesMsm(1, st, pr, true, HEADER + 6 * P + 32, 4 * m);
         _everyPointReachesMsm(1, st, pr, false, 0, 6 + 5 * m);
         uint256 off = (6 + 5 * m) * P + (4 + 3 * m) * 32;
-        for (uint256 k; k <= m; ++k) _everyPointReachesMsm(1, st, pr, false, off + k * BP_LEN, 16);
+        for (uint256 k; k <= m; ++k) {
+            _everyPointReachesMsm(1, st, pr, false, off + k * BP_LEN, 16);
+        }
     }
 
     /// `T` on one equation and `−T` on another would sum to `O` under equal weights: never reaches a sum.

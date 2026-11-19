@@ -1,0 +1,6 @@
+# t5 mutants at commit b77670551 (name | outcome | test)
+a fresh Arc instead of cfg.head | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::chain_reads_fail_over_on_transport_errors_never_on_a_revert
+failover_answers returning the total | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::chain_reads_fail_over_on_transport_errors_never_on_a_revert
+the simulation on the 30 s clients | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::a_hung_endpoint_and_the_block_gas_read_fail_over
+a lane read through the failover read | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::the_lane_reads_stay_on_the_first_endpoint
+4 mutants, 4 killed, 0 survived, 0 not loaded

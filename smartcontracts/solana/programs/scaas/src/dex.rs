@@ -9,7 +9,7 @@ use crate::account::INSTRUCTIONS_ID;
 use crate::auth::{self, Auth, CANCEL_LABEL, MINNONCE_LABEL, ORDER_LABEL};
 use crate::state::*;
 use crate::util;
-use crate::{ScaasError, Matched, OrderFilled};
+use crate::{Matched, OrderFilled, ScaasError};
 
 pub const FOK: u8 = 1;
 pub const IOC: u8 = 2;
@@ -94,7 +94,12 @@ pub struct SetMarket<'info> {
     pub market: Account<'info, Market>,
 }
 
-pub fn set_market(ctx: Context<SetMarket>, fee_ppm: u32, enabled: bool, fee_recipient: Pubkey) -> Result<()> {
+pub fn set_market(
+    ctx: Context<SetMarket>,
+    fee_ppm: u32,
+    enabled: bool,
+    fee_recipient: Pubkey,
+) -> Result<()> {
     require!(fee_ppm <= MAX_FEE_PPM, ScaasError::FeeTooHigh);
     let m = &mut ctx.accounts.market;
     m.fee_ppm = fee_ppm;
@@ -183,14 +188,31 @@ fn check_order(
 ) -> Result<()> {
     require!(o.hash(network, market_key) == *hash, ScaasError::BadOrder);
     require!(o.maker == subject.owner, ScaasError::BadOrder);
-    require!(o.taker == [0; 32] || o.taker == *counterparty, ScaasError::WrongTaker);
-    require!(o.relayer == [0; 32] || o.relayer == lane.to_bytes(), ScaasError::WrongRelayer);
-    require!(o.flags & !(FOK | IOC) == 0 && o.sell_amount > 0 && o.buy_amount > 0, ScaasError::BadOrder);
+    require!(
+        o.taker == [0; 32] || o.taker == *counterparty,
+        ScaasError::WrongTaker
+    );
+    require!(
+        o.relayer == [0; 32] || o.relayer == lane.to_bytes(),
+        ScaasError::WrongRelayer
+    );
+    require!(
+        o.flags & !(FOK | IOC) == 0 && o.sell_amount > 0 && o.buy_amount > 0,
+        ScaasError::BadOrder
+    );
     util::check_deadline(o.expiry)?;
     require!(o.nonce >= min_nonce, ScaasError::BadNonce);
     require!(o.max_fee_ppm >= market.fee_ppm, ScaasError::FeeTooHigh);
     subject.check_policy()?;
-    auth::verify(ix_sysvar, auth, &subject.keys, &subject.origins, ORDER_LABEL, hash, None)
+    auth::verify(
+        ix_sysvar,
+        auth,
+        &subject.keys,
+        &subject.origins,
+        ORDER_LABEL,
+        hash,
+        None,
+    )
 }
 
 fn apply_fill(f: &mut Fill, o: &Order, fill: u64, lane: Pubkey) -> Result<()> {
@@ -200,8 +222,15 @@ fn apply_fill(f: &mut Fill, o: &Order, fill: u64, lane: Pubkey) -> Result<()> {
     }
     let after = f.filled.checked_add(fill).ok_or(ScaasError::Overflow)?;
     require!(after <= o.sell_amount, ScaasError::Overfill);
-    require!(o.flags & FOK == 0 || after == o.sell_amount, ScaasError::FillOrKill);
-    f.filled = if o.flags & IOC != 0 { o.sell_amount } else { after };
+    require!(
+        o.flags & FOK == 0 || after == o.sell_amount,
+        ScaasError::FillOrKill
+    );
+    f.filled = if o.flags & IOC != 0 {
+        o.sell_amount
+    } else {
+        after
+    };
     Ok(())
 }
 
@@ -226,17 +255,53 @@ pub fn settle(
     let x = &ctx.accounts;
     let (m, mk, net, lane) = (&x.market, x.market.key(), x.config.network, x.lane.key());
     require!(m.enabled, ScaasError::MarketDisabled);
-    require!(b.sell_mint == a.buy_mint && b.buy_mint == a.sell_mint, ScaasError::BadMarket);
+    require!(
+        b.sell_mint == a.buy_mint && b.buy_mint == a.sell_mint,
+        ScaasError::BadMarket
+    );
     let pair = (a.sell_mint, a.buy_mint);
-    require!(pair == (m.base_mint, m.quote_mint) || pair == (m.quote_mint, m.base_mint), ScaasError::BadMarket);
+    require!(
+        pair == (m.base_mint, m.quote_mint) || pair == (m.quote_mint, m.base_mint),
+        ScaasError::BadMarket
+    );
     require_keys_neq!(x.subject_a.key(), x.subject_b.key(), ScaasError::SelfTrade);
     let (sa, sb) = (&x.subject_a, &x.subject_b);
-    check_order(&a, &hash_a, &net, m, &mk, sa, &b.maker, &lane, min_nonce(&x.min_nonce_a)?, &auth_a, &x.instructions)?;
-    check_order(&b, &hash_b, &net, m, &mk, sb, &a.maker, &lane, min_nonce(&x.min_nonce_b)?, &auth_b, &x.instructions)?;
+    check_order(
+        &a,
+        &hash_a,
+        &net,
+        m,
+        &mk,
+        sa,
+        &b.maker,
+        &lane,
+        min_nonce(&x.min_nonce_a)?,
+        &auth_a,
+        &x.instructions,
+    )?;
+    check_order(
+        &b,
+        &hash_b,
+        &net,
+        m,
+        &mk,
+        sb,
+        &a.maker,
+        &lane,
+        min_nonce(&x.min_nonce_b)?,
+        &auth_b,
+        &x.instructions,
+    )?;
     require!(fill_a > 0 && fill_b > 0, ScaasError::ZeroAmount);
     let (fa, fb) = (fill_a as u128, fill_b as u128);
-    require!(fb * a.sell_amount as u128 >= fa * a.buy_amount as u128, ScaasError::PriceLimit);
-    require!(fa * b.sell_amount as u128 >= fb * b.buy_amount as u128, ScaasError::PriceLimit);
+    require!(
+        fb * a.sell_amount as u128 >= fa * a.buy_amount as u128,
+        ScaasError::PriceLimit
+    );
+    require!(
+        fa * b.sell_amount as u128 >= fb * b.buy_amount as u128,
+        ScaasError::PriceLimit
+    );
     util::check_mint(&x.mint_x.to_account_info(), fill_a)?;
     util::check_mint(&x.mint_y.to_account_info(), fill_b)?;
     let (fee_x, fee_y) = (fee(fill_a, m.fee_ppm), fee(fill_b, m.fee_ppm));
@@ -246,31 +311,83 @@ pub fn settle(
     apply_fill(&mut ctx.accounts.fill_b, &b, fill_b, lane)?;
 
     let x = &ctx.accounts;
-    let (ap, lp, sp) = (x.associated_token_program.to_account_info(), x.lane.to_account_info(), x.system_program.to_account_info());
+    let (ap, lp, sp) = (
+        x.associated_token_program.to_account_info(),
+        x.lane.to_account_info(),
+        x.system_program.to_account_info(),
+    );
     let (mx, my) = (x.mint_x.to_account_info(), x.mint_y.to_account_info());
-    let (tx_, ty) = (x.token_program_x.to_account_info(), x.token_program_y.to_account_info());
+    let (tx_, ty) = (
+        x.token_program_x.to_account_info(),
+        x.token_program_y.to_account_info(),
+    );
     let (ia, ib) = (x.subject_a.to_account_info(), x.subject_b.to_account_info());
     util::ata_idempotent(&ap, &lp, &x.b_dst, &ib, &mx, &sp, &tx_)?;
     util::ata_idempotent(&ap, &lp, &x.a_dst, &ia, &my, &sp, &ty)?;
     let seeds_a: &[&[u8]] = &[b"acct", &a.maker, &[bump_a]];
     let seeds_b: &[&[u8]] = &[b"acct", &b.maker, &[bump_b]];
     let (src_a, src_b) = (x.a_src.to_account_info(), x.b_src.to_account_info());
-    util::transfer(&tx_, &src_a, &mx, &x.b_dst, &ia, seeds_a, fill_a - fee_x, x.mint_x.decimals)?;
-    util::transfer(&ty, &src_b, &my, &x.a_dst, &ib, seeds_b, fill_b - fee_y, x.mint_y.decimals)?;
+    util::transfer(
+        &tx_,
+        &src_a,
+        &mx,
+        &x.b_dst,
+        &ia,
+        seeds_a,
+        fill_a - fee_x,
+        x.mint_x.decimals,
+    )?;
+    util::transfer(
+        &ty,
+        &src_b,
+        &my,
+        &x.a_dst,
+        &ib,
+        seeds_b,
+        fill_b - fee_y,
+        x.mint_y.decimals,
+    )?;
     if fee_ppm > 0 {
         let mi = x.market.to_account_info();
         let vx = x.vault_x.as_ref().ok_or(ScaasError::BadAccounts)?;
         let vy = x.vault_y.as_ref().ok_or(ScaasError::BadAccounts)?;
         util::ata_idempotent(&ap, &lp, vx, &mi, &mx, &sp, &tx_)?;
         util::ata_idempotent(&ap, &lp, vy, &mi, &my, &sp, &ty)?;
-        util::transfer(&tx_, &src_a, &mx, vx, &ia, seeds_a, fee_x, x.mint_x.decimals)?;
+        util::transfer(
+            &tx_,
+            &src_a,
+            &mx,
+            vx,
+            &ia,
+            seeds_a,
+            fee_x,
+            x.mint_x.decimals,
+        )?;
         util::transfer(&ty, &src_b, &my, vy, &ib, seeds_b, fee_y, x.mint_y.decimals)?;
     }
     let maker_a = Pubkey::new_from_array(a.maker);
     let maker_b = Pubkey::new_from_array(b.maker);
-    emit_cpi!(OrderFilled { market: mk, order_hash: hash_a, maker: maker_a, sold: fill_a, bought: fill_b - fee_y, fee: fee_y });
-    emit_cpi!(OrderFilled { market: mk, order_hash: hash_b, maker: maker_b, sold: fill_b, bought: fill_a - fee_x, fee: fee_x });
-    emit_cpi!(Matched { market: mk, a: hash_a, b: hash_b });
+    emit_cpi!(OrderFilled {
+        market: mk,
+        order_hash: hash_a,
+        maker: maker_a,
+        sold: fill_a,
+        bought: fill_b - fee_y,
+        fee: fee_y
+    });
+    emit_cpi!(OrderFilled {
+        market: mk,
+        order_hash: hash_b,
+        maker: maker_b,
+        sold: fill_b,
+        bought: fill_a - fee_x,
+        fee: fee_x
+    });
+    emit_cpi!(Matched {
+        market: mk,
+        a: hash_a,
+        b: hash_b
+    });
     Ok(())
 }
 
@@ -298,12 +415,28 @@ pub struct CancelSigned<'info> {
 
 /// `"scaas.cancel.v1" ‖ network ‖ market ‖ order_hash`, ký bởi khoá của maker. Lệnh đầy đủ đi kèm để ràng maker và
 /// hạn: `Fill` (tạo nếu chưa có) giữ `valid_until` = hạn lệnh ⇒ không prune được trước khi chính lệnh hết hạn.
-pub fn cancel_signed(ctx: Context<CancelSigned>, order: Order, order_hash: [u8; 32], auth: Auth) -> Result<()> {
+pub fn cancel_signed(
+    ctx: Context<CancelSigned>,
+    order: Order,
+    order_hash: [u8; 32],
+    auth: Auth,
+) -> Result<()> {
     let a = &ctx.accounts;
     let (net, mk) = (a.config.network, a.market.key());
-    require!(order.hash(&net, &mk) == order_hash && order.maker == a.subject.owner, ScaasError::BadOrder);
+    require!(
+        order.hash(&net, &mk) == order_hash && order.maker == a.subject.owner,
+        ScaasError::BadOrder
+    );
     let digest = auth::sha256(&[CANCEL_LABEL.as_bytes(), &net, mk.as_ref(), &order_hash]);
-    auth::verify(&a.instructions, &auth, &a.subject.keys, &a.subject.origins, CANCEL_LABEL, &digest, None)?;
+    auth::verify(
+        &a.instructions,
+        &auth,
+        &a.subject.keys,
+        &a.subject.origins,
+        CANCEL_LABEL,
+        &digest,
+        None,
+    )?;
     let lane = a.lane.key();
     let f = &mut ctx.accounts.fill;
     if f.rent_payer == Pubkey::default() {
@@ -334,12 +467,30 @@ pub struct InvalidateNonces<'info> {
 }
 
 /// `"scaas.minnonce.v1" ‖ network ‖ market ‖ account ‖ min_nonce` — tăng nghiêm ngặt (chữ ký cũ phát lại ⇒ lỗi).
-pub fn invalidate_nonces_signed(ctx: Context<InvalidateNonces>, min_nonce: u64, auth: Auth) -> Result<()> {
+pub fn invalidate_nonces_signed(
+    ctx: Context<InvalidateNonces>,
+    min_nonce: u64,
+    auth: Auth,
+) -> Result<()> {
     let a = &ctx.accounts;
     let (net, mk, sk) = (a.config.network, a.market.key(), a.subject.key());
     require!(min_nonce > a.min_nonce.min_nonce, ScaasError::BadNonce);
-    let digest = auth::sha256(&[MINNONCE_LABEL.as_bytes(), &net, mk.as_ref(), sk.as_ref(), &min_nonce.to_le_bytes()]);
-    auth::verify(&a.instructions, &auth, &a.subject.keys, &a.subject.origins, MINNONCE_LABEL, &digest, None)?;
+    let digest = auth::sha256(&[
+        MINNONCE_LABEL.as_bytes(),
+        &net,
+        mk.as_ref(),
+        sk.as_ref(),
+        &min_nonce.to_le_bytes(),
+    ]);
+    auth::verify(
+        &a.instructions,
+        &auth,
+        &a.subject.keys,
+        &a.subject.origins,
+        MINNONCE_LABEL,
+        &digest,
+        None,
+    )?;
     ctx.accounts.min_nonce.min_nonce = min_nonce;
     Ok(())
 }
@@ -377,7 +528,12 @@ pub fn sweep(ctx: Context<Sweep>) -> Result<()> {
         &a.token_program,
     )?;
     let m = &a.market;
-    let seeds: &[&[u8]] = &[b"mkt", m.base_mint.as_ref(), m.quote_mint.as_ref(), &[m.bump]];
+    let seeds: &[&[u8]] = &[
+        b"mkt",
+        m.base_mint.as_ref(),
+        m.quote_mint.as_ref(),
+        &[m.bump],
+    ];
     util::transfer(
         &a.token_program,
         &a.source.to_account_info(),

@@ -12,6 +12,7 @@ Reads q, Bz3sqr, nbin, Z, nex and l2Bsq_i of every pqz_<rel>_params.h of every s
 margin q / rhs and the overall smallest. Exit 1 if any condition fails. Stdlib only:
   python3 -B -I pqz-core/params/sets/ks_check.py [set ...]
 """
+
 import glob
 import math
 import os
@@ -35,8 +36,11 @@ def margins(path):
     q, bz3sqr = limbs(h, f"{name}_q"), limbs(h, f"{name}_Bz3sqr")
     bsq = [limbs(h, f"{name}_l2Bsq{i}") for i in range(z)]
     barp = 2 * math.sqrt(bz3sqr) / math.sqrt(26)
-    out = {"41 nex d Barp": q / (41 * nex * D * barp), "Barp^2 + Barp sqrt(nbin d)": q / (barp**2 + barp * math.sqrt(nbin * D)),
-           "Barp^2 + Barp sqrt(Z d)": q / (barp**2 + barp * math.sqrt(z * D))}
+    out = {
+        "41 nex d Barp": q / (41 * nex * D * barp),
+        "Barp^2 + Barp sqrt(nbin d)": q / (barp**2 + barp * math.sqrt(nbin * D)),
+        "Barp^2 + Barp sqrt(Z d)": q / (barp**2 + barp * math.sqrt(z * D)),
+    }
     out |= {f"3 B_{i}^2 + Barp^2": q / (3 * b + barp**2) for i, b in enumerate(bsq)}
     return out
 

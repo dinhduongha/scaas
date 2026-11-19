@@ -90,9 +90,15 @@ contract UAStoreLayoutTest is Test {
         assertEq(_at(a, _m(U, 1)), 0x72, "1 keyOwner");
         assertEq(_at(a, _mm(U, 5, 2)), uint256(0x73) | 1 << 160 | 1 << 168, "2 pqzKey[ua][version]: ptr, proven, added");
         assertEq(_at(a, bytes32(uint256(_m(U, 3)) + 1)), 0x74, "3 ekPtr");
-        assertEq(_at(a, bytes32(uint256(_m(U, 3)) + 2)), 0x86, "3 ekPtr[u][2] (3zh: address[3], base + 0 and + 1 unmoved)");
+        assertEq(
+            _at(a, bytes32(uint256(_m(U, 3)) + 2)), 0x86, "3 ekPtr[u][2] (3zh: address[3], base + 0 and + 1 unmoved)"
+        );
         assertEq(_at(a, keccak256(abi.encode(uint256(0x75), uint256(4)))), 0x76, "4 uaCount");
-        assertEq(_at(a, keccak256(abi.encode(uint256(7), keccak256(abi.encode(uint256(0x75), uint256(5)))))), uint256(U), "5 uaAt");
+        assertEq(
+            _at(a, keccak256(abi.encode(uint256(7), keccak256(abi.encode(uint256(0x75), uint256(5)))))),
+            uint256(U),
+            "5 uaAt"
+        );
         assertEq(_at(a, _m(U, 6)), 1, "6 reg (length)");
         assertEq(_at(a, _mm(U, 5, 7)), 0x78, "7 pqzPopHash[ua][version]");
         assertEq(_at(a, _mm(U, 5, 8)), 1, "8 pqzPop[ua][version] (length)");
@@ -105,11 +111,17 @@ contract UAStoreLayoutTest is Test {
         assertEq(_at(a, _m(U, 14)), 0x7f, "14 retired");
         assertEq(_at(a, _m(U, 15)), 0x80, "15 accepted");
         assertEq(_at(a, _mm(U, 3, 16)), 0x81, "16 memberSigHash");
-        assertEq(_at(a, _m(U, 17)), uint256(0x82) | uint256(0x83) << 64 | 1 << 128, "17 pqzVersions: latest, current, listed");
+        assertEq(
+            _at(a, _m(U, 17)), uint256(0x82) | uint256(0x83) << 64 | 1 << 128, "17 pqzVersions: latest, current, listed"
+        );
         assertEq(_at(a, keccak256(abi.encode(uint256(0x84), _m(U, 18)))), 1, "18 pqzKeyUsed[ua][pqzKeyHash]");
         assertEq(_at(a, _m(U, 19)), 0x85, "19 popSlots");
         bytes32 sc = bytes32(uint256(0x5C09E));
-        assertEq(_at(a, keccak256(abi.encode(uint256(5), _mm2(U, sc, 20)))), uint256(0x86) | 1 << 160, "20 scopedKey[ua][scope][version]");
+        assertEq(
+            _at(a, keccak256(abi.encode(uint256(5), _mm2(U, sc, 20)))),
+            uint256(0x86) | 1 << 160,
+            "20 scopedKey[ua][scope][version]"
+        );
         assertEq(_at(a, keccak256(abi.encode(uint256(5), _mm2(U, sc, 21)))), 0x87, "21 scopedPopHash");
         assertEq(_at(a, keccak256(abi.encode(uint256(5), _mm2(U, sc, 22)))), 1, "22 scopedPop (length)");
         assertEq(_at(a, keccak256(abi.encode(uint256(5), _mm2(U, sc, 23)))), 0x89, "23 scopedOpenKem");
@@ -120,7 +132,8 @@ contract UAStoreLayoutTest is Test {
 
     /// The registry keeps `UAStore.Layout` at slot 0 (its only state variable): the probe's slots are the registry's.
     function test_UAStoreLayoutAtSlot0() public view {
-        string memory art = vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/UARegistry.sol/UARegistry.json"));
+        string memory art =
+            vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/UARegistry.sol/UARegistry.json"));
         assertEq(art.readString(".storageLayout.storage[0].label"), "_s");
         assertEq(art.readString(".storageLayout.storage[0].slot"), "0");
         assertFalse(vm.keyExistsJson(art, ".storageLayout.storage[1]"));

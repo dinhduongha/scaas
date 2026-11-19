@@ -1,0 +1,6 @@
+# t2a mutants at commit 95b8646e6 (name | outcome | test)
+MAC over fields in another order | killed | ../../scripts/capped cargo test --locked --offline -j2 --test index_mac index_mac_rows
+re-seal with a new DEK | killed | ../../scripts/capped cargo test --locked --offline -j2 --test reseal reseal_keeps_the_prf_envelope
+keep the DEK after lock | killed | ../../scripts/capped cargo test --locked --offline -j2 --test reseal dek_wiped_at_lock
+skip the zeroing on dispose | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib secret_bytes_zeroed_on_dispose
+4 mutants, 4 killed, 0 survived, 0 not loaded

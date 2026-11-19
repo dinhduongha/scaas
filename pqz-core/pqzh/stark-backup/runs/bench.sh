@@ -5,6 +5,6 @@ set -eu
 cd "$(dirname "$0")/.."
 tag=$1
 shift
-cargo build --release --offline --bin pqzh_bench 2> runs/$tag-build.txt
-/usr/bin/time -v target/release/pqzh_bench "$@" > runs/$tag.jsonl 2> runs/$tag-time.txt
+cargo build --release --offline --bin pqzh_bench 2>runs/$tag-build.txt
+/usr/bin/time -v target/release/pqzh_bench "$@" >runs/$tag.jsonl 2>runs/$tag-time.txt
 grep -E "Maximum resident|Elapsed" runs/$tag-time.txt

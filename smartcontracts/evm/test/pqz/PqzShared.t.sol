@@ -55,8 +55,11 @@ contract PqzSharedTest is PqzFixture {
         bytes memory pl = _burnPl(3, bytes32(0));
         bytes memory st = tok.burnStatement(_bs(pl), 40, fan, 0);
         assertEq(bytes32(_cut(st, 320, 32)), fan, "header word 10: the recipient id");
-        assertEq(bytes32(_cut(tok.burnStatement(_bs(pl), 40, _pad(address(0xD00D)), 0), 320, 32)), bytes32(abi.encode(address(0xD00D))),
-            "a native recipient: the padded address, as before");
+        assertEq(
+            bytes32(_cut(tok.burnStatement(_bs(pl), 40, _pad(address(0xD00D)), 0), 320, 32)),
+            bytes32(abi.encode(address(0xD00D))),
+            "a native recipient: the padded address, as before"
+        );
         vm.expectEmit(true, true, false, false, address(tok));
         emit IConfidentialToken.Unshielded(alice, 40, fan, address(0));
         tok.mtxUnshield(_bs(pl), 40, fan, hex"c0de", _pqAuth(), "", noVerdict());
@@ -92,7 +95,8 @@ contract PqzSharedTest is PqzFixture {
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(legTok), 1, 1);
         c.legs[1] = IFactoryToken.Leg(address(usd), 1, 1);
-        WrappedPqzToken w = WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w")));
+        WrappedPqzToken w =
+            WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w")));
         _public(legTok, address(this), 100 * SCALE);
         legTok.approve(address(w), type(uint256).max);
         w.mtxWrapShield(address(legTok), 100 * SCALE, alice);
@@ -100,22 +104,46 @@ contract PqzSharedTest is PqzFixture {
         usd.approve(address(w), type(uint256).max);
         w.mtxWrapShield(address(usd), 100 * SCALE, alice);
         bytes memory pl = _burnPl(3, bytes32(0));
-        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(legTok), fan, 40, 0), hex"c0de", _pqAuth(), "", noVerdict());
+        w.mtxUnshieldUnwrap(
+            _bs(pl),
+            IConfidentialWrappedToken.Unwrap(address(legTok), fan, 40, 0),
+            hex"c0de",
+            _pqAuth(),
+            "",
+            noVerdict()
+        );
         assertEq(legTok.balanceOfUA(fan), 40 * SCALE, "the leg's own UA ledger");
         assertEq(w.totalSupply(), 160 * SCALE, "burnt from the pool");
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usd)));
-        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(usd), fan, 10, 0), hex"c0de", _pqAuth(), "", noVerdict());
+        w.mtxUnshieldUnwrap(
+            _bs(pl), IConfidentialWrappedToken.Unwrap(address(usd), fan, 10, 0), hex"c0de", _pqAuth(), "", noVerdict()
+        );
         // the UA allowlist of the kind: not `mtxWrapShield` (a UA wrap-shields in two steps)
-        _uaRefused(NormalPqzToken(address(w)), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), SCALE, alice)));
+        _uaRefused(
+            NormalPqzToken(address(w)),
+            abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), SCALE, alice))
+        );
         (bytes4[] memory s, uint8[] memory cl,) = w.mtxSelectors();
         bytes4[19] memory want = [
-            IMetaTx.cancelNonce.selector, bytes4(keccak256("wrap(uint256)")), bytes4(keccak256("unwrap(uint256,address,uint256)")),
-            bytes4(keccak256("wrap(address,uint256)")), bytes4(keccak256("unwrap(address,uint256,address,uint256)")),
-            WrappedToken.addReserve.selector, WrappedToken.wrapToUA.selector, WrappedToken.unwrapToUA.selector,
-            IConfidentialToken.mtxShield.selector, IPqzToken.mtxConfidentialTransfer.selector, IPqzToken.mtxConfidentialTransferCompact.selector,
-            IPqzToken.mtxUnshield.selector, IConfidentialWrappedToken.mtxWrapShield.selector, IPqzWrappedToken.mtxUnshieldUnwrap.selector,
-            IPqzToken.mtxConfidentialTransferSingle.selector, IPqzToken.mtxConfidentialTransferSingleCompact.selector,
-            IPqzToken.mtxRollOver.selector, IPqzToken.mtxPrepareAcc.selector, IPqzToken.mtxRollOverSigned.selector
+            IMetaTx.cancelNonce.selector,
+            bytes4(keccak256("wrap(uint256)")),
+            bytes4(keccak256("unwrap(uint256,address,uint256)")),
+            bytes4(keccak256("wrap(address,uint256)")),
+            bytes4(keccak256("unwrap(address,uint256,address,uint256)")),
+            WrappedToken.addReserve.selector,
+            WrappedToken.wrapToUA.selector,
+            WrappedToken.unwrapToUA.selector,
+            IConfidentialToken.mtxShield.selector,
+            IPqzToken.mtxConfidentialTransfer.selector,
+            IPqzToken.mtxConfidentialTransferCompact.selector,
+            IPqzToken.mtxUnshield.selector,
+            IConfidentialWrappedToken.mtxWrapShield.selector,
+            IPqzWrappedToken.mtxUnshieldUnwrap.selector,
+            IPqzToken.mtxConfidentialTransferSingle.selector,
+            IPqzToken.mtxConfidentialTransferSingleCompact.selector,
+            IPqzToken.mtxRollOver.selector,
+            IPqzToken.mtxPrepareAcc.selector,
+            IPqzToken.mtxRollOverSigned.selector
         ];
         assertEq(s.length, 19);
         for (uint256 i; i < 19; ++i) {
@@ -141,11 +169,17 @@ contract PqzSharedTest is PqzFixture {
     function test_allowlists_normalKind() public {
         (bytes4[] memory s, uint8[] memory c,) = NormalPqzToken(address(tok)).mtxSelectors();
         bytes4[11] memory want = [
-            IMetaTx.cancelNonce.selector, NormalToken.burn.selector, IConfidentialToken.mtxShield.selector,
-            IPqzToken.mtxConfidentialTransfer.selector, IPqzToken.mtxConfidentialTransferCompact.selector,
-            IPqzToken.mtxUnshield.selector, IPqzToken.mtxConfidentialTransferSingle.selector,
-            IPqzToken.mtxConfidentialTransferSingleCompact.selector, IPqzToken.mtxRollOver.selector,
-            IPqzToken.mtxPrepareAcc.selector, IPqzToken.mtxRollOverSigned.selector
+            IMetaTx.cancelNonce.selector,
+            NormalToken.burn.selector,
+            IConfidentialToken.mtxShield.selector,
+            IPqzToken.mtxConfidentialTransfer.selector,
+            IPqzToken.mtxConfidentialTransferCompact.selector,
+            IPqzToken.mtxUnshield.selector,
+            IPqzToken.mtxConfidentialTransferSingle.selector,
+            IPqzToken.mtxConfidentialTransferSingleCompact.selector,
+            IPqzToken.mtxRollOver.selector,
+            IPqzToken.mtxPrepareAcc.selector,
+            IPqzToken.mtxRollOverSigned.selector
         ];
         assertEq(s.length, 11);
         for (uint256 i; i < 11; ++i) {

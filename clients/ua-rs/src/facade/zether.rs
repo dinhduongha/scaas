@@ -5,7 +5,8 @@
 //!   (EIP-2333 `m/12381/<coin>/<account>/<use>`, use 7 the conf key, 8 the viewing key) into the wallet's arena; the handle
 //!   holds the store, its generation and the slot (no secret bytes), `Y` and the UA. Every secret operation runs under the
 //!   store's read guard, so `lock()` revokes the handle (`KeyRevoked`, for good; spec §8.2).
-//! - **Commands** ([`COMMANDS`]): encrypt, the PoP, the owner and UA signatures, the shield calldata, the envelope, typed
+//! - **Commands** ([`COMMANDS`]): encrypt, the PoP, the auditor's proof of possession (`auditorPop`, set-auditor: over the
+//!   token's typed `AuditorConsent` of this key, built from `chainId`, `chainUid`, `token`, `epoch`), the owner and UA signatures, the shield calldata, the envelope, typed
 //!   digests and named calls (zether-prover's `api`), and the **words commands** (zether-prover's `state`; ARCH-POS-13, T14b):
 //!   `balance`, `pendingBalance`, `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`,
 //!   `recoverTransfer` (with the sender's openings `SENDER_S` / `SENDER_CP`), `openDisclosure` (the receiver's and the
@@ -17,8 +18,10 @@
 //! - **No decryption oracle** (ARCH-POS-13, owner 2026-11-06; spec no-decryption-oracle §4.3, §4.7, T14b): a command that
 //!   decrypts takes a named location (`family`, `chainId`, `chainUid`, `token`, `block`, `ua`, the entry's `fromUA` and
 //!   `sendCounter`, a leg `index`) and the **raw** storage words the reading layer read at one block (the account struct's
-//!   slots, the `bytes` data slots, `entries` / `entryPtrs` / `memos` and the SSTORE2 code, the token's `psid`, `modes` and
-//!   `auditorKey` words), never a ciphertext, an entry, a memo or a parsed state field. zether-prover's `state::prepare`
+//!   slots, the `bytes` data slots, `entries` / `entryPtrs` / `memos` and the SSTORE2 code, the token's `psid`, `modes`, the
+//!   entry's `entryAuditorEpoch` word and the words of the key of the entry's auditor epoch, CTR-ZTH-95), never a ciphertext,
+//!   an entry, a memo or a parsed state field. An auditor handle opens only the entries of its own epoch: `prepare` refuses
+//!   another epoch's entry before the key is used (set-auditor spec §9, T11). zether-prover's `state::prepare`
 //!   checks `psid` and the family, parses the words by the pinned layout (`ua-mtx-merge` T19c), checks them, binds the leg
 //!   and the role to this handle's `Y` and rebuilds the ciphertexts exactly as `ZetherLib`; only then is the key used
 //!   (`state::run`). Every refusal before that is `Argument`; after it only `KeyRevoked` and `Argument` to the caller (a
@@ -37,9 +40,17 @@
 //! nonce over `x`) runs through `scaas_ct::secret_mul` in zether-prover (T14b, Codex C6). Residual (spec §8.2): the
 //! prover's scalar copies on the stack, its fixed-base multiplications `[x]G`, and the per-transfer secrets `s`, `t_j` on
 //! supplied keys (arkworks). UNAUDITED.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::disallowed_methods
+)]
 
-use crate::wallet::{aead_open, aead_seal, bounded, hkdf_sha256, Alg, Error, Handle, KeyId, Result, SecretStore};
+use crate::wallet::{
+    aead_open, aead_seal, bounded, hkdf_sha256, Alg, Error, Handle, KeyId, Result, SecretStore,
+};
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rand_core::{CryptoRng, OsRng, RngCore};
 use serde_json::{json, Map, Value};
@@ -63,11 +74,29 @@ const CACHE_AAD: &[u8] = b"zether-cache:bls12381";
 
 /// The header fields of the transfer and burn proofs (zether-prover `api::header`; the raw commands, feature `vectors`).
 #[cfg(feature = "vectors")]
-const HEADER: &[&str] =
-    &["chainId", "chainUid", "token", "envelopeBinding", "unwrapBinding", "sendCounter", "accSeq", "fee", "beneficiary", "validUntilBlock"];
+const HEADER: &[&str] = &[
+    "chainId",
+    "chainUid",
+    "token",
+    "envelopeBinding",
+    "unwrapBinding",
+    "sendCounter",
+    "accSeq",
+    "fee",
+    "beneficiary",
+    "validUntilBlock",
+];
 /// The recovery source and its chain fields (`recovery_source`, `recovery_header`; the raw commands, feature `vectors`).
 #[cfg(feature = "vectors")]
-const RECOVERY: &[&str] = &["payload", "entry", "sendCounter", "memo", "chainId", "chainUid", "token"];
+const RECOVERY: &[&str] = &[
+    "payload",
+    "entry",
+    "sendCounter",
+    "memo",
+    "chainId",
+    "chainUid",
+    "token",
+];
 
 /// The commands, in this order (the fuzz target `zether_cmd`, built with `vectors`, names them by index). `pickDecoys`
 /// `{candidates, exclude, count, weights?, recipient?}` → `{decoys}`, with `recipient` `{decoys, legs}` (`legs` the shuffled leg
@@ -99,6 +128,7 @@ pub const COMMANDS: &[&str] = &[
     #[cfg(feature = "vectors")]
     "rawOpenDisclosure",
     "pop",
+    "auditorPop",
     "ownerAuth",
     "uaSig",
     "shieldCalldata",
@@ -127,7 +157,9 @@ fn words(cmd: &str) -> bool {
 #[cfg(feature = "vectors")]
 fn prover_name(cmd: &str) -> String {
     match cmd.strip_prefix("raw") {
-        Some(r) => r.get(..1).map(str::to_lowercase).unwrap_or_default() + r.get(1..).unwrap_or_default(),
+        Some(r) => {
+            r.get(..1).map(str::to_lowercase).unwrap_or_default() + r.get(1..).unwrap_or_default()
+        }
         None => cmd.to_string(),
     }
 }
@@ -144,17 +176,45 @@ fn allowed(cmd: &str, field: &str) -> bool {
         #[cfg(feature = "vectors")]
         "decrypt" => has(&["curve", "ct", "tableBits", "boundBits", "allowLargeTable"]),
         #[cfg(feature = "vectors")]
-        "decryptPending" => has(&["curve", "pending", "tableBits", "boundBits", "allowLargeTable"]),
+        "decryptPending" => has(&[
+            "curve",
+            "pending",
+            "tableBits",
+            "boundBits",
+            "allowLargeTable",
+        ]),
         #[cfg(feature = "vectors")]
         "rawCheckBalance" => has(&["curve", "acc", "balance"]),
         #[cfg(feature = "vectors")]
-        "rawProveTransfer" => has(HEADER) || has(&["curve", "disclosureMode", "yTo", "yAud", "auditorMode", "acc", "balance", "amount"]),
+        "rawProveTransfer" => {
+            has(HEADER)
+                || has(&[
+                    "curve",
+                    "disclosureMode",
+                    "yTo",
+                    "yAud",
+                    "auditorMode",
+                    "acc",
+                    "balance",
+                    "amount",
+                ])
+        }
         #[cfg(feature = "vectors")]
         "rawProveTransferMulti" => {
             has(HEADER)
                 || has(&[
-                    "curve", "disclosureMode", "mode", "recipients", "yAud", "auditorMode", "decoyFee", "minDecoyFee", "uaSigner",
-                    "uaSignerGas", "acc", "balance",
+                    "curve",
+                    "disclosureMode",
+                    "mode",
+                    "recipients",
+                    "yAud",
+                    "auditorMode",
+                    "decoyFee",
+                    "minDecoyFee",
+                    "uaSigner",
+                    "uaSignerGas",
+                    "acc",
+                    "balance",
                 ])
         }
         #[cfg(feature = "vectors")]
@@ -165,16 +225,30 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "rawRecoverTransfer" => has(RECOVERY) || has(&["curve", "tableBits", "boundBits", "yAud"]),
         #[cfg(feature = "vectors")]
         "rawOpenDisclosure" => has(&[
-            "curve", "kind", "chainId", "chainUid", "token", "entryRef", "index", "amount", "Yt", "Cout", "Dout", "Ya", "Caud", "Daud",
+            "curve", "kind", "chainId", "chainUid", "token", "entryRef", "index", "amount", "Yt",
+            "Cout", "Dout", "Ya", "Caud", "Daud",
         ]),
         "pickDecoys" => has(&["candidates", "exclude", "count", "weights", "recipient"]),
         "pop" => field == "curve",
+        // set-auditor (CTR-ZTH-95): this key's proof of possession over the token's `AuditorConsent`, built from named fields
+        "auditorPop" => has(&["curve", "chainId", "chainUid", "token", "epoch"]),
         "ownerAuth" => has(&["curve", "digest"]),
         "uaSig" => has(&["curve", "purpose", "digest"]),
         "envelope" | "uaEnvelope" => has(&["chainId", "chainUid", "token", "meta"]),
         "typedDigest" => has(&["op", "chainId", "chainUid", "token", "message"]),
         "namedCall" => has(&[
-            "op", "env", "payload", "proof", "beneficiary", "sig", "recipient", "amount", "unwrap", "chainId", "chainUid", "token",
+            "op",
+            "env",
+            "payload",
+            "proof",
+            "beneficiary",
+            "sig",
+            "recipient",
+            "amount",
+            "unwrap",
+            "chainId",
+            "chainUid",
+            "token",
         ]),
         _ => false,
     }
@@ -192,7 +266,10 @@ fn scalar(x: &Value) -> bool {
 
 /// `x` an object of scalars whose fields are all in `fields`.
 fn flat(x: &Value, fields: &[&str]) -> bool {
-    x.as_object().is_some_and(|o| o.iter().all(|(k, v)| fields.contains(&k.as_str()) && scalar(v)))
+    x.as_object().is_some_and(|o| {
+        o.iter()
+            .all(|(k, v)| fields.contains(&k.as_str()) && scalar(v))
+    })
 }
 
 /// `x` (any depth, bounded by the reader) holds no object member named `key` and only scalars of [`scalar`]'s kinds.
@@ -211,16 +288,43 @@ fn shape(field: &str, x: &Value) -> bool {
     match field {
         "acc" | "ct" | "pending" => flat(x, &["C", "D"]),
         "account" => x.as_array().is_some_and(|a| a.iter().all(Value::is_string)),
-        "accountData" | "entryWords" | "memoWords" | "auditorKeyWords" => {
-            x.as_array().is_some_and(|a| a.iter().all(|w| flat(w, &["slot", "word"])))
-        }
+        "accountData" | "entryWords" | "memoWords" | "auditorKeyWords" => x
+            .as_array()
+            .is_some_and(|a| a.iter().all(|w| flat(w, &["slot", "word"]))),
         "blob" => flat(x, &["address", "code"]),
         "cacheBox" => flat(x, &["iv", "ct"]),
         "candidates" | "exclude" => x.as_array().is_some_and(|a| a.iter().all(Value::is_string)),
         "weights" => x.as_array().is_some_and(|a| a.iter().all(Value::is_u64)),
-        "recipients" => x.as_array().is_some_and(|a| a.iter().all(|r| flat(r, &["yTo", "amount"]))),
-        "meta" => flat(x, &["from", "data", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]),
-        "env" => flat(x, &["from", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]),
+        "recipients" => x
+            .as_array()
+            .is_some_and(|a| a.iter().all(|r| flat(r, &["yTo", "amount"]))),
+        "meta" => flat(
+            x,
+            &[
+                "from",
+                "data",
+                "batch",
+                "nonce",
+                "validUntil",
+                "mode",
+                "relayer",
+                "fee",
+                "feeRecipient",
+            ],
+        ),
+        "env" => flat(
+            x,
+            &[
+                "from",
+                "batch",
+                "nonce",
+                "validUntil",
+                "mode",
+                "relayer",
+                "fee",
+                "feeRecipient",
+            ],
+        ),
         "unwrap" => flat(x, &["underlying", "recipient", "amount", "minOut"]),
         "message" => x.is_object() && clean(x),
         "curve" => x.as_str() == Some("bls12381"),
@@ -240,8 +344,13 @@ impl ZetherCmd {
     /// all on `cmd`'s allow-list, each of its shape; else `Argument` (an unknown command, a `key` object, a secret-returning
     /// flag, an unknown field, another curve).
     pub fn from_json(cmd: &str, json: &[u8]) -> Result<ZetherCmd> {
-        let cmd = *COMMANDS.iter().find(|c| **c == cmd).ok_or(Error::Argument)?;
-        let Value::Object(v) = bounded::json(json, CMD_MAX, CMD_DEPTH)? else { return Err(Error::Argument) };
+        let cmd = *COMMANDS
+            .iter()
+            .find(|c| **c == cmd)
+            .ok_or(Error::Argument)?;
+        let Value::Object(v) = bounded::json(json, CMD_MAX, CMD_DEPTH)? else {
+            return Err(Error::Argument);
+        };
         if !v.iter().all(|(k, x)| allowed(cmd, k) && shape(k, x)) {
             return Err(Error::Argument);
         }
@@ -288,17 +397,33 @@ pub struct ZetherKey {
 impl zeroize::ZeroizeOnDrop for ZetherKey {}
 
 /// [`crate::wallet::Wallet::zether_key`].
-pub(crate) fn derive(store: &Arc<SecretStore>, coin: u32, account: u32, key_use: u32) -> Result<ZetherKey> {
+pub(crate) fn derive(
+    store: &Arc<SecretStore>,
+    coin: u32,
+    account: u32,
+    key_use: u32,
+) -> Result<ZetherKey> {
     super::release_or_unlocked()?;
     if key_use != USE_CONF && key_use != USE_VIEWING {
         return Err(Error::Argument);
     }
     let (secret, y) = store.key(KeyId::Zether(coin, account, key_use), |seed| {
-        let k = ProverKey::<Bls12381>::derive(seed, coin, account, key_use).map_err(|_| Error::Argument)?;
-        Ok((Zeroizing::new(encode_scalar::<Bls12381>(&k.x).to_vec()), k.encoded_y()))
+        let k = ProverKey::<Bls12381>::derive(seed, coin, account, key_use)
+            .map_err(|_| Error::Argument)?;
+        Ok((
+            Zeroizing::new(encode_scalar::<Bls12381>(&k.x).to_vec()),
+            k.encoded_y(),
+        ))
     })?;
     let ua = crate::derive_ua(0x0141, &y, false)?;
-    Ok(ZetherKey { coin, account, key_use, y, ua, secret })
+    Ok(ZetherKey {
+        coin,
+        account,
+        key_use,
+        y,
+        ua,
+        secret,
+    })
 }
 
 fn b64(b: &[u8]) -> String {
@@ -334,12 +459,19 @@ impl ZetherKey {
     /// `f` over the prover's key, rebuilt from `x` under the guard (its `x` wiped on drop).
     fn with_key<T>(&self, f: impl FnOnce(&ProverKey<Bls12381>) -> Result<T>) -> Result<T> {
         self.with_x(|x| {
-            let k = ProverKey::from_secret(decode_scalar::<Bls12381>(x).map_err(|_| Error::Argument)?).map_err(|_| Error::Argument)?;
+            let k =
+                ProverKey::from_secret(decode_scalar::<Bls12381>(x).map_err(|_| Error::Argument)?)
+                    .map_err(|_| Error::Argument)?;
             f(&k)
         })
     }
 
-    fn run<Rn: RngCore + CryptoRng>(&self, cmd: &str, request_json: &[u8], rng: &mut Rn) -> Result<String> {
+    fn run<Rn: RngCore + CryptoRng>(
+        &self,
+        cmd: &str,
+        request_json: &[u8],
+        rng: &mut Rn,
+    ) -> Result<String> {
         let c = ZetherCmd::from_json(cmd, request_json)?;
         if c.cmd == "pickDecoys" {
             // T15n (CTR-UA-29): the multi-recipient transfer's decoys, by the OS CSPRNG; the key is not used
@@ -350,7 +482,11 @@ impl ZetherKey {
             // the words parsed, checked, bound to this handle's `Y` and rebuilt before the key is touched (ARCH-POS-13)
             let y = decode_point::<Bls12381>(&self.y).map_err(|_| Error::Argument)?;
             let p = zether_prover::state::prepare(c.cmd, &v, &y).map_err(|_| Error::Argument)?;
-            return self.with_key(|k| zether_prover::state::run(&p, k, rng).map(|o| o.to_string()).map_err(|_| Error::Argument));
+            return self.with_key(|k| {
+                zether_prover::state::run(&p, k, rng)
+                    .map(|o| o.to_string())
+                    .map_err(|_| Error::Argument)
+            });
         }
         #[cfg(feature = "vectors")]
         let owned = prover_name(c.cmd);
@@ -358,7 +494,11 @@ impl ZetherKey {
         let name = owned.as_str();
         #[cfg(not(feature = "vectors"))]
         let name = c.cmd;
-        self.with_key(|k| zether_prover::api::call_with_key(name, &v, k, rng).map(|o| o.to_string()).map_err(|_| Error::Argument))
+        self.with_key(|k| {
+            zether_prover::api::call_with_key(name, &v, k, rng)
+                .map(|o| o.to_string())
+                .map_err(|_| Error::Argument)
+        })
     }
 
     /// Command `cmd` of [`COMMANDS`] on `request_json` (named fields, as zether-prover's `api`, without a key) with this
@@ -369,14 +509,24 @@ impl ZetherKey {
 
     fn cache_key(x: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
         let k = hkdf_sha256(x, &[], CACHE_INFO, 32)?;
-        Ok(Zeroizing::new(k.as_slice().try_into().map_err(|_| Error::Argument)?))
+        Ok(Zeroizing::new(
+            k.as_slice().try_into().map_err(|_| Error::Argument)?,
+        ))
     }
 
     fn seal_box(&self, entries_json: &[u8], iv: &[u8; 12]) -> Result<String> {
         if entries_json.len() > crate::wallet::MAX_PT {
             return Err(Error::Argument);
         }
-        let ct = self.with_x(|x| aead_seal(Alg::Aes256Gcm, &*Self::cache_key(x)?, iv, CACHE_AAD, entries_json))?;
+        let ct = self.with_x(|x| {
+            aead_seal(
+                Alg::Aes256Gcm,
+                &*Self::cache_key(x)?,
+                iv,
+                CACHE_AAD,
+                entries_json,
+            )
+        })?;
         Ok(json!({"iv": b64(iv), "ct": b64(&ct)}).to_string())
     }
 
@@ -391,8 +541,15 @@ impl ZetherKey {
     /// clientkeys `openBalanceCache`: the entries of a box; `Argument` for a box that is not `{iv, ct}` (base64url, a 12-byte iv),
     /// `Aead` for one that does not open under this key (clientkeys: an empty cache).
     pub fn open_balance_cache(&self, box_json: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
-        let Value::Object(o) = bounded::json(box_json, BOX_MAX, BOX_DEPTH)? else { return Err(Error::Argument) };
-        let field = |k: &str| o.get(k).and_then(Value::as_str).and_then(|s| Base64UrlUnpadded::decode_vec(s).ok()).ok_or(Error::Argument);
+        let Value::Object(o) = bounded::json(box_json, BOX_MAX, BOX_DEPTH)? else {
+            return Err(Error::Argument);
+        };
+        let field = |k: &str| {
+            o.get(k)
+                .and_then(Value::as_str)
+                .and_then(|s| Base64UrlUnpadded::decode_vec(s).ok())
+                .ok_or(Error::Argument)
+        };
         if o.len() != 2 {
             return Err(Error::Argument);
         }
@@ -418,7 +575,12 @@ pub fn vectors_key_uses() -> usize {
 #[cfg(feature = "vectors")]
 impl ZetherKey {
     /// [`ZetherKey::call`] at `rng` (zether-prover's vector files are made at fixed seeds).
-    pub fn vectors_call<Rn: RngCore + CryptoRng>(&self, cmd: &str, request_json: &[u8], rng: &mut Rn) -> Result<String> {
+    pub fn vectors_call<Rn: RngCore + CryptoRng>(
+        &self,
+        cmd: &str,
+        request_json: &[u8],
+        rng: &mut Rn,
+    ) -> Result<String> {
         self.run(cmd, request_json, rng)
     }
     /// [`ZetherKey::seal_balance_cache`] at a given iv.

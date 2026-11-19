@@ -57,7 +57,7 @@ contract FeeLegsTest is RegFixture {
             address t = _ks()[i];
             MetaTxLib.UAMetaTransfer memory x;
             (x.from, x.to, x.value, x.batch, x.validUntil, x.mode, x.fee) =
-                (nid(alice), nid(bob), 100, 1, block.timestamp + 60, FIX, 1); // FIXED: at most 1 %
+            (nid(alice), nid(bob), 100, 1, block.timestamp + 60, FIX, 1); // FIXED: at most 1 %
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
             IUARegistry.UASig memory sig;
             sig.signature = abi.encodePacked(r, s, v);
@@ -74,7 +74,8 @@ contract FeeLegsTest is RegFixture {
 
     /// RK-8: `mtxCancelNonce` takes the fee-leg row too.
     function test_cancelNonceFeeLeg() public {
-        string memory ty = "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+        string memory ty =
+            "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
         for (uint256 i; i < 2; ++i) {
             address t = _ks()[i];
             MetaTxLib.UAEnvelope memory e = _env(alice, FIX, 1);
@@ -111,13 +112,25 @@ contract FeeLegsTest is RegFixture {
     }
 
     function _payTr(address t) internal view returns (MetaTxLib.UAMetaTransfer memory) {
-        return MetaTxLib.UAMetaTransfer({from: nid(alice), to: nid(bob), value: 100, entryRef: PAYREF,
-            batch: NormalToken(t).payLane(PAYREF), nonce: 0, validUntil: block.timestamp + 300, mode: RR,
-            relayer: relayer, fee: 0, feeRecipient: address(0)});
+        return MetaTxLib.UAMetaTransfer({
+            from: nid(alice),
+            to: nid(bob),
+            value: 100,
+            entryRef: PAYREF,
+            batch: NormalToken(t).payLane(PAYREF),
+            nonce: 0,
+            validUntil: block.timestamp + 300,
+            mode: RR,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
+        });
     }
 
     function _rfSigs(address t, MetaTxLib.UAMetaTransfer memory x)
-        internal view returns (IUARegistry.UASig memory ps, IUARegistry.UASig memory rs)
+        internal
+        view
+        returns (IUARegistry.UASig memory ps, IUARegistry.UASig memory rs)
     {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
         ps.signature = abi.encodePacked(r, s, v);
@@ -156,8 +169,10 @@ contract FeeLegsTest is RegFixture {
     function test_relayFeeFrozenPayee() public {
         for (uint256 i; i < 2; ++i) {
             address t = _ks()[i];
-            bytes memory cd = abi.encodeCall(NormalToken.mtxRelayFee,
-                (nid(alice), address(0x7A), keccak256("call"), nid(feeTo), 5, 2, 0, block.timestamp + 60, _bad()));
+            bytes memory cd = abi.encodeCall(
+                NormalToken.mtxRelayFee,
+                (nid(alice), address(0x7A), keccak256("call"), nid(feeTo), 5, 2, 0, block.timestamp + 60, _bad())
+            );
             bytes4 ctl = _try(t, cd);
             assertTrue(ctl != 0 && ctl != IRegulatedToken.FeeRecipientFrozen.selector, "control");
             _freeze(t, nid(feeTo));
@@ -186,7 +201,9 @@ contract FeeLegsTest is RegFixture {
 
     /// Kind 9 over a SCaaS underlying (a kind-0 token alice holds), `FREEZE` only.
     function _wrapOrderPair() internal returns (address u, address w) {
-        u = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("U", "U", 0, SUPPLY, alice, address(0))), "u");
+        u = f.createToken(
+            IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("U", "U", 0, SUPPLY, alice, address(0))), "u"
+        );
         IFactoryToken.TokenConfig memory c = _cfg9();
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.FREEZE);
         c.roles.compliance = 0;
@@ -194,7 +211,11 @@ contract FeeLegsTest is RegFixture {
         w = f.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "w");
     }
 
-    function _wrapOrder(address w, uint256 fee, bytes32 destination) internal view returns (ITradeToken.UAWrapOrder memory o) {
+    function _wrapOrder(address w, uint256 fee, bytes32 destination)
+        internal
+        view
+        returns (ITradeToken.UAWrapOrder memory o)
+    {
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill, o.fee) = (nid(alice), w, 1000, 3000, 1000, fee);
         (o.destination, o.batch, o.nonce, o.validUntil) = (destination, 7, 1, block.timestamp + 300);
     }
@@ -241,11 +262,26 @@ contract FeeLegsTest is RegFixture {
     /// alice's signed `UARelayFee` of 5 to the router (open mode) on lane 2, nonce 0, for `cd` on `target` (helpers: the
     /// test's stack).
     function _relaySig(address t, address target, bytes memory cd, address router, uint256 vu)
-        internal view returns (IUARegistry.UASig memory a)
+        internal
+        view
+        returns (IUARegistry.UASig memory a)
     {
-        bytes32 h = keccak256(abi.encode(keccak256(
-            "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"),
-            nid(alice), target, keccak256(cd), nid(router), uint256(5), uint256(2), uint256(0), vu, router));
+        bytes32 h = keccak256(
+            abi.encode(
+                keccak256(
+                    "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"
+                ),
+                nid(alice),
+                target,
+                keccak256(cd),
+                nid(router),
+                uint256(5),
+                uint256(2),
+                uint256(0),
+                vu,
+                router
+            )
+        );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, MtxDigest.typed(t, h));
         a.signature = abi.encodePacked(r, s, v);
     }
@@ -272,5 +308,4 @@ contract FeeLegsTest is RegFixture {
         vm.prank(relayer);
         router.relay(target, cd, t, nid(alice), nid(address(router)), 5, 2, 0, vu, a);
     }
-
 }

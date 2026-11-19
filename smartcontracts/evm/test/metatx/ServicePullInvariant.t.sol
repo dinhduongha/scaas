@@ -67,10 +67,14 @@ contract ServicePullHandler is Test {
         return IRegulatedToken(t).isFrozen(MetaTxLib.pad(address(s)));
     }
 
-    function _try(RefServiceEscrow.Deposit memory op, uint256 pk) internal returns (bool ok, bytes memory ret, bytes32 ref) {
+    function _try(RefServiceEscrow.Deposit memory op, uint256 pk)
+        internal
+        returns (bool ok, bytes memory ret, bytes32 ref)
+    {
         ref = spDepositRef(address(s), block.chainid, op);
-        MetaTxLib.UAMetaTransfer memory x = spPull(op.payer, address(s), op.amount, ref, LANE,
-            NormalToken(t).mtxNonce(op.payer, LANE), block.timestamp + 300);
+        MetaTxLib.UAMetaTransfer memory x = spPull(
+            op.payer, address(s), op.amount, ref, LANE, NormalToken(t).mtxNonce(op.payer, LANE), block.timestamp + 300
+        );
         IUARegistry.UASig memory a = _sign(pk, x);
         (ok, ret) = address(s).call(abi.encodeCall(RefServiceEscrow.deposit, (op, x, a)));
     }
@@ -79,8 +83,9 @@ contract ServicePullHandler is Test {
         uint256 i = who % 4;
         address p = payer(i);
         amount = bound(amount, 1, 6_000);
-        RefServiceEscrow.Deposit memory op =
-            RefServiceEscrow.Deposit(MetaTxLib.pad(p), amount, uint64(block.timestamp + bound(lock, 0, 2 days)), bytes32(++salt));
+        RefServiceEscrow.Deposit memory op = RefServiceEscrow.Deposit(
+            MetaTxLib.pad(p), amount, uint64(block.timestamp + bound(lock, 0, 2 days)), bytes32(++salt)
+        );
         bool can = IERC20(t).balanceOf(p) >= amount && !_frozenS();
         (bool ok,, bytes32 ref) = _try(op, pks[i]);
         assertEq(ok, can, "a deposit lands iff the payer can pay and S is not frozen");
@@ -147,8 +152,16 @@ contract ServicePullHandler is Test {
         bytes32 sid = MetaTxLib.pad(address(s));
         bytes32 orderId = keccak256(abi.encode("sp-inv-order", ++orders));
         vm.prank(compliance);
-        IRegulatedToken(t).recordOrder(orderId, keccak256("document"), sid, bytes32(uint256(0xBE)), amount,
-            uint64(block.timestamp + 30 days), EnvKit.codeUidOf(address(t)));
+        IRegulatedToken(t)
+            .recordOrder(
+                orderId,
+                keccak256("document"),
+                sid,
+                bytes32(uint256(0xBE)),
+                amount,
+                uint64(block.timestamp + 30 days),
+                EnvKit.codeUidOf(address(t))
+            );
         bytes32 rid = keccak256(abi.encode(orderId, sid, bytes32(uint256(0xBE))));
         vm.prank(issuer);
         IRegulatedToken(t).freeze(sid, REF, rid, EnvKit.codeUidOf(address(t)));
@@ -183,8 +196,14 @@ contract ServicePullInvariantTest is RegFixture {
             initial[p] = IERC20(t8).balanceOf(p);
         }
         bytes4[] memory sel = new bytes4[](5);
-        (sel[0], sel[1], sel[2], sel[3], sel[4]) = (ServicePullHandler.deposit.selector, ServicePullHandler.replay.selector,
-            ServicePullHandler.release.selector, ServicePullHandler.sendOutside.selector, ServicePullHandler.force.selector);
+        (sel[0], sel[1], sel[2], sel[3], sel[4]) =
+        (
+            ServicePullHandler.deposit.selector,
+            ServicePullHandler.replay.selector,
+            ServicePullHandler.release.selector,
+            ServicePullHandler.sendOutside.selector,
+            ServicePullHandler.force.selector
+        );
         targetSelector(FuzzSelector(address(h), sel));
         targetContract(address(h));
     }
@@ -207,7 +226,9 @@ contract ServicePullInvariantTest is RegFixture {
     function invariant_payerConservation() public view {
         for (uint256 i; i < 4; ++i) {
             address p = h.payer(i);
-            assertEq(IERC20(t8).balanceOf(p) + _sumCustody(MetaTxLib.pad(p)) + h.outsideBy(p), initial[p], "conservation");
+            assertEq(
+                IERC20(t8).balanceOf(p) + _sumCustody(MetaTxLib.pad(p)) + h.outsideBy(p), initial[p], "conservation"
+            );
         }
     }
 

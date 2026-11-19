@@ -34,8 +34,13 @@ interface ISwapRouter02 {
 }
 
 interface IV2Router {
-    function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to,
-        uint256 deadline) external returns (uint256[] memory);
+    function swapExactTokensForTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory);
     function getAmountsOut(uint256 amountIn, address[] calldata path) external view returns (uint256[] memory);
 }
 
@@ -113,15 +118,24 @@ contract UniswapForkTest is Test {
         // every call is capped at the block's 36 M gas, below what Amsterdam's code deposit charges for the 27-39 KiB
         // implementations (NormalToken, SCaaSDex).
         OpenFactory f = EnvKit.factory(address(this), UID_, 0);
-        address tokImpl = Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode,
-            address(0), address(0), false);
+        address tokImpl = Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
         address dexImpl = Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        tok = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
-            abi.encode(normalInit("Tok", "TOK", 18, 1_000_000e18, alice, address(0))), "tok"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "dex"));
+        tok = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL,
+                1,
+                abi.encode(normalInit("Tok", "TOK", 18, 1_000_000e18, alice, address(0))),
+                "tok"
+            )
+        );
+        dex = SCaaSDex(
+            f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "dex")
+        );
         address[] memory keep = new address[](6);
         (keep[0], keep[1], keep[2], keep[3], keep[4], keep[5]) =
-            (address(f), tokImpl, dexImpl, address(tok), address(dex), dex.puller());
+        (address(f), tokImpl, dexImpl, address(tok), address(dex), dex.puller());
         vm.makePersistent(keep);
         // the body modules of the DEX and of the token kind (T66b; the liquidity spec §9.1) live at their own addresses
         vm.makePersistent(dex.modules());
@@ -153,7 +167,9 @@ contract UniswapForkTest is Test {
     }
 
     function _order(address from, address receiveToken, uint256 amount, uint256 receiveAmount, uint256 fee)
-        internal view returns (ITradeToken.TradeOrder memory o)
+        internal
+        view
+        returns (ITradeToken.TradeOrder memory o)
     {
         o.from = from;
         o.receiveToken = receiveToken;
@@ -175,25 +191,35 @@ contract UniswapForkTest is Test {
     }
 
     function _leg(uint256 pk, address sell, ITradeToken.TradeOrder memory o, uint256 fill)
-        internal view returns (ISCaaSDex.DexLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.DexLeg memory)
     {
         return DexLegs.leg(sell, o, _sig(pk, sell, o), fill);
     }
 
     function _xLeg(uint256 pk, address sell, ITradeToken.TradeOrder memory o, uint256 sellFill, uint256 floor)
-        internal view returns (ISCaaSDex.ExchangeLeg memory)
+        internal
+        view
+        returns (ISCaaSDex.ExchangeLeg memory)
     {
         return DexLegs.xLeg(sell, o, _sig(pk, sell, o), sellFill, floor);
     }
 
-    function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l) internal pure returns (ISCaaSDex.ExchangePlan memory p) {
+    function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l)
+        internal
+        pure
+        returns (ISCaaSDex.ExchangePlan memory p)
+    {
         p.ref = ref;
         p.legs = new ISCaaSDex.ExchangeLeg[](1);
         p.legs[0] = l;
     }
 
     function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l0, ISCaaSDex.ExchangeLeg memory l1)
-        internal pure returns (ISCaaSDex.ExchangePlan memory p)
+        internal
+        pure
+        returns (ISCaaSDex.ExchangePlan memory p)
     {
         p.ref = ref;
         p.legs = new ISCaaSDex.ExchangeLeg[](2);
@@ -210,22 +236,36 @@ contract UniswapForkTest is Test {
 
     /// Path (a) through SwapRouter02: `approve(router, amountIn)` on `tIn`, then `exactInputSingle` to the DEX.
     function _v3Router(address tIn, address tOut, uint24 fee, uint256 amountIn, uint256 minOut)
-        internal view returns (ISCaaSDex.Interaction[] memory xs)
+        internal
+        view
+        returns (ISCaaSDex.Interaction[] memory xs)
     {
         xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(tIn, abi.encodeCall(IERC20.approve, (V3_ROUTER, amountIn)));
-        xs[1] = ISCaaSDex.Interaction(V3_ROUTER, abi.encodeCall(ISwapRouter02.exactInputSingle,
-            (ISwapRouter02.ExactInputSingleParams(tIn, tOut, fee, address(dex), amountIn, minOut, 0))));
+        xs[1] = ISCaaSDex.Interaction(
+            V3_ROUTER,
+            abi.encodeCall(
+                ISwapRouter02.exactInputSingle,
+                (ISwapRouter02.ExactInputSingleParams(tIn, tOut, fee, address(dex), amountIn, minOut, 0))
+            )
+        );
     }
 
     /// Path (a) through Router02: `approve(router, amountIn)` on `tIn`, then `swapExactTokensForTokens` to the DEX.
     function _v2Router(address tIn, address tOut, uint256 amountIn, uint256 minOut)
-        internal view returns (ISCaaSDex.Interaction[] memory xs)
+        internal
+        view
+        returns (ISCaaSDex.Interaction[] memory xs)
     {
         xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(tIn, abi.encodeCall(IERC20.approve, (V2_ROUTER, amountIn)));
-        xs[1] = ISCaaSDex.Interaction(V2_ROUTER, abi.encodeCall(IV2Router.swapExactTokensForTokens,
-            (amountIn, minOut, _path(tIn, tOut), address(dex), type(uint256).max)));
+        xs[1] = ISCaaSDex.Interaction(
+            V2_ROUTER,
+            abi.encodeCall(
+                IV2Router.swapExactTokensForTokens,
+                (amountIn, minOut, _path(tIn, tOut), address(dex), type(uint256).max)
+            )
+        );
     }
 
     function _path(address a, address b) internal pure returns (address[] memory p) {
@@ -256,7 +296,8 @@ contract UniswapForkTest is Test {
 
     /// What path (a)'s interactions return to the DEX for `amountIn` of `tIn`: run as the DEX on a snapshot, reverted.
     function _quoteA(address tIn, uint256 amountIn, address tOut, ISCaaSDex.Interaction[] memory xs)
-        internal returns (uint256 q)
+        internal
+        returns (uint256 q)
     {
         uint256 id = vm.snapshotState();
         deal(tIn, address(dex), amountIn);
@@ -345,8 +386,17 @@ contract UniswapForkTest is Test {
     /// derivation (factory, init-code hash) is the factory's own `getPool`.
     function test_fork_executor_v3TwoHops() public {
         (address t0, address t1) = WETH < USDC ? (WETH, USDC) : (USDC, WETH);
-        address derived = address(uint160(uint256(keccak256(abi.encodePacked(hex"ff", V3_FACTORY,
-            keccak256(abi.encode(t0, t1, uint24(500))), V3_POOL_INIT_CODE_HASH)))));
+        address derived = address(
+            uint160(
+                uint256(
+                    keccak256(
+                        abi.encodePacked(
+                            hex"ff", V3_FACTORY, keccak256(abi.encode(t0, t1, uint24(500))), V3_POOL_INIT_CODE_HASH
+                        )
+                    )
+                )
+            )
+        );
         assertEq(IUniswapV3Factory(V3_FACTORY).getPool(WETH, USDC, 500), derived);
         _viaOne("v3x2", _hops(_v3Hop(WETH, USDT, 500), _v3Hop(USDT, USDC, 100)));
     }
@@ -437,8 +487,10 @@ contract UniswapForkTest is Test {
         uint256 floor = _buffered(q);
         ITradeToken.TradeOrder memory o = _order(alice, WETH, 1000e18, floor * 95 / 100, FEE);
         vm.prank(relayer);
-        dex.mtxExchange(_plan("tok", _xLeg(ALICE_PK, address(tok), o, 1000e18, floor)),
-            _v2Router(address(tok), WETH, 1000e18, floor));
+        dex.mtxExchange(
+            _plan("tok", _xLeg(ALICE_PK, address(tok), o, 1000e18, floor)),
+            _v2Router(address(tok), WETH, 1000e18, floor)
+        );
         assertEq(IERC20(WETH).balanceOf(alice), q - _fee(floor, FEE));
         assertEq(tok.balanceOf(alice), 1_000_000e18 - 101_000e18);
         assertEq(tok.balanceOf(pair), 101_000e18);
@@ -455,9 +507,11 @@ contract UniswapForkTest is Test {
         ISCaaSDex.Interaction[] memory xs = _v3Router(WETH, USDC, 500, 1 ether - internalW, 0);
         uint256 qn = _quoteA(WETH, 1 ether - internalW, USDC, xs);
         uint256 fa = 1000e6 + _buffered(qn);
-        ISCaaSDex.ExchangePlan memory p = _plan("cow",
+        ISCaaSDex.ExchangePlan memory p = _plan(
+            "cow",
             _xLeg(DAVE_PK, WETH, _order(dave, USDC, 1 ether, fa * 95 / 100, FEE), 1 ether, fa),
-            _xLeg(ERIN_PK, USDC, _order(erin, WETH, 1000e6, internalW * 99 / 100, 0), 1000e6, internalW));
+            _xLeg(ERIN_PK, USDC, _order(erin, WETH, 1000e6, internalW * 99 / 100, 0), 1000e6, internalW)
+        );
         vm.prank(relayer);
         dex.mtxExchange(p, xs);
         assertEq(IERC20(USDC).balanceOf(dave), 1000e6 + qn - _fee(fa, FEE));
@@ -477,15 +531,20 @@ contract UniswapForkTest is Test {
         ITradeToken.TradeOrder memory o = _order(dave, USDC, 1 ether, 1000e6, FEE);
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](3);
         xs[0] = ISCaaSDex.Interaction(WETH, abi.encodeCall(IERC20.approve, (PERMIT2, 1 ether)));
-        xs[1] = ISCaaSDex.Interaction(PERMIT2,
-            abi.encodeCall(IPermit2.approve, (WETH, UNIVERSAL_ROUTER, uint160(1 ether), uint48(block.timestamp + 300))));
+        xs[1] = ISCaaSDex.Interaction(
+            PERMIT2,
+            abi.encodeCall(IPermit2.approve, (WETH, UNIVERSAL_ROUTER, uint160(1 ether), uint48(block.timestamp + 300)))
+        );
         bytes[] memory inputs = new bytes[](1); // V3_SWAP_EXACT_IN (command 0x00), payer the DEX through Permit2
         inputs[0] = abi.encode(address(dex), 1 ether, 0, abi.encodePacked(WETH, uint24(500), USDC), true);
-        xs[2] = ISCaaSDex.Interaction(UNIVERSAL_ROUTER,
-            abi.encodeCall(IUniversalRouter.execute, (hex"00", inputs, block.timestamp + 300)));
+        xs[2] = ISCaaSDex.Interaction(
+            UNIVERSAL_ROUTER, abi.encodeCall(IUniversalRouter.execute, (hex"00", inputs, block.timestamp + 300))
+        );
         ISCaaSDex.ExchangePlan memory p = _plan("ur", _xLeg(DAVE_PK, WETH, o, 1 ether, 2000e6));
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, PERMIT2, IPermit2.approve.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, PERMIT2, IPermit2.approve.selector)
+        );
         dex.mtxExchange(p, xs);
         assertEq(IERC20(WETH).balanceOf(dave), 10 ether);
         assertEq(IERC20(USDC).balanceOf(dave), 0);
@@ -508,9 +567,10 @@ contract UniswapForkTest is Test {
         IERC20(USDC).approve(dex.puller(), type(uint256).max);
         ITradeToken.LiquidityOrder memory o;
         (o.from, o.recipient, o.fee, o.relayer, o.batch, o.validUntil) =
-            (nid(dave), nid(erin), 3_000, relayer, 21, block.timestamp + 300);
+        (nid(dave), nid(erin), 3_000, relayer, 21, block.timestamp + 300);
         o.inputs = new ITradeToken.LiquidityToken[](2);
-        (o.inputs[0], o.inputs[1]) = (ITradeToken.LiquidityToken(WETH, 1 ether), ITradeToken.LiquidityToken(USDC, 10_000e6));
+        (o.inputs[0], o.inputs[1]) =
+        (ITradeToken.LiquidityToken(WETH, 1 ether), ITradeToken.LiquidityToken(USDC, 10_000e6));
         o.outputs = new ITradeToken.LiquidityToken[](1);
         o.outputs[0] = ITradeToken.LiquidityToken(pair, 1);
         ISCaaSDex.LiquidityPlan memory p;
@@ -522,8 +582,12 @@ contract UniswapForkTest is Test {
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](3);
         xs[0] = ISCaaSDex.Interaction(WETH, abi.encodeCall(IERC20.approve, (V2_ROUTER, 1 ether)));
         xs[1] = ISCaaSDex.Interaction(USDC, abi.encodeCall(IERC20.approve, (V2_ROUTER, 10_000e6)));
-        xs[2] = ISCaaSDex.Interaction(V2_ROUTER, abi.encodeCall(IV2RouterLike.addLiquidity,
-            (WETH, USDC, 1 ether, 10_000e6, 0, 0, address(dex), block.timestamp + 300)));
+        xs[2] = ISCaaSDex.Interaction(
+            V2_ROUTER,
+            abi.encodeCall(
+                IV2RouterLike.addLiquidity, (WETH, USDC, 1 ether, 10_000e6, 0, 0, address(dex), block.timestamp + 300)
+            )
+        );
         vm.prank(relayer);
         dex.mtxLiquidity(p, xs);
         uint256 lp = IERC20(pair).balanceOf(erin);
@@ -547,8 +611,10 @@ contract UniswapForkTest is Test {
         q.pull[0] = lp;
         xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(pair, abi.encodeCall(IERC20.approve, (V2_ROUTER, lp)));
-        xs[1] = ISCaaSDex.Interaction(V2_ROUTER, abi.encodeCall(IV2RouterLike.removeLiquidity,
-            (WETH, USDC, lp, 0, 0, address(dex), block.timestamp + 300)));
+        xs[1] = ISCaaSDex.Interaction(
+            V2_ROUTER,
+            abi.encodeCall(IV2RouterLike.removeLiquidity, (WETH, USDC, lp, 0, 0, address(dex), block.timestamp + 300))
+        );
         uint256 w0 = IERC20(WETH).balanceOf(erin);
         vm.prank(relayer);
         dex.mtxLiquidity(q, xs);
@@ -566,8 +632,23 @@ interface IV2FactoryLike {
 }
 
 interface IV2RouterLike {
-    function addLiquidity(address a, address b, uint256 amountADesired, uint256 amountBDesired, uint256 amountAMin,
-        uint256 amountBMin, address to, uint256 deadline) external returns (uint256, uint256, uint256);
-    function removeLiquidity(address a, address b, uint256 liquidity, uint256 amountAMin, uint256 amountBMin, address to,
-        uint256 deadline) external returns (uint256, uint256);
+    function addLiquidity(
+        address a,
+        address b,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256, uint256, uint256);
+    function removeLiquidity(
+        address a,
+        address b,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256, uint256);
 }

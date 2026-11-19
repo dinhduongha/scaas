@@ -493,7 +493,8 @@ S1–S18, `docs/superpowers/specs/2026-10-30-ua-soroban-design.md`). A family sp
 (row, options considered, choice and why, cost if wrong, who decided), or says why the row does not apply. The **shared**
 column is the same answer on every chain ([NET-ALL-20](#NET-ALL-20), one rule everywhere); only the **family** column
 differs, and it states the chain's own mechanics (NEAR ≠ Algorand ≠ Soroban …), never a lumped answer. Names (owner 2026-10-30): a family's round is the **UA family round** `ua-<family>` (`ua-soroban`, `ua-near`,
-`ua-cosmos`, …); its UA-8 portable-registry step is `ua8-<family>` and a classical Zether track `zether-<family>`; the
+`ua-cosmos`, …); its UA-8 portable-registry step is `ua-portable-<family>` (owner 2026-11-19; called `ua8-<family>` before, which
+the rounds' plan, spec and run file names and the history keep) and a classical Zether track `zether-<family>`; the
 branch, the spec / plan file names and the commit prefixes use these names.
 
 | # | Question | Shared answer (every family) | Family-specific part | UA-Soroban |

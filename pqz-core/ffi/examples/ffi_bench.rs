@@ -16,7 +16,13 @@ use pqz_ffi::*;
 fn stats(mut v: Vec<f64>) -> String {
     v.sort_by(|a, b| a.total_cmp(b));
     let q = |p: f64| v[((v.len() - 1) as f64 * p).round() as usize];
-    format!("{{\"n\": {}, \"p50_ms\": {:.3}, \"p99_ms\": {:.3}, \"max_ms\": {:.3}}}", v.len(), q(0.5), q(0.99), q(1.0))
+    format!(
+        "{{\"n\": {}, \"p50_ms\": {:.3}, \"p99_ms\": {:.3}, \"max_ms\": {:.3}}}",
+        v.len(),
+        q(0.5),
+        q(0.99),
+        q(1.0)
+    )
 }
 
 fn time(n: usize, mut f: impl FnMut()) -> Vec<f64> {
@@ -30,17 +36,31 @@ fn time(n: usize, mut f: impl FnMut()) -> Vec<f64> {
 }
 
 fn main() {
-    let n: usize = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(200);
+    let n: usize = std::env::args()
+        .nth(1)
+        .and_then(|a| a.parse().ok())
+        .unwrap_or(200);
     let rnd = [0x33u8; 32];
     let mut pqzl_inputs = Vec::new();
-    for id in [PQZL_ID, PQZH_ID].into_iter().filter(|&id| id == PQZL_ID || pqz_ffi::PQZH) {
+    for id in [PQZL_ID, PQZH_ID]
+        .into_iter()
+        .filter(|&id| id == PQZL_ID || pqz_ffi::PQZH)
+    {
         let sys = if id == PQZL_ID { "PQZL" } else { "PQZH" };
-        let forms = fixture::cases(&id).unwrap().into_iter().map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit, None));
-        let multi = fixture::multi_cases(&id, usize::MAX).unwrap().into_iter().map(|c| (c.name(), c.op(), c.stmt, c.wit, Some((c.m, c.aud))));
+        let forms = fixture::cases(&id)
+            .unwrap()
+            .into_iter()
+            .map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit, None));
+        let multi = fixture::multi_cases(&id, usize::MAX)
+            .unwrap()
+            .into_iter()
+            .map(|c| (c.name(), c.op(), c.stmt, c.wit, Some((c.m, c.aud))));
         for (name, op, st, wit, shape) in forms.chain(multi) {
             let t = Instant::now();
             let Ok(proof) = prove(op, &st, &wit, &rnd) else {
-                println!("{{\"sys\": \"{sys}\", \"form\": \"{name}\", \"skipped\": \"no prover\"}}");
+                println!(
+                    "{{\"sys\": \"{sys}\", \"form\": \"{name}\", \"skipped\": \"no prover\"}}"
+                );
                 continue;
             };
             let prove_ms = t.elapsed().as_secs_f64() * 1e3;
@@ -50,20 +70,39 @@ fn main() {
             adv[m] ^= 4;
             assert_eq!(precompile(&input), Ok(VALID));
             let direct = |s: &[u8], p: &[u8]| {
-                if id == PQZL_ID { pqzl::verify_fast_on_caller(op, s, p) } else { pqzh::verify(op, s, p) == Ok(true) }
+                if id == PQZL_ID {
+                    pqzl::verify_fast_on_caller(op, s, p)
+                } else {
+                    pqzh::verify(op, s, p) == Ok(true)
+                }
             };
             assert!(verify_input(&input).unwrap()); // warm on the worker (relation keys, SV tables)
             let mut out = [0u8; 32];
             let row = [
                 ("direct", time(n, || assert!(direct(&st, &proof)))),
-                ("rust", time(n, || assert_eq!(precompile(&input), Ok(VALID)))),
-                ("c_abi", time(n, || unsafe {
-                    assert_eq!(pqz_precompile(input.as_ptr(), input.len(), out.as_mut_ptr(), 32), PQZ_FFI_OK);
-                })),
-                ("adversarial", time(n, || assert_eq!(precompile(&adv), Ok(INVALID)))),
+                (
+                    "rust",
+                    time(n, || assert_eq!(precompile(&input), Ok(VALID))),
+                ),
+                (
+                    "c_abi",
+                    time(n, || unsafe {
+                        assert_eq!(
+                            pqz_precompile(input.as_ptr(), input.len(), out.as_mut_ptr(), 32),
+                            PQZ_FFI_OK
+                        );
+                    }),
+                ),
+                (
+                    "adversarial",
+                    time(n, || assert_eq!(precompile(&adv), Ok(INVALID))),
+                ),
                 ("decode", time(n, || assert!(decode(&input).is_ok()))),
             ];
-            let body: Vec<String> = row.into_iter().map(|(k, v)| format!("\"{k}\": {}", stats(v))).collect();
+            let body: Vec<String> = row
+                .into_iter()
+                .map(|(k, v)| format!("\"{k}\": {}", stats(v)))
+                .collect();
             let multi = shape.map_or(String::new(), |(m, aud)| {
                 let bound = if id == PQZL_ID { stmt::MAX_PROOF_PQZL } else { pqzh::max_proof_len_multi(m, aud) };
                 format!(
@@ -73,7 +112,11 @@ fn main() {
                     5 + st.len() + bound
                 )
             });
-            println!("{{\"sys\": \"{sys}\", \"form\": \"{name}\", {multi}\"proof_bytes\": {}, {}}}", proof.len(), body.join(", "));
+            println!(
+                "{{\"sys\": \"{sys}\", \"form\": \"{name}\", {multi}\"proof_bytes\": {}, {}}}",
+                proof.len(),
+                body.join(", ")
+            );
             if id == PQZL_ID {
                 pqzl_inputs.push(input);
             }
@@ -112,6 +155,10 @@ fn arenas(pqzl_inputs: &[Vec<u8>]) {
     );
     // and the precompile path on a fresh ARENA_SMALL core
     assert!(pqzl::reinit(pqzl::ARENA_SMALL));
-    let ok = pqzl_inputs.iter().all(|i| precompile(i) == Ok(VALID)) && selftest::report().unwrap().hash == st.hash;
-    println!("{{\"arena\": \"ARENA_SMALL\", \"all_valid\": {ok}, \"peak_bytes\": {}}}", pqzl::arena_peak());
+    let ok = pqzl_inputs.iter().all(|i| precompile(i) == Ok(VALID))
+        && selftest::report().unwrap().hash == st.hash;
+    println!(
+        "{{\"arena\": \"ARENA_SMALL\", \"all_valid\": {ok}, \"peak_bytes\": {}}}",
+        pqzl::arena_peak()
+    );
 }

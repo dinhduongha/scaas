@@ -16,7 +16,9 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 /// payout reverts as a whole when one recipient is blocked by a list).
 contract Payout {
     function pay(address t, address[] calldata to, uint256 v) external {
-        for (uint256 i; i < to.length; ++i) IERC20(t).transfer(to[i], v);
+        for (uint256 i; i < to.length; ++i) {
+            IERC20(t).transfer(to[i], v);
+        }
     }
 }
 
@@ -151,7 +153,8 @@ contract ListsTest is ListFixture {
             MetaTxLib.UAMetaTransfer memory x;
             (x.from, x.to, x.value, x.batch, x.validUntil) = (b, a, 1, 1, block.timestamp + 60);
             bytes memory c0 = abi.encodeCall(NormalToken.mtxExecuteTransfer, (x, _bad()));
-            MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(b, 3, 0, block.timestamp + 60, 0, address(0), 0, address(0));
+            MetaTxLib.UAEnvelope memory e =
+                MetaTxLib.UAEnvelope(b, 3, 0, block.timestamp + 60, 0, address(0), 0, address(0));
             bytes memory c1 = abi.encodeCall(UAMetaTxBase.mtxCancelNonce, (e, 9, _bad()));
             bytes4 sel = bit == ALLOW ? NOT_ALLOWED : DENIED_ERR;
             assertTrue(_try(t, c0) != sel && _try(t, c1) != sel, "control: open");
@@ -167,7 +170,7 @@ contract ListsTest is ListFixture {
             (address t, uint8 bit) = _each(k);
             MetaTxLib.UAMetaTransfer memory x;
             (x.from, x.to, x.value, x.batch, x.validUntil, x.mode, x.fee) =
-                (a, b, 100, 1, block.timestamp + 60, MetaTxLib.MODE_FEE_FIXED, 1);
+            (a, b, 100, 1, block.timestamp + 60, MetaTxLib.MODE_FEE_FIXED, 1);
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(x));
             IUARegistry.UASig memory sig;
             sig.signature = abi.encodePacked(r, s, v);

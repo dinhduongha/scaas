@@ -21,7 +21,9 @@ use super::{Error, Result, UaKey, Wallet};
 use crate::keccak;
 use crate::musig2::{self, Bn254, Curve, Secp256k1};
 use crate::verify::{hash_to_g1_bls12381, hash_to_scalar, hash_to_scalar_wide, map_to_g1_bn254};
-use crate::verify::{BLS12381_DST_POP, BLS12381_DST_SIG, BN254_LABEL_POP, BN254_LABEL_SIG, SCHNORR_TAG};
+use crate::verify::{
+    BLS12381_DST_POP, BLS12381_DST_SIG, BN254_LABEL_POP, BN254_LABEL_SIG, SCHNORR_TAG,
+};
 use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
 use ark_ff::{BigInteger, PrimeField, Zero};
@@ -85,7 +87,11 @@ where
     P::BaseField: PrimeField + CtSwap,
 {
     let mut out = Vec::new();
-    g1_bytes(&mul(Projective::<P>::generator(), &*scalar::<P::ScalarField>(s)?)?, w, &mut out)?;
+    g1_bytes(
+        &mul(Projective::<P>::generator(), &*scalar::<P::ScalarField>(s)?)?,
+        w,
+        &mut out,
+    )?;
     Ok(out)
 }
 
@@ -137,7 +143,13 @@ fn nonce<F: PrimeField>(sk: &[u8], y: &[u8], ua_msg: &[u8; 32], aux: &[u8; 32]) 
 
 /// scaas Schnorr of `ua_msg` by the secret `sk` whose key data is `y`; `fixed` replaces the OS `aux` (feature `vectors`,
 /// `Argument` if it gives `k = 0`).
-fn schnorr<P: SWCurveConfig>(sk_bytes: &[u8], y: &[u8], ua_msg: &[u8; 32], fixed: Option<&[u8; 32]>, w: usize) -> Result<Vec<u8>>
+fn schnorr<P: SWCurveConfig>(
+    sk_bytes: &[u8],
+    y: &[u8],
+    ua_msg: &[u8; 32],
+    fixed: Option<&[u8; 32]>,
+    w: usize,
+) -> Result<Vec<u8>>
 where
     P::BaseField: PrimeField + CtSwap,
 {
@@ -168,19 +180,46 @@ where
 
 /// The signature of `ua_msg` by the pairing kind `kind` with its secret and key data; `role` picks the BLS domain;
 /// `fixed`: scaas Schnorr's `aux` (32 bytes, feature `vectors`), none for BLS (deterministic).
-pub(crate) fn sign(kind: u16, secret: &[u8], key_data: &[u8], ua_msg: &[u8; 32], role: SigRole, fixed: Option<&[u8]>) -> Result<Vec<u8>> {
+pub(crate) fn sign(
+    kind: u16,
+    secret: &[u8],
+    key_data: &[u8],
+    ua_msg: &[u8; 32],
+    role: SigRole,
+    fixed: Option<&[u8]>,
+) -> Result<Vec<u8>> {
     let pop = role == SigRole::Pop;
-    let aux = fixed.map(<&[u8; 32]>::try_from).transpose().map_err(|_| Error::Argument)?;
+    let aux = fixed
+        .map(<&[u8; 32]>::try_from)
+        .transpose()
+        .map_err(|_| Error::Argument)?;
     let mut out = Vec::new();
     match (kind, aux) {
         (0x0104, _) => return schnorr::<Bn1>(secret, key_data, ua_msg, aux, 32),
         (0x0105, _) => return schnorr::<Bls1>(secret, key_data, ua_msg, aux, 64),
         (0x0106, None) => {
-            let h = hash_to_g1_bls12381(ua_msg, if pop { BLS12381_DST_POP } else { BLS12381_DST_SIG });
+            let h = hash_to_g1_bls12381(
+                ua_msg,
+                if pop {
+                    BLS12381_DST_POP
+                } else {
+                    BLS12381_DST_SIG
+                },
+            );
             g1_bytes(&mul(h.into_group(), &*scalar(secret)?)?, 64, &mut out)?;
         }
         (0x0107, None) => {
-            let h = map_to_g1_bn254(&[if pop { BN254_LABEL_POP } else { BN254_LABEL_SIG }, &ua_msg[..]].concat());
+            let h = map_to_g1_bn254(
+                &[
+                    if pop {
+                        BN254_LABEL_POP
+                    } else {
+                        BN254_LABEL_SIG
+                    },
+                    &ua_msg[..],
+                ]
+                .concat(),
+            );
             g1_bytes(&mul(h.into_group(), &*scalar(secret)?)?, 32, &mut out)?;
         }
         _ => return Err(Error::Argument),
@@ -224,8 +263,18 @@ impl Musig2Session {
         let (pks, msg) = (&self.pks, &self.msg);
         let (pk, pubnonce) = (&self.pk, &self.pubnonce);
         // BIP-327 Sign's last step: the own partial signature verifies, else nothing is released (T21 L15)
-        fn own<C: Curve>(key: &Handle, sec: &[u8], aggnonce: &[u8], pk: &[u8], pn: &[u8], pks: &[Vec<u8>], msg: &[u8]) -> Result<[u8; 32]> {
-            let psig = key.with(|sk| musig2::sign::<C>(sec, sk, aggnonce, pks, msg))?.map_err(musig2_error)?;
+        fn own<C: Curve>(
+            key: &Handle,
+            sec: &[u8],
+            aggnonce: &[u8],
+            pk: &[u8],
+            pn: &[u8],
+            pks: &[Vec<u8>],
+            msg: &[u8],
+        ) -> Result<[u8; 32]> {
+            let psig = key
+                .with(|sk| musig2::sign::<C>(sec, sk, aggnonce, pks, msg))?
+                .map_err(musig2_error)?;
             match musig2::partial_sig_verify_internal::<C>(&psig, pn, pk, aggnonce, pks, msg) {
                 Ok(true) => Ok(psig),
                 _ => Err(Error::Argument),
@@ -256,11 +305,18 @@ impl UaKey {
     /// in the order the group signs) and `msg`, its `rand'` from the OS RNG.
     pub fn musig2_session(&self, pks: &[Vec<u8>], msg: &[u8]) -> Result<Musig2Session> {
         let mut rand = Zeroizing::new([0u8; 32]);
-        OsRng.try_fill_bytes(&mut rand[..]).map_err(|_| Error::Rng)?;
+        OsRng
+            .try_fill_bytes(&mut rand[..])
+            .map_err(|_| Error::Rng)?;
         self.musig2_session_with(pks, msg, &rand)
     }
 
-    fn musig2_session_with(&self, pks: &[Vec<u8>], msg: &[u8], rand: &[u8; 32]) -> Result<Musig2Session> {
+    fn musig2_session_with(
+        &self,
+        pks: &[Vec<u8>],
+        msg: &[u8],
+        rand: &[u8; 32],
+    ) -> Result<Musig2Session> {
         match self.kind {
             0x0110 => self.session::<Secp256k1>(pks, msg, rand),
             0x0112 => self.session::<Bn254>(pks, msg, rand),
@@ -268,19 +324,31 @@ impl UaKey {
         }
     }
 
-    fn session<C: Curve>(&self, pks: &[Vec<u8>], msg: &[u8], rand: &[u8; 32]) -> Result<Musig2Session> {
+    fn session<C: Curve>(
+        &self,
+        pks: &[Vec<u8>],
+        msg: &[u8],
+        rand: &[u8; 32],
+    ) -> Result<Musig2Session> {
         // the registry's MuSig2 key-data rule (2 <= n <= 16, valid points, strictly increasing; T21 L16) before KeyAgg: the
         // first key stands in for `Q`, which KeyAgg computes below
         let n = u16::try_from(pks.len()).map_err(|_| Error::Argument)?;
         let first = pks.first().ok_or(Error::Argument)?;
-        crate::validate_key_data(self.kind, &[&first[..], &n.to_be_bytes(), &pks.concat()].concat(), false).map_err(|_| Error::Argument)?;
+        crate::validate_key_data(
+            self.kind,
+            &[&first[..], &n.to_be_bytes(), &pks.concat()].concat(),
+            false,
+        )
+        .map_err(|_| Error::Argument)?;
         if !pks.contains(&self.key_data) {
             return Err(Error::Argument);
         }
         let agg = C::agg_bytes(&musig2::key_agg::<C>(pks).map_err(musig2_error)?.q);
         let pk = &self.key_data;
-        let (sec, pubnonce) =
-            self.secret.with(|sk| musig2::nonce_gen::<C>(rand, Some(sk), pk, Some(&agg), Some(msg), None))?.map_err(musig2_error)?;
+        let (sec, pubnonce) = self
+            .secret
+            .with(|sk| musig2::nonce_gen::<C>(rand, Some(sk), pk, Some(&agg), Some(msg), None))?
+            .map_err(musig2_error)?;
         let nonce = self.secret.put(sec.get(..64).ok_or(Error::Argument)?)?;
         Ok(Musig2Session {
             kind: self.kind,
@@ -310,15 +378,25 @@ impl Wallet {
         self.frost_session_with(key, &mut OsRng)
     }
 
-    fn frost_session_with<C: Ciphersuite>(&self, key: &KeyPackage<C>, rng: &mut (impl RngCore + CryptoRng)) -> Result<FrostSession<C>> {
+    fn frost_session_with<C: Ciphersuite>(
+        &self,
+        key: &KeyPackage<C>,
+        rng: &mut (impl RngCore + CryptoRng),
+    ) -> Result<FrostSession<C>> {
         // `SigningNonces` zeroizes on drop; its two scalars go to the arena as `hiding ‖ binding`, each serialized copy wiped
         // (T21 L75)
         let n = SigningNonces::new(key.signing_share(), rng);
-        let (h, b) = (Zeroizing::new(n.hiding().serialize()), Zeroizing::new(n.binding().serialize()));
+        let (h, b) = (
+            Zeroizing::new(n.hiding().serialize()),
+            Zeroizing::new(n.binding().serialize()),
+        );
         let mut bytes = Zeroizing::new(Vec::with_capacity(h.len() + b.len()));
         bytes.extend_from_slice(&h);
         bytes.extend_from_slice(&b);
-        Ok(FrostSession { nonce: Some(self.store.put(&bytes)?), commitments: *n.commitments() })
+        Ok(FrostSession {
+            nonce: Some(self.store.put(&bytes)?),
+            commitments: *n.commitments(),
+        })
     }
 }
 
@@ -331,11 +409,20 @@ impl<C: Ciphersuite> FrostSession<C> {
     /// Round 2's signature share; spends the nonces first (wiped in the arena as they are read). Round 2 runs under a read
     /// lease of the store, so the wallet's `lock()` waits for it while other signers run; after `lock()`: `KeyRevoked` (spec
     /// §8.2, T21 L73, L82).
-    pub fn sign(&mut self, package: &SigningPackage<C>, key: &KeyPackage<C>) -> Result<SignatureShare<C>> {
+    pub fn sign(
+        &mut self,
+        package: &SigningPackage<C>,
+        key: &KeyPackage<C>,
+    ) -> Result<SignatureShare<C>> {
         self.sign_paused(package, key, || ())
     }
 
-    fn sign_paused(&mut self, package: &SigningPackage<C>, key: &KeyPackage<C>, pause: impl FnOnce()) -> Result<SignatureShare<C>> {
+    fn sign_paused(
+        &mut self,
+        package: &SigningPackage<C>,
+        key: &KeyPackage<C>,
+        pause: impl FnOnce(),
+    ) -> Result<SignatureShare<C>> {
         self.nonce.take().ok_or(Error::Argument)?.take_with(|k| {
             let (hiding, binding) = k.split_at(k.len() / 2);
             let nonce = |b: &[u8]| Nonce::<C>::deserialize(b).map_err(|_| Error::Argument);
@@ -366,7 +453,12 @@ mod vectors {
 
     impl UaKey {
         /// `musig2_session` with a fixed `rand'`.
-        pub fn vectors_musig2_session(&self, pks: &[Vec<u8>], msg: &[u8], rand: &[u8; 32]) -> Result<Musig2Session> {
+        pub fn vectors_musig2_session(
+            &self,
+            pks: &[Vec<u8>],
+            msg: &[u8],
+            rand: &[u8; 32],
+        ) -> Result<Musig2Session> {
             self.musig2_session_with(pks, msg, rand)
         }
     }
@@ -395,7 +487,10 @@ mod vectors {
 
         /// `sign` that runs `pause` inside round 2, after the share is computed (T21 L73: `lock()` meanwhile).
         pub fn vectors_sign_paused(
-            &mut self, package: &SigningPackage<C>, key: &KeyPackage<C>, pause: impl FnOnce(),
+            &mut self,
+            package: &SigningPackage<C>,
+            key: &KeyPackage<C>,
+            pause: impl FnOnce(),
         ) -> Result<SignatureShare<C>> {
             self.sign_paused(package, key, pause)
         }
@@ -404,7 +499,9 @@ mod vectors {
     impl Wallet {
         /// `frost_session` with the caller's RNG.
         pub fn vectors_frost_session_with_rng<C: Ciphersuite>(
-            &self, key: &KeyPackage<C>, rng: &mut (impl RngCore + CryptoRng),
+            &self,
+            key: &KeyPackage<C>,
+            rng: &mut (impl RngCore + CryptoRng),
         ) -> Result<FrostSession<C>> {
             self.frost_session_with(key, rng)
         }
@@ -414,11 +511,21 @@ mod vectors {
 /// The scaas Schnorr nonce `k` of `0x0104` / `0x0105` (32 bytes big-endian) for the secret `sk`, key data `y`, `ua_msg`
 /// and `aux` (feature `vectors`: the nonce-map rows).
 #[cfg(feature = "vectors")]
-pub fn schnorr_nonce(kind: u16, sk: &[u8; 32], y: &[u8], ua_msg: &[u8; 32], aux: &[u8; 32]) -> Result<[u8; 32]> {
+pub fn schnorr_nonce(
+    kind: u16,
+    sk: &[u8; 32],
+    y: &[u8],
+    ua_msg: &[u8; 32],
+    aux: &[u8; 32],
+) -> Result<[u8; 32]> {
     let mut out = Vec::new();
     match kind {
         0x0104 => be(&nonce::<ark_bn254::Fr>(sk, y, ua_msg, aux), 32, &mut out),
-        0x0105 => be(&nonce::<ark_bls12_381::Fr>(sk, y, ua_msg, aux), 32, &mut out),
+        0x0105 => be(
+            &nonce::<ark_bls12_381::Fr>(sk, y, ua_msg, aux),
+            32,
+            &mut out,
+        ),
         _ => return Err(Error::Argument),
     }
     out.try_into().map_err(|_| Error::Argument)

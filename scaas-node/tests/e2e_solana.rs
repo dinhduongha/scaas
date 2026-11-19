@@ -9,7 +9,7 @@
 //! 1. hai lane relayer từ mnemonic 24 từ (`m/44'/501'/i'/0'`), airdrop; mỗi lane tự tạo durable nonce account (địa
 //!    chỉ nonce của lane 1 bị gửi lamports trước — vẫn tạo được, review M1);
 //!    alice (chủ thể) không có SOL, tiền nằm ở ATA của Account PDA của nó (mở lười ở lần trả đầu);
-//! 2. `initialize` với genesis hash thật; mint SPL Token + mint Token-2022; Odoo giả trả mint thật và TỪ CHỐI event
+//! 2. `initialize` với genesis hash thật; mint SPL Token + mint Token-2022; ExternalPull giả trả mint thật và TỪ CHỐI event
 //!    của mint chưa đăng ký;
 //! 3. ANTI-LOCK đồng thời: X `signed` trên lane 0 nhưng bị GIỮ; Y (Token-2022) đi hết tới `mined` trên lane 1; rồi X
 //!    qua; phát lại X ⇒ mô phỏng từ chối ⇒ `dead`; chữ ký tự tính = chữ ký RPC; phí = 2 chữ ký;
@@ -27,16 +27,19 @@ use async_trait::async_trait;
 use axum::extract::{Path, State};
 use axum::routing::post;
 use axum::{Json, Router};
-use scaas_node::adapter::{index_step, lane_step, recover_lane, Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
+use scaas_node::adapter::{
+    index_step, lane_step, recover_lane, Built, ChainAdapter, Family, Head, Lane, Rejected, Signed,
+    TxStatus,
+};
 use scaas_node::adapters::solana::{
-    account_of, ata, auth_ix, b58, discriminator, find_pda, key, message_v1, nonce_account, parse_auth, relay_pay_ix, Budget, Ix, Key,
-    Meta, MetaOp, Pay,
-    ATA_PROGRAM, SYSTEM, TOKEN_2022, TOKEN_PROGRAM,
+    account_of, ata, auth_ix, b58, discriminator, find_pda, key, message_v1, nonce_account,
+    parse_auth, relay_pay_ix, Budget, Ix, Key, Meta, MetaOp, Pay, ATA_PROGRAM, SYSTEM, TOKEN_2022,
+    TOKEN_PROGRAM,
 };
 use scaas_node::chain::SimError;
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
+use scaas_node::config::{ChainCfg, ExternalPullCfg, FinalityCfg};
+use scaas_node::external_pull::{ExternalPull, Job};
 use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::odoo::{Job, Odoo};
 use scaas_node::signer::{Curve, LocalSigner, Signer};
 use serde_json::{json, Value};
 
@@ -48,7 +51,10 @@ const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon 
                         abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
 fn now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 fn sha256(parts: &[&[u8]]) -> [u8; 32] {
@@ -73,7 +79,11 @@ async fn rpc(method: &str, params: Value) -> Value {
 }
 
 fn meta(key: Key, signer: bool, writable: bool) -> Meta {
-    Meta { key, signer, writable }
+    Meta {
+        key,
+        signer,
+        writable,
+    }
 }
 
 /// Tx native (dựng môi trường — KHÔNG phải đường relayer): v1, lifetime = blockhash gần nhất, ký bởi mọi signer.
@@ -81,16 +91,27 @@ async fn send(ixs: Vec<Ix>, signers: &[&LocalSigner]) -> String {
     let payer: Key = signers[0].public_key().try_into().unwrap();
     let bh = rpc("getLatestBlockhash", json!([{"commitment": "confirmed"}])).await;
     let bh = key(bh["value"]["blockhash"].as_str().unwrap()).unwrap();
-    let budget = Budget { priority_lamports: 0, cu: 400_000, loaded_bytes: 4 * 1024 * 1024 };
+    let budget = Budget {
+        priority_lamports: 0,
+        cu: 400_000,
+        loaded_bytes: 4 * 1024 * 1024,
+    };
     let (msg, n) = message_v1(&payer, &bh, &ixs, &budget).unwrap();
     let mut tx = msg.clone();
     for i in 0..n {
         let k = &msg[42 + 32 * i..74 + 32 * i];
-        let s = signers.iter().find(|s| s.public_key() == k).expect("missing signer");
+        let s = signers
+            .iter()
+            .find(|s| s.public_key() == k)
+            .expect("missing signer");
         tx.extend_from_slice(&s.sign(&msg).unwrap());
     }
     let b64 = base64_encode(&tx);
-    let sig = rpc("sendTransaction", json!([b64, {"encoding": "base64", "preflightCommitment": "confirmed"}])).await;
+    let sig = rpc(
+        "sendTransaction",
+        json!([b64, {"encoding": "base64", "preflightCommitment": "confirmed"}]),
+    )
+    .await;
     let sig = sig.as_str().unwrap().to_string();
     for _ in 0..60 {
         let st = rpc("getSignatureStatuses", json!([[sig]])).await;
@@ -113,7 +134,10 @@ async fn airdrop(to: &Key, lamports: u64) {
     let sig = rpc("requestAirdrop", json!([b58(to), lamports])).await;
     for _ in 0..60 {
         let st = rpc("getSignatureStatuses", json!([[sig]])).await;
-        if st["value"][0]["confirmationStatus"].as_str().is_some_and(|s| s != "processed") {
+        if st["value"][0]["confirmationStatus"]
+            .as_str()
+            .is_some_and(|s| s != "processed")
+        {
             return;
         }
         tokio::time::sleep(Duration::from_millis(400)).await;
@@ -122,7 +146,11 @@ async fn airdrop(to: &Key, lamports: u64) {
 }
 
 async fn token_balance(account: &Key) -> u64 {
-    let v = rpc("getTokenAccountBalance", json!([b58(account), {"commitment": "confirmed"}])).await;
+    let v = rpc(
+        "getTokenAccountBalance",
+        json!([b58(account), {"commitment": "confirmed"}]),
+    )
+    .await;
     v["value"]["amount"].as_str().unwrap().parse().unwrap()
 }
 
@@ -136,7 +164,10 @@ fn pk(s: &LocalSigner) -> Key {
 
 /// Mint SPL Token / Token-2022 (82 byte, không extension), authority = `admin`.
 async fn create_mint(admin: &LocalSigner, mint: &LocalSigner, tp: &Key) {
-    let rent = rpc("getMinimumBalanceForRentExemption", json!([82])).await.as_u64().unwrap();
+    let rent = rpc("getMinimumBalanceForRentExemption", json!([82]))
+        .await
+        .as_u64()
+        .unwrap();
     let mut create = 0u32.to_le_bytes().to_vec();
     create.extend_from_slice(&rent.to_le_bytes());
     create.extend_from_slice(&82u64.to_le_bytes());
@@ -146,8 +177,16 @@ async fn create_mint(admin: &LocalSigner, mint: &LocalSigner, tp: &Key) {
     init.push(0);
     send(
         vec![
-            Ix { program: SYSTEM, accounts: vec![meta(pk(admin), true, true), meta(pk(mint), true, true)], data: create },
-            Ix { program: *tp, accounts: vec![meta(pk(mint), false, true)], data: init },
+            Ix {
+                program: SYSTEM,
+                accounts: vec![meta(pk(admin), true, true), meta(pk(mint), true, true)],
+                data: create,
+            },
+            Ix {
+                program: *tp,
+                accounts: vec![meta(pk(mint), false, true)],
+                data: init,
+            },
         ],
         &[admin, mint],
     )
@@ -159,32 +198,52 @@ async fn mint_to(admin: &LocalSigner, owner: &Key, mint: &Key, tp: &Key, amount:
     let a = ata(owner, mint, tp);
     let create = Ix {
         program: key(ATA_PROGRAM).unwrap(),
-        accounts: vec![meta(pk(admin), true, true), meta(a, false, true), meta(*owner, false, false), meta(*mint, false, false),
-            meta(SYSTEM, false, false), meta(*tp, false, false)],
+        accounts: vec![
+            meta(pk(admin), true, true),
+            meta(a, false, true),
+            meta(*owner, false, false),
+            meta(*mint, false, false),
+            meta(SYSTEM, false, false),
+            meta(*tp, false, false),
+        ],
         data: vec![1],
     };
     let mut d = vec![7u8];
     d.extend_from_slice(&amount.to_le_bytes());
-    let mint_ix = Ix { program: *tp, accounts: vec![meta(*mint, false, true), meta(a, false, true), meta(pk(admin), true, false)], data: d };
+    let mint_ix = Ix {
+        program: *tp,
+        accounts: vec![
+            meta(*mint, false, true),
+            meta(a, false, true),
+            meta(pk(admin), true, false),
+        ],
+        data: d,
+    };
     send(vec![create, mint_ix], &[admin]).await;
     a
 }
 
-// ------------------------------------------------------------------ fake Odoo (same transitions as e2e.rs)
+// ------------------------------------------------------------------ fake ExternalPull (same transitions as e2e.rs)
 
 fn allowed(from: &str, to: &str) -> bool {
     matches!(
         (from, to),
         ("queued", "nonce_leased")
             | ("nonce_leased", "queued" | "signed" | "dead" | "consumed")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed")
+            | (
+                "signed",
+                "broadcast" | "mined" | "reverted" | "queued" | "dead" | "consumed"
+            )
+            | (
+                "broadcast",
+                "mined" | "reverted" | "broadcast" | "queued" | "dead" | "consumed"
+            )
             | ("mined", "reverted")
     )
 }
 
 #[derive(Default)]
-struct FakeOdoo {
+struct FakeExternalPull {
     states: std::collections::HashMap<i64, String>,
     refused: Vec<Value>,
     jobs: Vec<Value>,
@@ -197,7 +256,11 @@ struct FakeOdoo {
     inflight: Vec<Value>,
 }
 
-async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
+async fn fake(
+    State(s): State<Arc<Mutex<FakeExternalPull>>>,
+    Path((model, method)): Path<(String, String)>,
+    Json(body): Json<Value>,
+) -> Json<Value> {
     let mut o = s.lock().unwrap();
     let out = match (model.as_str(), method.as_str()) {
         ("blockchain.chain", "node_config") => json!({
@@ -214,10 +277,16 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
         ("blockchain.relay.job", "relay_report") => {
             let id = body["job_id"].as_i64().unwrap();
             let to = body["chain_state"].as_str().unwrap().to_string();
-            let from = o.states.get(&id).cloned().unwrap_or_else(|| "queued".into());
+            let from = o
+                .states
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| "queued".into());
             if !allowed(&from, &to) {
                 o.refused.push(body.clone());
-                return Json(json!({"error": format!("Transition {from} -> {to} is not allowed.")}));
+                return Json(
+                    json!({"error": format!("Transition {from} -> {to} is not allowed.")}),
+                );
             }
             o.states.insert(id, to);
             o.reports.push(body.clone());
@@ -225,13 +294,18 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
         }
         ("blockchain.chain.event", "chain_event_ingest") => {
             for e in body["events"].as_array().unwrap() {
-                if !o.tokens.iter().any(|t| Some(t.as_str()) == e["contract"].as_str()) {
+                if !o
+                    .tokens
+                    .iter()
+                    .any(|t| Some(t.as_str()) == e["contract"].as_str())
+                {
                     o.refused.push(e.clone());
                 }
             }
             o.ingests += 1;
             o.indexed_block = body["to_block"].as_u64().unwrap();
-            o.ingested.extend(body["events"].as_array().unwrap().iter().cloned());
+            o.ingested
+                .extend(body["events"].as_array().unwrap().iter().cloned());
             json!({"indexed_block": o.indexed_block, "created": 0})
         }
         _ => json!({"error": "unexpected"}),
@@ -239,22 +313,40 @@ async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path
     Json(out)
 }
 
-async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
-    let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
+async fn start_fake(state: Arc<Mutex<FakeExternalPull>>) -> SocketAddr {
+    let app = Router::new()
+        .route("/json/2/{model}/{method}", post(fake))
+        .with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     addr
 }
 
-fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
+fn external_pull_at(addr: SocketAddr) -> ExternalPull {
+    let cfg = ExternalPullCfg {
+        url: format!("http://{addr}"),
+        database: "t".into(),
+        relay_api_key_env: String::new(),
+        indexer_api_key_env: String::new(),
+    };
+    ExternalPull::with_key(&cfg, "k".into()).unwrap()
 }
 
 /// `relay_pay` của alice (ví seed R32, kind 0 = ký thẳng `T`) thành job `signed_op`.
 #[allow(clippy::too_many_arguments)]
-fn job(id: i64, network: &Key, alice: &LocalSigner, mint: &Key, tp: &str, to: &Key, amount: u64, ref_byte: u8, lane_byte: u8, valid_until: u64) -> (Value, [u8; 32]) {
+fn job(
+    id: i64,
+    network: &Key,
+    alice: &LocalSigner,
+    mint: &Key,
+    tp: &str,
+    to: &Key,
+    amount: u64,
+    ref_byte: u8,
+    lane_byte: u8,
+    valid_until: u64,
+) -> (Value, [u8; 32]) {
     let program = key(PROGRAM).unwrap();
     let from = pk(alice);
     let op = MetaOp {
@@ -331,14 +423,29 @@ impl ChainAdapter for Held {
     }
 }
 
-fn states_of(state: &Arc<Mutex<FakeOdoo>>, id: i64) -> Vec<String> {
-    state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).map(|r| r["chain_state"].as_str().unwrap().to_string()).collect()
+fn states_of(state: &Arc<Mutex<FakeExternalPull>>, id: i64) -> Vec<String> {
+    state
+        .lock()
+        .unwrap()
+        .reports
+        .iter()
+        .filter(|r| r["job_id"] == id)
+        .map(|r| r["chain_state"].as_str().unwrap().to_string())
+        .collect()
 }
 
-async fn run_job(adapter: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<FakeOdoo>>, lane: usize, j: Value) -> Vec<String> {
+async fn run_job(
+    adapter: &dyn ChainAdapter,
+    external_pull: &ExternalPull,
+    state: &Arc<Mutex<FakeExternalPull>>,
+    lane: usize,
+    j: Value,
+) -> Vec<String> {
     let id = j["id"].as_i64().unwrap();
     state.lock().unwrap().jobs.push(j);
-    assert!(lane_step(adapter, odoo, lane, "e2e").await.unwrap());
+    assert!(lane_step(adapter, external_pull, lane, "e2e")
+        .await
+        .unwrap());
     states_of(state, id)
 }
 
@@ -351,7 +458,11 @@ fn cfg(network: &str) -> ChainCfg {
         rpc_urls: vec![RPC.into()],
         lanes: vec![0, 1],
         params,
-        finality: FinalityCfg { mode: "tag".into(), depth: 0, quorum: 1 },
+        finality: FinalityCfg {
+            mode: "tag".into(),
+            depth: 0,
+            quorum: 1,
+        },
         poll_ms: 200,
         ..Default::default()
     }
@@ -362,12 +473,20 @@ fn cfg(network: &str) -> ChainCfg {
 async fn solana_payments_relay_finalize_and_never_lock_each_other() {
     let _ = tracing_subscriber::fmt().with_env_filter("warn").try_init();
     let program = key(PROGRAM).unwrap();
-    let genesis = rpc("getGenesisHash", json!([])).await.as_str().unwrap().to_string();
+    let genesis = rpc("getGenesisHash", json!([]))
+        .await
+        .as_str()
+        .unwrap()
+        .to_string();
     let network = key(&genesis).unwrap();
 
     // initialize: only the upgrade authority set at genesis (`--upgradeable-program … <authority>`).
     let authority = signer("e2e-upgrade-authority");
-    assert_eq!(b58(&pk(&authority)), "73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm", "the validator's --upgradeable-program authority");
+    assert_eq!(
+        b58(&pk(&authority)),
+        "73VoVWyfxmaWC6gUjsse6xzNTLLoEhazMCcKakXWbebm",
+        "the validator's --upgradeable-program authority"
+    );
     airdrop(&pk(&authority), 100_000_000_000).await;
     let loader = key("BPFLoaderUpgradeab1e11111111111111111111111").unwrap();
     let mut data = discriminator("global", "initialize").to_vec();
@@ -375,8 +494,13 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
     data.extend_from_slice(&pk(&authority));
     let init = Ix {
         program,
-        accounts: vec![meta(pk(&authority), true, true), meta(find_pda(&[b"config"], &program).0, false, true), meta(program, false, false),
-            meta(find_pda(&[&program], &loader).0, false, false), meta(SYSTEM, false, false)],
+        accounts: vec![
+            meta(pk(&authority), true, true),
+            meta(find_pda(&[b"config"], &program).0, false, true),
+            meta(program, false, false),
+            meta(find_pda(&[&program], &loader).0, false, false),
+            meta(SYSTEM, false, false),
+        ],
         data,
     };
     send(vec![init], &[&authority]).await;
@@ -409,147 +533,413 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
     }
     let adapter = scaas_node::adapters::build(&cfg(&genesis), &signers).unwrap();
     assert_eq!(adapter.chain_key(), format!("solana:{genesis}"));
-    assert_eq!(adapter.lanes()[0].address, "3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx");
+    assert_eq!(
+        adapter.lanes()[0].address,
+        "3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx"
+    );
     assert!(adapter.lane_balance(0).await.unwrap().unwrap() > 0);
     // first `sequence` creates the lane's deterministic durable nonce account
     let s0 = adapter.sequence(0).await.unwrap();
     let nonce0 = nonce_account(&pk(&signers[0]));
-    assert!(!rpc("getAccountInfo", json!([b58(&nonce0), {"commitment": "confirmed"}])).await["value"].is_null());
-    assert_eq!(adapter.sequence(0).await.unwrap(), s0, "stable until a tx advances it");
+    assert!(!rpc(
+        "getAccountInfo",
+        json!([b58(&nonce0), {"commitment": "confirmed"}])
+    )
+    .await["value"]
+        .is_null());
+    assert_eq!(
+        adapter.sequence(0).await.unwrap(),
+        s0,
+        "stable until a tx advances it"
+    );
     // M1: someone squats lane 1's public nonce address with lamports before its first use; creation still works
     let nonce1 = nonce_account(&pk(&signers[1]));
     airdrop(&nonce1, 1_000_000).await;
     adapter.sequence(1).await.unwrap();
-    let n1 = rpc("getAccountInfo", json!([b58(&nonce1), {"commitment": "confirmed", "encoding": "base64"}])).await;
-    assert_eq!(n1["value"]["space"].as_u64(), Some(80), "pre-funded address became the lane's nonce account");
+    let n1 = rpc(
+        "getAccountInfo",
+        json!([b58(&nonce1), {"commitment": "confirmed", "encoding": "base64"}]),
+    )
+    .await;
+    assert_eq!(
+        n1["value"]["space"].as_u64(),
+        Some(80),
+        "pre-funded address became the lane's nonce account"
+    );
 
-    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![b58(&usd), b58(&eur)], ..Default::default() }));
-    let odoo = odoo_at(start_fake(state.clone()).await);
+    let state = Arc::new(Mutex::new(FakeExternalPull {
+        tokens: vec![b58(&usd), b58(&eur)],
+        ..Default::default()
+    }));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
     let head0 = adapter.final_head().await.unwrap().expect("finalized head");
     state.lock().unwrap().indexed_block = head0.height;
 
-    // ANTI-LOCK: X `signed` on lane 0 and held; Y (Token-2022, another Odoo lane) goes all the way on lane 1.
+    // ANTI-LOCK: X `signed` on lane 0 and held; Y (Token-2022, another ExternalPull lane) goes all the way on lane 1.
     let vu = now() + 600;
-    let (x, x_digest) = job(1, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 1000, 0x11, 0xa1, vu);
-    let (y, y_digest) = job(2, &network, &alice, &eur, TOKEN_2022, &shop, 500, 0x22, 0xa2, vu);
-    let held = Held { inner: adapter.clone(), hold: 1, gate: tokio::sync::Semaphore::new(0) };
+    let (x, x_digest) = job(
+        1,
+        &network,
+        &alice,
+        &usd,
+        TOKEN_PROGRAM,
+        &shop,
+        1000,
+        0x11,
+        0xa1,
+        vu,
+    );
+    let (y, y_digest) = job(
+        2, &network, &alice, &eur, TOKEN_2022, &shop, 500, 0x22, 0xa2, vu,
+    );
+    let held = Held {
+        inner: adapter.clone(),
+        hold: 1,
+        gate: tokio::sync::Semaphore::new(0),
+    };
     state.lock().unwrap().jobs.push(x.clone());
-    let x_run = lane_step(&held, &odoo, 0, "e2e");
+    let x_run = lane_step(&held, &external_pull, 0, "e2e");
     let y_run = async {
         while states_of(&state, 1).last().map(String::as_str) != Some("signed") {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         state.lock().unwrap().jobs.push(y);
-        assert!(lane_step(&held, &odoo, 1, "e2e").await.unwrap());
-        assert_eq!(states_of(&state, 2), ["signed", "broadcast", "mined"], "Y while X is in flight");
+        assert!(lane_step(&held, &external_pull, 1, "e2e").await.unwrap());
+        assert_eq!(
+            states_of(&state, 2),
+            ["signed", "broadcast", "mined"],
+            "Y while X is in flight"
+        );
         assert_eq!(states_of(&state, 1), ["signed"], "X still held, unsent");
         held.gate.add_permits(1);
     };
-    let joined = tokio::time::timeout(Duration::from_secs(120), async { tokio::join!(x_run, y_run) }).await;
-    let Ok((x_done, ())) = joined else { panic!("lanes stuck: {:#?}", state.lock().unwrap().reports) };
+    let joined = tokio::time::timeout(Duration::from_secs(120), async {
+        tokio::join!(x_run, y_run)
+    })
+    .await;
+    let Ok((x_done, ())) = joined else {
+        panic!("lanes stuck: {:#?}", state.lock().unwrap().reports)
+    };
     assert!(x_done.unwrap());
     assert_eq!(states_of(&state, 1), ["signed", "broadcast", "mined"]);
     assert_eq!(token_balance(&ata(&shop, &usd, &tok)).await, 1000);
     assert_eq!(token_balance(&ata(&shop, &eur, &t22)).await, 500);
     // Self-computed tx id = the signature the cluster recorded; fee = lane signature + precompile signature.
-    let x_id = state.lock().unwrap().reports.iter().find(|r| r["job_id"] == 1 && r["chain_state"] == "signed").unwrap()["tx_hash"]
+    let x_id = state
+        .lock()
+        .unwrap()
+        .reports
+        .iter()
+        .find(|r| r["job_id"] == 1 && r["chain_state"] == "signed")
+        .unwrap()["tx_hash"]
         .as_str()
         .unwrap()
         .to_string();
     let x_sig = b58(&alloy::hex::decode(x_id.trim_start_matches("0x")).unwrap());
-    let x_tx = rpc("getTransaction", json!([x_sig, {"commitment": "confirmed", "maxSupportedTransactionVersion": 1}])).await;
+    let x_tx = rpc(
+        "getTransaction",
+        json!([x_sig, {"commitment": "confirmed", "maxSupportedTransactionVersion": 1}]),
+    )
+    .await;
     assert_eq!(x_tx["transaction"]["signatures"][0], json!(x_sig));
     assert!(x_tx["meta"]["err"].is_null());
     assert_eq!(x_tx["version"], json!(1), "a v1 transaction");
     assert_eq!(x_tx["meta"]["fee"].as_u64().unwrap() % 5000, 0);
-    println!("relay_pay: fee {} lamports, {} CU", x_tx["meta"]["fee"], x_tx["meta"]["computeUnitsConsumed"]);
-    assert_eq!(adapter.tx_fee(&x_id).await.unwrap(), x_tx["meta"]["fee"].as_u64().map(u128::from));
+    println!(
+        "relay_pay: fee {} lamports, {} CU",
+        x_tx["meta"]["fee"], x_tx["meta"]["computeUnitsConsumed"]
+    );
+    assert_eq!(
+        adapter.tx_fee(&x_id).await.unwrap(),
+        x_tx["meta"]["fee"].as_u64().map(u128::from)
+    );
     // Replay X: the lane PDA nonce is used ⇒ simulation refuses ⇒ `consumed` (R80), nothing paid.
     let mut replay = x;
     replay["id"] = json!(3);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, replay).await, ["consumed"]);
+    assert_eq!(
+        run_job(adapter.as_ref(), &external_pull, &state, 0, replay).await,
+        ["consumed"]
+    );
 
     // REJECTED: bytes signed over a nonce value that has since advanced.
-    let (r6, _) = job(6, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 10, 0x66, 0xa6, vu);
+    let (r6, _) = job(
+        6,
+        &network,
+        &alice,
+        &usd,
+        TOKEN_PROGRAM,
+        &shop,
+        10,
+        0x66,
+        0xa6,
+        vu,
+    );
     let r6: Job = serde_json::from_value(r6).unwrap();
-    let stale = adapter.sign(adapter.build(&r6, 0).await.unwrap(), 0, adapter.sequence(0).await.unwrap()).await.unwrap();
-    let (adv, _) = job(61, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 10, 0x61, 0xb6, vu);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 0, adv).await, ["signed", "broadcast", "mined"]);
+    let stale = adapter
+        .sign(
+            adapter.build(&r6, 0).await.unwrap(),
+            0,
+            adapter.sequence(0).await.unwrap(),
+        )
+        .await
+        .unwrap();
+    let (adv, _) = job(
+        61,
+        &network,
+        &alice,
+        &usd,
+        TOKEN_PROGRAM,
+        &shop,
+        10,
+        0x61,
+        0xb6,
+        vu,
+    );
+    assert_eq!(
+        run_job(adapter.as_ref(), &external_pull, &state, 0, adv).await,
+        ["signed", "broadcast", "mined"]
+    );
     let err = adapter.submit(&stale).await.unwrap_err();
     assert!(err.downcast_ref::<Rejected>().is_some(), "{err:#}");
-    assert_eq!(adapter.tx_status(&stale.tx_id).await.unwrap(), TxStatus::Unknown);
+    assert_eq!(
+        adapter.tx_status(&stale.tx_id).await.unwrap(),
+        TxStatus::Unknown
+    );
 
     // RESTART. A: broadcast before the crash ⇒ the new process's recover_lane settles it mined.
-    let (a7, _) = job(7, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 70, 0x77, 0xa7, vu);
+    let (a7, _) = job(
+        7,
+        &network,
+        &alice,
+        &usd,
+        TOKEN_PROGRAM,
+        &shop,
+        70,
+        0x77,
+        0xa7,
+        vu,
+    );
     let a7: Job = serde_json::from_value(a7).unwrap();
-    let s7 = adapter.sign(adapter.build(&a7, 0).await.unwrap(), 0, adapter.sequence(0).await.unwrap()).await.unwrap();
+    let s7 = adapter
+        .sign(
+            adapter.build(&a7, 0).await.unwrap(),
+            0,
+            adapter.sequence(0).await.unwrap(),
+        )
+        .await
+        .unwrap();
     adapter.submit(&s7).await.unwrap();
     // B: signed (journaled) but never sent, payload still valid for minutes.
-    let (b8, _) = job(8, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 80, 0x88, 0xa8, vu);
+    let (b8, _) = job(
+        8,
+        &network,
+        &alice,
+        &usd,
+        TOKEN_PROGRAM,
+        &shop,
+        80,
+        0x88,
+        0xa8,
+        vu,
+    );
     let b8: Job = serde_json::from_value(b8).unwrap();
-    let s8 = adapter.sign(adapter.build(&b8, 1).await.unwrap(), 1, adapter.sequence(1).await.unwrap()).await.unwrap();
+    let s8 = adapter
+        .sign(
+            adapter.build(&b8, 1).await.unwrap(),
+            1,
+            adapter.sequence(1).await.unwrap(),
+        )
+        .await
+        .unwrap();
     drop(adapter);
     let adapter = scaas_node::adapters::build(&cfg(&genesis), &signers).unwrap(); // new process
     {
         let mut o = state.lock().unwrap();
         o.states.insert(7, "broadcast".into());
         o.states.insert(8, "signed".into());
-        o.inflight = vec![json!({"job_id": 7, "state": "broadcast", "tx_hash": s7.tx_id, "nonce": s7.sequence,
-            "payload": {"id": 7, "kind": "signed_op", "op": {"valid_until": vu}}})];
+        o.inflight = vec![
+            json!({"job_id": 7, "state": "broadcast", "tx_hash": s7.tx_id, "nonce": s7.sequence,
+            "payload": {"id": 7, "kind": "signed_op", "op": {"valid_until": vu}}}),
+        ];
     }
-    tokio::time::timeout(Duration::from_secs(60), recover_lane(adapter.as_ref(), &odoo, 0, "e2e")).await.expect("recovery A").unwrap();
+    tokio::time::timeout(
+        Duration::from_secs(60),
+        recover_lane(adapter.as_ref(), &external_pull, 0, "e2e"),
+    )
+    .await
+    .expect("recovery A")
+    .unwrap();
     assert_eq!(states_of(&state, 7), ["mined"]);
-    state.lock().unwrap().inflight = vec![json!({"job_id": 8, "state": "signed", "tx_hash": s8.tx_id, "nonce": s8.sequence,
-        "payload": {"id": 8, "kind": "signed_op", "op": {"valid_until": vu}}})];
+    state.lock().unwrap().inflight = vec![
+        json!({"job_id": 8, "state": "signed", "tx_hash": s8.tx_id, "nonce": s8.sequence,
+        "payload": {"id": 8, "kind": "signed_op", "op": {"valid_until": vu}}}),
+    ];
     let t = std::time::Instant::now();
-    tokio::time::timeout(Duration::from_secs(60), recover_lane(adapter.as_ref(), &odoo, 1, "e2e")).await.expect("recovery B").unwrap();
-    assert_eq!(states_of(&state, 8), ["queued"], "requeued at once, not held until the payload expires");
+    tokio::time::timeout(
+        Duration::from_secs(60),
+        recover_lane(adapter.as_ref(), &external_pull, 1, "e2e"),
+    )
+    .await
+    .expect("recovery B")
+    .unwrap();
+    assert_eq!(
+        states_of(&state, 8),
+        ["queued"],
+        "requeued at once, not held until the payload expires"
+    );
     assert!(t.elapsed() < Duration::from_secs(30));
-    assert!(adapter.submit(&s8).await.unwrap_err().downcast_ref::<Rejected>().is_some(), "old bytes can never land");
+    assert!(
+        adapter
+            .submit(&s8)
+            .await
+            .unwrap_err()
+            .downcast_ref::<Rejected>()
+            .is_some(),
+        "old bytes can never land"
+    );
 
     // L2: a payment in an unregistered mint lands but is never reported.
-    let (e10, _) = job(10, &network, &alice, &evil, TOKEN_PROGRAM, &shop, 33, 0xaa, 0xaa, vu);
-    assert_eq!(run_job(adapter.as_ref(), &odoo, &state, 1, e10).await, ["signed", "broadcast", "mined"]);
+    let (e10, _) = job(
+        10,
+        &network,
+        &alice,
+        &evil,
+        TOKEN_PROGRAM,
+        &shop,
+        33,
+        0xaa,
+        0xaa,
+        vu,
+    );
+    assert_eq!(
+        run_job(adapter.as_ref(), &external_pull, &state, 1, e10).await,
+        ["signed", "broadcast", "mined"]
+    );
 
     // I1: the same relay_pay wrapped in ANOTHER program's CPI (test-only forwarder) is still reported.
-    let (w12, w_digest) = job(12, &network, &alice, &usd, TOKEN_PROGRAM, &shop, 12, 0xcc, 0xcc, vu);
-    let w_op = MetaOp::decode(&alloy::hex::decode(w12["op"]["payload"].as_str().unwrap()).unwrap()).unwrap();
-    let w_auth = parse_auth(w12["op"]["signature"].as_str().unwrap(), w12["op"]["public_key"].as_str().unwrap()).unwrap();
-    let pay = Pay { program, lane: pk(&signers[0]), op: &w_op, auth: &w_auth, token_program: key(TOKEN_PROGRAM).unwrap(), subject_exists: true };
+    let (w12, w_digest) = job(
+        12,
+        &network,
+        &alice,
+        &usd,
+        TOKEN_PROGRAM,
+        &shop,
+        12,
+        0xcc,
+        0xcc,
+        vu,
+    );
+    let w_op = MetaOp::decode(&alloy::hex::decode(w12["op"]["payload"].as_str().unwrap()).unwrap())
+        .unwrap();
+    let w_auth = parse_auth(
+        w12["op"]["signature"].as_str().unwrap(),
+        w12["op"]["public_key"].as_str().unwrap(),
+    )
+    .unwrap();
+    let pay = Pay {
+        program,
+        lane: pk(&signers[0]),
+        op: &w_op,
+        auth: &w_auth,
+        token_program: key(TOKEN_PROGRAM).unwrap(),
+        subject_exists: true,
+    };
     let mut inner = relay_pay_ix(&pay);
     assert_eq!(inner.data[226], 1, "Auth.precompile_ix");
     inner.data[226] = 0; // no AdvanceNonce here: the precompile is instruction 0
     let mut accounts = vec![meta(program, false, false)];
     accounts.extend(inner.accounts);
-    let wrapped = Ix { program: key(WRAPPER).unwrap(), accounts, data: inner.data };
-    let w_sig = send(vec![auth_ix(&w_auth, &w_op.digest()), wrapped], &[&signers[0]]).await;
-    let w_tx = rpc("getTransaction", json!([w_sig, {"commitment": "confirmed", "maxSupportedTransactionVersion": 1}])).await;
-    assert!(w_tx["meta"]["logMessages"].as_array().unwrap().iter().any(|l| l.as_str() == Some(&format!("Program {PROGRAM} invoke [2]"))), "relay_pay ran as a CPI");
+    let wrapped = Ix {
+        program: key(WRAPPER).unwrap(),
+        accounts,
+        data: inner.data,
+    };
+    let w_sig = send(
+        vec![auth_ix(&w_auth, &w_op.digest()), wrapped],
+        &[&signers[0]],
+    )
+    .await;
+    let w_tx = rpc(
+        "getTransaction",
+        json!([w_sig, {"commitment": "confirmed", "maxSupportedTransactionVersion": 1}]),
+    )
+    .await;
+    assert!(
+        w_tx["meta"]["logMessages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|l| l.as_str() == Some(&format!("Program {PROGRAM} invoke [2]"))),
+        "relay_pay ran as a CPI"
+    );
 
     // Finality: index until X, Y, R6-advance, A and the wrapped pay are reported (finalized lags ~32 slots).
     for _ in 0..240 {
-        while index_step(adapter.as_ref(), &odoo).await.unwrap() {}
-        if state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count() >= 5 {
+        while index_step(adapter.as_ref(), &external_pull).await.unwrap() {}
+        if state
+            .lock()
+            .unwrap()
+            .ingested
+            .iter()
+            .filter(|e| e["event"] == "PaymentSettled")
+            .count()
+            >= 5
+        {
             break;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     let ing = state.lock().unwrap().ingested.clone();
-    let settled: Vec<&Value> = ing.iter().filter(|e| e["event"] == "PaymentSettled").collect();
-    assert_eq!(settled.len(), 5, "X, Y, 61, A, wrapped — not EVIL: {ing:#?}");
-    let pay_w = settled.iter().find(|e| e["entry_ref"] == json!(format!("0x{}", "cc".repeat(32)))).expect("wrapped pay settled");
+    let settled: Vec<&Value> = ing
+        .iter()
+        .filter(|e| e["event"] == "PaymentSettled")
+        .collect();
+    assert_eq!(
+        settled.len(),
+        5,
+        "X, Y, 61, A, wrapped — not EVIL: {ing:#?}"
+    );
+    let pay_w = settled
+        .iter()
+        .find(|e| e["entry_ref"] == json!(format!("0x{}", "cc".repeat(32))))
+        .expect("wrapped pay settled");
     assert_eq!(pay_w["amount"].as_str(), Some("12"));
-    let pay_x = settled.iter().find(|e| e["entry_ref"] == json!(format!("0x{}", "11".repeat(32)))).expect("X settled");
-    assert_eq!((pay_x["contract"].as_str(), pay_x["to"].as_str(), pay_x["amount"].as_str()), (Some(b58(&usd).as_str()), Some(b58(&shop).as_str()), Some("1000")));
+    let pay_x = settled
+        .iter()
+        .find(|e| e["entry_ref"] == json!(format!("0x{}", "11".repeat(32))))
+        .expect("X settled");
+    assert_eq!(
+        (
+            pay_x["contract"].as_str(),
+            pay_x["to"].as_str(),
+            pay_x["amount"].as_str()
+        ),
+        (
+            Some(b58(&usd).as_str()),
+            Some(b58(&shop).as_str()),
+            Some("1000")
+        )
+    );
     assert_eq!(pay_x["from"], json!(b58(&pk(&alice))));
     assert_eq!(pay_x["tx_hash"], json!(x_id));
-    let pay_y = settled.iter().find(|e| e["entry_ref"] == json!(format!("0x{}", "22".repeat(32)))).expect("Y settled");
+    let pay_y = settled
+        .iter()
+        .find(|e| e["entry_ref"] == json!(format!("0x{}", "22".repeat(32))))
+        .expect("Y settled");
     assert_eq!(pay_y["contract"], json!(b58(&eur)), "Token-2022 mint");
     for d in [x_digest, y_digest, w_digest] {
-        assert!(ing.iter().any(|e| e["event"] == "MetaTransactionExecuted" && e["digest"] == json!(format!("0x{}", alloy::hex::encode(d)))));
+        assert!(ing.iter().any(|e| e["event"] == "MetaTransactionExecuted"
+            && e["digest"] == json!(format!("0x{}", alloy::hex::encode(d)))));
     }
-    assert!(ing.iter().all(|e| e["block_hash"].as_str().unwrap().len() == 66 && e["tx_hash"].as_str().unwrap().len() == 130));
-    assert!(state.lock().unwrap().refused.is_empty(), "{:#?}", state.lock().unwrap().refused);
+    assert!(ing
+        .iter()
+        .all(|e| e["block_hash"].as_str().unwrap().len() == 66
+            && e["tx_hash"].as_str().unwrap().len() == 130));
+    assert!(
+        state.lock().unwrap().refused.is_empty(),
+        "{:#?}",
+        state.lock().unwrap().refused
+    );
 
     // Empty token list ⇒ no ingest, the cursor holds (L1).
     let (cursor, ingests) = {
@@ -558,7 +948,7 @@ async fn solana_payments_relay_finalize_and_never_lock_each_other() {
         o.indexed_block = o.indexed_block.saturating_sub(5);
         (o.indexed_block, o.ingests)
     };
-    assert!(!index_step(adapter.as_ref(), &odoo).await.unwrap());
+    assert!(!index_step(adapter.as_ref(), &external_pull).await.unwrap());
     let o = state.lock().unwrap();
     assert_eq!((o.indexed_block, o.ingests), (cursor, ingests));
 }

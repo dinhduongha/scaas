@@ -25,7 +25,8 @@ import {EnvKit} from "../../helpers/EnvKit.sol";
 /// something to check, so a vacuous pass is visible. **UNAUDITED.**
 contract PayTaxHandler is Test {
     bytes32 internal constant UA_PAY_WITH_TAX = keccak256(
-        "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
     uint32 internal constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
     address internal constant RELAYER = address(0xBEEF);
 
@@ -42,7 +43,9 @@ contract PayTaxHandler is Test {
 
     constructor(address t_, address issuer_, address r0, address r1) {
         (t, issuer, recipients) = (t_, issuer_, [r0, r1]);
-        for (uint256 i; i < 3; ++i) eoas[i] = vm.addr(pks[i]);
+        for (uint256 i; i < 3; ++i) {
+            eoas[i] = vm.addr(pks[i]);
+        }
     }
 
     function recipient(uint256 i) external view returns (address) {
@@ -59,10 +62,23 @@ contract PayTaxHandler is Test {
     }
 
     function _x(uint256 i, uint256 j, uint256 v, bytes32 ref, uint256 lane)
-        internal view returns (MetaTxLib.UAMetaTransfer memory x)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransfer memory x)
     {
-        x = MetaTxLib.UAMetaTransfer(nid(eoas[i]), nid(eoas[j]), v, ref, lane, NormalToken(t).mtxNonce(nid(eoas[i]), lane),
-            block.timestamp + 300, RR, RELAYER, 0, address(0));
+        x = MetaTxLib.UAMetaTransfer(
+            nid(eoas[i]),
+            nid(eoas[j]),
+            v,
+            ref,
+            lane,
+            NormalToken(t).mtxNonce(nid(eoas[i]), lane),
+            block.timestamp + 300,
+            RR,
+            RELAYER,
+            0,
+            address(0)
+        );
     }
 
     function _sign(uint256 i, bytes32 d) internal view returns (IUARegistry.UASig memory s) {
@@ -96,7 +112,9 @@ contract PayTaxHandler is Test {
         IRegulatedToken.TaxConfig memory c = IRegulatedToken(t).taxConfig();
         if (c.effectivePpm <= effBefore) return;
         ++hits[4];
-        if (c0.eta == 0 || block.timestamp < c0.eta || c.effectivePpm != c0.pendingPpm) _bad(4, "rate rose before eta");
+        if (c0.eta == 0 || block.timestamp < c0.eta || c.effectivePpm != c0.pendingPpm) {
+            _bad(4, "rate rose before eta");
+        }
     }
 
     // ------------------------------------------------------------------ the pay entries
@@ -115,9 +133,13 @@ contract PayTaxHandler is Test {
         // J2: the same signature never lands twice, on this entry or the plain transfer
         ++hits[2];
         vm.prank(RELAYER);
-        try NormalToken(t).mtxPay(x, s, m) returns (bool) { _bad(2, "mtxPay replayed"); } catch {}
+        try NormalToken(t).mtxPay(x, s, m) returns (bool) {
+            _bad(2, "mtxPay replayed");
+        } catch {}
         vm.prank(RELAYER);
-        try NormalToken(t).mtxExecuteTransfer(x, s) returns (bool) { _bad(2, "replayed as a plain transfer"); } catch {}
+        try NormalToken(t).mtxExecuteTransfer(x, s) returns (bool) {
+            _bad(2, "replayed as a plain transfer");
+        } catch {}
     }
 
     function payDirect(uint256 i, uint256 j, uint256 v) external {
@@ -136,7 +158,8 @@ contract PayTaxHandler is Test {
         (i, j) = (i % 3, j % 3);
         if (i == j) return;
         v = bound(v, 0, IERC20(t).balanceOf(eoas[i]));
-        uint256 tax = percent ? Math.mulDiv(v, IRegulatedToken(t).taxConfig().effectivePpm, 1_000_000) : bound(amt, 0, v);
+        uint256 tax =
+            percent ? Math.mulDiv(v, IRegulatedToken(t).taxConfig().effectivePpm, 1_000_000) : bound(amt, 0, v);
         uint8 mode = percent ? 1 : 2;
         (MetaTxLib.PayMeta memory m, bytes32 ref) = _meta();
         MetaTxLib.UAMetaTransfer memory x = _x(i, j, v, ref, 9);
@@ -151,14 +174,17 @@ contract PayTaxHandler is Test {
         _books(x.from, x.to, r, v, tax, b0);
         ++hits[2];
         vm.prank(RELAYER);
-        try IRegulatedToken(t).mtxPayWithTax(x, mode, tax, s, m) returns (bool) { _bad(2, "mtxPayWithTax replayed"); } catch {}
+        try IRegulatedToken(t).mtxPayWithTax(x, mode, tax, s, m) returns (bool) {
+            _bad(2, "mtxPayWithTax replayed");
+        } catch {}
     }
 
     function payTaxDirect(uint256 i, uint256 j, uint256 v, bool percent, uint256 amt) external {
         (i, j) = (i % 3, j % 3);
         if (i == j) return;
         v = bound(v, 0, IERC20(t).balanceOf(eoas[i]));
-        uint256 tax = percent ? Math.mulDiv(v, IRegulatedToken(t).taxConfig().effectivePpm, 1_000_000) : bound(amt, 0, v);
+        uint256 tax =
+            percent ? Math.mulDiv(v, IRegulatedToken(t).taxConfig().effectivePpm, 1_000_000) : bound(amt, 0, v);
         (MetaTxLib.PayMeta memory m, bytes32 ref) = _meta();
         bytes32 r = IRegulatedToken(t).taxConfig().taxRecipient;
         (bytes32 from, bytes32 to) = (nid(eoas[i]), nid(eoas[j]));
@@ -176,8 +202,10 @@ contract PayTaxHandler is Test {
         ++hits[3];
         if (_bal(from) != b0[0] - v || _bal(to) != b0[1] + v - tax || _bal(r) != b0[2] + tax) _bad(3, "books");
         ++hits[5];
-        if (r == 0 || r == to || r == MetaTxLib.pad(MetaTxLib.UA_POOL) || r == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)
-            || r == nid(t) || tax > v) _bad(5, "the tax leg");
+        if (
+            r == 0 || r == to || r == MetaTxLib.pad(MetaTxLib.UA_POOL) || r == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)
+                || r == nid(t) || tax > v
+        ) _bad(5, "the tax leg");
         if (tax != 0) ++hits[6];
     }
 

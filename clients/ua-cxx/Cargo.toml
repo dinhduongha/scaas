@@ -15,7 +15,14 @@ crate-type = ["staticlib", "rlib"]
 # ua-rs-sign T13a: the wallet (spec §9.1) and both facades at the default PQZ set (MD-5, as ua-c's default), `mlock` on native
 # builds; never `vectors` (src/wallet.rs refuses it at compile time)
 [dependencies]
-scaas-ua = { path = "../ua-rs", default-features = false, features = ["json", "wallet", "mlock", "zether", "pqz", "pqz-set-n2304-kmax4096"] }
+scaas-ua = { path = "../ua-rs", default-features = false, features = [
+  "json",
+  "wallet",
+  "mlock",
+  "zether",
+  "pqz",
+  "pqz-set-n2304-kmax4096",
+] }
 cxx = "=1.0.202"
 zeroize = "=1.8.2"
 

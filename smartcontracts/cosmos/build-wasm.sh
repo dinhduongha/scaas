@@ -9,20 +9,20 @@ cd "$(dirname "$0")"
 export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=--allow-undefined"
 mkdir -p artifacts
 for c in token mandate dex relayfee relayexec; do
-  cargo build -j2 --release --lib --target wasm32-unknown-unknown -p "scaas-$c"
-  wasm-opt -Os --enable-bulk-memory --enable-sign-ext --enable-mutable-globals --enable-nontrapping-float-to-int \
-    --enable-reference-types --enable-multivalue \
-    --llvm-memory-copy-fill-lowering --signext-lowering --llvm-nontrapping-fptoint-lowering \
-    --strip-target-features --strip-debug \
-    "target/wasm32-unknown-unknown/release/scaas_$c.wasm" -o "artifacts/scaas_$c.wasm"
-  wasm-opt --mvp-features --enable-mutable-globals "artifacts/scaas_$c.wasm" -o /dev/null
+    cargo build -j2 --release --lib --target wasm32-unknown-unknown -p "scaas-$c"
+    wasm-opt -Os --enable-bulk-memory --enable-sign-ext --enable-mutable-globals --enable-nontrapping-float-to-int \
+        --enable-reference-types --enable-multivalue \
+        --llvm-memory-copy-fill-lowering --signext-lowering --llvm-nontrapping-fptoint-lowering \
+        --strip-target-features --strip-debug \
+        "target/wasm32-unknown-unknown/release/scaas_$c.wasm" -o "artifacts/scaas_$c.wasm"
+    wasm-opt --mvp-features --enable-mutable-globals "artifacts/scaas_$c.wasm" -o /dev/null
 done
 # --allow-undefined turns ANY missing symbol into an import: fail unless every import is a cosmwasm-std 3.0.10 host
 # function in `env` (src/exports/imports.rs). `cosmwasm-check` when installed, else this stdlib parser.
 if command -v cosmwasm-check >/dev/null; then
-  cosmwasm-check artifacts/*.wasm
+    cosmwasm-check artifacts/*.wasm
 else
-  python3 -I - artifacts/*.wasm <<'EOF'
+    python3 -I - artifacts/*.wasm <<'EOF'
 import sys
 ALLOWED = set("""abort db_read db_write db_remove db_scan db_next db_next_key db_next_value addr_validate addr_canonicalize
 addr_humanize bls12_381_aggregate_g1 bls12_381_aggregate_g2 bls12_381_pairing_equality bls12_381_hash_to_g1

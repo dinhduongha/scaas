@@ -1,0 +1,3 @@
+# dart format reads the page width here (the repository's 120, as rustfmt.toml / .clang-format / .prettierrc).
+formatter:
+  page_width: 120

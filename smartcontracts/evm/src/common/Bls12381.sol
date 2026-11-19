@@ -28,12 +28,12 @@ pragma solidity ^0.8.20;
 /// `G1ADD`/`G2ADD` **chỉ** kiểm on-curve. Nghĩa là tổng hợp khoá bằng một chuỗi `G2ADD` rẻ
 /// tiền là **không** được bảo vệ — phải ép qua `G2MSM` k=1 một lần lúc đăng ký (§02.5.3).
 library Bls12381 {
-    address internal constant G1ADD         = address(0x0b);
-    address internal constant G1MSM         = address(0x0c);
-    address internal constant G2ADD         = address(0x0d);
-    address internal constant G2MSM         = address(0x0e);
+    address internal constant G1ADD = address(0x0b);
+    address internal constant G1MSM = address(0x0c);
+    address internal constant G2ADD = address(0x0d);
+    address internal constant G2MSM = address(0x0e);
     address internal constant PAIRING_CHECK = address(0x0f);
-    address internal constant MAP_FP_TO_G1  = address(0x10);
+    address internal constant MAP_FP_TO_G1 = address(0x10);
     address internal constant MAP_FP2_TO_G2 = address(0x11);
 
     uint256 internal constant FP_BYTES = 64;
@@ -47,8 +47,7 @@ library Bls12381 {
     ///      — một chữ ký BLS thật verify qua `PAIRING_CHECK` với hằng số này trả về 1, và
     ///      trả 0 khi đổi thông điệp. Hằng số sai thì phép kiểm dương tính đã không qua.
     ///      Toạ độ Fp2 xếp `c0` TRƯỚC `c1`, mỗi Fp là 64 byte (16 byte 0 ở đầu).
-    bytes internal constant NEG_G2_GENERATOR =
-        hex"00000000000000000000000000000000024aa2b2f08f0a91260805272dc51051"
+    bytes internal constant NEG_G2_GENERATOR = hex"00000000000000000000000000000000024aa2b2f08f0a91260805272dc51051"
         hex"c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
         hex"0000000000000000000000000000000013e02b6052719f607dacd3a088274f65"
         hex"596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e"
@@ -136,13 +135,17 @@ library Bls12381 {
 
     /// @notice Như `verifyMinSig` nhưng dùng sẵn `NEG_G2_GENERATOR`.
     function verifyMinSig(bytes memory hashedMsgG1, bytes memory pubkeyG2, bytes memory sigG1)
-        internal view returns (bool)
+        internal
+        view
+        returns (bool)
     {
         return verifyMinSig(NEG_G2_GENERATOR, hashedMsgG1, pubkeyG2, sigG1);
     }
 
     function _isZero(bytes memory b) private pure returns (bool z) {
         z = true;
-        for (uint256 i; i < b.length; ++i) if (b[i] != 0) return false;
+        for (uint256 i; i < b.length; ++i) {
+            if (b[i] != 0) return false;
+        }
     }
 }

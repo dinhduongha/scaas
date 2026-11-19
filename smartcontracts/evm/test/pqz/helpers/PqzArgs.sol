@@ -96,7 +96,9 @@ abstract contract PqzArgs {
         uint256 g = _groups(m, aud);
         uint256 o = 240 + 32 * m;
         t.u = new bytes[](g);
-        for (uint256 i; i < g; ++i) t.u[i] = _part(pl, o + PqzCt.PK * i, PqzCt.PK);
+        for (uint256 i; i < g; ++i) {
+            t.u[i] = _part(pl, o + PqzCt.PK * i, PqzCt.PK);
+        }
         o += PqzCt.PK * g;
         t.legs = new IPqzToken.PqzLeg[](m);
         for (uint256 j; j < m; ++j) {
@@ -122,12 +124,32 @@ abstract contract PqzArgs {
     // The client's EIP-712 hashes of the three argument structs (the wallet JSON tests in `PqzTyped.t.sol` pin them).
 
     function _hashT(IPqzToken.PqzTransferArgs memory t) internal pure returns (bytes32) {
-        return keccak256(bytes.concat(
-            abi.encode(TH_TRANSFER_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt,
-                t.ownTag),
-            abi.encode(keccak256(t.u), keccak256(t.vTo), keccak256(t.vFrom), keccak256(t.vAuditor), keccak256(t.uFrom),
-                keccak256(t.sealedMemo), _hashO(t.openingTo), _hashO(t.openingAuditor))
-        ));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    TH_TRANSFER_ARGS,
+                    t.p,
+                    t.validUntilBlock,
+                    t.shieldIn,
+                    t.fromUA,
+                    t.keyVersion,
+                    t.toUA,
+                    t.beneficiaryUA,
+                    t.salt,
+                    t.ownTag
+                ),
+                abi.encode(
+                    keccak256(t.u),
+                    keccak256(t.vTo),
+                    keccak256(t.vFrom),
+                    keccak256(t.vAuditor),
+                    keccak256(t.uFrom),
+                    keccak256(t.sealedMemo),
+                    _hashO(t.openingTo),
+                    _hashO(t.openingAuditor)
+                )
+            )
+        );
     }
 
     bytes32 internal constant TH_OPENING = keccak256("PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)");
@@ -138,21 +160,47 @@ abstract contract PqzArgs {
 
     function _hashM(IPqzToken.PqzMultiArgs memory t) internal pure returns (bytes32) {
         bytes memory us;
-        for (uint256 g; g < t.u.length; ++g) us = bytes.concat(us, keccak256(t.u[g]));
+        for (uint256 g; g < t.u.length; ++g) {
+            us = bytes.concat(us, keccak256(t.u[g]));
+        }
         bytes memory ls;
         for (uint256 j; j < t.legs.length; ++j) {
             IPqzToken.PqzLeg memory l = t.legs[j];
             ls = bytes.concat(ls, keccak256(abi.encode(TH_LEG, l.ua, keccak256(l.v), keccak256(l.vAuditor))));
         }
-        return keccak256(bytes.concat(
-            abi.encode(TH_MULTI_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.decoyFee, t.salt,
-                t.ownTag),
-            abi.encode(keccak256(us), keccak256(ls), keccak256(t.vFrom), keccak256(t.sealedMemo))
-        ));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    TH_MULTI_ARGS,
+                    t.p,
+                    t.validUntilBlock,
+                    t.shieldIn,
+                    t.fromUA,
+                    t.keyVersion,
+                    t.beneficiaryUA,
+                    t.decoyFee,
+                    t.salt,
+                    t.ownTag
+                ),
+                abi.encode(keccak256(us), keccak256(ls), keccak256(t.vFrom), keccak256(t.sealedMemo))
+            )
+        );
     }
 
     function _hashB(IPqzToken.PqzBurnArgs memory b) internal pure returns (bytes32) {
-        return keccak256(abi.encode(TH_BURN_ARGS, b.p, b.validUntilBlock, b.shieldIn, b.fromUA, b.keyVersion, b.beneficiaryUA,
-            b.ownTag, keccak256(b.u), keccak256(b.vFrom)));
+        return keccak256(
+            abi.encode(
+                TH_BURN_ARGS,
+                b.p,
+                b.validUntilBlock,
+                b.shieldIn,
+                b.fromUA,
+                b.keyVersion,
+                b.beneficiaryUA,
+                b.ownTag,
+                keccak256(b.u),
+                keccak256(b.vFrom)
+            )
+        );
     }
 }

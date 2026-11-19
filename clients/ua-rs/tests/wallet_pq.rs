@@ -10,7 +10,10 @@ use scaas_ua::{purpose_tag, ua_message};
 use serde_json::Value;
 
 fn path(f: &str) -> String {
-    format!("{}/../../smartcontracts/vectors/ua/{f}", env!("CARGO_MANIFEST_DIR"))
+    format!(
+        "{}/../../smartcontracts/vectors/ua/{f}",
+        env!("CARGO_MANIFEST_DIR")
+    )
 }
 fn load(f: &str) -> Value {
     serde_json::from_str(&std::fs::read_to_string(path(f)).unwrap()).unwrap()
@@ -33,12 +36,23 @@ fn kind_of(v: &Value) -> u16 {
 fn wallet(id: &str) -> Wallet {
     let k = load("keys.json");
     let m = arr(&k, "mnemonics").iter().find(|m| m["id"] == id).unwrap();
-    Wallet::from_mnemonic(m["words"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+    Wallet::from_mnemonic(
+        m["words"].as_str().unwrap(),
+        m["passphrase"].as_str().unwrap(),
+    )
+    .unwrap()
 }
 /// The PQ kinds: mldsa44, mldsa65, fndsa512, slhdsa128s, mldsa87, fndsa1024.
 const PQ: [u16; 6] = [0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135];
 /// Signature lengths per kind, Falcon padded.
-const SIG_LEN: [(u16, usize); 6] = [(0x0130, 2420), (0x0131, 3309), (0x0132, 666), (0x0133, 7856), (0x0134, 4627), (0x0135, 1280)];
+const SIG_LEN: [(u16, usize); 6] = [
+    (0x0130, 2420),
+    (0x0131, 3309),
+    (0x0132, 666),
+    (0x0133, 7856),
+    (0x0134, 4627),
+    (0x0135, 1280),
+];
 const FALCON: [u16; 2] = [0x0132, 0x0135];
 
 /// pq_kat.json: every PQ kind's key of the SEP-0005 mnemonic (account 0, index 0), its UA (Falcon: PQClean's seeded keygen
@@ -50,7 +64,11 @@ fn pq_kat_keys() {
     let mut n = 0;
     for (name, r) in v["kinds"].as_object().unwrap() {
         let key = w.ua_key(kind_of(&r["kind"]), 0, 0).unwrap();
-        assert_eq!(hex::encode(key.key_data()), hex::encode(bytes(&r["pk"])), "{name}");
+        assert_eq!(
+            hex::encode(key.key_data()),
+            hex::encode(bytes(&r["pk"])),
+            "{name}"
+        );
         assert_eq!(key.ua().unwrap(), b32(&r["ua"]), "{name}");
         n += 1;
     }
@@ -65,17 +83,30 @@ fn sign_json_pq_rows() {
     let s = load("sign.json");
     let w = wallet("pq_kat");
     let mut n = 0;
-    for r in arr(&s, "ua").iter().filter(|r| PQ.contains(&kind_of(&r["kind"]))) {
+    for r in arr(&s, "ua")
+        .iter()
+        .filter(|r| PQ.contains(&kind_of(&r["kind"])))
+    {
         let kind = kind_of(&r["kind"]);
         let key = w.ua_key(kind, 0, 0).unwrap();
         assert_eq!(key.key_data(), bytes(&r["keyData"]), "{r}");
         let (purpose, digest) = (b32(&r["purposeTag"]), b32(&r["digest"]));
         let ua_msg = ua_message(kind, &purpose, &digest).unwrap();
         assert_eq!(ua_msg, b32(&r["uaMsg"]), "{r}");
-        assert_eq!(pq::signed_message(kind, &ua_msg), bytes(&r["signed"]), "{r}");
-        assert!(pq::verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"])), "{r}");
+        assert_eq!(
+            pq::signed_message(kind, &ua_msg),
+            bytes(&r["signed"]),
+            "{r}"
+        );
+        assert!(
+            pq::verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"])),
+            "{r}"
+        );
         let mine = key.sign_ua(&purpose, &digest).unwrap();
-        assert_eq!(mine.len(), SIG_LEN.iter().find(|(k, _)| *k == kind).unwrap().1);
+        assert_eq!(
+            mine.len(),
+            SIG_LEN.iter().find(|(k, _)| *k == kind).unwrap().1
+        );
         assert!(pq::verify(kind, &key.key_data(), &ua_msg, &mine), "{r}");
         n += 1;
     }
@@ -92,7 +123,10 @@ fn two_release_signatures_differ() {
         let (a, b) = (key.sign_ua(&p, &d).unwrap(), key.sign_ua(&p, &d).unwrap());
         assert_ne!(a, b, "{kind:#06x}");
         let m = ua_message(kind, &p, &d).unwrap();
-        assert!(pq::verify(kind, &key.key_data(), &m, &a) && pq::verify(kind, &key.key_data(), &m, &b), "{kind:#06x}");
+        assert!(
+            pq::verify(kind, &key.key_data(), &m, &a) && pq::verify(kind, &key.key_data(), &m, &b),
+            "{kind:#06x}"
+        );
     }
 }
 
@@ -106,14 +140,24 @@ fn signed_bytes_per_scheme() {
         let key = w.ua_key(kind, 0, 0).unwrap();
         let sig = key.sign_ua(&p, &d).unwrap();
         let ua_msg = ua_message(kind, &p, &d).unwrap();
-        let pq_msg = scaas_ua::keccak256(&[&scaas_ua::tag(kind).unwrap()[..], &ua_msg].concat()).to_vec();
+        let pq_msg =
+            scaas_ua::keccak256(&[&scaas_ua::tag(kind).unwrap()[..], &ua_msg].concat()).to_vec();
         let (own, other) = if FALCON.contains(&kind) {
             (ua_msg.to_vec(), pq_msg)
         } else {
-            ([&[0u8, 0][..], &pq_msg].concat(), [&[0u8, 1, 0][..], &pq_msg].concat()) // a one-byte context
+            (
+                [&[0u8, 0][..], &pq_msg].concat(),
+                [&[0u8, 1, 0][..], &pq_msg].concat(),
+            ) // a one-byte context
         };
-        assert!(pq::verify_raw(kind, &key.key_data(), &own, &sig), "{kind:#06x}");
-        assert!(!pq::verify_raw(kind, &key.key_data(), &other, &sig), "{kind:#06x}");
+        assert!(
+            pq::verify_raw(kind, &key.key_data(), &own, &sig),
+            "{kind:#06x}"
+        );
+        assert!(
+            !pq::verify_raw(kind, &key.key_data(), &other, &sig),
+            "{kind:#06x}"
+        );
     }
 }
 
@@ -144,11 +188,46 @@ fn rs_signatures_json_rows() {
         let ua_msg = ua_message(kind, &b32(&r["purposeTag"]), &b32(&r["digest"])).unwrap();
         assert_eq!(ua_msg, b32(&r["uaMsg"]), "{r}");
         let pop = r["role"] == "pop";
-        assert!(scaas_ua::verify::verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"]), pop), "{r}");
+        assert!(
+            scaas_ua::verify::verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"]), pop),
+            "{r}"
+        );
         kinds.insert(kind);
     }
-    assert_eq!(kinds.into_iter().collect::<Vec<_>>(), [0x0103, 0x0104, 0x0105, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]);
+    assert_eq!(
+        kinds.into_iter().collect::<Vec<_>>(),
+        [0x0103, 0x0104, 0x0105, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]
+    );
     assert_eq!(arr(&f, "rows").len(), 27); // 18 + 9 pqz-scoped-key rows (T21 L03)
+                                           // CTR-UA-46: `sign_ua_app` over the sign.json portableApp rows of the same kinds, role pop, under app_purpose(appId)
+    let s = load("sign.json");
+    for r in arr(&f, "appRows") {
+        let kind = kind_of(&r["kind"]);
+        let key = w.ua_key(kind, 0, 0).unwrap();
+        assert_eq!(key.key_data(), bytes(&r["keyData"]), "{r}");
+        let purpose = scaas_ua::ua_portable::app_purpose(&b32(&r["appId"])).unwrap();
+        assert_eq!(purpose, b32(&r["purposeTag"]), "{r}");
+        let ua_msg = ua_message(kind, &purpose, &b32(&r["digest"])).unwrap();
+        assert_eq!(ua_msg, b32(&r["uaMsg"]), "{r}");
+        assert!(
+            arr(&s["portableApp"], "rows")
+                .iter()
+                .any(|x| x["uaMsg"] == r["uaMsg"]),
+            "{r}"
+        );
+        assert_eq!(r["role"], "pop");
+        assert!(
+            scaas_ua::verify::verify(
+                kind,
+                &key.key_data(),
+                &ua_msg,
+                &bytes(&r["signature"]),
+                true
+            ),
+            "{r}"
+        );
+    }
+    assert_eq!(arr(&f, "appRows").len(), 18); // 2 apps x the 9 randomized kinds
 }
 
 #[cfg(feature = "vectors")]
@@ -163,7 +242,10 @@ mod vectors {
         let s = load("sign.json");
         let w = wallet("pq_kat");
         let mut n = 0;
-        for r in arr(&s, "ua").iter().filter(|r| PQ.contains(&kind_of(&r["kind"])) && r["compare"] == "bytes") {
+        for r in arr(&s, "ua")
+            .iter()
+            .filter(|r| PQ.contains(&kind_of(&r["kind"])) && r["compare"] == "bytes")
+        {
             let kind = kind_of(&r["kind"]);
             let key = w.ua_key(kind, 0, 0).unwrap();
             let fixed = match (&r["fixed"]["rnd"], &r["fixed"]["optRand"]) {
@@ -171,7 +253,9 @@ mod vectors {
                 (_, Value::Null) => key.key_data()[..16].to_vec(), // PK.seed: FIPS 205's deterministic variant
                 other => panic!("{other:?}"),
             };
-            let sig = key.vectors_sign_ua_fixed(&b32(&r["purposeTag"]), &b32(&r["digest"]), &fixed).unwrap();
+            let sig = key
+                .vectors_sign_ua_fixed(&b32(&r["purposeTag"]), &b32(&r["digest"]), &fixed)
+                .unwrap();
             assert_eq!(hex::encode(sig), hex::encode(bytes(&r["signature"])), "{r}");
             n += 1;
         }
@@ -189,12 +273,23 @@ mod vectors {
             let kind = kind_of(&r["kind"]);
             let key = w.ua_key(kind, 0, 0).unwrap();
             let ua_msg = b32(&r["ua_msg"]);
-            assert!(pq::verify(kind, &key.key_data(), &ua_msg, &bytes(&r["sig"])), "{name}");
+            assert!(
+                pq::verify(kind, &key.key_data(), &ua_msg, &bytes(&r["sig"])),
+                "{name}"
+            );
             if FALCON.contains(&kind) {
                 continue;
             }
-            let fixed = if kind == 0x0133 { key.key_data()[..16].to_vec() } else { vec![0u8; 32] };
-            assert_eq!(hex::encode(key.vectors_sign_ua_msg(&ua_msg, &fixed).unwrap()), hex::encode(bytes(&r["sig"])), "{name}");
+            let fixed = if kind == 0x0133 {
+                key.key_data()[..16].to_vec()
+            } else {
+                vec![0u8; 32]
+            };
+            assert_eq!(
+                hex::encode(key.vectors_sign_ua_msg(&ua_msg, &fixed).unwrap()),
+                hex::encode(bytes(&r["sig"])),
+                "{name}"
+            );
             n += 1;
         }
         assert_eq!(n, 4);
@@ -206,7 +301,10 @@ mod vectors {
     fn acvp_siggen_rows() {
         let x = load("pq_external.json");
         let mut n = 0;
-        for c in arr(&x["acvp_mldsa_siggen"], "cases").iter().chain(arr(&x["acvp_slhdsa_siggen"], "cases")) {
+        for c in arr(&x["acvp_mldsa_siggen"], "cases")
+            .iter()
+            .chain(arr(&x["acvp_slhdsa_siggen"], "cases"))
+        {
             let kind = match c["set"].as_str().unwrap() {
                 "ML-DSA-44" => 0x0130,
                 "ML-DSA-65" => 0x0131,
@@ -219,8 +317,15 @@ mod vectors {
                 _ => None,
             };
             assert_eq!(rnd.is_none(), c["deterministic"].as_bool().unwrap());
-            let sig = sign_internal(kind, &bytes(&c["sk"]), &bytes(&c["mprime"]), rnd.as_deref()).unwrap();
-            assert_eq!(hex::encode(sig), hex::encode(bytes(&c["sig"])), "{} tc {}", c["set"], c["tc"]);
+            let sig = sign_internal(kind, &bytes(&c["sk"]), &bytes(&c["mprime"]), rnd.as_deref())
+                .unwrap();
+            assert_eq!(
+                hex::encode(sig),
+                hex::encode(bytes(&c["sig"])),
+                "{} tc {}",
+                c["set"],
+                c["tc"]
+            );
             n += 1;
         }
         assert_eq!(n, 16);
@@ -242,11 +347,20 @@ mod vectors {
             assert_eq!(a, b);
             assert_ne!(a, c);
             let m = ua_message(kind, &p, &d).unwrap();
-            assert!(pq::verify(kind, &key.key_data(), &m, &a) && pq::verify(kind, &key.key_data(), &m, &c));
-            assert_eq!(key.vectors_sign_ua_fixed(&p, &d, &[1u8; 87]).err(), Some(Error::Argument));
+            assert!(
+                pq::verify(kind, &key.key_data(), &m, &a)
+                    && pq::verify(kind, &key.key_data(), &m, &c)
+            );
+            assert_eq!(
+                key.vectors_sign_ua_fixed(&p, &d, &[1u8; 87]).err(),
+                Some(Error::Argument)
+            );
         }
         let key = w.ua_key(0x0131, 0, 0).unwrap();
-        assert_eq!(key.vectors_sign_ua_fixed(&p, &d, &[0u8; 31]).err(), Some(Error::Argument));
+        assert_eq!(
+            key.vectors_sign_ua_fixed(&p, &d, &[0u8; 31]).err(),
+            Some(Error::Argument)
+        );
     }
 
     /// The arena keeps what each signer rebuilds its key from: ML-DSA's 32-byte seed, SLH-DSA's 64-byte key (no keygen per
@@ -254,7 +368,12 @@ mod vectors {
     #[test]
     fn arena_keeps_the_encoded_keys() {
         let w = wallet("pq_kat");
-        for (kind, len, head) in [(0x0130, 32, None), (0x0133, 64, None), (0x0132, 1281, Some(0x59)), (0x0135, 2305, Some(0x5a))] {
+        for (kind, len, head) in [
+            (0x0130, 32, None),
+            (0x0133, 64, None),
+            (0x0132, 1281, Some(0x59)),
+            (0x0135, 2305, Some(0x5a)),
+        ] {
             let key = w.ua_key(kind, 0, 0).unwrap();
             assert!(key.vectors_secret_in_arena().unwrap(), "{kind:#06x}");
             let s = key.vectors_with_secret(|s| s.to_vec()).unwrap();
@@ -263,7 +382,11 @@ mod vectors {
                 assert_eq!(s[0], h);
             }
             if kind == 0x0133 {
-                assert_eq!(&s[32..], &key.key_data()[..], "SK.seed ‖ SK.prf ‖ PK.seed ‖ PK.root");
+                assert_eq!(
+                    &s[32..],
+                    &key.key_data()[..],
+                    "SK.seed ‖ SK.prf ‖ PK.seed ‖ PK.root"
+                );
             }
         }
     }
@@ -275,15 +398,25 @@ mod vectors {
     #[ignore]
     fn regenerate() {
         let s = load("sign.json");
-        let old = std::fs::read_to_string(path("rs_signatures.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
+        let old = std::fs::read_to_string(path("rs_signatures.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok());
         let w = wallet("pq_kat");
         let mut rows = Vec::new();
         let signed_here = |r: &&Value| {
-            r["compare"] == "verify" && (matches!(kind_of(&r["kind"]), 0x0103..=0x0105) || PQ.contains(&kind_of(&r["kind"])))
+            r["compare"] == "verify"
+                && (matches!(kind_of(&r["kind"]), 0x0103..=0x0105)
+                    || PQ.contains(&kind_of(&r["kind"])))
         };
         for r in arr(&s, "ua").iter().filter(signed_here) {
             let kind = kind_of(&r["kind"]);
-            let key = w.ua_key(kind, r["account"].as_u64().unwrap() as u32, r["index"].as_u64().unwrap() as u32).unwrap();
+            let key = w
+                .ua_key(
+                    kind,
+                    r["account"].as_u64().unwrap() as u32,
+                    r["index"].as_u64().unwrap() as u32,
+                )
+                .unwrap();
             let (purpose, digest) = (b32(&r["purposeTag"]), b32(&r["digest"]));
             let ua_msg = ua_message(kind, &purpose, &digest).unwrap();
             let mut row = serde_json::json!({
@@ -296,16 +429,71 @@ mod vectors {
             let kept = old.as_ref().and_then(|o| {
                 arr(o, "rows").iter().find(|x| {
                     let mut x = (*x).clone();
-                    let sig = x.as_object_mut().and_then(|m| m.remove("signature")).unwrap_or(Value::Null);
-                    sig.is_string() && x == row && scaas_ua::verify::verify(kind, &key.key_data(), &ua_msg, &bytes(&sig), pop)
+                    let sig = x
+                        .as_object_mut()
+                        .and_then(|m| m.remove("signature"))
+                        .unwrap_or(Value::Null);
+                    sig.is_string()
+                        && x == row
+                        && scaas_ua::verify::verify(
+                            kind,
+                            &key.key_data(),
+                            &ua_msg,
+                            &bytes(&sig),
+                            pop,
+                        )
                 })
             });
             let sig = match kept {
                 Some(x) => x["signature"].clone(),
-                None => Value::String(format!("0x{}", hex::encode(key.sign_ua(&purpose, &digest).unwrap()))),
+                None => Value::String(format!(
+                    "0x{}",
+                    hex::encode(key.sign_ua(&purpose, &digest).unwrap())
+                )),
             };
             row["signature"] = sig;
             rows.push(row);
+        }
+        // CTR-UA-46: the portableApp rows of the same kinds, signed by `sign_ua_app` (role pop), kept as the rows are
+        let mut app_rows = Vec::new();
+        for r in arr(&s["portableApp"], "rows").iter().filter(|r| {
+            matches!(kind_of(&r["kind"]), 0x0103..=0x0105) || PQ.contains(&kind_of(&r["kind"]))
+        }) {
+            let kind = kind_of(&r["kind"]);
+            let key = w.ua_key(kind, 0, 0).unwrap();
+            let (app_id, digest) = (b32(&r["appId"]), b32(&r["digest"]));
+            let ua_msg = b32(&r["uaMsg"]);
+            let mut row = serde_json::json!({
+                "app": r["app"], "appId": r["appId"], "kind": kind, "name": r["name"], "mnemonic": "pq_kat", "account": 0, "index": 0,
+                "keyData": format!("0x{}", hex::encode(key.key_data())), "purposeTag": r["purposeTag"], "digest": r["digest"],
+                "uaMsg": r["uaMsg"], "role": "pop",
+            });
+            let kept = old.as_ref().and_then(|o| {
+                o["appRows"].as_array()?.iter().find(|x| {
+                    let mut x = (*x).clone();
+                    let sig = x
+                        .as_object_mut()
+                        .and_then(|m| m.remove("signature"))
+                        .unwrap_or(Value::Null);
+                    sig.is_string()
+                        && x == row
+                        && scaas_ua::verify::verify(
+                            kind,
+                            &key.key_data(),
+                            &ua_msg,
+                            &bytes(&sig),
+                            true,
+                        )
+                })
+            });
+            row["signature"] = match kept {
+                Some(x) => x["signature"].clone(),
+                None => Value::String(format!(
+                    "0x{}",
+                    hex::encode(key.sign_ua_app(&app_id, &digest).unwrap())
+                )),
+            };
+            app_rows.push(row);
         }
         let out = serde_json::json!({
             "note": "Written by clients/ua-rs (tests/wallet_pq.rs, `cargo test --features vectors --test wallet_pq -- --ignored \
@@ -313,9 +501,16 @@ mod vectors {
                      OS randomness: hedged ML-DSA, randomized SLH-DSA, Falcon-padded, BIP-340 and scaas Schnorr with an OS aux) \
                      over the requests of the sign.json `compare: verify` rows of the pq_kat wallet; read and verified by clientkeys \
                      (test/ua-wallet.test.js), so a bug shared by one crate's signer and verifier cannot pass. A re-run keeps \
-                     every row that is still the same request and still verifies.",
+                     every row that is still the same request and still verifies. appRows (CTR-UA-46): `UaKey::sign_ua_app` over \
+                     the sign.json portableApp rows of the same kinds (role pop), apart from `rows` so that a binding re-signing \
+                     `rows` through its generic `sign_ua` meets no app purpose.",
             "rows": rows,
+            "appRows": app_rows,
         });
-        std::fs::write(path("rs_signatures.json"), serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
+        std::fs::write(
+            path("rs_signatures.json"),
+            serde_json::to_string_pretty(&out).unwrap() + "\n",
+        )
+        .unwrap();
     }
 }

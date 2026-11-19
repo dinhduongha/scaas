@@ -1,5 +1,6 @@
 """`Deployer.linked` returns the transitive link closure, leaf first (metatx-split task 6); `Signed` signs and submits a named entry.
 Run: python3 -I smartcontracts/evm/script/pqz/test_e2e_linked.py"""
+
 import importlib.util
 import json
 import os
@@ -92,8 +93,12 @@ assert e2e.Signed.spent[TOK, e2e.pad(Eoa.addr)] == 3
 sg = e2e.Signed(TOK, Eoa, PQ, R, 0)
 sg.send("WrapShield", ["0x" + "cd" * 20, 9, A], "x")
 e = [Eoa.addr] + sg.e[1:]
-assert R.sent == e2e.named_cd("WrapShield", e, ["0x" + "cd" * 20, 9, A],
-                              e2e.ecdsa(1, e2e.typed_digest("WrapShield", at, e, ["0x" + "cd" * 20, 9, A])))
+assert R.sent == e2e.named_cd(
+    "WrapShield",
+    e,
+    ["0x" + "cd" * 20, 9, A],
+    e2e.ecdsa(1, e2e.typed_digest("WrapShield", at, e, ["0x" + "cd" * 20, 9, A])),
+)
 assert R.sent[:4] == e2e.sel(f"mtxWrapShield({e2e.EVL_S},address,uint256,bytes32,bytes)")
 
 
@@ -115,5 +120,7 @@ sg = e2e.Signed(TOK, ms, PQ, R, 0)
 sg.send("RollOver", [A, 1], "x")
 d = e2e.typed_digest("UARollOver", at, sg.e, [A, 1])
 md = e2e.kc(ms.ua, e2e.ua_msg(e2e.MSIG, e2e.P_METATX, d))
-assert R.sent == e2e.named_cd("UARollOver", sg.e, [A, 1], [b"", b"", [[0, b"", ml(e2e.P_MEMBER, md)], [1, b"", ml(e2e.P_MEMBER, md)]]])
+assert R.sent == e2e.named_cd(
+    "UARollOver", sg.e, [A, 1], [b"", b"", [[0, b"", ml(e2e.P_MEMBER, md)], [1, b"", ml(e2e.P_MEMBER, md)]]]
+)
 print("ok")

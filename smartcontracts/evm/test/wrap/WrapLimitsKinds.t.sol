@@ -48,7 +48,9 @@ contract WrapLimitsZetherTest is ZetherFixture {
 
     function setUp() public {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
+        Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
         _users();
     }
 
@@ -61,7 +63,10 @@ contract WrapLimitsZetherTest is ZetherFixture {
         c.maxSupply = hybrid ? 1e30 : 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        return WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), salt)));
+        return
+            WrappedZetherToken(
+                payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), salt))
+            );
     }
 
     function test_r34_pureWrapRefusesTheBits_kind3() public {
@@ -97,14 +102,21 @@ contract WrapLimitsZetherTest is ZetherFixture {
         assertEq(t.wrapQuotaOf(MetaTxLib.pad(address(this)), address(usd)).wrapShort.left, 0, "the payer's window");
         assertEq(t.wrapQuotaOf(ZetherTypes.UA.unwrap(alice.ua), address(usd)).netWrapped, 30 * SCALE, "toUA credited");
         assertEq(t.wrapQuotaOf(MetaTxLib.pad(address(this)), address(usd)).netWrapped, 0, "the payer not");
-        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapLimitExceeded.selector, address(usd), uint8(0),
-            MetaTxLib.pad(address(this)), SCALE, 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IWrappedToken.WrapLimitExceeded.selector, address(usd), uint8(0), MetaTxLib.pad(address(this)), SCALE, 0
+            )
+        );
         w.mtxWrapShield(address(usd), SCALE, ZetherTypes.UA.unwrap(alice.ua));
     }
 
-    function _unshieldUnwrap(WrappedZetherToken w, IZetherToken.ZetherBurn memory b) internal returns (bytes memory ret) {
-        IConfidentialWrappedToken.Unwrap memory x =
-            IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 0);
+    function _unshieldUnwrap(WrappedZetherToken w, IZetherToken.ZetherBurn memory b)
+        internal
+        returns (bytes memory ret)
+    {
+        IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(
+            address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 0
+        );
         try w.mtxUnshieldUnwrap(b, x, "") {
             revert("no proof behind it");
         } catch (bytes memory e) {
@@ -119,12 +131,16 @@ contract WrapLimitsZetherTest is ZetherFixture {
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(w), type(uint256).max);
         w.wrap(address(usd), 50 * SCALE); // a public wrap: the reserve, credited to this test's public id
-        WrappedToken(payable(address(w))).setWrapLimits(legs1(address(usd), lim(0, 0)), true, false, false, EnvKit.codeUidOf(address(address(w))));
+        WrappedToken(payable(address(w)))
+            .setWrapLimits(legs1(address(usd), lim(0, 0)), true, false, false, EnvKit.codeUidOf(address(address(w))));
         IZetherToken.ZetherBurn memory b;
         (b.yFrom.x0, b.yFrom.x1) = (bytes32(uint256(1)), bytes32(uint256(2)));
         bytes32 sender = ZetherTypes.UA.unwrap(ZetherTypes.toUA(abi.encode(b.yFrom)));
-        assertEq(_unshieldUnwrap(w, b), abi.encodeWithSelector(IWrappedToken.UnwrapAboveNetWrapped.selector, address(usd),
-            sender, 10 * SCALE, 0), "the shielded id is not the public id");
+        assertEq(
+            _unshieldUnwrap(w, b),
+            abi.encodeWithSelector(IWrappedToken.UnwrapAboveNetWrapped.selector, address(usd), sender, 10 * SCALE, 0),
+            "the shielded id is not the public id"
+        );
         // the matched path: a wrap-shield credits alice's Zether id, whose check passes; the proof stage refuses
         w.mtxWrapShield(address(usd), 20 * SCALE, ZetherTypes.UA.unwrap(alice.ua));
         b.yFrom = abi.decode(alice.y, (IZetherToken.G1));
@@ -186,15 +202,18 @@ contract WrapLimitsPqzTest is PqzFixture {
         WrappedToken t = WrappedToken(payable(address(w)));
         assertEq(t.wrapQuotaOf(MetaTxLib.pad(address(this)), address(usd)).wrapShort.left, 0);
         assertEq(t.wrapQuotaOf(alice, address(usd)).netWrapped, 30 * SCALE);
-        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapLimitExceeded.selector, address(usd), uint8(0),
-            MetaTxLib.pad(address(this)), SCALE, 0));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IWrappedToken.WrapLimitExceeded.selector, address(usd), uint8(0), MetaTxLib.pad(address(this)), SCALE, 0
+            )
+        );
         w.mtxWrapShield(address(usd), SCALE, alice);
     }
 
     /// The burn on the fixture's mocked precompile: `ret` empty when it passes.
     function _unshieldUnwrap(WrappedPqzToken w, bytes32 fromUA) internal returns (bytes memory ret) {
-        bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), fromUA, bytes32(0)),
-            _blob(21, PqzCt.CT));
+        bytes memory pl =
+            bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), fromUA, bytes32(0)), _blob(21, PqzCt.CT));
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 0);
         try w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "", noVerdict()) {}
@@ -208,10 +227,13 @@ contract WrapLimitsPqzTest is PqzFixture {
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(w), type(uint256).max);
         w.wrap(address(usd), 50 * SCALE);
-        WrappedToken(payable(address(w))).setWrapLimits(legs1(address(usd), lim(0, 0)), true, false, false, EnvKit.codeUidOf(address(address(w))));
+        WrappedToken(payable(address(w)))
+            .setWrapLimits(legs1(address(usd), lim(0, 0)), true, false, false, EnvKit.codeUidOf(address(address(w))));
         bytes32 bad = bytes32(uint256(0xBAD));
-        assertEq(_unshieldUnwrap(w, bad), abi.encodeWithSelector(IWrappedToken.UnwrapAboveNetWrapped.selector, address(usd),
-            bad, 10 * SCALE, 0));
+        assertEq(
+            _unshieldUnwrap(w, bad),
+            abi.encodeWithSelector(IWrappedToken.UnwrapAboveNetWrapped.selector, address(usd), bad, 10 * SCALE, 0)
+        );
         w.mtxWrapShield(address(usd), 20 * SCALE, alice); // the matched path: alice's PQZ id credited
         bytes memory r = _unshieldUnwrap(w, alice);
         assertTrue(r.length < 4 || bytes4(r) != IWrappedToken.UnwrapAboveNetWrapped.selector, "the check passed");
@@ -260,15 +282,17 @@ contract WrapLimitsRegulatedTest is RegFixture {
         vm.prank(ownerA);
         WrappedToken(payable(t)).setWrapLimits(a, false, false, false, EnvKit.codeUidOf(address(t)));
         _freeze(t, nid(alice));
-        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapLimitExceeded.selector, address(usd), uint8(2), nid(alice),
-            50, 10));
+        vm.expectRevert(
+            abi.encodeWithSelector(IWrappedToken.WrapLimitExceeded.selector, address(usd), uint8(2), nid(alice), 50, 10)
+        );
         vm.prank(alice);
         WrappedToken(payable(t)).unwrap(address(usd), 50, alice, 0);
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(alice)));
         vm.prank(alice);
         WrappedToken(payable(t)).unwrap(address(usd), 5, alice, 0);
-        MetaTxLib.UAMetaTransaction memory m =
-            _uaTx(alice, abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(usd), 50, alice, 0), 0, 0);
+        MetaTxLib.UAMetaTransaction memory m = _uaTx(
+            alice, abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(usd), 50, alice, 0), 0, 0
+        );
         IUARegistry.UASig memory sig = _uaSig(ALICE_PK, t, m);
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(alice)));
         WrappedToken(payable(t)).mtxExecute(m, sig);
@@ -278,7 +302,8 @@ contract WrapLimitsRegulatedTest is RegFixture {
     function test_r18_disableRefusedOnKind9() public {
         address t = _hyb9(WL_CONTROLS, "h");
         vm.prank(ownerA);
-        WrappedToken(payable(t)).setWrapLimits(legs1(address(usd), lim(10, 1 days)), false, false, false, EnvKit.codeUidOf(address(t)));
+        WrappedToken(payable(t))
+            .setWrapLimits(legs1(address(usd), lim(10, 1 days)), false, false, false, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapControlActive.selector, uint8(25)));
         vm.prank(ownerA);
         WrappedToken(payable(t)).disableFeature(25, EnvKit.codeUidOf(address(WrappedToken(payable(t)))));
@@ -287,7 +312,9 @@ contract WrapLimitsRegulatedTest is RegFixture {
 
 /// Group 3l, kind `WRAPPED_ZETHER_REGULATED` (row 34). UNAUDITED.
 contract WrapLimitsZetherRegTest is ZetherRegFixture {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
     function mk(uint256 extra, bool hybrid, bytes32 salt) external returns (address) {
         IFactoryToken.TokenConfig memory c = _regCfg(false, uint256(1) << 40);
@@ -307,7 +334,9 @@ contract WrapLimitsZetherRegTest is ZetherRegFixture {
 
 /// Group 3l, kind `NORMAL_ZETHER_REGULATED` (row 19). UNAUDITED.
 contract WrapLimitsZetherRegNormalTest is ZetherRegFixture {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 
     function test_r19_normalKind10RefusesTheBits() public {
         for (uint8 bit = 25; bit <= 27; ++bit) {
@@ -321,7 +350,9 @@ contract WrapLimitsZetherRegNormalTest is ZetherRegFixture {
 
 /// Group 3l, kind `WRAPPED_PQZ_REGULATED` (row 34). UNAUDITED.
 contract WrapLimitsPqzRegTest is PqzRegFixture {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 
     function mk(uint256 extra, bool hybrid, bytes32 salt) external returns (address) {
         IFactoryToken.TokenConfig memory c = _regCfg();
@@ -341,7 +372,9 @@ contract WrapLimitsPqzRegTest is PqzRegFixture {
 
 /// Group 3l, kind `NORMAL_PQZ_REGULATED` (row 19). UNAUDITED.
 contract WrapLimitsPqzRegNormalTest is PqzRegFixture {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 
     function test_r19_normalKind12RefusesTheBits() public {
         for (uint8 bit = 25; bit <= 27; ++bit) {

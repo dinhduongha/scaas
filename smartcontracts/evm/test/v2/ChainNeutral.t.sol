@@ -63,10 +63,15 @@ contract ChainNeutralTest is Test {
         s.normalRelease = f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1);
         s.dexRelease = f.dexImplementationOf(1);
         vm.startPrank(alice);
-        s.token = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("T", "T", 6, 1e12, alice,
-            address(0))), "t");
-        s.unregistered = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, s.normalRelease,
-            abi.encode(normalInit("U", "U", 6, 0, alice, address(0))), "u");
+        s.token = f.createToken(
+            IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("T", "T", 6, 1e12, alice, address(0))), "t"
+        );
+        s.unregistered = f.createTokenUnregistered(
+            IOpenFactory.TokenKind.NORMAL,
+            s.normalRelease,
+            abi.encode(normalInit("U", "U", 6, 0, alice, address(0))),
+            "u"
+        );
         s.dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(alice), 0, alice, false, 0, address(0), 0, 0)), "d");
         vm.stopPrank();
         s.tokenCode = s.token.codehash;
@@ -74,10 +79,20 @@ contract ChainNeutralTest is Test {
         (,,, s.chainId,, s.salt,) = NormalToken(payable(s.token)).eip712Domain();
         // the instance's code is the proxy and the env this factory composes (create3_kat.json's layout)
         IFactoryToken.Env memory e = f.tokenEnvOf(IOpenFactory.TokenKind.NORMAL, 1);
-        IFactoryToken.ChainEnv memory ce = IFactoryToken.ChainEnv(uid, e.registry, f.govRouter(), e.smartKeyAccountImpl,
-            e.hedera, e.deps, e.params);
-        assertEq(s.tokenCode, keccak256(abi.encodePacked(hex"363d3d373d3d3d363d73", s.normalRelease,
-            hex"5af43d82803e903d91602b57fd5bf3", ChainEnvCode.encode(ce))), "proxy || env");
+        IFactoryToken.ChainEnv memory ce =
+            IFactoryToken.ChainEnv(uid, e.registry, f.govRouter(), e.smartKeyAccountImpl, e.hedera, e.deps, e.params);
+        assertEq(
+            s.tokenCode,
+            keccak256(
+                abi.encodePacked(
+                    hex"363d3d373d3d3d363d73",
+                    s.normalRelease,
+                    hex"5af43d82803e903d91602b57fd5bf3",
+                    ChainEnvCode.encode(ce)
+                )
+            ),
+            "proxy || env"
+        );
         assertEq(abi.encode(NormalToken(payable(s.token)).chainEnv()), abi.encode(ce), "chainEnv() the composition");
         assertEq(f.predictAddress(nid(alice), 1, 0, "t"), s.token, "predictAddress, createToken");
         assertEq(f.predictAddress(nid(alice), 1, 0, "u"), s.unregistered, "predictAddress, unregistered");
@@ -89,14 +104,25 @@ contract ChainNeutralTest is Test {
 
     /// Alice's signed transfer of 1 to `to` on `token` (nonce 0, lane 0), its digest in `token`'s domain on this chain.
     function _signed(address token, address to) internal view returns (bytes memory cd) {
-        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: nid(alice), to: nid(to), value: 1, entryRef: 0,
-            batch: 0, nonce: 0, validUntil: block.timestamp + 1 hours, mode: 0, relayer: address(0), fee: 0,
-            feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: nid(alice),
+            to: nid(to),
+            value: 1,
+            entryRef: 0,
+            batch: 0,
+            nonce: 0,
+            validUntil: block.timestamp + 1 hours,
+            mode: 0,
+            relayer: address(0),
+            fee: 0,
+            feeRecipient: address(0)
+        });
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, IERC20MetaTx(token).mtxTransferDigest(x));
         IUARegistry.UASig memory a;
         a.signature = abi.encodePacked(r, s, v);
-        cd = abi.encodeCall(IMetaTokenV2.mtxTransfer, (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode,
-            x.relayer, a));
+        cd = abi.encodeCall(
+            IMetaTokenV2.mtxTransfer, (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, a)
+        );
     }
 
     function _relay(address token, bytes memory cd) internal returns (bool ok) {
@@ -157,8 +183,10 @@ contract ChainNeutralTest is Test {
         vm.setBlockhash(999, keccak256("A 999"));
         vm.store(HISTORY, bytes32(0), UID_A);
         OpenFactory f = new OpenFactory{salt: salt_}(nid(registrar));
-        bytes memory withRef = abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), bytes32(0), 999, keccak256("A 999")));
-        bytes memory noRef = abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), bytes32(0), 0, bytes32(0)));
+        bytes memory withRef =
+            abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), bytes32(0), 999, keccak256("A 999")));
+        bytes memory noRef =
+            abi.encodeCall(OpenFactory.configureChain, (UID_A, 0, address(0), bytes32(0), 0, bytes32(0)));
         vm.prank(registrar);
         (bool ok,) = address(f).call(withRef);
         assertTrue(ok, "A configured");
@@ -171,8 +199,9 @@ contract ChainNeutralTest is Test {
         vm.etch(HISTORY, "");
         f = new OpenFactory{salt: salt_}(nid(registrar));
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.RefBlockMismatch.selector, 999, keccak256("A 999"),
-            keccak256("C 999")));
+        vm.expectRevert(
+            abi.encodeWithSelector(IOpenFactory.RefBlockMismatch.selector, 999, keccak256("A 999"), keccak256("C 999"))
+        );
         f.configureChain(UID_A, 0, address(0), bytes32(0), 999, keccak256("A 999"));
         // without the reference the replay binds C to A's chain_uid, and A's signature runs on C's twin
         vm.prank(registrar);
@@ -200,12 +229,19 @@ contract ChainNeutralTest is Test {
     function _plainToken(OpenFactory f, address registrar) internal returns (address t) {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), ""); // T66b: its body modules, pinned
         vm.startPrank(registrar);
-        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)),
-            withModules(plainEnv(address(f), address(0), bytes32(0), address(0), false), ms));
-        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f)));
+        f.publishTokenEnv(
+            IOpenFactory.TokenKind.NORMAL,
+            1,
+            EnvKit.uidOf(address(f)),
+            withModules(plainEnv(address(f), address(0), bytes32(0), address(0), false), ms)
+        );
+        f.deployTokenImplementation(
+            IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f))
+        );
         vm.stopPrank();
         vm.prank(alice);
-        t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("T", "T", 6, 1e12, alice, address(0))),
-            "t");
+        t = f.createToken(
+            IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("T", "T", 6, 1e12, alice, address(0))), "t"
+        );
     }
 }

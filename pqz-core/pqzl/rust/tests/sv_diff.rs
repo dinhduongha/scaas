@@ -41,8 +41,8 @@ fn vectors_verify_fast() {
 #[allow(clippy::needless_range_loop)] // the index loops follow pqz_sv_diff.c's
 mod harness {
     use pqzl::{
-        encrypt, keypair_from_secret, test_mutate, Ctx, MAX_PROOF, POLYVEC_BYTES as PV, PROOF_SYSTEM_ID, PROOF_SYSTEM_SPLIT_ID,
-        V_BYTES as VB,
+        encrypt, keypair_from_secret, test_mutate, Ctx, MAX_PROOF, POLYVEC_BYTES as PV,
+        PROOF_SYSTEM_ID, PROOF_SYSTEM_SPLIT_ID, V_BYTES as VB,
     };
 
     const Q: u64 = pqzl::Q;
@@ -72,10 +72,36 @@ mod harness {
     }
 
     pub const KIND: [&str; 30] = [
-        "honest", "reencode", "bitflip", "byte_set", "random_bytes", "truncate", "extend", "stmt_coeff", "stmt_oob",
-        "stmt_prefix", "stmt_scalar", "other_proof", "bench_k4_unary", "m_swap_z1", "m_swap_z21", "m_swap_z3z4",
-        "m_z1_pm1", "m_z1_large", "m_z4_bound", "m_z3_large", "m_h", "m_hint", "m_c", "m_tB", "m_tA1", "m_z21_pm1",
-        "m_swap_h", "stmt_legs", "stmt_auditor", "fuzz",
+        "honest",
+        "reencode",
+        "bitflip",
+        "byte_set",
+        "random_bytes",
+        "truncate",
+        "extend",
+        "stmt_coeff",
+        "stmt_oob",
+        "stmt_prefix",
+        "stmt_scalar",
+        "other_proof",
+        "bench_k4_unary",
+        "m_swap_z1",
+        "m_swap_z21",
+        "m_swap_z3z4",
+        "m_z1_pm1",
+        "m_z1_large",
+        "m_z4_bound",
+        "m_z3_large",
+        "m_h",
+        "m_hint",
+        "m_c",
+        "m_tB",
+        "m_tA1",
+        "m_z21_pm1",
+        "m_swap_h",
+        "stmt_legs",
+        "stmt_auditor",
+        "fuzz",
     ];
     const NK: usize = KIND.len();
     /// first decoded-field kind = test_mutate kind 0
@@ -115,7 +141,11 @@ mod harness {
             5 => "R_TX0".into(),
             r if r == TXS_REL => "R_TXS".into(),
             r if r == TXS_REL + 1 => "R_TXS0".into(),
-            _ => format!("R_TXM{}{}", TXD[rel - 6].0, if TXD[rel - 6].1 == 1 { "" } else { "_0" }),
+            _ => format!(
+                "R_TXM{}{}",
+                TXD[rel - 6].0,
+                if TXD[rel - 6].1 == 1 { "" } else { "_0" }
+            ),
         }
     }
     fn op(rel: usize) -> u8 {
@@ -264,7 +294,17 @@ mod harness {
             st[HDR_SALT..HDR_SALT + 16].fill(0);
             st[HDR_RECIPIENT..HDR_RECIPIENT + 32].fill(0);
             let mut p = HEADER;
-            for part in [&kf.pk[..], &kt.pk[..], &ka.pk[..], &t.u[..], &t.vs[0][..], &o.u[..], &o.vs[0][..], &o.vs[1][..], &o.vs[2][..]] {
+            for part in [
+                &kf.pk[..],
+                &kt.pk[..],
+                &ka.pk[..],
+                &t.u[..],
+                &t.vs[0][..],
+                &o.u[..],
+                &o.vs[0][..],
+                &o.vs[1][..],
+                &o.vs[2][..],
+            ] {
                 st[p..p + part.len()].copy_from_slice(part);
                 p += part.len();
             }
@@ -289,7 +329,15 @@ mod harness {
             s0[..HEADER].copy_from_slice(&st[..HEADER]);
             s0[HDR_AUDITOR_ON + 31] = 0;
             let mut p = HEADER;
-            for part in [&kf.pk[..], &kt.pk[..], &t.u[..], &t.vs[0][..], &o.u[..], &o.vs[0][..], &o.vs[1][..]] {
+            for part in [
+                &kf.pk[..],
+                &kt.pk[..],
+                &t.u[..],
+                &t.vs[0][..],
+                &o.u[..],
+                &o.vs[0][..],
+                &o.vs[1][..],
+            ] {
                 s0[p..p + part.len()].copy_from_slice(part);
                 p += part.len();
             }
@@ -397,7 +445,11 @@ mod harness {
                 st[DISC_AMOUNT..DISC_AMOUNT + 64].fill(0);
                 be8(&mut st[DISC_AMOUNT + 24..], v);
                 // kind word: SENDER_S 0, RECEIVER_X 1, AUDITOR 2
-                st[DISC_KIND + 31] = if k == 1 { 1 + (self.rnd() % 2) as u8 } else { 0 };
+                st[DISC_KIND + 31] = if k == 1 {
+                    1 + (self.rnd() % 2) as u8
+                } else {
+                    0
+                };
                 st[DISC_PK..DISC_PK + PV].copy_from_slice(&kt.pk[..]);
                 st[DISC_PK + PV..DISC_PK + 2 * PV].copy_from_slice(&o.u[..]);
                 st[DISC_PK + 2 * PV..].copy_from_slice(&o.vs[0]);
@@ -431,11 +483,19 @@ mod harness {
             let (kf, ka) = (self.keygen(), self.keygen());
             let kr: Vec<Key> = (0..m).map(|_| self.keygen()).collect();
             let bal = self.rnd() % (1 << 48);
-            let fee = if self.rnd().is_multiple_of(4) { 0 } else { self.rnd() % 4096 % (bal + 1) };
+            let fee = if self.rnd().is_multiple_of(4) {
+                0
+            } else {
+                self.rnd() % 4096 % (bal + 1)
+            };
             let mut left = bal - fee;
             let mut dg = Vec::new();
             for _ in 0..m {
-                let aj = if self.rnd() & 1 == 1 { self.rnd() % (left / 2 + 1) } else { 0 };
+                let aj = if self.rnd() & 1 == 1 {
+                    self.rnd() % (left / 2 + 1)
+                } else {
+                    0
+                };
                 dg.push(digits(aj));
                 left -= aj;
             }
@@ -450,16 +510,31 @@ mod harness {
                 r.push(self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64));
                 e1.push(self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64));
             }
-            let (mut e2, mut e2a, mut u, mut v, mut va) = (Vec::new(), Vec::new(), vec![None; g], Vec::new(), Vec::new());
+            let (mut e2, mut e2a, mut u, mut v, mut va) = (
+                Vec::new(),
+                Vec::new(),
+                vec![None; g],
+                Vec::new(),
+                Vec::new(),
+            );
             for j in 0..m {
                 e2.push(self.short16::<16>(20, 64));
                 e2a.push(self.short16::<16>(20, 64));
-                let o = encrypt(&[&*kr[j].pk], &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2[j]]).unwrap();
+                let o =
+                    encrypt(&[&*kr[j].pk], &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2[j]]).unwrap();
                 u[j / lpg] = Some(o.u);
                 v.push(o.vs[0]);
                 if a == 1 {
                     let w = [(j % lpg) as u8]; // the copy's window (R0-1)
-                    let o = pqzl::encrypt_win(&[&*ka.pk], &w, &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2a[j]]).unwrap();
+                    let o = pqzl::encrypt_win(
+                        &[&*ka.pk],
+                        &w,
+                        &[dg[j]],
+                        &r[j / lpg],
+                        &e1[j / lpg],
+                        &[e2a[j]],
+                    )
+                    .unwrap();
                     va.push(o.vs[0]);
                 }
             }
@@ -503,7 +578,8 @@ mod harness {
             for gi in 0..g {
                 se(&r[gi], &e1[gi], &mut w);
             }
-            let e16 = |e: &[i16; 16], w: &mut Vec<u8>| w.extend(e.iter().flat_map(|x| x.to_le_bytes()));
+            let e16 =
+                |e: &[i16; 16], w: &mut Vec<u8>| w.extend(e.iter().flat_map(|x| x.to_le_bytes()));
             for x in &e2 {
                 e16(x, &mut w);
             }
@@ -521,10 +597,18 @@ mod harness {
         }
 
         /// one round of the mutation list on proof pf of statement st (pqz_sv_diff.c mutate_round)
-        fn mutate_round(&mut self, rel: usize, st: &[u8], pf: &[u8], fuzz: usize, out: &mut Vec<Case>) {
+        fn mutate_round(
+            &mut self,
+            rel: usize,
+            st: &[u8],
+            pf: &[u8],
+            fuzz: usize,
+            out: &mut Vec<Case>,
+        ) {
             let op = op(rel);
             let len = pf.len();
-            let mut check = |kind, stmt: Option<Vec<u8>>, proof: Vec<u8>| out.push(Case { kind, stmt, proof });
+            let mut check =
+                |kind, stmt: Option<Vec<u8>>, proof: Vec<u8>| out.push(Case { kind, stmt, proof });
             // byte level
             let mut bad = pf.to_vec();
             let bit = (self.rnd() % (8 * len as u64)) as usize;
@@ -537,12 +621,20 @@ mod harness {
             let mut bad = vec![0u8; len];
             self.rnd_bytes(&mut bad);
             check(4, None, bad);
-            let n = if self.rnd() & 1 == 1 { len - 1 - (self.rnd() % 64) as usize } else { (self.rnd() % len as u64) as usize };
+            let n = if self.rnd() & 1 == 1 {
+                len - 1 - (self.rnd() % 64) as usize
+            } else {
+                (self.rnd() % len as u64) as usize
+            };
             check(5, None, pf[..n].to_vec());
             let mut bad = pf.to_vec();
             let n = 1 + self.rnd() % 16;
             for _ in 0..n {
-                let b = if self.rnd() & 1 == 1 { 0 } else { self.rnd() as u8 };
+                let b = if self.rnd() & 1 == 1 {
+                    0
+                } else {
+                    self.rnd() as u8
+                };
                 bad.push(b);
             }
             check(6, None, bad);
@@ -551,7 +643,11 @@ mod harness {
             let mut st2 = st.to_vec();
             let off = p0 + 8 * (self.rnd() % ncoef as u64) as usize;
             let mut v = u64::from_be_bytes(st2[off..off + 8].try_into().unwrap());
-            v = if v < Q { (v + 1 + self.rnd() % 7) % Q } else { v };
+            v = if v < Q {
+                (v + 1 + self.rnd() % 7) % Q
+            } else {
+                v
+            };
             st2[off..off + 8].copy_from_slice(&v.to_be_bytes());
             check(7, Some(st2), pf.to_vec());
             let mut st2 = st.to_vec();
@@ -578,7 +674,11 @@ mod harness {
                     _ => DISC_AMOUNT,
                 };
                 let x = (1 + self.rnd() % 15) as u8;
-                let i = if self.rnd().is_multiple_of(4) { self.rnd() % 24 } else { 30 + self.rnd() % 2 };
+                let i = if self.rnd().is_multiple_of(4) {
+                    self.rnd() % 24
+                } else {
+                    30 + self.rnd() % 2
+                };
                 st2[w + i as usize] ^= x;
                 check(10, Some(st2), pf.to_vec());
             }
@@ -686,7 +786,10 @@ mod harness {
     /// n_txs: PQZL_SV_DIFF's 11th number, default n_tx
     fn n_txs(a: &[u64; 10]) -> u64 {
         let s = std::env::var("PQZL_SV_DIFF").unwrap_or_default();
-        s.split_whitespace().nth(10).map(|x| x.parse().unwrap()).unwrap_or(a[1])
+        s.split_whitespace()
+            .nth(10)
+            .map(|x| x.parse().unwrap())
+            .unwrap_or(a[1])
     }
 
     /// pqz_sv_diff.c main's loop: per relation, per honest proof, the proof and its cases (`sink (rel, op, stmt,
@@ -695,9 +798,20 @@ mod harness {
         let ntxs = n_txs(&a);
         let [nreg, ntx, muts, seed, fuzz, nburn, nds, ndr, ntx0, ntxm] = a;
         let nps = [nreg, ntx, nburn, nds, ndr, ntx0];
-        let mut g = Gen { xs: 0x243F_6A88_85A3_08D3 ^ seed.wrapping_mul(0x9E37_79B9_7F4A_7C15), ctx: Ctx::new(), prev: vec![None; NREL], prove_fails: 0 };
+        let mut g = Gen {
+            xs: 0x243F_6A88_85A3_08D3 ^ seed.wrapping_mul(0x9E37_79B9_7F4A_7C15),
+            ctx: Ctx::new(),
+            prev: vec![None; NREL],
+            prove_fails: 0,
+        };
         for rel in 0..NREL {
-            let np = if rel < 6 { nps[rel] } else if rel >= TXS_REL { ntxs } else { ntxm };
+            let np = if rel < 6 {
+                nps[rel]
+            } else if rel >= TXS_REL {
+                ntxs
+            } else {
+                ntxm
+            };
             for _ in 0..np {
                 let mut r32 = [0u8; 32];
                 g.rnd_bytes(&mut r32);
@@ -714,15 +828,29 @@ mod harness {
                     g.prove_fails += 1;
                     continue;
                 };
-                let mut cases = vec![Case { kind: 0, stmt: None, proof: pf.clone() }];
+                let mut cases = vec![Case {
+                    kind: 0,
+                    stmt: None,
+                    proof: pf.clone(),
+                }];
                 let (r1, r2) = (g.rnd(), g.rnd());
                 if let Some(b) = test_mutate(mop(rel), &pf, 99, r1, r2).unwrap() {
                     if b.len() <= MAX_PROOF + 64 {
-                        cases.push(Case { kind: 1, stmt: None, proof: b });
+                        cases.push(Case {
+                            kind: 1,
+                            stmt: None,
+                            proof: b,
+                        });
                     }
                 }
                 for m in 0..muts {
-                    g.mutate_round(rel, &st, &pf, if m == 0 { fuzz as usize } else { 0 }, &mut cases);
+                    g.mutate_round(
+                        rel,
+                        &st,
+                        &pf,
+                        if m == 0 { fuzz as usize } else { 0 },
+                        &mut cases,
+                    );
                 }
                 sink(rel, op(rel), &st, cases);
                 g.prev[rel] = Some(pf);
@@ -741,7 +869,12 @@ mod harness {
 
     impl Tally {
         pub fn new() -> Tally {
-            Tally { cases: vec![[0; NK]; NREL], acc: vec![[0; NK]; NREL], mism: vec![[0; NK]; NREL], aud_accepted: 0 }
+            Tally {
+                cases: vec![[0; NK]; NREL],
+                acc: vec![[0; NK]; NREL],
+                mism: vec![[0; NK]; NREL],
+                aud_accepted: 0,
+            }
         }
         /// one case: the reference verdict a, the compared one b
         pub fn add(&mut self, rel: usize, kind: usize, a: bool, b: bool) {
@@ -752,7 +885,11 @@ mod harness {
             }
             if a != b {
                 self.mism[rel][kind] += 1;
-                eprintln!("{{\"mismatch\": \"{}\", \"rel\": \"{}\", \"reference\": {a}, \"fast\": {b}}}", KIND[kind], name(rel));
+                eprintln!(
+                    "{{\"mismatch\": \"{}\", \"rel\": \"{}\", \"reference\": {a}, \"fast\": {b}}}",
+                    KIND[kind],
+                    name(rel)
+                );
             }
         }
         /// prints the JSON lines; returns (cases of the six forms, all cases, mismatches)
@@ -788,7 +925,10 @@ mod harness {
 fn sv_eq_generic() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let a = harness::args();
-    let nt: usize = std::env::var("PQZL_SV_THREADS").ok().and_then(|s| s.parse().ok()).unwrap_or(4);
+    let nt: usize = std::env::var("PQZL_SV_THREADS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(4);
     let mut ctxs: Vec<Ctx> = (0..nt).map(|_| Ctx::new()).collect();
     let mut t = harness::Tally::new();
     let fails = harness::run(a, |rel, op, st, cases| {
@@ -804,7 +944,11 @@ fn sv_eq_generic() {
                             let i = next.fetch_add(1, Ordering::Relaxed);
                             let Some(c) = cases.get(i) else { break out };
                             let stmt = c.stmt.as_deref().unwrap_or(st);
-                            out.push((i, ctx.verify(op, stmt, &c.proof), ctx.verify_fast(op, stmt, &c.proof)));
+                            out.push((
+                                i,
+                                ctx.verify(op, stmt, &c.proof),
+                                ctx.verify_fast(op, stmt, &c.proof),
+                            ));
                         }
                     })
                 })

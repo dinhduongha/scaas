@@ -1,0 +1,7 @@
+send-on-expired | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+ignore-proposer | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+row-mark-ignored | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+requeue-drops-mark | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+refusal-not-marked | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+gone-not-consumed | submit::tests::a_held_confirm_is_sent_only_while_confirmable | 101
+requeue-any-op | submit::tests::auditor_verdicts | 101

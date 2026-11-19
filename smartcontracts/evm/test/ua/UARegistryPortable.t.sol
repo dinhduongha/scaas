@@ -26,8 +26,12 @@ contract UARegistryPortableTest is UARegistryBase {
         super.setUp();
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + PQ.length);
-        for (uint256 i; i < base.length; ++i) c[i] = base[i];
-        for (uint256 i; i < PQ.length; ++i) c[base.length + i] = UARegistry.KindConfig(PQ[i], address(mock), 50_000);
+        for (uint256 i; i < base.length; ++i) {
+            c[i] = base[i];
+        }
+        for (uint256 i; i < PQ.length; ++i) {
+            c[base.length + i] = UARegistry.KindConfig(PQ[i], address(mock), 50_000);
+        }
         p = _deploy(REG_P, chainUidA, address(0), false, BUDGET, address(0), true, c);
     }
 
@@ -35,14 +39,17 @@ contract UARegistryPortableTest is UARegistryBase {
 
     /// A key of a PQ holder kind of its exact length (FN-DSA: its header byte, every coefficient 0 < q; ML-DSA: any bytes).
     function _pqKey(uint16 kind, uint8 seed) internal pure returns (bytes memory d) {
-        uint256 n = kind == UAKinds.MLDSA44 ? 1312 : kind == UAKinds.MLDSA65 ? 1952 : kind == UAKinds.FNDSA512 ? 897
-            : kind == UAKinds.MLDSA87 ? 2592 : 1793;
+        uint256 n = kind == UAKinds.MLDSA44
+            ? 1312
+            : kind == UAKinds.MLDSA65 ? 1952 : kind == UAKinds.FNDSA512 ? 897 : kind == UAKinds.MLDSA87 ? 2592 : 1793;
         d = new bytes(n);
         if (kind == UAKinds.FNDSA512 || kind == UAKinds.FNDSA1024) {
             d[0] = kind == UAKinds.FNDSA512 ? bytes1(0x09) : bytes1(0x0a);
             d[n - 1] = bytes1(seed); // the last coefficient's low bits: < q
         } else {
-            for (uint256 i; i < n; ++i) d[i] = bytes1(uint8(i) ^ seed);
+            for (uint256 i; i < n; ++i) {
+                d[i] = bytes1(uint8(i) ^ seed);
+            }
         }
     }
 
@@ -56,7 +63,11 @@ contract UARegistryPortableTest is UARegistryBase {
     }
 
     /// A single key's `UASig` over `uaMessage(kind, purpose, TYPED)`.
-    function _single(uint16 kind, bytes memory key, bytes32 purpose) internal pure returns (IUARegistry.UASig memory s) {
+    function _single(uint16 kind, bytes memory key, bytes32 purpose)
+        internal
+        pure
+        returns (IUARegistry.UASig memory s)
+    {
         s.signature = _sig(key, UAKinds.uaMessage(kind, purpose, TYPED));
     }
 
@@ -96,13 +107,19 @@ contract UARegistryPortableTest is UARegistryBase {
     }
 
     /// The `members` of the slots of `ids`, sorted by index.
-    function _members(UARegistry r, bytes memory d, bytes32 ua, bytes32[] memory ids, bytes memory ml, bytes32 purpose, bool uaAuth)
-        internal
-        view
-        returns (IUARegistry.UASig memory s)
-    {
+    function _members(
+        UARegistry r,
+        bytes memory d,
+        bytes32 ua,
+        bytes32[] memory ids,
+        bytes memory ml,
+        bytes32 purpose,
+        bool uaAuth
+    ) internal view returns (IUARegistry.UASig memory s) {
         s.members = new IUARegistry.MemberSig[](ids.length);
-        for (uint256 i; i < ids.length; ++i) s.members[i] = _slot(r, d, ua, ids[i], ml, purpose, uaAuth);
+        for (uint256 i; i < ids.length; ++i) {
+            s.members[i] = _slot(r, d, ua, ids[i], ml, purpose, uaAuth);
+        }
         for (uint256 i = 1; i < ids.length; ++i) {
             for (uint256 j = i; j > 0 && s.members[j - 1].index > s.members[j].index; --j) {
                 (s.members[j - 1], s.members[j]) = (s.members[j], s.members[j - 1]);
@@ -212,8 +229,9 @@ contract UARegistryPortableTest is UARegistryBase {
     /// CTR-UA-37: a good signature of a slot that is listed but not accepted is refused, and passes once the slot accepts.
     function test_requirePortable_msigUnacceptedSlot() public {
         (bytes memory d, bytes32 ua, bytes memory ml) = _msig3(p, 1);
-        IUARegistry.UASig memory s =
-            _members(p, d, ua, _ids(_pad(vm.addr(SK)), UAKinds.uaOf(0x0101, _key(0x0101))), ml, UAKinds.PURPOSE_PQCHAT, false);
+        IUARegistry.UASig memory s = _members(
+            p, d, ua, _ids(_pad(vm.addr(SK)), UAKinds.uaOf(0x0101, _key(0x0101))), ml, UAKinds.PURPOSE_PQCHAT, false
+        );
         _refused(p, ua, UAKinds.PURPOSE_PQCHAT, s);
         p.acceptMembership(ua, _acceptKeySig(d, 0x0101, _key(0x0101)));
         _portable(p, ua, UAKinds.PURPOSE_PQCHAT, s);
@@ -236,8 +254,12 @@ contract UARegistryPortableTest is UARegistryBase {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_PQCHAT, TYPED);
         IUARegistry.UASig memory s;
         s.members = new IUARegistry.MemberSig[](2);
-        s.members[0] = IUARegistry.MemberSig(0, new IUARegistry.InnerSig[](0), _sig(_key(lo), UAKinds.uaMessage(lo, UAKinds.PURPOSE_MEMBER, md)));
-        s.members[1] = IUARegistry.MemberSig(1, new IUARegistry.InnerSig[](0), _sig(_key(hi), UAKinds.uaMessage(hi, UAKinds.PURPOSE_MEMBER, md)));
+        s.members[0] = IUARegistry.MemberSig(
+            0, new IUARegistry.InnerSig[](0), _sig(_key(lo), UAKinds.uaMessage(lo, UAKinds.PURPOSE_MEMBER, md))
+        );
+        s.members[1] = IUARegistry.MemberSig(
+            1, new IUARegistry.InnerSig[](0), _sig(_key(hi), UAKinds.uaMessage(hi, UAKinds.PURPOSE_MEMBER, md))
+        );
         p.requireAuthorized(ua, UAKinds.PURPOSE_PQCHAT, TYPED, s); // a transaction authorisation keeps the old rule
         _refused(p, ua, UAKinds.PURPOSE_PQCHAT, s);
         IUARegistry.UASig memory heavy;
@@ -252,7 +274,8 @@ contract UARegistryPortableTest is UARegistryBase {
     /// gen 2 holds, over gen-1 members, is checked by gen 2 (its derived members handed to gen 1).
     function test_requirePortable_gen2() public {
         (bytes memory d, bytes32 ua, bytes memory ml) = _msig3(p, 3);
-        UARegistry g2 = _deploy(REG_G2, chainUidA, address(p), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry g2 =
+            _deploy(REG_G2, chainUidA, address(p), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         bytes32 chat = UAKinds.PURPOSE_PQCHAT;
         bytes32[] memory two = _ids(_pad(vm.addr(SK)), UAKinds.uaOf(0x0101, _key(0x0101)));
         _portable(g2, ua, chat, _members(p, d, ua, two, ml, chat, false));

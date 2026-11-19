@@ -23,14 +23,12 @@ import {G1Bn254, G1Bls12381} from "../src/zether/ZetherCurves.sol";
 ///           pairing returns 1 within its EIP-1108 price (113,000).
 contract UAPrecompileProbe {
     /// kinds.json `invalid`, kind 0x0141 "outside the subgroup" (G1, 128 bytes).
-    bytes internal constant G1_OUTSIDE =
-        hex"0000000000000000000000000000000000000000000000000000000000000000"
+    bytes internal constant G1_OUTSIDE = hex"0000000000000000000000000000000000000000000000000000000000000000"
         hex"0000000000000000000000000000000000000000000000000000000000000004"
         hex"000000000000000000000000000000000a989badd40d6212b33cffc3f3763e9b"
         hex"c760f988c9926b26da9dd85e928483446346b8ed00e1de5d5ea93e354abe706c";
     /// kinds.json `invalid`, kind 0x0106 "outside the subgroup" (G2, 256 bytes).
-    bytes internal constant G2_OUTSIDE =
-        hex"0000000000000000000000000000000000000000000000000000000000000000"
+    bytes internal constant G2_OUTSIDE = hex"0000000000000000000000000000000000000000000000000000000000000000"
         hex"0000000000000000000000000000000000000000000000000000000000000002"
         hex"0000000000000000000000000000000000000000000000000000000000000000"
         hex"0000000000000000000000000000000000000000000000000000000000000000"
@@ -39,8 +37,7 @@ contract UAPrecompileProbe {
         hex"00000000000000000000000000000000172e93db764a8400a7d5071b6b6f5de0"
         hex"da2f0f4a063119abca014006b7c40a2cfe291a1924e65db0d6d0fcfbf3bf3d5c";
     /// kinds.json `invalid`, kind 0x0107 "outside the subgroup" (bn254 G2, 128 bytes, EIP-197 order).
-    bytes internal constant BN_G2_OUTSIDE =
-        hex"0000000000000000000000000000000000000000000000000000000000000000"
+    bytes internal constant BN_G2_OUTSIDE = hex"0000000000000000000000000000000000000000000000000000000000000000"
         hex"0000000000000000000000000000000000000000000000000000000000000001"
         hex"2351dcdda257b62181cbd745dfee16d5fdf4eb185bbcf33c20a0fe6eaa9cb4a3"
         hex"07fb3d558dafafb6bf6dd326a5fefe0beca3f9ac3bd999a390d504fad34b0b8c";
@@ -63,8 +60,8 @@ contract UAPrecompileProbe {
             && _returns(address(0x0e), abi.encodePacked(g2, uint256(1)), UAKinds.G2MSM_GAS, g2)
             && !_answers(address(0x0e), abi.encodePacked(G2_OUTSIDE, uint256(1)), UAKinds.G2MSM_GAS, 256)
             && _returns(
-                address(0x0f), bytes.concat(g1, g2, G1Bls12381.neg(g1), g2), BLS_PAIRING_2_GAS, abi.encode(uint256(1))
-            ) && _returns(address(0x0b), bytes.concat(g1, new bytes(128)), 375, g1) // G1ADD: g1 + O = g1 (EIP-2537 price)
+            address(0x0f), bytes.concat(g1, g2, G1Bls12381.neg(g1), g2), BLS_PAIRING_2_GAS, abi.encode(uint256(1))
+        ) && _returns(address(0x0b), bytes.concat(g1, new bytes(128)), 375, g1) // G1ADD: g1 + O = g1 (EIP-2537 price)
             && _answers(address(0x10), new bytes(64), 5_500, 128); // MAP_FP_TO_G1(0) (EIP-2537 price)
     }
 
@@ -73,7 +70,9 @@ contract UAPrecompileProbe {
         bytes memory g2 = CurveSigs.BN254_G2;
         return _answers(address(0x08), bytes.concat(g1, g2), UAKinds.PAIRING_GAS, 32)
             && !_answers(address(0x08), bytes.concat(g1, BN_G2_OUTSIDE), UAKinds.PAIRING_GAS, 32)
-            && _returns(address(0x08), bytes.concat(g1, g2, G1Bn254.neg(g1), g2), BN_PAIRING_2_GAS, abi.encode(uint256(1)));
+            && _returns(
+            address(0x08), bytes.concat(g1, g2, G1Bn254.neg(g1), g2), BN_PAIRING_2_GAS, abi.encode(uint256(1))
+        );
     }
 
     /// Succeeds within `cap` and returns exactly `want`.

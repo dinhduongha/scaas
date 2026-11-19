@@ -12,7 +12,9 @@ contract DiffDexTest is UADexBase, LegacyDiff {
         vm.etch(address(0xB0B), hex"00");
     }
 
-    function _kindOf(address) internal pure override returns (uint8) { return type(uint8).max; }
+    function _kindOf(address) internal pure override returns (uint8) {
+        return type(uint8).max;
+    }
 
     function test_diff_dex() public {
         address[] memory c = new address[](4);

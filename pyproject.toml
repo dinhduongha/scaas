@@ -1,0 +1,7 @@
+# Python formatting for every Python directory of the repository (scripts/, clients/ua-py, pqz-core tools, the generators).
+# ruff skips a pyproject.toml without a [tool.ruff] section (clients/ua-py's), so this one file applies everywhere.
+[tool.ruff]
+required-version = "==0.16.4"
+line-length = 120
+# .gitignore is honoured as well (respect-gitignore)
+extend-exclude = ["**/legacy/**", "**/node_modules/**", "smartcontracts/evm/lib/**"]

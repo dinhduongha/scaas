@@ -5,6 +5,7 @@ canonicalisation (`MetaTxLib.canon`: a non-zero unbound relayer / fee recipient 
 roll wait (bounded, `ROLL_WAIT`; `evm_mine` on anvil), D3's unproven wallet records (no `storePqzScopedPop` where the
 registry checks R_REG, a gap row instead) and forge's filler bytes; each test run against a mutant of what it guards, which
 it must catch.  python3 -I script/onchain/test_mldsa_on.py"""
+
 import os
 import sys
 
@@ -15,7 +16,13 @@ import mldsa_on_pqz as Q  # noqa: E402
 Q.M = M
 Q._bind()
 
-HDR = {"key": "local-31337-testnet", "name": "local", "chainId": 31337, "chainUid": "0x" + "11" * 32, "network": "testnet"}
+HDR = {
+    "key": "local-31337-testnet",
+    "name": "local",
+    "chainId": 31337,
+    "chainUid": "0x" + "11" * 32,
+    "network": "testnet",
+}
 FAILS = []
 
 
@@ -30,18 +37,26 @@ def refused(f, name):
 def t_sets(se):
     """True iff `se` (set_entries) passes every row."""
     flat_off = dict(HDR, ua_registry="0xa", mldsa_precompile="off")
-    two = dict(HDR, ua_registry="0xa", mldsa_precompile="off",
-               sets={"mldsa-off": {"ua_registry": "0xa", "mldsa_precompile": "off"},
-                     "mldsa-on": {"ua_registry": "0xb", "mldsa_precompile": "on"}})
+    two = dict(
+        HDR,
+        ua_registry="0xa",
+        mldsa_precompile="off",
+        sets={
+            "mldsa-off": {"ua_registry": "0xa", "mldsa_precompile": "off"},
+            "mldsa-on": {"ua_registry": "0xb", "mldsa_precompile": "on"},
+        },
+    )
     rows = [
-        se(flat_off, "mldsa-off")["ua_registry"] == "0xa",                              # control of the two below
-        refused(lambda: se(flat_off, "mldsa-on"), "DEPLOY_SET_MISMATCH"),               # a flat book of the other mode
-        refused(lambda: se(flat_off, "mldsa-of"), "DEPLOY_SET_UNKNOWN"),                # one letter changed
-        se(two, "mldsa-on")["ua_registry"] == "0xb",                                     # the set's own entries, not the top
+        se(flat_off, "mldsa-off")["ua_registry"] == "0xa",  # control of the two below
+        refused(lambda: se(flat_off, "mldsa-on"), "DEPLOY_SET_MISMATCH"),  # a flat book of the other mode
+        refused(lambda: se(flat_off, "mldsa-of"), "DEPLOY_SET_UNKNOWN"),  # one letter changed
+        se(two, "mldsa-on")["ua_registry"] == "0xb",  # the set's own entries, not the top
         se(two, "mldsa-off")["ua_registry"] == "0xa",
         refused(lambda: se(dict(two, sets={"mldsa-off": two["sets"]["mldsa-off"]}), "mldsa-on"), "DEPLOY_SET_MISSING"),
-        refused(lambda: se(dict(two, sets=dict(two["sets"], **{"mldsa-on": {"mldsa_precompile": "off"}})), "mldsa-on"),
-                "DEPLOY_SET_MISMATCH"),                                                  # a set entry whose mode is not its label's
+        refused(
+            lambda: se(dict(two, sets=dict(two["sets"], **{"mldsa-on": {"mldsa_precompile": "off"}})), "mldsa-on"),
+            "DEPLOY_SET_MISMATCH",
+        ),  # a set entry whose mode is not its label's
     ]
     return all(rows)
 
@@ -51,11 +66,11 @@ def t_canon(ce):
     r, f = "0x" + "aa" * 20, "0x" + "bb" * 20
     env = [z, 0, 1, 9, 0, r, 5, f]
     rows = [
-        ce(env)[5] == 0 and ce(env)[7] == 0,                     # open mode: a non-zero unbound relayer and recipient signed as 0
+        ce(env)[5] == 0 and ce(env)[7] == 0,  # open mode: a non-zero unbound relayer and recipient signed as 0
         ce(env[:4] + [1] + env[5:])[5] == r and ce(env[:4] + [1] + env[5:])[7] == 0,  # relayer bound
         ce(env[:4] + [2] + env[5:])[7] == f and ce(env[:4] + [2] + env[5:])[5] == 0,  # recipient bound
-        ce(env[:4] + [0x22] + env[5:])[7] == f,                  # FIXED fee + recipient bound (Tokens' FIXED_FEE)
-        ce(env)[6] == 5 and env[5] == r,                         # the fee kept; the caller's list untouched
+        ce(env[:4] + [0x22] + env[5:])[7] == f,  # FIXED fee + recipient bound (Tokens' FIXED_FEE)
+        ce(env)[6] == 5 and env[5] == r,  # the fee kept; the caller's list untouched
     ]
     return all(rows)
 
@@ -124,6 +139,7 @@ class Chain:
 
 def t_wait(w):
     """True iff `w` (wait_roll) passes every row."""
+
     def run(chain, step, head=100):
         c = Chain(chain, head, step)
         try:
@@ -132,14 +148,15 @@ def t_wait(w):
             return str(e).split(":")[0], c
         except RuntimeError as e:
             return str(e), c
+
     moving, c1 = run(1337, 1)
     stuck, c2 = run(1337, 0)
     anvil, c3 = run(31337, 0)
     rows = [
         moving == 100 + Q.E.ROLL_AGE + 1 and c1.mined == 0,  # control: a live chain reaches b0 + 6, nothing mined
-        stuck == "ROLL_WAIT" and 300 < c2.t <= 302,          # a stuck head: the named stop at the bound, not a hang
-        anvil == 106 and c3.mined == 6,                      # anvil: the six blocks mined, then reached
-        run(1337, 0, head=106)[0] == 106,                    # already there: no wait
+        stuck == "ROLL_WAIT" and 300 < c2.t <= 302,  # a stuck head: the named stop at the bound, not a hang
+        anvil == 106 and c3.mined == 6,  # anvil: the six blocks mined, then reached
+        run(1337, 0, head=106)[0] == 106,  # already there: no wait
     ]
     return all(rows)
 
@@ -196,8 +213,12 @@ def t_real(real):
     (s1, g1), (s2, g2) = out
     rows = [
         len(s1) == 1 and s1[0].startswith("setPqzScopedKey"),
-        len(g1) == 1 and g1[0]["status"] == 3 and g1[0]["tx"] == "" and g1[0]["sel"] == E.sel(Q.sigs().store_scoped).hex()
-        and g1[0]["what"].startswith("gap: 0x" + "00" * 31 + "07 scope ") and g1[0]["what"].endswith("record unproven (D3)"),
+        len(g1) == 1
+        and g1[0]["status"] == 3
+        and g1[0]["tx"] == ""
+        and g1[0]["sel"] == E.sel(Q.sigs().store_scoped).hex()
+        and g1[0]["what"].startswith("gap: 0x" + "00" * 31 + "07 scope ")
+        and g1[0]["what"].endswith("record unproven (D3)"),
         len(s2) == 2 and s2[1].startswith("storePqzScopedPop") and g2 == [],
     ]
     return all(rows)
@@ -205,8 +226,14 @@ def t_real(real):
 
 def t_blob(b):
     x, y = b(0x7C01, 18_432), b(0x7C02, 18_432)
-    lanes = [int.from_bytes(x[i:i + 8], "big") for i in range(0, len(x), 8)]
-    return len(x) == 18_432 and len(b(1, 48)) == 48 and all(v < 1 << 40 for v in lanes) and any(v >> 32 for v in lanes) and x != y
+    lanes = [int.from_bytes(x[i : i + 8], "big") for i in range(0, len(x), 8)]
+    return (
+        len(x) == 18_432
+        and len(b(1, 48)) == 48
+        and all(v < 1 << 40 for v in lanes)
+        and any(v >> 32 for v in lanes)
+        and x != y
+    )
 
 
 if __name__ == "__main__":
@@ -224,7 +251,9 @@ if __name__ == "__main__":
     check(not t_real(Q.real), "mutant: D3 inverted (storePqzScopedPop sent on an R_REG registry) is caught")
     Q.d3_skip = d3
     check(t_blob(Q.blob), "blob: forge's filler, every 64-bit lane < 2^40")
-    check(not t_blob(lambda seed, n: b"".join(Q.E.kc(Q.W(seed), Q.W(i)) for i in range(0, n, 32))[:n]),
-          "mutant: blob without the lane mask is caught")
+    check(
+        not t_blob(lambda seed, n: b"".join(Q.E.kc(Q.W(seed), Q.W(i)) for i in range(0, n, 32))[:n]),
+        "mutant: blob without the lane mask is caught",
+    )
     print(f"test_mldsa_on: {len(FAILS)} failure(s)")
     sys.exit(1 if FAILS else 0)

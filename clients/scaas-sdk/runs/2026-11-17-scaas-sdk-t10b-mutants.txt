@@ -1,0 +1,7 @@
+# t10b mutants at commit f56800650 (name | outcome | test)
+quote signs | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::quote_makes_no_signature
+submit signs twice | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::submit_signs_once_on_each_path
+submit skips the simulation's gas check | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::submit_refuses_more_gas_than_quoted
+a refused unsigned form quoted at a guess | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::unsigned_form_refused_is_gas_unquoted
+no margin | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib op::tests::quote_shows_and_caps
+5 mutants, 5 killed, 0 survived, 0 not loaded

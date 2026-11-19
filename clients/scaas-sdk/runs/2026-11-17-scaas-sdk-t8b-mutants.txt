@@ -1,0 +1,6 @@
+# t8b mutants at commit 0053ca491 (name | outcome | test)
+swap two arguments of mtxUnshield (Zether) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_zether
+a wrong selector on mtxRollOverBatch | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_zether
+drop the unsigned ownerSig of mtxRollOverSigned | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_zether
+an owner statement signed as bytes | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_zether
+4 mutants, 4 killed, 0 survived, 0 not loaded

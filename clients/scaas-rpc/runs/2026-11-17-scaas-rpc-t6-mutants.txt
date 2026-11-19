@@ -1,0 +1,8 @@
+# t6 mutants at commit b77670551 (name | outcome | test)
+pin by number instead of hash | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes pinned_reads_name_the_block_by_hash
+skip the re-check | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_reorg_between_read_and_recheck_is_block_changed
+compare T without the block hash | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool a_member_whose_block_hash_differs_is_outside_the_group
+the smallest block | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool the_block_is_the_need_th_highest_named
+the pending nonce from one endpoint under strict majority | killed | ../../scripts/capped cargo test --locked --offline -j2 --features evm --test anvil -- --ignored the_nonce_under_strict_majority_is_the_agreed_committed_nonce
+the fee from one endpoint under strict majority | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes fees_under_strict_majority_are_the_need_th_highest
+6 mutants, 6 killed, 0 survived, 0 not loaded

@@ -13,7 +13,9 @@
 //! array in C, that is the previous iteration's `pk`, as the compiled C prints; the check ignores it). Apart from the
 //! `before_init_rejected` line, the output equals the C binary's byte for byte.
 use pqzl::testkit::{enc_seed_lowered, keygen_lowered};
-use pqzl::{dec, enc_group_seed, enc_seed, keygen, Ctx, Enc, Error, Key, CT_BYTES, POLYVEC_BYTES, V_BYTES};
+use pqzl::{
+    dec, enc_group_seed, enc_seed, keygen, Ctx, Enc, Error, Key, CT_BYTES, POLYVEC_BYTES, V_BYTES,
+};
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::Shake256;
 use std::fmt::Write;
@@ -58,7 +60,10 @@ fn mix(mut x: u64) -> u64 {
 }
 
 fn ints(v: &[i64]) -> String {
-    v.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ")
+    v.iter()
+        .map(|x| x.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// the C return code
@@ -78,12 +83,20 @@ fn kg(ctx: &mut Option<Ctx>, sd: &[u8; 32]) -> Result<Key, Error> {
 }
 
 /// Enc through `Ctx::enc_seed` when `ctx` is set, else the free function
-fn es(ctx: &mut Option<Ctx>, pks: &[&[u8; POLYVEC_BYTES]], m: &[[u8; 16]], se: &[u8; 32]) -> Result<Enc, Error> {
-    ctx.as_mut().map_or_else(|| enc_seed(pks, m, se), |c| c.enc_seed(pks, m, se))
+fn es(
+    ctx: &mut Option<Ctx>,
+    pks: &[&[u8; POLYVEC_BYTES]],
+    m: &[[u8; 16]],
+    se: &[u8; 32],
+) -> Result<Enc, Error> {
+    ctx.as_mut()
+        .map_or_else(|| enc_seed(pks, m, se), |c| c.enc_seed(pks, m, se))
 }
 
 fn main() {
-    let nrt: usize = std::env::args().nth(1).map_or(1000, |a| a.parse().expect("n_roundtrip"));
+    let nrt: usize = std::env::args()
+        .nth(1)
+        .map_or(1000, |a| a.parse().expect("n_roundtrip"));
     // `ctx`: every KeyGen / Enc through one Ctx's methods (its cached A); the output must not change
     let mut ctx = (std::env::args().nth(2).as_deref() == Some("ctx")).then(Ctx::new);
     let mut fails = 0;
@@ -101,7 +114,8 @@ fn main() {
         ct[..POLYVEC_BYTES].copy_from_slice(u);
         ct[POLYVEC_BYTES..].copy_from_slice(v);
     };
-    let as_ct = |ct: &[u8]| -> Box<[u8; CT_BYTES]> { ct.to_vec().into_boxed_slice().try_into().unwrap() };
+    let as_ct =
+        |ct: &[u8]| -> Box<[u8; CT_BYTES]> { ct.to_vec().into_boxed_slice().try_into().unwrap() };
 
     // 1. SHAKE256
     const IL: [usize; 10] = [0, 1, 31, 135, 136, 137, 271, 272, 1000, 4999];
@@ -112,11 +126,18 @@ fn main() {
         shake256(&[&inp[..IL[c] / 3], &inp[IL[c] / 3..]], &mut out, OL[c] / 2);
         shake256(&[&inp], &mut out2, 0); // one-shot: the first 32 bytes must agree
         fails += (out[..32] != out2) as i32;
-        println!("{{\"shake256\": {{\"in\": \"{}\", \"outlen\": {}, \"out\": \"{}\"}}}}", hex(&inp), OL[c], hex(&out));
+        println!(
+            "{{\"shake256\": {{\"in\": \"{}\", \"outlen\": {}, \"out\": \"{}\"}}}}",
+            hex(&inp),
+            OL[c],
+            hex(&out)
+        );
     }
 
     // 2. KeyGen, Enc, Dec on 20 seeds
-    let seed: Vec<[u8; 32]> = (0..NK).map(|i| core::array::from_fn(|j| (31 * i + j) as u8)).collect();
+    let seed: Vec<[u8; 32]> = (0..NK)
+        .map(|i| core::array::from_fn(|j| (31 * i + j) as u8))
+        .collect();
     let mut keys = Vec::new();
     for sd in &seed {
         let k = kg(&mut ctx, sd);
@@ -128,7 +149,14 @@ fn main() {
     }
     for i in 0..NK {
         let t = (i + 1) % NK;
-        let v = [mix(i as u64), if i == 0 { !0 } else { mix(i as u64) >> (i % 64) }];
+        let v = [
+            mix(i as u64),
+            if i == 0 {
+                !0
+            } else {
+                mix(i as u64) >> (i % 64)
+            },
+        ];
         se = core::array::from_fn(|j| (17 * i + j + 1) as u8);
         m = [digits(v[0]), digits(v[1])];
         let c = es(&mut ctx, &[&*keys[i].pk, &*keys[t].pk], &m, &se);
@@ -144,11 +172,22 @@ fn main() {
             r |= rc(&x);
             let (mm, nn) = x.unwrap_or(([0; 16], [0; 16]));
             fails += (0..16).filter(|&k| mm[k] != m[j][k] as i64).count() as i32;
-            d.push(format!("{{\"M\": [{}], \"noise\": [{}]}}", ints(&mm), ints(&nn)));
+            d.push(format!(
+                "{{\"M\": [{}], \"noise\": [{}]}}",
+                ints(&mm),
+                ints(&nn)
+            ));
         }
         fails += (r != 0) as i32;
-        let (se, r0, r1, uh, v0, v1, d) =
-            (hex(&se), hex(&seed[i]), hex(&seed[t]), sh256(&u), hex(&vs[0]), hex(&vs[1]), d.join(", "));
+        let (se, r0, r1, uh, v0, v1, d) = (
+            hex(&se),
+            hex(&seed[i]),
+            hex(&seed[t]),
+            sh256(&u),
+            hex(&vs[0]),
+            hex(&vs[1]),
+            d.join(", "),
+        );
         println!(
             "{{\"enc\": {{\"seed_enc\": \"{se}\", \"recipients\": [\"{r0}\", \"{r1}\"], \"values\": [{}, {}], \"ctr\": \
              {ctr}, \"rc\": {r}, \"u_shake256\": \"{uh}\", \"v\": [\"{v0}\", \"{v1}\"], \"dec\": [{d}]}}}}",
@@ -162,7 +201,9 @@ fn main() {
             let gs = enc_group_seed(&se, g);
             fails += (g == 0 && gs != se) as i32;
             let (se, gs) = (hex(&se), hex(&gs));
-            println!("{{\"enc_group_seed\": {{\"seed_enc\": \"{se}\", \"g\": {g}, \"out\": \"{gs}\"}}}}");
+            println!(
+                "{{\"enc_group_seed\": {{\"seed_enc\": \"{se}\", \"g\": {g}, \"out\": \"{gs}\"}}}}"
+            );
         }
     }
 
@@ -174,10 +215,26 @@ fn main() {
         while (r + 1) * (r + 1) <= x {
             r += 1;
         }
-        if x - r * r > r { r + 1 } else { r }
+        if x - r * r > r {
+            r + 1
+        } else {
+            r
+        }
     };
-    let (hs, he, bs0, be0) = (isqrt_round(pqzl::N as i64 / 2), isqrt_round(10 * pqzl::N as i64), pqzl::BETA_S as i64, pqzl::BETA_E as i64);
-    let ls: [[i64; 4]; 6] = [[hs, he, 64, 0], [hs, he, 64, 1], [hs, he, 64, 2], [hs, he, 12, 3], [0, be0, 64, 4], [bs0, be0, 0, 5]];
+    let (hs, he, bs0, be0) = (
+        isqrt_round(pqzl::N as i64 / 2),
+        isqrt_round(10 * pqzl::N as i64),
+        pqzl::BETA_S as i64,
+        pqzl::BETA_E as i64,
+    );
+    let ls: [[i64; 4]; 6] = [
+        [hs, he, 64, 0],
+        [hs, he, 64, 1],
+        [hs, he, 64, 2],
+        [hs, he, 12, 3],
+        [0, be0, 64, 4],
+        [bs0, be0, 0, 5],
+    ];
     let (mut resampled_k, mut resampled_e, mut err64) = (0, 0, 0);
     let mut kp = vec![0u8; POLYVEC_BYTES];
     for (c, l) in ls.iter().enumerate() {
@@ -187,7 +244,15 @@ fn main() {
         se = core::array::from_fn(|j| (101 * c + j) as u8);
         let mv = [mix(c as u64), mix(c as u64 + 50)];
         m = [digits(mv[0]), digits(mv[1])];
-        let e = enc_seed_lowered(ctx.as_mut(), &[&*keys[0].pk, &*keys[1].pk], &m, &se, bs, be, b2);
+        let e = enc_seed_lowered(
+            ctx.as_mut(),
+            &[&*keys[0].pk, &*keys[1].pk],
+            &m,
+            &se,
+            bs,
+            be,
+            b2,
+        );
         let (rk, re) = (rc(&k), rc(&e));
         let ck = k.as_ref().map_or(-1, |k| k.ctr as i64);
         let ce = e.as_ref().map_or(-1, |e| e.ctr as i64);
@@ -203,7 +268,14 @@ fn main() {
         let kh = sh256(&kp);
         println!("{{\"keygen_lowered\": {{\"seed\": \"{}\", \"bs\": {}, \"be\": {}, \"ctr\": {ck}, \"rc\": {rk}, \
                   \"pk_shake256\": \"{kh}\"}}}}", hex(sd), l[0], l[1]);
-        let (se, r0, r1, uh, v0, v1) = (hex(&se), hex(&seed[0]), hex(&seed[1]), sh256(&u), hex(&vs[0]), hex(&vs[1]));
+        let (se, r0, r1, uh, v0, v1) = (
+            hex(&se),
+            hex(&seed[0]),
+            hex(&seed[1]),
+            sh256(&u),
+            hex(&vs[0]),
+            hex(&vs[1]),
+        );
         println!(
             "{{\"enc_lowered\": {{\"seed_enc\": \"{se}\", \"bs\": {bs}, \"be\": {be}, \"b2\": {b2}, \"recipients\": \
              [\"{r0}\", \"{r1}\"], \"values\": [{}, {}], \"ctr\": {ce}, \"rc\": {re}, \"u_shake256\": \"{uh}\", \"v\": \
@@ -212,8 +284,10 @@ fn main() {
         );
     }
     fails += (resampled_k == 0 || resampled_e == 0 || err64 != 2) as i32;
-    println!("{{\"lowered\": {{\"keygen_resampled\": {resampled_k}, \"enc_resampled\": {resampled_e}, \
-              \"ctr64_errors\": {err64}}}}}");
+    println!(
+        "{{\"lowered\": {{\"keygen_resampled\": {resampled_k}, \"enc_resampled\": {resampled_e}, \
+              \"ctr64_errors\": {err64}}}}}"
+    );
 
     // 3. round trip; non-canonical inputs rejected
     let (mut maxn, mut maxctr) = (0i64, 0u32);
@@ -238,7 +312,9 @@ fn main() {
                         match dec(&s0, &as_ct(&ct)) {
                             Ok((mm, nn)) => {
                                 for k in 0..16 {
-                                    bad |= mm[k] != m[0][k] as i64 || nn[k] > B_FRESH || nn[k] < -B_FRESH;
+                                    bad |= mm[k] != m[0][k] as i64
+                                        || nn[k] > B_FRESH
+                                        || nn[k] < -B_FRESH;
                                     maxn = maxn.max(nn[k].abs());
                                 }
                             }
@@ -250,7 +326,13 @@ fn main() {
             }
             Err(_) => bad = true,
         }
-        maxctr = if c1 > maxctr { c1 } else if c2 > maxctr { c2 } else { maxctr };
+        maxctr = if c1 > maxctr {
+            c1
+        } else if c2 > maxctr {
+            c2
+        } else {
+            maxctr
+        };
         fails += bad as i32;
     }
     ct[POLYVEC_BYTES - 8..POLYVEC_BYTES].fill(0xff); // a u coefficient >= q

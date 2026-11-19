@@ -30,12 +30,47 @@ Key ops (op codes 6–12, the shared table): amount 0, pay_ref / lane zero, nonc
 `extra = sha256(ARC-4(entry parameters after (op, auth)))`; set_policy and finish_recovery are actions under op codes 10
 and 11 with signed parameters `[6, policy]` / `[7]` (as NEAR). No local state (OptIn refused); Update / Delete refused.
 """
-from algopy import (Account, BigUInt, Bytes, Global, OpUpFeeSource, String, Txn, UInt64, arc4, ensure_budget, op,
-                    subroutine, urange)
 
-from common import (COST_ENTRY, COST_NATIVE, TAIL, KIND_ADDRESS, KIND_UA, OP_ADD_KEY, OP_ADD_ORIGIN, OP_CANCEL_RECOVERY, OP_REMOVE_KEY,
-                    OP_REMOVE_ORIGIN, OP_SET_GUARDIAN, OP_START_RECOVERY, Bytes32, Holder, MetaOp, check_envelope,
-                    authority, digest, mbr_paid, sign_bytes, verify_native, zero)
+from algopy import (
+    Account,
+    BigUInt,
+    Bytes,
+    Global,
+    OpUpFeeSource,
+    String,
+    Txn,
+    UInt64,
+    arc4,
+    ensure_budget,
+    op,
+    subroutine,
+    urange,
+)
+
+from common import (
+    COST_ENTRY,
+    COST_NATIVE,
+    TAIL,
+    KIND_ADDRESS,
+    KIND_UA,
+    OP_ADD_KEY,
+    OP_ADD_ORIGIN,
+    OP_CANCEL_RECOVERY,
+    OP_REMOVE_KEY,
+    OP_REMOVE_ORIGIN,
+    OP_SET_GUARDIAN,
+    OP_START_RECOVERY,
+    Bytes32,
+    Holder,
+    MetaOp,
+    check_envelope,
+    authority,
+    digest,
+    mbr_paid,
+    sign_bytes,
+    verify_native,
+    zero,
+)
 
 MAX_KEYS = 8
 MAX_ORIGINS = 8
@@ -212,8 +247,14 @@ class AccountApp(arc4.ARC4Contract, name="Account"):
             oh = origin_hash(origin.native)
             after = with_origin(after, oh)
         usable(after, op_.to)
-        t = op.replace(t, O_READY, op.itob(Global.latest_timestamp + RECOVERY_DELAY_S) + kid.bytes
-                       + op.extract(op.itob(UInt64(1) if needs else UInt64(0)), 7, 1) + oh.bytes)
+        t = op.replace(
+            t,
+            O_READY,
+            op.itob(Global.latest_timestamp + RECOVERY_DELAY_S)
+            + kid.bytes
+            + op.extract(op.itob(UInt64(1) if needs else UInt64(0)), 7, 1)
+            + oh.bytes,
+        )
         put(op_.from_, signer)
         save(op_.to, t, String("start_recovery"))
         mbr_paid(before, UInt64(0))
@@ -266,8 +307,9 @@ class AccountApp(arc4.ARC4Contract, name="Account"):
 def signed_key_op(o: MetaOp, auth: Bytes, code: UInt64, params: Bytes) -> Bytes:
     """A key op's shape, envelope and signature; the signer's record with its key nonce consumed."""
     ensure_budget(COST_ENTRY, OpUpFeeSource.GroupCredit)
-    assert o.op.as_uint64() == code and o.amount.as_biguint() == 0 and o.pay_ref == zero() and o.lane == zero(), \
+    assert o.op.as_uint64() == code and o.amount.as_biguint() == 0 and o.pay_ref == zero() and o.lane == zero(), (
         "key op shape (op code, amount 0, pay_ref and lane zero)"
+    )
     assert o.extra.bytes == op.sha256(params), "extra is not sha256 of the parameters"
     check_envelope(o)
     rec, _opened, _mode = signed(o.from_, digest(o), auth)
@@ -355,16 +397,23 @@ def leaf_ok(auth: Bytes, d: Bytes32, rec: Bytes, lazy: bool) -> tuple[Bytes, UIn
         assert auth.length == 129, "secp256k1 auth length"
         # ecdsa_verify Secp256k1 accepts lower-S signatures only (libsecp256k1; test_high_s_refused)
         ensure_budget(COST_SECP256K1 + TAIL, OpUpFeeSource.GroupCredit)
-        assert op.ecdsa_verify(op.ECDSA.Secp256k1, d.bytes, op.extract(auth, 65, 32), op.extract(auth, 97, 32),
-                               op.extract(auth, 1, 32), op.extract(auth, 33, 32)), "secp256k1 signature (low s)"
+        assert op.ecdsa_verify(
+            op.ECDSA.Secp256k1,
+            d.bytes,
+            op.extract(auth, 65, 32),
+            op.extract(auth, 97, 32),
+            op.extract(auth, 1, 32),
+            op.extract(auth, 33, 32),
+        ), "secp256k1 signature (low s)"
         return rec, UInt64(KIND_SECP256K1), ua_of(UInt64(KIND_SECP256K1), op.extract(auth, 1, 64)), False
     assert tag == AUTH_PASSKEY, "unknown auth tag"
     assert auth.length >= 131, "passkey auth length"
     n = op.extract_uint16(auth, 129)
     ad = op.extract(auth, 131, n)
     cd = op.substring(auth, 131 + n, auth.length)
-    assert ad.length <= PASSKEY_FIELD_MAX and cd.length <= PASSKEY_FIELD_MAX, \
+    assert ad.length <= PASSKEY_FIELD_MAX and cd.length <= PASSKEY_FIELD_MAX, (
         "passkey clientDataJSON / authenticatorData over 1024 bytes"
+    )
     ensure_budget(COST_PASSKEY + COST_PASSKEY_PER_BYTE * cd.length + TAIL, OpUpFeeSource.GroupCredit)
     # NET-ALL-04 order: authenticatorData ≥ 37 B, rpIdHash (bound by the key id below), UP and UV, the grammar, the
     # origin listed, low s, the signature
@@ -376,10 +425,20 @@ def leaf_ok(auth: Bytes, d: Bytes32, rec: Bytes, lazy: bool) -> tuple[Bytes, UIn
         assert has(rec, origins_at(rec), n_origins(rec), oh.bytes), "passkey origin not listed"
     s = op.extract(auth, 97, 32)
     assert BigUInt.from_bytes(s) <= HALF_N_P256, "passkey signature high s"
-    assert op.ecdsa_verify(op.ECDSA.Secp256r1, op.sha256(ad + op.sha256(cd)), op.extract(auth, 65, 32), s,
-                           op.extract(auth, 1, 32), op.extract(auth, 33, 32)), "passkey signature"
-    return rec, UInt64(KIND_WEBAUTHN_P256), ua_of(UInt64(KIND_WEBAUTHN_P256), op.extract(auth, 1, 64)
-                                                  + op.extract(ad, 0, 32)), True
+    assert op.ecdsa_verify(
+        op.ECDSA.Secp256r1,
+        op.sha256(ad + op.sha256(cd)),
+        op.extract(auth, 65, 32),
+        s,
+        op.extract(auth, 1, 32),
+        op.extract(auth, 33, 32),
+    ), "passkey signature"
+    return (
+        rec,
+        UInt64(KIND_WEBAUTHN_P256),
+        ua_of(UInt64(KIND_WEBAUTHN_P256), op.extract(auth, 1, 64) + op.extract(ad, 0, 32)),
+        True,
+    )
 
 
 @subroutine
@@ -388,10 +447,12 @@ def client_origin(cd: Bytes, d: Bytes32) -> Bytes:
     b64url(d) `","origin":"` origin `"` then `}` (end), or `,"crossOrigin":false` then `}` (end) or `,` … `}` (end)
     with no `"topOrigin"` / `"crossOrigin"` after; no whitespace, no member before crossOrigin, no `\\` in the origin.
     Returns the origin."""
-    assert cd.length > 91 and op.extract(cd, 0, 36) == CD_TYPE and op.extract(cd, 79, 12) == CD_ORIGIN, \
+    assert cd.length > 91 and op.extract(cd, 0, 36) == CD_TYPE and op.extract(cd, 79, 12) == CD_ORIGIN, (
         "passkey clientDataJSON (type, challenge or origin)"
-    assert op.base64_decode(op.Base64.URLEncoding, op.extract(cd, 36, 43) + b"=") == d.bytes, \
+    )
+    assert op.base64_decode(op.Base64.URLEncoding, op.extract(cd, 36, 43) + b"=") == d.bytes, (
         "passkey clientDataJSON (type, challenge or origin)"
+    )
     # the origin ends at the first `"`; no `\\` before it. 8 bytes per step (SWAR: a word holds byte b iff
     # word ^ b…b has a zero byte), then byte-wise in the word that holds one
     padded = cd + op.bzero(8)
@@ -412,8 +473,9 @@ def client_origin(cd: Bytes, d: Bytes32) -> Bytes:
     t = op.substring(cd, i + 1, cd.length)
     if t != b"}" and t != CD_CROSS + b"}":
         n = t.length
-        assert n > 22 and op.extract(t, 0, 21) == CD_CROSS + b"," and op.getbyte(t, n - 1) == 0x7D, \
+        assert n > 22 and op.extract(t, 0, 21) == CD_CROSS + b"," and op.getbyte(t, n - 1) == 0x7D, (
             "passkey clientDataJSON (members after origin)"
+        )
         # every `"` after crossOrigin:false starts neither member name (8 bytes per step, as above)
         tp = t + op.bzero(8)
         for j in urange(20, n, 8):
@@ -532,8 +594,9 @@ def msig_valid(kd: Bytes) -> bool:
         if k == KIND_WEBAUTHN_P256:
             pk = True
         if k != KIND_ALGORAND_ADDRESS:
-            assert (k == KIND_WEBAUTHN_P256 or k == KIND_ED25519 or k == KIND_SECP256K1) and derived(mid), \
+            assert (k == KIND_WEBAUTHN_P256 or k == KIND_ED25519 or k == KIND_SECP256K1) and derived(mid), (
                 "msig member kind not accepted"
+            )
         w = op.extract_uint16(kd, o + 34)
         assert w > 0, "msig member weight 0"
         assert i == 0 or BigUInt.from_bytes(mid) > prev, "msig members not strictly increasing"

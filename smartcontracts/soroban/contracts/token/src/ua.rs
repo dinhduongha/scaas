@@ -7,13 +7,14 @@ use scaas_ua_common::{
     PURPOSE_METATX_CANCEL, PURPOSE_TRADE,
 };
 use soroban_sdk::{
-    contractevent, contractimpl, panic_with_error, Address, Bytes, BytesN, Env, Executable, IntoVal, TryFromVal, Val,
-    Vec,
+    contractevent, contractimpl, panic_with_error, Address, Bytes, BytesN, Env, Executable,
+    IntoVal, TryFromVal, Val, Vec,
 };
 
 use crate::{
-    balance_of, check_amount, move_funds, not_pool, set_balance, Burn, Error, Key, MetaTransactionExecuted, Mint,
-    PaymentMeta, Token, TokenArgs, TokenClient, Transfer, TTL_BUMP, TTL_MIN,
+    balance_of, check_amount, move_funds, not_pool, set_balance, Burn, Error, Key,
+    MetaTransactionExecuted, Mint, PaymentMeta, Token, TokenArgs, TokenClient, Transfer, TTL_BUMP,
+    TTL_MIN,
 };
 
 /// Every UA move; `mint_to_ua` comes from `Holder::Addr(token)`, `ua_burn` goes to it.
@@ -73,7 +74,11 @@ fn ua_bal(env: &Env, ua: &BytesN<32>) -> i128 {
 }
 
 fn add_ua(env: &Env, ua: &BytesN<32>, amount: i128) {
-    write(env, &Key::UaBalance(ua.clone()), &(ua_bal(env, ua) + amount));
+    write(
+        env,
+        &Key::UaBalance(ua.clone()),
+        &(ua_bal(env, ua) + amount),
+    );
 }
 
 fn debit_ua(env: &Env, ua: &BytesN<32>, amount: i128) {
@@ -91,7 +96,12 @@ fn pool(env: &Env) -> Address {
 
 /// The bound registry, else `UaLedgerOff` (S16).
 fn registry(env: &Env) -> UaRegistryClient<'static> {
-    match env.storage().instance().get::<_, Option<Address>>(&Key::Registry).flatten() {
+    match env
+        .storage()
+        .instance()
+        .get::<_, Option<Address>>(&Key::Registry)
+        .flatten()
+    {
         Some(r) => {
             env.storage().instance().extend_ttl(TTL_MIN, TTL_BUMP);
             UaRegistryClient::new(env, &r)
@@ -105,7 +115,11 @@ fn check_receiver(env: &Env, reg: &UaRegistryClient, to: &Holder) {
     match to {
         Holder::Ua(u) => {
             if !reg.receivable(u) {
-                let e = if reg.record_of(u).is_none() { Error::UaNotRegistered } else { Error::UaNotReceivable };
+                let e = if reg.record_of(u).is_none() {
+                    Error::UaNotRegistered
+                } else {
+                    Error::UaNotReceivable
+                };
                 panic_with_error!(env, e);
             }
         }
@@ -119,7 +133,12 @@ fn credit(env: &Env, to: &Holder, amount: i128) {
         Holder::Ua(u) => add_ua(env, u, amount),
         Holder::Addr(a) => {
             move_funds(env, &pool(env), a, amount);
-            Transfer { from: pool(env), to: a.clone(), amount }.publish(env);
+            Transfer {
+                from: pool(env),
+                to: a.clone(),
+                amount,
+            }
+            .publish(env);
         }
     }
 }
@@ -165,7 +184,10 @@ fn authorize(
 #[contractimpl]
 impl Token {
     pub fn registry(env: Env) -> Option<Address> {
-        env.storage().instance().get::<_, Option<Address>>(&Key::Registry).flatten()
+        env.storage()
+            .instance()
+            .get::<_, Option<Address>>(&Key::Registry)
+            .flatten()
     }
 
     pub fn ua_balance(env: Env, ua: BytesN<32>) -> i128 {
@@ -190,24 +212,57 @@ impl Token {
         let to = Holder::Ua(to);
         check_receiver(&env, &reg, &to);
         move_funds(&env, &from, &pool(&env), amount);
-        Transfer { from: from.clone(), to: pool(&env), amount }.publish(&env);
+        Transfer {
+            from: from.clone(),
+            to: pool(&env),
+            amount,
+        }
+        .publish(&env);
         credit(&env, &to, amount);
-        UaTransfer { from: Holder::Addr(from), to, amount }.publish(&env);
+        UaTransfer {
+            from: Holder::Addr(from),
+            to,
+            amount,
+        }
+        .publish(&env);
     }
 
     /// `pay` to a UA receiver: `PayRef(from, pay_ref)` once, as `pay` (the mandate pays a UA payee through it).
-    pub fn pay_to_ua(env: Env, from: Address, to: BytesN<32>, amount: i128, pay_ref: BytesN<32>, valid_until: u64) {
+    pub fn pay_to_ua(
+        env: Env,
+        from: Address,
+        to: BytesN<32>,
+        amount: i128,
+        pay_ref: BytesN<32>,
+        valid_until: u64,
+    ) {
         from.require_auth();
         let reg = registry(&env);
         let holder = Holder::Ua(to.clone());
         check_receiver(&env, &reg, &holder);
         Self::use_pay_ref(&env, &from, &pay_ref, valid_until);
         move_funds(&env, &from, &pool(&env), amount);
-        Transfer { from: from.clone(), to: pool(&env), amount }.publish(&env);
+        Transfer {
+            from: from.clone(),
+            to: pool(&env),
+            amount,
+        }
+        .publish(&env);
         credit(&env, &holder, amount);
         let src = Holder::Addr(from.clone());
-        UaTransfer { from: src.clone(), to: holder.clone(), amount }.publish(&env);
-        UaPaymentSettled { from: src, to: holder, amount, pay_ref: pay_ref.clone() }.publish(&env);
+        UaTransfer {
+            from: src.clone(),
+            to: holder.clone(),
+            amount,
+        }
+        .publish(&env);
+        UaPaymentSettled {
+            from: src,
+            to: holder,
+            amount,
+            pay_ref: pay_ref.clone(),
+        }
+        .publish(&env);
         let args = (from.clone(), to, amount, pay_ref, valid_until);
         let digest = op_digest(&env, &pool(&env), "pay_to_ua", args.into_val(&env));
         MetaTransactionExecuted { from, digest }.publish(&env);
@@ -220,9 +275,18 @@ impl Token {
         let to = Holder::Ua(to);
         check_receiver(&env, &reg, &to);
         set_balance(&env, &pool(&env), balance_of(&env, &pool(&env)) + amount);
-        Mint { to: pool(&env), amount }.publish(&env);
+        Mint {
+            to: pool(&env),
+            amount,
+        }
+        .publish(&env);
         credit(&env, &to, amount);
-        UaTransfer { from: Holder::Addr(pool(&env)), to, amount }.publish(&env);
+        UaTransfer {
+            from: Holder::Addr(pool(&env)),
+            to,
+            amount,
+        }
+        .publish(&env);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -237,13 +301,36 @@ impl Token {
         relayer: Option<Address>,
         auth: UaSig,
     ) {
-        let args = (from.clone(), to.clone(), amount, lane.clone(), nonce, valid_until, relayer.clone());
-        let (reg, digest) =
-            authorize(&env, "ua_transfer", args.into_val(&env), PURPOSE_METATX, &from, &lane, nonce, valid_until, &relayer, &auth);
+        let args = (
+            from.clone(),
+            to.clone(),
+            amount,
+            lane.clone(),
+            nonce,
+            valid_until,
+            relayer.clone(),
+        );
+        let (reg, digest) = authorize(
+            &env,
+            "ua_transfer",
+            args.into_val(&env),
+            PURPOSE_METATX,
+            &from,
+            &lane,
+            nonce,
+            valid_until,
+            &relayer,
+            &auth,
+        );
         check_receiver(&env, &reg, &to);
         debit_ua(&env, &from, amount);
         credit(&env, &to, amount);
-        UaTransfer { from: Holder::Ua(from.clone()), to, amount }.publish(&env);
+        UaTransfer {
+            from: Holder::Ua(from.clone()),
+            to,
+            amount,
+        }
+        .publish(&env);
         UaMetaTransactionExecuted { from, digest }.publish(&env);
     }
 
@@ -259,8 +346,26 @@ impl Token {
         relayer: Option<Address>,
         auth: UaSig,
     ) {
-        let args = (from.clone(), to.clone(), amount, pay_ref.clone(), valid_until, relayer.clone());
-        Self::ua_settle(&env, "ua_pay", args.into_val(&env), from, to, amount, pay_ref, valid_until, relayer, auth);
+        let args = (
+            from.clone(),
+            to.clone(),
+            amount,
+            pay_ref.clone(),
+            valid_until,
+            relayer.clone(),
+        );
+        Self::ua_settle(
+            &env,
+            "ua_pay",
+            args.into_val(&env),
+            from,
+            to,
+            amount,
+            pay_ref,
+            valid_until,
+            relayer,
+            auth,
+        );
     }
 
     /// `ua_pay` with `pay_ref = meta_pay_id(salt, meta)`; `PaymentMeta` before the settlement (CTR-MTX-26).
@@ -277,9 +382,32 @@ impl Token {
         auth: UaSig,
     ) {
         let pay_ref = meta_pay_id(&env, &salt, &meta);
-        PaymentMeta { pay_id: pay_ref.clone(), meta: meta.clone() }.publish(&env);
-        let args = (from.clone(), to.clone(), amount, salt, meta, valid_until, relayer.clone());
-        Self::ua_settle(&env, "ua_pay_meta", args.into_val(&env), from, to, amount, pay_ref, valid_until, relayer, auth);
+        PaymentMeta {
+            pay_id: pay_ref.clone(),
+            meta: meta.clone(),
+        }
+        .publish(&env);
+        let args = (
+            from.clone(),
+            to.clone(),
+            amount,
+            salt,
+            meta,
+            valid_until,
+            relayer.clone(),
+        );
+        Self::ua_settle(
+            &env,
+            "ua_pay_meta",
+            args.into_val(&env),
+            from,
+            to,
+            amount,
+            pay_ref,
+            valid_until,
+            relayer,
+            auth,
+        );
     }
 
     /// The UA's tokens leave the pool: `UaBalance(from)` and `Balance(token)` down by `amount`.
@@ -294,30 +422,82 @@ impl Token {
         relayer: Option<Address>,
         auth: UaSig,
     ) {
-        let args = (from.clone(), amount, lane.clone(), nonce, valid_until, relayer.clone());
-        let (_, digest) =
-            authorize(&env, "ua_burn", args.into_val(&env), PURPOSE_METATX, &from, &lane, nonce, valid_until, &relayer, &auth);
+        let args = (
+            from.clone(),
+            amount,
+            lane.clone(),
+            nonce,
+            valid_until,
+            relayer.clone(),
+        );
+        let (_, digest) = authorize(
+            &env,
+            "ua_burn",
+            args.into_val(&env),
+            PURPOSE_METATX,
+            &from,
+            &lane,
+            nonce,
+            valid_until,
+            &relayer,
+            &auth,
+        );
         debit_ua(&env, &from, amount);
         set_balance(&env, &pool(&env), balance_of(&env, &pool(&env)) - amount);
-        Burn { from: pool(&env), amount }.publish(&env);
-        UaTransfer { from: Holder::Ua(from.clone()), to: Holder::Addr(pool(&env)), amount }.publish(&env);
+        Burn {
+            from: pool(&env),
+            amount,
+        }
+        .publish(&env);
+        UaTransfer {
+            from: Holder::Ua(from.clone()),
+            to: Holder::Addr(pool(&env)),
+            amount,
+        }
+        .publish(&env);
         UaMetaTransactionExecuted { from, digest }.publish(&env);
     }
 
     /// Bumps `lane` by one (purpose `metatx-cancel`): a signed entry at the old nonce can no longer run. The signature
     /// names no nonce, so each cancel digest runs once (`UaCancelUsed`, EVM `cancelUsed`; a replay is `BadNonce`).
-    pub fn ua_cancel_nonce(env: Env, ua: BytesN<32>, lane: BytesN<32>, valid_until: u64, auth: UaSig) {
+    pub fn ua_cancel_nonce(
+        env: Env,
+        ua: BytesN<32>,
+        lane: BytesN<32>,
+        valid_until: u64,
+        auth: UaSig,
+    ) {
         let nonce = Self::ua_nonce(env.clone(), ua.clone(), lane.clone());
         let args: Vec<Val> = (ua.clone(), lane.clone(), valid_until).into_val(&env);
         // Before the signature check, as EVM `cancelUsed`: a replay costs no verify.
-        let used = Key::UaCancelUsed(op_digest(&env, &pool(&env), "ua_cancel_nonce", args.clone()));
+        let used = Key::UaCancelUsed(op_digest(
+            &env,
+            &pool(&env),
+            "ua_cancel_nonce",
+            args.clone(),
+        ));
         if read::<bool>(&env, &used).is_some() {
             panic_with_error!(&env, Error::BadNonce);
         }
-        let (_, digest) =
-            authorize(&env, "ua_cancel_nonce", args, PURPOSE_METATX_CANCEL, &ua, &lane, nonce, valid_until, &None, &auth);
+        let (_, digest) = authorize(
+            &env,
+            "ua_cancel_nonce",
+            args,
+            PURPOSE_METATX_CANCEL,
+            &ua,
+            &lane,
+            nonce,
+            valid_until,
+            &None,
+            &auth,
+        );
         write(&env, &used, &true);
-        UaNonceCancelled { ua: ua.clone(), lane, new_nonce: nonce + 1 }.publish(&env);
+        UaNonceCancelled {
+            ua: ua.clone(),
+            lane,
+            new_nonce: nonce + 1,
+        }
+        .publish(&env);
         UaMetaTransactionExecuted { from: ua, digest }.publish(&env);
     }
 
@@ -331,7 +511,9 @@ impl Token {
             panic_with_error!(&env, Error::BadOrder);
         }
         dex.require_auth();
-        let Holder::Ua(ua) = order.maker.clone() else { panic_with_error!(&env, Error::BadOrder) };
+        let Holder::Ua(ua) = order.maker.clone() else {
+            panic_with_error!(&env, Error::BadOrder)
+        };
         if order.sell_token != pool(&env) {
             panic_with_error!(&env, Error::BadOrder);
         }
@@ -340,18 +522,33 @@ impl Token {
         }
         check_amount(&env, amount);
         let sell_amount = order.sell_amount;
-        let digest = op_digest(&env, &pool(&env), "ua_order", (dex.clone(), order).into_val(&env));
+        let digest = op_digest(
+            &env,
+            &pool(&env),
+            "ua_order",
+            (dex.clone(), order).into_val(&env),
+        );
         let k = Key::UaPulled(digest.clone());
         let pulled = read::<i128>(&env, &k).unwrap_or(0);
         if amount > sell_amount - pulled {
             panic_with_error!(&env, Error::BadOrder);
         }
-        reg.require_authorized(&ua, &BytesN::from_array(&env, &PURPOSE_TRADE), &digest, &auth);
+        reg.require_authorized(
+            &ua,
+            &BytesN::from_array(&env, &PURPOSE_TRADE),
+            &digest,
+            &auth,
+        );
         write(&env, &k, &(pulled + amount));
         debit_ua(&env, &ua, amount);
         let to = Holder::Addr(dex);
         credit(&env, &to, amount);
-        UaTransfer { from: Holder::Ua(ua.clone()), to, amount }.publish(&env);
+        UaTransfer {
+            from: Holder::Ua(ua.clone()),
+            to,
+            amount,
+        }
+        .publish(&env);
         UaMetaTransactionExecuted { from: ua, digest }.publish(&env);
     }
 }
@@ -372,13 +569,35 @@ impl Token {
         auth: UaSig,
     ) {
         let lane = pay_lane(env, &pay_ref);
-        let (reg, digest) = authorize(env, f, args, PURPOSE_METATX, &from, &lane, 0, valid_until, &relayer, &auth);
+        let (reg, digest) = authorize(
+            env,
+            f,
+            args,
+            PURPOSE_METATX,
+            &from,
+            &lane,
+            0,
+            valid_until,
+            &relayer,
+            &auth,
+        );
         check_receiver(env, &reg, &to);
         debit_ua(env, &from, amount);
         credit(env, &to, amount);
         let src = Holder::Ua(from.clone());
-        UaTransfer { from: src.clone(), to: to.clone(), amount }.publish(env);
-        UaPaymentSettled { from: src, to, amount, pay_ref }.publish(env);
+        UaTransfer {
+            from: src.clone(),
+            to: to.clone(),
+            amount,
+        }
+        .publish(env);
+        UaPaymentSettled {
+            from: src,
+            to,
+            amount,
+            pay_ref,
+        }
+        .publish(env);
         UaMetaTransactionExecuted { from, digest }.publish(env);
     }
 }

@@ -1,7 +1,7 @@
 //! Honest proofs verify; mutated proofs / statements and out-of-range witnesses do not (run with --release).
-use pqzh::client::{Tweak, digits, setup, setup_with};
-use pqzh::rel::{OP_REGISTER, OP_TRANSFER, prove_unchecked};
-use pqzh::{MAX_PROOF, Params, prove, verify};
+use pqzh::client::{digits, setup, setup_with, Tweak};
+use pqzh::rel::{prove_unchecked, OP_REGISTER, OP_TRANSFER};
+use pqzh::{prove, verify, Params, MAX_PROOF};
 
 fn p() -> Params {
     Params::DEFAULT
@@ -22,7 +22,12 @@ fn honest_and_cross() {
     let pr = prove(OP_REGISTER, &s.reg_stmt, &s.reg_wit, [1; 32], &p()).unwrap();
     let pt = prove(OP_TRANSFER, &s.tx_stmt, &s.tx_wit, [2; 32], &p()).unwrap();
     // the PQZH kind's limit (owner, TODO P6-PQZH): both proofs within 160 KB at the default parameters
-    assert!(pr.len() <= MAX_PROOF && pt.len() <= MAX_PROOF, "R_REG {} B, R_TX {} B", pr.len(), pt.len());
+    assert!(
+        pr.len() <= MAX_PROOF && pt.len() <= MAX_PROOF,
+        "R_REG {} B, R_TX {} B",
+        pr.len(),
+        pt.len()
+    );
     assert!(verify(OP_REGISTER, &s.reg_stmt, &pr, &p()));
     assert!(verify(OP_TRANSFER, &s.tx_stmt, &pt, &p()));
     // wrong op / swapped proofs / other parameters
@@ -45,7 +50,10 @@ fn reg_norm_exceeded_small_coefficients() {
     for k in 0..1300 {
         sv[k] = if k % 2 == 0 { 1 } else { -1 };
     }
-    let s = setup_with(&Tweak { s_f: Some(sv), ..Default::default() });
+    let s = setup_with(&Tweak {
+        s_f: Some(sv),
+        ..Default::default()
+    });
     assert!(prove(OP_REGISTER, &s.reg_stmt, &s.reg_wit, [1; 32], &p()).is_err());
     assert!(rejected(OP_REGISTER, &s.reg_stmt, &s.reg_wit));
     assert!(rejected(OP_TRANSFER, &s.tx_stmt, &s.tx_wit));
@@ -55,7 +63,10 @@ fn reg_norm_exceeded_small_coefficients() {
 fn reg_coefficient_out_of_range() {
     let mut sv = vec![0i64; 2048];
     sv[5] = 100; // |s_5| > 36 (and > 64, the int8 witness still holds it)
-    let s = setup_with(&Tweak { s_f: Some(sv), ..Default::default() });
+    let s = setup_with(&Tweak {
+        s_f: Some(sv),
+        ..Default::default()
+    });
     assert!(rejected(OP_REGISTER, &s.reg_stmt, &s.reg_wit));
 }
 
@@ -65,7 +76,10 @@ fn tx_digit_out_of_range() {
     let mut d = digits(123_456);
     d[0] += 16;
     d[1] -= 1;
-    let s = setup_with(&Tweak { d: Some(d), ..Default::default() });
+    let s = setup_with(&Tweak {
+        d: Some(d),
+        ..Default::default()
+    });
     assert!(prove(OP_TRANSFER, &s.tx_stmt, &s.tx_wit, [1; 32], &p()).is_err());
     assert!(rejected(OP_TRANSFER, &s.tx_stmt, &s.tx_wit));
 }
@@ -74,7 +88,10 @@ fn tx_digit_out_of_range() {
 fn tx_e2_norm_exceeded() {
     let mut e = vec![0i64; 16];
     e[0] = 65; // ||e2_t|| = 65 > 64
-    let s = setup_with(&Tweak { e2_t: Some(e), ..Default::default() });
+    let s = setup_with(&Tweak {
+        e2_t: Some(e),
+        ..Default::default()
+    });
     assert!(prove(OP_TRANSFER, &s.tx_stmt, &s.tx_wit, [1; 32], &p()).is_err());
     assert!(rejected(OP_TRANSFER, &s.tx_stmt, &s.tx_wit));
 }

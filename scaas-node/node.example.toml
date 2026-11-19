@@ -9,14 +9,14 @@
 # entries below that are absent from the store are imported; present ones are NOT overwritten (a warning says
 # which differ). Keys, rpc_urls, params, coin_type and this url always come from this file.
 [store]
-url = "sqlite:///var/lib/scaas/node.db"          # created 0600 by `store init`; missing ⇒ the node refuses to start
-                                                 # (an unmounted volume never becomes a fresh, empty store)
+url = "sqlite:///var/lib/scaas/node.db" # created 0600 by `store init`; missing ⇒ the node refuses to start
+# (an unmounted volume never becomes a fresh, empty store)
 # job_retention_secs = 2592000                   # terminal jobs kept 30 d (and never before their payload expired)
 # feed_retention_secs = 604800                   # job/event feed rows kept 7 d
 
-# Job API for external clients (Odoo, other ERPs) and admin login. Served from a later release; read now.
+# Job API for external clients (ERPs and others) and admin login. Served from a later release; read now.
 [api]
-bind = "127.0.0.1:8548"                          # default; never the port of gateway_bind or admin_bind (checked)
+bind = "127.0.0.1:8548" # default; never the port of gateway_bind or admin_bind (checked)
 # master_key = { env = "SCAAS_API_MASTER_KEY" }  # >= 32 bytes; derives every client API key secret (R92)
 # admin_cors_origins = ["https://app.example.com"]
 # lease_hold_after_start_secs = 15
@@ -25,7 +25,7 @@ bind = "127.0.0.1:8548"                          # default; never the port of ga
 
 # Tenants (R90). Imported once; afterwards managed in the store.
 # [[namespaces]]
-# name = "odoo-prod"
+# name = "external-pull-prod"
 # chains = ["evm:7622"]
 # allow_call = true                              # mandates / subject accounts need call jobs (R103)
 
@@ -51,24 +51,24 @@ bind = "127.0.0.1:8548"                          # default; never the port of ga
 # enabled = false
 # listen = ["/ip4/0.0.0.0/udp/4001/quic-v1", "/ip4/0.0.0.0/tcp/4001"]
 
-# legacy(R104): the Odoo pull path. Required while submit/indexer/admin run on it.
-[odoo]
-url = "http://odoo:8069"
-database = "odoo19"
-relay_api_key_env = "SCAAS_RELAY_API_KEY"       # user in "Blockchain Relay Worker (service)"
-indexer_api_key_env = "SCAAS_INDEXER_API_KEY"   # user in "Blockchain Indexer (service)"
+# legacy(R104): the external pull path. Required while submit/indexer/admin run on it.
+[external_pull]
+url = "http://external-pull:8069"
+database = "pulldb"
+relay_api_key_env = "SCAAS_RELAY_API_KEY"     # user in "Blockchain Relay Worker (service)"
+indexer_api_key_env = "SCAAS_INDEXER_API_KEY" # user in "Blockchain Indexer (service)"
 
 [modules]
 submit = true
 indexer = true
 gateway = true
-gateway_bind = "127.0.0.1:8547"                  # behind a reverse proxy (per-IP rate limit there)
+gateway_bind = "127.0.0.1:8547" # behind a reverse proxy (per-IP rate limit there)
 # gateway_auth = "none" is refused on a non-loopback bind (R54). bearer: "Authorization: Bearer <secret>".
 # hmac: X-SCaaS-Timestamp, X-SCaaS-Nonce, X-SCaaS-Signature = hex(HMAC-SHA256(secret,
 #       ts "." nonce "." METHOD " " path?query "\n" body)); 300 s skew, nonce single-use.
 # gateway_auth = "hmac"
 # gateway_secret_env = "SCAAS_GATEWAY_SECRET"   # >= 16 bytes
-admin_bind = "127.0.0.1:9108"                    # /healthz /readyz /metrics (R51); "" disables
+admin_bind = "127.0.0.1:9108" # /healthz /readyz /metrics (R51); "" disables
 
 # One 24-word BIP-39 mnemonic for every lane that has no private_key of its own (R60).
 # Lanes derive per family by SLIP-44: evm m/44'/60'/0'/0/i, hedera m/44'/3030'/0'/0/i,
@@ -86,8 +86,8 @@ mnemonic = { keystore = "/etc/scaas/mnemonic.json", passphrase_env = "SCAAS_KEYS
 # order (POST <endpoint>/v1/pqz-verdict) when a job carries none. A PQZ verifier (off-chain) is a separately operated trust role
 # (e.g. scaas-pqz-verifier), never this node. URLs only, no secret.
 [pqz_verifier]
-endpoints = []                                   # e.g. ["https://pqz-verifier.example.org"]
-refuse_shield_when_unserved = false              # true: refuse shields into an OFFCHAIN token whose verifier is revoked or unserved
+endpoints = []                      # e.g. ["https://pqz-verifier.example.org"]
+refuse_shield_when_unserved = false # true: refuse shields into an OFFCHAIN token whose verifier is revoked or unserved
 # timeout_ms = 5000                              # one endpoint's whole request
 # max_response_bytes = 262144                    # a longer answer is no answer
 # valid_margin_secs = 30                         # a verdict expiring sooner than this is not sent
@@ -95,37 +95,37 @@ refuse_shield_when_unserved = false              # true: refuse shields into an 
 [[chains]]
 family = "evm"
 evm_chain_number = 7622
-rpc_urls = ["http://nethermind:8545"]            # >= finality.quorum independent endpoints
-lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas only, never user funds
+rpc_urls = ["http://nethermind:8545"] # >= finality.quorum independent endpoints
+lanes = [0, 1, 2, 3]                  # 4 relayer accounts: hold gas only, never user funds
 # private_key = { env = "SCAAS_RELAYER_KEY_7622" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
 # dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/scaas-testnet.json)
-chain_uid = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"  # block 0 (evm/chain-uids.json):
-                                                 # a lane whose RPC block 0 differs never starts (NODE-GW-07)
+chain_uid = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13" # block 0 (evm/chain-uids.json):
+# a lane whose RPC block 0 differs never starts (NODE-GW-07)
 # account_factory = "0x..."                      # SmartKeyAccountFactory: the only `deploy` call target (unset: refused)
 # token_factory = "0x..."                        # the token factory (OpenFactory): never a call target; its infoOf
-                                                 # lists the PqChat instances (class 3, version != 0) that pqchat jobs
-                                                 # run on (unset: every pqchat job refused, CALL_TARGET_REFUSED)
+# lists the PqChat instances (class 3, version != 0) that pqchat jobs
+# run on (unset: every pqchat job refused, CALL_TARGET_REFUSED)
 # ua_registry = "0x..."                          # UARegistry: the only target of register / setKemKey / storePqzPop /
-                                                 # setPqzKey call jobs (unset: refused); a relayed PQ register over
-                                                 # max_gas_per_tx or the block gas limit is refused UA_REGISTER_SPLIT
+# setPqzKey call jobs (unset: refused); a relayed PQ register over
+# max_gas_per_tx or the block gas limit is refused UA_REGISTER_SPLIT
 governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
-                                                 # GovernanceRouter ("governance_router" in deployments/<key>.json): the only
-                                                 # targets of gov_router jobs, direct or relayed (empty: refused); on 7622
-                                                 # since reset 2 (2026-11-10, NET-EVM-11): the Step 5 deploy's router
-                                                 # (GovDeploy.t.sol test_routerAndRelayFeeRouterNewAddresses); a PQZ e2e
-                                                 # run adds its own book's router here
+# GovernanceRouter ("governance_router" in deployments/<key>.json): the only
+# targets of gov_router jobs, direct or relayed (empty: refused); on 7622
+# since reset 2 (2026-11-10, NET-EVM-11): the Step 5 deploy's router
+# (GovDeploy.t.sol test_routerAndRelayFeeRouterNewAddresses); a PQZ e2e
+# run adds its own book's router here
 # compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<key>.json,
-                                                 # DEPLOY_REGULATED=1): the canonical registry the regulated kinds 8-13
-                                                 # pin; the DEX venue's pre-check reads it (NODE-DEX-11). An address, no
-                                                 # secret (regulated-kinds spec §6.1, §7). Set with the next key, or neither.
+# DEPLOY_REGULATED=1): the canonical registry the regulated kinds 8-13
+# pin; the DEX venue's pre-check reads it (NODE-DEX-11). An address, no
+# secret (regulated-kinds spec §6.1, §7). Set with the next key, or neither.
 # compliance_registry_codehash = "0x..."         # its runtime code hash ("compliance_registry_codehash" in the same JSON):
-                                                 # checked against eth_getCode when the venue loads; another code or none
-                                                 # stops the venue (fail closed). Unset: a regulated leg with a list on is
-                                                 # refused REGISTRY_NOT_CONFIGURED. The registry admin attests the venue
-                                                 # and its puller ELIGIBLE_CONTRACT (an operator step, docs/node/ops.md)
+# checked against eth_getCode when the venue loads; another code or none
+# stops the venue (fail closed). Unset: a regulated leg with a list on is
+# refused REGISTRY_NOT_CONFIGURED. The registry admin attests the venue
+# and its puller ELIGIBLE_CONTRACT (an operator step, docs/node/ops.md)
 # fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
-                                                 # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
+# unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)
 # params = { relay_fee = { router = "0x...", min_amount = 1, min_wei_value = { "0x<token>" = "100000000000" } } }
 #                                                # RelayFeeRouter ("relay_fee_router" in deployments/<key>.json; one CREATE2
@@ -145,13 +145,13 @@ governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
 # rpc_simulate_timeout_ms = 120000               # each request of a simulation (eth_call, eth_estimateGas; a PQZ or Zether proof check); > 0
 poll_ms = 1000
 stuck_after_secs = 60
-max_gas_per_tx = 64000000                        # regular + state gas (Amsterdam): PQZ op 1 ≈ 43 M (owner 2026-10-22);
-                                                 # regular stays ≤ 2^24, and the block gas limit is read from the chain
-                                                 # PQ signers need a higher cap than the default 3000000: each SCaaS
-                                                 # input verifies its signer once (mldsa65 cap 5.95 M), and an mldsa65
-                                                 # two-input liquidity order is ≈ 12.1 M regular (docs/node/ops.md §12)
+max_gas_per_tx = 64000000 # regular + state gas (Amsterdam): PQZ op 1 ≈ 43 M (owner 2026-10-22);
+# regular stays ≤ 2^24, and the block gas limit is read from the chain
+# PQ signers need a higher cap than the default 3000000: each SCaaS
+# input verifies its signer once (mldsa65 cap 5.95 M), and an mldsa65
+# two-input liquidity order is ≈ 12.1 M regular (docs/node/ops.md §12)
 max_fee_cap_gwei = 500
-max_index_lag = 100                              # /readyz fails when final head - indexed > this
+max_index_lag = 100    # /readyz fails when final head - indexed > this
 # Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.
 # Amounts in the gas coin's smallest unit (wei); strings for values above 2^63.
 # call_budget_pct (default 50): the ML-DSA cache parts the lane sends before a register (NODE-JOB-29) stop at this share of the
@@ -170,38 +170,38 @@ breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_re
 # entries = [{ entry = "deposit", op_type = "Deposit(bytes32 payer,uint256 amount,uint64 releaseAfter,bytes32 salt)" }]
 
 # ---- Other network families (R58): one [[chains]] each; delete the ones you do not run. ----
-# They run the generic lane runner (one tx in flight per lane, `signed` journaled in Odoo before sending,
+# They run the generic lane runner (one tx in flight per lane, `signed` journaled in ExternalPull before sending,
 # in-flight jobs re-checked on restart). `network` makes the key `family:network`, which must equal
-# Odoo's blockchain.chain.chain_key. Lane addresses to fund: `scaas-node addresses --config node.toml`.
+# ExternalPull's blockchain.chain.chain_key. Lane addresses to fund: `scaas-node addresses --config node.toml`.
 
-[[chains]]                                       # Hedera: HSCS through a JSON-RPC relay; nonce lanes like EVM
+[[chains]] # Hedera: HSCS through a JSON-RPC relay; nonce lanes like EVM
 family = "hedera"
-evm_chain_number = 296                           # 295 mainnet, 296 testnet, 297 previewnet, 298 local node
+evm_chain_number = 296                       # 295 mainnet, 296 testnet, 297 previewnet, 298 local node
 rpc_urls = ["https://testnet.hashio.io/api"]
-lanes = [0, 1]                                   # ECDSA accounts (HIP-583 alias): fund each lane address
-finality = { mode = "instant", quorum = 1 }      # aBFT: a record file is final
+lanes = [0, 1]                               # ECDSA accounts (HIP-583 alias): fund each lane address
+finality = { mode = "instant", quorum = 1 }  # aBFT: a record file is final
 max_gas_per_tx = 3000000
-max_fee_cap_gwei = 2000                         # fixed fee schedule: testnet eth_gasPrice ~870 gwei-equivalent
+max_fee_cap_gwei = 2000                      # fixed fee schedule: testnet eth_gasPrice ~870 gwei-equivalent
 # chain_uid = "0x5699954170cc8177692691d15368cad54f1e7a90c9e16b782f989de1b8d19358"  # DERIVED (chain-uids.json):
-                                                 # confirm on the relay first; an RPC error on block 0 keeps the lane stopped
+# confirm on the relay first; an RPC error on block 0 keeps the lane stopped
 
-[[chains]]                                       # Cosmos SDK + CosmWasm
+[[chains]] # Cosmos SDK + CosmWasm
 family = "cosmos"
-network = "scaas-1"                             # the chain-id: every signature is bound to it
-rpc_urls = ["http://cosmos:26657"]               # CometBFT RPC
+network = "scaas-1"                         # the chain-id: every signature is bound to it
+rpc_urls = ["http://cosmos:26657"]          # CometBFT RPC
 lanes = [0, 1]
-finality = { mode = "instant", quorum = 1 }      # CometBFT: a committed block is final
+finality = { mode = "instant", quorum = 1 } # CometBFT: a committed block is final
 max_gas_per_tx = 3000000
-# rest = REST gateway (LCD); prefix = bech32 prefix; gas_price in denom per gas unit (> 0, or zero_fee = true
-# on a zero-fee devnet only).
-params = { rest = "http://cosmos:1317", prefix = "wasm", denom = "ustake", gas_price = "0.025", zero_fee = false }
+# rest = the REST gateways (LCD), a list like rpc_urls (ARCH-POS-15); prefix = bech32 prefix; gas_price in denom per gas
+# unit (> 0, or zero_fee = true on a zero-fee devnet only).
+params = { rest = ["http://cosmos:1317"], prefix = "wasm", denom = "ustake", gas_price = "0.025", zero_fee = false }
 
-[[chains]]                                       # Stellar Soroban
+[[chains]] # Stellar Soroban
 family = "soroban"
 network = "testnet"
 rpc_urls = ["https://soroban-testnet.stellar.org"]
 lanes = [0, 1]
-finality = { mode = "instant", quorum = 1 }      # SCP: a closed ledger is final
+finality = { mode = "instant", quorum = 1 }        # SCP: a closed ledger is final
 # fee_bump_lane = i: lane i's account pays every lane's fee (CAP-15 fee bump); base_fee in stroops.
 # max_deposit_per_job (stroops; absent = 0 = none): the most resource fee (with the node's 15 % margin) a job may
 # declare when its simulation restores archived entries (Protocol 23 auto-restore; the lane pays, spec §7).
@@ -226,67 +226,69 @@ params = { network_passphrase = "Test SDF Network ; September 2015", base_fee = 
 # job runs to all of it, free ones too, so those can spend the hour's budget and stop a payment until the window ends.
 breaker = { gas_budget_per_hour = "1000000000", min_relayer_balance = "100000000", call_budget_pct = 50 }
 
-[[chains]]                                       # Pi Network: Soroban family, Stellar-compatible
+[[chains]] # Pi Network: Soroban family, Stellar-compatible
 family = "soroban"
-network = "pi-testnet"                           # Odoo network_key; mainnet: "pi-mainnet"
-rpc_urls = ["http://pi-soroban-rpc:8000"]        # your Pi Soroban RPC
+network = "pi-testnet"                      # ExternalPull network_key; mainnet: "pi-mainnet"
+rpc_urls = ["http://pi-soroban-rpc:8000"]   # your Pi Soroban RPC
 lanes = [0, 1]
-coin_type = 314159                               # lanes m/44'/314159'/i' (SLIP-44 Pi), not Stellar's 148
+coin_type = 314159                          # lanes m/44'/314159'/i' (SLIP-44 Pi), not Stellar's 148
 finality = { mode = "instant", quorum = 1 }
 # Passphrases are owner-provided — confirm at deploy: testnet "Pi Testnet", mainnet "Pi Network".
 params = { network_passphrase = "Pi Testnet", base_fee = 100, max_resource_fee_per_job = 120000000 }
-breaker = { gas_budget_per_hour = "1000000000", min_relayer_balance = "100000000" }  # required, as Stellar's: Pi's smallest unit
+breaker = { gas_budget_per_hour = "1000000000", min_relayer_balance = "100000000" }                  # required, as Stellar's: Pi's smallest unit
 
-[[chains]]                                       # Sui
+[[chains]] # Sui
 family = "sui"
 network = "testnet"
 rpc_urls = ["https://fullnode.testnet.sui.io:443"]
 lanes = [0, 1]
-finality = { mode = "instant", quorum = 1 }      # a certified checkpoint is final
+finality = { mode = "instant", quorum = 1 }        # a certified checkpoint is final
 # package: the scaas package id (after an upgrade: the NEW id, and type_package = the ORIGINAL id that event
 # types keep). lane_journal (required): a directory that survives restarts; the last signed tx of each lane
-# is kept there and re-sent on start-up so its gas coin is never equivocated.
+# is kept there and re-sent on start-up so its gas coin is never equivocated. chain_identifier (optional,
+# `sui_getChainIdentifier`): every endpoint, the first included, must answer it; unset, the first endpoint's is the reference.
 params = { package = "0x<package id>", lane_journal = "/var/lib/scaas/sui-journal", max_gas_budget = 50000000 }
 
-[[chains]]                                       # TON (TON Center v3 API)
+[[chains]] # TON (TON Center v3 API)
 family = "ton"
 network = "testnet"
 rpc_urls = ["https://testnet.toncenter.com"]
-lanes = [0, 1]                                   # W5 wallets: fund each lane address
+lanes = [0, 1]                                       # W5 wallets: fund each lane address
 finality = { mode = "depth", depth = 0, quorum = 1 }
 # global_id: -239 mainnet, -3 testnet (the MetaOp domain); attach/forward in nanoton; api_key_env names the env
 # var holding the TON Center key (the key itself never goes here).
 params = { global_id = -3, attach_nanoton = 150000000, forward_nanoton = 0, api_key_env = "SCAAS_TONCENTER_API_KEY" }
 
-[[chains]]                                       # Solana (scaas Anchor program)
+[[chains]] # Solana (scaas Anchor program)
 family = "solana"
-network = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"  # the cluster's genesis hash (mainnet-beta here)
-rpc_urls = ["https://api.mainnet-beta.solana.com"]  # needs transaction history (getSignaturesForAddress)
-lanes = [0, 1]                                   # ed25519 m/44'/501'/i'/0': fund each lane address; each lane
-                                                 # creates its durable nonce account on first use
-finality = { mode = "tag", quorum = 1 }          # commitment `finalized`
+network = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d" # the cluster's genesis hash (mainnet-beta here)
+rpc_urls = ["https://api.mainnet-beta.solana.com"]       # needs transaction history (getSignaturesForAddress)
+lanes = [0, 1]                                           # ed25519 m/44'/501'/i'/0': fund each lane address; each lane
+# creates its durable nonce account on first use
+finality = { mode = "tag", quorum = 1 } # commitment `finalized`
 # program_id: YOUR scaas deployment (smartcontracts/solana/scripts/deploy.sh — the test id is refused on public clusters);
 # max_cu caps the compute-unit limit, max_priority_lamports the total priority fee per tx (v1 header),
 # max_loaded_bytes the loaded-account-data limit.
 params = { program_id = "<your program id>", max_cu = 600000, max_priority_lamports = 2000000 }
 
-[[chains]]                                       # Aptos
+[[chains]] # Aptos
 family = "aptos"
-network = "2"                                    # the chain id: 1 mainnet, 2 testnet, 4 localnet
+network = "2"                                            # the chain id: 1 mainnet, 2 testnet, 4 localnet
 rpc_urls = ["https://fullnode.testnet.aptoslabs.com/v1"]
-lanes = [0, 1]                                   # ed25519 accounts: fund each lane address with APT
-finality = { mode = "instant", quorum = 1 }      # AptosBFT: a committed block is final
+lanes = [0, 1]                                           # ed25519 accounts: fund each lane address with APT
+finality = { mode = "instant", quorum = 1 }              # AptosBFT: a committed block is final
 # package: the scaas package (object code deployment). indexer_url: Aptos Indexer API (GraphQL) — events are
 # hinted there and re-read from the full node; the cursor never passes what its user_transaction_processor has
 # processed. indexer_api_key_env names the env var holding an API key (optional). tx_ttl_s caps a lane tx's life.
-params = { package = "0x<package address>", indexer_url = "https://api.testnet.aptoslabs.com/v1/graphql", tx_ttl_s = 600, max_gas_amount = 200000 }
+# max_gas_unit_price (octas, default 10000) caps the gas unit price any endpoint quotes (CLI-RPC-05): above it a job waits.
+params = { package = "0x<package address>", indexer_url = "https://api.testnet.aptoslabs.com/v1/graphql", tx_ttl_s = 600, max_gas_amount = 200000, max_gas_unit_price = 10000 }
 
-[[chains]]                                       # NEAR (near-sandbox / localnet; no public network yet)
+[[chains]] # NEAR (near-sandbox / localnet; no public network yet)
 family = "near"
-network = "68XTWuVmYJkVmj4HM9zFwXdDiS4DE2KX7RbVBdRERiCk"  # the genesis hash (RPC `status`, base58): every token's `network`
-rpc_urls = ["http://127.0.0.1:3030"]            # the RPC must allow `max_gas_burnt_view` >= 300 Tgas (`*_check` views)
-lanes = [0, 1]                                   # implicit accounts (64-hex ed25519 key, m/44'/397'/0'/0'/i'): fund each with NEAR
-finality = { mode = "instant", quorum = 1 }      # the adapter reads `final` blocks only
+network = "68XTWuVmYJkVmj4HM9zFwXdDiS4DE2KX7RbVBdRERiCk" # the genesis hash (RPC `status`, base58): every token's `network`
+rpc_urls = ["http://127.0.0.1:3030"]                     # the RPC must allow `max_gas_burnt_view` >= 300 Tgas (`*_check` views)
+lanes = [0, 1]                                           # implicit accounts (64-hex ed25519 key, m/44'/397'/0'/0'/i'): fund each with NEAR
+finality = { mode = "instant", quorum = 1 }              # the adapter reads `final` blocks only
 # tokens: the SCaaS token accounts; at start each must exist with code and no access key (else the chain is halted),
 # carry this network, and have every lane registered (`storage_deposit`). dex: the escrow DEX (its `matched` joins
 # trade legs). relay_fee: the escrow router and its executor (both keyless; `router.executor()` must match),
@@ -295,17 +297,18 @@ finality = { mode = "instant", quorum = 1 }      # the adapter reads `final` blo
 # Router targets: the tokens and the DEX (their call is checked first), plus `targets = { "<account>" = ["method", …] }`
 # the operator vouches for (only those methods). Every job's payment, a target / wrapped op, a mandate's expiry and DEX
 # orders must stay valid >= 120 s. target_gas / target_deposit of a token or DEX target are set by the node.
-# A view stopped by the RPC's max_gas_burnt_view is retried, never fatal.
+# A view stopped by the RPC's max_gas_burnt_view is retried, never fatal. max_deposit_per_job (yoctoNEAR, a decimal string,
+# default 1 NEAR) caps what one job attaches, whichever endpoint's check reported it (CLI-RPC-05): above it a job waits.
 tokens = [{ address = "token.test.near", decimals = 6 }]
-params = { dex = "dex.test.near", relay_fee = { router = "relayfee.test.near", executor = "relayexec.test.near", min_amount = 1, min_yocto_value = { "token.test.near" = "1000000000000000000" } } }
+params = { max_deposit_per_job = "1000000000000000000000000", dex = "dex.test.near", relay_fee = { router = "relayfee.test.near", executor = "relayexec.test.near", min_amount = 1, min_yocto_value = { "token.test.near" = "1000000000000000000" } } }
 
-[[chains]]                                       # Algorand (the repo's localnet; no public network yet)
+[[chains]] # Algorand (the repo's localnet; no public network yet)
 family = "algorand"
-network = "wBo2DSfDgHI2d1UP8i7p10+RpE1mC5fQyZDvnlh+KgY="  # the genesis hash (algod `genesis-hash`, base64): every MetaOp's network
-rpc_urls = ["http://127.0.0.1:4001"]            # algod REST (simulate enabled); params.algod_token_env names the env var
-                                                 # holding its X-Algo-API-Token (optional)
-lanes = [0, 1]                                   # ed25519 accounts (m/44'/283'/0'/0'/i'): fund each above its minimum balance
-finality = { mode = "instant", quorum = 1 }      # one-round finality: a block is final
+network = "wBo2DSfDgHI2d1UP8i7p10+RpE1mC5fQyZDvnlh+KgY=" # the genesis hash (algod `genesis-hash`, base64): every MetaOp's network
+rpc_urls = ["http://127.0.0.1:4001"]                     # algod REST (simulate enabled); params.algod_token_env names the env var
+# holding its X-Algo-API-Token (optional)
+lanes = [0, 1]                              # ed25519 accounts (m/44'/283'/0'/0'/i'): fund each above its minimum balance
+finality = { mode = "instant", quorum = 1 } # one-round finality: a block is final
 # tokens: the SCaaS token apps (app ids). account_app / mandate_app / dex_app / relayfee_app: the deployment's apps
 # (account_app required). At start every app must exist with the approval / clear program hashes of artifacts.json
 # (else the chain is halted), each token's and the mandate's account_app and the DEX's router_app must match, the
@@ -316,5 +319,7 @@ finality = { mode = "instant", quorum = 1 }      # one-round finality: a block i
 # MBR payments. Router targets: the tokens', account app's, mandate's and DEX's relayable entries, plus `targets =
 # { "<app id>" = ["method(args)ret", …] }` the operator vouches for (only those methods). Every job's payment, a target
 # op, a mandate's expiry and DEX orders must stay valid >= 120 s. A pay-meta `meta` is at most 507 B (the log limit).
+# max_min_fee (µALGO, default 10000) and max_fee_per_byte (µALGO, default 100) cap algod's min-fee and fee, whichever
+# endpoint quoted them (CLI-RPC-05): above either a job waits.
 tokens = [{ address = "1001", decimals = 6 }]
-params = { account_app = 1004, mandate_app = 1005, dex_app = 1006, relayfee_app = 1002, relay_fee = { min_amount = 1, min_microalgo_value = { "1001" = 1000 } } }
+params = { max_min_fee = 10000, max_fee_per_byte = 100, account_app = 1004, mandate_app = 1005, dex_app = 1006, relayfee_app = 1002, relay_fee = { min_amount = 1, min_microalgo_value = { "1001" = 1000 } } }

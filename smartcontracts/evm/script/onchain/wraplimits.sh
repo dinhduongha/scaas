@@ -39,125 +39,145 @@ T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 trap 'exit 1' INT TERM # stop on a signal (a long wait must end when stopped), then the EXIT cleanup
 mkdir -p "$OUTD"
-case $PROFILE in full|short) ;; *) say "FAIL WRAPLIMITS_PROFILE is full or short, not $PROFILE"; exit 1 ;; esac
+case $PROFILE in full | short) ;; *)
+    say "FAIL WRAPLIMITS_PROFILE is full or short, not $PROFILE"
+    exit 1
+    ;;
+esac
 first=${PHASES%% *}
 if [ "$first" = setup ]; then
-  : > "$L"
-  : > "$WL"
-  : > "$NEG"
-  rm -f "$R" "$NEXT" "$OUTD/pending.txt"
-  for p in $ALL; do rm -f "$B/$p-latest.json"; done
+    : >"$L"
+    : >"$WL"
+    : >"$NEG"
+    rm -f "$R" "$NEXT" "$OUTD/pending.txt"
+    for p in $ALL; do rm -f "$B/$p-latest.json"; done
 else
-  # a later call: the earlier one's state, its next start and its run dir
-  [ -s "$NEXT" ] && [ -s "deployments/wraplimits-$NET-state.json" ] && [ -f "$NEG" ] && [ -s "$WL" ] ||
-    { say "FAIL $first: no state of an earlier call ($NEXT, deployments/wraplimits-$NET-state.json, $NEG: the same MATRIX_OUT)"; exit 1; }
-  rm -f "$R"
+    # a later call: the earlier one's state, its next start and its run dir
+    [ -s "$NEXT" ] && [ -s "deployments/wraplimits-$NET-state.json" ] && [ -f "$NEG" ] && [ -s "$WL" ] ||
+        {
+            say "FAIL $first: no state of an earlier call ($NEXT, deployments/wraplimits-$NET-state.json, $NEG: the same MATRIX_OUT)"
+            exit 1
+        }
+    rm -f "$R"
 fi
 say "profile $PROFILE, phases $PHASES"
 if [ "$REMOTE" != 1 ]; then
-  # each block a fixed step after the last, whatever the wall clock (full: 1 s; short: 10 s, the SCaaS testnet's pace of
-  # ~2 Clique blocks per transaction, so the short windows see the testnet's spread); the broadcast's span is added to
-  # the next start either way (the stacked gate's slow --slow broadcast outran a fixed margin: VersionNotYetUsable)
-  cast rpc --rpc-url "$RPC" anvil_setBlockTimestampInterval "$([ "$PROFILE" = short ] && echo 10 || echo 1)" > /dev/null
+    # each block a fixed step after the last, whatever the wall clock (full: 1 s; short: 10 s, the SCaaS testnet's pace of
+    # ~2 Clique blocks per transaction, so the short windows see the testnet's spread); the broadcast's span is added to
+    # the next start either way (the stacked gate's slow --slow broadcast outran a fixed margin: VersionNotYetUsable)
+    cast rpc --rpc-url "$RPC" anvil_setBlockTimestampInterval "$([ "$PROFILE" = short ] && echo 10 || echo 1)" >/dev/null
 fi
 ts() { cast block latest --rpc-url "$RPC" -f timestamp; }
 utc() { date -u -d "@$1" '+%Y-%m-%d %H:%M:%S UTC'; }
 # remote: wait for a block at or after $1, bounded (the time needed + 300 s), a line every 30 s
 wait_for() {
-  now=$(ts)
-  [ "$now" -lt "$1" ] || return 0
-  dl=$(($(date +%s) + $1 - now + 300)) i=0
-  say "$p: waiting for a block at $1 ($(utc "$1")), $(($1 - now)) s"
-  while [ "$now" -lt "$1" ]; do
-    [ "$(date +%s)" -le "$dl" ] || { say "FAIL $p: no block at $1 ($(utc "$1")) by $(utc "$dl"), head at $now"; return 1; }
-    sleep 5
-    i=$((i + 5))
     now=$(ts)
-    [ $((i % 30)) != 0 ] || say "$p: waiting for $1 ($(utc "$1")), $(($1 - now)) s left"
-  done
+    [ "$now" -lt "$1" ] || return 0
+    dl=$(($(date +%s) + $1 - now + 300)) i=0
+    say "$p: waiting for a block at $1 ($(utc "$1")), $(($1 - now)) s"
+    while [ "$now" -lt "$1" ]; do
+        [ "$(date +%s)" -le "$dl" ] || {
+            say "FAIL $p: no block at $1 ($(utc "$1")) by $(utc "$dl"), head at $now"
+            return 1
+        }
+        sleep 5
+        i=$((i + 5))
+        now=$(ts)
+        [ $((i % 30)) != 0 ] || say "$p: waiting for $1 ($(utc "$1")), $(($1 - now)) s left"
+    done
 }
-SLOW=--slow; [ "$REMOTE" != 1 ] || SLOW=
+SLOW=--slow
+[ "$REMOTE" != 1 ] || SLOW=
 . script/onchain/fee.sh
 rc=0 done_=
 for p in $PHASES; do
-  if [ -s "$NEXT" ]; then
-    if [ "$REMOTE" = 1 ]; then
-      wait_for "$(cat "$NEXT")" || { rc=1; break; }
-    else
-      cast rpc --rpc-url "$RPC" evm_setNextBlockTimestamp "$(cat "$NEXT")" > /dev/null
-      cast rpc --rpc-url "$RPC" evm_mine > /dev/null
+    if [ -s "$NEXT" ]; then
+        if [ "$REMOTE" = 1 ]; then
+            wait_for "$(cat "$NEXT")" || {
+                rc=1
+                break
+            }
+        else
+            cast rpc --rpc-url "$RPC" evm_setNextBlockTimestamp "$(cat "$NEXT")" >/dev/null
+            cast rpc --rpc-url "$RPC" evm_mine >/dev/null
+        fi
+        mv "$NEXT" "$T/prev" # back if this run fails (a retry of the same phase)
     fi
-    mv "$NEXT" "$T/prev" # back if this run fails (a retry of the same phase)
-  fi
-  t0=$(ts) w0=$(date +%s)
-  echo "## wraplimits $p at $t0" >> "$L"
-  say "$p: forge at block time $t0 ($(utc "$t0")) …"
-  tc=WrapLimits
-  [ "$p" != setup ] || tc=WrapLimitsSetup
-  rm -f "$B/$p-latest.json"
-  remote_fee "$RPC" # a remote target: a fee with headroom (fee.sh)
-  ONCHAIN_NET=$NET WRAPLIMITS_PROFILE=$PROFILE forge script script/onchain/WrapLimits.s.sol --tc "$tc" --sig "$p()" \
-    --rpc-url "$RPC" --broadcast $SLOW --sender "$SENDER" --disable-code-size-limit --out out/onchain-wraplimits \
-    --cache-path cache/onchain-wraplimits > "$T/$p.log" 2>&1 || rc=$?
-  cat "$T/$p.log" >> "$L"
-  if [ "$REMOTE" = 1 ] && ! grep -q 'No files changed, compilation skipped' "$T/$p.log"; then
-    say "FAIL $p: forge did not skip compilation (a remote run compiles under scripts/capped first)"
-    rc=1
-  fi
-  sed -n 's/^  \(wl .*\)/\1/p' "$T/$p.log" | tee -a "$WL" >> "$L"
-  if [ "$rc" != 0 ]; then
-    say "FAIL $p: $(grep -E '^Error|revert|require' "$T/$p.log" | tail -1 | cut -c1-160)"
-    tail -30 "$T/$p.log"
-    # the start of this phase again (the failed run may have written the next one's); a failed setup: none
-    if [ -f "$T/prev" ]; then mv "$T/prev" "$NEXT"; else rm -f "$NEXT"; fi
-    break
-  fi
-  # the next start written by the run (its simulation's time) + the span of its broadcast on chain
-  t1=$(ts)
-  if [ -s "$NEXT" ]; then
-    echo $(($(cat "$NEXT") + t1 - t0)) > "$T/next" && mv "$T/next" "$NEXT"
-  fi
-  done_="$done_ $p"
-  python3 -I script/onchain/coverage.py --out "$OUTD" neg "$NET" wraplimits "$RPC" > "$T/neg.txt" 2>&1 || rc=1
-  cat "$T/neg.txt" >> "$L"
-  [ ! -f "$R" ] || { cat "$R" >> "$NEG"; rm -f "$R"; }
-  grep '^BAD' "$T/neg.txt" | sed "s/^/[$NET\/wraplimits] FAIL /" || true
-  n=$(python3 -I -c "import json, sys; print(len(json.load(open(sys.argv[1]))['receipts']))" "$B/$p-latest.json")
-  say "$p ok: $n tx, block time $t0 -> $t1, $(($(date +%s) - w0)) s$(grep '^negatives' "$T/neg.txt" | tail -1 | sed 's/^/, /')"
-  [ "$rc" = 0 ] || break
+    t0=$(ts) w0=$(date +%s)
+    echo "## wraplimits $p at $t0" >>"$L"
+    say "$p: forge at block time $t0 ($(utc "$t0")) …"
+    tc=WrapLimits
+    [ "$p" != setup ] || tc=WrapLimitsSetup
+    rm -f "$B/$p-latest.json"
+    remote_fee "$RPC" # a remote target: a fee with headroom (fee.sh)
+    ONCHAIN_NET=$NET WRAPLIMITS_PROFILE=$PROFILE forge script script/onchain/WrapLimits.s.sol --tc "$tc" --sig "$p()" \
+        --rpc-url "$RPC" --broadcast $SLOW --sender "$SENDER" --disable-code-size-limit --out out/onchain-wraplimits \
+        --cache-path cache/onchain-wraplimits >"$T/$p.log" 2>&1 || rc=$?
+    cat "$T/$p.log" >>"$L"
+    if [ "$REMOTE" = 1 ] && ! grep -q 'No files changed, compilation skipped' "$T/$p.log"; then
+        say "FAIL $p: forge did not skip compilation (a remote run compiles under scripts/capped first)"
+        rc=1
+    fi
+    sed -n 's/^  \(wl .*\)/\1/p' "$T/$p.log" | tee -a "$WL" >>"$L"
+    if [ "$rc" != 0 ]; then
+        say "FAIL $p: $(grep -E '^Error|revert|require' "$T/$p.log" | tail -1 | cut -c1-160)"
+        tail -30 "$T/$p.log"
+        # the start of this phase again (the failed run may have written the next one's); a failed setup: none
+        if [ -f "$T/prev" ]; then mv "$T/prev" "$NEXT"; else rm -f "$NEXT"; fi
+        break
+    fi
+    # the next start written by the run (its simulation's time) + the span of its broadcast on chain
+    t1=$(ts)
+    if [ -s "$NEXT" ]; then
+        echo $(($(cat "$NEXT") + t1 - t0)) >"$T/next" && mv "$T/next" "$NEXT"
+    fi
+    done_="$done_ $p"
+    python3 -I script/onchain/coverage.py --out "$OUTD" neg "$NET" wraplimits "$RPC" >"$T/neg.txt" 2>&1 || rc=1
+    cat "$T/neg.txt" >>"$L"
+    [ ! -f "$R" ] || {
+        cat "$R" >>"$NEG"
+        rm -f "$R"
+    }
+    grep '^BAD' "$T/neg.txt" | sed "s/^/[$NET\/wraplimits] FAIL /" || true
+    n=$(python3 -I -c "import json, sys; print(len(json.load(open(sys.argv[1]))['receipts']))" "$B/$p-latest.json")
+    say "$p ok: $n tx, block time $t0 -> $t1, $(($(date +%s) - w0)) s$(grep '^negatives' "$T/neg.txt" | tail -1 | sed 's/^/, /')"
+    [ "$rc" = 0 ] || break
 done
 # the phases left after the last one run, and the earliest start of the next
 last=${done_##* } left= seen=
-for p in $ALL; do [ -z "$seen" ] || left="$left $p"; [ "$p" != "$last" ] || seen=1; done
+for p in $ALL; do
+    [ -z "$seen" ] || left="$left $p"
+    [ "$p" != "$last" ] || seen=1
+done
 left=${left# }
 [ -z "$last" ] || rm -f "$OUTD/pending.txt"
 if [ -n "$last" ] && [ -n "$left" ] && [ -s "$NEXT" ]; then
-  echo "$left pending: ${left%% *} from $(cat "$NEXT") ($(utc "$(cat "$NEXT")"))" > "$OUTD/pending.txt"
-  say "$(cat "$OUTD/pending.txt")"
+    echo "$left pending: ${left%% *} from $(cat "$NEXT") ($(utc "$(cat "$NEXT")"))" >"$OUTD/pending.txt"
+    say "$(cat "$OUTD/pending.txt")"
 fi
 # every run of this call and the earlier ones (their broadcast files; a call with setup removed the older ones)
 runs=
 for p in $ALL; do [ ! -f "$B/$p-latest.json" ] || runs="$runs $B/$p-latest.json"; done
 [ -n "$runs" ] || exit 1
 # the negatives' rows (run by run) after the transactions' (coverage.py forge writes the file anew)
-python3 -I script/onchain/coverage.py --out "$OUTD" forge "$NET" "deployments/onchain-$NET-wraplimits.json" $runs >> "$L"
-[ ! -f "$NEG" ] || cat "$NEG" >> "$R"
+python3 -I script/onchain/coverage.py --out "$OUTD" forge "$NET" "deployments/onchain-$NET-wraplimits.json" $runs >>"$L"
+[ ! -f "$NEG" ] || cat "$NEG" >>"$R"
 [ "${ONCHAIN_TRACE:-$([ "$NET" = local ] && echo 1)}" != 1 ] ||
-  python3 -I script/onchain/coverage.py --out "$OUTD" trace "$NET" wraplimits "$RPC" >> "$L"
+    python3 -I script/onchain/coverage.py --out "$OUTD" trace "$NET" wraplimits "$RPC" >>"$L"
 # the coverage of the contracts this group touched (their labels in its book), from this build
-python3 -I - "$NET" "$T/groups.json" << 'EOF'
+python3 -I - "$NET" "$T/groups.json" <<'EOF'
 import json, sys
 book = set(json.load(open(f"deployments/onchain-{sys.argv[1]}-wraplimits.json")).values())
 g = json.load(open("script/onchain/groups.json"))["groups"]
 json.dump({"groups": {k: [c for c in v if c["label"] in book] for k, v in g.items() if any(c["label"] in book for c in v)}},
           open(sys.argv[2], "w"))
 EOF
-ONCHAIN_OUT=out/onchain-wraplimits python3 -I script/onchain/coverage.py --out "$OUTD" gen --groups "$T/groups.json" > /dev/null
-python3 -I script/onchain/coverage.py --out "$OUTD" views "$NET" "$RPC" >> "$L"
-python3 -I script/onchain/coverage.py --out "$OUTD" table --net "$NET" > "$OUTD/table-$NET.txt"
+ONCHAIN_OUT=out/onchain-wraplimits python3 -I script/onchain/coverage.py --out "$OUTD" gen --groups "$T/groups.json" >/dev/null
+python3 -I script/onchain/coverage.py --out "$OUTD" views "$NET" "$RPC" >>"$L"
+python3 -I script/onchain/coverage.py --out "$OUTD" table --net "$NET" >"$OUTD/table-$NET.txt"
 # the summary: every row of every run (its label from the run's rows file, in send order; forge's own CREATE2 library
 # deploys listed apart), the gas by row type, the negatives; the records' `what` set to the row
-python3 -I - "$OUTD" "$NET" "$CHAIN" "$rc" "$(git rev-parse --short HEAD)" "$ALL" "$WL" "$PROFILE" << 'EOF'
+python3 -I - "$OUTD" "$NET" "$CHAIN" "$rc" "$(git rev-parse --short HEAD)" "$ALL" "$WL" "$PROFILE" <<'EOF'
 import collections, json, os, sys
 outd, net, chain, rc, commit, phases, wl, profile = sys.argv[1:9]
 rows, libs, ran = [], [], []

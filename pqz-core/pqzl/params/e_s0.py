@@ -5,6 +5,7 @@ Run inside SageMath with lattice-estimator (commit 53da598) on PYTHONPATH; run.s
 and its stdout is estimator.txt. Every parameter comes from docs/contracts/pq-zero-knowledge.md (CTR-PQZ-03, -04, section 5)
 or from a derivation printed next to it; docs/research/pqz-parameters-e-s0.md explains each step.
 """
+
 import math
 import os
 import sys
@@ -79,8 +80,10 @@ print(f"q = 2^42 - 215 = {q}: prime, q mod 16 = {q % 16} (l = {l} factors), Delt
 ls18 = q ** (1 / l) / sqrt(l)
 print(f"LS18 Cor. 1.2 invertibility bound q^(1/l)/sqrt(l) = {ls18:.1f} (l_inf)")
 b_fresh = BETA_E * BETA_S + BETA_S * BETA_E + BETA_2
-print(f"B_FRESH = {b_fresh}; K_MAX*B_FRESH = {K_MAX * b_fresh} < 2^24 = {2**24}: {K_MAX * b_fresh < 2**24}; "
-      f"2^24 < Delta/2: {2**24 < DELTA / 2}")
+print(
+    f"B_FRESH = {b_fresh}; K_MAX*B_FRESH = {K_MAX * b_fresh} < 2^24 = {2**24}: {K_MAX * b_fresh < 2**24}; "
+    f"2^24 < Delta/2: {2**24 < DELTA / 2}"
+)
 
 # ---- 1. LWE instances --------------------------------------------------------------------------------------------
 hr("1. LWE instances under LWE.estimate")
@@ -164,8 +167,10 @@ for kappa in range(6, 10):
     acc = float((op <= eta).mean())
     logc = (d // 2) * log2(2 * kappa + 1) + log2(acc)
     chal[kappa] = (eta, acc, logc)
-    print(f"kappa = {kappa}: eta (99% quantile of s(c), 2e5 samples) = {eta}, |C| = 2^{logc:.2f}, "
-          f"final-round error 2/|C| = 2^-{logc - 1:.2f}, 2*kappa = {2 * kappa} < {ls18:.0f}: {2 * kappa < ls18}")
+    print(
+        f"kappa = {kappa}: eta (99% quantile of s(c), 2e5 samples) = {eta}, |C| = 2^{logc:.2f}, "
+        f"final-round error 2/|C| = 2^-{logc - 1:.2f}, 2*kappa = {2 * kappa} < {ls18:.0f}: {2 * kappa < ls18}"
+    )
 KAPPA = min(kk for kk, v in chal.items() if v[2] - 1 >= 128)
 ETA, _, LOGC = chal[KAPPA]
 print(f"=> kappa = {KAPPA}, eta = {ETA} (smallest kappa with 2/|C| <= 2^-128)")
@@ -178,9 +183,11 @@ LAM = math.ceil(128 / log2(q))  # Z_q amortization repetitions (q^-LAM <= 2^-128
 L_B = 256 // d + LAM + 1  # t_B rows: JL mask y3 (256/d), LAM garbage polys, 1 quadratic-garbage poly
 GAMMA = 11  # Rej0 slack s = gamma*||cv||, expected repetitions M = exp(13.37/gamma + 1/(2 gamma^2))
 M_REJ = math.exp(sqrt(2 * 129 * log(2)) / GAMMA + 1 / (2 * GAMMA**2))
-print(f"R_TX: m1 = {M1} ring elements ({M1 * d} coefficients), ||s1|| <= alpha = {ALPHA:.1f}; lambda = {LAM} "
-      f"(q^-{LAM} = 2^-{LAM * log2(q):.2f}; lambda = {LAM - 1} gives 2^-{(LAM - 1) * log2(q):.2f}); "
-      f"t_B rows = {L_B}; gamma = {GAMMA} (M = {M_REJ:.2f} per masked vector)")
+print(
+    f"R_TX: m1 = {M1} ring elements ({M1 * d} coefficients), ||s1|| <= alpha = {ALPHA:.1f}; lambda = {LAM} "
+    f"(q^-{LAM} = 2^-{LAM * log2(q):.2f}; lambda = {LAM - 1} gives 2^-{(LAM - 1) * log2(q):.2f}); "
+    f"t_B rows = {L_B}; gamma = {GAMMA} (M = {M_REJ:.2f} per masked vector)"
+)
 
 
 def msis_bound(m1, m2):
@@ -210,8 +217,7 @@ def min_rank(rows):
     return lo
 
 
-print("\nsizing search (fast: primal_usvp for MLWE, SIS lattice attack for MSIS; target beta >= "
-      f"{TARGET_BETA}):")
+print(f"\nsizing search (fast: primal_usvp for MLWE, SIS lattice attack for MSIS; target beta >= {TARGET_BETA}):")
 for n_sis in range(8, 64):
     rows = n_sis + L_B
     rank = min_rank(rows)
@@ -223,13 +229,16 @@ for n_sis in range(8, 64):
     if sb >= TARGET_BETA:
         break
 N_SIS, M2, B_SIS = n_sis, m2, B
-print(f"=> MSIS rank n = {N_SIS}, m2 = {M2} (MLWE rank {M2 - N_SIS - L_B}, {N_SIS + L_B} rows), "
-      f"B = {B_SIS:.4g} = 2^{lg(B_SIS):.2f} (q = 2^{lg(q):.2f}); t_A = {N_SIS * d * 42 // 8} B")
+print(
+    f"=> MSIS rank n = {N_SIS}, m2 = {M2} (MLWE rank {M2 - N_SIS - L_B}, {N_SIS + L_B} rows), "
+    f"B = {B_SIS:.4g} = 2^{lg(B_SIS):.2f} (q = 2^{lg(q):.2f}); t_A = {N_SIS * d * 42 // 8} B"
+)
 proof_mlwe = mlwe(M2 - N_SIS - L_B, N_SIS + L_B)
 proof_mlwe = proof_mlwe.updated(tag=f"proof MLWE (ABDLOP hiding, rank {M2 - N_SIS - L_B})")
 lwe_rows[proof_mlwe.tag] = full_estimate(proof_mlwe)
-proof_msis = SISParameters(n=N_SIS * d, q=q, length_bound=B_SIS, m=(M1 + M2) * d, norm=2,
-                           tag=f"proof MSIS (ABDLOP binding, n = {N_SIS})")
+proof_msis = SISParameters(
+    n=N_SIS * d, q=q, length_bound=B_SIS, m=(M1 + M2) * d, norm=2, tag=f"proof MSIS (ABDLOP binding, n = {N_SIS})"
+)
 sis_row = sis_estimate(proof_msis)
 
 # ---- 4. Exactness of the norm proofs ------------------------------------------------------------------------------
@@ -240,15 +249,20 @@ N_JL = M1 * d
 print(f"JL extracted bound b' = 2 sqrt(512) s3 / sqrt(30) = {b_jl:.4g} = 2^{lg(b_jl):.2f}")
 print(f"exact l2: b'^2 + beta_e^2 = 2^{lg(b_jl**2 + BETA_E**2):.2f} < q = 2^{lg(q):.2f}: {b_jl**2 + BETA_E**2 < q}")
 print(f"modular JL: 41 * N * b' = 2^{lg(41 * N_JL * b_jl):.2f} < q: {41 * N_JL * b_jl < q}")
-print(f"binary rows: largest reconstructed integer 2^25 (e_T + 2^24) < q: {2**25 < q}; "
-      f"row 7 terms < 2^15 < q: {2**15 < q}")
+print(
+    f"binary rows: largest reconstructed integer 2^25 (e_T + 2^24) < q: {2**25 < q}; "
+    f"row 7 terms < 2^15 < q: {2**15 < q}"
+)
 
 # ---- 5. Per-round Fiat-Shamir soundness ---------------------------------------------------------------------------
 hr("5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own; section 5 of pq-zero-knowledge.md)")
 jl_unit = log2(sum(comb(256, i) for i in range(30))) - 256
 rounds = [
-    ("R1 JL projection R <- Bin^{256 x N} (LNP22 JL lemma, < 2^-128)", 128.0,
-     f"unit-vector case exactly 2^{jl_unit:.2f}"),
+    (
+        "R1 JL projection R <- Bin^{256 x N} (LNP22 JL lemma, < 2^-128)",
+        128.0,
+        f"unit-vector case exactly 2^{jl_unit:.2f}",
+    ),
     (f"R2 Z_q amortization, lambda = {LAM} repetitions (q^-lambda)", LAM * log2(q), ""),
     (f"R3 R_q aggregation of quadratic relations (q^-(d/l) = q^-{d // l})", (d // l) * log2(q), ""),
     (f"R4 final challenge c in C, kappa = {KAPPA}, eta = {ETA} (2/|C|)", LOGC - 1, ""),
@@ -269,11 +283,15 @@ for tag, r in lwe_rows.items():
 c, qu = sis_row["classical"], sis_row["quantum"]
 good = c[0] >= ky["classical"][0] and qu[0] >= ky["quantum"][0]
 ok &= good
-print(f"{proof_msis.tag:48s} {c[0]:7.1f} ({c[1]:>13s}) {qu[0]:7.1f} ({qu[1]:>13s})  {c[2]:4d}  {'OK' if good else 'MISS'}")
+print(
+    f"{proof_msis.tag:48s} {c[0]:7.1f} ({c[1]:>13s}) {qu[0]:7.1f} ({qu[1]:>13s})  {c[2]:4d}  {'OK' if good else 'MISS'}"
+)
 for name, b in hint_rows:
     good = b >= ky["classical"][2]  # same uSVP model as Kyber-512's usvp beta
     ok &= good
-    print(f"{'DBDD ' + name:48s} {0.292 * b:7.1f} ({'usvp':>13s}) {0.265 * b:7.1f} ({'usvp':>13s})  {b:4d}  "
-          f"{'OK' if good else 'MISS'}")
+    print(
+        f"{'DBDD ' + name:48s} {0.292 * b:7.1f} ({'usvp':>13s}) {0.265 * b:7.1f} ({'usvp':>13s})  {b:4d}  "
+        f"{'OK' if good else 'MISS'}"
+    )
 ok &= all(bits >= 128 for _, bits, _ in rounds)
 print(f"\nGATE: {'MET' if ok else 'MISSED'}")

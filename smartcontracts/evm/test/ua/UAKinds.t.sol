@@ -91,15 +91,32 @@ contract UAKindsTest is Test {
         }
         // every purpose at v1 (kem, pqz-key: UA-8; membership: CTR-UA-37; msig-update: CTR-UA-44; pqz-verdict: group 3f), then pop v2
         // (UA-8 P1)
-        bytes32[17] memory p = [
-            UAKinds.PURPOSE_POP, UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL,
-            UAKinds.PURPOSE_MEMBER, UAKinds.PURPOSE_ZETHER_AUTH, UAKinds.PURPOSE_ZETHER_OWNER, UAKinds.PURPOSE_KEYOP,
-            UAKinds.PURPOSE_PAYEE_FEE, UAKinds.PURPOSE_VP, UAKinds.PURPOSE_VC_ANCHOR, UAKinds.PURPOSE_TRADE,
-            UAKinds.PURPOSE_KEM, UAKinds.PURPOSE_PQZ_KEY, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.PURPOSE_MSIG_UPDATE,
-            UAKinds.PURPOSE_PQZ_VERDICT, UAKinds.PURPOSE_POP_V2
+        // set-auditor (CTR-PQZ-43, spec §5.2, O10): + the PQZ auditor consent's purpose, the string form of the others
+        bytes32[18] memory p = [
+            UAKinds.PURPOSE_POP,
+            UAKinds.PURPOSE_METATX,
+            UAKinds.PURPOSE_METATX_CANCEL,
+            UAKinds.PURPOSE_MEMBER,
+            UAKinds.PURPOSE_ZETHER_AUTH,
+            UAKinds.PURPOSE_ZETHER_OWNER,
+            UAKinds.PURPOSE_KEYOP,
+            UAKinds.PURPOSE_PAYEE_FEE,
+            UAKinds.PURPOSE_VP,
+            UAKinds.PURPOSE_VC_ANCHOR,
+            UAKinds.PURPOSE_TRADE,
+            UAKinds.PURPOSE_KEM,
+            UAKinds.PURPOSE_PQZ_KEY,
+            UAKinds.PURPOSE_MEMBERSHIP,
+            UAKinds.PURPOSE_MSIG_UPDATE,
+            UAKinds.PURPOSE_PQZ_VERDICT,
+            UAKinds.PURPOSE_AUDITOR_CONSENT,
+            UAKinds.PURPOSE_POP_V2
         ];
-        assertEq(_count(j, "purposes"), 17);
-        for (uint256 i; i < 17; ++i) assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
+        assertEq(UAKinds.PURPOSE_AUDITOR_CONSENT, keccak256("scaas.ua.purpose.auditor-consent.v1"));
+        assertEq(_count(j, "purposes"), 18);
+        for (uint256 i; i < 18; ++i) {
+            assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
+        }
         assertEq(UAKinds.MSG_TAG, vm.parseJsonBytes32(j, ".constants.MSG_TAG"));
         assertEq(UAKinds.PURPOSE_POP, vm.parseJsonBytes32(j, ".constants.POP_TAG"));
         assertEq(UAKinds.DOMAIN_TYPEHASH, vm.parseJsonBytes32(j, ".constants.DOMAIN_TYPEHASH"));
@@ -133,7 +150,8 @@ contract UAKindsTest is Test {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("invalid", i, "kind")));
             bytes memory d = vm.parseJsonBytes(j, _at("invalid", i, "keyData"));
             string memory reason = vm.parseJsonString(j, _at("invalid", i, "reason"));
-            bytes memory want = abi.encodeWithSelector(_selector(vm.parseJsonString(j, _at("invalid", i, "error"))), kind);
+            bytes memory want =
+                abi.encodeWithSelector(_selector(vm.parseJsonString(j, _at("invalid", i, "error"))), kind);
             try h.validate(kind, d, vm.parseJsonBool(j, _at("invalid", i, "hederaNative"))) {
                 revert(string.concat("accepted: ", reason));
             } catch (bytes memory got) {
@@ -164,7 +182,9 @@ contract UAKindsTest is Test {
         for (uint256 i; i < nm; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("messages", i, "kind")));
             bytes32 got = UAKinds.uaMessage(
-                kind, vm.parseJsonBytes32(j, _at("messages", i, "purposeTag")), vm.parseJsonBytes32(j, _at("messages", i, "digest"))
+                kind,
+                vm.parseJsonBytes32(j, _at("messages", i, "purposeTag")),
+                vm.parseJsonBytes32(j, _at("messages", i, "digest"))
             );
             assertEq(got, vm.parseJsonBytes32(j, _at("messages", i, "uaMsg")));
         }
@@ -181,7 +201,10 @@ contract UAKindsTest is Test {
             uint16 kind = uint16(vm.parseJsonUint(s, _at("pop", i, "kind")));
             bytes32 h = vm.parseJsonBytes32(s, _at("pop", i, "pqzKeyHash"));
             bytes32 kh = vm.parseJsonBytes32(s, _at("pop", i, "kemRecordHash"));
-            assertEq(UAKinds.portableRecordDigest(ua, kind, h, kh), vm.parseJsonBytes32(s, _at("pop", i, "portableRecordDigest")));
+            assertEq(
+                UAKinds.portableRecordDigest(ua, kind, h, kh),
+                vm.parseJsonBytes32(s, _at("pop", i, "portableRecordDigest"))
+            );
             assertEq(
                 UAKinds.registrationDigest(ua, kind, h, kh, vm.parseJsonBytes32(s, _at("pop", i, "pqzPopHash"))),
                 vm.parseJsonBytes32(s, _at("pop", i, "registrationDigest"))
@@ -233,7 +256,8 @@ contract UAKindsTest is Test {
         uint256 nmem = _count(s, "member");
         for (uint256 i; i < nmem; ++i) {
             bytes32 m = UAKinds.memberDigest(
-                vm.parseJsonBytes32(s, _at("member", i, "structureUa")), vm.parseJsonBytes32(s, _at("member", i, "uaMsg"))
+                vm.parseJsonBytes32(s, _at("member", i, "structureUa")),
+                vm.parseJsonBytes32(s, _at("member", i, "uaMsg"))
             );
             assertEq(m, vm.parseJsonBytes32(s, _at("member", i, "memberDigest")));
         }
@@ -290,12 +314,16 @@ contract UAKindsTest is Test {
 
     function _slice(bytes memory a, uint256 start, uint256 len) internal pure returns (bytes memory out) {
         out = new bytes(len);
-        for (uint256 i; i < len; ++i) out[i] = a[start + i];
+        for (uint256 i; i < len; ++i) {
+            out[i] = a[start + i];
+        }
     }
 
     /// P6a's PqUA keeps its own tags (ruling U8): they must equal the table's.
     function test_pqTagsMatchPqUA() public pure {
-        for (uint16 k = UAKinds.MLDSA44; k <= 0x0135; ++k) assertEq(UAKinds.tag(k), PqUA.tag(k));
+        for (uint16 k = UAKinds.MLDSA44; k <= 0x0135; ++k) {
+            assertEq(UAKinds.tag(k), PqUA.tag(k));
+        }
     }
 
     /// CTR-UA-39: `mldsa87` (0x0134), tag `scaas.ua.mldsa87.v1`, group `mldsa87`, key data the FIPS 204 `pk` of 2,592 B (the
@@ -305,7 +333,9 @@ contract UAKindsTest is Test {
         assertEq(UAKinds.name(k), "mldsa87");
         assertEq(UAKinds.tag(k), keccak256("scaas.ua.mldsa87.v1"));
         assertEq(UAKinds.groupName(k), "mldsa87");
-        assertTrue(UAKinds.isSigning(k) && UAKinds.isDerived(k) && UAKinds.isMember(k, false) && UAKinds.isMember(k, true));
+        assertTrue(
+            UAKinds.isSigning(k) && UAKinds.isDerived(k) && UAKinds.isMember(k, false) && UAKinds.isMember(k, true)
+        );
         assertFalse(UAKinds.isNative(k) || UAKinds.isZether(k));
         assertTrue(UAStore.isPq(k) && UAStore.isPq(0x0130) && !UAStore.isPq(0x0136) && !UAStore.isPq(0x012f));
         assertEq(UAStore.vkLength(k), 2592);
@@ -326,13 +356,17 @@ contract UAKindsTest is Test {
         assertEq(UAKinds.name(k), "fndsa1024");
         assertEq(UAKinds.tag(k), keccak256("scaas.ua.fndsa1024.v1"));
         assertEq(UAKinds.groupName(k), "fndsa1024");
-        assertTrue(UAKinds.isSigning(k) && UAKinds.isDerived(k) && UAKinds.isMember(k, false) && UAKinds.isMember(k, true));
+        assertTrue(
+            UAKinds.isSigning(k) && UAKinds.isDerived(k) && UAKinds.isMember(k, false) && UAKinds.isMember(k, true)
+        );
         assertFalse(UAKinds.isNative(k) || UAKinds.isZether(k));
         assertTrue(UAStore.isPq(k) && !UAStore.isPq(0x0136));
         assertEq(UAStore.vkLength(k), 1793);
         bytes memory d = new bytes(1793);
         d[0] = 0x0a;
-        for (uint256 i = 1; i < 1793; i += 2) d[i] = 0x55; // h_i < q throughout
+        for (uint256 i = 1; i < 1793; i += 2) {
+            d[i] = 0x55; // h_i < q throughout
+        }
         this.validate(k, d);
         // the last coefficient h_1023 = (d[1791] & 0x3f) << 8 | d[1792] (bits 14322..14335 of h)
         (d[1791], d[1792]) = (0x3f, 0xff); // 16383 >= q
@@ -383,7 +417,9 @@ contract UAKindsTest is Test {
     function test_portableDomainSeparatorPinned() public {
         vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
         bytes32 ds = keccak256(
-            abi.encode(keccak256("EIP712Domain(string name,string version)"), keccak256("SCaaS UA Portable"), keccak256("1"))
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version)"), keccak256("SCaaS UA Portable"), keccak256("1")
+            )
         );
         assertEq(ds, 0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1);
         assertEq(UAKinds.PORTABLE_DOMAIN_SEPARATOR, ds);
@@ -395,12 +431,25 @@ contract UAKindsTest is Test {
         vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
         string memory j = _p();
         // CTR-UA-44 (TODO 3ze): + `UAMsigUpdate`, `UAMsigMember`
-        string[8] memory t = ["UAKemRecord", "UAPortableRecord", "UARegistration", "UAPqzKey", "UAPqzKeyRecord", "UAMembership",
-            "UAMsigUpdate", "UAMsigMember"];
+        string[8] memory t = [
+            "UAKemRecord",
+            "UAPortableRecord",
+            "UARegistration",
+            "UAPqzKey",
+            "UAPqzKeyRecord",
+            "UAMembership",
+            "UAMsigUpdate",
+            "UAMsigMember"
+        ];
         bytes32[8] memory got = [
-            UAKinds.UA_KEM_RECORD_TYPEHASH, UAKinds.UA_PORTABLE_RECORD_TYPEHASH, UAKinds.UA_REGISTRATION_TYPEHASH,
-            UAKinds.UA_PQZ_KEY_TYPEHASH, UAKinds.UA_PQZ_KEY_RECORD_TYPEHASH, UAKinds.UA_MEMBERSHIP_TYPEHASH,
-            UAKinds.UA_MSIG_UPDATE_TYPEHASH, UAKinds.UA_MSIG_MEMBER_TYPEHASH
+            UAKinds.UA_KEM_RECORD_TYPEHASH,
+            UAKinds.UA_PORTABLE_RECORD_TYPEHASH,
+            UAKinds.UA_REGISTRATION_TYPEHASH,
+            UAKinds.UA_PQZ_KEY_TYPEHASH,
+            UAKinds.UA_PQZ_KEY_RECORD_TYPEHASH,
+            UAKinds.UA_MEMBERSHIP_TYPEHASH,
+            UAKinds.UA_MSIG_UPDATE_TYPEHASH,
+            UAKinds.UA_MSIG_MEMBER_TYPEHASH
         ];
         bytes32[8] memory pinned = [
             bytes32(0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201),
@@ -481,7 +530,9 @@ contract UAKindsTest is Test {
             bytes memory pqzPop = vm.parseJsonBytes(j, string.concat(r, ".pqzPop"));
             assertEq(pqzPop.length == 0 ? bytes32(0) : keccak256(pqzPop), popHash, name_);
             bytes32 record = UAKinds.portableRecordHash(
-                ua, kind, vm.parseJsonBytes32(j, string.concat(r, ".pqzKeyHash")),
+                ua,
+                kind,
+                vm.parseJsonBytes32(j, string.concat(r, ".pqzKeyHash")),
                 vm.parseJsonBytes32(j, string.concat(r, ".kemRecordHash"))
             );
             bytes32 d = UAKinds.portableDigest(UAKinds.registrationHash(record, popHash));
@@ -542,8 +593,11 @@ contract UAKindsTest is Test {
             uint16 kind = uint16(vm.parseJsonUint(j, string.concat(r, ".kind")));
             bytes32 m = UAKinds.uaMessage(kind, UAKinds.PURPOSE_PQZ_KEY, rd);
             assertEq(m, vm.parseJsonBytes32(j, string.concat(r, ".message")), name_);
-            assertEq(UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, kd),
-                vm.parseJsonBytes32(j, string.concat(r, ".pqzRegMessage")), name_);
+            assertEq(
+                UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, kd),
+                vm.parseJsonBytes32(j, string.concat(r, ".pqzRegMessage")),
+                name_
+            );
             if (kind == UAKinds.MSIG) {
                 assertEq(UAKinds.memberDigest(ua, m), vm.parseJsonBytes32(j, string.concat(r, ".memberDigest")), name_);
             }
@@ -560,7 +614,9 @@ contract UAKindsTest is Test {
         assertEq(UAKinds.PURPOSE_PQZ_KEY, vm.parseJsonBytes32(j, ".tags.PURPOSE_PQZ_KEY.hash"));
         assertFalse(vm.keyExistsJson(j, ".tags.KEM_RECORD_TAG"));
         assertFalse(vm.keyExistsJson(j, ".tags.PQZ_KEY_RECORD_TAG"));
-        assertEq(UAKinds.groupTag(UAKinds.groupName(UAKinds.PQZ_MLWE)), vm.parseJsonBytes32(j, ".tags.PQZ_KEY_GROUP.hash"));
+        assertEq(
+            UAKinds.groupTag(UAKinds.groupName(UAKinds.PQZ_MLWE)), vm.parseJsonBytes32(j, ".tags.PQZ_KEY_GROUP.hash")
+        );
     }
 
     /// portable.json `checked` and `kemPkLength` (UA-8 P7, P11.3).

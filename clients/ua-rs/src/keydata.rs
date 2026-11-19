@@ -1,6 +1,6 @@
 //! Key-data validation (accounts.md §1.6 "Validation at registration"): the unique canonical encoding of a valid key or
 //! structure, else `UAError::KeyData`. Never panics: every length is checked before it is sliced.
-use crate::{in_native_space, SCHEMES, is_member, is_native, kind_info, Result, UAError};
+use crate::{in_native_space, is_member, is_native, kind_info, Result, UAError, SCHEMES};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ff::{BigInteger, PrimeField, Zero};
 
@@ -18,11 +18,19 @@ const fn hex32(s: &str) -> [u8; 32] {
     out
 }
 const fn nibble(c: u8) -> u8 {
-    if c <= b'9' { c - b'0' } else { c - b'a' + 10 }
+    if c <= b'9' {
+        c - b'0'
+    } else {
+        c - b'a' + 10
+    }
 }
 
 fn need(ok: bool, reason: &'static str) -> Result<()> {
-    if ok { Ok(()) } else { Err(UAError::KeyData(reason)) }
+    if ok {
+        Ok(())
+    } else {
+        Err(UAError::KeyData(reason))
+    }
 }
 
 /// Big-endian bytes (exactly the field's width) → the element, `None` unless canonical (< modulus).
@@ -57,7 +65,9 @@ fn p256_point(xy: &[u8]) -> Result<()> {
 
 fn ed25519_key(b: &[u8]) -> Result<()> {
     let enc: [u8; 32] = b.try_into().map_err(|_| UAError::KeyData("length"))?;
-    let p = curve25519_dalek::edwards::CompressedEdwardsY(enc).decompress().ok_or(UAError::KeyData("curve"))?;
+    let p = curve25519_dalek::edwards::CompressedEdwardsY(enc)
+        .decompress()
+        .ok_or(UAError::KeyData("curve"))?;
     // dalek accepts y ≥ p and a negative zero x; the re-encoding is canonical, so compare
     need(p.compress().to_bytes() == enc, "canonical")?;
     need(!p.is_small_order(), "small-order")
@@ -65,7 +75,9 @@ fn ed25519_key(b: &[u8]) -> Result<()> {
 
 fn bn_g1(b: &[u8]) -> Result<()> {
     use ark_bn254::{Fq, G1Affine};
-    let (Some(x), Some(y)) = (fe::<Fq>(&b[..32]), fe::<Fq>(&b[32..64])) else { return Err(UAError::KeyData("range")) };
+    let (Some(x), Some(y)) = (fe::<Fq>(&b[..32]), fe::<Fq>(&b[32..64])) else {
+        return Err(UAError::KeyData("range"));
+    };
     need(!(x.is_zero() && y.is_zero()), "identity")?;
     need(G1Affine::new_unchecked(x, y).is_on_curve(), "curve")
 }
@@ -73,8 +85,13 @@ fn bn_g1(b: &[u8]) -> Result<()> {
 fn bn_g2(b: &[u8]) -> Result<()> {
     use ark_bn254::{Fq, Fq2, G2Affine};
     let w: Vec<Option<Fq>> = (0..4).map(|i| fe::<Fq>(&b[32 * i..32 * i + 32])).collect();
-    let (Some(xi), Some(xr), Some(yi), Some(yr)) = (w[0], w[1], w[2], w[3]) else { return Err(UAError::KeyData("range")) };
-    need(!(xi.is_zero() && xr.is_zero() && yi.is_zero() && yr.is_zero()), "identity")?;
+    let (Some(xi), Some(xr), Some(yi), Some(yr)) = (w[0], w[1], w[2], w[3]) else {
+        return Err(UAError::KeyData("range"));
+    };
+    need(
+        !(xi.is_zero() && xr.is_zero() && yi.is_zero() && yr.is_zero()),
+        "identity",
+    )?;
     // EIP-197 order: imaginary part first
     on_curve_in_subgroup(&G2Affine::new_unchecked(Fq2::new(xr, xi), Fq2::new(yr, yi)))
 }
@@ -92,14 +109,24 @@ fn bls_g1(b: &[u8]) -> Result<()> {
 
 fn bls_g2(b: &[u8]) -> Result<()> {
     use ark_bls12_381::{Fq2, G2Affine};
-    let (x0, x1, y0, y1) = (bls_fp(&b[..64])?, bls_fp(&b[64..128])?, bls_fp(&b[128..192])?, bls_fp(&b[192..256])?);
-    need(!(x0.is_zero() && x1.is_zero() && y0.is_zero() && y1.is_zero()), "identity")?;
+    let (x0, x1, y0, y1) = (
+        bls_fp(&b[..64])?,
+        bls_fp(&b[64..128])?,
+        bls_fp(&b[128..192])?,
+        bls_fp(&b[192..256])?,
+    );
+    need(
+        !(x0.is_zero() && x1.is_zero() && y0.is_zero() && y1.is_zero()),
+        "identity",
+    )?;
     // EIP-2537 order: c0 first
     on_curve_in_subgroup(&G2Affine::new_unchecked(Fq2::new(x0, x1), Fq2::new(y0, y1)))
 }
 
 fn u16_at(d: &[u8], o: usize) -> Result<usize> {
-    d.get(o..o + 2).map(|s| ((s[0] as usize) << 8) | s[1] as usize).ok_or(UAError::KeyData("length"))
+    d.get(o..o + 2)
+        .map(|s| ((s[0] as usize) << 8) | s[1] as usize)
+        .ok_or(UAError::KeyData("length"))
 }
 
 /// `Q ‖ u16 n ‖ n × P_i`, 2 ≤ n ≤ 16, P_i strictly increasing.

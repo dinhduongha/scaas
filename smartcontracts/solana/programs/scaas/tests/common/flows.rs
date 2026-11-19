@@ -14,7 +14,14 @@ pub fn mandate_addr(account: &Pubkey, seed: [u8; 32]) -> Pubkey {
 }
 
 impl Env {
-    pub fn mandate_init(&self, owner_account: &Pubkey, seed: [u8; 32], asset: &Pubkey, delegate: &Ed, payees: Vec<Pubkey>) -> MandateInit {
+    pub fn mandate_init(
+        &self,
+        owner_account: &Pubkey,
+        seed: [u8; 32],
+        asset: &Pubkey,
+        delegate: &Ed,
+        payees: Vec<Pubkey>,
+    ) -> MandateInit {
         MandateInit {
             seed,
             asset: *asset,
@@ -48,12 +55,29 @@ impl Env {
                 system_program: SYSTEM,
             }
             .to_account_metas(None),
-            data: scaas::instruction::MandateOpen { init: init.clone(), auth: auth(A::KIND_RAW, 0, 0, 0) }.data(),
+            data: scaas::instruction::MandateOpen {
+                init: init.clone(),
+                auth: auth(A::KIND_RAW, 0, 0, 0),
+            }
+            .data(),
         };
-        self.send(&[ed_ix(&[signer.sign(A::KIND_RAW, A::MANDATE_LABEL, &dg)]), ix], &[])
+        self.send(
+            &[
+                ed_ix(&[signer.sign(A::KIND_RAW, A::MANDATE_LABEL, &dg)]),
+                ix,
+            ],
+            &[],
+        )
     }
 
-    pub fn mandate_pay_ix(&self, mandate: &Pubkey, mint: &Pubkey, tp: Pubkey, args: &scaas::PayArgs, a: Auth) -> Instruction {
+    pub fn mandate_pay_ix(
+        &self,
+        mandate: &Pubkey,
+        mint: &Pubkey,
+        tp: Pubkey,
+        args: &scaas::PayArgs,
+        a: Auth,
+    ) -> Instruction {
         let to = Pubkey::new_from_array(args.to);
         Instruction {
             program_id: scaas::ID,
@@ -74,26 +98,54 @@ impl Env {
                 program: scaas::ID,
             }
             .to_account_metas(None),
-            data: scaas::instruction::MandatePay { args: args.clone(), auth: a }.data(),
+            data: scaas::instruction::MandatePay {
+                args: args.clone(),
+                auth: a,
+            }
+            .data(),
         }
     }
 
     /// Thế hệ của Mandate đang mở (L4); 0 nếu chưa có.
     pub fn generation(&self, mandate: &Pubkey) -> u64 {
-        self.account::<scaas::state::Mandate>(mandate).map_or(0, |m| m.generation)
+        self.account::<scaas::state::Mandate>(mandate)
+            .map_or(0, |m| m.generation)
     }
 
     /// Delegate ký `MetaOp{op: mandate_pay, contract: mandate, from: owner, nonce: generation hiện tại}`.
-    pub fn mandate_pay(&mut self, delegate: &Ed, owner: &Ed, mandate: &Pubkey, mint: &Pubkey, args: &scaas::PayArgs) -> Res {
-        let args = scaas::PayArgs { nonce: self.generation(mandate), ..args.clone() };
+    pub fn mandate_pay(
+        &mut self,
+        delegate: &Ed,
+        owner: &Ed,
+        mandate: &Pubkey,
+        mint: &Pubkey,
+        args: &scaas::PayArgs,
+    ) -> Res {
+        let args = scaas::PayArgs {
+            nonce: self.generation(mandate),
+            ..args.clone()
+        };
         self.mandate_pay_signed(delegate, owner, mandate, mint, &args)
     }
 
     /// Như `mandate_pay` nhưng ký đúng `args` (kể cả `nonce`).
-    pub fn mandate_pay_signed(&mut self, delegate: &Ed, owner: &Ed, mandate: &Pubkey, mint: &Pubkey, args: &scaas::PayArgs) -> Res {
+    pub fn mandate_pay_signed(
+        &mut self,
+        delegate: &Ed,
+        owner: &Ed,
+        mandate: &Pubkey,
+        mint: &Pubkey,
+        args: &scaas::PayArgs,
+    ) -> Res {
         let dg = self.metaop_digest(mandate, mint, A::OP_MANDATE_PAY, &owner.pk(), args);
         let ix = self.mandate_pay_ix(mandate, mint, TOKEN, args, auth(A::KIND_RAW, 0, 0, 0));
-        self.send(&[ed_ix(&[delegate.sign(A::KIND_RAW, A::METAOP_LABEL, &dg)]), ix], &[])
+        self.send(
+            &[
+                ed_ix(&[delegate.sign(A::KIND_RAW, A::METAOP_LABEL, &dg)]),
+                ix,
+            ],
+            &[],
+        )
     }
 
     pub fn mandate_revoke(&mut self, signer: &Ed, owner: &Ed, mandate: &Pubkey) -> Res {
@@ -101,7 +153,13 @@ impl Env {
         self.mandate_revoke_gen(signer, owner, mandate, g)
     }
 
-    pub fn mandate_revoke_gen(&mut self, signer: &Ed, owner: &Ed, mandate: &Pubkey, generation: u64) -> Res {
+    pub fn mandate_revoke_gen(
+        &mut self,
+        signer: &Ed,
+        owner: &Ed,
+        mandate: &Pubkey,
+        generation: u64,
+    ) -> Res {
         let op = scaas::auth::MetaOp {
             network: self.network,
             contract: mandate.to_bytes(),
@@ -119,22 +177,55 @@ impl Env {
         };
         let ix = Instruction {
             program_id: scaas::ID,
-            accounts: scaas::accounts::MandateRevoke { lane: self.lane.pubkey(), config: self.config(), mandate: *mandate, instructions: IXS }
-                .to_account_metas(None),
-            data: scaas::instruction::MandateRevokeSigned { valid_until: 1000, auth: auth(A::KIND_RAW, 0, 0, 0) }.data(),
+            accounts: scaas::accounts::MandateRevoke {
+                lane: self.lane.pubkey(),
+                config: self.config(),
+                mandate: *mandate,
+                instructions: IXS,
+            }
+            .to_account_metas(None),
+            data: scaas::instruction::MandateRevokeSigned {
+                valid_until: 1000,
+                auth: auth(A::KIND_RAW, 0, 0, 0),
+            }
+            .data(),
         };
-        self.send(&[ed_ix(&[signer.sign(A::KIND_RAW, A::METAOP_LABEL, &op.digest())]), ix], &[])
+        self.send(
+            &[
+                ed_ix(&[signer.sign(A::KIND_RAW, A::METAOP_LABEL, &op.digest())]),
+                ix,
+            ],
+            &[],
+        )
     }
 
     /// Khoá Account đóng Mandate; `quads` = (nguồn của Mandate, mint, đích của Account, token program).
-    pub fn mandate_close(&mut self, owner: &Ed, mandate: &Pubkey, quads: &[(Pubkey, Pubkey, Pubkey, Pubkey)]) -> Res {
+    pub fn mandate_close(
+        &mut self,
+        owner: &Ed,
+        mandate: &Pubkey,
+        quads: &[(Pubkey, Pubkey, Pubkey, Pubkey)],
+    ) -> Res {
         self.mandate_close_as(owner, owner, mandate, quads)
     }
 
-    pub fn mandate_close_as(&mut self, owner: &Ed, signer: &Ed, mandate: &Pubkey, quads: &[(Pubkey, Pubkey, Pubkey, Pubkey)]) -> Res {
+    pub fn mandate_close_as(
+        &mut self,
+        owner: &Ed,
+        signer: &Ed,
+        mandate: &Pubkey,
+        quads: &[(Pubkey, Pubkey, Pubkey, Pubkey)],
+    ) -> Res {
         let acct = owner.account();
         let nonce = self.subject(&acct).key_nonce;
-        let dg = sha(&[A::MCLOSE_LABEL.as_bytes(), &self.network, acct.as_ref(), mandate.as_ref(), &nonce.to_le_bytes(), &1000u64.to_le_bytes()]);
+        let dg = sha(&[
+            A::MCLOSE_LABEL.as_bytes(),
+            &self.network,
+            acct.as_ref(),
+            mandate.as_ref(),
+            &nonce.to_le_bytes(),
+            &1000u64.to_le_bytes(),
+        ]);
         let rent_payer = self.lane.pubkey();
         let mut accounts = scaas::accounts::MandateClose {
             lane: self.lane.pubkey(),
@@ -146,19 +237,38 @@ impl Env {
         }
         .to_account_metas(None);
         for (src, mint, dst, tp) in quads {
-            accounts.extend([AccountMeta::new(*src, false), AccountMeta::new_readonly(*mint, false), AccountMeta::new(*dst, false), AccountMeta::new_readonly(*tp, false)]);
+            accounts.extend([
+                AccountMeta::new(*src, false),
+                AccountMeta::new_readonly(*mint, false),
+                AccountMeta::new(*dst, false),
+                AccountMeta::new_readonly(*tp, false),
+            ]);
         }
         let ix = Instruction {
             program_id: scaas::ID,
             accounts,
-            data: scaas::instruction::MandateCloseSigned { nonce, valid_until: 1000, auth: auth(A::KIND_RAW, 0, 0, 0) }.data(),
+            data: scaas::instruction::MandateCloseSigned {
+                nonce,
+                valid_until: 1000,
+                auth: auth(A::KIND_RAW, 0, 0, 0),
+            }
+            .data(),
         };
-        self.send(&[ed_ix(&[signer.sign(A::KIND_RAW, A::MCLOSE_LABEL, &dg)]), ix], &[])
+        self.send(
+            &[ed_ix(&[signer.sign(A::KIND_RAW, A::MCLOSE_LABEL, &dg)]), ix],
+            &[],
+        )
     }
 
     // -------------------------------------------------------------- DEX
 
-    pub fn list_market(&mut self, base: &Pubkey, quote: &Pubkey, fee_ppm: u32, fee_recipient: &Pubkey) -> Res {
+    pub fn list_market(
+        &mut self,
+        base: &Pubkey,
+        quote: &Pubkey,
+        fee_ppm: u32,
+        fee_recipient: &Pubkey,
+    ) -> Res {
         let admin = self.admin.insecure_clone();
         let ix = Instruction {
             program_id: scaas::ID,
@@ -171,16 +281,37 @@ impl Env {
                 system_program: SYSTEM,
             }
             .to_account_metas(None),
-            data: scaas::instruction::ListMarket { fee_ppm, fee_recipient: *fee_recipient }.data(),
+            data: scaas::instruction::ListMarket {
+                fee_ppm,
+                fee_recipient: *fee_recipient,
+            }
+            .data(),
         };
         self.send_as(&admin, &[ix], &[])
     }
 
-    pub fn set_market(&mut self, signer: &solana_keypair::Keypair, market: &Pubkey, fee_ppm: u32, enabled: bool, fee_recipient: &Pubkey) -> Res {
+    pub fn set_market(
+        &mut self,
+        signer: &solana_keypair::Keypair,
+        market: &Pubkey,
+        fee_ppm: u32,
+        enabled: bool,
+        fee_recipient: &Pubkey,
+    ) -> Res {
         let ix = Instruction {
             program_id: scaas::ID,
-            accounts: scaas::accounts::SetMarket { admin: signer.pubkey(), config: self.config(), market: *market }.to_account_metas(None),
-            data: scaas::instruction::SetMarket { fee_ppm, enabled, fee_recipient: *fee_recipient }.data(),
+            accounts: scaas::accounts::SetMarket {
+                admin: signer.pubkey(),
+                config: self.config(),
+                market: *market,
+            }
+            .to_account_metas(None),
+            data: scaas::instruction::SetMarket {
+                fee_ppm,
+                enabled,
+                fee_recipient: *fee_recipient,
+            }
+            .data(),
         };
         let s = signer.insecure_clone();
         self.send_as(&s, &[ix], &[])
@@ -192,7 +323,19 @@ impl Env {
 
     /// Một `settle`: `sig_a`/`sig_b` = chỉ số chữ ký trong instruction precompile ở `precompile_ix`.
     #[allow(clippy::too_many_arguments)]
-    pub fn settle_ix(&self, market: &Pubkey, a: &Order, b: &Order, fill_a: u64, fill_b: u64, tp: Pubkey, fee: bool, precompile_ix: u8, sig_a: u8, sig_b: u8) -> Instruction {
+    pub fn settle_ix(
+        &self,
+        market: &Pubkey,
+        a: &Order,
+        b: &Order,
+        fill_a: u64,
+        fill_b: u64,
+        tp: Pubkey,
+        fee: bool,
+        precompile_ix: u8,
+        sig_a: u8,
+        sig_b: u8,
+    ) -> Instruction {
         let (ha, hb) = (self.order_hash(market, a), self.order_hash(market, b));
         let (sa, sb) = (account_of(&a.maker), account_of(&b.maker));
         let (x, y) = (a.sell_mint, a.buy_mint);
@@ -241,15 +384,33 @@ impl Env {
 
     /// Hai lệnh ký trong một precompile + `settle`, CU 1,4M.
     #[allow(clippy::too_many_arguments)]
-    pub fn settle(&mut self, market: &Pubkey, a: &Order, ka: &Ed, b: &Order, kb: &Ed, fill_a: u64, fill_b: u64, fee: bool) -> Res {
-        let sigs = [ka.sign(A::KIND_RAW, A::ORDER_LABEL, &self.order_hash(market, a)), kb.sign(A::KIND_RAW, A::ORDER_LABEL, &self.order_hash(market, b))];
+    pub fn settle(
+        &mut self,
+        market: &Pubkey,
+        a: &Order,
+        ka: &Ed,
+        b: &Order,
+        kb: &Ed,
+        fill_a: u64,
+        fill_b: u64,
+        fee: bool,
+    ) -> Res {
+        let sigs = [
+            ka.sign(A::KIND_RAW, A::ORDER_LABEL, &self.order_hash(market, a)),
+            kb.sign(A::KIND_RAW, A::ORDER_LABEL, &self.order_hash(market, b)),
+        ];
         let ix = self.settle_ix(market, a, b, fill_a, fill_b, TOKEN, fee, 1, 0, 1);
         self.send(&[cu(1_400_000), ed_ix(&sigs), ix], &[])
     }
 
     pub fn cancel(&mut self, market: &Pubkey, o: &Order, k: &Ed) -> Res {
         let h = self.order_hash(market, o);
-        let dg = sha(&[A::CANCEL_LABEL.as_bytes(), &self.network, market.as_ref(), &h]);
+        let dg = sha(&[
+            A::CANCEL_LABEL.as_bytes(),
+            &self.network,
+            market.as_ref(),
+            &h,
+        ]);
         let ix = Instruction {
             program_id: scaas::ID,
             accounts: scaas::accounts::CancelSigned {
@@ -262,14 +423,28 @@ impl Env {
                 system_program: SYSTEM,
             }
             .to_account_metas(None),
-            data: scaas::instruction::CancelSigned { order: o.clone(), order_hash: h, auth: auth(A::KIND_RAW, 0, 0, 0) }.data(),
+            data: scaas::instruction::CancelSigned {
+                order: o.clone(),
+                order_hash: h,
+                auth: auth(A::KIND_RAW, 0, 0, 0),
+            }
+            .data(),
         };
-        self.send(&[ed_ix(&[k.sign(A::KIND_RAW, A::CANCEL_LABEL, &dg)]), ix], &[])
+        self.send(
+            &[ed_ix(&[k.sign(A::KIND_RAW, A::CANCEL_LABEL, &dg)]), ix],
+            &[],
+        )
     }
 
     pub fn invalidate(&mut self, market: &Pubkey, k: &Ed, min_nonce: u64) -> Res {
         let acct = k.account();
-        let dg = sha(&[A::MINNONCE_LABEL.as_bytes(), &self.network, market.as_ref(), acct.as_ref(), &min_nonce.to_le_bytes()]);
+        let dg = sha(&[
+            A::MINNONCE_LABEL.as_bytes(),
+            &self.network,
+            market.as_ref(),
+            acct.as_ref(),
+            &min_nonce.to_le_bytes(),
+        ]);
         let ix = Instruction {
             program_id: scaas::ID,
             accounts: scaas::accounts::InvalidateNonces {
@@ -282,12 +457,25 @@ impl Env {
                 system_program: SYSTEM,
             }
             .to_account_metas(None),
-            data: scaas::instruction::InvalidateNoncesSigned { min_nonce, auth: auth(A::KIND_RAW, 0, 0, 0) }.data(),
+            data: scaas::instruction::InvalidateNoncesSigned {
+                min_nonce,
+                auth: auth(A::KIND_RAW, 0, 0, 0),
+            }
+            .data(),
         };
-        self.send(&[ed_ix(&[k.sign(A::KIND_RAW, A::MINNONCE_LABEL, &dg)]), ix], &[])
+        self.send(
+            &[ed_ix(&[k.sign(A::KIND_RAW, A::MINNONCE_LABEL, &dg)]), ix],
+            &[],
+        )
     }
 
-    pub fn sweep(&mut self, market: &Pubkey, source: &Pubkey, mint: &Pubkey, recipient: &Pubkey) -> Res {
+    pub fn sweep(
+        &mut self,
+        market: &Pubkey,
+        source: &Pubkey,
+        mint: &Pubkey,
+        recipient: &Pubkey,
+    ) -> Res {
         let ix = Instruction {
             program_id: scaas::ID,
             accounts: scaas::accounts::Sweep {
@@ -316,10 +504,23 @@ pub fn market_addr(base: &Pubkey, quote: &Pubkey) -> Pubkey {
 pub fn cu(units: u32) -> Instruction {
     let mut data = vec![2u8];
     data.extend_from_slice(&units.to_le_bytes());
-    Instruction { program_id: "ComputeBudget111111111111111111111111111111".parse().unwrap(), accounts: vec![], data }
+    Instruction {
+        program_id: "ComputeBudget111111111111111111111111111111"
+            .parse()
+            .unwrap(),
+        accounts: vec![],
+        data,
+    }
 }
 
-pub fn order(maker: &Ed, sell: &Pubkey, buy: &Pubkey, sell_amount: u64, buy_amount: u64, nonce: u64) -> Order {
+pub fn order(
+    maker: &Ed,
+    sell: &Pubkey,
+    buy: &Pubkey,
+    sell_amount: u64,
+    buy_amount: u64,
+    nonce: u64,
+) -> Order {
     Order {
         maker: maker.pk(),
         taker: [0; 32],

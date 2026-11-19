@@ -16,7 +16,9 @@ use crate::proof::tbox::{self, Statement};
 use crate::proof::{abdlop, Eq};
 use crate::rand::shake::shake128;
 use crate::rand::urandom::polyvec_urandom_bnd;
-use crate::{Ctx, Error, Wiped, HEADER_BYTES, MAX_PROOF, PREFIX_BYTES, POLYVEC_BYTES as PV, V_BYTES};
+use crate::{
+    Ctx, Error, Wiped, HEADER_BYTES, MAX_PROOF, POLYVEC_BYTES as PV, PREFIX_BYTES, V_BYTES,
+};
 use alloc::vec::Vec;
 
 use crate::params::set;
@@ -48,12 +50,33 @@ pub(crate) struct Rel {
     pub(crate) name: &'static str,
 }
 
-const fn rel(p: &'static Tbox, op: u8, code: u8, legs: usize, aud: usize, name: &'static str) -> Rel {
-    Rel { p, op, code, legs, aud, name }
+const fn rel(
+    p: &'static Tbox,
+    op: u8,
+    code: u8,
+    legs: usize,
+    aud: usize,
+    name: &'static str,
+) -> Rel {
+    Rel {
+        p,
+        op,
+        code,
+        legs,
+        aud,
+        name,
+    }
 }
 
 const fn txm(p: &'static Tbox, m: usize, lg: u8, a: usize, name: &'static str) -> Rel {
-    rel(p, crate::OP_TRANSFER_MULTI, 0x70 | (a as u8) << 3 | lg, m, a, name)
+    rel(
+        p,
+        crate::OP_TRANSFER_MULTI,
+        0x70 | (a as u8) << 3 | lg,
+        m,
+        a,
+        name,
+    )
 }
 
 pub(crate) const NREL: usize = if cfg!(feature = "oversize") { 18 } else { 16 };
@@ -68,10 +91,38 @@ pub(crate) static RELS: [Rel; NREL] = [
     rel(&params::tx::pqz_tx, crate::OP_TRANSFER, 1, 1, 1, "tx"),
     rel(&params::tx0::pqz_tx0, crate::OP_TRANSFER, 0x81, 1, 0, "tx0"),
     rel(&params::burn::pqz_burn, crate::OP_BURN, 2, 0, 0, "burn"),
-    rel(&params::ds::pqz_ds, crate::OP_DISCLOSE_SENDER, 4, 0, 0, "ds"),
-    rel(&params::dr::pqz_dr, crate::OP_DISCLOSE_RECEIVER, 5, 0, 0, "dr"),
-    rel(&params::txs::pqz_txs, crate::OP_TRANSFER, CODE_SPLIT | 1, 1, 1, "txs"),
-    rel(&params::txs0::pqz_txs0, crate::OP_TRANSFER, 0x80 | CODE_SPLIT | 1, 1, 0, "txs0"),
+    rel(
+        &params::ds::pqz_ds,
+        crate::OP_DISCLOSE_SENDER,
+        4,
+        0,
+        0,
+        "ds",
+    ),
+    rel(
+        &params::dr::pqz_dr,
+        crate::OP_DISCLOSE_RECEIVER,
+        5,
+        0,
+        0,
+        "dr",
+    ),
+    rel(
+        &params::txs::pqz_txs,
+        crate::OP_TRANSFER,
+        CODE_SPLIT | 1,
+        1,
+        1,
+        "txs",
+    ),
+    rel(
+        &params::txs0::pqz_txs0,
+        crate::OP_TRANSFER,
+        0x80 | CODE_SPLIT | 1,
+        1,
+        0,
+        "txs0",
+    ),
     txm(&params::tx::pqz_tx, 1, 0, 1, "tx"),
     txm(&params::txm2::pqz_txm2, 2, 1, 1, "txm2"),
     txm(&params::txm4::pqz_txm4, 4, 2, 1, "txm4"),
@@ -117,9 +168,16 @@ pub(crate) const HDR_AUDITOR_ON: usize = 448;
 
 /// `PQZ_TXM_LPG (a)`: legs per randomness group, S_AUD with the auditor (owner 2026-10-25, R0-1), 4 without
 pub(crate) const fn lpg(a: usize) -> usize {
-    if a > 0 { set::S_AUD } else { 4 }
+    if a > 0 {
+        set::S_AUD
+    } else {
+        4
+    }
 }
-const _: () = assert!(set::S_AUD >= 1 && set::S_AUD <= 4, "S_AUD windows of 16 in the 64 coefficients of pk_a^T r_g");
+const _: () = assert!(
+    set::S_AUD >= 1 && set::S_AUD <= 4,
+    "S_AUD windows of 16 in the 64 coefficients of pk_a^T r_g"
+);
 /// `PQZ_TXM_GROUPS (m, a)`
 pub(crate) const fn groups(m: usize, a: usize) -> usize {
     m.div_ceil(lpg(a))
@@ -174,7 +232,9 @@ pub(crate) fn rel_of(op: u8, stmt: &[u8]) -> Option<usize> {
             if !(ok1 && ok2) {
                 return None;
             }
-            TXM0 + RELS[TXM0..].iter().position(|r| r.legs as u64 == m && r.aud as u64 == a)?
+            TXM0 + RELS[TXM0..]
+                .iter()
+                .position(|r| r.legs as u64 == m && r.aud as u64 == a)?
         }
         _ => return None,
     };
@@ -244,17 +304,32 @@ struct Sys<'a> {
 
 impl Sys<'_> {
     /// `add_lin_row`: sum_j A'[i][j] x[off_x + j] + y[off_y + i] - rhs = 0, A' = A or A^T
-    fn lin_row(&mut self, transpose: bool, i: usize, off_x: usize, off_y: usize, rhs: &mut Poly) -> Result<(), Error> {
+    fn lin_row(
+        &mut self,
+        transpose: bool,
+        i: usize,
+        off_x: usize,
+        off_y: usize,
+        rhs: &mut Poly,
+    ) -> Result<(), Error> {
         let n = 2 * (self.p.tbox.m1 + self.p.quad_eval.quad_many.l) as usize;
         let mut r1 = Sparse::new_vec(n);
         for j in 0..K {
-            let e = if transpose { self.a.at(j, i) } else { self.a.at(i, j) };
+            let e = if transpose {
+                self.a.at(j, i)
+            } else {
+                self.a.at(i, j)
+            };
             r1.insert_elem(2 * (off_x + j))?.clone_from(e);
         }
         r1.insert_elem(2 * (off_y + i))?.set_one();
         r1.sort()?;
         self.quad.try_reserve(1).map_err(|_| Error::Memory)?;
-        self.quad.push(Eq { r2: None, r1: Some(r1), r0: Some(Poly::neg(rhs)) });
+        self.quad.push(Eq {
+            r2: None,
+            r1: Some(r1),
+            r0: Some(Poly::neg(rhs)),
+        });
         Ok(())
     }
 
@@ -294,7 +369,11 @@ impl Sys<'_> {
         let mut r0 = Poly::ZERO;
         set_c(&mut r0, 0, rhs);
         self.eval.try_reserve(1).map_err(|_| Error::Memory)?;
-        self.eval.push(Eq { r2: None, r1: Some(r1), r0: Some(Poly::redc(&mut r0)) });
+        self.eval.push(Eq {
+            r2: None,
+            r1: Some(r1),
+            r0: Some(Poly::redc(&mut r0)),
+        });
         Ok(())
     }
 }
@@ -333,7 +412,13 @@ fn slot(base: usize, w: usize, i: usize, b: usize) -> usize {
 }
 
 fn statement(s: Sys<'_>, es: Vec<PolyMat>, ps: Option<PolyMat>, ds: PolyMat) -> Statement {
-    Statement { quad: s.quad, eval: s.eval, es, ps, ds }
+    Statement {
+        quad: s.quad,
+        eval: s.eval,
+        es,
+        ps,
+        ds,
+    }
 }
 
 /// what the witness parsers read from the statement (`txst_t`): the ciphertext the witness decrypts (the debit
@@ -349,7 +434,13 @@ pub(crate) struct Pub {
 
 impl Pub {
     fn none() -> Pub {
-        Pub { u: PolyVec(Vec::new()), v: Poly::ZERO, fee: 0, amount: 0, win: 0 }
+        Pub {
+            u: PolyVec(Vec::new()),
+            v: Poly::ZERO,
+            fee: 0,
+            amount: 0,
+            win: 0,
+        }
     }
 }
 
@@ -362,14 +453,24 @@ fn build_reg(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     if !rd_polyvec(&mut pk, &stmt[PREFIX_BYTES + 32..]) {
         return Ok(None);
     }
-    let mut s = Sys { p, a, quad: vec_try(K)?, eval: Vec::new(), bits: 0, nbin: 0 };
+    let mut s = Sys {
+        p,
+        a,
+        quad: vec_try(K)?,
+        eval: Vec::new(),
+        bits: 0,
+        nbin: 0,
+    };
     for i in 0..K {
         s.lin_row(false, i, 0, K, &mut pk[i])?;
     }
     let mut es = vec_try(2)?;
     es.push(new_sel(K, 2 * K, 0)?);
     es.push(new_sel(K, 2 * K, K)?);
-    Ok(Some((statement(s, es, None, new_sel(1, 2 * K, 0)?), Pub::none())))
+    Ok(Some((
+        statement(s, es, None, new_sel(1, 2 * K, 0)?),
+        Pub::none(),
+    )))
 }
 
 /// the debit shape (`shape_t`): s1 slots, bit bases, exact-l2 blocks
@@ -398,7 +499,13 @@ struct Shape {
 fn shape_of(r: &Rel) -> Result<Shape, Error> {
     let (m, a) = (r.legs, r.aud);
     let split = r.op == crate::OP_TRANSFER && r.code & CODE_SPLIT != 0; // (R_TXM's codes 0x7_ have the bit too)
-    let g = if r.op == crate::OP_BURN { 1 } else if split { 2 } else { groups(m, a) };
+    let g = if r.op == crate::OP_BURN {
+        1
+    } else if split {
+        2
+    } else {
+        groups(m, a)
+    };
     let e = 2 * K + 2 * K * g;
     let e2f = e + m;
     let bits = e2f + 1 + a * m;
@@ -493,7 +600,11 @@ fn parse_debit(stmt: &[u8], h: &Shape) -> Result<(Debit, bool), Error> {
     for _ in 0..h.legs {
         pk.push(vec_at(&mut ok)?);
     }
-    let pka = if h.aud > 0 { vec_at(&mut ok)? } else { PolyVec::new(0)? };
+    let pka = if h.aud > 0 {
+        vec_at(&mut ok)?
+    } else {
+        PolyVec::new(0)?
+    };
     let ut = vec_at(&mut ok)?;
     let mut vt = Poly::ZERO;
     ok &= rd_poly(&mut vt, &stmt[at..], 16);
@@ -528,7 +639,22 @@ fn parse_debit(stmt: &[u8], h: &Shape) -> Result<(Debit, bool), Error> {
         ok &= rd_polyvec(&mut uf, &stmt[at..]);
         u.push(uf);
     }
-    Ok((Debit { pkf, pk, pka, ut, vt, u, v, vf, va, fee, amount }, ok))
+    Ok((
+        Debit {
+            pkf,
+            pk,
+            pka,
+            ut,
+            vt,
+            u,
+            v,
+            vf,
+            va,
+            fee,
+            amount,
+        },
+        ok,
+    ))
 }
 
 /// `build_debit` (R_TX, R_TX0, R_TXS, R_TXS0, R_BURN, R_TXM): rows 1, 2 (R_q-linear), then per coefficient i rows 3-7
@@ -544,7 +670,14 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
     if !ok {
         return Ok(None);
     }
-    let mut s = Sys { p: r.p, a, quad: vec_try(K * (1 + h.groups))?, eval: vec_try(16 * (m + 1 + au * m + 2))?, bits: h.bits, nbin };
+    let mut s = Sys {
+        p: r.p,
+        a,
+        quad: vec_try(K * (1 + h.groups))?,
+        eval: vec_try(16 * (m + 1 + au * m + 2))?,
+        bits: h.bits,
+        nbin,
+    };
     let mut acc = vec_try(nbin)?;
     acc.resize(nbin, Poly::ZERO);
     for i in 0..K {
@@ -552,7 +685,13 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
     }
     for g in 0..h.groups {
         for i in 0..K {
-            s.lin_row(true, i, 2 * K + 2 * K * g, 3 * K + 2 * K * g, &mut t.u[g][i])?;
+            s.lin_row(
+                true,
+                i,
+                2 * K + 2 * K * g,
+                3 * K + 2 * K * g,
+                &mut t.u[g][i],
+            )?;
         }
     }
     for i in 0..16 {
@@ -563,7 +702,15 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
                 add_bit(&mut acc, slot(64 * j, 4, i, b), DELTA << b);
             }
             let rhs = -cval(&mut t.v[j], i);
-            s.evaleq(Some(&mut t.pk[j]), 2 * K + 2 * K * (j / h.lpg), i, i, Some(h.e + j), &mut acc, rhs)?;
+            s.evaleq(
+                Some(&mut t.pk[j]),
+                2 * K + 2 * K * (j / h.lpg),
+                i,
+                i,
+                Some(h.e + j),
+                &mut acc,
+                rhs,
+            )?;
         }
         acc_zero(&mut acc);
         for b in 0..4 {
@@ -571,7 +718,15 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
         }
         let rhs = -cval(&mut t.vf, i);
         let fg = usize::from(h.split); // v_f's group: the sender's own (r_f, e1_f) on R_TXS
-        s.evaleq(Some(&mut t.pkf), 2 * K + 2 * K * fg, i, i, Some(h.e2f), &mut acc, rhs)?;
+        s.evaleq(
+            Some(&mut t.pkf),
+            2 * K + 2 * K * fg,
+            i,
+            i,
+            Some(h.e2f),
+            &mut acc,
+            rhs,
+        )?;
         for j in 0..au * m {
             acc_zero(&mut acc);
             for b in 0..4 {
@@ -580,7 +735,15 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
             let rhs = -cval(&mut t.va[j], i);
             // R0-1: the copy of leg j at coefficients [16 (j mod lpg), ..) of pk_a^T r_g(j)
             let (g, w) = (j / h.lpg, j % h.lpg);
-            s.evaleq(Some(&mut t.pka), 2 * K + 2 * K * g, 16 * w + i, i, Some(h.e2f + 1 + j), &mut acc, rhs)?;
+            s.evaleq(
+                Some(&mut t.pka),
+                2 * K + 2 * K * g,
+                16 * w + i,
+                i,
+                Some(h.e2f + 1 + j),
+                &mut acc,
+                rhs,
+            )?;
         }
         // row 6: (u_T^T s_f)_i + Delta M_i + (e_T,i + 2^24) - 2^24 - v_T,i = 0
         acc_zero(&mut acc);
@@ -624,7 +787,13 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
     }
     let ps = new_sel(nbin, m1, h.bits)?;
     let ds = new_sel(1, m1, h.e)?;
-    let p = Pub { u: t.ut, v: t.vt, fee: t.fee, amount: t.amount, win: 0 };
+    let p = Pub {
+        u: t.ut,
+        v: t.vt,
+        fee: t.fee,
+        amount: t.amount,
+        win: 0,
+    };
     Ok(Some((statement(s, es, Some(ps), ds), p)))
 }
 
@@ -648,7 +817,14 @@ fn build_ds(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     if !ok {
         return Ok(None);
     }
-    let mut s = Sys { p: RELS[4].p, a, quad: vec_try(K)?, eval: vec_try(16)?, bits: 2 * K + 1, nbin: 0 };
+    let mut s = Sys {
+        p: RELS[4].p,
+        a,
+        quad: vec_try(K)?,
+        eval: vec_try(16)?,
+        bits: 2 * K + 1,
+        nbin: 0,
+    };
     for i in 0..K {
         s.lin_row(true, i, 0, K, &mut u[i])?;
     }
@@ -660,7 +836,10 @@ fn build_ds(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     es.push(new_sel(K, 2 * K + 1, 0)?);
     es.push(new_sel(K, 2 * K + 1, K)?);
     es.push(new_sel(1, 2 * K + 1, 2 * K)?);
-    Ok(Some((statement(s, es, None, new_sel(1, 2 * K + 1, 2 * K)?), Pub::none())))
+    Ok(Some((
+        statement(s, es, None, new_sel(1, 2 * K + 1, 2 * K)?),
+        Pub::none(),
+    )))
 }
 
 /// R_DR: pk = A s + e; (u^T s)_{16 w + i} + (e'_i + E) - E + Delta d_i - v_i = 0 (w the kind word's window: R0-1)
@@ -669,7 +848,14 @@ fn build_dr(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     if !ok {
         return Ok(None);
     }
-    let mut s = Sys { p: RELS[5].p, a, quad: vec_try(K)?, eval: vec_try(16)?, bits: 2 * K, nbin: DR_NBIN };
+    let mut s = Sys {
+        p: RELS[5].p,
+        a,
+        quad: vec_try(K)?,
+        eval: vec_try(16)?,
+        bits: 2 * K,
+        nbin: DR_NBIN,
+    };
     let mut acc = vec_try(DR_NBIN)?;
     acc.resize(DR_NBIN, Poly::ZERO);
     for i in 0..K {
@@ -686,8 +872,22 @@ fn build_dr(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     let mut es = vec_try(2)?;
     es.push(new_sel(K, 2 * K + DR_NBIN, 0)?);
     es.push(new_sel(K, 2 * K + DR_NBIN, K)?);
-    let st = statement(s, es, Some(new_sel(DR_NBIN, 2 * K + DR_NBIN, 2 * K)?), new_sel(1, 2 * K + DR_NBIN, 0)?);
-    Ok(Some((st, Pub { u, v, fee: 0, amount, win })))
+    let st = statement(
+        s,
+        es,
+        Some(new_sel(DR_NBIN, 2 * K + DR_NBIN, 2 * K)?),
+        new_sel(1, 2 * K + DR_NBIN, 0)?,
+    );
+    Ok(Some((
+        st,
+        Pub {
+            u,
+            v,
+            fee: 0,
+            amount,
+            win,
+        },
+    )))
 }
 
 /// `build`: the statement of relation r (its length checked) and what the witness parsers read of it; `None` if
@@ -715,7 +915,11 @@ fn le16(p: &[u8]) -> i64 {
 /// `wit_vec`: n coefficients (int8, or int16 LE if wide) into s1[off .. off + k); the rest of `w`
 fn wit_vec<'a>(s1: &mut PolyVec, off: usize, w: &'a [u8], wide: bool) -> &'a [u8] {
     for j in 0..N {
-        let v = if wide { le16(&w[2 * j..]) } else { w[j] as i8 as i64 };
+        let v = if wide {
+            le16(&w[2 * j..])
+        } else {
+            w[j] as i8 as i64
+        };
         set_c(&mut s1[off + j / 64], j % 64, v);
     }
     &w[if wide { 2 * N } else { N }..]
@@ -728,7 +932,10 @@ fn ct_sdiv(x: i64, d: u64) -> (i64, i64) {
     let s = (x >> 63) as u64;
     let mut n = [(x as u64 ^ s).wrapping_sub(s)];
     let q = crate::arith::mpn::div(None, &mut n, &[d]);
-    ((q ^ s).wrapping_sub(s) as i64, (n[0] ^ s).wrapping_sub(s) as i64)
+    (
+        (q ^ s).wrapping_sub(s) as i64,
+        (n[0] ^ s).wrapping_sub(s) as i64,
+    )
 }
 
 fn dec_w(u: &mut PolyVec, v: &mut Poly, s1: &mut PolyVec, off: usize) -> [i64; 16] {
@@ -779,7 +986,11 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
     let wv = Wiped(dec_w(&mut t.u, &mut t.v, s1, 0));
     // review E: round half away from zero without a branch
     let mm: Wiped<[i64; 16]> = Wiped(core::array::from_fn(|i| {
-        ct_sdiv(wv[i] + (((DELTA / 2) ^ (wv[i] >> 63)) - (wv[i] >> 63)), DELTA as u64).0
+        ct_sdiv(
+            wv[i] + (((DELTA / 2) ^ (wv[i] >> 63)) - (wv[i] >> 63)),
+            DELTA as u64,
+        )
+        .0
     }));
     let et: Wiped<[i64; 16]> = Wiped(core::array::from_fn(|i| wv[i] - DELTA * mm[i]));
     // carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0
@@ -841,7 +1052,11 @@ fn dr_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec) -> bool {
         let e = wi - DELTA * digit(t.amount, i);
         bad |= (e + EOFF) as u64 >= 1 << EB; // e outside [-E, E); review E: no branch on the secret e
         for b in 0..EB {
-            set_c(&mut s1[2 * K + (EB * i + b) / 64], (EB * i + b) % 64, ((e + EOFF) >> b) & 1);
+            set_c(
+                &mut s1[2 * K + (EB * i + b) / 64],
+                (EB * i + b) % 64,
+                ((e + EOFF) >> b) & 1,
+            );
         }
     }
     let bad = crate::ct::verdict(bad); // review E: the verdict is public (prove fails)
@@ -880,7 +1095,9 @@ fn set_upsilon(p: &Tbox, s1: &mut PolyVec, blocks: &[(usize, usize)]) -> bool {
 /// `s0_ok`: R_REG / R_DR's z4 filler s[0] within its Bprime (an honest prover's check, review R0-C2); the verdict is
 /// public (prove fails)
 fn s0_ok(s1: &mut PolyVec) -> bool {
-    let n2: i64 = (0..D).map(|k| cval(&mut s1[0], k) * cval(&mut s1[0], k)).sum();
+    let n2: i64 = (0..D)
+        .map(|k| cval(&mut s1[0], k) * cval(&mut s1[0], k))
+        .sum();
     !crate::ct::verdict(n2 > BPRIME_S0 * BPRIME_S0)
 }
 
@@ -921,7 +1138,8 @@ fn witness(t: &mut Pub, r: &Rel, wit: &[u8], s1: &mut PolyVec) -> Result<bool, E
         _ => {
             // the debit relations (R_TX, R_TX0, R_TXS, R_TXS0, R_BURN, R_TXM): one l2 slack per block
             h = shape_of(r)?;
-            let want = (1 + h.groups) * 3 * N + 32 * (h.legs + 1 + h.aud * h.legs) + 16 * h.legs + 16;
+            let want =
+                (1 + h.groups) * 3 * N + 32 * (h.legs + 1 + h.aud * h.legs) + 16 * h.legs + 16;
             if wit.len() != want || !debit_witness(t, wit, s1, r)? {
                 return Ok(false);
             }
@@ -934,7 +1152,11 @@ fn witness(t: &mut Pub, r: &Rel, wit: &[u8], s1: &mut PolyVec) -> Result<bool, E
 /// `pqz_prover_seeds` (CTR-PQZ-19, P6e D6): ex[0..32) seeds s2, ex[32..64) every mask of the toolbox proof; each =
 /// SHAKE128(tag || rnd32 || wh || hash0), tags "SCAAS-PQZ-PROVER-RND-V2" / "...-SUB-V2", wh = SHAKE128(
 /// "SCAAS-PQZ-PROVER-WIT-V2" || wit)[0..32)
-fn prover_seeds(rnd32: &[u8; 32], wit: &[u8], hash0: &[u8; 32]) -> (Wiped<[u8; 32]>, Wiped<[u8; 32]>) {
+fn prover_seeds(
+    rnd32: &[u8; 32],
+    wit: &[u8],
+    hash0: &[u8; 32],
+) -> (Wiped<[u8; 32]>, Wiped<[u8; 32]>) {
     let mut wh = Wiped([0u8; 32]);
     shake128(&[b"SCAAS-PQZ-PROVER-WIT-V2", wit]).squeeze(&mut *wh);
     let (mut a, mut b) = (Wiped([0u8; 32]), Wiped([0u8; 32]));
@@ -945,7 +1167,10 @@ fn prover_seeds(rnd32: &[u8; 32], wit: &[u8], hash0: &[u8; 32]) -> (Wiped<[u8; 3
 
 impl Ctx {
     /// A and relation ri's keys, built at first use
-    pub(crate) fn rel_state(&mut self, ri: usize) -> Result<(&mut [PolyMat; 3], &mut PolyMat), Error> {
+    pub(crate) fn rel_state(
+        &mut self,
+        ri: usize,
+    ) -> Result<(&mut [PolyMat; 3], &mut PolyMat), Error> {
         if self.keys[ri].is_none() {
             self.keys[ri] = Some(rel_keys(&RELS[ri])?);
         }
@@ -960,14 +1185,18 @@ impl Ctx {
     /// exhaustion, a node fault in pqz-ffi), which `Ctx::verify` folds into false and `Ctx::try_verify` keeps
     pub(crate) fn verify_rel(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
         // the exact statement length (rel_of) and the proof cap before the caches and the hash (fix A)
-        let Some(ri) = rel_of(op, stmt) else { return Ok(false) };
+        let Some(ri) = rel_of(op, stmt) else {
+            return Ok(false);
+        };
         if proof.len() > MAX_PROOF {
             return Ok(false);
         }
         let r = &RELS[ri];
         let (keys, a) = self.rel_state(ri)?;
         let h = stmt_hash(op, stmt)?;
-        let Some((mut s, _)) = build(a, r, stmt)? else { return Ok(false) };
+        let Some((mut s, _)) = build(a, r, stmt)? else {
+            return Ok(false);
+        };
         // a proof that does not decode is invalid; running out of memory while decoding is not (Error::Memory)
         let mut f = match decode_proof(r.p, proof) {
             Err(Error::Memory) => return Err(Error::Memory),
@@ -984,10 +1213,19 @@ impl Ctx {
     /// `pqz_prove` + `do_prove`: `Error::Input` for an unknown relation, a malformed statement or witness (also one
     /// inconsistent with the statement, or above a norm bound), an encoding over MAX_PROOF bytes, and on wasm32 an
     /// op 7 statement with more than `WASM_MAX_LEGS` legs
-    pub(crate) fn prove_rel(&mut self, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, Error> {
+    pub(crate) fn prove_rel(
+        &mut self,
+        op: u8,
+        stmt: &[u8],
+        wit: &[u8],
+        rnd32: &[u8; 32],
+    ) -> Result<Vec<u8>, Error> {
         let ri = rel_of(op, stmt).ok_or(Error::Input)?;
         let r = &RELS[ri];
-        if cfg!(target_arch = "wasm32") && r.op == crate::OP_TRANSFER_MULTI && r.legs > crate::WASM_MAX_LEGS {
+        if cfg!(target_arch = "wasm32")
+            && r.op == crate::OP_TRANSFER_MULTI
+            && r.legs > crate::WASM_MAX_LEGS
+        {
             return Err(Error::Input);
         }
         let tb = r.p.tbox;
@@ -998,26 +1236,36 @@ impl Ctx {
         // ex; Wiped, fix B)
         let mut s1 = Wiped(PolyVec::new(tb.m1 as usize)?);
         let mut m = Wiped(PolyVec::new((tb.l + tb.lext) as usize)?);
-        let Some((mut s, mut t)) = build(a, r, stmt)? else { return Err(Error::Input) };
+        let Some((mut s, mut t)) = build(a, r, stmt)? else {
+            return Err(Error::Input);
+        };
         let mut s2 = Wiped(PolyVec::new(tb.m2 as usize)?);
         for v in [&s1, &m, &s2] {
-            crate::name_buf(&v.0.0); // the wipe test hook (3zh Fable F-10)
+            crate::name_buf(&v.0 .0); // the wipe test hook (3zh Fable F-10)
         }
         if !witness(&mut t, r, wit, &mut s1)? {
             return Err(Error::Input);
         }
         let (ex0, ex1) = prover_seeds(rnd32, wit, &hash0);
-        polyvec_urandom_bnd(&mut **s2, &Int::from_i64(1, -tb.nu), &Int::from_i64(1, tb.nu), &ex0, 0)?;
+        polyvec_urandom_bnd(
+            &mut **s2,
+            &Int::from_i64(1, -tb.nu),
+            &Int::from_i64(1, tb.nu),
+            &ex0,
+            0,
+        )?;
         {
             // t_a2 freed before the encoding, as before (the memory peaks)
             let mut t_a2 = Wiped(PolyVec::new(tb.kmsis as usize)?);
-            crate::name_buf(&t_a2.0.0);
+            crate::name_buf(&t_a2.0 .0);
             let mut hash = hash0;
             abdlop::commit(&mut f.t_a1, &mut t_a2, &mut s1, &mut s2, keys, tb)?;
             crate::ct::public(&f.t_a1[..]); // review E: the commitment, hashed and sent (t_a2 stays secret)
             crate::ct::public(&f.t_b[..]);
             abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, tb)?;
-            tbox::prove(&mut hash, &mut f, &mut s1, &mut m, &mut s2, &mut t_a2, keys, &mut s, &ex1)?;
+            tbox::prove(
+                &mut hash, &mut f, &mut s1, &mut m, &mut s2, &mut t_a2, keys, &mut s, &ex1,
+            )?;
         }
         // cap = MAX_PROOF: an over-length proof is Input before any encoder assert (C: encproof's cap, then len >
         // PQZ_MAX_PROOF)
@@ -1042,13 +1290,31 @@ mod tests {
         for r in RELS.iter() {
             let dc = r.p.tbox.dcompress;
             let d = dc.d;
-            for a in (0..3 * (1i64 << d)).map(|x| q - 1 - x).chain([0, 1, 1 << (d - 1), (1 << (d - 1)) + 1]) {
+            for a in (0..3 * (1i64 << d)).map(|x| q - 1 - x).chain([
+                0,
+                1,
+                1 << (d - 1),
+                (1 << (d - 1)) + 1,
+            ]) {
                 let (r1, na) = dc.power2round(&Int::from_i64(1, a));
                 let (r1, na) = (r1.get_i64(), na.get_i64());
                 let low = na - (r1 << d);
-                assert!(r1 >= 0 && r1 < 1 << (l - d), "{} D {d}: a {a} r1 {r1}", r.name);
-                assert!(low.abs() <= 1 << (d - 1), "{} D {d}: a {a} low {low}", r.name);
-                assert_eq!(((r1 << d) + low - a).rem_euclid(q), 0, "{} D {d}: a {a}", r.name);
+                assert!(
+                    r1 >= 0 && r1 < 1 << (l - d),
+                    "{} D {d}: a {a} r1 {r1}",
+                    r.name
+                );
+                assert!(
+                    low.abs() <= 1 << (d - 1),
+                    "{} D {d}: a {a} low {low}",
+                    r.name
+                );
+                assert_eq!(
+                    ((r1 << d) + low - a).rem_euclid(q),
+                    0,
+                    "{} D {d}: a {a}",
+                    r.name
+                );
                 wraps += (na != a) as usize;
             }
         }
@@ -1082,13 +1348,28 @@ mod tests {
             for bad in [&long[..], &st[..st.len() - 1]] {
                 assert!(rel_of(r.op, bad).is_none(), "{} len {}", r.name, bad.len());
                 assert_eq!(ctx.try_verify(r.op, bad, &[]), Ok(false), "{}", r.name);
-                assert_eq!(ctx.prove(r.op, bad, &[], &[0; 32]), Err(Error::Input), "{}", r.name);
+                assert_eq!(
+                    ctx.prove(r.op, bad, &[], &[0; 32]),
+                    Err(Error::Input),
+                    "{}",
+                    r.name
+                );
                 #[cfg(feature = "sv")]
                 assert_eq!(ctx.try_verify_fast(r.op, bad, &[]), Ok(false), "{}", r.name);
             }
-            assert_eq!(ctx.try_verify(r.op, &st, &big), Ok(false), "{} proof cap", r.name);
+            assert_eq!(
+                ctx.try_verify(r.op, &st, &big),
+                Ok(false),
+                "{} proof cap",
+                r.name
+            );
             #[cfg(feature = "sv")]
-            assert_eq!(ctx.try_verify_fast(r.op, &st, &big), Ok(false), "{} proof cap", r.name);
+            assert_eq!(
+                ctx.try_verify_fast(r.op, &st, &big),
+                Ok(false),
+                "{} proof cap",
+                r.name
+            );
         }
         assert!(ctx.a.is_none() && ctx.keys.iter().all(Option::is_none));
         #[cfg(feature = "sv")]
@@ -1121,13 +1402,27 @@ mod tests {
             assert!(build(a, r, &st).unwrap().is_some(), "{}", r.name);
             let mut bad = st.clone();
             bad[coef..coef + 8].copy_from_slice(&Q.to_be_bytes());
-            assert!(build(a, r, &bad).unwrap().is_none(), "{} coefficient", r.name);
-            assert_eq!(ctx.prove(r.op, &bad, &[], &[0; 32]), Err(Error::Input), "{} coefficient", r.name);
+            assert!(
+                build(a, r, &bad).unwrap().is_none(),
+                "{} coefficient",
+                r.name
+            );
+            assert_eq!(
+                ctx.prove(r.op, &bad, &[], &[0; 32]),
+                Err(Error::Input),
+                "{} coefficient",
+                r.name
+            );
             if let Some(w) = word {
                 let mut bad = st;
                 bad[w] = 1;
                 assert!(build(a, r, &bad).unwrap().is_none(), "{} word", r.name);
-                assert_eq!(ctx.prove(r.op, &bad, &[], &[0; 32]), Err(Error::Input), "{} word", r.name);
+                assert_eq!(
+                    ctx.prove(r.op, &bad, &[], &[0; 32]),
+                    Err(Error::Input),
+                    "{} word",
+                    r.name
+                );
             }
         }
     }

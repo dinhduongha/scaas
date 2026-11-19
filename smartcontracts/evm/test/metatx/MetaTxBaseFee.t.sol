@@ -40,7 +40,9 @@ contract FeeProbe is MtxRegistryMock {
     }
 
     function _chargeFee(address from, uint256 basis, MetaTxLib.MetaTransaction memory m)
-        internal override returns (uint256)
+        internal
+        override
+        returns (uint256)
     {
         if (m.fee == 99) revert FeeFailed();
         lastBasis = basis;
@@ -69,14 +71,23 @@ contract MetaTxBaseFeeTest is MtxFixture {
     function test_feeModes_refusedWithoutOverride() public {
         bytes4 setNameSel = MtxRegistryMock.setName.selector;
         // ABSOLUTE refuses PERCENT by class
-        _modeRun(_m(alice, _setName("a"), 1, 0), MetaTxLib.MODE_FEE_PERCENT,
-            abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, setNameSel, MetaTxLib.MODE_FEE_PERCENT));
+        _modeRun(
+            _m(alice, _setName("a"), 1, 0),
+            MetaTxLib.MODE_FEE_PERCENT,
+            abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, setNameSel, MetaTxLib.MODE_FEE_PERCENT)
+        );
         // ABSOLUTE admits FIXED by class; supportedModes() = 0x03 refuses it
-        _modeRun(_m(alice, _setName("a"), 1, 0), MetaTxLib.MODE_FEE_FIXED,
-            abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, MetaTxLib.MODE_FEE_FIXED));
+        _modeRun(
+            _m(alice, _setName("a"), 1, 0),
+            MetaTxLib.MODE_FEE_FIXED,
+            abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, MetaTxLib.MODE_FEE_FIXED)
+        );
         // AMOUNT admits PERCENT by class; supportedModes() refuses it
-        _modeRun(_m(alice, abi.encodeCall(MtxRegistryMock.bump, (1)), 1, 0), MetaTxLib.MODE_FEE_PERCENT,
-            abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, MetaTxLib.MODE_FEE_PERCENT));
+        _modeRun(
+            _m(alice, abi.encodeCall(MtxRegistryMock.bump, (1)), 1, 0),
+            MetaTxLib.MODE_FEE_PERCENT,
+            abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, MetaTxLib.MODE_FEE_PERCENT)
+        );
         // NONE with both flags passes
         MetaTxLib.MetaTransaction memory ok = _m(alice, _setName("a"), 1, 0);
         ok.relayer = relayer;
@@ -123,8 +134,11 @@ contract MetaTxBaseFeeTest is MtxFixture {
         a.mode = MetaTxLib.MODE_FEE_PERCENT;
         sigA = _sign(ALICE_PK, a);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, MtxRegistryMock.setName.selector,
-            MetaTxLib.MODE_FEE_PERCENT));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IMetaTx.MtxFeeClass.selector, MtxRegistryMock.setName.selector, MetaTxLib.MODE_FEE_PERCENT
+            )
+        );
         p.mtxExecute(a, sigA);
     }
 

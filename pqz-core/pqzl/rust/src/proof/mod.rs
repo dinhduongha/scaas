@@ -40,12 +40,20 @@ pub(crate) struct Coder {
 
 impl Coder {
     pub(crate) fn new() -> Coder {
-        Coder { b: Vec::new(), pos: 0 }
+        Coder {
+            b: Vec::new(),
+            pos: 0,
+        }
     }
 
     /// `coder_enc_urandom3 (v, m, nbits)`: every coefficient (after `poly_get_coeffvec`'s `fromcrt`) in [0, m), its
     /// low `nbits` bits; a value out of range is `_uencode`'s ASSERT_ERR (the sticky error): `Error::Internal`
-    pub(crate) fn urandom<V: Pv + ?Sized>(&mut self, v: &mut V, m: &Int, nbits: u32) -> Result<(), Error> {
+    pub(crate) fn urandom<V: Pv + ?Sized>(
+        &mut self,
+        v: &mut V,
+        m: &Int,
+        nbits: u32,
+    ) -> Result<(), Error> {
         let more = (v.len() * 64 * nbits as usize).div_ceil(8) + 1;
         self.b.try_reserve(more).map_err(|_| Error::Memory)?;
         let zero = Int::new(1);

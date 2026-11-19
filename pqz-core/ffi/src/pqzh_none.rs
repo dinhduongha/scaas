@@ -8,7 +8,12 @@ pub fn verify(_op: u8, _stmt: &[u8], _proof: &[u8]) -> Result<bool, crate::NodeF
 
 /// No PQZH prover in this build.
 #[cfg(feature = "prove")]
-pub fn prove(_op: u8, _stmt: &[u8], _wit: &[u8], _rnd32: &[u8; 32]) -> Result<Vec<u8>, &'static str> {
+pub fn prove(
+    _op: u8,
+    _stmt: &[u8],
+    _wit: &[u8],
+    _rnd32: &[u8; 32],
+) -> Result<Vec<u8>, &'static str> {
     Err("PQZH is not compiled into this build (parameter set without PQZH)")
 }
 

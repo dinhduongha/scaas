@@ -17,7 +17,8 @@ abstract contract ZetherForceSuite is ZetherRegFixture {
     uint256 internal constant PUBLIC = 50_000;
     address internal constant BENEFICIARY = address(0xBEE);
     /// keccak256(abi.encode(uint256(keccak256("scaas.zether")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 internal constant ZETHER_SLOT = keccak256(abi.encode(uint256(keccak256("scaas.zether")) - 1)) & ~bytes32(uint256(0xff));
+    bytes32 internal constant ZETHER_SLOT =
+        keccak256(abi.encode(uint256(keccak256("scaas.zether")) - 1)) & ~bytes32(uint256(0xff));
     uint256 internal constant ACCT_FIELD = 8; // ZetherStorage.acct
     uint256 internal constant FIELDS = 13; // verifier … minDecoyFee
     uint256 internal constant ACCOUNT_SLOTS = 6; // accC, accD, pendC, pendD, the seqs, modeNonce ‖ mode
@@ -44,13 +45,19 @@ abstract contract ZetherForceSuite is ZetherRegFixture {
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         for (uint256 i; i < acc.length; ++i) {
             VmSafe.StorageAccess[] memory sa = acc[i].storageAccesses;
-            for (uint256 j; j < sa.length; ++j) if (sa[j].account == address(tok) && _shieldedSlot(sa[j].slot)) ++n;
+            for (uint256 j; j < sa.length; ++j) {
+                if (sa[j].account == address(tok) && _shieldedSlot(sa[j].slot)) ++n;
+            }
         }
     }
 
     function test_forceMovesPublicOnly_zetherStateUntouched() public {
         subject = aId;
-        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ZETHER_SLOT) + 1))), SCALE, "the namespace (shieldScale at +1)");
+        assertEq(
+            uint256(vm.load(address(tok), bytes32(uint256(ZETHER_SLOT) + 1))),
+            SCALE,
+            "the namespace (shieldScale at +1)"
+        );
         // control: a shield to alice touches her Account slots
         uint256 snap = vm.snapshotState();
         _public(tok, address(this), SCALE);
@@ -60,7 +67,16 @@ abstract contract ZetherForceSuite is ZetherRegFixture {
         vm.revertToState(snap);
 
         vm.prank(compliance);
-        _r().recordOrder(keccak256("order"), keccak256("document"), aId, nid(BENEFICIARY), PUBLIC, uint64(block.timestamp + 10 days), EnvKit.codeUidOf(address(_r())));
+        _r()
+            .recordOrder(
+                keccak256("order"),
+                keccak256("document"),
+                aId,
+                nid(BENEFICIARY),
+                PUBLIC,
+                uint64(block.timestamp + 10 days),
+                EnvKit.codeUidOf(address(_r()))
+            );
         bytes32 rid = keccak256(abi.encode(keccak256("order"), aId, nid(BENEFICIARY)));
         vm.prank(issuer);
         _r().freeze(aId, REF, rid, EnvKit.codeUidOf(address(_r())));
@@ -84,9 +100,13 @@ abstract contract ZetherForceSuite is ZetherRegFixture {
 }
 
 contract ZetherForce10Test is ZetherForceSuite {
-    function _isWrapped() internal pure override returns (bool) { return false; }
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
 }
 
 contract ZetherForce11Test is ZetherForceSuite {
-    function _isWrapped() internal pure override returns (bool) { return true; }
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
 }

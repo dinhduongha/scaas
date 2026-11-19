@@ -19,8 +19,9 @@ library MldsaKit {
         bytes memory invalid = vm.parseJsonBytes(kat, string.concat(k, ".eip8355_probe_invalid"));
         vm.mockCall(pc, valid, abi.encode(uint256(1)));
         vm.mockCall(pc, invalid, abi.encode(uint256(0)));
-        bytes memory init = abi.encodePacked(type(MldsaVerifier).creationCode,
-            abi.encode([uint16(0x0130), 0x0131, 0x0134][i], pc, valid, invalid));
+        bytes memory init = abi.encodePacked(
+            type(MldsaVerifier).creationCode, abi.encode([uint16(0x0130), 0x0131, 0x0134][i], pc, valid, invalid)
+        );
         v = vm.computeCreate2Address(salt, keccak256(init), DEPLOYER);
         if (v.code.length == 0) {
             (bool ok,) = DEPLOYER.call(bytes.concat(salt, init));

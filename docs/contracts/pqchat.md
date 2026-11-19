@@ -613,9 +613,12 @@ The Fable fixes cost each `postMessage` and each plain `rekey` one SLOAD (`postM
 364,096 → 366,316 regular; the release 24,771 → 24,883 B). `remove` (CTR-CHAT-20) reads one packed field on the
 1:1 path (`rekey` 366,316 → 366,797; `postMessage` unchanged); the release 24,883 → 27,825 B.
 
-**The base shared with `PqVault`** (SPECIFIED, [CTR-PQV-12](pqvault.md#CTR-PQV-12)): before the freeze the group code
-moves into one base used by `PqChat` and `PqVault`; this page's layout, typehashes, ABI and every per-operation row above
-stay as they are, and only the release-size figures move, with old → new figures, or the move does not happen.
+**The base shared with `PqVault`** (BUILT `fcdd83a7e`, [CTR-PQV-12](pqvault.md#CTR-PQV-12), UNAUDITED): the group code is in
+`src/pqgroup/PqGroupBase.sol` (epochs, wraps, lists, nonces, blobs, the env read; no state), `PqChatCore` on it over its own
+namespace, PqChat's errors and events unchanged. This page's layout, typehashes, ABI (byte-identical, `interfaceId`
+`0xa46bb0a4`) and every per-operation row above hold, and the 55 mutants are killed before and after by the same tests;
+only the release-size figures moved: the release 28,776 → 29,152 B, its deployment regular 1,973,256 → 1,998,222 and
+state 44,602,560 → 45,177,840; `PqChatTopics` 16,398 → 16,449 B.
 
 ## 13. Tests
 

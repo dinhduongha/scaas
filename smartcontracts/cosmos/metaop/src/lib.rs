@@ -1,7 +1,9 @@
 //! `MetaOp` v1 cho CosmWasm (R30, R66): payload JSON chủ thể ký, miền nằm trong payload, kiểm chữ ký
 //! ADR-036 (secp256k1) hoặc WebAuthn passkey (secp256r1). Contract nhận NGUYÊN bytes đã ký và parse chặt,
 //! nên không có bước chính tắc hoá thứ hai có thể lệch với thứ ví đã ký.
-use cosmwasm_std::{from_json, Addr, Api, Binary, CanonicalAddr, Env, HexBinary, StdError, StdResult, Uint128};
+use cosmwasm_std::{
+    from_json, Addr, Api, Binary, CanonicalAddr, Env, HexBinary, StdError, StdResult, Uint128,
+};
 use ripemd::Ripemd160;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -94,7 +96,12 @@ pub fn passkey_account(pk: &[u8]) -> Vec<u8> {
 }
 
 pub fn base64url(data: &[u8]) -> String {
-    Binary::from(data).to_base64().replace('+', "-").replace('/', "_").trim_end_matches('=').to_string()
+    Binary::from(data)
+        .to_base64()
+        .replace('+', "-")
+        .replace('/', "_")
+        .trim_end_matches('=')
+        .to_string()
 }
 
 /// Kiểm payload + chữ ký + miền + hạn. KHÔNG tiêu nonce (contract gọi tự giữ lane/nonce của nó).
@@ -125,11 +132,20 @@ pub fn verify(api: &dyn Api, env: &Env, payload: &[u8], auth: &Auth) -> StdResul
                 return Err(err("adr036: compressed secp256k1 public key expected"));
             }
             let hash = sha256(&adr036_doc(from.as_str(), payload));
-            (secp256k1_account(pk), api.secp256k1_verify(&hash, sig, pk).map_err(err)?)
+            (
+                secp256k1_account(pk),
+                api.secp256k1_verify(&hash, sig, pk).map_err(err)?,
+            )
         }
         "passkey" => {
-            let ad = auth.authenticator_data.as_ref().ok_or_else(|| err("passkey: authenticator_data missing"))?;
-            let cdj = auth.client_data_json.as_ref().ok_or_else(|| err("passkey: client_data_json missing"))?;
+            let ad = auth
+                .authenticator_data
+                .as_ref()
+                .ok_or_else(|| err("passkey: authenticator_data missing"))?;
+            let cdj = auth
+                .client_data_json
+                .as_ref()
+                .ok_or_else(|| err("passkey: client_data_json missing"))?;
             // Một khoá = một địa chỉ: chỉ dạng SEC1 không nén 65 byte (khoá COSE x‖y của WebAuthn).
             if pk.len() != 65 {
                 return Err(err("passkey: uncompressed P-256 public key expected"));
@@ -144,7 +160,10 @@ pub fn verify(api: &dyn Api, env: &Env, payload: &[u8], auth: &Auth) -> StdResul
             }
             let mut msg = ad.to_vec();
             msg.extend_from_slice(&sha256(cdj.as_bytes()));
-            (passkey_account(pk), api.secp256r1_verify(&sha256(&msg), sig, pk).map_err(err)?)
+            (
+                passkey_account(pk),
+                api.secp256r1_verify(&sha256(&msg), sig, pk).map_err(err)?,
+            )
         }
         _ => return Err(err("unknown signature scheme")),
     };
@@ -181,5 +200,10 @@ pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
 /// bytes (the `MetaOp`'s `network`), `target` the target's canonical address bytes, `msg` the exact bytes the
 /// executor sends to it. No salt: the target sees the unprivileged executor, so its own authorisation is in `msg`.
 pub fn relay_ref(chain_id: &str, target: &[u8], msg: &[u8]) -> [u8; 32] {
-    keccak256(&[b"scaas.relayfee", chain_id.as_bytes(), target, &keccak256(&[msg])])
+    keccak256(&[
+        b"scaas.relayfee",
+        chain_id.as_bytes(),
+        target,
+        &keccak256(&[msg]),
+    ])
 }

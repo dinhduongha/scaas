@@ -25,6 +25,10 @@ dynamic_test_linking = false
 optimizer = true
 optimizer_runs = 200
 via_ir = false
+# No metadata hash in the bytecode (owner 2026-11-17, code-format plan F2): a comment, NatSpec or format edit moves no
+# code hash, initcode hash or CREATE2 / CREATE3 address; each contract is smaller; builds reproduce across hosts.
+# The CBOR tail keeps the solc version. Every profile below states it again.
+bytecode_hash = "none"
 remappings = [
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
   "forge-std/=lib/forge-std/src/",
@@ -41,17 +45,23 @@ fs_permissions = [
   { access = "read", path = "../vectors" },
   { access = "read-write", path = "../vectors/metatx" },
   { access = "read-write", path = "../vectors/governance" },
-  { access = "read-write", path = "../vectors/pqz" }, # test/pqz/PqzStateVectors.t.sol (STATE_VECTORS=1)
-  { access = "read-write", path = "../vectors/zether" }, # test/zether/ZetherStateVectors.t.sol (STATE_VECTORS=1)
-  { access = "read-write", path = "../vectors/factory" }, # test/v2/Create3Kat.t.sol (WRITE_CREATE3_KAT=true)
+  { access = "read-write", path = "../vectors/pqz" },          # test/pqz/PqzStateVectors.t.sol (STATE_VECTORS=1)
+  { access = "read-write", path = "../vectors/zether" },       # test/zether/ZetherStateVectors.t.sol (STATE_VECTORS=1)
+  { access = "read-write", path = "../vectors/factory" },      # test/v2/Create3Kat.t.sol (WRITE_CREATE3_KAT=true)
   { access = "read", path = "./size-baseline.json" },
-  { access = "read", path = "./broadcast" }, # script/ZetherE2E.s.sol gasSplit (the e2e broadcast)
-  { access = "read", path = "./test" }, # test/ExpectRevertLint.t.sol scans the tests
-  { access = "read", path = "./chain-uids.json" }, # script/DeployBase.sol _setup (chain-neutral spec §3.3)
+  { access = "read", path = "./broadcast" },                   # script/ZetherE2E.s.sol gasSplit (the e2e broadcast)
+  { access = "read", path = "./test" },                        # test/ExpectRevertLint.t.sol scans the tests
+  { access = "read", path = "./chain-uids.json" },             # script/DeployBase.sol _setup (chain-neutral spec §3.3)
   { access = "read", path = "./rescue-vault-admin-log.json" }, # script/DeployRescueVault.s.sol, the public admin log
-  { access = "read", path = "./rescue-vault-init.hex" }, # script/DeployRescueVault.s.sol, the vault's committed init code
-  { access = "read-write", path = "./releases.json" }, # script/DeployBase.sol, the release list (spec §6.2)
+  { access = "read", path = "./rescue-vault-init.hex" },       # script/DeployRescueVault.s.sol, the vault's committed init code
+  { access = "read-write", path = "./releases.json" },         # script/DeployBase.sol, the release list (spec §6.2)
 ]
+
+# forge fmt (owner 2026-11-17: width 120 for every language but Rust); the other options keep forge's defaults. The
+# generated PqzSet.sol (pqz-core/params/sets/gen_set.py) is never hand-edited, so never formatted.
+[fmt]
+line_length = 120
+ignore = ["src/pqz/PqzSet.sol"]
 
 [invariant]
 runs = 64
@@ -65,28 +75,35 @@ fail_on_revert = true
 # cả 7 precompile BLS12-381 trả đúng số byte, base fee dính 0 nên gas vẫn miễn phí.
 # Chi tiết: ~dockers/mba-chain-nethermind/README-chainspec.md
 [profile.scaas-testnet]
+bytecode_hash = "none"
 evm_version = "amsterdam"
 
 # Zether (S2): BLS12-381 cần EIP-2537 (Prague trở lên); profile ghim Amsterdam như default.
 #   FOUNDRY_PROFILE=zether forge test --match-path 'test/zether/*'
 [profile.zether]
+bytecode_hash = "none"
 evm_version = "amsterdam"
 
 # Gnosis Chain: Pectra since 2025-04-30 14:03:40 UTC, then Fusaka (EIP-2537 measured live, docs/networks/evm.md §3); deploy after its Glamsterdam fork.
 [profile.gnosis]
+bytecode_hash = "none"
 evm_version = "amsterdam"
 
 [profile.celo]
+bytecode_hash = "none"
 evm_version = "amsterdam"
 
 # Draft chains (docs/networks/evm.md §1, researched 2026-10-11): BSC through Mendel (Osaka) 2026-04-28; Polygon PoS has
 # no named Osaka fork but runs the Osaka opcode set (CLZ since Lisovo 2026-03-04); Base through Azul 2026-05-28; each is
 # deployed after its Glamsterdam fork.
 [profile.bsc]
+bytecode_hash = "none"
 evm_version = "amsterdam"
 
 [profile.polygon]
+bytecode_hash = "none"
 evm_version = "amsterdam"
 
 [profile.base]
+bytecode_hash = "none"
 evm_version = "amsterdam"

@@ -182,8 +182,12 @@ contract RatesTest is V2Fixture {
         usdc.mint(address(this), 1);
         usdc.approve(address(big), 1);
         big.wrap(1); // supply > 0, so execute must evaluate the huge leg
-        adm.exec(address(big), abi.encodeCall(WrappedToken.proposeRate,
-            (address(usdc), type(uint96).max - 1, 1, EnvKit.codeUidOf(address(big)))));
+        adm.exec(
+            address(big),
+            abi.encodeCall(
+                WrappedToken.proposeRate, (address(usdc), type(uint96).max - 1, 1, EnvKit.codeUidOf(address(big)))
+            )
+        );
         vm.warp(block.timestamp + 7 days);
         adm.exec(address(big), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(big)))));
     }
@@ -243,7 +247,12 @@ contract RatesTest is V2Fixture {
         c.maxRateStepBps = uint16(v[4]);
         WrappedToken s = _single(address(usdc), 6, v[0], v[1], c);
         if (!_withinRef(v[0], v[1], v[2], v[3], v[4])) vm.expectRevert(IWrappedToken.RateStepTooLarge.selector);
-        adm.exec(address(s), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), uint96(v[2]), uint96(v[3]), EnvKit.codeUidOf(address(s)))));
+        adm.exec(
+            address(s),
+            abi.encodeCall(
+                WrappedToken.proposeRate, (address(usdc), uint96(v[2]), uint96(v[3]), EnvKit.codeUidOf(address(s)))
+            )
+        );
     }
 
     function _withinRef(uint256 n0, uint256 d0, uint256 n1, uint256 d1, uint256 bps) internal pure returns (bool) {

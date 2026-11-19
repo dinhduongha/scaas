@@ -55,7 +55,14 @@ pub extern "C" fn alloc(n: u32) -> *mut u8 {
 /// # Safety
 /// `st` / `sn`, `wit` / `wn` and `rnd` / 32 are readable buffers as [`sl`] requires (from `alloc`).
 #[no_mangle]
-pub unsafe extern "C" fn prove_v(op: u32, st: *const u8, sn: u32, wit: *const u8, wn: u32, rnd: *const u8) -> u32 {
+pub unsafe extern "C" fn prove_v(
+    op: u32,
+    st: *const u8,
+    sn: u32,
+    wit: *const u8,
+    wn: u32,
+    rnd: *const u8,
+) -> u32 {
     // SAFETY: the caller's contract above
     let (r, st, wit) = unsafe { (sl(rnd, 32), sl(st, sn), sl(wit, wn)) };
     let r: [u8; 32] = r.try_into().unwrap();
@@ -118,5 +125,6 @@ pub extern "C" fn m8_refused() -> u32 {
     for (i, w) in Multi::header(&PQZL_ID, 8, true).iter().enumerate() {
         st[32 * i..32 * i + 32].copy_from_slice(w);
     }
-    (pqz_ffi::prove(7, &st, &[], &[0; 32]) == Err(pqz_ffi::ProveError::Statement(Reject::Legs))) as u32
+    (pqz_ffi::prove(7, &st, &[], &[0; 32]) == Err(pqz_ffi::ProveError::Statement(Reject::Legs)))
+        as u32
 }

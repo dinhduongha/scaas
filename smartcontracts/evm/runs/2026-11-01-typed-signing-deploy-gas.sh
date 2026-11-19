@@ -16,25 +16,34 @@ export FOUNDRY_FS_PERMISSIONS='[{"access":"read-write","path":"./"}]' # the broa
 SENDER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 A=
 anvil_at() { # <block gas limit>
-  anvil --chain-id 31337 --hardfork amsterdam --gas-limit "$1" --code-size-limit 65536 --port $PORT --silent & A=$!
-  for _ in $(seq 50); do cast chain-id --rpc-url $RPC >/dev/null 2>&1 && break; sleep 0.2; done
+    anvil --chain-id 31337 --hardfork amsterdam --gas-limit "$1" --code-size-limit 65536 --port $PORT --silent &
+    A=$!
+    for _ in $(seq 50); do
+        cast chain-id --rpc-url $RPC >/dev/null 2>&1 && break
+        sleep 0.2
+    done
 }
-anvil_stop() { kill "$A" 2>/dev/null; wait "$A" 2>/dev/null; A=; }
+anvil_stop() {
+    kill "$A" 2>/dev/null
+    wait "$A" 2>/dev/null
+    A=
+}
 trap anvil_stop EXIT
 fs() { ../../scripts/capped forge script "$@" --rpc-url $RPC --disable-code-size-limit --gas-estimate-multiplier 105 --sender $SENDER; }
 
 D=broadcast/$(basename $S)/31337
 split_at() { # <block gas limit>: dry run + replay on a fresh chain
-  anvil_at "$1"
-  DEPLOY_ZETHER=true fs $S:DeployGasProbe --silent >/dev/null 2>&1
-  rm -f "$D/dry-run/split.txt"
-  fs $S:DeployGasProbe --sig 'split(string)' "$D/dry-run/run-latest.json" 2>&1 | grep -E '^ *SPLIT ' > "$D/dry-run/split.txt"
-  anvil_stop
+    anvil_at "$1"
+    DEPLOY_ZETHER=true fs $S:DeployGasProbe --silent >/dev/null 2>&1
+    rm -f "$D/dry-run/split.txt"
+    fs $S:DeployGasProbe --sig 'split(string)' "$D/dry-run/run-latest.json" 2>&1 | grep -E '^ *SPLIT ' >"$D/dry-run/split.txt"
+    anvil_stop
 }
 echo "# at $(git rev-parse --short HEAD), $(forge --version | head -1), solc via foundry.toml, profile scaas-testnet"
 split_at 200000000
 anvil_at 200000000
-DEPLOY_ZETHER=true fs $S:DeployGasProbe --broadcast --slow --silent >/dev/null 2>&1; echo "# broadcast rc=$? (200 M)"
+DEPLOY_ZETHER=true fs $S:DeployGasProbe --broadcast --slow --silent >/dev/null 2>&1
+echo "# broadcast rc=$? (200 M)"
 python3 -I - "$D" <<'P'
 import json, re, sys, os
 d = sys.argv[1]
@@ -50,11 +59,12 @@ for i, (t, r) in enumerate(zip(j["transactions"], j["receipts"])):
 P
 anvil_stop
 for l in 100000000 60000000 36000000; do for z in false true; do
-  anvil_at "$l"
-  o=$(DEPLOY_ZETHER=$z fs script/Deploy.s.sol --broadcast --slow 2>&1); rc=$?
-  n=$(cast block-number --rpc-url $RPC)
-  why=$(grep -m1 -oE 'block gas limit [0-9]+ < [0-9]+ needed to deploy the [A-Za-z]+|intrinsic gas too high[^"]{0,60}' <<<"$o")
-  [ -n "$why" ] || why=$(grep -m1 -B1 OutOfGas <<<"$o" | grep -oE 'new [A-Za-z0-9]+' | sed 's/^new \(.*\)/simulation: OutOfGas in the creation of \1/')
-  echo "# Deploy.s.sol block limit $l DEPLOY_ZETHER=$z: rc=$rc, blocks mined $n: $why"
-  anvil_stop
+    anvil_at "$l"
+    o=$(DEPLOY_ZETHER=$z fs script/Deploy.s.sol --broadcast --slow 2>&1)
+    rc=$?
+    n=$(cast block-number --rpc-url $RPC)
+    why=$(grep -m1 -oE 'block gas limit [0-9]+ < [0-9]+ needed to deploy the [A-Za-z]+|intrinsic gas too high[^"]{0,60}' <<<"$o")
+    [ -n "$why" ] || why=$(grep -m1 -B1 OutOfGas <<<"$o" | grep -oE 'new [A-Za-z0-9]+' | sed 's/^new \(.*\)/simulation: OutOfGas in the creation of \1/')
+    echo "# Deploy.s.sol block limit $l DEPLOY_ZETHER=$z: rc=$rc, blocks mined $n: $why"
+    anvil_stop
 done; done

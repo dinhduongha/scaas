@@ -52,7 +52,8 @@ contract PqzDebitRecordTest is PqzFixture {
 
     /// An op 1 of `from` (version `kv`) to `to` at `p`, `shieldIn` topped up from the test's public balance.
     function _op1(bytes32 from, uint64 kv, bytes32 to, uint64 p, uint256 shieldIn, uint256 seed)
-        internal returns (IPqzToken.PqzTransferArgs memory t)
+        internal
+        returns (IPqzToken.PqzTransferArgs memory t)
     {
         if (shieldIn != 0) _public(tok, address(this), shieldIn * SCALE);
         t = _ts(_payload(p, shieldIn, from, to, bytes32(0), _out(seed, false), ""));
@@ -65,10 +66,13 @@ contract PqzDebitRecordTest is PqzFixture {
 
     /// A refresh (`amount` 0) or burn of `from` (version `kv`) at `p`.
     function _burnArgs(bytes32 from, uint64 kv, uint64 p, uint256 shieldIn, uint256 seed)
-        internal returns (IPqzToken.PqzBurnArgs memory b)
+        internal
+        returns (IPqzToken.PqzBurnArgs memory b)
     {
         if (shieldIn != 0) _public(tok, address(this), shieldIn * SCALE);
-        b = _bs(bytes.concat(abi.encode(uint256(p), block.number + 50, shieldIn, from, bytes32(0)), _blob(seed, PqzCt.CT)));
+        b = _bs(
+            bytes.concat(abi.encode(uint256(p), block.number + 50, shieldIn, from, bytes32(0)), _blob(seed, PqzCt.CT))
+        );
         b.keyVersion = kv;
     }
 
@@ -83,12 +87,16 @@ contract PqzDebitRecordTest is PqzFixture {
         if (f & 2 == 0) tok.mtxPrepareAcc(ua, v, 0);
         if (f & 4 == 0) tok.mtxPrepareAcc(ua, v, 1);
         vm.roll(block.number + ROLL_AGE);
-        for (uint256 k; k < n; k += PqzCore.ROLL_MAX) tok.mtxRollOver(ua, v, n - k < PqzCore.ROLL_MAX ? n - k : PqzCore.ROLL_MAX);
+        for (uint256 k; k < n; k += PqzCore.ROLL_MAX) {
+            tok.mtxRollOver(ua, v, n - k < PqzCore.ROLL_MAX ? n - k : PqzCore.ROLL_MAX);
+        }
     }
 
     function _slots(bytes32 ua, uint64 v, uint256 n) internal view returns (uint256[] memory s) {
         s = new uint256[](n);
-        for (uint256 i; i < n; ++i) s[i] = tok.pqzPending(ua, v, uint64(i));
+        for (uint256 i; i < n; ++i) {
+            s[i] = tok.pqzPending(ua, v, uint64(i));
+        }
     }
 
     // ----- PP-1: pending slots kept -----
@@ -100,7 +108,11 @@ contract PqzDebitRecordTest is PqzFixture {
         uint256[] memory before = _slots(alice, 0, 3);
         _send1(alice, 0, bob, 3, 0, 5);
         IPqzToken.AccountState memory a = tok.pqzAccount(alice, 0);
-        assertEq(abi.encode(a.rolled, a.floor, a.cleared), abi.encode(uint64(3), uint64(3), uint64(3)), "the counters as before");
+        assertEq(
+            abi.encode(a.rolled, a.floor, a.cleared),
+            abi.encode(uint64(3), uint64(3), uint64(3)),
+            "the counters as before"
+        );
         for (uint256 i; i < 3; ++i) {
             assertTrue(before[i] != 0, "written");
             assertEq(tok.pqzPending(alice, 0, uint64(i)), before[i], "kept, unchanged");
@@ -114,8 +126,14 @@ contract PqzDebitRecordTest is PqzFixture {
         uint256[] memory before = _slots(alice, 0, 40);
         _rollN(alice, 0, 40);
         IPqzToken.AccountState memory a = tok.pqzAccount(alice, 0);
-        assertEq(abi.encode(a.rolled, a.floor, a.cleared), abi.encode(uint64(40), uint64(24), uint64(24)), "40 rolled, 24 below the window");
-        for (uint256 i; i < 40; ++i) assertEq(tok.pqzPending(alice, 0, uint64(i)), before[i], "kept, unchanged");
+        assertEq(
+            abi.encode(a.rolled, a.floor, a.cleared),
+            abi.encode(uint64(40), uint64(24), uint64(24)),
+            "40 rolled, 24 below the window"
+        );
+        for (uint256 i; i < 40; ++i) {
+            assertEq(tok.pqzPending(alice, 0, uint64(i)), before[i], "kept, unchanged");
+        }
     }
 
     /// `pqzPendingCt` below `cleared`: a credit's `u ‖ v` from its blob, a TRIVIAL entry `Trivial(digits(amount))`, as above it.
@@ -123,7 +141,9 @@ contract PqzDebitRecordTest is PqzFixture {
         _shield(alice, 7);
         vm.roll(block.number + 1);
         bytes memory out = _out(11, false);
-        tok.mtxConfidentialTransferSingle(_ts(_payload(0, 0, bob, alice, bytes32(0), out, "")), PROOF, _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(
+            _ts(_payload(0, 0, bob, alice, bytes32(0), out, "")), PROOF, _pqAuth(), "", noVerdict()
+        );
         _send1(alice, 0, carol, 2, 0, 5);
         assertEq(tok.pqzAccount(alice, 0).cleared, 2, "both below cleared");
         assertEq(tok.pqzPendingCt(alice, 0, 0), _trivCt(7), "the TRIVIAL entry");
@@ -139,11 +159,14 @@ contract PqzDebitRecordTest is PqzFixture {
     }
 
     function _recSlot(bytes32 ua, uint64 k) internal pure returns (uint256) {
-        return uint256(keccak256(abi.encode(uint256(k), keccak256(abi.encode(ua, uint256(PqzCore._STORAGE) + REC_SLOT)))));
+        return
+            uint256(keccak256(abi.encode(uint256(k), keccak256(abi.encode(ua, uint256(PqzCore._STORAGE) + REC_SLOT)))));
     }
 
     function _rec(address prevBlob, uint64 p, uint16 dp, uint64 shieldIn, uint64 kv, uint64 prevCounter, bool hasPrev)
-        internal pure returns (IPqzToken.DebitRecordView memory)
+        internal
+        pure
+        returns (IPqzToken.DebitRecordView memory)
     {
         return IPqzToken.DebitRecordView(prevBlob, p, dp, 0, shieldIn, kv, prevCounter, hasPrev);
     }
@@ -155,11 +178,17 @@ contract PqzDebitRecordTest is PqzFixture {
         assertEq(abi.encode(tok.pqzDebitRecord(ua, k)), abi.encode(w), what);
         uint256 s = _recSlot(ua, k);
         bool wide = w.shieldIn != 0 || w.keyVersion != 0 || (w.hasPrev && w.prevCounter + 1 != k);
-        assertEq(uint256(vm.load(address(tok), bytes32(s))), uint256(uint160(w.prevBlob)) << 96 | uint256(w.p) << 32
-            | uint256(w.deltaP) << 16 | uint256(w.proofStore) << 8 | (wide ? 3 : 1), string.concat(what, ": w0"));
-        assertEq(uint256(vm.load(address(tok), bytes32(s + 1))),
+        assertEq(
+            uint256(vm.load(address(tok), bytes32(s))),
+            uint256(uint160(w.prevBlob)) << 96 | uint256(w.p) << 32 | uint256(w.deltaP) << 16 | uint256(w.proofStore)
+                << 8 | (wide ? 3 : 1),
+            string.concat(what, ": w0")
+        );
+        assertEq(
+            uint256(vm.load(address(tok), bytes32(s + 1))),
             wide ? uint256(w.shieldIn) << 192 | uint256(w.keyVersion) << 128 | uint256(w.prevCounter) << 64 : 0,
-            string.concat(what, ": w1"));
+            string.concat(what, ": w1")
+        );
     }
 
     function _blobOf(bytes32 ua, uint64 v) internal view returns (address) {
@@ -209,7 +238,8 @@ contract PqzDebitRecordTest is PqzFixture {
         (c.lockedFeatures, c.roles.minter) = (0, 0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        WrappedPqzToken w = WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "drw")));
+        WrappedPqzToken w =
+            WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "drw")));
         tok = NormalPqzToken(address(w));
         usd.mint(address(this), 10 * SCALE);
         usd.approve(address(w), type(uint256).max);
@@ -269,7 +299,9 @@ contract PqzDebitRecordTest is PqzFixture {
             if (uint256(writes[i]) == s) w0 = true;
             if (uint256(writes[i]) == s + 1) w1 = true;
         }
-        for (uint256 i; i < reads.length; ++i) if (uint256(reads[i]) == s + 1) w1 = true;
+        for (uint256 i; i < reads.length; ++i) {
+            if (uint256(reads[i]) == s + 1) w1 = true;
+        }
         assertTrue(w0, "w0 written");
         assertFalse(w1, "w1's slot not touched");
         _expect(alice, 1, _rec(b0, 2, 1, 0, 0, 0, true), "narrow");
@@ -325,17 +357,27 @@ contract PqzDebitRecordTest is PqzFixture {
         _entries(alice, 4);
         _rollN(alice, 0, 4); // rolled 20: 20 − INLINE_MAX = 4 is below cleared 16
         IPqzToken.AccountState memory a = tok.pqzAccount(alice, 0);
-        assertEq(abi.encode(a.rolled, a.floor, a.cleared), abi.encode(uint64(20), uint64(16), uint64(16)), "floor kept at the debit's p");
+        assertEq(
+            abi.encode(a.rolled, a.floor, a.cleared),
+            abi.encode(uint64(20), uint64(16), uint64(16)),
+            "floor kept at the debit's p"
+        );
     }
 
     function test_lastDebit_perVersion() public {
         _entries(alice, 1);
         _send1(alice, 0, bob, 1, 0, 5);
         _rotate(alice, 1, _pk(34));
-        assertEq(abi.encode(tok.pqzAccount(alice, 0).lastDebit, tok.pqzAccount(alice, 1).lastDebit), abi.encode(uint64(1), uint64(0)));
+        assertEq(
+            abi.encode(tok.pqzAccount(alice, 0).lastDebit, tok.pqzAccount(alice, 1).lastDebit),
+            abi.encode(uint64(1), uint64(0))
+        );
         _shield(alice, 5);
         _send1(alice, 1, bob, 1, 0, 6);
-        assertEq(abi.encode(tok.pqzAccount(alice, 0).lastDebit, tok.pqzAccount(alice, 1).lastDebit), abi.encode(uint64(1), uint64(2)));
+        assertEq(
+            abi.encode(tok.pqzAccount(alice, 0).lastDebit, tok.pqzAccount(alice, 1).lastDebit),
+            abi.encode(uint64(1), uint64(2))
+        );
     }
 
     /// Each version's chain `lastDebit → prevCounter → …` across interleaved debits (Codex C6).
@@ -350,7 +392,10 @@ contract PqzDebitRecordTest is PqzFixture {
         _refresh(alice, 0, 1, 7); // k 2, version 0
         address b2 = _blobOf(alice, 0);
         _refresh(alice, 1, 1, 8); // k 3, version 1
-        assertEq(abi.encode(tok.pqzAccount(alice, 0).lastDebit, tok.pqzAccount(alice, 1).lastDebit), abi.encode(uint64(3), uint64(4)));
+        assertEq(
+            abi.encode(tok.pqzAccount(alice, 0).lastDebit, tok.pqzAccount(alice, 1).lastDebit),
+            abi.encode(uint64(3), uint64(4))
+        );
         _expect(alice, 3, _rec(b1, 1, 0, 0, 1, 1, true), "version 1's second debit: prevCounter 1");
         _expect(alice, 2, _rec(b0, 1, 0, 0, 0, 0, true), "version 0's second debit: prevCounter 0");
         _expect(alice, 1, _rec(address(0), 1, 1, 0, 1, 0, false), "version 1's first debit");
@@ -392,7 +437,9 @@ contract PqzDebitRecordTest is PqzFixture {
             PqzCt.loadBlob(r.prevBlob, uo, vo, c);
         }
         bytes[] memory plus = new bytes[](r.deltaP);
-        for (uint256 i; i < r.deltaP; ++i) plus[i] = tok.pqzPendingCt(ua, r.keyVersion, r.p - r.deltaP + uint64(i));
+        for (uint256 i; i < r.deltaP; ++i) {
+            plus[i] = tok.pqzPendingCt(ua, r.keyVersion, r.p - r.deltaP + uint64(i));
+        }
         return ct.sum(c, plus, new bytes[](0), r.shieldIn);
     }
 
@@ -409,8 +456,9 @@ contract PqzDebitRecordTest is PqzFixture {
                 if ((r >> 16) & 1 == 1) _shield(alice, 2); // the same block: merged into the tail when it may be
                 vm.roll(block.number + 1);
             } else if (a == 1) {
-                tok.mtxConfidentialTransferSingle(_ts(_payload(0, 0, bob, alice, bytes32(0), _out(r, false), "")), PROOF,
-                    _pqAuth(), "", noVerdict());
+                tok.mtxConfidentialTransferSingle(
+                    _ts(_payload(0, 0, bob, alice, bytes32(0), _out(r, false), "")), PROOF, _pqAuth(), "", noVerdict()
+                );
                 vm.roll(block.number + 1);
             } else if (a == 2) {
                 if (s.pendingCount > s.rolled) _rollN(alice, 0, 1 + (r >> 8) % (s.pendingCount - s.rolled));
@@ -441,7 +489,8 @@ contract PqzDebitRecordTest is PqzFixture {
         if (sIn != 0) _public(tok, address(this), sIn * SCALE);
         bytes32[] memory legs = new bytes32[](1);
         legs[0] = carol;
-        IPqzToken.PqzMultiArgs memory x = _ms(_mpayload(p, sIn, alice, bytes32(0), legs, _blob(r, _outLen(1, false)), ""));
+        IPqzToken.PqzMultiArgs memory x =
+            _ms(_mpayload(p, sIn, alice, bytes32(0), legs, _blob(r, _outLen(1, false)), ""));
         t = _cut(tok.transferStatement(x, 0), 640 + 2 * PqzCt.PK, PqzCt.CT);
         tok.mtxConfidentialTransfer(x, PROOF, _pqAuth(), "", noVerdict());
     }
@@ -475,7 +524,11 @@ contract PqzDebitRecordTest is PqzFixture {
         for (uint256 i; i < labels.length; ++i) {
             for (uint256 j; j < 3; ++j) {
                 if (keccak256(bytes(labels[i])) != keccak256(bytes(want[j]))) continue;
-                uint256 sl = uint256(keccak256(abi.encode(uint256(0), keccak256(abi.encode(alice, uint256(PqzCore._STORAGE) + slots[i])))));
+                uint256 sl = uint256(
+                    keccak256(
+                        abi.encode(uint256(0), keccak256(abi.encode(alice, uint256(PqzCore._STORAGE) + slots[i])))
+                    )
+                );
                 uint256 word = uint256(vm.load(address(tok), bytes32(sl + inner[i])));
                 uint256 mask = widths[i] == 32 ? type(uint256).max : (uint256(1) << (8 * widths[i])) - 1;
                 assertEq((word >> (8 * at[i])) & mask, value[j], want[j]);

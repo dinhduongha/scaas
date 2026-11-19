@@ -62,6 +62,14 @@ library GovernanceBits {
     ///      admin may change `maxSupply` (a hybrid's) and `maxWrapSupply`, each after `grantDelay` (`setMaxSupply`,
     ///      `setMaxWrapSupply`); unset, or disabled (one-way), both caps are fixed for good. Never enabled later.
     uint8 internal constant SUPPLY_CAP_ADJUSTABLE = 31;
+    /// @dev The setAuditor round (spec 2026-11-17-set-auditor.md §3, CTR-GOV-31, owner 2026-11-17): a power on the confidential
+    ///      kinds 2, 3, 4, 5, 10, 11, 12, 13 only: a holder replaces the token's auditor (`setAuditorKey` / `setAuditorUA`) after
+    ///      `max(noticePeriod(), grantDelay)`, with the new auditor's consent. Any holder (a single key too), never contract-only,
+    ///      never delay-relaxed, never delegable (`DelegableRefused`); set at creation only, not on a token without an auditor
+    ///      (`BadAuditorMode(0)`) or without an admin (`FeatureNeedsAdmin`). Not in `REGULATED_ROLES` (kinds 8 and 9 refuse it).
+    uint8 internal constant AUDITOR = 32;
+    /// @dev What the confidential kinds 2, 3, 4, 5, 10, 11, 12, 13 add to their valid and role masks (bit 32).
+    uint256 internal constant AUDITOR_BITS = uint256(1) << AUDITOR;
     /// @dev The bits `enableFeature` may switch on (spec §5.2): 8, 9, 28, each only where the kind's mask holds it and not
     ///      locked. 8 and 9 are never disabled (`FeatureNotDisableable`). No plain kind's mask holds them.
     uint256 internal constant ENABLEABLE = (1 << ALLOWLIST) | (1 << DENYLIST) | (1 << KYC);
@@ -74,8 +82,8 @@ library GovernanceBits {
     /// @dev `Roles.issuer`'s bits: `init` grants it each one that is set (regulated-kinds spec §2.4; bit 23, pay-meta-tax
     ///      spec §6.1, F-19; bit 24, PQZ proof path spec §5, which a plain PQZ kind's issuer seat takes alone), and each list
     ///      bit 8, 9 that is valid and not locked off, set or not (round 3s, spec §6.3, Fable P1-1, R-7: `enableable`).
-    uint256 internal constant ISSUER_BITS = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST) | (1 << DENYLIST)
-        | (1 << TAX) | (1 << PQZ_PROOF);
+    uint256 internal constant ISSUER_BITS = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST)
+        | (1 << DENYLIST) | (1 << TAX) | (1 << PQZ_PROOF);
     /// @dev What the PQZ kinds 4, 5, 12, 13 add to their base kind's valid and role masks (bit 24).
     uint256 internal constant PQZ_KIND_BITS = 1 << PQZ_PROOF;
     /// @dev The contract-only bits a threshold (`msig`) UA may hold as a contract (RK-1, CTR-AS-03 Change, owner
@@ -91,8 +99,8 @@ library GovernanceBits {
     uint256 internal constant NORMAL_BITS =
         (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE) | (1 << BURNER);
     /// @dev `MINTABLE` makes a hybrid (spec §5.2, CTR-GOV-12): set at creation iff `maxSupply != 0`.
-    uint256 internal constant WRAPPED_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE)
-        | (1 << RESCUABLE) | WRAP_CONTROLS | (1 << SUPPLY_CAP_ADJUSTABLE);
+    uint256 internal constant WRAPPED_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << RATE_ADJUSTABLE)
+        | (1 << WRAP_DISABLEABLE) | (1 << RESCUABLE) | WRAP_CONTROLS | (1 << SUPPLY_CAP_ADJUSTABLE);
     /// @dev The masks of each kind (spec §1.2): the bits with a holder, those whose holder must have code, those whose power
     ///      passes the number it acts on (B-09), those whose power reads `use`'s scope (B-10). Every token kind: scalar bits 1
     ///      and 30, no scope.
@@ -111,7 +119,9 @@ library GovernanceBits {
     ///         set, not locked (off), the admin not 0, and for 28 a compliance registry (it cannot be set after creation).
     ///         One predicate for the `termsHash` rule at init, the issuer seat's list bits, and every client's warning.
     function enableable(uint256 features, uint256 locked, uint256 valid, bytes32 admin, bool registry)
-        internal pure returns (uint256 e)
+        internal
+        pure
+        returns (uint256 e)
     {
         if (admin == 0) return 0;
         e = ENABLEABLE & valid & ~features & ~locked;

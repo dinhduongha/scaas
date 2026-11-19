@@ -49,14 +49,18 @@ contract FactoryGenericKindTest is Test {
     }
 
     function _release(uint16 c, uint16 k, uint64 v, bytes memory code, bytes4 sel, bytes4 iface, bytes memory implArgs)
-        internal returns (address)
+        internal
+        returns (address)
     {
         vm.prank(registrar);
         return f.deployImplementation(_id(c, k, v), 1, sel, iface, code, implArgs, EnvKit.uidOf(address(f)));
     }
 
     function _note(uint64 v) internal returns (address) {
-        return _release(4, 0, v, type(NoteKind).creationCode, INoteKind.initialize.selector, type(INoteKind).interfaceId, "");
+        return
+            _release(
+                4, 0, v, type(NoteKind).creationCode, INoteKind.initialize.selector, type(INoteKind).interfaceId, ""
+            );
     }
 
     function _enable(uint16 c, uint16 k, bool on) internal {
@@ -78,8 +82,9 @@ contract FactoryGenericKindTest is Test {
         _publish(4, 0, 1);
         address n1 = _note(1);
         assertEq(f.classes().length, 1);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ReleaseNotYetUsable.selector, 4, 0, 1,
-            uint64(block.timestamp + NOTICE)));
+        vm.expectRevert(
+            abi.encodeWithSelector(IOpenFactory.ReleaseNotYetUsable.selector, 4, 0, 1, uint64(block.timestamp + NOTICE))
+        );
         f.createInstance(_id(4, 0, 1), "a", _noteCall(nid(alice), "hi"));
         vm.warp(block.timestamp + NOTICE);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassKindDisabled.selector, 4, 0));
@@ -114,7 +119,9 @@ contract FactoryGenericKindTest is Test {
         assertEq(NoteKind(n1).factoryInfo().chainUid, bytes32(0), "the release carries no env");
         // class 5, kind 1: a dynamic argument
         _publish(5, 1, 1);
-        _release(5, 1, 1, type(RosterKind).creationCode, IRosterKind.initialize.selector, type(IRosterKind).interfaceId, "");
+        _release(
+            5, 1, 1, type(RosterKind).creationCode, IRosterKind.initialize.selector, type(IRosterKind).interfaceId, ""
+        );
         vm.warp(block.timestamp + NOTICE);
         _enable(5, 1, true);
         address[] memory ms = new address[](3);
@@ -161,8 +168,15 @@ contract FactoryGenericKindTest is Test {
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassReserved.selector, c));
             f.publishClassEnv(c, 0, 1, EnvKit.uidOf(address(f)), _env());
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassReserved.selector, c));
-            f.deployImplementation(_id(c, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
-                type(NoteKind).creationCode, "", EnvKit.uidOf(address(f)));
+            f.deployImplementation(
+                _id(c, 0, 1),
+                1,
+                INoteKind.initialize.selector,
+                type(INoteKind).interfaceId,
+                type(NoteKind).creationCode,
+                "",
+                EnvKit.uidOf(address(f))
+            );
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassReserved.selector, c));
             f.deprecateRelease(_id(c, 0, 1), EnvKit.uidOf(address(f)), "x");
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ClassReserved.selector, c));
@@ -179,14 +193,48 @@ contract FactoryGenericKindTest is Test {
         bytes memory code = type(NoteKind).creationCode;
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ReleaseUnknown.selector, 4, 0, 0));
-        f.deployImplementation(_id(4, 0, 0), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, code, "", EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            _id(4, 0, 0),
+            1,
+            INoteKind.initialize.selector,
+            type(INoteKind).interfaceId,
+            code,
+            "",
+            EnvKit.uidOf(address(f))
+        );
         vm.expectRevert(IOpenFactory.InitSelectorZero.selector);
-        f.deployImplementation(_id(4, 0, 1), 1, bytes4(0), type(INoteKind).interfaceId, code, "", EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            _id(4, 0, 1), 1, bytes4(0), type(INoteKind).interfaceId, code, "", EnvKit.uidOf(address(f))
+        );
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, uint32(4) << 16, 2));
-        f.deployImplementation(_id(4, 0, 1), 2, INoteKind.initialize.selector, type(INoteKind).interfaceId, code, "", EnvKit.uidOf(address(f)));
-        address n1 = f.deployImplementation(_id(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, code, "", EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            _id(4, 0, 1),
+            2,
+            INoteKind.initialize.selector,
+            type(INoteKind).interfaceId,
+            code,
+            "",
+            EnvKit.uidOf(address(f))
+        );
+        address n1 = f.deployImplementation(
+            _id(4, 0, 1),
+            1,
+            INoteKind.initialize.selector,
+            type(INoteKind).interfaceId,
+            code,
+            "",
+            EnvKit.uidOf(address(f))
+        );
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ReleaseAlreadyRegistered.selector, 4, 0, 1, n1));
-        f.deployImplementation(_id(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, code, "", EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            _id(4, 0, 1),
+            1,
+            INoteKind.initialize.selector,
+            type(INoteKind).interfaceId,
+            code,
+            "",
+            EnvKit.uidOf(address(f))
+        );
         vm.stopPrank();
     }
 
@@ -196,18 +244,30 @@ contract FactoryGenericKindTest is Test {
         bytes memory code = type(BadKind).creationCode;
         bytes4 sel = INoteKind.initialize.selector;
         bytes4 iface = type(INoteKind).interfaceId;
-        for (uint8 m = 1; m <= 9; ++m) { // another factory, class, kind, version; uninitialized; the pre-3r 224 B; 160 B; 256 B; none
-            address at = vm.computeCreate2Address(keccak256(abi.encode("release", _id(4, 0, 1))),
-                keccak256(bytes.concat(code, abi.encode(_id(4, 0, 1), address(f), abi.encode(m)))), address(f));
+        for (uint8 m = 1; m <= 9; ++m) {
+            // another factory, class, kind, version; uninitialized; the pre-3r 224 B; 160 B; 256 B; none
+            address at = vm.computeCreate2Address(
+                keccak256(abi.encode("release", _id(4, 0, 1))),
+                keccak256(bytes.concat(code, abi.encode(_id(4, 0, 1), address(f), abi.encode(m)))),
+                address(f)
+            );
             vm.prank(registrar);
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ReleaseInfoMismatch.selector, at));
             f.deployImplementation(_id(4, 0, 1), 1, sel, iface, code, abi.encode(m), EnvKit.uidOf(address(f)));
         }
-        for (uint8 m = 10; m <= 11; ++m) { // ERC-165 false for the interface; true for 0xffffffff
-            address at = vm.computeCreate2Address(keccak256(abi.encode("release", _id(4, 0, 1))),
-                keccak256(bytes.concat(code, abi.encode(_id(4, 0, 1), address(f), abi.encode(m)))), address(f));
+        for (uint8 m = 10; m <= 11; ++m) {
+            // ERC-165 false for the interface; true for 0xffffffff
+            address at = vm.computeCreate2Address(
+                keccak256(abi.encode("release", _id(4, 0, 1))),
+                keccak256(bytes.concat(code, abi.encode(_id(4, 0, 1), address(f), abi.encode(m)))),
+                address(f)
+            );
             vm.prank(registrar);
-            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.InterfaceNotSupported.selector, at, m == 10 ? iface : bytes4(0xffffffff)));
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    IOpenFactory.InterfaceNotSupported.selector, at, m == 10 ? iface : bytes4(0xffffffff)
+                )
+            );
             f.deployImplementation(_id(4, 0, 1), 1, sel, iface, code, abi.encode(m), EnvKit.uidOf(address(f)));
         }
         vm.prank(registrar);
@@ -227,8 +287,11 @@ contract FactoryGenericKindTest is Test {
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, mod));
         f.deployImplementation(_id(4, 0, 1), 1, sel, iface, code, abi.encode(uint8(18)), EnvKit.uidOf(address(f)));
-        address at = vm.computeCreate2Address(keccak256(abi.encode("release", _id(4, 0, 1))),
-            keccak256(bytes.concat(code, abi.encode(_id(4, 0, 1), address(f), abi.encode(uint8(19))))), address(f));
+        address at = vm.computeCreate2Address(
+            keccak256(abi.encode("release", _id(4, 0, 1))),
+            keccak256(bytes.concat(code, abi.encode(_id(4, 0, 1), address(f), abi.encode(uint8(19))))),
+            address(f)
+        );
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModulesUnreadable.selector, at));
         f.deployImplementation(_id(4, 0, 1), 1, sel, iface, code, abi.encode(uint8(19)), EnvKit.uidOf(address(f)));
@@ -239,7 +302,8 @@ contract FactoryGenericKindTest is Test {
         vm.prank(registrar);
         f.publishClassEnv(4, 0, 2, EnvKit.uidOf(address(f)), e);
         vm.prank(registrar);
-        address r = f.deployImplementation(_id(4, 0, 1), 2, sel, iface, code, abi.encode(uint8(18)), EnvKit.uidOf(address(f)));
+        address r =
+            f.deployImplementation(_id(4, 0, 1), 2, sel, iface, code, abi.encode(uint8(18)), EnvKit.uidOf(address(f)));
         assertEq(BadKind(r).modules()[0], mod, "the pinned module");
         assertEq(NoteKind(_note(2)).modules().length, 0, "an empty modules() deploys");
     }
@@ -251,20 +315,33 @@ contract FactoryGenericKindTest is Test {
         for (uint8 m = 12; m <= 17; ++m) {
             if (m == 16) continue; // NESTED: test_generic_nestedCreation
             vm.prank(registrar);
-            f.deployImplementation(_id(4, 0, uint64(m)), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, code,
-                abi.encode(m), EnvKit.uidOf(address(f)));
+            f.deployImplementation(
+                _id(4, 0, uint64(m)),
+                1,
+                INoteKind.initialize.selector,
+                type(INoteKind).interfaceId,
+                code,
+                abi.encode(m),
+                EnvKit.uidOf(address(f))
+            );
         }
         _note(1);
         vm.warp(block.timestamp + NOTICE);
         _enable(4, 0, true);
         // the initCall's selector: none (0-3 bytes) or another
         for (uint256 len; len < 4; ++len) {
-            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.InitSelectorMismatch.selector, INoteKind.initialize.selector,
-                bytes4(new bytes(len))));
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    IOpenFactory.InitSelectorMismatch.selector, INoteKind.initialize.selector, bytes4(new bytes(len))
+                )
+            );
             f.createInstance(_id(4, 0, 1), "s", new bytes(len));
         }
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.InitSelectorMismatch.selector, INoteKind.initialize.selector,
-            INoteKind.note.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IOpenFactory.InitSelectorMismatch.selector, INoteKind.initialize.selector, INoteKind.note.selector
+            )
+        );
         f.createInstance(_id(4, 0, 1), "s", abi.encodeCall(INoteKind.note, ()));
         // an initializer that leaves `initialized` false, or reports another class after init
         address p12 = f.predictAddress(nid(address(this)), 4, 0, "12");
@@ -298,8 +375,15 @@ contract FactoryGenericKindTest is Test {
         _publish(4, 0, 1);
         _note(1);
         vm.prank(registrar);
-        f.deployImplementation(_id(4, 0, 16), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
-            type(BadKind).creationCode, abi.encode(uint8(16)), EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            _id(4, 0, 16),
+            1,
+            INoteKind.initialize.selector,
+            type(INoteKind).interfaceId,
+            type(BadKind).creationCode,
+            abi.encode(uint8(16)),
+            EnvKit.uidOf(address(f))
+        );
         vm.warp(block.timestamp + NOTICE);
         _enable(4, 0, true);
         vm.prank(alice);
@@ -319,7 +403,15 @@ contract FactoryGenericKindTest is Test {
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.publishClassEnv(4, 0, 1, EnvKit.uidOf(address(f)), _env());
         vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
-        f.deployImplementation(_id(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, "", "", EnvKit.uidOf(address(f)));
+        f.deployImplementation(
+            _id(4, 0, 1),
+            1,
+            INoteKind.initialize.selector,
+            type(INoteKind).interfaceId,
+            "",
+            "",
+            EnvKit.uidOf(address(f))
+        );
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
         f.deprecateRelease(_id(4, 0, 1), EnvKit.uidOf(address(f)), "x");
         vm.expectPartialRevert(IAdmin.NotAdmin.selector);
@@ -387,7 +479,9 @@ contract FactoryGenericKindTest is Test {
                 VmSafe.StorageAccess memory s = acc[i].storageAccesses[j];
                 if (s.account != who || !s.isWrite || s.reverted || s.previousValue != 0 || s.newValue == 0) continue;
                 bool dup;
-                for (uint256 k; k < m; ++k) if (seen[k] == s.slot) dup = true;
+                for (uint256 k; k < m; ++k) {
+                    if (seen[k] == s.slot) dup = true;
+                }
                 if (!dup) seen[m++] = s.slot;
             }
         }
@@ -395,10 +489,13 @@ contract FactoryGenericKindTest is Test {
 
     /// The token and DEX paths are untouched by the generic block (their tests: FactoryIndex, Factory, Dex).
     function test_generic_tokenAndDexUntouched() public {
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false
+        );
         vm.warp(block.timestamp + NOTICE);
-        address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("N", "N", 0, 1, alice, address(0))),
-            "t");
+        address t = f.createToken(
+            IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("N", "N", 0, 1, alice, address(0))), "t"
+        );
         assertEq(f.infoOf(t).contractClass, 1);
         assertEq(f.creating(), bytes32(0));
     }

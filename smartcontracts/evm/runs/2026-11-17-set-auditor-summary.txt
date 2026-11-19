@@ -1,0 +1,180 @@
+# setAuditor plan (docs/superpowers/plans/2026-11-17-set-auditor.md): task | step | tree | rc | counts; task mutant | mutant | tests that went red | rc.
+# Session 1 rows ran on per-task snapshot trees (aN = HEAD + A1..AN files, lost at the 2026-11-18 reboot); session 3 rows on the
+# A1-A8 commit tree: forge in the worktree, clients, node and mutants in the fixed lanes (incremental; cache proof below). UNAUDITED.
+# Allowed red until the closing re-pin (a0.txt section 3): GovDeploy test_routerAndRelayFeeRouterNewAddresses, LinkClosure test_moduleOpcodes.
+# Session 1 set-* rows are left out: the owner ruling of 2026-11-18 dropped per-task set sweeps, and their red logs predate the pqz-core symlink (stale).
+a1 | forge-account | a1 snapshot (session 1) | 0 | 103 passed 0 failed 0 skipped (forge)
+a1 | forge-as | a1 snapshot (session 1) | 0 | 564 passed 0 failed 0 skipped (forge)
+a1 | forge-confidential | a1 snapshot (session 1) | 0 | 5 passed 0 failed 0 skipped (forge)
+a1 | forge-factory | a1 snapshot (session 1) | 0 | 2 passed 0 failed 0 skipped (forge)
+a1 | forge-fork | a1 snapshot (session 1) | 0 | 0 passed 0 failed 1 skipped (forge)
+a1 | forge-hedera | a1 snapshot (session 1) | 0 | 20 passed 0 failed 0 skipped (forge)
+a1 | forge-liquidity | a1 snapshot (session 1) | 0 | 93 passed 0 failed 1 skipped (forge)
+a1 | forge-merge | a1 snapshot (session 1) | 0 | 350 passed 0 failed 0 skipped (forge)
+a1 | forge-metatx | a1 snapshot (session 1) | 0 | 548 passed 0 failed 1 skipped (forge)
+a1 | forge-modules | a1 snapshot (session 1) | 0 | 35 passed 0 failed 0 skipped (forge)
+a1 | forge-p6f | a1 snapshot (session 1) | 0 | 4 passed 0 failed 0 skipped (forge)
+a1 | forge-pqchat | a1 snapshot (session 1) | 0 | 99 passed 0 failed 0 skipped (forge)
+a1 | forge-pqz | a1 snapshot (session 1) | 0 | 680 passed 0 failed 4 skipped (forge)
+a1 | forge-pqzh | a1 snapshot (session 1) | 0 | 42 passed 0 failed 0 skipped (forge)
+a1 | forge-research | a1 snapshot (session 1) | 0 | 360 passed 0 failed 7 skipped (forge)
+a1 | forge-top | a1 snapshot (session 1) | 0 | 29 passed 0 failed 0 skipped (forge)
+a1 | forge-ua | a1 snapshot (session 1) | 0 | 847 passed 0 failed 0 skipped (forge)
+a1 | forge-v2 | a1 snapshot (session 1) | 0 | 750 passed 0 failed 0 skipped (forge)
+a1 | forge-wallet | a1 snapshot (session 1) | 0 | 185 passed 0 failed 0 skipped (forge)
+a1 | forge-wrap | a1 snapshot (session 1) | 0 | 324 passed 0 failed 0 skipped (forge)
+a1 | forge-zether | a1 snapshot (session 1) | 0 | 444 passed 0 failed 4 skipped (forge)
+a1 | size | a1 snapshot (session 1) | 0 | 
+a1 | uagas | a1 snapshot (session 1) | 0 | 22 passed 0 failed 0 skipped (forge)
+a2 | forge-account | a2 snapshot (session 1) | 0 | 103 passed 0 failed 0 skipped (forge)
+a2 | forge-as | a2 snapshot (session 1) | 0 | 564 passed 0 failed 0 skipped (forge)
+a2 | forge-confidential | a2 snapshot (session 1) | 0 | 5 passed 0 failed 0 skipped (forge)
+a2 | forge-factory | a2 snapshot (session 1) | 0 | 2 passed 0 failed 0 skipped (forge)
+a2 | forge-fork | a2 snapshot (session 1) | 0 | 0 passed 0 failed 1 skipped (forge)
+a2 | forge-governance | a2 snapshot (session 1) | 1 | 923 passed 1 failed 0 skipped (forge)
+a2 | forge-hedera | a2 snapshot (session 1) | 0 | 20 passed 0 failed 0 skipped (forge)
+a2 | forge-liquidity | a2 snapshot (session 1) | 0 | 93 passed 0 failed 1 skipped (forge)
+a2 | forge-merge | a2 snapshot (session 1) | 0 | 350 passed 0 failed 0 skipped (forge)
+a2 | forge-metatx | a2 snapshot (session 1) | 0 | 548 passed 0 failed 1 skipped (forge)
+a2 | forge-modules | a2 snapshot (session 1) | 0 | 35 passed 0 failed 0 skipped (forge)
+a2 | forge-p6f | a2 snapshot (session 1) | 0 | 4 passed 0 failed 0 skipped (forge)
+a2 | forge-pqchat | a2 snapshot (session 1) | 0 | 99 passed 0 failed 0 skipped (forge)
+a2 | forge-pqz | a2 snapshot (session 1) | 0 | 680 passed 0 failed 4 skipped (forge)
+a2 | forge-pqzh | a2 snapshot (session 1) | 0 | 42 passed 0 failed 0 skipped (forge)
+a2 | forge-research | a2 snapshot (session 1) | 0 | 360 passed 0 failed 7 skipped (forge)
+a2 | forge-top | a2 snapshot (session 1) | 0 | 29 passed 0 failed 0 skipped (forge)
+a2 | forge-ua | a2 snapshot (session 1) | 0 | 847 passed 0 failed 0 skipped (forge)
+a2 | forge-v2 | a2 snapshot (session 1) | 1 | 749 passed 1 failed 0 skipped (forge)
+a2 | forge-wallet | a2 snapshot (session 1) | 0 | 185 passed 0 failed 0 skipped (forge)
+a2 | forge-wrap | a2 snapshot (session 1) | 0 | 324 passed 0 failed 0 skipped (forge)
+a2 | forge-zether | a2 snapshot (session 1) | 0 | 471 passed 0 failed 4 skipped (forge)
+a2 | size | a2 snapshot (session 1) | 0 | 
+a2 | uagas | a2 snapshot (session 1) | 0 | 22 passed 0 failed 0 skipped (forge)
+a3 | forge-as | a3 snapshot (session 1) | 0 | 564 passed 0 failed 0 skipped (forge)
+a3 | forge-governance | a3 snapshot (session 1) | 1 | 923 passed 1 failed 0 skipped (forge)
+a3 | forge-merge | a3 snapshot (session 1) | 0 | 350 passed 0 failed 0 skipped (forge)
+a3 | forge-v2 | a3 snapshot (session 1) | 1 | 749 passed 1 failed 0 skipped (forge)
+a3 | forge-zether | a3 snapshot (session 1) | 0 | 474 passed 0 failed 4 skipped (forge)
+a3 | size | a3 snapshot (session 1) | 0 | 
+a1-a8 | clientkeys | commit tree, incremental | 0 | 
+a1-a8 | forge-as | commit tree, incremental | 0 | 568 passed 0 failed 0 skipped (forge)
+a1-a8 | forge-confidential | commit tree, incremental | 0 | 5 passed 0 failed 0 skipped (forge)
+a1-a8 | forge-governance | commit tree, incremental | 1 | 927 passed 1 failed 0 skipped (forge)
+a1-a8 | forge-merge | commit tree, incremental | 0 | 350 passed 0 failed 0 skipped (forge)
+a1-a8 | forge-metatx | commit tree, incremental | 0 | 548 passed 0 failed 1 skipped (forge)
+a1-a8 | forge-modules | commit tree, incremental | 0 | 35 passed 0 failed 0 skipped (forge)
+a1-a8 | forge-pqz | commit tree, incremental | 0 | 692 passed 0 failed 4 skipped (forge)
+a1-a8 | forge-ua | commit tree, incremental | 0 | 847 passed 0 failed 0 skipped (forge)
+a1-a8 | forge-v2 | commit tree, incremental | 1 | 749 passed 1 failed 0 skipped (forge)
+a1-a8 | forge-zether | commit tree, incremental | 0 | 474 passed 0 failed 4 skipped (forge)
+a1-a8 | node-clippy | commit tree, incremental | 0 | 
+a1-a8 | node-lib | commit tree, incremental | 0 | 783 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | pqzvec-n2048-kmax1024 | commit tree, incremental | 0 | 2 passed 0 failed 0 skipped (forge)
+a1-a8 | pqzvec-n2304-kmax4096 | commit tree, incremental | 0 | 2 passed 0 failed 0 skipped (forge)
+a1-a8 | pqzvec-n2560-kmax16384 | commit tree, incremental | 0 | 2 passed 0 failed 0 skipped (forge)
+a1-a8 | pqzvec-n2816-kmax65536 | commit tree, incremental | 0 | 2 passed 0 failed 0 skipped (forge)
+a1-a8 | proof-cargo | commit tree, incremental | 0 | 
+a1-a8 | proof-forge | commit tree, incremental | 0 | 
+a1-a8 | size | commit tree, incremental | 0 | 
+a1-a8 | ua-c | commit tree, incremental | 0 | 5 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | ua-c-release | commit tree, incremental | 0 | 
+a1-a8 | ua-cs | commit tree, incremental | 0 | 
+a1-a8 | ua-cxx | commit tree, incremental | 0 | 100% tests passed, 0 tests failed out of 43
+a1-a8 | ua-dart | commit tree, incremental | 0 | 
+a1-a8 | ua-dart-frb | commit tree, incremental | 0 | 
+a1-a8 | ua-go | commit tree, incremental | 0 | 
+a1-a8 | ua-py | commit tree, incremental | 0 | Ran 99 tests
+a1-a8 | ua-qt | commit tree, incremental | 0 | 100% tests passed, 0 tests failed out of 1
+a1-a8 | ua-rs-default | commit tree, incremental | 0 | 60 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | ua-rs-json | commit tree, incremental | 0 | 7 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | ua-rs-pq | commit tree, incremental | 0 | 38 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | ua-rs-pqz-n2048 | commit tree, incremental | 0 | 13 passed 0 failed 3 ignored (cargo, the cells' last two lines)
+a1-a8 | ua-rs-signers | commit tree, incremental | 0 | 4 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | ua-rs-vectors | commit tree, incremental | 0 | 34 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | ua-rs-verify-only | commit tree, incremental | 0 | 4 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | ua-rs-wallet-mlock | commit tree, incremental | 0 | 46 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | ua-rs-zether-only | commit tree, incremental | 0 | 23 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1-a8 | zp-clippy | commit tree, incremental | 0 | 
+a1-a8 | zp-test | commit tree, incremental | 0 | 21 passed 0 failed 0 ignored (cargo, the cells' last two lines)
+a1 mutant | delayed-relax-32 | test_bit32_masks_confidentialKinds, test_bit32_stopsAtOnce | 1
+a1 mutant | regulated-roles-32 | test_bit32_anyHolder, test_bit32_grantOnKind8_noSuchRole, test_bit32_masks_confidentialKinds, test_bit32_stopsAtOnce | 1
+a1 mutant | zether-none-check-dropped | test_bit32_init_zether | 1
+a1 mutant | pqz-none-check-dropped | test_bit32_init_refusals | 1
+a1 mutant | zether-admin0-dropped | test_bit32_init_zether | 1
+a1 mutant | pqz-admin0-dropped | test_bit32_init_refusals | 1
+a1 mutant | delegable-accepted | test_bit32_delegableRefused | 1
+a1 mutant | enableable-32 | test_bit32_grantOnKind8_noSuchRole, test_bit32_masks_confidentialKinds | 1
+a2 mutant | drop-use32 | test_state_zerosAfterDisable, test_twoUsesPerReplacement, test_wayBack, test_word_and_stranger | 1
+a2 mutant | drop-chain-word | test_word_and_stranger | 1
+a2 mutant | drop-epoch-check | test_wrongEpoch | 1
+a2 mutant | confirm-before-eta | test_propose_waits_then_applies | 1
+a2 mutant | drop-window-end | test_confirmAfterWindow_proposesAfresh, test_otherValue_pendingUntilExpiry, test_status_inTurn, test_twoUsesPerReplacement | 1
+a2 mutant | window-zero-notice | test_otherValue_pendingUntilExpiry, test_zeroNotice_grantDelay_confirmsInWindow | 1
+a2 mutant | window-by-delay | test_otherValue_pendingUntilExpiry, test_zeroNotice_grantDelay_confirmsInWindow | 1
+a2 mutant | refuse-over-expired | test_confirmAfterWindow_proposesAfresh, test_otherValue_pendingUntilExpiry, test_revokedProposer_deadAfterRegrant, test_status_inTurn, test_twoUsesPerReplacement | 1
+a2 mutant | accept-over-live | test_otherHolder_cannotConfirmOrCancel, test_otherValue_pendingUntilExpiry | 1
+a2 mutant | drop-cancel | test_cancel_byProposingCurrent, test_otherHolder_cannotConfirmOrCancel | 1
+a2 mutant | drop-proposer-confirm | test_otherHolder_cannotConfirmOrCancel | 1
+a2 mutant | drop-proposer-cancel | test_otherHolder_cannotConfirmOrCancel | 1
+a2 mutant | drop-role-epoch | test_revokedProposer_deadAfterRegrant, test_status_inTurn | 1
+a2 mutant | notice-alone | test_delay_grantDelayLonger, test_zeroNotice_grantDelay_confirmsInWindow | 1
+a2 mutant | grantdelay-alone | test_cancel_byProposingCurrent, test_confirmAfterWindow_proposesAfresh, test_consent_refusedAtApply, test_consent_refusedAtProposal, test_delay_noticeLonger, test_otherHolder_cannotConfirmOrCancel, test_otherValue_pendingUntilExpiry, test_pop_refusals, test_propose_waits_then_applies, test_revokedProposer_deadAfterRegrant, test_same_and_keyInvalid, test_state_zerosAfterDisable, test_status_inTurn, test_twoUsesPerReplacement, test_word_and_stranger, test_wrongEpoch | 1
+a2 mutant | delay0-not-at-once | test_delayZero_appliesAtOnce, test_epoch1_multi_bothForms, test_epoch1_writes_optOutDoesNot, test_threeEpochs_history, test_wayBack | 1
+a2 mutant | skip-checks-proposal | test_consent_refusedAtProposal, test_pop_refusals, test_same_and_keyInvalid | 1
+a2 mutant | skip-checks-apply | test_consent_refusedAtApply | 1
+a2 mutant | pop-d-unbound | test_cancel_byProposingCurrent, test_confirmAfterWindow_proposesAfresh, test_consent_refusedAtApply, test_consent_refusedAtProposal, test_delayZero_appliesAtOnce, test_delay_grantDelayLonger, test_delay_noticeLonger, test_epoch1_multi_bothForms, test_epoch1_writes_optOutDoesNot, test_otherHolder_cannotConfirmOrCancel, test_otherValue_pendingUntilExpiry, test_pop_refusals, test_propose_waits_then_applies, test_revokedProposer_deadAfterRegrant, test_same_and_keyInvalid, test_state_zerosAfterDisable, test_status_inTurn, test_threeEpochs_history, test_twoUsesPerReplacement, test_wayBack, test_word_and_stranger, test_wrongEpoch, test_zeroNotice_grantDelay_confirmsInWindow | 1
+a2 mutant | pop-drop-c-nonzero | test_pop_challengeZeroRefused | 1
+a2 mutant | pop-drop-z-range | test_pop_refusals | 1
+a2 mutant | pop-drop-r-valid | test_pop_refusals | 1
+a2 mutant | skip-entry-single | test_epoch1_writes_optOutDoesNot, test_threeEpochs_history, test_wayBack | 1
+a2 mutant | skip-entry-multi | test_epoch1_multi_bothForms | 1
+a2 mutant | write-at-epoch0 | test_epoch0_auditedTransfer_writesNothing | 1
+a2 mutant | write-on-optout | test_epoch1_writes_optOutDoesNot | 1
+a2 mutant | history-overwritten | test_threeEpochs_history, test_wayBack | 1
+a2 mutant | keyof-current | test_epoch1_writes_optOutDoesNot, test_threeEpochs_history, test_wayBack | 1
+a2 mutant | epoch-moves-pinned | test_namespaceRootsAndOffsetsArePinned | 1
+a3 mutant | disclosure-current-key | test_disclosure_multi_acrossEpochs, test_disclosure_threeEpochs_single | 1
+a3 mutant | recovery-current-key | auditor_epochs_bind_the_entry_key, the_sender_recovers_with_the_entry_epoch_key | 101
+a3 mutant | reader-current-auditor | auditor_epochs_bind_the_entry_key | 101
+a3 mutant | reader-secret-before-epoch | auditor_epochs_bind_the_entry_key, word_location_and_role_negatives_are_refused_before_the_key | 101
+a3 mutant | pop-challenge-drops-y | committed_rows_are_current_and_verify | 101
+a3 mutant | pop-challenge-drops-d | committed_rows_are_current_and_verify | 101
+a3 mutant | ua-rs-reader-current-auditor | auditor_handles_read_their_own_epoch_only | 101
+a4 mutant | drop-use32 | test_refusals_holder_epoch_word | 1
+a4 mutant | drop-chain-word | test_refusals_holder_epoch_word | 1
+a4 mutant | read-pqz-notice | test_consent_exactAndRefusedAtBothSteps, test_delay_maxAndZero, test_precompile_keyCheckedAtBothSteps, test_precompile_waitsFactoryNotice, test_refusals_holder_epoch_word, test_strangerShield_doesNotBlock, test_window_cancel_status | 1
+a4 mutant | drop-epoch-check | test_refusals_holder_epoch_word | 1
+a4 mutant | confirm-before-eta | test_precompile_waitsFactoryNotice | 1
+a4 mutant | refuse-over-expired | test_window_cancel_status | 1
+a4 mutant | accept-over-live | test_window_cancel_status | 1
+a4 mutant | drop-cancel | test_refusals_holder_epoch_word, test_window_cancel_status | 1
+a4 mutant | drop-proposer-confirm | test_refusals_holder_epoch_word | 1
+a4 mutant | drop-proposer-cancel | test_refusals_holder_epoch_word | 1
+a4 mutant | delay0-not-at-once | test_delay_maxAndZero, test_epoch1_op7_writes, test_epochs_op1_and_disclosure, test_gas_op7_M8_epochs, test_offchainToken_keyProvenKem, test_offchainToken_noVerifier_unprovenAccepted | 1
+a4 mutant | skip-checks-proposal | test_consent_exactAndRefusedAtBothSteps, test_offchainToken_keyProvenKem, test_offchainToken_noVerifier_unprovenAccepted, test_precompile_keyCheckedAtBothSteps | 1
+a4 mutant | skip-checks-apply | test_consent_exactAndRefusedAtBothSteps, test_precompile_keyCheckedAtBothSteps | 1
+a4 mutant | consent-zether-purpose | test_consent_exactAndRefusedAtBothSteps, test_offchainToken_noVerifier_unprovenAccepted | 1
+a4 mutant | drop-opening-kem | test_offchainToken_keyProvenKem | 1
+a4 mutant | proven-everywhere | test_offchainToken_noVerifier_unprovenAccepted | 1
+a4 mutant | proven-never | test_offchainToken_keyProvenKem | 1
+a4 mutant | skip-entry-write | test_epoch1_op7_writes, test_epochs_op1_and_disclosure, test_gas_op7_M8_epochs | 1
+a4 mutant | write-at-epoch0 | test_epochs_op1_and_disclosure | 1
+a4 mutant | write-on-optout | test_epochs_op1_and_disclosure | 1
+a4 mutant | legof-current | test_epochs_op1_and_disclosure | 1
+a4 mutant | uaof-current | test_epochs_op1_and_disclosure | 1
+a4 mutant | history-overwritten | test_epochs_op1_and_disclosure | 1
+a4 mutant | epoch-moves-pinned | test_namespaceRootsAndOffsetsArePinned | 1
+a4 mutant | reader-current-auditor | auditor_reads_by_the_entry_epoch | 101
+a4 mutant | reader-secret-before-epoch | auditor_reads_by_the_entry_epoch, entry_and_role_negatives_refused_before_the_key | 101
+a6 mutant | key-struct-word | test_router_setAuditorKey | 1
+a6 mutant | ua-struct-word | test_router_setAuditorUA, test_router_setAuditorUA_refusals | 1
+a6 mutant | key-epoch-forwarded | test_router_setAuditorKey | 1
+a6 mutant | pop-not-forwarded | test_router_setAuditorKey | 1
+a6 mutant | consent-not-forwarded | test_router_setAuditorUA | 1
+a6 mutant | ua-op-key-typehash | test_router_setAuditorUA, test_router_setAuditorUA_refusals | 1
+a6 mutant | typehash-string | test_UASetAuditorTypehashesArePinned | 1
+a8 mutant | requeue-dropped | submit::tests::auditor_verdicts | 101
+proof | proof-forge | lane mutants | 0 | proof-forge: 304 artifacts compared, 0 differ
+proof | proof-cargo | lane mutants | 0 | proof-cargo: 47 test binaries, outcomes identical
+a9 | matrix local zether (kinds 2, 10; set-auditor rows) | local anvil, A1-A8 tree + A9 | 0 | txs 197/197, negatives 2/2
+a9 | matrix local pqzkeys (kind 4 AUDITOR token; set-auditor rows) | local anvil, A1-A8 tree + A9 | 0 | txs 734/734, negatives 29/29

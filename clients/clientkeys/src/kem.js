@@ -7,24 +7,26 @@
 // A KEM key comes only through a UA key (`kemKeyOf(uaKey, version)`, the key's own seed, uakey.js): KEM holders only
 // (mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024); an `msig` has no KEM key (MD-11: seal to its accepted members). The JS
 // reference of smartcontracts/vectors/ua/kem.json; clients/ua-rs is held to its rows (T7).
-import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
-import { x25519 as X } from '@noble/curves/ed25519.js';
-import { sha3_256 } from '@noble/hashes/sha3.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { extract, expand } from '@noble/hashes/hkdf.js';
-import { concatBytes, utf8ToBytes, keccak_256, wipe } from './bytes.js';
-import { UAError, isPqzHolder, KEM_PK_LENGTH } from './ua.js';
+import { ml_kem1024 } from "@noble/post-quantum/ml-kem.js";
+import { x25519 as X } from "@noble/curves/ed25519.js";
+import { sha3_256 } from "@noble/hashes/sha3.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { extract, expand } from "@noble/hashes/hkdf.js";
+import { concatBytes, utf8ToBytes, keccak_256, wipe } from "./bytes.js";
+import { UAError, isPqzHolder, KEM_PK_LENGTH } from "./ua.js";
 
-const fail = (code, reason) => { throw new UAError(code, reason); };
+const fail = (code, reason) => {
+  throw new UAError(code, reason);
+};
 const EK = 1568;
 const CT = 1568;
 const DK = 3168;
-const LABEL = utf8ToBytes('scaas.kem.1');
-const SALT = utf8ToBytes('scaas.ua.kem.v1');
-const u8 = (v, n, what) => (v instanceof Uint8Array && v.length === n ? v : fail('KemCheck', `${what}: ${n} bytes`));
+const LABEL = utf8ToBytes("scaas.kem.1");
+const SALT = utf8ToBytes("scaas.ua.kem.v1");
+const u8 = (v, n, what) => (v instanceof Uint8Array && v.length === n ? v : fail("KemCheck", `${what}: ${n} bytes`));
 const be64 = (v) => {
-  const n = typeof v === 'bigint' ? v : Number.isInteger(v) ? BigInt(v) : -1n;
-  if (n < 0n || n >= 1n << 64n) fail('Argument', 'version must be a u64');
+  const n = typeof v === "bigint" ? v : Number.isInteger(v) ? BigInt(v) : -1n;
+  if (n < 0n || n >= 1n << 64n) fail("Argument", "version must be a u64");
   const b = new Uint8Array(8);
   new DataView(b.buffer).setBigUint64(0, n);
   return b;
@@ -66,15 +68,15 @@ export function dkCheckOk(dk) {
 const combine = (ssM, ssX, E, pkX) => sha3_256(concatBytes(ssM, ssX, E, pkX, LABEL));
 
 function encaps(kemPk, m, e) {
-  if (!(kemPk instanceof Uint8Array) || kemPk.length < 1) fail('KemCheck', 'kemPk');
-  if (kemPk[0] !== 1) fail('KemCheck', `scheme ${kemPk[0]}: only scheme 1 (ML-KEM-1024 + X25519)`);
-  if (kemPk.length !== KEM_PK_LENGTH) fail('KemCheck', `kemPk length ${kemPk.length}, not ${KEM_PK_LENGTH}`);
+  if (!(kemPk instanceof Uint8Array) || kemPk.length < 1) fail("KemCheck", "kemPk");
+  if (kemPk[0] !== 1) fail("KemCheck", `scheme ${kemPk[0]}: only scheme 1 (ML-KEM-1024 + X25519)`);
+  if (kemPk.length !== KEM_PK_LENGTH) fail("KemCheck", `kemPk length ${kemPk.length}, not ${KEM_PK_LENGTH}`);
   const ek = kemPk.subarray(1, 1 + EK);
   const pkX = kemPk.subarray(1 + EK);
-  if (!ekModulusOk(ek)) fail('KemCheck', 'ek modulus check (FIPS 203 §7.2)');
+  if (!ekModulusOk(ek)) fail("KemCheck", "ek modulus check (FIPS 203 §7.2)");
   const E = X.getPublicKey(e);
   const ssX = x25519(e, pkX);
-  if (zero(ssX)) fail('KemCheck', 'ss_X is all zero (small-order pk_X)');
+  if (zero(ssX)) fail("KemCheck", "ss_X is all zero (small-order pk_X)");
   const { cipherText, sharedSecret } = ml_kem1024.encapsulate(ek, m);
   const ss = combine(sharedSecret, ssX, E, pkX);
   wipe(ssX, sharedSecret);
@@ -82,16 +84,17 @@ function encaps(kemPk, m, e) {
 }
 
 /** `(mlkemCt, x25519Eph, ss)` to `kemPk`, `m` and `e` from the platform RNG. */
-export const kemEncaps = (kemPk) => encaps(kemPk, crypto.getRandomValues(new Uint8Array(32)), crypto.getRandomValues(new Uint8Array(32)));
+export const kemEncaps = (kemPk) =>
+  encaps(kemPk, crypto.getRandomValues(new Uint8Array(32)), crypto.getRandomValues(new Uint8Array(32)));
 
 /** Test vectors only: `kemEncaps` with the given `m` (ML-KEM message randomness) and `e` (the X25519 ephemeral secret). */
-export const kemEncapsVector = (kemPk, m, e) => encaps(kemPk, u8(m, 32, 'm'), u8(e, 32, 'e'));
+export const kemEncapsVector = (kemPk, m, e) => encaps(kemPk, u8(m, 32, "m"), u8(e, 32, "e"));
 
 function keyPair(okm, id) {
   const { ek, dk } = mlkemKeyGen(okm.subarray(0, 32), okm.subarray(32, 64));
   const skX = okm.slice(64, 96);
   wipe(okm);
-  if (!dkCheckOk(dk)) fail('KemCheck', 'decapsulation-key check (FIPS 203 §7.3)'); // a self-test of the derived key
+  if (!dkCheckOk(dk)) fail("KemCheck", "decapsulation-key check (FIPS 203 §7.3)"); // a self-test of the derived key
   const pkX = X.getPublicKey(skX);
   const kemPk = concatBytes(Uint8Array.of(1), ek, pkX);
   const kemPkHash = keccak_256(kemPk);
@@ -105,10 +108,10 @@ function keyPair(okm, id) {
     /** `ss` of `(mlkemCt, x25519Eph)`: lengths 1,568 / 32 and a contributory `ss_X` (else `KemCheck`); ML-KEM implicit rejection
      *  kept (a wrong `mlkemCt` gives another `ss`, never an error). */
     decaps(mlkemCt, x25519Eph) {
-      if (!(mlkemCt instanceof Uint8Array) || mlkemCt.length !== CT) fail('KemCheck', `mlkemCt: ${CT} bytes`);
-      if (!(x25519Eph instanceof Uint8Array) || x25519Eph.length !== 32) fail('KemCheck', 'x25519Eph: 32 bytes');
+      if (!(mlkemCt instanceof Uint8Array) || mlkemCt.length !== CT) fail("KemCheck", `mlkemCt: ${CT} bytes`);
+      if (!(x25519Eph instanceof Uint8Array) || x25519Eph.length !== 32) fail("KemCheck", "x25519Eph: 32 bytes");
       const ssX = x25519(skX, x25519Eph);
-      if (zero(ssX)) fail('KemCheck', 'ss_X is all zero (small-order E)');
+      if (zero(ssX)) fail("KemCheck", "ss_X is all zero (small-order E)");
       const ssM = ml_kem1024.decapsulate(mlkemCt, dk);
       const ss = combine(ssM, ssX, x25519Eph, pkX);
       wipe(ssX, ssM);
@@ -121,7 +124,10 @@ function keyPair(okm, id) {
 /** The KEM key of a UA from the HKDF-Extract of its seed (`prk`, held by the UA key, uakey.js): the HKDF-Expand step. */
 export function kemKeyFromPrk(prk, ua, version) {
   const v = be64(version);
-  return keyPair(expand(sha256, prk, concatBytes(LABEL, ua, v), 96), { ua, version: typeof version === 'bigint' ? version : Number(version) });
+  return keyPair(expand(sha256, prk, concatBytes(LABEL, ua, v), 96), {
+    ua,
+    version: typeof version === "bigint" ? version : Number(version),
+  });
 }
 
 /** HKDF-Extract(salt = "scaas.ua.kem.v1", ikm = seed): what a KEM holder's UA key keeps for `kemKey`. */
@@ -134,7 +140,8 @@ export const isKemHolder = (kind) => isPqzHolder(kind);
  *  KEM key (MD-11), and anything that is not a UA key of this module (an `msig` record, a key of a non-holder) is refused. */
 export function kemKeyOf(key, version) {
   // an msig is never a UA key here (deriveUAKey refuses 0x0120): its KEM key cannot be asked for
-  if (typeof key?.kemKey !== 'function') fail('KemHolder', 'not a single-key UA key; an msig has no KEM key: seal to each of its accepted members');
+  if (typeof key?.kemKey !== "function")
+    fail("KemHolder", "not a single-key UA key; an msig has no KEM key: seal to each of its accepted members");
   return key.kemKey(version);
 }
 
@@ -142,4 +149,4 @@ export function kemKeyOf(key, version) {
 export const generateEphemeral = () => keyPair(crypto.getRandomValues(new Uint8Array(96)), null);
 
 /** Test vectors only: the ephemeral key from 96 given bytes (the layout of kemSeed). */
-export const ephemeralVector = (bytes96) => keyPair(u8(bytes96, 96, 'seed').slice(), null);
+export const ephemeralVector = (bytes96) => keyPair(u8(bytes96, 96, "seed").slice(), null);

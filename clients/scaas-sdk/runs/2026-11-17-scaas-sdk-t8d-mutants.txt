@@ -1,0 +1,5 @@
+# t8d mutants at commit 5e342212b (name | outcome | test)
+swap two arguments of mtxPayUnderMandate | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_wallet
+a wrong selector on mtxRevokeMandate | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_wallet
+drop the unsigned meta of mtxPayUnderMandate | killed | ../../scripts/capped cargo test --locked --offline -j2 --test entries entries_wallet
+3 mutants, 3 killed, 0 survived, 0 not loaded

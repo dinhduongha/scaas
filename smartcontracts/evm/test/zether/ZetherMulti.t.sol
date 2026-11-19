@@ -22,18 +22,27 @@ abstract contract ZetherMultiSuite is ZetherFixture {
 
     function setUp() public {
         _deploy(true);
-        for (uint256 i; i < 8; ++i) rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
+        for (uint256 i; i < 8; ++i) {
+            rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
+        }
     }
 
     // ------------------------------------------------------------------ tiện ích
 
     function _to(uint256 m) internal view returns (User[] memory to) {
         to = new User[](m);
-        for (uint256 j; j < m; ++j) to[j] = rs[j];
+        for (uint256 j; j < m; ++j) {
+            to[j] = rs[j];
+        }
     }
 
-    function _send(NormalZetherToken t, ZetherTypes.TransferMode mode, Tx memory x, ZetherTypes.UA ben) internal returns (bytes32) {
-        if (mode == ZetherTypes.TransferMode.HASH) return t.mtxConfidentialTransferCompact(_zMulti(x.payload, ben), x.proof);
+    function _send(NormalZetherToken t, ZetherTypes.TransferMode mode, Tx memory x, ZetherTypes.UA ben)
+        internal
+        returns (bytes32)
+    {
+        if (mode == ZetherTypes.TransferMode.HASH) {
+            return t.mtxConfidentialTransferCompact(_zMulti(x.payload, ben), x.proof);
+        }
         return t.mtxConfidentialTransfer(_zMulti(x.payload, ben), x.proof);
     }
 
@@ -48,7 +57,9 @@ abstract contract ZetherMultiSuite is ZetherFixture {
 
     function _cut(bytes memory a, uint256 off, uint256 len) internal pure returns (bytes memory out) {
         out = new bytes(len);
-        for (uint256 i; i < len; ++i) out[i] = a[off + i];
+        for (uint256 i; i < len; ++i) {
+            out[i] = a[off + i];
+        }
     }
 
     /// @dev `R = salt ‖ B_1 ‖ … ‖ B_M` dựng lại từ payload (đúng thứ một client đọc được từ calldata).
@@ -73,7 +84,9 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         uint256 p = ver.g1EncodedBytes();
         out = bytes.concat(payload);
         bytes memory np = ver.g1Add(_cut(payload, off, p), ver.g1MulBase(1));
-        for (uint256 i; i < p; ++i) out[off + i] = np[i];
+        for (uint256 i; i < p; ++i) {
+            out[off + i] = np[i];
+        }
     }
 
     function _funded(uint256 amount) internal {
@@ -95,11 +108,24 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         _send(tok, mode, t, carol.ua);
         uint256 used = g0 - gasleft();
         Vm.Gas memory lg = vm.lastCallGas(); // the isolated transaction: REGULAR gas, and EIP-8037 STATE gas apart
-        console2.log(string.concat(
-            bls ? "bls12-381" : "bn254", " mtxConfidentialTransfer M=", vm.toString(m), " ", _modeName(mode),
-            audOut ? " auditor-out" : "", " gas ", vm.toString(used), " calldata ", vm.toString(cd),
-            " regular ", vm.toString(lg.gasTotalUsed), " state ", vm.toString(uint256(int256(lg.gasStateUsed)))
-        ));
+        console2.log(
+            string.concat(
+                bls ? "bls12-381" : "bn254",
+                " mtxConfidentialTransfer M=",
+                vm.toString(m),
+                " ",
+                _modeName(mode),
+                audOut ? " auditor-out" : "",
+                " gas ",
+                vm.toString(used),
+                " calldata ",
+                vm.toString(cd),
+                " regular ",
+                vm.toString(lg.gasTotalUsed),
+                " state ",
+                vm.toString(uint256(int256(lg.gasStateUsed)))
+            )
+        );
         assertTrue(_holds(tok, alice, b - 1000 - FEE, true), "sender acc = b - sum(v) - fee");
     }
 
@@ -108,37 +134,106 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         uint256 b = 1_000_000;
         _funded(b);
         Tx memory t = _proveTransfer(tok, alice, rs[0], 1000, b, carol.ua, 0);
-        uint256 cd = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof)).length;
+        uint256 cd =
+            abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof)).length;
         uint256 g0 = gasleft();
         _direct(tok, t, carol.ua);
         uint256 used = g0 - gasleft();
-        console2.log(string.concat(
-            bls ? "bls12-381" : "bn254", " mtxConfidentialTransferSingle", audOut ? " auditor-out" : "",
-            " gas ", vm.toString(used), " calldata ", vm.toString(cd)
-        ));
+        console2.log(
+            string.concat(
+                bls ? "bls12-381" : "bn254",
+                " mtxConfidentialTransferSingle",
+                audOut ? " auditor-out" : "",
+                " gas ",
+                vm.toString(used),
+                " calldata ",
+                vm.toString(cd)
+            )
+        );
         assertTrue(_holds(tok, alice, b - 1000 - FEE, true), "sender acc = b - v - fee");
     }
 
-    function test_gasSingle() public { _gasSingle(); }
-    function test_gasOutSingle() public { audOut = true; _gasSingle(); }
+    function test_gasSingle() public {
+        _gasSingle();
+    }
 
-    function test_gasM1Hash() public { _gasRun(1, ZetherTypes.TransferMode.HASH); }
-    function test_gasM1Bundle() public { _gasRun(1, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasM2Hash() public { _gasRun(2, ZetherTypes.TransferMode.HASH); }
-    function test_gasM2Bundle() public { _gasRun(2, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasM4Hash() public { _gasRun(4, ZetherTypes.TransferMode.HASH); }
-    function test_gasM4Bundle() public { _gasRun(4, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasM8Hash() public { _gasRun(8, ZetherTypes.TransferMode.HASH); }
-    function test_gasM8Bundle() public { _gasRun(8, ZetherTypes.TransferMode.BUNDLE); }
+    function test_gasOutSingle() public {
+        audOut = true;
+        _gasSingle();
+    }
+
+    function test_gasM1Hash() public {
+        _gasRun(1, ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_gasM1Bundle() public {
+        _gasRun(1, ZetherTypes.TransferMode.BUNDLE);
+    }
+
+    function test_gasM2Hash() public {
+        _gasRun(2, ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_gasM2Bundle() public {
+        _gasRun(2, ZetherTypes.TransferMode.BUNDLE);
+    }
+
+    function test_gasM4Hash() public {
+        _gasRun(4, ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_gasM4Bundle() public {
+        _gasRun(4, ZetherTypes.TransferMode.BUNDLE);
+    }
+
+    function test_gasM8Hash() public {
+        _gasRun(8, ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_gasM8Bundle() public {
+        _gasRun(8, ZetherTypes.TransferMode.BUNDLE);
+    }
+
     // Z12: token có auditor, người gửi bỏ auditor (mọi C_aud = O)
-    function test_gasOutM1Hash() public { audOut = true; _gasRun(1, ZetherTypes.TransferMode.HASH); }
-    function test_gasOutM1Bundle() public { audOut = true; _gasRun(1, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasOutM2Hash() public { audOut = true; _gasRun(2, ZetherTypes.TransferMode.HASH); }
-    function test_gasOutM2Bundle() public { audOut = true; _gasRun(2, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasOutM4Hash() public { audOut = true; _gasRun(4, ZetherTypes.TransferMode.HASH); }
-    function test_gasOutM4Bundle() public { audOut = true; _gasRun(4, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasOutM8Hash() public { audOut = true; _gasRun(8, ZetherTypes.TransferMode.HASH); }
-    function test_gasOutM8Bundle() public { audOut = true; _gasRun(8, ZetherTypes.TransferMode.BUNDLE); }
+    function test_gasOutM1Hash() public {
+        audOut = true;
+        _gasRun(1, ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_gasOutM1Bundle() public {
+        audOut = true;
+        _gasRun(1, ZetherTypes.TransferMode.BUNDLE);
+    }
+
+    function test_gasOutM2Hash() public {
+        audOut = true;
+        _gasRun(2, ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_gasOutM2Bundle() public {
+        audOut = true;
+        _gasRun(2, ZetherTypes.TransferMode.BUNDLE);
+    }
+
+    function test_gasOutM4Hash() public {
+        audOut = true;
+        _gasRun(4, ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_gasOutM4Bundle() public {
+        audOut = true;
+        _gasRun(4, ZetherTypes.TransferMode.BUNDLE);
+    }
+
+    function test_gasOutM8Hash() public {
+        audOut = true;
+        _gasRun(8, ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_gasOutM8Bundle() public {
+        audOut = true;
+        _gasRun(8, ZetherTypes.TransferMode.BUNDLE);
+    }
 
     // ------------------------------------------------------------------ hiệu lực
 
@@ -149,11 +244,21 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         uint256 seq = tok.accountState(rs[1].ua).pendingSeq;
         Tx memory t = _proveMulti(tok, alice, _to(4), vs, 1000, carol.ua, ZetherTypes.TransferMode.HASH);
         bytes32[] memory uas = new bytes32[](4);
-        for (uint256 j; j < 4; ++j) uas[j] = ZetherTypes.UA.unwrap(rs[j].ua);
+        for (uint256 j; j < 4; ++j) {
+            uas[j] = ZetherTypes.UA.unwrap(rs[j].ua);
+        }
         bytes32 expected = _ref(tok, alice, 0);
         vm.expectEmit(true, true, true, true, address(tok));
-        emit IConfidentialToken.ConfidentialTransferMulti(expected, ZetherTypes.UA.unwrap(alice.ua),
-            ZetherTypes.UA.unwrap(carol.ua), FEE, 0, uas, uint8(ZetherTypes.TransferMode.HASH), address(0));
+        emit IConfidentialToken.ConfidentialTransferMulti(
+            expected,
+            ZetherTypes.UA.unwrap(alice.ua),
+            ZetherTypes.UA.unwrap(carol.ua),
+            FEE,
+            0,
+            uas,
+            uint8(ZetherTypes.TransferMode.HASH),
+            address(0)
+        );
         bytes32 ref = _send(tok, ZetherTypes.TransferMode.HASH, t, carol.ua);
         assertEq(ref, _ref(tok, alice, 0), "entryRef carries chainUid (CTR-ZTH-36)");
         assertTrue(_holds(tok, alice, 1000 - 350 - FEE, true), "sender debited sum + fee");
@@ -245,13 +350,20 @@ abstract contract ZetherMultiSuite is ZetherFixture {
 
     /// @dev Opening Chaum-Pedersen leg `j`: SENDER_CP trên cơ sở `Y_tj` bằng `s`, AUDITOR trên `D_aud_j` (review C0-1),
     ///      RECEIVER_X trên `D_out`.
-    function _cp(uint256 x, bytes32 ref, uint256 j, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory payload)
-        internal view returns (bytes memory)
-    {
+    function _cp(
+        uint256 x,
+        bytes32 ref,
+        uint256 j,
+        uint256 amount,
+        ITransferDisclosure.OpeningKind kind,
+        bytes memory payload
+    ) internal view returns (bytes memory) {
         uint256 p = ver.g1EncodedBytes();
-        bytes memory base = kind == ITransferDisclosure.OpeningKind.SENDER_CP ? _cut(payload, _legAt(j), p)
-            : kind == ITransferDisclosure.OpeningKind.AUDITOR ? _cut(payload, _legAt(j) + 3 * p, p)
-            : _cut(payload, 176 + p, p);
+        bytes memory base = kind == ITransferDisclosure.OpeningKind.SENDER_CP
+            ? _cut(payload, _legAt(j), p)
+            : kind == ITransferDisclosure.OpeningKind.AUDITOR
+                ? _cut(payload, _legAt(j) + 3 * p, p)
+                : _cut(payload, 176 + p, p);
         return _cpOpening(tok, x, ref, j, amount, kind, base);
     }
 
@@ -271,8 +383,11 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         address ptr = address(uint160(uint256(vm.load(address(tok), keccak256(abi.encode(ref, ns + 10))))));
         assertTrue(ptr != address(0) && ptr.code.length == bundles.length + 1, "the pointer: 0x00 || R");
         assertEq(vm.load(address(tok), keccak256(abi.encode(ref, ns + 9))), bytes32(0));
-        assertEq(vm.load(address(tok), keccak256(abi.encode(ref, ns + 11))), bytes32(uint256(_memo(3).length * 2 + 1)),
-            "the memo next to it (a long `bytes`: 2 * len + 1)");
+        assertEq(
+            vm.load(address(tok), keccak256(abi.encode(ref, ns + 11))),
+            bytes32(uint256(_memo(3).length * 2 + 1)),
+            "the memo next to it (a long `bytes`: 2 * len + 1)"
+        );
         assertEq(tok.transferEntry(ref), bundles, "R itself, from state");
         assertEq(tok.transferMemo(ref), _memo(3), "the sender memo");
         _discloseAll(ref, t);
@@ -303,7 +418,9 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes memory r;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] == IZetherToken.TransferBundles.selector && logs[i].topics[1] == ref) r = abi.decode(logs[i].data, (bytes));
+            if (logs[i].topics[0] == IZetherToken.TransferBundles.selector && logs[i].topics[1] == ref) {
+                r = abi.decode(logs[i].data, (bytes));
+            }
         }
         assertGt(r.length, 0, "event R");
         assertEq(keccak256(tok.transferEntry(ref)), keccak256(r), "state R hashes to the event's commitment");
@@ -314,17 +431,26 @@ abstract contract ZetherMultiSuite is ZetherFixture {
     ///      unknown-selector path and reverts (and no allow-list entry names it).
     function test_noBundleRetired() public {
         bytes4 old = bytes4(keccak256("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)"));
-        (bool ok, bytes memory ret) = address(tok).call(abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")));
+        (bool ok, bytes memory ret) =
+            address(tok).call(abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")));
         assertFalse(ok, "retired");
         assertEq(ret.length, 0, "the plain fallback revert (no function by that selector)");
         (bytes4[] memory s,,) = tok.mtxSelectors();
-        for (uint256 i; i < s.length; ++i) assertTrue(s[i] != old, "off the allow-list");
+        for (uint256 i; i < s.length; ++i) {
+            assertTrue(s[i] != old, "off the allow-list");
+        }
         // relayed: the envelope is refused at the allow-list, not forwarded to the fallback
         uint256 pk = 0x9A7E5;
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
-            from: vm.addr(pk), data: abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")),
-            batch: 1, nonce: tok.mtxNonce(MetaTxLib.pad(vm.addr(pk)), 1), validUntil: block.timestamp + 300,
-            mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer: relayer, fee: 0, feeRecipient: address(0)
+            from: vm.addr(pk),
+            data: abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")),
+            batch: 1,
+            nonce: tok.mtxNonce(MetaTxLib.pad(vm.addr(pk)), 1),
+            validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
+            relayer: relayer,
+            fee: 0,
+            feeRecipient: address(0)
         });
         (uint8 v, bytes32 r, bytes32 sg) = vm.sign(pk, MtxDigest.metaTx(address(tok), m));
         vm.prank(relayer);
@@ -394,8 +520,11 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         assertTrue(_vta(tok, ref, 1, 77, RX, rx));
         assertFalse(_vta(tok, ref, 2, 77, RX, rx), "an opening does not move to another leg");
         bytes memory au = _cp(X_AUD, ref, 1, 77, ITransferDisclosure.OpeningKind.AUDITOR, t.payload);
-        assertEq(_vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.AUDITOR, au), !audOut,
-            "auditor opens unless left out (Z12)");
+        assertEq(
+            _vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.AUDITOR, au),
+            !audOut,
+            "auditor opens unless left out (Z12)"
+        );
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BadRecipientIndex.selector, 3));
         _vta(tok, ref, 3, 0, S, abi.encode(t.s));
         (bytes memory ct, bytes memory yTo) = dis.transferCiphertext(address(tok), ref, 1);
@@ -446,7 +575,9 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         Tx memory t = _proveMulti(tok, alice, _to(2), vs, 500, _none(), ZetherTypes.TransferMode.HASH);
         uint256 p = ver.g1EncodedBytes();
         bytes memory pl = bytes.concat(t.payload);
-        for (uint256 i; i < p; ++i) pl[_legAt(0) + 2 * p + i] = 0; // C_aud_1 = O, C_aud_2 ≠ O
+        for (uint256 i; i < p; ++i) {
+            pl[_legAt(0) + 2 * p + i] = 0; // C_aud_1 = O, C_aud_2 ≠ O
+        }
         vm.expectRevert(IZetherToken.AuditorLegsMixed.selector);
         tok.mtxConfidentialTransferCompact(_zMulti(pl, _none()), t.proof);
         vm.expectRevert(IZetherToken.AuditorLegsMixed.selector);
@@ -491,7 +622,9 @@ abstract contract ZetherMultiSuite is ZetherFixture {
                 if (j == k) continue;
                 assertNotEq(_recPt(rec, j, 3), _recPt(rec, k, 3), "C_aud_j == C_aud_k");
                 assertNotEq(_recPt(rec, j, 4), _recPt(rec, k, 4), "D_aud_j == D_aud_k");
-                for (uint256 h = 0; h < 9; ++h) _noCancel(_recPt(rec, j, 3), _recPt(rec, k, 3), vs[j], vs[k], 1 + h / 3, 1 + h % 3);
+                for (uint256 h = 0; h < 9; ++h) {
+                    _noCancel(_recPt(rec, j, 3), _recPt(rec, k, 3), vs[j], vs[k], 1 + h / 3, 1 + h % 3);
+                }
             }
         }
         _reusedTRefused();
@@ -505,7 +638,9 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         Tx memory t = _proveMulti(tok, alice, _to(3), vs, 423, _none(), ZetherTypes.TransferMode.BUNDLE);
         uint256 p = ver.g1EncodedBytes();
         bytes memory pl = bytes.concat(t.payload);
-        for (uint256 i; i < 2 * p; ++i) pl[_legAt(2) + 2 * p + i] = pl[_legAt(0) + 2 * p + i];
+        for (uint256 i; i < 2 * p; ++i) {
+            pl[_legAt(2) + 2 * p + i] = pl[_legAt(0) + 2 * p + i];
+        }
         ZetherProver.MultiWitness memory w = _multiWitness(alice.x, t.s, vs, 423);
         w.t[2] = w.t[0];
         bytes memory st = stm.transferStatement(address(tok), _zMulti(pl, _none()), ZetherTypes.TransferMode.BUNDLE, 0);
@@ -541,8 +676,15 @@ abstract contract ZetherMultiSuite is ZetherFixture {
             assertTrue(_vta(tok, ref, j, vs[j], ITransferDisclosure.OpeningKind.AUDITOR, au), "AUDITOR opens leg j");
             assertFalse(_vta(tok, ref, j, vs[j] + 1, ITransferDisclosure.OpeningKind.AUDITOR, au));
         }
-        bytes memory onDOut = _cpOpening(tok, X_AUD, ref, 1, 41, ITransferDisclosure.OpeningKind.AUDITOR,
-            _cut(t.payload, 176 + ver.g1EncodedBytes(), ver.g1EncodedBytes()));
+        bytes memory onDOut = _cpOpening(
+            tok,
+            X_AUD,
+            ref,
+            1,
+            41,
+            ITransferDisclosure.OpeningKind.AUDITOR,
+            _cut(t.payload, 176 + ver.g1EncodedBytes(), ver.g1EncodedBytes())
+        );
         assertFalse(_vta(tok, ref, 1, 41, ITransferDisclosure.OpeningKind.AUDITOR, onDOut), "not over D_out");
         (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 3);
         uint256 p = ver.g1EncodedBytes();
@@ -636,9 +778,7 @@ abstract contract ZetherMultiSuite is ZetherFixture {
 
     /// @dev Gas on-chain của `verifyTransferAmount` gọi từ một contract (`Escrow3P.measure`), token/disclosure
     ///      làm nguội trước mỗi lần đo (như một giao dịch mới: account và slot bundle lạnh).
-    function _measure(Escrow3P esc, bytes32 ref, uint256 j, uint256 k, bytes memory o)
-        internal returns (uint256)
-    {
+    function _measure(Escrow3P esc, bytes32 ref, uint256 j, uint256 k, bytes memory o) internal returns (uint256) {
         vm.cool(address(tok));
         vm.cool(address(dis));
         vm.cool(address(ver));
@@ -649,10 +789,17 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         Escrow3P esc = new Escrow3P();
         string[4] memory names = ["SENDER_S", "RECEIVER_X", "AUDITOR", "SENDER_CP"];
         for (uint256 k; k < 4; ++k) {
-            console2.log(string.concat(
-                bls ? "bls12-381" : "bn254", " disclose ", tag, " ", names[k], " gas ",
-                vm.toString(_measure(esc, ref, j, k, o[k]))
-            ));
+            console2.log(
+                string.concat(
+                    bls ? "bls12-381" : "bn254",
+                    " disclose ",
+                    tag,
+                    " ",
+                    names[k],
+                    " gas ",
+                    vm.toString(_measure(esc, ref, j, k, o[k]))
+                )
+            );
         }
     }
 
@@ -673,10 +820,21 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         _gasKinds(string.concat("M=", vm.toString(m), " ", _modeName(mode)), ref, j, o);
     }
 
-    function test_gasDiscloseM1Bundle() public { _gasDisclose(1, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasDiscloseM8Bundle() public { _gasDisclose(8, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasDiscloseM1Hash() public { _gasDisclose(1, ZetherTypes.TransferMode.HASH); }
-    function test_gasDiscloseM8Hash() public { _gasDisclose(8, ZetherTypes.TransferMode.HASH); }
+    function test_gasDiscloseM1Bundle() public {
+        _gasDisclose(1, ZetherTypes.TransferMode.BUNDLE);
+    }
+
+    function test_gasDiscloseM8Bundle() public {
+        _gasDisclose(8, ZetherTypes.TransferMode.BUNDLE);
+    }
+
+    function test_gasDiscloseM1Hash() public {
+        _gasDisclose(1, ZetherTypes.TransferMode.HASH);
+    }
+
+    function test_gasDiscloseM8Hash() public {
+        _gasDisclose(8, ZetherTypes.TransferMode.HASH);
+    }
 
     function test_gasDiscloseSingle() public {
         _funded(1_000_000);
@@ -699,10 +857,11 @@ contract Escrow3P {
     mapping(bytes32 => uint256) public released;
 
     function release(IZetherToken token, bytes32 ref, uint256 j, uint256 amount, bytes calldata opening)
-        external returns (bool)
+        external
+        returns (bool)
     {
-        bool ok = token.disclosure().verifyTransferAmount(
-            address(token), ref, j, amount, ITransferDisclosure.OpeningKind.SENDER_CP, opening);
+        bool ok = token.disclosure()
+            .verifyTransferAmount(address(token), ref, j, amount, ITransferDisclosure.OpeningKind.SENDER_CP, opening);
         require(ok, "not proven");
         released[ref] = amount;
         return true;

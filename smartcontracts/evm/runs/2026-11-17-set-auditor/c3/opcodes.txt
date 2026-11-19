@@ -1,0 +1,13 @@
+# Closing review C3.2: test/v2/module-opcodes.json [DELEGATECALL count, DELEGATECALLs without a closure PUSH20], pinned -> now,
+# for every body module of the confidential kinds; measured by probe/OpcodeProbe.t.sol (LinkClosure's own scan) on the tree of
+# setAuditor C2 + C3. Only the modules below moved, each by one DELEGATECALL site to a closure library (the second figure
+# unchanged), the modules that carry the round's bit-32 setter; every other module of kinds 2, 3, 4, 5, 10, 11, 12, 13 is unchanged. The re-pin is the bundle step's.
+kind | module | pinned | now
+2 | NormalZetherTokenZ | [5, 0] | [6, 0]
+3 | WrappedZetherTokenZ | [12, 1] | [13, 1]
+4 | NormalPqzTokenQ | [22, 0] | [23, 0]
+5 | WrappedPqzTokenS | [10, 0] | [11, 0]
+10 | NormalZetherRegulatedTokenZ | [5, 0] | [6, 0]
+11 | WrappedZetherRegulatedTokenZ | [11, 1] | [12, 1]
+12 | NormalPqzRegulatedTokenS | [10, 0] | [11, 0]
+13 | WrappedPqzRegulatedTokenS | [10, 0] | [11, 0]

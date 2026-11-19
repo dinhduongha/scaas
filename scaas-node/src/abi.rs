@@ -408,6 +408,37 @@ sol! {
         error UAKeyNotCached(bytes32 ua);
     }
 
+    /// Set-auditor (spec §8, CTR-GOV-31): the refusals of bit 32's setters on both confidential families (`IConfidentialToken`'s
+    /// four, Zether's two): `AuditorNotReady` stays `queued` ([`crate::guard`]), every other one `dead` by name.
+    #[derive(Debug)]
+    interface IAuditorSetter {
+        /// `status` 0 none, 1 waiting (before `eta`), 2 confirmable (`[eta, eta + 7 days]`), 3 expired, 4 void; `pending` the
+        /// proposed key's `keccak256` (Zether) or the proposed UA (PQZ); `proposer` the holder that proposed.
+        function auditorState() external view returns (uint32 epoch, bytes32 pending, uint64 eta, bytes32 proposer, uint8 status);
+        error AuditorNotReady(uint64 eta);
+        error AuditorPending();
+        error AuditorSame();
+        error AuditorEpochMismatch(uint32 expected, uint32 got);
+        error AuditorKeyInvalid();
+        error AuditorConsentInvalid();
+    }
+
+    /// `MetaTxLib.UAEnvelope`: a named op's envelope, its eight words inline.
+    #[derive(Debug, PartialEq, Eq)]
+    struct UAEnvelope {
+        bytes32 from; uint256 batch; uint256 nonce; uint256 validUntil; uint32 mode; address relayer; uint256 fee;
+        address feeRecipient;
+    }
+
+    /// The router's bit-32 ops (CTR-GOV-31), decoded to read a held confirm's subject, target and value (closing review C2).
+    #[derive(Debug)]
+    interface IAuditorRouter {
+        function mtxSetAuditorKey(UAEnvelope e, address target, bytes newKey, uint32 epoch, bytes pop, bytes32 chainUid,
+            UASig auth) external;
+        function mtxSetAuditorUA(UAEnvelope e, address target, bytes32 newAuditor, uint32 epoch, UASig consent, bytes32 chainUid,
+            UASig auth) external;
+    }
+
     /// A PQZ token's key-version surface (group 3g, spec 2026-11-06-pqz-key-versions §3, §7.3): the errors the node names
     /// (`PQZ_KEY_STALE`, `PQZ_KEY_VERSION_UNKNOWN`, `PQZ_KEY_REUSED`, `PQZ_KEY_ROTATED` over `ProofRejected`), the auditor a
     /// debit's copies go to, and the version events the indexer reads.
@@ -420,6 +451,7 @@ sol! {
         error SelfTransfer();
         error ProofRejected();
         error KeyReused(bytes32 ua);
+
         error StaleKeyVersion(bytes32 ua, uint64 keyVersion, uint64 current);
         error KeyVersionUnknown(bytes32 ua, uint64 keyVersion);
 
@@ -723,7 +755,8 @@ sol! {
 /// `type(IRegulatedToken).interfaceId`: the XOR of its functions' selectors.
 pub fn regulated_interface_id() -> [u8; 4] {
     use alloy::sol_types::SolInterface;
-    IRegulatedToken::IRegulatedTokenCalls::selectors().fold([0u8; 4], |a, s| std::array::from_fn(|i| a[i] ^ s[i]))
+    IRegulatedToken::IRegulatedTokenCalls::selectors()
+        .fold([0u8; 4], |a, s| std::array::from_fn(|i| a[i] ^ s[i]))
 }
 
 /// A regulated token's refusal that a later block may lift (regulated-kinds spec §7): the account is frozen, the token
@@ -733,8 +766,16 @@ pub fn regulated_interface_id() -> [u8; 4] {
 /// attestation); it is never counted against the subject's or a maker's grief score (asset-suite §2.7, F-16). `reason`
 /// is a `decode_revert` string.
 pub fn regulated_refusal(reason: &str) -> Option<&'static str> {
-    const LIFTABLE: [&str; 8] = ["Frozen", "TokenPaused", "NotEligible", "FeeRecipientFrozen", "ComplianceRegistryUnavailable",
-        "ComplianceRegistryGasStarved", "NotAllowed", "Denied"];
+    const LIFTABLE: [&str; 8] = [
+        "Frozen",
+        "TokenPaused",
+        "NotEligible",
+        "FeeRecipientFrozen",
+        "ComplianceRegistryUnavailable",
+        "ComplianceRegistryGasStarved",
+        "NotAllowed",
+        "Denied",
+    ];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
     LIFTABLE.into_iter().find(|n| *n == name)
 }
@@ -761,7 +802,13 @@ pub fn own_list_refusal(reason: &str, subject: alloy::primitives::B256) -> Optio
 /// `queued` with `WRAP_LIMIT_REFUSED: <named error>`, never `dead` (expiry or the attempt cap ends it), and no grief score.
 /// `WrapControlNeedsHybrid` (a creation refusal, permanent) is not in the class. `reason` is a `decode_revert` string.
 pub fn wrap_limit_refusal(reason: &str) -> Option<&'static str> {
-    const LIFTABLE: [&str; 5] = ["WrapLimitExceeded", "WrapCapExceeded", "UnwrapAboveNetWrapped", "WrapperNotListed", "UnwrapperNotListed"];
+    const LIFTABLE: [&str; 5] = [
+        "WrapLimitExceeded",
+        "WrapCapExceeded",
+        "UnwrapAboveNetWrapped",
+        "WrapperNotListed",
+        "UnwrapperNotListed",
+    ];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
     LIFTABLE.into_iter().find(|n| *n == name)
 }
@@ -771,18 +818,36 @@ pub fn wrap_limit_refusal(reason: &str) -> Option<&'static str> {
 /// which supply or the other setter lifts; `false`: the shape refusals `MaxSupplyInvalid`, `MaxWrapSupplyInvalid`, never). The
 /// node keeps a liftable one `queued` with `SUPPLY_CAP_REFUSED: <named error>`. `reason` is a `decode_revert` string.
 pub fn supply_cap_refusal(reason: &str) -> Option<(&'static str, bool)> {
-    const LIFTABLE: [&str; 6] = ["MaxSupplyExceeded", "MaxWrapSupplyExceeded", "MaxSupplyBelowSupply", "MaxSupplyBelowWrapCap",
-        "MaxWrapSupplyBelowWrapped", "MaxWrapSupplyAboveMaxSupply"];
+    const LIFTABLE: [&str; 6] = [
+        "MaxSupplyExceeded",
+        "MaxWrapSupplyExceeded",
+        "MaxSupplyBelowSupply",
+        "MaxSupplyBelowWrapCap",
+        "MaxWrapSupplyBelowWrapped",
+        "MaxWrapSupplyAboveMaxSupply",
+    ];
     const FINAL: [&str; 2] = ["MaxSupplyInvalid", "MaxWrapSupplyInvalid"];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
-    LIFTABLE.into_iter().find(|n| *n == name).map(|n| (n, true)).or_else(|| FINAL.into_iter().find(|n| *n == name).map(|n| (n, false)))
+    LIFTABLE
+        .into_iter()
+        .find(|n| *n == name)
+        .map(|n| (n, true))
+        .or_else(|| FINAL.into_iter().find(|n| *n == name).map(|n| (n, false)))
 }
 
 /// A governance error's word `key` (`bit`, `field`) in a `decode_revert` string `Name(Name { key: N, … })` of the error `name`,
 /// parsed whole (`bit: 31` is not bit 3).
 pub fn gov_word(reason: &str, name: &str, key: &str) -> Option<u8> {
-    let rest = reason.strip_prefix(name)?.strip_prefix('(')?.split_once(&format!("{key}: "))?.1;
-    rest[..rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len())].parse().ok()
+    let rest = reason
+        .strip_prefix(name)?
+        .strip_prefix('(')?
+        .split_once(&format!("{key}: "))?
+        .1;
+    rest[..rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len())]
+        .parse()
+        .ok()
 }
 
 /// What a PQZ token's key-version refusal means for a job (group 3g, spec §7.3), from a `decode_revert` string.
@@ -811,22 +876,45 @@ pub const PROOF_STORE_LOG: u8 = 1;
 pub fn pqz_verdict_refusal(reason: &str) -> Option<(&'static str, bool)> {
     // round 3t (CTR-PQZ-36): the fee setter's `VerifierFeeNotReady` / `VerifierFeePending` liftable, `VerifierFeeAboveMax` /
     // `VerifierFeeSame` final
-    const LIFTABLE: [&str; 9] = ["PqzVerdictMismatch", "PqzVerdictRejected", "PqzVerifierRevoked", "PqzVerifierChanged",
-        "PqzVerifierNotReady", "PqzVerifierPending", "PqzVerifierUnregistered", "VerifierFeeNotReady", "VerifierFeePending"];
-    const FINAL: [&str; 8] = ["PqzVerifierFixed", "PqzVerifierSame", "PqzVerifierKind", "PqzVerdictRequired", "PqzVerifyModeInvalid",
-        "PqzVerifyConfigInvalid", "VerifierFeeAboveMax", "VerifierFeeSame"];
+    const LIFTABLE: [&str; 9] = [
+        "PqzVerdictMismatch",
+        "PqzVerdictRejected",
+        "PqzVerifierRevoked",
+        "PqzVerifierChanged",
+        "PqzVerifierNotReady",
+        "PqzVerifierPending",
+        "PqzVerifierUnregistered",
+        "VerifierFeeNotReady",
+        "VerifierFeePending",
+    ];
+    const FINAL: [&str; 8] = [
+        "PqzVerifierFixed",
+        "PqzVerifierSame",
+        "PqzVerifierKind",
+        "PqzVerdictRequired",
+        "PqzVerifyModeInvalid",
+        "PqzVerifyConfigInvalid",
+        "VerifierFeeAboveMax",
+        "VerifierFeeSame",
+    ];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
-    LIFTABLE.into_iter().find(|n| *n == name).map(|n| (n, true)).or_else(|| FINAL.into_iter().find(|n| *n == name).map(|n| (n, false)))
+    LIFTABLE
+        .into_iter()
+        .find(|n| *n == name)
+        .map(|n| (n, true))
+        .or_else(|| FINAL.into_iter().find(|n| *n == name).map(|n| (n, false)))
 }
 
 pub fn pqz_refusal(reason: &str) -> Option<PqzRefusal> {
-    Some(match reason.split(['(', ' ', '{']).next().unwrap_or_default() {
-        "StaleKeyVersion" => PqzRefusal::Stale,
-        "KeyVersionUnknown" => PqzRefusal::Unknown,
-        "KeyReused" => PqzRefusal::Reused,
-        "ProofRejected" => PqzRefusal::ProofRejected,
-        _ => return None,
-    })
+    Some(
+        match reason.split(['(', ' ', '{']).next().unwrap_or_default() {
+            "StaleKeyVersion" => PqzRefusal::Stale,
+            "KeyVersionUnknown" => PqzRefusal::Unknown,
+            "KeyReused" => PqzRefusal::Reused,
+            "ProofRejected" => PqzRefusal::ProofRejected,
+            _ => return None,
+        },
+    )
 }
 
 /// Readable error name for `last_error` on the client; raw hex when it is none of ours.
@@ -864,6 +952,9 @@ pub fn decode_revert(data: &[u8]) -> String {
     if let Ok(e) = IPqzToken::IPqzTokenErrors::abi_decode(data) {
         return format!("{e:?}");
     }
+    if let Ok(e) = IAuditorSetter::IAuditorSetterErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
     if let Ok(e) = IUARegistry::IUARegistryErrors::abi_decode(data) {
         return format!("{e:?}");
     }
@@ -878,21 +969,63 @@ mod tests {
 
     #[test]
     fn known_errors_are_named() {
-        let e = IToken::MetaTxBadNonce { expected: U256::from(1), got: U256::ZERO }.abi_encode();
+        let e = IToken::MetaTxBadNonce {
+            expected: U256::from(1),
+            got: U256::ZERO,
+        }
+        .abi_encode();
         assert!(decode_revert(&e).contains("MetaTxBadNonce"));
-        let e = IMandateWallet::StaleEpoch { current: 2, signed: 1 }.abi_encode();
-        assert!(decode_revert(&e).starts_with("StaleEpoch"), "{}", decode_revert(&e));
-        let e = IToken::MinNonceNotIncreasing { current: U256::from(5), requested: U256::from(5) }.abi_encode();
+        let e = IMandateWallet::StaleEpoch {
+            current: 2,
+            signed: 1,
+        }
+        .abi_encode();
+        assert!(
+            decode_revert(&e).starts_with("StaleEpoch"),
+            "{}",
+            decode_revert(&e)
+        );
+        let e = IToken::MinNonceNotIncreasing {
+            current: U256::from(5),
+            requested: U256::from(5),
+        }
+        .abi_encode();
         assert!(decode_revert(&e).starts_with("MinNonceNotIncreasing("));
         assert!(decode_revert(&[1, 2, 3]).starts_with("revert 0x"));
         // pay-meta-tax T42 (`tax_mismatch_after_rate_change_refused_by_name`): the pay and tax refusals are named
-        let e = IRegulatedToken::TaxMismatch { expected: U256::from(50), got: U256::from(100) }.abi_encode();
-        assert!(decode_revert(&e).starts_with("TaxMismatch"), "{}", decode_revert(&e));
-        let e = IToken::PayMetaMismatch { entryRef: alloy::primitives::B256::ZERO, payId: alloy::primitives::B256::ZERO }.abi_encode();
-        assert!(decode_revert(&e).starts_with("PayMetaMismatch"), "{}", decode_revert(&e));
-        let e = IToken::PayRecordAmount { amount: U256::from(1) << 192 }.abi_encode();
-        assert!(decode_revert(&e).starts_with("PayRecordAmount"), "{}", decode_revert(&e));
-        assert!(decode_revert(&IRegulatedToken::TaxRecipientIsPayee {}.abi_encode()).starts_with("TaxRecipientIsPayee"));
+        let e = IRegulatedToken::TaxMismatch {
+            expected: U256::from(50),
+            got: U256::from(100),
+        }
+        .abi_encode();
+        assert!(
+            decode_revert(&e).starts_with("TaxMismatch"),
+            "{}",
+            decode_revert(&e)
+        );
+        let e = IToken::PayMetaMismatch {
+            entryRef: alloy::primitives::B256::ZERO,
+            payId: alloy::primitives::B256::ZERO,
+        }
+        .abi_encode();
+        assert!(
+            decode_revert(&e).starts_with("PayMetaMismatch"),
+            "{}",
+            decode_revert(&e)
+        );
+        let e = IToken::PayRecordAmount {
+            amount: U256::from(1) << 192,
+        }
+        .abi_encode();
+        assert!(
+            decode_revert(&e).starts_with("PayRecordAmount"),
+            "{}",
+            decode_revert(&e)
+        );
+        assert!(
+            decode_revert(&IRegulatedToken::TaxRecipientIsPayee {}.abi_encode())
+                .starts_with("TaxRecipientIsPayee")
+        );
     }
 
     /// `type(IRegulatedToken).interfaceId`: the XOR of its eighteen selectors (pay-meta-tax T39 / T40: + setTaxRate,
@@ -901,7 +1034,10 @@ mod tests {
     /// §7, + setAllowed, setDenied, listFlagsOf, enableFeature: 0x01a22b62 -> 0x789ed7c4).
     #[test]
     fn own_list_refusal_names_the_subject_only() {
-        let (s, o) = (alloy::primitives::B256::repeat_byte(0xa1), alloy::primitives::B256::repeat_byte(0xb2));
+        let (s, o) = (
+            alloy::primitives::B256::repeat_byte(0xa1),
+            alloy::primitives::B256::repeat_byte(0xb2),
+        );
         let r = decode_revert(&IRegulatedToken::Denied { account: s }.abi_encode());
         assert_eq!(own_list_refusal(&r, s), Some("DENIED"), "{r}");
         assert_eq!(own_list_refusal(&r, o), None, "another party's: liftable");
@@ -909,7 +1045,13 @@ mod tests {
         let r = decode_revert(&IRegulatedToken::NotAllowed { account: s }.abi_encode());
         assert_eq!(own_list_refusal(&r, s), Some("NOT_ALLOWED"), "{r}");
         assert_eq!(regulated_refusal(&r), Some("NotAllowed"));
-        assert_eq!(own_list_refusal(&decode_revert(&IRegulatedToken::Frozen { account: s }.abi_encode()), s), None);
+        assert_eq!(
+            own_list_refusal(
+                &decode_revert(&IRegulatedToken::Frozen { account: s }.abi_encode()),
+                s
+            ),
+            None
+        );
     }
 
     #[test]
@@ -925,16 +1067,44 @@ mod tests {
     fn pqz_key_refusals_are_named() {
         let a = alloy::primitives::B256::repeat_byte(0xa1);
         for (data, name, want) in [
-            (IPqzToken::StaleKeyVersion { ua: a, keyVersion: 1, current: 2 }.abi_encode(), "StaleKeyVersion", PqzRefusal::Stale),
-            (IPqzToken::KeyVersionUnknown { ua: a, keyVersion: 3 }.abi_encode(), "KeyVersionUnknown", PqzRefusal::Unknown),
-            (IPqzToken::KeyReused { ua: a }.abi_encode(), "KeyReused", PqzRefusal::Reused),
-            (IPqzToken::ProofRejected {}.abi_encode(), "ProofRejected", PqzRefusal::ProofRejected),
+            (
+                IPqzToken::StaleKeyVersion {
+                    ua: a,
+                    keyVersion: 1,
+                    current: 2,
+                }
+                .abi_encode(),
+                "StaleKeyVersion",
+                PqzRefusal::Stale,
+            ),
+            (
+                IPqzToken::KeyVersionUnknown {
+                    ua: a,
+                    keyVersion: 3,
+                }
+                .abi_encode(),
+                "KeyVersionUnknown",
+                PqzRefusal::Unknown,
+            ),
+            (
+                IPqzToken::KeyReused { ua: a }.abi_encode(),
+                "KeyReused",
+                PqzRefusal::Reused,
+            ),
+            (
+                IPqzToken::ProofRejected {}.abi_encode(),
+                "ProofRejected",
+                PqzRefusal::ProofRejected,
+            ),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(name), "{r}");
             assert_eq!(pqz_refusal(&r), Some(want), "{r}");
         }
-        assert_eq!(pqz_refusal(&decode_revert(&IPqzToken::SelfTransfer {}.abi_encode())), None);
+        assert_eq!(
+            pqz_refusal(&decode_revert(&IPqzToken::SelfTransfer {}.abi_encode())),
+            None
+        );
         assert_eq!(pqz_refusal("KeyReusedX(..)"), None);
     }
 
@@ -944,25 +1114,80 @@ mod tests {
     fn pqz_verdict_refusals_are_named() {
         let a = alloy::primitives::B256::repeat_byte(0xa1);
         for (data, name, liftable) in [
-            (IPqzToken::PqzVerdictMismatch { field: 5 }.abi_encode(), "PqzVerdictMismatch", true),
-            (IPqzToken::PqzVerdictRejected {}.abi_encode(), "PqzVerdictRejected", true),
-            (IPqzToken::PqzVerifierRevoked {}.abi_encode(), "PqzVerifierRevoked", true),
-            (IPqzToken::PqzVerifierChanged {}.abi_encode(), "PqzVerifierChanged", true),
-            (IPqzToken::PqzVerifierNotReady { eta: 9 }.abi_encode(), "PqzVerifierNotReady", true),
-            (IPqzToken::PqzVerifierPending { pending: a }.abi_encode(), "PqzVerifierPending", true),
-            (IPqzToken::PqzVerifierUnregistered { ua: a }.abi_encode(), "PqzVerifierUnregistered", true),
-            (IPqzToken::PqzVerifierFixed {}.abi_encode(), "PqzVerifierFixed", false),
-            (IPqzToken::PqzVerifierSame {}.abi_encode(), "PqzVerifierSame", false),
-            (IPqzToken::PqzVerifierKind { kind: 0x0132 }.abi_encode(), "PqzVerifierKind", false),
-            (IPqzToken::PqzVerdictRequired {}.abi_encode(), "PqzVerdictRequired", false),
-            (IPqzToken::PqzVerifyModeInvalid { mode: 2 }.abi_encode(), "PqzVerifyModeInvalid", false),
-            (IPqzToken::PqzVerifyConfigInvalid {}.abi_encode(), "PqzVerifyConfigInvalid", false),
+            (
+                IPqzToken::PqzVerdictMismatch { field: 5 }.abi_encode(),
+                "PqzVerdictMismatch",
+                true,
+            ),
+            (
+                IPqzToken::PqzVerdictRejected {}.abi_encode(),
+                "PqzVerdictRejected",
+                true,
+            ),
+            (
+                IPqzToken::PqzVerifierRevoked {}.abi_encode(),
+                "PqzVerifierRevoked",
+                true,
+            ),
+            (
+                IPqzToken::PqzVerifierChanged {}.abi_encode(),
+                "PqzVerifierChanged",
+                true,
+            ),
+            (
+                IPqzToken::PqzVerifierNotReady { eta: 9 }.abi_encode(),
+                "PqzVerifierNotReady",
+                true,
+            ),
+            (
+                IPqzToken::PqzVerifierPending { pending: a }.abi_encode(),
+                "PqzVerifierPending",
+                true,
+            ),
+            (
+                IPqzToken::PqzVerifierUnregistered { ua: a }.abi_encode(),
+                "PqzVerifierUnregistered",
+                true,
+            ),
+            (
+                IPqzToken::PqzVerifierFixed {}.abi_encode(),
+                "PqzVerifierFixed",
+                false,
+            ),
+            (
+                IPqzToken::PqzVerifierSame {}.abi_encode(),
+                "PqzVerifierSame",
+                false,
+            ),
+            (
+                IPqzToken::PqzVerifierKind { kind: 0x0132 }.abi_encode(),
+                "PqzVerifierKind",
+                false,
+            ),
+            (
+                IPqzToken::PqzVerdictRequired {}.abi_encode(),
+                "PqzVerdictRequired",
+                false,
+            ),
+            (
+                IPqzToken::PqzVerifyModeInvalid { mode: 2 }.abi_encode(),
+                "PqzVerifyModeInvalid",
+                false,
+            ),
+            (
+                IPqzToken::PqzVerifyConfigInvalid {}.abi_encode(),
+                "PqzVerifyConfigInvalid",
+                false,
+            ),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(name), "{r}");
             assert_eq!(pqz_verdict_refusal(&r), Some((name, liftable)), "{r}");
         }
-        assert_eq!(pqz_verdict_refusal(&decode_revert(&IPqzToken::ProofRejected {}.abi_encode())), None);
+        assert_eq!(
+            pqz_verdict_refusal(&decode_revert(&IPqzToken::ProofRejected {}.abi_encode())),
+            None
+        );
         assert_eq!(pqz_verdict_refusal("PqzVerdictMismatchX(..)"), None);
     }
 
@@ -973,11 +1198,45 @@ mod tests {
         let a = alloy::primitives::B256::repeat_byte(0xf1);
         let u = alloy::primitives::Address::repeat_byte(5);
         for (data, name) in [
-            (IWrapLimits::WrapLimitExceeded { underlying: u, limit: 2, account: a, amount: U256::from(7), remaining: U256::ZERO }.abi_encode(), "WrapLimitExceeded"),
-            (IWrapLimits::WrapCapExceeded { underlying: u, limit: 0, amount: U256::from(7), remaining: U256::ZERO }.abi_encode(), "WrapCapExceeded"),
-            (IWrapLimits::UnwrapAboveNetWrapped { underlying: u, account: a, amount: U256::from(7), entitlement: U256::from(1) }.abi_encode(), "UnwrapAboveNetWrapped"),
-            (IWrapLimits::WrapperNotListed { account: a }.abi_encode(), "WrapperNotListed"),
-            (IWrapLimits::UnwrapperNotListed { account: a }.abi_encode(), "UnwrapperNotListed"),
+            (
+                IWrapLimits::WrapLimitExceeded {
+                    underlying: u,
+                    limit: 2,
+                    account: a,
+                    amount: U256::from(7),
+                    remaining: U256::ZERO,
+                }
+                .abi_encode(),
+                "WrapLimitExceeded",
+            ),
+            (
+                IWrapLimits::WrapCapExceeded {
+                    underlying: u,
+                    limit: 0,
+                    amount: U256::from(7),
+                    remaining: U256::ZERO,
+                }
+                .abi_encode(),
+                "WrapCapExceeded",
+            ),
+            (
+                IWrapLimits::UnwrapAboveNetWrapped {
+                    underlying: u,
+                    account: a,
+                    amount: U256::from(7),
+                    entitlement: U256::from(1),
+                }
+                .abi_encode(),
+                "UnwrapAboveNetWrapped",
+            ),
+            (
+                IWrapLimits::WrapperNotListed { account: a }.abi_encode(),
+                "WrapperNotListed",
+            ),
+            (
+                IWrapLimits::UnwrapperNotListed { account: a }.abi_encode(),
+                "UnwrapperNotListed",
+            ),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(&format!("{name}(")), "{r}");
@@ -985,8 +1244,14 @@ mod tests {
             assert_eq!(regulated_refusal(&r), None, "{r}: not a regulated refusal");
         }
         for (data, name) in [
-            (IWrapLimits::WrapControlNeedsHybrid { bit: 25 }.abi_encode(), "WrapControlNeedsHybrid"),
-            (IWrapLimits::WrapSubjectZero {}.abi_encode(), "WrapSubjectZero"),
+            (
+                IWrapLimits::WrapControlNeedsHybrid { bit: 25 }.abi_encode(),
+                "WrapControlNeedsHybrid",
+            ),
+            (
+                IWrapLimits::WrapSubjectZero {}.abi_encode(),
+                "WrapSubjectZero",
+            ),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(name), "{r}");
@@ -1001,36 +1266,94 @@ mod tests {
     fn regulated_refusals_are_named() {
         let a = alloy::primitives::B256::repeat_byte(0xf1);
         for (data, name) in [
-            (IRegulatedToken::Frozen { account: a }.abi_encode(), "Frozen"),
-            (IRegulatedToken::TokenPaused { until: 7 }.abi_encode(), "TokenPaused"),
-            (IRegulatedToken::NotEligible { account: a, reason: 1 }.abi_encode(), "NotEligible"),
-            (IRegulatedToken::FeeRecipientFrozen { account: a }.abi_encode(), "FeeRecipientFrozen"),
-            (IRegulatedToken::ComplianceRegistryUnavailable { complianceRegistry: alloy::primitives::Address::repeat_byte(5) }.abi_encode(),
-                "ComplianceRegistryUnavailable"),
-            (IRegulatedToken::ComplianceRegistryGasStarved { cap: U256::from(50_000), left: U256::from(1) }.abi_encode(),
-                "ComplianceRegistryGasStarved"),
+            (
+                IRegulatedToken::Frozen { account: a }.abi_encode(),
+                "Frozen",
+            ),
+            (
+                IRegulatedToken::TokenPaused { until: 7 }.abi_encode(),
+                "TokenPaused",
+            ),
+            (
+                IRegulatedToken::NotEligible {
+                    account: a,
+                    reason: 1,
+                }
+                .abi_encode(),
+                "NotEligible",
+            ),
+            (
+                IRegulatedToken::FeeRecipientFrozen { account: a }.abi_encode(),
+                "FeeRecipientFrozen",
+            ),
+            (
+                IRegulatedToken::ComplianceRegistryUnavailable {
+                    complianceRegistry: alloy::primitives::Address::repeat_byte(5),
+                }
+                .abi_encode(),
+                "ComplianceRegistryUnavailable",
+            ),
+            (
+                IRegulatedToken::ComplianceRegistryGasStarved {
+                    cap: U256::from(50_000),
+                    left: U256::from(1),
+                }
+                .abi_encode(),
+                "ComplianceRegistryGasStarved",
+            ),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(&format!("{name}(")), "{r}");
             assert_eq!(regulated_refusal(&r), Some(name), "{r}");
         }
         for (data, name) in [
-            (IGovernance::NotProposer { bit: 5, account: a, proposer: a }.abi_encode(), "NotProposer"),
-            (IGovernance::MissingRole { bit: 5, account: a }.abi_encode(), "MissingRole"),
+            (
+                IGovernance::NotProposer {
+                    bit: 5,
+                    account: a,
+                    proposer: a,
+                }
+                .abi_encode(),
+                "NotProposer",
+            ),
+            (
+                IGovernance::MissingRole { bit: 5, account: a }.abi_encode(),
+                "MissingRole",
+            ),
             (IRegulatedToken::RefRequired {}.abi_encode(), "RefRequired"),
-            (IRegulatedToken::PauseCooldown { until: 1 }.abi_encode(), "PauseCooldown"),
-            (IComplianceRegistry::AdminWrittenSlot { account: a }.abi_encode(), "AdminWrittenSlot"),
-            (IComplianceRegistry::NotKycProvider {}.abi_encode(), "NotKycProvider"),
-            (IRegulatedToken::ComplianceRegistryRouterMismatch { complianceRegistry: alloy::primitives::Address::repeat_byte(5),
-                got: alloy::primitives::Address::repeat_byte(6) }.abi_encode(), "ComplianceRegistryRouterMismatch"),
+            (
+                IRegulatedToken::PauseCooldown { until: 1 }.abi_encode(),
+                "PauseCooldown",
+            ),
+            (
+                IComplianceRegistry::AdminWrittenSlot { account: a }.abi_encode(),
+                "AdminWrittenSlot",
+            ),
+            (
+                IComplianceRegistry::NotKycProvider {}.abi_encode(),
+                "NotKycProvider",
+            ),
+            (
+                IRegulatedToken::ComplianceRegistryRouterMismatch {
+                    complianceRegistry: alloy::primitives::Address::repeat_byte(5),
+                    got: alloy::primitives::Address::repeat_byte(6),
+                }
+                .abi_encode(),
+                "ComplianceRegistryRouterMismatch",
+            ),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(&format!("{name}(")), "{r}");
             assert_eq!(regulated_refusal(&r), None, "{name}: named, not liftable");
         }
         assert_eq!(regulated_refusal("FrozenX(..)"), None);
-        assert_eq!(regulated_refusal(&decode_revert(&IWrapLimits::WrapperNotListed { account: a }.abi_encode())), None,
-            "a wrap limit is its own class");
+        assert_eq!(
+            regulated_refusal(&decode_revert(
+                &IWrapLimits::WrapperNotListed { account: a }.abi_encode()
+            )),
+            None,
+            "a wrap limit is its own class"
+        );
         assert_eq!(regulated_refusal("revert 0x1234"), None);
     }
 
@@ -1041,30 +1364,69 @@ mod tests {
     #[test]
     fn regulated_kat_rows_read_by_the_node() {
         use scaas_ua::regulated::{can_receive, record_id, Attestation};
-        let p = format!("{}/../smartcontracts/vectors/governance/regulated_kat.json", env!("CARGO_MANIFEST_DIR"));
-        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
-        let w = |s: &serde_json::Value| -> [u8; 32] { s.as_str().unwrap().parse::<alloy::primitives::B256>().unwrap().0 };
+        let p = format!(
+            "{}/../smartcontracts/vectors/governance/regulated_kat.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let w = |s: &serde_json::Value| -> [u8; 32] {
+            s.as_str()
+                .unwrap()
+                .parse::<alloy::primitives::B256>()
+                .unwrap()
+                .0
+        };
         let n = |s: &serde_json::Value| -> u64 { s.as_str().unwrap().parse().unwrap() };
         let mut named = 0;
-        for r in v["freeze"].as_array().unwrap().iter().filter(|r| !r["error"].is_null()) {
+        for r in v["freeze"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| !r["error"].is_null())
+        {
             let sig = r["error"]["sig"].as_str().unwrap();
             let data = alloy::hex::decode(r["error"]["data"].as_str().unwrap()).unwrap();
             let got = decode_revert(&data);
-            assert!(got.starts_with(&format!("{}(", &sig[..sig.find('(').unwrap()])), "{}: {got} is not {sig}", r["name"]);
+            assert!(
+                got.starts_with(&format!("{}(", &sig[..sig.find('(').unwrap()])),
+                "{}: {got} is not {sig}",
+                r["name"]
+            );
             named += 1;
         }
         assert_eq!(named, 17, "every refused freeze row");
         let rows = v["receiver"].as_array().unwrap();
         for r in rows {
-            let a = Attestation { flags: n(&r["flags"]), valid_until: n(&r["validUntil"]), attester_enabled: r["kycProviderEnabled"].as_bool().unwrap() };
+            let a = Attestation {
+                flags: n(&r["flags"]),
+                valid_until: n(&r["validUntil"]),
+                attester_enabled: r["kycProviderEnabled"].as_bool().unwrap(),
+            };
             let kyc = r["kyc"].as_bool().unwrap(); // round 3s: both masks under bit 28
-            let (req, den) = (kyc.then(|| n(&r["requiredFlags"])), kyc.then(|| n(&r["deniedFlags"])));
+            let (req, den) = (
+                kyc.then(|| n(&r["requiredFlags"])),
+                kyc.then(|| n(&r["deniedFlags"])),
+            );
             let got = can_receive(req, den, &a, n(&r["now"]));
-            assert_eq!(got, (r["ok"].as_bool().unwrap(), r["reason"].as_u64().unwrap() as u8), "{}", r["name"]);
+            assert_eq!(
+                got,
+                (
+                    r["ok"].as_bool().unwrap(),
+                    r["reason"].as_u64().unwrap() as u8
+                ),
+                "{}",
+                r["name"]
+            );
         }
         assert_eq!(rows.len(), 44);
         for r in v["recordId"].as_array().unwrap() {
-            assert_eq!(record_id(&w(&r["orderId"]), &w(&r["subject"]), &w(&r["beneficiary"])), w(&r["recordId"]), "{}", r["name"]);
+            assert_eq!(
+                record_id(&w(&r["orderId"]), &w(&r["subject"]), &w(&r["beneficiary"])),
+                w(&r["recordId"]),
+                "{}",
+                r["name"]
+            );
         }
     }
 }

@@ -41,8 +41,13 @@ contract PqzGuardsTest is PqzFixture {
     function _pqzh(bytes32 salt_) internal returns (NormalPqzToken) {
         pqv = _newPqzVerifier(PQZH_ID);
         factory = EnvKit.factory(registrar, PQZ_UID, 0);
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(factory)));
         return _newToken(salt_);
@@ -58,8 +63,13 @@ contract PqzGuardsTest is PqzFixture {
         vm.skip(!PqzSet.HAS_PQZH || PqzSet.PQZH_VALUE);
         pqv = _newPqzVerifier(PQZH_ID);
         factory = EnvKit.factory(registrar, PQZ_UID, 0);
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(factory)));
         vm.expectRevert(IPqzToken.PqzhValueUnsupported.selector);
@@ -128,9 +138,15 @@ contract PqzGuardsTest is PqzFixture {
 
     function test_valueIn_keyOfAnotherLengthRefused() public {
         (uint64 v,, bytes32 ph, bool proven) = reg.pqzKeyOf(bob);
-        vm.mockCall(address(reg), abi.encodeWithSelector(IUARegistry.pqzKeyOf.selector, bob), abi.encode(v, address(ct), ph, proven));
+        vm.mockCall(
+            address(reg),
+            abi.encodeWithSelector(IUARegistry.pqzKeyOf.selector, bob),
+            abi.encode(v, address(ct), ph, proven)
+        );
         // group 3g T52 (KV-10): the prepare reads the version it names, `pqzKeyAt(bob, 0)`
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyAt, (bob, uint64(0))), abi.encode(address(ct), ph, proven));
+        vm.mockCall(
+            address(reg), abi.encodeCall(IUARegistry.pqzKeyAt, (bob, uint64(0))), abi.encode(address(ct), ph, proven)
+        );
         bytes memory err = abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bob);
         _public(tok, address(this), SCALE);
         vm.expectRevert(err);
@@ -147,7 +163,8 @@ contract PqzGuardsTest is PqzFixture {
 
     function test_relay_shieldInPulledBeforeTheLibrary() public {
         _fund(tok, alice, 10);
-        bytes memory pl = _payload(tok.pqzAccount(alice, 0).pendingCount, 1000, alice, bob, bytes32(0), _out(1, true), "");
+        bytes memory pl =
+            _payload(tok.pqzAccount(alice, 0).pendingCount, 1000, alice, bob, bytes32(0), _out(1, true), "");
         vm.expectCall(PQZ, abi.encodePacked(uint8(1)), 0);
         vm.expectCall(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector), 0);
         vm.expectRevert(); // ERC20InsufficientBalance of the signer: nothing to move
@@ -157,8 +174,9 @@ contract PqzGuardsTest is PqzFixture {
     function test_relay_shieldInAboveTheCapIsStillAmountOutOfRange() public {
         _fund(tok, alice, 10);
         uint256 room = tok.maxShielded() - tok.totalShielded();
-        bytes memory pl = _payload(tok.pqzAccount(alice, 0).pendingCount, type(uint256).max, alice, bob, bytes32(0),
-            _out(1, true), "");
+        bytes memory pl = _payload(
+            tok.pqzAccount(alice, 0).pendingCount, type(uint256).max, alice, bob, bytes32(0), _out(1, true), ""
+        );
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AmountOutOfRange.selector, type(uint256).max, room));
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict());
     }
@@ -178,7 +196,9 @@ contract PqzGuardsTest is PqzFixture {
     function test_check_registryOutOfGasIsVerifyGas() public {
         _fund(tok, alice, 10);
         bytes memory pl = _payloadFor(tok, alice, bob, bytes32(0), _out(1, true));
-        vm.mockFunction(address(reg), address(new OutOfGas()), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector));
+        vm.mockFunction(
+            address(reg), address(new OutOfGas()), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector)
+        );
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict());
     }

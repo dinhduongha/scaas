@@ -5,24 +5,24 @@
 // Keys come from the BIP-39 seed by HKDF; ML-DSA and SLH-DSA sign pq_msg = keccak256(TAG(kind) ‖ ua_msg) with the empty
 // context, Falcon signs ua_msg (the 32-byte message of EIP-8052). There is no "sign this digest" entry: signUA takes the
 // purpose tag and the operation digest and builds ua_msg itself (CTR-UA-10 layer 1).
-import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
-import { slh_dsa_sha2_128s } from '@noble/post-quantum/slh-dsa.js';
-import { falcon512padded, falcon1024padded } from '@noble/post-quantum/falcon.js';
-import { hkdf } from '@noble/hashes/hkdf.js';
-import { shake128, shake256 } from '@noble/hashes/sha3.js';
-import { keccak_256, sha256, concatBytes, utf8ToBytes } from './bytes.js';
+import { ml_dsa44, ml_dsa65, ml_dsa87 } from "@noble/post-quantum/ml-dsa.js";
+import { slh_dsa_sha2_128s } from "@noble/post-quantum/slh-dsa.js";
+import { falcon512padded, falcon1024padded } from "@noble/post-quantum/falcon.js";
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { shake128, shake256 } from "@noble/hashes/sha3.js";
+import { keccak_256, sha256, concatBytes, utf8ToBytes } from "./bytes.js";
 
 /** kind number, tag string, scheme, HKDF output length, signed message. */
 export const PQ_KINDS = {
-  mldsa44: { kind: 0x0130, tag: 'scaas.ua.mldsa44.v1', alg: ml_dsa44, seedLen: 32, pq: true },
-  mldsa65: { kind: 0x0131, tag: 'scaas.ua.mldsa65.v1', alg: ml_dsa65, seedLen: 32, pq: true },
-  fndsa512: { kind: 0x0132, tag: 'scaas.ua.fndsa512.v1', alg: falcon512padded, seedLen: 48, pq: false },
-  slhdsa128s: { kind: 0x0133, tag: 'scaas.ua.slhdsa128s.v1', alg: slh_dsa_sha2_128s, seedLen: 48, pq: true },
-  mldsa87: { kind: 0x0134, tag: 'scaas.ua.mldsa87.v1', alg: ml_dsa87, seedLen: 32, pq: true },
-  fndsa1024: { kind: 0x0135, tag: 'scaas.ua.fndsa1024.v1', alg: falcon1024padded, seedLen: 48, pq: false },
+  mldsa44: { kind: 0x0130, tag: "scaas.ua.mldsa44.v1", alg: ml_dsa44, seedLen: 32, pq: true },
+  mldsa65: { kind: 0x0131, tag: "scaas.ua.mldsa65.v1", alg: ml_dsa65, seedLen: 32, pq: true },
+  fndsa512: { kind: 0x0132, tag: "scaas.ua.fndsa512.v1", alg: falcon512padded, seedLen: 48, pq: false },
+  slhdsa128s: { kind: 0x0133, tag: "scaas.ua.slhdsa128s.v1", alg: slh_dsa_sha2_128s, seedLen: 48, pq: true },
+  mldsa87: { kind: 0x0134, tag: "scaas.ua.mldsa87.v1", alg: ml_dsa87, seedLen: 32, pq: true },
+  fndsa1024: { kind: 0x0135, tag: "scaas.ua.fndsa1024.v1", alg: falcon1024padded, seedLen: 48, pq: false },
 };
 
-const MSG_TAG = keccak_256(utf8ToBytes('scaas.ua.msg.v1'));
+const MSG_TAG = keccak_256(utf8ToBytes("scaas.ua.msg.v1"));
 
 function spec(name) {
   const s = PQ_KINDS[name];
@@ -50,17 +50,17 @@ export const purposeTag = (p) => keccak_256(utf8ToBytes(`scaas.ua.purpose.${p}.v
 
 /** ua_msg = keccak256(MSG_TAG ‖ TAG(kind) ‖ purposeTag ‖ digest) (CTR-UA-12). */
 export const uaMessage = (name, purpose, digest) =>
-  keccak_256(concatBytes(MSG_TAG, kindTag(name), b32(purpose, 'purposeTag'), b32(digest, 'digest')));
+  keccak_256(concatBytes(MSG_TAG, kindTag(name), b32(purpose, "purposeTag"), b32(digest, "digest")));
 
 /** pq_msg = keccak256(TAG(kind) ‖ ua_msg) (CTR-UA-23). */
-export const pqMessage = (name, uaMsg) => keccak_256(concatBytes(kindTag(name), b32(uaMsg, 'ua_msg')));
+export const pqMessage = (name, uaMsg) => keccak_256(concatBytes(kindTag(name), b32(uaMsg, "ua_msg")));
 
 /** ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info = kind_tag ‖ u32 account ‖ u32 index). */
 export function pqSeed(seed, name, account, index) {
   const s = spec(name);
-  if (!(seed instanceof Uint8Array)) throw new Error('seed must be a Uint8Array');
-  const info = concatBytes(utf8ToBytes(s.tag), u32(account, 'account'), u32(index, 'index'));
-  return hkdf(sha256, seed, utf8ToBytes('scaas.ua.pq.v1'), info, s.seedLen);
+  if (!(seed instanceof Uint8Array)) throw new Error("seed must be a Uint8Array");
+  const info = concatBytes(utf8ToBytes(s.tag), u32(account, "account"), u32(index, "index"));
+  return hkdf(sha256, seed, utf8ToBytes("scaas.ua.pq.v1"), info, s.seedLen);
 }
 
 /** CTR-PQZ-13 with group 3g's C8: a single-key holder's PQZ key seed `seed32_v = HKDF-SHA256(ikm = BIP-39 seed, salt =
@@ -68,13 +68,18 @@ export function pqSeed(seed, name, account, index) {
  *  the `info` without the suffix (today's keys stay), every version v ≥ 1 appends `be64(v)` (the map stays injective). An `msig`
  *  operator draws each version's `seed32` fresh instead, never from this. */
 export function pqzKeySeed(seed, account, index, version = 0) {
-  if (!(seed instanceof Uint8Array)) throw new Error('seed must be a Uint8Array');
+  if (!(seed instanceof Uint8Array)) throw new Error("seed must be a Uint8Array");
   const v = BigInt(version);
-  if (v < 0n || v >= 1n << 64n) throw new Error('version must be a uint64');
+  if (v < 0n || v >= 1n << 64n) throw new Error("version must be a uint64");
   const be64 = new Uint8Array(8);
   new DataView(be64.buffer).setBigUint64(0, v);
-  const info = concatBytes(utf8ToBytes('scaas.ua.pqz-mlwe.v1'), u32(account, 'account'), u32(index, 'index'), v === 0n ? new Uint8Array(0) : be64);
-  return hkdf(sha256, seed, utf8ToBytes('scaas.ua.pq.v1'), info, 32);
+  const info = concatBytes(
+    utf8ToBytes("scaas.ua.pqz-mlwe.v1"),
+    u32(account, "account"),
+    u32(index, "index"),
+    v === 0n ? new Uint8Array(0) : be64,
+  );
+  return hkdf(sha256, seed, utf8ToBytes("scaas.ua.pq.v1"), info, 32);
 }
 
 /** Deterministic key pair of a PQ kind. Falcon keys are implementation-specific: pinned to @noble/post-quantum 0.7.1 by the vectors. */
@@ -145,20 +150,27 @@ function rejNttPoly(seed34) {
 
 /** EIP-8051 expanded key: Â (k·l polynomials, row-major) ‖ tr (64, FIPS 204) ‖ NTT(t1·2^13) (k), coefficients u32 big-endian. */
 export function mldsaExpandedKey(name, pk) {
-  const [k, l] = name === 'mldsa44' ? [4, 4] : name === 'mldsa65' ? [6, 5] : [0, 0];
-  if (!k || pk.length !== 32 + 320 * k) throw new Error('mldsaExpandedKey: ML-DSA-44 or -65 public key required');
+  const [k, l] = name === "mldsa44" ? [4, 4] : name === "mldsa65" ? [6, 5] : [0, 0];
+  if (!k || pk.length !== 32 + 320 * k) throw new Error("mldsaExpandedKey: ML-DSA-44 or -65 public key required");
   const out = new Uint8Array((k * l + k) * 1024 + 64);
   const dv = new DataView(out.buffer);
   let o = 0;
-  const put = (poly) => { for (const c of poly) { dv.setUint32(o, c); o += 4; } };
-  for (let i = 0; i < k; i++) for (let j = 0; j < l; j++) put(rejNttPoly(concatBytes(pk.subarray(0, 32), new Uint8Array([j, i]))));
+  const put = (poly) => {
+    for (const c of poly) {
+      dv.setUint32(o, c);
+      o += 4;
+    }
+  };
+  for (let i = 0; i < k; i++)
+    for (let j = 0; j < l; j++) put(rejNttPoly(concatBytes(pk.subarray(0, 32), new Uint8Array([j, i]))));
   out.set(shake256(pk, { dkLen: 64 }), o);
   o += 64;
   for (let i = 0; i < k; i++) {
     const t = new Array(256);
     const base = 32 + 320 * i;
     for (let c = 0; c < 256; c++) {
-      const bit = 10 * c, by = base + (bit >> 3);
+      const bit = 10 * c,
+        by = base + (bit >> 3);
       const v = ((pk[by] | (pk[by + 1] << 8)) >> (bit & 7)) & 0x3ff;
       t[c] = mulq(v, 8192);
     }

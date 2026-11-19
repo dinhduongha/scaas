@@ -18,9 +18,13 @@ import {normalInit} from "../v2/helpers/V2Fixture.sol";
 contract NoModulesRelease {
     address public immutable factory;
 
-    constructor(address f, bytes memory) { factory = f; }
+    constructor(address f, bytes memory) {
+        factory = f;
+    }
 
-    function kind() external pure returns (uint8) { return 0; }
+    function kind() external pure returns (uint8) {
+        return 0;
+    }
 
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
 }
@@ -43,7 +47,9 @@ contract UAModulePinsTest is Test {
 
     function _first(address[] memory ms, uint256 n) internal pure returns (address[] memory out) {
         out = new address[](n);
-        for (uint256 i; i < n; ++i) out[i] = ms[i];
+        for (uint256 i; i < n; ++i) {
+            out[i] = ms[i];
+        }
     }
 
     function _dexEnv(address[] memory ms) internal view returns (IFactoryToken.Env memory e) {
@@ -72,7 +78,8 @@ contract UAModulePinsTest is Test {
     function test_m_unregisteredModuleNotPinned() public {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
         f.publishTokenEnv(NORMAL, 1, EnvKit.uidOf(address(f)), _env(ms));
-        address impl = f.deployTokenImplementation(NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f)));
+        address impl =
+            f.deployTokenImplementation(NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f)));
         f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), _env(_first(ms, 2)));
         bytes memory init = abi.encode(normalInit("U", "U", 0, 1, address(this), address(0)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModuleNotPinned.selector, ms[2]));
@@ -97,8 +104,11 @@ contract UAModulePinsTest is Test {
     function test_m_modulesUnreadable() public {
         f.publishTokenEnv(NORMAL, 1, EnvKit.uidOf(address(f)), _env(new address[](0)));
         bytes memory code = type(NoModulesRelease).creationCode;
-        address at = vm.computeCreate2Address(keccak256(abi.encode(NORMAL, uint64(1))),
-            keccak256(bytes.concat(code, abi.encode(address(f), bytes("")))), address(f));
+        address at = vm.computeCreate2Address(
+            keccak256(abi.encode(NORMAL, uint64(1))),
+            keccak256(bytes.concat(code, abi.encode(address(f), bytes("")))),
+            address(f)
+        );
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ModulesUnreadable.selector, at));
         f.deployTokenImplementation(NORMAL, 1, 1, code, "", EnvKit.uidOf(address(f)));
     }

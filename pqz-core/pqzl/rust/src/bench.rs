@@ -3,8 +3,11 @@
 //! bench, so the same proofs (its `proofs_fnv`). Only the honest R_TXM shapes are built (`txm_build` without the
 //! negative-case knobs of `txm_check`, which is not ported).
 use crate::rel::{DISC_AMOUNT, DISC_PK, HDR_AMOUNT, HDR_AUDITOR_ON, HDR_FEE, HDR_LEGS};
-use crate::{encrypt, keypair_from_secret, Ctx, Error, HEADER_BYTES, PREFIX_BYTES, PROOF_SYSTEM_ID, TXM_MAX_LEGS};
 use crate::PROOF_SYSTEM_SPLIT_ID;
+use crate::{
+    encrypt, keypair_from_secret, Ctx, Error, HEADER_BYTES, PREFIX_BYTES, PROOF_SYSTEM_ID,
+    TXM_MAX_LEGS,
+};
 use crate::{POLYVEC_BYTES as PV, V_BYTES};
 use alloc::boxed::Box;
 use alloc::vec;
@@ -39,13 +42,26 @@ pub const TXS_REL: usize = 6 + TXB.len();
 
 /// the relations' names as the C bench prints them
 pub const NAMES: [&str; NREL] = [
-    "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR", "R_TX0", "R_TXM1", "R_TXM2", "R_TXM4", "R_TXM8", "R_TXM1_0", "R_TXM2_0",
-    "R_TXM4_0", "R_TXM8_0",
+    "R_REG",
+    "R_TX",
+    "R_BURN",
+    "R_DS",
+    "R_DR",
+    "R_TX0",
+    "R_TXM1",
+    "R_TXM2",
+    "R_TXM4",
+    "R_TXM8",
+    "R_TXM1_0",
+    "R_TXM2_0",
+    "R_TXM4_0",
+    "R_TXM8_0",
     #[cfg(feature = "oversize")]
     "R_TXM16",
     #[cfg(feature = "oversize")]
     "R_TXM16_0",
-    "R_TXS", "R_TXS0",
+    "R_TXS",
+    "R_TXS0",
 ];
 
 /// adversarial verify kinds (`step_verify_bad`)
@@ -64,7 +80,9 @@ impl Xs {
 
     fn cbd(&mut self, eta: u32) -> i64 {
         let r = self.rnd();
-        (0..eta).map(|i| ((r >> i) & 1) as i64 - ((r >> (32 + i)) & 1) as i64).sum()
+        (0..eta)
+            .map(|i| ((r >> i) & 1) as i64 - ((r >> (32 + i)) & 1) as i64)
+            .sum()
     }
 
     /// a short vector with an l2 bound (resampled as KeyGen / Enc do)
@@ -128,7 +146,8 @@ fn wr_word(p: &mut [u8], v: u64) {
 }
 
 fn le16s(out: &mut Vec<u8>, x: &[i16]) {
-    x.iter().for_each(|v| out.extend_from_slice(&v.to_le_bytes()));
+    x.iter()
+        .for_each(|v| out.extend_from_slice(&v.to_le_bytes()));
 }
 
 fn i8s(out: &mut Vec<u8>, x: &[i8]) {
@@ -182,7 +201,12 @@ impl Bench {
     /// `step_init`: `setup` and `setup_txm`
     pub fn new() -> Result<Bench, Error> {
         let mut xs = Xs(0x243F6A8885A308D3);
-        let (kf, kt, ka, _kx) = (keygen(&mut xs)?, keygen(&mut xs)?, keygen(&mut xs)?, keygen(&mut xs)?);
+        let (kf, kt, ka, _kx) = (
+            keygen(&mut xs)?,
+            keygen(&mut xs)?,
+            keygen(&mut xs)?,
+            keygen(&mut xs)?,
+        );
 
         // R_REG: prefix || message || pk
         let mut reg = vec![0xA5u8; PREFIX_BYTES];
@@ -214,7 +238,17 @@ impl Bench {
         tx[HDR_SALT..HDR_SALT + 16].fill(0);
         tx[HDR_RECIPIENT..HDR_RECIPIENT + 32].fill(0);
         let header = tx.clone();
-        for x in [&kf.pk[..], &kt.pk[..], &ka.pk[..], &ut[..], &vt[..], &c.u[..], &c.vs[0], &c.vs[1], &c.vs[2]] {
+        for x in [
+            &kf.pk[..],
+            &kt.pk[..],
+            &ka.pk[..],
+            &ut[..],
+            &vt[..],
+            &c.u[..],
+            &c.vs[0],
+            &c.vs[1],
+            &c.vs[2],
+        ] {
             tx.extend_from_slice(x);
         }
         let mut tx_wit = Vec::new();
@@ -272,7 +306,15 @@ impl Bench {
         // R_TX0: the R_TX transfer without pk_a and v_a, auditorOn 0
         let mut tx0 = header;
         tx0[HDR_AUDITOR_ON + 31] = 0;
-        for x in [&kf.pk[..], &kt.pk[..], &ut[..], &vt[..], &c.u[..], &c.vs[0], &c.vs[1]] {
+        for x in [
+            &kf.pk[..],
+            &kt.pk[..],
+            &ut[..],
+            &vt[..],
+            &c.u[..],
+            &c.vs[0],
+            &c.vs[1],
+        ] {
             tx0.extend_from_slice(x);
         }
         let mut tx0_wit = tx_wit[..6 * crate::N + 64].to_vec();
@@ -285,9 +327,23 @@ impl Bench {
         let mut seedmul = [0u32; NREL];
         seedmul[..6].copy_from_slice(&[31, 17, 13, 11, 7, 19]);
         let mut keyoff = [HEADER_BYTES; NREL];
-        keyoff[..6].copy_from_slice(&[PREFIX_BYTES + 32, HEADER_BYTES, HEADER_BYTES, DISC_PK, DISC_PK, HEADER_BYTES]);
+        keyoff[..6].copy_from_slice(&[
+            PREFIX_BYTES + 32,
+            HEADER_BYTES,
+            HEADER_BYTES,
+            DISC_PK,
+            DISC_PK,
+            HEADER_BYTES,
+        ]);
         let mut scaloff = [HDR_FEE + 31; NREL];
-        scaloff[..6].copy_from_slice(&[PREFIX_BYTES + 31, HDR_FEE + 31, HDR_AMOUNT + 31, DISC_AMOUNT + 31, DISC_AMOUNT + 31, HDR_FEE + 31]);
+        scaloff[..6].copy_from_slice(&[
+            PREFIX_BYTES + 31,
+            HDR_FEE + 31,
+            HDR_AMOUNT + 31,
+            DISC_AMOUNT + 31,
+            DISC_AMOUNT + 31,
+            HDR_FEE + 31,
+        ]);
 
         // setup_txm: the keys from the reseeded test RNG (state saved and restored), one statement per shape
         let xs0 = xs.0;
@@ -336,13 +392,28 @@ impl Bench {
         ops[TXS_REL + 1] = crate::OP_TRANSFER;
         seedmul[TXS_REL] = 43;
         seedmul[TXS_REL + 1] = 47;
-        Ok(Bench { ctx: Ctx::new(), fast: false, xs, ops, stmt, wit, seedmul, keyoff, scaloff, proofs: vec![Vec::new(); NREL] })
+        Ok(Bench {
+            ctx: Ctx::new(),
+            fast: false,
+            xs,
+            ops,
+            stmt,
+            wit,
+            seedmul,
+            keyoff,
+            scaloff,
+            proofs: vec![Vec::new(); NREL],
+        })
     }
 
     /// `step_prove`: rnd32[i] = seed * SEEDMUL[rel] + i; the proof is kept (none after a failure)
     pub fn prove(&mut self, rel: usize, seed: u32) -> Result<(), Error> {
-        let rnd32: [u8; 32] = core::array::from_fn(|i| seed.wrapping_mul(self.seedmul[rel]).wrapping_add(i as u32) as u8);
-        let r = self.ctx.prove(self.ops[rel], &self.stmt[rel], &self.wit[rel], &rnd32);
+        let rnd32: [u8; 32] = core::array::from_fn(|i| {
+            seed.wrapping_mul(self.seedmul[rel]).wrapping_add(i as u32) as u8
+        });
+        let r = self
+            .ctx
+            .prove(self.ops[rel], &self.stmt[rel], &self.wit[rel], &rnd32);
         self.proofs[rel] = r.as_ref().map_or(Vec::new(), Clone::clone);
         r.map(|_| ())
     }
@@ -351,10 +422,14 @@ impl Bench {
     /// the proof public again after it
     #[cfg(feature = "ctgrind")]
     pub fn prove_ct(&mut self, rel: usize, seed: u32) -> Result<(), Error> {
-        let rnd32: [u8; 32] = core::array::from_fn(|i| seed.wrapping_mul(self.seedmul[rel]).wrapping_add(i as u32) as u8);
+        let rnd32: [u8; 32] = core::array::from_fn(|i| {
+            seed.wrapping_mul(self.seedmul[rel]).wrapping_add(i as u32) as u8
+        });
         crate::ct::secret(&self.wit[rel][..]);
         crate::ct::secret(&rnd32);
-        let r = self.ctx.prove(self.ops[rel], &self.stmt[rel], &self.wit[rel], &rnd32);
+        let r = self
+            .ctx
+            .prove(self.ops[rel], &self.stmt[rel], &self.wit[rel], &rnd32);
         crate::ct::public(&self.wit[rel][..]);
         crate::ct::public(&rnd32);
         crate::ct::public(&r);
@@ -386,7 +461,13 @@ impl Bench {
 
     /// `step_verify`
     pub fn verify(&mut self, rel: usize) -> bool {
-        vfy(&mut self.ctx, self.fast, self.ops[rel], &self.stmt[rel], &self.proofs[rel])
+        vfy(
+            &mut self.ctx,
+            self.fast,
+            self.ops[rel],
+            &self.stmt[rel],
+            &self.proofs[rel],
+        )
     }
 
     /// `step_verify_bad`: kind 0 one random bit flipped in the proof, 1 random bytes of the valid length, 2 one
@@ -411,13 +492,29 @@ impl Bench {
                 vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &bad)
             }
             2 | 5 => {
-                let off = if kind == 2 { self.keyoff[rel] + 8 * (self.xs.rnd() % crate::N as u64) as usize + 7 } else { self.scaloff[rel] };
+                let off = if kind == 2 {
+                    self.keyoff[rel] + 8 * (self.xs.rnd() % crate::N as u64) as usize + 7
+                } else {
+                    self.scaloff[rel]
+                };
                 self.stmt[rel][off] ^= 1;
-                let r = vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &self.proofs[rel]);
+                let r = vfy(
+                    &mut self.ctx,
+                    self.fast,
+                    op,
+                    &self.stmt[rel],
+                    &self.proofs[rel],
+                );
                 self.stmt[rel][off] ^= 1;
                 r
             }
-            3 => vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &bad[..len - 1]),
+            3 => vfy(
+                &mut self.ctx,
+                self.fast,
+                op,
+                &self.stmt[rel],
+                &bad[..len - 1],
+            ),
             _ => {
                 bad[len / 2..].fill(0xff);
                 vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &bad)
@@ -429,7 +526,9 @@ impl Bench {
 
     /// `step_hash`: FNV-1a of the last proof
     pub fn hash(&self, rel: usize) -> u32 {
-        self.proofs[rel].iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619))
+        self.proofs[rel]
+            .iter()
+            .fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619))
     }
 }
 
@@ -437,7 +536,15 @@ impl Bench {
 /// auditor KTA (the copy of leg j at window j mod lpg); one real leg (the last, 123,456),
 /// the rest decoys; balance 1,000,000, fee 7 (auditor on) / 0
 #[allow(clippy::too_many_arguments)]
-fn txm_build(xs: &mut Xs, kts: &Key, kta: &Key, ktr: &[Key], m: usize, a: usize, tag: u8) -> Result<(Vec<u8>, Vec<u8>), Error> {
+fn txm_build(
+    xs: &mut Xs,
+    kts: &Key,
+    kta: &Key,
+    ktr: &[Key],
+    m: usize,
+    a: usize,
+    tag: u8,
+) -> Result<(Vec<u8>, Vec<u8>), Error> {
     let (g, lpg) = (crate::rel::groups(m, a), crate::rel::lpg(a));
     let (balance, fee) = (1_000_000u64, if a > 0 { 7u64 } else { 0 });
     let amount = |j: usize| if j == m - 1 { 123_456u64 } else { 0 };
@@ -464,10 +571,29 @@ fn txm_build(xs: &mut Xs, kts: &Key, kta: &Key, ktr: &[Key], m: usize, a: usize,
     xs.0 = xs0;
     let (mut v, mut va) = (Vec::new(), Vec::new());
     for j in 0..m {
-        v.push(encrypt(&[&ktr[j].pk], &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2l[j]])?.vs[0]);
+        v.push(
+            encrypt(
+                &[&ktr[j].pk],
+                &[dg[j]],
+                &r[j / lpg],
+                &e1[j / lpg],
+                &[e2l[j]],
+            )?
+            .vs[0],
+        );
         if a > 0 {
             let w = [(j % lpg) as u8];
-            va.push(crate::encrypt_win(&[&kta.pk], &w, &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2a[j]])?.vs[0]);
+            va.push(
+                crate::encrypt_win(
+                    &[&kta.pk],
+                    &w,
+                    &[dg[j]],
+                    &r[j / lpg],
+                    &e1[j / lpg],
+                    &[e2a[j]],
+                )?
+                .vs[0],
+            );
         }
     }
     let vf = encrypt(&[&kts.pk], &[dpg], &r[0], &e1[0], &[e2f])?.vs[0];
@@ -481,7 +607,9 @@ fn txm_build(xs: &mut Xs, kts: &Key, kta: &Key, ktr: &[Key], m: usize, a: usize,
     wr_word(&mut st[HDR_AUDITOR_ON..], a as u64);
     st[HDR_SALT..HDR_SALT + 16].fill(0);
     st.extend_from_slice(&kts.pk[..]);
-    ktr[..m].iter().for_each(|k| st.extend_from_slice(&k.pk[..]));
+    ktr[..m]
+        .iter()
+        .for_each(|k| st.extend_from_slice(&k.pk[..]));
     if a > 0 {
         st.extend_from_slice(&kta.pk[..]);
     }
@@ -490,7 +618,8 @@ fn txm_build(xs: &mut Xs, kts: &Key, kta: &Key, ktr: &[Key], m: usize, a: usize,
     u.iter().for_each(|x| st.extend_from_slice(&x[..]));
     v.iter().for_each(|x| st.extend_from_slice(x));
     st.extend_from_slice(&vf);
-    va.iter().for_each(|x: &[u8; V_BYTES]| st.extend_from_slice(x));
+    va.iter()
+        .for_each(|x: &[u8; V_BYTES]| st.extend_from_slice(x));
 
     let mut wt = Vec::new();
     key_wit(&mut wt, kts);
@@ -505,7 +634,9 @@ fn txm_build(xs: &mut Xs, kts: &Key, kta: &Key, ktr: &[Key], m: usize, a: usize,
     }
     dg.iter().for_each(|x| wt.extend_from_slice(x));
     wt.extend_from_slice(&dpg);
-    if st.len() != crate::rel::txm_stmt(m, a) || wt.len() != (1 + g) * 3 * crate::N + 32 * (m + 1 + a * m) + 16 * m + 16 {
+    if st.len() != crate::rel::txm_stmt(m, a)
+        || wt.len() != (1 + g) * 3 * crate::N + 32 * (m + 1 + a * m) + 16 * m + 16
+    {
         return Err(Error::Internal);
     }
     Ok((st, wt))

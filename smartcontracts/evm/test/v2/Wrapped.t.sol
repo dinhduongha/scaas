@@ -81,11 +81,15 @@ contract WrappedTest is V2Fixture {
         Rate memory fixedRate;
         uint256[] memory none;
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 0));
-        this.initExt(new address[](0),
-            abi.encode(wrappedInit(new address[](0), none, none, 6, fixedRate, address(0), address(0))));
+        this.initExt(
+            new address[](0),
+            abi.encode(wrappedInit(new address[](0), none, none, 6, fixedRate, address(0), address(0)))
+        );
         address[] memory nine = new address[](9);
         uint256[] memory ones = new uint256[](9);
-        for (uint256 i; i < 9; ++i) (nine[i], ones[i]) = (address(new MockERC20("X", "X", 6)), 1);
+        for (uint256 i; i < 9; ++i) {
+            (nine[i], ones[i]) = (address(new MockERC20("X", "X", 6)), 1);
+        }
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.UnderlyingCountInvalid.selector, 9));
         this.initExt(nine, abi.encode(wrappedInit(nine, ones, ones, 6, fixedRate, address(0), address(0))));
     }
@@ -222,12 +226,16 @@ contract WrappedTest is V2Fixture {
         RateAdminForwarder adm = new RateAdminForwarder();
         WrappedToken t = _single(address(usdc), 6, 3, 7, _adjustable(address(adm)));
         bytes32[12] memory tokBefore;
-        for (uint256 i; i < 12; ++i) tokBefore[i] = vm.load(address(t), bytes32(uint256(NS_TOKEN) + i));
+        for (uint256 i; i < 12; ++i) {
+            tokBefore[i] = vm.load(address(t), bytes32(uint256(NS_TOKEN) + i));
+        }
         usdc.mint(address(this), 1_000);
         usdc.approve(address(t), 1_000);
         t.wrap(1_000);
         adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(usdc), 3, 7, EnvKit.codeUidOf(address(t)))));
-        for (uint256 i; i < 12; ++i) assertEq(vm.load(address(t), bytes32(uint256(NS_TOKEN) + i)), tokBefore[i]);
+        for (uint256 i; i < 12; ++i) {
+            assertEq(vm.load(address(t), bytes32(uint256(NS_TOKEN) + i)), tokBefore[i]);
+        }
         bytes32 leg0 = keccak256(abi.encode(uint256(0), NS_UNDERLYING));
         assertEq(address(uint160(uint256(vm.load(address(t), leg0)))), address(usdc));
         uint256 rate = uint256(vm.load(address(t), bytes32(uint256(leg0) + 1)));
@@ -235,7 +243,9 @@ contract WrappedTest is V2Fixture {
         assertEq(rate >> 96, 7);
         assertEq(uint256(vm.load(address(t), bytes32(uint256(leg0) + 2))), 1_000);
         // nothing below slot 6 except the ERC-20 state: no `_legCount` in the linear layout
-        for (uint256 s = 3; s < 8; ++s) assertEq(vm.load(address(t), bytes32(s)), bytes32(0));
+        for (uint256 s = 3; s < 8; ++s) {
+            assertEq(vm.load(address(t), bytes32(s)), bytes32(0));
+        }
     }
 
     /// Errors raised inside the external `WrappedLib` (OpenZeppelin's `FailedCall`, `SafeERC20FailedOperation`,
@@ -245,9 +255,17 @@ contract WrappedTest is V2Fixture {
     /// `WrappedLib` × `WrappedToken` and `MtxPipelineLib` × every kind's artifact.
     function test_libraryErrorsAreInTheTokenAbi() public view {
         _requireErrorsIn("WrappedLib", "WrappedToken");
-        string[6] memory kinds = ["NormalToken", "WrappedToken", "NormalZetherToken",
-            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken"];
-        for (uint256 k; k < kinds.length; ++k) _requireErrorsIn("MtxPipelineLib", kinds[k]);
+        string[6] memory kinds = [
+            "NormalToken",
+            "WrappedToken",
+            "NormalZetherToken",
+            "WrappedZetherToken",
+            "NormalPqzToken",
+            "WrappedPqzToken"
+        ];
+        for (uint256 k; k < kinds.length; ++k) {
+            _requireErrorsIn("MtxPipelineLib", kinds[k]);
+        }
     }
 
     function _requireErrorsIn(string memory libName, string memory tokName) internal view {
@@ -256,9 +274,15 @@ contract WrappedTest is V2Fixture {
         assertGt(want.length, 0);
         for (uint256 i; i < want.length; ++i) {
             bool found;
-            for (uint256 j; j < have.length; ++j) found = found || have[j] == want[i];
-            assertTrue(found, string.concat(
-                tokName, " ABI lacks ", libName, ".", names[i], " ", vm.toString(abi.encodePacked(want[i]))));
+            for (uint256 j; j < have.length; ++j) {
+                found = found || have[j] == want[i];
+            }
+            assertTrue(
+                found,
+                string.concat(
+                    tokName, " ABI lacks ", libName, ".", names[i], " ", vm.toString(abi.encodePacked(want[i]))
+                )
+            );
         }
     }
 
@@ -276,15 +300,24 @@ contract WrappedTest is V2Fixture {
             if (!_eq(art.readString(_at(".abi[", i, "].type")), "error")) continue;
             tmpN[k] = art.readString(_at(".abi[", i, "].name"));
             string memory sig = string.concat(tmpN[k], "(");
-            for (uint256 j; vm.keyExistsJson(art, _at(".abi[", i, string.concat("].inputs[", vm.toString(j), "]"))); ++j) {
-                sig = string.concat(sig, j == 0 ? "" : ",", art.readString(
-                    _at(".abi[", i, string.concat("].inputs[", vm.toString(j), "].type"))));
+            for (
+                uint256 j;
+                vm.keyExistsJson(art, _at(".abi[", i, string.concat("].inputs[", vm.toString(j), "]")));
+                ++j
+            ) {
+                sig = string.concat(
+                    sig,
+                    j == 0 ? "" : ",",
+                    art.readString(_at(".abi[", i, string.concat("].inputs[", vm.toString(j), "].type")))
+                );
             }
             tmp[k++] = bytes4(keccak256(bytes(string.concat(sig, ")"))));
         }
         out = new bytes4[](k);
         names = new string[](k);
-        for (uint256 i; i < k; ++i) (out[i], names[i]) = (tmp[i], tmpN[i]);
+        for (uint256 i; i < k; ++i) {
+            (out[i], names[i]) = (tmp[i], tmpN[i]);
+        }
     }
 
     function _at(string memory a, uint256 i, string memory b) internal pure returns (string memory) {

@@ -3,7 +3,9 @@
 //! digest), `msig` from its key data. Only SCaaS key records sign (spec §3.3, R7): a NEAR access key never does, and a
 //! `near-account` msig member counts only as the call's predecessor.
 use crate::hash::nep413_hash;
-use crate::ua::{self, KeyRecord, KIND_ED25519, KIND_MSIG, KIND_NEAR_ACCOUNT, KIND_SECP256K1, KIND_WEBAUTHN_P256};
+use crate::ua::{
+    self, KeyRecord, KIND_ED25519, KIND_MSIG, KIND_NEAR_ACCOUNT, KIND_SECP256K1, KIND_WEBAUTHN_P256,
+};
 use crate::webauthn::{self, AuthError};
 use near_sdk::{env, near, AccountId, Gas};
 
@@ -13,10 +15,25 @@ type R<T> = Result<T, &'static str>;
 #[near(serializers = [borsh])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Auth {
-    Ed25519 { key: [u8; 32], sig: [u8; 64] },
-    Secp256k1 { key: [u8; 64], sig: [u8; 64], v: u8 },
-    Passkey { key: [u8; 64], authenticator_data: Vec<u8>, client_data_json: Vec<u8>, sig: [u8; 64] },
-    Msig { key_data: Vec<u8>, sigs: Vec<(u8, Auth)> },
+    Ed25519 {
+        key: [u8; 32],
+        sig: [u8; 64],
+    },
+    Secp256k1 {
+        key: [u8; 64],
+        sig: [u8; 64],
+        v: u8,
+    },
+    Passkey {
+        key: [u8; 64],
+        authenticator_data: Vec<u8>,
+        client_data_json: Vec<u8>,
+        sig: [u8; 64],
+    },
+    Msig {
+        key_data: Vec<u8>,
+        sigs: Vec<(u8, Auth)>,
+    },
 }
 
 impl Auth {
@@ -25,9 +42,14 @@ impl Auth {
         let (kind, key_data) = match self {
             Auth::Ed25519 { key, .. } => (KIND_ED25519, key.to_vec()),
             Auth::Secp256k1 { key, .. } => (KIND_SECP256K1, key.to_vec()),
-            Auth::Passkey { key, authenticator_data: ad, .. } => {
-                (KIND_WEBAUTHN_P256, [&key[..], ad.get(..32).ok_or("passkey authenticatorData")?].concat())
-            }
+            Auth::Passkey {
+                key,
+                authenticator_data: ad,
+                ..
+            } => (
+                KIND_WEBAUTHN_P256,
+                [&key[..], ad.get(..32).ok_or("passkey authenticatorData")?].concat(),
+            ),
             Auth::Msig { key_data, .. } => (KIND_MSIG, key_data.clone()),
         };
         Ok(KeyRecord { kind, key_data })
@@ -61,7 +83,11 @@ pub const PASSKEY_FIELD_MAX: usize = 1024;
 /// Every passkey signature of `auth` (directly or as an msig member) within `PASSKEY_FIELD_MAX`.
 pub fn passkey_fields(auth: &Auth) -> R<()> {
     match auth {
-        Auth::Passkey { authenticator_data: ad, client_data_json: cd, .. } => {
+        Auth::Passkey {
+            authenticator_data: ad,
+            client_data_json: cd,
+            ..
+        } => {
             if cd.len() > PASSKEY_FIELD_MAX || ad.len() > PASSKEY_FIELD_MAX {
                 return Err("passkey clientDataJSON / authenticatorData over 1024 bytes");
             }
@@ -83,12 +109,18 @@ pub fn verify(
     origins: Option<&[String]>,
 ) -> R<Vec<String>> {
     let Auth::Msig { key_data, sigs } = auth else {
-        return Ok(leaf(auth, digest, recipient, origins)?.into_iter().collect());
+        return Ok(leaf(auth, digest, recipient, origins)?
+            .into_iter()
+            .collect());
     };
     let m = ua::parse_msig(key_data)?;
     let caller = ua::native_id(predecessor);
-    let mut weight: u32 =
-        m.members.iter().filter(|x| x.kind == KIND_NEAR_ACCOUNT && x.id == caller).map(|x| x.weight as u32).sum();
+    let mut weight: u32 = m
+        .members
+        .iter()
+        .filter(|x| x.kind == KIND_NEAR_ACCOUNT && x.id == caller)
+        .map(|x| x.weight as u32)
+        .sum();
     let mut seen = Vec::new();
     let mut last: Option<u8> = None;
     for (i, a) in sigs {
@@ -120,27 +152,46 @@ pub fn verify(
     Ok(seen)
 }
 
-fn leaf(auth: &Auth, digest: &[u8; 32], recipient: &AccountId, origins: Option<&[String]>) -> R<Option<String>> {
+fn leaf(
+    auth: &Auth,
+    digest: &[u8; 32],
+    recipient: &AccountId,
+    origins: Option<&[String]>,
+) -> R<Option<String>> {
     match auth {
-        Auth::Ed25519 { key, sig } => {
-            env::ed25519_verify(sig, nep413_hash(digest, recipient), key).then_some(None).ok_or("ed25519 signature")
-        }
+        Auth::Ed25519 { key, sig } => env::ed25519_verify(sig, nep413_hash(digest, recipient), key)
+            .then_some(None)
+            .ok_or("ed25519 signature"),
         Auth::Secp256k1 { key, sig, v } => {
             // `true`: refuses high s (and r, s out of range); v is the recovery id.
             (*v <= 1 && env::ecrecover(digest, sig, *v, true) == Some(*key))
                 .then_some(None)
                 .ok_or("secp256k1 signature (low s, recovery id 0 / 1)")
         }
-        Auth::Passkey { key, authenticator_data: ad, client_data_json: cd, sig } => {
-            let rp: [u8; 32] = ad.get(..32).ok_or("passkey authenticatorData")?.try_into().unwrap();
+        Auth::Passkey {
+            key,
+            authenticator_data: ad,
+            client_data_json: cd,
+            sig,
+        } => {
+            let rp: [u8; 32] = ad
+                .get(..32)
+                .ok_or("passkey authenticatorData")?
+                .try_into()
+                .unwrap();
             let own = match origins {
                 Some(_) => None,
-                None => Some(webauthn::origin(cd, digest).ok_or("passkey clientDataJSON (type, challenge or origin)")?),
+                None => Some(
+                    webauthn::origin(cd, digest)
+                        .ok_or("passkey clientDataJSON (type, challenge or origin)")?,
+                ),
             };
             let list = origins.unwrap_or_else(|| std::slice::from_ref(own.as_ref().unwrap()));
             webauthn::verify(key, digest, ad, cd, sig, &rp, list).map_err(|e| match e {
                 AuthError::ClientData => "passkey clientDataJSON (type, challenge or origin)",
-                AuthError::AuthenticatorData => "passkey authenticatorData (rpIdHash or UP / UV flags)",
+                AuthError::AuthenticatorData => {
+                    "passkey authenticatorData (rpIdHash or UP / UV flags)"
+                }
                 AuthError::HighS => "passkey signature high s",
                 AuthError::BadKey => "passkey key",
                 AuthError::BadSignature => "passkey signature",

@@ -13,13 +13,17 @@ library EnvKit {
     Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
     function env(bytes32 uid, address registry, address ska, bool hedera)
-        internal pure returns (IFactoryToken.ChainEnv memory e)
+        internal
+        pure
+        returns (IFactoryToken.ChainEnv memory e)
     {
         (e.chainUid, e.registry, e.smartKeyAccountImpl, e.hedera) = (uid, registry, ska, hedera);
     }
 
     function env(bytes32 uid, address registry, address ska, bool hedera, address govRouter)
-        internal pure returns (IFactoryToken.ChainEnv memory e)
+        internal
+        pure
+        returns (IFactoryToken.ChainEnv memory e)
     {
         e = env(uid, registry, ska, hedera);
         e.govRouter = govRouter;
@@ -27,7 +31,10 @@ library EnvKit {
 
     /// @dev The runtime code of a clone of `impl` with `e` appended (for `vm.etch` at a vector's address).
     function runtime(address impl, IFactoryToken.ChainEnv memory e) internal pure returns (bytes memory) {
-        return abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3", ChainEnvCode.encode(e));
+        return
+            abi.encodePacked(
+                hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3", ChainEnvCode.encode(e)
+            );
     }
 
     /// @dev The EIP-1167 clone code hash of `impl` (the router's and the UA registry's `smartKeyCloneHash()`).

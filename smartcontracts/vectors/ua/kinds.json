@@ -716,6 +716,12 @@
       "purposeTag": "0x6e2771f5777618fa67e04937826da046b89915d6f2f052c799d38b94df7d89bc"
     },
     {
+      "purpose": "auditor-consent",
+      "version": 1,
+      "tag": "scaas.ua.purpose.auditor-consent.v1",
+      "purposeTag": "0xde3d73bc40ce8f4675cb286da7c990d6eebbf6710714b26831b743a83d8fc24d"
+    },
+    {
       "purpose": "pop",
       "version": 2,
       "tag": "scaas.ua.purpose.pop.v2",
@@ -2905,6 +2911,14 @@
       "purposeTag": "0x6e2771f5777618fa67e04937826da046b89915d6f2f052c799d38b94df7d89bc",
       "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
       "uaMsg": "0x25beef3c4a3d2ca0d6e5b1d008e7515d8157f28316fb264976e63c40bbaf2ebe"
+    },
+    {
+      "kind": 256,
+      "purpose": "auditor-consent",
+      "version": 1,
+      "purposeTag": "0xde3d73bc40ce8f4675cb286da7c990d6eebbf6710714b26831b743a83d8fc24d",
+      "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
+      "uaMsg": "0x2fbc0473e3590937111897cade61303d3bb1e54a0c7a2456950b62ddd552455a"
     }
   ],
   "canonicalIds": [

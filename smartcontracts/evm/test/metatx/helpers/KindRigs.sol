@@ -78,7 +78,8 @@ abstract contract KindRig is Test {
         doms = new bytes32[](tks.length);
         for (uint256 i; i < tks.length; ++i) {
             (kinds[i], toks[i]) = (tks[i].kind, tks[i].t);
-            (, string memory n, string memory v, uint256 cid, address vc, bytes32 salt,) = NormalToken(tks[i].t).eip712Domain();
+            (, string memory n, string memory v, uint256 cid, address vc, bytes32 salt,) =
+                NormalToken(tks[i].t).eip712Domain();
             doms[i] = keccak256(abi.encode(keccak256(bytes(n)), keccak256(bytes(v)), cid, vc, salt));
         }
     }
@@ -94,16 +95,28 @@ contract PlainRig is UALedgerBase, KindRig {
         tok.mint(alice, 9_000_000, EnvKit.codeUidOf(address(tok)));
         vm.prank(alice);
         tok.transferToUA(uaP, 2_000_000);
-        tks.push(Tk("NORMAL", address(tok), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 0, address(0), dex, 0, 0));
+        tks.push(
+            Tk("NORMAL", address(tok), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 0, address(0), dex, 0, 0)
+        );
         // UNDERLYING: 10_000_000 wrapped units
         _wrapFor(alice, 10_000_000);
         vm.prank(alice);
         wrp.transferToUA(uaP, 2_000_000);
-        tks.push(Tk("WRAPPED", address(wrp), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 1, address(und), dex, 0, 0));
+        tks.push(
+            Tk("WRAPPED", address(wrp), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 1, address(und), dex, 0, 0)
+        );
         // NONE with no UA registry (the ledger off)
-        address off = EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, address(0), address(0), false));
-        NormalToken(off).initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 10_000_000, alice, address(this))));
-        tks.push(Tk("NORMAL_LEDGEROFF", off, ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, 0, 2, address(0), dex, 0, 0));
+        address off = EnvKit.clone(
+            address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+            EnvKit.env(chainUidA, address(0), address(0), false)
+        );
+        NormalToken(off)
+            .initialize(
+                nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 10_000_000, alice, address(this)))
+            );
+        tks.push(
+            Tk("NORMAL_LEDGEROFF", off, ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, 0, 2, address(0), dex, 0, 0)
+        );
     }
 }
 
@@ -124,11 +137,33 @@ contract PqzRig is PqzFixture, KindRig {
         address t = _pClone(address(normalImpl), _cfg(uint256(1) << 40));
         NormalPqzToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
         NormalPqzToken(t).mintToUA(uaD, 2_000_000, EnvKit.codeUidOf(address(t)));
-        tks.push(Tk("NORMAL_PQZ", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), uaD, 0, address(0), dex, 0, 0));
+        tks.push(
+            Tk(
+                "NORMAL_PQZ",
+                t,
+                SK,
+                signer,
+                PK2,
+                vm.addr(PK2),
+                address(0xFEE),
+                address(0xBEEF),
+                uaD,
+                0,
+                address(0),
+                dex,
+                0,
+                0
+            )
+        );
         // WRAPPED_PQZ: one 1:1 leg
         MockERC20 usd = new MockERC20("USD", "USD", 6);
-        address impl = Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(WrappedPqzToken).creationCode);
+        address impl = Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_PQZ,
+            1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)),
+            type(WrappedPqzToken).creationCode
+        );
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = 1 << GovernanceBits.PAYABLE;
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
@@ -142,12 +177,31 @@ contract PqzRig is PqzFixture, KindRig {
         WrappedToken(payable(w)).wrap(20_000_000);
         WrappedToken(payable(w)).transferToUA(uaD, 2_000_000);
         vm.stopPrank();
-        tks.push(Tk("WRAPPED_PQZ", w, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), uaD, 1, address(usd), dex, 0, 0));
+        tks.push(
+            Tk(
+                "WRAPPED_PQZ",
+                w,
+                SK,
+                signer,
+                PK2,
+                vm.addr(PK2),
+                address(0xFEE),
+                address(0xBEEF),
+                uaD,
+                1,
+                address(usd),
+                dex,
+                0,
+                0
+            )
+        );
     }
 
     /// The test plays the factory: a CREATE clone (its address does not depend on the implementation's code).
     function _pClone(address impl, IFactoryToken.TokenConfig memory c) internal returns (address t) {
-        t = EnvKit.clone(impl, instanceEnv(pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), PQZ_UID, address(0)));
+        t = EnvKit.clone(
+            impl, instanceEnv(pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), PQZ_UID, address(0))
+        );
         vm.prank(address(factory));
         NormalToken(t).initialize(nid(address(this)), 1, abi.encode(c));
     }
@@ -170,11 +224,29 @@ contract ZetherRig is ZetherFixture, KindRig {
         NormalZetherToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
         vm.prank(signer);
         NormalToken(t).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
-        tks.push(Tk("NORMAL_ZETHER", t, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 0, address(0), dex, 0, 0));
+        tks.push(
+            Tk(
+                "NORMAL_ZETHER",
+                t,
+                SK,
+                signer,
+                PK2,
+                vm.addr(PK2),
+                address(0xFEE),
+                address(0xBEEF),
+                ZetherTypes.UA.unwrap(bob.ua),
+                0,
+                address(0),
+                dex,
+                0,
+                0
+            )
+        );
         // WRAPPED_ZETHER: one 1:1 leg
         MockERC20 usd = new MockERC20("USD", "USD", 6);
-        address impl = Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(),
-            type(WrappedZetherToken).creationCode);
+        address impl = Catalogue.release(
+            factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode
+        );
         IFactoryToken.TokenConfig memory c = _cfg(true, uint256(1) << 40);
         c.features = 1 << GovernanceBits.PAYABLE;
         c.lockedFeatures = 0; // the fixture locks MINTABLE for its minter (B-06); this token has neither
@@ -188,7 +260,24 @@ contract ZetherRig is ZetherFixture, KindRig {
         WrappedToken(payable(w)).wrap(20_000_000);
         WrappedToken(payable(w)).transferToUA(ZetherTypes.UA.unwrap(bob.ua), 2_000_000);
         vm.stopPrank();
-        tks.push(Tk("WRAPPED_ZETHER", w, SK, signer, PK2, vm.addr(PK2), address(0xFEE), address(0xBEEF), ZetherTypes.UA.unwrap(bob.ua), 1, address(usd), dex, 0, 0));
+        tks.push(
+            Tk(
+                "WRAPPED_ZETHER",
+                w,
+                SK,
+                signer,
+                PK2,
+                vm.addr(PK2),
+                address(0xFEE),
+                address(0xBEEF),
+                ZetherTypes.UA.unwrap(bob.ua),
+                1,
+                address(usd),
+                dex,
+                0,
+                0
+            )
+        );
     }
 
     function _pClone(address impl, IFactoryToken.TokenConfig memory c) internal returns (address t) {

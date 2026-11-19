@@ -96,7 +96,8 @@ contract MockPositionManagerV4 is ERC721 {
     constructor() ERC721("Positions", "POS") {}
 
     function mint(PoolKey calldata key, int24 lo, int24 hi, uint128 liq, address owner, address refundTo)
-        external returns (uint256 id)
+        external
+        returns (uint256 id)
     {
         id = nextId++;
         _mint(owner, id);
@@ -208,9 +209,13 @@ contract MockDistributor {
 /// An `mtxExchange`-style contract without `liquidityOrderDigest` (a DEX release before the liquidity spec, review P1-2):
 /// it runs a token's `mtxLiquidityPull` of an order signed for it, then moves the pulled tokens to `to`.
 contract MockOldDex {
-    function run(address token, ITradeToken.LiquidityOrder calldata o, IUARegistry.UASig calldata auth, uint256 amount,
-        address to) external
-    {
+    function run(
+        address token,
+        ITradeToken.LiquidityOrder calldata o,
+        IUARegistry.UASig calldata auth,
+        uint256 amount,
+        address to
+    ) external {
         ILiquidityPullToken(token).mtxLiquidityPull(o, auth, amount, msg.sender);
         IERC20(token).transfer(to, amount);
     }
@@ -227,7 +232,12 @@ contract MockWrongDex {
     }
 
     function liquidityOrderDigest(ITradeToken.LiquidityOrder calldata) external view returns (bytes32) {
-        if (mode == 2) assembly { mstore(0, 1) return(0, 16) }
+        if (mode == 2) {
+            assembly {
+                mstore(0, 1)
+                return(0, 16)
+            }
+        }
         if (mode == 3) return right;
         return keccak256("another");
     }
@@ -251,7 +261,11 @@ contract MockShortReader {
     function position(uint256) external view returns (bytes32, int24, int24, uint128, bool) {
         uint256 n = words * 32;
         assembly {
-            mstore(0, 0) mstore(0x20, 0) mstore(0x40, 0) mstore(0x60, 0) mstore(0x80, 0)
+            mstore(0, 0)
+            mstore(0x20, 0)
+            mstore(0x40, 0)
+            mstore(0x60, 0)
+            mstore(0x80, 0)
             return(0, n)
         }
     }
@@ -279,10 +293,11 @@ contract MockReenter {
 
     function go() external {
         (bool ok, bytes memory r) = target.call(data);
-        if (!ok) assembly { revert(add(r, 32), mload(r)) }
+        if (!ok) {
+            assembly { revert(add(r, 32), mload(r)) }
+        }
     }
 }
-
 
 /// Answers a fixed position for any id (L25: a reader that matches while its manager keeps the NFT).
 contract MockFixedReader {

@@ -63,38 +63,125 @@ library Shake {
                 mstore(992, xor(xor(xor(xor(mload(192), mload(352)), mload(512)), mload(672)), mload(832)))
                 mstore(1024, xor(xor(xor(xor(mload(224), mload(384)), mload(544)), mload(704)), mload(864)))
                 mstore(1056, xor(xor(xor(xor(mload(256), mload(416)), mload(576)), mload(736)), mload(896)))
-                { let cp := mload(960) d0 := xor(mload(1056), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff)) }
-                { let cp := mload(992) d1 := xor(mload(928), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff)) }
-                { let cp := mload(1024) d2 := xor(mload(960), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff)) }
-                { let cp := mload(1056) d3 := xor(mload(992), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff)) }
-                { let cp := mload(928) d4 := xor(mload(1024), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff)) }
+                {
+                    let cp := mload(960)
+                    d0 := xor(mload(1056), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff))
+                }
+                {
+                    let cp := mload(992)
+                    d1 := xor(mload(928), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff))
+                }
+                {
+                    let cp := mload(1024)
+                    d2 := xor(mload(960), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff))
+                }
+                {
+                    let cp := mload(1056)
+                    d3 := xor(mload(992), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff))
+                }
+                {
+                    let cp := mload(928)
+                    d4 := xor(mload(1024), and(or(shl(1, cp), shr(63, cp)), 0xffffffffffffffff))
+                }
             }
             function rhoPi(d0, d1, d2, d3, d4) {
                 mstore(928, xor(mload(128), d0))
-                { let v := xor(mload(160), d1) mstore(1248, and(or(shl(1, v), shr(63, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(192), d2) mstore(1568, and(or(shl(62, v), shr(2, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(224), d3) mstore(1088, and(or(shl(28, v), shr(36, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(256), d4) mstore(1408, and(or(shl(27, v), shr(37, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(288), d0) mstore(1440, and(or(shl(36, v), shr(28, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(320), d1) mstore(960, and(or(shl(44, v), shr(20, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(352), d2) mstore(1280, and(or(shl(6, v), shr(58, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(384), d3) mstore(1600, and(or(shl(55, v), shr(9, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(416), d4) mstore(1120, and(or(shl(20, v), shr(44, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(448), d0) mstore(1152, and(or(shl(3, v), shr(61, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(480), d1) mstore(1472, and(or(shl(10, v), shr(54, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(512), d2) mstore(992, and(or(shl(43, v), shr(21, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(544), d3) mstore(1312, and(or(shl(25, v), shr(39, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(576), d4) mstore(1632, and(or(shl(39, v), shr(25, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(608), d0) mstore(1664, and(or(shl(41, v), shr(23, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(640), d1) mstore(1184, and(or(shl(45, v), shr(19, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(672), d2) mstore(1504, and(or(shl(15, v), shr(49, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(704), d3) mstore(1024, and(or(shl(21, v), shr(43, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(736), d4) mstore(1344, and(or(shl(8, v), shr(56, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(768), d0) mstore(1376, and(or(shl(18, v), shr(46, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(800), d1) mstore(1696, and(or(shl(2, v), shr(62, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(832), d2) mstore(1216, and(or(shl(61, v), shr(3, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(864), d3) mstore(1536, and(or(shl(56, v), shr(8, v)), 0xffffffffffffffff)) }
-                { let v := xor(mload(896), d4) mstore(1056, and(or(shl(14, v), shr(50, v)), 0xffffffffffffffff)) }
+                {
+                    let v := xor(mload(160), d1)
+                    mstore(1248, and(or(shl(1, v), shr(63, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(192), d2)
+                    mstore(1568, and(or(shl(62, v), shr(2, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(224), d3)
+                    mstore(1088, and(or(shl(28, v), shr(36, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(256), d4)
+                    mstore(1408, and(or(shl(27, v), shr(37, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(288), d0)
+                    mstore(1440, and(or(shl(36, v), shr(28, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(320), d1)
+                    mstore(960, and(or(shl(44, v), shr(20, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(352), d2)
+                    mstore(1280, and(or(shl(6, v), shr(58, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(384), d3)
+                    mstore(1600, and(or(shl(55, v), shr(9, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(416), d4)
+                    mstore(1120, and(or(shl(20, v), shr(44, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(448), d0)
+                    mstore(1152, and(or(shl(3, v), shr(61, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(480), d1)
+                    mstore(1472, and(or(shl(10, v), shr(54, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(512), d2)
+                    mstore(992, and(or(shl(43, v), shr(21, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(544), d3)
+                    mstore(1312, and(or(shl(25, v), shr(39, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(576), d4)
+                    mstore(1632, and(or(shl(39, v), shr(25, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(608), d0)
+                    mstore(1664, and(or(shl(41, v), shr(23, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(640), d1)
+                    mstore(1184, and(or(shl(45, v), shr(19, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(672), d2)
+                    mstore(1504, and(or(shl(15, v), shr(49, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(704), d3)
+                    mstore(1024, and(or(shl(21, v), shr(43, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(736), d4)
+                    mstore(1344, and(or(shl(8, v), shr(56, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(768), d0)
+                    mstore(1376, and(or(shl(18, v), shr(46, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(800), d1)
+                    mstore(1696, and(or(shl(2, v), shr(62, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(832), d2)
+                    mstore(1216, and(or(shl(61, v), shr(3, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(864), d3)
+                    mstore(1536, and(or(shl(56, v), shr(8, v)), 0xffffffffffffffff))
+                }
+                {
+                    let v := xor(mload(896), d4)
+                    mstore(1056, and(or(shl(14, v), shr(50, v)), 0xffffffffffffffff))
+                }
             }
             function chi() {
                 {
@@ -201,13 +288,26 @@ library Shake {
             let n := shr(5, add(rate, 31))
             for { let m := 0 } lt(m, n) { m := add(m, 1) } {
                 let l := add(S, shl(7, m))
-                let w := or(or(shl(192, mload(l)), shl(128, mload(add(l, 32)))), or(shl(64, mload(add(l, 64))), mload(add(l, 96))))
+                let w :=
+                    or(
+                        or(shl(192, mload(l)), shl(128, mload(add(l, 32)))),
+                        or(shl(64, mload(add(l, 64))), mload(add(l, 96)))
+                    )
                 mstore(add(out, shl(5, m)), _bswap(w))
             }
             function _bswap(w) -> v {
-                v := or(shr(8, and(w, 0xff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00)), shl(8, and(w, 0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff)))
-                v := or(shr(16, and(v, 0xffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000)), shl(16, and(v, 0x0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff)))
-                v := or(shr(32, and(v, 0xffffffff00000000ffffffff00000000ffffffff00000000ffffffff00000000)), shl(32, and(v, 0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff)))
+                v := or(
+                    shr(8, and(w, 0xff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00)),
+                    shl(8, and(w, 0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff))
+                )
+                v := or(
+                    shr(16, and(v, 0xffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000)),
+                    shl(16, and(v, 0x0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff))
+                )
+                v := or(
+                    shr(32, and(v, 0xffffffff00000000ffffffff00000000ffffffff00000000ffffffff00000000)),
+                    shl(32, and(v, 0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff))
+                )
             }
         }
     }
@@ -215,7 +315,9 @@ library Shake {
     /// SHAKE over `len` bytes at `p`, `outLen` bytes written at `out` (whole blocks: up to rate + 31 bytes past).
     function hash(uint256 rate, uint256 p, uint256 len, uint256 out, uint256 outLen) internal pure {
         absorb(rate, p, len);
-        for (uint256 o; o < outLen; o += rate) squeeze(rate, out + o);
+        for (uint256 o; o < outLen; o += rate) {
+            squeeze(rate, out + o);
+        }
     }
 
     function _xorBlock(uint256 rate, uint256 p) private pure {
@@ -223,9 +325,18 @@ library Shake {
             let lanes := shr(3, rate)
             for { let m := 0 } lt(shl(2, m), lanes) { m := add(m, 1) } {
                 let w := mload(add(p, shl(5, m)))
-                w := or(shr(8, and(w, 0xff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00)), shl(8, and(w, 0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff)))
-                w := or(shr(16, and(w, 0xffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000)), shl(16, and(w, 0x0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff)))
-                w := or(shr(32, and(w, 0xffffffff00000000ffffffff00000000ffffffff00000000ffffffff00000000)), shl(32, and(w, 0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff)))
+                w := or(
+                    shr(8, and(w, 0xff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00)),
+                    shl(8, and(w, 0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff))
+                )
+                w := or(
+                    shr(16, and(w, 0xffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000)),
+                    shl(16, and(w, 0x0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff))
+                )
+                w := or(
+                    shr(32, and(w, 0xffffffff00000000ffffffff00000000ffffffff00000000ffffffff00000000)),
+                    shl(32, and(w, 0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff))
+                )
                 for { let j := 0 } lt(j, 4) { j := add(j, 1) } {
                     let i := add(shl(2, m), j)
                     if lt(i, lanes) {

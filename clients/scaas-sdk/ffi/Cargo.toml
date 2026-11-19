@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# The SDK's reference library for its own binding tests (spec §16.2): a staticlib + cdylib with the generated FRB surface
+# (src/api, src/frb_generated.rs) and the two secret copy calls. An app links its own one library instead (scaas-app:
+# app-core-rust). UNAUDITED.
+[package]
+name = "scaas-sdk-ffi"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../../LICENSE"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+scaas-sdk = { path = "..", features = ["frb"] }
+scaas-ua = { path = "../../ua-rs", default-features = false, features = ["wallet"] }
+scaas-rpc = { path = "../../scaas-rpc", default-features = false, features = ["evm", "node-client"] }
+flutter_rust_bridge = "=2.13.0"
+tokio = { version = "1", features = ["rt", "time"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+# arkworks subgroup checks crawl unoptimised
+[profile.dev.package."*"]
+opt-level = 3

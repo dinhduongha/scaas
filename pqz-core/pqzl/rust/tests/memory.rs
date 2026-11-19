@@ -48,7 +48,10 @@ fn admit(n: isize, size: usize) -> bool {
         // BUSY first: reading the variable allocates, which must pass uncounted
         BUSY.with(|b| b.set(true));
         if std::env::var("PQZL_MEM_TRACE").is_ok_and(|v| v.parse() == Ok(size) || v == "all") {
-            eprintln!("denied {size} B (+{n} B, allocation {k}):\n{}", std::backtrace::Backtrace::force_capture());
+            eprintln!(
+                "denied {size} B (+{n} B, allocation {k}):\n{}",
+                std::backtrace::Backtrace::force_capture()
+            );
         }
         BUSY.with(|b| b.set(false));
         return false;
@@ -134,8 +137,17 @@ const C_TX_PROVE_PEAK: usize = 312_151_904;
 fn peak_per_op() {
     println!("size_of::<Ctx>() = {} B (the specialised verifier's fixed tables inline, the rest on the heap)", std::mem::size_of::<Ctx>());
     println!("peak_per_op (bytes; cold = fresh Ctx, the call builds A / keys / SV tables; warm = second call)");
-    println!("{:<28} {:>12} {:>12} {:>12} {:>12} {:>12} {:>12} {:>9}", "row", "prove cold", "prove warm",
-             "verify cold", "verify warm", "fast cold", "fast warm", "allocs");
+    println!(
+        "{:<28} {:>12} {:>12} {:>12} {:>12} {:>12} {:>12} {:>9}",
+        "row",
+        "prove cold",
+        "prove warm",
+        "verify cold",
+        "verify warm",
+        "fast cold",
+        "fast warm",
+        "allocs"
+    );
     let mut tx = 0;
     for r in rows() {
         let mut c = Ctx::new();
@@ -150,7 +162,10 @@ fn peak_per_op() {
         let (ok, fc, _, _) = measure(None, 0, || c.verify_fast(r.op, &r.stmt, &r.proof));
         assert!(ok, "{}", r.name);
         let (_, fw, _, _) = measure(None, 0, || c.verify_fast(r.op, &r.stmt, &r.proof));
-        println!("{:<28} {pc:>12} {pw:>12} {vc:>12} {vw:>12} {fc:>12} {fw:>12} {n:>9}", r.name);
+        println!(
+            "{:<28} {pc:>12} {pw:>12} {vc:>12} {vw:>12} {fc:>12} {fw:>12} {n:>9}",
+            r.name
+        );
         if r.code == 1 {
             tx = pc;
         }
@@ -164,14 +179,19 @@ fn peak_per_op() {
 /// `try_verify` / `try_verify_fast`, where out of memory must never come back as the verdict false)
 fn run(c: &mut Ctx, r: &Row, which: u8) -> Option<bool> {
     let out = match which {
-        0 => c.prove(r.op, &r.stmt, &r.wit, &r.rnd32).map(|p| p == r.proof),
+        0 => c
+            .prove(r.op, &r.stmt, &r.wit, &r.rnd32)
+            .map(|p| p == r.proof),
         1 => c.try_verify(r.op, &r.stmt, &r.proof),
         _ => c.try_verify_fast(r.op, &r.stmt, &r.proof),
     };
     match out {
         Ok(true) => Some(true),
         Err(Error::Memory) => None,
-        Ok(false) => panic!("{} {}: not the honest result (an out-of-memory folded into the verdict?)", r.name, OPS[which as usize]),
+        Ok(false) => panic!(
+            "{} {}: not the honest result (an out-of-memory folded into the verdict?)",
+            r.name, OPS[which as usize]
+        ),
         Err(e) => panic!("{} {}: {e:?}", r.name, OPS[which as usize]),
     }
 }
@@ -180,11 +200,20 @@ fn run(c: &mut Ctx, r: &Row, which: u8) -> Option<bool> {
 /// result or the out-of-memory one, and the retry the honest one; allocations denied)
 fn op(c: &mut Ctx, r: &Row, which: u8, cap: Option<usize>, deny: u64) -> (bool, u64) {
     let (out, _, _, denied) = measure(cap, deny, || run(c, r, which));
-    (out.unwrap_or_else(|| run(c, r, which) == Some(true)), denied)
+    (
+        out.unwrap_or_else(|| run(c, r, which) == Some(true)),
+        denied,
+    )
 }
 
 /// keygen, keypair_from_secret, enc_seed (two recipients), encrypt, through `c`'s methods or the free functions
-type Keys = (pqzl::Key, pqzl::Key, Box<[u8; pqzl::POLYVEC_BYTES]>, pqzl::Enc, pqzl::Enc);
+type Keys = (
+    pqzl::Key,
+    pqzl::Key,
+    Box<[u8; pqzl::POLYVEC_BYTES]>,
+    pqzl::Enc,
+    pqzl::Enc,
+);
 
 fn keys_all(mut c: Option<&mut Ctx>) -> Result<Keys, Error> {
     let (s1, s2) = ([5u8; 32], [6u8; 32]);
@@ -213,7 +242,9 @@ fn keys_all(mut c: Option<&mut Ctx>) -> Result<Keys, Error> {
 fn flat(r: Result<Keys, Error>) -> Result<Vec<u8>, Error> {
     let (k1, k2, pk, e, x) = r?;
     let mut out = [&k1.pk[..], &k2.pk[..], &pk[..], &e.u[..], &x.u[..]].concat();
-    e.vs.iter().chain(&x.vs).for_each(|v| out.extend_from_slice(v));
+    e.vs.iter()
+        .chain(&x.vs)
+        .for_each(|v| out.extend_from_slice(v));
     Ok(out)
 }
 
@@ -233,8 +264,18 @@ const OPS: [&str; 3] = ["prove", "verify", "verify_fast"];
 #[test]
 fn exhaustion_is_error() {
     // the log names the settings it ran with (review round 2: the port's exhaustive logs did not)
-    let set: Vec<String> = std::env::vars().filter(|(k, _)| k.starts_with("PQZL_MEM_")).map(|(k, v)| format!("{k}={v}")).collect();
-    println!("PQZL_MEM_* settings: {}", if set.is_empty() { "none (the defaults)".to_string() } else { set.join(" ") });
+    let set: Vec<String> = std::env::vars()
+        .filter(|(k, _)| k.starts_with("PQZL_MEM_"))
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    println!(
+        "PQZL_MEM_* settings: {}",
+        if set.is_empty() {
+            "none (the defaults)".to_string()
+        } else {
+            set.join(" ")
+        }
+    );
     let rs = rows();
     let tx = rs.iter().find(|r| r.code == 1).unwrap();
     let m8 = rs.iter().find(|r| r.name == "M8-on").unwrap();
@@ -252,16 +293,35 @@ fn exhaustion_is_error() {
         (64, 32)
     } else {
         let hi = peak.div_ceil(MIB) + 4;
-        println!("R_TX prove cold peak recorded {peak} B: caps {hi} / {} MiB", hi / 2);
+        println!(
+            "R_TX prove cold peak recorded {peak} B: caps {hi} / {} MiB",
+            hi / 2
+        );
         (hi, hi / 2)
     };
     for (r, cap, want_mem) in [(tx, hi, false), (m8, hi, true), (tx, lo, true)] {
         let mut c = Ctx::new();
         let (out, _, _, d) = measure(Some(cap * MIB), 0, || run(&mut c, r, 0));
-        assert_eq!((out, d > 0), if want_mem { (None, true) } else { (Some(true), false) }, "{} prove, {cap} MiB", r.name);
+        assert_eq!(
+            (out, d > 0),
+            if want_mem {
+                (None, true)
+            } else {
+                (Some(true), false)
+            },
+            "{} prove, {cap} MiB",
+            r.name
+        );
         assert_eq!(run(&mut c, r, 0), Some(true));
-        println!("{} prove cold under {cap} MiB: {}; the same Ctx then proves", r.name,
-                 if want_mem { "Error::Memory" } else { "the vector's proof" });
+        println!(
+            "{} prove cold under {cap} MiB: {}; the same Ctx then proves",
+            r.name,
+            if want_mem {
+                "Error::Memory"
+            } else {
+                "the vector's proof"
+            }
+        );
     }
     for which in 1..3 {
         let (out, peak, _, _) = measure(None, 0, || run(&mut Ctx::new(), tx, which));
@@ -269,11 +329,21 @@ fn exhaustion_is_error() {
         let cap = (peak / 2).min(64 * MIB);
         let mut c = Ctx::new();
         let (out, _, _, d) = measure(Some(cap), 0, || run(&mut c, tx, which));
-        assert!(out.is_none() && d > 0, "R_TX {} under {cap} B (peak {peak} B)", OPS[which as usize]);
+        assert!(
+            out.is_none() && d > 0,
+            "R_TX {} under {cap} B (peak {peak} B)",
+            OPS[which as usize]
+        );
         assert_eq!(run(&mut c, tx, which), Some(true));
         // the bool API under the same cap: false (and the Ctx accepts afterwards)
         let mut c = Ctx::new();
-        let bool_api = |c: &mut Ctx| if which == 1 { c.verify(tx.op, &tx.stmt, &tx.proof) } else { c.verify_fast(tx.op, &tx.stmt, &tx.proof) };
+        let bool_api = |c: &mut Ctx| {
+            if which == 1 {
+                c.verify(tx.op, &tx.stmt, &tx.proof)
+            } else {
+                c.verify_fast(tx.op, &tx.stmt, &tx.proof)
+            }
+        };
         let (b, _, _, d) = measure(Some(cap), 0, || bool_api(&mut c));
         assert!(!b && d > 0);
         assert!(bool_api(&mut c));
@@ -300,7 +370,10 @@ fn exhaustion_is_error() {
             let mut c = fresh();
             let (out, _, _, d) = measure(None, k, || keys_all(ctx(&mut c, mode)));
             let out = flat(out);
-            assert!(d == 1 && (out == Err(Error::Memory) || out.as_ref() == Ok(&want)), "keys mode {mode}: allocation {k}");
+            assert!(
+                d == 1 && (out == Err(Error::Memory) || out.as_ref() == Ok(&want)),
+                "keys mode {mode}: allocation {k}"
+            );
             assert_eq!(flat(keys_all(ctx(&mut c, mode))).as_ref(), Ok(&want));
         }
         println!("keys ({}): each of the {n} allocations denied in turn: Error::Memory, then the same outputs",
@@ -308,9 +381,11 @@ fn exhaustion_is_error() {
     }
 
     let env = |k: &str| std::env::var(k).ok();
-    let sweep: Option<Vec<u64>> = env("PQZL_MEM_SWEEP").map(|s| s.split(',').map(|x| x.parse().expect("C,F,S")).collect());
+    let sweep: Option<Vec<u64>> =
+        env("PQZL_MEM_SWEEP").map(|s| s.split(',').map(|x| x.parse().expect("C,F,S")).collect());
     let only = env("PQZL_MEM_ONLY");
-    let nthreads: usize = env("PQZL_MEM_THREADS").map_or(6, |s| s.parse().expect("PQZL_MEM_THREADS"));
+    let nthreads: usize =
+        env("PQZL_MEM_THREADS").map_or(6, |s| s.parse().expect("PQZL_MEM_THREADS"));
     let mut work = Vec::new();
     for r in &rs {
         for which in 0..3u8 {

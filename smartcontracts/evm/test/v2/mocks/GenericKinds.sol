@@ -71,7 +71,9 @@ contract NoteKind is GenericKindBase, INoteKind {
 
     constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory) GenericKindBase(id, factory_) {}
 
-    function _interfaceId() internal pure override returns (bytes4) { return type(INoteKind).interfaceId; }
+    function _interfaceId() internal pure override returns (bytes4) {
+        return type(INoteKind).interfaceId;
+    }
 
     function initialize(bytes32 ownerUA, string calldata note_) external {
         _begin(ownerUA);
@@ -86,7 +88,9 @@ contract RosterKind is GenericKindBase, IRosterKind {
 
     constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory) GenericKindBase(id, factory_) {}
 
-    function _interfaceId() internal pure override returns (bytes4) { return type(IRosterKind).interfaceId; }
+    function _interfaceId() internal pure override returns (bytes4) {
+        return type(IRosterKind).interfaceId;
+    }
 
     function initialize(bytes32 ownerUA, uint64 start_, address[] calldata members_) external {
         _begin(ownerUA);
@@ -94,7 +98,9 @@ contract RosterKind is GenericKindBase, IRosterKind {
         _members = members_;
     }
 
-    function members() external view returns (address[] memory) { return _members; }
+    function members() external view returns (address[] memory) {
+        return _members;
+    }
 }
 
 /// A release that lies, by `mode` (its `implArgs`): each mode one way the factory must refuse (§8.9 negatives).
@@ -131,12 +137,16 @@ contract BadKind is GenericKindBase, INoteKind {
     /// transaction; EIP-1153 clears it at the end).
     bytes32 public seenAfter;
 
-    constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs) GenericKindBase(id, factory_) {
+    constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs)
+        GenericKindBase(id, factory_)
+    {
         MODE = abi.decode(implArgs, (uint8));
         if (MODE == NOT_INITIALIZED) _initialized = false;
     }
 
-    function _interfaceId() internal pure override returns (bytes4) { return type(INoteKind).interfaceId; }
+    function _interfaceId() internal pure override returns (bytes4) {
+        return type(INoteKind).interfaceId;
+    }
 
     function initialize(bytes32 ownerUA, string calldata note_) external {
         if (MODE == INIT_REVERTS) revert("init reverts");
@@ -145,15 +155,20 @@ contract BadKind is GenericKindBase, INoteKind {
         if (MODE == LEAVES_UNINITIALIZED) _initialized = false;
         if (MODE == NESTED) {
             // a nested creation from `initialize`: this clone is its creator
-            IOpenFactory(FACTORY).createInstance(IOpenFactory.ReleaseId(4, 0, 1), "nested",
-                abi.encodeCall(INoteKind.initialize, (bytes32(uint256(0xBEEF)), "inner")));
+            IOpenFactory(FACTORY)
+                .createInstance(
+                    IOpenFactory.ReleaseId(4, 0, 1),
+                    "nested",
+                    abi.encodeCall(INoteKind.initialize, (bytes32(uint256(0xBEEF)), "inner"))
+                );
             seenAfter = IOpenFactory(FACTORY).creating();
         }
     }
 
     function factoryInfo() external view override returns (IOpenFactory.FactoryInfo memory i) {
-        i = IOpenFactory.FactoryInfo(MODE == OTHER_FACTORY ? OTHER : FACTORY, ChainEnvCode.chainUid(), CLASS, KIND, VERSION,
-            _initialized);
+        i = IOpenFactory.FactoryInfo(
+            MODE == OTHER_FACTORY ? OTHER : FACTORY, ChainEnvCode.chainUid(), CLASS, KIND, VERSION, _initialized
+        );
         bool isClone = ChainEnvCode.isClone();
         if (MODE == OTHER_CLASS || (MODE == OTHER_CLASS_AFTER_INIT && isClone)) i.contractClass = CLASS + 1;
         if (MODE == OTHER_KIND) i.kind = KIND + 1;
@@ -166,7 +181,9 @@ contract BadKind is GenericKindBase, INoteKind {
                 : abi.encode(i);
             uint256 n = MODE == SEVEN_WORDS ? 224 : MODE == SHORT_160 ? 160 : 256;
             bytes memory r = new bytes(n);
-            for (uint256 k; k < n && k < b.length; ++k) r[k] = b[k];
+            for (uint256 k; k < n && k < b.length; ++k) {
+                r[k] = b[k];
+            }
             assembly ("memory-safe") {
                 return(add(r, 32), n)
             }

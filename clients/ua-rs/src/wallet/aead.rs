@@ -20,21 +20,41 @@ pub enum Alg {
 const HKDF_MAX: usize = 255 * 32;
 
 /// `ct ‖ tag` (16 bytes) of `data` under `key` and `nonce`, `aad` authenticated.
-pub fn aead_seal(alg: Alg, key: &[u8; 32], nonce: &[u8; 12], aad: &[u8], data: &[u8]) -> Result<Vec<u8>> {
+pub fn aead_seal(
+    alg: Alg,
+    key: &[u8; 32],
+    nonce: &[u8; 12],
+    aad: &[u8],
+    data: &[u8],
+) -> Result<Vec<u8>> {
     let p = Payload { msg: data, aad };
     let out = match alg {
-        Alg::Aes256Gcm => aes_gcm::Aes256Gcm::new_from_slice(key).map_err(|_| Error::Argument)?.encrypt(nonce.into(), p),
-        Alg::Aes256GcmSiv => aes_gcm_siv::Aes256GcmSiv::new_from_slice(key).map_err(|_| Error::Argument)?.encrypt(nonce.into(), p),
+        Alg::Aes256Gcm => aes_gcm::Aes256Gcm::new_from_slice(key)
+            .map_err(|_| Error::Argument)?
+            .encrypt(nonce.into(), p),
+        Alg::Aes256GcmSiv => aes_gcm_siv::Aes256GcmSiv::new_from_slice(key)
+            .map_err(|_| Error::Argument)?
+            .encrypt(nonce.into(), p),
     };
     out.map_err(|_| Error::Argument)
 }
 
 /// The plaintext of `ct ‖ tag`: `Aead` for a bad tag (or an input shorter than the tag), and no plaintext.
-pub fn aead_open(alg: Alg, key: &[u8; 32], nonce: &[u8; 12], aad: &[u8], data: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+pub fn aead_open(
+    alg: Alg,
+    key: &[u8; 32],
+    nonce: &[u8; 12],
+    aad: &[u8],
+    data: &[u8],
+) -> Result<Zeroizing<Vec<u8>>> {
     let p = Payload { msg: data, aad };
     let out = match alg {
-        Alg::Aes256Gcm => aes_gcm::Aes256Gcm::new_from_slice(key).map_err(|_| Error::Argument)?.decrypt(nonce.into(), p),
-        Alg::Aes256GcmSiv => aes_gcm_siv::Aes256GcmSiv::new_from_slice(key).map_err(|_| Error::Argument)?.decrypt(nonce.into(), p),
+        Alg::Aes256Gcm => aes_gcm::Aes256Gcm::new_from_slice(key)
+            .map_err(|_| Error::Argument)?
+            .decrypt(nonce.into(), p),
+        Alg::Aes256GcmSiv => aes_gcm_siv::Aes256GcmSiv::new_from_slice(key)
+            .map_err(|_| Error::Argument)?
+            .decrypt(nonce.into(), p),
     };
     out.map(Zeroizing::new).map_err(|_| Error::Aead)
 }
@@ -46,7 +66,11 @@ pub fn hkdf_sha256(ikm: &[u8], salt: &[u8], info: &[u8], len: usize) -> Result<Z
 
 /// HKDF-Expand-SHA256 of a PRK (at least 32 bytes): `len ≤ 255 × 32`, else `Argument`.
 pub fn hkdf_expand_sha256(prk: &[u8], info: &[u8], len: usize) -> Result<Zeroizing<Vec<u8>>> {
-    expand(&Hkdf::<Sha256>::from_prk(prk).map_err(|_| Error::Argument)?, info, len)
+    expand(
+        &Hkdf::<Sha256>::from_prk(prk).map_err(|_| Error::Argument)?,
+        info,
+        len,
+    )
 }
 
 fn expand(h: &Hkdf<Sha256>, info: &[u8], len: usize) -> Result<Zeroizing<Vec<u8>>> {
@@ -61,7 +85,9 @@ fn expand(h: &Hkdf<Sha256>, info: &[u8], len: usize) -> Result<Zeroizing<Vec<u8>
 /// HMAC-SHA256 (RFC 2104) of `data` under `key`.
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     // HMAC takes a key of any length: `new_from_slice` cannot fail here
-    let Ok(mut m) = <Hmac<Sha256> as Mac>::new_from_slice(key) else { return [0; 32] };
+    let Ok(mut m) = <Hmac<Sha256> as Mac>::new_from_slice(key) else {
+        return [0; 32];
+    };
     m.update(data);
     m.finalize().into_bytes().into()
 }

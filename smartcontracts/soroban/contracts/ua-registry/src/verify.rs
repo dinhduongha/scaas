@@ -16,11 +16,18 @@ pub fn check(env: &Env, kind: u32, key_data: &Bytes, msg: &Hash<32>, sig: &Bytes
         WEBAUTHN_P256 => webauthn::check(env, key_data, msg, sig, e),
         P256 => {
             let key = uncompressed(env, key_data);
-            let rs: BytesN<64> = sig.clone().try_into().unwrap_or_else(|_| panic_with_error!(env, e));
-            env.crypto().secp256r1_verify(&key, &env.crypto().sha256(&msg.to_bytes().into()), &rs);
+            let rs: BytesN<64> = sig
+                .clone()
+                .try_into()
+                .unwrap_or_else(|_| panic_with_error!(env, e));
+            env.crypto()
+                .secp256r1_verify(&key, &env.crypto().sha256(&msg.to_bytes().into()), &rs);
         }
         ED25519 => {
-            let pk: BytesN<32> = key_data.clone().try_into().unwrap_or_else(|_| panic_with_error!(env, Error::KeyData));
+            let pk: BytesN<32> = key_data
+                .clone()
+                .try_into()
+                .unwrap_or_else(|_| panic_with_error!(env, Error::KeyData));
             ed25519(env, &pk, &msg.to_bytes().into(), sig, e);
         }
         SECP256K1 => {
@@ -29,14 +36,28 @@ pub fn check(env: &Env, kind: u32, key_data: &Bytes, msg: &Hash<32>, sig: &Bytes
             }
         }
         MLDSA44 => {
-            let pk: BytesN<1312> = key_data.clone().try_into().unwrap_or_else(|_| panic_with_error!(env, Error::KeyData));
-            let s: BytesN<2420> = sig.clone().try_into().unwrap_or_else(|_| panic_with_error!(env, e));
-            env.crypto().ml_dsa_44_verify(&pk, &pq_message(env, kind, msg), &s, &Bytes::new(env));
+            let pk: BytesN<1312> = key_data
+                .clone()
+                .try_into()
+                .unwrap_or_else(|_| panic_with_error!(env, Error::KeyData));
+            let s: BytesN<2420> = sig
+                .clone()
+                .try_into()
+                .unwrap_or_else(|_| panic_with_error!(env, e));
+            env.crypto()
+                .ml_dsa_44_verify(&pk, &pq_message(env, kind, msg), &s, &Bytes::new(env));
         }
         MLDSA65 => {
-            let pk: BytesN<1952> = key_data.clone().try_into().unwrap_or_else(|_| panic_with_error!(env, Error::KeyData));
-            let s: BytesN<3309> = sig.clone().try_into().unwrap_or_else(|_| panic_with_error!(env, e));
-            env.crypto().ml_dsa_65_verify(&pk, &pq_message(env, kind, msg), &s, &Bytes::new(env));
+            let pk: BytesN<1952> = key_data
+                .clone()
+                .try_into()
+                .unwrap_or_else(|_| panic_with_error!(env, Error::KeyData));
+            let s: BytesN<3309> = sig
+                .clone()
+                .try_into()
+                .unwrap_or_else(|_| panic_with_error!(env, e));
+            env.crypto()
+                .ml_dsa_65_verify(&pk, &pq_message(env, kind, msg), &s, &Bytes::new(env));
         }
         _ => panic_with_error!(env, Error::KindDisabled),
     }
@@ -46,7 +67,8 @@ pub fn check(env: &Env, kind: u32, key_data: &Bytes, msg: &Hash<32>, sig: &Bytes
 fn uncompressed(env: &Env, key_data: &Bytes) -> BytesN<65> {
     let mut k = Bytes::from_array(env, &[4u8]);
     k.append(key_data);
-    k.try_into().unwrap_or_else(|_| panic_with_error!(env, Error::KeyData))
+    k.try_into()
+        .unwrap_or_else(|_| panic_with_error!(env, Error::KeyData))
 }
 
 /// The contract's ed25519 key check (spec §3): `y < p` and none of the small-order encodings, i.e. the eight canonical
@@ -77,7 +99,10 @@ pub fn ed25519(env: &Env, pk: &BytesN<32>, msg: &Bytes, sig: &Bytes, e: Error) {
     if !ed25519_key_ok(&pk.to_array()) {
         panic_with_error!(env, Error::KeyData);
     }
-    let s: BytesN<64> = sig.clone().try_into().unwrap_or_else(|_| panic_with_error!(env, e));
+    let s: BytesN<64> = sig
+        .clone()
+        .try_into()
+        .unwrap_or_else(|_| panic_with_error!(env, e));
     env.crypto().ed25519_verify(pk, msg, &s);
 }
 

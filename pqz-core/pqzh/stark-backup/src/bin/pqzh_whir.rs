@@ -15,17 +15,19 @@ use p3_dft::Radix2DFTSmallBatch;
 use p3_field::extension::BinomialExtensionField;
 use p3_multi_stark::config::MultiStarkConfig;
 use p3_multi_stark::{
-    MultiStarkProof, ProverInstance, ProverInstances, VerifierInstance, VerifierInstances, prove, security_report, setup,
-    verify,
+    prove, security_report, setup, verify, MultiStarkProof, ProverInstance, ProverInstances,
+    VerifierInstance, VerifierInstances,
 };
-use p3_sumcheck::layout::{Layout, PrefixProver, Table, TableShape, Witness, plan_stacked_layout};
-use p3_whir::{FoldingFactor, ProtocolParameters, SecurityAssumption, WhirConfig, WhirProver, WhirProverData};
+use p3_sumcheck::layout::{plan_stacked_layout, Layout, PrefixProver, Table, TableShape, Witness};
+use p3_whir::{
+    FoldingFactor, ProtocolParameters, SecurityAssumption, WhirConfig, WhirProver, WhirProverData,
+};
 
 use pqzh::air::PqzhAir;
-use pqzh::client::{KINDS, R, mutate};
-use pqzh::config::{BeChallenger, ValMmcs, mmcs};
+use pqzh::client::{mutate, KINDS, R};
+use pqzh::config::{mmcs, BeChallenger, ValMmcs};
 use pqzh::ring::F;
-use pqzh::{OP_REGISTER, OP_TRANSFER, client, enc, rel};
+use pqzh::{client, enc, rel, OP_REGISTER, OP_TRANSFER};
 
 struct Track;
 static LIVE: AtomicIsize = AtomicIsize::new(0);
@@ -85,7 +87,11 @@ macro_rules! wcfg {
             fn build_witness(&self, tables: Vec<Table<F>>) -> Witness<F> {
                 L::<$ef>::new_witness(tables, self.fold)
             }
-            fn committed_table<'a>(&self, d: &'a WhirProverData<F, $ef, ValMmcs, L<$ef>>, i: usize) -> &'a Table<F> {
+            fn committed_table<'a>(
+                &self,
+                d: &'a WhirProverData<F, $ef, ValMmcs, L<$ef>>,
+                i: usize,
+            ) -> &'a Table<F> {
                 d.table(i)
             }
         }
@@ -107,13 +113,19 @@ struct Opt {
 fn rates(nv: usize, ff: &FoldingFactor, start: usize) -> Vec<usize> {
     let s = ff.compute_folding_schedule(nv).expect("folding schedule");
     let mut r = start;
-    s.iter().take(s.len() - 1).map(|&f| {
-        r += f - 1;
-        r
-    }).collect()
+    s.iter()
+        .take(s.len() - 1)
+        .map(|&f| {
+            r += f - 1;
+            r
+        })
+        .collect()
 }
 
-fn pcs_for<EF: p3_field::ExtensionField<F> + p3_field::TwoAdicField>(shapes: &[TableShape], o: &Opt) -> Pcs<EF>
+fn pcs_for<EF: p3_field::ExtensionField<F> + p3_field::TwoAdicField>(
+    shapes: &[TableShape],
+    o: &Opt,
+) -> Pcs<EF>
 where
     Pcs<EF>: Sized,
 {
@@ -127,7 +139,11 @@ where
         soundness_type: o.assume,
         starting_log_inv_rate: o.rate,
     };
-    Pcs::<EF>::new(WhirConfig::new(nv, params).expect("WHIR config"), Dft::default(), mmcs(0))
+    Pcs::<EF>::new(
+        WhirConfig::new(nv, params).expect("WHIR config"),
+        Dft::default(),
+        mmcs(0),
+    )
 }
 
 fn stats(v: &mut [f64]) -> String {
@@ -136,7 +152,12 @@ fn stats(v: &mut [f64]) -> String {
     if n == 0 {
         return "null".into();
     }
-    format!("{{\"n\": {n}, \"p50_ms\": {:.3}, \"p99_ms\": {:.3}, \"max_ms\": {:.3}}}", v[n / 2], v[((n - 1) as f64 * 0.99) as usize], v[n - 1])
+    format!(
+        "{{\"n\": {n}, \"p50_ms\": {:.3}, \"p99_ms\": {:.3}, \"max_ms\": {:.3}}}",
+        v[n / 2],
+        v[((n - 1) as f64 * 0.99) as usize],
+        v[n - 1]
+    )
 }
 
 macro_rules! run {
@@ -219,7 +240,12 @@ macro_rules! run {
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
-    let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.as_str());
+    let get = |k: &str| {
+        a.iter()
+            .position(|x| x == k)
+            .and_then(|i| a.get(i + 1))
+            .map(|s| s.as_str())
+    };
     let num = |k: &str, d: usize| get(k).map_or(d, |s| s.parse().unwrap());
     let o = Opt {
         rate: num("--rate", 1),
@@ -238,7 +264,10 @@ fn main() {
     let rels: Vec<(u8, &str, &[u8], &[u8])> = match get("--rel").unwrap_or("both") {
         "reg" => vec![(OP_REGISTER, "R_REG", &s.reg_stmt, &s.reg_wit)],
         "tx" => vec![(OP_TRANSFER, "R_TX", &s.tx_stmt, &s.tx_wit)],
-        _ => vec![(OP_REGISTER, "R_REG", &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, "R_TX", &s.tx_stmt, &s.tx_wit)],
+        _ => vec![
+            (OP_REGISTER, "R_REG", &s.reg_stmt, &s.reg_wit),
+            (OP_TRANSFER, "R_TX", &s.tx_stmt, &s.tx_wit),
+        ],
     };
     for (op, name, st, w) in rels {
         if ext == 2 {

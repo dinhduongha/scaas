@@ -17,7 +17,9 @@ pub const VP: usize = V_BYTES / 32 * GROUP;
 pub const CTP: usize = PKP + VP;
 /// The slots of a materialised `acc` (`PQZ_ACC_WORDS`): `⌈CTP / 32⌉`, each `not(stream word)`.
 pub const ACC_WORDS: usize = CTP.div_ceil(32);
-const _: () = assert!(B.is_multiple_of(2) && B < 64 && PK_BYTES.is_multiple_of(32) && V_BYTES.is_multiple_of(32));
+const _: () = assert!(
+    B.is_multiple_of(2) && B < 64 && PK_BYTES.is_multiple_of(32) && V_BYTES.is_multiple_of(32)
+);
 
 /// The 64-bit-lane bytes (`be8` per coefficient, as the statement holds them) of `packed`, a whole number of groups; `None`
 /// otherwise. No range check: a field may be any `B`-bit value (the caller checks `< q` where the contract's state is canonical).

@@ -11,7 +11,13 @@ use scaas_ct::{secret_mul, CtSwap, LADDER_BITS};
 use subtle::Choice;
 
 fn edge_and_random<F: PrimeField>(rng: &mut rand_chacha::ChaCha20Rng) -> Vec<F> {
-    let mut v = vec![F::zero(), F::one(), F::from(2u64), -F::one(), -F::from(2u64)];
+    let mut v = vec![
+        F::zero(),
+        F::one(),
+        F::from(2u64),
+        -F::one(),
+        -F::from(2u64),
+    ];
     v.extend((0..12).map(|_| F::rand(rng)));
     v
 }
@@ -44,7 +50,10 @@ fn ladder_is_384_bits_wide() {
 
 #[test]
 fn masked_swap_swaps_exactly_when_asked() {
-    let (a0, b0) = (ark_bls12_381::Fq2::from(3u64), ark_bls12_381::Fq2::new(5u64.into(), 7u64.into()));
+    let (a0, b0) = (
+        ark_bls12_381::Fq2::from(3u64),
+        ark_bls12_381::Fq2::new(5u64.into(), 7u64.into()),
+    );
     let (mut a, mut b) = (a0, b0);
     CtSwap::ct_swap(&mut a, &mut b, Choice::from(0));
     assert_eq!((a, b), (a0, b0));
@@ -91,7 +100,11 @@ mod vectors {
         for e in [x, y] {
             assert_eq!(e.iterations, 384, "{name}");
             assert!(at_least::<P::ScalarField>(&e.k), "{name}: k' ≥ r");
-            assert_eq!(P::ScalarField::from_be_bytes_mod_order(&be(&e.k)), k, "{name}: k' ≡ k (mod r)");
+            assert_eq!(
+                P::ScalarField::from_be_bytes_mod_order(&be(&e.k)),
+                k,
+                "{name}: k' ≡ k (mod r)"
+            );
         }
         assert!(trace::take().is_empty());
     }

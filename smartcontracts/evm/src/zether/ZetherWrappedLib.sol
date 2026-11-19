@@ -32,9 +32,15 @@ library ZetherWrappedLib {
     ///         plain kind, `legs`, the rate and `conf` are checked by the two libraries. `kind` and the masks are the token's
     ///         own (`kind()`, `_validBits()`, `_roleBits()`, `_contractOnlyBits()`; regulated-kinds spec §2.4), never fixed
     ///         here. Never on Hedera (`ZetherLayer` refuses that env).
-    function init(bytes calldata initArgs, IZetherVerifier v, address registry, uint8 kind, uint256 valid, uint256 roleBits,
-        uint256 contractOnly) public
-    {
+    function init(
+        bytes calldata initArgs,
+        IZetherVerifier v,
+        address registry,
+        uint8 kind,
+        uint256 valid,
+        uint256 roleBits,
+        uint256 contractOnly
+    ) public {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.initialSupply != 0 || cfg.initialHolder != address(0)) revert IFactoryToken.ConfigFieldForOtherKind(1);
         requireRegOfKind(kind, cfg.reg);
@@ -74,9 +80,11 @@ library ZetherWrappedLib {
     /// @notice The proof part of a direct `mtxUnshieldUnwrap`, forwarded: its arguments as the token got them, then the
     ///         token's `Env`. A direct call (binding 0) binds the leg and `minOut` (`ZetherLib.unwrapBinding`); returns
     ///         the inner fee. The token checked the leg and the payee before, and pays out after.
-    function unshieldUnwrap(IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof)
-        public returns (uint256)
-    {
+    function unshieldUnwrap(
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof
+    ) public returns (uint256) {
         ZetherLib.Env memory env = ZetherLib.envTail();
         if (env.binding == 0) env.binding = ZetherLib.unwrapBinding(x.underlying, x.minOut);
         return ZetherLib.unshieldWith(b, proof, x.amount, x.recipient, env);
@@ -84,22 +92,29 @@ library ZetherWrappedLib {
 
     /// @notice What the signed `mtxUnshieldUnwrap` signs and runs (as `ZetherLib.uaMultiCall`): the `Unwrap` leg a nested
     ///         struct.
-    function uaUnwrapCall(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherBurn calldata b,
-        IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata)
-        public pure returns (bytes32, bytes memory, bytes memory)
-    {
+    function uaUnwrapCall(
+        MetaTxLib.UAEnvelope calldata,
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof,
+        IUARegistry.UASig calldata
+    ) public pure returns (bytes32, bytes memory, bytes memory) {
         return (UA_UNSHIELD_UNWRAP_TYPEHASH, _unwrapWords(b, x, proof), _unwrapOp(b, x, proof));
     }
 
-    function _unwrapWords(IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof)
-        private pure returns (bytes memory)
-    {
+    function _unwrapWords(
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof
+    ) private pure returns (bytes memory) {
         return abi.encode(ZetherLib.hashBurn(b), ZetherLib.hashUnwrap(x), keccak256(proof));
     }
 
-    function _unwrapOp(IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof)
-        private pure returns (bytes memory)
-    {
+    function _unwrapOp(
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof
+    ) private pure returns (bytes memory) {
         return abi.encodeCall(IZetherWrappedToken.mtxUnshieldUnwrap, (b, x, proof));
     }
 }

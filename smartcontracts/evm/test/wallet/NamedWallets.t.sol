@@ -24,13 +24,23 @@ string constant F_FROM = '{"name":"from","type":"address"}';
 string constant F_UA_FROM = '{"name":"from","type":"bytes32"}';
 string constant F_TOKEN = '{"name":"token","type":"address"}';
 string constant F_EPOCH = '{"name":"epoch","type":"uint64"}';
-string constant SET_PAYEE = string.concat(F_UA_FROM, ",", F_TOKEN, ',{"name":"payee","type":"bytes32"},{"name":"allowed","type":"bool"}');
+string constant SET_PAYEE =
+    string.concat(F_UA_FROM, ",", F_TOKEN, ',{"name":"payee","type":"bytes32"},{"name":"allowed","type":"bool"}');
 string constant REVOKE_MANDATE = string.concat(F_UA_FROM, ",", F_TOKEN);
-string constant PAY = string.concat(F_UA_FROM, ",", F_TOKEN, ',{"name":"payee","type":"bytes32"},{"name":"amount","type":"uint256"},'
-    '{"name":"entryRef","type":"bytes32"},', F_EPOCH);
+string constant PAY = string.concat(
+    F_UA_FROM,
+    ",",
+    F_TOKEN,
+    ',{"name":"payee","type":"bytes32"},{"name":"amount","type":"uint256"},' '{"name":"entryRef","type":"bytes32"},',
+    F_EPOCH
+);
 string constant DELEGATE_REVOKE = string.concat(F_UA_FROM, ",", F_TOKEN, ",", F_EPOCH);
-string constant EXECUTE = string.concat(F_FROM, ',{"name":"target","type":"address"},{"name":"value","type":"uint256"},{"name":"data","type":"bytes"}');
-string constant UA_EXECUTE_FIELDS = string.concat(F_UA_FROM, ',{"name":"target","type":"address"},{"name":"value","type":"uint256"},{"name":"data","type":"bytes"}');
+string constant EXECUTE = string.concat(
+    F_FROM, ',{"name":"target","type":"address"},{"name":"value","type":"uint256"},{"name":"data","type":"bytes"}'
+);
+string constant UA_EXECUTE_FIELDS = string.concat(
+    F_UA_FROM, ',{"name":"target","type":"address"},{"name":"value","type":"uint256"},{"name":"data","type":"bytes"}'
+);
 string constant KEY = '{"name":"kind","type":"uint8"},{"name":"x","type":"bytes32"},{"name":"y","type":"bytes32"},'
     '{"name":"rpIdHash","type":"bytes32"},{"name":"originHash","type":"bytes32"}';
 string constant ADD_KEY = string.concat(F_FROM, ",", KEY);
@@ -59,14 +69,32 @@ function tail(MetaTxLib.UAEnvelope memory e) pure returns (string memory) {
 }
 
 function tail(uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, uint256 fee)
-    pure returns (string memory)
+    pure
+    returns (string memory)
 {
     address r = mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? relayer : address(0);
-    return string.concat('"batch":', n(batch), ',"nonce":', n(nonce), ',"validUntil":', n(validUntil), ',"mode":', n(mode),
-        ',"relayer":', a(r), ',"fee":', n(fee), ',"feeRecipient":', a(address(0)));
+    return string.concat(
+        '"batch":',
+        n(batch),
+        ',"nonce":',
+        n(nonce),
+        ',"validUntil":',
+        n(validUntil),
+        ',"mode":',
+        n(mode),
+        ',"relayer":',
+        a(r),
+        ',"fee":',
+        n(fee),
+        ',"feeRecipient":',
+        a(address(0))
+    );
 }
 
-function setPayeeDigest(address w, MetaTxLib.UAEnvelope memory e, address token, address payee, bool allowed) view returns (bytes32) {
+function setPayeeDigest(address w, MetaTxLib.UAEnvelope memory e, address token, address payee, bool allowed)
+    view
+    returns (bytes32)
+{
     string memory m = string.concat('"from":', h(e.from), ',"token":', a(token), ',"payee":', h(MetaTxLib.pad(payee)));
     m = string.concat(m, ',"allowed":', allowed ? "true" : "false", ",", tail(e));
     return walletDigest(w, "UASetPayee", SET_PAYEE, m);
@@ -77,22 +105,34 @@ function revokeMandateDigest(address w, MetaTxLib.UAEnvelope memory e, address t
     return walletDigest(w, "UARevokeMandate", REVOKE_MANDATE, m);
 }
 
-function payDigest(address w, MetaTxLib.UAEnvelope memory e, address token, address payee, uint256 amount, bytes32 ref, uint64 ep)
-    view returns (bytes32)
-{
+function payDigest(
+    address w,
+    MetaTxLib.UAEnvelope memory e,
+    address token,
+    address payee,
+    uint256 amount,
+    bytes32 ref,
+    uint64 ep
+) view returns (bytes32) {
     string memory m = string.concat('"from":', h(e.from), ',"token":', a(token), ',"payee":', h(MetaTxLib.pad(payee)));
     m = string.concat(m, ',"amount":', n(amount), ',"entryRef":', h(PayMetaKit.ref(ref))); // pay-meta-tax T37: a commitment
     m = string.concat(m, ',"epoch":', n(ep), ",", tail(e));
     return walletDigest(w, "UAPayUnderMandate", PAY, m);
 }
 
-function delegateRevokeDigest(address w, MetaTxLib.UAEnvelope memory e, address token, uint64 ep) view returns (bytes32) {
+function delegateRevokeDigest(address w, MetaTxLib.UAEnvelope memory e, address token, uint64 ep)
+    view
+    returns (bytes32)
+{
     string memory m = string.concat('"from":', h(e.from), ',"token":', a(token), ',"epoch":', n(ep), ",", tail(e));
     return walletDigest(w, "UADelegateRevoke", DELEGATE_REVOKE, m);
 }
 
 /// The account's `Execute` (`SmartKeyAccount`, unchanged).
-function executeDigest(address w, MetaTxLib.Envelope memory e, address target, uint256 value, bytes memory data) view returns (bytes32) {
+function executeDigest(address w, MetaTxLib.Envelope memory e, address target, uint256 value, bytes memory data)
+    view
+    returns (bytes32)
+{
     string memory m = string.concat('"from":', a(e.from), ',"target":', a(target), ',"value":', n(value));
     m = string.concat(m, ',"data":"', VM.toString(data), '",', tail(e));
     return walletDigest(w, "Execute", EXECUTE, m);
@@ -100,7 +140,8 @@ function executeDigest(address w, MetaTxLib.Envelope memory e, address target, u
 
 /// The mandate wallet's `UAExecute`.
 function uaExecuteDigest(address w, MetaTxLib.UAEnvelope memory e, address target, uint256 value, bytes memory data)
-    view returns (bytes32)
+    view
+    returns (bytes32)
 {
     string memory m = string.concat('"from":', h(e.from), ',"target":', a(target), ',"value":', n(value));
     m = string.concat(m, ',"data":"', VM.toString(data), '",', tail(e));
@@ -116,12 +157,18 @@ contract NamedMandateEntriesTest is MandateFixture {
     }
 
     function _paySig(MetaTxLib.UAEnvelope memory e, uint256 amount, bytes32 ref, uint64 ep)
-        internal view returns (IUARegistry.UASig memory)
+        internal
+        view
+        returns (IUARegistry.UASig memory)
     {
         return _ua(DELEGATE_PK, payDigest(address(w), e, address(t), npp, amount, ref, ep));
     }
 
-    function _delegateRevokeSig(MetaTxLib.UAEnvelope memory e, uint64 ep) internal view returns (IUARegistry.UASig memory) {
+    function _delegateRevokeSig(MetaTxLib.UAEnvelope memory e, uint64 ep)
+        internal
+        view
+        returns (IUARegistry.UASig memory)
+    {
         return _ua(DELEGATE_PK, delegateRevokeDigest(address(w), e, address(t), ep));
     }
 
@@ -295,7 +342,11 @@ contract NamedMandateEntriesTest is MandateFixture {
         bytes memory inner = abi.encodeCall(MandateWallet.setPayee, (address(t), _id(stranger), true));
         MetaTxLib.UAEnvelope memory e = _env(owner, 0);
         IUARegistry.UASig memory sig = _ua(OWNER_PK, uaExecuteDigest(address(w), e, address(w), 0, inner));
-        vm.expectRevert(abi.encodeWithSelector(MandateWallet.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                MandateWallet.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)
+            )
+        );
         w.mtxExecute(e, address(w), 0, inner, sig);
         assertEq(w.mtxNonce(_id(owner), LANE), 0, "a failed op burns no nonce");
     }
@@ -385,8 +436,18 @@ contract NamedMandateEntriesTest is MandateFixture {
             abi.encodeCall(MandateWallet.mtxDelegateRevoke, (e, address(t), 1, none)),
             abi.encodeCall(MandateWallet.mtxPayUnderMandate, (e, address(t), _id(npp), 1, _ref(0), 1, none, _meta(0))),
             abi.encodeCall(MandateWallet.mtxSetMandate, (e, address(t), _id(npp), 1, 1, 1, 1, none)),
-            abi.encodeWithSelector(bytes4(keccak256("mtxExecute((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")),
-                e, npp, uint256(0), bytes(""), none)
+            abi.encodeWithSelector(
+                bytes4(
+                    keccak256(
+                        "mtxExecute((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"
+                    )
+                ),
+                e,
+                npp,
+                uint256(0),
+                bytes(""),
+                none
+            )
         ];
         for (uint256 i; i < calls.length; ++i) {
             MetaTxLib.UAMetaTransaction memory m = _gen(_id(owner), calls[i], 5, 0);
@@ -427,7 +488,9 @@ contract NamedHederaMandateTest is MandateFixture {
 
     function _setPayee(uint256 nonce) internal {
         MetaTxLib.UAEnvelope memory e = _env(edOwner, nonce);
-        hw.mtxSetPayee(e, address(t), _id(npp), true, _ed(ED_KEY, setPayeeDigest(address(hw), e, address(t), npp, true)));
+        hw.mtxSetPayee(
+            e, address(t), _id(npp), true, _ed(ED_KEY, setPayeeDigest(address(hw), e, address(t), npp, true))
+        );
     }
 
     function test_ed25519OwnerNamedEntries() public {
@@ -506,12 +569,28 @@ contract NamedAccountTest is WebAuthnSoft {
     }
 
     function _keyJson(uint8 kind, SubjectKey memory k) internal pure returns (string memory) {
-        return string.concat('"kind":', n(kind), ',"x":', h(k.x), ',"y":', h(k.y), ',"rpIdHash":', h(k.rpIdHash),
-            ',"originHash":', h(k.originHash));
+        return string.concat(
+            '"kind":',
+            n(kind),
+            ',"x":',
+            h(k.x),
+            ',"y":',
+            h(k.y),
+            ',"rpIdHash":',
+            h(k.rpIdHash),
+            ',"originHash":',
+            h(k.originHash)
+        );
     }
 
-    function _addKeyDigest(MetaTxLib.Envelope memory e, uint8 kind, SubjectKey memory k) internal view returns (bytes32) {
-        return walletDigest(address(acct), "AddKey", ADD_KEY, string.concat('"from":', a(e.from), ",", _keyJson(kind, k), ",", tail(e)));
+    function _addKeyDigest(MetaTxLib.Envelope memory e, uint8 kind, SubjectKey memory k)
+        internal
+        view
+        returns (bytes32)
+    {
+        return walletDigest(
+            address(acct), "AddKey", ADD_KEY, string.concat('"from":', a(e.from), ",", _keyJson(kind, k), ",", tail(e))
+        );
     }
 
     function _addKeyDigest(MetaTxLib.Envelope memory e, SubjectKey memory k) internal view returns (bytes32) {
@@ -519,16 +598,34 @@ contract NamedAccountTest is WebAuthnSoft {
     }
 
     function _removeKeyDigest(MetaTxLib.Envelope memory e, uint256 index) internal view returns (bytes32) {
-        return walletDigest(address(acct), "RemoveKey", REMOVE_KEY, string.concat('"from":', a(e.from), ',"index":', n(index), ",", tail(e)));
+        return walletDigest(
+            address(acct),
+            "RemoveKey",
+            REMOVE_KEY,
+            string.concat('"from":', a(e.from), ',"index":', n(index), ",", tail(e))
+        );
     }
 
-    function _rotateKeyDigest(MetaTxLib.Envelope memory e, uint256 index, SubjectKey memory k) internal view returns (bytes32) {
-        return walletDigest(address(acct), "RotateKey", ROTATE_KEY,
-            string.concat('"from":', a(e.from), ',"index":', n(index), ",", _keyJson(uint8(k.kind), k), ",", tail(e)));
+    function _rotateKeyDigest(MetaTxLib.Envelope memory e, uint256 index, SubjectKey memory k)
+        internal
+        view
+        returns (bytes32)
+    {
+        return walletDigest(
+            address(acct),
+            "RotateKey",
+            ROTATE_KEY,
+            string.concat('"from":', a(e.from), ',"index":', n(index), ",", _keyJson(uint8(k.kind), k), ",", tail(e))
+        );
     }
 
     function _setGuardianDigest(MetaTxLib.Envelope memory e, address g) internal view returns (bytes32) {
-        return walletDigest(address(acct), "SetGuardian", SET_GUARDIAN, string.concat('"from":', a(e.from), ',"guardian":', a(g), ",", tail(e)));
+        return walletDigest(
+            address(acct),
+            "SetGuardian",
+            SET_GUARDIAN,
+            string.concat('"from":', a(e.from), ',"guardian":', a(g), ",", tail(e))
+        );
     }
 
     function _cancelRecoveryDigest(MetaTxLib.Envelope memory e) internal view returns (bytes32) {
@@ -637,7 +734,11 @@ contract NamedAccountTest is WebAuthnSoft {
         bytes memory inner = abi.encodeCall(SmartKeyAccount.cancelRecovery, ());
         e = _env(1);
         s = _seedSig(0, SEED, executeDigest(address(acct), e, address(acct), 0, inner));
-        vm.expectRevert(abi.encodeWithSelector(SmartKeyAccount.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                SmartKeyAccount.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)
+            )
+        );
         acct.mtxExecute(e, address(acct), 0, inner, s);
     }
 
@@ -661,7 +762,8 @@ contract NamedAccountTest is WebAuthnSoft {
 
         // the same fields as a generic `MetaTransaction`: another digest, so no leaf of this root
         MetaTxLib.MetaTransaction memory m;
-        (m.from, m.data, m.batch, m.validUntil) = (address(acct), abi.encodeCall(SmartKeyAccount.addKey, (k)), LANE, e0.validUntil);
+        (m.from, m.data, m.batch, m.validUntil) =
+        (address(acct), abi.encodeCall(SmartKeyAccount.addKey, (k)), LANE, e0.validUntil);
         bytes memory blob = abi.encode(uint256(0), p0, sig);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         acct.mtxExecute(m, blob);
@@ -684,7 +786,8 @@ contract NamedAccountTest is WebAuthnSoft {
 
         // the same fields as a generic `MetaTransaction`: another digest, another challenge
         MetaTxLib.MetaTransaction memory m;
-        (m.from, m.data, m.batch, m.validUntil) = (address(acct), abi.encodeCall(SmartKeyAccount.addKey, (k)), LANE, e.validUntil);
+        (m.from, m.data, m.batch, m.validUntil) =
+        (address(acct), abi.encodeCall(SmartKeyAccount.addKey, (k)), LANE, e.validUntil);
         wrong = AccountSig(0, new bytes32[](0), _enc(_assertion(PASSKEY, acct.mtxDigest(m))));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         _addKey(e, k, wrong);
@@ -699,7 +802,11 @@ contract NamedAccountTest is WebAuthnSoft {
     uint256 internal constant TUPLE_AT = 0x120;
 
     /// `mtxCancelRecovery(e, sig)` with the tuple's offset and the bytes behind the head set by hand.
-    function _rawCancel(MetaTxLib.Envelope memory e, uint256 tupleAt, bytes memory tuple) internal pure returns (bytes memory) {
+    function _rawCancel(MetaTxLib.Envelope memory e, uint256 tupleAt, bytes memory tuple)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodePacked(SmartKeyAccount.mtxCancelRecovery.selector, abi.encode(e), tupleAt, tuple);
     }
 
@@ -729,9 +836,13 @@ contract NamedAccountTest is WebAuthnSoft {
         // inner offsets and lengths past the end: `_isValid`'s decode, inside the static call
         _refused(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), uint256(1) << 40, uint256(0x60))), bad);
         _refused(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), uint256(0x60), uint256(1) << 40, uint256(0))), bad);
-        _refused(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), uint256(0x60), uint256(0x80), uint256(0), uint256(1) << 40)), bad);
+        _refused(
+            _rawCancel(e, TUPLE_AT, abi.encode(uint256(0), uint256(0x60), uint256(0x80), uint256(0), uint256(1) << 40)),
+            bad
+        );
 
-        (bool ok, bytes memory ret) = address(acct).call(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), new bytes32[](0), raw)));
+        (bool ok, bytes memory ret) =
+            address(acct).call(_rawCancel(e, TUPLE_AT, abi.encode(uint256(0), new bytes32[](0), raw)));
         assertTrue(ok, string(ret));
         assertEq(acct.pendingRecovery(), bytes32(0));
     }
@@ -741,8 +852,10 @@ contract NamedAccountTest is WebAuthnSoft {
         SubjectKey memory k = _seedKey(SEED2);
         MetaTxLib.Envelope memory e = _env(0);
         AccountSig memory s = _seedSig(0, SEED, _addKeyDigest(e, 0, k));
-        _refused(abi.encodeCall(SmartKeyAccount.mtxAddKey, (e, 0, k.x, k.y, k.rpIdHash, k.originHash, s)),
-            abi.encodeWithSelector(SmartKeyAccount.BadKey.selector));
+        _refused(
+            abi.encodeCall(SmartKeyAccount.mtxAddKey, (e, 0, k.x, k.y, k.rpIdHash, k.originHash, s)),
+            abi.encodeWithSelector(SmartKeyAccount.BadKey.selector)
+        );
         s = _seedSig(0, SEED, _addKeyDigest(e, 3, k));
         _refused(abi.encodeCall(SmartKeyAccount.mtxAddKey, (e, 3, k.x, k.y, k.rpIdHash, k.originHash, s)), "");
         assertEq(acct.keyCount(), 1);
@@ -845,8 +958,18 @@ contract NamedAccountTest is WebAuthnSoft {
             abi.encodeCall(SmartKeyAccount.mtxRotateKey, (e, 0, 2, 0, 0, 0, 0, none)),
             abi.encodeCall(SmartKeyAccount.mtxSetGuardian, (e, address(0), none)),
             abi.encodeCall(SmartKeyAccount.mtxCancelRecovery, (e, none)),
-            abi.encodeWithSelector(bytes4(keccak256("mtxExecute((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(uint256,bytes32[],bytes))")),
-                e, address(0), uint256(0), bytes(""), none)
+            abi.encodeWithSelector(
+                bytes4(
+                    keccak256(
+                        "mtxExecute((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(uint256,bytes32[],bytes))"
+                    )
+                ),
+                e,
+                address(0),
+                uint256(0),
+                bytes(""),
+                none
+            )
         ];
         for (uint256 i; i < calls.length; ++i) {
             MetaTxLib.MetaTransaction memory m;

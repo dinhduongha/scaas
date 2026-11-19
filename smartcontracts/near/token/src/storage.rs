@@ -2,7 +2,9 @@
 //! refunded to the predecessor in the same receipt. NEP-145 with `min == max` (one fixed cost per holder);
 //! deviations: `storage_unregister` of a registered account panics (balances are permanent, `force` included).
 use crate::{Holder, Token, TokenExt};
-use near_contract_standards::storage_management::{StorageBalance, StorageBalanceBounds, StorageManagement};
+use near_contract_standards::storage_management::{
+    StorageBalance, StorageBalanceBounds, StorageManagement,
+};
 use near_sdk::{assert_one_yocto, env, near, require, AccountId, NearToken, Promise};
 
 /// One NEP-145 registration of the longest (64-char) account id: key `f` ‖ Borsh(AccountId) 69 B + u128 16 B +
@@ -25,10 +27,23 @@ impl Token {
     pub(crate) fn receiver_bytes(&self, to: &Holder) -> u64 {
         match to {
             Holder::Near(a) => {
-                require!(*a != env::current_account_id(), "token refuses a transfer to the token itself");
-                if self.ft.accounts.contains_key(a) { 0 } else { ACCOUNT_STORAGE_BYTES }
+                require!(
+                    *a != env::current_account_id(),
+                    "token refuses a transfer to the token itself"
+                );
+                if self.ft.accounts.contains_key(a) {
+                    0
+                } else {
+                    ACCOUNT_STORAGE_BYTES
+                }
             }
-            Holder::Ua(id) => if self.ua.contains_key(id) { 0 } else { UA_STORAGE_BYTES },
+            Holder::Ua(id) => {
+                if self.ua.contains_key(id) {
+                    0
+                } else {
+                    UA_STORAGE_BYTES
+                }
+            }
         }
     }
 
@@ -50,7 +65,10 @@ impl Token {
     /// The end of a signed (`mtx_*`) entry: the attached deposit pays every byte of new records the call created
     /// (`storage_due`), the excess refunded to the predecessor; no yoctoNEAR rule (the signature is the authority).
     pub(crate) fn charge_storage(&mut self) {
-        charge(std::mem::take(&mut self.storage_due), env::predecessor_account_id());
+        charge(
+            std::mem::take(&mut self.storage_due),
+            env::predecessor_account_id(),
+        );
     }
 }
 
@@ -66,7 +84,10 @@ fn take_storage_deposit(bytes: u64) {
 pub(crate) fn charge(bytes: u64, refund_to: AccountId) {
     let need = env::storage_byte_cost().saturating_mul(bytes.into());
     let attached = env::attached_deposit();
-    require!(attached >= need, "The attached deposit is less than the storage cost of the new record");
+    require!(
+        attached >= need,
+        "The attached deposit is less than the storage cost of the new record"
+    );
     let refund = attached.saturating_sub(need);
     if refund > NearToken::from_yoctonear(0) {
         Promise::new(refund_to).transfer(refund).detach();
@@ -77,7 +98,11 @@ pub(crate) fn charge(bytes: u64, refund_to: AccountId) {
 impl StorageManagement for Token {
     /// NEP-145, anyone for anyone; already registered: the deposit is refunded.
     #[payable]
-    fn storage_deposit(&mut self, account_id: Option<AccountId>, registration_only: Option<bool>) -> StorageBalance {
+    fn storage_deposit(
+        &mut self,
+        account_id: Option<AccountId>,
+        registration_only: Option<bool>,
+    ) -> StorageBalance {
         self.ft.storage_deposit(account_id, registration_only)
     }
 
@@ -93,7 +118,10 @@ impl StorageManagement for Token {
         let _ = force;
         assert_one_yocto();
         require!(
-            !self.ft.accounts.contains_key(&env::predecessor_account_id()),
+            !self
+                .ft
+                .accounts
+                .contains_key(&env::predecessor_account_id()),
             "balances are permanent: storage_unregister refused (force included)"
         );
         false

@@ -62,8 +62,15 @@ interface IRegulatedToken {
     event ForcedTransfer(bytes32 indexed recordId, bytes32 indexed from, bytes32 indexed to, uint256 amount);
     event Paused(bytes32 indexed ref, uint64 until);
     event Unpaused(bytes32 indexed ref);
-    event OrderRecorded(bytes32 indexed recordId, bytes32 indexed orderId, bytes32 indexed subject, bytes32 beneficiary,
-        uint256 maxAmount, uint64 freezeUntil, bytes32 documentHash);
+    event OrderRecorded(
+        bytes32 indexed recordId,
+        bytes32 indexed orderId,
+        bytes32 indexed subject,
+        bytes32 beneficiary,
+        uint256 maxAmount,
+        uint64 freezeUntil,
+        bytes32 documentHash
+    );
     event OrderRevoked(bytes32 indexed recordId, bytes32 reasonRef);
     event OperatorTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount, bytes32 indexed ref);
 
@@ -71,8 +78,15 @@ interface IRegulatedToken {
     event TaxRateSet(uint32 ratePpm, uint64 effectiveAt);
     event TaxRecipientSet(bytes32 indexed taxRecipient);
     /// @notice After the payment's events, also at `tax == 0` (C6, F-05); `digest` 0 on `payWithTax` (no signed struct).
-    event PaymentTaxed(bytes32 indexed entryRef, bytes32 indexed payee, bytes32 indexed taxRecipient, bytes32 from,
-        uint8 taxMode, uint256 tax, bytes32 digest);
+    event PaymentTaxed(
+        bytes32 indexed entryRef,
+        bytes32 indexed payee,
+        bytes32 indexed taxRecipient,
+        bytes32 from,
+        uint8 taxMode,
+        uint256 tax,
+        bytes32 digest
+    );
 
     /// @notice Round 3s (spec 2026-11-10-token-lists.md §6.1, CTR-GOV-24): one event per account of `setAllowed` /
     ///         `setDenied`, `by` the subject (0 for init's row of the initial holder).
@@ -140,8 +154,15 @@ interface IRegulatedToken {
     function pause(bytes32 ref, uint64 until, bytes32 chainUid_) external;
     function unpause(bytes32 ref, bytes32 chainUid_) external;
     /// @notice Bit 10, compliance.
-    function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount,
-        uint64 freezeUntil, bytes32 chainUid_) external;
+    function recordOrder(
+        bytes32 orderId,
+        bytes32 documentHash,
+        bytes32 subject,
+        bytes32 beneficiary,
+        uint256 maxAmount,
+        uint64 freezeUntil,
+        bytes32 chainUid_
+    ) external;
     /// @notice Bit 10, compliance; with `RECORD` disabled the role alone (T8).
     function revokeOrder(bytes32 recordId, bytes32 reasonRef, bytes32 chainUid_) external;
     /// @notice Bit 22, any holder, scalar `amount` (CTR-GOV-20): public balances only.
@@ -154,11 +175,22 @@ interface IRegulatedToken {
     function setTaxRecipient(bytes32 taxRecipient, bytes32 chainUid_) external;
     function taxConfig() external view returns (TaxConfig memory);
     /// @notice Bits 0 (`PAYABLE`) and 23: a payment with its tax, signed `UAPayWithTax` by `t.from` (spec §5.3).
-    function mtxPayWithTax(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax, IUARegistry.UASig calldata auth,
-        MetaTxLib.PayMeta calldata meta) external returns (bool);
+    function mtxPayWithTax(
+        MetaTxLib.UAMetaTransfer calldata t,
+        uint8 taxMode,
+        uint256 tax,
+        IUARegistry.UASig calldata auth,
+        MetaTxLib.PayMeta calldata meta
+    ) external returns (bool);
     /// @notice The direct twin, the caller pays (spec §5.6).
-    function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef,
-        MetaTxLib.PayMeta calldata meta) external returns (bool);
+    function payWithTax(
+        bytes32 to,
+        uint256 amount,
+        uint8 taxMode,
+        uint256 tax,
+        bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta
+    ) external returns (bool);
 
     /// @notice Round 3s (spec §6.1): bit 8's holder writes the allow list, bit 9's the deny list, 1-256 accounts, at once both
     ///         ways; a dormant list (its bit off) too. On 10-13 `setAllowed` exists and always reverts `MissingRole` (bit 8

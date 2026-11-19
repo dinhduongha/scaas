@@ -77,7 +77,7 @@ pub fn red(x: u128) -> u64 {
 /// positions >= NL with 2^(W i) mod q (in limbs), and finishes with a Barrett step whose product fits u64. Only u64
 /// products; u128 only for shifts and adds.
 pub(crate) mod limb {
-    use super::{L, NR, Q, red3q};
+    use super::{red3q, L, NR, Q};
 
     /// limbs per element: two (21 bits at L = 42, today's split), three above 42 bits
     pub const NL: usize = if L <= 42 { 2 } else { 3 };
@@ -185,7 +185,11 @@ pub(crate) mod limb {
         let mut c = [[0u64; NC]; 4];
         for i in 0..4 {
             for j in 0..4 {
-                if i + j < 4 { mac(&mut c[i + j], a[i], b[j], 1) } else { mac(&mut c[i + j - 4], a[i], b[j], NR) }
+                if i + j < 4 {
+                    mac(&mut c[i + j], a[i], b[j], 1)
+                } else {
+                    mac(&mut c[i + j - 4], a[i], b[j], NR)
+                }
             }
         }
         c.map(red)
@@ -303,7 +307,12 @@ impl F4 {
         }
     }
     pub fn get(b: &[u8]) -> Option<F4> {
-        Some(F4([Fq::get(b)?, Fq::get(&b[EB..])?, Fq::get(&b[2 * EB..])?, Fq::get(&b[3 * EB..])?]))
+        Some(F4([
+            Fq::get(b)?,
+            Fq::get(&b[EB..])?,
+            Fq::get(&b[2 * EB..])?,
+            Fq::get(&b[3 * EB..])?,
+        ]))
     }
 }
 
@@ -428,7 +437,9 @@ mod tests {
     fn mul_and_red_match_naive() {
         let mut s = 0x1234_5678_9abc_def0u64;
         for _ in 0..10_000 {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let a = s % Q;
             let b = (s >> 7) % Q;
             assert_eq!((Fq(a) * Fq(b)).0 as u128, a as u128 * b as u128 % Q as u128);
@@ -447,7 +458,18 @@ mod tests {
     fn branch_free_matches_reference() {
         let mut s = 0x2545_f491_4f6c_dd1du64;
         let q = Q as i64;
-        let mut edge = vec![0i64, 1, -1, q, -q, q - 1, 1 - q, i64::MIN, i64::MAX, i64::MIN + 1];
+        let mut edge = vec![
+            0i64,
+            1,
+            -1,
+            q,
+            -q,
+            q - 1,
+            1 - q,
+            i64::MIN,
+            i64::MAX,
+            i64::MIN + 1,
+        ];
         edge.extend((0..100_000).map(|i| {
             s ^= s << 13;
             s ^= s >> 7;
@@ -461,7 +483,10 @@ mod tests {
             let (a, b) = (Fq::from_i64(w[0]), Fq::from_i64(w[1]));
             let sum = a.0 + b.0;
             assert_eq!((a + b).0, if sum >= Q { sum - Q } else { sum });
-            assert_eq!((a - b).0, if a.0 >= b.0 { a.0 - b.0 } else { a.0 + Q - b.0 });
+            assert_eq!(
+                (a - b).0,
+                if a.0 >= b.0 { a.0 - b.0 } else { a.0 + Q - b.0 }
+            );
         }
         for x in [0, 1, Q - 1, Q, Q + 1, 2 * Q - 1, (1 << L) + (1 << 30)] {
             assert_eq!(csub(x), if x >= Q { x - Q } else { x });
@@ -477,7 +502,9 @@ mod tests {
         use limb::{NC, W};
         let mut s = 0x0fed_cba9_8765_4321u64;
         let mut nx = || {
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             match s % 5 {
                 0 => Q - 1 - (s >> 60),
                 1 => s >> 60,
@@ -487,8 +514,14 @@ mod tests {
         for _ in 0..20_000 {
             let (a, b) = (nx(), nx());
             assert_eq!(limb::red(limb::mul(a, b)), red(a as u128 * b as u128));
-            let (x, y) = (F4([Fq(nx()), Fq(nx()), Fq(nx()), Fq(nx())]), F4([Fq(nx()), Fq(nx()), Fq(nx()), Fq(nx())]));
-            assert_eq!(F4(limb::f4_mul(x.0.map(|v| v.0), y.0.map(|v| v.0)).map(Fq)), x * y);
+            let (x, y) = (
+                F4([Fq(nx()), Fq(nx()), Fq(nx()), Fq(nx())]),
+                F4([Fq(nx()), Fq(nx()), Fq(nx()), Fq(nx())]),
+            );
+            assert_eq!(
+                F4(limb::f4_mul(x.0.map(|v| v.0), y.0.map(|v| v.0)).map(Fq)),
+                x * y
+            );
         }
         for n in [1usize, 1000, 1 << 20] {
             let (mut w, mut u) = ([0u64; NC], 0u128);
@@ -504,7 +537,10 @@ mod tests {
         for _ in 0..1 << 18 {
             limb::mac(&mut w, m, m, 4);
         }
-        assert_eq!(limb::red(w), red(4 * (1u128 << 18) * (m as u128 * m as u128)));
+        assert_eq!(
+            limb::red(w),
+            red(4 * (1u128 << 18) * (m as u128 * m as u128))
+        );
         // any u64 columns: sum_c (2^64 - 1) 2^(W c) mod q
         let pw = |e: u32| Fq(2).pow(e as u64);
         let want = (0..NC as u32).fold(Fq::ZERO, |a, c| a + Fq(red(u64::MAX as u128)) * pw(W * c));
@@ -517,7 +553,10 @@ mod tests {
         // the set's q - 1 factorisation (pqzh_set.rs), GEN generates F_q^*, NR is a non-square, q = 1 mod 4
         assert_eq!(set::QM1.iter().product::<u64>(), Q - 1);
         for &p in set::QM1 {
-            assert!((2..p).take_while(|d| d * d <= p).all(|d| p % d != 0), "{p} prime");
+            assert!(
+                (2..p).take_while(|d| d * d <= p).all(|d| p % d != 0),
+                "{p} prime"
+            );
             assert_ne!(Fq(set::GEN).pow((Q - 1) / p), Fq::ONE);
         }
         assert_eq!(Q % 4, 1);

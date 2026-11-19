@@ -15,7 +15,7 @@ use crate::arith::int::{Int, IntVec};
 use crate::arith::ntt::{D, Q};
 use crate::arith::poly::Poly;
 use crate::arith::polymat::{self, Pm, PmRef, PolyMat};
-use crate::arith::polyvec::{self, Pv, PvRef, PolyVec};
+use crate::arith::polyvec::{self, PolyVec, Pv, PvRef};
 use crate::arith::spoly::Sparse;
 use crate::coder::ProofParts;
 use crate::params::{Abdlop, Tbox};
@@ -76,7 +76,11 @@ fn intmat_urandom(rows: usize, seed: &[u8; 32], dom: u32) -> Result<Vec<Vec<i64>
     let mut v = Vec::new();
     v.try_reserve_exact(rows).map_err(|_| Error::Memory)?;
     for i in 0..rows {
-        v.push(urandom_q(256, seed, (dom as u64) << 32 | (i * 256) as u32 as u64)?);
+        v.push(urandom_q(
+            256,
+            seed,
+            (dom as u64) << 32 | (i * 256) as u32 as u64,
+        )?);
     }
     Ok(v)
 }
@@ -89,7 +93,11 @@ fn int(v: i64) -> Int {
 /// equations are pre-multiplied): acc += sum_j v_j eqs_j, reduced mod q
 fn accumulate(acc: &mut Acc, eqs: &mut [Eq], v: Option<&[i64]>, qe: &Abdlop) -> Result<(), Error> {
     let n = 2 * (qe.m1 + qe.l) as usize;
-    let (mut t0, mut t1, mut t2) = (Sparse::new_mat(n, n, diag(n)), Sparse::new_mat(n, n, diag(n)), Sparse::new_mat(n, n, diag(n)));
+    let (mut t0, mut t1, mut t2) = (
+        Sparse::new_mat(n, n, diag(n)),
+        Sparse::new_mat(n, n, diag(n)),
+        Sparse::new_mat(n, n, diag(n)),
+    );
     Sparse::set(&mut t0, &acc.r2)?;
     for (j, e) in eqs.iter_mut().enumerate() {
         if let Some(r2) = &mut e.r2 {
@@ -136,12 +144,24 @@ fn accumulate(acc: &mut Acc, eqs: &mut [Eq], v: Option<&[i64]>, qe: &Abdlop) -> 
 
 /// `__schwartz_zippel_accumulate2` (P6-SZ): Gamma = lambda x M uniform from (seed, dom); rows 2i / 2i + 1 into the
 /// accumulator pair i
-fn accumulate2(a1: &mut [Acc], a2: &mut [Acc], eqs: &mut [Eq], seed: &[u8; 32], dom: u32, qe: &Abdlop) -> Result<(), Error> {
+fn accumulate2(
+    a1: &mut [Acc],
+    a2: &mut [Acc],
+    eqs: &mut [Eq],
+    seed: &[u8; 32],
+    dom: u32,
+    qe: &Abdlop,
+) -> Result<(), Error> {
     let m = eqs.len();
     let v = urandom_q(2 * a1.len() * m, seed, dom as u64)?;
     for i in 0..a1.len() {
         accumulate(&mut a1[i], eqs, Some(&v[2 * i * m..(2 * i + 1) * m]), qe)?;
-        accumulate(&mut a2[i], eqs, Some(&v[(2 * i + 1) * m..(2 * i + 2) * m]), qe)?;
+        accumulate(
+            &mut a2[i],
+            eqs,
+            Some(&v[(2 * i + 1) * m..(2 * i + 2) * m]),
+            qe,
+        )?;
     }
     Ok(())
 }
@@ -251,7 +271,10 @@ fn zero_cols(a: &PolyMat, n: usize) -> Result<Vec<bool>, Error> {
 
 /// `_pqz_dot_pub`: polyvec_dot skipping products with a zero poly (NTT domain, as polyvec_dot leaves it)
 fn dot_pub<A: Pv + ?Sized, B: Pv + ?Sized>(a: &mut A, b: &mut B) -> Poly {
-    let mut r = Poly { crt: true, ..Poly::ZERO };
+    let mut r = Poly {
+        crt: true,
+        ..Poly::ZERO
+    };
     for i in 0..a.len() {
         if a.get(i).is_zero_pub() || b.get(i).is_zero_pub() {
             continue;
@@ -263,7 +286,11 @@ fn dot_pub<A: Pv + ?Sized, B: Pv + ?Sized>(a: &mut A, b: &mut B) -> Poly {
 
 /// `_diag`: (min, max)
 fn ud(r: usize, c: usize) -> (usize, usize) {
-    if r > c { (c, r) } else { (r, c) }
+    if r > c {
+        (c, r)
+    } else {
+        (r, c)
+    }
 }
 
 /// The Gram part o(s1)^T o(P)^T P s1 of a selection `p` (and its automorphism `op`) into `r2`, column pairs with a
@@ -282,7 +309,13 @@ fn gram(r2: &mut Sparse, p: &mut PolyMat, op: &mut PolyMat, zs: &[bool]) -> Resu
 }
 
 /// `_lnp_tbox_check_z34`: the norm bounds on z3 (l2) and z4 (l_inf), then hash = H(hash || ty3, ty4, tbeta)
-fn check_z34(hash: &mut [u8; 32], z3: &mut PolyVec, z4: &mut PolyVec, t_b: &mut PolyVec, p: &Tbox) -> Result<bool, Error> {
+fn check_z34(
+    hash: &mut [u8; 32],
+    z3: &mut PolyVec,
+    z4: &mut PolyVec,
+    t_b: &mut PolyVec,
+    p: &Tbox,
+) -> Result<bool, Error> {
     let tb = p.tbox;
     let (q, log2q) = (&tb.ring.q, tb.ring.log2q);
     let (l, w) = (tb.l as usize, 256 / D);
@@ -325,7 +358,12 @@ fn check_z34(hash: &mut [u8; 32], z3: &mut PolyVec, z4: &mut PolyVec, t_b: &mut 
 
 /// P6-FS (lazer#28, PQZL v3): hash = H(hash || grandom3(z3) || grandom3(z4)), one coder session over centred copies
 /// (`encproof`'s encoding), after `compute_z34` / a successful `check_z34`: the seed of V3 / V4 and of the tg round
-pub(crate) fn hash_z34(hash: &mut [u8; 32], z3: &PolyVec, z4: &PolyVec, p: &Tbox) -> Result<(), Error> {
+pub(crate) fn hash_z34(
+    hash: &mut [u8; 32],
+    z3: &PolyVec,
+    z4: &PolyVec,
+    p: &Tbox,
+) -> Result<(), Error> {
     let mut enc = Coder::new();
     enc.grandom(z3, p.log2stdev3)?;
     enc.grandom(z4, p.log2stdev4)?;
@@ -349,7 +387,8 @@ pub(crate) fn hash_h(hash: &mut [u8; 32], h: &PolyVec, p: &Tbox) -> Result<(), E
 /// the coefficients of the polys `v` (z3 or z4: 256 of them)
 fn coeffs(v: &mut PolyVec) -> Result<Vec<Int>, Error> {
     let mut r = Vec::new();
-    r.try_reserve_exact(v.len() * D).map_err(|_| Error::Memory)?;
+    r.try_reserve_exact(v.len() * D)
+        .map_err(|_| Error::Memory)?;
     for p in v.iter_mut() {
         p.fromcrt();
         r.extend((0..D).map(|j| p.c(j)));
@@ -389,7 +428,9 @@ fn vr_polys(v: &[Vec<i64>], ncols: usize, seed: &[u8; 32], roff: u64) -> Result<
     let mut m = PolyMat::new(lambda, ncols / D)?;
     for k in 0..lambda {
         for i in 0..ncols / D {
-            m.at(k, i).set_i64(&core::array::from_fn::<i64, D, _>(|j| vr[k * ncols + i * D + j] % Q as i64));
+            m.at(k, i).set_i64(&core::array::from_fn::<i64, D, _>(|j| {
+                vr[k * ncols + i * D + j] % Q as i64
+            }));
         }
     }
     Ok(m)
@@ -398,10 +439,22 @@ fn vr_polys(v: &[Vec<i64>], ncols: usize, seed: &[u8; 32], roff: u64) -> Result<
 /// The z4 equations (approximate l_inf proof): per row k of V (lambda x 256), y4 - z4 + beta4 (V R' Ds) s1 = 0,
 /// pre-multiplied into accumulator k / 2 of the pair k % 2
 #[allow(clippy::too_many_arguments)]
-fn sz_z4(a1: &mut [Acc], a2: &mut [Acc], ods: &mut PolyMat, z4: &mut PolyVec, seed: &[u8; 32], rseed: &[u8; 32], dom: u32, p: &Tbox) -> Result<(), Error> {
+fn sz_z4(
+    a1: &mut [Acc],
+    a2: &mut [Acc],
+    ods: &mut PolyMat,
+    z4: &mut PolyVec,
+    seed: &[u8; 32],
+    rseed: &[u8; 32],
+    dom: u32,
+    p: &Tbox,
+) -> Result<(), Error> {
     let tb = p.tbox;
     let (z, m1) = (p.z as usize, (tb.m1 - p.z) as usize);
-    let (loff3, loff4) = (if p.nex > 0 { 256 / D } else { 0 }, if p.nprime > 0 { 256 / D } else { 0 });
+    let (loff3, loff4) = (
+        if p.nex > 0 { 256 / D } else { 0 },
+        if p.nprime > 0 { 256 / D } else { 0 },
+    );
     let ibeta = (m1 + z + loff3 + loff4) * 2;
     let iy4 = (m1 + z + loff3) * 2;
     let lambda = p.quad_eval.lambda as usize;
@@ -442,7 +495,11 @@ fn sz_z4(a1: &mut [Acc], a2: &mut [Acc], ods: &mut PolyMat, z4: &mut PolyVec, se
         }
         r1.set_sorted(true);
         let mut e = eq(Some(r2), Some(r1), Some(r0_of(&z4_, &v[k])));
-        let acc = if k % 2 == 0 { &mut a1[k / 2] } else { &mut a2[k / 2] };
+        let acc = if k % 2 == 0 {
+            &mut a1[k / 2]
+        } else {
+            &mut a2[k / 2]
+        };
         accumulate(acc, &mut e, None, p.quad_eval.quad_eval)?;
     }
     Ok(())
@@ -465,7 +522,10 @@ fn sz_z3(
     let tb = p.tbox;
     let (z, m1) = (p.z as usize, (tb.m1 - p.z) as usize);
     let (nex, nbin) = (p.nex as usize, p.nbin as usize);
-    let (loff3, loff4) = (if p.nex > 0 { 256 / D } else { 0 }, if p.nprime > 0 { 256 / D } else { 0 });
+    let (loff3, loff4) = (
+        if p.nex > 0 { 256 / D } else { 0 },
+        if p.nprime > 0 { 256 / D } else { 0 },
+    );
     let ibeta = (m1 + z + loff3 + loff4) * 2;
     let (iupsilon, iy3) = (2 * m1, (m1 + z) * 2);
     let lambda = p.quad_eval.lambda as usize;
@@ -487,7 +547,11 @@ fn sz_z3(
     for (i, oe) in oes.iter_mut().enumerate() {
         let mut m = PolyMat::new(lambda, m1)?;
         for k in 0..lambda {
-            polyvec::mul2(&mut m.row(k), &mut vrpol.row(k).sub(off, p.n[i] as usize, 1), oe);
+            polyvec::mul2(
+                &mut m.row(k),
+                &mut vrpol.row(k).sub(off, p.n[i] as usize, 1),
+                oe,
+            );
         }
         off += p.n[i] as usize;
         vres.push(m);
@@ -495,7 +559,11 @@ fn sz_z3(
     for k in 0..lambda {
         let mut r2 = Sparse::new_mat(n_, n_, diag(n_));
         for i in 0..m1 {
-            let mut p2 = if has_ps { vrps.at(k, i).clone() } else { Poly::ZERO };
+            let mut p2 = if has_ps {
+                vrps.at(k, i).clone()
+            } else {
+                Poly::ZERO
+            };
             for m in vres.iter_mut() {
                 p2.add_assign(m.at(k, i), false);
             }
@@ -524,7 +592,11 @@ fn sz_z3(
         *r1.insert_elem(ibeta + 1)? = Poly::ZERO;
         r1.set_sorted(true);
         let mut e = eq(Some(r2), Some(r1), Some(r0_of(&z3_, &v[k])));
-        let acc = if k % 2 == 0 { &mut a1[k / 2] } else { &mut a2[k / 2] };
+        let acc = if k % 2 == 0 {
+            &mut a1[k / 2]
+        } else {
+            &mut a2[k / 2]
+        };
         accumulate(acc, &mut e, None, p.quad_eval.quad_eval)?;
     }
     Ok(())
@@ -542,7 +614,8 @@ struct Autos {
 fn autos(s: &mut Statement, p: &Tbox) -> Result<Autos, Error> {
     let m1 = (p.tbox.m1 - p.z) as usize;
     let mut oes = Vec::new();
-    oes.try_reserve_exact(s.es.len()).map_err(|_| Error::Memory)?;
+    oes.try_reserve_exact(s.es.len())
+        .map_err(|_| Error::Memory)?;
     for (i, e) in s.es.iter_mut().enumerate() {
         let mut o = PolyMat::new(p.n[i] as usize, m1)?;
         polymat::auto(&mut o, e);
@@ -564,7 +637,10 @@ fn autos(s: &mut Statement, p: &Tbox) -> Result<Autos, Error> {
 /// (np, n_): the quadratic proof's and the evaluation equations' dimension
 fn dims(p: &Tbox) -> (usize, usize) {
     let m1 = p.tbox.m1 as usize; // m1 + Z
-    (2 * (m1 + p.quad_eval.quad_many.l as usize), 2 * (m1 + p.quad_eval.quad_eval.l as usize))
+    (
+        2 * (m1 + p.quad_eval.quad_many.l as usize),
+        2 * (m1 + p.quad_eval.quad_eval.l as usize),
+    )
 }
 
 /// the lambda / 2 accumulator pairs (C's typo kept: the second set's r1 keeps nelems_max np)
@@ -577,7 +653,11 @@ fn accs(p: &Tbox) -> Result<(Vec<Acc>, Vec<Acc>), Error> {
         if !second {
             r1.set_nelems_max(n_);
         }
-        Acc { r2, r1, r0: Poly::ZERO }
+        Acc {
+            r2,
+            r1,
+            r0: Poly::ZERO,
+        }
     };
     let h = p.quad_eval.lambda as usize / 2;
     Ok((vec_of(h, |_| mk(false))?, vec_of(h, |_| mk(true))?))
@@ -598,7 +678,11 @@ fn beta_eqs(p: &Tbox) -> Result<[Eq; 2], Error> {
         *r2.insert_rc(ibeta, ibeta + 1)? = mono(0, &inv2);
         *r2.insert_rc(ibeta + 1, ibeta + 1)? = mono(0, &i4);
         r2.set_sorted(true);
-        Ok(Eq { r2: Some(r2), r1: None, r0: Some(mono(0, &int(-1))) })
+        Ok(Eq {
+            r2: Some(r2),
+            r1: None,
+            r0: Some(mono(0, &int(-1))),
+        })
     };
     Ok([beta_eq(0)?, beta_eq(1)?])
 }
@@ -643,18 +727,36 @@ fn accumulate_all(
             *r1.insert_elem(ibeta)? = mono(i, &inv2);
             *r1.insert_elem(ibeta + 1)? = mono(i, &inv2);
             r1.set_sorted(true);
-            accumulate2(a1, a2, &mut eq(None, Some(r1), None), hash, mm + i as u32, qe)?;
+            accumulate2(
+                a1,
+                a2,
+                &mut eq(None, Some(r1), None),
+                hash,
+                mm + i as u32,
+                qe,
+            )?;
         }
     }
     if nprime > 0 {
         let ninv2 = Int::neg_of(&inv2);
         for i in 1..D {
             let mut r1 = Sparse::new_vec(n_);
-            let (k, a, b) = if i < D / 2 { (i + D / 2, ninv2, inv2) } else { (i + D / 2 - D, inv2, ninv2) };
+            let (k, a, b) = if i < D / 2 {
+                (i + D / 2, ninv2, inv2)
+            } else {
+                (i + D / 2 - D, inv2, ninv2)
+            };
             *r1.insert_elem(ibeta)? = mono(k, &a);
             *r1.insert_elem(ibeta + 1)? = mono(k, &b);
             r1.set_sorted(true);
-            accumulate2(a1, a2, &mut eq(None, Some(r1), None), hash, mm + dd - 1 + i as u32, qe)?;
+            accumulate2(
+                a1,
+                a2,
+                &mut eq(None, Some(r1), None),
+                hash,
+                mm + dd - 1 + i as u32,
+                qe,
+            )?;
         }
     }
     if z > 0 {
@@ -672,11 +774,20 @@ fn accumulate_all(
         }
         r2.set_sorted(true);
         r1.set_sorted(true);
-        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), None), hash, mm + 2 * (dd - 1) + 1, qe)?;
+        accumulate2(
+            a1,
+            a2,
+            &mut eq(Some(r2), Some(r1), None),
+            hash,
+            mm + 2 * (dd - 1) + 1,
+            qe,
+        )?;
     }
     if nbin > 0 {
         // Ps s1 binary: <Ps s1, Ps s1 - 1> = 0 over Z
-        let (Some(ps), Some(ops)) = (&mut s.ps, &mut au.ops) else { return Err(Error::Internal) };
+        let (Some(ps), Some(ops)) = (&mut s.ps, &mut au.ops) else {
+            return Err(Error::Internal);
+        };
         let mut f_ = PolyVec::new(nbin)?;
         for x in f_.iter_mut() {
             x.set_i64(&[-1; D]);
@@ -700,7 +811,14 @@ fn accumulate_all(
         if !r2.is_upperdiag() {
             return Err(Error::Internal);
         }
-        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(Poly::ZERO)), hash, mm + 2 * (dd - 1) + 2, qe)?;
+        accumulate2(
+            a1,
+            a2,
+            &mut eq(Some(r2), Some(r1), Some(Poly::ZERO)),
+            hash,
+            mm + 2 * (dd - 1) + 2,
+            qe,
+        )?;
     }
     // exact l2 (P6-L2: domain dom + i per block): ||Es_i s1||^2 + <pow2, upsilon_i> - B_i^2 = 0 over Z
     #[allow(clippy::needless_range_loop)] // i indexes es, oes, l2bsqr and the domain
@@ -721,17 +839,43 @@ fn accumulate_all(
         if !r2.is_upperdiag() {
             return Err(Error::Internal);
         }
-        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(mono(0, &a_))), hash, mm + 2 * (dd - 1) + 3 + i as u32, qe)?;
+        accumulate2(
+            a1,
+            a2,
+            &mut eq(Some(r2), Some(r1), Some(mono(0, &a_))),
+            hash,
+            mm + 2 * (dd - 1) + 3 + i as u32,
+            qe,
+        )?;
     }
     if nprime > 0 {
         #[cfg(feature = "test-hooks")]
         crate::fstrace::rec(2, hash, (mm + 2 * (dd - 1) + 3 + z as u32) as u64);
-        sz_z4(a1, a2, &mut au.ods, z4, hash, cseed, mm + 2 * (dd - 1) + 3 + z as u32, p)?;
+        sz_z4(
+            a1,
+            a2,
+            &mut au.ods,
+            z4,
+            hash,
+            cseed,
+            mm + 2 * (dd - 1) + 3 + z as u32,
+            p,
+        )?;
     }
     if nex > 0 {
         #[cfg(feature = "test-hooks")]
         crate::fstrace::rec(3, hash, (mm + 2 * (dd - 1) + 3 + z as u32 + 256) as u64);
-        sz_z3(a1, a2, &mut au.oes, au.ops.as_mut(), z3, hash, cseed, mm + 2 * (dd - 1) + 3 + z as u32 + 256, p)?;
+        sz_z3(
+            a1,
+            a2,
+            &mut au.oes,
+            au.ops.as_mut(),
+            z3,
+            hash,
+            cseed,
+            mm + 2 * (dd - 1) + 3 + z as u32 + 256,
+            p,
+        )?;
     }
     for (x, y) in a1.iter_mut().zip(a2.iter_mut()) {
         sz_auto(x, y, qe)?;
@@ -756,11 +900,22 @@ fn finish(a: &mut Acc, h: &mut Poly, i: usize, p: &Tbox) -> Result<(), Error> {
 
 /// the lower protocol's equations: the accumulators, the two beta equations, the relation's R_q rows (`r0 = false`:
 /// without their constant terms, which the prover's `_schwartz_zippel_poly (R2, r1, NULL, ...)` does not combine)
-fn quad_eqs(a1: Vec<Acc>, beta: [Eq; 2], quad: &mut Vec<Eq>, p: &Tbox, r0: bool) -> Result<Vec<Eq>, Error> {
+fn quad_eqs(
+    a1: Vec<Acc>,
+    beta: [Eq; 2],
+    quad: &mut Vec<Eq>,
+    p: &Tbox,
+    r0: bool,
+) -> Result<Vec<Eq>, Error> {
     let (np, _) = dims(p);
     let mut eqs = Vec::new();
-    eqs.try_reserve_exact(a1.len() + 2 + quad.len()).map_err(|_| Error::Memory)?;
-    eqs.extend(a1.into_iter().map(|a| Eq { r2: Some(a.r2), r1: Some(a.r1), r0: Some(a.r0) }));
+    eqs.try_reserve_exact(a1.len() + 2 + quad.len())
+        .map_err(|_| Error::Memory)?;
+    eqs.extend(a1.into_iter().map(|a| Eq {
+        r2: Some(a.r2),
+        r1: Some(a.r1),
+        r0: Some(a.r0),
+    }));
     eqs.extend(beta);
     for mut e in quad.drain(..) {
         if let Some(r1) = &mut e.r1 {
@@ -775,14 +930,24 @@ fn quad_eqs(a1: Vec<Acc>, beta: [Eq; 2], quad: &mut Vec<Eq>, p: &Tbox, r0: bool)
 }
 
 /// `lnp_tbox_verify` (after `abdlop_hashcomm`): false = reject
-pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMat; 3], s: &mut Statement) -> Result<bool, Error> {
+pub(crate) fn verify(
+    hash: &mut [u8; 32],
+    f: &mut ProofParts,
+    keys: &mut [PolyMat; 3],
+    s: &mut Statement,
+) -> Result<bool, Error> {
     let p = f.p;
     let tb = p.tbox;
     let qe = p.quad_eval.quad_eval;
     let lambda = p.quad_eval.lambda as usize;
     let (q, log2q) = (&tb.ring.q, tb.ring.log2q);
     // nex, nprime > 0 in every relation (review 3w u1-5: `sz_z3`'s y3 loop is bounded by loff4, upstream)
-    if tb.l != 0 || s.es.len() != p.z as usize || f.h.len() != lambda / 2 || p.nex == 0 || p.nprime == 0 {
+    if tb.l != 0
+        || s.es.len() != p.z as usize
+        || f.h.len() != lambda / 2
+        || p.nex == 0
+        || p.nprime == 0
+    {
         return Err(Error::Internal); // the forms pqz_rel.c passes (module doc)
     }
     let (mut a1, mut a2) = accs(p)?;
@@ -808,13 +973,22 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
     enc.urandom(&mut tg, q, log2q)?;
     *hash = hash2(hash, &enc.end()?);
 
-    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &cseed, p)?;
+    accumulate_all(
+        &mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &cseed, p,
+    )?;
     for (i, a) in a1.iter_mut().enumerate() {
         finish(a, &mut f.h[i], i, p)?;
     }
     let mut eqs = quad_eqs(a1, beta, &mut s.quad, p, true)?;
     hash_h(hash, &f.h, p)?;
-    let o = Opening { c: &mut f.c, z1: &mut f.z1, z21: &mut f.z21, hint: &mut f.hint, t_a1: &mut f.t_a1, t_b: &mut f.t_b };
+    let o = Opening {
+        c: &mut f.c,
+        z1: &mut f.z1,
+        z21: &mut f.z21,
+        hint: &mut f.hint,
+        t_a1: &mut f.t_a1,
+        t_b: &mut f.t_b,
+    };
     #[cfg(feature = "test-hooks")]
     crate::fstrace::rec(5, hash, 0);
     quad::many_verify(hash, o, keys, &mut eqs, p.quad_eval.quad_many)
@@ -823,7 +997,12 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
 // ---------------------------------------------------------------- prover
 
 /// `__evaleq`: <s, R2 s> + <r1, s> + r0, coefficients mod q, centred (`R2`'s row count is `s.len()` at every call)
-fn evaleq<S: Pv + ?Sized>(r2: Option<&mut Sparse>, r1: Option<&mut Sparse>, r0: Option<&Poly>, s: &mut S) -> Result<Poly, Error> {
+fn evaleq<S: Pv + ?Sized>(
+    r2: Option<&mut Sparse>,
+    r1: Option<&mut Sparse>,
+    r0: Option<&Poly>,
+    s: &mut S,
+) -> Result<Poly, Error> {
     let mut res = r0.cloned().unwrap_or(Poly::ZERO);
     if let Some(r1) = r1 {
         polyvec::adddot2(&mut res, r1, s, false);
@@ -841,7 +1020,13 @@ fn evaleq<S: Pv + ?Sized>(r2: Option<&mut Sparse>, r1: Option<&mut Sparse>, r0: 
 
 /// `__check_coeff0` (an ASSERT_ERR, on in every build: `Error::Internal`): the equation's value at s has coefficient
 /// 0 zero (`all = None`), coefficients 0 and d/2 zero (`Some(false)`), or every coefficient zero (`Some(true)`)
-fn check_coeff0<S: Pv + ?Sized>(r2: Option<&mut Sparse>, r1: Option<&mut Sparse>, r0: Option<&Poly>, s: &mut S, all: Option<bool>) -> Result<(), Error> {
+fn check_coeff0<S: Pv + ?Sized>(
+    r2: Option<&mut Sparse>,
+    r1: Option<&mut Sparse>,
+    r0: Option<&Poly>,
+    s: &mut S,
+    all: Option<bool>,
+) -> Result<(), Error> {
     let v = evaleq(r2, r1, r0, s)?;
     // review E: the value at the secret s is secret; the verdict (true for every valid witness) is public
     let ok = match all {
@@ -850,13 +1035,18 @@ fn check_coeff0<S: Pv + ?Sized>(r2: Option<&mut Sparse>, r1: Option<&mut Sparse>
         Some(true) => (0..D).fold(true, |r, j| r & v.c(j).eqzero()),
     };
     let ok = crate::ct::verdict(ok);
-    if ok { Ok(()) } else { Err(Error::Internal) }
+    if ok {
+        Ok(())
+    } else {
+        Err(Error::Internal)
+    }
 }
 
 /// the coefficients of `v` as i64 (coefficient domain)
 fn coeffs_i64(v: &mut PolyVec) -> Result<Vec<i64>, Error> {
     let mut r = Vec::new();
-    r.try_reserve_exact(v.len() * D).map_err(|_| Error::Memory)?;
+    r.try_reserve_exact(v.len() * D)
+        .map_err(|_| Error::Memory)?;
     for p in v.iter_mut() {
         p.fromcrt();
         r.extend((0..D).map(|j| p.c(j).get_i64()));
@@ -912,13 +1102,13 @@ fn compute_z34(
     // the witness part s1[m1..] and Es·s1 / Ds·s1 (review G-2, fix B)
     let mut s3 = Wiped(PolyVec::new(nex)?);
     let mut s4 = Wiped(PolyVec::new(nprime)?);
-    crate::name_buf(&s3.0.0);
-    crate::name_buf(&s4.0.0);
+    crate::name_buf(&s3.0 .0);
+    crate::name_buf(&s4.0 .0);
     // the masks, a rejected try's z3, z4 and the images R s3, R' s4 (256 linear forms of the witness each): cleared on
     // every exit (review 3w u1-3, as C's pqz_arena_wipe_release)
     let (mut y3, mut y4) = (Wiped(PolyVec::new(w)?), Wiped(PolyVec::new(w)?));
-    crate::name_buf(&y3.0.0);
-    crate::name_buf(&y4.0.0);
+    crate::name_buf(&y3.0 .0);
+    crate::name_buf(&y4.0 .0);
     polyvec::set_zero(&mut m.sub(l + 2 * w, 1, 1)); // beta
 
     let mut loff = 0;
@@ -977,7 +1167,12 @@ fn compute_z34(
             polyvec::set(&mut m.sub(l, w, 1), &*y3);
             let mut ty3 = f.t_b.sub(l, w, 1);
             polyvec::set(&mut ty3, &*y3);
-            polyvec::addmul(&mut ty3, &mut bp.sub(l, 0, w, m2r, 1, 1), &mut s2.sub(0, m2r, 1), false);
+            polyvec::addmul(
+                &mut ty3,
+                &mut bp.sub(l, 0, w, m2r, 1, 1),
+                &mut s2.sub(0, m2r, 1),
+                false,
+            );
             polyvec::mod_self(&mut ty3);
             polyvec::redp_self(&mut ty3);
             beta3 = 1 - 2 * ((rbits as i64 >> (8 - nrbits)) & 1);
@@ -989,7 +1184,12 @@ fn compute_z34(
             polyvec::set(&mut m.sub(l + oy4, w, 1), &*y4);
             let mut ty4 = f.t_b.sub(l + oy4, w, 1);
             polyvec::set(&mut ty4, &*y4);
-            polyvec::addmul(&mut ty4, &mut bp.sub(l + oy4, 0, w, m2r, 1, 1), &mut s2.sub(0, m2r, 1), false);
+            polyvec::addmul(
+                &mut ty4,
+                &mut bp.sub(l + oy4, 0, w, m2r, 1, 1),
+                &mut s2.sub(0, m2r, 1),
+                false,
+            );
             polyvec::mod_self(&mut ty4);
             polyvec::redp_self(&mut ty4);
             beta4 = 1 - 2 * ((rbits as i64 >> (8 - nrbits)) & 1); // P6-D3: the next unused bit (upstream bit 8 - nrbits + 1)
@@ -1006,7 +1206,12 @@ fn compute_z34(
         let beta = beta.clone();
         let mut tbeta = f.t_b.sub(l + loff, 1, 1);
         tbeta.at(0).clone_from(&beta);
-        polyvec::addmul(&mut tbeta, &mut bp.sub(l + loff, 0, 1, m2r, 1, 1), &mut s2.sub(0, m2r, 1), false);
+        polyvec::addmul(
+            &mut tbeta,
+            &mut bp.sub(l + loff, 0, 1, m2r, 1, 1),
+            &mut s2.sub(0, m2r, 1),
+            false,
+        );
         polyvec::mod_self(&mut tbeta);
         polyvec::redp_self(&mut tbeta);
         // encode ty3, ty4, tbeta: the hash of the encoding seeds the challenges. review E: this try's commitments are
@@ -1037,7 +1242,9 @@ fn compute_z34(
             crate::name_buf(&z3v.0);
             crate::name_buf(&rs3.0);
             if !cheat_skips_s3() {
-                z3v.iter_mut().zip(rs3.iter()).for_each(|(z, &r)| *z += beta3 * r);
+                z3v.iter_mut()
+                    .zip(rs3.iter())
+                    .for_each(|(z, &r)| *z += beta3 * r);
             }
         }
         let mut rs4 = Wiped(Vec::new());
@@ -1048,7 +1255,9 @@ fn compute_z34(
             crate::name_buf(&s4c.0);
             crate::name_buf(&z4v.0);
             crate::name_buf(&rs4.0);
-            z4v.iter_mut().zip(rs4.iter()).for_each(|(z, &r)| *z += beta4 * r);
+            z4v.iter_mut()
+                .zip(rs4.iter())
+                .for_each(|(z, &r)| *z += beta4 * r);
         }
         // rejection sampling (rej3 = rej4 = 2 in every relation: bimodal)
         if nex > 0 && p.rej3 != 0 && !cheat_skips_s3() {
@@ -1082,10 +1291,18 @@ fn compute_z34(
     };
     crate::wipe(core::slice::from_mut(&mut rbits)); // P6-D3: secret signs (C explicit_bzero)
     *hash = cseed;
-    for (k, x) in f.z3.iter_mut().enumerate().take(if nex > 0 { w } else { 0 }) {
+    for (k, x) in
+        f.z3.iter_mut()
+            .enumerate()
+            .take(if nex > 0 { w } else { 0 })
+    {
         x.set_i64(&z3v[k * D..(k + 1) * D]);
     }
-    for (k, x) in f.z4.iter_mut().enumerate().take(if nprime > 0 { w } else { 0 }) {
+    for (k, x) in
+        f.z4.iter_mut()
+            .enumerate()
+            .take(if nprime > 0 { w } else { 0 })
+    {
         x.set_i64(&z4v[k * D..(k + 1) * D]);
     }
     crate::ct::public(&f.z3[..]); // review E: accepted, proof fields
@@ -1149,11 +1366,17 @@ pub(crate) fn prove(
 
     // s = (<s1>, <m>, <y3>, <y4>, <beta>) (and <g> before the last check)
     let mut sv = Wiped(PolyVec::new(np)?);
-    crate::name_buf(&sv.0.0);
+    crate::name_buf(&sv.0 .0);
     polyvec::set(&mut sv.sub(0, m1 + z, 2), &**s1);
     polyvec::auto(&mut sv.sub(1, m1 + z, 2), &mut **s1);
-    polyvec::set(&mut sv.sub((m1 + z) * 2, loff + 1, 2), &m.sub(l, loff + 1, 1));
-    polyvec::auto(&mut sv.sub((m1 + z) * 2 + 1, loff + 1, 2), &mut m.sub(l, loff + 1, 1));
+    polyvec::set(
+        &mut sv.sub((m1 + z) * 2, loff + 1, 2),
+        &m.sub(l, loff + 1, 1),
+    );
+    polyvec::auto(
+        &mut sv.sub((m1 + z) * 2 + 1, loff + 1, 2),
+        &mut m.sub(l, loff + 1, 1),
+    );
 
     // cheating modes 1, 2: the z3 / z4 part of each accumulator at coefficients 0 and d/2 as the cheater can know it
     // before tg (Gamma and V from hz: Gamma's part is 0 there for an otherwise honest s), cancelled through g
@@ -1163,9 +1386,16 @@ pub(crate) fn prove(
     if mode == 1 || mode == 2 {
         let (mut c1, mut c2) = accs(p)?;
         let mut au2 = autos(s, p)?;
-        accumulate_all(&mut c1, &mut c2, s, &mut au2, &mut f.z3, &mut f.z4, &hz, &cseed, p)?;
+        accumulate_all(
+            &mut c1, &mut c2, s, &mut au2, &mut f.z3, &mut f.z4, &hz, &cseed, p,
+        )?;
         for a in c1.iter_mut() {
-            let t = evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sv.sub(0, n_, 1))?;
+            let t = evaleq(
+                Some(&mut a.r2),
+                Some(&mut a.r1),
+                Some(&a.r0),
+                &mut sv.sub(0, n_, 1),
+            )?;
             offs.push((t.c(0).get_i64(), t.c(D / 2).get_i64()));
         }
     }
@@ -1184,7 +1414,12 @@ pub(crate) fn prove(
     {
         let mut tg = f.t_b.sub(qe.l as usize, lambda / 2, 1);
         polyvec::set(&mut tg, &*f.h);
-        polyvec::addmul(&mut tg, &mut keys[2].sub(qe.l as usize, 0, lambda / 2, m2r, 1, 1), &mut s2.sub(0, m2r, 1), false);
+        polyvec::addmul(
+            &mut tg,
+            &mut keys[2].sub(qe.l as usize, 0, lambda / 2, m2r, 1, 1),
+            &mut s2.sub(0, m2r, 1),
+            false,
+        );
         polyvec::mod_self(&mut tg);
         polyvec::redp_self(&mut tg);
         crate::ct::public_pv(&tg); // review E: the commitment to g, hashed and sent
@@ -1194,20 +1429,39 @@ pub(crate) fn prove(
     }
     // the input evaluation equations have constant coefficient 0 (mode 5, a test hook: not checked)
     for e in s.eval.iter_mut().filter(|_| mode != 5) {
-        check_coeff0(e.r2.as_mut(), e.r1.as_mut(), e.r0.as_ref(), &mut sv.sub(0, (m1 + z) * 2, 1), None)?;
+        check_coeff0(
+            e.r2.as_mut(),
+            e.r1.as_mut(),
+            e.r0.as_ref(),
+            &mut sv.sub(0, (m1 + z) * 2, 1),
+            None,
+        )?;
     }
 
     let (mut a1, mut a2) = accs(p)?;
     let beta = beta_eqs(p)?;
-    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &cseed, p)?;
+    accumulate_all(
+        &mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &cseed, p,
+    )?;
 
     // h_i = g_i + the accumulated evaluation i (coefficients 0 and d/2 zero), then the quadratic equations
     for (i, a) in a1.iter_mut().enumerate() {
         let mut sub = sv.sub(0, n_, 1);
         if mode == 0 || mode == 4 {
-            check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub, Some(false))?;
+            check_coeff0(
+                Some(&mut a.r2),
+                Some(&mut a.r1),
+                Some(&a.r0),
+                &mut sub,
+                Some(false),
+            )?;
         }
-        let mut t = Wiped(evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub)?); // the evaluation at the witness (F-4)
+        let mut t = Wiped(evaleq(
+            Some(&mut a.r2),
+            Some(&mut a.r1),
+            Some(&a.r0),
+            &mut sub,
+        )?); // the evaluation at the witness (F-4)
         f.h[i].add_assign(&mut t, false);
         crate::ct::public(&f.h[i]); // review E: hi, a proof field
         #[cfg(feature = "test-hooks")]
@@ -1216,22 +1470,45 @@ pub(crate) fn prove(
             f.h[i].set_coeff(0, &int(0));
             f.h[i].set_coeff(D / 2, &int(0));
         }
-        if mode != 3 && mode != 5 && !(f.h[i].get_coeff(0).eqzero() && f.h[i].get_coeff(D / 2).eqzero()) {
+        if mode != 3
+            && mode != 5
+            && !(f.h[i].get_coeff(0).eqzero() && f.h[i].get_coeff(D / 2).eqzero())
+        {
             return Err(Error::Internal);
         }
         finish(a, &mut f.h[i], i, p)?;
     }
     // they evaluate to zero at s = (.., <g>)
     let og = (m1 + z + l + loff + 1) * 2;
-    polyvec::set(&mut sv.sub(og, lambda / 2, 2), &m.sub(l + loff + 1, lambda / 2, 1));
-    polyvec::auto(&mut sv.sub(og + 1, lambda / 2, 2), &mut m.sub(l + loff + 1, lambda / 2, 1));
+    polyvec::set(
+        &mut sv.sub(og, lambda / 2, 2),
+        &m.sub(l + loff + 1, lambda / 2, 1),
+    );
+    polyvec::auto(
+        &mut sv.sub(og + 1, lambda / 2, 2),
+        &mut m.sub(l + loff + 1, lambda / 2, 1),
+    );
     for a in a1.iter_mut().filter(|_| mode == 0 || mode == 4) {
-        check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut *sv, Some(true))?;
+        check_coeff0(
+            Some(&mut a.r2),
+            Some(&mut a.r1),
+            Some(&a.r0),
+            &mut *sv,
+            Some(true),
+        )?;
     }
 
     let mut eqs = quad_eqs(a1, beta, &mut s.quad, p, false)?;
     hash_h(hash, &f.h, p)?;
     #[cfg(feature = "test-hooks")]
     crate::fstrace::rec(5, hash, 0);
-    quad::many_prove(hash, f, quad::Secret { s1, m, s2, t_a2 }, keys, &mut eqs, seed_cont2, p.quad_eval.quad_many)
+    quad::many_prove(
+        hash,
+        f,
+        quad::Secret { s1, m, s2, t_a2 },
+        keys,
+        &mut eqs,
+        seed_cont2,
+        p.quad_eval.quad_many,
+    )
 }

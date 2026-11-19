@@ -5,8 +5,8 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Addr, Binary, Deps, DepsMut, Env, Event, HexBinary, MessageInfo, Response, StdResult, Storage,
-    Uint128, WasmMsg,
+    to_json_binary, Addr, Binary, Deps, DepsMut, Env, Event, HexBinary, MessageInfo, Response,
+    StdResult, Storage, Uint128, WasmMsg,
 };
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
@@ -35,19 +35,51 @@ pub struct InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExecuteMsg {
-    Transfer { recipient: String, amount: Uint128 },
-    Send { contract: String, amount: Uint128, msg: Binary },
-    Mint { recipient: String, amount: Uint128 },
+    Transfer {
+        recipient: String,
+        amount: Uint128,
+    },
+    Send {
+        contract: String,
+        amount: Uint128,
+        msg: Binary,
+    },
+    Mint {
+        recipient: String,
+        amount: Uint128,
+    },
     /// `info.sender` trả (ví hợp đồng/mandate), phát `payment_settled` mang `pay_ref`.
-    Pay { to: String, amount: Uint128, pay_ref: HexBinary },
+    Pay {
+        to: String,
+        amount: Uint128,
+        pay_ref: HexBinary,
+    },
     /// Meta-tx: `payload` = bytes `MetaOp` chủ thể đã ký (op `pay` | `trade` | `revoke`).
-    Relay { payload: Binary, auth: Auth },
+    Relay {
+        payload: Binary,
+        auth: Auth,
+    },
     /// CTR-MTX-26: the same signed `pay` op, plus `(salt, meta)` unsigned: `pay_ref == metaPayId(salt, meta)`,
     /// `lane == payLane(pay_ref)`, `nonce == 0`; emits `payment_meta` before `payment_settled`.
-    RelayPayMeta { payload: Binary, auth: Auth, salt: HexBinary, meta: Binary },
-    IncreaseAllowance { spender: String, amount: Uint128 },
-    DecreaseAllowance { spender: String, amount: Uint128 },
-    TransferFrom { owner: String, recipient: String, amount: Uint128 },
+    RelayPayMeta {
+        payload: Binary,
+        auth: Auth,
+        salt: HexBinary,
+        meta: Binary,
+    },
+    IncreaseAllowance {
+        spender: String,
+        amount: Uint128,
+    },
+    DecreaseAllowance {
+        spender: String,
+        amount: Uint128,
+    },
+    TransferFrom {
+        owner: String,
+        recipient: String,
+        amount: Uint128,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -84,30 +116,56 @@ const ALLOWANCES: Map<(&Addr, &Addr), Uint128> = Map::new("allow");
 const NONCES: Map<(&Addr, &[u8]), u64> = Map::new("nonce");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn instantiate(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InstantiateMsg) -> StdResult<Response> {
+pub fn instantiate(
+    deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    msg: InstantiateMsg,
+) -> StdResult<Response> {
     let mut total = Uint128::zero();
     for b in &msg.initial_balances {
         let a = deps.api.addr_validate(&b.address)?;
-        BALANCES.update(deps.storage, &a, |v| -> StdResult<_> { Ok(v.unwrap_or_default().checked_add(b.amount)?) })?;
+        BALANCES.update(deps.storage, &a, |v| -> StdResult<_> {
+            Ok(v.unwrap_or_default().checked_add(b.amount)?)
+        })?;
         total = total.checked_add(b.amount)?;
     }
     let minter = msg.minter.map(|m| deps.api.addr_validate(&m)).transpose()?;
-    INFO.save(deps.storage, &TokenInfo { name: msg.name, symbol: msg.symbol, decimals: msg.decimals, total_supply: total, minter })?;
+    INFO.save(
+        deps.storage,
+        &TokenInfo {
+            name: msg.name,
+            symbol: msg.symbol,
+            decimals: msg.decimals,
+            total_supply: total,
+            minter,
+        },
+    )?;
     Ok(Response::new())
 }
 
 fn move_funds(store: &mut dyn Storage, from: &Addr, to: &Addr, amount: Uint128) -> StdResult<()> {
     let have = BALANCES.may_load(store, from)?.unwrap_or_default();
-    let left = have.checked_sub(amount).map_err(|_| err("insufficient balance"))?;
+    let left = have
+        .checked_sub(amount)
+        .map_err(|_| err("insufficient balance"))?;
     BALANCES.save(store, from, &left)?;
-    BALANCES.update(store, to, |v| -> StdResult<_> { Ok(v.unwrap_or_default().checked_add(amount)?) })?;
+    BALANCES.update(store, to, |v| -> StdResult<_> {
+        Ok(v.unwrap_or_default().checked_add(amount)?)
+    })?;
     Ok(())
 }
 
 /// `pay_ref` KHÔNG bị khoá toàn cục ở token (như `MetaToken` EVM): ai cũng gọi được `Pay` với một `pay_ref` bất
 /// kỳ, nên khoá "một lần" ở đây cho phép front-run đốt `pay_ref` của người trả. Chống replay là nonce lane;
 /// Odoo cộng các khoản theo `entry_ref` + người nhận (thiếu/thừa ⇒ cần chú ý).
-fn settle(store: &mut dyn Storage, from: &Addr, to: &Addr, amount: Uint128, pay_ref: &[u8]) -> StdResult<Event> {
+fn settle(
+    store: &mut dyn Storage,
+    from: &Addr,
+    to: &Addr,
+    amount: Uint128,
+    pay_ref: &[u8],
+) -> StdResult<Event> {
     if pay_ref.len() != 32 {
         return Err(err("pay_ref is 32 bytes"));
     }
@@ -116,7 +174,10 @@ fn settle(store: &mut dyn Storage, from: &Addr, to: &Addr, amount: Uint128, pay_
         .add_attribute("from", from)
         .add_attribute("to", to)
         .add_attribute("amount", amount)
-        .add_attribute("pay_ref", format!("0x{}", HexBinary::from(pay_ref).to_hex())))
+        .add_attribute(
+            "pay_ref",
+            format!("0x{}", HexBinary::from(pay_ref).to_hex()),
+        ))
 }
 
 fn is_contract(deps: &Deps, addr: &Addr) -> bool {
@@ -131,13 +192,25 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             move_funds(deps.storage, &info.sender, &to, amount)?;
             Ok(Response::new().add_attribute("action", "transfer"))
         }
-        ExecuteMsg::Send { contract, amount, msg } => {
+        ExecuteMsg::Send {
+            contract,
+            amount,
+            msg,
+        } => {
             let to = deps.api.addr_validate(&contract)?;
             move_funds(deps.storage, &info.sender, &to, amount)?;
-            let hook = ReceiverExecuteMsg::Receive(Cw20ReceiveMsg { sender: info.sender.to_string(), amount, msg });
+            let hook = ReceiverExecuteMsg::Receive(Cw20ReceiveMsg {
+                sender: info.sender.to_string(),
+                amount,
+                msg,
+            });
             Ok(Response::new()
                 .add_attribute("action", "send")
-                .add_message(WasmMsg::Execute { contract_addr: contract, msg: to_json_binary(&hook)?, funds: vec![] }))
+                .add_message(WasmMsg::Execute {
+                    contract_addr: contract,
+                    msg: to_json_binary(&hook)?,
+                    funds: vec![],
+                }))
         }
         ExecuteMsg::Mint { recipient, amount } => {
             let mut ti = INFO.load(deps.storage)?;
@@ -147,16 +220,27 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             ti.total_supply = ti.total_supply.checked_add(amount)?;
             INFO.save(deps.storage, &ti)?;
             let to = deps.api.addr_validate(&recipient)?;
-            BALANCES.update(deps.storage, &to, |v| -> StdResult<_> { Ok(v.unwrap_or_default().checked_add(amount)?) })?;
+            BALANCES.update(deps.storage, &to, |v| -> StdResult<_> {
+                Ok(v.unwrap_or_default().checked_add(amount)?)
+            })?;
             Ok(Response::new().add_attribute("action", "mint"))
         }
-        ExecuteMsg::Pay { to, amount, pay_ref } => {
+        ExecuteMsg::Pay {
+            to,
+            amount,
+            pay_ref,
+        } => {
             let to = deps.api.addr_validate(&to)?;
             let ev = settle(deps.storage, &info.sender, &to, amount, &pay_ref)?;
             Ok(Response::new().add_event(ev))
         }
         ExecuteMsg::Relay { payload, auth } => relay(deps, env, info, &payload, &auth, None),
-        ExecuteMsg::RelayPayMeta { payload, auth, salt, meta } => relay(deps, env, info, &payload, &auth, Some((&salt, &meta))),
+        ExecuteMsg::RelayPayMeta {
+            payload,
+            auth,
+            salt,
+            meta,
+        } => relay(deps, env, info, &payload, &auth, Some((&salt, &meta))),
         ExecuteMsg::IncreaseAllowance { spender, amount } => {
             let sp = deps.api.addr_validate(&spender)?;
             if !is_contract(&deps.as_ref(), &sp) {
@@ -170,11 +254,18 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::DecreaseAllowance { spender, amount } => {
             let sp = deps.api.addr_validate(&spender)?;
             let key = (&info.sender, &sp);
-            let left = ALLOWANCES.may_load(deps.storage, key)?.unwrap_or_default().saturating_sub(amount);
+            let left = ALLOWANCES
+                .may_load(deps.storage, key)?
+                .unwrap_or_default()
+                .saturating_sub(amount);
             ALLOWANCES.save(deps.storage, key, &left)?;
             Ok(Response::new().add_attribute("action", "decrease_allowance"))
         }
-        ExecuteMsg::TransferFrom { owner, recipient, amount } => {
+        ExecuteMsg::TransferFrom {
+            owner,
+            recipient,
+            amount,
+        } => {
             if !is_contract(&deps.as_ref(), &info.sender) {
                 return Err(err("only a contract may transfer_from"));
             }
@@ -182,7 +273,13 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             let to = deps.api.addr_validate(&recipient)?;
             let key = (&owner, &info.sender);
             let have = ALLOWANCES.may_load(deps.storage, key)?.unwrap_or_default();
-            ALLOWANCES.save(deps.storage, key, &have.checked_sub(amount).map_err(|_| err("allowance exceeded"))?)?;
+            ALLOWANCES.save(
+                deps.storage,
+                key,
+                &have
+                    .checked_sub(amount)
+                    .map_err(|_| err("allowance exceeded"))?,
+            )?;
             move_funds(deps.storage, &owner, &to, amount)?;
             Ok(Response::new().add_attribute("action", "transfer_from"))
         }
@@ -190,12 +287,21 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
 }
 
 /// `pay_meta`: `(salt, meta)` of a `RelayPayMeta` (CTR-MTX-26), checked against the signed op before anything moves.
-fn relay(deps: DepsMut, env: Env, info: MessageInfo, payload: &[u8], auth: &Auth, pay_meta: Option<(&[u8], &[u8])>) -> StdResult<Response> {
+fn relay(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    payload: &[u8],
+    auth: &Auth,
+    pay_meta: Option<(&[u8], &[u8])>,
+) -> StdResult<Response> {
     let v = verify(deps.api, &env, payload, auth)?;
     let op = &v.op;
     let mut res = Response::new();
     if let Some((salt, meta)) = pay_meta {
-        let salt: &[u8; 32] = salt.try_into().map_err(|_| err("pay-meta: salt is 32 bytes"))?;
+        let salt: &[u8; 32] = salt
+            .try_into()
+            .map_err(|_| err("pay-meta: salt is 32 bytes"))?;
         if op.op != "pay" {
             return Err(err("pay-meta: op is not pay"));
         }
@@ -225,8 +331,13 @@ fn relay(deps: DepsMut, env: Env, info: MessageInfo, payload: &[u8], auth: &Auth
         }
         // Chân lệnh DEX: chỉ DEX (contract) đã được ký làm relayer VÀ người nhận mới kéo được tiền.
         "trade" => {
-            if op.relayer != info.sender.as_str() || op.to != info.sender.as_str() || !is_contract(&deps.as_ref(), &info.sender) {
-                return Err(err("trade: relayer and recipient must be the calling contract"));
+            if op.relayer != info.sender.as_str()
+                || op.to != info.sender.as_str()
+                || !is_contract(&deps.as_ref(), &info.sender)
+            {
+                return Err(err(
+                    "trade: relayer and recipient must be the calling contract",
+                ));
             }
             move_funds(deps.storage, &v.from, &info.sender, op.amount)?;
         }
@@ -237,7 +348,10 @@ fn relay(deps: DepsMut, env: Env, info: MessageInfo, payload: &[u8], auth: &Auth
     Ok(res.add_event(
         Event::new("meta_tx_executed")
             .add_attribute("from", v.from.as_str())
-            .add_attribute("digest", format!("0x{}", HexBinary::from(v.digest).to_hex()))
+            .add_attribute(
+                "digest",
+                format!("0x{}", HexBinary::from(v.digest).to_hex()),
+            )
             .add_attribute("op", op.op.as_str())
             .add_attribute("lane", op.lane.to_hex())
             .add_attribute("nonce", op.nonce.to_string()),
@@ -249,16 +363,29 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Balance { address } => {
             let a = deps.api.addr_validate(&address)?;
-            to_json_binary(&BalanceResponse { balance: BALANCES.may_load(deps.storage, &a)?.unwrap_or_default() })
+            to_json_binary(&BalanceResponse {
+                balance: BALANCES.may_load(deps.storage, &a)?.unwrap_or_default(),
+            })
         }
         QueryMsg::TokenInfo {} => to_json_binary(&INFO.load(deps.storage)?),
         QueryMsg::Allowance { owner, spender } => {
-            let (o, s) = (deps.api.addr_validate(&owner)?, deps.api.addr_validate(&spender)?);
-            to_json_binary(&AllowanceResponse { allowance: ALLOWANCES.may_load(deps.storage, (&o, &s))?.unwrap_or_default() })
+            let (o, s) = (
+                deps.api.addr_validate(&owner)?,
+                deps.api.addr_validate(&spender)?,
+            );
+            to_json_binary(&AllowanceResponse {
+                allowance: ALLOWANCES
+                    .may_load(deps.storage, (&o, &s))?
+                    .unwrap_or_default(),
+            })
         }
         QueryMsg::Nonce { owner, lane } => {
             let o = deps.api.addr_validate(&owner)?;
-            to_json_binary(&NONCES.may_load(deps.storage, (&o, lane.as_slice()))?.unwrap_or(0))
+            to_json_binary(
+                &NONCES
+                    .may_load(deps.storage, (&o, lane.as_slice()))?
+                    .unwrap_or(0),
+            )
         }
     }
 }

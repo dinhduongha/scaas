@@ -8,18 +8,31 @@
 //! `bytes` / `string` raw, as the ABI passes them; EIP-712 hashed them), the node job's named fields, the prompt; with a fee,
 //! the relay-fee wrap (open mode, clientkeys `buildRelayFee`). Vectors `smartcontracts/vectors/metatx/servicepull.json`. The
 //! service and the token decide; nothing here is a check of record. UNAUDITED.
-use super::eip712::{abi_atom, pull_atom, scaas_typed_data, to_hex, u256_from, u256_to_dec, uint_value, Abi, TypedData, U256};
+use super::eip712::{
+    abi_atom, pull_atom, scaas_typed_data, to_hex, u256_from, u256_to_dec, uint_value, Abi,
+    TypedData, U256,
+};
 use super::{Error, Result};
-use crate::ua8::UASig;
+use crate::ua_portable::UASig;
 use crate::{keccak256, relay_ref, word};
 use serde_json::{json, Value};
 
 const MAX_OP_FIELDS: usize = 16;
 const UMT_FIELDS: [(&str, &str); 11] = [
-    ("from", "bytes32"), ("to", "bytes32"), ("value", "uint256"), ("entryRef", "bytes32"), ("batch", "uint256"), ("nonce", "uint256"),
-    ("validUntil", "uint256"), ("mode", "uint32"), ("relayer", "address"), ("fee", "uint256"), ("feeRecipient", "address"),
+    ("from", "bytes32"),
+    ("to", "bytes32"),
+    ("value", "uint256"),
+    ("entryRef", "bytes32"),
+    ("batch", "uint256"),
+    ("nonce", "uint256"),
+    ("validUntil", "uint256"),
+    ("mode", "uint32"),
+    ("relayer", "address"),
+    ("fee", "uint256"),
+    ("feeRecipient", "address"),
 ];
-const UMT: &str = "(bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
+const UMT: &str =
+    "(bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
 const UASIG: &str = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
 const MODE_RESTRICT_RELAYER: u64 = 1;
 
@@ -54,7 +67,11 @@ impl V {
 }
 fn seq(xs: &[V]) -> Vec<u8> {
     let encs: Vec<Vec<u8>> = xs.iter().map(V::enc).collect();
-    let mut off: usize = xs.iter().zip(&encs).map(|(x, e)| if x.dynamic() { 32 } else { e.len() }).sum();
+    let mut off: usize = xs
+        .iter()
+        .zip(&encs)
+        .map(|(x, e)| if x.dynamic() { 32 } else { e.len() })
+        .sum();
     let (mut head, mut tail) = (Vec::new(), Vec::new());
     for (x, e) in xs.iter().zip(encs) {
         if x.dynamic() {
@@ -68,11 +85,21 @@ fn seq(xs: &[V]) -> Vec<u8> {
     [head, tail].concat()
 }
 fn sig_v(s: &UASig) -> V {
-    let inner = |m: &crate::ua8::InnerSig| V::T(vec![V::W(word(m.index.into())), V::B(m.sig.clone())]);
-    let member = |m: &crate::ua8::MemberSig| {
-        V::T(vec![V::W(word(m.index.into())), V::A(m.members.iter().map(inner).collect()), V::B(m.sig.clone())])
+    let inner = |m: &crate::ua_portable::InnerSig| {
+        V::T(vec![V::W(word(m.index.into())), V::B(m.sig.clone())])
     };
-    V::T(vec![V::B(s.key_data.clone()), V::B(s.signature.clone()), V::A(s.members.iter().map(member).collect())])
+    let member = |m: &crate::ua_portable::MemberSig| {
+        V::T(vec![
+            V::W(word(m.index.into())),
+            V::A(m.members.iter().map(inner).collect()),
+            V::B(m.sig.clone()),
+        ])
+    };
+    V::T(vec![
+        V::B(s.key_data.clone()),
+        V::B(s.signature.clone()),
+        V::A(s.members.iter().map(member).collect()),
+    ])
 }
 fn atom_v(ty: &str, v: Option<&Value>) -> Result<V> {
     Ok(match abi_atom(ty, v)? {
@@ -117,7 +144,9 @@ fn u64_of(v: &Value, k: &str) -> Result<u64> {
 /// `from` as a 32-byte id, or `address` / `bytes32` per `ty` (a hex string, exact length).
 fn fixed<const N: usize>(v: &Value, k: &str) -> Result<[u8; N]> {
     let s = get(v, k).and_then(Value::as_str).ok_or(Error::Argument)?;
-    super::eip712::from_hex(s).and_then(|b| b.try_into().ok()).ok_or(Error::Argument)
+    super::eip712::from_hex(s)
+        .and_then(|b| b.try_into().ok())
+        .ok_or(Error::Argument)
 }
 
 /// A built service pull: what the payer is shown and signs (`transfer`), and what is sent once signed.
@@ -146,20 +175,45 @@ pub struct ServicePull {
 /// operation's typed data `{domain, types, primaryType, message}` in the service's domain, `name` the token's domain name
 /// (`SCaaS MetaToken` when absent). `Argument` for every refusal of the module doc.
 pub fn service_pull(input: &Value) -> Result<ServicePull> {
-    const KEYS: [&str; 11] = ["name", "token", "chainId", "chainUid", "entry", "op", "from", "amount", "batch", "nonce", "validUntil"];
-    if input.as_object().is_none_or(|o| o.keys().any(|k| !KEYS.contains(&k.as_str()))) {
+    const KEYS: [&str; 11] = [
+        "name",
+        "token",
+        "chainId",
+        "chainUid",
+        "entry",
+        "op",
+        "from",
+        "amount",
+        "batch",
+        "nonce",
+        "validUntil",
+    ];
+    if input
+        .as_object()
+        .is_none_or(|o| o.keys().any(|k| !KEYS.contains(&k.as_str())))
+    {
         return Err(Error::Argument);
     }
-    let entry = get(input, "entry").and_then(Value::as_str).ok_or(Error::Argument)?;
+    let entry = get(input, "entry")
+        .and_then(Value::as_str)
+        .ok_or(Error::Argument)?;
     let mut c = entry.chars();
-    if !c.next().is_some_and(|f| f.is_ascii_alphabetic() || f == '_') || !c.all(|x| x.is_ascii_alphanumeric() || x == '_') {
+    if !c
+        .next()
+        .is_some_and(|f| f.is_ascii_alphabetic() || f == '_')
+        || !c.all(|x| x.is_ascii_alphanumeric() || x == '_')
+    {
         return Err(Error::Argument);
     }
     let name = match get(input, "name") {
         None => "SCaaS MetaToken",
         Some(n) => n.as_str().ok_or(Error::Argument)?,
     };
-    let (token, chain_uid, from) = (fixed::<20>(input, "token")?, fixed::<32>(input, "chainUid")?, fixed::<32>(input, "from")?);
+    let (token, chain_uid, from) = (
+        fixed::<20>(input, "token")?,
+        fixed::<32>(input, "chainUid")?,
+        fixed::<32>(input, "from")?,
+    );
     let chain_id = u64_of(input, "chainId")?;
     let op = TypedData::from_value(get(input, "op").ok_or(Error::Argument)?.clone())?;
     let d = op.domain();
@@ -169,10 +223,17 @@ pub fn service_pull(input: &Value) -> Result<ServicePull> {
     }
     let primary = op.primary_type().to_string();
     let fields = op.fields_of(&primary).ok_or(Error::Argument)?;
-    if fields.is_empty() || fields.len() > MAX_OP_FIELDS || op.struct_count() != 1 || !fields.iter().all(|(_, t)| pull_atom(t)) {
+    if fields.is_empty()
+        || fields.len() > MAX_OP_FIELDS
+        || op.struct_count() != 1
+        || !fields.iter().all(|(_, t)| pull_atom(t))
+    {
         return Err(Error::Argument); // C3: at most 16 atomic, `bytes` or `string` fields, no nested struct, no array
     }
-    if fields.first().is_none_or(|(n, t)| n != "payer" || t != "bytes32") {
+    if fields
+        .first()
+        .is_none_or(|(n, t)| n != "payer" || t != "bytes32")
+    {
         return Err(Error::Argument);
     }
     let m = op.message().clone();
@@ -194,8 +255,19 @@ pub fn service_pull(input: &Value) -> Result<ServicePull> {
         "validUntil": u256_to_dec(&uint_of(input, "validUntil")?), "mode": MODE_RESTRICT_RELAYER, "relayer": to_hex(&service),
         "fee": "0", "feeRecipient": super::eip712::ZERO_ADDRESS,
     });
-    let transfer = scaas_typed_data("UAMetaTransfer", Some(name), &token, chain_id, &chain_uid, &message)?;
-    let types = fields.iter().map(|(_, t)| t.as_str()).collect::<Vec<_>>().join(",");
+    let transfer = scaas_typed_data(
+        "UAMetaTransfer",
+        Some(name),
+        &token,
+        chain_id,
+        &chain_uid,
+        &message,
+    )?;
+    let types = fields
+        .iter()
+        .map(|(_, t)| t.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
     let abi_signature = format!("{entry}(({types}),{UMT},{UASIG})");
     let prompt = json!({
         "service": to_hex(&service), "serviceName": d.get("name").cloned().unwrap_or(Value::Null), "op": primary, "message": m,
@@ -233,12 +305,24 @@ pub struct RelayFeeWrap {
 impl ServicePull {
     fn t_value(&self) -> Result<V> {
         let m = self.transfer.message();
-        UMT_FIELDS.iter().map(|(n, t)| atom_v(t, m.get(*n))).collect::<Result<Vec<_>>>().map(V::T)
+        UMT_FIELDS
+            .iter()
+            .map(|(n, t)| atom_v(t, m.get(*n)))
+            .collect::<Result<Vec<_>>>()
+            .map(V::T)
     }
     /// `<entry>(op, t, auth)`: the call the relayer sends to the service.
     pub fn calldata(&self, auth: &UASig) -> Result<Vec<u8>> {
-        let op = self.op_values.iter().map(|(n, t)| atom_v(t, self.op_message.get(n))).collect::<Result<Vec<_>>>()?;
-        Ok([self.selector.to_vec(), seq(&[V::T(op), self.t_value()?, sig_v(auth)])].concat())
+        let op = self
+            .op_values
+            .iter()
+            .map(|(n, t)| atom_v(t, self.op_message.get(n)))
+            .collect::<Result<Vec<_>>>()?;
+        Ok([
+            self.selector.to_vec(),
+            seq(&[V::T(op), self.t_value()?, sig_v(auth)]),
+        ]
+        .concat())
     }
     /// The node job's named fields (spec §8): `{entry, contract: "service", token: the service, args: {op, pullToken, t, auth}}`.
     pub fn job(&self, auth: &Value) -> Value {
@@ -249,17 +333,39 @@ impl ServicePull {
     /// service is the router or its executor; the fee in the pulled token on the pull's own lane and nonce (the pull runs first
     /// and spends it, §2.4: the fee takes `nonce + 1`); a zero fee.
     pub fn relay_fee(&self, auth: &UASig, f: &Value) -> Result<RelayFeeWrap> {
-        const KEYS: [&str; 8] = ["name", "feeToken", "router", "executor", "value", "batch", "nonce", "validUntil"];
-        if f.as_object().is_none_or(|o| o.keys().any(|k| !KEYS.contains(&k.as_str()))) {
+        const KEYS: [&str; 8] = [
+            "name",
+            "feeToken",
+            "router",
+            "executor",
+            "value",
+            "batch",
+            "nonce",
+            "validUntil",
+        ];
+        if f.as_object()
+            .is_none_or(|o| o.keys().any(|k| !KEYS.contains(&k.as_str())))
+        {
             return Err(Error::Argument);
         }
-        let (fee_token, router, executor) = (fixed::<20>(f, "feeToken")?, fixed::<20>(f, "router")?, fixed::<20>(f, "executor")?);
-        let (value, batch, nonce) = (uint_of(f, "value")?, uint_of(f, "batch")?, uint_of(f, "nonce")?);
+        let (fee_token, router, executor) = (
+            fixed::<20>(f, "feeToken")?,
+            fixed::<20>(f, "router")?,
+            fixed::<20>(f, "executor")?,
+        );
+        let (value, batch, nonce) = (
+            uint_of(f, "value")?,
+            uint_of(f, "batch")?,
+            uint_of(f, "nonce")?,
+        );
         let t = self.transfer.message();
         if self.service == router || self.service == executor || value == [0; 32] {
             return Err(Error::Argument);
         }
-        if fee_token == self.token && batch == uint_value(t.get("batch"))? && nonce == uint_value(t.get("nonce"))? {
+        if fee_token == self.token
+            && batch == uint_value(t.get("batch"))?
+            && nonce == uint_value(t.get("nonce"))?
+        {
             return Err(Error::Argument);
         }
         let name = match get(f, "name") {
@@ -273,7 +379,14 @@ impl ServicePull {
             "payee": to_hex(&pad(&router)), "value": u256_to_dec(&value), "batch": u256_to_dec(&batch), "nonce": u256_to_dec(&nonce),
             "validUntil": u256_to_dec(&uint_of(f, "validUntil")?), "relayer": to_hex(&router),
         });
-        let fee = scaas_typed_data("UARelayFee", Some(name), &fee_token, self.chain_id, &self.chain_uid, &message)?;
+        let fee = scaas_typed_data(
+            "UARelayFee",
+            Some(name),
+            &fee_token,
+            self.chain_id,
+            &self.chain_uid,
+            &message,
+        )?;
         Ok(RelayFeeWrap {
             relay_ref: relay_ref(self.chain_id, &self.service, &call_data),
             call_data_hash,
@@ -290,11 +403,20 @@ impl RelayFeeWrap {
     pub fn calldata(&self, fee_auth: &UASig) -> Result<Vec<u8>> {
         let m = self.fee.message();
         let w = |n: &str, t: &str| atom_v(t, m.get(n));
-        let sig = format!("relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,{UASIG})");
+        let sig = format!(
+            "relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,{UASIG})"
+        );
         let args = [
-            w("target", "address")?, V::B(self.call_data.clone()), V::W(pad(&self.fee_token)), w("from", "bytes32")?,
-            w("payee", "bytes32")?, w("value", "uint256")?, w("batch", "uint256")?, w("nonce", "uint256")?,
-            w("validUntil", "uint256")?, sig_v(fee_auth),
+            w("target", "address")?,
+            V::B(self.call_data.clone()),
+            V::W(pad(&self.fee_token)),
+            w("from", "bytes32")?,
+            w("payee", "bytes32")?,
+            w("value", "uint256")?,
+            w("batch", "uint256")?,
+            w("nonce", "uint256")?,
+            w("validUntil", "uint256")?,
+            sig_v(fee_auth),
         ];
         Ok([selector(&sig).to_vec(), seq(&args)].concat())
     }

@@ -44,10 +44,19 @@ contract ChainNeutralKindsTest is Test {
         ureg.setSmartKeyCloneHash(EnvKit.cloneHash(address(0xBEEF)));
         router = new GovernanceRouter(UID_, address(ureg), address(0xBEEF), false);
         f = EnvKit.factory(registrar, UID_, 0, address(router));
-        impl = NormalToken(Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg),
-            address(0), false));
-        tok = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
-            abi.encode(normalInit("N", "N", 6, 1000, vm.addr(PK), address(0))), "t"));
+        impl = NormalToken(
+            Catalogue.plain(
+                f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0), false
+            )
+        );
+        tok = NormalToken(
+            f.createToken(
+                IOpenFactory.TokenKind.NORMAL,
+                1,
+                abi.encode(normalInit("N", "N", 6, 1000, vm.addr(PK), address(0))),
+                "t"
+            )
+        );
     }
 
     function _cfg() internal pure returns (bytes memory) {
@@ -87,14 +96,47 @@ contract ChainNeutralKindsTest is Test {
     function test_eip712Domain_saltIsTheDigests() public view {
         (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) = tok.eip712Domain();
         assertEq(salt, UID_);
-        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: nid(vm.addr(PK)), to: nid(address(0xCAFE)),
-            value: 1, entryRef: 0, batch: 1, nonce: 0, validUntil: 1_800_000_600, mode: 0, relayer: address(0), fee: 0,
-            feeRecipient: address(0)});
-        bytes32 dom = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
-        bytes32 sh = keccak256(abi.encode(MetaTxLib.UAMETATRANSFER_TYPEHASH, x.from, x.to, x.value, x.entryRef, x.batch,
-            x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient));
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: nid(vm.addr(PK)),
+            to: nid(address(0xCAFE)),
+            value: 1,
+            entryRef: 0,
+            batch: 1,
+            nonce: 0,
+            validUntil: 1_800_000_600,
+            mode: 0,
+            relayer: address(0),
+            fee: 0,
+            feeRecipient: address(0)
+        });
+        bytes32 dom = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                vc,
+                salt
+            )
+        );
+        bytes32 sh = keccak256(
+            abi.encode(
+                MetaTxLib.UAMETATRANSFER_TYPEHASH,
+                x.from,
+                x.to,
+                x.value,
+                x.entryRef,
+                x.batch,
+                x.nonce,
+                x.validUntil,
+                x.mode,
+                x.relayer,
+                x.fee,
+                x.feeRecipient
+            )
+        );
         assertEq(tok.mtxTransferDigest(x), keccak256(abi.encodePacked(hex"1901", dom, sh)));
     }
 
@@ -112,8 +154,16 @@ contract ChainNeutralKindsTest is Test {
         NormalToken(bare).initialize(nid(address(this)), 1, _cfg());
         // a truncated env: the head without its counts
         address cut;
-        bytes memory code = abi.encodePacked(hex"363d3d373d3d3d363d73", address(impl), hex"5af43d82803e903d91602b57fd5bf3",
-            UID_, address(ureg), address(router), address(0), false);
+        bytes memory code = abi.encodePacked(
+            hex"363d3d373d3d3d363d73",
+            address(impl),
+            hex"5af43d82803e903d91602b57fd5bf3",
+            UID_,
+            address(ureg),
+            address(router),
+            address(0),
+            false
+        );
         cut = address(0xC07);
         vm.etch(cut, code);
         vm.prank(address(f));
@@ -138,8 +188,8 @@ contract ChainNeutralKindsTest is Test {
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
         NormalToken(three).initialize(nid(address(this)), 1, _cfg());
         // trailing bytes past the counts
-        bytes memory longer = bytes.concat(EnvKit.runtime(address(impl), EnvKit.env(UID_, address(ureg), address(0), false)),
-            hex"00");
+        bytes memory longer =
+            bytes.concat(EnvKit.runtime(address(impl), EnvKit.env(UID_, address(ureg), address(0), false)), hex"00");
         vm.etch(address(0xC08), longer);
         vm.prank(address(f));
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
@@ -178,8 +228,9 @@ contract ChainNeutralKindsTest is Test {
 
     function test_dex_readsItsEnvAndItsReleaseSignsNothing() public {
         SCaaSDex dImpl = SCaaSDex(Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0xBEEF)));
-        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0xD7), false, 0, address(0), 0, 0)),
-            "d");
+        address d = f.createDex(
+            1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0xD7), false, 0, address(0), 0, 0)), "d"
+        );
         assertEq(SCaaSDex(d).chainUid(), UID_);
         assertEq(SCaaSDex(d).GOV_ROUTER(), address(router));
         assertEq(SCaaSDex(d).SMART_KEY_ACCOUNT_IMPL(), address(0xBEEF));
@@ -190,8 +241,10 @@ contract ChainNeutralKindsTest is Test {
         vm.prank(address(f));
         vm.expectRevert(IFactoryToken.EnvMissing.selector);
         dImpl.initialize(nid(address(this)), 1, "");
-        assertEq(keccak256(abi.encode(SCaaSDex(d).chainEnv())),
-            keccak256(abi.encode(EnvKit.env(UID_, address(0), address(0xBEEF), false, address(router)))));
+        assertEq(
+            keccak256(abi.encode(SCaaSDex(d).chainEnv())),
+            keccak256(abi.encode(EnvKit.env(UID_, address(0), address(0xBEEF), false, address(router))))
+        );
         dImpl.validateEnv(SCaaSDex(d).chainEnv()); // the DEX checks nothing
     }
 

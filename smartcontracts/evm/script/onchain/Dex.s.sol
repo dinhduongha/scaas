@@ -25,7 +25,10 @@ interface ISettleOne {
 ///         the caller under its allowance and pays `amountOut` of `tOut` to `to` from its own inventory (copied from
 ///         test/v2/DexExchange.t.sol `MockRouter`, without the quirks).
 contract OnchainRouter {
-    function swap(address tIn, address tOut, uint256 amountIn, uint256 amountOut, address to) external returns (uint256) {
+    function swap(address tIn, address tOut, uint256 amountIn, uint256 amountOut, address to)
+        external
+        returns (uint256)
+    {
         IERC20(tIn).transferFrom(msg.sender, address(this), amountIn);
         IERC20(tOut).transfer(to, amountOut);
         return amountOut;
@@ -35,11 +38,18 @@ contract OnchainRouter {
 /// @notice TEST ONLY fixture: an executor of the exchange path (b): pays each floor plus `abi.decode(data, (int256))` from its
 ///         own inventory (test/v2/DexExchange.t.sol `MockExecutor`, without the optional call).
 contract OnchainExecutor is IExchangeExecutor {
-    function exchangeCallback(bytes32, address[] calldata, uint256[] calldata, address[] calldata tokensIn,
-        uint256[] calldata amountsIn, bytes calldata data) external
-    {
+    function exchangeCallback(
+        bytes32,
+        address[] calldata,
+        uint256[] calldata,
+        address[] calldata tokensIn,
+        uint256[] calldata amountsIn,
+        bytes calldata data
+    ) external {
         int256 bonus = abi.decode(data, (int256));
-        for (uint256 i; i < tokensIn.length; ++i) IERC20(tokensIn[i]).transfer(msg.sender, uint256(int256(amountsIn[i]) + bonus));
+        for (uint256 i; i < tokensIn.length; ++i) {
+            IERC20(tokensIn[i]).transfer(msg.sender, uint256(int256(amountsIn[i]) + bonus));
+        }
     }
 }
 
@@ -106,7 +116,11 @@ contract Dex is OnchainBase {
     function _setup() internal {
         A = _normal("Onchain Dex A", "oDA", a1);
         B = _normal("Onchain Dex B", "oDB", a2);
-        usdc = MockERC20(_create2(abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain USD", "oUSD", uint8(6))), "usdc"));
+        usdc = MockERC20(
+            _create2(
+                abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain USD", "oUSD", uint8(6))), "usdc"
+            )
+        );
         _book(address(usdc), "MockERC20");
         vm.startBroadcast(k1);
         usdc.mint(a1, 1e12);
@@ -152,7 +166,11 @@ contract Dex is OnchainBase {
         return abi.decode(r, (address));
     }
 
-    function _base(string memory name, string memory symbol) internal pure returns (IFactoryToken.TokenConfig memory c) {
+    function _base(string memory name, string memory symbol)
+        internal
+        pure
+        returns (IFactoryToken.TokenConfig memory c)
+    {
         (c.name, c.symbol, c.decimals) = (name, symbol, 6);
         c.features = 1 << GovernanceBits.PAYABLE;
     }
@@ -190,7 +208,8 @@ contract Dex is OnchainBase {
     }
 
     function _dex(uint64 grantDelay, uint256 features, string memory what) internal returns (ISCaaSDex d) {
-        bytes memory cfg = abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, TREASURY, false, grantDelay, address(0), features, 0));
+        bytes memory cfg =
+            abi.encode(ISCaaSDex.DexConfig(_pad(a1), 200_000, TREASURY, false, grantDelay, address(0), features, 0));
         vm.broadcast(k1);
         d = ISCaaSDex(f.createDex(1, cfg, _salt(what)));
         _book(address(d), "SCaaSDex");
@@ -218,54 +237,73 @@ contract Dex is OnchainBase {
     // ------------------------------------------------------------------ orders and legs
 
     function _o(bytes32 from, address recv, uint256 amt, uint256 recvAmt, uint256 fee)
-        internal returns (ITradeToken.UATradeOrder memory o)
+        internal
+        returns (ITradeToken.UATradeOrder memory o)
     {
         (o.from, o.receiveToken, o.amount, o.receiveAmount, o.fee) = (from, recv, amt, recvAmt, fee);
         (o.dex, o.batch, o.nonce, o.validUntil) = (address(dex), 1, ++on, vu);
     }
 
     function _leg(address sell, ITradeToken.UATradeOrder memory o, uint256 pk, uint256 fill)
-        internal view returns (ISCaaSDex.DexLeg memory l)
+        internal
+        view
+        returns (ISCaaSDex.DexLeg memory l)
     {
         (l.sellToken, l.shape, l.uaOrder, l.fill) = (sell, 1, o, fill);
         l.auth.signature = _ecdsa(pk, ITradeToken(sell).tradeOrderDigest(o));
     }
 
     function _outside(address from, address recv, uint256 amt, uint256 recvAmt)
-        internal returns (ITradeToken.TradeOrder memory o)
+        internal
+        returns (ITradeToken.TradeOrder memory o)
     {
         (o.from, o.receiveToken, o.amount, o.receiveAmount) = (from, recv, amt, recvAmt);
         (o.dex, o.batch, o.nonce, o.validUntil) = (address(dex), 1, ++on, vu);
     }
 
-    function _leg0(ITradeToken.TradeOrder memory o, uint256 pk, uint256 fill) internal view returns (ISCaaSDex.DexLeg memory l) {
+    function _leg0(ITradeToken.TradeOrder memory o, uint256 pk, uint256 fill)
+        internal
+        view
+        returns (ISCaaSDex.DexLeg memory l)
+    {
         return _leg0t(address(usdc), o, pk, fill);
     }
 
     /// An outside leg (shape 0) selling `t`, signed as a `DexOrder` on the current `dex`.
     function _leg0t(address t, ITradeToken.TradeOrder memory o, uint256 pk, uint256 fill)
-        internal view returns (ISCaaSDex.DexLeg memory l)
+        internal
+        view
+        returns (ISCaaSDex.DexLeg memory l)
     {
         (l.sellToken, l.order, l.fill) = (t, o, fill);
         l.sig = _ecdsa(pk, dex.dexOrderDigest(t, o));
     }
 
     function _x(ISCaaSDex.DexLeg memory l, uint256 sellFill, uint256 receiveFill)
-        internal pure returns (ISCaaSDex.ExchangeLeg memory x)
+        internal
+        pure
+        returns (ISCaaSDex.ExchangeLeg memory x)
     {
-        (x.sellToken, x.shape, x.order, x.uaOrder, x.sig, x.auth) = (l.sellToken, l.shape, l.order, l.uaOrder, l.sig, l.auth);
+        (x.sellToken, x.shape, x.order, x.uaOrder, x.sig, x.auth) =
+        (l.sellToken, l.shape, l.order, l.uaOrder, l.sig, l.auth);
         (x.sellFill, x.receiveFill) = (sellFill, receiveFill);
     }
 
     function _one(bytes32 ref, ISCaaSDex.DexLeg memory taker, ISCaaSDex.DexLeg memory maker)
-        internal pure returns (ISCaaSDex.Settlement memory s)
+        internal
+        pure
+        returns (ISCaaSDex.Settlement memory s)
     {
         (s.ref, s.taker) = (ref, taker);
         s.makers = new ISCaaSDex.DexLeg[](1);
         s.makers[0] = maker;
     }
 
-    function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l) internal pure returns (ISCaaSDex.ExchangePlan memory p) {
+    function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l)
+        internal
+        pure
+        returns (ISCaaSDex.ExchangePlan memory p)
+    {
         p.ref = ref;
         p.legs = new ISCaaSDex.ExchangeLeg[](1);
         p.legs[0] = l;
@@ -273,12 +311,15 @@ contract Dex is OnchainBase {
 
     /// `approve(r, amountIn)` on `tIn`, then `r.swap(tIn, tOut, amountIn, amountOut, dex)`.
     function _swap(OnchainRouter r, address tIn, address tOut, uint256 amountIn, uint256 amountOut)
-        internal view returns (ISCaaSDex.Interaction[] memory xs)
+        internal
+        view
+        returns (ISCaaSDex.Interaction[] memory xs)
     {
         xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(tIn, abi.encodeCall(IERC20.approve, (address(r), amountIn)));
-        xs[1] = ISCaaSDex.Interaction(address(r),
-            abi.encodeCall(OnchainRouter.swap, (tIn, tOut, amountIn, amountOut, address(dex))));
+        xs[1] = ISCaaSDex.Interaction(
+            address(r), abi.encodeCall(OnchainRouter.swap, (tIn, tOut, amountIn, amountOut, address(dex)))
+        );
     }
 
     /// a1 sells 1000 A for at least 1900 B at `fee` ppm, as an exchange leg with the floor 1900.
@@ -291,21 +332,35 @@ contract Dex is OnchainBase {
     function _settle() internal {
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](2);
         // 1. a1 sells 1000 A for >= 1900 B (0.3 %), a2 sells 2000 B for 1000 A (0.1 %)
-        ss[0] = _one("ab", _leg(A, _o(_pad(a1), B, 1000, 1900, 3_000), k1, 1000),
-            _leg(B, _o(_pad(a2), A, 2000, 1000, 1_000), k2, 2000));
+        ss[0] = _one(
+            "ab",
+            _leg(A, _o(_pad(a1), B, 1000, 1900, 3_000), k1, 1000),
+            _leg(B, _o(_pad(a2), A, 2000, 1000, 1_000), k2, 2000)
+        );
         // 2. the same with the taker's auth by the wrong key: MatchFailed, the batch still settles 1
-        ss[1] = _one("bad", _leg(A, _o(_pad(a1), B, 1000, 1900, 0), k2, 1000),
-            _leg(B, _o(_pad(a2), A, 2000, 1000, 0), k2, 2000));
+        ss[1] = _one(
+            "bad", _leg(A, _o(_pad(a1), B, 1000, 1900, 0), k2, 1000), _leg(B, _o(_pad(a2), A, 2000, 1000, 0), k2, 2000)
+        );
         vm.broadcast(k3);
         bool[] memory ok = dex.mtxSettle{gas: G}(ss);
         require(ok[0] && !ok[1], "settle: 1 of 2");
         // an outside leg: a3 sells 1000 usdc (DexOrder, pulled by the puller) for 1000 A; a1 sells 1000 A for 1000 usdc
         ss = new ISCaaSDex.Settlement[](3);
-        ss[0] = _one("usd", _leg0(_outside(a3, A, 1000, 1000), k3, 1000), _leg(A, _o(_pad(a1), address(usdc), 1000, 1000, 0), k1, 1000));
+        ss[0] = _one(
+            "usd",
+            _leg0(_outside(a3, A, 1000, 1000), k3, 1000),
+            _leg(A, _o(_pad(a1), address(usdc), 1000, 1000, 0), k1, 1000)
+        );
         // a wrapped leg: a1 sells 1000 W for 1000 B; a2 sells 1000 B for 1000 W
-        ss[1] = _one("w", _leg(W, _o(_pad(a1), B, 1000, 1000, 2_000), k1, 1000), _leg(B, _o(_pad(a2), W, 1000, 1000, 0), k2, 1000));
+        ss[1] = _one(
+            "w",
+            _leg(W, _o(_pad(a1), B, 1000, 1000, 2_000), k1, 1000),
+            _leg(B, _o(_pad(a2), W, 1000, 1000, 0), k2, 1000)
+        );
         // a regulated leg: a2 sells 1000 R for 1000 A; a1 sells 1000 A for 1000 R
-        ss[2] = _one("r", _leg(R, _o(_pad(a2), A, 1000, 1000, 0), k2, 1000), _leg(A, _o(_pad(a1), R, 1000, 1000, 0), k1, 1000));
+        ss[2] = _one(
+            "r", _leg(R, _o(_pad(a2), A, 1000, 1000, 0), k2, 1000), _leg(A, _o(_pad(a1), R, 1000, 1000, 0), k1, 1000)
+        );
         vm.broadcast(k2);
         ok = dex.mtxSettle{gas: G}(ss);
         require(ok[0] && ok[1] && ok[2], "settle: outside, wrapped, regulated");
@@ -369,15 +424,21 @@ contract Dex is OnchainBase {
         ISCaaSDex main = dex;
         dexC = _dex(0, CLOSED, "dexC");
         dexO = _dex(0, CLOSED, "dexO");
-        require(IGovernance(address(dexC)).features() & CLOSED != 0 && IGovernance(address(dexO)).features() & CLOSED != 0,
-            "closed at creation");
+        require(
+            IGovernance(address(dexC)).features() & CLOSED != 0 && IGovernance(address(dexO)).features() & CLOSED != 0,
+            "closed at creation"
+        );
         bytes32 wc = dexC.chainUid();
         vm.broadcast(k1);
         dexC.setMarket{gas: G}(A, B, true, wc);
         dex = dexC;
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](2);
-        ss[0] = _one("cw", _leg(A, _o(_pad(a1), W, 1000, 1000, 0), k1, 1000), _leg(W, _o(_pad(a2), A, 1000, 1000, 0), k2, 1000));
-        ss[1] = _one("cab", _leg(A, _o(_pad(a1), B, 1000, 1900, 0), k1, 1000), _leg(B, _o(_pad(a2), A, 2000, 1000, 0), k2, 2000));
+        ss[0] = _one(
+            "cw", _leg(A, _o(_pad(a1), W, 1000, 1000, 0), k1, 1000), _leg(W, _o(_pad(a2), A, 1000, 1000, 0), k2, 1000)
+        );
+        ss[1] = _one(
+            "cab", _leg(A, _o(_pad(a1), B, 1000, 1900, 0), k1, 1000), _leg(B, _o(_pad(a2), A, 2000, 1000, 0), k2, 2000)
+        );
         vm.broadcast(k3);
         bool[] memory ok = dexC.mtxSettle{gas: G}(ss);
         require(!ok[0] && ok[1], "closed: the unlisted A / W refused, the listed A / B settles");
@@ -386,17 +447,37 @@ contract Dex is OnchainBase {
         hp.taker = _leg(A, _o(_pad(a1), W, 1000, 1000, 0), k1, 1000);
         hp.makers = new ISCaaSDex.DexLeg[](0);
         (hp.outsideSell, hp.outsideFloor) = (1000, 1000);
-        _negData(a3, address(dexC), abi.encodeCall(ISCaaSDex.mtxHybrid, (hp, _swap(router, A, W, 1000, 1000))),
-            abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, A, W), "mtxHybrid on dexC (closed), A / W not listed");
-        _negData(a3, address(dexC), abi.encodeCall(ISCaaSDex.mtxExchange,
-            (_plan("cxneg", _x(_leg(W, _o(_pad(a1), B, 1000, 1000, 0), k1, 0), 1000, 1000)), _swap(router, W, B, 1000, 1000))),
-            abi.encodeWithSelector(ISCaaSDex.TokenNotKnown.selector, W), "mtxExchange on dexC (closed), W in no listed market");
+        _negData(
+            a3,
+            address(dexC),
+            abi.encodeCall(ISCaaSDex.mtxHybrid, (hp, _swap(router, A, W, 1000, 1000))),
+            abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, A, W),
+            "mtxHybrid on dexC (closed), A / W not listed"
+        );
+        _negData(
+            a3,
+            address(dexC),
+            abi.encodeCall(
+                ISCaaSDex.mtxExchange,
+                (
+                    _plan("cxneg", _x(_leg(W, _o(_pad(a1), B, 1000, 1000, 0), k1, 0), 1000, 1000)),
+                    _swap(router, W, B, 1000, 1000)
+                )
+            ),
+            abi.encodeWithSelector(ISCaaSDex.TokenNotKnown.selector, W),
+            "mtxExchange on dexC (closed), W in no listed market"
+        );
         bytes32 wo = dexO.chainUid();
         vm.broadcast(k1);
         IGovernance(address(dexO)).disableFeature{gas: G}(GovernanceBits.CLOSED_MARKETS, wo); // the DEX's own-word control
         require(IGovernance(address(dexO)).features() & CLOSED == 0, "dexO open");
-        _negData(a1, address(dexO), abi.encodeWithSignature("enableFeature(uint8,bytes32)", GovernanceBits.CLOSED_MARKETS, wo), "",
-            "enableFeature(29) on dexO after its disable: no such entry on the DEX (bit 29 never comes back)");
+        _negData(
+            a1,
+            address(dexO),
+            abi.encodeWithSignature("enableFeature(uint8,bytes32)", GovernanceBits.CLOSED_MARKETS, wo),
+            "",
+            "enableFeature(29) on dexO after its disable: no such entry on the DEX (bit 29 never comes back)"
+        );
         dex = main;
     }
 
@@ -424,26 +505,45 @@ contract Dex is OnchainBase {
         // SCaaS - SCaaS, exact
         (uint256 b0, uint256 x0) = (IERC20(B).balanceOf(a1), IERC20(A).balanceOf(a2));
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
-        ss[0] = _one("oab", _leg(A, _o(_pad(a1), B, 1000, 1900, 3_000), k1, 1000), _leg(B, _o(_pad(a2), A, 2000, 1000, 1_000), k2, 2000));
+        ss[0] = _one(
+            "oab",
+            _leg(A, _o(_pad(a1), B, 1000, 1900, 3_000), k1, 1000),
+            _leg(B, _o(_pad(a2), A, 2000, 1000, 1_000), k2, 2000)
+        );
         vm.broadcast(k3);
         require(dexO.mtxSettle{gas: G}(ss)[0], "dexO: A / B never listed settles");
         require(IERC20(B).balanceOf(a1) == b0 + 1994 && IERC20(A).balanceOf(a2) == x0 + 999, "SCaaS - SCaaS exact");
         // an outside fee-on-transfer maker: the measured path
         uint256 f0 = IERC20(fot).balanceOf(a1);
-        ss[0] = _one("ofot", _leg(A, _o(_pad(a1), fot, 1000, 1900, 0), k1, 1000), _leg0t(fot, _outside(a3, A, 2000, 1000), k3, 2000));
+        ss[0] = _one(
+            "ofot",
+            _leg(A, _o(_pad(a1), fot, 1000, 1900, 0), k1, 1000),
+            _leg0t(fot, _outside(a3, A, 2000, 1000), k3, 2000)
+        );
         vm.broadcast(k3);
         require(dexO.mtxSettle{gas: G}(ss)[0], "dexO: FOT maker settles");
         require(IERC20(fot).balanceOf(a1) == f0 + 1961, "FOT: everything that arrived, paid out");
         // the exchange path, FOT received
         f0 = IERC20(fot).balanceOf(a1);
-        ISCaaSDex.ExchangePlan memory xp = _plan("oxf", _x(_leg(A, _o(_pad(a1), fot, 1000, 1900, 0), k1, 0), 1000, 1900));
+        ISCaaSDex.ExchangePlan memory xp =
+            _plan("oxf", _x(_leg(A, _o(_pad(a1), fot, 1000, 1900, 0), k1, 0), 1000, 1900));
         ISCaaSDex.Interaction[] memory xs = _swap(router, A, fot, 1000, 2000);
         vm.broadcast(k3);
         dexO.mtxExchange{gas: G}(xp, xs);
         require(IERC20(fot).balanceOf(a1) == f0 + 1961, "exchange: FOT credited");
-        _negData(a3, address(dexO), abi.encodeCall(ISCaaSDex.mtxExchange,
-            (_plan("oxneg", _x(_leg(A, _o(_pad(a1), fot, 1000, 1900, 0), k1, 0), 1000, 1900)), _swap(router, A, fot, 1000, 1920))),
-            abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, fot), "mtxExchange on dexO: FOT credited 1882 < 1900");
+        _negData(
+            a3,
+            address(dexO),
+            abi.encodeCall(
+                ISCaaSDex.mtxExchange,
+                (
+                    _plan("oxneg", _x(_leg(A, _o(_pad(a1), fot, 1000, 1900, 0), k1, 0), 1000, 1900)),
+                    _swap(router, A, fot, 1000, 1920)
+                )
+            ),
+            abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, fot),
+            "mtxExchange on dexO: FOT credited 1882 < 1900"
+        );
         // the hybrid with an outside FOT maker, (a) the router and (b) the executor
         f0 = IERC20(fot).balanceOf(a1);
         x0 = IERC20(A).balanceOf(a3);
@@ -479,12 +579,27 @@ contract Dex is OnchainBase {
         bytes32 wr = IMetaTx(R).chainUid();
         vm.broadcast(k1);
         IGovernance(R).renounceRole{gas: G}(GovernanceBits.DENYLIST, wr);
-        _negData(a1, R, abi.encodeCall(IGovernance.renounceRole, (GovernanceBits.ALLOWLIST, SIBLING_WORD)), _wordRefused(wr),
-            "renounceRole on kind 8 by a holder, a sibling's chain word");
-        _negData(a1, address(dexO), abi.encodeCall(IGovernance.disableFeature, (GovernanceBits.LISTING, SIBLING_WORD)),
-            _wordRefused(dexO.chainUid()), "disableFeature on a DEX by its admin, a sibling's chain word");
-        _negData(a1, address(dexC), abi.encodeCall(IGovernance.renounceRole, (GovernanceBits.FEE_ROUTING, SIBLING_WORD)),
-            _wordRefused(dexC.chainUid()), "renounceRole on a DEX by a holder, a sibling's chain word");
+        _negData(
+            a1,
+            R,
+            abi.encodeCall(IGovernance.renounceRole, (GovernanceBits.ALLOWLIST, SIBLING_WORD)),
+            _wordRefused(wr),
+            "renounceRole on kind 8 by a holder, a sibling's chain word"
+        );
+        _negData(
+            a1,
+            address(dexO),
+            abi.encodeCall(IGovernance.disableFeature, (GovernanceBits.LISTING, SIBLING_WORD)),
+            _wordRefused(dexO.chainUid()),
+            "disableFeature on a DEX by its admin, a sibling's chain word"
+        );
+        _negData(
+            a1,
+            address(dexC),
+            abi.encodeCall(IGovernance.renounceRole, (GovernanceBits.FEE_ROUTING, SIBLING_WORD)),
+            _wordRefused(dexC.chainUid()),
+            "renounceRole on a DEX by a holder, a sibling's chain word"
+        );
     }
 
     // ------------------------------------------------------------------ cancels and nonce floors (token and DEX)
@@ -521,8 +636,21 @@ contract Dex is OnchainBase {
         ITradeToken.UAWrapOrder memory o;
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill, o.fee) = (_pad(a1), W2, 1000, 1000, 1000, 1_000);
         (o.batch, o.nonce, o.validUntil) = (7, 1, vu);
-        ITradeToken.UATradeOrder memory t = ITradeToken.UATradeOrder(o.from, W2, o.amount, o.minMinted, o.minFill, o.fee,
-            o.relayer, W2, o.destination, o.flags, o.batch, o.nonce, o.validUntil);
+        ITradeToken.UATradeOrder memory t = ITradeToken.UATradeOrder(
+            o.from,
+            W2,
+            o.amount,
+            o.minMinted,
+            o.minFill,
+            o.fee,
+            o.relayer,
+            W2,
+            o.destination,
+            o.flags,
+            o.batch,
+            o.nonce,
+            o.validUntil
+        );
         bytes memory sig = _ecdsa(k1, ITradeToken(A).tradeOrderDigest(t));
         vm.broadcast(k2);
         IWrappedToken(W2).mtxWrapOrder{gas: G}(A, o, _uaSig(sig));
@@ -540,9 +668,23 @@ contract Dex is OnchainBase {
         vm.broadcast(k1);
         IERC20(A).transfer(a2, 1e7); // a2's A for the makers below
         uint8[7] memory ks = [1, 2, 3, 8, 9, 10, 11];
-        string[12] memory lb = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "", "", "", "",
-            "NormalRegulatedToken", "WrappedRegulatedToken", "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken"];
-        for (uint256 i; i < 7; ++i) _kind(ks[i], lb[ks[i]]);
+        string[12] memory lb = [
+            "NormalToken",
+            "WrappedToken",
+            "NormalZetherToken",
+            "WrappedZetherToken",
+            "",
+            "",
+            "",
+            "",
+            "NormalRegulatedToken",
+            "WrappedRegulatedToken",
+            "NormalZetherRegulatedToken",
+            "WrappedZetherRegulatedToken"
+        ];
+        for (uint256 i; i < 7; ++i) {
+            _kind(ks[i], lb[ks[i]]);
+        }
     }
 
     function _kind(uint8 n, string memory label) internal {
@@ -563,7 +705,9 @@ contract Dex is OnchainBase {
         IFactoryToken.TokenConfig memory c = _base("Onchain Dex K", string.concat("oDK", vm.toString(n)));
         c.admin = _pad(a1);
         if (n == 2 || n == 3 || n == 10 || n == 11) {
-            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
+            c.conf = IFactoryToken.ConfidentialConfig(
+                "", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false
+            );
         }
         if (n % 2 == 1) {
             c.legs = new IFactoryToken.Leg[](1);
@@ -581,8 +725,11 @@ contract Dex is OnchainBase {
 
     function _kindSettle(address x, uint8 n) internal {
         ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
-        ss[0] = _one(keccak256(abi.encode("kind", n)), _leg(x, _o(_pad(a1), A, 1000, 1000, 0), k1, 1000),
-            _leg(A, _o(_pad(a2), x, 1000, 1000, 0), k2, 1000));
+        ss[0] = _one(
+            keccak256(abi.encode("kind", n)),
+            _leg(x, _o(_pad(a1), A, 1000, 1000, 0), k1, 1000),
+            _leg(A, _o(_pad(a2), x, 1000, 1000, 0), k2, 1000)
+        );
         vm.broadcast(k2);
         require(dex.mtxSettle{gas: G}(ss)[0], string.concat("settle: kind ", vm.toString(n)));
     }
@@ -606,8 +753,21 @@ contract Dex is OnchainBase {
         ITradeToken.UAWrapOrder memory o;
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) = (_pad(a1), wt, amt, amt, amt);
         (o.batch, o.nonce, o.validUntil) = (7, ++wn, vu);
-        ITradeToken.UATradeOrder memory t = ITradeToken.UATradeOrder(o.from, wt, o.amount, o.minMinted, o.minFill, o.fee,
-            o.relayer, wt, o.destination, o.flags, o.batch, o.nonce, o.validUntil);
+        ITradeToken.UATradeOrder memory t = ITradeToken.UATradeOrder(
+            o.from,
+            wt,
+            o.amount,
+            o.minMinted,
+            o.minFill,
+            o.fee,
+            o.relayer,
+            wt,
+            o.destination,
+            o.flags,
+            o.batch,
+            o.nonce,
+            o.validUntil
+        );
         bytes memory sig = _ecdsa(k1, ITradeToken(A).tradeOrderDigest(t));
         vm.broadcast(k2);
         IWrappedToken(wt).mtxWrapOrder{gas: G}(A, o, _uaSig(sig));
@@ -651,32 +811,76 @@ contract Dex is OnchainBase {
         // an unlisted market refuses only on a closed DEX (CTR-DEX-32: open by default): `_closedMarkets` lists it on dexC
         // the cancelled order filled again
         ITradeToken.UATradeOrder memory c = cancelled;
-        _neg(a3, address(dex), abi.encodeCall(ISCaaSDex.mtxExchange,
-            (_plan("negc", _x(_leg(A, c, k1, 0), 1000, 1900)), _swap(router, A, B, 1000, 2000))),
-            ITradeToken.OrderClosed.selector, "mtxExchange of a cancelled order");
+        _neg(
+            a3,
+            address(dex),
+            abi.encodeCall(
+                ISCaaSDex.mtxExchange,
+                (_plan("negc", _x(_leg(A, c, k1, 0), 1000, 1900)), _swap(router, A, B, 1000, 2000))
+            ),
+            ITradeToken.OrderClosed.selector,
+            "mtxExchange of a cancelled order"
+        );
         // an outside leg signed by the wrong key
         ITradeToken.TradeOrder memory u = _outside(a3, A, 1000, 1000);
         ISCaaSDex.DexLeg memory bad = _leg0(u, k2, 0);
-        _neg(a3, address(dex), abi.encodeCall(ISCaaSDex.mtxExchange,
-            (_plan("negs", _x(bad, 1000, 1000)), _swap(router, address(usdc), A, 1000, 1000))),
-            ISCaaSDex.BadSignature.selector, "mtxExchange of an outside order with a bad signature");
+        _neg(
+            a3,
+            address(dex),
+            abi.encodeCall(
+                ISCaaSDex.mtxExchange, (_plan("negs", _x(bad, 1000, 1000)), _swap(router, address(usdc), A, 1000, 1000))
+            ),
+            ISCaaSDex.BadSignature.selector,
+            "mtxExchange of an outside order with a bad signature"
+        );
         // listed-only: an interaction on an unlisted router
-        _neg(a3, address(dex), abi.encodeCall(ISCaaSDex.mtxExchange, (_plan("negt", _aliceX(0)), _swap(router2, A, B, 1000, 2000))),
-            ISCaaSDex.TargetNotListed.selector, "mtxExchange through an unlisted target, listed-only on");
+        _neg(
+            a3,
+            address(dex),
+            abi.encodeCall(ISCaaSDex.mtxExchange, (_plan("negt", _aliceX(0)), _swap(router2, A, B, 1000, 2000))),
+            ISCaaSDex.TargetNotListed.selector,
+            "mtxExchange through an unlisted target, listed-only on"
+        );
         // the self-call entries and the factory's
         ISCaaSDex.Settlement memory s;
-        _neg(a3, address(dex), abi.encodeCall(ISettleOne.settleOne, (s, a3)), ISCaaSDex.NotSelf.selector, "settleOne called directly");
+        _neg(
+            a3,
+            address(dex),
+            abi.encodeCall(ISettleOne.settleOne, (s, a3)),
+            ISCaaSDex.NotSelf.selector,
+            "settleOne called directly"
+        );
         ISCaaSDex.ExchangePlan memory p;
-        _neg(a3, address(dex), abi.encodeCall(ISCaaSDex.exchangeOne, (p, new ISCaaSDex.Interaction[](0), a3)),
-            ISCaaSDex.NotSelf.selector, "exchangeOne called directly");
-        _neg(a3, address(dex), abi.encodeCall(ISCaaSDex.initialize, (bytes32(0), 1, "")), ISCaaSDex.NotFactory.selector,
-            "initialize called directly");
+        _neg(
+            a3,
+            address(dex),
+            abi.encodeCall(ISCaaSDex.exchangeOne, (p, new ISCaaSDex.Interaction[](0), a3)),
+            ISCaaSDex.NotSelf.selector,
+            "exchangeOne called directly"
+        );
+        _neg(
+            a3,
+            address(dex),
+            abi.encodeCall(ISCaaSDex.initialize, (bytes32(0), 1, "")),
+            ISCaaSDex.NotFactory.selector,
+            "initialize called directly"
+        );
         // a token's mtxTrade by anyone but the order's DEX
         ITradeToken.UATradeOrder memory o = _o(_pad(a1), B, 1000, 1900, 0);
-        _neg(a2, A, abi.encodeCall(ITradeToken.mtxTrade, (o, _uaSig(""), ITradeToken.TradeFill(1000, 1900, 0, a2))),
-            ITradeToken.NotDex.selector, "mtxTrade called by a non-DEX");
+        _neg(
+            a2,
+            A,
+            abi.encodeCall(ITradeToken.mtxTrade, (o, _uaSig(""), ITradeToken.TradeFill(1000, 1900, 0, a2))),
+            ITradeToken.NotDex.selector,
+            "mtxTrade called by a non-DEX"
+        );
         // dex2's LISTING is off: a market cannot be set
-        _neg(a1, address(dex2), abi.encodeCall(ISCaaSDex.setMarket, (A, B, true, dex2.chainUid())), IGovernance.FeatureNotSet.selector,
-            "setMarket on dex2 after disableFeature(LISTING)");
+        _neg(
+            a1,
+            address(dex2),
+            abi.encodeCall(ISCaaSDex.setMarket, (A, B, true, dex2.chainUid())),
+            IGovernance.FeatureNotSet.selector,
+            "setMarket on dex2 after disableFeature(LISTING)"
+        );
     }
 }

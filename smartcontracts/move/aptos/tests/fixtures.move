@@ -13,16 +13,24 @@ module scaas::fixtures {
     use aptos_framework::timestamp;
     use scaas::meta;
 
-    struct Mint has key { r: MintRef }
+    struct Mint has key {
+        r: MintRef
+    }
 
-    public fun setup(fx: &signer, b: &signer) { setup_chain(fx, b, 4) }
+    public fun setup(fx: &signer, b: &signer) {
+        setup_chain(fx, b, 4)
+    }
 
     public fun setup_chain(fx: &signer, b: &signer, id: u8) {
         timestamp::set_time_has_started_for_testing(fx);
         timestamp::update_global_time_for_test_secs(100);
         chain_id::initialize_for_test(fx, id);
         let std = account::create_signer_for_test(@std);
-        features::change_feature_flags_for_testing(&std, vector[features::get_default_account_resource_feature()], vector[]);
+        features::change_feature_flags_for_testing(
+            &std,
+            vector[features::get_default_account_resource_feature()],
+            vector[]
+        );
         meta::init_for_test(b);
     }
 
@@ -30,9 +38,18 @@ module scaas::fixtures {
         let creator = account::create_signer_for_test(@0xcafe);
         let c = object::create_named_object(&creator, name);
         primary_fungible_store::create_primary_store_enabled_fungible_asset(
-            &c, option::none(), string::utf8(name), string::utf8(name), 6, string::utf8(b""), string::utf8(b""),
+            &c,
+            option::none(),
+            string::utf8(name),
+            string::utf8(name),
+            6,
+            string::utf8(b""),
+            string::utf8(b"")
         );
-        move_to(&object::generate_signer(&c), Mint { r: fungible_asset::generate_mint_ref(&c) });
+        move_to(
+            &object::generate_signer(&c),
+            Mint { r: fungible_asset::generate_mint_ref(&c) }
+        );
         object::object_from_constructor_ref<Metadata>(&c)
     }
 
@@ -40,7 +57,11 @@ module scaas::fixtures {
         primary_fungible_store::mint(&Mint[object::object_address(&asset)].r, to, amount);
     }
 
-    public fun bal(asset: Object<Metadata>, who: address): u64 { primary_fungible_store::balance(who, asset) }
+    public fun bal(asset: Object<Metadata>, who: address): u64 {
+        primary_fungible_store::balance(who, asset)
+    }
 
-    public fun set_now(s: u64) { timestamp::update_global_time_for_test_secs(s) }
+    public fun set_now(s: u64) {
+        timestamp::update_global_time_for_test_secs(s)
+    }
 }

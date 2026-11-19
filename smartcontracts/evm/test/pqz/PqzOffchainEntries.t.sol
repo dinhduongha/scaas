@@ -70,15 +70,21 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     // ------------------------------------------------------------------ the envelope of a signed form
 
     function _u(bytes32 from, address t) internal view returns (MetaTxLib.UAEnvelope memory) {
-        return MetaTxLib.UAEnvelope(from, LANE, NormalPqzToken(t).mtxNonce(from, LANE), block.timestamp + 300, 0, address(0), 0,
-            address(0));
+        return MetaTxLib.UAEnvelope(
+            from, LANE, NormalPqzToken(t).mtxNonce(from, LANE), block.timestamp + 300, 0, address(0), 0, address(0)
+        );
     }
 
     /// The merged entries' statement binding (CTR-PQZ-21, R36), computed here.
     function _tag(address t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
-        return keccak256(bytes.concat(
-            abi.encode(keccak256("SCAAS-PQZ-UA-ENVELOPE-V1"), block.chainid, IMetaTx(t).chainUid(), t, u.from, u.batch),
-            abi.encode(u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+        return keccak256(
+            bytes.concat(
+                abi.encode(
+                    keccak256("SCAAS-PQZ-UA-ENVELOPE-V1"), block.chainid, IMetaTx(t).chainUid(), t, u.from, u.batch
+                ),
+                abi.encode(u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
     }
 
     function _dAuth() internal view returns (IUARegistry.UASig memory) {
@@ -111,16 +117,20 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     }
 
     function _burnA(NormalPqzToken t) internal view returns (IPqzToken.PqzBurnArgs memory) {
-        return _bs(bytes.concat(abi.encode(_p(t), block.number + 50, uint256(0), alice, bytes32(0)), _blob(14, PqzCt.CT)));
+        return
+            _bs(bytes.concat(abi.encode(_p(t), block.number + 50, uint256(0), alice, bytes32(0)), _blob(14, PqzCt.CT)));
     }
 
     function _unwrapX(NormalPqzToken t) internal view returns (IConfidentialWrappedToken.Unwrap memory) {
-        return IConfidentialWrappedToken.Unwrap(WrappedPqzToken(payable(address(t))).underlyings()[0], TO, 10, 10 * SCALE);
+        return
+            IConfidentialWrappedToken.Unwrap(WrappedPqzToken(payable(address(t))).underlyings()[0], TO, 10, 10 * SCALE);
     }
 
     /// The statement entry `op` builds on `t` under binding `b` (0: direct).
     function _stmt(uint8 op, NormalPqzToken t, bytes32 b) internal view returns (bytes memory) {
-        if (op == SINGLE || op == SINGLE_COMPACT) return t.transferSingleStatement(_singleA(t, op == SINGLE_COMPACT), b);
+        if (op == SINGLE || op == SINGLE_COMPACT) {
+            return t.transferSingleStatement(_singleA(t, op == SINGLE_COMPACT), b);
+        }
         if (op == MULTI || op == COMPACT) return t.transferStatement(_multiA(t, op == COMPACT), b);
         if (op == UNSHIELD) return t.burnStatement(_burnA(t), 5, TO, b);
         if (op == REFRESH) return t.burnStatement(_burnA(t), 0, 0, b);
@@ -128,39 +138,73 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     }
 
     /// The calldata of entry `op` on `t` (direct, or signed in envelope `u` by `dId`) with verdict `sv`.
-    function _cd(uint8 op, NormalPqzToken t, MetaTxLib.UAEnvelope memory u, bool signed, IPqzToken.PqzSignedVerdict memory sv)
-        internal view returns (bytes memory)
-    {
+    function _cd(
+        uint8 op,
+        NormalPqzToken t,
+        MetaTxLib.UAEnvelope memory u,
+        bool signed,
+        IPqzToken.PqzSignedVerdict memory sv
+    ) internal view returns (bytes memory) {
         IUARegistry.UASig memory pa = _pqAuth();
         if (op == SINGLE || op == SINGLE_COMPACT) {
             IPqzToken.PqzTransferArgs memory a = _singleA(t, op == SINGLE_COMPACT);
             if (!signed) {
-                return op == SINGLE ? abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (a, VPROOF, pa, "", sv))
+                return op == SINGLE
+                    ? abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (a, VPROOF, pa, "", sv))
                     : abi.encodeCall(IPqzToken.mtxConfidentialTransferSingleCompact, (a, VPROOF, pa, "", sv));
             }
-            return abi.encodeWithSignature(string.concat(op == SINGLE ? "mtxConfidentialTransferSingle" :
-                "mtxConfidentialTransferSingleCompact", SIG_SINGLE), u, a, VPROOF, pa, bytes(""), _dAuth(), sv);
+            return abi.encodeWithSignature(
+                string.concat(
+                    op == SINGLE ? "mtxConfidentialTransferSingle" : "mtxConfidentialTransferSingleCompact", SIG_SINGLE
+                ),
+                u,
+                a,
+                VPROOF,
+                pa,
+                bytes(""),
+                _dAuth(),
+                sv
+            );
         }
         if (op == MULTI || op == COMPACT) {
             IPqzToken.PqzMultiArgs memory m = _multiA(t, op == COMPACT);
             if (!signed) {
-                return op == MULTI ? abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (m, VPROOF, pa, "", sv))
+                return op == MULTI
+                    ? abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (m, VPROOF, pa, "", sv))
                     : abi.encodeCall(IPqzToken.mtxConfidentialTransferCompact, (m, VPROOF, pa, "", sv));
             }
-            return abi.encodeWithSignature(string.concat(op == MULTI ? "mtxConfidentialTransfer" :
-                "mtxConfidentialTransferCompact", SIG_MULTI), u, m, VPROOF, pa, bytes(""), _dAuth(), sv);
+            return abi.encodeWithSignature(
+                string.concat(op == MULTI ? "mtxConfidentialTransfer" : "mtxConfidentialTransferCompact", SIG_MULTI),
+                u,
+                m,
+                VPROOF,
+                pa,
+                bytes(""),
+                _dAuth(),
+                sv
+            );
         }
         IPqzToken.PqzBurnArgs memory bb = _burnA(t);
         if (op == UNSHIELD || op == REFRESH) {
             (uint256 amt, bytes32 rcp) = op == UNSHIELD ? (uint256(5), TO) : (uint256(0), bytes32(0));
             if (!signed) return abi.encodeCall(IPqzToken.mtxUnshield, (bb, amt, rcp, VPROOF, pa, "", sv));
-            return abi.encodeWithSignature(string.concat("mtxUnshield", SIG_UNSHIELD), u, bb, IPqzToken.Payout(amt, rcp),
-                VPROOF, pa, bytes(""), _dAuth(), sv);
+            return abi.encodeWithSignature(
+                string.concat("mtxUnshield", SIG_UNSHIELD),
+                u,
+                bb,
+                IPqzToken.Payout(amt, rcp),
+                VPROOF,
+                pa,
+                bytes(""),
+                _dAuth(),
+                sv
+            );
         }
         IConfidentialWrappedToken.Unwrap memory x = _unwrapX(t);
         if (!signed) return abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (bb, x, VPROOF, pa, "", sv));
-        return abi.encodeWithSignature(string.concat("mtxUnshieldUnwrap", SIG_UNWRAP), u, bb, x, VPROOF, pa, bytes(""),
-            _dAuth(), sv);
+        return abi.encodeWithSignature(
+            string.concat("mtxUnshieldUnwrap", SIG_UNWRAP), u, bb, x, VPROOF, pa, bytes(""), _dAuth(), sv
+        );
     }
 
     string internal constant ENV_T = "(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
@@ -172,12 +216,26 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     string internal constant MARGS_T =
         "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
     string internal constant BARGS_T = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)";
-    string internal SIG_SINGLE = string.concat("(", ENV_T, ",", TARGS_T, ",bytes,", SIG_T, ",bytes,", SIG_T, ",", VERDICT_T, ")");
-    string internal SIG_MULTI = string.concat("(", ENV_T, ",", MARGS_T, ",bytes,", SIG_T, ",bytes,", SIG_T, ",", VERDICT_T, ")");
-    string internal SIG_UNSHIELD = string.concat("(", ENV_T, ",", BARGS_T, ",(uint256,bytes32),bytes,", SIG_T, ",bytes,", SIG_T,
-        ",", VERDICT_T, ")");
-    string internal SIG_UNWRAP = string.concat("(", ENV_T, ",", BARGS_T, ",(address,bytes32,uint256,uint256),bytes,", SIG_T,
-        ",bytes,", SIG_T, ",", VERDICT_T, ")");
+    string internal SIG_SINGLE =
+        string.concat("(", ENV_T, ",", TARGS_T, ",bytes,", SIG_T, ",bytes,", SIG_T, ",", VERDICT_T, ")");
+    string internal SIG_MULTI =
+        string.concat("(", ENV_T, ",", MARGS_T, ",bytes,", SIG_T, ",bytes,", SIG_T, ",", VERDICT_T, ")");
+    string internal SIG_UNSHIELD = string.concat(
+        "(", ENV_T, ",", BARGS_T, ",(uint256,bytes32),bytes,", SIG_T, ",bytes,", SIG_T, ",", VERDICT_T, ")"
+    );
+    string internal SIG_UNWRAP = string.concat(
+        "(",
+        ENV_T,
+        ",",
+        BARGS_T,
+        ",(address,bytes32,uint256,uint256),bytes,",
+        SIG_T,
+        ",bytes,",
+        SIG_T,
+        ",",
+        VERDICT_T,
+        ")"
+    );
 
     /// Runs entry `op` on the matching token (direct, or signed by `dId`): an OFFCHAIN token with the verifier's verdict, after
     /// the same call with the empty verdict is refused; a PRECOMPILE token with the empty verdict (the precompile mocked 1).
@@ -195,38 +253,122 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
             emit IPqzToken.PqzVerified(keccak256(st), keccak256(VPROOF), vA, 0);
         }
         (bool ok, bytes memory ret) = address(t).call(_cd(op, t, u, signed, offchain ? _sv(t, st) : noVerdict()));
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
     }
 
-    function test_entry_transfer_direct_offchain() public { _entry(MULTI, false, true); }
-    function test_entry_transfer_signed_offchain() public { _entry(MULTI, true, true); }
-    function test_entry_compact_direct_offchain() public { _entry(COMPACT, false, true); }
-    function test_entry_compact_signed_offchain() public { _entry(COMPACT, true, true); }
-    function test_entry_single_direct_offchain() public { _entry(SINGLE, false, true); }
-    function test_entry_single_signed_offchain() public { _entry(SINGLE, true, true); }
-    function test_entry_singleCompact_direct_offchain() public { _entry(SINGLE_COMPACT, false, true); }
-    function test_entry_singleCompact_signed_offchain() public { _entry(SINGLE_COMPACT, true, true); }
-    function test_entry_unshield_direct_offchain() public { _entry(UNSHIELD, false, true); }
-    function test_entry_unshield_signed_offchain() public { _entry(UNSHIELD, true, true); }
-    function test_entry_refresh_direct_offchain() public { _entry(REFRESH, false, true); }
-    function test_entry_refresh_signed_offchain() public { _entry(REFRESH, true, true); }
-    function test_entry_unshieldUnwrap_direct_offchain() public { _entry(UNWRAP, false, true); }
-    function test_entry_unshieldUnwrap_signed_offchain() public { _entry(UNWRAP, true, true); }
+    function test_entry_transfer_direct_offchain() public {
+        _entry(MULTI, false, true);
+    }
 
-    function test_entry_transfer_direct_precompile() public { _entry(MULTI, false, false); }
-    function test_entry_transfer_signed_precompile() public { _entry(MULTI, true, false); }
-    function test_entry_compact_direct_precompile() public { _entry(COMPACT, false, false); }
-    function test_entry_compact_signed_precompile() public { _entry(COMPACT, true, false); }
-    function test_entry_single_direct_precompile() public { _entry(SINGLE, false, false); }
-    function test_entry_single_signed_precompile() public { _entry(SINGLE, true, false); }
-    function test_entry_singleCompact_direct_precompile() public { _entry(SINGLE_COMPACT, false, false); }
-    function test_entry_singleCompact_signed_precompile() public { _entry(SINGLE_COMPACT, true, false); }
-    function test_entry_unshield_direct_precompile() public { _entry(UNSHIELD, false, false); }
-    function test_entry_unshield_signed_precompile() public { _entry(UNSHIELD, true, false); }
-    function test_entry_refresh_direct_precompile() public { _entry(REFRESH, false, false); }
-    function test_entry_refresh_signed_precompile() public { _entry(REFRESH, true, false); }
-    function test_entry_unshieldUnwrap_direct_precompile() public { _entry(UNWRAP, false, false); }
-    function test_entry_unshieldUnwrap_signed_precompile() public { _entry(UNWRAP, true, false); }
+    function test_entry_transfer_signed_offchain() public {
+        _entry(MULTI, true, true);
+    }
+
+    function test_entry_compact_direct_offchain() public {
+        _entry(COMPACT, false, true);
+    }
+
+    function test_entry_compact_signed_offchain() public {
+        _entry(COMPACT, true, true);
+    }
+
+    function test_entry_single_direct_offchain() public {
+        _entry(SINGLE, false, true);
+    }
+
+    function test_entry_single_signed_offchain() public {
+        _entry(SINGLE, true, true);
+    }
+
+    function test_entry_singleCompact_direct_offchain() public {
+        _entry(SINGLE_COMPACT, false, true);
+    }
+
+    function test_entry_singleCompact_signed_offchain() public {
+        _entry(SINGLE_COMPACT, true, true);
+    }
+
+    function test_entry_unshield_direct_offchain() public {
+        _entry(UNSHIELD, false, true);
+    }
+
+    function test_entry_unshield_signed_offchain() public {
+        _entry(UNSHIELD, true, true);
+    }
+
+    function test_entry_refresh_direct_offchain() public {
+        _entry(REFRESH, false, true);
+    }
+
+    function test_entry_refresh_signed_offchain() public {
+        _entry(REFRESH, true, true);
+    }
+
+    function test_entry_unshieldUnwrap_direct_offchain() public {
+        _entry(UNWRAP, false, true);
+    }
+
+    function test_entry_unshieldUnwrap_signed_offchain() public {
+        _entry(UNWRAP, true, true);
+    }
+
+    function test_entry_transfer_direct_precompile() public {
+        _entry(MULTI, false, false);
+    }
+
+    function test_entry_transfer_signed_precompile() public {
+        _entry(MULTI, true, false);
+    }
+
+    function test_entry_compact_direct_precompile() public {
+        _entry(COMPACT, false, false);
+    }
+
+    function test_entry_compact_signed_precompile() public {
+        _entry(COMPACT, true, false);
+    }
+
+    function test_entry_single_direct_precompile() public {
+        _entry(SINGLE, false, false);
+    }
+
+    function test_entry_single_signed_precompile() public {
+        _entry(SINGLE, true, false);
+    }
+
+    function test_entry_singleCompact_direct_precompile() public {
+        _entry(SINGLE_COMPACT, false, false);
+    }
+
+    function test_entry_singleCompact_signed_precompile() public {
+        _entry(SINGLE_COMPACT, true, false);
+    }
+
+    function test_entry_unshield_direct_precompile() public {
+        _entry(UNSHIELD, false, false);
+    }
+
+    function test_entry_unshield_signed_precompile() public {
+        _entry(UNSHIELD, true, false);
+    }
+
+    function test_entry_refresh_direct_precompile() public {
+        _entry(REFRESH, false, false);
+    }
+
+    function test_entry_refresh_signed_precompile() public {
+        _entry(REFRESH, true, false);
+    }
+
+    function test_entry_unshieldUnwrap_direct_precompile() public {
+        _entry(UNWRAP, false, false);
+    }
+
+    function test_entry_unshieldUnwrap_signed_precompile() public {
+        _entry(UNWRAP, true, false);
+    }
 
     // ------------------------------------------------------------------ the signed struct, the relayer
 
@@ -240,9 +382,15 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         MetaTxLib.UAEnvelope memory u = _u(nId, address(off));
         bytes memory st = off.transferSingleStatement(a, _tag(address(off), u));
         bytes32 th = keccak256(
-            "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)");
-        bytes32 sh = keccak256(bytes.concat(abi.encode(th, u.from), abi.encode(_hashT(a), keccak256(VPROOF), keccak256("")),
-            abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+            "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)"
+        );
+        bytes32 sh = keccak256(
+            bytes.concat(
+                abi.encode(th, u.from),
+                abi.encode(_hashT(a), keccak256(VPROOF), keccak256("")),
+                abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
         (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(off)), sh));
         IUARegistry.UASig memory auth;
         auth.signature = abi.encodePacked(r, ss, vv);
@@ -250,14 +398,18 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         IPqzToken.PqzVerdict memory v2 = _verdict(off, st, VPROOF);
         v2.validUntil += 1000;
         IPqzToken.PqzSignedVerdict memory sv2 = _sign(off, VKEY, v2);
-        bytes memory c1 = abi.encodeWithSignature(string.concat("mtxConfidentialTransferSingle", SIG_SINGLE), u, a, VPROOF,
-            _pqAuth(), bytes(""), auth, sv1);
-        bytes memory c2 = abi.encodeWithSignature(string.concat("mtxConfidentialTransferSingle", SIG_SINGLE), u, a, VPROOF,
-            _pqAuth(), bytes(""), auth, sv2);
+        bytes memory c1 = abi.encodeWithSignature(
+            string.concat("mtxConfidentialTransferSingle", SIG_SINGLE), u, a, VPROOF, _pqAuth(), bytes(""), auth, sv1
+        );
+        bytes memory c2 = abi.encodeWithSignature(
+            string.concat("mtxConfidentialTransferSingle", SIG_SINGLE), u, a, VPROOF, _pqAuth(), bytes(""), auth, sv2
+        );
         uint256 snap = vm.snapshotState();
         vm.prank(address(0x4E1A));
         (bool ok,) = address(off).call(c1);
-        assertTrue(ok, "the struct without the verdict (3h: + ownTag; three-key model: + uFrom and the openings), verdict 1");
+        assertTrue(
+            ok, "the struct without the verdict (3h: + ownTag; three-key model: + uFrom and the openings), verdict 1"
+        );
         vm.revertToState(snap);
         vm.prank(address(0x4E1A));
         (ok,) = address(off).call(c2);
@@ -277,11 +429,14 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         assertTrue(ok);
     }
 
-    function _cdSingle(MetaTxLib.UAEnvelope memory u, IPqzToken.PqzTransferArgs memory a, IPqzToken.PqzSignedVerdict memory sv)
-        internal view returns (bytes memory)
-    {
-        return abi.encodeWithSignature(string.concat("mtxConfidentialTransferSingle", SIG_SINGLE), u, a, VPROOF, _pqAuth(),
-            bytes(""), _dAuth(), sv);
+    function _cdSingle(
+        MetaTxLib.UAEnvelope memory u,
+        IPqzToken.PqzTransferArgs memory a,
+        IPqzToken.PqzSignedVerdict memory sv
+    ) internal view returns (bytes memory) {
+        return abi.encodeWithSignature(
+            string.concat("mtxConfidentialTransferSingle", SIG_SINGLE), u, a, VPROOF, _pqAuth(), bytes(""), _dAuth(), sv
+        );
     }
 
     // ------------------------------------------------------------------ disclosure (spec §5.4)
@@ -291,7 +446,9 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     }
 
     function _disclose8(NormalPqzToken t, bytes32 ref, uint256 amount, IPqzToken.PqzSignedVerdict memory sv)
-        internal view returns (bool)
+        internal
+        view
+        returns (bool)
     {
         return t.verifyTransferAmount(ref, 0, amount, 1, 0, VPROOF, sv);
     }
@@ -353,15 +510,21 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         GovernanceRouter router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
         OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
-        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
-            type(NormalPqzToken).creationCode);
+        Catalogue.release(
+            f,
+            IOpenFactory.TokenKind.NORMAL_PQZ,
+            1,
+            pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode
+        );
         vm.prank(registrar);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, vA, false);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
         c.admin = nId;
-        NormalPqzToken t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-router"));
+        NormalPqzToken t =
+            NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-router"));
         bytes32 tu = EnvKit.codeUidOf(address(t)); // the token's chain word, the ops' last field (CTR-GOV-28)
         _rop(router, GovernanceRouterTypes.UA_PQZ_SET_VERIFIER, address(t), abi.encode(vB, tu));
         assertEq(t.pqzVerifyConfig().verifier, vB, "notice 0: at once");
@@ -372,10 +535,17 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     }
 
     function _rop(GovernanceRouter router, bytes32 th, address target, bytes memory args) internal {
-        MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(nId, LANE, router.mtxNonce(nId, LANE), block.timestamp + 300, 0,
-            address(0), 0, address(0));
-        bytes32 sh = keccak256(bytes.concat(abi.encode(th, u.from), abi.encode(target), args,
-            abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+        MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(
+            nId, LANE, router.mtxNonce(nId, LANE), block.timestamp + 300, 0, address(0), 0, address(0)
+        );
+        bytes32 sh = keccak256(
+            bytes.concat(
+                abi.encode(th, u.from),
+                abi.encode(target),
+                args,
+                abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))
+            )
+        );
         (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(router)), sh));
         IUARegistry.UASig memory auth;
         auth.signature = abi.encodePacked(r, ss, vv);
@@ -394,21 +564,49 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
 
     function _has(address t, bytes4 sel) internal view returns (bool found) {
         (bytes4[] memory s,,) = IMetaTx(t).mtxSelectors();
-        for (uint256 i; i < s.length; ++i) if (s[i] == sel) found = true;
+        for (uint256 i; i < s.length; ++i) {
+            if (s[i] == sel) found = true;
+        }
     }
 
     function _selectors(address t, bool wrapped) internal view {
         string memory v = string.concat(",bytes,", SIG_T, ",bytes,", VERDICT_T, ")");
         assertTrue(_has(t, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", MARGS_T, v))))), "op 7");
-        assertTrue(_has(t, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", MARGS_T, v))))), "compact");
-        assertTrue(_has(t, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", TARGS_T, v))))), "op 1");
-        assertTrue(_has(t, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingleCompact(", TARGS_T, v))))));
-        assertTrue(_has(t, bytes4(keccak256(bytes(string.concat("mtxUnshield(", BARGS_T, ",uint256,bytes32", v))))), "unshield");
-        assertFalse(_has(t, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", TARGS_T,
-            ",bytes,", SIG_T, ",bytes)"))))), "the pre-3f op 1");
+        assertTrue(
+            _has(t, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", MARGS_T, v))))), "compact"
+        );
+        assertTrue(
+            _has(t, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingle(", TARGS_T, v))))), "op 1"
+        );
+        assertTrue(
+            _has(t, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferSingleCompact(", TARGS_T, v)))))
+        );
+        assertTrue(
+            _has(t, bytes4(keccak256(bytes(string.concat("mtxUnshield(", BARGS_T, ",uint256,bytes32", v))))), "unshield"
+        );
+        assertFalse(
+            _has(
+                t,
+                bytes4(
+                    keccak256(
+                        bytes(string.concat("mtxConfidentialTransferSingle(", TARGS_T, ",bytes,", SIG_T, ",bytes)"))
+                    )
+                )
+            ),
+            "the pre-3f op 1"
+        );
         if (wrapped) {
-            assertTrue(_has(t, bytes4(keccak256(bytes(string.concat("mtxUnshieldUnwrap(", BARGS_T,
-                ",(address,bytes32,uint256,uint256)", v))))), "unwrap");
+            assertTrue(
+                _has(
+                    t,
+                    bytes4(
+                        keccak256(
+                            bytes(string.concat("mtxUnshieldUnwrap(", BARGS_T, ",(address,bytes32,uint256,uint256)", v))
+                        )
+                    )
+                ),
+                "unwrap"
+            );
         }
     }
 

@@ -11,22 +11,26 @@
 
 use std::io::BufRead;
 
-use pqzh_ligero::client::{MultiTweak, inputs, rel_name, setup, setup_multi};
+use pqzh_ligero::client::{inputs, rel_name, setup, setup_multi, MultiTweak};
 use pqzh_ligero::cs::{self, Layout};
 use pqzh_ligero::fq::EB;
 use pqzh_ligero::merkle::keccak;
-use pqzh_ligero::{Params, RELS, Rel, multi_rels, prove, soundness, verify};
+use pqzh_ligero::{multi_rels, prove, soundness, verify, Params, Rel, RELS};
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
 fn unhex(s: &str) -> Vec<u8> {
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).expect("hex")).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).expect("hex"))
+        .collect()
 }
 
 fn fnv(b: &[u8]) -> u32 {
-    b.iter().fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619))
+    b.iter()
+        .fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619))
 }
 
 fn main() {
@@ -68,7 +72,9 @@ fn main() {
         }
         "sizes" => {
             let s = setup();
-            let multi = [1, 2, 4, 8, 16].into_iter().flat_map(|m| [true, false].map(|aud| Rel::Multi { m, aud }));
+            let multi = [1, 2, 4, 8, 16]
+                .into_iter()
+                .flat_map(|m| [true, false].map(|aud| Rel::Multi { m, aud }));
             for r in RELS.iter().map(|&f| Rel::Form(f)).chain(multi) {
                 let st = match r {
                     Rel::Form(_) => inputs(&s, r).0,
@@ -77,7 +83,10 @@ fn main() {
                 let max = p.max_proof_len(r);
                 // soundness needs a statement the crate parses: not for the shapes it does not build (M = 8, 16)
                 let snd: Vec<String> = match cs::rel_of(r.op(), &st) {
-                    Some(_) => soundness(r.op(), &st, &p).iter().map(|(n, b)| format!("\"{n}\": {b:.2}")).collect(),
+                    Some(_) => soundness(r.op(), &st, &p)
+                        .iter()
+                        .map(|(n, b)| format!("\"{n}\": {b:.2}"))
+                        .collect(),
                     None => vec!["\"built\": false".into()],
                 };
                 println!(

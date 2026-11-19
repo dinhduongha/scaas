@@ -18,9 +18,14 @@ contract HybridHarness is SCaaSDex {
         takerSoldCheck(h, sold, recv, o, leftover, 0);
     }
 
-    function takerSoldCheck(bytes32 h, uint256 sold, uint256 recv, ITradeToken.UATradeOrder memory o, uint256 leftover,
-        uint256 surplus) public pure
-    {
+    function takerSoldCheck(
+        bytes32 h,
+        uint256 sold,
+        uint256 recv,
+        ITradeToken.UATradeOrder memory o,
+        uint256 leftover,
+        uint256 surplus
+    ) public pure {
         Calc memory c;
         (c.h, c.sold, c.recv, c.o) = (h, sold, recv, o);
         _takerSoldCheck(c, leftover, surplus);

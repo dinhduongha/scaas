@@ -36,7 +36,8 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
     /// T-05 (owner 2026-11-13, CTR-PQZ-37's Change): the build's set's own directory, `pqz/verifier_fee.json` at
     /// `n2048-kmax1024`, `pqz/<set>/verifier_fee.json` at every other set.
     function _rel() internal pure returns (string memory) {
-        return keccak256(bytes(PqzSet.NAME)) == keccak256("n2048-kmax1024") ? "pqz/verifier_fee.json"
+        return keccak256(bytes(PqzSet.NAME)) == keccak256("n2048-kmax1024")
+            ? "pqz/verifier_fee.json"
             : string.concat("pqz/", PqzSet.NAME, "/verifier_fee.json");
     }
 
@@ -64,7 +65,9 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
         ben = _mldsaUA(9);
         lg[0] = bob;
         lg[1] = carol;
-        for (uint256 j = 2; j < 8; ++j) lg[j] = _pqzUA(_pk(uint8(40 + j)), uint8(40 + j));
+        for (uint256 j = 2; j < 8; ++j) {
+            lg[j] = _pqzUA(_pk(uint8(40 + j)), uint8(40 + j));
+        }
     }
 
     function _tokens(uint64 vf) internal returns (NormalPqzToken n, NormalPqzToken w) {
@@ -89,7 +92,8 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
     }
 
     // form codes: 0 op 1 BUNDLE, 1 op 1 HASH, 2..5 op 7 M = 1, 2, 4, 8 (BUNDLE), 6 burn, 7 refresh, 8 unwrap
-    string[9] internal NAMES = ["op1-bundle", "op1-hash", "op7-m1", "op7-m2", "op7-m4", "op7-m8", "burn", "refresh", "unwrap"];
+    string[9] internal NAMES =
+        ["op1-bundle", "op1-hash", "op7-m1", "op7-m2", "op7-m4", "op7-m8", "burn", "refresh", "unwrap"];
 
     function _m(uint256 f) internal pure returns (uint256) {
         return f >= 2 && f <= 5 ? 1 << (f - 2) : 0;
@@ -109,21 +113,26 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
 
     function _multiA(NormalPqzToken t, bytes32 b, uint256 m) internal view returns (IPqzToken.PqzMultiArgs memory) {
         bytes32[] memory legs = new bytes32[](m);
-        for (uint256 j; j < m; ++j) legs[j] = lg[j];
+        for (uint256 j; j < m; ++j) {
+            legs[j] = lg[j];
+        }
         return _ms(_mpayload(_p(t), 0, alice, b, legs, _blob(13, _outLen(m, false)), ""));
     }
 
     function _unwrapX(NormalPqzToken t) internal view returns (IConfidentialWrappedToken.Unwrap memory) {
-        return IConfidentialWrappedToken.Unwrap(WrappedPqzToken(payable(address(t))).underlyings()[0], TO, 10, 10 * scale);
+        return
+            IConfidentialWrappedToken.Unwrap(WrappedPqzToken(payable(address(t))).underlyings()[0], TO, 10, 10 * scale);
     }
 
     /// Form `f` on `t` (direct, with the verifier's verdict): its statement and call data.
     function _op(uint256 f, NormalPqzToken t, bytes32 b) internal view returns (bytes memory st, bytes memory cd) {
         IUARegistry.UASig memory pa = _pqAuth();
         if (f <= 1) {
-            IPqzToken.PqzTransferArgs memory a = _ts(_payload(_p(t), 0, alice, bob, b, _out(11, false), f == 1 ? _memo() : bytes("")));
+            IPqzToken.PqzTransferArgs memory a =
+                _ts(_payload(_p(t), 0, alice, bob, b, _out(11, false), f == 1 ? _memo() : bytes("")));
             st = t.transferSingleStatement(a, 0);
-            cd = f == 0 ? abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (a, VPROOF, pa, "", _sv(t, st)))
+            cd = f == 0
+                ? abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (a, VPROOF, pa, "", _sv(t, st)))
                 : abi.encodeCall(IPqzToken.mtxConfidentialTransferSingleCompact, (a, VPROOF, pa, "", _sv(t, st)));
         } else if (f <= 5) {
             IPqzToken.PqzMultiArgs memory m = _multiA(t, b, _m(f));
@@ -135,7 +144,9 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
             cd = abi.encodeCall(IPqzToken.mtxUnshield, (_burnA(t, b), amt, r, VPROOF, pa, "", _sv(t, st)));
         } else {
             st = WrappedPqzToken(payable(address(t))).unshieldUnwrapStatement(_burnA(t, b), _unwrapX(t), 0);
-            cd = abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_burnA(t, b), _unwrapX(t), VPROOF, pa, "", _sv(t, st)));
+            cd = abi.encodeCall(
+                IPqzWrappedToken.mtxUnshieldUnwrap, (_burnA(t, b), _unwrapX(t), VPROOF, pa, "", _sv(t, st))
+            );
         }
     }
 
@@ -157,18 +168,21 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
     function _snap(NormalPqzToken t, bytes32 b) internal view returns (R memory s) {
         IUALedger l = IUALedger(address(t));
         (s.verifier, s.ben, s.leg) = (t.balanceOf(vm.addr(VKEY)), b == 0 ? 0 : l.balanceOfUA(b), l.balanceOfUA(bob));
-        (s.recipient, s.dShielded, s.dPool) = (t.balanceOf(address(0xD00D)), t.totalShielded(), t.balanceOf(MetaTxLib.SHIELD_POOL));
+        (s.recipient, s.dShielded, s.dPool) =
+        (t.balanceOf(address(0xD00D)), t.totalShielded(), t.balanceOf(MetaTxLib.SHIELD_POOL));
     }
 
     function _row(uint256 f, NormalPqzToken t, bytes32 b) internal returns (R memory r) {
         (bytes memory st, bytes memory cd) = _op(f, t, b);
         R memory x = _snap(t, b);
         (bool ok, bytes memory ret) = address(t).call(cd);
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        if (!ok) {
+            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        }
         R memory y = _snap(t, b);
         r.feeWord = _wd(st, 256);
-        (r.verifier, r.ben, r.leg, r.recipient) = (y.verifier - x.verifier, y.ben - x.ben, f <= 1 ? 0 : y.leg - x.leg,
-            y.recipient - x.recipient); // op 1's receiver gets a hidden credit, no public one
+        (r.verifier, r.ben, r.leg, r.recipient) =
+        (y.verifier - x.verifier, y.ben - x.ben, f <= 1 ? 0 : y.leg - x.leg, y.recipient - x.recipient); // op 1's receiver gets a hidden credit, no public one
         (r.dShielded, r.dPool) = (x.dShielded - y.dShielded, x.dPool - y.dPool);
     }
 
@@ -177,17 +191,47 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
     }
 
     function _jsonHead(uint256 f, bool withBen, uint64 vf) internal view returns (string memory) {
-        return string.concat("{\"form\": \"", NAMES[f], "\", \"legs\": ", vm.toString(_m(f)), ", \"beneficiary\": ",
-            withBen ? "true" : "false", ", \"shieldScale\": ", vm.toString(scale), ", \"confidentialFee\": ", vm.toString(FEE),
-            ", \"verifierFee\": ", vm.toString(vf), ", \"decoyFee\": ", vm.toString(_m(f) == 0 ? 0 : decoy), ", \"amount\": ",
-            vm.toString(_amount(f)));
+        return string.concat(
+            "{\"form\": \"",
+            NAMES[f],
+            "\", \"legs\": ",
+            vm.toString(_m(f)),
+            ", \"beneficiary\": ",
+            withBen ? "true" : "false",
+            ", \"shieldScale\": ",
+            vm.toString(scale),
+            ", \"confidentialFee\": ",
+            vm.toString(FEE),
+            ", \"verifierFee\": ",
+            vm.toString(vf),
+            ", \"decoyFee\": ",
+            vm.toString(_m(f) == 0 ? 0 : decoy),
+            ", \"amount\": ",
+            vm.toString(_amount(f))
+        );
     }
 
     function _jsonPay(R memory r) internal pure returns (string memory) {
-        string memory a = string.concat(", \"feeWord\": ", vm.toString(r.feeWord), ", \"payBeneficiary\": ", vm.toString(r.ben),
-            ", \"payVerifier\": ", vm.toString(r.verifier), ", \"payPerLeg\": ", vm.toString(r.leg));
-        return string.concat(a, ", \"payRecipient\": ", vm.toString(r.recipient), ", \"dTotalShielded\": ",
-            vm.toString(r.dShielded), ", \"dPool\": ", vm.toString(r.dPool), "}");
+        string memory a = string.concat(
+            ", \"feeWord\": ",
+            vm.toString(r.feeWord),
+            ", \"payBeneficiary\": ",
+            vm.toString(r.ben),
+            ", \"payVerifier\": ",
+            vm.toString(r.verifier),
+            ", \"payPerLeg\": ",
+            vm.toString(r.leg)
+        );
+        return string.concat(
+            a,
+            ", \"payRecipient\": ",
+            vm.toString(r.recipient),
+            ", \"dTotalShielded\": ",
+            vm.toString(r.dShielded),
+            ", \"dPool\": ",
+            vm.toString(r.dPool),
+            "}"
+        );
     }
 
     function _bindingRows(string memory pin, bool write) internal returns (string memory s) {
@@ -223,11 +267,13 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
 
     function _bindingRow(NormalPqzToken t, bool pre, uint256 mode, uint64 vf) internal view returns (Bind memory b) {
         (b.pre, b.mode, b.vf) = (pre, mode, vf);
-        IPqzToken.PqzTransferArgs memory a = _ts(_payload(_p(t), 0, alice, bob, 0, _out(11, false), mode == 0 ? _memo() : bytes("")));
+        IPqzToken.PqzTransferArgs memory a =
+            _ts(_payload(_p(t), 0, alice, bob, 0, _out(11, false), mode == 0 ? _memo() : bytes("")));
         bytes memory st1 = t.transferSingleStatement(a, 0);
         (b.w1, b.fee1) = (bytes32(_wd(st1, 544)), _wd(st1, 256));
         b.w7 = bytes32(_wd(t.transferStatement(mode == 0 ? _hashMulti(t) : _multiA(t, 0, 2), 0), 544));
-        bytes32 want = pre ? keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE, uint8(mode)))
+        bytes32 want = pre
+            ? keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE, uint8(mode)))
             : keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE_VF, uint8(mode), uint256(vf)));
         assertEq(b.w1, want, "op 1 word 544");
         assertEq(b.w7, want, "op 7 word 544");
@@ -235,16 +281,32 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
     }
 
     function _bindingJson(Bind memory b) internal pure returns (string memory) {
-        return string.concat("{\"pqzVerifyMode\": \"", b.pre ? "PRECOMPILE" : "OFFCHAIN", "\", \"mode\": \"",
-            b.mode == 0 ? "HASH" : "BUNDLE", "\", \"modeByte\": ", vm.toString(b.mode), ", \"verifierFee\": ", vm.toString(b.vf),
-            ", \"op1Word544\": \"", vm.toString(b.w1), "\", \"op7Word544\": \"", vm.toString(b.w7), "\", \"op1FeeWord\": ",
-            vm.toString(b.fee1), "}");
+        return string.concat(
+            "{\"pqzVerifyMode\": \"",
+            b.pre ? "PRECOMPILE" : "OFFCHAIN",
+            "\", \"mode\": \"",
+            b.mode == 0 ? "HASH" : "BUNDLE",
+            "\", \"modeByte\": ",
+            vm.toString(b.mode),
+            ", \"verifierFee\": ",
+            vm.toString(b.vf),
+            ", \"op1Word544\": \"",
+            vm.toString(b.w1),
+            "\", \"op7Word544\": \"",
+            vm.toString(b.w7),
+            "\", \"op1FeeWord\": ",
+            vm.toString(b.fee1),
+            "}"
+        );
     }
 
     function _checkBinding(string memory pin, uint256 i, Bind memory b) internal view {
         string memory k = string.concat(".binding[", vm.toString(i), "]");
-        assertEq(keccak256(bytes(pin.readString(string.concat(k, ".pqzVerifyMode")))),
-            keccak256(b.pre ? bytes("PRECOMPILE") : bytes("OFFCHAIN")), k);
+        assertEq(
+            keccak256(bytes(pin.readString(string.concat(k, ".pqzVerifyMode")))),
+            keccak256(b.pre ? bytes("PRECOMPILE") : bytes("OFFCHAIN")),
+            k
+        );
         assertEq(pin.readUint(string.concat(k, ".modeByte")), b.mode, k);
         assertEq(pin.readUint(string.concat(k, ".verifierFee")), b.vf, k);
         assertEq(pin.readBytes32(string.concat(k, ".op1Word544")), b.w1, string.concat(k, " op1Word544"));
@@ -255,14 +317,24 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
     function _hashMulti(NormalPqzToken t) internal view returns (IPqzToken.PqzMultiArgs memory) {
         bytes32[] memory legs = new bytes32[](2);
         (legs[0], legs[1]) = (lg[0], lg[1]);
-        return _ms(_mpayload(_p(t), 0, alice, 0, legs, _blob(13, _outLen(2, false)),
-            bytes.concat(salt, _slice(_blob(0x3e31, 352), 0, 2 + 40 * 2))));
+        return _ms(
+            _mpayload(
+                _p(t),
+                0,
+                alice,
+                0,
+                legs,
+                _blob(13, _outLen(2, false)),
+                bytes.concat(salt, _slice(_blob(0x3e31, 352), 0, 2 + 40 * 2))
+            )
+        );
     }
 
     /// One block of rows, `scale` × `vf` (an external self-call: its memory starts afresh), checked against `pin` unless
     /// writing; rows `[first, first + 18)`.
     function rowBlock(uint256 si, uint256 fi, uint256 first, string calldata pin, bool write)
-        external returns (string memory all)
+        external
+        returns (string memory all)
     {
         scale = si == 0 ? 1 : 1e12;
         uint64 vf = [uint64(0), 1, CAP][fi];
@@ -294,20 +366,43 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
         string memory bind = _bindingRows(pin, write);
         if (!write) {
             assertEq(pin.readUint(".rowCount"), n, "row count");
-            assertEq(keccak256(bytes(pin.readString(".binding[0].op1Word544"))),
-                keccak256(bytes(vm.toString(keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE_VF, uint8(0), uint256(0)))))), "binding 0");
+            assertEq(
+                keccak256(bytes(pin.readString(".binding[0].op1Word544"))),
+                keccak256(bytes(vm.toString(keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE_VF, uint8(0), uint256(0)))))),
+                "binding 0"
+            );
             return;
         }
-        vm.writeFile(_out(), string.concat("{\n \"_comment\": \"GENERATED by smartcontracts/evm/test/pqz/PqzVerifierFeeVectors.t.sol ",
-            "(WRITE_VERIFIER_FEE=1): round 3t, CTR-PQZ-36. Fee word (header word 256) = txFee + verifierFee + M*decoyFee, txFee = ",
-            "confidentialFee with a beneficiary else 0; payouts in public units (units * shieldScale); dTotalShielded = feeWord + ",
-            "amount; dPool = dTotalShielded * shieldScale. binding: the direct op 1 / op 7 word 544 and op 1's fee word (no ",
-            "beneficiary: the verifier fee alone). Proofs mocked; UNAUDITED.\",\n",
-            string.concat(" \"file\": \"", _rel(), "\", \"set\": \"", PqzSet.NAME, "\", \"tagDirectMode\": \"",
-            vm.toString(PqzCore.TAG_DIRECT_MODE), "\", \"tagDirectModeVf\": \"", vm.toString(PqzCore.TAG_DIRECT_MODE_VF),
-            "\", \"verifierFeeMax\": ", vm.toString(CAP), ", \"rowCount\": ", vm.toString(n), ", \"bindingCount\": 10",
-            ",\n \"rows\": [\n  ", all,
-            "\n ],\n \"binding\": [", bind, "]\n}\n")));
+        vm.writeFile(
+            _out(),
+            string.concat(
+                "{\n \"_comment\": \"GENERATED by smartcontracts/evm/test/pqz/PqzVerifierFeeVectors.t.sol ",
+                "(WRITE_VERIFIER_FEE=1): round 3t, CTR-PQZ-36. Fee word (header word 256) = txFee + verifierFee + M*decoyFee, txFee = ",
+                "confidentialFee with a beneficiary else 0; payouts in public units (units * shieldScale); dTotalShielded = feeWord + ",
+                "amount; dPool = dTotalShielded * shieldScale. binding: the direct op 1 / op 7 word 544 and op 1's fee word (no ",
+                "beneficiary: the verifier fee alone). Proofs mocked; UNAUDITED.\",\n",
+                string.concat(
+                    " \"file\": \"",
+                    _rel(),
+                    "\", \"set\": \"",
+                    PqzSet.NAME,
+                    "\", \"tagDirectMode\": \"",
+                    vm.toString(PqzCore.TAG_DIRECT_MODE),
+                    "\", \"tagDirectModeVf\": \"",
+                    vm.toString(PqzCore.TAG_DIRECT_MODE_VF),
+                    "\", \"verifierFeeMax\": ",
+                    vm.toString(CAP),
+                    ", \"rowCount\": ",
+                    vm.toString(n),
+                    ", \"bindingCount\": 10",
+                    ",\n \"rows\": [\n  ",
+                    all,
+                    "\n ],\n \"binding\": [",
+                    bind,
+                    "]\n}\n"
+                )
+            )
+        );
     }
 
     function _check(string memory pin, uint256 i, uint256 f, bool withBen, uint64 vf, R memory r) internal view {

@@ -17,7 +17,9 @@ contract BindingProbe is MtxRegistryMock {
         seen.push(_ticketBinding());
     }
 
-    function seenLength() external view returns (uint256) { return seen.length; }
+    function seenLength() external view returns (uint256) {
+        return seen.length;
+    }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m) internal pure override returns (bytes32) {
         return m.nonce == 0 ? bytes32(uint256(7)) : bytes32(0);
@@ -42,7 +44,7 @@ contract MetaTxBaseBatchTest is MtxFixture {
         ms[0] = _m(alice, _setName("alice"), 1, 0);
         ms[1] = _m(bob, _setName("bob"), 1, 0);
         ms[2] = _m(alice, abi.encodeCall(MtxRegistryMock.bump, (2)), 1, 1);
-        ms[2].mode = MetaTxLib.MODE_RESTRICT_RELAYER;   // bound to the submitting relayer: still fine in a batch
+        ms[2].mode = MetaTxLib.MODE_RESTRICT_RELAYER; // bound to the submitting relayer: still fine in a batch
         ms[2].relayer = relayer;
         sigs[0] = _sign(ALICE_PK, ms[0]);
         sigs[1] = _sign(BOB_PK, ms[1]);
@@ -105,7 +107,9 @@ contract MetaTxBaseBatchTest is MtxFixture {
         MetaTxLib.MetaTransaction memory m = _m(alice, data, 1, 0);
         bytes memory sig = _sign(ALICE_PK, m);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, IMetaTxAddress.mtxBatch.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, IMetaTxAddress.mtxBatch.selector)
+        );
         reg.mtxExecute(m, sig);
     }
 
@@ -128,7 +132,7 @@ contract MetaTxBaseBatchTest is MtxFixture {
         ms[0] = _m(alice, _setName("alice"), 1, 0);
         ms[1] = _m(bob, _setName("bob"), 1, 0);
         sigs[0] = _sign(ALICE_PK, ms[0]);
-        sigs[1] = _sign(ALICE_PK, ms[1]);   // signed by the wrong key
+        sigs[1] = _sign(ALICE_PK, ms[1]); // signed by the wrong key
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         _batch(ms, sigs);
         assertEq(reg.nameOf(alice), "");
@@ -143,7 +147,7 @@ contract MetaTxBaseBatchTest is MtxFixture {
         ms[0] = _m(alice, _setName("alice"), 1, 0);
         ms[1] = _m(bob, _setName("bob"), 1, 0);
         ms[1].mode = MetaTxLib.MODE_RESTRICT_RELAYER;
-        ms[1].relayer = other;              // bound to another relayer than the submitter
+        ms[1].relayer = other; // bound to another relayer than the submitter
         sigs[0] = _sign(ALICE_PK, ms[0]);
         sigs[1] = _sign(BOB_PK, ms[1]);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, other, relayer));

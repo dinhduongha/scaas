@@ -102,13 +102,17 @@ contract MtxCtxTest is PqzRegistryBase {
     }
 
     function _mt(address from, bytes memory data, uint256 batch, uint32 mode, uint256 fee)
-        internal view returns (MetaTxLib.MetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.MetaTransaction memory m)
     {
         m = MetaTxLib.MetaTransaction(from, data, batch, 0, block.timestamp + 300, mode, RELAYER, fee, address(0));
     }
 
     function _um(bytes32 from, bytes memory data, uint256 batch, uint32 mode, uint256 fee)
-        internal view returns (MetaTxLib.UAMetaTransaction memory m)
+        internal
+        view
+        returns (MetaTxLib.UAMetaTransaction memory m)
     {
         m = MetaTxLib.UAMetaTransaction(from, data, batch, 0, block.timestamp + 300, mode, RELAYER, fee, address(0));
     }
@@ -119,12 +123,26 @@ contract MtxCtxTest is PqzRegistryBase {
     }
 
     function _ut(bytes32 from, bytes32 to, uint256 batch) internal view returns (MetaTxLib.UAMetaTransfer memory) {
-        return MetaTxLib.UAMetaTransfer(from, to, 1_000, bytes32(0), batch, 0, block.timestamp + 300,
-            RR | MetaTxLib.MODE_FEE_FIXED, RELAYER, 5, address(0));
+        return MetaTxLib.UAMetaTransfer(
+            from,
+            to,
+            1_000,
+            bytes32(0),
+            batch,
+            0,
+            block.timestamp + 300,
+            RR | MetaTxLib.MODE_FEE_FIXED,
+            RELAYER,
+            5,
+            address(0)
+        );
     }
 
     /// The relayer submits `cd` to `t` with all gas, recording every account and storage access.
-    function _recorded(address t, bytes memory cd) internal returns (bool ok, bytes memory ret, VmSafe.AccountAccess[] memory a) {
+    function _recorded(address t, bytes memory cd)
+        internal
+        returns (bool ok, bytes memory ret, VmSafe.AccountAccess[] memory a)
+    {
         vm.startStateDiffRecording();
         vm.prank(RELAYER);
         (ok, ret) = t.call(cd);
@@ -136,8 +154,10 @@ contract MtxCtxTest is PqzRegistryBase {
     /// storage accesses where it has any.
     function _libCall(VmSafe.AccountAccess[] memory a, address t, bytes4 sel) internal pure returns (uint256) {
         for (uint256 i; i < a.length; ++i) {
-            if (a[i].kind == VmSafe.AccountAccessKind.DelegateCall && a[i].account == address(MtxPipelineLib)
-                && a[i].data.length >= 4 && bytes4(a[i].data) == sel) {
+            if (
+                a[i].kind == VmSafe.AccountAccessKind.DelegateCall && a[i].account == address(MtxPipelineLib)
+                    && a[i].data.length >= 4 && bytes4(a[i].data) == sel
+            ) {
                 for (uint256 j; j < a[i].storageAccesses.length; ++j) {
                     require(a[i].storageAccesses[j].account == t, "the library ran in another contract's context");
                 }
@@ -152,8 +172,10 @@ contract MtxCtxTest is PqzRegistryBase {
     function _pCall(VmSafe.AccountAccess[] memory a, address t, bytes4 sel) internal view returns (uint256) {
         address p = NormalToken(t).modules()[0];
         for (uint256 i; i < a.length; ++i) {
-            if (a[i].kind == VmSafe.AccountAccessKind.DelegateCall && a[i].account == p && a[i].data.length >= 4
-                && bytes4(a[i].data) == sel) {
+            if (
+                a[i].kind == VmSafe.AccountAccessKind.DelegateCall && a[i].account == p && a[i].data.length >= 4
+                    && bytes4(a[i].data) == sel
+            ) {
                 for (uint256 j; j < a[i].storageAccesses.length; ++j) {
                     require(a[i].storageAccesses[j].account == t, "module P ran in another contract's context");
                 }
@@ -196,7 +218,9 @@ contract MtxCtxTest is PqzRegistryBase {
     }
 
     function _add(bytes32[] memory set, uint256 n, bytes32 x) internal pure returns (uint256) {
-        for (uint256 i; i < n; ++i) if (set[i] == x) return n;
+        for (uint256 i; i < n; ++i) {
+            if (set[i] == x) return n;
+        }
         set[n] = x;
         return n + 1;
     }
@@ -205,7 +229,9 @@ contract MtxCtxTest is PqzRegistryBase {
         assertEq(got.length, want.length, string.concat(what, ": the number of written slots"));
         for (uint256 i; i < want.length; ++i) {
             bool found;
-            for (uint256 j; j < got.length; ++j) if (got[j] == want[i]) found = true;
+            for (uint256 j; j < got.length; ++j) {
+                if (got[j] == want[i]) found = true;
+            }
             assertTrue(found, string.concat(what, ": an expected slot was not written"));
         }
     }
@@ -230,11 +256,15 @@ contract MtxCtxTest is PqzRegistryBase {
     }
 
     function _set(bytes32 a, bytes32 b, bytes32 c, bytes32 d, bytes32 e, uint256 n)
-        internal pure returns (bytes32[] memory s)
+        internal
+        pure
+        returns (bytes32[] memory s)
     {
         s = new bytes32[](n);
         bytes32[5] memory x = [a, b, c, d, e];
-        for (uint256 i; i < n; ++i) s[i] = x[i];
+        for (uint256 i; i < n; ++i) {
+            s[i] = x[i];
+        }
     }
 
     /// The relayer's call of `cd` on `t` with `g` gas, state rolled back.
@@ -268,7 +298,8 @@ contract MtxCtxTest is PqzRegistryBase {
     /// is read where it still crosses into the library, a named entry of another module: `mtxBurn` (A) on a normal kind,
     /// `mtxUnwrap` (W) on a wrapped one; both and P build it with the one `_mtxCtx()` of `MetaTokenBase`.
     function test_ctxEqualsTokenViews() public {
-        IRig[3] memory rigs = [IRig(address(new PlainRig())), IRig(address(new PqzRig())), IRig(address(new ZetherRig()))];
+        IRig[3] memory rigs =
+            [IRig(address(new PlainRig())), IRig(address(new PqzRig())), IRig(address(new ZetherRig()))];
         PlainRig(address(rigs[0])).init();
         PqzRig(address(rigs[1])).init();
         ZetherRig(address(rigs[2])).init();
@@ -292,18 +323,36 @@ contract MtxCtxTest is PqzRegistryBase {
         IUARegistry.UASig memory none;
         MetaTxLib.UAEnvelope memory e;
         bool wrapped = bytes(kind).length >= 7 && keccak256(_slice(bytes(kind), 0, 7)) == keccak256("WRAPPED");
-        MtxPipelineLib.Ctx memory c = _ctxOf(t, wrapped
-            ? abi.encodeWithSignature("mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,"
-                "address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", e, uint256(1), BOB, uint256(0), none)
-            : abi.encodeWithSignature("mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,"
-                "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", e, uint256(1), none),
-            MtxPipelineLib.preNamedUA.selector);
+        MtxPipelineLib.Ctx memory c = _ctxOf(
+            t,
+            wrapped
+                ? abi.encodeWithSignature(
+                    "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,"
+                    "address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+                    e,
+                    uint256(1),
+                    BOB,
+                    uint256(0),
+                    none
+                )
+                : abi.encodeWithSignature(
+                    "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,"
+                    "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+                    e,
+                    uint256(1),
+                    none
+                ),
+            MtxPipelineLib.preNamedUA.selector
+        );
         NormalToken k = NormalToken(t);
         assertEq(c.domainSeparator, _separator(t), string.concat(kind, ": domainSeparator"));
         assertEq(c.registry, k.registry(), string.concat(kind, ": registry"));
         address ska = k.SMART_KEY_ACCOUNT_IMPL();
-        assertEq(c.skaCloneCodehash, ska == address(0) ? bytes32(0) : keccak256(_cloneCode(ska)),
-            string.concat(kind, ": skaCloneCodehash"));
+        assertEq(
+            c.skaCloneCodehash,
+            ska == address(0) ? bytes32(0) : keccak256(_cloneCode(ska)),
+            string.concat(kind, ": skaCloneCodehash")
+        );
         assertEq(c.hedera, k.IS_HEDERA(), string.concat(kind, ": hedera"));
     }
 
@@ -318,7 +367,8 @@ contract MtxCtxTest is PqzRegistryBase {
         (, string memory name, string memory version, uint256 chainId, address vc, bytes32 salt,) =
             NormalToken(t).eip712Domain();
         assertEq(vc, t);
-        return keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
+        return
+            keccak256(abi.encode(DOMAIN_TYPEHASH, keccak256(bytes(name)), keccak256(bytes(version)), chainId, vc, salt));
     }
 
     // ------------------------------------------------------------------ R2: the four digest views against the vectors
@@ -339,13 +389,20 @@ contract MtxCtxTest is PqzRegistryBase {
         assertEq(NormalToken(at).mtxDigest(_katUaTx(j)), vm.parseJsonBytes32(j, ".digest"), "metatx_kat");
         j = vm.readFile("test/vectors/metatransfer_kat.json");
         assertEq(vm.parseJsonAddress(j, ".verifying_contract"), at);
-        assertEq(NormalToken(at).mtxTransferDigest(_katTransfer(j)), vm.parseJsonBytes32(j, ".digest"), "metatransfer_kat");
+        assertEq(
+            NormalToken(at).mtxTransferDigest(_katTransfer(j)), vm.parseJsonBytes32(j, ".digest"), "metatransfer_kat"
+        );
 
         // clientkeys' UA vectors (metatx3.json, context A)
         j = vm.readFile("../vectors/ua/metatx3.json");
-        at = _etchNormal(vm.parseJsonAddress(j, ".token"), vm.parseJsonBytes32(j, ".chainUid"), vm.parseJsonUint(j, ".chainId"));
-        assertEq(_uaRows(j, at, ".call[", false) + _uaRows(j, at, ".burn[", false) + _uaRows(j, at, ".transfer[", true), 33,
-            "metatx3: every call, burn and transfer row");
+        at = _etchNormal(
+            vm.parseJsonAddress(j, ".token"), vm.parseJsonBytes32(j, ".chainUid"), vm.parseJsonUint(j, ".chainId")
+        );
+        assertEq(
+            _uaRows(j, at, ".call[", false) + _uaRows(j, at, ".burn[", false) + _uaRows(j, at, ".transfer[", true),
+            33,
+            "metatx3: every call, burn and transfer row"
+        );
 
         // the zether-prover's envelope.json: a `NORMAL_ZETHER` clone (domain "SCaaS ZetherToken") at its token address
         ZetherRig zr = new ZetherRig();
@@ -420,7 +477,8 @@ contract MtxCtxTest is PqzRegistryBase {
         for (; vm.keyExistsJson(j, string.concat(list, vm.toString(n), "]")); ++n) {
             string memory r = string.concat(list, vm.toString(n), "].");
             string memory p = string.concat(r, "typedData.message.");
-            bytes32 got = transfer ? NormalToken(at).mtxTransferDigest(_ut3(j, p)) : NormalToken(at).mtxDigest(_um3(j, p));
+            bytes32 got =
+                transfer ? NormalToken(at).mtxTransferDigest(_ut3(j, p)) : NormalToken(at).mtxDigest(_um3(j, p));
             assertEq(got, vm.parseJsonBytes32(j, string.concat(r, "digest")), string.concat("metatx3 ", list));
         }
     }
@@ -475,24 +533,37 @@ contract MtxCtxTest is PqzRegistryBase {
     function test_relayedCall_writesRecordedSlots() public {
         bytes32 relayer = _balSlot(RELAYER);
         // mtxExecute: burn(1,000) with a fixed fee of 5 to the relayer
-        MetaTxLib.MetaTransaction memory m = _mt(alice, abi.encodeCall(NormalToken.burn, (1_000)), 11,
-            RR | MetaTxLib.MODE_FEE_FIXED, 5);
-        _checkWrites(abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), m)))), "mtxExecute",
-            _set(_nonceSlot(MetaTxLib.pad(alice), 11), _balSlot(alice), relayer, _supplySlot(), 0, 4));
+        MetaTxLib.MetaTransaction memory m =
+            _mt(alice, abi.encodeCall(NormalToken.burn, (1_000)), 11, RR | MetaTxLib.MODE_FEE_FIXED, 5);
+        _checkWrites(
+            abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), m)))),
+            "mtxExecute",
+            _set(_nonceSlot(MetaTxLib.pad(alice), 11), _balSlot(alice), relayer, _supplySlot(), 0, 4)
+        );
         // uaExecute: the `mldsa65` UA burns through UA_POOL, fee from its ledger
-        MetaTxLib.UAMetaTransaction memory um = _um(u, abi.encodeCall(NormalToken.burn, (1_000)), 12,
-            RR | MetaTxLib.MODE_FEE_FIXED, 5);
-        _checkWrites(abi.encodeCall(UAMetaTxBase.mtxExecute, (um, UACall.auth(um.from, _mlAuth()))), "uaExecute",
-            _set(_nonceSlot(u, 12), _uaSlot(u), _balSlot(MetaTxLib.UA_POOL), _supplySlot(), relayer, 5));
+        MetaTxLib.UAMetaTransaction memory um =
+            _um(u, abi.encodeCall(NormalToken.burn, (1_000)), 12, RR | MetaTxLib.MODE_FEE_FIXED, 5);
+        _checkWrites(
+            abi.encodeCall(UAMetaTxBase.mtxExecute, (um, UACall.auth(um.from, _mlAuth()))),
+            "uaExecute",
+            _set(_nonceSlot(u, 12), _uaSlot(u), _balSlot(MetaTxLib.UA_POOL), _supplySlot(), relayer, 5)
+        );
         // mtxExecuteTransfer: alice -> BOB 100, fee 5
         MetaTxLib.UAMetaTransfer memory t = _tr(alice, BOB, 13);
-        _checkWrites(abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer,
-            (t, UACall.auth(t.from, _ecdsa(ALICE_PK, tok.mtxTransferDigest(t))))),
-            "mtxExecuteTransfer", _set(_nonceSlot(MetaTxLib.pad(alice), 13), _balSlot(alice), _balSlot(BOB), relayer, 0, 4));
+        _checkWrites(
+            abi.encodeCall(
+                IERC20MetaTx.mtxExecuteTransfer, (t, UACall.auth(t.from, _ecdsa(ALICE_PK, tok.mtxTransferDigest(t))))
+            ),
+            "mtxExecuteTransfer",
+            _set(_nonceSlot(MetaTxLib.pad(alice), 13), _balSlot(alice), _balSlot(BOB), relayer, 0, 4)
+        );
         // mtxExecuteTransfer: u -> BOB 100, fee 5
         MetaTxLib.UAMetaTransfer memory ut = _ut(u, MetaTxLib.pad(BOB), 14);
-        _checkWrites(abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (ut, UACall.auth(ut.from, _mlAuth()))), "mtxExecuteTransfer",
-            _set(_nonceSlot(u, 14), _uaSlot(u), _balSlot(MetaTxLib.UA_POOL), _balSlot(BOB), relayer, 5));
+        _checkWrites(
+            abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (ut, UACall.auth(ut.from, _mlAuth()))),
+            "mtxExecuteTransfer",
+            _set(_nonceSlot(u, 14), _uaSlot(u), _balSlot(MetaTxLib.UA_POOL), _balSlot(BOB), relayer, 5)
+        );
     }
 
     function _checkWrites(bytes memory cd, string memory path, bytes32[] memory want) internal {
@@ -508,16 +579,24 @@ contract MtxCtxTest is PqzRegistryBase {
     /// smallest working call gas is logged (Task 8's node floor input); one gas less reverts with the SigCheck starvation
     /// error for that cap, never as a bad signature.
     function test_minGas_smartKeyAccountMtxExecute() public {
-        address acct = fac.deploy(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(uint160(vm.addr(SKA_PK)))), 0, 0, 0),
-            address(0x6A2D));
+        address acct = fac.deploy(
+            SubjectKey(KeyKind.SECP256K1, bytes32(uint256(uint160(vm.addr(SKA_PK)))), 0, 0, 0), address(0x6A2D)
+        );
         tok.mint(acct, 1_000, EnvKit.codeUidOf(address(tok)));
         MetaTxLib.MetaTransaction memory m = _mt(acct, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
         bytes32 app = Erc7739Kit.separator(address(tok));
         bytes32 c = MtxHash.hashStruct(m);
         assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), MtxDigest.metaTx(address(tok), m));
-        bytes memory sig = Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0),
-            _ecdsa(SKA_PK, Erc7739Kit.nested(acct, app, "MetaTransaction", Erc7739Kit.METATX_TYPE, c))), app, c,
-            Erc7739Kit.METATX_TYPE);
+        bytes memory sig = Erc7739Kit.wrap(
+            abi.encode(
+                uint256(0),
+                new bytes32[](0),
+                _ecdsa(SKA_PK, Erc7739Kit.nested(acct, app, "MetaTransaction", Erc7739Kit.METATX_TYPE, c))
+            ),
+            app,
+            c,
+            Erc7739Kit.METATX_TYPE
+        );
         bytes memory cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (m, sig));
         // the ERC-1271 STATICCALL comes from module P's frame
         uint256 snap = vm.snapshotState();
@@ -587,16 +666,29 @@ contract MtxCtxTest is PqzRegistryBase {
     function test_hedera_hip632CallerIsToken() public {
         address t = address(htok);
         MetaTxLib.MetaTransaction memory m = _mt(hed, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
-        _hip632(t, abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ed(MtxDigest.metaTx(address(htok), m)))),
-            IMetaTx.executeMetaTransaction.selector);
+        _hip632(
+            t,
+            abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ed(MtxDigest.metaTx(address(htok), m)))),
+            IMetaTx.executeMetaTransaction.selector
+        );
         MetaTxLib.UAMetaTransfer memory x = _tr(hed, BOB, 2);
-        _hip632(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, UACall.auth(x.from, _ed(htok.mtxTransferDigest(x))))),
-            IERC20MetaTx.mtxExecuteTransfer.selector);
+        _hip632(
+            t,
+            abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, UACall.auth(x.from, _ed(htok.mtxTransferDigest(x))))),
+            IERC20MetaTx.mtxExecuteTransfer.selector
+        );
         MetaTxLib.UAMetaTransfer memory y = _ut(MetaTxLib.pad(hed), MetaTxLib.pad(BOB), 3);
-        _hip632(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (y, UACall.auth(y.from, _ed(htok.mtxTransferDigest(y))))),
-            IERC20MetaTx.mtxExecuteTransfer.selector);
+        _hip632(
+            t,
+            abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (y, UACall.auth(y.from, _ed(htok.mtxTransferDigest(y))))),
+            IERC20MetaTx.mtxExecuteTransfer.selector
+        );
         assertEq(htok.balanceOf(BOB), 2_000);
-        assertEq(htok.mtxNonce(MetaTxLib.pad(hed), 1) + htok.mtxNonce(MetaTxLib.pad(hed), 2) + htok.mtxNonce(MetaTxLib.pad(hed), 3), 3);
+        assertEq(
+            htok.mtxNonce(MetaTxLib.pad(hed), 1) + htok.mtxNonce(MetaTxLib.pad(hed), 2)
+                + htok.mtxNonce(MetaTxLib.pad(hed), 3),
+            3
+        );
     }
 
     function _hip632(address t, bytes memory cd, bytes4 sel) internal {

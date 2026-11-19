@@ -49,14 +49,24 @@ abstract contract WebAuthnSoft is V2Fixture {
     }
 
     function _clientData(bytes32 challenge, string memory origin, string memory tail)
-        internal pure returns (bytes memory)
+        internal
+        pure
+        returns (bytes memory)
     {
-        return abi.encodePacked('{"type":"webauthn.get","challenge":"', Base64.encodeURL(abi.encodePacked(challenge)),
-                                '","origin":"', origin, '"', tail);
+        return abi.encodePacked(
+            '{"type":"webauthn.get","challenge":"',
+            Base64.encodeURL(abi.encodePacked(challenge)),
+            '","origin":"',
+            origin,
+            '"',
+            tail
+        );
     }
 
     function _signAssertion(uint256 pk, bytes memory authData, bytes memory clientData)
-        internal pure returns (Assertion memory a)
+        internal
+        pure
+        returns (Assertion memory a)
     {
         bytes32 h = sha256(abi.encodePacked(authData, sha256(clientData)));
         (bytes32 r, bytes32 s) = vm.signP256(pk, h);
@@ -65,8 +75,9 @@ abstract contract WebAuthnSoft is V2Fixture {
     }
 
     function _assertion(uint256 pk, bytes32 message) internal pure returns (Assertion memory) {
-        return _signAssertion(pk, abi.encodePacked(sha256(bytes(RP_ID)), bytes1(0x05), uint32(0)),
-                              _clientData(message, ORIGIN, TAIL));
+        return _signAssertion(
+            pk, abi.encodePacked(sha256(bytes(RP_ID)), bytes1(0x05), uint32(0)), _clientData(message, ORIGIN, TAIL)
+        );
     }
 
     function _enc(Assertion memory a) internal pure returns (bytes memory) {
@@ -113,10 +124,20 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         fac = new SmartKeyAccountFactory(UID_);
-        NormalToken impl = NormalToken(_envFor(address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
-            EnvKit.env(UID_, address(0), fac.IMPLEMENTATION(), false)));
-        t = NormalToken(_clone(address(impl), address(this), new address[](0),
-            abi.encode(normalInit("Points", "PTS", 0, 0, address(this), address(this)))));
+        NormalToken impl = NormalToken(
+            _envFor(
+                address(new NormalToken(address(this), kindArgs(0, address(this), ""))),
+                EnvKit.env(UID_, address(0), fac.IMPLEMENTATION(), false)
+            )
+        );
+        t = NormalToken(
+            _clone(
+                address(impl),
+                address(this),
+                new address[](0),
+                abi.encode(normalInit("Points", "PTS", 0, 0, address(this), address(this)))
+            )
+        );
         acct = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), GUARDIAN)));
         t.mint(address(acct), 1000, EnvKit.codeUidOf(address(t)));
     }
@@ -161,7 +182,9 @@ contract SmartKeyAccountTest is WebAuthnSoft {
             KeyKind.P256_WEBAUTHN,
             bytes32(uint256(28573233055232466711029625910063034642429572463461595413086259353299906450061)),
             bytes32(uint256(39367742072897599771788408398752356480431855827262528811857788332151452825281)),
-            sha256("localhost"), keccak256("http://localhost:3005"));
+            sha256("localhost"),
+            keccak256("http://localhost:3005")
+        );
         return SmartKeyAccount(payable(fac.deploy(k, address(0))));
     }
 
@@ -173,7 +196,8 @@ contract SmartKeyAccountTest is WebAuthnSoft {
             hex"49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d9763050000010a",
             _clientData(BASE_CHALLENGE, "http://localhost:3005", TAIL),
             bytes32(uint256(29739767516584490820047863506833955097567272713519339793744591468032609909569)),
-            bytes32(uint256(45947455641742997809691064512762075989493430661170736817032030660832793108102)));
+            bytes32(uint256(45947455641742997809691064512762075989493430661170736817032030660832793108102))
+        );
         assertTrue(_valid(a, BASE_CHALLENGE, _sig(0, inner)));
         assertFalse(_valid(a, keccak256("other"), _sig(0, inner)));
     }
@@ -184,7 +208,8 @@ contract SmartKeyAccountTest is WebAuthnSoft {
             hex"49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000101",
             _clientData(BASE_CHALLENGE, "http://localhost:3005", "}"),
             bytes32(uint256(43684192885701841787131392247364253107519555363555461570655060745499568693242)),
-            bytes32(uint256(22655632649588629308599201066602670461698485748654492451178007896016452673579)));
+            bytes32(uint256(22655632649588629308599201066602670461698485748654492451178007896016452673579))
+        );
         assertTrue(_valid(a, BASE_CHALLENGE, _sig(0, inner)));
     }
 
@@ -192,8 +217,12 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     function test_node_software_authenticator_vector() public {
         string memory j = vm.readFile("test/vectors/webauthn_soft.json");
         SubjectKey memory k = SubjectKey(
-            KeyKind.P256_WEBAUTHN, vm.parseJsonBytes32(j, ".qx"), vm.parseJsonBytes32(j, ".qy"),
-            sha256(bytes(vm.parseJsonString(j, ".rpId"))), keccak256(bytes(vm.parseJsonString(j, ".origin"))));
+            KeyKind.P256_WEBAUTHN,
+            vm.parseJsonBytes32(j, ".qx"),
+            vm.parseJsonBytes32(j, ".qy"),
+            sha256(bytes(vm.parseJsonString(j, ".rpId"))),
+            keccak256(bytes(vm.parseJsonString(j, ".origin")))
+        );
         SmartKeyAccount a = SmartKeyAccount(payable(fac.deploy(k, address(0))));
         bytes32 challenge = vm.parseJsonBytes32(j, ".challenge");
         assertTrue(_valid(a, challenge, vm.parseJsonBytes(j, ".signature")));
@@ -205,8 +234,14 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     bytes32 internal constant D = keccak256("operation digest");
 
     function _withAuth(bytes1 flags, string memory origin, string memory tail) internal pure returns (bytes memory) {
-        return _sig(0, _enc(_signAssertion(PASSKEY, abi.encodePacked(sha256(bytes(RP_ID)), flags, uint32(0)),
-                                           _clientData(D, origin, tail))));
+        return _sig(
+            0,
+            _enc(
+                _signAssertion(
+                    PASSKEY, abi.encodePacked(sha256(bytes(RP_ID)), flags, uint32(0)), _clientData(D, origin, tail)
+                )
+            )
+        );
     }
 
     function test_soft_assertion_valid() public {
@@ -223,8 +258,9 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     }
 
     function test_wrong_rp_id_hash() public {
-        Assertion memory a = _signAssertion(PASSKEY, abi.encodePacked(sha256("evil.example.com"), bytes1(0x05), uint32(0)),
-                                            _clientData(D, ORIGIN, TAIL));
+        Assertion memory a = _signAssertion(
+            PASSKEY, abi.encodePacked(sha256("evil.example.com"), bytes1(0x05), uint32(0)), _clientData(D, ORIGIN, TAIL)
+        );
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
     }
 
@@ -242,7 +278,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     function test_tampering() public {
         Assertion memory a = _assertion(PASSKEY, D);
-        a.authData[36] = 0x01;   // sign counter
+        a.authData[36] = 0x01; // sign counter
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
         a = _assertion(PASSKEY, D);
         a.clientData = _clientData(D, ORIGIN, ',"crossOrigin":false,"x":1}');
@@ -251,22 +287,40 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         a.r = bytes32(uint256(a.r) ^ 1);
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
         a = _assertion(PASSKEY, D);
-        a.authData = abi.encodePacked(sha256(bytes(RP_ID)), bytes1(0x05));   // 33 bytes
+        a.authData = abi.encodePacked(sha256(bytes(RP_ID)), bytes1(0x05)); // 33 bytes
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
     }
 
     function test_type_create_is_refused() public {
-        bytes memory cd = abi.encodePacked('{"type":"webauthn.create","challenge":"',
-            Base64.encodeURL(abi.encodePacked(D)), '","origin":"', ORIGIN, '"', TAIL);
-        Assertion memory a = _signAssertion(PASSKEY, abi.encodePacked(sha256(bytes(RP_ID)), bytes1(0x05), uint32(0)), cd);
+        bytes memory cd = abi.encodePacked(
+            '{"type":"webauthn.create","challenge":"',
+            Base64.encodeURL(abi.encodePacked(D)),
+            '","origin":"',
+            ORIGIN,
+            '"',
+            TAIL
+        );
+        Assertion memory a =
+            _signAssertion(PASSKEY, abi.encodePacked(sha256(bytes(RP_ID)), bytes1(0x05), uint32(0)), cd);
         assertFalse(_valid(acct, D, _sig(0, _enc(a))));
     }
 
     function test_client_data_layouts() public {
-        assertTrue(_valid(acct, D, _withAuth(0x05, ORIGIN,
-            ',"crossOrigin":false,"other_keys_can_be_added_here":"do not compare clientDataJSON against a template"}')));
+        assertTrue(
+            _valid(
+                acct,
+                D,
+                _withAuth(
+                    0x05,
+                    ORIGIN,
+                    ',"crossOrigin":false,"other_keys_can_be_added_here":"do not compare clientDataJSON against a template"}'
+                )
+            )
+        );
         assertTrue(_valid(acct, D, _withAuth(0x05, ORIGIN, "}")), "Safari: origin then }");
-        assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, ',"crossOrigin":true,"topOrigin":"https://evil.example.com"}')));
+        assertFalse(
+            _valid(acct, D, _withAuth(0x05, ORIGIN, ',"crossOrigin":true,"topOrigin":"https://evil.example.com"}'))
+        );
         assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, ',"x":1,"crossOrigin":true}')));
         assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, ',"crossOrigin": true}')));
         assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, ',"crossOrigin":true}')));
@@ -308,7 +362,8 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         for (uint256 i; i < 8; ++i) {
             assertFalse(_accepts(acct, D, _sig(0, bad[i])), vm.toString(i));
             if (i == 5 || i == 6) continue;
-            (bytes memory a, bytes memory c, bytes32 r, bytes32 s) = abi.decode(bad[i], (bytes, bytes, bytes32, bytes32));
+            (bytes memory a, bytes memory c, bytes32 r, bytes32 s) =
+                abi.decode(bad[i], (bytes, bytes, bytes32, bytes32));
             assertEq(abi.encode(a, c, r, s), sig, string.concat(vm.toString(i), ": same fields"));
         }
     }
@@ -316,7 +371,8 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     /// The verifier read as the account's own self-call reads it (staticcall): a revert is a refusal.
     function _accepts(SmartKeyAccount a, bytes32 digest, bytes memory sig) internal returns (bool) {
         vm.prank(address(a));
-        (bool ok, bytes memory ret) = address(a).staticcall(abi.encodeCall(SmartKeyAccount.isValidOwnDigest, (digest, sig)));
+        (bool ok, bytes memory ret) =
+            address(a).staticcall(abi.encodeCall(SmartKeyAccount.isValidOwnDigest, (digest, sig)));
         return ok && ret.length == 32 && abi.decode(ret, (bool));
     }
 
@@ -324,7 +380,9 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     function _field(bytes memory x) internal pure returns (bytes memory c) {
         bytes memory e = abi.encode(x);
         c = new bytes(e.length - 32);
-        for (uint256 i; i < c.length; ++i) c[i] = e[32 + i];
+        for (uint256 i; i < c.length; ++i) {
+            c[i] = e[32 + i];
+        }
     }
 
     function _setByte(bytes memory b, uint256 o) internal pure returns (bytes memory c) {
@@ -348,7 +406,9 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     function _tree(bytes32[4] memory d) internal view returns (bytes32 root, bytes32[][4] memory proofs) {
         bytes32[4] memory l;
-        for (uint256 i; i < 4; ++i) l[i] = acct.batchLeaf(d[i]);
+        for (uint256 i; i < 4; ++i) {
+            l[i] = acct.batchLeaf(d[i]);
+        }
         bytes32 n01 = Hashes.commutativeKeccak256(l[0], l[1]);
         bytes32 n23 = Hashes.commutativeKeccak256(l[2], l[3]);
         root = Hashes.commutativeKeccak256(n01, n23);
@@ -360,7 +420,9 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     }
 
     function _ops() internal pure returns (bytes32[4] memory d) {
-        for (uint256 i; i < 4; ++i) d[i] = keccak256(abi.encode("op", i));
+        for (uint256 i; i < 4; ++i) {
+            d[i] = keccak256(abi.encode("op", i));
+        }
     }
 
     function test_batch_one_passkey_assertion_covers_each_op() public {
@@ -394,13 +456,16 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         x = _tr(from, shop, 400, ref, uint256(ref), RR);
         bytes32 app = Erc7739Kit.separator(address(t));
         bytes32 c = MtxHash.hashStruct(x);
-        assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), t.mtxTransferDigest(x), "the kit rebuilds the token digest");
+        assertEq(
+            keccak256(abi.encodePacked(hex"1901", app, c)), t.mtxTransferDigest(x), "the kit rebuilds the token digest"
+        );
         d = Erc7739Kit.nested(from, app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c);
     }
 
     /// The account signature `sig` with its ERC-7739 suffix for the token's `UAMetaTransfer` `x`.
     function _w(MetaTxLib.UAMetaTransfer memory x, bytes memory sig) internal view returns (bytes memory) {
-        return Erc7739Kit.wrap(sig, Erc7739Kit.separator(address(t)), MtxHash.hashStruct(x), Erc7739Kit.UA_TRANSFER_TYPE);
+        return
+            Erc7739Kit.wrap(sig, Erc7739Kit.separator(address(t)), MtxHash.hashStruct(x), Erc7739Kit.UA_TRANSFER_TYPE);
     }
 
     function _payWith(MetaTxLib.UAMetaTransfer memory x, bytes memory sig) internal {
@@ -414,7 +479,9 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         bytes memory sig = _pk(0, PASSKEY, d);
         vm.expectEmit(true, true, true, true, address(t));
         // ua-mtx-merge T2 (R18, R20), meaning: the merged typed path emits `UAPaymentSettled` for a native payer too
-        emit IUALedger.UAPaymentSettled(MetaTxLib.pad(address(acct)), MetaTxLib.pad(shop), 400, 0, relayer, keccak256("r1"));
+        emit IUALedger.UAPaymentSettled(
+            MetaTxLib.pad(address(acct)), MetaTxLib.pad(shop), 400, 0, relayer, keccak256("r1")
+        );
         _payWith(x, sig);
         assertEq(t.balanceOf(shop), 400);
     }
@@ -464,8 +531,12 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     /// (chains without the precompile) needs the 400k.
     function test_cloneCodehashIsWhatTokensCap() public {
         assertEq(t.SMART_KEY_ACCOUNT_IMPL(), fac.IMPLEMENTATION());
-        assertEq(address(acct).codehash, keccak256(abi.encodePacked(
-            hex"363d3d373d3d3d363d73", fac.IMPLEMENTATION(), hex"5af43d82803e903d91602b57fd5bf3")));
+        assertEq(
+            address(acct).codehash,
+            keccak256(
+                abi.encodePacked(hex"363d3d373d3d3d363d73", fac.IMPLEMENTATION(), hex"5af43d82803e903d91602b57fd5bf3")
+            )
+        );
         bytes memory sig = _pk(0, PASSKEY, D);
         uint256 g = gasleft();
         assertTrue(_valid(acct, D, sig));
@@ -490,7 +561,9 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     // ------------------------------------------------------------------ key management (CTR-ACC-10)
 
     function test_never_zero_keys() public {
-        _ownerCallFails(abi.encodeCall(SmartKeyAccount.removeKey, (0)), abi.encodeWithSelector(SmartKeyAccount.LastKey.selector));
+        _ownerCallFails(
+            abi.encodeCall(SmartKeyAccount.removeKey, (0)), abi.encodeWithSelector(SmartKeyAccount.LastKey.selector)
+        );
         assertEq(acct.keyCount(), 1);
     }
 
@@ -504,8 +577,10 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     function test_remove_unknown_index() public {
         _ownerCall(abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED))), 0, PASSKEY, true);
-        _ownerCallFails(abi.encodeCall(SmartKeyAccount.removeKey, (7)),
-            abi.encodeWithSelector(SmartKeyAccount.NoSuchKey.selector, 7));
+        _ownerCallFails(
+            abi.encodeCall(SmartKeyAccount.removeKey, (7)),
+            abi.encodeWithSelector(SmartKeyAccount.NoSuchKey.selector, 7)
+        );
     }
 
     function test_owner_call_replay_expiry_and_foreign_key() public {
@@ -540,13 +615,15 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     function test_duplicate_and_bad_keys() public {
         bytes4 bad = SmartKeyAccount.BadKey.selector;
-        _ownerCallFails(abi.encodeCall(SmartKeyAccount.addKey, (_passkey(PASSKEY))),
-            abi.encodeWithSelector(SmartKeyAccount.DuplicateKey.selector));
+        _ownerCallFails(
+            abi.encodeCall(SmartKeyAccount.addKey, (_passkey(PASSKEY))),
+            abi.encodeWithSelector(SmartKeyAccount.DuplicateKey.selector)
+        );
         SubjectKey memory k = _passkey(PASSKEY2);
-        k.y = bytes32(uint256(k.y) ^ 1);                                   // off the curve
+        k.y = bytes32(uint256(k.y) ^ 1); // off the curve
         _ownerCallFails(abi.encodeCall(SmartKeyAccount.addKey, (k)), abi.encodeWithSelector(bad));
         k = _seedKey(SEED);
-        k.x = bytes32(uint256(k.x) | (1 << 200));                          // dirty bits above the address
+        k.x = bytes32(uint256(k.x) | (1 << 200)); // dirty bits above the address
         _ownerCallFails(abi.encodeCall(SmartKeyAccount.addKey, (k)), abi.encodeWithSelector(bad));
         k = _passkey(PASSKEY2);
         k.originHash = 0;
@@ -584,7 +661,8 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     function test_otherSignerIsNotTheAccount() public {
         uint256 pk = 0xA11CE;
         address alice = vm.addr(pk);
-        MetaTxLib.MetaTransaction memory m = _call(alice, abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED))), 0, RR);
+        MetaTxLib.MetaTransaction memory m =
+            _call(alice, abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED))), 0, RR);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, acct.mtxDigest(m));
         vm.prank(relayer);
         vm.expectRevert(SmartKeyAccount.NotSelf.selector);
@@ -600,7 +678,8 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         // or an ECDSA blob under the passkey's index is a `MetaTxBadSignature`
         m = _own(abi.encodeCall(IMetaTx.cancelNonce, (0)), 0);
         (v, r, s) = vm.sign(SEED, acct.mtxDigest(m));
-        bytes[3] memory bad = [abi.encodePacked(r, s, v), _sig(1, abi.encodePacked(r, s, v)), _sig(0, abi.encodePacked(r, s, v))];
+        bytes[3] memory bad =
+            [abi.encodePacked(r, s, v), _sig(1, abi.encodePacked(r, s, v)), _sig(0, abi.encodePacked(r, s, v))];
         for (uint256 i; i < 3; ++i) {
             vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
             acct.mtxExecute(m, bad[i]);
@@ -614,31 +693,46 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     }
 
     function test_execute_moves_funds() public {
-        _ownerCall(abi.encodeCall(SmartKeyAccount.execute,
-                                  (address(t), 0, abi.encodeCall(t.transfer, (shop, 100)))), 0, PASSKEY, true);
+        _ownerCall(
+            abi.encodeCall(SmartKeyAccount.execute, (address(t), 0, abi.encodeCall(t.transfer, (shop, 100)))),
+            0,
+            PASSKEY,
+            true
+        );
         assertEq(t.balanceOf(shop), 100);
     }
 
     /// `execute` runs under the guard: it cannot call the account's own functions or take a second signed call.
     function test_executeCannotReenter() public {
         bytes memory inner = abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED)));
-        _ownerCallFails(abi.encodeCall(SmartKeyAccount.execute, (address(acct), 0, inner)),
-            abi.encodeWithSelector(SmartKeyAccount.CallFailed.selector,
-                abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
+        _ownerCallFails(
+            abi.encodeCall(SmartKeyAccount.execute, (address(acct), 0, inner)),
+            abi.encodeWithSelector(
+                SmartKeyAccount.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)
+            )
+        );
         ReenterAccount re = new ReenterAccount();
         MetaTxLib.MetaTransaction memory m2 = _own(inner, 1);
         bytes memory sig2 = _pk(0, PASSKEY, acct.mtxDigest(m2));
-        _ownerCallFails(abi.encodeCall(SmartKeyAccount.execute, (address(re), 0, abi.encodeCall(re.hit, (acct, m2, sig2)))),
-            abi.encodeWithSelector(SmartKeyAccount.CallFailed.selector,
-                abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
+        _ownerCallFails(
+            abi.encodeCall(SmartKeyAccount.execute, (address(re), 0, abi.encodeCall(re.hit, (acct, m2, sig2)))),
+            abi.encodeWithSelector(
+                SmartKeyAccount.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)
+            )
+        );
         assertEq(acct.keyCount(), 1);
         // W-Q: the guardian's entries are under the same guard (CTR-MTX-18)
-        bytes[2] memory rec = [abi.encodeCall(SmartKeyAccount.initiateRecovery, (_seedKey(SEED))),
-            abi.encodeCall(SmartKeyAccount.completeRecovery, (_seedKey(SEED)))];
+        bytes[2] memory rec = [
+            abi.encodeCall(SmartKeyAccount.initiateRecovery, (_seedKey(SEED))),
+            abi.encodeCall(SmartKeyAccount.completeRecovery, (_seedKey(SEED)))
+        ];
         for (uint256 i; i < 2; ++i) {
-            _ownerCallFails(abi.encodeCall(SmartKeyAccount.execute, (address(acct), 0, rec[i])),
-                abi.encodeWithSelector(SmartKeyAccount.CallFailed.selector,
-                    abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
+            _ownerCallFails(
+                abi.encodeCall(SmartKeyAccount.execute, (address(acct), 0, rec[i])),
+                abi.encodeWithSelector(
+                    SmartKeyAccount.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)
+                )
+            );
         }
     }
 
@@ -680,9 +774,15 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     function test_allowlistPinned() public view {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = acct.mtxSelectors();
-        bytes4[7] memory want = [IMetaTx.cancelNonce.selector, SmartKeyAccount.addKey.selector,
-            SmartKeyAccount.removeKey.selector, SmartKeyAccount.rotateKey.selector, SmartKeyAccount.setGuardian.selector,
-            SmartKeyAccount.cancelRecovery.selector, SmartKeyAccount.execute.selector];
+        bytes4[7] memory want = [
+            IMetaTx.cancelNonce.selector,
+            SmartKeyAccount.addKey.selector,
+            SmartKeyAccount.removeKey.selector,
+            SmartKeyAccount.rotateKey.selector,
+            SmartKeyAccount.setGuardian.selector,
+            SmartKeyAccount.cancelRecovery.selector,
+            SmartKeyAccount.execute.selector
+        ];
         assertEq(s.length, 7);
         for (uint256 i; i < 7; ++i) {
             assertEq(s[i], want[i]);
@@ -690,8 +790,10 @@ contract SmartKeyAccountTest is WebAuthnSoft {
             assertEq(a[i], 0);
         }
         assertEq(SmartKeyAccount.addKey.selector, bytes4(keccak256("addKey((uint8,bytes32,bytes32,bytes32,bytes32))")));
-        assertEq(SmartKeyAccount.rotateKey.selector,
-            bytes4(keccak256("rotateKey(uint256,(uint8,bytes32,bytes32,bytes32,bytes32))")));
+        assertEq(
+            SmartKeyAccount.rotateKey.selector,
+            bytes4(keccak256("rotateKey(uint256,(uint8,bytes32,bytes32,bytes32,bytes32))"))
+        );
         assertEq(acct.supportedModes(), 0x03);
     }
 
@@ -712,22 +814,34 @@ contract SmartKeyAccountTest is WebAuthnSoft {
             abi.encodeCall(SmartKeyAccount.isValidSignature, (D, "")),
             abi.encodeCall(IMetaTxAddress.mtxBatch, (new MetaTxLib.MetaTransaction[](0), new bytes[](0)))
         ];
-        for (uint256 i; i < calls.length; ++i) _signedFails(calls[i], abi.encodeWithSelector(no, bytes4(calls[i])));
+        for (uint256 i; i < calls.length; ++i) {
+            _signedFails(calls[i], abi.encodeWithSelector(no, bytes4(calls[i])));
+        }
     }
 
     function test_staticShapes() public {
         bytes memory k = abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED)));
         assertEq(k.length, 164);
-        _signedFails(abi.encodePacked(k, bytes32(0)),
-            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.addKey.selector));
-        _signedFails(abi.encodePacked(SmartKeyAccount.cancelRecovery.selector, bytes32(0)),
-            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.cancelRecovery.selector));
-        _signedFails(abi.encodePacked(abi.encodeCall(SmartKeyAccount.removeKey, (0)), bytes1(0)),
-            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.removeKey.selector));
-        _signedFails(abi.encodePacked(abi.encodeCall(SmartKeyAccount.setGuardian, (address(0))), bytes1(0)),
-            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.setGuardian.selector));
-        _signedFails(abi.encodePacked(abi.encodeCall(SmartKeyAccount.rotateKey, (0, _seedKey(SEED))), bytes1(0)),
-            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.rotateKey.selector));
+        _signedFails(
+            abi.encodePacked(k, bytes32(0)),
+            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.addKey.selector)
+        );
+        _signedFails(
+            abi.encodePacked(SmartKeyAccount.cancelRecovery.selector, bytes32(0)),
+            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.cancelRecovery.selector)
+        );
+        _signedFails(
+            abi.encodePacked(abi.encodeCall(SmartKeyAccount.removeKey, (0)), bytes1(0)),
+            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.removeKey.selector)
+        );
+        _signedFails(
+            abi.encodePacked(abi.encodeCall(SmartKeyAccount.setGuardian, (address(0))), bytes1(0)),
+            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.setGuardian.selector)
+        );
+        _signedFails(
+            abi.encodePacked(abi.encodeCall(SmartKeyAccount.rotateKey, (0, _seedKey(SEED))), bytes1(0)),
+            abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, SmartKeyAccount.rotateKey.selector)
+        );
     }
 
     function test_feeModesRefused() public {
@@ -754,22 +868,35 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         bytes32 c = keccak256("contents");
         bytes32 h = keccak256(abi.encodePacked(hex"1901", app, c));
         // implicit mode
-        bytes memory sig = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "Mail", "Mail(address to)", c)),
-            app, c, "Mail(address to)");
+        bytes memory sig = Erc7739Kit.wrap(
+            _pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "Mail", "Mail(address to)", c)),
+            app,
+            c,
+            "Mail(address to)"
+        );
         assertEq(acct.isValidSignature(h, sig), MAGIC, "positive control: TypedDataSign, implicit");
         assertEq(b.isValidSignature(h, sig), bytes4(0xffffffff), "same key, other account");
         assertEq(acct.isValidSignature(keccak256("other"), sig), bytes4(0xffffffff), "the hash is not app || contents");
         assertEq(acct.isValidSignature(h, _pk(0, PASSKEY, h)), bytes4(0xffffffff), "the raw hash");
         // explicit mode: `Asset` sorts before `Order`
         string memory ty = "Asset(address token)Order(Asset give)";
-        bytes memory ex = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "Order", ty, c)), app, c,
-            string.concat(ty, "Order"));
+        bytes memory ex = Erc7739Kit.wrap(
+            _pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "Order", ty, c)), app, c, string.concat(ty, "Order")
+        );
         assertEq(acct.isValidSignature(h, ex), MAGIC, "positive control: TypedDataSign, explicit");
-        bytes memory lower = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "mail", "mail(address to)", c)),
-            app, c, "mail(address to)");
+        bytes memory lower = Erc7739Kit.wrap(
+            _pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "mail", "mail(address to)", c)),
+            app,
+            c,
+            "mail(address to)"
+        );
         assertEq(acct.isValidSignature(h, lower), bytes4(0xffffffff), "contentsName starting a-z");
-        bytes memory comma = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "Ma,il", "Ma,il(address to)", c)),
-            app, c, "Ma,il(address to)");
+        bytes memory comma = Erc7739Kit.wrap(
+            _pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "Ma,il", "Ma,il(address to)", c)),
+            app,
+            c,
+            "Ma,il(address to)"
+        );
         assertEq(acct.isValidSignature(h, comma), bytes4(0xffffffff), "contentsName holding a comma");
         // PersonalSign
         bytes memory ps = _pk(0, PASSKEY, Erc7739Kit.personal(address(acct), D));
@@ -793,26 +920,35 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         bytes32 c = keccak256("contents");
         bytes32 h = keccak256(abi.encodePacked(hex"1901", app, c));
         assertEq(_nest(h, app, c, "Mail", "Mail(address to)", "Mail(address to)"), MAGIC, "positive control: implicit");
-        assertEq(_nest(h, app, c, "Order", "Asset(address t)Order(Asset a)", "Asset(address t)Order(Asset a)Order"), MAGIC,
-            "positive control: explicit");
+        assertEq(
+            _nest(h, app, c, "Order", "Asset(address t)Order(Asset a)", "Asset(address t)Order(Asset a)Order"),
+            MAGIC,
+            "positive control: explicit"
+        );
         assertEq(_nest(h, app, c, "Ma il", "Ma il(address to)", "Ma il(address to)"), _INV, "a space");
         assertEq(_nest(h, app, c, "Ma\x00il", "Ma\x00il(address to)", "Ma\x00il(address to)"), _INV, "NUL");
         assertEq(_nest(h, app, c, "Ma)il", "Ma)il(address to)", "Ma)il(address to)"), _INV, "a ) in the name");
         assertEq(_nest(h, app, c, "", "(address to)", "(address to)"), _INV, "an empty name");
-        assertEq(_nest(h, app, c, "Ma(il", "Mail(address to)", "Mail(address to)Ma(il"), _INV, "explicit: a ( in the name");
+        assertEq(
+            _nest(h, app, c, "Ma(il", "Mail(address to)", "Mail(address to)Ma(il"), _INV, "explicit: a ( in the name"
+        );
         assertEq(_nest(h, app, c, "Ma il", "Mail(address to)", "Mail(address to)Ma il"), _INV, "explicit: a space");
         assertEq(_nest(h, app, c, "Ma,il", "Mail(address to)", "Mail(address to)Ma,il"), _INV, "explicit: a comma");
         assertEq(_nest(h, app, c, "Mail", "Mail", "Mail"), _INV, "no ( and no ): no name");
-        bytes memory empty = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "", "", c)), app, c, "");
+        bytes memory empty =
+            Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, "", "", c)), app, c, "");
         assertEq(acct.isValidSignature(h, empty), _INV, "an empty description");
     }
 
     bytes4 internal constant _INV = 0xffffffff;
 
     function _nest(bytes32 h, bytes32 app, bytes32 c, string memory name, string memory ty, string memory descr)
-        internal view returns (bytes4)
+        internal
+        view
+        returns (bytes4)
     {
-        bytes memory sig = Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, name, ty, c)), app, c, descr);
+        bytes memory sig =
+            Erc7739Kit.wrap(_pk(0, PASSKEY, Erc7739Kit.nested(address(acct), app, name, ty, c)), app, c, descr);
         (bool ok, bytes memory ret) = address(acct).staticcall(abi.encodeCall(IERC1271.isValidSignature, (h, sig)));
         return ok && ret.length == 32 ? bytes4(ret) : _INV;
     }
@@ -835,9 +971,18 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         assertEq(acct.chainUid(), UID_);
         assertEq(fac.chainUid(), UID_);
         MetaTxLib.MetaTransaction memory m = _own(hex"12345678", 3);
-        bytes32 ds = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256("SCaaS SmartKeyAccount"), keccak256("1"), uint256(7622), address(acct), UID_));
+        bytes32 ds = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
+                ),
+                keccak256("SCaaS SmartKeyAccount"),
+                keccak256("1"),
+                uint256(7622),
+                address(acct),
+                UID_
+            )
+        );
         assertEq(acct.mtxDigest(m), keccak256(abi.encodePacked(hex"1901", ds, MtxHash.hashStruct(m))));
     }
 
@@ -853,7 +998,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         vm.expectRevert(abi.encodeWithSelector(SmartKeyAccount.RecoveryNotReady.selector, block.timestamp + 1));
         acct.completeRecovery(k);
         vm.warp(block.timestamp + 1);
-        vm.prank(address(0xA11));                  // anyone submits
+        vm.prank(address(0xA11)); // anyone submits
         uint256 idx = acct.completeRecovery(k);
         assertEq(acct.pendingRecovery(), bytes32(0));
         assertEq(acct.keyCount(), 2, "recovery adds, removes nothing");
@@ -870,8 +1015,10 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         vm.warp(block.timestamp + 3 days);
         vm.expectRevert(SmartKeyAccount.NoRecovery.selector);
         acct.completeRecovery(k);
-        _ownerCallFails(abi.encodeCall(SmartKeyAccount.cancelRecovery, ()),
-            abi.encodeWithSelector(SmartKeyAccount.NoRecovery.selector));
+        _ownerCallFails(
+            abi.encodeCall(SmartKeyAccount.cancelRecovery, ()),
+            abi.encodeWithSelector(SmartKeyAccount.NoRecovery.selector)
+        );
     }
 
     /// Owner ruling 2026-10-30 (D2): a guardian with an EIP-7702 designator is running its delegate's code (a phished
@@ -960,9 +1107,12 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         string memory j = vm.readFile("test/vectors/smart_key_account_create2.json");
         bytes32 s = fac.salt(k, GUARDIAN);
         assertEq(s, vm.parseJsonBytes32(j, ".salt"));
-        assertEq(Clones.predictDeterministicAddress(
-            vm.parseJsonAddress(j, ".implementation"), s, vm.parseJsonAddress(j, ".factory")),
-            vm.parseJsonAddress(j, ".account"));
+        assertEq(
+            Clones.predictDeterministicAddress(
+                vm.parseJsonAddress(j, ".implementation"), s, vm.parseJsonAddress(j, ".factory")
+            ),
+            vm.parseJsonAddress(j, ".account")
+        );
         assertEq(fac.predict(k, GUARDIAN), Clones.predictDeterministicAddress(fac.IMPLEMENTATION(), s, address(fac)));
     }
 

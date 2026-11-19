@@ -31,8 +31,27 @@ apps) in one atomic group — no escrow, no refund, no residual (CTR-MTX-16):
 Inner fees 0 (the lane pools them); no inner transaction rekeys or closes. No local state (OptIn refused); Update /
 Delete refused (the ARC-4 router accepts neither).
 """
-from algopy import (Account, Application, Bytes, Global, GlobalState, OnCompleteAction, OpUpFeeSource, TemplateVar,
-                    TransactionType, Txn, UInt64, arc4, ensure_budget, gtxn, itxn, op, subroutine, urange)
+
+from algopy import (
+    Account,
+    Application,
+    Bytes,
+    Global,
+    GlobalState,
+    OnCompleteAction,
+    OpUpFeeSource,
+    TemplateVar,
+    TransactionType,
+    Txn,
+    UInt64,
+    arc4,
+    ensure_budget,
+    gtxn,
+    itxn,
+    op,
+    subroutine,
+    urange,
+)
 
 from common import KIND_ADDRESS, MTX_PAY, Bytes32, Holder, MetaOp, pay_lane, relay_ref
 
@@ -72,30 +91,38 @@ class RelayFee(arc4.ARC4Contract):
         assert t.on_completion == OnCompleteAction.NoOp, "target call must be NoOp (rule 13)"
         exe = self._executor()
         assert t.sender == exe, "target sender is not the executor"
-        assert t.num_app_args == 0 or t.app_args(0) != arc4.arc4_signature(ADD_KEY_NATIVE), \
+        assert t.num_app_args == 0 or t.app_args(0) != arc4.arc4_signature(ADD_KEY_NATIVE), (
             "add_key_native is never relayed (no key for the executor)"
+        )
         call = op.itob(target.id) + op.extract(op.itob(t.num_app_args), 7, 1)
         for i in urange(t.num_app_args):
             a = t.app_args(i)
             call += op.extract(op.itob(a.length), 6, 2) + a
         r = relay_ref(Bytes32.from_bytes(Global.genesis_hash), Bytes32.from_bytes(taddr.bytes), call, op_.extra)
-        assert (op_.pay_ref == r and op_.lane == pay_lane(r) and op_.nonce.as_uint64() == 0
-                and op_.relayer.bytes == Global.current_application_address.bytes), \
-            "payment shape (pay_ref = ref of the target call, lane = payLane(ref), nonce 0, relayer = router)"
+        assert (
+            op_.pay_ref == r
+            and op_.lane == pay_lane(r)
+            and op_.nonce.as_uint64() == 0
+            and op_.relayer.bytes == Global.current_application_address.bytes
+        ), "payment shape (pay_ref = ref of the target call, lane = payLane(ref), nonce 0, relayer = router)"
         assert op_.to.bytes != addr_holder(exe).bytes, "the executor is never paid"
         payee = op_.to
         if op_.to.bytes == addr_holder(Global.current_application_address).bytes:
             payee = addr_holder(Txn.sender)  # open mode: the token pays the lane that submitted this call
         fwd = router_payment(at, taddr)
         app = Application(token.as_uint64())
-        pay = itxn.ApplicationCall(app_id=app, fee=0, app_args=(arc4.arc4_signature(MTX_PAY), op_.bytes,
-                                                                arc4.DynamicBytes(auth).bytes, Txn.sender.bytes))
+        pay = itxn.ApplicationCall(
+            app_id=app,
+            fee=0,
+            app_args=(arc4.arc4_signature(MTX_PAY), op_.bytes, arc4.DynamicBytes(auth).bytes, Txn.sender.bytes),
+        )
         if fwd:
             itxn.submit_txns(itxn.Payment(receiver=app.address, amount=fwd, fee=0), pay)
         else:
             pay.submit()
-        arc4.emit("RelayFeePaid", r, arc4.UInt64(target.id), token, op_.from_, payee,
-                  arc4.UInt256(op_.amount.as_biguint()))
+        arc4.emit(
+            "RelayFeePaid", r, arc4.UInt64(target.id), token, op_.from_, payee, arc4.UInt256(op_.amount.as_biguint())
+        )
 
     @arc4.abimethod(readonly=True)
     def relay_ref(self, call: Bytes, salt: Bytes32) -> Bytes32:
@@ -111,9 +138,16 @@ class RelayFee(arc4.ARC4Contract):
     def _executor(self) -> Account:
         """The executor LogicSig of this router: `sha512_256("Program" ‖ EXEC_PREFIX ‖ itob(app id) ‖ EXEC_SUFFIX ‖
         20 01 salt)`."""
-        return Account(op.sha512_256(b"Program" + TemplateVar[Bytes]("EXEC_PREFIX")
-                                     + op.itob(Global.current_application_id.id) + TemplateVar[Bytes]("EXEC_SUFFIX")
-                                     + b"\x20\x01" + op.extract(op.itob(self.salt.value), 7, 1)))
+        return Account(
+            op.sha512_256(
+                b"Program"
+                + TemplateVar[Bytes]("EXEC_PREFIX")
+                + op.itob(Global.current_application_id.id)
+                + TemplateVar[Bytes]("EXEC_SUFFIX")
+                + b"\x20\x01"
+                + op.extract(op.itob(self.salt.value), 7, 1)
+            )
+        )
 
 
 @subroutine
@@ -129,8 +163,9 @@ def router_payment(target: UInt64, target_address: Account) -> UInt64:
     if at > 0:
         p = gtxn.Transaction(at - 1)
         if p.type == TransactionType.Payment and p.receiver == Global.current_application_address:
-            assert p.close_remainder_to == Global.zero_address and p.rekey_to == Global.zero_address, \
+            assert p.close_remainder_to == Global.zero_address and p.rekey_to == Global.zero_address, (
                 "router MBR payment must not close or rekey"
+            )
             return p.amount
     return UInt64(0)
 

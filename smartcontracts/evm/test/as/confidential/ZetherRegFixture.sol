@@ -3,7 +3,16 @@ pragma solidity ^0.8.24;
 
 import {NormalZetherToken} from "../../../src/zether/NormalZetherToken.sol";
 
-import {ZetherNamedBase, typedDigest, multiJson, singleJson, T_G1, T_LEG, T_MULTI, T_SINGLE} from "../../zether/ZetherTyped.t.sol";
+import {
+    ZetherNamedBase,
+    typedDigest,
+    multiJson,
+    singleJson,
+    T_G1,
+    T_LEG,
+    T_MULTI,
+    T_SINGLE
+} from "../../zether/ZetherTyped.t.sol";
 import {Holder} from "../helpers/RegFixture.sol";
 import {MockERC20} from "../../helpers/Mocks.sol";
 import {Catalogue, regArgs} from "../../helpers/Catalogue.sol";
@@ -26,18 +35,33 @@ import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// The signed transfer entries alone (no overload), so `abi.encodeCall` can name each.
 interface IZetherSigned {
-    function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata auth) external returns (bytes32);
-    function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherMulti calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes32);
-    function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, IZetherToken.ZetherSingle calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata auth) external returns (bytes32);
+    function mtxConfidentialTransfer(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes32);
+    function mtxConfidentialTransferCompact(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherMulti calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes32);
+    function mtxConfidentialTransferSingle(
+        MetaTxLib.UAEnvelope calldata e,
+        IZetherToken.ZetherSingle calldata t,
+        bytes calldata proof,
+        IUARegistry.UASig calldata auth
+    ) external returns (bytes32);
 }
 
 /// The direct unshield-unwrap of kind 11 alone.
 interface IZetherUnwrapDirect {
-    function mtxUnshieldUnwrap(IZetherToken.ZetherBurn calldata b, IConfidentialWrappedToken.Unwrap calldata x,
-        bytes calldata proof) external;
+    function mtxUnshieldUnwrap(
+        IZetherToken.ZetherBurn calldata b,
+        IConfidentialWrappedToken.Unwrap calldata x,
+        bytes calldata proof
+    ) external;
 }
 
 /// Measures a call's execution inside one frame: the outer transaction's intrinsic and calldata gas (large for a proof's
@@ -75,27 +99,48 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     function _isWrapped() internal pure virtual returns (bool);
 
     /// `DENYLIST` on the token `setUp` creates.
-    function _denylist() internal pure virtual returns (bool) { return false; }
+    function _denylist() internal pure virtual returns (bool) {
+        return false;
+    }
 
     /// Round 3s (spec 2026-11-10-token-lists.md §4.3): `DENYLIST` as the token's own list (`setDenied` by the issuer seat)
     /// instead of the registry; `_attestDenied` writes the list and `_deniedErr` is `Denied(a)`.
-    function _lists() internal pure virtual returns (bool) { return false; }
+    function _lists() internal pure virtual returns (bool) {
+        return false;
+    }
 
     /// The refusal of a denied account at a checked site: the list's `Denied(a)` or the registry's `NotEligible(a, 0)`.
     function _deniedErr(bytes32 a) internal pure returns (bytes memory) {
-        return _lists() ? abi.encodeWithSelector(bytes4(keccak256("Denied(bytes32)")), a)
+        return _lists()
+            ? abi.encodeWithSelector(bytes4(keccak256("Denied(bytes32)")), a)
             : abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, a, uint8(0));
     }
 
     function setUp() public virtual {
         _stack();
-        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1, _zenv(),
-            type(NormalZetherRegulatedToken).creationCode, regArgs());
-        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
-            type(WrappedZetherRegulatedToken).creationCode, regArgs());
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED,
+            1,
+            _zenv(),
+            type(NormalZetherRegulatedToken).creationCode,
+            regArgs()
+        );
+        Catalogue.release(
+            factory,
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED,
+            1,
+            _zenv(),
+            type(WrappedZetherRegulatedToken).creationCode,
+            regArgs()
+        );
         vm.startPrank(registrar);
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
-        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(
+            IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory))
+        );
+        factory.setTokenKindEnabled(
+            IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory))
+        );
         vm.stopPrank();
         issuer = address(new Holder());
         compliance = address(new Holder());
@@ -136,7 +181,10 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     }
 
     function _kind() internal pure returns (IOpenFactory.TokenKind) {
-        return _isWrapped() ? IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED : IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED;
+        return
+            _isWrapped()
+                ? IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED
+                : IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED;
     }
 
     function _newToken(bool auditor, bytes32 s, uint256 maxShielded) internal override returns (NormalZetherToken) {
@@ -173,7 +221,12 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
             bytes32[] memory one = new bytes32[](1);
             one[0] = a;
             vm.prank(issuer);
-            (bool ok,) = address(tok).call(abi.encodeWithSignature("setDenied(bytes32[],bool,bytes32)", one, true, EnvKit.codeUidOf(address(tok))));
+            (bool ok,) = address(tok)
+                .call(
+                    abi.encodeWithSignature(
+                        "setDenied(bytes32[],bool,bytes32)", one, true, EnvKit.codeUidOf(address(tok))
+                    )
+                );
             require(ok, "setDenied");
             return;
         }
@@ -196,8 +249,11 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     /// The three direct transfer entries (spec §4.1): 0 `mtxConfidentialTransfer` (the token's default form), 1 `…Compact`,
     /// 2 `…Single`.
     function _sel(uint256 k) internal pure returns (bytes4) {
-        return k == 0 ? IZetherToken.mtxConfidentialTransfer.selector
-            : k == 1 ? IZetherToken.mtxConfidentialTransferCompact.selector : IZetherToken.mtxConfidentialTransferSingle.selector;
+        return k == 0
+            ? IZetherToken.mtxConfidentialTransfer.selector
+            : k == 1
+                ? IZetherToken.mtxConfidentialTransferCompact.selector
+                : IZetherToken.mtxConfidentialTransferSingle.selector;
     }
 
     /// The direct call of entry `k` (0-2: the transfers, 10 to `bob`; 3: an unshield of 10 to `0xB0C`), `alice` with `bal` in
@@ -207,31 +263,48 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     }
 
     /// `alice`'s multi transfer of `vs[j]` to `to[j]` with beneficiary `ben` in the token's default form, its direct call.
-    function _multiTo(User[] memory to, uint256[] memory vs, uint256 bal, ZetherTypes.UA ben) internal view returns (bytes memory) {
+    function _multiTo(User[] memory to, uint256[] memory vs, uint256 bal, ZetherTypes.UA ben)
+        internal
+        view
+        returns (bytes memory)
+    {
         Tx memory x = _proveMulti(tok, alice, to, vs, bal, ben, _defaultForm(tok));
         return abi.encodeCall(IZetherToken.mtxConfidentialTransfer, (_zMulti(x.payload, ben), x.proof));
     }
 
     /// The named (signed) call of transfer entry `k` (0-2), `alice`'s proof bound to envelope `e`; the signature by `payer`
     /// (`e.from == pad(payer)`) or by `alice`'s Zether key (`e.from == aId`); `bad`: over another digest.
-    function _signedCall(uint256 k, MetaTxLib.UAEnvelope memory e, uint256 bal, bool bad) internal view returns (bytes memory) {
+    function _signedCall(uint256 k, MetaTxLib.UAEnvelope memory e, uint256 bal, bool bad)
+        internal
+        view
+        returns (bytes memory)
+    {
         return k == 2 ? _signedSingle(e, bal, bad) : _signedMulti(k == 1, e, bal, bad);
     }
 
     function _signedSingle(MetaTxLib.UAEnvelope memory e, uint256 bal, bool bad) internal view returns (bytes memory) {
         Tx memory x = _proveTransfer(tok, alice, bob, 10, bal, _none(), _uaBindingOf(tok, e));
         IZetherToken.ZetherSingle memory t = _zSingle(x.payload, _none());
-        bytes32 d = typedDigest(address(tok), "UAZetherTransferSingle",
-            _fields(true, "ZetherSingle", '{"name":"proof","type":"bytes"}'), string.concat(',', T_G1, ',', T_SINGLE),
-            _msg(e.from, _argsMsg(singleJson(t), x.proof), e));
+        bytes32 d = typedDigest(
+            address(tok),
+            "UAZetherTransferSingle",
+            _fields(true, "ZetherSingle", '{"name":"proof","type":"bytes"}'),
+            string.concat(",", T_G1, ",", T_SINGLE),
+            _msg(e.from, _argsMsg(singleJson(t), x.proof), e)
+        );
         return abi.encodeCall(IZetherSigned.mtxConfidentialTransferSingle, (e, t, x.proof, _auth(e, d, bad)));
     }
 
-    function _signedMulti(bool compact, MetaTxLib.UAEnvelope memory e, uint256 bal, bool bad) internal view returns (bytes memory) {
+    function _signedMulti(bool compact, MetaTxLib.UAEnvelope memory e, uint256 bal, bool bad)
+        internal
+        view
+        returns (bytes memory)
+    {
         Tx memory y = _proveOne(compact, bal, _uaBindingOf(tok, e));
         IZetherToken.ZetherMulti memory m = _zMulti(y.payload, _none());
         IUARegistry.UASig memory s = _auth(e, _multiDigest(compact, e, m, y.proof), bad);
-        return compact ? abi.encodeCall(IZetherSigned.mtxConfidentialTransferCompact, (e, m, y.proof, s))
+        return compact
+            ? abi.encodeCall(IZetherSigned.mtxConfidentialTransferCompact, (e, m, y.proof, s))
             : abi.encodeCall(IZetherSigned.mtxConfidentialTransfer, (e, m, y.proof, s));
     }
 
@@ -241,19 +314,34 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         to[0] = bob;
         uint256[] memory vs = new uint256[](1);
         vs[0] = 10;
-        return _proveMulti(tok, alice, to, vs, bal, _none(), compact ? ZetherTypes.TransferMode.HASH : _defaultForm(tok), bd);
+        return
+            _proveMulti(
+                tok, alice, to, vs, bal, _none(), compact ? ZetherTypes.TransferMode.HASH : _defaultForm(tok), bd
+            );
     }
 
-    function _multiDigest(bool compact, MetaTxLib.UAEnvelope memory e, IZetherToken.ZetherMulti memory m, bytes memory proof)
-        internal view returns (bytes32)
-    {
-        return typedDigest(address(tok), compact ? "UAZetherTransferCompact" : "UAZetherTransfer",
-            _fields(true, "ZetherMulti", '{"name":"proof","type":"bytes"}'), string.concat(',', T_G1, ',', T_LEG, ',', T_MULTI),
-            _msg(e.from, _argsMsg(multiJson(m), proof), e));
+    function _multiDigest(
+        bool compact,
+        MetaTxLib.UAEnvelope memory e,
+        IZetherToken.ZetherMulti memory m,
+        bytes memory proof
+    ) internal view returns (bytes32) {
+        return typedDigest(
+            address(tok),
+            compact ? "UAZetherTransferCompact" : "UAZetherTransfer",
+            _fields(true, "ZetherMulti", '{"name":"proof","type":"bytes"}'),
+            string.concat(",", T_G1, ",", T_LEG, ",", T_MULTI),
+            _msg(e.from, _argsMsg(multiJson(m), proof), e)
+        );
     }
 
     /// `payer`'s ECDSA (`e.from == pad(payer)`) or `alice`'s Zether key (`e.from == aId`) over `d`, or over another digest.
-    function _auth(MetaTxLib.UAEnvelope memory e, bytes32 d, bool bad) internal view returns (IUARegistry.UASig memory) {
+    function _auth(MetaTxLib.UAEnvelope memory e, bytes32 d, bool bad)
+        internal
+        view
+        virtual
+        returns (IUARegistry.UASig memory)
+    {
         if (bad) d = keccak256(abi.encode(d));
         return e.from == aId ? _uaAuth(alice, d) : _eoa(d);
     }
@@ -276,8 +364,14 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xB0C)), amount, amount * SCALE);
         IZetherToken.ZetherBurn memory b = _zBurn(_unshieldPayload(tok, alice), _none());
-        bytes memory pr = _proveU(alice, stm.unshieldUnwrapStatement(address(tok), b, x.amount, x.recipient, x.underlying,
-            x.minOut, 0), x.amount, bal, _none(), tok);
+        bytes memory pr = _proveU(
+            alice,
+            stm.unshieldUnwrapStatement(address(tok), b, x.amount, x.recipient, x.underlying, x.minOut, 0),
+            x.amount,
+            bal,
+            _none(),
+            tok
+        );
         return abi.encodeCall(IZetherUnwrapDirect.mtxUnshieldUnwrap, (b, x, pr));
     }
 }

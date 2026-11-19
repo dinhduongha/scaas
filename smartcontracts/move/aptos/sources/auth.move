@@ -16,14 +16,20 @@ module scaas::auth {
     const WEBAUTHN: u8 = 2;
     const NONE: u8 = 255;
 
-    public fun ed25519(): u8 { ED25519 }
+    public fun ed25519(): u8 {
+        ED25519
+    }
 
-    public fun webauthn(): u8 { WEBAUTHN }
+    public fun webauthn(): u8 {
+        WEBAUTHN
+    }
 
     /// Lược đồ theo độ dài khoá; `NONE` nếu không nhận.
     public fun scheme_of(pk: &vector<u8>): u8 {
         let n = pk.length();
-        if (n == 32) ED25519 else if (n == 65 && pk[0] == 4) WEBAUTHN else NONE
+        if (n == 32) ED25519
+        else if (n == 65 && pk[0] == 4) WEBAUTHN
+        else NONE
     }
 
     /// Khoá `pk` dẫn ra đúng `auth_key` (= `account::get_authentication_key(owner)`, bằng `bcs(owner)` với tài
@@ -73,21 +79,23 @@ module scaas::auth {
         rp_id_hash: &vector<u8>,
         origins: &vector<vector<u8>>,
         table: &vector<u256>,
-        chain_id: u8,
+        chain_id: u8
     ): bool {
-        if (sig.length() != 64 || digest.length() != 32) return false;
+        if (sig.length() != 64 || digest.length() != 32)
+            return false;
         let s = scheme_of(pk);
         if (s == ED25519) {
             if (!check_envelope(envelope, &expected_message(label, digest), chain_id, origins)) return false;
             return ed25519::signature_verify_strict(
                 &ed25519::new_signature_from_bytes(*sig),
                 &ed25519::new_unvalidated_public_key_from_bytes(*pk),
-                *envelope,
+                *envelope
             )
         };
         if (s != WEBAUTHN) return false;
         let (ok, ad, cd) = webauthn_parts(envelope);
-        if (!ok || ad.length() < 37 || rp_id_hash.length() != 32) return false;
+        if (!ok || ad.length() < 37 || rp_id_hash.length() != 32)
+            return false;
         let i = 0;
         while (i < 32) {
             if (ad[i] != rp_id_hash[i]) return false;
@@ -96,23 +104,29 @@ module scaas::auth {
         if (ad[32] & 5 != 5) return false;
         // So chuỗi con an toàn: trình duyệt escape `"` trong mọi giá trị chuỗi nên needle không lọt vào giá trị.
         if (!contains(&cd, &b"\"type\":\"webauthn.get\"")) return false;
-        if (contains(&cd, &b"\"crossOrigin\":true") || contains(&cd, &b"\"topOrigin\"")) return false;
+        if (contains(&cd, &b"\"crossOrigin\":true") || contains(&cd, &b"\"topOrigin\""))
+            return false;
         let ch = b"\"challenge\":\"";
         ch.append(base64url(digest));
         ch.push_back(34);
         if (!contains(&cd, &ch)) return false;
         let origin = origin_of(&cd);
-        if (origin.is_empty() || !origins.contains(&origin)) return false;
+        if (origin.is_empty() || !origins.contains(&origin))
+            return false;
         let msg = ad;
         msg.append(sha2_256(cd));
-        if (table.is_empty()) p256::verify(pk, &sha2_256(msg), sig) else p256::verify_with(table, &sha2_256(msg), sig)
+        if (table.is_empty()) p256::verify(pk, &sha2_256(msg), sig)
+        else p256::verify_with(table, &sha2_256(msg), sig)
     }
 
     /// Phong bì `aptos:signMessage` (spec §4.2). Không phụ thuộc thứ tự dòng. `origins` khác rỗng ⇒ dòng
     /// `application` bắt buộc và giá trị ∈ `origins`.
-    public fun check_envelope(full: &vector<u8>, message: &vector<u8>, chain_id: u8, origins: &vector<vector<u8>>): bool {
+    public fun check_envelope(
+        full: &vector<u8>, message: &vector<u8>, chain_id: u8, origins: &vector<vector<u8>>
+    ): bool {
         let lines = split(full, 10);
-        if (lines.length() < 2 || lines[0] != b"APTOS") return false;
+        if (lines.length() < 2 || lines[0] != b"APTOS")
+            return false;
         let seen = vector[false, false, false, false, false];
         let keys = vector[b"address", b"application", b"chainId", b"message", b"nonce"];
         let i = 1;
@@ -129,7 +143,8 @@ module scaas::auth {
                     let value = slice(line, prefix.length(), line.length());
                     if (k == 3 && value != *message) return false;
                     if (k == 2 && value != decimal(chain_id)) return false;
-                    if (k == 1 && !origins.is_empty() && !origins.contains(&value)) return false;
+                    if (k == 1 && !origins.is_empty() && !origins.contains(&value))
+                        return false;
                 } else k += 1;
             };
             if (!found) return false;
@@ -144,7 +159,9 @@ module scaas::auth {
         if (n < 2) return (false, vector[], vector[]);
         let len = ((envelope[0] as u64) << 8) | (envelope[1] as u64);
         if (2 + len > n) return (false, vector[], vector[]);
-        (true, slice(envelope, 2, 2 + len), slice(envelope, 2 + len, n))
+        (
+            true, slice(envelope, 2, 2 + len), slice(envelope, 2 + len, n)
+        )
     }
 
     /// rpIdHash và origin của một assertion (mở Account lười bằng passkey: lấy từ chính assertion đã ký).
@@ -229,7 +246,9 @@ module scaas::auth {
         out
     }
 
-    fun contains(hay: &vector<u8>, needle: &vector<u8>): bool { find(hay, needle) < hay.length() }
+    fun contains(hay: &vector<u8>, needle: &vector<u8>): bool {
+        find(hay, needle) < hay.length()
+    }
 
     /// Vị trí đầu tiên của `needle` trong `hay`, hoặc `hay.length()`.
     fun find(hay: &vector<u8>, needle: &vector<u8>): u64 {
@@ -248,25 +267,109 @@ module scaas::auth {
     #[test]
     fun envelope_rules() {
         let m = b"scaas.metaop.v1:0xab";
-        assert!(check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\nnonce: 01", &m, 4, &vector[]), 0);
+        assert!(
+            check_envelope(
+                &b"APTOS\nmessage: scaas.metaop.v1:0xab\nnonce: 01",
+                &m,
+                4,
+                &vector[]
+            ),
+            0
+        );
         // order does not matter; every known key once
-        assert!(check_envelope(&b"APTOS\nnonce: 01\nchainId: 4\napplication: https://pay.test\nmessage: scaas.metaop.v1:0xab\naddress: 0x1", &m, 4, &vector[]), 1);
+        assert!(
+            check_envelope(
+                &b"APTOS\nnonce: 01\nchainId: 4\napplication: https://pay.test\nmessage: scaas.metaop.v1:0xab\naddress: 0x1",
+                &m,
+                4,
+                &vector[]
+            ),
+            1
+        );
         // a second message line (phishing page asked to sign "...\nmessage: <ours>")
-        assert!(!check_envelope(&b"APTOS\nmessage: hello\nmessage: scaas.metaop.v1:0xab", &m, 4, &vector[]), 2);
-        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\nmessage: scaas.metaop.v1:0xab", &m, 4, &vector[]), 3);
+        assert!(
+            !check_envelope(
+                &b"APTOS\nmessage: hello\nmessage: scaas.metaop.v1:0xab",
+                &m,
+                4,
+                &vector[]
+            ),
+            2
+        );
+        assert!(
+            !check_envelope(
+                &b"APTOS\nmessage: scaas.metaop.v1:0xab\nmessage: scaas.metaop.v1:0xab",
+                &m,
+                4,
+                &vector[]
+            ),
+            3
+        );
         // unknown key, wrong chain, missing message, wrong prefix, trailing newline
-        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\nfoo: 1", &m, 4, &vector[]), 4);
-        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\nchainId: 1", &m, 4, &vector[]), 5);
+        assert!(
+            !check_envelope(
+                &b"APTOS\nmessage: scaas.metaop.v1:0xab\nfoo: 1",
+                &m,
+                4,
+                &vector[]
+            ),
+            4
+        );
+        assert!(
+            !check_envelope(
+                &b"APTOS\nmessage: scaas.metaop.v1:0xab\nchainId: 1",
+                &m,
+                4,
+                &vector[]
+            ),
+            5
+        );
         assert!(!check_envelope(&b"APTOS\nnonce: 1", &m, 4, &vector[]), 6);
-        assert!(!check_envelope(&b"APTOSX\nmessage: scaas.metaop.v1:0xab", &m, 4, &vector[]), 7);
-        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\n", &m, 4, &vector[]), 8);
-        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xabc", &m, 4, &vector[]), 9);
-        assert!(check_envelope(&b"APTOS\nchainId: 132\nmessage: scaas.metaop.v1:0xab", &m, 132, &vector[]), 10);
+        assert!(
+            !check_envelope(&b"APTOSX\nmessage: scaas.metaop.v1:0xab", &m, 4, &vector[]),
+            7
+        );
+        assert!(
+            !check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab\n", &m, 4, &vector[]),
+            8
+        );
+        assert!(
+            !check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xabc", &m, 4, &vector[]),
+            9
+        );
+        assert!(
+            check_envelope(
+                &b"APTOS\nchainId: 132\nmessage: scaas.metaop.v1:0xab",
+                &m,
+                132,
+                &vector[]
+            ),
+            10
+        );
         // origins set: `application` is required and must be one of them
         let o = vector[b"https://pay.test"];
-        assert!(check_envelope(&b"APTOS\napplication: https://pay.test\nmessage: scaas.metaop.v1:0xab", &m, 4, &o), 13);
-        assert!(!check_envelope(&b"APTOS\napplication: https://evil.test\nmessage: scaas.metaop.v1:0xab", &m, 4, &o), 14);
-        assert!(!check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab", &m, 4, &o), 15);
+        assert!(
+            check_envelope(
+                &b"APTOS\napplication: https://pay.test\nmessage: scaas.metaop.v1:0xab",
+                &m,
+                4,
+                &o
+            ),
+            13
+        );
+        assert!(
+            !check_envelope(
+                &b"APTOS\napplication: https://evil.test\nmessage: scaas.metaop.v1:0xab",
+                &m,
+                4,
+                &o
+            ),
+            14
+        );
+        assert!(
+            !check_envelope(&b"APTOS\nmessage: scaas.metaop.v1:0xab", &m, 4, &o),
+            15
+        );
         assert!(expected_message(b"x", &x"00ff") == b"x:0x00ff", 11);
         assert!(base64url(&x"fbff") == b"-_8", 12);
     }

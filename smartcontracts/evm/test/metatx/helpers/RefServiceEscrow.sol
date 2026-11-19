@@ -66,7 +66,9 @@ contract RefServiceEscrow is EIP712, ReentrancyGuardTransient {
     error NotReleasable(bytes32 entryRef);
 
     event Deposited(bytes32 indexed entryRef, bytes32 indexed payer, uint256 amount, uint64 releaseAfter, bytes32 salt);
-    event Noted(bytes32 indexed entryRef, bytes32 indexed payer, uint256 amount, string memo, bytes commitment, bytes32 salt);
+    event Noted(
+        bytes32 indexed entryRef, bytes32 indexed payer, uint256 amount, string memo, bytes commitment, bytes32 salt
+    );
     event Released(bytes32 indexed entryRef, bytes32 indexed payer, uint256 amount);
 
     constructor(address token) EIP712("SCaaS RefServiceEscrow", "1") {
@@ -79,7 +81,8 @@ contract RefServiceEscrow is EIP712, ReentrancyGuardTransient {
     // ------------------------------------------------------------------ the entries (§3.1)
 
     function deposit(Deposit calldata op, MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
-        external nonReentrant
+        external
+        nonReentrant
     {
         bytes32 ref = depositRef(op);
         _enter(ref, op.payer, op.amount, t, auth);
@@ -90,7 +93,8 @@ contract RefServiceEscrow is EIP712, ReentrancyGuardTransient {
     }
 
     function note(Note calldata op, MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
-        external nonReentrant
+        external
+        nonReentrant
     {
         bytes32 ref = noteRef(op);
         _enter(ref, op.payer, op.amount, t, auth);
@@ -116,7 +120,9 @@ contract RefServiceEscrow is EIP712, ReentrancyGuardTransient {
 
     /// @notice Each entry's selector, its `<Op>`'s EIP-712 `encodeType`, and the token it pulls.
     function servicePullEntries()
-        external view returns (bytes4[] memory selectors, string[] memory opTypes, address[] memory tokens)
+        external
+        view
+        returns (bytes4[] memory selectors, string[] memory opTypes, address[] memory tokens)
     {
         selectors = new bytes4[](2);
         opTypes = new string[](2);
@@ -131,8 +137,13 @@ contract RefServiceEscrow is EIP712, ReentrancyGuardTransient {
     }
 
     function noteRef(Note calldata op) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(NOTE_TYPEHASH, op.payer, op.amount, keccak256(bytes(op.memo)),
-            keccak256(op.commitment), op.salt)));
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    NOTE_TYPEHASH, op.payer, op.amount, keccak256(bytes(op.memo)), keccak256(op.commitment), op.salt
+                )
+            )
+        );
     }
 
     function domainSeparator() external view returns (bytes32) {
@@ -145,9 +156,13 @@ contract RefServiceEscrow is EIP712, ReentrancyGuardTransient {
     function _afterPull(bytes32) internal virtual {}
 
     /// @dev Steps 1-8 of §3.3 in order; the caller credits the custody after it (step 9, §3.4).
-    function _enter(bytes32 ref, bytes32 payer, uint256 amount, MetaTxLib.UAMetaTransfer calldata t,
-        IUARegistry.UASig calldata auth) private
-    {
+    function _enter(
+        bytes32 ref,
+        bytes32 payer,
+        uint256 amount,
+        MetaTxLib.UAMetaTransfer calldata t,
+        IUARegistry.UASig calldata auth
+    ) private {
         _checks(ref, payer, amount, t); // steps 1-6
         used[ref] = true; // step 7
         _pull(t, auth); // step 8
@@ -188,7 +203,11 @@ contract RefServiceEscrowFailAfter is RefServiceEscrow {
 contract NoopPullToken {
     mapping(address => uint256) public balanceOf;
 
-    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata) external pure returns (bool) {
+    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata, IUARegistry.UASig calldata)
+        external
+        pure
+        returns (bool)
+    {
         return true;
     }
 }
@@ -204,12 +223,17 @@ contract ReenterPullToken {
         (target, data) = (t, d);
     }
 
-    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata) external returns (bool) {
+    function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata)
+        external
+        returns (bool)
+    {
         if (target != address(0)) {
             address s = target;
             target = address(0);
             (bool ok, bytes memory ret) = s.call(data);
-            if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+            if (!ok) {
+                assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+            }
         }
         balanceOf[address(uint160(uint256(t.to)))] += t.value;
         return true;

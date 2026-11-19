@@ -571,7 +571,7 @@ func abiList(items [][]byte) []byte {
 	return append(append(out, offs...), bytes.Join(items, nil)...)
 }
 
-// memberSigs is abi.encode(MemberSig[]) of a UASig JSON's members (ua8.rs encode_member_sigs).
+// memberSigs is abi.encode(MemberSig[]) of a UASig JSON's members (ua_portable.rs encode_member_sigs).
 func memberSigs(ms []any) []byte {
 	if len(ms) == 0 {
 		return nil
@@ -1638,7 +1638,9 @@ type nfix struct {
 	ws map[string]*Wallet
 }
 
-func newNfix(t *testing.T) *nfix { return &nfix{t: t, v: vec(t, "smartcontracts/vectors/native/native.json"), ws: map[string]*Wallet{}} }
+func newNfix(t *testing.T) *nfix {
+	return &nfix{t: t, v: vec(t, "smartcontracts/vectors/native/native.json"), ws: map[string]*Wallet{}}
+}
 
 func (f *nfix) wallet(id string) *Wallet {
 	if w, ok := f.ws[id]; ok {

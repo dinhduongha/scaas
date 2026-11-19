@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-// The test side of src/ua-verify.js (the verifiers themselves), shared by test/ua-sig.test.js (signatures.json), test/ua8.test.js
+// The test side of src/ua-verify.js (the verifiers themselves), shared by test/ua-sig.test.js (signatures.json), test/ua-portable.test.js
 // (portable.json) and test/soroban.test.js (ua-ops.json): the lenient msig reading of transaction authorisations.
-import { B, bytesAt, wordAt, kindVerify, nativeOk } from '../src/ua-verify.js';
-import * as ua from '../src/ua.js';
-import { hex } from '../src/bytes.js';
+import { B, bytesAt, wordAt, kindVerify, nativeOk } from "../src/ua-verify.js";
+import * as ua from "../src/ua.js";
+import { hex } from "../src/bytes.js";
 
-export * from '../src/ua-verify.js';
+export * from "../src/ua-verify.js";
 
 /** A derived kind's signature over a 32-byte ua_msg, the BLS PoP domain. */
 export const sigOk = (kind, keyData, msg, sig) => kindVerify(kind, keyData, msg, sig, true);
@@ -31,8 +31,11 @@ export function msigOk(r, md, blob, keyOf, nativeDigest) {
     if (!m || s.index <= last) return false;
     last = s.index;
     const ok = ua.isNativeKind(m.kind)
-      ? s.listLength === 0 && nativeDigest !== undefined && nativeOk(`0x${m.id.slice(26)}`, typeof nativeDigest === 'string' ? B(nativeDigest) : nativeDigest, hex(s.sig))
-      : s.listLength === 0 && sigOk(m.kind, keyOf(m.id), hex(ua.uaMessage(m.kind, ua.purposeTag('member'), B(md))), hex(s.sig));
+      ? s.listLength === 0 &&
+        nativeDigest !== undefined &&
+        nativeOk(`0x${m.id.slice(26)}`, typeof nativeDigest === "string" ? B(nativeDigest) : nativeDigest, hex(s.sig))
+      : s.listLength === 0 &&
+        sigOk(m.kind, keyOf(m.id), hex(ua.uaMessage(m.kind, ua.purposeTag("member"), B(md))), hex(s.sig));
     if (!ok) return false;
     weight += m.weight;
   }

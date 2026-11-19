@@ -20,7 +20,9 @@ fn seed(r: &[(u8, [u8; 32], u64)], kind: u8) -> Option<[u8; 32]> {
 }
 
 fn hex4(s: Option<[u8; 32]>) -> String {
-    s.map_or("none".into(), |s| s[..4].iter().map(|b| format!("{b:02x}")).collect())
+    s.map_or("none".into(), |s| {
+        s[..4].iter().map(|b| format!("{b:02x}")).collect()
+    })
 }
 
 /// the relation shapes the binding is checked on (review R1-C8: not only R_REG, M = 0, nbin = 0): R_REG, R_TX (one
@@ -33,12 +35,19 @@ fn fs_bind() {
     let mut ctx = Ctx::new();
     let (mut fails, mut checks) = (Vec::new(), 0);
     for code in CODES {
-        let r = rows.iter().find(|r| r.code == code).unwrap_or_else(|| panic!("a row of relation {code:#x}"));
-        let honest = ctx.prove(r.op, &r.stmt, &r.wit, &r.rnd32).expect("honest proof");
+        let r = rows
+            .iter()
+            .find(|r| r.code == code)
+            .unwrap_or_else(|| panic!("a row of relation {code:#x}"));
+        let honest = ctx
+            .prove(r.op, &r.stmt, &r.wit, &r.rnd32)
+            .expect("honest proof");
         let muts: Vec<(&str, Vec<u8>)> = [("h", 7), ("z3", 14), ("z4", 5), ("tg", 15), ("c", 9)]
             .into_iter()
             .map(|(n, k)| {
-                let p = test_mutate(code, &honest, k, 0, 0x105).unwrap().expect("mutation re-encodes");
+                let p = test_mutate(code, &honest, k, 0, 0x105)
+                    .unwrap()
+                    .expect("mutation re-encodes");
                 assert_ne!(p, honest, "{code:#x}: mutation {n} changed nothing");
                 (n, p)
             })
@@ -46,12 +55,20 @@ fn fs_bind() {
         fs_trace_take();
         for (vn, fast) in [("verify", false), ("verify_fast", true)] {
             let mut run = |p: &[u8]| {
-                let ok = if fast { ctx.verify_fast(r.op, &r.stmt, p) } else { ctx.verify(r.op, &r.stmt, p) };
+                let ok = if fast {
+                    ctx.verify_fast(r.op, &r.stmt, p)
+                } else {
+                    ctx.verify(r.op, &r.stmt, p)
+                };
                 (ok, fs_trace_take())
             };
             let (ok, hon) = run(&honest);
             checks += 1;
-            println!("P6-FS {} {vn} honest: {}", r.name, if ok { "ACCEPT" } else { "REJECT (FAIL)" });
+            println!(
+                "P6-FS {} {vn} honest: {}",
+                r.name,
+                if ok { "ACCEPT" } else { "REJECT (FAIL)" }
+            );
             if !ok {
                 fails.push(format!("{} {vn} honest rejected", r.name));
             }
@@ -93,7 +110,11 @@ fn fs_bind() {
             }
         }
     }
-    println!("VERDICT: P6-FS Fiat-Shamir binding (lazer#28) {} ({} failed checks of {checks})", if fails.is_empty() { "ok" } else { "FAIL" }, fails.len());
+    println!(
+        "VERDICT: P6-FS Fiat-Shamir binding (lazer#28) {} ({} failed checks of {checks})",
+        if fails.is_empty() { "ok" } else { "FAIL" },
+        fails.len()
+    );
     assert!(fails.is_empty(), "P6-FS binding failed: {fails:?}");
 }
 
@@ -108,19 +129,35 @@ fn fs_bind_commitment_r_and_final_seeds() {
     let mut ctx = Ctx::new();
     let mut fails = Vec::new();
     for code in CODES {
-        let r = rows.iter().find(|r| r.code == code).unwrap_or_else(|| panic!("a row of relation {code:#x}"));
-        let honest = ctx.prove(r.op, &r.stmt, &r.wit, &r.rnd32).expect("honest proof");
+        let r = rows
+            .iter()
+            .find(|r| r.code == code)
+            .unwrap_or_else(|| panic!("a row of relation {code:#x}"));
+        let honest = ctx
+            .prove(r.op, &r.stmt, &r.wit, &r.rnd32)
+            .expect("honest proof");
         fs_trace_take();
         let ok = ctx.verify(r.op, &r.stmt, &honest);
         let hon = fs_trace_take();
         assert!(ok, "{}: honest proof rejected", r.name);
         let (nb, ti) = pqzl::test_tb_layout(code).expect("tB layout");
-        assert!(nb >= 10 && ti >= 9 && ti < nb, "{}: tB {nb} polys, t at {ti}", r.name);
+        assert!(
+            nb >= 10 && ti >= 9 && ti < nb,
+            "{}: tB {nb} polys, t at {ti}",
+            r.name
+        );
         // (name, mutation kind, r1, trace kind): r2 = 0x105 (coefficient 5, sign +)
-        for (mn, k, r1, t) in
-            [("tA1", 11, 0x300, 6), ("ty3", 10, 0, 4), ("ty4", 10, 4, 4), ("tbeta", 10, 8, 4), ("t", 10, ti as u64, 8), ("hint (w1)", 8, 0, 8)]
-        {
-            let p = test_mutate(code, &honest, k, r1, 0x105).unwrap().expect("mutation re-encodes");
+        for (mn, k, r1, t) in [
+            ("tA1", 11, 0x300, 6),
+            ("ty3", 10, 0, 4),
+            ("ty4", 10, 4, 4),
+            ("tbeta", 10, 8, 4),
+            ("t", 10, ti as u64, 8),
+            ("hint (w1)", 8, 0, 8),
+        ] {
+            let p = test_mutate(code, &honest, k, r1, 0x105)
+                .unwrap()
+                .expect("mutation re-encodes");
             assert_ne!(p, honest, "{}: mutation {mn} changed nothing", r.name);
             let _ = ctx.verify(r.op, &r.stmt, &p);
             let mt = fs_trace_take();
@@ -137,4 +174,3 @@ fn fs_bind_commitment_r_and_final_seeds() {
     }
     assert!(fails.is_empty(), "binding failed: {fails:?}");
 }
-

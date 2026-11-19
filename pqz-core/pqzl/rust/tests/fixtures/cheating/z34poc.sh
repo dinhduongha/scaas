@@ -8,9 +8,9 @@
 # and writes build/z34poc/out/<case>.{stmt,proof}, case = honest (control), z3_over, z4_over.
 set -eu
 F=$(cd "$(dirname "$0")" && pwd)
-cd "$F/../../../.." # pqz-core/pqzl
+cd "$F/../../../.."                       # pqz-core/pqzl
 PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
-[ -f $PB/native/libpqz.a ] || ./build.sh native > /dev/null
+[ -f $PB/native/libpqz.a ] || ./build.sh native >/dev/null
 B=$PB/z34poc
 rm -rf $B/out # never a previous run's (another parameter set's) proofs
 mkdir -p $B/out
@@ -18,13 +18,16 @@ CC=${CC:-clang}
 FL="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -w -I$PB/include -Isrc -Ilazer -Iparams"
 sed -e '3a\
 int pqz_z34_mode; /* z34poc: 0 honest, 1 y3 << 2 and no z3 rejection, 2 y4 << 4 and no z4 rejection */' \
-  -e 's|^          polyvec_grandom (y3, params->log2stdev3, seed_tbox, dom++);$|&\n          if (pqz_z34_mode == 1) polyvec_lshift (y3, y3, 2);|' \
-  -e 's|^          polyvec_grandom (y4, params->log2stdev4, seed_tbox, dom++);$|&\n          if (pqz_z34_mode == 2) polyvec_lshift (y4, y4, 4);|' \
-  -e 's|if (nex > 0 \&\& params->rej3)$|if (nex > 0 \&\& params->rej3 \&\& pqz_z34_mode != 1)|' \
-  -e 's|if (nprime > 0 \&\& params->rej4)$|if (nprime > 0 \&\& params->rej4 \&\& pqz_z34_mode != 2)|' \
-  lazer/lnp-tbox.c > $B/lnp-tbox.c
+    -e 's|^          polyvec_grandom (y3, params->log2stdev3, seed_tbox, dom++);$|&\n          if (pqz_z34_mode == 1) polyvec_lshift (y3, y3, 2);|' \
+    -e 's|^          polyvec_grandom (y4, params->log2stdev4, seed_tbox, dom++);$|&\n          if (pqz_z34_mode == 2) polyvec_lshift (y4, y4, 4);|' \
+    -e 's|if (nex > 0 \&\& params->rej3)$|if (nex > 0 \&\& params->rej3 \&\& pqz_z34_mode != 1)|' \
+    -e 's|if (nprime > 0 \&\& params->rej4)$|if (nprime > 0 \&\& params->rej4 \&\& pqz_z34_mode != 2)|' \
+    lazer/lnp-tbox.c >$B/lnp-tbox.c
 n=$(diff lazer/lnp-tbox.c $B/lnp-tbox.c | grep -c '^>' || true)
-[ "$n" = 5 ] || { echo "z34poc: prover patch did not apply ($n lines)"; exit 1; }
+[ "$n" = 5 ] || {
+    echo "z34poc: prover patch did not apply ($n lines)"
+    exit 1
+}
 $CC -I$B $FL -DPQZ_SV -c src/pqz_lazer.c -o $B/pqz_lazer.o
 for f in pqz_ntt pqz_arena pqz_rel pqz_keys pqz_sv; do $CC $FL -DPQZ_SV -c src/$f.c -o $B/$f.o; done
 rm -f $B/libpqz.a

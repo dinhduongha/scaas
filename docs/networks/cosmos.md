@@ -253,7 +253,20 @@ longer in the message enum; settle/cancel tests unchanged.
   (anti-lock tests in the contract suite and end to end). An expired transaction is refused by the contract, so the
   lane sequence never hangs.
 - **Fees**: the relayer pays in the lane's native denom.
-- Configuration: `rpc_urls = [CometBFT RPC]`, `params = {rest, prefix, denom, gas_price, zero_fee?}`.
+- Configuration: `rpc_urls = [CometBFT RPC, …]`, `params = {rest = [REST gateway, …], prefix, denom, gas_price, zero_fee?}`:
+  `rest` is a list like `rpc_urls` ([ARCH-POS-15](../decisions.md#ARCH-POS-15), owner 2026-11-18; no single-URL form).
+- Endpoints (BUILT, scaas-rpc T21): both lists are read through the crate's family clients (16 MiB, depth 64, no redirect,
+  20 s a request). `build`'s REST reads (the lane's account, the simulate) fail over across `rest`
+  ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next gateway must answer `node_info` with the configured chain id and
+  a latest block at or above the height the first CometBFT endpoint last showed; an answer other than 2xx from it decides
+  nothing and a refusal read while it answered requeues the job. From the first gateway only an error with gRPC code 2 or 3 (a
+  refused simulate, a smart query's error) is its verdict; any other answer (503 code 14, a rate limit, a 404) fails over
+  (scaas-rpc T24.3). The transaction status (REST `GetTx` and the block scan), the
+  send, `op_consumed`, the lane sequence, the router's executor (kept for the process) and the signing account number (kept
+  from a read outside `build`, scaas-rpc T24.14) are the first gateway's only; the
+  CometBFT reads (`status`, `block`, `block_results`) are the first endpoint's, as before. Before its first read each first
+  endpoint passes its identity (CLI-RPC-03, scaas-rpc T24.8): the first gateway `node_info`'s network, the first CometBFT
+  endpoint `status`'s `node_info.network`, each the configured chain id; another network answers nothing.
 
 <a id="NET-COS-08"></a>**NET-COS-08** — **`contract` and `valid_until` come from the signed payload**
 ([NODE-LANE-16](../node/submit-lanes.md#NODE-LANE-16)): `relay_msg` parses the payload; a job whose JSON differs ⇒
@@ -320,6 +333,11 @@ fails if the admin is not empty ([deploy gate](README.md#deploy-gate)); the node
 unchanged. Deploy tooling is PLANNED (`deploy.sh` exits 2 for Cosmos); older classic `instantiate` deployments rely on
 the node's duplicate-chain-id refusal. Tests: the deploy script yields different addresses on two devnets with the
 same chain id and different genesis; the node refuses a duplicate chain id.
+
+**Formatted build (2026-11-18).** The contracts' Rust was formatted (rustfmt, code-format plan F1); panic locations
+moved, so `scaas_mandate.wasm`, `scaas_relayfee.wasm` and `scaas_token.wasm` from `build-wasm.sh` differ from the
+earlier build (`scaas_dex.wasm`, `scaas_relayexec.wasm` unchanged); no hash of them is pinned. The next redeploy carries
+the formatted build.
 
 ## 9. Conformance
 

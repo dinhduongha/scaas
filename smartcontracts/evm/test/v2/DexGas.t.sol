@@ -27,7 +27,9 @@ contract DexGasTest is UADexBase {
     }
 
     function _order(address from, address recv, uint256 amount, uint256 recvAmount, uint256 nonce)
-        internal view returns (ITradeToken.TradeOrder memory o)
+        internal
+        view
+        returns (ITradeToken.TradeOrder memory o)
     {
         o = _nat(from, recv, amount, recvAmount, 3_000);
         o.nonce = nonce;
@@ -37,8 +39,10 @@ contract DexGasTest is UADexBase {
     function _route(uint256 amountIn, uint256 amountOut) internal view returns (ISCaaSDex.Interaction[] memory xs) {
         xs = new ISCaaSDex.Interaction[](2);
         xs[0] = ISCaaSDex.Interaction(address(A), abi.encodeCall(IERC20.approve, (address(router), amountIn)));
-        xs[1] = ISCaaSDex.Interaction(address(router),
-            abi.encodeCall(MockRouter.swap, (address(A), address(B), amountIn, amountOut, address(dex))));
+        xs[1] = ISCaaSDex.Interaction(
+            address(router),
+            abi.encodeCall(MockRouter.swap, (address(A), address(B), amountIn, amountOut, address(dex)))
+        );
     }
 
     /// Alice sells 1000 A for >= 1800 B; `n` makers (bob, 2000 B for 1000 A each, fills 800 / n B); the other 600 A go

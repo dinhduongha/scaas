@@ -81,10 +81,19 @@ library UAKinds {
     /// CTR-UA-44 (TODO 3ze, owner 2026-11-14): an `msig`'s structure update (`updateMsig`), signed by a threshold of the stored
     /// structure; not a `requirePortable` purpose (`_portablePurpose` refuses it), never any other record's signature.
     bytes32 internal constant PURPOSE_MSIG_UPDATE = keccak256("scaas.ua.purpose.msig-update.v1");
+    /// @dev Set-auditor (CTR-PQZ-43, spec §5.2, O10): a PQZ token's new auditor signs its `AuditorConsent` under this purpose
+    ///      (`requireAuthorized` takes any purpose: the registry and its closed portable list are unchanged).
+    bytes32 internal constant PURPOSE_AUDITOR_CONSENT = keccak256("scaas.ua.purpose.auditor-consent.v1");
+    /// CTR-UA-46 (pqvault spec §4.1): the namespace word of an app's portable purpose, `appPurpose(appId)`, which the registry
+    /// derives itself (`requirePortableApp`). Never a purpose itself. A SCaaS purpose is the hash of an ASCII
+    /// `scaas.ua.purpose.<p>.v<n>` shorter than 64 bytes, an app purpose the hash of exactly 64 bytes led by this word, so the
+    /// two never meet without a keccak collision; a new SCaaS purpose keeps that string form.
+    bytes32 internal constant APP_PURPOSE_NS = keccak256("scaas.ua.purpose.app.v1");
     /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8): the portable domain `EIP712Domain(string name,string
     /// version)` = ("SCaaS UA Portable", "1"), no chain id, verifying contract or salt (a record registers a UA on every
     /// chain, CTR-UA-07); `kind` is `uint16` (its name: `name(kind)`, the registry's `kindName`).
-    bytes32 internal constant PORTABLE_DOMAIN_SEPARATOR = 0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1;
+    bytes32 internal constant PORTABLE_DOMAIN_SEPARATOR =
+        0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1;
     bytes32 internal constant UA_KEM_RECORD_TYPEHASH =
         keccak256("UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)");
     bytes32 internal constant UA_PORTABLE_RECORD_TYPEHASH = keccak256(
@@ -180,7 +189,8 @@ library UAKinds {
 
     /// `msig` itself since owner 2026-11-02: one level down only, `UARegistryCoreLib._worst` refuses an `msig` that holds one as a member.
     function isMember(uint16 kind, bool hederaNative) internal pure returns (bool) {
-        return _singleSigning(kind) || kind == MSIG || kind == EVM_EOA || kind == EVM_CONTRACT || (hederaNative && kind == HEDERA_NATIVE);
+        return _singleSigning(kind) || kind == MSIG || kind == EVM_EOA || kind == EVM_CONTRACT
+            || (hederaNative && kind == HEDERA_NATIVE);
     }
 
     // ----- names, tags, groups -----
@@ -245,7 +255,9 @@ library UAKinds {
         _requireTagged(kind);
         if (kind == WEBAUTHN_P256 || kind == P256) return "p256";
         if (kind == ED25519) return "ed25519";
-        if (kind == BIP340 || kind == SECP256K1 || kind == MUSIG2_SECP256K1 || kind == FROST_SECP256K1) return "secp256k1";
+        if (kind == BIP340 || kind == SECP256K1 || kind == MUSIG2_SECP256K1 || kind == FROST_SECP256K1) {
+            return "secp256k1";
+        }
         if (kind == SCHNORR_BN254 || kind == MUSIG2_BN254 || kind == FROST_BN254) return "bn254-g1";
         if (kind == SCHNORR_BLS12381 || kind == ZETHER_BLS12381) return "bls12381-g1";
         if (kind == BLS12381_MINSIG) return "bls12381-g2";
@@ -281,12 +293,19 @@ library UAKinds {
         if (d.length < lo + len) revert UAKeyData(kind);
         if (lo == 0 && len == d.length) return keccak256(abi.encodePacked(groupTag(g), d));
         bytes memory pub = new bytes(len);
-        for (uint256 i; i < len; ++i) pub[i] = d[lo + i];
+        for (uint256 i; i < len; ++i) {
+            pub[i] = d[lo + i];
+        }
         return keccak256(abi.encodePacked(groupTag(g), pub));
     }
 
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(MSG_TAG, tag(kind), purposeTag, digest));
+    }
+
+    /// CTR-UA-46: app `appId`'s portable purpose, `keccak256(abi.encode(APP_PURPOSE_NS, appId))`.
+    function appPurpose(bytes32 appId) internal pure returns (bytes32) {
+        return keccak256(abi.encode(APP_PURPOSE_NS, appId));
     }
 
     /// `keccak256("evm:" ‖ decimal(chainId))` (the registry computes it in its constructor from `block.chainid`).
@@ -315,7 +334,11 @@ library UAKinds {
 
     /// `hashStruct(UAKemRecord{ua, version, scheme, kemPkHash})` from its words: a hash-committed `register` key
     /// (typed-signing R1, owner 2026-10-31), the zero record for `(0, 0, 0)`.
-    function kemRecordHash(bytes32 ua, uint64 version, uint8 scheme, bytes32 kemPkHash) internal pure returns (bytes32) {
+    function kemRecordHash(bytes32 ua, uint64 version, uint8 scheme, bytes32 kemPkHash)
+        internal
+        pure
+        returns (bytes32)
+    {
         return keccak256(abi.encode(UA_KEM_RECORD_TYPEHASH, ua, version, scheme, kemPkHash));
     }
 
@@ -407,11 +430,14 @@ library UAKinds {
     }
 
     /// typed(`UAPqzScopedKey`): what a scoped key's `R_REG` proves over, as `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, ·)` (K3-3).
-    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version, bytes32 pqzKeyHash)
-        internal
-        pure
-        returns (bytes32)
-    {
+    function pqzScopedKeyDigest(
+        bytes32 ua,
+        uint8 keyClass,
+        bytes32 chainUid,
+        address token,
+        uint64 version,
+        bytes32 pqzKeyHash
+    ) internal pure returns (bytes32) {
         return portableDigest(
             keccak256(abi.encode(UA_PQZ_SCOPED_KEY_TYPEHASH, ua, keyClass, chainUid, token, version, pqzKeyHash))
         );
@@ -429,10 +455,22 @@ library UAKinds {
         bytes32 openKemHash,
         uint64 validUntilBlock
     ) internal pure returns (bytes32) {
-        return portableDigest(keccak256(abi.encode(
-            UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH, ua, keyClass, chainUid, token, version, pqzKeyHash, pqzPopHash, openKemHash,
-            validUntilBlock
-        )));
+        return portableDigest(
+            keccak256(
+                abi.encode(
+                    UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH,
+                    ua,
+                    keyClass,
+                    chainUid,
+                    token,
+                    version,
+                    pqzKeyHash,
+                    pqzPopHash,
+                    openKemHash,
+                    validUntilBlock
+                )
+            )
+        );
     }
 
     /// typed(`UAMembership{ua, member}`): what `member` signs to accept its place in the `msig` `ua` (CTR-UA-37).
@@ -457,22 +495,39 @@ library UAKinds {
         for (uint256 i; i < m.length; ++i) {
             h[i] = keccak256(abi.encode(UA_MSIG_MEMBER_TYPEHASH, m[i].kind, m[i].id, m[i].weight));
         }
-        return portableDigest(keccak256(abi.encode(
-            UA_MSIG_UPDATE_TYPEHASH, ua, chainUid, registry, version, s.threshold, keccak256(abi.encodePacked(h)), enabled,
-            validUntilBlock
-        )));
+        return portableDigest(
+            keccak256(
+                abi.encode(
+                    UA_MSIG_UPDATE_TYPEHASH,
+                    ua,
+                    chainUid,
+                    registry,
+                    version,
+                    s.threshold,
+                    keccak256(abi.encodePacked(h)),
+                    enabled,
+                    validUntilBlock
+                )
+            )
+        );
     }
 
     function uaAuthDomainSeparator(uint256 generation, uint256 chainId, address registry, bytes32 chainUid)
-        internal pure returns (bytes32)
+        internal
+        pure
+        returns (bytes32)
     {
         return keccak256(
-            abi.encode(DOMAIN_TYPEHASH, NAME_HASH, keccak256(bytes(Strings.toString(generation))), chainId, registry, chainUid)
+            abi.encode(
+                DOMAIN_TYPEHASH, NAME_HASH, keccak256(bytes(Strings.toString(generation))), chainId, registry, chainUid
+            )
         );
     }
 
     function uaAuthDigest(bytes32 domainSeparator, bytes32 ua, bytes32 purposeTag, bytes32 digest)
-        internal pure returns (bytes32)
+        internal
+        pure
+        returns (bytes32)
     {
         return keccak256(
             abi.encodePacked(hex"1901", domainSeparator, keccak256(abi.encode(UAAUTH_TYPEHASH, ua, purposeTag, digest)))
@@ -620,9 +675,8 @@ library UAKinds {
     function _bnG2(bytes memory d) private view returns (bool) {
         if (_isZero(d)) return false;
         if (gasleft() < PAIRING_GAS + PAIRING_GAS / 63 + 5_000) revert UAVerifyGas();
-        (bool ok, bytes memory out) = address(0x08).staticcall{gas: PAIRING_GAS}(
-            abi.encodePacked(uint256(1), uint256(2), d)
-        );
+        (bool ok, bytes memory out) =
+            address(0x08).staticcall{gas: PAIRING_GAS}(abi.encodePacked(uint256(1), uint256(2), d));
         return ok && out.length == 32;
     }
 

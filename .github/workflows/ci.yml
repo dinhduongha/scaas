@@ -16,16 +16,25 @@
 #   contract-cosmos:   test.sh cosmos (cargo test)
 #   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
+#   clients/scaas-rpc: cargo test --locked --all-features; cargo clippy --locked --all-targets --all-features -- -D warnings;
+#                  cargo test --locked --features evm --test anvil -- --ignored (three anvils, foundry's);
+#                  cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client (compiles for
+#                  wasm32, not run); ! git grep -n 'tokio::time' -- src (no tokio timer in the crate, F18)
 #   pqz:           in pqz-core: params/sets/gen_set.py --all --check, pqzl/params/to_rust.py --check (generated files in sync);
 #                  sh gate-controls.sh (the gate scripts' negative controls, stubs only);
 #                  python3 -I nethermind/chain/check-provisional-ids.py (each provisional schedule's ids = PqzSetIds.cs);
 #                  at PQZ_SET n2304-kmax4096: pqzl/build.sh native, kat/check.py (KAT); pqzl/check_tbox_fixes.sh, sv/check_sv_fixes.sh;
 #                  ffi pqz-vectors --check, smartcontracts/vectors/pqz/pqz_kat.py --check, ffi/vectors/tamper.py; cargo test --release (stmt, pqzh/ligero, ffi);
 #                  fuzz smoke (fuzz/run.sh precompile, mutate, codec: 60 s each on the committed corpora)
-#   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths;
+#   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths; ... consumer;
 #                  ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security)
 #                  python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check (the PQZ gas table's inputs = the calibrated or
 #                  provisional precompile rows and each set's proofs; T21 L67)
+#   format:        scripts/format.sh --check (check only, at the pinned versions: rustfmt of rust-toolchain.toml, forge 1.8.5, clientkeys'
+#                  Prettier 3.3.3, ruff 0.16.4, gofmt, dotnet format whitespace, dart format, clang-format 19.1.7, movefmt 1.5.3 (Aptos Move),
+#                  tact-fmt (Tact 1.6.13), shfmt 3.10.0, taplo 0.9.3,
+#                  actionlint 1.7.12, hadolint 2.15.1 on errors; .rustfmt-ignore, .clang-format-ignore and foundry.toml [fmt] keep
+#                  generated and harness-read files out)
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test; its ML-DSA-65 signer (script/pqz/mldsa.mjs) against the DEX:
 #                          MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol
 #   clients/zether-prover: cargo clippy --all-targets -- -D warnings, default and --features hazmat; cargo test; cargo test --features hazmat (ARCH-POS-13: the raw commands, test-only); ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke: the shipped wasm refuses the raw commands) and ZETHER_HAZMAT=1 ./wasm-smoke.sh (the prover in wasm); zether-cli --features hazmat against the tokens (ZetherProverCross);
@@ -33,7 +42,7 @@
 #   clients/ua-rs:         one matrix cell per feature set (ua-rs-sign MD-5, T18), each: cargo clippy --locked --all-targets <features> -- -D warnings; cargo test --locked <features> [<tests>]:
 #                          default (wallet + zether + pqz at n2304-kmax4096, the release cell; no_oracle, pqz_wallet_rows; then pqz_read --bin pqz-read -- --include-ignored against anvil),
 #                          vectors (--features vectors: the test hooks, the vector rows both ways, no_oracle's positive control), verify-only (--no-default-features),
-#                          signers (--test groups_verify; tests/groups.rs, the generator, runs in the vectors cell), json (--test json), pq (--test pq --test ua8), wallet-mlock (wallet,mlock), zether-only (wallet,zether,mlock: --lib --test facade_zether),
+#                          signers (--test groups_verify; tests/groups.rs, the generator, runs in the vectors cell), json (--test json), pq (--test pq --test ua_portable), wallet-mlock (wallet,mlock), zether-only (wallet,zether,mlock: --lib --test facade_zether),
 #                          pqz-n2048 (wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock: --lib --bin pqz-read --test pqz_read facade_pqz_state facade_pqz pqz_backup no_oracle) and the same + vectors
 #                          (facade_pqz_state facade_pqz pqz_backup no_oracle); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
 #   ua-rs-targets:         compile only, no run (MD-5, plan T0 / T18), wasm32-unknown-unknown, aarch64-linux-android (NDK clang, API 24), aarch64-apple-ios (macOS): cargo build --locked --lib --target <t> <cell> in ua-rs
@@ -57,7 +66,7 @@
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
 #                          in a production manifest or in the cargo tree -e features graph of ua-c, ua-cxx, ua-qt, ua-dart-frb, zether-prover)
 #   UA-8 portable registrations: smartcontracts/vectors/ua/portable.json is read by ua-rs, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-qt, ua-dart, ua-dart-frb,
-#                  clientkeys and forge (UARegistryUA8.t.sol); the jobs above already run them, so no new job. The old chain-bound vectors are in
+#                  clientkeys and forge (UARegistryUaPortable.t.sol); the jobs above already run them, so no new job. The old chain-bound vectors are in
 #                  smartcontracts/vectors/ua/legacy/. The local closing gate: smartcontracts/evm/runs/2026-10-30-ua8-gates.sh (its logs are runs/2026-10-30-ua8-*.txt)
 # Rust: one toolchain for every job (ARCH-POS-12): env RUST_TOOLCHAIN (default 1.97.1 = the root rust-toolchain.toml; a manual
 #   run may set input rust_toolchain), installed by every dtolnay/rust-toolchain step and exported as RUSTUP_TOOLCHAIN.
@@ -68,10 +77,58 @@ name: scaas-ci
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled] # labeled: a ci-full-* label reruns with that group on
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'scripts/check_test_features.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
+    paths:
+      [
+        "smartcontracts/**",
+        "scaas-node/**",
+        "clients/**",
+        "docs/**",
+        "scripts/docs_check.py",
+        "scripts/test_docs_check.py",
+        "scripts/size_gate.py",
+        "scripts/check_test_features.py",
+        "pqz-core/**",
+        "rust-toolchain.toml",
+        ".github/workflows/ci.yml",
+        ".github/ci_changes.py",
+        "scripts/format.sh",
+        "rustfmt.toml",
+        ".rustfmt-ignore",
+        ".prettierrc",
+        ".prettierignore",
+        "pyproject.toml",
+        ".editorconfig",
+        ".clang-format",
+        ".clang-format-ignore",
+        "taplo.toml",
+      ]
   push:
     branches: [main]
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'scripts/check_test_features.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
+    paths:
+      [
+        "smartcontracts/**",
+        "scaas-node/**",
+        "clients/**",
+        "docs/**",
+        "scripts/docs_check.py",
+        "scripts/test_docs_check.py",
+        "scripts/size_gate.py",
+        "scripts/check_test_features.py",
+        "pqz-core/**",
+        "rust-toolchain.toml",
+        ".github/workflows/ci.yml",
+        ".github/ci_changes.py",
+        "scripts/format.sh",
+        "rustfmt.toml",
+        ".rustfmt-ignore",
+        ".prettierrc",
+        ".prettierignore",
+        "pyproject.toml",
+        ".editorconfig",
+        ".clang-format",
+        ".clang-format-ignore",
+        "taplo.toml",
+      ]
   workflow_dispatch:
     inputs:
       full:
@@ -82,7 +139,7 @@ on:
       rust_toolchain:
         description: the Rust toolchain of every job (ARCH-POS-12)
         type: string
-        default: '1.97.1'
+        default: "1.97.1"
 
 # One Rust toolchain for every job (ARCH-POS-12): 1.97.1 = the root rust-toolchain.toml unless a manual run names another.
 # RUSTUP_TOOLCHAIN makes every cargo / rustc call use it (workflow env cannot read env, hence the expression twice).
@@ -106,6 +163,7 @@ jobs:
       contract_cosmos: ${{ steps.f.outputs.contract_cosmos }}
       contract_ton: ${{ steps.f.outputs.contract_ton }}
       node: ${{ steps.f.outputs.node }}
+      scaas_rpc: ${{ steps.f.outputs.scaas_rpc }}
       docs: ${{ steps.f.outputs.docs }}
       clientkeys: ${{ steps.f.outputs.clientkeys }}
       pqz: ${{ steps.f.outputs.pqz }}
@@ -269,7 +327,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: build (puyapy, artifacts.json --check)
         run: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand
       - name: vectors --check
@@ -356,6 +414,38 @@ jobs:
       - name: test.sh ton
         run: smartcontracts/scripts/test.sh ton
 
+  # the network crate (CLI-RPC-01): endpoint lists, failover and strict majority, the bounded transport, the scaas-node client
+  scaas-rpc:
+    needs: changes
+    if: needs.changes.outputs.scaas_rpc == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-rpc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-rpc
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - name: cargo test
+        run: cargo test --locked --all-features
+      - name: cargo clippy
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: strict majority, broadcast and transaction state on three anvils
+        run: cargo test --locked --features evm --test anvil -- --ignored
+      - name: compiles for wasm32 (not run)
+        run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client
+      - name: no tokio timer in the crate (F18)
+        run: "! git grep -n 'tokio::time' -- src"
+
   node:
     needs: changes
     if: needs.changes.outputs.node == 'true'
@@ -382,7 +472,7 @@ jobs:
           ../../scripts/evm_libs.sh check
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       # the Algorand adapter's unit tests read the compiled apps (git-ignored smartcontracts/algorand/out)
       - name: Algorand artifacts for the adapter tests
         working-directory: .
@@ -420,6 +510,8 @@ jobs:
         run: python3 scripts/docs_check.py facts check
       - name: no machine paths in tracked files
         run: python3 scripts/docs_check.py paths
+      - name: no consumer name in the node's code (scaas-node/src, scaas-node/tests)
+        run: python3 scripts/docs_check.py consumer
       # AGENTS.md Security: no temp path in a committed file ([t]: the step does not match itself)
       - name: no temp paths in tracked files
         run: |
@@ -428,6 +520,77 @@ jobs:
       # precompile rows (pqz-core/nethermind/chain/engine-pqz.json or the provisional ones) and each set's proofs
       - name: PQZ gas table inputs (gas-inputs.py --check)
         run: python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check
+
+  # Code-format plan F9: every formatter at its pinned version, check mode only (CI never rewrites code); no build, so
+  # it runs on every run. Locally: scripts/format.sh fixes, scripts/format.sh --check runs exactly this.
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }} # rustfmt of the root rust-toolchain.toml (1.97.1: rustfmt 1.9.0)
+          components: rustfmt
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.8.1
+          cache: npm
+          cache-dependency-path: |
+            clients/clientkeys/package-lock.json
+            smartcontracts/ton/package-lock.json
+      - name: Prettier 3.3.3 (the devDependency of clients/clientkeys)
+        working-directory: clients/clientkeys
+        run: npm ci --ignore-scripts
+      - name: tact-fmt (@tact-lang/compiler 1.6.13, the devDependency of smartcontracts/ton)
+        working-directory: smartcontracts/ton
+        run: npm ci --ignore-scripts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ruff 0.16.4 and clang-format 19.1.7 (pinned wheels, hashes checked)
+        run: |
+          printf '%s\n' \
+            'ruff==0.16.4 --hash=sha256:f2d812e482f5a7e02eee26cd73d2a37ebbdf47d795ea63ba1b89110ae93e9fb3' \
+            'clang-format==19.1.7 --hash=sha256:f4906fb463dd2033032978f56962caab268c9428a384126b9400543eb667f11c' \
+            > "$RUNNER_TEMP/format-req.txt"
+          pip install --require-hashes --only-binary :all: -r "$RUNNER_TEMP/format-req.txt"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.12.2
+      - name: shfmt 3.10.0, actionlint 1.7.12, hadolint 2.15.1, movefmt 1.5.3 (release binaries, each checked against the release's sha256)
+        run: |
+          set -eu
+          b=$RUNNER_TEMP/format-bin
+          mkdir -p "$b"
+          curl -fsSL -o "$b/shfmt" https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64
+          curl -fsSL -o "$b/movefmt" \
+            https://github.com/aptos-labs/movefmt/releases/download/v1.5.3/movefmt-v1.5.3-x86_64-unknown-linux-gnu
+          curl -fsSL -o "$b/hadolint" https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64
+          curl -fsSL -o "$b/actionlint.tgz" \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          printf '%s  %s\n' \
+            1f57a384d59542f8fac5f503da1f3ea44242f46dff969569e80b524d64b71dbc "$b/shfmt" \
+            c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507 "$b/hadolint" \
+            8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$b/actionlint.tgz" \
+            6a14ffbd9881be309609b37216d8eec2ed69dda17da6affd4423f826d6cd8d72 "$b/movefmt" | sha256sum -c -
+          tar -xzf "$b/actionlint.tgz" -C "$b" actionlint
+          chmod +x "$b/shfmt" "$b/hadolint" "$b/actionlint" "$b/movefmt"
+          echo "$b" >> "$GITHUB_PATH"
+      # the taplo 0.9.3 release publishes no checksums: built from crates.io with its lockfile
+      - name: taplo 0.9.3
+        run: cargo install taplo-cli --version 0.9.3 --locked
+      - name: format check (scripts/format.sh --check)
+        run: scripts/format.sh --check
 
   test-features:
     needs: changes
@@ -608,7 +771,7 @@ jobs:
       matrix:
         include:
           - cell: default
-            features: ''
+            features: ""
           - cell: vectors
             features: --features vectors
           - cell: verify-only
@@ -621,7 +784,7 @@ jobs:
             tests: --test json
           - cell: pq
             features: --no-default-features --features pq
-            tests: --test pq --test ua8
+            tests: --test pq --test ua_portable
           - cell: wallet-mlock
             features: --no-default-features --features wallet,mlock
           - cell: zether-only
@@ -633,6 +796,9 @@ jobs:
           - cell: pqz-n2048-vectors
             features: --no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock,vectors
             tests: --test facade_pqz_state --test facade_pqz --test pqz_backup --test no_oracle
+          - cell: roots
+            features: --no-default-features --features roots
+            tests: --test roots
     defaults:
       run:
         working-directory: clients/ua-rs
@@ -859,7 +1025,7 @@ jobs:
         run: cargo build --release --locked
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
       - name: install
         run: pip install -r requirements.txt
       - name: vectors and the wallet
@@ -886,7 +1052,7 @@ jobs:
         run: cargo build --release --locked
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: "1.25"
           cache-dependency-path: clients/ua-go/go.sum
       - name: vet
         run: go vet ./...
@@ -918,7 +1084,7 @@ jobs:
         run: cargo build --release --locked
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
       - name: vectors
         run: dotnet test
 
