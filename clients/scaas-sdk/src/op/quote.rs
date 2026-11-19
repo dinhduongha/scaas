@@ -173,27 +173,31 @@ pub(crate) fn signer_kind(p: &Prepared) -> u16 {
     }
 }
 
-/// A self-relay quote `q` of `p` once `p` is signed into `signed` calldata bytes (owner 2026-11-19, G3): its gas recomputed
-/// from the real signature's length, never below `q`'s (`q` itself when nothing grew); above `Limits::max_gas`
-/// `SignedGasAboveCap`, above the profile's per-transaction cap `GasAboveTxCap`, a cost above the caps `FeeAboveCap`.
+/// A self-relay quote `q` of an operation on `chain` by a signer of kind `signer`, whose unsigned calldata is `unsigned` bytes,
+/// once signed into `signed` calldata bytes (owner 2026-11-19, G3 at `submit`, Q5 at a gateway operation's self-relay
+/// `resend`, from the row's stored signed calldata): its gas recomputed from the real signature's length, never below `q`'s
+/// (`q` itself when nothing grew); above `Limits::max_gas` `SignedGasAboveCap`, above the profile's per-transaction cap
+/// `GasAboveTxCap`, a cost above the caps `FeeAboveCap`.
 pub(crate) fn signed_quote(
     sdk: &Sdk,
-    p: &Prepared,
+    chain: &str,
+    signer: u16,
+    unsigned: usize,
     q: &SubmitQuote,
     signed: usize,
 ) -> Result<SubmitQuote, SdkError> {
     let chain = sdk
         .chains
         .iter()
-        .find(|c| c.profile.key == p.chain())
+        .find(|c| c.profile.key == chain)
         .ok_or(SdkError::ChainUnknown)?;
     let counted = super::gas::counted_bytes(
         &chain.profile.gas,
         &chain.profile.gas_opt_in,
         &sdk.gas_tables,
-        signer_kind(p),
+        signer,
         q.gas_from.as_ref(),
-        super::submit::unsigned(p)?.calldata.len(),
+        unsigned,
     );
     let gas = super::gas::signed_gas(q.gas_limit, counted, signed);
     if gas == q.gas_limit {

@@ -154,6 +154,8 @@ impl Wallet {
                     landed: None,
                     relayer_bound: false,
                     gas_limit: Some(q.quote.gas_limit),
+                    signer_kind: None,
+                    unsigned_len: None,
                     ended_at: None,
                     message: serde_json::Value::Null,
                 };
