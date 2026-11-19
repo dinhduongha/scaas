@@ -208,6 +208,8 @@ pub(crate) const QUOTABLE: &[(&str, &[&str])] = &[
     ("mtxRevokeRole", &["gov_router"]),
     ("mtxSetAllowed", &["gov_router"]),
     ("mtxSetAuditorKey", &["gov_router"]),
+    // I3 (owner 2026-11-19): measured without the consent's verify, the SDK adding it by the auditor's kind
+    ("mtxSetAuditorUA", &["gov_router"]),
     ("mtxSetChainEntries", &["gov_router"]),
     ("mtxSetClassKindEnabled", &["gov_router"]),
     ("mtxSetCompliance", &["gov_router"]),
@@ -247,8 +249,6 @@ pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
     ("mtxConfidentialTransferSingleCompact", &["pqz"]),
     ("mtxUnshield", &["pqz"]),
     ("mtxUnshieldUnwrap", &["pqz"]),
-    // the new auditor's consent, a second signature (ruling 4) the fixture mocks
-    ("mtxSetAuditorUA", &["gov_router"]),
 ];
 
 /// The EIP-712 domain's name of a domain kind (`typed_ops.json`'s `domains`).

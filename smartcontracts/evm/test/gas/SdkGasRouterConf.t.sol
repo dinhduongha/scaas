@@ -21,6 +21,7 @@ import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SdkGasOps} from "./SdkGasOps.sol";
+import {SdkGasMetered} from "./SdkGasMeter.sol";
 import {_sgPqzKeep} from "./SdkGasFixtures.sol";
 
 /// The router's confidential-token entries signed by the reference signer (a native key), each on a router-configured
@@ -184,5 +185,80 @@ contract SdkGasRouterZetherTest is SdkGasRouterConfOps, ZetherFixture {
 
     function test_sdkGas_routerZether() public {
         _both("gov_router", "mtxSetAuditorKey", "zether", address(gcRouter), _sgFrom(), _auditorKey);
+    }
+}
+
+/// I3 (owner 2026-11-19, ruling 4: the new auditor's consent is an attached signature): `mtxSetAuditorUA` (variant `pqz`) on
+/// an `OFFCHAIN` `NORMAL_PQZ` token with bit 32 `AUDITOR` granted to the signer, at notice 0, to a registered ML-DSA-65 UA
+/// holding a PQZ key, applied at once. The row is without the consent's verify cost: the fixture's ML-DSA precompile is
+/// mocked (the consent a filler signature over its stored key); the SDK adds the consent's verify row by the auditor's kind.
+/// The call sits on EIP-7976's calldata floor (the consent's 3,309 bytes): measured inside the transaction (`SdkGasMetered`).
+contract SdkGasRouterPqzAuditorTest is SdkGasRouterConfOps, SdkGasMetered, PqzOffchainBase {
+    NormalPqzToken internal gcTok;
+    bytes32 internal gcAud;
+
+    function setUp() public {
+        _sgSkaSetup(PQZ_UID); // G4: the registry, the router and the releases as a deploy configures them
+        _offStack();
+        _sgDeployRegistry(address(reg), PQZ_UID, _sgPqzKeep(address(mlv), address(pqv)));
+        sgPk = 0xA11CE;
+        gcRouter = new GovernanceRouter(PQZ_UID, address(reg), sgSka, false);
+        OpenFactory f = new OpenFactory(nid(registrar));
+        EnvKit.configure(f, PQZ_UID, 0, address(gcRouter));
+        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, _penv(), type(NormalPqzToken).creationCode);
+        vm.prank(registrar);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
+        IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
+        c.features |= uint256(1) << GovernanceBits.AUDITOR;
+        (c.admin, c.lockedFeatures) = (nid(address(this)), 0);
+        gcTok = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "sg-router-pqz-aud"));
+        IGovernance(address(gcTok)).grantRole(GovernanceBits.AUDITOR, _sgFrom(), EnvKit.codeUidOf(address(gcTok)));
+        gcAud = _pqzUA(_pk(41), 41);
+        _sgUaSignerOn(address(reg)); // G2: the derived reference signer
+    }
+
+    /// G2: the derived signer holds `AUDITOR` too, in its run only.
+    function _sgUaPrep(address) internal override {
+        IGovernance(address(gcTok))
+            .grantRole(GovernanceBits.AUDITOR, UAKinds.uaOf(sgUaKind, sgUaKey), EnvKit.codeUidOf(address(gcTok)));
+    }
+
+    function _fixtureSka() internal view override returns (address) {
+        return sgSka;
+    }
+
+    /// `mtxSetAuditorUA(E, target, newAuditor, epoch, consent, chainUid, auth)`.
+    function _auditorUA(address c, uint256 nonce) internal view returns (bytes memory) {
+        bytes32 u = EnvKit.codeUidOf(address(gcTok));
+        bytes32 d = MtxDigest.typed(
+            c,
+            keccak256(
+                bytes.concat(
+                    abi.encode(T.UA_SET_AUDITOR_UA, _sgFrom(), address(gcTok)),
+                    abi.encode(gcAud, uint32(1), u),
+                    abi.encode(SG_LANE, nonce, block.timestamp + 600, uint32(0), address(0), uint256(0), address(0))
+                )
+            )
+        );
+        return abi.encodeCall(
+            GovernanceRouter.mtxSetAuditorUA, (_sgE(nonce), address(gcTok), gcAud, uint32(1), _pqAuth(), u, _sgUaSig(d))
+        );
+    }
+
+    function test_sdkGas_routerPqzAuditor() public {
+        (address r, string memory k) = (address(gcRouter), "mtxSetAuditorUA");
+        bytes32 before = gcTok.auditorUA();
+        assertTrue(before != gcAud, "a change of auditor");
+        uint256 s = vm.snapshotState();
+        _measureMetered(_k("gov_router", k, "fresh", "pqz"), r, _auditorUA(r, 0));
+        vm.revertToState(s);
+        _setNonce(r, _sgFrom(), SG_LANE, 1);
+        _measureMetered(_k("gov_router", k, "used", "pqz"), r, _auditorUA(r, 1));
+        vm.revertToState(s);
+        _sgUaPrep(r);
+        (sgKind, sgKeyData, sgSk) = (sgUaKind, sgUaKey, sgUaSk); // the revert below restores the native signer
+        _measureMetered(_k("gov_router", k, "ua", "pqz"), r, _auditorUA(r, 0));
+        vm.revertToState(s);
+        assertEq(gcTok.auditorUA(), before, "each row from the same state");
     }
 }

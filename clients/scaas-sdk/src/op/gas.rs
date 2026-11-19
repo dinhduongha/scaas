@@ -394,24 +394,25 @@ pub(crate) fn item_count(
 }
 
 /// The kind of the second signature an operation attaches (owner 2026-11-19, ruling 4): `mtxPayWithPayeeFee`'s payer
-/// `UASig` (`extra.payerSig`) over the payment (`message.payment`, whose `from` it signs for); `None`: the operation attaches
-/// none. Within: the native key for an empty key data on a native id; else the accepted kind whose id of the key data is
+/// `UASig` (`extra.payerSig`) over the payment (`message.payment`, whose `from` it signs for), or (I3) `mtxSetAuditorUA`'s
+/// new auditor's consent (`extra.consent`, signed by `message.newAuditor`; the row is measured without its verify);
+/// `None`: the operation attaches none. Within: the native key for an empty key data on a native id; else the accepted kind whose id of the key data is
 /// the payment's `from`; `None` when it cannot be determined (members, a stored kind's empty key data, no kind matches).
 pub(crate) fn attached_kind(
     extra: &serde_json::Value,
     message: &serde_json::Value,
 ) -> Option<Option<u16>> {
-    let sig = extra.get("payerSig")?;
+    let (sig, owner) = match (extra.get("payerSig"), extra.get("consent")) {
+        (Some(s), _) => (s, super::prepared::envelope(message).and_then(|e| e.get("from"))),
+        (None, Some(s)) => (s, message.get("newAuditor")),
+        (None, None) => return None,
+    };
     let kind = || -> Option<u16> {
         if !sig.get("members")?.as_array()?.is_empty() {
             return None;
         }
         let kd = super::unhex(sig.get("keyData")?.as_str()?).ok()?;
-        let from: [u8; 32] =
-            super::unhex(super::prepared::envelope(message)?.get("from")?.as_str()?)
-                .ok()?
-                .try_into()
-                .ok()?;
+        let from: [u8; 32] = super::unhex(owner?.as_str()?).ok()?.try_into().ok()?;
         if kd.is_empty() {
             return scaas_ua::in_native_space(&from).then_some(NATIVE_EVM);
         }
@@ -1529,7 +1530,8 @@ mod tests {
         assert_eq!(signed_gas(90_000, 500, 628), 90_000 + 12_288);
     }
 
-    /// Ruling 4: the attached signature's kind, read from `payerSig` and the payment's `from`.
+    /// Ruling 4: the attached signature's kind, read from `payerSig` and the payment's `from`; I3: from `consent` and
+    /// `newAuditor`.
     #[test]
     fn attached_signature_kind() {
         let kd = vec![7u8; 64];
@@ -1565,6 +1567,25 @@ mod tests {
             Some(None),
             "members"
         );
+        // I3: mtxSetAuditorUA's consent, signed by the new auditor (`message.newAuditor`)
+        let consent = |kd: &str| serde_json::json!({"consent": {"keyData": kd, "signature": "0x01", "members": []}});
+        let aud = |a: &str| serde_json::json!({"from": native, "target": "0x01", "newAuditor": a, "epoch": 1});
+        assert_eq!(
+            attached_kind(&consent(&super::super::hex(&kd)), &aud(&super::super::hex(&ua))),
+            Some(Some(0x0101)),
+            "the auditor's kind"
+        );
+        assert_eq!(
+            attached_kind(&consent("0x"), &aud(&super::super::hex(&ua))),
+            Some(None),
+            "a stored kind's consent: the worst kind"
+        );
+        assert_eq!(
+            attached_kind(&consent(&super::super::hex(&kd)), &aud(&native)),
+            Some(None),
+            "the consent's key is not the auditor's"
+        );
+        assert_eq!(attached_kind(&serde_json::json!({}), &aud(&native)), None, "none attached");
     }
 
     /// The new optional fields' parse: `save` and `fee_extra` held like a figure and positive, `sig_bytes` bounded.

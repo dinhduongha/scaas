@@ -1,0 +1,4 @@
+# gasI3 mutants at commit 19a99b0e6 (name | outcome | test)
+the consent not attached | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib attached_signature_kind
+the consent read against the envelope's from | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib attached_signature_kind
+2 mutants, 2 killed, 0 survived, 0 not loaded
