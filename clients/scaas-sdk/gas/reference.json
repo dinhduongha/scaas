@@ -6,7 +6,8 @@
   "assumptions": [
     "Seed rows sourced from committed forge pins (smartcontracts/evm/test/vectors/plus_zero_gas.json, written by test/governance/PlusZero.t.sol), until the SDK gas generator writes this file.",
     "Foundry 1.8.5, foundry.toml: evm_version amsterdam, isolate = true (each top-level call its own transaction), bytecode_hash none.",
-    "gas is execution gas without the intrinsic 21,000 and calldata (the SDK adds both and its margin); every pin measured with entryRef = 0 on a lane used before (not fresh).",
+    "measured is execution gas: the pin's gasTotalUsed - 15,000 (the Amsterdam intrinsic cost) - the call's standard calldata gas (4 a zero byte, 16 a non-zero byte, calldata_gas per source key); where the EIP-7976 floor bound the total (the pqz row: 15,000 + 64 x 3,908 = 265,112) the figure is an upper bound of execution gas. The SDK adds 21,000 + 64 gas a byte and its margin.",
+    "Every pin measured with entryRef = 0 on a lane used before (not fresh).",
     "Rows with stand_in rely on a stand-in verifier or a mocked precompile and may undershoot on a real chain."
   ],
   "rows": [
@@ -15,38 +16,53 @@
       "kind": "token",
       "signer": 257,
       "fresh": false,
-      "gas": 98000,
-      "measured": 97861,
+      "gas": 79000,
+      "measured": 78033,
       "source": "smartcontracts/evm/test/vectors/plus_zero_gas.json#uaExecuteTransfer_normal,uaExecuteTransfer_wrapped",
-      "stand_in": "P-256 (0x0101) verified by the fixture's stand-in verifier"
+      "stand_in": "P-256 (0x0101) verified by the fixture's stand-in verifier",
+      "calldata_gas": {
+        "uaExecuteTransfer_normal": 4816,
+        "uaExecuteTransfer_wrapped": 4828
+      }
     },
     {
       "entry": "mtxExecuteTransfer",
       "kind": "zether",
       "signer": 321,
       "fresh": false,
-      "gas": 140000,
-      "measured": 139471,
-      "source": "smartcontracts/evm/test/vectors/plus_zero_gas.json#uaExecuteTransfer_normalZether,uaExecuteTransfer_wrappedZether"
+      "gas": 120000,
+      "measured": 119027,
+      "source": "smartcontracts/evm/test/vectors/plus_zero_gas.json#uaExecuteTransfer_normalZether,uaExecuteTransfer_wrappedZether",
+      "calldata_gas": {
+        "uaExecuteTransfer_normalZether": 5432,
+        "uaExecuteTransfer_wrappedZether": 5444
+      }
     },
     {
       "entry": "mtxExecuteTransfer",
       "kind": "pqz",
       "signer": 305,
       "fresh": false,
-      "gas": 266000,
-      "measured": 265112,
+      "gas": 234000,
+      "measured": 233508,
       "source": "smartcontracts/evm/test/vectors/plus_zero_gas.json#uaExecuteTransfer_normalPqz,uaExecuteTransfer_wrappedPqz",
-      "stand_in": "mldsa65 (0x0131) verified through a mocked precompile candidate"
+      "stand_in": "mldsa65 (0x0131) verified through a mocked precompile candidate",
+      "calldata_gas": {
+        "uaExecuteTransfer_normalPqz": 16604,
+        "uaExecuteTransfer_wrappedPqz": 16604
+      }
     },
     {
       "entry": "mtxCancelNonce",
       "kind": "gov_router",
       "signer": 0,
       "fresh": false,
-      "gas": 73000,
-      "measured": 72665,
-      "source": "smartcontracts/evm/test/vectors/plus_zero_gas.json#mtxCancelNonce_router"
+      "gas": 55000,
+      "measured": 54017,
+      "source": "smartcontracts/evm/test/vectors/plus_zero_gas.json#mtxCancelNonce_router",
+      "calldata_gas": {
+        "mtxCancelNonce_router": 3648
+      }
     }
   ]
 }

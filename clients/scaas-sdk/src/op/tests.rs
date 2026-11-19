@@ -1105,7 +1105,7 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
         }
         let q = r.unwrap();
         let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
-        assert_eq!(q.gas_limit, gas::with_margin(73_000 + 21_000 + 64 * len));
+        assert_eq!(q.gas_limit, gas::with_margin(55_000 + 21_000 + 64 * len));
         assert_eq!(
             (q.gas, q.gas_from),
             (Some(q.gas_limit), Some(GasFrom::Reference))

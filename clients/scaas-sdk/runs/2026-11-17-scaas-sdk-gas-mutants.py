@@ -51,7 +51,7 @@ MUTANTS = [
     ("the file: one key twice", [(C, "            if out.iter().any(|o| o.key() == row.key()) {", "            if false {")],
      U + "gas_table_parse_checks"),
     ("a reference row away from its source",
-     [("clients/scaas-sdk/gas/reference.json", '"measured": 72665,', '"measured": 72600,')],
+     [("clients/scaas-sdk/gas/reference.json", '"measured": 54017,', '"measured": 54000,')],
      U + "reference_rows_hold_their_sources"),
     ("open: an opt-in naming no table", [(L, " && gas_tables.iter().any(|t| &t.name == n))", ")")],
      I + "open_checks_gas_tables_and_opt_ins"),

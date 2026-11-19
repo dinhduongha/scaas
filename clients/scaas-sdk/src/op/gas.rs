@@ -224,7 +224,9 @@ mod tests {
     }
 
     /// Each reference row holds to its source: `source` = `<repo path>#<key>[,<key>…]` of a measurement file (`{key: gas}`),
-    /// `measured` the worst of the named keys, and the two bounds (`measured <= gas`, `gas - measured < 1000`) held by the parse.
+    /// `measured` the worst of the named keys' execution gas, each key's total less 15,000 (the Amsterdam intrinsic cost) and
+    /// its standard calldata gas (`calldata_gas`, 0 when absent); the two bounds (`measured <= gas`, `gas - measured < 1000`)
+    /// are held by the parse.
     #[test]
     fn reference_rows_hold_their_sources() {
         let v: serde_json::Value = serde_json::from_str(REFERENCE_FILE).unwrap();
@@ -235,7 +237,9 @@ mod tests {
                 serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
             let worst = keys
                 .split(',')
-                .map(|k| m[k].as_u64().unwrap())
+                .map(|k| {
+                    m[k].as_u64().unwrap() - 15_000 - r["calldata_gas"][k].as_u64().unwrap_or(0)
+                })
                 .max()
                 .unwrap();
             assert_eq!(worst, r["measured"].as_u64().unwrap(), "{r}");
