@@ -25,15 +25,15 @@ MUTANTS = [
         [
             (
                 G,
-                "Some(p) => Some(b.gas.saturating_add(p.gas.saturating_mul(len(&p.input)?))),",
-                "Some(_) => Some(b.gas),",
+                "            g = g.saturating_add(p.gas.saturating_mul((op.len)(&p.input)?));\n",
+                "",
             )
         ],
         U + "gas_per_byte_part_adds_the_inputs_length",
     ),
     (
         "a missing input answers as 0",
-        [(G, "p.gas.saturating_mul(len(&p.input)?)", "p.gas.saturating_mul(len(&p.input).unwrap_or(0))")],
+        [(G, "p.gas.saturating_mul((op.len)(&p.input)?)", "p.gas.saturating_mul((op.len)(&p.input).unwrap_or(0))")],
         U + "gas_per_byte_part_adds_the_inputs_length",
     ),
     ("data counted in hex digits", [(G, "            h.len() / 2\n", "            h.len()\n")], U + "gas_per_byte"),
@@ -49,7 +49,7 @@ MUTANTS = [
     ),
     (
         "the quote passes no input length",
-        [(Q, "&|input| super::gas::input_len(&prepared.t.extra, &prepared.t.message, input),", "&|_| Some(0),")],
+        [(Q, "len: &|input| super::gas::input_len(extra, message, input),", "len: &|_| Some(0),")],
         W + "pay_with_paymeta_v3",
     ),
     (
@@ -110,8 +110,8 @@ MUTANTS = [
         U + "reference_table_covers_every_quotable_key",
     ),
     (
-        "a verify kind unmeasured but listed as measured",
-        [(P, "&[0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]", "&[0x0130, 0x0131, 0x0132, 0x0133, 0x0134]")],
+        "a PQ verify row without sig_bytes (was: a verify kind unmeasured but listed as measured)",
+        [(R, '"sig_bytes": 1280', '"sig_bytes_": 1280')],
         U + "reference_table_covers_every_quotable_key",
     ),
 ]

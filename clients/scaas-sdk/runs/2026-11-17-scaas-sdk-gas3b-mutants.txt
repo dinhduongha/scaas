@@ -1,4 +1,4 @@
-# gas3b mutants at commit 90838139f (name | outcome | test)
+# gas3b mutants at commit 6d99b2332 (name | outcome | test)
 the per-byte part ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_byte_part_adds_the_inputs_length
 a missing input answers as 0 | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_byte_part_adds_the_inputs_length
 data counted in hex digits | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_byte
@@ -14,5 +14,5 @@ a reference row away from its source | killed | ../../scripts/capped cargo test 
 a reference per-byte part away from its source | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
 a quotable key without its row | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_table_covers_every_quotable_key
 a measured key left as unmeasured | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_table_covers_every_quotable_key
-a verify kind unmeasured but listed as measured | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_table_covers_every_quotable_key
+a PQ verify row without sig_bytes (was: a verify kind unmeasured but listed as measured) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_table_covers_every_quotable_key
 16 mutants, 16 killed, 0 survived, 0 not loaded

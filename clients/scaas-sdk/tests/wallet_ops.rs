@@ -493,7 +493,8 @@ async fn prepare_row(
                 },
                 meta: pay_meta(&d["extra"]["meta"]),
                 payer_auth: PayerAuth {
-                    key_data: "0x".into(),
+                    // a test's own key data (ruling 4's unknown kind), else the vector's native id's
+                    key_data: d["extra"]["payerKeyData"].as_str().unwrap_or("0x").into(),
                     signature: s(&d["extra"]["payerSig"]),
                 },
                 fee: f("fee"),
@@ -552,7 +553,7 @@ fn gas_rows() -> GasRows {
                     gas: 1_000,
                 }),
                 save: Some(1_000), // ruling 1: a saving pay answered
-                fee_extra: None,
+                fee_extra: (entry == "mtxPay").then_some(2_000), // ruling 3
             })
         })
         .collect();
@@ -565,7 +566,7 @@ fn gas_rows() -> GasRows {
             .chain(0x0130..=0x0135)
             .map(|signer| GasVerify {
                 signer,
-                gas: 0,
+                gas: if signer == 0x0135 { 5_000 } else { 0 }, // the dearest (ruling 4)
                 sig_bytes: None,
             })
             .collect(),
@@ -879,6 +880,69 @@ async fn pay_with_paymeta_v3() {
     let body = body_at(&t, 0).await;
     assert_eq!(body["op"]["entry"], "mtxPay");
     assert_eq!(body["op"]["args"]["meta"]["save"], true);
+    // owner 2026-11-19, ruling 1: a saving pay adds the row's `save` (1,000 here, with the margin); the same meta unsaved
+    // (one calldata byte changes, not the length) does not
+    assert_eq!(rows[2]["save"], true);
+    let mut unsaved = rows[2].clone();
+    unsaved["save"] = json!(false);
+    let (saved, plain) = (gas_of(&rows[2]).await, gas_of(&unsaved).await);
+    assert!(
+        (1_499..=1_501).contains(&(saved - plain)),
+        "{saved} {plain}"
+    );
+    // ruling 3: a fee > 0 adds the row's `fee_extra` (2,000 here, with the margin)
+    let fee = |fee: &str| {
+        let (t, pay, m) = (&t, &pay, meta_of(&rows[0]));
+        let mut p = pay(m);
+        (p.envelope.mode, p.envelope.fee) = (0x20, fee.to_string()); // FIXED
+        async move {
+            let p = t.sdk.wallet().prepare_pay(p).await.unwrap();
+            t.sdk
+                .op()
+                .quote(p, SubmitPath::Gateway)
+                .await
+                .unwrap()
+                .gas
+                .unwrap()
+        }
+    };
+    let (zero, two) = (fee("0").await, fee("2").await);
+    assert!((2_999..=3_001).contains(&(two - zero)), "{zero} {two}");
+}
+
+/// Owner 2026-11-19, ruling 4: `mtxPayWithPayeeFee`'s attached payer signature adds its kind's verify part (the vector's
+/// native id: the native row, 0 here); of a kind the SDK cannot determine (key data whose id is not the payer's), the
+/// dearest accepted kind's (0x0135's 5,000 here), beside 32 more calldata bytes at 64 gas a byte, with the margin.
+#[tokio::test(flavor = "multi_thread")]
+async fn payee_fee_quotes_the_attached_signature() {
+    let t = setup(1).await;
+    let v = load("smartcontracts/vectors/typed/typed_ops.json");
+    let (d, m) = (
+        &v["ops"]["UAPayeeFee"]["domains"]["token"],
+        &v["ops"]["UAPayeeFee"]["message"],
+    );
+    let gas = |d: Value| {
+        let t = &t;
+        async move {
+            let p = prepare_row(t, "UAPayeeFee", &d, m, true).await.unwrap();
+            t.sdk
+                .op()
+                .quote(p, SubmitPath::Gateway)
+                .await
+                .unwrap()
+                .gas
+                .unwrap()
+        }
+    };
+    let native = gas(d.clone()).await;
+    let mut other = d.clone();
+    other["extra"]["payerKeyData"] = json!(format!("0x{}", "11".repeat(32)));
+    let unknown = gas(other).await;
+    let want = (5_000 + 32 * 64) * 3 / 2;
+    assert!(
+        (want - 1..=want + 1).contains(&(unknown - native)),
+        "{native} {unknown}"
+    );
 }
 
 async fn body_at(t: &T, n: usize) -> Value {

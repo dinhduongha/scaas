@@ -75,8 +75,8 @@ MUTANTS = [
         [
             (
                 G,
-                "Some((b.saturating_add(v), GasSources { base, verify }))",
-                "Some((b.saturating_add(v - v), GasSources { base, verify }))",
+                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { base, verify },",
+                "b.saturating_add(s).saturating_add(inner),\n                GasSources { base, verify },",
             )
         ],
         U + "gas_lookup_order_and_opt_in",
@@ -86,8 +86,8 @@ MUTANTS = [
         [
             (
                 G,
-                "Some((b.saturating_add(v), GasSources { base, verify }))",
-                "Some((b.saturating_add(v), GasSources { verify: base.clone(), base }))",
+                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { base, verify },",
+                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { verify: base.clone(), base },",
             )
         ],
         U + "quote_names_its_gas_source_in_order",
@@ -97,8 +97,8 @@ MUTANTS = [
         [
             (
                 G,
-                "Some((b.saturating_add(v), GasSources { base, verify }))",
-                "Some((b.saturating_add(v), GasSources { base: verify.clone(), verify }))",
+                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { base, verify },",
+                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { base: verify.clone(), verify },",
             )
         ],
         U + "gas_parts_are_looked_up_independently",
@@ -115,7 +115,7 @@ MUTANTS = [
             (
                 G,
                 "        _ => app.map(|g| (g, GasSources::both(GasFrom::App))),",
-                "        (Some((b, _)), None) => app.map(|g| (g + b, GasSources::both(GasFrom::App))),\n"
+                "        (Some((b, _)), None, _) => app.map(|g| (g + b, GasSources::both(GasFrom::App))),\n"
                 "        _ => app.map(|g| (g, GasSources::both(GasFrom::App))),",
             )
         ],
