@@ -210,8 +210,10 @@ impl Op {
     }
 
     /// [`Op::quote`] with the app's own gas figure for the operation (execution gas, one total for base and verify), used only
-    /// when the tables lack its base or its verify row (owner 2026-11-19); the quote names it `App` for both. A figure above
-    /// `Limits::max_gas` is `FeeAboveCap`.
+    /// when the tables lack its base or its verify row (owner 2026-11-19); the quote names it `App` for both. For
+    /// `mtxExecute` (owner 2026-11-19, ruling 5) the figure is instead its inner call's, added to the wallet's rows (never a
+    /// total; without the rows the operation is unquoted, and `quote` without a figure leaves it unquoted: a self-relay is
+    /// `GasUnquoted`, a relayed quote reports `gas: None`). A figure above `Limits::max_gas` is `FeeAboveCap`.
     pub async fn quote_with_gas(
         &self,
         prepared: Arc<Prepared>,
@@ -259,15 +261,29 @@ impl Op {
                     .as_ref()
                     .is_some_and(|(_, _, n)| n.is_zero());
                 let entry = prepared.entry();
-                let figure = super::gas::quoted(
-                    &chain.profile.gas,
-                    &chain.profile.gas_opt_in,
-                    &sdk.gas_tables,
-                    app,
-                    (&entry, prepared.t.kind, signer, fresh),
-                    unsigned.calldata.len(),
-                    &|input| super::gas::input_len(&prepared.t.extra, &prepared.t.message, input),
-                );
+                let figure = {
+                    let (extra, message) = (&prepared.t.extra, &prepared.t.message);
+                    let op = super::gas::OpGas {
+                        len: &|input| super::gas::input_len(extra, message, input),
+                        // ruling 1: the record saved (`PayMeta.save`)
+                        saves: extra.get("meta").is_some_and(|m| {
+                            scaas_ua::wallet::entries::pay_meta_of(m).is_ok_and(|m| m.save)
+                        }),
+                        // ruling 3: a fee > 0 (the amount the relayer takes, computed above)
+                        fee: fee.bytes().any(|b| b != b'0'),
+                        // ruling 4: the second signature attached
+                        attached: super::gas::attached_kind(extra, message),
+                    };
+                    super::gas::quoted(
+                        &chain.profile.gas,
+                        &chain.profile.gas_opt_in,
+                        &sdk.gas_tables,
+                        app,
+                        (&entry, prepared.t.kind, signer, fresh),
+                        unsigned.calldata.len(),
+                        &op,
+                    )
+                }; // `op` borrows a closure that is not `Send`: dropped before any await
                 let gateway = || SubmitQuote {
                     path: SubmitPath::Gateway,
                     payer: None,

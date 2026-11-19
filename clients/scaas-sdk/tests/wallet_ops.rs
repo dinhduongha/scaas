@@ -551,12 +551,24 @@ fn gas_rows() -> GasRows {
                     input: "meta.body".into(),
                     gas: 1_000,
                 }),
+                save: Some(1_000), // ruling 1: a saving pay answered
+                fee_extra: None,
             })
         })
         .collect();
     GasRows {
         base,
-        verify: vec![GasVerify { signer: 0, gas: 0 }],
+        // every signer kind the SDK accepts: a second signature of an unknown kind takes the dearest (ruling 4)
+        verify: [0u16]
+            .into_iter()
+            .chain(0x0101..=0x0108)
+            .chain(0x0130..=0x0135)
+            .map(|signer| GasVerify {
+                signer,
+                gas: 0,
+                sig_bytes: None,
+            })
+            .collect(),
     }
 }
 
@@ -651,18 +663,18 @@ async fn every_wallet_pair_is_its_vector() {
                 // an unbound relayer / fee recipient is 0 as signed (the vectors' messages are canonical)
                 assert_eq!(got, val, "{name} on {kind}: {n}");
             }
-            // sign once at submit: the simulated calldata is the row's (the row's RFC 6979 signature in it)
-            let q = t
-                .sdk
-                .op()
-                .quote(
-                    p.clone(),
-                    SubmitPath::SelfRelay {
-                        payer: t.payer.clone(),
-                    },
-                )
-                .await
-                .unwrap();
+            // sign once at submit: the simulated calldata is the row's (the row's RFC 6979 signature in it); `mtxExecute`
+            // is quoted with the app's figure for its inner call (ruling 5, owner 2026-11-19)
+            let path = SubmitPath::SelfRelay {
+                payer: t.payer.clone(),
+            };
+            let op = t.sdk.op();
+            let q = if p.entry() == "mtxExecute" {
+                op.quote_with_gas(p.clone(), path, 50_000).await
+            } else {
+                op.quote(p.clone(), path).await
+            }
+            .unwrap();
             let sig = &d["signature"].as_str().unwrap()[2..];
             assert!(
                 !carried(&t, sig),
@@ -1064,15 +1076,18 @@ async fn ua_execute_decoded_only() {
             .any(|f| f.name == "token" && f.value == token && f.display == "listed VND"),
         "the token touched, marked"
     );
+    let path = SubmitPath::SelfRelay {
+        payer: t.payer.clone(),
+    };
+    // ruling 5 (owner 2026-11-19): without the app's figure for the inner call, unquoted; with it, quoted
+    assert_eq!(
+        code(t.sdk.op().quote(p.clone(), path.clone()).await),
+        "GasUnquoted"
+    );
     let q = t
         .sdk
         .op()
-        .quote(
-            p.clone(),
-            SubmitPath::SelfRelay {
-                payer: t.payer.clone(),
-            },
-        )
+        .quote_with_gas(p.clone(), path, 50_000)
         .await
         .unwrap();
     t.sdk.op().submit(p, q).await.unwrap();

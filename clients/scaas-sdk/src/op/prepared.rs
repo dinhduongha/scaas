@@ -240,9 +240,6 @@ pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
     ("mtxWrapOrder", &["pqz", "token", "zether"]),
     ("mtxWrapShield", &["pqz", "zether"]),
 ];
-/// The signer kinds the rulings name without a verify row yet (PLANNED: the PQ kinds' fixtures).
-#[cfg(test)] // the coverage test's
-pub(crate) const UNMEASURED_SIGNERS: &[u16] = &[0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135];
 
 /// The EIP-712 domain's name of a domain kind (`typed_ops.json`'s `domains`).
 pub(crate) fn domain_name(kind: &str) -> Result<&'static str, SdkError> {

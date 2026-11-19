@@ -186,12 +186,18 @@ fn gas_rows(g: u64) -> crate::GasRows {
                     fresh,
                     gas: g,
                     per_byte: None,
+                    save: None,
+                    fee_extra: None,
                 });
             }
         }
     }
     let verify = [0x0101, gas::NATIVE_EVM]
-        .map(|signer| crate::GasVerify { signer, gas: 0 })
+        .map(|signer| crate::GasVerify {
+            signer,
+            gas: 0,
+            sig_bytes: None,
+        })
         .to_vec();
     crate::GasRows { base, verify }
 }
@@ -1034,6 +1040,7 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
         g.verify = vec![crate::GasVerify {
             signer: 0x0131,
             gas: 0,
+            sig_bytes: None,
         }];
         p.gas = g;
     })
@@ -1109,14 +1116,25 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
         let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
         // the reference table's row of the router's cancel on a used lane (the generated file's figure: 55,000 for the old
         // seed pin, regular gas only; since part 3b's measurement regular + state gas)
-        let row = crate::GasTable::parse(gas::REFERENCE_FILE)
-            .unwrap()
-            .rows
+        let rows = crate::GasTable::parse(gas::REFERENCE_FILE).unwrap().rows;
+        let row = rows
             .base
-            .into_iter()
+            .iter()
             .find(|b| b.key() == ("mtxCancelNonce", "gov_router", false))
             .unwrap();
-        assert_eq!(q.gas_limit, gas::with_margin(row.gas + 21_000 + 64 * len));
+        // ruling 2 (owner 2026-11-19): the native key's signature bytes at 64 gas a byte over the unsigned calldata
+        let sig = rows
+            .verify
+            .iter()
+            .find(|v| v.signer == 0)
+            .unwrap()
+            .sig_bytes
+            .unwrap();
+        assert_eq!(sig, 96);
+        assert_eq!(
+            q.gas_limit,
+            gas::with_margin(row.gas + 21_000 + 64 * (len + sig))
+        );
         assert_eq!(
             (q.gas, q.gas_from),
             (

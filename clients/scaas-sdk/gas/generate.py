@@ -12,8 +12,11 @@ script with --inputs and --out.
   generate.py --check [--inputs F] [--out F]    the table equals what the measurement file gives (CI); exit 1 if not
 
 A base row's figure is the worst of the kind's variants measured (`<kind>_<entry>_<fresh|used>_<variant>`), rounded up to
-the next 1,000; its per-byte part the worst `<kind>_<entry>_per_byte_<variant>`; a verify row `verify_<kind>_delta`. Prints
-its run time.
+the next 1,000; its per-byte part the worst `<kind>_<entry>_per_byte_<variant>`; its `save` (owner 2026-11-19, ruling 1)
+the worst `<kind>_<entry>_saved_<variant>` less `..._fresh_<variant>`, its `fee_extra` (ruling 3) the worst
+`..._fee_<variant>` less `..._fresh_<variant>` (a source item `a-b` is the difference of two keys); a verify row
+`verify_<kind>_delta`, its `sig_bytes` (ruling 2) `verify_<kind>_sig_bytes`, its `stand_in` from the input list. Prints its
+run time.
 """
 
 import argparse
@@ -34,6 +37,25 @@ def ceil1000(g):
 def variants(m, prefix):
     """The keys `<prefix><variant>` of `m`, the split parts left out."""
     return sorted(k for k in m if k.startswith(prefix) and not k.endswith(("_regular", "_state")))
+
+
+def extra(m, src, kind, entry, what):
+    """The worst per-variant difference `<kind>_<entry>_<what>_<v>` less `<kind>_<entry>_fresh_<v>`, or None."""
+    pre = f"{kind}_{entry}_{what}_"
+    pairs = [(k, f"{kind}_{entry}_fresh_{k[len(pre) :]}") for k in variants(m, pre)]
+    if not pairs:
+        return None
+    for a, b in pairs:
+        if b not in m:
+            raise SystemExit(f"no fresh row {b} for {a}")
+    measured = max(m[a] - m[b] for a, b in pairs)
+    if measured <= 0:
+        raise SystemExit(f"{kind} {entry} {what}: no cost added ({measured})")
+    return {
+        "gas": ceil1000(measured),
+        "measured": measured,
+        "source": f"{src}#{','.join(f'{a}-{b}' for a, b in pairs)}",
+    }
 
 
 def table(inputs, m):
@@ -64,13 +86,32 @@ def table(inputs, m):
                             "gas": max(m[k] for k in pkeys),
                             "source": f"{src}#{','.join(pkeys)}",
                         }
+                    if entry in inputs["save"]:
+                        row["save"] = extra(m, src, kind, entry, "saved")
+                        if row["save"] is None:
+                            raise SystemExit(f"no saved-record measurement for {kind} {entry}")
+                    fee = extra(m, src, kind, entry, "fee")
+                    if fee is not None:
+                        row["fee_extra"] = fee
                     base.append(row)
-    verify = [{"signer": 0, "gas": 0, "measured": 0, "source": "the reference signer (0 by definition)"}]
+    verify = [
+        {
+            "signer": 0,
+            "gas": 0,
+            "measured": 0,
+            "source": "the reference signer (0 by definition)",
+            "sig_bytes": m["verify_native_sig_bytes"],
+        }
+    ]
     for signer in inputs["verify"]:
         k = f"verify_0x{signer:04x}_delta"
         if k not in m:
             raise SystemExit(f"no measurement {k}")
-        verify.append({"signer": signer, "gas": ceil1000(m[k]), "measured": m[k], "source": f"{src}#{k}"})
+        row = {"signer": signer, "gas": ceil1000(m[k]), "measured": m[k], "source": f"{src}#{k}"}
+        row["sig_bytes"] = m[f"verify_0x{signer:04x}_sig_bytes"]
+        if str(signer) in inputs["stand_in"]:
+            row["stand_in"] = inputs["stand_in"][str(signer)]
+        verify.append(row)
     return {
         "format": "scaas.gas-table",
         "v": 2,
