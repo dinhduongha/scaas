@@ -115,6 +115,12 @@ async fn deployed(slot: u16) -> (Anvil, String, serde_json::Value, String, Strin
         "0x8ac7230489e80000",
     ]); // 10 ether
     let name = format!("local-31337-{port}-testnet");
+    // one deploy at a time: forge script keeps its broadcast state per chain id (31337) in the shared cache, so two
+    // tests deploying at once collide on it
+    static DEPLOY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let one = DEPLOY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let status = Command::new("forge")
         .current_dir(sc())
         .args([
@@ -137,6 +143,7 @@ async fn deployed(slot: u16) -> (Anvil, String, serde_json::Value, String, Strin
         .status()
         .expect("forge in PATH");
     assert!(status.success(), "forge script failed");
+    drop(one);
     let book = format!("{}/deployments/{name}.json", sc());
     let dep: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&book).unwrap()).unwrap();
