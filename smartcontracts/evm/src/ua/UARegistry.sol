@@ -813,18 +813,30 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _lib(address(UARegistryAuxLib), UARegistryAuxLib.updateMsig.selector, UAKinds.MSIG);
     }
 
-    /// UA-7 O1 (plan T66a): gen 2 forwards a record it does not hold (UA8-D11: gen 1's verdict, its revert as it is), else the
-    /// library's check on this record.
+    /// UA-7 O1 (plan T66a): a record held elsewhere of a kind not verify-only here goes to its holder directly (spec
+    /// 2026-11-19-registry-verify-only-kinds §4, N3: its verdict, its revert as it is), else the library's check (`_portableAt`).
     function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view {
-        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortable(ua, purposeTag, typedDigest, auth);
-        else _libView(address(UARegistryCoreLib), UARegistryCoreLib.requirePortable.selector, _s.records[ua].kind);
+        (address h, uint16 k) = _portableAt(ua);
+        if (h != address(0)) IUARegistry(h).requirePortable(ua, purposeTag, typedDigest, auth);
+        else _libView(address(UARegistryCoreLib), UARegistryCoreLib.requirePortable.selector, k);
+    }
+
+    /// §4: where a portable check of `ua` runs. Held here, or held elsewhere of a kind verify-only here: this generation's library (`k`
+    /// the kind, so the library gets its word); held elsewhere of another kind: its holder `h`; held nowhere: the library, which refuses.
+    function _portableAt(bytes32 ua) private view returns (address h, uint16 k) {
+        k = _s.records[ua].kind;
+        if (k == 0) {
+            (h, k) = _holderKind(ua);
+            if (_vo(k)) h = address(0);
+        }
     }
 
     /// CTR-UA-46: as `requirePortable`, under the purpose the library derives from `appId`. Gen 2 forwards plainly: a predecessor
     /// without this entry reverts (empty data, no fallback), a refusal of a void view.
     function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig calldata auth) external view {
-        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortableApp(ua, appId, typedDigest, auth);
-        else _libView(address(UARegistryCoreLib), UARegistryCoreLib.requirePortableApp.selector, _s.records[ua].kind);
+        (address h, uint16 k) = _portableAt(ua);
+        if (h != address(0)) IUARegistry(h).requirePortableApp(ua, appId, typedDigest, auth);
+        else _libView(address(UARegistryCoreLib), UARegistryCoreLib.requirePortableApp.selector, k);
     }
 
     /// `_lib` inside a view (`requirePortable`): the library entry writes nothing, so it runs in a STATICCALL frame too. Solidity
@@ -867,6 +879,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     // ----- requireAuthorized -----
 
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view {
+        if (!UAKinds.inNativeSpace(ua) && _s.records[ua].kind == 0) {
+            // spec 2026-11-19-registry-verify-only-kinds §4 (CTR-UA-60, N3): a record held elsewhere, one walk. A kind verify-only here:
+            // this generation's verifier in the library (`UAKeyNotCached` from the holder's cache under key form 1); any other: its
+            // holder's check, handed to it directly (`via`: its starvation `UAVerifyGas`, any other refusal `UAUnauthorized`)
+            (address h, uint16 k) = _holderKind(ua);
+            if (_vo(k)) _libView(address(UARegistryCoreLib), UARegistryCoreLib.requireAuthorized.selector, k);
+            else if (!UAStore.via(h, ua, purposeTag, digest, auth)) revert UAUnauthorized(ua); // held nowhere: h = 0, false
+            return;
+        }
         if (!_authorized(ua, purposeTag, digest, auth)) {
             // owner 2026-11-15, F-8: an ML-DSA record without its complete cache on a verifier without a precompile gets the named
             // refusal (CTR-UA-23), asked only after a refused check, so an accepted one pays nothing for it
@@ -891,8 +912,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             return
                 auth.keyData.length == 0 && auth.members.length == 0 && _native(ua, purposeTag, digest, auth.signature);
         }
-        uint16 kind = _s.records[ua].kind;
-        if (kind == 0) return UAStore.via(predecessor, ua, purposeTag, digest, auth);
+        uint16 kind = _s.records[ua].kind; // held here (`requireAuthorized` took the rest)
         if (kind == UAKinds.MSIG) {
             // CTR-UA-44: the current structure (the record's slot is warm: its `keyPtr` costs a warm read, single keys pay nothing)
             return auth.keyData.length == 0 && auth.signature.length == 0
@@ -915,33 +935,52 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes memory sig
     ) private view returns (bool) {
         uint256 cfg = _cfg(kind);
+        if (!UAStore._registrable(cfg)) {
+            // §4: a member held elsewhere, its kind `holderOf`'s (the listed one must match): verify-only here, this generation's
+            // `requireAuthorized` of it (the library's verifier path); else its holder, directly, one hand-off (N3)
+            (address h, uint16 k) = _holderKind(id);
+            if (k != kind) return false;
+            return UAStore.via(
+                cfg >> 224 & 1 != 0 ? address(this) : h, id, purposeTag, digest, UASig(keyData, sig, new MemberSig[](0))
+            );
+        }
         uint256 vl = UAStore.vkLength(kind);
         if (vl != 0 || purposeTag == UAKinds.PURPOSE_MEMBER) {
             if (keyData.length != 0) return false; // CTR-UA-17 / CTR-UA-33: auth carries only the signature
-            if (UAStore._registrable(cfg)) {
-                Record memory r = _s.records[id];
-                if (r.kind != kind) return false;
-                if (vl == 0) {
-                    keyData = UAStore.keyRest(id);
-                } else {
-                    bytes memory ek = UAStore.expanded(id, kind);
-                    if (ek.length != 0) {
-                        bytes32 m = UAKinds.uaMessage(kind, purposeTag, digest);
-                        return _verifierCall(cfg, MldsaVerifier.verifyCached.selector, ek, m, sig);
-                    }
-                    keyData = SSTORE2.read(r.keyPtr);
+            Record memory r = _s.records[id];
+            if (r.kind != kind) return false;
+            if (vl == 0) {
+                keyData = UAStore.keyRest(id);
+            } else {
+                bytes memory ek = UAStore.expanded(id, kind);
+                if (ek.length != 0) {
+                    bytes32 m = UAKinds.uaMessage(kind, purposeTag, digest);
+                    return _verifierCall(cfg, MldsaVerifier.verifyCached.selector, ek, m, sig);
                 }
+                keyData = SSTORE2.read(r.keyPtr);
             }
         } else if (UAKinds.uaOf(kind, keyData) != id) {
             return false;
-        }
-        if (!UAStore._registrable(cfg)) {
-            return UAStore.via(predecessor, id, purposeTag, digest, UASig(keyData, sig, new MemberSig[](0)));
         }
         return
             _verifierCall(
                 cfg, IUAKindVerifier.verify.selector, keyData, UAKinds.uaMessage(kind, purposeTag, digest), sig
             );
+    }
+
+    /// §4: the holder of a record this generation does not hold and its kind, by the walk (the predecessor's `holderOf`, C8); (0, 0)
+    /// for a record held nowhere, or at generation 1. A failed read is `UAVerifyGas` (F11).
+    function _holderKind(bytes32 ua) private view returns (address h, uint16 k) {
+        if (predecessor != address(0)) {
+            (h, k,) = abi.decode(
+                UAStore.read(predecessor, abi.encodeCall(IUARegistry.holderOf, (ua))), (address, uint16, address)
+            );
+        }
+    }
+
+    /// `kind` is verify-only here (bit 224 of its word, §2).
+    function _vo(uint16 kind) private view returns (bool) {
+        return _cfg(kind) >> 224 & 1 != 0;
     }
 
     /// accounts.md §1.9 `msig` row, a transaction authorization (the portable one: `UARegistryCoreLib._msig`): strictly increasing
@@ -981,7 +1020,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             if (s.sig.length != 0) return false;
             MemberSig[] memory inner = UAStore.lift(s.members);
             if (_s.records[id].kind == 0) {
-                return UAStore.via(predecessor, id, UAKinds.PURPOSE_MEMBER, md, UASig("", "", inner));
+                (address h,) = _holderKind(id); // §4: forwarded whole to its holder (R6), directly
+                return UAStore.via(h, id, UAKinds.PURPOSE_MEMBER, md, UASig("", "", inner));
             }
             return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.msig(id, _s.records[id].keyPtr), inner);
         }

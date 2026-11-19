@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IUARegistry} from "./IUARegistry.sol";
-import {IUAPopVerifier, IUAMinimalVerifier} from "./IUAVerifier.sol";
+import {IUAKindVerifier, IUAPopVerifier, IUAMinimalVerifier} from "./IUAVerifier.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
@@ -243,10 +243,15 @@ library UARegistryCoreLib {
         view
     {
         IUARegistry.Record memory r = UAStore.layout().records[ua];
-        // the registration's `pop` is `register`'s own check (its slots need no acceptance): never a view's
-        if (r.kind == 0 || purposeTag == UAKinds.PURPOSE_POP_V2) revert IUARegistry.UAUnauthorized(ua);
+        // the registration's `pop` is `register`'s own check (its slots need no acceptance): never a view's, never a later generation's
+        if (purposeTag == UAKinds.PURPOSE_POP_V2) revert IUARegistry.UAUnauthorized(ua);
         bool ok;
-        if (r.kind != UAKinds.MSIG) {
+        if (r.kind == 0) {
+            // spec 2026-11-19-registry-verify-only-kinds §4: held elsewhere, of a kind verify-only here (the registry hands every other
+            // such record to its holder), or held nowhere (refused)
+            ok = auth.keyData.length == 0 && auth.members.length == 0
+                && _voPortable(ua, purposeTag, typedDigest, auth.signature);
+        } else if (r.kind != UAKinds.MSIG) {
             bytes memory d; // a surplus-form kind verifies its stored `p` (`_multi`), never `d`
             if (!UAKinds.hasSurplusForm(r.kind)) (d,) = UAStore.registration(ua, r);
             ok = auth.keyData.length == 0 && auth.members.length == 0
@@ -261,6 +266,71 @@ library UARegistryCoreLib {
         // complete ML-DSA cache without a precompile (`_consent`), and SSTORE2 parts are never removed; a gen-1 record has no
         // row here (r.kind == 0 above). A refusal of a stored ML-DSA record is a wrong signature, never a missing cache.
         if (!ok) revert IUARegistry.UAUnauthorized(ua);
+    }
+
+    /// `IUARegistry.requireAuthorized` of a record held elsewhere whose kind is verify-only here (spec 2026-11-19-registry-verify-only-kinds
+    /// §4, CTR-UA-60): the registry walked, handed every other such record to its holder, and appended the word of the holder's kind
+    /// (`_cfgKind()`); held nowhere, or a word not verify-only: `UAUnauthorized`. Its `UAKeyNotCached` (key form 1) and `UAVerifyGas`
+    /// as they are. No write: the registry runs it inside its view.
+    function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, IUARegistry.UASig calldata auth)
+        external
+    {
+        (address h, uint16 k,) = _holderOf(ua);
+        if (
+            h == address(0) || _cfgKind() >> 224 & 1 == 0 || auth.members.length != 0
+                || !_voCheck(h, ua, k, purposeTag, digest, auth.keyData, auth.signature)
+        ) revert IUARegistry.UAUnauthorized(ua);
+    }
+
+    /// §4 (CTR-UA-60): the record `id` of `kind`, held at `h`, checked by this generation's verify-only verifier (`_cfgKind()`) on the
+    /// bytes the holder's code passes on that path ("Key bytes"): the stored key (`keyOf`), a classical member's registration key
+    /// data, the holder's complete ML-DSA cache under key form 1 (else `UAKeyNotCached`), a classical signer's `keyData` against the
+    /// id; the holder's entry (`verify`, `verifyCached`); under the cap with the hold. Every read of the holder fails only by gas:
+    /// `UAVerifyGas` (F11).
+    function _voCheck(
+        address h,
+        bytes32 id,
+        uint16 kind,
+        bytes32 purposeTag,
+        bytes32 digest,
+        bytes memory keyData,
+        bytes memory sig
+    ) private view returns (bool) {
+        uint256 cfg = _cfgKind();
+        bytes4 sel = IUAKindVerifier.verify.selector;
+        uint256 vl = UAStore.vkLength(kind);
+        if (vl != 0 || purposeTag == UAKinds.PURPOSE_MEMBER) {
+            if (keyData.length != 0) return false;
+            if (cfg >> 225 & 1 != 0) {
+                (keyData, sel) = (UAStore.cacheAt(h, id, kind), MldsaVerifier.verifyCached.selector);
+            } else if (vl != 0) {
+                keyData = abi.decode(UAStore.read(h, abi.encodeCall(IUARegistry.keyOf, (id))), (bytes));
+            } else {
+                keyData = UAStore.regKey(h, id);
+            }
+        } else if (UAKinds.uaOf(kind, keyData) != id) {
+            return false;
+        }
+        bytes memory data = abi.encodeWithSelector(sel, keyData, UAKinds.uaMessage(kind, purposeTag, digest), sig);
+        return UAStore.capped(address(uint160(cfg)), UAStore._capOf(cfg), data, 1, true);
+    }
+
+    /// §4 / §5 (CTR-UA-60): the portable check of a record held elsewhere by this generation's verify-only verifier (`_cfgKind()`, the
+    /// word of the holder's kind the registry passed): `verifyPop` on the holder's registration key data (`verifyCached` on its
+    /// complete cache under key form 1), the path and DST the holder's `_single` takes; under the cap with the hold, the group kinds'
+    /// cap `verifyBudget` held too (P10). False where no generation holds `ua` or the word is not verify-only.
+    function _voPortable(bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory sig) internal view returns (bool) {
+        uint256 cfg = _cfgKind();
+        (address h, uint16 k,) = _holderOf(ua);
+        if (h == address(0) || cfg >> 224 & 1 == 0) return false;
+        bytes32 message = UAKinds.uaMessage(k, purpose, digest);
+        bytes memory data = cfg >> 225 & 1 != 0
+            ? abi.encodeWithSelector(MldsaVerifier.verifyCached.selector, UAStore.cacheAt(h, ua, k), message, sig)
+            : abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, UAStore.regKey(h, ua), message, sig);
+        uint256 cap = k >= UAKinds.MUSIG2_SECP256K1 && k <= UAKinds.FROST_BN254
+            ? IUARegistry(address(this)).verifyBudget()
+            : UAStore._capOf(cfg);
+        return UAStore.capped(address(uint160(cfg)), cap, data, 1, true);
     }
 
     // ----- acceptance (CTR-UA-37) -----

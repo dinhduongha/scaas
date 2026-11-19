@@ -30,6 +30,12 @@ contract StarvingPredecessor is MockPredecessor {
         _fail();
     }
 
+    /// It holds every derived id (spec 2026-11-19-registry-verify-only-kinds §4, N3: gen 2 hands a record to the holder the walk names;
+    /// one no generation holds is refused without a hand-off).
+    function holderOf(bytes32) external view override returns (address, uint16, address) {
+        return (address(this), 0x0101, address(0));
+    }
+
     function _fail() private view {
         if (cheap) revert();
         while (true) {}

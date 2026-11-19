@@ -363,6 +363,30 @@ library UAStore {
     /// UAVerifyGas, never a verdict (T-AUTH-4): the target's own `UAVerifyGas` (at a hold) is re-raised, and so is the
     /// target running out of gas before its hold (W-M): no revert data and at most the 1/64 this frame kept (`g` = gasleft
     /// before the call); any other revert returns its unused gas and stays a verdict.
+    /// A view `call` on the line (spec 2026-11-19-registry-verify-only-kinds §4, F11): its return data; a failed read is never a
+    /// verdict but `UAVerifyGas` (§11.3's probes leave only gas to fail it).
+    function read(address target, bytes memory call) internal view returns (bytes memory ret) {
+        bool ok;
+        (ok, ret) = target.staticcall(call);
+        if (!ok) revert UAKinds.UAVerifyGas();
+    }
+
+    /// The registration key data of `ua` at its holder `h` (`registrationOf`'s first two words, the rest not decoded), by `read`.
+    function regKey(address h, bytes32 ua) internal view returns (bytes memory d) {
+        (, d) = abi.decode(read(h, abi.encodeCall(IUARegistry.registrationOf, (ua))), (uint16, bytes));
+    }
+
+    /// The complete ML-DSA cache of `ua` (`kind`) at its holder `h` (key form 1, §2 / §4): its part pointers, 20 bytes each, as
+    /// `expanded` returns them; an incomplete one is `UAKeyNotCached(ua)`.
+    function cacheAt(address h, bytes32 ua, uint16 kind) internal view returns (bytes memory ek) {
+        address[3] memory p = abi.decode(read(h, abi.encodeCall(IUARegistry.expandedKeyOf, (ua))), (address[3]));
+        uint256 n = kind == UAKinds.MLDSA44 ? 1 : kind == UAKinds.MLDSA65 ? 2 : 3;
+        for (uint256 i; i < n; ++i) {
+            if (p[i] == address(0)) revert IUARegistry.UAKeyNotCached(ua);
+            ek = bytes.concat(ek, bytes20(p[i]));
+        }
+    }
+
     function via(address target, bytes32 id, bytes32 purposeTag, bytes32 digest, IUARegistry.UASig memory auth)
         internal
         view

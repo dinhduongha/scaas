@@ -121,7 +121,7 @@ contract MockPredecessor {
     function kindHome(uint16) external pure returns (address) {}
 
     /// The rest of the line's views a successor probes (§11.3, W3): this stand-in holds nothing.
-    function holderOf(bytes32) external pure returns (address, uint16, address) {}
+    function holderOf(bytes32) external view virtual returns (address, uint16, address) {}
     function verifierOf(uint16) external pure returns (address) {}
     function verifyOnly(uint16) external pure returns (bool) {}
     function pqzHomeOf(bytes32) external pure returns (address) {}
