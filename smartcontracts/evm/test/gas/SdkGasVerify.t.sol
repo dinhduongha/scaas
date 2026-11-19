@@ -121,7 +121,11 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         c[8] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
         // the Zether UA kind (owner 2026-11-19, P1): Schnorr under the Zether tag, `UALedgerBase`'s cap
         c[9] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
-        reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPq(c));
+        // G4: the registry as a deploy configures it (`SdkGasDeploy`), these verifiers kept (the PQ precompile stand-ins);
+        // the forwarder reads its `SmartKeyAccount` clone hash, as the token's pipeline does
+        _sgSkaSetup(chainUidA);
+        _sgDeployRegistry(REG_A, chainUidA, _withPq(c));
+        reg = UARegistry(REG_A);
         fwd = new SdkGasForwarder(reg);
         meter = new SdkGasMeter();
     }

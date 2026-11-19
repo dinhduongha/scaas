@@ -14,8 +14,7 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
-import {ZetherRegFixture} from "../as/confidential/ZetherRegFixture.sol";
-import {PqzRegFixture} from "../as/confidential/PqzRegFixture.sol";
+import {SdkGasZetherFix, SdkGasPqzFix} from "./SdkGasFixtures.sol";
 import {SdkGasOps} from "./SdkGasOps.sol";
 
 /// The `zether` and `pqz` domain kinds' base rows (owner 2026-11-19: the token kinds' entry set; ruling A: the regulated
@@ -164,7 +163,7 @@ abstract contract SdkGasKind is SdkGasKindBase {
 }
 
 /// The `zether` kind's fixture: `ZetherRegFixture` with the `WRAPPED_ZETHER` release.
-abstract contract SdkGasZetherBase is SdkGasKindBase, ZetherRegFixture {
+abstract contract SdkGasZetherBase is SdkGasKindBase, SdkGasZetherFix {
     function _isWrapped() internal pure override returns (bool) {
         return false;
     }
@@ -207,7 +206,7 @@ abstract contract SdkGasZetherBase is SdkGasKindBase, ZetherRegFixture {
 contract SdkGasZetherTest is SdkGasKind, SdkGasZetherBase {}
 
 /// The `pqz` kind's fixture: `PqzRegFixture` with the `WRAPPED_PQZ` release.
-abstract contract SdkGasPqzBase is SdkGasKindBase, PqzRegFixture {
+abstract contract SdkGasPqzBase is SdkGasKindBase, SdkGasPqzFix {
     function _isWrapped() internal pure override returns (bool) {
         return false;
     }

@@ -22,10 +22,7 @@ import {Catalogue} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {UID_, normalInit} from "../v2/helpers/V2Fixture.sol";
-import {Work1271} from "../v2/DexOutside.t.sol";
-import {RegFixture} from "../as/helpers/RegFixture.sol";
-import {ZetherRegFixture} from "../as/confidential/ZetherRegFixture.sol";
-import {PqzRegFixture} from "../as/confidential/PqzRegFixture.sol";
+import {SdkGasRegFix, SdkGasZetherFix, SdkGasPqzFix} from "./SdkGasFixtures.sol";
 import {SdkGasOps} from "./SdkGasOps.sol";
 import {SdkGasLedger} from "./SdkGasLedger.sol";
 import {SdkGasMetered} from "./SdkGasMeter.sol";
@@ -152,7 +149,7 @@ contract SdkGasOrderTokenTest is SdkGasLedger, SdkGasOrderOps {
 /// party attested) and `TAX` at 10 %. `mtxWrapOrder` on a fresh kind-9 wrapper of a factory `NORMAL` leg the signer holds
 /// (a leg with `FORCE` or `MODERATE`, as the regulated kinds have, is refused). No `_ua_` row: the fixture has no registry
 /// with a secp256k1 verifier.
-contract SdkGasOrderRegulatedTest is SdkGasOrderOps, RegFixture {
+contract SdkGasOrderRegulatedTest is SdkGasOrderOps, SdkGasRegFix {
     address internal constant SG_TAX_TO = address(0x7A0);
 
     function _cfg(IFactoryToken.TokenConfig memory c) internal view returns (IFactoryToken.TokenConfig memory) {
@@ -268,7 +265,7 @@ abstract contract SdkGasOrderKind is SdkGasOrderOps {
     }
 }
 
-contract SdkGasOrderZetherTest is SdkGasOrderKind, ZetherRegFixture {
+contract SdkGasOrderZetherTest is SdkGasOrderKind, SdkGasZetherFix {
     function _isWrapped() internal pure override returns (bool) {
         return false;
     }
@@ -308,7 +305,7 @@ contract SdkGasOrderZetherTest is SdkGasOrderKind, ZetherRegFixture {
     }
 }
 
-contract SdkGasOrderPqzTest is SdkGasOrderKind, PqzRegFixture {
+contract SdkGasOrderPqzTest is SdkGasOrderKind, SdkGasPqzFix {
     function _isWrapped() internal pure override returns (bool) {
         return false;
     }
@@ -353,10 +350,10 @@ contract SdkGasOrderDexTest is SdkGasOrderOps {
 
     function setUp() public {
         sgPk = 0xDA7E;
-        address work = address(new Work1271());
+        address ska = _sgSkaSetup(UID_); // G4: the deploy's `SmartKeyAccount` implementation
         OpenFactory f = EnvKit.factory(address(this), UID_, 0);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), work, false);
-        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, work);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), ska, false);
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, ska);
         dex = SCaaSDex(
             f.createDex(
                 1,

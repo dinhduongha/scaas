@@ -70,22 +70,26 @@ abstract contract RegFixture is Test {
         return address(0);
     }
 
+    /// The chain's `SmartKeyAccount` implementation the fixture's releases name (0 = none, this fixture's own setting); the SDK
+    /// gas harness (`test/gas/SdkGasDeploy.sol`, G4) names the one a real deploy names.
+    function _fixtureSka() internal view virtual returns (address) {}
+
     function setUp() public virtual {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0, _router());
         if (address(ureg) == address(0)) ureg = new StubUARegistry(UID); // a router's suite made it first (its registry)
         bool h = _hedera();
         Catalogue.plain(
-            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0), h
+            f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg), _fixtureSka(), h
         );
         Catalogue.plain(
-            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(ureg), address(0), h
+            f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(ureg), _fixtureSka(), h
         );
         Catalogue.release(
             f,
             IOpenFactory.TokenKind.NORMAL_REGULATED,
             1,
-            plainEnv(address(f), address(0), UID, address(ureg), h),
+            plainEnv(address(f), _fixtureSka(), UID, address(ureg), h),
             type(NormalRegulatedToken).creationCode,
             regArgs()
         );
@@ -93,7 +97,7 @@ abstract contract RegFixture is Test {
             f,
             IOpenFactory.TokenKind.WRAPPED_REGULATED,
             1,
-            plainEnv(address(f), address(0), UID, address(ureg), h),
+            plainEnv(address(f), _fixtureSka(), UID, address(ureg), h),
             type(WrappedRegulatedToken).creationCode,
             regArgs()
         );

@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import {deployKindModules, deployDexModules} from "../../script/KindModules.sol";
 import {GovernanceRouterTypes as T} from "../../src/governance/GovernanceRouterBase.sol";
-import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -41,12 +40,9 @@ contract SdkGasRouterAdminTest is SdkGasRouterBase {
 
     function setUp() public override {
         super.setUp();
-        // the fixture's registry at `PREG` (its storage kept) and the router with the account factory's clone, so the
-        // directory takes all four entries (`SmartKeyCloneHashMismatch` otherwise)
-        skaf = new SmartKeyAccountFactory(chainUidA);
-        address impl = skaf.IMPLEMENTATION();
-        preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, impl, true, _mockPqCfg());
-        router = new GovernanceRouter(chainUidA, PREG, impl, false);
+        // the registry at `PREG` and the router name the deploy's `SmartKeyAccount` implementation (G4, `SdkGasRouterFix`):
+        // its factory is the directory's entry (`SmartKeyCloneHashMismatch` otherwise)
+        skaf = sgSkaf;
         relay = new RelayFeeRouter();
         zs = new ZetherStatements();
         address a = address(uint160(uint256(eoa)));
@@ -286,15 +282,12 @@ contract SdkGasRouterCreateTest is SdkGasRouterBase {
         bytes32 fu = EnvKit.uidOf(address(f));
         vm.startPrank(REGISTRAR);
         f.publishTokenEnv(
-            IOpenFactory.TokenKind.NORMAL,
-            1,
-            fu,
-            withModules(plainEnv(address(f), address(0), chainUidA, PREG, false), ms)
+            IOpenFactory.TokenKind.NORMAL, 1, fu, withModules(plainEnv(address(f), sgSka, chainUidA, PREG, false), ms)
         );
         f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, fu);
-        f.publishDexEnv(1, fu, withModules(plainEnv(address(f), address(0), chainUidA, address(0), false), dm));
+        f.publishDexEnv(1, fu, withModules(plainEnv(address(f), sgSka, chainUidA, address(0), false), dm));
         f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, dargs, fu);
-        f.publishClassEnv(CLS, 0, 1, fu, plainEnv(address(f), address(0), chainUidA, address(0), false));
+        f.publishClassEnv(CLS, 0, 1, fu, plainEnv(address(f), sgSka, chainUidA, address(0), false));
         f.deployImplementation(
             IOpenFactory.ReleaseId(CLS, 0, 1),
             1,

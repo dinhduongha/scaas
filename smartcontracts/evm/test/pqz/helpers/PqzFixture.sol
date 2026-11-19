@@ -75,19 +75,23 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     mapping(bytes32 => mapping(uint256 => uint256)) internal trivBlk; // the block a TRIVIAL entry was appended in
     mapping(bytes32 => uint256) internal feeIn; // fees paid to a UA's public balance, in shielded units
 
+    /// The chain's `SmartKeyAccount` implementation the fixture's releases name (0 = none, this fixture's own setting); the SDK
+    /// gas harness (`test/gas/SdkGasDeploy.sol`, G4) names the one a real deploy names.
+    function _fixtureSka() internal view virtual returns (address) {}
+
+    /// The release env of the PQZ kinds on this stack (`deps`: the `PqzKeyVerifier`).
+    function _penv() internal view returns (IFactoryToken.Env memory e) {
+        e = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
+        e.smartKeyAccountImpl = _fixtureSka();
+    }
+
     function _stack() internal virtual {
         _registryStack();
         ct = new PqzCtHarness();
         factory = EnvKit.factory(registrar, PQZ_UID, notice);
         // plan 5g-Z2: the PQZL release, its verifier the env's (CTR-ZTH-20)
         normalImpl = NormalPqzToken(
-            Catalogue.release(
-                factory,
-                IOpenFactory.TokenKind.NORMAL_PQZ,
-                1,
-                pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)),
-                type(NormalPqzToken).creationCode
-            )
+            Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1, _penv(), type(NormalPqzToken).creationCode)
         );
         vm.startPrank(registrar);
         factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(factory)));
@@ -161,13 +165,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     }
 
     function _releaseWrapped() internal {
-        Catalogue.release(
-            factory,
-            IOpenFactory.TokenKind.WRAPPED_PQZ,
-            1,
-            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)),
-            type(WrappedPqzToken).creationCode
-        );
+        Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, _penv(), type(WrappedPqzToken).creationCode);
     }
 
     /// An `WRAPPED_PQZ` token with one 1:1 `MockERC20` leg (after `_releaseWrapped`).

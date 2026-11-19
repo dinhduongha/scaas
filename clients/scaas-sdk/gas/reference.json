@@ -8,7 +8,7 @@
     "Foundry 1.8.5, foundry.toml: evm_version amsterdam, isolate = true (each top-level call its own transaction), bytecode_hash none.",
     "A figure is execution gas: gasTotalUsed - 15,000 (the Amsterdam intrinsic cost) - the call's standard calldata gas (4 a zero byte, 16 a non-zero byte), plus the call's EIP-8037 state gas; a row whose transaction sat on EIP-7976's calldata floor is refused by the harness. The SDK adds 21,000 + 64 gas a byte of the unsigned calldata and its margin.",
     "EIP-8037 state gas at its fixed cost per state byte, CPSB 1530 (EIP-8037's constant; revm 43 CPSB_GLAMSTERDAM, Nethermind GasCostOf.CostPerStateByte): 97,920 a new storage slot. CPSB does not depend on the block gas limit or any chain parameter.",
-    "Base rows: the reference signer, a native EVM key (no registry call); fee 0, relayer and fee recipient unbound (mtxPayWithPayeeFee binds its relayer, as the entry requires); every payee, fee recipient and credited account holding nothing before (a first write); a fresh lane has nonce 0, a used one nonce 1. A token kind's row is the worst of its Normal, Wrapped and regulated variants that have the entry (owner 2026-11-19, ruling A); a regulated token with the registry check (KYC; kinds 10-13 the deny mask) and TAX at 10 %.",
+    "Base rows: the reference signer, a native EVM key (no registry call); the UA registry, the governance router and every release env configured as a real deploy configures them (owner 2026-11-19, G4: DeployBase's gen-1 kind table on the real verifiers at the deploy's caps, budget 12,000,000, msig on, and the chain's SmartKeyAccount implementation, whose clone code hash a native signer's check reads); fee 0, relayer and fee recipient unbound (mtxPayWithPayeeFee binds its relayer, as the entry requires); every payee, fee recipient and credited account holding nothing before (a first write); a fresh lane has nonce 0, a used one nonce 1. A token kind's row is the worst of its Normal, Wrapped and regulated variants that have the entry (owner 2026-11-19, ruling A); a regulated token with the registry check (KYC; kinds 10-13 the deny mask) and TAX at 10 %.",
     "per_byte (owner 2026-11-19, ruling B): whole gas a byte of the input, the slope between two lengths below where the calldata floor binds (PayMeta body: 256 and 1,024 bytes, a saved record; mtxExecute data: 32 and 160 bytes).",
     "save (owner 2026-11-19, ruling 1): the fixed cost a pay entry adds when it saves its PayMeta record (save set, payNo non-zero): the worst difference, per variant, between the saved record with an empty body and the unsaved pay, both on a fresh lane; the SDK adds it when the operation saves.",
     "fee_extra (owner 2026-11-19, ruling 3): the worst difference, per variant, between the entry with a fee of 1 (FIXED, amounts of 1 raised to 100 for the 1 % cap, the recipient unbound: the relayer, holding nothing) and without, both on a fresh lane; the SDK adds it when the fee is > 0. Not on mtxRelayFee and mtxPayWithPayeeFee (their payment is their fee, in the row) On the wrap-in entries (A6) the fee row less the same call at fee 0, the signer already holding units (their fee is charged in units the signer holds before the call).",
@@ -24,17 +24,17 @@
       "entry": "mtxExecuteTransfer",
       "kind": "token",
       "fresh": true,
-      "gas": 280000,
-      "measured": 279875,
+      "gas": 281000,
+      "measured": 280199,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_fresh_normal,token_mtxExecuteTransfer_fresh_normal_reg,token_mtxExecuteTransfer_fresh_wrapped,token_mtxExecuteTransfer_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 126000,
-        "measured": 125468,
+        "measured": 125467,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_fee_normal-token_mtxExecuteTransfer_fresh_normal,token_mtxExecuteTransfer_fee_normal_reg-token_mtxExecuteTransfer_fresh_normal_reg,token_mtxExecuteTransfer_fee_wrapped-token_mtxExecuteTransfer_fresh_wrapped,token_mtxExecuteTransfer_fee_wrapped_reg-token_mtxExecuteTransfer_fresh_wrapped_reg"
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14186,
+        "measured": 14183,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_ua_normal-token_mtxExecuteTransfer_fresh_normal-verify_0x0108_delta,token_mtxExecuteTransfer_ua_wrapped-token_mtxExecuteTransfer_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -42,17 +42,17 @@
       "entry": "mtxExecuteTransfer",
       "kind": "token",
       "fresh": false,
-      "gas": 182000,
-      "measured": 181955,
+      "gas": 183000,
+      "measured": 182279,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_used_normal,token_mtxExecuteTransfer_used_normal_reg,token_mtxExecuteTransfer_used_wrapped,token_mtxExecuteTransfer_used_wrapped_reg",
       "fee_extra": {
         "gas": 126000,
-        "measured": 125468,
+        "measured": 125467,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_fee_normal-token_mtxExecuteTransfer_fresh_normal,token_mtxExecuteTransfer_fee_normal_reg-token_mtxExecuteTransfer_fresh_normal_reg,token_mtxExecuteTransfer_fee_wrapped-token_mtxExecuteTransfer_fresh_wrapped,token_mtxExecuteTransfer_fee_wrapped_reg-token_mtxExecuteTransfer_fresh_wrapped_reg"
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14186,
+        "measured": 14183,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxExecuteTransfer_ua_normal-token_mtxExecuteTransfer_fresh_normal-verify_0x0108_delta,token_mtxExecuteTransfer_ua_wrapped-token_mtxExecuteTransfer_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -61,7 +61,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 291000,
-      "measured": 290615,
+      "measured": 290942,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPay_fresh_normal,token_mtxPay_fresh_normal_reg,token_mtxPay_fresh_wrapped,token_mtxPay_fresh_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -80,7 +80,7 @@
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14162,
+        "measured": 14166,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPay_ua_normal-token_mtxPay_fresh_normal-verify_0x0108_delta,token_mtxPay_ua_wrapped-token_mtxPay_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -88,8 +88,8 @@
       "entry": "mtxPay",
       "kind": "token",
       "fresh": false,
-      "gas": 193000,
-      "measured": 192695,
+      "gas": 194000,
+      "measured": 193022,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPay_used_normal,token_mtxPay_used_normal_reg,token_mtxPay_used_wrapped,token_mtxPay_used_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -108,7 +108,7 @@
       },
       "ua_extra": {
         "gas": 15000,
-        "measured": 14162,
+        "measured": 14166,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPay_ua_normal-token_mtxPay_fresh_normal-verify_0x0108_delta,token_mtxPay_ua_wrapped-token_mtxPay_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -116,8 +116,8 @@
       "entry": "mtxPayWithPayeeFee",
       "kind": "token",
       "fresh": true,
-      "gas": 435000,
-      "measured": 434752,
+      "gas": 436000,
+      "measured": 435404,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPayWithPayeeFee_fresh_normal,token_mtxPayWithPayeeFee_fresh_normal_reg,token_mtxPayWithPayeeFee_fresh_wrapped,token_mtxPayWithPayeeFee_fresh_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -139,8 +139,8 @@
       "entry": "mtxPayWithPayeeFee",
       "kind": "token",
       "fresh": false,
-      "gas": 337000,
-      "measured": 336832,
+      "gas": 338000,
+      "measured": 337484,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPayWithPayeeFee_used_normal,token_mtxPayWithPayeeFee_used_normal_reg,token_mtxPayWithPayeeFee_used_wrapped,token_mtxPayWithPayeeFee_used_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -163,7 +163,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 431000,
-      "measured": 430253,
+      "measured": 430577,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPayWithTax_fresh_normal_reg,token_mtxPayWithTax_fresh_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -186,7 +186,7 @@
       "kind": "token",
       "fresh": false,
       "gas": 333000,
-      "measured": 332333,
+      "measured": 332657,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxPayWithTax_used_normal_reg,token_mtxPayWithTax_used_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -209,11 +209,11 @@
       "kind": "token",
       "fresh": true,
       "gas": 289000,
-      "measured": 288530,
+      "measured": 288854,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxRelayFee_fresh_normal,token_mtxRelayFee_fresh_normal_reg,token_mtxRelayFee_fresh_wrapped,token_mtxRelayFee_fresh_wrapped_reg",
       "ua_extra": {
         "gas": 15000,
-        "measured": 14182,
+        "measured": 14181,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxRelayFee_ua_normal-token_mtxRelayFee_fresh_normal-verify_0x0108_delta,token_mtxRelayFee_ua_wrapped-token_mtxRelayFee_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -222,11 +222,11 @@
       "kind": "token",
       "fresh": false,
       "gas": 191000,
-      "measured": 190610,
+      "measured": 190934,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxRelayFee_used_normal,token_mtxRelayFee_used_normal_reg,token_mtxRelayFee_used_wrapped,token_mtxRelayFee_used_wrapped_reg",
       "ua_extra": {
         "gas": 15000,
-        "measured": 14182,
+        "measured": 14181,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxRelayFee_ua_normal-token_mtxRelayFee_fresh_normal-verify_0x0108_delta,token_mtxRelayFee_ua_wrapped-token_mtxRelayFee_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -234,8 +234,8 @@
       "entry": "mtxCancelNonce",
       "kind": "token",
       "fresh": true,
-      "gas": 255000,
-      "measured": 254994,
+      "gas": 256000,
+      "measured": 255318,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelNonce_fresh_normal,token_mtxCancelNonce_fresh_normal_reg,token_mtxCancelNonce_fresh_wrapped,token_mtxCancelNonce_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 145000,
@@ -253,7 +253,7 @@
       "kind": "token",
       "fresh": false,
       "gas": 158000,
-      "measured": 157074,
+      "measured": 157398,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelNonce_used_normal,token_mtxCancelNonce_used_normal_reg,token_mtxCancelNonce_used_wrapped,token_mtxCancelNonce_used_wrapped_reg",
       "fee_extra": {
         "gas": 145000,
@@ -271,7 +271,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 187000,
-      "measured": 186644,
+      "measured": 186968,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxBurn_fresh_normal,token_mtxBurn_fresh_normal_reg",
       "fee_extra": {
         "gas": 134000,
@@ -288,8 +288,8 @@
       "entry": "mtxBurn",
       "kind": "token",
       "fresh": false,
-      "gas": 89000,
-      "measured": 88724,
+      "gas": 90000,
+      "measured": 89048,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxBurn_used_normal,token_mtxBurn_used_normal_reg",
       "fee_extra": {
         "gas": 134000,
@@ -307,7 +307,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 772000,
-      "measured": 771284,
+      "measured": 771608,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrap_fresh_wrapped,token_mtxWrap_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 126000,
@@ -320,7 +320,7 @@
       "kind": "token",
       "fresh": false,
       "gas": 674000,
-      "measured": 673364,
+      "measured": 673688,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrap_used_wrapped,token_mtxWrap_used_wrapped_reg",
       "fee_extra": {
         "gas": 126000,
@@ -333,7 +333,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 773000,
-      "measured": 772097,
+      "measured": 772421,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapLeg_fresh_wrapped,token_mtxWrapLeg_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 126000,
@@ -346,7 +346,7 @@
       "kind": "token",
       "fresh": false,
       "gas": 675000,
-      "measured": 674177,
+      "measured": 674501,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapLeg_used_wrapped,token_mtxWrapLeg_used_wrapped_reg",
       "fee_extra": {
         "gas": 126000,
@@ -359,7 +359,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 421000,
-      "measured": 420559,
+      "measured": 420883,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxAddReserve_fresh_wrapped,token_mtxAddReserve_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 145000,
@@ -372,7 +372,7 @@
       "kind": "token",
       "fresh": false,
       "gas": 323000,
-      "measured": 322639,
+      "measured": 322963,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxAddReserve_used_wrapped,token_mtxAddReserve_used_wrapped_reg",
       "fee_extra": {
         "gas": 145000,
@@ -384,8 +384,8 @@
       "entry": "mtxWrapToUA",
       "kind": "token",
       "fresh": true,
-      "gas": 892000,
-      "measured": 891909,
+      "gas": 895000,
+      "measured": 894557,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapToUA_fresh_wrapped,token_mtxWrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 138000,
@@ -397,8 +397,8 @@
       "entry": "mtxWrapToUA",
       "kind": "token",
       "fresh": false,
-      "gas": 794000,
-      "measured": 793989,
+      "gas": 797000,
+      "measured": 796637,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapToUA_used_wrapped,token_mtxWrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 138000,
@@ -411,7 +411,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 358000,
-      "measured": 357133,
+      "measured": 357457,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrap_fresh_wrapped,token_mtxUnwrap_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -429,7 +429,7 @@
       "kind": "token",
       "fresh": false,
       "gas": 260000,
-      "measured": 259213,
+      "measured": 259537,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrap_used_wrapped,token_mtxUnwrap_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -446,8 +446,8 @@
       "entry": "mtxUnwrapLeg",
       "kind": "token",
       "fresh": true,
-      "gas": 358000,
-      "measured": 357924,
+      "gas": 359000,
+      "measured": 358248,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapLeg_fresh_wrapped,token_mtxUnwrapLeg_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -465,7 +465,7 @@
       "kind": "token",
       "fresh": false,
       "gas": 261000,
-      "measured": 260004,
+      "measured": 260328,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapLeg_used_wrapped,token_mtxUnwrapLeg_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -482,8 +482,8 @@
       "entry": "mtxUnwrapToUA",
       "kind": "token",
       "fresh": true,
-      "gas": 491000,
-      "measured": 490528,
+      "gas": 494000,
+      "measured": 493176,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapToUA_fresh_wrapped,token_mtxUnwrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -500,8 +500,8 @@
       "entry": "mtxUnwrapToUA",
       "kind": "token",
       "fresh": false,
-      "gas": 393000,
-      "measured": 392608,
+      "gas": 396000,
+      "measured": 395256,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxUnwrapToUA_used_wrapped,token_mtxUnwrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -519,11 +519,11 @@
       "kind": "zether",
       "fresh": true,
       "gas": 279000,
-      "measured": 278306,
+      "measured": 278630,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxExecuteTransfer_fresh_normal,zether_mtxExecuteTransfer_fresh_normal_reg,zether_mtxExecuteTransfer_fresh_wrapped,zether_mtxExecuteTransfer_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 127000,
-        "measured": 126825,
+        "measured": 126824,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxExecuteTransfer_fee_normal-zether_mtxExecuteTransfer_fresh_normal,zether_mtxExecuteTransfer_fee_normal_reg-zether_mtxExecuteTransfer_fresh_normal_reg,zether_mtxExecuteTransfer_fee_wrapped-zether_mtxExecuteTransfer_fresh_wrapped,zether_mtxExecuteTransfer_fee_wrapped_reg-zether_mtxExecuteTransfer_fresh_wrapped_reg"
       }
     },
@@ -532,11 +532,11 @@
       "kind": "zether",
       "fresh": false,
       "gas": 181000,
-      "measured": 180386,
+      "measured": 180710,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxExecuteTransfer_used_normal,zether_mtxExecuteTransfer_used_normal_reg,zether_mtxExecuteTransfer_used_wrapped,zether_mtxExecuteTransfer_used_wrapped_reg",
       "fee_extra": {
         "gas": 127000,
-        "measured": 126825,
+        "measured": 126824,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxExecuteTransfer_fee_normal-zether_mtxExecuteTransfer_fresh_normal,zether_mtxExecuteTransfer_fee_normal_reg-zether_mtxExecuteTransfer_fresh_normal_reg,zether_mtxExecuteTransfer_fee_wrapped-zether_mtxExecuteTransfer_fresh_wrapped,zether_mtxExecuteTransfer_fee_wrapped_reg-zether_mtxExecuteTransfer_fresh_wrapped_reg"
       }
     },
@@ -544,8 +544,8 @@
       "entry": "mtxPay",
       "kind": "zether",
       "fresh": true,
-      "gas": 289000,
-      "measured": 288980,
+      "gas": 290000,
+      "measured": 289307,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxPay_fresh_normal,zether_mtxPay_fresh_normal_reg,zether_mtxPay_fresh_wrapped,zether_mtxPay_fresh_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -568,7 +568,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 192000,
-      "measured": 191060,
+      "measured": 191387,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxPay_used_normal,zether_mtxPay_used_normal_reg,zether_mtxPay_used_wrapped,zether_mtxPay_used_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -590,8 +590,8 @@
       "entry": "mtxPayWithPayeeFee",
       "kind": "zether",
       "fresh": true,
-      "gas": 433000,
-      "measured": 432937,
+      "gas": 434000,
+      "measured": 433589,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxPayWithPayeeFee_fresh_normal,zether_mtxPayWithPayeeFee_fresh_normal_reg,zether_mtxPayWithPayeeFee_fresh_wrapped,zether_mtxPayWithPayeeFee_fresh_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -609,7 +609,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 336000,
-      "measured": 335017,
+      "measured": 335669,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxPayWithPayeeFee_used_normal,zether_mtxPayWithPayeeFee_used_normal_reg,zether_mtxPayWithPayeeFee_used_wrapped,zether_mtxPayWithPayeeFee_used_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -627,7 +627,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 429000,
-      "measured": 428481,
+      "measured": 428805,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxPayWithTax_fresh_normal_reg,zether_mtxPayWithTax_fresh_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -650,7 +650,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 331000,
-      "measured": 330561,
+      "measured": 330885,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxPayWithTax_used_normal_reg,zether_mtxPayWithTax_used_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -672,16 +672,16 @@
       "entry": "mtxRelayFee",
       "kind": "zether",
       "fresh": true,
-      "gas": 287000,
-      "measured": 286905,
+      "gas": 288000,
+      "measured": 287229,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRelayFee_fresh_normal,zether_mtxRelayFee_fresh_normal_reg,zether_mtxRelayFee_fresh_wrapped,zether_mtxRelayFee_fresh_wrapped_reg"
     },
     {
       "entry": "mtxRelayFee",
       "kind": "zether",
       "fresh": false,
-      "gas": 189000,
-      "measured": 188985,
+      "gas": 190000,
+      "measured": 189309,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRelayFee_used_normal,zether_mtxRelayFee_used_normal_reg,zether_mtxRelayFee_used_wrapped,zether_mtxRelayFee_used_wrapped_reg"
     },
     {
@@ -689,7 +689,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 250000,
-      "measured": 249438,
+      "measured": 249762,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxCancelNonce_fresh_normal,zether_mtxCancelNonce_fresh_normal_reg,zether_mtxCancelNonce_fresh_wrapped,zether_mtxCancelNonce_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -702,7 +702,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 152000,
-      "measured": 151518,
+      "measured": 151842,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxCancelNonce_used_normal,zether_mtxCancelNonce_used_normal_reg,zether_mtxCancelNonce_used_wrapped,zether_mtxCancelNonce_used_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -715,7 +715,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 189000,
-      "measured": 188328,
+      "measured": 188652,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxBurn_fresh_normal,zether_mtxBurn_fresh_normal_reg",
       "fee_extra": {
         "gas": 134000,
@@ -728,7 +728,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 91000,
-      "measured": 90408,
+      "measured": 90732,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxBurn_used_normal,zether_mtxBurn_used_normal_reg",
       "fee_extra": {
         "gas": 134000,
@@ -741,7 +741,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 771000,
-      "measured": 770089,
+      "measured": 770413,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrap_fresh_wrapped,zether_mtxWrap_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 129000,
@@ -754,7 +754,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 673000,
-      "measured": 672169,
+      "measured": 672493,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrap_used_wrapped,zether_mtxWrap_used_wrapped_reg",
       "fee_extra": {
         "gas": 129000,
@@ -766,8 +766,8 @@
       "entry": "mtxWrapLeg",
       "kind": "zether",
       "fresh": true,
-      "gas": 771000,
-      "measured": 770879,
+      "gas": 772000,
+      "measured": 771203,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapLeg_fresh_wrapped,zether_mtxWrapLeg_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 129000,
@@ -779,8 +779,8 @@
       "entry": "mtxWrapLeg",
       "kind": "zether",
       "fresh": false,
-      "gas": 673000,
-      "measured": 672959,
+      "gas": 674000,
+      "measured": 673283,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapLeg_used_wrapped,zether_mtxWrapLeg_used_wrapped_reg",
       "fee_extra": {
         "gas": 129000,
@@ -793,7 +793,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 418000,
-      "measured": 417399,
+      "measured": 417723,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxAddReserve_fresh_wrapped,zether_mtxAddReserve_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -806,7 +806,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 320000,
-      "measured": 319479,
+      "measured": 319803,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxAddReserve_used_wrapped,zether_mtxAddReserve_used_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -818,8 +818,8 @@
       "entry": "mtxWrapToUA",
       "kind": "zether",
       "fresh": true,
-      "gas": 895000,
-      "measured": 894884,
+      "gas": 896000,
+      "measured": 895208,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapToUA_fresh_wrapped,zether_mtxWrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 139000,
@@ -831,8 +831,8 @@
       "entry": "mtxWrapToUA",
       "kind": "zether",
       "fresh": false,
-      "gas": 797000,
-      "measured": 796964,
+      "gas": 798000,
+      "measured": 797288,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapToUA_used_wrapped,zether_mtxWrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 139000,
@@ -845,7 +845,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 360000,
-      "measured": 359135,
+      "measured": 359459,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnwrap_fresh_wrapped,zether_mtxUnwrap_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -858,7 +858,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 262000,
-      "measured": 261215,
+      "measured": 261539,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnwrap_used_wrapped,zether_mtxUnwrap_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -870,8 +870,8 @@
       "entry": "mtxUnwrapLeg",
       "kind": "zether",
       "fresh": true,
-      "gas": 360000,
-      "measured": 359931,
+      "gas": 361000,
+      "measured": 360255,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnwrapLeg_fresh_wrapped,zether_mtxUnwrapLeg_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -884,7 +884,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 263000,
-      "measured": 262011,
+      "measured": 262335,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnwrapLeg_used_wrapped,zether_mtxUnwrapLeg_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -897,7 +897,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 495000,
-      "measured": 494597,
+      "measured": 494921,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnwrapToUA_fresh_wrapped,zether_mtxUnwrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -909,8 +909,8 @@
       "entry": "mtxUnwrapToUA",
       "kind": "zether",
       "fresh": false,
-      "gas": 397000,
-      "measured": 396677,
+      "gas": 398000,
+      "measured": 397001,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnwrapToUA_used_wrapped,zether_mtxUnwrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -923,11 +923,11 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 279000,
-      "measured": 278306,
+      "measured": 278630,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxExecuteTransfer_fresh_normal,pqz_mtxExecuteTransfer_fresh_normal_reg,pqz_mtxExecuteTransfer_fresh_wrapped,pqz_mtxExecuteTransfer_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 127000,
-        "measured": 126825,
+        "measured": 126824,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxExecuteTransfer_fee_normal-pqz_mtxExecuteTransfer_fresh_normal,pqz_mtxExecuteTransfer_fee_normal_reg-pqz_mtxExecuteTransfer_fresh_normal_reg,pqz_mtxExecuteTransfer_fee_wrapped-pqz_mtxExecuteTransfer_fresh_wrapped,pqz_mtxExecuteTransfer_fee_wrapped_reg-pqz_mtxExecuteTransfer_fresh_wrapped_reg"
       }
     },
@@ -936,11 +936,11 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 181000,
-      "measured": 180386,
+      "measured": 180710,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxExecuteTransfer_used_normal,pqz_mtxExecuteTransfer_used_normal_reg,pqz_mtxExecuteTransfer_used_wrapped,pqz_mtxExecuteTransfer_used_wrapped_reg",
       "fee_extra": {
         "gas": 127000,
-        "measured": 126825,
+        "measured": 126824,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxExecuteTransfer_fee_normal-pqz_mtxExecuteTransfer_fresh_normal,pqz_mtxExecuteTransfer_fee_normal_reg-pqz_mtxExecuteTransfer_fresh_normal_reg,pqz_mtxExecuteTransfer_fee_wrapped-pqz_mtxExecuteTransfer_fresh_wrapped,pqz_mtxExecuteTransfer_fee_wrapped_reg-pqz_mtxExecuteTransfer_fresh_wrapped_reg"
       }
     },
@@ -948,8 +948,8 @@
       "entry": "mtxPay",
       "kind": "pqz",
       "fresh": true,
-      "gas": 289000,
-      "measured": 288958,
+      "gas": 290000,
+      "measured": 289285,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPay_fresh_normal,pqz_mtxPay_fresh_normal_reg,pqz_mtxPay_fresh_wrapped,pqz_mtxPay_fresh_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -972,7 +972,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 192000,
-      "measured": 191038,
+      "measured": 191365,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPay_used_normal,pqz_mtxPay_used_normal_reg,pqz_mtxPay_used_wrapped,pqz_mtxPay_used_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -994,8 +994,8 @@
       "entry": "mtxPayWithPayeeFee",
       "kind": "pqz",
       "fresh": true,
-      "gas": 433000,
-      "measured": 432893,
+      "gas": 434000,
+      "measured": 433545,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPayWithPayeeFee_fresh_normal,pqz_mtxPayWithPayeeFee_fresh_normal_reg,pqz_mtxPayWithPayeeFee_fresh_wrapped,pqz_mtxPayWithPayeeFee_fresh_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -1012,8 +1012,8 @@
       "entry": "mtxPayWithPayeeFee",
       "kind": "pqz",
       "fresh": false,
-      "gas": 335000,
-      "measured": 334973,
+      "gas": 336000,
+      "measured": 335625,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPayWithPayeeFee_used_normal,pqz_mtxPayWithPayeeFee_used_normal_reg,pqz_mtxPayWithPayeeFee_used_wrapped,pqz_mtxPayWithPayeeFee_used_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -1031,7 +1031,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 429000,
-      "measured": 428415,
+      "measured": 428739,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPayWithTax_fresh_normal_reg,pqz_mtxPayWithTax_fresh_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -1054,7 +1054,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 331000,
-      "measured": 330495,
+      "measured": 330819,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPayWithTax_used_normal_reg,pqz_mtxPayWithTax_used_wrapped_reg",
       "per_byte": {
         "input": "meta.body",
@@ -1076,16 +1076,16 @@
       "entry": "mtxRelayFee",
       "kind": "pqz",
       "fresh": true,
-      "gas": 287000,
-      "measured": 286794,
+      "gas": 288000,
+      "measured": 287118,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRelayFee_fresh_normal,pqz_mtxRelayFee_fresh_normal_reg,pqz_mtxRelayFee_fresh_wrapped,pqz_mtxRelayFee_fresh_wrapped_reg"
     },
     {
       "entry": "mtxRelayFee",
       "kind": "pqz",
       "fresh": false,
-      "gas": 189000,
-      "measured": 188874,
+      "gas": 190000,
+      "measured": 189198,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRelayFee_used_normal,pqz_mtxRelayFee_used_normal_reg,pqz_mtxRelayFee_used_wrapped,pqz_mtxRelayFee_used_wrapped_reg"
     },
     {
@@ -1093,7 +1093,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 250000,
-      "measured": 249483,
+      "measured": 249807,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxCancelNonce_fresh_normal,pqz_mtxCancelNonce_fresh_normal_reg,pqz_mtxCancelNonce_fresh_wrapped,pqz_mtxCancelNonce_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -1106,7 +1106,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 152000,
-      "measured": 151563,
+      "measured": 151887,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxCancelNonce_used_normal,pqz_mtxCancelNonce_used_normal_reg,pqz_mtxCancelNonce_used_wrapped,pqz_mtxCancelNonce_used_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -1119,7 +1119,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 189000,
-      "measured": 188313,
+      "measured": 188637,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxBurn_fresh_normal,pqz_mtxBurn_fresh_normal_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1132,7 +1132,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 91000,
-      "measured": 90393,
+      "measured": 90717,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxBurn_used_normal,pqz_mtxBurn_used_normal_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1145,7 +1145,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 771000,
-      "measured": 770121,
+      "measured": 770445,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrap_fresh_wrapped,pqz_mtxWrap_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 129000,
@@ -1158,7 +1158,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 673000,
-      "measured": 672201,
+      "measured": 672525,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrap_used_wrapped,pqz_mtxWrap_used_wrapped_reg",
       "fee_extra": {
         "gas": 129000,
@@ -1170,8 +1170,8 @@
       "entry": "mtxWrapLeg",
       "kind": "pqz",
       "fresh": true,
-      "gas": 771000,
-      "measured": 770912,
+      "gas": 772000,
+      "measured": 771236,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapLeg_fresh_wrapped,pqz_mtxWrapLeg_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 129000,
@@ -1183,8 +1183,8 @@
       "entry": "mtxWrapLeg",
       "kind": "pqz",
       "fresh": false,
-      "gas": 673000,
-      "measured": 672992,
+      "gas": 674000,
+      "measured": 673316,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapLeg_used_wrapped,pqz_mtxWrapLeg_used_wrapped_reg",
       "fee_extra": {
         "gas": 129000,
@@ -1197,7 +1197,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 418000,
-      "measured": 417453,
+      "measured": 417777,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxAddReserve_fresh_wrapped,pqz_mtxAddReserve_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -1210,7 +1210,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 320000,
-      "measured": 319533,
+      "measured": 319857,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxAddReserve_used_wrapped,pqz_mtxAddReserve_used_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -1223,7 +1223,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 896000,
-      "measured": 895099,
+      "measured": 895423,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapToUA_fresh_wrapped,pqz_mtxWrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 139000,
@@ -1236,7 +1236,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 798000,
-      "measured": 797179,
+      "measured": 797503,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapToUA_used_wrapped,pqz_mtxWrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 139000,
@@ -1249,7 +1249,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 360000,
-      "measured": 359319,
+      "measured": 359643,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxUnwrap_fresh_wrapped,pqz_mtxUnwrap_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1262,7 +1262,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 262000,
-      "measured": 261399,
+      "measured": 261723,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxUnwrap_used_wrapped,pqz_mtxUnwrap_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1275,7 +1275,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 361000,
-      "measured": 360117,
+      "measured": 360441,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxUnwrapLeg_fresh_wrapped,pqz_mtxUnwrapLeg_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1288,7 +1288,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 263000,
-      "measured": 262197,
+      "measured": 262521,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxUnwrapLeg_used_wrapped,pqz_mtxUnwrapLeg_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1300,8 +1300,8 @@
       "entry": "mtxUnwrapToUA",
       "kind": "pqz",
       "fresh": true,
-      "gas": 495000,
-      "measured": 494890,
+      "gas": 496000,
+      "measured": 495214,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxUnwrapToUA_fresh_wrapped,pqz_mtxUnwrapToUA_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1313,8 +1313,8 @@
       "entry": "mtxUnwrapToUA",
       "kind": "pqz",
       "fresh": false,
-      "gas": 397000,
-      "measured": 396970,
+      "gas": 398000,
+      "measured": 397294,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxUnwrapToUA_used_wrapped,pqz_mtxUnwrapToUA_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -1331,7 +1331,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_fresh_hedera,wallet_mtxSetMandate_fresh_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 48,
+        "measured": 166,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_ua_hedera-wallet_mtxSetMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxSetMandate_ua_mandate-wallet_mtxSetMandate_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1344,7 +1344,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_used_hedera,wallet_mtxSetMandate_used_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 48,
+        "measured": 166,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetMandate_ua_hedera-wallet_mtxSetMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxSetMandate_ua_mandate-wallet_mtxSetMandate_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1357,7 +1357,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_fresh_hedera,wallet_mtxSetPayee_fresh_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 35,
+        "measured": 175,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_ua_hedera-wallet_mtxSetPayee_fresh_hedera-verify_0x0108_delta,wallet_mtxSetPayee_ua_mandate-wallet_mtxSetPayee_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1370,7 +1370,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_used_hedera,wallet_mtxSetPayee_used_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 35,
+        "measured": 175,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxSetPayee_ua_hedera-wallet_mtxSetPayee_fresh_hedera-verify_0x0108_delta,wallet_mtxSetPayee_ua_mandate-wallet_mtxSetPayee_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1383,7 +1383,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_fresh_hedera,wallet_mtxRevokeMandate_fresh_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 36,
+        "measured": 176,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_ua_hedera-wallet_mtxRevokeMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxRevokeMandate_ua_mandate-wallet_mtxRevokeMandate_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1396,7 +1396,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_used_hedera,wallet_mtxRevokeMandate_used_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 36,
+        "measured": 176,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxRevokeMandate_ua_hedera-wallet_mtxRevokeMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxRevokeMandate_ua_mandate-wallet_mtxRevokeMandate_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1414,7 +1414,7 @@
       },
       "ua_extra": {
         "gas": 1000,
-        "measured": 27,
+        "measured": 156,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxExecute_ua_hedera-wallet_mtxExecute_fresh_hedera-verify_0x0108_delta,wallet_mtxExecute_ua_mandate-wallet_mtxExecute_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1432,7 +1432,7 @@
       },
       "ua_extra": {
         "gas": 1000,
-        "measured": 27,
+        "measured": 156,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxExecute_ua_hedera-wallet_mtxExecute_fresh_hedera-verify_0x0108_delta,wallet_mtxExecute_ua_mandate-wallet_mtxExecute_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1445,7 +1445,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_fresh_hedera,wallet_mtxCancelNonce_fresh_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 46,
+        "measured": 164,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_ua_hedera-wallet_mtxCancelNonce_fresh_hedera-verify_0x0108_delta,wallet_mtxCancelNonce_ua_mandate-wallet_mtxCancelNonce_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1458,7 +1458,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_used_hedera,wallet_mtxCancelNonce_used_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 46,
+        "measured": 164,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxCancelNonce_ua_hedera-wallet_mtxCancelNonce_fresh_hedera-verify_0x0108_delta,wallet_mtxCancelNonce_ua_mandate-wallet_mtxCancelNonce_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1481,7 +1481,7 @@
       },
       "ua_extra": {
         "gas": 1000,
-        "measured": 37,
+        "measured": 177,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxPayUnderMandate_ua_hedera-wallet_mtxPayUnderMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxPayUnderMandate_ua_mandate-wallet_mtxPayUnderMandate_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1504,7 +1504,7 @@
       },
       "ua_extra": {
         "gas": 1000,
-        "measured": 37,
+        "measured": 177,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxPayUnderMandate_ua_hedera-wallet_mtxPayUnderMandate_fresh_hedera-verify_0x0108_delta,wallet_mtxPayUnderMandate_ua_mandate-wallet_mtxPayUnderMandate_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1517,7 +1517,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_fresh_hedera,wallet_mtxDelegateRevoke_fresh_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 48,
+        "measured": 166,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_ua_hedera-wallet_mtxDelegateRevoke_fresh_hedera-verify_0x0108_delta,wallet_mtxDelegateRevoke_ua_mandate-wallet_mtxDelegateRevoke_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1530,7 +1530,7 @@
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_used_hedera,wallet_mtxDelegateRevoke_used_mandate",
       "ua_extra": {
         "gas": 1000,
-        "measured": 48,
+        "measured": 166,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#wallet_mtxDelegateRevoke_ua_hedera-wallet_mtxDelegateRevoke_fresh_hedera-verify_0x0108_delta,wallet_mtxDelegateRevoke_ua_mandate-wallet_mtxDelegateRevoke_fresh_mandate-verify_0x0108_delta"
       }
     },
@@ -1539,15 +1539,15 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 250000,
-      "measured": 249857,
+      "measured": 249986,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelNonce_fresh_router"
     },
     {
       "entry": "mtxCancelNonce",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 152000,
-      "measured": 151937,
+      "gas": 153000,
+      "measured": 152066,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelNonce_used_router"
     },
     {
@@ -1555,7 +1555,7 @@
       "kind": "token",
       "fresh": true,
       "gas": 137000,
-      "measured": 136435,
+      "measured": 136759,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelOrder_fresh_normal,token_mtxCancelOrder_fresh_normal_reg,token_mtxCancelOrder_fresh_normal_reg_wo,token_mtxCancelOrder_fresh_normal_wo,token_mtxCancelOrder_fresh_wrapped,token_mtxCancelOrder_fresh_wrapped_reg,token_mtxCancelOrder_fresh_wrapped_reg_wo,token_mtxCancelOrder_fresh_wrapped_wo"
     },
     {
@@ -1563,35 +1563,35 @@
       "kind": "token",
       "fresh": false,
       "gas": 137000,
-      "measured": 136435,
+      "measured": 136759,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxCancelOrder_used_normal,token_mtxCancelOrder_used_normal_reg,token_mtxCancelOrder_used_normal_reg_wo,token_mtxCancelOrder_used_normal_wo,token_mtxCancelOrder_used_wrapped,token_mtxCancelOrder_used_wrapped_reg,token_mtxCancelOrder_used_wrapped_reg_wo,token_mtxCancelOrder_used_wrapped_wo"
     },
     {
       "entry": "mtxInvalidateNonces",
       "kind": "token",
       "fresh": true,
-      "gas": 132000,
-      "measured": 131688,
+      "gas": 133000,
+      "measured": 132015,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxInvalidateNonces_fresh_normal,token_mtxInvalidateNonces_fresh_normal_reg,token_mtxInvalidateNonces_fresh_wrapped,token_mtxInvalidateNonces_fresh_wrapped_reg"
     },
     {
       "entry": "mtxInvalidateNonces",
       "kind": "token",
       "fresh": false,
-      "gas": 132000,
-      "measured": 131688,
+      "gas": 133000,
+      "measured": 132015,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxInvalidateNonces_used_normal,token_mtxInvalidateNonces_used_normal_reg,token_mtxInvalidateNonces_used_wrapped,token_mtxInvalidateNonces_used_wrapped_reg"
     },
     {
       "entry": "mtxWrapOrder",
       "kind": "token",
       "fresh": true,
-      "gas": 762000,
-      "measured": 761806,
+      "gas": 763000,
+      "measured": 762133,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_fresh_wrapped,token_mtxWrapOrder_fresh_wrapped_reg",
       "ua_extra": {
         "gas": 141000,
-        "measured": 140042,
+        "measured": 140038,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_ua_wrapped-token_mtxWrapOrder_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -1599,12 +1599,12 @@
       "entry": "mtxWrapOrder",
       "kind": "token",
       "fresh": false,
-      "gas": 762000,
-      "measured": 761806,
+      "gas": 763000,
+      "measured": 762133,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_used_wrapped,token_mtxWrapOrder_used_wrapped_reg",
       "ua_extra": {
         "gas": 141000,
-        "measured": 140042,
+        "measured": 140038,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#token_mtxWrapOrder_ua_wrapped-token_mtxWrapOrder_fresh_wrapped-verify_0x0108_delta"
       }
     },
@@ -1613,7 +1613,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 137000,
-      "measured": 136457,
+      "measured": 136781,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxCancelOrder_fresh_normal,zether_mtxCancelOrder_fresh_normal_reg,zether_mtxCancelOrder_fresh_normal_reg_wo,zether_mtxCancelOrder_fresh_normal_wo,zether_mtxCancelOrder_fresh_wrapped,zether_mtxCancelOrder_fresh_wrapped_reg,zether_mtxCancelOrder_fresh_wrapped_reg_wo,zether_mtxCancelOrder_fresh_wrapped_wo"
     },
     {
@@ -1621,39 +1621,39 @@
       "kind": "zether",
       "fresh": false,
       "gas": 137000,
-      "measured": 136457,
+      "measured": 136781,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxCancelOrder_used_normal,zether_mtxCancelOrder_used_normal_reg,zether_mtxCancelOrder_used_normal_reg_wo,zether_mtxCancelOrder_used_normal_wo,zether_mtxCancelOrder_used_wrapped,zether_mtxCancelOrder_used_wrapped_reg,zether_mtxCancelOrder_used_wrapped_reg_wo,zether_mtxCancelOrder_used_wrapped_wo"
     },
     {
       "entry": "mtxInvalidateNonces",
       "kind": "zether",
       "fresh": true,
-      "gas": 132000,
-      "measured": 131710,
+      "gas": 133000,
+      "measured": 132037,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxInvalidateNonces_fresh_normal,zether_mtxInvalidateNonces_fresh_normal_reg,zether_mtxInvalidateNonces_fresh_wrapped,zether_mtxInvalidateNonces_fresh_wrapped_reg"
     },
     {
       "entry": "mtxInvalidateNonces",
       "kind": "zether",
       "fresh": false,
-      "gas": 132000,
-      "measured": 131710,
+      "gas": 133000,
+      "measured": 132037,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxInvalidateNonces_used_normal,zether_mtxInvalidateNonces_used_normal_reg,zether_mtxInvalidateNonces_used_wrapped,zether_mtxInvalidateNonces_used_wrapped_reg"
     },
     {
       "entry": "mtxWrapOrder",
       "kind": "zether",
       "fresh": true,
-      "gas": 762000,
-      "measured": 761682,
+      "gas": 763000,
+      "measured": 762009,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapOrder_fresh_wrapped,zether_mtxWrapOrder_fresh_wrapped_reg"
     },
     {
       "entry": "mtxWrapOrder",
       "kind": "zether",
       "fresh": false,
-      "gas": 762000,
-      "measured": 761682,
+      "gas": 763000,
+      "measured": 762009,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapOrder_used_wrapped,zether_mtxWrapOrder_used_wrapped_reg"
     },
     {
@@ -1661,7 +1661,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 137000,
-      "measured": 136435,
+      "measured": 136759,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxCancelOrder_fresh_normal,pqz_mtxCancelOrder_fresh_normal_reg,pqz_mtxCancelOrder_fresh_normal_reg_wo,pqz_mtxCancelOrder_fresh_normal_wo,pqz_mtxCancelOrder_fresh_wrapped,pqz_mtxCancelOrder_fresh_wrapped_reg,pqz_mtxCancelOrder_fresh_wrapped_reg_wo,pqz_mtxCancelOrder_fresh_wrapped_wo"
     },
     {
@@ -1669,39 +1669,39 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 137000,
-      "measured": 136435,
+      "measured": 136759,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxCancelOrder_used_normal,pqz_mtxCancelOrder_used_normal_reg,pqz_mtxCancelOrder_used_normal_reg_wo,pqz_mtxCancelOrder_used_normal_wo,pqz_mtxCancelOrder_used_wrapped,pqz_mtxCancelOrder_used_wrapped_reg,pqz_mtxCancelOrder_used_wrapped_reg_wo,pqz_mtxCancelOrder_used_wrapped_wo"
     },
     {
       "entry": "mtxInvalidateNonces",
       "kind": "pqz",
       "fresh": true,
-      "gas": 132000,
-      "measured": 131732,
+      "gas": 133000,
+      "measured": 132059,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxInvalidateNonces_fresh_normal,pqz_mtxInvalidateNonces_fresh_normal_reg,pqz_mtxInvalidateNonces_fresh_wrapped,pqz_mtxInvalidateNonces_fresh_wrapped_reg"
     },
     {
       "entry": "mtxInvalidateNonces",
       "kind": "pqz",
       "fresh": false,
-      "gas": 132000,
-      "measured": 131732,
+      "gas": 133000,
+      "measured": 132059,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxInvalidateNonces_used_normal,pqz_mtxInvalidateNonces_used_normal_reg,pqz_mtxInvalidateNonces_used_wrapped,pqz_mtxInvalidateNonces_used_wrapped_reg"
     },
     {
       "entry": "mtxWrapOrder",
       "kind": "pqz",
       "fresh": true,
-      "gas": 762000,
-      "measured": 761750,
+      "gas": 763000,
+      "measured": 762077,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapOrder_fresh_wrapped,pqz_mtxWrapOrder_fresh_wrapped_reg"
     },
     {
       "entry": "mtxWrapOrder",
       "kind": "pqz",
       "fresh": false,
-      "gas": 762000,
-      "measured": 761750,
+      "gas": 763000,
+      "measured": 762077,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapOrder_used_wrapped,pqz_mtxWrapOrder_used_wrapped_reg"
     },
     {
@@ -1863,7 +1863,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 291000,
-      "measured": 290226,
+      "measured": 290355,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxAcceptAdmin_fresh_dex,gov_router_mtxAcceptAdmin_fresh_normal,gov_router_mtxAcceptAdmin_fresh_regulated,gov_router_mtxAcceptAdmin_fresh_wrapped"
     },
     {
@@ -1871,7 +1871,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 193000,
-      "measured": 192306,
+      "measured": 192435,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxAcceptAdmin_used_dex,gov_router_mtxAcceptAdmin_used_normal,gov_router_mtxAcceptAdmin_used_regulated,gov_router_mtxAcceptAdmin_used_wrapped"
     },
     {
@@ -1927,31 +1927,31 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 197000,
-      "measured": 196842,
+      "measured": 196971,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelGrant_fresh_normal,gov_router_mtxCancelGrant_fresh_regulated"
     },
     {
       "entry": "mtxCancelGrant",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 99000,
-      "measured": 98922,
+      "gas": 100000,
+      "measured": 99051,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelGrant_used_normal,gov_router_mtxCancelGrant_used_regulated"
     },
     {
       "entry": "mtxCancelRate",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 178000,
-      "measured": 177912,
+      "gas": 179000,
+      "measured": 178041,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelRate_fresh_wrapped"
     },
     {
       "entry": "mtxCancelRate",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 80000,
-      "measured": 79992,
+      "gas": 81000,
+      "measured": 80121,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelRate_used_wrapped"
     },
     {
@@ -1959,7 +1959,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 4346000,
-      "measured": 4345157,
+      "measured": 4345286,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateDex_fresh_dex"
     },
     {
@@ -1967,7 +1967,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 4248000,
-      "measured": 4247237,
+      "measured": 4247366,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateDex_used_dex"
     },
     {
@@ -1975,7 +1975,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 1912000,
-      "measured": 1911596,
+      "measured": 1911725,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateInstance_fresh_note"
     },
     {
@@ -1983,7 +1983,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 1814000,
-      "measured": 1813676,
+      "measured": 1813805,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateInstance_used_note"
     },
     {
@@ -1991,7 +1991,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 2272000,
-      "measured": 2271379,
+      "measured": 2271508,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_fresh_normal"
     },
     {
@@ -1999,7 +1999,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 2174000,
-      "measured": 2173459,
+      "measured": 2173588,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_used_normal"
     },
     {
@@ -2055,7 +2055,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 176000,
-      "measured": 175762,
+      "measured": 175891,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDisableFeature_fresh_normal,gov_router_mtxDisableFeature_fresh_regulated"
     },
     {
@@ -2063,7 +2063,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 78000,
-      "measured": 77842,
+      "measured": 77971,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDisableFeature_used_normal,gov_router_mtxDisableFeature_used_regulated"
     },
     {
@@ -2071,7 +2071,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 178000,
-      "measured": 177604,
+      "measured": 177733,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDisableWrap_fresh_wrapped"
     },
     {
@@ -2079,7 +2079,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 80000,
-      "measured": 79684,
+      "measured": 79813,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDisableWrap_used_wrapped"
     },
     {
@@ -2087,7 +2087,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 287000,
-      "measured": 286319,
+      "measured": 286448,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxEnableFeature_fresh_regulated"
     },
     {
@@ -2095,7 +2095,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 189000,
-      "measured": 188399,
+      "measured": 188528,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxEnableFeature_used_regulated"
     },
     {
@@ -2103,7 +2103,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 205000,
-      "measured": 204609,
+      "measured": 204738,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxExecuteRate_fresh_wrapped"
     },
     {
@@ -2111,7 +2111,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 107000,
-      "measured": 106689,
+      "measured": 106818,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxExecuteRate_used_wrapped"
     },
     {
@@ -2119,7 +2119,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 422000,
-      "measured": 421102,
+      "measured": 421231,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxForceTransfer_fresh_regulated"
     },
     {
@@ -2127,23 +2127,23 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 324000,
-      "measured": 323182,
+      "measured": 323311,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxForceTransfer_used_regulated"
     },
     {
       "entry": "mtxFreeze",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 392000,
-      "measured": 391891,
+      "gas": 393000,
+      "measured": 392020,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxFreeze_fresh_regulated"
     },
     {
       "entry": "mtxFreeze",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 294000,
-      "measured": 293971,
+      "gas": 295000,
+      "measured": 294100,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxFreeze_used_regulated"
     },
     {
@@ -2151,7 +2151,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 514000,
-      "measured": 513223,
+      "measured": 513352,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxGrantRole_fresh_normal,gov_router_mtxGrantRole_fresh_regulated"
     },
     {
@@ -2159,7 +2159,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 416000,
-      "measured": 415303,
+      "measured": 415432,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxGrantRole_used_normal,gov_router_mtxGrantRole_used_regulated"
     },
     {
@@ -2167,7 +2167,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 380000,
-      "measured": 379225,
+      "measured": 379354,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxMint_fresh_normal,gov_router_mtxMint_fresh_regulated"
     },
     {
@@ -2175,7 +2175,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 282000,
-      "measured": 281305,
+      "measured": 281434,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxMint_used_normal,gov_router_mtxMint_used_regulated"
     },
     {
@@ -2183,7 +2183,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 405000,
-      "measured": 404255,
+      "measured": 404384,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxMintToUA_fresh_normal,gov_router_mtxMintToUA_fresh_regulated"
     },
     {
@@ -2191,7 +2191,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 307000,
-      "measured": 306335,
+      "measured": 306464,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxMintToUA_used_normal,gov_router_mtxMintToUA_used_regulated"
     },
     {
@@ -2199,7 +2199,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 299000,
-      "measured": 298193,
+      "measured": 298322,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxOperatorTransfer_fresh_regulated"
     },
     {
@@ -2207,7 +2207,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 201000,
-      "measured": 200273,
+      "measured": 200402,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxOperatorTransfer_used_regulated"
     },
     {
@@ -2215,7 +2215,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 287000,
-      "measured": 286570,
+      "measured": 286699,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPause_fresh_regulated"
     },
     {
@@ -2223,7 +2223,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 189000,
-      "measured": 188650,
+      "measured": 188779,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPause_used_regulated"
     },
     {
@@ -2231,7 +2231,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 164000,
-      "measured": 163765,
+      "measured": 163894,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzCancelVerifier_fresh_pqz"
     },
     {
@@ -2239,7 +2239,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 66000,
-      "measured": 65845,
+      "measured": 65974,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzCancelVerifier_used_pqz"
     },
     {
@@ -2247,7 +2247,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 303000,
-      "measured": 302287,
+      "measured": 302416,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzRevokeVerifier_fresh_pqz"
     },
     {
@@ -2255,23 +2255,23 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 205000,
-      "measured": 204367,
+      "measured": 204496,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzRevokeVerifier_used_pqz"
     },
     {
       "entry": "mtxPqzSetVerifier",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 301000,
-      "measured": 300901,
+      "gas": 302000,
+      "measured": 301030,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzSetVerifier_fresh_pqz"
     },
     {
       "entry": "mtxPqzSetVerifier",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 203000,
-      "measured": 202981,
+      "gas": 204000,
+      "measured": 203110,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzSetVerifier_used_pqz"
     },
     {
@@ -2279,7 +2279,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 286000,
-      "measured": 285290,
+      "measured": 285419,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxProposeRate_fresh_wrapped"
     },
     {
@@ -2287,7 +2287,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 188000,
-      "measured": 187370,
+      "measured": 187499,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxProposeRate_used_wrapped"
     },
     {
@@ -2342,8 +2342,8 @@
       "entry": "mtxRecordOrder",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 607000,
-      "measured": 606981,
+      "gas": 608000,
+      "measured": 607110,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRecordOrder_fresh_regulated"
     },
     {
@@ -2351,15 +2351,15 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 510000,
-      "measured": 509061,
+      "measured": 509190,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRecordOrder_used_regulated"
     },
     {
       "entry": "mtxRenounceAdmin",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 188000,
-      "measured": 187943,
+      "gas": 189000,
+      "measured": 188072,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRenounceAdmin_fresh_normal,gov_router_mtxRenounceAdmin_fresh_regulated"
     },
     {
@@ -2367,7 +2367,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 91000,
-      "measured": 90023,
+      "measured": 90152,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRenounceAdmin_used_normal,gov_router_mtxRenounceAdmin_used_regulated"
     },
     {
@@ -2375,7 +2375,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 304000,
-      "measured": 303241,
+      "measured": 303370,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRenounceRole_fresh_normal,gov_router_mtxRenounceRole_fresh_regulated"
     },
     {
@@ -2383,7 +2383,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 206000,
-      "measured": 205321,
+      "measured": 205450,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRenounceRole_used_normal,gov_router_mtxRenounceRole_used_regulated"
     },
     {
@@ -2407,7 +2407,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 208000,
-      "measured": 207038,
+      "measured": 207167,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeOrder_fresh_regulated"
     },
     {
@@ -2415,7 +2415,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 110000,
-      "measured": 109118,
+      "measured": 109247,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeOrder_used_regulated"
     },
     {
@@ -2423,7 +2423,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 278000,
-      "measured": 277372,
+      "measured": 277501,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeRole_fresh_normal,gov_router_mtxRevokeRole_fresh_regulated"
     },
     {
@@ -2431,7 +2431,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 180000,
-      "measured": 179452,
+      "measured": 179581,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeRole_used_normal,gov_router_mtxRevokeRole_used_regulated"
     },
     {
@@ -2439,7 +2439,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 273000,
-      "measured": 272133,
+      "measured": 272262,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_fresh_regulated"
     },
     {
@@ -2447,7 +2447,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 175000,
-      "measured": 174213,
+      "measured": 174342,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_used_regulated"
     },
     {
@@ -2455,7 +2455,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 900000,
-      "measured": 899162,
+      "measured": 899291,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAuditorKey_fresh_zether"
     },
     {
@@ -2463,7 +2463,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 802000,
-      "measured": 801242,
+      "measured": 801371,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAuditorKey_used_zether"
     },
     {
@@ -2519,7 +2519,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 175000,
-      "measured": 174197,
+      "measured": 174326,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_fresh_regulated"
     },
     {
@@ -2527,7 +2527,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 77000,
-      "measured": 76277,
+      "measured": 76406,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_used_regulated"
     },
     {
@@ -2535,7 +2535,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 269000,
-      "measured": 268070,
+      "measured": 268199,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetExchangeTarget_fresh_dex"
     },
     {
@@ -2543,7 +2543,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 171000,
-      "measured": 170150,
+      "measured": 170279,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetExchangeTarget_used_dex"
     },
     {
@@ -2551,7 +2551,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 171000,
-      "measured": 170213,
+      "measured": 170342,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetFeeSplit_fresh_dex"
     },
     {
@@ -2559,23 +2559,23 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 73000,
-      "measured": 72293,
+      "measured": 72422,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetFeeSplit_used_dex"
     },
     {
       "entry": "mtxSetGrant",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 422000,
-      "measured": 421876,
+      "gas": 423000,
+      "measured": 422005,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetGrant_fresh_normal,gov_router_mtxSetGrant_fresh_regulated"
     },
     {
       "entry": "mtxSetGrant",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 324000,
-      "measured": 323956,
+      "gas": 325000,
+      "measured": 324085,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetGrant_used_normal,gov_router_mtxSetGrant_used_regulated"
     },
     {
@@ -2599,7 +2599,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 170000,
-      "measured": 169361,
+      "measured": 169490,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetListedOnly_fresh_dex"
     },
     {
@@ -2607,7 +2607,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 72000,
-      "measured": 71441,
+      "measured": 71570,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetListedOnly_used_dex"
     },
     {
@@ -2615,7 +2615,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 716000,
-      "measured": 715708,
+      "measured": 715824,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMarket_fresh_dex"
     },
     {
@@ -2623,7 +2623,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 618000,
-      "measured": 617788,
+      "measured": 617904,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMarket_used_dex"
     },
     {
@@ -2631,7 +2631,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 181000,
-      "measured": 180025,
+      "measured": 180154,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMaxSupply_fresh_hybrid"
     },
     {
@@ -2639,7 +2639,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 83000,
-      "measured": 82105,
+      "measured": 82234,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMaxSupply_used_hybrid"
     },
     {
@@ -2647,31 +2647,31 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 278000,
-      "measured": 277837,
+      "measured": 277966,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMaxWrapSupply_fresh_hybrid"
     },
     {
       "entry": "mtxSetMaxWrapSupply",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 180000,
-      "measured": 179917,
+      "gas": 181000,
+      "measured": 180046,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMaxWrapSupply_used_hybrid"
     },
     {
       "entry": "mtxSetProofStore",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 174000,
-      "measured": 173878,
+      "gas": 175000,
+      "measured": 174007,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetProofStore_fresh_pqz"
     },
     {
       "entry": "mtxSetProofStore",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 76000,
-      "measured": 75958,
+      "gas": 77000,
+      "measured": 76087,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetProofStore_used_pqz"
     },
     {
@@ -2679,7 +2679,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 277000,
-      "measured": 276011,
+      "measured": 276140,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRate_fresh_regulated"
     },
     {
@@ -2687,23 +2687,23 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 179000,
-      "measured": 178091,
+      "measured": 178220,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRate_used_regulated"
     },
     {
       "entry": "mtxSetTaxRecipient",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 179000,
-      "measured": 178877,
+      "gas": 180000,
+      "measured": 179006,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRecipient_fresh_regulated"
     },
     {
       "entry": "mtxSetTaxRecipient",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 81000,
-      "measured": 80957,
+      "gas": 82000,
+      "measured": 81086,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRecipient_used_regulated"
     },
     {
@@ -2726,16 +2726,16 @@
       "entry": "mtxSetVerifierFee",
       "kind": "gov_router",
       "fresh": true,
-      "gas": 183000,
-      "measured": 182882,
+      "gas": 184000,
+      "measured": 183011,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetVerifierFee_fresh_pqz"
     },
     {
       "entry": "mtxSetVerifierFee",
       "kind": "gov_router",
       "fresh": false,
-      "gas": 85000,
-      "measured": 84962,
+      "gas": 86000,
+      "measured": 85091,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetVerifierFee_used_pqz"
     },
     {
@@ -2743,7 +2743,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 444000,
-      "measured": 443522,
+      "measured": 443651,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_fresh_hybrid"
     },
     {
@@ -2751,7 +2751,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 346000,
-      "measured": 345602,
+      "measured": 345731,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_used_hybrid"
     },
     {
@@ -2759,7 +2759,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 274000,
-      "measured": 273518,
+      "measured": 273647,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapMember_fresh_hybrid"
     },
     {
@@ -2767,7 +2767,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 176000,
-      "measured": 175598,
+      "measured": 175727,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapMember_used_hybrid"
     },
     {
@@ -2775,7 +2775,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 270000,
-      "measured": 269178,
+      "measured": 269307,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxTransferAdmin_fresh_dex,gov_router_mtxTransferAdmin_fresh_normal,gov_router_mtxTransferAdmin_fresh_regulated,gov_router_mtxTransferAdmin_fresh_wrapped"
     },
     {
@@ -2783,7 +2783,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 172000,
-      "measured": 171258,
+      "measured": 171387,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxTransferAdmin_used_dex,gov_router_mtxTransferAdmin_used_normal,gov_router_mtxTransferAdmin_used_regulated,gov_router_mtxTransferAdmin_used_wrapped"
     },
     {
@@ -2791,7 +2791,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 181000,
-      "measured": 180504,
+      "measured": 180633,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxUnfreeze_fresh_regulated"
     },
     {
@@ -2799,7 +2799,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 83000,
-      "measured": 82584,
+      "measured": 82713,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxUnfreeze_used_regulated"
     },
     {
@@ -2807,7 +2807,7 @@
       "kind": "gov_router",
       "fresh": true,
       "gas": 188000,
-      "measured": 187461,
+      "measured": 187590,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxUnpause_fresh_regulated"
     },
     {
@@ -2815,7 +2815,7 @@
       "kind": "gov_router",
       "fresh": false,
       "gas": 90000,
-      "measured": 89541,
+      "measured": 89670,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxUnpause_used_regulated"
     },
     {
@@ -2823,7 +2823,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 906000,
-      "measured": 905039,
+      "measured": 905363,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxShield_fresh_normal,zether_mtxShield_fresh_normal_reg,zether_mtxShield_fresh_wrapped,zether_mtxShield_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -2836,7 +2836,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 808000,
-      "measured": 807119,
+      "measured": 807443,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxShield_used_normal,zether_mtxShield_used_normal_reg,zether_mtxShield_used_wrapped,zether_mtxShield_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -2849,7 +2849,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 979000,
-      "measured": 978356,
+      "measured": 978680,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapShield_fresh_wrapped,zether_mtxWrapShield_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 146000,
@@ -2862,7 +2862,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 881000,
-      "measured": 880436,
+      "measured": 880760,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxWrapShield_used_wrapped,zether_mtxWrapShield_used_wrapped_reg",
       "fee_extra": {
         "gas": 146000,
@@ -2875,7 +2875,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 5475000,
-      "measured": 5474504,
+      "measured": 5474831,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferSingle_fresh_normal,zether_mtxConfidentialTransferSingle_fresh_normal_reg,zether_mtxConfidentialTransferSingle_fresh_wrapped,zether_mtxConfidentialTransferSingle_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 148000,
@@ -2888,7 +2888,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 5377000,
-      "measured": 5376584,
+      "measured": 5376911,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferSingle_used_normal,zether_mtxConfidentialTransferSingle_used_normal_reg,zether_mtxConfidentialTransferSingle_used_wrapped,zether_mtxConfidentialTransferSingle_used_wrapped_reg",
       "fee_extra": {
         "gas": 148000,
@@ -2901,7 +2901,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 1904000,
-      "measured": 1903027,
+      "measured": 1903353,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshield_fresh_normal,zether_mtxUnshield_fresh_normal_reg,zether_mtxUnshield_fresh_wrapped,zether_mtxUnshield_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 141000,
@@ -2914,7 +2914,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 1806000,
-      "measured": 1805107,
+      "measured": 1805433,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshield_used_normal,zether_mtxUnshield_used_normal_reg,zether_mtxUnshield_used_wrapped,zether_mtxUnshield_used_wrapped_reg",
       "fee_extra": {
         "gas": 141000,
@@ -2926,12 +2926,12 @@
       "entry": "mtxUnshieldUnwrap",
       "kind": "zether",
       "fresh": true,
-      "gas": 1966000,
-      "measured": 1965827,
+      "gas": 1967000,
+      "measured": 1966153,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshieldUnwrap_fresh_wrapped,zether_mtxUnshieldUnwrap_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 148000,
-        "measured": 147580,
+        "measured": 147579,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshieldUnwrap_fee_wrapped-zether_mtxUnshieldUnwrap_fresh_wrapped,zether_mtxUnshieldUnwrap_fee_wrapped_reg-zether_mtxUnshieldUnwrap_fresh_wrapped_reg"
       }
     },
@@ -2939,12 +2939,12 @@
       "entry": "mtxUnshieldUnwrap",
       "kind": "zether",
       "fresh": false,
-      "gas": 1868000,
-      "measured": 1867907,
+      "gas": 1869000,
+      "measured": 1868233,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshieldUnwrap_used_wrapped,zether_mtxUnshieldUnwrap_used_wrapped_reg",
       "fee_extra": {
         "gas": 148000,
-        "measured": 147580,
+        "measured": 147579,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxUnshieldUnwrap_fee_wrapped-zether_mtxUnshieldUnwrap_fresh_wrapped,zether_mtxUnshieldUnwrap_fee_wrapped_reg-zether_mtxUnshieldUnwrap_fresh_wrapped_reg"
       }
     },
@@ -2953,7 +2953,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 926000,
-      "measured": 925566,
+      "measured": 925890,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOver_fresh_normal,zether_mtxRollOver_fresh_normal_reg,zether_mtxRollOver_fresh_wrapped,zether_mtxRollOver_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -2966,7 +2966,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 828000,
-      "measured": 827646,
+      "measured": 827970,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOver_used_normal,zether_mtxRollOver_used_normal_reg,zether_mtxRollOver_used_wrapped,zether_mtxRollOver_used_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -2978,8 +2978,8 @@
       "entry": "mtxRollOverSigned",
       "kind": "zether",
       "fresh": true,
-      "gas": 993000,
-      "measured": 992945,
+      "gas": 994000,
+      "measured": 993269,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverSigned_fresh_normal,zether_mtxRollOverSigned_fresh_normal_reg,zether_mtxRollOverSigned_fresh_wrapped,zether_mtxRollOverSigned_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -2992,7 +2992,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 896000,
-      "measured": 895025,
+      "measured": 895349,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverSigned_used_normal,zether_mtxRollOverSigned_used_normal_reg,zether_mtxRollOverSigned_used_wrapped,zether_mtxRollOverSigned_used_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -3005,7 +3005,7 @@
       "kind": "zether",
       "fresh": true,
       "gas": 340000,
-      "measured": 339004,
+      "measured": 339328,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxSetRollOverMode_fresh_normal,zether_mtxSetRollOverMode_fresh_normal_reg,zether_mtxSetRollOverMode_fresh_wrapped,zether_mtxSetRollOverMode_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -3018,7 +3018,7 @@
       "kind": "zether",
       "fresh": false,
       "gas": 242000,
-      "measured": 241084,
+      "measured": 241408,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxSetRollOverMode_used_normal,zether_mtxSetRollOverMode_used_normal_reg,zether_mtxSetRollOverMode_used_wrapped,zether_mtxSetRollOverMode_used_wrapped_reg",
       "fee_extra": {
         "gas": 150000,
@@ -3030,8 +3030,8 @@
       "entry": "mtxShield",
       "kind": "pqz",
       "fresh": true,
-      "gas": 451000,
-      "measured": 450757,
+      "gas": 452000,
+      "measured": 451081,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxShield_fresh_normal,pqz_mtxShield_fresh_normal_reg,pqz_mtxShield_fresh_wrapped,pqz_mtxShield_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -3043,8 +3043,8 @@
       "entry": "mtxShield",
       "kind": "pqz",
       "fresh": false,
-      "gas": 353000,
-      "measured": 352837,
+      "gas": 354000,
+      "measured": 353161,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxShield_used_normal,pqz_mtxShield_used_normal_reg,pqz_mtxShield_used_wrapped,pqz_mtxShield_used_wrapped_reg",
       "fee_extra": {
         "gas": 134000,
@@ -3056,8 +3056,8 @@
       "entry": "mtxWrapShield",
       "kind": "pqz",
       "fresh": true,
-      "gas": 523000,
-      "measured": 522699,
+      "gas": 524000,
+      "measured": 523023,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapShield_fresh_wrapped,pqz_mtxWrapShield_fresh_wrapped_reg",
       "fee_extra": {
         "gas": 146000,
@@ -3069,8 +3069,8 @@
       "entry": "mtxWrapShield",
       "kind": "pqz",
       "fresh": false,
-      "gas": 425000,
-      "measured": 424779,
+      "gas": 426000,
+      "measured": 425103,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxWrapShield_used_wrapped,pqz_mtxWrapShield_used_wrapped_reg",
       "fee_extra": {
         "gas": 146000,
@@ -3083,7 +3083,7 @@
       "kind": "pqz",
       "fresh": true,
       "gas": 23292000,
-      "measured": 23291184,
+      "measured": 23291508,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPrepareAcc_fresh_normal,pqz_mtxPrepareAcc_fresh_normal_half1,pqz_mtxPrepareAcc_fresh_normal_reg,pqz_mtxPrepareAcc_fresh_normal_reg_half1,pqz_mtxPrepareAcc_fresh_wrapped,pqz_mtxPrepareAcc_fresh_wrapped_half1,pqz_mtxPrepareAcc_fresh_wrapped_reg,pqz_mtxPrepareAcc_fresh_wrapped_reg_half1",
       "fee_extra": {
         "gas": 150000,
@@ -3096,7 +3096,7 @@
       "kind": "pqz",
       "fresh": false,
       "gas": 23194000,
-      "measured": 23193264,
+      "measured": 23193588,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxPrepareAcc_used_normal,pqz_mtxPrepareAcc_used_normal_half1,pqz_mtxPrepareAcc_used_normal_reg,pqz_mtxPrepareAcc_used_normal_reg_half1,pqz_mtxPrepareAcc_used_wrapped,pqz_mtxPrepareAcc_used_wrapped_half1,pqz_mtxPrepareAcc_used_wrapped_reg,pqz_mtxPrepareAcc_used_wrapped_reg_half1",
       "fee_extra": {
         "gas": 150000,
@@ -3116,70 +3116,70 @@
     {
       "signer": 256,
       "gas": 34000,
-      "measured": 33799,
+      "measured": 33670,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0100_delta",
       "sig_bytes": 608
     },
     {
       "signer": 257,
       "gas": 19000,
-      "measured": 18503,
+      "measured": 18374,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta",
       "sig_bytes": 128
     },
     {
       "signer": 258,
-      "gas": 180000,
-      "measured": 179084,
+      "gas": 179000,
+      "measured": 178955,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0102_delta",
       "sig_bytes": 96
     },
     {
       "signer": 259,
       "gas": 20000,
-      "measured": 19296,
+      "measured": 19167,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0103_delta",
       "sig_bytes": 96
     },
     {
       "signer": 260,
-      "gas": 38000,
-      "measured": 37007,
+      "gas": 37000,
+      "measured": 36878,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0104_delta",
       "sig_bytes": 160
     },
     {
       "signer": 261,
       "gas": 49000,
-      "measured": 48966,
+      "measured": 48837,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0105_delta",
       "sig_bytes": 288
     },
     {
       "signer": 262,
       "gas": 172000,
-      "measured": 171641,
+      "measured": 171512,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0106_delta",
       "sig_bytes": 384
     },
     {
       "signer": 263,
       "gas": 155000,
-      "measured": 154250,
+      "measured": 154121,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0107_delta",
       "sig_bytes": 192
     },
     {
       "signer": 264,
       "gas": 15000,
-      "measured": 14188,
+      "measured": 14059,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0108_delta",
       "sig_bytes": 160
     },
     {
       "signer": 304,
       "gas": 80000,
-      "measured": 79837,
+      "measured": 79708,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0130_delta",
       "sig_bytes": 2432,
       "stand_in": "ML-DSA-44 on a GasBurner standing in for its precompile (SCaaS testnet address 0x...5caa0012) at the calibrated 59,000 + 6 a message word; a chain without the precompile runs the registry's cached path, far dearer"
@@ -3187,7 +3187,7 @@
     {
       "signer": 305,
       "gas": 123000,
-      "measured": 122302,
+      "measured": 122173,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0131_delta",
       "sig_bytes": 3328,
       "stand_in": "ML-DSA-65 on a GasBurner standing in for its precompile (0x...5caa0013) at the calibrated 100,000 + 6 a message word; a chain without the precompile runs the registry's cached path, far dearer"
@@ -3195,7 +3195,7 @@
     {
       "signer": 306,
       "gas": 2355000,
-      "measured": 2354624,
+      "measured": 2354495,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta",
       "sig_bytes": 672,
       "margin": 1000
@@ -3203,14 +3203,14 @@
     {
       "signer": 307,
       "gas": 1339000,
-      "measured": 1338149,
+      "measured": 1338020,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0133_delta",
       "sig_bytes": 7872
     },
     {
       "signer": 308,
       "gas": 160000,
-      "measured": 159204,
+      "measured": 159075,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0134_delta",
       "sig_bytes": 4640,
       "stand_in": "ML-DSA-87 on a GasBurner standing in for its precompile (0x...5caa0014) at the calibrated 135,000 + 6 a message word; the kind is enabled only where a precompile verifies it (CTR-UA-39)"
@@ -3218,7 +3218,7 @@
     {
       "signer": 309,
       "gas": 4824000,
-      "measured": 4823467,
+      "measured": 4823338,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0135_delta",
       "sig_bytes": 1280,
       "margin": 1000
@@ -3226,7 +3226,7 @@
     {
       "signer": 321,
       "gas": 52000,
-      "measured": 51229,
+      "measured": 51100,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0141_delta",
       "sig_bytes": 160
     }

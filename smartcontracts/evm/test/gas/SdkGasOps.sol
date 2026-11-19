@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Test, Vm} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Test.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
@@ -12,6 +12,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {MtxHash} from "../helpers/MtxHash.sol";
+import {SdkGasDeploy} from "./SdkGasDeploy.sol";
 
 interface ISdkGasNonce {
     function mtxNonce(bytes32 from, uint256 batch) external view returns (uint256);
@@ -40,7 +41,7 @@ interface ISdkGasCancel {
 ///         (default the pin file) instead; run it with `--threads 1`. Keys: `<kind>_<entry>_<fresh|used>_<variant>`, and for
 ///         the `PayMeta` body's per-byte coefficient (owner 2026-11-19, ruling B) `<kind>_<entry>_body<bytes>_<variant>` (a
 ///         saved record, `payNo` set, on a fresh lane) and `<kind>_<entry>_saved_<variant>` (the same, empty body).
-abstract contract SdkGasRows is Test {
+abstract contract SdkGasRows is SdkGasDeploy {
     string internal constant SDK_GAS = "test/vectors/sdk_gas.json";
     address internal constant SG_RELAYER = address(0x5EAD);
     address internal constant SG_PAYEE = address(0xFA11);
@@ -242,6 +243,36 @@ abstract contract SdkGasOps is SdkGasRows {
 
     function _sgFrom() internal view returns (bytes32) {
         return sgKind == 0 ? MetaTxLib.pad(vm.addr(sgPk)) : UAKinds.uaOf(sgKind, sgKeyData);
+    }
+
+    /// A1's derived reference signer: secp256k1 (0x0108), forge-signable by `vm.sign`.
+    uint256 internal constant SG_UA_SK = 0x5A3B10;
+
+    /// The UA of `kind` (P-256, ed25519, secp256k1) from secret `sk`, registered on the registry `r` with its PoP, no
+    /// attributes: its id and key data.
+    function _sgRegisterOn(address r, uint16 kind, uint256 sk) internal returns (bytes32 ua, bytes memory k) {
+        if (kind == UAKinds.P256) {
+            (uint256 x, uint256 y) = vm.publicKeyP256(sk);
+            k = abi.encodePacked(x, y);
+        } else if (kind == UAKinds.ED25519) {
+            k = abi.encodePacked(vm.publicKeyEd25519(bytes32(sk)));
+        } else {
+            Vm.Wallet memory w = vm.createWallet(sk);
+            k = abi.encodePacked(w.publicKeyX, w.publicKeyY);
+        }
+        ua = UAKinds.uaOf(kind, k);
+        IUARegistry.UAAttrs memory none;
+        bytes32 d = UAKinds.registrationDigest(ua, kind, 0, UAKinds.kemRecordHash(ua, 0, UAKinds.kemPk(none.kem)), 0);
+        bytes memory pop = _sgUaSign(kind, sk, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, d));
+        assertEq(IUARegistry(r).register(kind, k, none, pop, ""), ua, "the UA registered");
+    }
+
+    /// A1: the derived reference signer (secp256k1 `SG_UA_SK`) registered on `r`; the fixture gives it what the native
+    /// signer holds.
+    function _sgUaSignerOn(address r) internal returns (bytes32 ua) {
+        bytes memory k;
+        (ua, k) = _sgRegisterOn(r, UAKinds.SECP256K1, SG_UA_SK);
+        (sgUaKind, sgUaKey, sgUaSk) = (UAKinds.SECP256K1, k, SG_UA_SK);
     }
 
     /// The signature of UA kind `kind` (P-256 low-s over sha256, ed25519, secp256k1 `r ‖ s ‖ v`) by `sk` over `m`.

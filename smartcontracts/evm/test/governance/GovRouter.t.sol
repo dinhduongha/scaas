@@ -162,7 +162,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     function setUp() public virtual override {
         super.setUp();
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, _mockPqCfg());
-        router = new GovernanceRouter(chainUidA, PREG, address(0), false);
+        router = new GovernanceRouter(chainUidA, PREG, _fixtureSka(), false);
         pqKey = _ml(1);
         pq = _register(preg, ML44, pqKey);
         Member[] memory m = new Member[](3);
@@ -259,7 +259,7 @@ abstract contract GovRouterFixture is UARegistryBase {
 
     /// The clones' env (chain-neutral spec §2.1): this chain, the registry, the router.
     function _cenv() internal view returns (IFactoryToken.ChainEnv memory) {
-        return EnvKit.env(chainUidA, PREG, address(0), false, address(router));
+        return EnvKit.env(chainUidA, PREG, _fixtureSka(), false, address(router));
     }
 
     function _normal(bytes32 owner_, bytes32 minter, uint64 delay) internal returns (NormalToken t) {

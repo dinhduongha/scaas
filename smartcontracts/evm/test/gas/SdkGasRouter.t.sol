@@ -15,9 +15,8 @@ import {regArgs} from "../helpers/Catalogue.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
-import {GovRouterFixture} from "../governance/GovRouter.t.sol";
+import {SdkGasRouterFix} from "./SdkGasFixtures.sol";
 import {MockWallet} from "../ua/UARegistryBase.sol";
-import {SdkGasOps} from "./SdkGasOps.sol";
 
 /// The `gov_router` domain kind's base rows (owner 2026-11-19, part 3b): each router entry signed for its target, on the
 /// router of `GovRouterFixture` (its targets clones of the real kinds, this test their factory), the variant the target's
@@ -30,7 +29,7 @@ import {SdkGasOps} from "./SdkGasOps.sol";
 /// nothing, a list entry, a grant, a freeze). The router has no derived reference signer here (A1): its registry is the
 /// fixture's PQ stand-in registry at `PREG`, without the secp256k1 verifier, and every target would need the derived UA
 /// as its admin or holder; no `_ua_` row.
-abstract contract SdkGasRouterBase is SdkGasOps, GovRouterFixture {
+abstract contract SdkGasRouterBase is SdkGasRouterFix {
     /// the signer of the row (a native id of the fixture, or `wallet`), the lane of the call built (`SG_LANE` measured, 0
     /// the sequence's own lane)
     bytes32 internal grWho;

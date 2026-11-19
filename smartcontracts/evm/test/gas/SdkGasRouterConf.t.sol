@@ -11,16 +11,16 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
-import {ZetherVerifierBase} from "../../src/zether/ZetherVerifier.sol";
 import {ZetherKeys} from "../zether/helpers/ZetherKeys.sol";
 import {ZetherFixture, ZUID} from "../zether/helpers/ZetherFixture.sol";
 import {PqzOffchainBase} from "../pqz/helpers/PqzOffchainBase.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
-import {Catalogue, pqzEnv, zetherEnv} from "../helpers/Catalogue.sol";
+import {Catalogue} from "../helpers/Catalogue.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SdkGasOps} from "./SdkGasOps.sol";
+import {_sgPqzKeep} from "./SdkGasFixtures.sol";
 
 /// The router's confidential-token entries signed by the reference signer (a native key), each on a router-configured
 /// factory with a notice period of 0 (a change applies at once): the op's digest `(typehash, from, target, words…, E)` in the
@@ -73,18 +73,14 @@ contract SdkGasRouterPqzTest is SdkGasRouterConfOps, PqzOffchainBase {
     NormalPqzToken internal gcTok;
 
     function setUp() public {
+        _sgSkaSetup(PQZ_UID); // G4: the registry, the router and the releases as a deploy configures them
         _offStack();
+        _sgDeployRegistry(address(reg), PQZ_UID, _sgPqzKeep(address(mlv), address(pqv)));
         sgPk = 0xA11CE;
-        gcRouter = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
+        gcRouter = new GovernanceRouter(PQZ_UID, address(reg), sgSka, false);
         OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(gcRouter));
-        Catalogue.release(
-            f,
-            IOpenFactory.TokenKind.NORMAL_PQZ,
-            1,
-            pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
-            type(NormalPqzToken).creationCode
-        );
+        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, _penv(), type(NormalPqzToken).creationCode);
         vm.prank(registrar);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
         (vMode, vUA, vFixed, vOwnKey, vFeeMax) = (PqzCore.OFFCHAIN, vA, false, true, 10);
@@ -94,6 +90,10 @@ contract SdkGasRouterPqzTest is SdkGasRouterConfOps, PqzOffchainBase {
         (c.admin, c.roles.issuer) = (_sgFrom(), _sgFrom());
         gcTok = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "sg-router-pqz"));
         _holders(address(gcTok));
+    }
+
+    function _fixtureSka() internal view override returns (address) {
+        return sgSka;
     }
 
     function test_sdkGas_routerPqz() public {
@@ -120,27 +120,15 @@ contract SdkGasRouterZetherTest is SdkGasRouterConfOps, ZetherFixture {
     uint256 internal constant XB = 0xB0D1E5;
 
     function setUp() public {
+        _sgSkaSetup(ZUID); // G4: the registry, the router and the releases as a deploy configures them
         _stack();
+        _sgDeployRegistry(address(reg), ZUID, _sgNoKeep());
         _users();
         sgPk = 0xA11CE;
-        gcRouter = new GovernanceRouter(ZUID, address(reg), address(0), false);
+        gcRouter = new GovernanceRouter(ZUID, address(reg), sgSka, false);
         OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, ZUID, 0, address(gcRouter));
-        Catalogue.release(
-            f,
-            IOpenFactory.TokenKind.NORMAL_ZETHER,
-            1,
-            zetherEnv(
-                address(f),
-                ZUID,
-                address(reg),
-                address(ver),
-                address(burnVer),
-                address(ZetherVerifierBase(address(ver)).innerProduct()),
-                address(dis)
-            ),
-            type(NormalZetherToken).creationCode
-        );
+        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_ZETHER, 1, _zenv(), type(NormalZetherToken).creationCode);
         vm.prank(registrar);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true, EnvKit.uidOf(address(f)));
         IFactoryToken.TokenConfig memory c = _cfg(true, uint256(1) << 40);
@@ -167,6 +155,10 @@ contract SdkGasRouterZetherTest is SdkGasRouterConfOps, ZetherFixture {
             GovernanceRouter.mtxSetAuditorKey,
             (_sgE(nonce), address(tok), y, uint32(1), _auditorPop(tok, XB, 1), u, _sgUaSig(d))
         );
+    }
+
+    function _fixtureSka() internal view override returns (address) {
+        return sgSka;
     }
 
     function test_sdkGas_routerZether() public {
