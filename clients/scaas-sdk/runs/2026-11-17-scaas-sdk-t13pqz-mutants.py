@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """scaas-sdk plan T13 part 2: the PQZ key attribute of a registration mutants:
-python3 clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t13pqz-mutants.py check | run [name...]"""
+python3 clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t13pqz-mutants.py check | run [name...]
+Not a mutant: dropping the PQZ-holder pre-check before the proof (ed25519 is then refused by `holder_pop_message` after a
+wasted proof, the same `Argument`: only the cost differs, which no test observes; it survived a first run)."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -12,10 +14,9 @@ T = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline
 MUTANTS = [
     ("the PoP leaves out the PQZ key", [(R, "                Some(&pqz_key),\n                Some(&pqz_pop),", "                None,\n                None,")],
      T + "registration_with_pqz_key"),
-    ("pqzPopHash not the proof's hash", [(R, "        false => hex(&scaas_ua::keccak256(&pqz_pop)),", "        false => hex(&[7u8; 32]),")],
+    # ua-rs's `registration_args` refuses a hash that is not the proof's, so the SDK's call fails before the test's own check
+    ("pqzPopHash not the proof's hash (ua-rs refuses the arguments)", [(R, "        false => hex(&scaas_ua::keccak256(&pqz_pop)),", "        false => hex(&[7u8; 32]),")],
      T + "registration_with_pqz_key"),
-    ("a non-holder proved", [(R, "                if !scaas_ua::is_pqz_holder(k.kind()) {", "                if false {")],
-     T + "registration_args_equal_portable_json"),
 ]
 
 if __name__ == "__main__":

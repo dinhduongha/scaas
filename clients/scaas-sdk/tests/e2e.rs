@@ -666,3 +666,176 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
     let s = follow(&sender, op).await;
     assert!(matches!(s, OpState::Landed { .. }), "pay: {s:?}");
 }
+
+// --- plan T13: SmartKeyAccount and guardian recovery ---
+
+/// The profile of `anvil` at `rpc` with measured gas figures of the account's entries (the table has no `account` rows),
+/// rounded up.
+fn account_profile(rpc: &str) -> ChainProfile {
+    let row = |entry: &str| GasBase {
+        entry: entry.into(),
+        kind: "account".into(),
+        fresh: true,
+        gas: 600_000,
+    };
+    ChainProfile {
+        key: "anvil".into(),
+        family: Family::Evm,
+        chain_id: Some(31337),
+        chain_uid: cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]),
+        rpc: vec![endpoint(rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: None,
+        factory: None,
+        router: None,
+        finality: Finality::Depth(0),
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![],
+        gas: GasRows {
+            base: vec![row("mtxAddKey"), row("mtxExecute")],
+            verify: vec![GasVerify { signer: 0, gas: 0 }],
+        },
+        max_valid_secs: None,
+        gas_opt_in: vec![],
+    }
+}
+
+/// A `SmartKeyAccount` of the seed's EVM key `index` (its first key, secp256k1) and `guardian`, deployed through `factory`
+/// by the deployer; its address, checked against the SDK's counterfactual one.
+fn deploy_account(rpc: &str, factory: &str, index: u32, guardian: &str) -> String {
+    use scaas_sdk::account::{smart_account_address, SubjectKeyArgs};
+    let key = Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .native_key(Network::Evm, index, None)
+        .unwrap()
+        .address()
+        .unwrap();
+    let first = SubjectKeyArgs::secp256k1(&key).unwrap();
+    let implementation = cast(&["call", factory, "IMPLEMENTATION()(address)", "--rpc-url", rpc]);
+    let predicted = smart_account_address(factory, &implementation, &first, guardian).unwrap();
+    let tuple = format!(
+        "({},{},{},{},{})",
+        first.kind, first.x, first.y, first.rp_id_hash, first.origin_hash
+    );
+    let sig = "deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)";
+    cast(&["send", factory, sig, &tuple, guardian, "--private-key", DEPLOYER, "--rpc-url", rpc]);
+    assert_ne!(cast(&["code", &predicted, "--rpc-url", rpc]), "0x", "deployed at the SDK's address");
+    predicted
+}
+
+fn smart_op(seed: &str, index: u32, account: &str) -> scaas_sdk::account::SmartOp {
+    scaas_sdk::account::SmartOp {
+        signer: KeyRef::Native {
+            seed: seed.into(),
+            network: "evm".into(),
+            index,
+        },
+        chain: "anvil".into(),
+        account: account.into(),
+        batch: "1".into(),
+        envelope: Envelope {
+            valid_until: now() + 600,
+            mode: 0,
+            relayer: None,
+            fee: "0".into(),
+            fee_recipient: None,
+        },
+    }
+}
+
+/// `p` quoted for a self-relay by the seed's EVM key 0, submitted and followed to its end.
+async fn self_relay(sdk: &Arc<Sdk>, seed: &str, p: Arc<scaas_sdk::op::Prepared>) -> OpState {
+    let payer = KeyRef::Native {
+        seed: seed.into(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let q = sdk.op().quote(p.clone(), SubmitPath::SelfRelay { payer }).await.unwrap();
+    let op = sdk.op().submit(p, q).await.unwrap();
+    follow(sdk, op).await
+}
+
+/// Plan T13 `smart_account_add_key_self_relay`: the account of the seed's EVM key 0 (deployed at the SDK's counterfactual
+/// address) adds a second key by its own `AddKey`, signed by key 0 and self-relayed by the same key's address; `Landed`, and
+/// the account holds two keys.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn smart_account_add_key_self_relay() {
+    use scaas_sdk::account::SubjectKeyArgs;
+    let (_anvil, rpc) = anvil(4).await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    funded_holder(rpc);
+    let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
+    let factory = dep["smart_key_account_factory"].as_str().unwrap().to_string();
+    let account = deploy_account(rpc, &factory, 0, "0x0000000000000000000000000000000000000000");
+    assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "1");
+    let (sdk, seed) = sdk_on(account_profile(rpc)).await;
+    let new_key = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000bb").unwrap();
+    let p = sdk
+        .account()
+        .prepare_smart_add_key(smart_op(&seed, 0, &account), new_key)
+        .await
+        .unwrap();
+    assert_eq!(p.entry(), "mtxAddKey");
+    let s = self_relay(&sdk, &seed, p).await;
+    assert!(matches!(s, OpState::Landed { .. }), "{s:?}");
+    assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "2");
+}
+
+/// Plan T13 `guardian_recovery_via_execute`: account A (the seed's EVM key 0) names the guardian `SmartKeyAccount` G (EVM key
+/// 1); G's `Execute` of the decoded `initiateRecovery(newKey)` on A, signed by key 1 and self-relayed by key 0, lands and
+/// starts the clock; `completeRecovery` is refused before the two days, passes after an `anvil` time warp, and A holds the
+/// new key.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn guardian_recovery_via_execute() {
+    use scaas_sdk::account::SubjectKeyArgs;
+    let (_anvil, rpc) = anvil(5).await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    funded_holder(rpc);
+    let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
+    let factory = dep["smart_key_account_factory"].as_str().unwrap().to_string();
+    let guardian = deploy_account(rpc, &factory, 1, "0x0000000000000000000000000000000000000000");
+    let account = deploy_account(rpc, &factory, 0, &guardian);
+    let (sdk, seed) = sdk_on(account_profile(rpc)).await;
+    let new_key = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000dd").unwrap();
+    let p = sdk
+        .account()
+        .prepare_initiate_recovery(smart_op(&seed, 1, &guardian), account.clone(), new_key.clone())
+        .await
+        .unwrap();
+    assert_eq!(p.entry(), "mtxExecute");
+    let s = self_relay(&sdk, &seed, p).await;
+    assert!(matches!(s, OpState::Landed { .. }), "{s:?}");
+    let pending = cast(&["call", &account, "pendingRecovery()(bytes32)", "--rpc-url", rpc]);
+    assert_ne!(pending, format!("0x{}", "00".repeat(32)), "the recovery started");
+    let tuple = format!(
+        "({},{},{},{},{})",
+        new_key.kind, new_key.x, new_key.y, new_key.rp_id_hash, new_key.origin_hash
+    );
+    let complete = || {
+        Command::new("cast")
+            .args([
+                "send",
+                &account,
+                "completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32))",
+                &tuple,
+                "--private-key",
+                DEPLOYER,
+                "--rpc-url",
+                rpc,
+            ])
+            .output()
+            .expect("cast in PATH")
+            .status
+            .success()
+    };
+    assert!(!complete(), "refused before RECOVERY_DELAY");
+    cast(&["rpc", "--rpc-url", rpc, "evm_increaseTime", "172801"]);
+    cast(&["rpc", "--rpc-url", rpc, "evm_mine"]);
+    assert!(complete(), "after the two days, by anyone");
+    assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "2");
+}

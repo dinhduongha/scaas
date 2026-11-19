@@ -230,7 +230,7 @@ pub struct Execute {
 
 /// The domain kind of `contract` by its `eip712Domain()` (ERC-5267), one of `name`'s rows' kinds: `ProfileMismatch` when its
 /// chain id, address or salt is not the profile's; `Argument` for another struct's domain.
-async fn kind_of(
+pub(crate) async fn kind_of(
     sdk: &Sdk,
     chain: &str,
     name: &str,
@@ -401,10 +401,10 @@ fn meta(
 }
 
 /// `(fee_recipient, relayer)`.
-type Bound = (Option<[u8; 20]>, Option<[u8; 20]>);
+pub(crate) type Bound = (Option<[u8; 20]>, Option<[u8; 20]>);
 
 /// The fee recipient and relayer a check names: those the mode binds.
-fn bound(m: &Map<String, Value>) -> Result<Bound, SdkError> {
+pub(crate) fn bound(m: &Map<String, Value>) -> Result<Bound, SdkError> {
     let mode = m.get("mode").map(dec).transpose()?.unwrap_or_default();
     let a = |k: &str| -> Result<Option<[u8; 20]>, SdkError> {
         m.get(k)
@@ -424,12 +424,12 @@ fn bound(m: &Map<String, Value>) -> Result<Bound, SdkError> {
 }
 
 /// The chain's id and `chain_uid` bytes.
-fn ids(sdk: &Sdk, chain: &str) -> Result<(u64, [u8; 32]), SdkError> {
+pub(crate) fn ids(sdk: &Sdk, chain: &str) -> Result<(u64, [u8; 32]), SdkError> {
     let (p, id, _) = evm(sdk, chain)?;
     Ok((id, id32(&p.chain_uid)?))
 }
 
-fn draft(
+pub(crate) fn draft(
     chain: String,
     name: &'static str,
     kind: &'static str,

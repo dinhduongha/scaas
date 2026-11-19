@@ -7,10 +7,14 @@
 mod register;
 mod restore;
 #[cfg(feature = "wallet")]
+mod smart;
+#[cfg(feature = "wallet")]
 mod sponsor;
 
 #[cfg(feature = "wallet")]
 pub use register::{Register, RegisterAttrs, RegistrationState, RegistryWrite};
+#[cfg(feature = "wallet")]
+pub use smart::{smart_account_address, SmartCall, SmartOp, SubjectKeyArgs};
 #[cfg(feature = "wallet")]
 pub use sponsor::{
     AttrsArgs, KemArgs, KemRecord, RegisterArgs, RegistrationBlob, WebAuthnArgs, BLOB_MAX,

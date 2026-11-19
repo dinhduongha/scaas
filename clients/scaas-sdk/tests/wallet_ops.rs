@@ -1200,3 +1200,100 @@ async fn percent_fee_is_reviewed_as_its_amount() {
         "the quote's fee is the amount, not the rate 5000"
     );
 }
+
+/// Plan T13 `execute_decoded_only` on a `SmartKeyAccount` (as T12's on a mandate wallet): an undecoded call is
+/// `OpaqueCallRefused`; a decoded `transfer` or a guardian's `initiateRecovery(key)` is reviewed field by field and signed
+/// under `Expect::Execute` (`scaas-ua` rebuilds the call's bytes); with `opaque-calls` and the marker, flagged; another
+/// contract's domain is `Argument`.
+#[tokio::test(flavor = "multi_thread")]
+async fn smart_execute_decoded_only() {
+    use scaas_sdk::account::{SmartCall, SmartOp, SubjectKeyArgs};
+    let t = setup(0).await;
+    let v = load("smartcontracts/vectors/typed/typed_ops.json");
+    let d = &v["ops"]["Execute"]["domains"]["account"]["domain"];
+    let account = d["verifyingContract"].as_str().unwrap().to_ascii_lowercase();
+    {
+        let mut c = t.chain.lock().unwrap();
+        let salt = c.genesis.clone();
+        c.domains
+            .insert(account.clone(), ("SCaaS SmartKeyAccount".into(), salt));
+    }
+    let token = "0x5ca00000000000000000000000000000000000a1";
+    let op = |account: &str| SmartOp {
+        signer: t.signer.clone(),
+        chain: "local".into(),
+        account: account.into(),
+        batch: "3".into(),
+        envelope: Envelope {
+            valid_until: 1_800_000_300,
+            mode: 0,
+            relayer: None,
+            fee: "0".into(),
+            fee_recipient: None,
+        },
+    };
+    let opaque = |allow| SmartCall::Opaque {
+        target: token.into(),
+        value: "0".into(),
+        data: "0xdeadbeef00".into(),
+        allow,
+    };
+    let acc = t.sdk.account();
+    assert_eq!(
+        code(acc.prepare_smart_execute(op(&account), opaque(None)).await),
+        "OpaqueCallRefused",
+        "an undecoded call"
+    );
+    let transfer = SmartCall::Transfer {
+        token: token.into(),
+        to: "0x00000000000000000000000000000000000000aa".into(),
+        amount: "77".into(),
+    };
+    assert_eq!(
+        code(acc.prepare_smart_execute(op(token), transfer.clone()).await),
+        "Argument",
+        "a token's domain is not an account's"
+    );
+    let p = acc.prepare_smart_execute(op(&account), transfer).await.unwrap();
+    assert_eq!(p.entry(), "mtxExecute");
+    assert!(!p.opaque());
+    let r = p.review();
+    assert_eq!(r.iter().find(|f| f.name == "call.amount").unwrap().value, "77");
+    assert_eq!(r.iter().find(|f| f.name == "from").unwrap().value, account, "from: the account itself");
+    // a guardian's recovery of another account, decoded
+    let new_key = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000bb").unwrap();
+    let guarded = "0x00000000000000000000000000000000000000cc";
+    let p = acc
+        .prepare_initiate_recovery(op(&account), guarded.into(), new_key.clone())
+        .await
+        .unwrap();
+    let r = p.review();
+    for (n, want) in [
+        ("call", "initiateRecovery"),
+        ("call.account", guarded),
+        ("call.key.x", new_key.x.as_str()),
+        ("target", guarded),
+    ] {
+        assert_eq!(r.iter().find(|f| f.name == n).unwrap().value, want, "{n}");
+    }
+    let q = t
+        .sdk
+        .op()
+        .quote(
+            p.clone(),
+            SubmitPath::SelfRelay {
+                payer: t.payer.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    t.sdk.op().submit(p, q).await.unwrap();
+    #[cfg(feature = "opaque-calls")]
+    {
+        let p = acc
+            .prepare_smart_execute(op(&account), opaque(Some(AllowOpaqueCall::new())))
+            .await
+            .unwrap();
+        assert!(p.opaque(), "under the marker: flagged");
+    }
+}

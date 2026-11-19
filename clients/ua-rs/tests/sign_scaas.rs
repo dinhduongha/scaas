@@ -287,6 +287,95 @@ fn execute_signs_only_the_decoded_call() {
     }
 }
 
+/// scaas-sdk T13: a `SmartKeyAccount`'s `Execute` under `Expect::Execute` signs only the decoded call, here a guardian's
+/// `initiateRecovery(key)` on the account it guards (CTR-ACC-03): the same bytes as `Expect::Op` over the rebuilt message (the
+/// control); another key, account or value in the typed data is refused.
+#[test]
+fn account_execute_signs_only_the_decoded_recovery() {
+    use scaas_ua::wallet::{DecodedCall, SubjectKey};
+    let r = row("Execute", "account");
+    let key = SubjectKey {
+        kind: 2,
+        x: {
+            let mut x = [0u8; 32];
+            x[12..].copy_from_slice(&[0x33; 20]);
+            x
+        },
+        y: [0; 32],
+        rp_id_hash: [0; 32],
+        origin_hash: [0; 32],
+    };
+    let call = DecodedCall::InitiateRecovery {
+        account: [0x44; 20],
+        key: key.clone(),
+    };
+    let (target, _, data) = call.encode().unwrap();
+    assert_eq!(target, [0x44; 20]);
+    assert_eq!(
+        &data[..4],
+        &scaas_ua::keccak256(b"initiateRecovery((uint8,bytes32,bytes32,bytes32,bytes32))")[..4]
+    );
+    assert_eq!(data.len(), 4 + 5 * 32);
+    let typed = |m: &Value| {
+        scaas_typed_data(
+            "Execute",
+            Some("SCaaS SmartKeyAccount"),
+            &r.contract,
+            r.chain_id,
+            &r.uid,
+            m,
+        )
+        .unwrap()
+    };
+    let mut m = r.message.clone();
+    m["target"] = format!("0x{}", hex::encode(target)).into();
+    m["value"] = "0".into();
+    m["data"] = format!("0x{}", hex::encode(&data)).into();
+    let exec = |msg: &Value| Expect::Execute {
+        wallet: r.contract,
+        chain_id: r.chain_id,
+        chain_uid: r.uid,
+        message: msg.clone(),
+        call: call.clone(),
+        max_fee: "0".into(),
+        fee_recipient: None,
+        relayer: None,
+        now: 1,
+        max_window: u64::MAX / 2,
+    };
+    let (_w, n) = native();
+    let canon = typed(&m).to_value()["message"].clone();
+    let s = sign_scaas(&n, &typed(&m), exec(&canon)).unwrap();
+    assert_eq!(
+        s,
+        sign_scaas(&n, &typed(&m), op(&r, "Execute", &canon)).unwrap(),
+        "the control"
+    );
+    let other = DecodedCall::InitiateRecovery {
+        account: [0x44; 20],
+        key: SubjectKey { y: [1; 32], ..key },
+    };
+    for (k, v) in [
+        (
+            "data",
+            Value::from(format!("0x{}", hex::encode(other.encode().unwrap().2))),
+        ),
+        (
+            "target",
+            Value::from(format!("0x{}", hex::encode([0x45u8; 20]))),
+        ),
+        ("value", "1".into()),
+    ] {
+        let mut x = m.clone();
+        x[k] = v;
+        assert_eq!(
+            sign_scaas(&n, &typed(&x), exec(&canon)).unwrap_err(),
+            Error::PolicyRefused,
+            "{k}"
+        );
+    }
+}
+
 /// Owner 2026-11-19, ruling D: a plain transfer on ids under `Expect::Transfer`: `entryRef = 0` on the lane the caller names, the
 /// lane's nonce; a payment's `entryRef` or another lane is refused. The typed data is `UAMetaTransfer`'s (`metatx3.json`'s
 /// domain), the same bytes as an unchecked signature of it (the control).

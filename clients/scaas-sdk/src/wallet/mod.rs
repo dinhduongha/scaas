@@ -6,7 +6,7 @@
 pub(crate) mod balances;
 pub(crate) mod history;
 mod native_evm;
-mod ops;
+pub(crate) mod ops;
 pub(crate) mod tokens;
 
 pub use balances::{Balances, TokenBalance};

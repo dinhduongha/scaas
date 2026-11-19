@@ -145,9 +145,10 @@ pub enum Expect {
         now: u64,
         max_window: u64,
     },
-    /// A mandate wallet's `UAExecute` of a decoded call (scaas-sdk spec §13.2; owner 2026-11-19, ruling C): `checkOp` over `message`
-    /// with `target`, `value` and `data` rebuilt from `call`, so only the decoded call is signed. No clientkeys counterpart and no
-    /// JSON form (built by the SDK).
+    /// A mandate wallet's `UAExecute` of a decoded call (scaas-sdk spec §13.2; owner 2026-11-19, ruling C), or a `SmartKeyAccount`'s
+    /// `Execute` (scaas-sdk T13; the typed data's primary type names which, `wallet` the contract): `checkOp` over `message` with
+    /// `target`, `value` and `data` rebuilt from `call`, so only the decoded call is signed. No clientkeys counterpart and no JSON
+    /// form (built by the SDK).
     Execute {
         wallet: [u8; 20],
         chain_id: u64,
@@ -261,6 +262,9 @@ pub enum DecodedCall {
         to: [u8; 20],
         amount: String,
     },
+    /// `account.initiateRecovery(key)` on a `SmartKeyAccount` by its guardian (CTR-ACC-03; scaas-sdk T13: a guardian
+    /// `SmartKeyAccount`'s `Execute`), value 0
+    InitiateRecovery { account: [u8; 20], key: SubjectKey },
 }
 
 impl DecodedCall {
@@ -277,6 +281,19 @@ impl DecodedCall {
                 data.extend_from_slice(to);
                 data.extend_from_slice(&n);
                 Ok((*token, [0u8; 32], data))
+            }
+            DecodedCall::InitiateRecovery { account, key } => {
+                let mut data =
+                    keccak256(b"initiateRecovery((uint8,bytes32,bytes32,bytes32,bytes32))")
+                        .get(..4)
+                        .ok_or(Error::Argument)?
+                        .to_vec();
+                let mut kind = [0u8; 32];
+                kind[31] = key.kind;
+                for w in [&kind, &key.x, &key.y, &key.rp_id_hash, &key.origin_hash] {
+                    data.extend_from_slice(w);
+                }
+                Ok((*account, [0u8; 32], data))
             }
         }
     }
@@ -880,9 +897,15 @@ fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
             m.insert("target".into(), to_hex(&target).into());
             m.insert("value".into(), dec(&value));
             m.insert("data".into(), to_hex(&data).into());
+            // a mandate wallet's `UAExecute`, or a `SmartKeyAccount`'s `Execute` (scaas-sdk T13): `check_op` holds the typed
+            // data to that struct's row and `wallet` as its verifying contract either way
+            let op = match td.primary_type() {
+                "Execute" => "Execute",
+                _ => "UAExecute",
+            };
             check_op(
                 td,
-                "UAExecute",
+                op,
                 wallet,
                 *chain_id,
                 chain_uid,
