@@ -819,15 +819,18 @@ pub fn pqz_auth_message(op: u8, stmt: &[u8]) -> Result<Value> {
     if !matches!(op, 1 | 2 | 7) {
         return Err(Error::Argument);
     }
-    let (head, body) = (stmt.get(..640).ok_or(Error::Argument)?, &stmt[640..]);
-    let w = |i: usize| -> &[u8] { &head[i * 32..i * 32 + 32] };
-    let n = |i: usize| {
-        let mut v = [0u8; 32];
-        v.copy_from_slice(w(i));
-        crate::wallet::u256_to_dec(&v)
-    };
-    let a = |i: usize| to_hex(&w(i)[12..]);
-    let x = |i: usize| to_hex(w(i));
+    if stmt.len() < 640 {
+        return Err(Error::Argument);
+    }
+    let (head, body) = stmt.split_at(640);
+    let words: Vec<Word> = head
+        .chunks_exact(32)
+        .map(|c| c.try_into().map_err(|_| Error::Argument))
+        .collect::<Result<_>>()?;
+    let w = |i: usize| -> Word { words.get(i).copied().unwrap_or_default() };
+    let n = |i: usize| crate::wallet::u256_to_dec(&w(i));
+    let a = |i: usize| to_hex(w(i).get(12..).unwrap_or_default());
+    let x = |i: usize| to_hex(&w(i));
     Ok(
         json!({"op": op, "opTag": x(0), "psid": x(1), "chainId": n(2), "token": a(3), "registry": a(4), "from": x(5),
         "to": x(6), "beneficiary": x(7), "fee": n(8), "amount": n(9), "recipient": x(10), "sendCounter": n(11), "p": n(12),
