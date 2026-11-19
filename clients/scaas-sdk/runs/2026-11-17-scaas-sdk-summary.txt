@@ -132,3 +132,7 @@ ck-test | 6dded4e97 | 0 | node: 484 pass, 0 fail, 4 skipped
 # wallet_typed, wallet_uasig, facade_zether, admin green; zether-prover typed_ops 8/8; scaas-node typed:: 41 and
 # guard/submit/abi 139 green (node clippy not run). A rustfmt-only follow-up of scaas-node/src/typed.rs and admin_tests.rs.
 # Mutants t20c 2/2 killed, each by its intended assertion. Not run this round: sdk-test whole, sdk-e2e, ua-test whole.
+# Item 3, an msig auditor's PQZ consent (controller call, owner auto-run 2026-11-19): msig_auditor_pqz_consent red first
+# (Argument), then green; admin::tests + account::msig::tests 12/12; clippy --all-targets (full features) clean; docs 0
+# errors; mutant t20c 3/3 killed (the new one by the test's unwrap). Not run: sdk-test whole, sdk-e2e, bind-gen (no public
+# item changed).

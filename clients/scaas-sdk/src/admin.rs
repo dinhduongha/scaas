@@ -488,6 +488,13 @@ impl Admin {
                             now: 0,
                             max_window: 0,
                         };
+                        // an `msig` auditor: its `UASig{"", "", members}` by the slots named (`account::msig`)
+                        #[cfg(feature = "account")]
+                        if let KeyRef::Msig { ua, slots } = &req.signer {
+                            let s = crate::account::msig::sign_typed(&sdk, &req.chain, ua, slots, &td, &ex)
+                                .await?;
+                            return Ok(scaas_ua::json::uasig_json(&s));
+                        }
                         let k = key_opened(&sdk, &req.signer).await?;
                         let s = crate::op::submit::sign_one(&sdk, &k, &td, &ex).await?;
                         Ok(json!({"keyData": hex(&s.key_data), "signature": hex(&s.signature), "members": []})

@@ -14,6 +14,7 @@ SDK_ADMIN = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked -
 V = "smartcontracts/vectors/typed/typed_ops.json"
 CK = (f"d=$(mktemp -d) && cp {V} $d/keep && node clients/clientkeys/scripts/typed-ops-vectors.mjs && "
       f"(cd clients/clientkeys && node --test test/auditor.test.js); rc=$?; cp $d/keep {V}; rm -rf $d; exit $rc")
+SDK_MSIG = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features {F} --lib msig_auditor_pqz_consent"
 MUTANTS = [
     ("the SDK signs a native PQZ auditor's consent (no up-front refusal)",
      [(ADMIN, 'if want == "pqz" && matches!(req.signer, KeyRef::Native { .. } | KeyRef::Imported { .. }) {',
@@ -21,6 +22,9 @@ MUTANTS = [
     ("the generator: the Zether domain's consent names the PQZ token again",
      [(GEN, 'const own = name === "AuditorConsent" ? { ...message, token: at.contract } : message;',
        'const own = message;')], CK),
+    ("an msig auditor's consent refused (no msig path)",
+     [(ADMIN, "if let KeyRef::Msig { ua, slots } = &req.signer {", "if let (false, KeyRef::Msig { ua, slots }) = (true, &req.signer) {")],
+     SDK_MSIG),
 ]
 
 if __name__ == "__main__":

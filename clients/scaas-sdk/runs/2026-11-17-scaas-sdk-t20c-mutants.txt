@@ -1,4 +1,5 @@
-# t20c mutants at commit b35f0515d (name | outcome | test)
+# t20c mutants at commit 2cba53aaf (name | outcome | test)
 the SDK signs a native PQZ auditor's consent (no up-front refusal) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib admin::tests
 the generator: the Zether domain's consent names the PQZ token again | killed | node --test test/auditor.test.js); rc=$?; cp $d/keep smartcontracts/vectors/typed/typed_ops.json; rm -rf $d; exit $rc
-2 mutants, 2 killed, 0 survived, 0 not loaded
+an msig auditor's consent refused (no msig path) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib msig_auditor_pqz_consent
+3 mutants, 3 killed, 0 survived, 0 not loaded

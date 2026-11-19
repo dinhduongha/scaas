@@ -941,3 +941,66 @@ async fn msig_members_apart() {
         "no device asked"
     );
 }
+
+/// Extra item 3 (controller call, owner auto-run 2026-11-19): an `msig` auditor's PQZ consent (`AuditorConsent` under
+/// `auditor-consent`): the consent names the `msig`'s own UA and comes back as its `UASig{"", "", members}` signed by the slots
+/// named; a slot set below the threshold refused.
+#[cfg(feature = "pqz")]
+#[tokio::test(flavor = "multi_thread")]
+async fn msig_auditor_pqz_consent() {
+    let t = setup(REGISTRY, None).await;
+    let token = "0x5ca00000000000000000000000000000000000a3";
+    {
+        let mut c = t.chain.lock().unwrap();
+        let g = c.genesis.clone();
+        c.domains.insert(token.into(), ("SCaaS PqzToken".into(), g));
+    }
+    let wallet = Wallet::from_mnemonic(REPO, "").unwrap();
+    let id_of = |i: u32| hex(&wallet.ua_key(FNDSA512, 0, i).unwrap().ua().unwrap());
+    let ids: Vec<MsigMemberArgs> = (0..2)
+        .map(|i| MsigMemberArgs {
+            kind: FNDSA512,
+            id: id_of(i),
+            weight: 1,
+        })
+        .collect();
+    let s = msig_structure(ids, 2).unwrap();
+    let kd = s.typed().unwrap().key_data();
+    record(&t, REGISTRY, &kd, &kd, 0, 0b11, 0b11);
+    let ua = s.ua().unwrap();
+    let slot_of = |i: u32| s.members.iter().position(|m| m.id == id_of(i)).unwrap() as u16;
+    let req = |slots: Vec<MsigSlot>| crate::admin::AuditorConsent {
+        signer: KeyRef::Msig {
+            ua: ua.clone(),
+            slots,
+        },
+        chain: "local".into(),
+        token: token.into(),
+        epoch: 1,
+    };
+    let both = vec![
+        member(&t, slot_of(0), FNDSA512, 0),
+        member(&t, slot_of(1), FNDSA512, 1),
+    ];
+    let out: Value = serde_json::from_str(
+        &t.sdk
+            .admin()
+            .sign_pqz_auditor_consent(req(both))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(out["keyData"], "0x");
+    assert_eq!(out["signature"], "0x");
+    assert_eq!(out["members"].as_array().unwrap().len(), 2, "both slots");
+    // below the threshold: refused, nothing returned
+    assert_ne!(
+        code(
+            t.sdk
+                .admin()
+                .sign_pqz_auditor_consent(req(vec![member(&t, slot_of(0), FNDSA512, 0)]))
+                .await
+        ),
+        "Ok"
+    );
+}
