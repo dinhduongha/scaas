@@ -106,6 +106,8 @@ const NESTED: &[(&str, &str)] = &[
     ("MuSig2Key", "bytes aggKey,bytes[] memberKeys"),
     ("FrostMember", "bytes[] commitments,bytes r,bytes32 z"),
     ("FrostKey", "bytes groupKey,uint16 threshold,FrostMember[] members"),
+    ("BlsMultiMember", "bytes key,uint16 weight"),
+    ("BlsMultiKey", "bytes aggKey,uint16 threshold,BlsMultiMember[] members"),
     ("DexLeg", "address sellToken,uint8 shape,TradeOrder order,UATradeOrder uaOrder,bytes sig,UASig auth,uint256 fill"),
     ("Settlement", "bytes32 ref,DexLeg taker,DexLeg[] makers"),
     ("ExchangeLeg", "address sellToken,uint8 shape,TradeOrder order,UATradeOrder uaOrder,bytes sig,UASig auth,uint256 sellFill,uint256 receiveFill"),
@@ -342,6 +344,9 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("registerWebAuthn", REG, "WebAuthnKey key,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("registerMuSig2", REG, "uint16 kind,MuSig2Key key,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("registerFrost", REG, "uint16 kind,FrostKey key,UAAttrs attrs,bytes pop,bytes pqzPop"),
+    // `bls12381-multi` (0x0121, spec 2026-11-19-bls12381-multi §2): named `key.aggKey`, `key.threshold`, `key.members[].key`,
+    // `key.members[].weight`; at most 64 members (the registry's `UAKeyData(0x0121)` above)
+    ("registerBlsMulti", REG, "BlsMultiKey key,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("setKemKey", REG, "bytes32 ua,uint64 version,KemKey kem,UASig sig"),
     // group 3g (KV-1): the PQZ key record of `version` (0: the key registered without one, R2 write-once)
     ("storePqzPop", REG, "bytes32 ua,uint64 version,bytes pqzPop"),
@@ -896,6 +901,9 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
         if el == "MsigMember" && a.len() > MSIG_MAX_MEMBERS {
             return Err(bad("more than 256 members"));
         }
+        if el == "BlsMultiMember" && a.len() > BLS_MULTI_MAX {
+            return Err(bad("more than 64 members"));
+        }
         // CTR-DEX-30 (C9): a liquidity order's inputs and outputs and its plan's extra tokens, at most eight each
         if el == "LiquidityToken" && a.len() > LIQUIDITY_MAX {
             return Err(bad(&format!("more than {LIQUIDITY_MAX}")));
@@ -910,6 +918,9 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
             .map(|(i, x)| parse(el, x, &format!("{path}[{i}]")))
             .collect();
         return Ok(Val::Array(v?));
+    }
+    if ty == "UASig" && j.get("signers").is_some() {
+        return bls_multi_sig(j, path);
     }
     if let Some(f) = nested(ty) {
         let o = j.as_object().ok_or_else(|| bad("not an object"))?;
@@ -967,6 +978,68 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
             }
         }
     })
+}
+
+/// `bls12381-multi`'s member cap (spec 2026-11-19-bls12381-multi §2, §8.3): `n ≤ 64`.
+const BLS_MULTI_MAX: usize = 64;
+
+/// A `bls12381-multi` (0x0121) `UASig` by name (spec 2026-11-19-bls12381-multi §5.1, §9; NODE-JOB placeholder, N7): `{signature,
+/// signers}`, nothing else. `signers` first, before any other check: at most 64 member indices, JSON integers, strictly increasing,
+/// each `< 64` (`< n` is the chain's check: the node knows no `n` without a chain read); then `signature`, the 128-byte σ
+/// (G1, EIP-2537): the packed 160 bytes `σ ‖ bitmap` are `HEX_ARGS_REFUSED`, any other length `BAD_PAYLOAD`. The node builds
+/// `signature = σ ‖ uint256(bitmap)` with `keyData` and `members` empty (a stored kind). A `UASig` without `signers` is every other
+/// kind's: the node cannot tell a 0x0121 signer from its id, so a packed 160-byte `signature` there reaches the chain, which refuses
+/// what does not verify.
+fn bls_multi_sig(j: &Value, path: &str) -> Result<Val> {
+    let o = j
+        .as_object()
+        .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}: not an object"))?;
+    let a = o["signers"]
+        .as_array()
+        .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.signers: not an array"))?;
+    if a.is_empty() || a.len() > BLS_MULTI_MAX {
+        bail!("BAD_PAYLOAD: {path}.signers: 1 to {BLS_MULTI_MAX} member indices");
+    }
+    let mut bitmap = U256::ZERO;
+    let mut last: Option<u64> = None;
+    for (k, v) in a.iter().enumerate() {
+        let i = v
+            .as_u64()
+            .filter(|i| *i < BLS_MULTI_MAX as u64)
+            .ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.signers[{k}]: an integer member index below {BLS_MULTI_MAX}"))?;
+        if last.is_some_and(|l| l >= i) {
+            bail!("BAD_PAYLOAD: {path}.signers: strictly increasing");
+        }
+        last = Some(i);
+        bitmap |= U256::from(1u8) << i as usize;
+    }
+    if let Some(k) = o.keys().find(|k| *k != "signers" && *k != "signature") {
+        bail!("BAD_PAYLOAD: {path}.{k}: a bls12381-multi UASig names only signature and signers");
+    }
+    let sig = match parse(
+        "bytes",
+        o.get("signature").unwrap_or(&Value::Null),
+        &format!("{path}.signature"),
+    )? {
+        Val::Bytes(b) => b,
+        _ => unreachable!("bytes"),
+    };
+    if sig.len() == 160 {
+        bail!("HEX_ARGS_REFUSED: {path}.signature: σ alone (128 B); the signers by name, the node builds σ ‖ bitmap");
+    }
+    if sig.len() != 128 {
+        bail!(
+            "BAD_PAYLOAD: {path}.signature: {} bytes, σ is 128 (G1, EIP-2537)",
+            sig.len()
+        );
+    }
+    let mut full = sig;
+    full.extend_from_slice(&bitmap.to_be_bytes::<32>());
+    Ok(Val::Tuple(vec![
+        Val::Bytes(vec![]),
+        Val::Bytes(full),
+        Val::Array(vec![]),
+    ]))
 }
 
 /// A `LiquidityPlan`'s own shape (spec 2026-11-10-dex-liquidity.md §11): at most eight extra tokens, one `pull` per input
@@ -2763,9 +2836,10 @@ mod tests {
         // (CTR-DEX-30)
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
         // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`; NODE-JOB-29 (TODO 3zh MD-14): -> 36, the registry's `cacheExpandedKey`
+        // bls-multi Task 10: -> 37, the registry's `registerBlsMulti`
         assert_eq!(
             rows().iter().filter(|r| !r.typed).count(),
-            36,
+            37,
             "the wallet's three flat builders are gone (MD-11 (a))"
         );
     }
@@ -3643,6 +3717,184 @@ mod tests {
             err(bad),
             "BAD_PAYLOAD: m: more than 16 slots",
             "before any element is read"
+        );
+    }
+
+    fn ua_vectors(file: &str) -> Value {
+        let p = format!(
+            "{}/../smartcontracts/vectors/ua/{file}",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+    }
+
+    /// bls-multi Task 10 (spec 2026-11-19-bls12381-multi §2): `registerBlsMulti` from portable.json's named `args` builds the
+    /// registry's calldata, the same as the `sol!` encoder's of the row's values; at most 64 members, by name.
+    #[test]
+    fn typed_register_bls_multi_row() {
+        use alloy::sol_types::SolCall;
+        let p = ua_vectors("portable.json");
+        let row = rows()
+            .iter()
+            .find(|r| r.name == "registerBlsMulti")
+            .unwrap();
+        assert_eq!(row.contracts, &["registry"]);
+        for r in p["blsMultiRegistrations"].as_array().unwrap() {
+            let mut args = r["args"].clone();
+            args.as_object_mut().unwrap().remove("entry");
+            let a = assemble(row, None, &args, None, None).unwrap();
+            let h = |v: &Value| alloy::hex::decode(v.as_str().unwrap()).unwrap();
+            let members = args["key"]["members"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|m| crate::abi::IUARegistry::BlsMultiMember {
+                    key: h(&m["key"]).into(),
+                    weight: m["weight"].as_u64().unwrap() as u16,
+                })
+                .collect();
+            let want = crate::abi::IUARegistry::registerBlsMultiCall {
+                key: crate::abi::IUARegistry::BlsMultiKey {
+                    aggKey: h(&args["key"]["aggKey"]).into(),
+                    threshold: args["key"]["threshold"].as_u64().unwrap() as u16,
+                    members,
+                },
+                attrs:
+                    <crate::abi::IUARegistry::UAAttrs as alloy::sol_types::SolValue>::abi_decode(
+                        &parse("UAAttrs", &args["attrs"], "attrs")
+                            .unwrap()
+                            .abi_encode(),
+                    )
+                    .unwrap(),
+                pop: h(&args["pop"]).into(),
+                pqzPop: h(&args["pqzPop"]).into(),
+            }
+            .abi_encode();
+            assert_eq!(a.data, want, "{}", r["name"]);
+        }
+        let m = json!({"key": format!("0x{}", "11".repeat(256)), "weight": 1});
+        parse("BlsMultiMember[]", &Value::Array(vec![m.clone(); 64]), "m").unwrap();
+        assert_eq!(
+            parse("BlsMultiMember[]", &Value::Array(vec![m; 65]), "m")
+                .unwrap_err()
+                .to_string(),
+            "BAD_PAYLOAD: m: more than 64 members"
+        );
+    }
+
+    /// groups.json `blsMulti` signature rows (ua-rs): `{signature: σ, signers: [indices]}` builds exactly the row's 160 bytes
+    /// `σ ‖ bitmap` in `UASig.signature`, `keyData` and `members` empty (spec §5.1, N7).
+    #[test]
+    fn bls_multi_uasig_from_named_fields() {
+        let g = ua_vectors("groups.json");
+        let mut n = 0;
+        for r in g["blsMulti"]["signatures"].as_array().unwrap() {
+            let sig = alloy::hex::decode(r["signature"].as_str().unwrap()).unwrap();
+            let bitmap = U256::from_be_slice(&sig[sig.len().saturating_sub(32)..]);
+            if sig.len() != 160
+                || bitmap == U256::ZERO
+                || bitmap >> 64 != U256::ZERO
+                || sig[..128] == [0u8; 128]
+            {
+                continue; // the rows the node refuses or cannot name (length, no signer, a bit ≥ 64, σ = O is the chain's)
+            }
+            let signers: Vec<u64> = (0..64).filter(|i| bitmap.bit(*i as usize)).collect();
+            let j = json!({"signature": format!("0x{}", alloy::hex::encode(&sig[..128])), "signers": signers});
+            let v = parse("UASig", &j, "auth").unwrap();
+            let u = <crate::abi::UASig as alloy::sol_types::SolValue>::abi_decode(&v.abi_encode())
+                .unwrap();
+            assert_eq!(u.signature.to_vec(), sig, "{}", r["name"]);
+            assert!(u.keyData.is_empty() && u.members.is_empty());
+            n += 1;
+        }
+        assert!(n >= 20, "{n} rows");
+    }
+
+    /// The packed 160 bytes beside `signers` are `HEX_ARGS_REFUSED`; a `UASig` naming `keyData` or `members` with `signers` is
+    /// refused; one without `signers` is every other kind's, unchanged.
+    #[test]
+    fn bls_multi_hex_blob_refused() {
+        let s128 = format!("0x{}", "22".repeat(128));
+        let s160 = format!("0x{}", "22".repeat(160));
+        let err = |j: Value| parse("UASig", &j, "auth").unwrap_err().to_string();
+        assert!(err(json!({"signature": s160, "signers": [0, 1]}))
+            .starts_with("HEX_ARGS_REFUSED: auth.signature"));
+        assert!(
+            err(json!({"signature": s128, "signers": [0], "keyData": "0x"}))
+                .starts_with("BAD_PAYLOAD: auth.keyData")
+        );
+        assert!(
+            err(json!({"signature": s128, "signers": [0], "members": []}))
+                .starts_with("BAD_PAYLOAD: auth.members")
+        );
+        assert!(
+            err(json!({"signature": format!("0x{}", "22".repeat(127)), "signers": [0]}))
+                .starts_with("BAD_PAYLOAD: auth.signature")
+        );
+        parse("UASig", &json!({"signature": s128, "signers": [0]}), "auth").unwrap();
+        // without `signers`: the generic UASig (a 160-byte `schnorr-bls12381` R ‖ z is one)
+        parse(
+            "UASig",
+            &json!({"keyData": "0x", "signature": s160, "members": []}),
+            "auth",
+        )
+        .unwrap();
+    }
+
+    /// Review Focus 4 (spec §9, N7): `signers` checked first, before the signature: at most 64 strictly increasing integer indices,
+    /// each < 64; unsorted, duplicate, empty, 65 entries, an index ≥ 64 or a non-integer: each `BAD_PAYLOAD` by name.
+    #[test]
+    fn bls_multi_signers_refusals() {
+        let bad_sig = json!("not even hex");
+        let err = |signers: Value| {
+            parse(
+                "UASig",
+                &json!({"signature": bad_sig, "signers": signers}),
+                "auth",
+            )
+            .unwrap_err()
+            .to_string()
+        };
+        for (signers, want) in [
+            (
+                json!([1, 0]),
+                "BAD_PAYLOAD: auth.signers: strictly increasing",
+            ),
+            (
+                json!([2, 2]),
+                "BAD_PAYLOAD: auth.signers: strictly increasing",
+            ),
+            (
+                json!([]),
+                "BAD_PAYLOAD: auth.signers: 1 to 64 member indices",
+            ),
+            (
+                json!((0..65).collect::<Vec<u64>>()),
+                "BAD_PAYLOAD: auth.signers: 1 to 64 member indices",
+            ),
+            (
+                json!([64]),
+                "BAD_PAYLOAD: auth.signers[0]: an integer member index below 64",
+            ),
+            (
+                json!([0, "1"]),
+                "BAD_PAYLOAD: auth.signers[1]: an integer member index below 64",
+            ),
+            (
+                json!([0.5]),
+                "BAD_PAYLOAD: auth.signers[0]: an integer member index below 64",
+            ),
+            (
+                json!([-1]),
+                "BAD_PAYLOAD: auth.signers[0]: an integer member index below 64",
+            ),
+            (json!("0x03"), "BAD_PAYLOAD: auth.signers: not an array"),
+        ] {
+            assert_eq!(err(signers.clone()), want, "{signers}");
+        }
+        // the boundary: 64 indices 0..63 pass the signers check (and reach the signature's)
+        assert!(
+            err(json!((0..64).collect::<Vec<u64>>())).starts_with("BAD_PAYLOAD: auth.signature")
         );
     }
 

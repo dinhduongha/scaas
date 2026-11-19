@@ -368,6 +368,9 @@ sol! {
         struct MuSig2Key { bytes aggKey; bytes[] memberKeys; }
         struct FrostMember { bytes[] commitments; bytes r; bytes32 z; }
         struct FrostKey { bytes groupKey; uint16 threshold; FrostMember[] members; }
+        /// `bls12381-multi` (0x0121, spec 2026-11-19-bls12381-multi §2): `aggKey` = apk, the members sorted by key with weights.
+        struct BlsMultiMember { bytes key; uint16 weight; }
+        struct BlsMultiKey { bytes aggKey; uint16 threshold; BlsMultiMember[] members; }
         function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerMsig(MsigStructure structure, UAAttrs attrs, MemberSig[] pop, bytes pqzPop) external returns (bytes32);
         /// CTR-UA-44: an `msig`'s structure update on this registry (`version` = stored + 1, signed by a quorum of the stored structure).
@@ -376,6 +379,7 @@ sol! {
         function registerWebAuthn(WebAuthnKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerMuSig2(uint16 kind, MuSig2Key key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerFrost(uint16 kind, FrostKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
+        function registerBlsMulti(BlsMultiKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function setKemKey(bytes32 ua, uint64 version, KemKey kem, UASig sig) external;
         // group 3g (KV-1): the record of a key version; version 0 the key registered later, v >= 1 a rotation
         function storePqzPop(bytes32 ua, uint64 version, bytes pqzPop) external;
