@@ -260,6 +260,11 @@ fn set_mismatch_refused() {
         (st::SET, st::PK_BYTES, PQZL_ID)
     );
     assert_eq!(s.pqzh_id, pqz_ffi::PQZH.then_some(PQZH_ID));
+    // P-T16-2: the exported `K_MAX` is the set's, the `kmax<N>` its name pins
+    assert_eq!(
+        format!("kmax{}", scaas_ua::facade::pqz::K_MAX),
+        s.name.rsplit('-').next().unwrap()
+    );
     assert_eq!(check_set(&s), Ok(()));
     assert_eq!(PqzSet::from_json(s.to_json().as_bytes()).unwrap(), s);
     for other in [

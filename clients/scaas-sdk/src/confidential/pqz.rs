@@ -31,7 +31,7 @@ use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, B256};
 use scaas_rpc::evm::EvmPool;
 use scaas_rpc::pool::{ReadAt, ReadError};
-use scaas_ua::facade::pqz::{pqz_set, PqzKey, STATE_LAYOUT};
+use scaas_ua::facade::pqz::{pqz_set, PqzKey, K_MAX, STATE_LAYOUT};
 use scaas_ua::facade::pqz_pack::ACC_WORDS;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -47,17 +47,6 @@ const INLINE_MAX: u64 = 16;
 const INLINE_MAX_PQZH: u64 = 10;
 /// The account's `flags` bit: `acc` materialised in `accWords`.
 const MAT: u64 = 1;
-
-/// This build's `K_MAX`: the `kmax<N>` of its set's name (`n2304-kmax4096`: 4096), the name `pqz-core/params/sets` pins.
-/// ponytail: parsed from the name, as `scaas-ua` exports no `K_MAX`; an export there replaces it.
-fn k_max() -> u64 {
-    pqz_set()
-        .name
-        .rsplit("kmax")
-        .next()
-        .and_then(|n| n.parse().ok())
-        .unwrap_or(0)
-}
 
 /// The ERC-7201 root of `scaas.pqz`: `keccak256(abi.encode(uint256(keccak256(id)) − 1)) & ~0xff`.
 pub(crate) fn root() -> W {
@@ -110,7 +99,7 @@ fn acct_base(ua: &W, v: u64) -> W {
 /// the facade refuses an account past `K_MAX` itself).
 fn window_end(s0: &W, s1: &W, op7_pqzh: bool) -> (u64, u64) {
     let (count, rolled) = (field(s0, "acct[U][7].pendingCount"), field(s0, "acct[U][7].rolled"));
-    let room = k_max().saturating_sub(field(s1, "acct[U][7].accUnits").saturating_add(1));
+    let room = (K_MAX as u64).saturating_sub(field(s1, "acct[U][7].accUnits").saturating_add(1));
     let inline = if op7_pqzh { INLINE_MAX_PQZH } else { INLINE_MAX };
     (rolled, count.min(rolled.saturating_add(inline.min(room))))
 }

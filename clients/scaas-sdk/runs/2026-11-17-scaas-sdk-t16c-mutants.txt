@@ -1,0 +1,3 @@
+# t16c mutants at commit 9c607b67f (name | outcome | test)
+P-T16-1: PqzAuth under metatx (the old mapping) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas owner_statements_sign_under_their_contract_purpose
+1 mutants, 1 killed, 0 survived, 0 not loaded

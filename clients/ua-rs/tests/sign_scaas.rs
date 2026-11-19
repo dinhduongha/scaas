@@ -165,7 +165,7 @@ fn ua_key_signs_under_the_entrys_purpose() {
 
 /// Owner 2026-11-19, ruling C3: the Zether owner statements sign under `zether-owner` (`ZetherLib`'s `requireAuthorized`), not
 /// `metatx`; the same class by the contracts: `PqzRollOver` under `zether-auth` (`PqzStateLib`, CTR-PQZ-41), `AuditorConsent`
-/// under `auditor-consent` (CTR-PQZ-43). Each row's signature equals `ua_sig` under that purpose and differs from `metatx`'s.
+/// under `auditor-consent` (CTR-PQZ-43), and `PqzAuth` under `zether-auth` (`PqzCore.requireHolder`; P-T16-1). Each row's signature equals `ua_sig` under that purpose and differs from `metatx`'s.
 #[test]
 fn owner_statements_sign_under_their_contract_purpose() {
     let w = Wallet::from_mnemonic(WORDS, "").unwrap();
@@ -174,6 +174,8 @@ fn owner_statements_sign_under_their_contract_purpose() {
         ("ZetherRollOver", "zether", "zether-owner"),
         ("ZetherSetRollOverMode", "zether", "zether-owner"),
         ("PqzRollOver", "pqz", "zether-auth"),
+        // P-T16-1: the debit's `pqzAuth` (`PqzCore.requireHolder`, `PURPOSE_ZETHER_AUTH`)
+        ("PqzAuth", "pqz", "zether-auth"),
         ("AuditorConsent", "pqz", "auditor-consent"),
     ] {
         let r = row(name, kind);

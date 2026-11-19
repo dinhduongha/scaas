@@ -682,7 +682,8 @@ pub fn sign_typed_by(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result
 /// native id signs the digest itself on a named entry, CTR-MTX-28); a UA key: [`super::ua_sig`] over the digest under the entry's
 /// purpose, `payee-fee` for `UAPayeeFee`, `trade` for the orders and their cancels (`TradeLib`), `zether-owner` for the Zether
 /// owner statements `ZetherRollOver` and `ZetherSetRollOverMode` (`ZetherLib`, owner 2026-11-19 C3; the outer `UA*` forms carry
-/// that signature as `ownerSig`), `zether-auth` for `PqzRollOver` (`PqzStateLib`, CTR-PQZ-41), `auditor-consent` for
+/// that signature as `ownerSig`), `zether-auth` for `PqzRollOver` (`PqzStateLib`, CTR-PQZ-41) and a debit's `PqzAuth`
+/// (`PqzCore.requireHolder`, P-T16-1), `auditor-consent` for
 /// `AuditorConsent` (`PqzStateLib`, CTR-PQZ-43), `metatx` for every other envelope. `Expect::Any` is `Argument` here: a SCaaS entry is always signed under its check.
 pub fn sign_scaas(
     key: &dyn Signer,
@@ -714,7 +715,7 @@ pub fn scaas_purpose(td: &TypedData) -> Result<[u8; 32]> {
         "UAWrapOrder" | "UATradeOrder" | "CancelUAOrder" | "CancelUAWrapOrder"
         | "UAInvalidateNonces" => "trade",
         "ZetherRollOver" | "ZetherSetRollOverMode" => "zether-owner",
-        "PqzRollOver" => "zether-auth",
+        "PqzRollOver" | "PqzAuth" => "zether-auth",
         "AuditorConsent" => "auditor-consent",
         _ => "metatx",
     })?)

@@ -68,8 +68,8 @@ use pqz_ffi::stmt::{
     built_legs, check_pk, coeffs_ok, legs_per_group, u64_word, Debit, Disclose, Form, Multi,
     Register, Stmt, Word, DELTA, DISC_WORDS, DW_AMOUNT, H_AMOUNT, H_BENEFICIARY, H_CHAIN_ID,
     H_CHAIN_UID, H_ENVELOPE, H_FEE, H_FROM, H_MEMO_HASH, H_P, H_PLAIN_USED, H_RECIPIENT,
-    H_RECIPIENTS_HASH, H_REGISTRY, H_SALT, H_SEND_COUNTER, H_TO, H_TOKEN, H_VALID_UNTIL, K_MAX,
-    PQZH_ID, PQZL_ID, Q,
+    H_RECIPIENTS_HASH, H_REGISTRY, H_SALT, H_SEND_COUNTER, H_TO, H_TOKEN, H_VALID_UNTIL, PQZH_ID,
+    PQZL_ID, Q,
 };
 use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
@@ -157,6 +157,9 @@ impl PqzSet {
         })
     }
 }
+
+/// This build's set's `K_MAX`: the credits an account holds between refreshes (`pqz-core/params/sets/<set>`; P-T16-2).
+pub use pqz_ffi::stmt::K_MAX;
 
 /// This build's parameter set.
 pub fn pqz_set() -> PqzSet {
