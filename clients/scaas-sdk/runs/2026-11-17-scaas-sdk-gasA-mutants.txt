@@ -1,0 +1,17 @@
+# gasA mutants at commit 0428d698c (name | outcome | test)
+ua_extra not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
+ua_extra added for the native key too | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_ua_extra_for_a_derived_signer
+parse: ua_extra dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
+the attached signature's bytes added again | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature
+an unknown attached signature's bytes added again | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature
+the attached signature's verify gas dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature
+the signer's own sig_bytes dropped too | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee_and_sig_bytes
+A4: a missing sig_bytes read as 0, accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_verify_row_without_sig_bytes_is_refused
+A4: refused as Argument, not by name | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_verify_row_without_sig_bytes_is_refused
+A4: the flag never set | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_verify_row_without_sig_bytes_is_refused
+A4: the reference table's native row without sig_bytes | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_file_parses
+A5: WebAuthn sig_bytes back at the first vector | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+A5: SLH-DSA's verify row at the valid vector | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+A6: a wrap-in fee_extra against the fresh row | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+ua_extra source: the verify delta not subtracted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+15 mutants, 15 killed, 0 survived, 0 not loaded
