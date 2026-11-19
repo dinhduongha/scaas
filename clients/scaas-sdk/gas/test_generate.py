@@ -9,7 +9,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import generate  # noqa: E402
+import generate
 
 V = "verify_0x0108_delta"
 
@@ -54,8 +54,10 @@ def main():
     assert t[("token", "mtxPay", True)]["ua_extra"]["unmeasured"] == ["normal_reg"], "a variant without a derived run"
     assert "unmeasured" not in t[("zether", "mtxPay", True)]["ua_extra"], "every variant measured"
     # a kind with none measured: the largest on another kind
-    t = table({**m, "pqz_mtxPay_fresh_normal": 9_000, "pqz_mtxPay_used_normal": 8_000, "zether_mtxPay_ua_normal": 12_000},
-              kinds=("token", "zether", "pqz"))
+    t = table(
+        {**m, "pqz_mtxPay_fresh_normal": 9_000, "pqz_mtxPay_used_normal": 8_000, "zether_mtxPay_ua_normal": 12_000},
+        kinds=("token", "zether", "pqz"),
+    )
     x = t[("pqz", "mtxPay", True)]["ua_extra"]
     assert (x["from_kind"], x["measured"], x["unmeasured"]) == ("token", 4_000, ["normal"]), x
     assert t[("pqz", "mtxPay", False)]["ua_extra"]["from_kind"] == "token", "the used lane too"
@@ -68,7 +70,11 @@ def main():
     assert refused(lambda: table(m, native=nat)), "a native-only entry measured with a derived signer"
     assert refused(lambda: table(m, native={"kinds": ["token"], "entries": []})), "a native-only kind likewise"
     # Q1: the second derived party
-    q = {**lanes("token", "mtxPay", "normal", 10_000), "token_mtxPay_ua_normal": 15_000, "token_mtxPay_ua2_normal": 15_500}
+    q = {
+        **lanes("token", "mtxPay", "normal", 10_000),
+        "token_mtxPay_ua_normal": 15_000,
+        "token_mtxPay_ua2_normal": 15_500,
+    }
     s = table(q, kinds=("token",))[("token", "mtxPay", True)]["ua_extra"]["second_party"]
     assert s["measured"] == -500, s  # 15,500 - 15,000 - 1,000
     print("[test_generate] ok")
