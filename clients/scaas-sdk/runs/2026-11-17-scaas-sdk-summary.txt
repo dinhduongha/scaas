@@ -52,14 +52,12 @@ ua-test (touched) | dfb10d2c8 | 0 | 93 passed, 0 failed, 0 ignored (6 binaries: 
 # (proof_system_ids_are_the_sets_pins). ua-rs's whole suite waits for the round-end matrix (touched suites above).
 # Mutants: t13pqz 2/2, t13smart 4/4 killed, each by its intended assertion; one first-run survivor each, recorded in its
 # script (an unobservable pre-check; dead code, removed).
-ua-vectors | 6e672164e | 0 | 659 passed, 0 failed, 6 ignored (62 binaries)
 # T13 part 3 (owner rulings S1-S3, P1, P2 at 6e672164e; deploy and completeRecovery ea845adad; passkey and secure-element
 # signing f525fa27f): every SDK step at f525fa27f; ua-rs changed only at 6e672164e (ua-clippy, ua-vectors there; ua-test at
 # f525fa27f, the same ua-rs tree). sdk-e2e 7/7 with the new e2e_pqz_pop_split_stored_on_anvil and the smart account tests
 # on the SDK's deploy and completeRecovery. sdk-min's one red is the same pre-existing tests/config.rs
 # open_checks_gas_tables_and_opt_ins (fixed on ua-rs-sign, arrives by merge). format.sh --check (every part but tact) clean.
 # Mutants: t13s123 4/4, t13direct 2/2, t13external 2/2 killed, each by its intended assertion. msig not built.
-sdk-min | fdd34262d | 101 | 30 passed, 1 failed, 0 ignored (3 binaries)
 format | fdd34262d | 0 | format.sh --check, every part but tact: clean
 # T13 part 4 (msig d98a4c952) and the owner's T1-T4 of 2026-11-19 (152ed27a9, 8e4d88593, 6c29ffbea, fdd34262d): every SDK
 # step at fdd34262d. sdk-e2e ran as the runner's command split in three runs by test name (each under the session's foreground
@@ -69,13 +67,24 @@ format | fdd34262d | 0 | format.sh --check, every part but tact: clean
 # clients/scaas-sdk/bindings/cpp yet (the C++ binding is a later task), so plan T13's gate box stays open.
 # Mutants: t13msig 7/7, t13cache 3/3, t13keyrows 2/2, t13policy 1/1, t13rpid 1/1 killed (t13cache's third by the entries
 # assertion: the prepare and the landed rule share the part reader, recorded in its name; every other by its intended one).
-features | f7a1aa384 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-sdk-wasm | f7a1aa384 | 0 | -
-sdk-test | f7a1aa384 | 0 | 206 passed, 0 failed, 11 ignored (18 binaries)
-docs | a91551c18 | 0 | -
-sdk-clippy | a91551c18 | 0 | -
-ua-clippy | a91551c18 | 0 | -
-sdk-sets | a91551c18 | 0 | 9 passed, 0 failed, 0 ignored (3 binaries)
-bind-dart | a91551c18 | 0 | dart: +6:
-ua-test | a91551c18 | 0 | 555 passed, 0 failed, 3 ignored (55 binaries)
-sdk-e2e | a91551c18 | 0 | 10 passed, 0 failed, 0 ignored (1 binaries)
+sdk-clippy | a58face1d | 0 | -
+ua-clippy | a58face1d | 0 | -
+features | a58face1d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+sdk-wasm | a58face1d | 0 | -
+sdk-e2e | a58face1d | 0 | 10 passed, 0 failed, 0 ignored (1 binaries)
+docs | 8ff3d4ebf | 0 | -
+sdk-sets | 8ff3d4ebf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries)
+bind-dart | 8ff3d4ebf | 0 | dart: +6:
+sdk-min | 8ff3d4ebf | 101 | 30 passed, 1 failed, 0 ignored (3 binaries)
+sdk-test | 8ff3d4ebf | 0 | 216 passed, 0 failed, 11 ignored (18 binaries)
+ua-test | 8ff3d4ebf | 0 | 557 passed, 0 failed, 3 ignored (55 binaries)
+ua-vectors | 8ff3d4ebf | 0 | 661 passed, 0 failed, 6 ignored (62 binaries)
+format | 8ff3d4ebf | 0 | format.sh --check rust py toml sh: clean
+# T16 part 3 and T13's M1-M5 (764661283 P-T16-1/-2; be0d622ee + dff035bc3 the six PQZ debits; 392323f1c P-T16-3/-5;
+# a58face1d M1-M5; 8ff3d4ebf docs only). At 764661283: ua-clippy, sdk-clippy, ua-test 555, ua-vectors 659 green. At
+# dff035bc3: sdk-test 213, sdk-sets 9, clippy, wasm, features, docs, ua-test 556, ua-vectors 660 green. The rows above at
+# a58face1d / 8ff3d4ebf (the same code). sdk-e2e 10/10 in one run (no anvil left); the PQZ debits have no anvil e2e (no PQZ
+# precompile on anvil; an OFFCHAIN token's holder key is the pqz3k scoped key). sdk-min's one red is the same pre-existing
+# tests/config.rs open_checks_gas_tables_and_opt_ins. bind-cpp: no binding directory yet. ck-test not run (clientkeys
+# untouched). Mutants: t16c 10/10, t16d 3/3, t13m 6/6 killed (t16c's "no verdict" by "the verifier asked", t13m's "combine
+# keeps the order" by UAPoP from the minimality check, its "another member digest" by ua-rs refusing the device's answer).
