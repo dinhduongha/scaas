@@ -5,17 +5,17 @@
 //! requests carry no key (CLI-UAL-06), over words the reading layer read at one final block. A decryption runs only after the
 //! read returned and its result goes to the caller (the holder) only: nothing the SDK sends, reads next or retries depends on
 //! it (spec §9.5). UNAUDITED.
-pub(crate) mod words;
-#[cfg(feature = "zether")]
-pub(crate) mod read;
-#[cfg(feature = "zether")]
-mod zether;
 #[cfg(feature = "pqz")]
 pub(crate) mod pqz;
 #[cfg(feature = "pqz")]
 mod pqz_debit;
+#[cfg(feature = "zether")]
+pub(crate) mod read;
 #[cfg(feature = "pqz")]
 mod verdict;
+pub(crate) mod words;
+#[cfg(feature = "zether")]
+mod zether;
 
 #[cfg(feature = "pqz")]
 pub use pqz::*;
@@ -97,7 +97,11 @@ pub struct ZetherBalance {
 
 #[cfg(feature = "zether")]
 /// The conf key (`m/12381/60/<account>/7`) of an open seed, kept beside its seed.
-pub(crate) fn handle(sdk: &Sdk, seed: &str, account: u32) -> Result<(Arc<OpenSeed>, ZetherKey), SdkError> {
+pub(crate) fn handle(
+    sdk: &Sdk,
+    seed: &str,
+    account: u32,
+) -> Result<(Arc<OpenSeed>, ZetherKey), SdkError> {
     let s = sdk.open_seed(seed)?;
     let k = s.wallet.zether_key(COIN_EVM, account, USE_CONF)?;
     Ok((s, k))
@@ -106,13 +110,16 @@ pub(crate) fn handle(sdk: &Sdk, seed: &str, account: u32) -> Result<(Arc<OpenSee
 #[cfg(feature = "zether")]
 /// The value at `path` in a facade answer (`Internal`: absent).
 pub(crate) fn at<'a>(v: &'a Value, path: &[&str]) -> Result<&'a Value, SdkError> {
-    path.iter().try_fold(v, |v, k| v.get(*k).ok_or(SdkError::Internal))
+    path.iter()
+        .try_fold(v, |v, k| v.get(*k).ok_or(SdkError::Internal))
 }
 
 #[cfg(feature = "zether")]
 /// `v`'s field `k` set to `x` (`Internal`: not an object).
 pub(crate) fn set(v: &mut Value, k: &str, x: Value) -> Result<(), SdkError> {
-    v.as_object_mut().ok_or(SdkError::Internal)?.insert(k.into(), x);
+    v.as_object_mut()
+        .ok_or(SdkError::Internal)?
+        .insert(k.into(), x);
     Ok(())
 }
 
@@ -148,24 +155,44 @@ impl Confidential {
     /// The holder's Zether balance on `token` (spec §9.4): the words read at the profile's final block under requirements 1 to
     /// 7, then decrypted by the facade. A word set that does not check or decrypt is refused here (`Argument`) and nothing is
     /// read again. `WalletLocked`, `ChainUnknown`, `ProfileMismatch`, the pool's codes.
-    pub async fn zether_balance(&self, req: ZetherBalanceRequest) -> Result<ZetherBalance, SdkError> {
+    pub async fn zether_balance(
+        &self,
+        req: ZetherBalanceRequest,
+    ) -> Result<ZetherBalance, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
                 let key = handle(&sdk, &req.seed, req.account)?;
-                let r = read::zether(&sdk, &req.chain, &req.token, Some(&key.1.y()), key.1.ua(), &[]).await?;
+                let r = read::zether(
+                    &sdk,
+                    &req.chain,
+                    &req.token,
+                    Some(&key.1.y()),
+                    key.1.ua(),
+                    &[],
+                )
+                .await?;
                 let mut words = r.words;
                 for (k, v) in [("tableBits", req.table_bits), ("boundBits", req.bound_bits)] {
                     if let Some(v) = v {
                         set(&mut words, k, json!(v))?;
                     }
                 }
-                let cmd = if req.pending { "pendingBalance" } else { "balance" };
+                let cmd = if req.pending {
+                    "pendingBalance"
+                } else {
+                    "balance"
+                };
                 let out = call(&sdk, key, cmd, words).await?;
                 Ok(ZetherBalance {
-                    amount: at(&out, &["amount"])?.as_str().ok_or(SdkError::Internal)?.to_string(),
+                    amount: at(&out, &["amount"])?
+                        .as_str()
+                        .ok_or(SdkError::Internal)?
+                        .to_string(),
                     block: r.block,
-                    acc_seq: at(&out, &["state", "accSeq"])?.as_u64().ok_or(SdkError::Internal)?,
+                    acc_seq: at(&out, &["state", "accSeq"])?
+                        .as_u64()
+                        .ok_or(SdkError::Internal)?,
                 })
             })
             .await

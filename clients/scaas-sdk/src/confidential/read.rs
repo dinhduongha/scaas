@@ -111,7 +111,11 @@ struct Plan {
 
 /// The fixed set at the read's block, nothing checked; the registry and the key pointers are where the token's code and the
 /// records (public values) name them, an unreadable one left empty for the checks to refuse.
-async fn fetch(pool: &EvmPool, at: ReadAt<alloy::primitives::B256>, p: &Plan) -> Result<Raw, ReadError> {
+async fn fetch(
+    pool: &EvmPool,
+    at: ReadAt<alloy::primitives::B256>,
+    p: &Plan,
+) -> Result<Raw, ReadError> {
     let at = &at;
     let w = |who: Address, slot: W| async move { word(pool, at, who, &slot).await };
     let rec = w(p.factory, p.rec).await?;
@@ -182,7 +186,15 @@ fn registered(ua: &W, rec: &W, code: &[u8]) -> Result<Vec<u8>, SdkError> {
 
 /// The checks of a fetched set (R2, R5, R6) and the facade's words; public data only. `y`: the handle's key (`None`: no
 /// handle, the watch loop's read of a keystore row's UA; R6 still binds the record's `Y` to the UA).
-fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: Option<&[u8]>, uas: &[W]) -> Result<Read, SdkError> {
+fn check(
+    r: Raw,
+    block: u64,
+    chain_id: u64,
+    chain_uid: &W,
+    token: &[u8; 20],
+    y: Option<&[u8]>,
+    uas: &[W],
+) -> Result<Read, SdkError> {
     // R5: catalogued by the profile's factory, a Zether kind
     let (class, kind) = class_kind(&r.rec);
     if class != CLASS_TOKEN || !ZETHER_KINDS.contains(&kind) {
@@ -216,7 +228,10 @@ fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: 
     for (i, lw) in r.account.iter().take(4).enumerate() {
         if *lw != [0; 32] {
             let mine = r.data.get(i * 4..i * 4 + 4).ok_or(SdkError::Internal)?;
-            data.extend(mine.iter().map(|(s, w)| json!({"slot": hex(s), "word": hex(w)})));
+            data.extend(
+                mine.iter()
+                    .map(|(s, w)| json!({"slot": hex(s), "word": hex(w)})),
+            );
         }
     }
     let words = json!({"family": "evm", "chainId": chain_id, "chainUid": hex(chain_uid), "token": hex(token),
@@ -225,8 +240,10 @@ fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: 
     Ok(Read {
         block,
         words,
-        auditor_mode: u8::try_from(field(&r.modes, "auditorMode")?).map_err(|_| SdkError::Internal)?,
-        disclosure_mode: u8::try_from(field(&r.modes, "disclosureMode")?).map_err(|_| SdkError::Internal)?,
+        auditor_mode: u8::try_from(field(&r.modes, "auditorMode")?)
+            .map_err(|_| SdkError::Internal)?,
+        disclosure_mode: u8::try_from(field(&r.modes, "disclosureMode")?)
+            .map_err(|_| SdkError::Internal)?,
         account: r.account,
         y_aud,
         ys,
@@ -247,9 +264,17 @@ pub(crate) async fn zether(
     others: &[W],
 ) -> Result<Read, SdkError> {
     let (profile, chain_id, pool) = evm(sdk, chain)?;
-    let factory = addr20(&profile.factory.clone().ok_or(SdkError::Argument)?.to_ascii_lowercase())?;
+    let factory = addr20(
+        &profile
+            .factory
+            .clone()
+            .ok_or(SdkError::Argument)?
+            .to_ascii_lowercase(),
+    )?;
     let t = addr20(&token.to_ascii_lowercase())?;
-    let uid: W = unhex(&profile.chain_uid)?.try_into().map_err(|_| SdkError::Argument)?;
+    let uid: W = unhex(&profile.chain_uid)?
+        .try_into()
+        .map_err(|_| SdkError::Argument)?;
     let mut uas = vec![ua];
     uas.extend_from_slice(others);
     let plan = Plan {

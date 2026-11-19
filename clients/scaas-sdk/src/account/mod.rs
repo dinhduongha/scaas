@@ -14,21 +14,23 @@ mod smart;
 mod sponsor;
 
 #[cfg(feature = "wallet")]
-pub use register::{Register, RegisterAttrs, RegistrationState, RegistryWrite};
-#[cfg(feature = "wallet")]
 pub use msig::{
-    msig_structure, AcceptMembership, MsigMemberArgs, MsigRegister, MsigSlotState, MsigState, MsigStructureArgs,
-    MsigUpdatePlan, UpdateMsig,
+    msig_structure, AcceptMembership, MsigMemberArgs, MsigRegister, MsigSlotState, MsigState,
+    MsigStructureArgs, MsigUpdatePlan, UpdateMsig,
 };
+#[cfg(feature = "wallet")]
+pub(crate) use register::{
+    receiver_registered, record_call, record_call2, record_holds, record_holds2, Landed,
+};
+#[cfg(feature = "wallet")]
+pub use register::{Register, RegisterAttrs, RegistrationState, RegistryWrite};
+pub use restore::Restore;
 #[cfg(feature = "wallet")]
 pub use smart::{smart_account_address, SmartCall, SmartOp, SubjectKeyArgs};
 #[cfg(feature = "wallet")]
 pub use sponsor::{
     AttrsArgs, KemArgs, KemRecord, RegisterArgs, RegistrationBlob, WebAuthnArgs, BLOB_MAX,
 };
-#[cfg(feature = "wallet")]
-pub(crate) use register::{receiver_registered, record_call, record_call2, record_holds, record_holds2, Landed};
-pub use restore::Restore;
 
 use crate::vault::{change_entry, AccountRow, SeedEntry};
 use crate::{Sdk, SdkError};
@@ -214,7 +216,11 @@ impl Account {
                 let open = sdk.open_seed(&req.seed)?;
                 let ua = match zether_ua(&sdk, &req)? {
                     Some(ua) => ua,
-                    None => hex(&open.wallet.ua_key(req.kind, req.account, req.index)?.ua().ok_or(SdkError::Argument)?),
+                    None => hex(&open
+                        .wallet
+                        .ua_key(req.kind, req.account, req.index)?
+                        .ua()
+                        .ok_or(SdkError::Argument)?),
                 };
                 let row = AccountRow::Ua {
                     id: crate::vault::uuid4()?,
@@ -268,7 +274,10 @@ impl Account {
     /// `seed` (unlocked: `WalletLocked`), the UA `scaas-ua` derives; the `KeyRef` that signs with it. `AuthenticatorRefused`: no
     /// authenticator or RP ID, a refusal; `Argument`: a bad name or key data.
     #[cfg(feature = "wallet")]
-    pub async fn create_passkey_key(&self, req: CreatePasskeyKey) -> Result<crate::op::KeyRef, SdkError> {
+    pub async fn create_passkey_key(
+        &self,
+        req: CreatePasskeyKey,
+    ) -> Result<crate::op::KeyRef, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -276,7 +285,10 @@ impl Account {
                     return Err(SdkError::Argument);
                 }
                 drop(sdk.open_seed(&req.seed)?);
-                let auth = sdk.authenticator.clone().ok_or(SdkError::AuthenticatorRefused)?;
+                let auth = sdk
+                    .authenticator
+                    .clone()
+                    .ok_or(SdkError::AuthenticatorRefused)?;
                 let rp_id = sdk.rp_id.clone().ok_or(SdkError::AuthenticatorRefused)?;
                 let exclude = sdk
                     .entry(&req.seed)
@@ -284,7 +296,10 @@ impl Account {
                     .accounts
                     .iter()
                     .filter_map(|r| match r {
-                        AccountRow::Key { credential_id: Some(c), .. } => crate::op::unhex(c).ok(),
+                        AccountRow::Key {
+                            credential_id: Some(c),
+                            ..
+                        } => crate::op::unhex(c).ok(),
                         _ => None,
                     })
                     .collect();
@@ -293,7 +308,13 @@ impl Account {
                     .await
                     .map_err(|_| SdkError::AuthenticatorRefused)?;
                 let kind = crate::op::external::PASSKEY;
-                let row = key_row(&req.name, kind, &c.key_data, Some(crate::op::hex(&c.credential_id)), None)?;
+                let row = key_row(
+                    &req.name,
+                    kind,
+                    &c.key_data,
+                    Some(crate::op::hex(&c.credential_id)),
+                    None,
+                )?;
                 key_ref(&sdk, &req.seed, row).await
             })
             .await
@@ -311,7 +332,10 @@ impl Account {
                     return Err(SdkError::Argument);
                 }
                 drop(sdk.open_seed(&req.seed)?);
-                let auth = sdk.authenticator.clone().ok_or(SdkError::AuthenticatorRefused)?;
+                let auth = sdk
+                    .authenticator
+                    .clone()
+                    .ok_or(SdkError::AuthenticatorRefused)?;
                 let k = auth
                     .p256_generate(req.policy)
                     .await
@@ -427,7 +451,11 @@ fn key_row(
 
 /// `row` added to `seed`; its `KeyRef`.
 #[cfg(feature = "wallet")]
-async fn key_ref(sdk: &Arc<Sdk>, seed: &str, row: AccountRow) -> Result<crate::op::KeyRef, SdkError> {
+async fn key_ref(
+    sdk: &Arc<Sdk>,
+    seed: &str,
+    row: AccountRow,
+) -> Result<crate::op::KeyRef, SdkError> {
     let info = add_row(sdk, seed, row).await?;
     Ok(crate::op::KeyRef::Key {
         seed: seed.into(),
@@ -481,7 +509,11 @@ fn zether_ua(sdk: &crate::Sdk, r: &AddUa) -> Result<Option<String>, SdkError> {
     if r.index != 0 {
         return Err(SdkError::Argument);
     }
-    Ok(Some(hex(&crate::confidential::handle(sdk, &r.seed, r.account)?.1.ua())))
+    Ok(Some(hex(&crate::confidential::handle(
+        sdk, &r.seed, r.account,
+    )?
+    .1
+    .ua())))
 }
 
 #[cfg(not(feature = "zether"))]

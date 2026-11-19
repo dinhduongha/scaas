@@ -1870,7 +1870,10 @@ struct Device {
 }
 
 fn device_key(tag: u8) -> p256::ecdsa::SigningKey {
-    p256::ecdsa::SigningKey::from_slice(&scaas_ua::sha256(&[b"scaas-sdk.t13.device".as_slice(), &[tag]].concat())).unwrap()
+    p256::ecdsa::SigningKey::from_slice(&scaas_ua::sha256(
+        &[b"scaas-sdk.t13.device".as_slice(), &[tag]].concat(),
+    ))
+    .unwrap()
 }
 
 fn xy(k: &p256::ecdsa::SigningKey) -> Vec<u8> {
@@ -1892,7 +1895,10 @@ fn b64url(b: &[u8]) -> String {
     const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::new();
     for c in b.chunks(3) {
-        let n = c.iter().enumerate().fold(0u32, |n, (i, x)| n | u32::from(*x) << (16 - 8 * i));
+        let n = c
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, x)| n | u32::from(*x) << (16 - 8 * i));
         (0..=c.len()).for_each(|i| out.push(A[(n >> (18 - 6 * i) & 63) as usize] as char));
     }
     out
@@ -1916,7 +1922,11 @@ impl crate::platform::Authenticator for Device {
     ) -> Result<crate::platform::PasskeyCreated, crate::platform::AuthError> {
         Ok(crate::platform::PasskeyCreated {
             credential_id: vec![7; 16],
-            key_data: [xy(&device_key(1)), scaas_ua::sha256(rp_id.as_bytes()).to_vec()].concat(),
+            key_data: [
+                xy(&device_key(1)),
+                scaas_ua::sha256(rp_id.as_bytes()).to_vec(),
+            ]
+            .concat(),
         })
     }
     async fn get_assertion(
@@ -1927,7 +1937,12 @@ impl crate::platform::Authenticator for Device {
         use p256::ecdsa::signature::hazmat::PrehashSigner;
         assert_eq!(req.allow, vec![vec![7u8; 16]], "the row's credential");
         let flags = if self.no_uv.load(SeqCst) { 0x01 } else { 0x05 };
-        let auth = [&scaas_ua::sha256(req.rp_id.as_bytes())[..], &[flags], &1u32.to_be_bytes()].concat();
+        let auth = [
+            &scaas_ua::sha256(req.rp_id.as_bytes())[..],
+            &[flags],
+            &1u32.to_be_bytes(),
+        ]
+        .concat();
         let cdj = format!(
             r#"{{"type":"webauthn.get","challenge":"{}","origin":"https://{RP_ID}"}}"#,
             b64url(&req.challenge)
@@ -1963,7 +1978,12 @@ impl crate::platform::Authenticator for Device {
         })
     }
     /// MESSAGE mode: ECDSA over SHA-256 of the 32 bytes given; `digest_mode`: the 32 bytes taken as the digest.
-    async fn p256_sign(&self, handle: String, ua_msg: Vec<u8>, _: String) -> Result<Vec<u8>, crate::platform::AuthError> {
+    async fn p256_sign(
+        &self,
+        handle: String,
+        ua_msg: Vec<u8>,
+        _: String,
+    ) -> Result<Vec<u8>, crate::platform::AuthError> {
         use p256::ecdsa::signature::hazmat::PrehashSigner;
         use p256::ecdsa::signature::Signer as _;
         assert_eq!(handle, "se-1");
@@ -1979,15 +1999,20 @@ impl crate::platform::Authenticator for Device {
 
 /// An SDK over the fake chain with `dev` as its authenticator, a verify row for both device kinds; a passkey row (or a
 /// secure-element row, `se`), and a `UACancelNonce` its UA signs, prepared and quoted for the gateway.
-async fn device_op(
-    dev: &Arc<Device>,
-    se: bool,
-) -> (T, Arc<Prepared>, SubmitQuote) {
+async fn device_op(dev: &Arc<Device>, se: bool) -> (T, Arc<Prepared>, SubmitQuote) {
     let auth: Arc<dyn crate::platform::Authenticator> = dev.clone();
     let t = setup_with(
         1,
         |p, _| {
-            p.gas.verify.extend([0x0100, 0x0101].map(|signer| crate::GasVerify { signer, gas: 0, sig_bytes: 0, margin: 0, per_item: None }));
+            p.gas
+                .verify
+                .extend([0x0100, 0x0101].map(|signer| crate::GasVerify {
+                    signer,
+                    gas: 0,
+                    sig_bytes: 0,
+                    margin: 0,
+                    per_item: None,
+                }));
         },
         Some(auth),
     )
@@ -2014,7 +2039,12 @@ async fn device_op(
         .unwrap()
     };
     let rows = acc.accounts(t.seed.clone()).await.unwrap();
-    let ua = rows.iter().find(|r| r.shape == "key").unwrap().id_text.clone();
+    let ua = rows
+        .iter()
+        .find(|r| r.shape == "key")
+        .unwrap()
+        .id_text
+        .clone();
     let mut d = cancel(&t, "token", TOKEN, "5", "0");
     d.signer = key;
     d.message["from"] = json!(ua);
@@ -2040,7 +2070,11 @@ async fn passkey_signs_through_the_authenticator() {
         } else {
             dev.no_uv.store(true, SeqCst);
         }
-        assert_eq!(code(t.sdk.op().submit(p, q).await), "AuthenticatorRefused", "another key: {wrong_key}");
+        assert_eq!(
+            code(t.sdk.op().submit(p, q).await),
+            "AuthenticatorRefused",
+            "another key: {wrong_key}"
+        );
         assert!(t.chain.lock().unwrap().bodies.is_empty(), "nothing sent");
     }
 }
@@ -2062,7 +2096,11 @@ async fn se_key_message_mode() {
         } else {
             dev.wrong_key.store(true, SeqCst);
         }
-        assert_eq!(code(t.sdk.op().submit(p, q).await), "ExternalSignature", "digest mode: {digest}");
+        assert_eq!(
+            code(t.sdk.op().submit(p, q).await),
+            "ExternalSignature",
+            "digest mode: {digest}"
+        );
         assert!(t.chain.lock().unwrap().bodies.is_empty(), "nothing sent");
     }
 }
@@ -2085,47 +2123,113 @@ async fn key_rows_register() {
                 biometry_current_set: true,
                 invalidated_by_enrollment: true,
             };
-            acc.create_se_key(crate::account::CreateSeKey { seed: t.seed.clone(), name: "element".into(), policy })
-                .await
-                .unwrap()
+            acc.create_se_key(crate::account::CreateSeKey {
+                seed: t.seed.clone(),
+                name: "element".into(),
+                policy,
+            })
+            .await
+            .unwrap()
         } else {
-            acc.create_passkey_key(crate::account::CreatePasskeyKey { seed: t.seed.clone(), name: "phone".into() })
-                .await
-                .unwrap()
+            acc.create_passkey_key(crate::account::CreatePasskeyKey {
+                seed: t.seed.clone(),
+                name: "phone".into(),
+            })
+            .await
+            .unwrap()
         };
-        let row = acc.accounts(t.seed.clone()).await.unwrap().into_iter().find(|r| r.shape == "key").unwrap();
+        let row = acc
+            .accounts(t.seed.clone())
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.shape == "key")
+            .unwrap();
         let ua = row.id_text.clone();
         t.chain.lock().unwrap().answers.push((
             REGISTRY.into(),
-            format!("{}{}", &fake_chain::keccak_hex(b"isRegistered(bytes32)")[..10], &ua[2..]),
+            format!(
+                "{}{}",
+                &fake_chain::keccak_hex(b"isRegistered(bytes32)")[..10],
+                &ua[2..]
+            ),
             format!("0x{}", "00".repeat(32)),
         ));
-        let payer = KeyRef::Native { seed: t.seed.clone(), network: "evm".into(), index: 0 };
+        let payer = KeyRef::Native {
+            seed: t.seed.clone(),
+            network: "evm".into(),
+            index: 0,
+        };
         let req = |attrs: crate::account::RegisterAttrs, payer: KeyRef| crate::account::Register {
             key: key.clone(),
             chain: "local".into(),
             attrs,
             payer,
         };
-        let ws = acc.prepare_register(req(Default::default(), payer.clone())).await.unwrap();
+        let ws = acc
+            .prepare_register(req(Default::default(), payer.clone()))
+            .await
+            .unwrap();
         assert_eq!(dev.asked.load(SeqCst), 1, "one answer for the PoP");
         assert_eq!(ws.len(), 1);
-        assert_eq!(ws[0].entry(), if se { "register" } else { "registerWebAuthn" });
+        assert_eq!(
+            ws[0].entry(),
+            if se { "register" } else { "registerWebAuthn" }
+        );
         assert_eq!(ws[0].ua(), ua);
-        let pop = ws[0].review().into_iter().find(|f| f.name == "args.pop").unwrap().value;
+        let pop = ws[0]
+            .review()
+            .into_iter()
+            .find(|f| f.name == "args.pop")
+            .unwrap()
+            .value;
         let kind = row.kind.unwrap();
         let kd = match se {
             true => xy(&device_key(2)),
-            false => [xy(&device_key(1)), scaas_ua::sha256(RP_ID.as_bytes()).to_vec()].concat(),
+            false => [
+                xy(&device_key(1)),
+                scaas_ua::sha256(RP_ID.as_bytes()).to_vec(),
+            ]
+            .concat(),
         };
-        let ok = scaas_ua::ua_portable::check_registration(kind, &kd, &Default::default(), &unhex(&pop).unwrap(), &[], &|_| None);
+        let ok = scaas_ua::ua_portable::check_registration(
+            kind,
+            &kd,
+            &Default::default(),
+            &unhex(&pop).unwrap(),
+            &[],
+            &|_| None,
+        );
         assert_eq!(ok, Ok(()), "the PoP verifies (se: {se})");
-        let kem = crate::account::RegisterAttrs { pqz_key: false, kem: true };
-        assert_eq!(code(acc.prepare_register(req(kem, payer.clone())).await), "Argument");
-        assert_eq!(code(acc.prepare_register(req(Default::default(), key.clone())).await), "Argument", "a key row pays nothing");
+        let kem = crate::account::RegisterAttrs {
+            pqz_key: false,
+            kem: true,
+        };
+        assert_eq!(
+            code(acc.prepare_register(req(kem, payer.clone())).await),
+            "Argument"
+        );
+        assert_eq!(
+            code(
+                acc.prepare_register(req(Default::default(), key.clone()))
+                    .await
+            ),
+            "Argument",
+            "a key row pays nothing"
+        );
         dev.wrong_key.store(true, SeqCst);
-        let refused = code(acc.prepare_register(req(Default::default(), payer.clone())).await);
-        assert_eq!(refused, if se { "ExternalSignature" } else { "AuthenticatorRefused" });
+        let refused = code(
+            acc.prepare_register(req(Default::default(), payer.clone()))
+                .await,
+        );
+        assert_eq!(
+            refused,
+            if se {
+                "ExternalSignature"
+            } else {
+                "AuthenticatorRefused"
+            }
+        );
     }
 }
 
@@ -2147,7 +2251,12 @@ async fn policy_refusal_asks_no_device() {
         let refused = external::sign(&t.sdk, &row, &p.t.td, &other.t.expect).await;
         assert_eq!(code(refused), "PolicyRefused", "se: {se}");
         assert_eq!(dev.asked.load(SeqCst), 0, "no device asked (se: {se})");
-        assert!(external::sign(&t.sdk, &row, &p.t.td, &p.t.expect).await.is_ok(), "the control (se: {se})");
+        assert!(
+            external::sign(&t.sdk, &row, &p.t.td, &p.t.expect)
+                .await
+                .is_ok(),
+            "the control (se: {se})"
+        );
         assert_eq!(dev.asked.load(SeqCst), 1);
     }
 }
@@ -2161,12 +2270,29 @@ async fn passkey_rp_id_from_config() {
     let auth: Arc<dyn crate::platform::Authenticator> = dev.clone();
     let t = setup_with(0, |_, _| {}, Some(auth.clone())).await;
     let acc = t.sdk.account();
-    acc.create_passkey_key(crate::account::CreatePasskeyKey { seed: t.seed.clone(), name: "phone".into() })
+    acc.create_passkey_key(crate::account::CreatePasskeyKey {
+        seed: t.seed.clone(),
+        name: "phone".into(),
+    })
+    .await
+    .unwrap();
+    let row = acc
+        .accounts(t.seed.clone())
         .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.shape == "key")
         .unwrap();
-    let row = acc.accounts(t.seed.clone()).await.unwrap().into_iter().find(|r| r.shape == "key").unwrap();
-    let kd = [xy(&device_key(1)), scaas_ua::sha256(RP_ID.as_bytes()).to_vec()].concat();
-    assert_eq!(row.id_text, hex(&scaas_ua::derive_ua(0x0100, &kd, false).unwrap()), "the configured RP ID");
+    let kd = [
+        xy(&device_key(1)),
+        scaas_ua::sha256(RP_ID.as_bytes()).to_vec(),
+    ]
+    .concat();
+    assert_eq!(
+        row.id_text,
+        hex(&scaas_ua::derive_ua(0x0100, &kd, false).unwrap()),
+        "the configured RP ID"
+    );
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![t.profile.clone()],
         store: MemoryStore::new(),
@@ -2179,14 +2305,26 @@ async fn passkey_rp_id_from_config() {
     })
     .await
     .unwrap();
-    let sec = |s: &str| Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(s.as_bytes().to_vec())).unwrap());
+    let sec = |s: &str| {
+        Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(s.as_bytes().to_vec())).unwrap())
+    };
     let seed = sdk
         .vault()
-        .import_words(ImportWords { label: "main".into(), words: sec(REPO), vault_passphrase: sec(PASS) })
+        .import_words(ImportWords {
+            label: "main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(PASS),
+        })
         .await
         .unwrap()
         .id;
-    let r = sdk.account().create_passkey_key(crate::account::CreatePasskeyKey { seed, name: "phone".into() }).await;
+    let r = sdk
+        .account()
+        .create_passkey_key(crate::account::CreatePasskeyKey {
+            seed,
+            name: "phone".into(),
+        })
+        .await;
     assert_eq!(code(r), "AuthenticatorRefused", "no RP ID configured");
 }
 

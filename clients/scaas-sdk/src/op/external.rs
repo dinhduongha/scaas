@@ -42,7 +42,10 @@ impl ExternalRow {
 /// `r ‖ s` of a signature as 64 bytes, or as DER `SEQUENCE { INTEGER r, INTEGER s }` (what WebAuthn and the platforms return).
 pub(crate) fn rs(sig: &[u8]) -> Option<([u8; 32], [u8; 32])> {
     if sig.len() == 64 {
-        return Some((sig.get(..32)?.try_into().ok()?, sig.get(32..)?.try_into().ok()?));
+        return Some((
+            sig.get(..32)?.try_into().ok()?,
+            sig.get(32..)?.try_into().ok()?,
+        ));
     }
     let (&[0x30, n], body) = sig.split_first_chunk::<2>()? else {
         return None;
@@ -61,7 +64,8 @@ pub(crate) fn rs(sig: &[u8]) -> Option<([u8; 32], [u8; 32])> {
             _ => return None,
         };
         let mut w = [0u8; 32];
-        w.get_mut(32usize.checked_sub(v.len())?..)?.copy_from_slice(v);
+        w.get_mut(32usize.checked_sub(v.len())?..)?
+            .copy_from_slice(v);
         Some((w, 2 + usize::from(l)))
     };
     let (r, a) = int(body)?;
@@ -70,7 +74,12 @@ pub(crate) fn rs(sig: &[u8]) -> Option<([u8; 32], [u8; 32])> {
 }
 
 /// The `UASig` of `td` by `row` under `expect` (module doc).
-pub(crate) async fn sign(sdk: &Sdk, row: &ExternalRow, td: &TypedData, expect: &Expect) -> Result<UASig, SdkError> {
+pub(crate) async fn sign(
+    sdk: &Sdk,
+    row: &ExternalRow,
+    td: &TypedData,
+    expect: &Expect,
+) -> Result<UASig, SdkError> {
     let asked = AtomicBool::new(false);
     let refuse = ExternalKey::new(row.key_ref(), |_| {
         asked.store(true, Ordering::SeqCst);
@@ -96,7 +105,10 @@ pub(crate) async fn answer(
     digest: &[u8; 32],
 ) -> Result<Vec<u8>, SdkError> {
     let (purpose, digest) = (*purpose, *digest);
-    let auth = sdk.authenticator.clone().ok_or(SdkError::AuthenticatorRefused)?;
+    let auth = sdk
+        .authenticator
+        .clone()
+        .ok_or(SdkError::AuthenticatorRefused)?;
     let answer = match row.kind {
         PASSKEY => {
             let challenge = webauthn_challenge(&purpose, &digest)?;
@@ -111,11 +123,19 @@ pub(crate) async fn answer(
                 .await
                 .map_err(|_| SdkError::AuthenticatorRefused)?;
             let (r, s) = rs(&a.signature).ok_or(SdkError::AuthenticatorRefused)?;
-            webauthn_assertion(&row.key_data, &challenge, &a.authenticator_data, &a.client_data_json, &r, &s)
-                .map_err(|_| SdkError::AuthenticatorRefused)?
+            webauthn_assertion(
+                &row.key_data,
+                &challenge,
+                &a.authenticator_data,
+                &a.client_data_json,
+                &r,
+                &s,
+            )
+            .map_err(|_| SdkError::AuthenticatorRefused)?
         }
         SECURE_ELEMENT => {
-            let ua_msg = scaas_ua::ua_message(SECURE_ELEMENT, &purpose, &digest).map_err(UaError::from)?;
+            let ua_msg =
+                scaas_ua::ua_message(SECURE_ELEMENT, &purpose, &digest).map_err(UaError::from)?;
             let handle = row.handle.clone().ok_or(SdkError::Argument)?;
             let sig = auth
                 .p256_sign(handle, ua_msg.to_vec(), "Sign a SCaaS operation".into())

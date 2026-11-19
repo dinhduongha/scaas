@@ -44,8 +44,12 @@ fn proof_system_ids_are_the_sets_pins() {
         env!("CARGO_MANIFEST_DIR"),
         mine.name
     );
-    let pin: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let pin: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let hex = |b: &[u8; 32]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
     assert_eq!(pin["pqzl_id"].as_str(), Some(hex(&mine.pqzl_id).as_str()));
-    assert_eq!(pin["pqzh_id"].as_str(), mine.pqzh_id.as_ref().map(hex).as_deref());
+    assert_eq!(
+        pin["pqzh_id"].as_str(),
+        mine.pqzh_id.as_ref().map(hex).as_deref()
+    );
 }

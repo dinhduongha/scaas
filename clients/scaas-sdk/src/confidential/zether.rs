@@ -7,7 +7,9 @@
 //! which signs only the digest `submit` approved. The plaintext amount and recipient are reviewed as `Request` fields: the
 //! signed struct holds them encrypted. UNAUDITED.
 use super::{at, call, handle, read, set, ZETHER_KIND};
-use crate::op::{addr20, dec, evm, field, hex, lane_nonce, unhex, Draft, KeyRef, Op, Prepared, Source};
+use crate::op::{
+    addr20, dec, evm, field, hex, lane_nonce, unhex, Draft, KeyRef, Op, Prepared, Source,
+};
 use crate::wallet::Envelope;
 use crate::SdkError;
 use alloy::primitives::Address;
@@ -42,7 +44,12 @@ impl ZetherSigner {
     pub(crate) fn pop(&self) -> Result<(Vec<u8>, Vec<u8>), SdkError> {
         let out = self.key.call("pop", br#"{"curve":"bls12381"}"#)?;
         let v: Value = serde_json::from_str(&out).map_err(|_| SdkError::Internal)?;
-        let get = |k: &str| v.get(k).and_then(Value::as_str).ok_or(SdkError::Internal).and_then(unhex);
+        let get = |k: &str| {
+            v.get(k)
+                .and_then(Value::as_str)
+                .ok_or(SdkError::Internal)
+                .and_then(unhex)
+        };
         Ok((get("Y")?, get("pop")?))
     }
     /// The digest `submit` checked: the only one this signer signs.
@@ -64,7 +71,8 @@ impl Signer for ZetherSigner {
         let SignRequest::UaMsg { kind, ua_msg, .. } = req else {
             return Err(Error::Argument);
         };
-        let d = (*self.digest.lock().unwrap_or_else(PoisonError::into_inner)).ok_or(Error::Argument)?;
+        let d =
+            (*self.digest.lock().unwrap_or_else(PoisonError::into_inner)).ok_or(Error::Argument)?;
         if *kind != ZETHER_KIND {
             return Err(Error::Argument);
         }
@@ -72,10 +80,15 @@ impl Signer for ZetherSigner {
             if scaas_ua::ua_message(ZETHER_KIND, &scaas_ua::purpose_tag(p)?, &d)? == *ua_msg {
                 let out = self.key.call(
                     "uaSig",
-                    json!({"curve": "bls12381", "purpose": p, "digest": hex(&d)}).to_string().as_bytes(),
+                    json!({"curve": "bls12381", "purpose": p, "digest": hex(&d)})
+                        .to_string()
+                        .as_bytes(),
                 )?;
                 let v: Value = serde_json::from_str(&out).map_err(|_| Error::Argument)?;
-                let sig = v.get("sig").and_then(Value::as_str).ok_or(Error::Argument)?;
+                let sig = v
+                    .get("sig")
+                    .and_then(Value::as_str)
+                    .ok_or(Error::Argument)?;
                 return unhex(sig).map_err(|_| Error::Argument);
             }
         }
@@ -250,7 +263,9 @@ pub struct OwnerRelay {
 }
 
 fn w32(s: &str) -> Result<[u8; 32], SdkError> {
-    unhex(&s.to_ascii_lowercase())?.try_into().map_err(|_| SdkError::Argument)
+    unhex(&s.to_ascii_lowercase())?
+        .try_into()
+        .map_err(|_| SdkError::Argument)
 }
 
 /// The owner statement: a roll-over, or a mode change to the mode given.
@@ -299,7 +314,11 @@ impl super::Confidential {
         fields: Map<String, Value>,
         env: Envelope,
     ) -> Result<Arc<Prepared>, SdkError> {
-        let p = self.sdk.wallet().plain(name, signer, chain, token, batch, fields, env).await?;
+        let p = self
+            .sdk
+            .wallet()
+            .plain(name, signer, chain, token, batch, fields, env)
+            .await?;
         if p.t.kind != "zether" {
             return Err(SdkError::Argument);
         }
@@ -311,37 +330,79 @@ impl super::Confidential {
         let mut f = Map::new();
         f.insert("toUA".into(), json!(r.to_ua));
         f.insert("amount".into(), json!(r.amount));
-        self.plain("UAShield", r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+        self.plain(
+            "UAShield", r.signer, r.chain, r.token, r.batch, f, r.envelope,
+        )
+        .await
     }
 
     /// Prepares `zether_wrap_shield` (`WrapShield` on a Zether token).
-    pub async fn prepare_zether_wrap_shield(&self, r: ZetherWrapShield) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_zether_wrap_shield(
+        &self,
+        r: ZetherWrapShield,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let mut f = Map::new();
         f.insert("underlying".into(), json!(r.underlying));
         f.insert("amountIn".into(), json!(r.amount_in));
         f.insert("toUA".into(), json!(r.to_ua));
-        self.plain("WrapShield", r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+        self.plain(
+            "WrapShield",
+            r.signer,
+            r.chain,
+            r.token,
+            r.batch,
+            f,
+            r.envelope,
+        )
+        .await
     }
 
     /// Prepares `UARollOver`.
-    pub async fn prepare_zether_roll_over(&self, r: ZetherRollOver) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_zether_roll_over(
+        &self,
+        r: ZetherRollOver,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let mut f = Map::new();
         f.insert("ua".into(), json!(r.ua));
         f.insert("n".into(), json!(r.n));
-        self.plain("UARollOver", r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+        self.plain(
+            "UARollOver",
+            r.signer,
+            r.chain,
+            r.token,
+            r.batch,
+            f,
+            r.envelope,
+        )
+        .await
     }
 
     /// Prepares `UARollOverBatch`.
-    pub async fn prepare_zether_roll_over_batch(&self, r: ZetherRollOverBatch) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_zether_roll_over_batch(
+        &self,
+        r: ZetherRollOverBatch,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let mut f = Map::new();
         f.insert("uas".into(), json!(r.uas));
-        self.plain("UARollOverBatch", r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+        self.plain(
+            "UARollOverBatch",
+            r.signer,
+            r.chain,
+            r.token,
+            r.batch,
+            f,
+            r.envelope,
+        )
+        .await
     }
 
     /// Prepares `UAZetherTransferSingle` (spec §9.1): the words of the holder and the recipient's registered `Y` read at the
     /// final block (§9.4), the proof by the facade, the typed message by its `namedCall`. `WalletLocked`, `ChainUnknown`,
     /// `ProfileMismatch`, `Argument` (a word set that does not check, a balance below the amount), the pool's codes.
-    pub async fn prepare_zether_transfer(&self, r: ZetherTransfer) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_zether_transfer(
+        &self,
+        r: ZetherTransfer,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let to = w32(&r.to_ua)?;
         let mut fields = Map::new();
         fields.insert("amount".into(), json!(r.amount));
@@ -370,7 +431,10 @@ impl super::Confidential {
     }
 
     /// Prepares `UAZetherUnshield` (spec §9.1): as [`Self::prepare_zether_transfer`], the proof a burn of `amount` to `recipient`.
-    pub async fn prepare_zether_unshield(&self, r: ZetherUnshield) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_zether_unshield(
+        &self,
+        r: ZetherUnshield,
+    ) -> Result<Arc<Prepared>, SdkError> {
         w32(&r.recipient)?;
         let mut fields = Map::new();
         fields.insert("amount".into(), json!(r.amount));
@@ -399,7 +463,10 @@ impl super::Confidential {
 
     /// Prepares `UAZetherUnshieldUnwrap` (spec §9.1): the burn proof of `amount` to the unwrap's `recipient`, the `Unwrap` leg
     /// signed in the struct.
-    pub async fn prepare_zether_unshield_unwrap(&self, r: ZetherUnshieldUnwrap) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_zether_unshield_unwrap(
+        &self,
+        r: ZetherUnshieldUnwrap,
+    ) -> Result<Arc<Prepared>, SdkError> {
         w32(&r.recipient)?;
         let underlying = addr20(&r.underlying.to_ascii_lowercase())?;
         let mut fields = Map::new();
@@ -434,22 +501,42 @@ impl super::Confidential {
 
     /// Prepares `UAZetherTransfer` (spec §9.1): [`ZetherTransferMulti`]'s legs, stored in the token's form (a COMPACT token's
     /// commit-reveal, else the bundle).
-    pub async fn prepare_zether_transfer_multi(&self, r: ZetherTransferMulti) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_zether_transfer_multi(
+        &self,
+        r: ZetherTransferMulti,
+    ) -> Result<Arc<Prepared>, SdkError> {
         self.multi("UAZetherTransfer", r).await
     }
 
     /// Prepares `UAZetherTransferCompact` (spec §9.1): as [`Self::prepare_zether_transfer_multi`], commit-reveal always.
-    pub async fn prepare_zether_transfer_compact(&self, r: ZetherTransferMulti) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_zether_transfer_compact(
+        &self,
+        r: ZetherTransferMulti,
+    ) -> Result<Arc<Prepared>, SdkError> {
         self.multi("UAZetherTransferCompact", r).await
     }
 
-    async fn multi(&self, name: &'static str, r: ZetherTransferMulti) -> Result<Arc<Prepared>, SdkError> {
+    async fn multi(
+        &self,
+        name: &'static str,
+        r: ZetherTransferMulti,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let mut legs = Vec::with_capacity(r.recipients.len());
         let mut review = Vec::new();
         for (i, l) in r.recipients.iter().enumerate() {
             legs.push((w32(&l.to_ua)?, l.amount.clone()));
-            review.push(field(&format!("request.to[{i}]"), &l.to_ua, &l.to_ua, Source::Request));
-            review.push(field(&format!("request.amount[{i}]"), &l.amount, &l.amount, Source::Request));
+            review.push(field(
+                &format!("request.to[{i}]"),
+                &l.to_ua,
+                &l.to_ua,
+                Source::Request,
+            ));
+            review.push(field(
+                &format!("request.amount[{i}]"),
+                &l.amount,
+                &l.amount,
+                Source::Request,
+            ));
         }
         if legs.is_empty() {
             return Err(SdkError::Argument);
@@ -492,8 +579,20 @@ impl super::Confidential {
 
     /// Prepares `ZetherRollOver` (the direct `mtxRollOverSigned`; spec §9.1): `expectedPendingSeq` the account's `pendingSeq`
     /// and `accSeq` its own, both read at the final block (§9.4). `Argument`: nothing pending.
-    pub async fn prepare_zether_owner_roll_over(&self, r: ZetherOwnerRollOver) -> Result<Arc<Prepared>, SdkError> {
-        self.owner(Owner::Roll, r.seed, r.account, r.chain, r.token, r.valid_until_block, None).await
+    pub async fn prepare_zether_owner_roll_over(
+        &self,
+        r: ZetherOwnerRollOver,
+    ) -> Result<Arc<Prepared>, SdkError> {
+        self.owner(
+            Owner::Roll,
+            r.seed,
+            r.account,
+            r.chain,
+            r.token,
+            r.valid_until_block,
+            None,
+        )
+        .await
     }
 
     /// Prepares `UARollOverSigned`: the Zether UA's envelope over [`Self::prepare_zether_owner_roll_over`]'s statement, whose
@@ -503,13 +602,34 @@ impl super::Confidential {
         r: ZetherOwnerRollOver,
         relay: OwnerRelay,
     ) -> Result<Arc<Prepared>, SdkError> {
-        self.owner(Owner::Roll, r.seed, r.account, r.chain, r.token, r.valid_until_block, Some(relay)).await
+        self.owner(
+            Owner::Roll,
+            r.seed,
+            r.account,
+            r.chain,
+            r.token,
+            r.valid_until_block,
+            Some(relay),
+        )
+        .await
     }
 
     /// Prepares `ZetherSetRollOverMode` (the direct `mtxSetRollOverMode`): `modeNonce` read at the final block. `Argument`: a
     /// mode other than 0 or 1.
-    pub async fn prepare_zether_owner_set_mode(&self, r: ZetherOwnerSetMode) -> Result<Arc<Prepared>, SdkError> {
-        self.owner(Owner::Mode(r.mode), r.seed, r.account, r.chain, r.token, r.valid_until_block, None).await
+    pub async fn prepare_zether_owner_set_mode(
+        &self,
+        r: ZetherOwnerSetMode,
+    ) -> Result<Arc<Prepared>, SdkError> {
+        self.owner(
+            Owner::Mode(r.mode),
+            r.seed,
+            r.account,
+            r.chain,
+            r.token,
+            r.valid_until_block,
+            None,
+        )
+        .await
     }
 
     /// Prepares `UASetRollOverMode`: as [`Self::prepare_zether_roll_over_signed`] over `ZetherSetRollOverMode`.
@@ -518,7 +638,16 @@ impl super::Confidential {
         r: ZetherOwnerSetMode,
         relay: OwnerRelay,
     ) -> Result<Arc<Prepared>, SdkError> {
-        self.owner(Owner::Mode(r.mode), r.seed, r.account, r.chain, r.token, r.valid_until_block, Some(relay)).await
+        self.owner(
+            Owner::Mode(r.mode),
+            r.seed,
+            r.account,
+            r.chain,
+            r.token,
+            r.valid_until_block,
+            Some(relay),
+        )
+        .await
     }
 
     #[allow(clippy::too_many_arguments)]

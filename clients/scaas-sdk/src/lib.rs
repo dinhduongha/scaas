@@ -15,9 +15,9 @@ compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 
 #[cfg(feature = "account")]
 pub mod account;
-pub mod config;
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod confidential;
+pub mod config;
 pub mod error;
 pub mod events;
 #[cfg(feature = "frb")]
@@ -270,7 +270,10 @@ impl Sdk {
             let verifiers = if p.verifiers.is_empty() {
                 None
             } else {
-                Some(scaas_rpc::node::VerifierClient::new(list(&p.verifiers, p.verifier_policy)?)?)
+                Some(scaas_rpc::node::VerifierClient::new(list(
+                    &p.verifiers,
+                    p.verifier_policy,
+                )?)?)
             };
             chains.push(Chain {
                 profile: p,
@@ -434,8 +437,15 @@ impl Sdk {
 
     /// The verifier client of chain `chain`'s PQZ verifiers (`ChainUnknown`; `VerdictRefused`: the profile lists none).
     #[cfg(feature = "pqz")]
-    pub(crate) fn verifiers(&self, chain: &str) -> Result<scaas_rpc::node::VerifierClient, SdkError> {
-        let c = self.chains.iter().find(|c| c.profile.key == chain).ok_or(SdkError::ChainUnknown)?;
+    pub(crate) fn verifiers(
+        &self,
+        chain: &str,
+    ) -> Result<scaas_rpc::node::VerifierClient, SdkError> {
+        let c = self
+            .chains
+            .iter()
+            .find(|c| c.profile.key == chain)
+            .ok_or(SdkError::ChainUnknown)?;
         c.verifiers.clone().ok_or(SdkError::VerdictRefused)
     }
 

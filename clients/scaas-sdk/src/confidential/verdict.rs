@@ -46,24 +46,42 @@ struct Raw {
 
 /// `STATE_LAYOUT`'s namespace slot and `(byte, width)` of `label` under the `scaas.pqz` root.
 fn slot_of(label: &str) -> (W, usize, usize) {
-    let r = STATE_LAYOUT.iter().find(|r| r.0 == label).map_or((0, 0, 0), |r| (r.1, r.3, r.4));
+    let r = STATE_LAYOUT
+        .iter()
+        .find(|r| r.0 == label)
+        .map_or((0, 0, 0), |r| (r.1, r.3, r.4));
     (add(&super::pqz::root(), r.0), r.1, r.2)
 }
 
-async fn fetch(pool: &EvmPool, at: ReadAt<B256>, factory: Address, token: Address) -> Result<Raw, ReadError> {
+async fn fetch(
+    pool: &EvmPool,
+    at: ReadAt<B256>,
+    factory: Address,
+    token: Address,
+) -> Result<Raw, ReadError> {
     let at = &at;
     let rec = word(pool, at, factory, &rec_slot(&token.into_array())).await?;
     let code = pool.code_at(at, token).await?.to_vec();
     let psid = word(pool, at, token, &slot_of("psid").0).await?;
     let verifier = word(pool, at, token, &slot_of("pqzVerifierUA").0).await?;
     let epoch = word(pool, at, token, &slot_of("pqzVerifierEpoch").0).await?;
-    let (mut record, mut key_code, mut registry, mut native_code) = ([0; 32], vec![], [0; 20], vec![]);
+    let (mut record, mut key_code, mut registry, mut native_code) =
+        ([0; 32], vec![], [0; 20], vec![]);
     if native(&verifier) {
-        native_code = pool.code_at(at, Address::from_slice(&verifier[12..])).await?.to_vec();
+        native_code = pool
+            .code_at(at, Address::from_slice(&verifier[12..]))
+            .await?
+            .to_vec();
     }
     if let Some((_, env)) = scaas_ua::factory::clone_env(&code) {
         registry = env.registry;
-        record = word(pool, at, Address::from(env.registry), &map_slot(&verifier, &be(REG_RECORDS_SLOT))).await?;
+        record = word(
+            pool,
+            at,
+            Address::from(env.registry),
+            &map_slot(&verifier, &be(REG_RECORDS_SLOT)),
+        )
+        .await?;
         let ptr = Address::from_slice(&record[5..25]);
         if !ptr.is_zero() {
             key_code = pool.code_at(at, ptr).await?.to_vec();
@@ -104,13 +122,23 @@ pub struct PqzVerdictRequest {
 /// pool's codes before any verifier is asked.
 pub(crate) async fn request(sdk: &Sdk, r: &PqzVerdictRequest) -> Result<Value, SdkError> {
     let (profile, chain_id, pool) = evm(sdk, &r.chain)?;
-    let factory = Address::from(addr20(&profile.factory.clone().ok_or(SdkError::Argument)?.to_ascii_lowercase())?);
+    let factory = Address::from(addr20(
+        &profile
+            .factory
+            .clone()
+            .ok_or(SdkError::Argument)?
+            .to_ascii_lowercase(),
+    )?);
     let t = addr20(&r.token.to_ascii_lowercase())?;
-    let uid: W = unhex(&profile.chain_uid)?.try_into().map_err(|_| SdkError::Argument)?;
+    let uid: W = unhex(&profile.chain_uid)?
+        .try_into()
+        .map_err(|_| SdkError::Argument)?;
     let (stmt, proof) = (unhex(&r.statement)?, unhex(&r.proof)?);
     let pool = &pool;
     let a = pool
-        .read_at_block(final_block(&profile), PURPOSE, |at| fetch(pool, at, factory, Address::from(t)))
+        .read_at_block(final_block(&profile), PURPOSE, |at| {
+            fetch(pool, at, factory, Address::from(t))
+        })
         .await?;
     let x = a.value;
     // R5, R2: the token's own checks, as the words it serves
@@ -123,7 +151,12 @@ pub(crate) async fn request(sdk: &Sdk, r: &PqzVerdictRequest) -> Result<Value, S
         return Err(SdkError::ProfileMismatch);
     }
     let (_, eb, ew) = slot_of("pqzVerifierEpoch");
-    let epoch = x.epoch.get(32 - eb - ew..32 - eb).unwrap_or_default().iter().fold(0u64, |a, b| (a << 8) | u64::from(*b));
+    let epoch = x
+        .epoch
+        .get(32 - eb - ew..32 - eb)
+        .unwrap_or_default()
+        .iter()
+        .fold(0u64, |a, b| (a << 8) | u64::from(*b));
     // no verifier named (a PRECOMPILE token, or one revoked): no verdict to ask for
     if x.verifier == [0; 32] {
         return Err(SdkError::VerdictRefused);
@@ -131,8 +164,22 @@ pub(crate) async fn request(sdk: &Sdk, r: &PqzVerdictRequest) -> Result<Value, S
     let client = sdk.verifiers(&r.chain)?;
     let req = json!({"token": hex(&t), "chainId": chain_id, "op": r.op, "statement": r.statement,
         "proof": r.proof, "pqzVerifierEpoch": epoch});
-    let answer = client.verdict(&req).await.map_err(|_| SdkError::VerdictRefused)?;
-    checked(&answer, &x, &t, chain_id, &uid, epoch, &stmt, &proof, sdk.now()).ok_or(SdkError::VerdictRefused)
+    let answer = client
+        .verdict(&req)
+        .await
+        .map_err(|_| SdkError::VerdictRefused)?;
+    checked(
+        &answer,
+        &x,
+        &t,
+        chain_id,
+        &uid,
+        epoch,
+        &stmt,
+        &proof,
+        sdk.now(),
+    )
+    .ok_or(SdkError::VerdictRefused)
 }
 
 /// The answer's `PqzVerdict` and its signer checked against the token's state `x` (module doc); `None` on any mismatch.
@@ -150,7 +197,11 @@ fn checked(
 ) -> Option<Value> {
     let v = answer.get("pqzVerdict")?;
     let s = answer.get("pqzVerdictSig")?;
-    let str_of = |o: &Value, k: &str| o.get(k).and_then(Value::as_str).map(str::to_ascii_lowercase);
+    let str_of = |o: &Value, k: &str| {
+        o.get(k)
+            .and_then(Value::as_str)
+            .map(str::to_ascii_lowercase)
+    };
     let num = |k: &str| match v.get(k)? {
         Value::Number(n) => n.as_u64(),
         Value::String(s) => s.parse().ok(),
@@ -162,7 +213,9 @@ fn checked(
         ("statementHash", hex(&scaas_ua::keccak256(stmt))),
         ("proofHash", hex(&scaas_ua::keccak256(proof))),
     ];
-    if fields.iter().any(|(k, want)| str_of(v, k).as_deref() != Some(want.as_str()))
+    if fields
+        .iter()
+        .any(|(k, want)| str_of(v, k).as_deref() != Some(want.as_str()))
         || num("chainId")? != chain_id
         || num("pqzVerifierEpoch")? != epoch
         || num("validUntil")? < now
@@ -170,11 +223,20 @@ fn checked(
         return None;
     }
     // the signer: a single derived key, the token's verifier, by its registry record at the same block
-    let (key_data, sig) = (unhex(&str_of(s, "keyData")?).ok()?, unhex(&str_of(s, "signature")?).ok()?);
-    if s.get("members").and_then(Value::as_array).is_none_or(|m| !m.is_empty()) {
+    let (key_data, sig) = (
+        unhex(&str_of(s, "keyData")?).ok()?,
+        unhex(&str_of(s, "signature")?).ok()?,
+    );
+    if s.get("members")
+        .and_then(Value::as_array)
+        .is_none_or(|m| !m.is_empty())
+    {
         return None;
     }
-    let digest = scaas_ua::wallet::pqz_verdict_typed_data(token, chain_id, uid, v).ok()?.digest().ok()?;
+    let digest = scaas_ua::wallet::pqz_verdict_typed_data(token, chain_id, uid, v)
+        .ok()?
+        .digest()
+        .ok()?;
     let purpose = scaas_ua::purpose_tag("pqz-verdict").ok()?;
     if native(&x.verifier) {
         // P-T16-3: an EOA signs the registry's `uaAuthDigest`; no key data, no code
@@ -188,7 +250,11 @@ fn checked(
                     registry: x.registry,
                     chain_uid: *uid,
                 };
-                scaas_ua::verify::native_ecdsa(&addr, &scaas_ua::ua_auth_digest(&d, &x.verifier, &purpose, &digest), &sig)
+                scaas_ua::verify::native_ecdsa(
+                    &addr,
+                    &scaas_ua::ua_auth_digest(&d, &x.verifier, &purpose, &digest),
+                    &sig,
+                )
             });
         return (!refused).then(|| json!({"pqzVerdict": v, "sig": {"keyData": "0x", "signature": hex(&sig), "members": []}}));
     }
@@ -203,7 +269,9 @@ fn checked(
     if !scaas_ua::verify::verify(kind, &key_data, &msg, &sig, false) {
         return None;
     }
-    Some(json!({"pqzVerdict": v, "sig": {"keyData": hex(&key_data), "signature": hex(&sig), "members": []}}))
+    Some(
+        json!({"pqzVerdict": v, "sig": {"keyData": hex(&key_data), "signature": hex(&sig), "members": []}}),
+    )
 }
 
 impl super::Confidential {

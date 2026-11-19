@@ -44,7 +44,10 @@ fn hx(b: &[u8]) -> String {
 }
 
 fn load(p: &str) -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/{p}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/../../smartcontracts/vectors/{p}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
@@ -191,7 +194,15 @@ fn registry(t: &T, ua: &str, registered: bool, kem_pk_hash: &str, kem_stored: bo
     c.answers.push((
         REGISTRY.into(),
         format!("{}{ua}", sel("kemKeyAt(bytes32,uint64)")),
-        format!("0x{}{}{}{}{}{}", w(0x40), w(0xe0), w(u64::from(kem_stored)), w(0x60), w(0), w(0)),
+        format!(
+            "0x{}{}{}{}{}{}",
+            w(0x40),
+            w(0xe0),
+            w(u64::from(kem_stored)),
+            w(0x60),
+            w(0),
+            w(0)
+        ),
     ));
 }
 
@@ -200,16 +211,28 @@ fn independent_register(kind: u16) -> (String, Vec<u8>, Value) {
     let wallet = Wallet::from_mnemonic(REPO, "").unwrap();
     let k = wallet.ua_key(kind, 0, 0).unwrap();
     let ua = k.ua().unwrap();
-    let hp = scaas_ua::holder_pop_message(kind, &ua, &k.key_data(), None, None, None, None).unwrap();
+    let hp =
+        scaas_ua::holder_pop_message(kind, &ua, &k.key_data(), None, None, None, None).unwrap();
     let pop = k
-        .sign_ua(&scaas_ua::ua_portable::pop_v2_tag(), &hp.registration_digest)
+        .sign_ua(
+            &scaas_ua::ua_portable::pop_v2_tag(),
+            &hp.registration_digest,
+        )
         .unwrap();
-    scaas_ua::ua_portable::check_registration(kind, &k.key_data(), &Default::default(), &pop, &[], &|_| None)
-        .expect("the PoP verifies (the positive control of the independent build)");
+    scaas_ua::ua_portable::check_registration(
+        kind,
+        &k.key_data(),
+        &Default::default(),
+        &pop,
+        &[],
+        &|_| None,
+    )
+    .expect("the PoP verifies (the positive control of the independent build)");
     let input = json!({"kind": kind, "keyData": hx(&k.key_data()), "pqzKey": "0x", "pqzPopHash": "0x", "pqzPop": "0x",
         "kemPk": "0x", "pop": hx(&pop)});
     let r: Value =
-        serde_json::from_str(&scaas_ua::json::registration_args_json(&input.to_string()).unwrap()).unwrap();
+        serde_json::from_str(&scaas_ua::json::registration_args_json(&input.to_string()).unwrap())
+            .unwrap();
     let args = r["args"].clone();
     (hx(&ua), registry_call("register", &args).unwrap(), args)
 }
@@ -218,7 +241,10 @@ fn req(t: &T, kind: u16, kem: bool) -> Register {
     Register {
         key: ua_key(t, kind),
         chain: "local".into(),
-        attrs: RegisterAttrs { pqz_key: false, kem },
+        attrs: RegisterAttrs {
+            pqz_key: false,
+            kem,
+        },
         payer: t.payer.clone(),
     }
 }
@@ -230,11 +256,20 @@ async fn registration_args_equal_portable_json() {
     let t = setup().await;
     let (ua, calldata, args) = independent_register(ED25519);
     registry(&t, &ua, false, &hx(&[0; 32]), false);
-    let ws = t.sdk.account().prepare_register(req(&t, ED25519, false)).await.unwrap();
+    let ws = t
+        .sdk
+        .account()
+        .prepare_register(req(&t, ED25519, false))
+        .await
+        .unwrap();
     assert_eq!(ws.len(), 1);
     assert_eq!(ws[0].entry(), "register");
     assert_eq!(ws[0].ua(), ua);
-    assert_eq!(ws[0].calldata(), hx(&calldata), "the SDK's calldata is scaas-ua's");
+    assert_eq!(
+        ws[0].calldata(),
+        hx(&calldata),
+        "the SDK's calldata is scaas-ua's"
+    );
     // the named form: the vectors' row of the same entry has the same fields
     let v = load("ua/portable.json");
     let row = v["registrations"]
@@ -250,22 +285,54 @@ async fn registration_args_equal_portable_json() {
     };
     assert_eq!(keys(&args), keys(&row["args"]));
     assert_eq!(keys(&args["attrs"]), keys(&row["args"]["attrs"]));
-    assert!(ws[0].review().iter().any(|f| f.name == "args.pop"), "every argument reviewed");
+    assert!(
+        ws[0].review().iter().any(|f| f.name == "args.pop"),
+        "every argument reviewed"
+    );
     // a KEM holder with its KEM key: in full (it fits one call), scheme 1
-    let mldsa = hx(&Wallet::from_mnemonic(REPO, "").unwrap().ua_key(MLDSA44, 0, 0).unwrap().ua().unwrap());
+    let mldsa = hx(&Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .ua_key(MLDSA44, 0, 0)
+        .unwrap()
+        .ua()
+        .unwrap());
     registry(&t, &mldsa, false, &hx(&[0; 32]), false);
-    let ws = t.sdk.account().prepare_register(req(&t, MLDSA44, true)).await.unwrap();
+    let ws = t
+        .sdk
+        .account()
+        .prepare_register(req(&t, MLDSA44, true))
+        .await
+        .unwrap();
     assert_eq!(ws.len(), 1, "no fill: the full key fits");
-    let kem = ws[0].review().into_iter().find(|f| f.name == "args.attrs.kem.scheme").unwrap();
+    let kem = ws[0]
+        .review()
+        .into_iter()
+        .find(|f| f.name == "args.attrs.kem.scheme")
+        .unwrap();
     assert_eq!(kem.value, "1");
     // refusals beside the control: a KEM key on a kind that holds none; a native key; the PQZ key's proof is not built
-    assert_eq!(code(t.sdk.account().prepare_register(req(&t, ED25519, true)).await), "KemHolder");
+    assert_eq!(
+        code(
+            t.sdk
+                .account()
+                .prepare_register(req(&t, ED25519, true))
+                .await
+        ),
+        "KemHolder"
+    );
     let mut native = req(&t, ED25519, false);
     native.key = t.payer.clone();
-    assert_eq!(code(t.sdk.account().prepare_register(native).await), "Argument");
+    assert_eq!(
+        code(t.sdk.account().prepare_register(native).await),
+        "Argument"
+    );
     let mut pqz = req(&t, ED25519, false);
     pqz.attrs.pqz_key = true;
-    assert_eq!(code(t.sdk.account().prepare_register(pqz).await), "Argument", "ed25519 holds no PQZ key");
+    assert_eq!(
+        code(t.sdk.account().prepare_register(pqz).await),
+        "Argument",
+        "ed25519 holds no PQZ key"
+    );
 }
 
 /// The PQZ key attribute (spec §7): the wallet's PQZ key of the same account and index, its `R_REG` proof by `scaas-ua` under
@@ -284,13 +351,27 @@ async fn registration_with_pqz_key() {
         r.attrs.pqz_key = true;
         let ws = t.sdk.account().prepare_register(r).await.unwrap();
         assert_eq!(ws.len(), 1, "it fits the fake chain's cap: no split");
-        let f = |n: &str| ws[0].review().into_iter().find(|x| x.name == n).unwrap().value;
+        let f = |n: &str| {
+            ws[0]
+                .review()
+                .into_iter()
+                .find(|x| x.name == n)
+                .unwrap()
+                .value
+        };
         let pqz_key = wallet.pqz_key(0, 0).unwrap().pk();
         assert_eq!(f("args.attrs.pqzKey"), hx(&pqz_key));
         let pqz_pop = alloy::hex::decode(&f("args.pqzPop")[2..]).unwrap();
         assert!(pqz_pop.len() > 20_000, "an R_REG proof");
-        assert_eq!(f("args.attrs.pqzPopHash"), hx(&scaas_ua::keccak256(&pqz_pop)));
-        let kem_pk = if kem { k.kem_key(0).unwrap().kem_pk() } else { vec![] };
+        assert_eq!(
+            f("args.attrs.pqzPopHash"),
+            hx(&scaas_ua::keccak256(&pqz_pop))
+        );
+        let kem_pk = if kem {
+            k.kem_key(0).unwrap().kem_pk()
+        } else {
+            vec![]
+        };
         let attrs = scaas_ua::ua_portable::UAAttrs {
             pqz_key: pqz_key.clone(),
             pqz_pop_hash: scaas_ua::keccak256(&pqz_pop),
@@ -302,8 +383,15 @@ async fn registration_with_pqz_key() {
             kem_pk_hash: [0; 32],
         };
         let pop = alloy::hex::decode(&f("args.pop")[2..]).unwrap();
-        scaas_ua::ua_portable::check_registration(MLDSA44, &k.key_data(), &attrs, &pop, &pqz_pop, &|_| None)
-            .expect("the PoP covers the PQZ key, its proof and the KEM key");
+        scaas_ua::ua_portable::check_registration(
+            MLDSA44,
+            &k.key_data(),
+            &attrs,
+            &pop,
+            &pqz_pop,
+            &|_| None,
+        )
+        .expect("the PoP covers the PQZ key, its proof and the KEM key");
     }
 }
 
@@ -314,8 +402,18 @@ async fn registry_write_landed_by_record() {
     let t = setup().await;
     let (ua, _, _) = independent_register(ED25519);
     registry(&t, &ua, false, &hx(&[0; 32]), false);
-    let ws = t.sdk.account().prepare_register(req(&t, ED25519, false)).await.unwrap();
-    let q = t.sdk.account().quote_registry_write(ws[0].clone()).await.unwrap();
+    let ws = t
+        .sdk
+        .account()
+        .prepare_register(req(&t, ED25519, false))
+        .await
+        .unwrap();
+    let q = t
+        .sdk
+        .account()
+        .quote_registry_write(ws[0].clone())
+        .await
+        .unwrap();
     let op = t
         .sdk
         .account()
@@ -323,7 +421,12 @@ async fn registry_write_landed_by_record() {
         .await
         .unwrap();
     assert_eq!(
-        code(t.sdk.account().submit_registry_write(ws[0].clone(), q).await),
+        code(
+            t.sdk
+                .account()
+                .submit_registry_write(ws[0].clone(), q)
+                .await
+        ),
         "PreparedUnknown",
         "one submit of a write"
     );
@@ -333,9 +436,16 @@ async fn registry_write_landed_by_record() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
-    assert_eq!(t.chain.lock().unwrap().sent.len(), 1, "the payer's transaction sent");
+    assert_eq!(
+        t.chain.lock().unwrap().sent.len(),
+        1,
+        "the payer's transaction sent"
+    );
     assert!(
-        matches!(t.sdk.op().state(op.clone()).await.unwrap(), OpState::InFlight { .. }),
+        matches!(
+            t.sdk.op().state(op.clone()).await.unwrap(),
+            OpState::InFlight { .. }
+        ),
         "no record yet"
     );
     registry(&t, &ua, true, &hx(&[0; 32]), false);
@@ -344,10 +454,20 @@ async fn registry_write_landed_by_record() {
         "the record lands it"
     );
     assert!(
-        t.sdk.account().prepare_register(req(&t, ED25519, false)).await.unwrap().is_empty(),
+        t.sdk
+            .account()
+            .prepare_register(req(&t, ED25519, false))
+            .await
+            .unwrap()
+            .is_empty(),
         "a registered UA: nothing to write"
     );
-    let s = t.sdk.account().registration_of("local".into(), ua).await.unwrap();
+    let s = t
+        .sdk
+        .account()
+        .registration_of("local".into(), ua)
+        .await
+        .unwrap();
     assert!(s.registered && !s.kem_stored);
 }
 
@@ -389,7 +509,8 @@ fn kind_enabled(t: &T, kind: u16, on: bool) {
     let mut c = t.chain.lock().unwrap();
     let d = format!("{}{}", sel("kindEnabled(uint16)"), w(u64::from(kind)));
     c.answers.retain(|(_, x, _)| *x != d);
-    c.answers.push((REGISTRY.into(), d, format!("0x{}", w(u64::from(on)))));
+    c.answers
+        .push((REGISTRY.into(), d, format!("0x{}", w(u64::from(on)))));
 }
 
 /// A blob of `registration_blobs.json` by name.
@@ -417,7 +538,11 @@ async fn registration_blob_is_clientkeys_form() {
         .unwrap();
     let text = blob.to_json().unwrap();
     let b: Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(RegistrationBlob::from_json(&text).unwrap(), blob, "the text form reads back");
+    assert_eq!(
+        RegistrationBlob::from_json(&text).unwrap(),
+        blob,
+        "the text form reads back"
+    );
     let mut keys: Vec<&String> = b.as_object().unwrap().keys().collect();
     keys.sort();
     assert_eq!(keys, ["args", "kem", "kind", "ua", "v"]);
@@ -446,16 +571,24 @@ async fn sponsored_registration_checks() {
     let submit = |b: &Value, expected: &str| {
         let b = RegistrationBlob::from_json(&b.to_string());
         let (acc, expected, payer) = (acc.clone(), expected.to_string(), t.payer.clone());
-        async move { acc.prepare_submit_registration(b?, "local".into(), expected, payer).await }
+        async move {
+            acc.prepare_submit_registration(b?, "local".into(), expected, payer)
+                .await
+        }
     };
     // every single-key blob of the vectors passes (each kind enabled, none registered), the PQ ones with their PQZ key's
     // proof among them (owner 2026-11-19, R1)
-    for b in load("ua/registration_blobs.json")["blobs"].as_array().unwrap() {
+    for b in load("ua/registration_blobs.json")["blobs"]
+        .as_array()
+        .unwrap()
+    {
         let (name, b) = (b["name"].as_str().unwrap(), &b["blob"]);
         let ua = b["ua"].as_str().unwrap();
         registry(&t, ua, false, &hx(&[0; 32]), false);
         kind_enabled(&t, b["kind"].as_u64().unwrap() as u16, true);
-        let ws = submit(b, ua).await.unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        let ws = submit(b, ua)
+            .await
+            .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         let want = if b["kem"].is_null() { 1 } else { 2 };
         assert_eq!(ws.len(), want, "{name}");
         if want == 2 {
@@ -488,7 +621,9 @@ async fn sponsored_registration_checks() {
     let mine_ua = bad["ua"].as_str().unwrap().to_string();
     registry(&t, &mine_ua, false, &hx(&[0; 32]), false);
     assert!(submit(&bad, &mine_ua).await.is_ok(), "the control");
-    bad["args"]["pop"] = json!(hx(&k.sign_ua(&scaas_ua::ua_portable::pop_v2_tag(), &[7; 32]).unwrap()));
+    bad["args"]["pop"] = json!(hx(&k
+        .sign_ua(&scaas_ua::ua_portable::pop_v2_tag(), &[7; 32])
+        .unwrap()));
     assert_eq!(code(submit(&bad, &mine_ua).await), "RegistrationPopInvalid");
     // a committed KEM key: missing, or another key than the committed one
     let c = blob("fndsa512/kem-commit");
@@ -503,10 +638,16 @@ async fn sponsored_registration_checks() {
     swapped["kem"]["kemPk"] = blob("mldsa87/kem-commit")["kem"]["kemPk"].clone();
     assert_eq!(code(submit(&swapped, &cua).await), "RegistrationKemMissing");
     // already registered: skipped, the KEM key added while missing, nothing once stored
-    let hash = c["args"]["attrs"]["kemPkHash"].as_str().unwrap().to_string();
+    let hash = c["args"]["attrs"]["kemPkHash"]
+        .as_str()
+        .unwrap()
+        .to_string();
     registry(&t, &cua, true, &hash, false);
     let ws = submit(&c, &cua).await.unwrap();
-    assert_eq!(ws.iter().map(|w| w.entry()).collect::<Vec<_>>(), ["setKemKey"]);
+    assert_eq!(
+        ws.iter().map(|w| w.entry()).collect::<Vec<_>>(),
+        ["setKemKey"]
+    );
     registry(&t, &cua, true, &hash, true);
     assert!(submit(&c, &cua).await.unwrap().is_empty());
     // the blob's bounds: an unknown field, depth 5, another version
@@ -515,14 +656,21 @@ async fn sponsored_registration_checks() {
     assert_eq!(code(submit(&unknown, &ua).await), "Argument");
     let mut nested = ed.clone();
     nested["args"]["attrs"]["memo"] = json!("x");
-    assert_eq!(code(submit(&nested, &ua).await), "Argument", "an unknown field inside the arguments");
+    assert_eq!(
+        code(submit(&nested, &ua).await),
+        "Argument",
+        "an unknown field inside the arguments"
+    );
     let mut deep = ed.clone();
     deep["args"]["attrs"]["kem"]["scheme"] = json!({"a": 0});
     assert_eq!(code(submit(&deep, &ua).await), "Argument");
     let mut v2 = ed.clone();
     v2["v"] = json!(2);
     assert_eq!(code(submit(&v2, &ua).await), "Argument");
-    assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent by any check");
+    assert!(
+        t.chain.lock().unwrap().sent.is_empty(),
+        "nothing sent by any check"
+    );
 }
 
 /// The blob's size cap (owner 2026-11-19, R1): the largest real blob passes; padded to the cap it still reads, one byte over
@@ -530,13 +678,20 @@ async fn sponsored_registration_checks() {
 #[tokio::test(flavor = "multi_thread")]
 async fn registration_blob_size_cap() {
     let big = blob("mldsa65/n2816-kmax65536/kem-commit").to_string();
-    assert!(big.len() > 64 * 1024, "the largest vector blob, above the old 64 KiB");
+    assert!(
+        big.len() > 64 * 1024,
+        "the largest vector blob, above the old 64 KiB"
+    );
     assert!(RegistrationBlob::from_json(&big).is_ok());
     let at_cap = format!("{big}{}", " ".repeat(BLOB_MAX - big.len()));
     assert_eq!(at_cap.len(), BLOB_MAX);
     assert!(RegistrationBlob::from_json(&at_cap).is_ok(), "at the cap");
     let over = format!("{at_cap} ");
-    assert_eq!(code(RegistrationBlob::from_json(&over)), "Argument", "one byte over the cap");
+    assert_eq!(
+        code(RegistrationBlob::from_json(&over)),
+        "Argument",
+        "one byte over the cap"
+    );
 }
 
 /// A PQ kind's blob split as T13's (spec §7.1): on a chain whose estimate grows with the calldata, the largest set's
@@ -598,7 +753,10 @@ async fn store_pqz_pop_landed_when_stored() {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     assert!(
-        matches!(t.sdk.op().state(op.clone()).await.unwrap(), OpState::InFlight { .. }),
+        matches!(
+            t.sdk.op().state(op.clone()).await.unwrap(),
+            OpState::InFlight { .. }
+        ),
         "no proof stored yet"
     );
     // the proof stored, `proven` still false (no verifier)
@@ -610,7 +768,8 @@ async fn store_pqz_pop_landed_when_stored() {
         let mut c = t.chain.lock().unwrap();
         let d = format!("{}{}", sel("pqzPopOf(bytes32,uint64)"), &ua[2..]);
         c.answers.retain(|(_, x, _)| *x != d);
-        c.answers.insert(0, (REGISTRY.into(), d, format!("0x{body}{pad}")));
+        c.answers
+            .insert(0, (REGISTRY.into(), d, format!("0x{body}{pad}")));
     }
     assert!(
         matches!(t.sdk.op().state(op).await.unwrap(), OpState::Landed { .. }),
@@ -621,7 +780,8 @@ async fn store_pqz_pop_landed_when_stored() {
         let mut c = t.chain.lock().unwrap();
         let d = format!("{}{}", sel("pqzPopOf(bytes32,uint64)"), &ua[2..]);
         c.answers.retain(|(_, x, _)| *x != d);
-        c.answers.insert(0, (REGISTRY.into(), d, format!("0x{body}{pad}")));
+        c.answers
+            .insert(0, (REGISTRY.into(), d, format!("0x{body}{pad}")));
     }
     let s = acc.registration_of("local".into(), ua).await.unwrap();
     assert!(s.pqz_pop_stored && !s.pqz_proven, "{s:?}");
@@ -639,13 +799,19 @@ async fn registry_write_kept_on_signing_failure() {
     let ws = acc.prepare_register(req(&t, ED25519, false)).await.unwrap();
     let q = acc.quote_registry_write(ws[0].clone()).await.unwrap();
     t.sdk.vault().lock(t.seed.clone()).await;
-    assert_eq!(code(acc.submit_registry_write(ws[0].clone(), q.clone()).await), "WalletLocked");
+    assert_eq!(
+        code(acc.submit_registry_write(ws[0].clone(), q.clone()).await),
+        "WalletLocked"
+    );
     t.sdk
         .vault()
         .unlock(t.seed.clone(), Unlock::Passphrase(sec(PASS.as_bytes())))
         .await
         .unwrap();
-    assert!(acc.submit_registry_write(ws[0].clone(), q).await.is_ok(), "the same write, again");
+    assert!(
+        acc.submit_registry_write(ws[0].clone(), q).await.is_ok(),
+        "the same write, again"
+    );
 }
 
 /// A pay to an unregistered derived UA is `ReceiverUnregistered` before anything is prepared; a registered one, or a native
@@ -676,19 +842,34 @@ async fn pay_to_unregistered_derived_ua() {
         },
     };
     registry(&t, &ua, false, &hx(&[0; 32]), false);
-    assert_eq!(code(t.sdk.wallet().prepare_pay(pay(&ua)).await), "ReceiverUnregistered");
+    assert_eq!(
+        code(t.sdk.wallet().prepare_pay(pay(&ua)).await),
+        "ReceiverUnregistered"
+    );
     registry(&t, &ua, true, &hx(&[0; 32]), false);
-    assert_ne!(code(t.sdk.wallet().prepare_pay(pay(&ua)).await), "ReceiverUnregistered");
+    assert_ne!(
+        code(t.sdk.wallet().prepare_pay(pay(&ua)).await),
+        "ReceiverUnregistered"
+    );
     let native = format!("0x{}{}", "00".repeat(12), "ca".repeat(20));
-    assert_ne!(code(t.sdk.wallet().prepare_pay(pay(&native)).await), "ReceiverUnregistered");
+    assert_ne!(
+        code(t.sdk.wallet().prepare_pay(pay(&native)).await),
+        "ReceiverUnregistered"
+    );
     // a profile naming no registry: fail closed for a derived UA (owner 2026-11-19, R3); a native id still passes
     let n = setup_with(None).await;
     let pay = |to: &str| Pay {
         signer: n.payer.clone(),
         ..pay(to)
     };
-    assert_eq!(code(n.sdk.wallet().prepare_pay(pay(&ua)).await), "ReceiverUnregistered");
-    assert_ne!(code(n.sdk.wallet().prepare_pay(pay(&native)).await), "ReceiverUnregistered");
+    assert_eq!(
+        code(n.sdk.wallet().prepare_pay(pay(&ua)).await),
+        "ReceiverUnregistered"
+    );
+    assert_ne!(
+        code(n.sdk.wallet().prepare_pay(pay(&native)).await),
+        "ReceiverUnregistered"
+    );
 }
 
 /// Owner 2026-11-19, T1 (CTR-UA-23 MD-3, MD-4): an ML-DSA key on a registry that caches expanded keys (`cacheExpandedKey` of
@@ -699,23 +880,44 @@ async fn pay_to_unregistered_derived_ua() {
 async fn mldsa_cache_then_register() {
     const MLDSA65: u16 = 0x0131;
     let t = setup().await;
-    let k = Wallet::from_mnemonic(REPO, "").unwrap().ua_key(MLDSA65, 0, 0).unwrap();
+    let k = Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .ua_key(MLDSA65, 0, 0)
+        .unwrap();
     let ua = hx(&k.ua().unwrap());
     let cached = |p0: u64, p1: u64| {
         let mut c = t.chain.lock().unwrap();
         let d = format!("{}{}", sel("expandedKeyOf(bytes32)"), &ua[2..]);
         c.answers.retain(|(_, x, _)| *x != d);
-        c.answers.push((REGISTRY.into(), d, format!("0x{}{}{}", w(p0), w(p1), w(0))));
+        c.answers
+            .push((REGISTRY.into(), d, format!("0x{}{}{}", w(p0), w(p1), w(0))));
     };
     registry(&t, &ua, false, &hx(&[0; 32]), false);
     cached(0xc1, 0);
-    let entries = |ws: &[Arc<scaas_sdk::account::RegistryWrite>]| ws.iter().map(|w| w.entry()).collect::<Vec<_>>();
-    let ws = t.sdk.account().prepare_register(req(&t, MLDSA65, false)).await.unwrap();
+    let entries = |ws: &[Arc<scaas_sdk::account::RegistryWrite>]| {
+        ws.iter().map(|w| w.entry()).collect::<Vec<_>>()
+    };
+    let ws = t
+        .sdk
+        .account()
+        .prepare_register(req(&t, MLDSA65, false))
+        .await
+        .unwrap();
     assert_eq!(entries(&ws), ["cacheExpandedKey", "register"]);
     let part1 = scaas_ua::mldsa_cache::part_call(MLDSA65, &k.key_data(), 1).unwrap();
     assert_eq!(ws[0].calldata(), hx(&part1));
-    let q = t.sdk.account().quote_registry_write(ws[0].clone()).await.unwrap();
-    let op = t.sdk.account().submit_registry_write(ws[0].clone(), q).await.unwrap();
+    let q = t
+        .sdk
+        .account()
+        .quote_registry_write(ws[0].clone())
+        .await
+        .unwrap();
+    let op = t
+        .sdk
+        .account()
+        .submit_registry_write(ws[0].clone(), q)
+        .await
+        .unwrap();
     for _ in 0..50 {
         if !t.chain.lock().unwrap().sent.is_empty() {
             break;
@@ -729,15 +931,31 @@ async fn mldsa_cache_then_register() {
         c.receipts.insert(id, true);
     }
     let s = t.sdk.op().state(op.clone()).await.unwrap();
-    assert!(!matches!(s, OpState::Landed { .. }), "a receipt alone lands nothing: {s:?}");
+    assert!(
+        !matches!(s, OpState::Landed { .. }),
+        "a receipt alone lands nothing: {s:?}"
+    );
     cached(0xc1, 0xc2);
-    assert!(matches!(t.sdk.op().state(op).await.unwrap(), OpState::Landed { .. }), "part 1 stored lands it");
+    assert!(
+        matches!(t.sdk.op().state(op).await.unwrap(), OpState::Landed { .. }),
+        "part 1 stored lands it"
+    );
     // every part stored: the registration alone
-    let ws = t.sdk.account().prepare_register(req(&t, MLDSA65, false)).await.unwrap();
+    let ws = t
+        .sdk
+        .account()
+        .prepare_register(req(&t, MLDSA65, false))
+        .await
+        .unwrap();
     assert_eq!(entries(&ws), ["register"]);
     // a verifier with the precompile: `cacheExpandedKey` refused, the registration alone
     cached(0, 0);
     t.chain.lock().unwrap().estimate_reverts = Some(|input| input.starts_with("0x8b738873"));
-    let ws = t.sdk.account().prepare_register(req(&t, MLDSA65, false)).await.unwrap();
+    let ws = t
+        .sdk
+        .account()
+        .prepare_register(req(&t, MLDSA65, false))
+        .await
+        .unwrap();
     assert_eq!(entries(&ws), ["register"]);
 }

@@ -74,7 +74,9 @@ pub enum MsigSlot {
 impl MsigSlot {
     pub(crate) fn index(&self) -> u16 {
         match self {
-            MsigSlot::Member { index, .. } | MsigSlot::Msig { index, .. } | MsigSlot::Signed { index, .. } => *index,
+            MsigSlot::Member { index, .. }
+            | MsigSlot::Msig { index, .. }
+            | MsigSlot::Signed { index, .. } => *index,
         }
     }
 }
@@ -109,7 +111,10 @@ pub(crate) enum Key {
         crate::confidential::ZetherSigner,
     ),
     /// a stored key row: its public parts, and a key that refuses every request (it signs only through `external::sign`)
-    External(external::ExternalRow, scaas_ua::wallet::ExternalKey<'static>),
+    External(
+        external::ExternalRow,
+        scaas_ua::wallet::ExternalKey<'static>,
+    ),
 }
 
 impl Key {
@@ -183,18 +188,23 @@ pub(crate) async fn key_opened(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
     }
     if let KeyRef::Key { seed, id } = r {
         drop(sdk.open_seed(seed)?); // a row is trusted once its seed's MAC verified (unlocked)
-        let row = sdk.entry(seed).await?.accounts.into_iter().find_map(|a| match a {
-            crate::vault::AccountRow::Key {
-                id: i,
-                kind,
-                key_data,
-                credential_id,
-                handle,
-                ua,
-                ..
-            } if i == *id => Some((kind, key_data, credential_id, handle, ua)),
-            _ => None,
-        });
+        let row = sdk
+            .entry(seed)
+            .await?
+            .accounts
+            .into_iter()
+            .find_map(|a| match a {
+                crate::vault::AccountRow::Key {
+                    id: i,
+                    kind,
+                    key_data,
+                    credential_id,
+                    handle,
+                    ua,
+                    ..
+                } if i == *id => Some((kind, key_data, credential_id, handle, ua)),
+                _ => None,
+            });
         let (kind, key_data, credential_id, handle, ua) = row.ok_or(SdkError::Argument)?;
         let row = external::ExternalRow {
             kind: u16::try_from(kind).map_err(|_| SdkError::Argument)?,
@@ -203,7 +213,9 @@ pub(crate) async fn key_opened(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             credential_id: credential_id.as_deref().map(unhex).transpose()?,
             handle,
         };
-        let refuse = scaas_ua::wallet::ExternalKey::new(row.key_ref(), |_| Err(scaas_ua::wallet::Error::ExternalSignature));
+        let refuse = scaas_ua::wallet::ExternalKey::new(row.key_ref(), |_| {
+            Err(scaas_ua::wallet::Error::ExternalSignature)
+        });
         return Ok(Key::External(row, refuse));
     }
     key(sdk, r)

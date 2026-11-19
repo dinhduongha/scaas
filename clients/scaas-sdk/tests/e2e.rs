@@ -104,7 +104,9 @@ async fn anvil(offset: u16) -> (Anvil, String) {
 /// One `forge script` at a time: the tests run in parallel, and forge's broadcast cache of a chain id takes a lock.
 fn deploy(rpc: &str, name: &str, env: &[(&str, &str)]) -> serde_json::Value {
     static FORGE: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _one = FORGE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _one = FORGE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let status = Command::new("forge")
         .current_dir(sc())
         .args([
@@ -140,7 +142,14 @@ fn funded_holder(rpc: &str) -> String {
         .unwrap()
         .address()
         .unwrap();
-    cast(&["rpc", "--rpc-url", rpc, "anvil_setBalance", &holder, "0x8ac7230489e80000"]);
+    cast(&[
+        "rpc",
+        "--rpc-url",
+        rpc,
+        "anvil_setBalance",
+        &holder,
+        "0x8ac7230489e80000",
+    ]);
     holder
 }
 
@@ -314,7 +323,13 @@ async fn e2e_pay_on_anvil() {
 /// The seed's UA `kind` of wallet `account` (index 0) registered through the SDK (plan T13): each registry write quoted,
 /// self-relayed by the seed's EVM key and followed to `Landed` by its record; the UA.
 #[cfg(feature = "account")]
-async fn register_with_sdk(sdk: &Arc<Sdk>, seed: &str, kind: u16, account: u32, kem: bool) -> String {
+async fn register_with_sdk(
+    sdk: &Arc<Sdk>,
+    seed: &str,
+    kind: u16,
+    account: u32,
+    kem: bool,
+) -> String {
     use scaas_sdk::account::{Register, RegisterAttrs};
     let acc = sdk.account();
     let writes = acc
@@ -382,7 +397,9 @@ fn zether_token(rpc: &str, factory: &str, holder: &str) -> String {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_zether_shield_transfer_balance_on_anvil() {
-    use scaas_sdk::confidential::{ZetherBalanceRequest, ZetherRollOver, ZetherShield, ZetherTransfer};
+    use scaas_sdk::confidential::{
+        ZetherBalanceRequest, ZetherRollOver, ZetherShield, ZetherTransfer,
+    };
     let (_anvil, rpc) = anvil(1).await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
@@ -390,7 +407,10 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
     let name = format!("local-31337-{port}-testnet");
     let dep = deploy(rpc, &name, &[("DEPLOY_ZETHER", "true")]);
     let factory = dep["token_factory"].as_str().unwrap().to_ascii_lowercase();
-    let registry = dep["zether_registry"].as_str().unwrap().to_ascii_lowercase();
+    let registry = dep["zether_registry"]
+        .as_str()
+        .unwrap()
+        .to_ascii_lowercase();
     let token = zether_token(rpc, &factory, &holder);
     let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]);
     let (sdk, seed) = sdk_on(ChainProfile {
@@ -490,7 +510,11 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
         .unwrap();
     let s = run(p, 1_000_000).await;
     assert!(matches!(s, OpState::Landed { .. }), "roll-over: {s:?}");
-    assert_eq!(balance(0, false).await, "1234", "spendable after the roll-over");
+    assert_eq!(
+        balance(0, false).await,
+        "1234",
+        "spendable after the roll-over"
+    );
     let head: u64 = cast(&["block-number", "--rpc-url", rpc]).parse().unwrap();
     let p = conf
         .prepare_zether_transfer(ZetherTransfer {
@@ -511,8 +535,16 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
     assert_eq!(p.entry(), "mtxConfidentialTransferSingle");
     let s = run(p, 9_000_000).await;
     assert!(matches!(s, OpState::Landed { .. }), "transfer: {s:?}");
-    assert_eq!(balance(0, false).await, "1134", "the holder after the transfer");
-    assert_eq!(balance(1, true).await, "100", "the recipient's pending after the transfer");
+    assert_eq!(
+        balance(0, false).await,
+        "1134",
+        "the holder after the transfer"
+    );
+    assert_eq!(
+        balance(1, true).await,
+        "100",
+        "the recipient's pending after the transfer"
+    );
 }
 
 /// Plan T13's e2e (spec §7): the seed's `fndsa512` UA (a PQ kind) with its KEM key registered through the SDK on `anvil`'s
@@ -530,7 +562,14 @@ async fn e2e_register_pq_kind_on_anvil() {
     let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
     let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
     assert_eq!(
-        cast(&["call", "--rpc-url", rpc, &registry, "kindEnabled(uint16)(bool)", &FNDSA512.to_string()]),
+        cast(&[
+            "call",
+            "--rpc-url",
+            rpc,
+            &registry,
+            "kindEnabled(uint16)(bool)",
+            &FNDSA512.to_string()
+        ]),
         "true",
         "fndsa512 enabled on this registry"
     );
@@ -604,14 +643,26 @@ async fn e2e_pqz_pop_split_stored_on_anvil() {
     let (sdk, seed) = sdk_on(registry_profile(rpc, &registry, None)).await;
     let full = sdk.account().prepare_register(req(&seed)).await.unwrap();
     assert_eq!(full.len(), 1, "no cap: one call");
-    let est: u64 = cast(&["estimate", "--from", &payer_address, &registry, &full[0].calldata(), "--rpc-url", rpc])
-        .parse()
-        .unwrap();
+    let est: u64 = cast(&[
+        "estimate",
+        "--from",
+        &payer_address,
+        &registry,
+        &full[0].calldata(),
+        "--rpc-url",
+        rpc,
+    ])
+    .parse()
+    .unwrap();
     let (sdk, seed) = sdk_on(registry_profile(rpc, &registry, Some(est - 100_000))).await;
     let acc = sdk.account();
     let writes = acc.prepare_register(req(&seed)).await.unwrap();
     let entries: Vec<_> = writes.iter().map(|w| w.entry()).collect();
-    assert_eq!(entries.len(), 2, "split under the full call's estimate: {entries:?}");
+    assert_eq!(
+        entries.len(),
+        2,
+        "split under the full call's estimate: {entries:?}"
+    );
     assert_eq!(entries[1], "storePqzPop");
     let ua = writes[0].ua();
     for w in writes {
@@ -675,7 +726,13 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
                 ua_extra: None,
                 per_item: None,
             }],
-            verify: vec![GasVerify { signer: 0, gas: 0, sig_bytes: 0, margin: 0, per_item: None }],
+            verify: vec![GasVerify {
+                signer: 0,
+                gas: 0,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            }],
         },
         max_valid_secs: None,
         verifiers: vec![],
@@ -716,7 +773,9 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
             salt: None,
             pay_no: Some("01890a5d-ac96-774b-bcce-b302099a8058".into()),
             save: false,
-            body: PayBody::Note { note: "sponsored".into() },
+            body: PayBody::Note {
+                note: "sponsored".into(),
+            },
         },
         envelope: Envelope {
             valid_until: now() + 600,
@@ -727,7 +786,12 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
         },
     };
     assert_eq!(
-        sender.wallet().prepare_pay(pay()).await.err().map(|e| e.code()),
+        sender
+            .wallet()
+            .prepare_pay(pay())
+            .await
+            .err()
+            .map(|e| e.code()),
         Some("ReceiverUnregistered")
     );
     let acc = sender.account();
@@ -784,8 +848,17 @@ fn account_profile(rpc: &str) -> ChainProfile {
         tx_gas_cap: Some(1 << 24),
         tokens: vec![],
         gas: GasRows {
-            base: [true, false].iter().flat_map(|&f| [row("mtxAddKey", f), row("mtxExecute", f)]).collect(),
-            verify: vec![GasVerify { signer: 0, gas: 0, sig_bytes: 0, margin: 0, per_item: None }],
+            base: [true, false]
+                .iter()
+                .flat_map(|&f| [row("mtxAddKey", f), row("mtxExecute", f)])
+                .collect(),
+            verify: vec![GasVerify {
+                signer: 0,
+                gas: 0,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            }],
         },
         max_valid_secs: None,
         verifiers: vec![],
@@ -797,7 +870,14 @@ fn account_profile(rpc: &str) -> ChainProfile {
 /// A `SmartKeyAccount` of the seed's EVM key `index` (its first key, secp256k1) and `guardian`, deployed through `factory`
 /// by the SDK (`prepare_smart_deploy`, sent by the seed's EVM key 0); its address, checked against the SDK's counterfactual
 /// one.
-async fn deploy_account(sdk: &Arc<Sdk>, seed: &str, rpc: &str, factory: &str, index: u32, guardian: &str) -> String {
+async fn deploy_account(
+    sdk: &Arc<Sdk>,
+    seed: &str,
+    rpc: &str,
+    factory: &str,
+    index: u32,
+    guardian: &str,
+) -> String {
     use scaas_sdk::account::{smart_account_address, SubjectKeyArgs};
     let key = Wallet::from_mnemonic(REPO, "")
         .unwrap()
@@ -806,17 +886,33 @@ async fn deploy_account(sdk: &Arc<Sdk>, seed: &str, rpc: &str, factory: &str, in
         .address()
         .unwrap();
     let first = SubjectKeyArgs::secp256k1(&key).unwrap();
-    let implementation = cast(&["call", factory, "IMPLEMENTATION()(address)", "--rpc-url", rpc]);
+    let implementation = cast(&[
+        "call",
+        factory,
+        "IMPLEMENTATION()(address)",
+        "--rpc-url",
+        rpc,
+    ]);
     let predicted = smart_account_address(factory, &implementation, &first, guardian).unwrap();
     let q = sdk
         .account()
-        .prepare_smart_deploy(key0(seed), "anvil".into(), factory.into(), first, guardian.into())
+        .prepare_smart_deploy(
+            key0(seed),
+            "anvil".into(),
+            factory.into(),
+            first,
+            guardian.into(),
+        )
         .await
         .unwrap();
     let op = sdk.wallet().submit_native_send(q).await.unwrap();
     let s = follow(sdk, op).await;
     assert!(matches!(s, OpState::Landed { .. }), "deploy: {s:?}");
-    assert_ne!(cast(&["code", &predicted, "--rpc-url", rpc]), "0x", "deployed at the SDK's address");
+    assert_ne!(
+        cast(&["code", &predicted, "--rpc-url", rpc]),
+        "0x",
+        "deployed at the SDK's address"
+    );
     predicted
 }
 
@@ -881,10 +977,24 @@ async fn smart_account_add_key_self_relay() {
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
     let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
-    let factory = dep["smart_key_account_factory"].as_str().unwrap().to_string();
+    let factory = dep["smart_key_account_factory"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let (sdk, seed) = sdk_on(account_profile(rpc)).await;
-    let account = deploy_account(&sdk, &seed, rpc, &factory, 0, "0x0000000000000000000000000000000000000000").await;
-    assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "1");
+    let account = deploy_account(
+        &sdk,
+        &seed,
+        rpc,
+        &factory,
+        0,
+        "0x0000000000000000000000000000000000000000",
+    )
+    .await;
+    assert_eq!(
+        cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]),
+        "1"
+    );
     let new_key = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000bb").unwrap();
     let p = sdk
         .account()
@@ -894,23 +1004,54 @@ async fn smart_account_add_key_self_relay() {
     assert_eq!(p.entry(), "mtxAddKey");
     let s = self_relay(&sdk, &seed, p).await;
     assert!(matches!(s, OpState::Landed { .. }), "{s:?}");
-    assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "2");
+    assert_eq!(
+        cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]),
+        "2"
+    );
     // another key signs (owner 2026-11-19, S3): the seed's EVM key 2 added at index 2, an `AddKey` it signs with the
     // index read from the account; a key the account does not hold is `SignerNotAccountKey` (P2)
-    let key2 = Wallet::from_mnemonic(REPO, "").unwrap().native_key(Network::Evm, 2, None).unwrap().address().unwrap();
+    let key2 = Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .native_key(Network::Evm, 2, None)
+        .unwrap()
+        .address()
+        .unwrap();
     let p = sdk
         .account()
-        .prepare_smart_add_key(smart_op(&seed, 0, &account), SubjectKeyArgs::secp256k1(&key2).unwrap())
+        .prepare_smart_add_key(
+            smart_op(&seed, 0, &account),
+            SubjectKeyArgs::secp256k1(&key2).unwrap(),
+        )
         .await
         .unwrap();
-    assert!(matches!(self_relay(&sdk, &seed, p).await, OpState::Landed { .. }));
+    assert!(matches!(
+        self_relay(&sdk, &seed, p).await,
+        OpState::Landed { .. }
+    ));
     let third = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000cc").unwrap();
-    let refused = sdk.account().prepare_smart_add_key(smart_op(&seed, 3, &account), third.clone()).await;
-    assert_eq!(refused.err().map(|e| e.code()), Some("SignerNotAccountKey"), "not a key of the account");
-    let p = sdk.account().prepare_smart_add_key(smart_op(&seed, 2, &account), third).await.unwrap();
+    let refused = sdk
+        .account()
+        .prepare_smart_add_key(smart_op(&seed, 3, &account), third.clone())
+        .await;
+    assert_eq!(
+        refused.err().map(|e| e.code()),
+        Some("SignerNotAccountKey"),
+        "not a key of the account"
+    );
+    let p = sdk
+        .account()
+        .prepare_smart_add_key(smart_op(&seed, 2, &account), third)
+        .await
+        .unwrap();
     let s = self_relay(&sdk, &seed, p).await;
-    assert!(matches!(s, OpState::Landed { .. }), "signed by key index 2: {s:?}");
-    assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "4");
+    assert!(
+        matches!(s, OpState::Landed { .. }),
+        "signed by key index 2: {s:?}"
+    );
+    assert_eq!(
+        cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]),
+        "4"
+    );
 }
 
 /// Plan T13 `guardian_recovery_via_execute`: account A (the seed's EVM key 0) names the guardian `SmartKeyAccount` G (EVM key
@@ -926,31 +1067,76 @@ async fn guardian_recovery_via_execute() {
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
     let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
-    let factory = dep["smart_key_account_factory"].as_str().unwrap().to_string();
+    let factory = dep["smart_key_account_factory"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let (sdk, seed) = sdk_on(account_profile(rpc)).await;
-    let guardian = deploy_account(&sdk, &seed, rpc, &factory, 1, "0x0000000000000000000000000000000000000000").await;
+    let guardian = deploy_account(
+        &sdk,
+        &seed,
+        rpc,
+        &factory,
+        1,
+        "0x0000000000000000000000000000000000000000",
+    )
+    .await;
     let account = deploy_account(&sdk, &seed, rpc, &factory, 0, &guardian).await;
     let new_key = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000dd").unwrap();
     let p = sdk
         .account()
-        .prepare_initiate_recovery(smart_op(&seed, 1, &guardian), account.clone(), new_key.clone())
+        .prepare_initiate_recovery(
+            smart_op(&seed, 1, &guardian),
+            account.clone(),
+            new_key.clone(),
+        )
         .await
         .unwrap();
     assert_eq!(p.entry(), "mtxExecute");
     let s = self_relay(&sdk, &seed, p).await;
     assert!(matches!(s, OpState::Landed { .. }), "{s:?}");
-    let pending = cast(&["call", &account, "pendingRecovery()(bytes32)", "--rpc-url", rpc]);
-    assert_ne!(pending, format!("0x{}", "00".repeat(32)), "the recovery started");
+    let pending = cast(&[
+        "call",
+        &account,
+        "pendingRecovery()(bytes32)",
+        "--rpc-url",
+        rpc,
+    ]);
+    assert_ne!(
+        pending,
+        format!("0x{}", "00".repeat(32)),
+        "the recovery started"
+    );
     // `completeRecovery` through the SDK, sent by the seed's EVM key 0 (anyone may)
     let acc = sdk.account();
-    let complete = || acc.prepare_complete_recovery(key0(&seed), "anvil".into(), account.clone(), new_key.clone());
-    assert!(complete().await.is_err(), "refused before RECOVERY_DELAY: its simulation reverts");
+    let complete = || {
+        acc.prepare_complete_recovery(
+            key0(&seed),
+            "anvil".into(),
+            account.clone(),
+            new_key.clone(),
+        )
+    };
+    assert!(
+        complete().await.is_err(),
+        "refused before RECOVERY_DELAY: its simulation reverts"
+    );
     cast(&["rpc", "--rpc-url", rpc, "evm_increaseTime", "172801"]);
     cast(&["rpc", "--rpc-url", rpc, "evm_mine"]);
-    let op = sdk.wallet().submit_native_send(complete().await.unwrap()).await.unwrap();
+    let op = sdk
+        .wallet()
+        .submit_native_send(complete().await.unwrap())
+        .await
+        .unwrap();
     let s = follow(&sdk, op).await;
-    assert!(matches!(s, OpState::Landed { .. }), "after the two days, by anyone: {s:?}");
-    assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "2");
+    assert!(
+        matches!(s, OpState::Landed { .. }),
+        "after the two days, by anyone: {s:?}"
+    );
+    assert_eq!(
+        cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]),
+        "2"
+    );
 }
 
 // --- plan T13: msig ---
@@ -974,7 +1160,9 @@ async fn land_write(sdk: &Arc<Sdk>, w: Arc<scaas_sdk::account::RegistryWrite>) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_msig_register_accept_transfer_update_on_anvil() {
-    use scaas_sdk::account::{msig_structure, AcceptMembership, MsigMemberArgs, MsigRegister, UpdateMsig};
+    use scaas_sdk::account::{
+        msig_structure, AcceptMembership, MsigMemberArgs, MsigRegister, UpdateMsig,
+    };
     use scaas_sdk::op::MsigSlot;
     use scaas_sdk::wallet::Transfer;
     const ED25519: u16 = 0x0102;
@@ -1008,8 +1196,26 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
         per_item: None,
     };
     profile.gas = GasRows {
-        base: [true, false].iter().flat_map(|&f| [base("mtxPay", f), base("mtxExecuteTransfer", f)]).collect(),
-        verify: vec![GasVerify { signer: 0, gas: 0, sig_bytes: 0, margin: 0, per_item: None }, GasVerify { signer: 0x0120, gas: 300_000, sig_bytes: 0, margin: 0, per_item: None }],
+        base: [true, false]
+            .iter()
+            .flat_map(|&f| [base("mtxPay", f), base("mtxExecuteTransfer", f)])
+            .collect(),
+        verify: vec![
+            GasVerify {
+                signer: 0,
+                gas: 0,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            },
+            GasVerify {
+                signer: 0x0120,
+                gas: 300_000,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            },
+        ],
     };
     let (sdk, seed) = sdk_on(profile).await;
     let mut uas = vec![];
@@ -1026,30 +1232,58 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
         }
     };
     let s = msig_structure(
-        uas.iter().map(|u| MsigMemberArgs { kind: ED25519, id: u.clone(), weight: 1 }).collect(),
+        uas.iter()
+            .map(|u| MsigMemberArgs {
+                kind: ED25519,
+                id: u.clone(),
+                weight: 1,
+            })
+            .collect(),
         2,
     )
     .unwrap();
     let ua = s.ua().unwrap();
     let acc = sdk.account();
     let ws = acc
-        .prepare_msig_register(MsigRegister { chain: "anvil".into(), structure: s.clone(), slots: vec![], payer: key0(&seed) })
+        .prepare_msig_register(MsigRegister {
+            chain: "anvil".into(),
+            structure: s.clone(),
+            slots: vec![],
+            payer: key0(&seed),
+        })
         .await
         .unwrap();
     assert_eq!(ws.len(), 1);
     land_write(&sdk, ws[0].clone()).await;
-    assert!(!acc.msig_state("anvil".into(), ua.clone()).await.unwrap().active, "no slot accepted yet");
-    let slot = |i: u16| MsigSlot::Member { index: i, key: key_of(&s.members[usize::from(i)].id) };
+    assert!(
+        !acc.msig_state("anvil".into(), ua.clone())
+            .await
+            .unwrap()
+            .active,
+        "no slot accepted yet"
+    );
+    let slot = |i: u16| MsigSlot::Member {
+        index: i,
+        key: key_of(&s.members[usize::from(i)].id),
+    };
     for i in [0u16, 1] {
         let w = acc
-            .prepare_accept_membership(AcceptMembership { chain: "anvil".into(), ua: ua.clone(), slot: slot(i), payer: key0(&seed) })
+            .prepare_accept_membership(AcceptMembership {
+                chain: "anvil".into(),
+                ua: ua.clone(),
+                slot: slot(i),
+                payer: key0(&seed),
+            })
             .await
             .unwrap()
             .expect("not accepted yet");
         land_write(&sdk, w).await;
     }
     let st = acc.msig_state("anvil".into(), ua.clone()).await.unwrap();
-    assert!(st.active && st.slots[0].accepted && st.slots[1].accepted && !st.slots[2].accepted, "{st:?}");
+    assert!(
+        st.active && st.slots[0].accepted && st.slots[1].accepted && !st.slots[2].accepted,
+        "{st:?}"
+    );
     // the holder pays the msig, the msig transfers by slots 0 and 1
     let p = sdk
         .wallet()
@@ -1063,9 +1297,17 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
                 salt: None,
                 pay_no: Some("01890a5d-ac96-774b-bcce-b302099a8059".into()),
                 save: false,
-                body: PayBody::Note { note: "to the msig".into() },
+                body: PayBody::Note {
+                    note: "to the msig".into(),
+                },
             },
-            envelope: Envelope { valid_until: now() + 600, mode: 0, relayer: None, fee: "0".into(), fee_recipient: None },
+            envelope: Envelope {
+                valid_until: now() + 600,
+                mode: 0,
+                relayer: None,
+                fee: "0".into(),
+                fee_recipient: None,
+            },
         })
         .await
         .unwrap();
@@ -1074,18 +1316,30 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
     let p = sdk
         .wallet()
         .prepare_transfer(Transfer {
-            signer: KeyRef::Msig { ua: ua.clone(), slots: vec![slot(0), slot(1)] },
+            signer: KeyRef::Msig {
+                ua: ua.clone(),
+                slots: vec![slot(0), slot(1)],
+            },
             chain: "anvil".into(),
             token: token.clone(),
             to: format!("0x{}{}", "00".repeat(12), "cafe".repeat(10)),
             value: "100".into(),
             batch: "1".into(),
-            envelope: Envelope { valid_until: now() + 600, mode: 0, relayer: None, fee: "0".into(), fee_recipient: None },
+            envelope: Envelope {
+                valid_until: now() + 600,
+                mode: 0,
+                relayer: None,
+                fee: "0".into(),
+                fee_recipient: None,
+            },
         })
         .await
         .unwrap();
     let s2 = self_relay(&sdk, &seed, p).await;
-    assert!(matches!(s2, OpState::Landed { .. }), "msig transfer: {s2:?}");
+    assert!(
+        matches!(s2, OpState::Landed { .. }),
+        "msig transfer: {s2:?}"
+    );
     // `updateMsig`: the third slot disabled, signed by slots 0 and 1 of the stored structure
     let block: u64 = cast(&["block-number", "--rpc-url", rpc]).parse().unwrap();
     let plan = acc
@@ -1104,7 +1358,10 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
         .unwrap();
     land_write(&sdk, plan.write).await;
     let st = acc.msig_state("anvil".into(), ua).await.unwrap();
-    assert!(st.version == 1 && !st.slots[2].enabled && st.active, "{st:?}");
+    assert!(
+        st.version == 1 && !st.slots[2].enabled && st.active,
+        "{st:?}"
+    );
 }
 
 /// Owner 2026-11-19, T1 (CTR-UA-23 MD-3): on `anvil` the ML-DSA verifiers have no precompile, so the registry caches the
@@ -1123,29 +1380,64 @@ async fn e2e_register_mldsa_cached_on_anvil() {
     let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
     let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
     assert_eq!(
-        cast(&["call", "--rpc-url", rpc, &registry, "kindEnabled(uint16)(bool)", &MLDSA65.to_string()]),
+        cast(&[
+            "call",
+            "--rpc-url",
+            rpc,
+            &registry,
+            "kindEnabled(uint16)(bool)",
+            &MLDSA65.to_string()
+        ]),
         "true",
         "mldsa65 enabled on this registry"
     );
     let (sdk, seed) = sdk_on(registry_profile(rpc, &registry, Some(1 << 24))).await;
     let acc = sdk.account();
     let req = || Register {
-        key: KeyRef::Ua { seed: seed.clone(), kind: MLDSA65, account: 0, index: 0 },
+        key: KeyRef::Ua {
+            seed: seed.clone(),
+            kind: MLDSA65,
+            account: 0,
+            index: 0,
+        },
         chain: "anvil".into(),
         attrs: RegisterAttrs::default(),
         payer: key0(&seed),
     };
     let writes = acc.prepare_register(req()).await.unwrap();
     let entries: Vec<_> = writes.iter().map(|w| w.entry()).collect();
-    assert_eq!(entries, ["cacheExpandedKey", "cacheExpandedKey", "register"]);
+    assert_eq!(
+        entries,
+        ["cacheExpandedKey", "cacheExpandedKey", "register"]
+    );
     let ua = writes[0].ua();
     for w in writes {
         land_write(&sdk, w).await;
     }
-    let ek = cast(&["call", "--rpc-url", rpc, &registry, "expandedKeyOf(bytes32)(address[3])", &ua]);
-    assert_eq!(ek.matches("0x0000000000000000000000000000000000000000").count(), 1, "parts 0 and 1 stored: {ek}");
-    assert!(acc.registration_of("anvil".into(), ua).await.unwrap().registered);
-    assert!(acc.prepare_register(req()).await.unwrap().is_empty(), "nothing left to write");
+    let ek = cast(&[
+        "call",
+        "--rpc-url",
+        rpc,
+        &registry,
+        "expandedKeyOf(bytes32)(address[3])",
+        &ua,
+    ]);
+    assert_eq!(
+        ek.matches("0x0000000000000000000000000000000000000000")
+            .count(),
+        1,
+        "parts 0 and 1 stored: {ek}"
+    );
+    assert!(
+        acc.registration_of("anvil".into(), ua)
+            .await
+            .unwrap()
+            .registered
+    );
+    assert!(
+        acc.prepare_register(req()).await.unwrap().is_empty(),
+        "nothing left to write"
+    );
 }
 
 // --- owner 2026-11-19, T2: a passkey row registered ---
@@ -1155,7 +1447,10 @@ struct Passkey(p256::ecdsa::SigningKey);
 
 impl Passkey {
     fn new() -> Self {
-        Passkey(p256::ecdsa::SigningKey::from_slice(&scaas_ua::sha256(b"scaas-sdk.e2e.passkey")).unwrap())
+        Passkey(
+            p256::ecdsa::SigningKey::from_slice(&scaas_ua::sha256(b"scaas-sdk.e2e.passkey"))
+                .unwrap(),
+        )
     }
 }
 
@@ -1182,12 +1477,24 @@ impl scaas_sdk::platform::Authenticator for Passkey {
         const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut challenge = String::new();
         for c in req.challenge.chunks(3) {
-            let n = c.iter().enumerate().fold(0u32, |n, (i, x)| n | u32::from(*x) << (16 - 8 * i));
-            (0..=c.len()).for_each(|i| challenge.push(A[(n >> (18 - 6 * i) & 63) as usize] as char));
+            let n = c
+                .iter()
+                .enumerate()
+                .fold(0u32, |n, (i, x)| n | u32::from(*x) << (16 - 8 * i));
+            (0..=c.len())
+                .for_each(|i| challenge.push(A[(n >> (18 - 6 * i) & 63) as usize] as char));
         }
-        let auth = [&scaas_ua::sha256(req.rp_id.as_bytes())[..], &[0x05], &1u32.to_be_bytes()].concat();
-        let cdj = format!(r#"{{"type":"webauthn.get","challenge":"{challenge}","origin":"https://{}"}}"#, req.rp_id)
-            .into_bytes();
+        let auth = [
+            &scaas_ua::sha256(req.rp_id.as_bytes())[..],
+            &[0x05],
+            &1u32.to_be_bytes(),
+        ]
+        .concat();
+        let cdj = format!(
+            r#"{{"type":"webauthn.get","challenge":"{challenge}","origin":"https://{}"}}"#,
+            req.rp_id
+        )
+        .into_bytes();
         let pre = scaas_ua::sha256(&[auth.as_slice(), &scaas_ua::sha256(&cdj)].concat());
         let sig: p256::ecdsa::Signature = self.0.sign_prehash(&pre).unwrap();
         Ok(scaas_sdk::platform::Assertion {
@@ -1214,7 +1521,12 @@ impl scaas_sdk::platform::Authenticator for Passkey {
     ) -> Result<scaas_sdk::platform::SePublic, scaas_sdk::platform::AuthError> {
         Err(scaas_sdk::platform::AuthError::Unavailable)
     }
-    async fn p256_sign(&self, _: String, _: Vec<u8>, _: String) -> Result<Vec<u8>, scaas_sdk::platform::AuthError> {
+    async fn p256_sign(
+        &self,
+        _: String,
+        _: Vec<u8>,
+        _: String,
+    ) -> Result<Vec<u8>, scaas_sdk::platform::AuthError> {
         Err(scaas_sdk::platform::AuthError::Unavailable)
     }
 }
@@ -1247,20 +1559,56 @@ async fn e2e_register_passkey_row_on_anvil() {
     .unwrap();
     let seed = sdk
         .vault()
-        .import_words(ImportWords { label: "main".into(), words: sec(REPO), vault_passphrase: sec(PASS) })
+        .import_words(ImportWords {
+            label: "main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(PASS),
+        })
         .await
         .unwrap()
         .id;
     let acc = sdk.account();
-    let key = acc.create_passkey_key(CreatePasskeyKey { seed: seed.clone(), name: "phone".into() }).await.unwrap();
-    let writes = acc
-        .prepare_register(Register { key, chain: "anvil".into(), attrs: Default::default(), payer: key0(&seed) })
+    let key = acc
+        .create_passkey_key(CreatePasskeyKey {
+            seed: seed.clone(),
+            name: "phone".into(),
+        })
         .await
         .unwrap();
-    assert_eq!(writes.iter().map(|w| w.entry()).collect::<Vec<_>>(), ["registerWebAuthn"]);
+    let writes = acc
+        .prepare_register(Register {
+            key,
+            chain: "anvil".into(),
+            attrs: Default::default(),
+            payer: key0(&seed),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        writes.iter().map(|w| w.entry()).collect::<Vec<_>>(),
+        ["registerWebAuthn"]
+    );
     let ua = writes[0].ua();
     land_write(&sdk, writes[0].clone()).await;
-    assert!(acc.registration_of("anvil".into(), ua.clone()).await.unwrap().registered);
-    let k = cast(&["call", "--rpc-url", rpc, &registry, "webAuthnKeyOf(bytes32)((bytes32,bytes32,bytes32))", &ua]);
-    assert!(k.contains(&format!("0x{}", alloy::hex::encode(scaas_ua::sha256(b"scaas.example")))), "{k}");
+    assert!(
+        acc.registration_of("anvil".into(), ua.clone())
+            .await
+            .unwrap()
+            .registered
+    );
+    let k = cast(&[
+        "call",
+        "--rpc-url",
+        rpc,
+        &registry,
+        "webAuthnKeyOf(bytes32)((bytes32,bytes32,bytes32))",
+        &ua,
+    ]);
+    assert!(
+        k.contains(&format!(
+            "0x{}",
+            alloy::hex::encode(scaas_ua::sha256(b"scaas.example"))
+        )),
+        "{k}"
+    );
 }

@@ -53,7 +53,11 @@ impl Sdk {
     /// Watches `account` (a `0x` address or UA that an account row of the keystore names) on `chains` (EVM profiles) and
     /// starts the poll loop once. `Argument`: an id no row names (a hidden set's account is never watched) or a bad id;
     /// `ChainUnknown`.
-    pub async fn watch(self: &Arc<Self>, account: String, chains: Vec<String>) -> Result<(), SdkError> {
+    pub async fn watch(
+        self: &Arc<Self>,
+        account: String,
+        chains: Vec<String>,
+    ) -> Result<(), SdkError> {
         let sdk = self.clone();
         self.spawn(async move {
             id_word(&account)?;
@@ -71,9 +75,12 @@ impl Sdk {
                 return Err(SdkError::Argument);
             };
             let zether = matches!(row, AccountRow::Ua { kind: 0x0141, .. });
-            let _ = sdk
-                .state_seen
-                .compare_exchange(REV_UNSEEN, state::rev(&sdk).await?, SeqCst, SeqCst);
+            let _ = sdk.state_seen.compare_exchange(
+                REV_UNSEEN,
+                state::rev(&sdk).await?,
+                SeqCst,
+                SeqCst,
+            );
             let start = {
                 let mut w = sdk.watching.lock().unwrap_or_else(PoisonError::into_inner);
                 if zether {
@@ -137,7 +144,12 @@ impl Sdk {
         err.map_or(Ok(()), Err)
     }
 
-    async fn poll_triple(&self, account: &str, chain: &str, token: Address) -> Result<(), SdkError> {
+    async fn poll_triple(
+        &self,
+        account: &str,
+        chain: &str,
+        token: Address,
+    ) -> Result<(), SdkError> {
         let (word, _) = id_word(account)?;
         let (profile, _, pool) = evm(self, chain)?;
         let key = format!("{chain}|{account}|{}", crate::op::hex(token.as_slice()));
@@ -159,7 +171,9 @@ impl Sdk {
             .await?;
         let moved = {
             let mut w = self.watching.lock().unwrap_or_else(PoisonError::into_inner);
-            w.last.insert(key.clone(), a.value).is_some_and(|v| v != a.value)
+            w.last
+                .insert(key.clone(), a.value)
+                .is_some_and(|v| v != a.value)
         };
         #[cfg(feature = "zether")]
         let moved = moved | self.poll_zether(account, chain, token, &key).await?;
@@ -194,7 +208,13 @@ impl Sdk {
     /// A watched Zether UA's words of `token` (spec §9.4: the fixed set, nothing decrypted): whether they moved since the last
     /// poll. A token not catalogued as Zether is noted and not read again; any other refusal is the poll's error.
     #[cfg(feature = "zether")]
-    async fn poll_zether(&self, account: &str, chain: &str, token: Address, key: &str) -> Result<bool, SdkError> {
+    async fn poll_zether(
+        &self,
+        account: &str,
+        chain: &str,
+        token: Address,
+        key: &str,
+    ) -> Result<bool, SdkError> {
         let t = crate::op::hex(token.as_slice());
         let tk = format!("{chain}|{t}");
         {
@@ -206,12 +226,17 @@ impl Sdk {
         let (ua, _) = id_word(account)?;
         let r = match crate::confidential::read::zether(self, chain, &t, None, ua, &[]).await {
             Err(SdkError::TokenUncatalogued) => {
-                self.watching.lock().unwrap_or_else(PoisonError::into_inner).not_zether.insert(tk);
+                self.watching
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .not_zether
+                    .insert(tk);
                 return Ok(false);
             }
             r => r?,
         };
-        let seen = serde_json::to_vec(&[r.words.get("account"), r.words.get("accountData")]).map_err(|_| SdkError::Internal)?;
+        let seen = serde_json::to_vec(&[r.words.get("account"), r.words.get("accountData")])
+            .map_err(|_| SdkError::Internal)?;
         let h = U256::from_be_bytes(scaas_ua::keccak256(&seen));
         let mut w = self.watching.lock().unwrap_or_else(PoisonError::into_inner);
         Ok(w.last.insert(format!("{key}|z"), h).is_some_and(|v| v != h))

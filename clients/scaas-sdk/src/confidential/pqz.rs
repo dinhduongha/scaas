@@ -91,7 +91,9 @@ pub(crate) fn field(w: &W, label: &str) -> u64 {
 
 /// The address at byte `byte` (from the low end) of `w`.
 fn low_addr(w: &W, byte: usize) -> [u8; 20] {
-    w.get(12 - byte..32 - byte).and_then(|b| b.try_into().ok()).unwrap_or_default()
+    w.get(12 - byte..32 - byte)
+        .and_then(|b| b.try_into().ok())
+        .unwrap_or_default()
 }
 
 /// `acct[ua][v]`: `keccak256(v ‖ keccak256(ua ‖ root + 8))`.
@@ -102,9 +104,16 @@ fn acct_base(ua: &W, v: u64) -> W {
 /// The facade's window end `p` (CTR-PQZ-06): `min(pendingCount, rolled + min(inline, K_MAX − 1 − accUnits))` (saturating:
 /// the facade refuses an account past `K_MAX` itself).
 fn window_end(s0: &W, s1: &W, op7_pqzh: bool) -> (u64, u64) {
-    let (count, rolled) = (field(s0, "acct[U][7].pendingCount"), field(s0, "acct[U][7].rolled"));
+    let (count, rolled) = (
+        field(s0, "acct[U][7].pendingCount"),
+        field(s0, "acct[U][7].rolled"),
+    );
     let room = (K_MAX as u64).saturating_sub(field(s1, "acct[U][7].accUnits").saturating_add(1));
-    let inline = if op7_pqzh { INLINE_MAX_PQZH } else { INLINE_MAX };
+    let inline = if op7_pqzh {
+        INLINE_MAX_PQZH
+    } else {
+        INLINE_MAX
+    };
     (rolled, count.min(rolled.saturating_add(inline.min(room))))
 }
 
@@ -122,13 +131,19 @@ fn key_maps(slot0: &W, token: &Address, ua: &W) -> (W, W) {
             map_slot(&scope, &map_slot(ua, &be(REG_SCOPED_VERSIONS_SLOT))),
         )
     } else {
-        (map_slot(ua, &be(REG_PQZ_KEY_SLOT)), map_slot(ua, &be(REG_PQZ_VERSIONS_SLOT)))
+        (
+            map_slot(ua, &be(REG_PQZ_KEY_SLOT)),
+            map_slot(ua, &be(REG_PQZ_VERSIONS_SLOT)),
+        )
     }
 }
 
 /// The current version of a versions word (`latest(64) ‖ current(64) ‖ …` from the low end).
 fn current(versions: &W) -> u64 {
-    versions.get(16..24).and_then(|b| b.try_into().ok()).map_or(0, u64::from_be_bytes)
+    versions
+        .get(16..24)
+        .and_then(|b| b.try_into().ok())
+        .map_or(0, u64::from_be_bytes)
 }
 
 /// The ids of this build's set: PQZL, and PQZH where the set has it.
@@ -184,7 +199,8 @@ pub(crate) struct PqzRead {
     pub words: Value,
     /// the token's slot 0 (`disclosureMode`, `auditorMode`, `pqzVerifyMode`, `proofStore`, `auditorEpoch`)
     pub slot0: W,
-    #[allow(dead_code)] // the verdict's and the proof path's (the token's `proofSystemId` at the read's block)
+    #[allow(dead_code)]
+    // the verdict's and the proof path's (the token's `proofSystemId` at the read's block)
     pub psid: W,
     /// the registry the token's `ChainEnv` names
     pub registry: [u8; 20],
@@ -226,7 +242,10 @@ async fn fetch(pool: &EvmPool, at: ReadAt<B256>, p: &Plan) -> Result<Raw, ReadEr
         account.push(tok(add(&base, i)).await?);
     }
     let send_counter = tok(map_slot(&p.ua, &ns("sendCounter[U]"))).await?;
-    let (s0, s1) = (account.first().copied().unwrap_or_default(), account.get(1).copied().unwrap_or_default());
+    let (s0, s1) = (
+        account.first().copied().unwrap_or_default(),
+        account.get(1).copied().unwrap_or_default(),
+    );
     let mut acc_words = Vec::new();
     let mut ptrs = vec![low_addr(&key_record, 0)];
     if field(&s1, "acct[U][7].flags") & MAT != 0 {
@@ -259,10 +278,18 @@ async fn fetch(pool: &EvmPool, at: ReadAt<B256>, p: &Plan) -> Result<Raw, ReadEr
         let cur = current(&word(pool, at, reg, &v).await?);
         let record = word(pool, at, reg, &map_slot(&be(cur), &k)).await?;
         let ptr = low_addr(&record, 0);
-        let code = if ptr == [0; 20] { vec![] } else { pool.code_at(at, Address::from(ptr)).await?.to_vec() };
+        let code = if ptr == [0; 20] {
+            vec![]
+        } else {
+            pool.code_at(at, Address::from(ptr)).await?.to_vec()
+        };
         keys.push((u, record, code));
     }
-    let verifier_fee = if field(&slot0, "pqzVerifyMode") == 1 { tok(ns("verifierFee")).await? } else { [0; 32] };
+    let verifier_fee = if field(&slot0, "pqzVerifyMode") == 1 {
+        tok(ns("verifierFee")).await?
+    } else {
+        [0; 32]
+    };
     let mut blobs: Vec<([u8; 20], Vec<u8>)> = Vec::new();
     for a in ptrs {
         if a != [0; 20] && !blobs.iter().any(|b| b.0 == a) {
@@ -345,8 +372,15 @@ fn check(
     let offchain = field(&x.slot0, "pqzVerifyMode") == 1;
     let mut keys = Vec::with_capacity(x.keys.len());
     for (_, record, code) in &x.keys {
-        let ok = (record[11] == 1 || offchain) && code.len() == pqz_set().pk_len + 1 && code.first() == Some(&0);
-        keys.push(code.get(1..).filter(|_| ok).ok_or(SdkError::ReceiverUnregistered)?.to_vec());
+        let ok = (record[11] == 1 || offchain)
+            && code.len() == pqz_set().pk_len + 1
+            && code.first() == Some(&0);
+        keys.push(
+            code.get(1..)
+                .filter(|_| ok)
+                .ok_or(SdkError::ReceiverUnregistered)?
+                .to_vec(),
+        );
     }
     let auditor = (x.keys.len() > others && field(&x.slot0, "auditorMode") != 0)
         .then(|| x.keys.last().map(|k| k.0).zip(keys.pop()))
@@ -379,9 +413,17 @@ pub(crate) async fn read(
     others: &[W],
 ) -> Result<PqzRead, SdkError> {
     let (profile, _, pool) = evm(sdk, chain)?;
-    let factory = addr20(&profile.factory.clone().ok_or(SdkError::Argument)?.to_ascii_lowercase())?;
+    let factory = addr20(
+        &profile
+            .factory
+            .clone()
+            .ok_or(SdkError::Argument)?
+            .to_ascii_lowercase(),
+    )?;
     let t = addr20(&token.to_ascii_lowercase())?;
-    let uid: W = unhex(&profile.chain_uid)?.try_into().map_err(|_| SdkError::Argument)?;
+    let uid: W = unhex(&profile.chain_uid)?
+        .try_into()
+        .map_err(|_| SdkError::Argument)?;
     let plan = Plan {
         factory: Address::from(factory),
         token: Address::from(t),
@@ -394,7 +436,17 @@ pub(crate) async fn read(
     let a = pool
         .read_at_block(final_block(&profile), PURPOSE, |at| fetch(pool, at, plan))
         .await?;
-    check(a.value, a.number, &uid, &t, &ua, version, pk, op7, others.len())
+    check(
+        a.value,
+        a.number,
+        &uid,
+        &t,
+        &ua,
+        version,
+        pk,
+        op7,
+        others.len(),
+    )
 }
 
 /// A PQZ balance read (spec §9.2, §9.4): the account of the UA key `signer` (a PQZ-capable kind, `KeyRef::Ua`) at key
@@ -422,7 +474,11 @@ pub struct PqzBalance {
 }
 
 /// The holder's UA and PQZ key of `signer` at `version` (`Argument`: not a `KeyRef::Ua` of a PQZ-capable kind).
-pub(crate) fn holder(sdk: &Sdk, signer: &KeyRef, version: u64) -> Result<(W, (Arc<OpenSeed>, PqzKey)), SdkError> {
+pub(crate) fn holder(
+    sdk: &Sdk,
+    signer: &KeyRef,
+    version: u64,
+) -> Result<(W, (Arc<OpenSeed>, PqzKey)), SdkError> {
     let KeyRef::Ua {
         seed,
         kind,
@@ -436,13 +492,22 @@ pub(crate) fn holder(sdk: &Sdk, signer: &KeyRef, version: u64) -> Result<(W, (Ar
         return Err(SdkError::Argument);
     }
     let s = sdk.open_seed(seed)?;
-    let ua = s.wallet.ua_key(*kind, *account, *index)?.ua().ok_or(SdkError::Argument)?;
+    let ua = s
+        .wallet
+        .ua_key(*kind, *account, *index)?
+        .ua()
+        .ok_or(SdkError::Argument)?;
     let k = s.wallet.pqz_key_version(*account, *index, version)?;
     Ok((ua, (s, k)))
 }
 
 /// `cmd` of the PQZ facade on `req`, off the async workers under `Limits::max_concurrent_heavy`, the seed kept open meanwhile.
-pub(crate) async fn call(sdk: &Sdk, key: (Arc<OpenSeed>, PqzKey), cmd: &'static str, req: &Value) -> Result<Value, SdkError> {
+pub(crate) async fn call(
+    sdk: &Sdk,
+    key: (Arc<OpenSeed>, PqzKey),
+    cmd: &'static str,
+    req: &Value,
+) -> Result<Value, SdkError> {
     let body = serde_json::to_vec(req).map_err(|_| SdkError::Internal)?;
     let out = sdk
         .heavy(move || {
@@ -480,10 +545,16 @@ impl super::Confidential {
                     .transpose()?
                     .and_then(|b| b.try_into().ok())
                     .ok_or(SdkError::Internal)?;
-                let latest = versions.get(24..).and_then(|b| b.try_into().ok()).map_or(0, u64::from_be_bytes);
+                let latest = versions
+                    .get(24..)
+                    .and_then(|b| b.try_into().ok())
+                    .map_or(0, u64::from_be_bytes);
                 Ok((
                     PqzBalance {
-                        amount: out.get("value").map(|v| v.to_string().trim_matches('"').to_string()).ok_or(SdkError::Internal)?,
+                        amount: out
+                            .get("value")
+                            .map(|v| v.to_string().trim_matches('"').to_string())
+                            .ok_or(SdkError::Internal)?,
                         block: w.block,
                         p: n("p")?,
                         send_counter: n("sendCounter")?,
@@ -527,7 +598,9 @@ impl super::Confidential {
         }
         let mut sum: u128 = 0;
         for b in &versions {
-            sum = sum.checked_add(b.amount.parse::<u128>().map_err(|_| SdkError::Internal)?).ok_or(SdkError::Internal)?;
+            sum = sum
+                .checked_add(b.amount.parse::<u128>().map_err(|_| SdkError::Internal)?)
+                .ok_or(SdkError::Internal)?;
         }
         Ok(PqzBalanceAll {
             amount: sum.to_string(),
@@ -590,7 +663,11 @@ impl super::Confidential {
         fields: serde_json::Map<String, Value>,
         env: crate::wallet::Envelope,
     ) -> Result<Arc<crate::op::Prepared>, SdkError> {
-        let p = self.sdk.wallet().plain(name, signer, chain, token, batch, fields, env).await?;
+        let p = self
+            .sdk
+            .wallet()
+            .plain(name, signer, chain, token, batch, fields, env)
+            .await?;
         if p.t.kind != "pqz" {
             return Err(SdkError::Argument);
         }
@@ -598,37 +675,67 @@ impl super::Confidential {
     }
 
     /// Prepares `pqz_shield` (`UAShield` on a PQZ token; spec §9.2): `ProfileMismatch`, `Argument` (not a PQZ token).
-    pub async fn prepare_pqz_shield(&self, r: PqzShield) -> Result<Arc<crate::op::Prepared>, SdkError> {
+    pub async fn prepare_pqz_shield(
+        &self,
+        r: PqzShield,
+    ) -> Result<Arc<crate::op::Prepared>, SdkError> {
         let mut f = serde_json::Map::new();
         f.insert("toUA".into(), json!(r.to_ua));
         f.insert("amount".into(), json!(r.amount));
-        self.pqz_plain("UAShield", r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+        self.pqz_plain(
+            "UAShield", r.signer, r.chain, r.token, r.batch, f, r.envelope,
+        )
+        .await
     }
 
     /// Prepares `pqz_wrap_shield` (`WrapShield` on a PQZ token).
-    pub async fn prepare_pqz_wrap_shield(&self, r: PqzWrapShield) -> Result<Arc<crate::op::Prepared>, SdkError> {
+    pub async fn prepare_pqz_wrap_shield(
+        &self,
+        r: PqzWrapShield,
+    ) -> Result<Arc<crate::op::Prepared>, SdkError> {
         let mut f = serde_json::Map::new();
         f.insert("underlying".into(), json!(r.underlying));
         f.insert("amountIn".into(), json!(r.amount_in));
         f.insert("toUA".into(), json!(r.to_ua));
-        self.pqz_plain("WrapShield", r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+        self.pqz_plain(
+            "WrapShield",
+            r.signer,
+            r.chain,
+            r.token,
+            r.batch,
+            f,
+            r.envelope,
+        )
+        .await
     }
 
     /// Prepares `UAPrepareAcc` (`value`: the `half`).
-    pub async fn prepare_pqz_prepare_acc(&self, r: PqzAccountOp) -> Result<Arc<crate::op::Prepared>, SdkError> {
+    pub async fn prepare_pqz_prepare_acc(
+        &self,
+        r: PqzAccountOp,
+    ) -> Result<Arc<crate::op::Prepared>, SdkError> {
         self.account_op("UAPrepareAcc", "half", r).await
     }
 
     /// Prepares `UAPqzRollOver` (`value`: the `n` entries rolled over).
-    pub async fn prepare_pqz_roll_over(&self, r: PqzAccountOp) -> Result<Arc<crate::op::Prepared>, SdkError> {
+    pub async fn prepare_pqz_roll_over(
+        &self,
+        r: PqzAccountOp,
+    ) -> Result<Arc<crate::op::Prepared>, SdkError> {
         self.account_op("UAPqzRollOver", "n", r).await
     }
 
-    async fn account_op(&self, name: &'static str, k: &str, r: PqzAccountOp) -> Result<Arc<crate::op::Prepared>, SdkError> {
+    async fn account_op(
+        &self,
+        name: &'static str,
+        k: &str,
+        r: PqzAccountOp,
+    ) -> Result<Arc<crate::op::Prepared>, SdkError> {
         let mut f = serde_json::Map::new();
         f.insert("ua".into(), json!(r.ua));
         f.insert("keyVersion".into(), json!(r.key_version.to_string()));
         f.insert(k.into(), json!(r.value));
-        self.pqz_plain(name, r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+        self.pqz_plain(name, r.signer, r.chain, r.token, r.batch, f, r.envelope)
+            .await
     }
 }

@@ -58,7 +58,8 @@ pub struct SubmitQuote {
 pub(crate) fn door_a(p: &Prepared) -> bool {
     // a PQZ debit (its proof and ciphertext parts) is above the gateway's body cap (`scaas_rpc::node::BODY_MAX`, the node's
     // 64 KiB): self-relayed only (controller call P-T16-8, owner auto-run 2026-11-19)
-    matches!(p.t.kind, "token" | "zether" | "pqz") && !(p.t.kind == "pqz" && PQZ_DEBITS.contains(&p.t.name))
+    matches!(p.t.kind, "token" | "zether" | "pqz")
+        && !(p.t.kind == "pqz" && PQZ_DEBITS.contains(&p.t.name))
 }
 
 /// The PQZ entries that carry a proof.

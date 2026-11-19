@@ -16,8 +16,8 @@ use scaas_sdk::account::AddWatch;
 use scaas_sdk::vault::{ImportWords, MemoryStore, SecureStore};
 use scaas_sdk::wallet::Cursor;
 use scaas_sdk::{
-    ChainProfile, EndpointConfig, Event, Family, Finality, Limits, ListedToken, RuntimeChoice,
-    Sdk, SdkConfig, SdkError,
+    ChainProfile, EndpointConfig, Event, Family, Finality, Limits, ListedToken, RuntimeChoice, Sdk,
+    SdkConfig, SdkError,
 };
 use scaas_ua::wallet::SecretBytes;
 use serde_json::{json, Value};
@@ -138,7 +138,8 @@ fn transfer(token: &str, from: &str, to: &str, n: u64, i: u64) -> Value {
 
 /// The `[from, to]` of every `eth_getLogs` request the fake received.
 fn log_ranges(c: &Fake) -> Vec<(u64, u64)> {
-    let num = |v: &Value| u64::from_str_radix(v.as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+    let num =
+        |v: &Value| u64::from_str_radix(v.as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
     let mut out = vec![];
     for body in &c.lock().unwrap().requests {
         let v: Value = serde_json::from_str(body).unwrap();
@@ -176,29 +177,68 @@ async fn history_pages_with_logs_range() {
     }
     let sdk = open(&url, 2, MemoryStore::new(), Limits::default()).await;
     let w = sdk.wallet();
-    assert_eq!(code(w.history(ACC.into(), "local".into(), None, 0).await), "Argument");
-    let p = w.history(ACC.into(), "local".into(), None, 2).await.unwrap();
+    assert_eq!(
+        code(w.history(ACC.into(), "local".into(), None, 0).await),
+        "Argument"
+    );
+    let p = w
+        .history(ACC.into(), "local".into(), None, 2)
+        .await
+        .unwrap();
     let pos: Vec<(u64, u64)> = p.items.iter().map(|i| (i.block, i.log_index)).collect();
     assert_eq!(pos, vec![(24_500, 0), (24_000, 3)], "newest first, limit");
     assert_eq!(p.items[0].event, "UATransfer");
-    assert_eq!(p.next, Some(Cursor { block: 24_000, log_index: 3 }));
-    let p = w.history(ACC.into(), "local".into(), p.next, 10).await.unwrap();
+    assert_eq!(
+        p.next,
+        Some(Cursor {
+            block: 24_000,
+            log_index: 3
+        })
+    );
+    let p = w
+        .history(ACC.into(), "local".into(), p.next, 10)
+        .await
+        .unwrap();
     assert_eq!(p.items.len(), 1);
     assert_eq!((p.items[0].block, p.items[0].log_index), (24_000, 1));
     assert!(p.ops.is_empty(), "operations on the first page only");
     // the next window ends at the cursor's block
-    assert_eq!(p.next, Some(Cursor { block: 14_000, log_index: u64::MAX }));
-    let p = w.history(ACC.into(), "local".into(), p.next, 10).await.unwrap();
-    assert_eq!(p.items.iter().map(|i| i.block).collect::<Vec<_>>(), vec![5_000]);
-    assert_eq!(p.next, Some(Cursor { block: 4_000, log_index: u64::MAX }));
-    let p = w.history(ACC.into(), "local".into(), p.next, 10).await.unwrap();
+    assert_eq!(
+        p.next,
+        Some(Cursor {
+            block: 14_000,
+            log_index: u64::MAX
+        })
+    );
+    let p = w
+        .history(ACC.into(), "local".into(), p.next, 10)
+        .await
+        .unwrap();
+    assert_eq!(
+        p.items.iter().map(|i| i.block).collect::<Vec<_>>(),
+        vec![5_000]
+    );
+    assert_eq!(
+        p.next,
+        Some(Cursor {
+            block: 4_000,
+            log_index: u64::MAX
+        })
+    );
+    let p = w
+        .history(ACC.into(), "local".into(), p.next, 10)
+        .await
+        .unwrap();
     assert!(p.items.is_empty());
     assert_eq!(p.next, None, "block 0 reached");
     let ranges = log_ranges(&c);
     // three requests (indexed fields 1, 2, 3) per page, each with both bounds and one span window
     assert_eq!(ranges.len(), 12);
     for (lo, hi) in &ranges {
-        assert!(lo <= hi && hi - lo < scaas_rpc::evm::LOG_RANGE_MAX, "{lo}..{hi}");
+        assert!(
+            lo <= hi && hi - lo < scaas_rpc::evm::LOG_RANGE_MAX,
+            "{lo}..{hi}"
+        );
     }
     assert_eq!(ranges[0], (15_001, 25_000));
     assert_eq!(ranges[3], (14_001, 24_000));
@@ -214,7 +254,11 @@ async fn history_added_and_balance_changed_events() {
     sdk.watch(ACC.into(), vec!["local".into()]).await.unwrap();
     sdk.poll().await.unwrap();
     let ev = events(&sub).await;
-    assert!(!ev.iter().any(|e| matches!(e, Event::BalanceChanged { .. } | Event::HistoryAdded { .. })), "{ev:?}");
+    assert!(
+        !ev.iter()
+            .any(|e| matches!(e, Event::BalanceChanged { .. } | Event::HistoryAdded { .. })),
+        "{ev:?}"
+    );
     {
         let mut g = c.lock().unwrap();
         g.logs.push(transfer(&token_addr(0), OTHER, ACC, 101, 0));
@@ -238,7 +282,10 @@ async fn history_added_and_balance_changed_events() {
         })
         .collect();
     assert_eq!(added.len(), 1);
-    assert_eq!(added[0].iter().map(|i| i.block).collect::<Vec<_>>(), vec![101]);
+    assert_eq!(
+        added[0].iter().map(|i| i.block).collect::<Vec<_>>(),
+        vec![101]
+    );
     // nothing moved: no event
     sdk.poll().await.unwrap();
     let ev = events(&sub).await;
@@ -297,14 +344,17 @@ async fn lagged_subscriber() {
     std::thread::spawn(move || {
         let _ = tx.send(h.block_on(s2.poll()).is_ok());
     });
-    let done = tokio::task::spawn_blocking(move || rx.recv_timeout(std::time::Duration::from_secs(20)))
-        .await
-        .unwrap();
+    let done =
+        tokio::task::spawn_blocking(move || rx.recv_timeout(std::time::Duration::from_secs(20)))
+            .await
+            .unwrap();
     assert_eq!(done, Ok(true), "the SDK blocked on a full queue");
     assert_eq!(sub.next(100).await, Some(Event::Lagged { missed: 6 }));
     let rest = events(&sub).await;
     assert_eq!(rest.len(), 4);
-    assert!(rest.iter().all(|e| matches!(e, Event::BalanceChanged { .. })));
+    assert!(rest
+        .iter()
+        .all(|e| matches!(e, Event::BalanceChanged { .. })));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -322,16 +372,27 @@ async fn operations_in_history() {
     };
     let st = json!({"rev": 1, "ops": [row("op-mine", &ACC.to_ascii_uppercase().replace("0X", "0x")), row("op-other", OTHER)]});
     store
-        .put_if("sdk.state".into(), None, serde_json::to_vec(&st).unwrap(), StorePolicy::default())
+        .put_if(
+            "sdk.state".into(),
+            None,
+            serde_json::to_vec(&st).unwrap(),
+            StorePolicy::default(),
+        )
         .await
         .unwrap();
     let w = sdk.wallet();
-    let p = w.history(ACC.into(), "local".into(), None, 10).await.unwrap();
+    let p = w
+        .history(ACC.into(), "local".into(), None, 10)
+        .await
+        .unwrap();
     assert_eq!(p.ops.len(), 1);
     assert_eq!(p.ops[0].op, "op-mine");
     assert_eq!(p.ops[0].state, "landed");
     assert_eq!(p.ops[0].landed_block, Some(95));
-    let p = w.history(OTHER.into(), "local".into(), None, 10).await.unwrap();
+    let p = w
+        .history(OTHER.into(), "local".into(), None, 10)
+        .await
+        .unwrap();
     assert_eq!(p.ops[0].op, "op-other");
 }
 
@@ -351,12 +412,19 @@ async fn watch_cap() {
             .unwrap()
             .requests
             .iter()
-            .filter(|b| b.contains("balanceOfUA") || b.contains(&keccak_hex(b"balanceOfUA(bytes32)")[2..10]))
+            .filter(|b| {
+                b.contains("balanceOfUA") || b.contains(&keccak_hex(b"balanceOfUA(bytes32)")[2..10])
+            })
             .count()
     };
     let cursors = || async {
         let st: Value = serde_json::from_slice(
-            &store.get("sdk.state".into(), String::new()).await.unwrap().unwrap().bytes,
+            &store
+                .get("sdk.state".into(), String::new())
+                .await
+                .unwrap()
+                .unwrap()
+                .bytes,
         )
         .unwrap();
         let mut k: Vec<String> = st["cursors"].as_object().unwrap().keys().cloned().collect();
@@ -393,7 +461,10 @@ async fn no_hidden_set_cursor() {
             .map(|i| String::from_utf8(i.bytes).unwrap())
     };
     // an id no keystore row names (a hidden set's account is never written): not watched, no cursor
-    assert_eq!(code(sdk.watch(OTHER.into(), vec!["local".into()]).await), "Argument");
+    assert_eq!(
+        code(sdk.watch(OTHER.into(), vec!["local".into()]).await),
+        "Argument"
+    );
     sdk.poll().await.unwrap();
     assert_eq!(state().await, None);
     // its history is read and writes nothing
@@ -416,7 +487,13 @@ async fn state_changed_from_another_process() {
     let d = std::env::temp_dir().join(format!("scaas-sdk-state-two-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    let a = open(&url, 1, scaas_sdk::vault::FileStore::new(&d).unwrap(), Limits::default()).await;
+    let a = open(
+        &url,
+        1,
+        scaas_sdk::vault::FileStore::new(&d).unwrap(),
+        Limits::default(),
+    )
+    .await;
     with_row(&a).await;
     let sub = a.subscribe();
     a.watch(ACC.into(), vec!["local".into()]).await.unwrap();
@@ -425,9 +502,18 @@ async fn state_changed_from_another_process() {
     // its own cursor write is no `StateChanged`
     a.poll().await.unwrap();
     let ev = events(&sub).await;
-    assert!(!ev.iter().any(|e| matches!(e, Event::StateChanged { .. })), "{ev:?}");
+    assert!(
+        !ev.iter().any(|e| matches!(e, Event::StateChanged { .. })),
+        "{ev:?}"
+    );
     // a second SDK over the same directory writes `sdk.state`
-    let b = open(&url, 1, scaas_sdk::vault::FileStore::new(&d).unwrap(), Limits::default()).await;
+    let b = open(
+        &url,
+        1,
+        scaas_sdk::vault::FileStore::new(&d).unwrap(),
+        Limits::default(),
+    )
+    .await;
     b.watch(ACC.into(), vec!["local".into()]).await.unwrap();
     c.lock().unwrap().finalized = 101;
     c.lock().unwrap().head = 101;

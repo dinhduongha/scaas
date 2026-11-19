@@ -20,12 +20,16 @@
 //! UNAUDITED.
 use super::pqz::{call, field as sfield, holder, read};
 use super::verdict::{request as verdict, PqzVerdictRequest};
-use crate::op::{addr20, dec, evm, field, hex, lane_nonce, unhex, Draft, KeyRef, Op, Prepared, ReviewField, Source};
+use crate::op::{
+    addr20, dec, evm, field, hex, lane_nonce, unhex, Draft, KeyRef, Op, Prepared, ReviewField,
+    Source,
+};
 use crate::wallet::{put_envelope, Envelope};
 use crate::SdkError;
 use alloy::primitives::{Address, U256};
 use scaas_ua::facade::pqz::{
-    bind_mode, envelope_binding, pqz_auth_message, pqz_set, unwrap_envelope, Mode, PqzEnvelope, Verification, V_BYTES,
+    bind_mode, envelope_binding, pqz_auth_message, pqz_set, unwrap_envelope, Mode, PqzEnvelope,
+    Verification, V_BYTES,
 };
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
@@ -103,10 +107,24 @@ pub struct PqzUnshieldUnwrap {
 
 /// What the proof proves beside the holder's account.
 enum Form {
-    Single { to: W, amount: u64 },
-    Multi { legs: Vec<(W, u64)>, decoy_fee: u64 },
-    Burn { amount: u64, recipient: W },
-    Unwrap { underlying: [u8; 20], recipient: W, amount: u64, min_out: u64 },
+    Single {
+        to: W,
+        amount: u64,
+    },
+    Multi {
+        legs: Vec<(W, u64)>,
+        decoy_fee: u64,
+    },
+    Burn {
+        amount: u64,
+        recipient: W,
+    },
+    Unwrap {
+        underlying: [u8; 20],
+        recipient: W,
+        amount: u64,
+        min_out: u64,
+    },
 }
 
 struct Debit {
@@ -123,7 +141,9 @@ struct Debit {
 }
 
 fn w32(s: &str) -> Result<W, SdkError> {
-    unhex(&s.to_ascii_lowercase())?.try_into().map_err(|_| SdkError::Argument)
+    unhex(&s.to_ascii_lowercase())?
+        .try_into()
+        .map_err(|_| SdkError::Argument)
 }
 
 fn num(s: &str) -> Result<u64, SdkError> {
@@ -162,17 +182,26 @@ impl super::Confidential {
     }
 
     /// Prepares `UAPqzTransferSingleCompact`: as [`Self::prepare_pqz_transfer`], commit-reveal (`HASH`) on every token.
-    pub async fn prepare_pqz_transfer_compact(&self, r: PqzTransfer) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_pqz_transfer_compact(
+        &self,
+        r: PqzTransfer,
+    ) -> Result<Arc<Prepared>, SdkError> {
         self.pqz_single("UAPqzTransferSingleCompact", r).await
     }
 
     /// Prepares `UAPqzTransfer` (op 7) in the token's default form.
-    pub async fn prepare_pqz_transfer_multi(&self, r: PqzTransferMulti) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_pqz_transfer_multi(
+        &self,
+        r: PqzTransferMulti,
+    ) -> Result<Arc<Prepared>, SdkError> {
         self.pqz_multi("UAPqzTransfer", r).await
     }
 
     /// Prepares `UAPqzTransferCompact` (op 7), commit-reveal on every token.
-    pub async fn prepare_pqz_transfer_multi_compact(&self, r: PqzTransferMulti) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_pqz_transfer_multi_compact(
+        &self,
+        r: PqzTransferMulti,
+    ) -> Result<Arc<Prepared>, SdkError> {
         self.pqz_multi("UAPqzTransferCompact", r).await
     }
 
@@ -198,7 +227,10 @@ impl super::Confidential {
     }
 
     /// Prepares `UAPqzUnshieldUnwrap` (op 2 with the `Unwrap` leg signed in the struct).
-    pub async fn prepare_pqz_unshield_unwrap(&self, r: PqzUnshieldUnwrap) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_pqz_unshield_unwrap(
+        &self,
+        r: PqzUnshieldUnwrap,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let form = Form::Unwrap {
             underlying: addr20(&r.underlying.to_ascii_lowercase())?,
             recipient: w32(&r.recipient)?,
@@ -220,7 +252,11 @@ impl super::Confidential {
         .await
     }
 
-    async fn pqz_single(&self, name: &'static str, r: PqzTransfer) -> Result<Arc<Prepared>, SdkError> {
+    async fn pqz_single(
+        &self,
+        name: &'static str,
+        r: PqzTransfer,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let form = Form::Single {
             to: w32(&r.to_ua)?,
             amount: num(&r.amount)?,
@@ -244,13 +280,27 @@ impl super::Confidential {
         .await
     }
 
-    async fn pqz_multi(&self, name: &'static str, r: PqzTransferMulti) -> Result<Arc<Prepared>, SdkError> {
+    async fn pqz_multi(
+        &self,
+        name: &'static str,
+        r: PqzTransferMulti,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let mut legs = Vec::with_capacity(r.legs.len());
         let mut review = Vec::new();
         for (i, l) in r.legs.iter().enumerate() {
             legs.push((w32(&l.to_ua)?, num(&l.amount)?));
-            review.push(field(&format!("request.to[{i}]"), &l.to_ua, &l.to_ua, Source::Request));
-            review.push(field(&format!("request.amount[{i}]"), &l.amount, &l.amount, Source::Request));
+            review.push(field(
+                &format!("request.to[{i}]"),
+                &l.to_ua,
+                &l.to_ua,
+                Source::Request,
+            ));
+            review.push(field(
+                &format!("request.amount[{i}]"),
+                &l.amount,
+                &l.amount,
+                Source::Request,
+            ));
         }
         if legs.is_empty() {
             return Err(SdkError::Argument);

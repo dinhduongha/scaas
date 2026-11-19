@@ -120,19 +120,27 @@ async fn sign_msig(
         .find(|r| r.name == p.t.name && r.kinds.contains(&p.t.kind))
         .map(|r| r.plan)
         .ok_or(SdkError::Argument)?;
-    let ua_form = plan.contains("@ua") || p.t.name.starts_with("UA") || p.t.name.starts_with("CancelUA");
+    let ua_form =
+        plan.contains("@ua") || p.t.name.starts_with("UA") || p.t.name.starts_with("CancelUA");
     if !ua_form || plan.contains("@bytes") || p.t.owner.is_some() {
         return Err(SdkError::Argument);
     }
     #[cfg(test)]
     sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    let s = crate::account::msig::sign_typed(sdk, &p.chain(), ua, slots, &p.t.td, &p.t.expect).await?;
-    let sig: Value = serde_json::from_str(&scaas_ua::json::uasig_json(&s)).map_err(|_| SdkError::Internal)?;
+    let s =
+        crate::account::msig::sign_typed(sdk, &p.chain(), ua, slots, &p.t.td, &p.t.expect).await?;
+    let sig: Value =
+        serde_json::from_str(&scaas_ua::json::uasig_json(&s)).map_err(|_| SdkError::Internal)?;
     build(p, &sig, &p.t.extra)
 }
 
 #[cfg(not(feature = "account"))]
-async fn sign_msig(_: &Sdk, _: &Prepared, _: &str, _: &[super::MsigSlot]) -> Result<Built, SdkError> {
+async fn sign_msig(
+    _: &Sdk,
+    _: &Prepared,
+    _: &str,
+    _: &[super::MsigSlot],
+) -> Result<Built, SdkError> {
     Err(SdkError::FeatureMissing)
 }
 
@@ -366,13 +374,14 @@ impl Op {
                 // G3: a self-relay's gas recomputed from the signed calldata, before anything is written or sent; the signer's
                 // kind and the unsigned calldata's length kept on the row for a later self-relay `resend` (Q5)
                 let kind = signer_kind(&sdk, &prepared).await;
-                let (signer, unsigned_len) = match unsigned(&prepared).and_then(|u| Ok((kind?, u.calldata.len()))) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        put_back(&sdk, &prepared);
-                        return Err(e);
-                    }
-                };
+                let (signer, unsigned_len) =
+                    match unsigned(&prepared).and_then(|u| Ok((kind?, u.calldata.len()))) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            put_back(&sdk, &prepared);
+                            return Err(e);
+                        }
+                    };
                 let quote = match &quote.path {
                     SubmitPath::SelfRelay { .. } => {
                         match signed_quote(

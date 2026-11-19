@@ -63,7 +63,10 @@ const EVENTS: [(&str, &str); 6] = [
         "PaymentSettled(address,address,uint256,uint256,address,bytes32)",
     ),
     ("Wrapped", "Wrapped(address,address,uint256,uint256)"),
-    ("Unwrapped", "Unwrapped(address,address,address,uint256,uint256)"),
+    (
+        "Unwrapped",
+        "Unwrapped(address,address,address,uint256,uint256)",
+    ),
     (
         "UnwrappedToUA",
         "UnwrappedToUA(address,address,bytes32,uint256,uint256)",
@@ -151,7 +154,9 @@ impl Wallet {
                 let top = before.map_or(fin, |c| c.block.min(fin));
                 let from = top.saturating_sub(LOG_RANGE_MAX - 1);
                 let mut items = scan(&pool, &tokens, B256::from(word), from, top).await?;
-                items.retain(|i| before.is_none_or(|c| (i.block, i.log_index) < (c.block, c.log_index)));
+                items.retain(|i| {
+                    before.is_none_or(|c| (i.block, i.log_index) < (c.block, c.log_index))
+                });
                 let next = if items.len() > limit as usize {
                     items.truncate(limit as usize);
                     items.last().map(|i| Cursor {

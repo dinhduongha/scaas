@@ -101,7 +101,9 @@ impl RegistrationBlob {
     /// The blob from its JSON text (passed out of band): `Argument` above [`BLOB_MAX`] bytes, deeper than 4, with an unknown
     /// or missing field at any level, or of a version other than 1.
     pub fn from_json(text: &str) -> Result<RegistrationBlob, SdkError> {
-        if text.len() > BLOB_MAX || scaas_ua::json::depth_within(text.as_bytes(), BLOB_DEPTH).is_err() {
+        if text.len() > BLOB_MAX
+            || scaas_ua::json::depth_within(text.as_bytes(), BLOB_DEPTH).is_err()
+        {
             return Err(SdkError::Argument);
         }
         let b: RegistrationBlob = serde_json::from_str(text).map_err(|_| SdkError::Argument)?;
@@ -154,7 +156,11 @@ fn attrs_of(a: &AttrsArgs) -> Result<UAAttrs, SdkError> {
 impl Account {
     /// The receiver's blob (spec §7.1): the registration of `key` (a seed's UA key) as `prepare_register` builds it, named,
     /// with no secret. `WalletLocked`; `Argument` and `FeatureMissing` as `prepare_register`.
-    pub async fn registration_blob(&self, key: KeyRef, attrs: RegisterAttrs) -> Result<RegistrationBlob, SdkError> {
+    pub async fn registration_blob(
+        &self,
+        key: KeyRef,
+        attrs: RegisterAttrs,
+    ) -> Result<RegistrationBlob, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {

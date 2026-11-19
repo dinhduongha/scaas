@@ -370,7 +370,11 @@ impl Op {
         let (_, now) = super::head(&pool).await?;
         // the struct's primary type: the row's name, but for `UAPqzRollOver`, signed as the PQZ domain's `UARollOver` (scaas-ua
         // `scaas_typed_data`: the domain named picks the row)
-        let primary = if d.name == "UAPqzRollOver" { "UARollOver" } else { d.name };
+        let primary = if d.name == "UAPqzRollOver" {
+            "UARollOver"
+        } else {
+            d.name
+        };
         let td = scaas_typed_data(
             primary,
             Some(domain_name(d.kind)?),
@@ -417,8 +421,19 @@ impl Op {
         let mut extra = d.extra;
         let owner = match d.owner {
             Some((name, slot, m)) => {
-                let otd = scaas_typed_data(name, Some(domain_name(d.kind)?), &d.contract, chain_id, &uid, &m)?;
-                let om = otd.to_value().get("message").cloned().ok_or(SdkError::Internal)?;
+                let otd = scaas_typed_data(
+                    name,
+                    Some(domain_name(d.kind)?),
+                    &d.contract,
+                    chain_id,
+                    &uid,
+                    &m,
+                )?;
+                let om = otd
+                    .to_value()
+                    .get("message")
+                    .cloned()
+                    .ok_or(SdkError::Internal)?;
                 flatten(slot.trim_end_matches("Sig"), &om, &mut review);
                 let ex = Expect::Op {
                     op: name.into(),

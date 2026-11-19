@@ -235,13 +235,15 @@ pub(crate) fn record_holds(landed: Landed, out: &[u8]) -> Option<bool> {
             Some(!out.get(off..off + 32)?.iter().all(|b| *b == 0))
         }
         // `(uint64 version, uint256 enabled, uint256 accepted)`
-        Landed::Accepted(i) => (out.len() == 96).then(|| i < 256 && word(out, 2).is_some_and(|w| w.bit(usize::from(i)))),
+        Landed::Accepted(i) => (out.len() == 96)
+            .then(|| i < 256 && word(out, 2).is_some_and(|w| w.bit(usize::from(i)))),
         Landed::MsigUpdate(v, _) => match (out.len(), word(out, 0)?) {
             (96, w) if w <= U256::from(u64::MAX) => Some(w >= U256::from(v)),
             _ => None,
         },
         // `address[3]`: part `p`'s pointer
-        Landed::Cached(p) => (out.len() == 96).then(|| word(out, usize::try_from(p).unwrap_or(3)).is_some_and(|w| !w.is_zero())),
+        Landed::Cached(p) => (out.len() == 96)
+            .then(|| word(out, usize::try_from(p).unwrap_or(3)).is_some_and(|w| !w.is_zero())),
     }
 }
 
@@ -267,7 +269,14 @@ pub(crate) async fn read_record(
     let Some(c2) = record_call2(landed, ua) else {
         return Ok(true);
     };
-    let out = pool.call_tx(TransactionRequest::default().with_to(registry).with_input(c2)).await.map_err(sim)?;
+    let out = pool
+        .call_tx(
+            TransactionRequest::default()
+                .with_to(registry)
+                .with_input(c2),
+        )
+        .await
+        .map_err(sim)?;
     record_holds2(landed, &out).ok_or_else(bad)
 }
 
@@ -276,7 +285,9 @@ async fn pqz_proven(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<
     let mut d = selector("pqzKeyAt(bytes32,uint64)");
     d.extend_from_slice(ua);
     d.extend_from_slice(&word_u64(0));
-    let tx = TransactionRequest::default().with_to(registry).with_input(Bytes::from(d));
+    let tx = TransactionRequest::default()
+        .with_to(registry)
+        .with_input(Bytes::from(d));
     let out = pool.call_tx(tx).await.map_err(sim)?;
     // `(address ptr, bytes32 pqzPopHash, bool proven)`
     word(&out, 2)
@@ -289,7 +300,11 @@ async fn pqz_proven(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<
 }
 
 /// `registrationOf(ua)`'s `attrs.kemPkHash` (zero for an unregistered UA).
-async fn kem_pk_hash(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<[u8; 32], SdkError> {
+async fn kem_pk_hash(
+    pool: &EvmPool,
+    registry: Address,
+    ua: &[u8; 32],
+) -> Result<[u8; 32], SdkError> {
     let mut d = selector("registrationOf(bytes32)");
     d.extend_from_slice(ua);
     let tx = TransactionRequest::default()
@@ -408,17 +423,37 @@ pub(crate) async fn writes(
         // an ML-DSA key on a registry that caches its expanded key (no precompile: `cacheExpandedKey` of part 0 simulates;
         // with a precompile it reverts `UAKeyCache`): each part not stored yet, before the registration (CTR-UA-23 MD-3)
         let mut cache_pending = false;
-        let kind = args.get("kind").and_then(Value::as_u64).and_then(|k| u16::try_from(k).ok());
+        let kind = args
+            .get("kind")
+            .and_then(Value::as_u64)
+            .and_then(|k| u16::try_from(k).ok());
         let parts = kind.map_or(0, scaas_ua::mldsa_cache::parts);
         if entry == "register" && parts > 0 {
             let kind = kind.ok_or(SdkError::Argument)?;
-            let pk = unhex(args.get("keyData").and_then(Value::as_str).ok_or(SdkError::Argument)?)?;
-            let probe = scaas_ua::mldsa_cache::part_call(kind, &pk, 0).map_err(|_| SdkError::Argument)?;
-            if pool.simulate_from(from, registry, Bytes::from(probe)).await.is_ok() {
+            let pk = unhex(
+                args.get("keyData")
+                    .and_then(Value::as_str)
+                    .ok_or(SdkError::Argument)?,
+            )?;
+            let probe =
+                scaas_ua::mldsa_cache::part_call(kind, &pk, 0).map_err(|_| SdkError::Argument)?;
+            if pool
+                .simulate_from(from, registry, Bytes::from(probe))
+                .await
+                .is_ok()
+            {
                 for p in 0..parts {
                     if !read_record(&pool, registry, Landed::Cached(p), &ua).await? {
                         let a = json!({"kind": kind, "pk": hex(&pk), "part": p});
-                        out.push(keep(sdk, chain, "cacheExpandedKey", ua, &a, payer, Landed::Cached(p))?);
+                        out.push(keep(
+                            sdk,
+                            chain,
+                            "cacheExpandedKey",
+                            ua,
+                            &a,
+                            payer,
+                            Landed::Cached(p),
+                        )?);
                         cache_pending = true;
                     }
                 }
@@ -431,7 +466,8 @@ pub(crate) async fn writes(
         // with the cache pending the registration cannot be estimated yet (`UAKeyNotCached`): a `pqzPop` goes apart, each
         // part quoted after the one before it landed
         let split = pqz_pop != "0x"
-            && (cache_pending || !fits(pool.simulate_from(from, registry, Bytes::from(full)).await));
+            && (cache_pending
+                || !fits(pool.simulate_from(from, registry, Bytes::from(full)).await));
         if split {
             let mut first = args.clone();
             first
@@ -439,20 +475,53 @@ pub(crate) async fn writes(
                 .ok_or(SdkError::Argument)?
                 .insert("pqzPop".into(), json!("0x"));
             let part = registry_call(&entry, &first)?;
-            if !cache_pending && !fits(pool.simulate_from(from, registry, Bytes::from(part)).await) {
+            if !cache_pending && !fits(pool.simulate_from(from, registry, Bytes::from(part)).await)
+            {
                 return Err(SdkError::GasAboveTxCap);
             }
-            out.push(keep(sdk, chain, &entry, ua, &first, payer, Landed::Registered)?);
+            out.push(keep(
+                sdk,
+                chain,
+                &entry,
+                ua,
+                &first,
+                payer,
+                Landed::Registered,
+            )?);
             let store = json!({"ua": hex(&ua), "version": 0, "pqzPop": pqz_pop});
-            out.push(keep(sdk, chain, "storePqzPop", ua, &store, payer, Landed::PqzPop(0))?);
+            out.push(keep(
+                sdk,
+                chain,
+                "storePqzPop",
+                ua,
+                &store,
+                payer,
+                Landed::PqzPop(0),
+            )?);
         } else {
-            out.push(keep(sdk, chain, &entry, ua, args, payer, Landed::Registered)?);
+            out.push(keep(
+                sdk,
+                chain,
+                &entry,
+                ua,
+                args,
+                payer,
+                Landed::Registered,
+            )?);
         }
     }
     if let Some(fill) = kem_fill {
         let filled = registered && read_record(&pool, registry, Landed::Kem(0), &ua).await?;
         if !filled {
-            out.push(keep(sdk, chain, "setKemKey", ua, fill, payer, Landed::Kem(0))?);
+            out.push(keep(
+                sdk,
+                chain,
+                "setKemKey",
+                ua,
+                fill,
+                payer,
+                Landed::Kem(0),
+            )?);
         }
     }
     Ok(out)
@@ -473,7 +542,10 @@ fn known(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
 
 /// Takes `w` out of the table (one submit: a second, concurrent or later, is `PreparedUnknown`).
 fn take(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
-    let mut t = sdk.registry_writes.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut t = sdk
+        .registry_writes
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     match t.get(&w.id) {
         Some(x) if Arc::ptr_eq(x, w) => {
             t.remove(&w.id);
@@ -485,7 +557,11 @@ fn take(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
 
 /// A seed key's registration by `scaas-ua` (`registration_args_json`; the PoP by `sign_ua` under `pop` v2, the Zether UA's by
 /// its facade): the UA and `{args, kemFill, …}`.
-pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result<([u8; 32], Value), SdkError> {
+pub(crate) fn build(
+    sdk: &Sdk,
+    key_ref: &KeyRef,
+    attrs: RegisterAttrs,
+) -> Result<([u8; 32], Value), SdkError> {
     let (mut pqz_key, mut pqz_pop) = (vec![], vec![]);
     let (kind, key_data, ua, pop, kem_pk) = match key(sdk, key_ref)? {
         Key::Ua(_, k) => {
@@ -528,11 +604,21 @@ pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result
         }
         Key::Native(..) | Key::External(..) => return Err(SdkError::Argument),
     };
-    Ok((ua, args_of(kind, &key_data, &pqz_key, &pqz_pop, &kem_pk, &pop)?))
+    Ok((
+        ua,
+        args_of(kind, &key_data, &pqz_key, &pqz_pop, &kem_pk, &pop)?,
+    ))
 }
 
 /// `scaas-ua`'s registration of these parts (`registration_args_json`): `{args, kemFill, …}`.
-fn args_of(kind: u16, key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], kem_pk: &[u8], pop: &[u8]) -> Result<Value, SdkError> {
+fn args_of(
+    kind: u16,
+    key_data: &[u8],
+    pqz_key: &[u8],
+    pqz_pop: &[u8],
+    kem_pk: &[u8],
+    pop: &[u8],
+) -> Result<Value, SdkError> {
     let pop_hash = match pqz_pop.is_empty() {
         true => "0x".to_string(),
         false => hex(&scaas_ua::keccak256(pqz_pop)),
@@ -542,7 +628,8 @@ fn args_of(kind: u16, key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], kem_pk: &
         "kemPk": hex(kem_pk), "pop": hex(pop),
     });
     serde_json::from_str(
-        &scaas_ua::json::registration_args_json(&input.to_string()).map_err(|_| SdkError::Argument)?,
+        &scaas_ua::json::registration_args_json(&input.to_string())
+            .map_err(|_| SdkError::Argument)?,
     )
     .map_err(|_| SdkError::Internal)
 }
@@ -551,7 +638,11 @@ fn args_of(kind: u16, key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], kem_pk: &
 /// secure element's `p256` `register`) signs its PoP through the `Authenticator` (`external::answer`, then `scaas-ua`'s
 /// `ua_sig` over an `ExternalKey` returning that answer, which `scaas-ua` verifies); neither holds a KEM or PQZ key
 /// (`Argument`).
-pub(crate) async fn build_key(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result<([u8; 32], Value), SdkError> {
+pub(crate) async fn build_key(
+    sdk: &Sdk,
+    key_ref: &KeyRef,
+    attrs: RegisterAttrs,
+) -> Result<([u8; 32], Value), SdkError> {
     if !matches!(key_ref, KeyRef::Key { .. }) {
         return build(sdk, key_ref, attrs);
     }
@@ -567,7 +658,10 @@ pub(crate) async fn build_key(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs)
     let answer = crate::op::external::answer(sdk, &row, &tag, &hp.registration_digest).await?;
     let device = scaas_ua::wallet::ExternalKey::new(row.key_ref(), move |_| Ok(answer.clone()));
     let pop = scaas_ua::wallet::ua_sig(&device, None, &tag, &hp.registration_digest)?.signature;
-    Ok((row.ua, args_of(row.kind, &row.key_data, &[], &[], &[], &pop)?))
+    Ok((
+        row.ua,
+        args_of(row.kind, &row.key_data, &[], &[], &[], &pop)?,
+    ))
 }
 
 /// The PQZ key attribute of a seed's UA key (spec §7): the PQZ key of the same wallet account and index
@@ -593,7 +687,10 @@ fn pqz_attr(
     };
     let pk = sdk.open_seed(seed)?.wallet.pqz_key(*account, *index)?;
     let mut req = serde_json::Map::new();
-    req.insert("proofSystemId".into(), json!(hex(&scaas_ua::facade::pqz::pqz_set().pqzl_id)));
+    req.insert(
+        "proofSystemId".into(),
+        json!(hex(&scaas_ua::facade::pqz::pqz_set().pqzl_id)),
+    );
     req.insert("kind".into(), json!(kind));
     req.insert("ua".into(), json!(hex(ua)));
     if !kem_pk.is_empty() {
@@ -602,18 +699,32 @@ fn pqz_attr(
     let req = Value::Object(req);
     let a: Value = serde_json::from_str(&pk.call("proveRegister", req.to_string().as_bytes())?)
         .map_err(|_| SdkError::Internal)?;
-    let proof = unhex(a.get("proof").and_then(Value::as_str).ok_or(SdkError::Internal)?)?;
+    let proof = unhex(
+        a.get("proof")
+            .and_then(Value::as_str)
+            .ok_or(SdkError::Internal)?,
+    )?;
     Ok((pk.pk(), proof))
 }
 
 #[cfg(not(feature = "pqz"))]
-fn pqz_attr(_: &Sdk, _: &KeyRef, _: u16, _: &[u8; 32], _: &[u8]) -> Result<(Vec<u8>, Vec<u8>), SdkError> {
+fn pqz_attr(
+    _: &Sdk,
+    _: &KeyRef,
+    _: u16,
+    _: &[u8; 32],
+    _: &[u8],
+) -> Result<(Vec<u8>, Vec<u8>), SdkError> {
     Err(SdkError::FeatureMissing)
 }
 
 /// `ReceiverUnregistered` (spec §7.1): `to` a derived UA (not a native id: its top 12 bytes not all zero) that the profile's
 /// registry does not hold, or on a profile naming no registry (fail closed: owner 2026-11-19, R3); a native id passes.
-pub(crate) async fn receiver_registered(sdk: &Sdk, chain: &str, to: &[u8; 32]) -> Result<(), SdkError> {
+pub(crate) async fn receiver_registered(
+    sdk: &Sdk,
+    chain: &str,
+    to: &[u8; 32],
+) -> Result<(), SdkError> {
     if to.get(..12).is_some_and(|h| h.iter().all(|b| *b == 0)) {
         return Ok(());
     }
@@ -634,7 +745,10 @@ impl Account {
     /// already registered UA gives only what it misses. `WalletLocked`; `Argument` (a key other than a seed's UA key, a KEM
     /// key on a kind that holds none, a profile without a registry); `FeatureMissing` (`attrs.pqz_key` without feature
     /// `pqz`; a PQZ key on a kind that holds none is `Argument`); `GasAboveTxCap`.
-    pub async fn prepare_register(&self, req: Register) -> Result<Vec<Arc<RegistryWrite>>, SdkError> {
+    pub async fn prepare_register(
+        &self,
+        req: Register,
+    ) -> Result<Vec<Arc<RegistryWrite>>, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -649,7 +763,10 @@ impl Account {
     /// The quote of `write` by its payer (spec §13.3): the estimate of its calldata, the chain's and the SDK's caps, the
     /// payer's nonce. Quote a later part only after the one before it landed (its estimate reverts before).
     /// `PreparedUnknown`, `GasAboveTxCap`, `FeeAboveCap`.
-    pub async fn quote_registry_write(&self, write: Arc<RegistryWrite>) -> Result<SubmitQuote, SdkError> {
+    pub async fn quote_registry_write(
+        &self,
+        write: Arc<RegistryWrite>,
+    ) -> Result<SubmitQuote, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -689,7 +806,8 @@ impl Account {
                     .parse::<u128>()
                     .map_err(|_| SdkError::Argument)?;
                 check_caps(&sdk, quote.gas_limit, fee)?;
-                if !matches!(&quote.path, SubmitPath::SelfRelay { payer } if *payer == write.payer) {
+                if !matches!(&quote.path, SubmitPath::SelfRelay { payer } if *payer == write.payer)
+                {
                     return Err(SdkError::Argument);
                 }
                 let (profile, chain_id, pool) = evm(&sdk, &write.chain)?;
@@ -756,7 +874,11 @@ impl Account {
     }
 
     /// The registration of `ua` (`0x` + 64 hex) on `chain` as the registry holds it now.
-    pub async fn registration_of(&self, chain: String, ua: String) -> Result<RegistrationState, SdkError> {
+    pub async fn registration_of(
+        &self,
+        chain: String,
+        ua: String,
+    ) -> Result<RegistrationState, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {

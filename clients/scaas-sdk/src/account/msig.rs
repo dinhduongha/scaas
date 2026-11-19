@@ -30,8 +30,9 @@ use scaas_ua::ua_portable::{
 };
 use scaas_ua::ua_portable::{InnerSig, MemberSig};
 use scaas_ua::wallet::{
-    membership_sig_current, msig_combine, msig_sig_current, msig_slot_sig_current, msig_update_typed_data,
-    registration_typed_data, scaas_purpose, sign_scaas, Expect, ExternalKey, Slot, TypedData,
+    membership_sig_current, msig_combine, msig_sig_current, msig_slot_sig_current,
+    msig_update_typed_data, registration_typed_data, scaas_purpose, sign_scaas, Expect,
+    ExternalKey, Slot, TypedData,
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -99,7 +100,10 @@ impl MsigStructureArgs {
 /// `msig_structure(members, threshold)` (spec §7): the members sorted by id (CTR-UA-09: strictly), the threshold at least 1 and
 /// at most the total weight, every weight at least 1; `Argument` otherwise (one id twice included). The registry checks the
 /// rest (kinds, registered members, the bound).
-pub fn msig_structure(mut members: Vec<MsigMemberArgs>, threshold: u16) -> Result<MsigStructureArgs, SdkError> {
+pub fn msig_structure(
+    mut members: Vec<MsigMemberArgs>,
+    threshold: u16,
+) -> Result<MsigStructureArgs, SdkError> {
     for m in &mut members {
         m.id = hex(&id32(&m.id)?);
     }
@@ -108,7 +112,9 @@ pub fn msig_structure(mut members: Vec<MsigMemberArgs>, threshold: u16) -> Resul
     if threshold == 0
         || u32::from(threshold) > total
         || members.iter().any(|m| m.weight == 0)
-        || members.windows(2).any(|w| w.first().map(|m| &m.id) == w.get(1).map(|m| &m.id))
+        || members
+            .windows(2)
+            .any(|w| w.first().map(|m| &m.id) == w.get(1).map(|m| &m.id))
     {
         return Err(SdkError::Argument);
     }
@@ -234,7 +240,12 @@ fn small(out: &[u8], at: usize, max: u64) -> Option<usize> {
         .and_then(|w| usize::try_from(w).ok())
 }
 
-async fn call(pool: &EvmPool, registry: Address, sig: &str, args: &[[u8; 32]]) -> Result<Vec<u8>, SdkError> {
+async fn call(
+    pool: &EvmPool,
+    registry: Address,
+    sig: &str,
+    args: &[[u8; 32]],
+) -> Result<Vec<u8>, SdkError> {
     let mut d = scaas_ua::keccak256(sig.as_bytes())
         .get(..4)
         .unwrap_or_default()
@@ -276,11 +287,13 @@ pub(crate) fn decode_structure(out: &[u8]) -> Option<Vec<u8>> {
 
 /// The `msig` `ua` on `registry`: `Argument` when it holds no `msig` of that id.
 async fn view(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<View, SdkError> {
-    let first = decode_key_data(&call(pool, registry, "registrationOf(bytes32)", &[*ua]).await?).ok_or_else(bad)?;
+    let first = decode_key_data(&call(pool, registry, "registrationOf(bytes32)", &[*ua]).await?)
+        .ok_or_else(bad)?;
     if scaas_ua::derive_ua(MSIG, &first, false).ok() != Some(*ua) {
         return Err(SdkError::Argument);
     }
-    let current = decode_structure(&call(pool, registry, "msigOf(bytes32)", &[*ua]).await?).ok_or_else(bad)?;
+    let current = decode_structure(&call(pool, registry, "msigOf(bytes32)", &[*ua]).await?)
+        .ok_or_else(bad)?;
     let st = call(pool, registry, "msigStateOf(bytes32)", &[*ua]).await?;
     let w = |i: usize| -> Result<[u8; 32], SdkError> {
         st.get(32 * i..32 * i + 32)
@@ -300,7 +313,11 @@ async fn view(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<View, 
 }
 
 /// The views of `ids` and of each `msig` member of their current structures (two levels).
-async fn views(pool: &EvmPool, registry: Address, ids: &[[u8; 32]]) -> Result<HashMap<[u8; 32], View>, SdkError> {
+async fn views(
+    pool: &EvmPool,
+    registry: Address,
+    ids: &[[u8; 32]],
+) -> Result<HashMap<[u8; 32], View>, SdkError> {
     let mut out = HashMap::new();
     for id in ids {
         let v = view(pool, registry, id).await?;
@@ -361,10 +378,18 @@ fn ua_slots<'a>(slots: &[MsigSlot], keys: &'a [Key]) -> Result<Vec<Slot<'a>>, Sd
 
 /// Each `msig` slot's leaves enabled and accepted in that inner `msig`, `structure` the outer's (CTR-UA-37: an inner names
 /// no signer until then). `Argument` before anything is signed.
-fn leaves_active(views: &HashMap<[u8; 32], View>, structure: &MsigStructure, slots: &[MsigSlot]) -> Result<(), SdkError> {
+fn leaves_active(
+    views: &HashMap<[u8; 32], View>,
+    structure: &MsigStructure,
+    slots: &[MsigSlot],
+) -> Result<(), SdkError> {
     for s in slots {
         if let MsigSlot::Msig { index, members } = s {
-            let id = structure.members.get(usize::from(*index)).ok_or(SdkError::Argument)?.id;
+            let id = structure
+                .members
+                .get(usize::from(*index))
+                .ok_or(SdkError::Argument)?
+                .id;
             let v = views.get(&id).ok_or(SdkError::Argument)?;
             if members.iter().any(|l| !v.active(l.index)) {
                 return Err(SdkError::MsigSlotInactive);
@@ -376,7 +401,11 @@ fn leaves_active(views: &HashMap<[u8; 32], View>, structure: &MsigStructure, slo
 
 /// Every slot enabled and accepted in `v` (the outer `msig`), and every leaf in its inner one: `MsigSlotInactive` otherwise
 /// (M2).
-fn slots_active(views: &HashMap<[u8; 32], View>, v: &View, slots: &[MsigSlot]) -> Result<(), SdkError> {
+fn slots_active(
+    views: &HashMap<[u8; 32], View>,
+    v: &View,
+    slots: &[MsigSlot],
+) -> Result<(), SdkError> {
     for s in slots {
         if !v.active(s.index()) {
             return Err(SdkError::MsigSlotInactive);
@@ -394,7 +423,12 @@ fn structure(kd: &[u8]) -> Result<MsigStructure, SdkError> {
 }
 
 /// The registry's domain for a native member's `UAAuth` (gen 1 only: `predecessor() == 0`).
-async fn domain(sdk: &Sdk, chain: &str, pool: &EvmPool, registry: Address) -> Result<scaas_ua::Domain, SdkError> {
+async fn domain(
+    sdk: &Sdk,
+    chain: &str,
+    pool: &EvmPool,
+    registry: Address,
+) -> Result<scaas_ua::Domain, SdkError> {
     let (profile, chain_id, _) = evm(sdk, chain)?;
     let pred = call(pool, registry, "predecessor()", &[]).await?;
     if word(&pred, 0) != Some(U256::ZERO) {
@@ -421,10 +455,19 @@ fn member_of(s: &str) -> Result<MemberSig, SdkError> {
             Some(Value::String(s)) => s.parse().ok(),
             _ => None,
         };
-        n.and_then(|n| u16::try_from(n).ok()).ok_or(SdkError::Argument)
+        n.and_then(|n| u16::try_from(n).ok())
+            .ok_or(SdkError::Argument)
     };
-    let sig = |v: &Value| v.get("sig").and_then(Value::as_str).ok_or(SdkError::Argument).and_then(unhex);
-    let inner = v.get("members").and_then(Value::as_array).ok_or(SdkError::Argument)?;
+    let sig = |v: &Value| {
+        v.get("sig")
+            .and_then(Value::as_str)
+            .ok_or(SdkError::Argument)
+            .and_then(unhex)
+    };
+    let inner = v
+        .get("members")
+        .and_then(Value::as_array)
+        .ok_or(SdkError::Argument)?;
     if inner.len() > 256 {
         return Err(SdkError::Argument);
     }
@@ -432,7 +475,12 @@ fn member_of(s: &str) -> Result<MemberSig, SdkError> {
         index: index(&v)?,
         members: inner
             .iter()
-            .map(|m| Ok(InnerSig { index: index(m)?, sig: sig(m)? }))
+            .map(|m| {
+                Ok(InnerSig {
+                    index: index(m)?,
+                    sig: sig(m)?,
+                })
+            })
             .collect::<Result<_, SdkError>>()?,
         sig: sig(&v)?,
     })
@@ -461,17 +509,28 @@ async fn slot_sig(
             asked.store(true, Ordering::SeqCst);
             Err(scaas_ua::wallet::Error::ExternalSignature)
         });
-        let slot = Slot::Member { index: *index, key: &refuse };
+        let slot = Slot::Member {
+            index: *index,
+            key: &refuse,
+        };
         let dry = msig_slot_sig_current(first, &current, &inner, purpose, digest, d, record, &slot);
         if !asked.load(Ordering::SeqCst) {
             return Err(dry.err().map_or(SdkError::Internal, SdkError::from));
         }
-        let md = scaas_ua::member_digest(ua, &scaas_ua::ua_message(MSIG, purpose, digest).map_err(ua_err)?);
+        let md = scaas_ua::member_digest(
+            ua,
+            &scaas_ua::ua_message(MSIG, purpose, digest).map_err(ua_err)?,
+        );
         let tag = scaas_ua::purpose_tag("member").map_err(ua_err)?;
         let answer = crate::op::external::answer(sdk, row, &tag, &md).await?;
         let device = ExternalKey::new(row.key_ref(), move |_| Ok(answer.clone()));
-        let slot = Slot::Member { index: *index, key: &device };
-        return Ok(msig_slot_sig_current(first, &current, &inner, purpose, digest, d, record, &slot)?);
+        let slot = Slot::Member {
+            index: *index,
+            key: &device,
+        };
+        return Ok(msig_slot_sig_current(
+            first, &current, &inner, purpose, digest, d, record, &slot,
+        )?);
     }
     let slots = ua_slots(std::slice::from_ref(s), &keys)?;
     Ok(msig_slot_sig_current(
@@ -535,7 +594,20 @@ async fn uasig(
                 }
                 m
             }
-            _ => slot_sig(sdk, &views, &v.first, ua, s, purpose, digest, d.as_ref(), None).await?,
+            _ => {
+                slot_sig(
+                    sdk,
+                    &views,
+                    &v.first,
+                    ua,
+                    s,
+                    purpose,
+                    digest,
+                    d.as_ref(),
+                    None,
+                )
+                .await?
+            }
         });
     }
     Ok(msig_combine(&v.first, &current, &members)?)
@@ -558,7 +630,12 @@ pub(crate) async fn sign_typed(
 
 /// The entry's check through the first local slot's key, a key that only refuses: `PolicyRefused` (or the typed data's own
 /// error) before any member key signs; `Argument` when no slot is local.
-async fn check_first(sdk: &Sdk, slots: &[MsigSlot], td: &TypedData, expect: &Expect) -> Result<(), SdkError> {
+async fn check_first(
+    sdk: &Sdk,
+    slots: &[MsigSlot],
+    td: &TypedData,
+    expect: &Expect,
+) -> Result<(), SdkError> {
     let probe = slots
         .iter()
         .find_map(|s| match s {
@@ -585,7 +662,10 @@ impl crate::op::Op {
     /// devices): `prepared`'s signer is `KeyRef::Msig` with exactly one local slot; the entry's check runs first, then that slot
     /// signs (its keys enabled and accepted, `MsigSlotInactive` otherwise). The `MemberSig` JSON the submitting device names as
     /// `MsigSlot::Signed`. Nothing is sent. `PreparedUnknown`, `PolicyRefused`, `Argument` (another signer, several slots).
-    pub async fn member_sign(&self, prepared: Arc<crate::op::Prepared>) -> Result<String, SdkError> {
+    pub async fn member_sign(
+        &self,
+        prepared: Arc<crate::op::Prepared>,
+    ) -> Result<String, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -625,7 +705,8 @@ impl crate::op::Op {
 
 /// `MemberSig[]` as the registry calls take them.
 fn members_json(s: &UASig) -> Result<Value, SdkError> {
-    let v: Value = serde_json::from_str(&scaas_ua::json::uasig_json(s)).map_err(|_| SdkError::Internal)?;
+    let v: Value =
+        serde_json::from_str(&scaas_ua::json::uasig_json(s)).map_err(|_| SdkError::Internal)?;
     v.get("members").cloned().ok_or(SdkError::Internal)
 }
 
@@ -648,10 +729,17 @@ impl Account {
                     let accepted = bit(&v.accepted, i);
                     let sig_hash = match accepted {
                         true => {
-                            let out =
-                                call(&pool, registry, "memberSigHashOf(bytes32,uint256)", &[id, U256::from(i).to_be_bytes()])
-                                    .await?;
-                            out.get(..32).map(hex).filter(|_| out.len() == 32).ok_or_else(bad)?
+                            let out = call(
+                                &pool,
+                                registry,
+                                "memberSigHashOf(bytes32,uint256)",
+                                &[id, U256::from(i).to_be_bytes()],
+                            )
+                            .await?;
+                            out.get(..32)
+                                .map(hex)
+                                .filter(|_| out.len() == 32)
+                                .ok_or_else(bad)?
                         }
                         false => hex(&[0; 32]),
                     };
@@ -683,7 +771,10 @@ impl Account {
     /// `registerMsig` of `req.structure` (spec §7): its `pop` by `req.slots` over the registration digest (`pop` v2; a native
     /// member's slot is not built here: `Argument`), the arguments by `scaas-ua` (`registration_args`), skipped when the UA is
     /// registered. An `msig` member must be registered first (its structures are read).
-    pub async fn prepare_msig_register(&self, req: MsigRegister) -> Result<Vec<Arc<RegistryWrite>>, SdkError> {
+    pub async fn prepare_msig_register(
+        &self,
+        req: MsigRegister,
+    ) -> Result<Vec<Arc<RegistryWrite>>, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -758,12 +849,18 @@ impl Account {
                 let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
                 let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
                 let s = ua_slots(&slots, &keys)?;
-                let m = membership_sig_current(&v.first, &current, &inner, s.first().ok_or(SdkError::Internal)?)?;
+                let m = membership_sig_current(
+                    &v.first,
+                    &current,
+                    &inner,
+                    s.first().ok_or(SdkError::Internal)?,
+                )?;
                 let ms = members_json(&UASig {
                     members: vec![m],
                     ..Default::default()
                 })?;
-                let args = json!({"ua": hex(&ua), "memberSig": ms.get(0).ok_or(SdkError::Internal)?});
+                let args =
+                    json!({"ua": hex(&ua), "memberSig": ms.get(0).ok_or(SdkError::Internal)?});
                 Ok(Some(keep(
                     &sdk,
                     &req.chain,

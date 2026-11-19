@@ -352,13 +352,24 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
         }
         "eth_estimateGas" if c.call_revert => err("execution reverted"),
         "eth_estimateGas"
-            if c.estimate_reverts.is_some_and(|f| f(p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap_or_default())) =>
+            if c.estimate_reverts.is_some_and(|f| {
+                f(p[0]["input"]
+                    .as_str()
+                    .or(p[0]["data"].as_str())
+                    .unwrap_or_default())
+            }) =>
         {
             err("execution reverted")
         }
         "eth_estimateGas" => {
-            let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap_or_default();
-            ok(json!(format!("{:#x}", c.gas_of.map_or(c.gas, |f| f(input)))))
+            let input = p[0]["input"]
+                .as_str()
+                .or(p[0]["data"].as_str())
+                .unwrap_or_default();
+            ok(json!(format!(
+                "{:#x}",
+                c.gas_of.map_or(c.gas, |f| f(input))
+            )))
         }
         "eth_getCode" => ok(json!(c
             .code
@@ -369,7 +380,10 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             let who = p[0].as_str().unwrap_or_default().to_ascii_lowercase();
             let slot = format!(
                 "0x{:0>64}",
-                p[1].as_str().unwrap_or_default().trim_start_matches("0x").to_ascii_lowercase()
+                p[1].as_str()
+                    .unwrap_or_default()
+                    .trim_start_matches("0x")
+                    .to_ascii_lowercase()
             );
             ok(json!(c
                 .storage
@@ -514,7 +528,8 @@ pub async fn serve(c: Fake) -> String {
                         if path.ends_with("/v1/gateway") {
                             (200, c.gw_info.clone())
                         } else if path.ends_with("/v1/pqz-verdict") {
-                            c.verdict_bodies.push(String::from_utf8_lossy(&body).to_string());
+                            c.verdict_bodies
+                                .push(String::from_utf8_lossy(&body).to_string());
                             match (c.verdict_fn, serde_json::from_slice::<Value>(&body)) {
                                 (Some(f), Ok(v)) => f(&v),
                                 _ => c.verdict.clone().unwrap_or((503, json!({"error": "BUSY"}))),

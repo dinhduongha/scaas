@@ -255,7 +255,9 @@ async fn registry_state(
     let registry: Address = row.contract.parse().map_err(|_| SdkError::Internal)?;
     let a = pool
         .read_at_block(choice, Purpose::Plain, |at| async move {
-            let out = pool.call_at(&at, registry, record_call(landed, &ua)).await?;
+            let out = pool
+                .call_at(&at, registry, record_call(landed, &ua))
+                .await?;
             let bad = || {
                 ReadError::Failure(scaas_rpc::EndpointFailure::new(
                     at.endpoint,

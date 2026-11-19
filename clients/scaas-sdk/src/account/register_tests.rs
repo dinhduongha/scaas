@@ -44,16 +44,21 @@ async fn pq_registration_split() {
         .find(|r| r["name"] == "mldsa65/n2304-kmax4096")
         .unwrap()
         .clone();
-    let ua: [u8; 32] = unhex(row["ua"].as_str().unwrap()).unwrap().try_into().unwrap();
+    let ua: [u8; 32] = unhex(row["ua"].as_str().unwrap())
+        .unwrap()
+        .try_into()
+        .unwrap();
     let chain = fake();
     {
         let mut c = chain.lock().unwrap();
         c.gas_of = Some(by_size);
         let sel = keccak_hex(b"isRegistered(bytes32)")[..10].to_string();
-        c.answers.push((REGISTRY.into(), sel, format!("0x{}", "00".repeat(32))));
+        c.answers
+            .push((REGISTRY.into(), sel, format!("0x{}", "00".repeat(32))));
         // `address[3]`: the ML-DSA key's expanded-key cache complete (plan T13, owner 2026-11-19 T1)
         let sel = keccak_hex(b"expandedKeyOf(bytes32)")[..10].to_string();
-        c.answers.push((REGISTRY.into(), sel, format!("0x{}", "11".repeat(96))));
+        c.answers
+            .push((REGISTRY.into(), sel, format!("0x{}", "11".repeat(96))));
     }
     let url = serve(chain.clone()).await;
     let profile = ChainProfile {
@@ -117,7 +122,10 @@ async fn pq_registration_split() {
     first["pqzPop"] = json!("0x");
     assert_eq!(ws[0].calldata, registry_call("register", &first).unwrap());
     let store = json!({"ua": hex(&ua), "version": 0, "pqzPop": args["pqzPop"]});
-    assert_eq!(ws[1].calldata, registry_call("storePqzPop", &store).unwrap());
+    assert_eq!(
+        ws[1].calldata,
+        registry_call("storePqzPop", &store).unwrap()
+    );
     assert_eq!(ws[1].landed, Landed::PqzPop(0));
     // a part still above the cap: `GasAboveTxCap`
     chain.lock().unwrap().gas_of = Some(|_| 20_000_000);

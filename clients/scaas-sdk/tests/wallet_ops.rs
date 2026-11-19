@@ -88,7 +88,8 @@ async fn setup(gateways: usize) -> T {
         c.genesis = salt.clone();
         // the registry holds every receiver here (a pay to a derived UA needs a registry: owner 2026-11-19, R3)
         let sel = fake_chain::keccak_hex(b"isRegistered(bytes32)")[..10].to_string();
-        c.answers.push((REGISTRY.into(), sel, format!("0x{}1", "0".repeat(63))));
+        c.answers
+            .push((REGISTRY.into(), sel, format!("0x{}1", "0".repeat(63))));
     }
     let url = serve(chain.clone()).await;
     let mut gws = vec![];
@@ -1320,7 +1321,10 @@ async fn smart_execute_decoded_only() {
     let t = setup(0).await;
     let v = load("smartcontracts/vectors/typed/typed_ops.json");
     let d = &v["ops"]["Execute"]["domains"]["account"]["domain"];
-    let account = d["verifyingContract"].as_str().unwrap().to_ascii_lowercase();
+    let account = d["verifyingContract"]
+        .as_str()
+        .unwrap()
+        .to_ascii_lowercase();
     {
         let mut c = t.chain.lock().unwrap();
         let salt = c.genesis.clone();
@@ -1364,12 +1368,22 @@ async fn smart_execute_decoded_only() {
         "Argument",
         "a token's domain is not an account's"
     );
-    let p = acc.prepare_smart_execute(op(&account), transfer).await.unwrap();
+    let p = acc
+        .prepare_smart_execute(op(&account), transfer)
+        .await
+        .unwrap();
     assert_eq!(p.entry(), "mtxExecute");
     assert!(!p.opaque());
     let r = p.review();
-    assert_eq!(r.iter().find(|f| f.name == "call.amount").unwrap().value, "77");
-    assert_eq!(r.iter().find(|f| f.name == "from").unwrap().value, account, "from: the account itself");
+    assert_eq!(
+        r.iter().find(|f| f.name == "call.amount").unwrap().value,
+        "77"
+    );
+    assert_eq!(
+        r.iter().find(|f| f.name == "from").unwrap().value,
+        account,
+        "from: the account itself"
+    );
     // a guardian's recovery of another account, decoded
     let new_key = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000bb").unwrap();
     let guarded = "0x00000000000000000000000000000000000000cc";
@@ -1404,7 +1418,9 @@ async fn smart_execute_decoded_only() {
     // signer's; the entry is signed as `keyIndex` 2. With two slots the signer is in none: `SignerNotAccountKey`.
     let sel = |s: &str| fake_chain::keccak_hex(s.as_bytes())[..10].to_string();
     let words = |k: &SubjectKeyArgs| {
-        let w = [&k.x, &k.y, &k.rp_id_hash, &k.origin_hash].map(|x| x[2..].to_string()).concat();
+        let w = [&k.x, &k.y, &k.rp_id_hash, &k.origin_hash]
+            .map(|x| x[2..].to_string())
+            .concat();
         format!("0x{:064x}{w}", k.kind)
     };
     let me = SubjectKeyArgs::secp256k1(v["key"]["address"].as_str().unwrap()).unwrap();
@@ -1422,7 +1438,10 @@ async fn smart_execute_decoded_only() {
             c.answers.push((account.clone(), d, out));
         }
     };
-    let read = |account: &str| SmartOp { key_index: None, ..op(account) };
+    let read = |account: &str| SmartOp {
+        key_index: None,
+        ..op(account)
+    };
     let transfer = SmartCall::Transfer {
         token: token.into(),
         to: "0x00000000000000000000000000000000000000aa".into(),
@@ -1430,14 +1449,27 @@ async fn smart_execute_decoded_only() {
     };
     slots(2);
     assert_eq!(
-        code(acc.prepare_smart_execute(read(&account), transfer.clone()).await),
+        code(
+            acc.prepare_smart_execute(read(&account), transfer.clone())
+                .await
+        ),
         "SignerNotAccountKey",
         "no slot holds the signer"
     );
     slots(3);
-    let p = acc.prepare_smart_execute(read(&account), transfer).await.unwrap();
-    let payer = SubmitPath::SelfRelay { payer: t.payer.clone() };
-    let q = t.sdk.op().quote_with_gas(p.clone(), payer, 50_000).await.unwrap();
+    let p = acc
+        .prepare_smart_execute(read(&account), transfer)
+        .await
+        .unwrap();
+    let payer = SubmitPath::SelfRelay {
+        payer: t.payer.clone(),
+    };
+    let q = t
+        .sdk
+        .op()
+        .quote_with_gas(p.clone(), payer, 50_000)
+        .await
+        .unwrap();
     t.sdk.op().submit(p, q).await.unwrap();
     let sig_head = format!("{:064x}{:064x}{:064x}", 2, 0x60, 0x80);
     assert!(carried_soon(&t, &sig_head).await, "AccountSig keyIndex 2");

@@ -16,8 +16,7 @@ use fake_chain::{fake, hash_of, serve, Fake, CHAIN_ID};
 use scaas_sdk::confidential::{ZetherBalanceRequest, ZetherKeyInfo};
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::{
-    ChainProfile, EndpointConfig, Family, Finality, Limits, RuntimeChoice, Sdk, SdkConfig,
-    SdkError,
+    ChainProfile, EndpointConfig, Family, Finality, Limits, RuntimeChoice, Sdk, SdkConfig, SdkError,
 };
 use scaas_ua::factory::{clone_runtime, ChainEnv};
 use scaas_ua::keccak256;
@@ -50,7 +49,10 @@ fn unhex(s: &str) -> Vec<u8> {
 }
 
 fn hx(b: &[u8]) -> String {
-    format!("0x{}", b.iter().map(|x| format!("{x:02x}")).collect::<String>())
+    format!(
+        "0x{}",
+        b.iter().map(|x| format!("{x:02x}")).collect::<String>()
+    )
 }
 
 fn a20(s: &str) -> [u8; 20] {
@@ -93,7 +95,11 @@ fn endpoint(url: &str, class: scaas_rpc::Class) -> EndpointConfig {
     }
 }
 
-pub fn profile(rpc: Vec<EndpointConfig>, policy: scaas_rpc::Policy, finality: Finality) -> ChainProfile {
+pub fn profile(
+    rpc: Vec<EndpointConfig>,
+    policy: scaas_rpc::Policy,
+    finality: Finality,
+) -> ChainProfile {
     ChainProfile {
         key: "local".into(),
         family: Family::Evm,
@@ -180,7 +186,8 @@ pub fn zether_state(c: &Fake, k: &ZetherKeyInfo, amount: u64) {
         params: vec![],
     };
     let mut cc = c.lock().unwrap();
-    cc.code.insert(TOKEN.into(), hx(&clone_runtime(&a20(IMPL), &env)));
+    cc.code
+        .insert(TOKEN.into(), hx(&clone_runtime(&a20(IMPL), &env)));
     let mut code = vec![0u8];
     code.extend_from_slice(&y);
     cc.code.insert(KEYPTR.into(), hx(&code));
@@ -232,7 +239,12 @@ fn req(seed: &str) -> ZetherBalanceRequest {
 async fn one(amount: u64, finality: Finality) -> (Arc<Sdk>, String, Fake) {
     let c = fake();
     let url = serve(c.clone()).await;
-    let (s, seed) = sdk(profile(vec![endpoint(&url, scaas_rpc::Class::Named)], scaas_rpc::Policy::Failover, finality)).await;
+    let (s, seed) = sdk(profile(
+        vec![endpoint(&url, scaas_rpc::Class::Named)],
+        scaas_rpc::Policy::Failover,
+        finality,
+    ))
+    .await;
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
     zether_state(&c, &k, amount);
     (s, seed, c)
@@ -274,7 +286,14 @@ fn count(c: &Fake, method: &str) -> usize {
 async fn decryption_reads_skip_discovered() {
     // control: a named endpoint
     let (s, seed, _c) = one(5, Finality::Finalized).await;
-    assert_eq!(s.confidential().zether_balance(req(&seed)).await.unwrap().amount, "5");
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
     // only a discovered endpoint: refused, nothing read
     let c = fake();
     let url = serve(c.clone()).await;
@@ -286,13 +305,19 @@ async fn decryption_reads_skip_discovered() {
     .await;
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
     zether_state(&c, &k, 5);
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "NoTrustedEndpoint");
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "NoTrustedEndpoint"
+    );
     assert_eq!(count(&c, "eth_getStorageAt"), 0);
     // strict_majority over two, one discovered: AgreementNeedsThree
     let (c1, c2) = (fake(), fake());
     let (u1, u2) = (serve(c1.clone()).await, serve(c2.clone()).await);
     let (s, seed) = sdk(profile(
-        vec![endpoint(&u1, scaas_rpc::Class::Named), endpoint(&u2, scaas_rpc::Class::Discovered)],
+        vec![
+            endpoint(&u1, scaas_rpc::Class::Named),
+            endpoint(&u2, scaas_rpc::Class::Discovered),
+        ],
         scaas_rpc::Policy::StrictMajority,
         Finality::Finalized,
     ))
@@ -300,7 +325,10 @@ async fn decryption_reads_skip_discovered() {
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
     zether_state(&c1, &k, 5);
     zether_state(&c2, &k, 5);
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "AgreementNeedsThree");
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "AgreementNeedsThree"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -309,7 +337,10 @@ async fn another_chain_pair_dropped() {
     other.lock().unwrap().genesis = hash_of(5);
     let (u1, u2) = (serve(other.clone()).await, serve(right.clone()).await);
     let (s, seed) = sdk(profile(
-        vec![endpoint(&u1, scaas_rpc::Class::Named), endpoint(&u2, scaas_rpc::Class::Named)],
+        vec![
+            endpoint(&u1, scaas_rpc::Class::Named),
+            endpoint(&u2, scaas_rpc::Class::Named),
+        ],
         scaas_rpc::Policy::Failover,
         Finality::Finalized,
     ))
@@ -317,7 +348,14 @@ async fn another_chain_pair_dropped() {
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
     zether_state(&other, &k, 7);
     zether_state(&right, &k, 5);
-    assert_eq!(s.confidential().zether_balance(req(&seed)).await.unwrap().amount, "5");
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
     assert_eq!(count(&other, "eth_getStorageAt"), 0);
     assert!(count(&right, "eth_getStorageAt") > 0);
 }
@@ -337,7 +375,11 @@ async fn words_at_one_final_block() {
         assert!(!rs.is_empty());
         for r in rs {
             let at = r["params"].as_array().unwrap().last().unwrap().clone();
-            assert_eq!(at["blockHash"], json!(hash_of(block)), "every word by the block's hash: {r}");
+            assert_eq!(
+                at["blockHash"],
+                json!(hash_of(block)),
+                "every word by the block's hash: {r}"
+            );
             assert_eq!(at["requireCanonical"], json!(true));
         }
     }
@@ -348,7 +390,14 @@ async fn view_never_serves_a_word() {
     // the fake's views answer nothing of the token's; the words come from storage alone
     let (s, seed, c) = one(5, Finality::Finalized).await;
     c.lock().unwrap().call_revert = true;
-    assert_eq!(s.confidential().zether_balance(req(&seed)).await.unwrap().amount, "5");
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
     assert_eq!(count(&c, "eth_call"), 0);
     // the module reaches no view: no call of the pool's that runs `eth_call`
     let src = include_str!("../src/confidential/read.rs");
@@ -361,11 +410,24 @@ async fn view_never_serves_a_word() {
 async fn code_hash_checked() {
     // control
     let (s, seed, c) = one(5, Finality::Finalized).await;
-    assert_eq!(s.confidential().zether_balance(req(&seed)).await.unwrap().amount, "5");
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
     // the token's code not a clone of a release
     let good = c.lock().unwrap().code.get(TOKEN).cloned().unwrap();
-    c.lock().unwrap().code.insert(TOKEN.into(), format!("{good}00"));
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "TokenUncatalogued");
+    c.lock()
+        .unwrap()
+        .code
+        .insert(TOKEN.into(), format!("{good}00"));
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "TokenUncatalogued"
+    );
     // a clone of another chain
     let env = ChainEnv {
         chain_uid: [7; 32],
@@ -376,46 +438,85 @@ async fn code_hash_checked() {
         deps: vec![],
         params: vec![],
     };
-    c.lock().unwrap().code.insert(TOKEN.into(), hx(&clone_runtime(&a20(IMPL), &env)));
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "ProfileMismatch");
+    c.lock()
+        .unwrap()
+        .code
+        .insert(TOKEN.into(), hx(&clone_runtime(&a20(IMPL), &env)));
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "ProfileMismatch"
+    );
     c.lock().unwrap().code.insert(TOKEN.into(), good);
     // the key pointer's code holds another key
     let other = s.confidential().zether_key(seed.clone(), 1).await.unwrap();
     let mut k = vec![0u8];
     k.extend(unhex(&other.y));
     c.lock().unwrap().code.insert(KEYPTR.into(), hx(&k));
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "LegKeyMismatch");
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "LegKeyMismatch"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn uncatalogued_token_refused() {
     let (s, seed, c) = one(5, Finality::Finalized).await;
-    assert_eq!(s.confidential().zether_balance(req(&seed)).await.unwrap().amount, "5");
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
     let slot = add(&map(&pad(&a20(TOKEN)), &be(8)), 1);
     for (class, kind) in [(0u8, 2u8), (1, 1), (1, 6)] {
         let mut rec = [0u8; 32];
         rec[29] = kind;
         rec[31] = class;
         put(&c, FACTORY, &slot, &rec);
-        assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "TokenUncatalogued", "class {class} kind {kind}");
+        assert_eq!(
+            code(s.confidential().zether_balance(req(&seed)).await),
+            "TokenUncatalogued",
+            "class {class} kind {kind}"
+        );
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn leg_of_another_key_refused() {
     let (s, seed, c) = one(5, Finality::Finalized).await;
-    assert_eq!(s.confidential().zether_balance(req(&seed)).await.unwrap().amount, "5");
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
     let ua: W = unhex(&k.ua).try_into().unwrap();
     let slot = map(&ua, &be(0));
-    let good = c.lock().unwrap().storage.get(&(REGISTRY.into(), hx(&slot))).cloned().unwrap();
+    let good = c
+        .lock()
+        .unwrap()
+        .storage
+        .get(&(REGISTRY.into(), hx(&slot)))
+        .cloned()
+        .unwrap();
     // no record, a record of another kind
     put(&c, REGISTRY, &slot, &[0; 32]);
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "LegKeyMismatch");
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "LegKeyMismatch"
+    );
     let mut r: W = unhex(&good).try_into().unwrap();
     r[31] = 0x40;
     put(&c, REGISTRY, &slot, &r);
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "LegKeyMismatch");
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "LegKeyMismatch"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -424,9 +525,27 @@ async fn nothing_back_to_the_source() {
     let (s2, seed2, c2) = one(9, Finality::Finalized).await;
     c1.lock().unwrap().requests.clear();
     c2.lock().unwrap().requests.clear();
-    assert_eq!(s1.confidential().zether_balance(req(&seed1)).await.unwrap().amount, "5");
-    assert_eq!(s2.confidential().zether_balance(req(&seed2)).await.unwrap().amount, "9");
-    assert_eq!(log(&c1), log(&c2), "the requests do not depend on the decrypted value");
+    assert_eq!(
+        s1.confidential()
+            .zether_balance(req(&seed1))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
+    assert_eq!(
+        s2.confidential()
+            .zether_balance(req(&seed2))
+            .await
+            .unwrap()
+            .amount,
+        "9"
+    );
+    assert_eq!(
+        log(&c1),
+        log(&c2),
+        "the requests do not depend on the decrypted value"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -440,7 +559,10 @@ async fn decryption_failure_never_fails_over() {
     let (a, b) = (fake(), fake());
     let (ua, ub) = (serve(a.clone()).await, serve(b.clone()).await);
     let (s, seed) = sdk(profile(
-        vec![endpoint(&ua, scaas_rpc::Class::Named), endpoint(&ub, scaas_rpc::Class::Named)],
+        vec![
+            endpoint(&ua, scaas_rpc::Class::Named),
+            endpoint(&ub, scaas_rpc::Class::Named),
+        ],
         scaas_rpc::Policy::Failover,
         Finality::Finalized,
     ))
@@ -449,9 +571,20 @@ async fn decryption_failure_never_fails_over() {
     zether_state(&a, &k, 1 << 19);
     zether_state(&b, &k, 5);
     a.lock().unwrap().requests.clear();
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "Argument");
-    assert_eq!(b.lock().unwrap().requests.len(), 0, "no request to the next endpoint");
-    assert_eq!(count(&a, "eth_getStorageAt"), words, "one read, never a second");
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "Argument"
+    );
+    assert_eq!(
+        b.lock().unwrap().requests.len(),
+        0,
+        "no request to the next endpoint"
+    );
+    assert_eq!(
+        count(&a, "eth_getStorageAt"),
+        words,
+        "one read, never a second"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -459,11 +592,25 @@ async fn watch_reads_are_fixed() {
     let (s, seed, c) = one(5, Finality::Finalized).await;
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
     c.lock().unwrap().requests.clear();
-    assert_eq!(s.confidential().zether_balance(req(&seed)).await.unwrap().amount, "5");
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
     let first = reads(&c);
     set_amount(&c, &k, 77);
     c.lock().unwrap().requests.clear();
-    assert_eq!(s.confidential().zether_balance(req(&seed)).await.unwrap().amount, "77");
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "77"
+    );
     assert_eq!(reads(&c), first, "a changed balance changes no read");
 }
 
@@ -509,13 +656,26 @@ async fn pairs_setup() -> (Arc<Sdk>, String, Fake, ZetherKeyInfo, ZetherKeyInfo)
 }
 
 /// [`pairs_setup`] with verify rows (gas 0) for the signer kinds `verify` only.
-async fn pairs_setup_verify(verify: &[u16]) -> (Arc<Sdk>, String, Fake, ZetherKeyInfo, ZetherKeyInfo) {
+async fn pairs_setup_verify(
+    verify: &[u16],
+) -> (Arc<Sdk>, String, Fake, ZetherKeyInfo, ZetherKeyInfo) {
     let c = fake();
     let url = serve(c.clone()).await;
     let gw = serve(c.clone()).await;
-    let mut p = profile(vec![endpoint(&url, scaas_rpc::Class::Named)], scaas_rpc::Policy::Failover, Finality::Finalized);
+    let mut p = profile(
+        vec![endpoint(&url, scaas_rpc::Class::Named)],
+        scaas_rpc::Policy::Failover,
+        Finality::Finalized,
+    );
     p.gateways = vec![endpoint(&gw, scaas_rpc::Class::Named)];
-    let entries = ["mtxShield", "mtxWrapShield", "mtxRollOver", "mtxRollOverBatch", "mtxConfidentialTransferSingle", "mtxUnshield"];
+    let entries = [
+        "mtxShield",
+        "mtxWrapShield",
+        "mtxRollOver",
+        "mtxRollOverBatch",
+        "mtxConfidentialTransferSingle",
+        "mtxUnshield",
+    ];
     p.gas = scaas_sdk::GasRows {
         base: entries
             .iter()
@@ -533,7 +693,16 @@ async fn pairs_setup_verify(verify: &[u16]) -> (Arc<Sdk>, String, Fake, ZetherKe
                 })
             })
             .collect(),
-        verify: verify.iter().map(|&signer| scaas_sdk::GasVerify { signer, gas: 0, sig_bytes: 0, margin: 0, per_item: None }).collect(),
+        verify: verify
+            .iter()
+            .map(|&signer| scaas_sdk::GasVerify {
+                signer,
+                gas: 0,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            })
+            .collect(),
     };
     let (s, seed) = sdk(p).await;
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
@@ -543,7 +712,8 @@ async fn pairs_setup_verify(verify: &[u16]) -> (Arc<Sdk>, String, Fake, ZetherKe
     {
         let mut cc = c.lock().unwrap();
         cc.timestamp = now();
-        cc.domains.insert(TOKEN.into(), ("SCaaS ZetherToken".into(), hash_of(0)));
+        cc.domains
+            .insert(TOKEN.into(), ("SCaaS ZetherToken".into(), hash_of(0)));
     }
     (s, seed, c, k, k2)
 }
@@ -559,10 +729,16 @@ async fn signed_by_zether(c: &Fake, n: usize, id: &str, k: &ZetherKeyInfo) -> Va
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     let op = &body["op"];
-    let sig = op["auth"]["signature"].as_str().or(op["signature"]["signature"].as_str()).unwrap_or_else(|| panic!("{op}"));
+    let sig = op["auth"]["signature"]
+        .as_str()
+        .or(op["signature"]["signature"].as_str())
+        .unwrap_or_else(|| panic!("{op}"));
     let d: W = unhex(id).try_into().unwrap();
     let m = scaas_ua::ua_message(0x0141, &scaas_ua::purpose_tag("metatx").unwrap(), &d).unwrap();
-    assert!(scaas_ua::verify::verify(0x0141, &unhex(&k.y), &m, &unhex(sig), false), "the Zether UA's signature");
+    assert!(
+        scaas_ua::verify::verify(0x0141, &unhex(&k.y), &m, &unhex(sig), false),
+        "the Zether UA's signature"
+    );
     body
 }
 
@@ -576,7 +752,11 @@ fn zether_signer(seed: &str) -> scaas_sdk::op::KeyRef {
 }
 
 async fn send(s: &Arc<Sdk>, p: Arc<scaas_sdk::op::Prepared>) {
-    let q = s.op().quote(p.clone(), scaas_sdk::op::SubmitPath::Gateway).await.unwrap();
+    let q = s
+        .op()
+        .quote(p.clone(), scaas_sdk::op::SubmitPath::Gateway)
+        .await
+        .unwrap();
     s.op().submit(p, q).await.unwrap();
 }
 
@@ -598,13 +778,30 @@ async fn zether_transfer_single_pair() {
         bound_bits: Some(18),
     };
     // a balance below the amount: refused before anything is signed
-    assert_eq!(code(s.confidential().prepare_zether_transfer(t("6")).await), "Argument");
-    let p = s.confidential().prepare_zether_transfer(t("3")).await.unwrap();
+    assert_eq!(
+        code(s.confidential().prepare_zether_transfer(t("6")).await),
+        "Argument"
+    );
+    let p = s
+        .confidential()
+        .prepare_zether_transfer(t("3"))
+        .await
+        .unwrap();
     assert_eq!(p.entry(), "mtxConfidentialTransferSingle");
     let rv = p.review();
-    let req = |n: &str| rv.iter().find(|f| f.name == n).map(|f| (f.value.clone(), f.source));
-    assert_eq!(req("request.amount"), Some(("3".into(), scaas_sdk::op::Source::Request)));
-    assert_eq!(req("request.to"), Some((k2.ua.clone(), scaas_sdk::op::Source::Request)));
+    let req = |n: &str| {
+        rv.iter()
+            .find(|f| f.name == n)
+            .map(|f| (f.value.clone(), f.source))
+    };
+    assert_eq!(
+        req("request.amount"),
+        Some(("3".into(), scaas_sdk::op::Source::Request))
+    );
+    assert_eq!(
+        req("request.to"),
+        Some((k2.ua.clone(), scaas_sdk::op::Source::Request))
+    );
     assert_eq!(req("from").map(|r| r.0), Some(k.ua.clone()));
     send(&s, p.clone()).await;
     let body = signed_by_zether(&c, 0, &p.id(), &k).await;
@@ -615,17 +812,35 @@ async fn zether_transfer_single_pair() {
     let mut other = vec![0u8];
     other.extend(unhex(&k3.y));
     c.lock().unwrap().code.insert(KEYPTR2.into(), hx(&other));
-    assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "LegKeyMismatch");
+    assert_eq!(
+        code(s.confidential().prepare_zether_transfer(t("3")).await),
+        "LegKeyMismatch"
+    );
     c.lock().unwrap().code.insert(KEYPTR2.into(), good);
     // a record of another kind: a key mismatch; no record at all: the recipient is unregistered (owner 2026-11-19, P2)
     let slot = map(&unhex(&k2.ua).try_into().unwrap(), &be(0));
-    let rec: W = unhex(&c.lock().unwrap().storage.get(&(REGISTRY.into(), hx(&slot))).cloned().unwrap()).try_into().unwrap();
+    let rec: W = unhex(
+        &c.lock()
+            .unwrap()
+            .storage
+            .get(&(REGISTRY.into(), hx(&slot)))
+            .cloned()
+            .unwrap(),
+    )
+    .try_into()
+    .unwrap();
     let mut r = rec;
     r[31] = 0x40;
     put(&c, REGISTRY, &slot, &r);
-    assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "LegKeyMismatch");
+    assert_eq!(
+        code(s.confidential().prepare_zether_transfer(t("3")).await),
+        "LegKeyMismatch"
+    );
     put(&c, REGISTRY, &slot, &[0; 32]);
-    assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "ReceiverUnregistered");
+    assert_eq!(
+        code(s.confidential().prepare_zether_transfer(t("3")).await),
+        "ReceiverUnregistered"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -652,7 +867,9 @@ async fn zether_unshield_pair() {
         .unwrap();
     assert_eq!(p.entry(), "mtxUnshield");
     let rv = p.review();
-    assert!(rv.iter().any(|f| f.name == "amount" && f.value == "2" && f.source == scaas_sdk::op::Source::Signed));
+    assert!(rv.iter().any(|f| f.name == "amount"
+        && f.value == "2"
+        && f.source == scaas_sdk::op::Source::Signed));
     assert!(rv.iter().any(|f| f.name == "recipient" && f.value == to));
     send(&s, p.clone()).await;
     let body = signed_by_zether(&c, 0, &p.id(), &k).await;
@@ -661,7 +878,9 @@ async fn zether_unshield_pair() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn zether_plain_pairs() {
-    use scaas_sdk::confidential::{ZetherRollOver, ZetherRollOverBatch, ZetherShield, ZetherWrapShield};
+    use scaas_sdk::confidential::{
+        ZetherRollOver, ZetherRollOverBatch, ZetherShield, ZetherWrapShield,
+    };
     let (s, seed, c, k, k2) = pairs_setup().await;
     let cf = s.confidential();
     let ps = [
@@ -698,11 +917,21 @@ async fn zether_plain_pairs() {
         .await
         .unwrap(),
     ];
-    for (n, (p, entry)) in ps.into_iter().zip(["mtxShield", "mtxRollOver", "mtxRollOverBatch"]).enumerate() {
+    for (n, (p, entry)) in ps
+        .into_iter()
+        .zip(["mtxShield", "mtxRollOver", "mtxRollOverBatch"])
+        .enumerate()
+    {
         assert_eq!(p.entry(), entry);
-        assert!(p.review().iter().any(|f| f.name == "from" && f.value == k.ua));
+        assert!(p
+            .review()
+            .iter()
+            .any(|f| f.name == "from" && f.value == k.ua));
         send(&s, p.clone()).await;
-        assert_eq!(signed_by_zether(&c, n, &p.id(), &k).await["op"]["entry"], entry);
+        assert_eq!(
+            signed_by_zether(&c, n, &p.id(), &k).await["op"]["entry"],
+            entry
+        );
     }
     // the wrap-shield's `from` is an address: a native EVM key signs it
     let p = cf
@@ -724,7 +953,10 @@ async fn zether_plain_pairs() {
         .unwrap();
     assert_eq!(p.entry(), "mtxWrapShield");
     // another domain (a PQZ token's) is not a Zether pair
-    c.lock().unwrap().domains.insert(TOKEN.into(), ("SCaaS PqzToken".into(), hash_of(0)));
+    c.lock()
+        .unwrap()
+        .domains
+        .insert(TOKEN.into(), ("SCaaS PqzToken".into(), hash_of(0)));
     let r = cf
         .prepare_zether_roll_over(ZetherRollOver {
             signer: zether_signer(&seed),
@@ -781,12 +1013,17 @@ async fn body(c: &Fake, n: usize) -> Value {
 fn zether_sig_ok(k: &ZetherKeyInfo, purpose: &str, digest: &str, sig: &Value) -> bool {
     let d: W = unhex(digest).try_into().unwrap();
     let m = scaas_ua::ua_message(0x0141, &scaas_ua::purpose_tag(purpose).unwrap(), &d).unwrap();
-    let s = sig["signature"].as_str().unwrap_or_else(|| panic!("no UASig in {sig}"));
+    let s = sig["signature"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no UASig in {sig}"));
     scaas_ua::verify::verify(0x0141, &unhex(&k.y), &m, &unhex(s), false)
 }
 
 fn rev(p: &scaas_sdk::op::Prepared, n: &str) -> Option<(String, scaas_sdk::op::Source)> {
-    p.review().into_iter().find(|f| f.name == n).map(|f| (f.value, f.source))
+    p.review()
+        .into_iter()
+        .find(|f| f.name == n)
+        .map(|f| (f.value, f.source))
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -818,9 +1055,15 @@ async fn zether_unshield_unwrap_pair() {
     assert_eq!(rev(&p, "unwrap.recipient"), Some((to.clone(), Signed)));
     assert_eq!(rev(&p, "unwrap.amount"), Some(("2".into(), Signed)));
     assert_eq!(rev(&p, "unwrap.minOut"), Some(("1".into(), Signed)));
-    assert!(p.review().iter().any(|f| f.name == "token" && f.value == UNDERLYING && f.source == Derived));
+    assert!(p
+        .review()
+        .iter()
+        .any(|f| f.name == "token" && f.value == UNDERLYING && f.source == Derived));
     send(&s, p.clone()).await;
-    assert_eq!(signed_by_zether(&c, 0, &p.id(), &k).await["op"]["entry"], "mtxUnshieldUnwrap");
+    assert_eq!(
+        signed_by_zether(&c, 0, &p.id(), &k).await["op"]["entry"],
+        "mtxUnshieldUnwrap"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -838,7 +1081,10 @@ async fn zether_transfer_multi_pairs() {
         chain: "local".into(),
         token: TOKEN.into(),
         batch: "0".into(),
-        recipients: vec![ZetherLeg { to_ua: k2.ua.clone(), amount: "3".into() }],
+        recipients: vec![ZetherLeg {
+            to_ua: k2.ua.clone(),
+            amount: "3".into(),
+        }],
         decoys,
         decoy_fee: "0".into(),
         ua_signer_gas: 0,
@@ -848,17 +1094,30 @@ async fn zether_transfer_multi_pairs() {
         bound_bits: Some(18),
     };
     // more decoys than the list holds besides the holder and the recipient: refused before anything is proved
-    assert_eq!(code(s.confidential().prepare_zether_transfer_multi(t(3)).await), "Argument");
+    assert_eq!(
+        code(s.confidential().prepare_zether_transfer_multi(t(3)).await),
+        "Argument"
+    );
     // the decoys are never the holder or a real recipient: with two eligible UAs, both are drawn every time (three runs: a
     // draw that ignored the exclusions passes all three with probability (1/6)^3)
     let mut p = None;
     for _ in 0..3 {
         c.lock().unwrap().requests.clear();
-        let q = s.confidential().prepare_zether_transfer_multi(t(2)).await.unwrap();
-        let slots: Vec<String> = reads(&c).iter().filter_map(|r| r["params"][1].as_str().map(String::from)).collect();
+        let q = s
+            .confidential()
+            .prepare_zether_transfer_multi(t(2))
+            .await
+            .unwrap();
+        let slots: Vec<String> = reads(&c)
+            .iter()
+            .filter_map(|r| r["params"][1].as_str().map(String::from))
+            .collect();
         for x in [&k3, &k4] {
             let ua: W = unhex(&x.ua).try_into().unwrap();
-            assert!(slots.contains(&hx(&map(&ua, &be(0)))), "each eligible decoy's record is read");
+            assert!(
+                slots.contains(&hx(&map(&ua, &be(0)))),
+                "each eligible decoy's record is read"
+            );
         }
         p = Some(q);
     }
@@ -869,14 +1128,32 @@ async fn zether_transfer_multi_pairs() {
     assert_eq!(rev(&p, "request.amount[0]"), Some(("3".into(), Request)));
     assert_eq!(rev(&p, "request.decoys"), Some(("2".into(), Derived)));
     send(&s, p.clone()).await;
-    assert_eq!(signed_by_zether(&c, 0, &p.id(), &k).await["op"]["entry"], "mtxConfidentialTransfer");
-    let p = s.confidential().prepare_zether_transfer_compact(t(1)).await.unwrap();
+    assert_eq!(
+        signed_by_zether(&c, 0, &p.id(), &k).await["op"]["entry"],
+        "mtxConfidentialTransfer"
+    );
+    let p = s
+        .confidential()
+        .prepare_zether_transfer_compact(t(1))
+        .await
+        .unwrap();
     assert_eq!(p.entry(), "mtxConfidentialTransferCompact");
     send(&s, p.clone()).await;
-    assert_eq!(signed_by_zether(&c, 1, &p.id(), &k).await["op"]["entry"], "mtxConfidentialTransferCompact");
+    assert_eq!(
+        signed_by_zether(&c, 1, &p.id(), &k).await["op"]["entry"],
+        "mtxConfidentialTransferCompact"
+    );
     // a listed UA whose record is gone: when it must be drawn, the key read refuses it (R6)
-    put(&c, REGISTRY, &map(&unhex(&k4.ua).try_into().unwrap(), &be(0)), &[0; 32]);
-    assert_eq!(code(s.confidential().prepare_zether_transfer_multi(t(2)).await), "ReceiverUnregistered");
+    put(
+        &c,
+        REGISTRY,
+        &map(&unhex(&k4.ua).try_into().unwrap(), &be(0)),
+        &[0; 32],
+    );
+    assert_eq!(
+        code(s.confidential().prepare_zether_transfer_multi(t(2)).await),
+        "ReceiverUnregistered"
+    );
 }
 
 /// P1 (owner 2026-11-19): the Zether UA's verify gas the prover adds comes from the gas table's `0x0141` verify row when there
@@ -887,8 +1164,8 @@ async fn zether_ua_verify_gas_from_the_table_then_the_request() {
     use scaas_sdk::confidential::{ZetherLeg, ZetherTransferMulti};
     for (verify, app, ok) in [
         (&[0u16, 0x0141][..], 1u64 << 30, true), // the table's row (0) wins over an over-cap request figure
-        (&[0u16][..], 1u64 << 30, false),         // no row: the request's figure is used, over the cap
-        (&[0u16][..], 0, true),                   // no row: the request's figure, within the cap (control)
+        (&[0u16][..], 1u64 << 30, false), // no row: the request's figure is used, over the cap
+        (&[0u16][..], 0, true),           // no row: the request's figure, within the cap (control)
     ] {
         let (s, seed, c, k, k2) = pairs_setup_verify(verify).await;
         let k3 = s.confidential().zether_key(seed.clone(), 2).await.unwrap();
@@ -902,7 +1179,10 @@ async fn zether_ua_verify_gas_from_the_table_then_the_request() {
                 chain: "local".into(),
                 token: TOKEN.into(),
                 batch: "0".into(),
-                recipients: vec![ZetherLeg { to_ua: k2.ua.clone(), amount: "3".into() }],
+                recipients: vec![ZetherLeg {
+                    to_ua: k2.ua.clone(),
+                    amount: "3".into(),
+                }],
                 decoys: 1,
                 decoy_fee: "0".into(),
                 ua_signer_gas: app,
@@ -912,7 +1192,12 @@ async fn zether_ua_verify_gas_from_the_table_then_the_request() {
                 bound_bits: Some(18),
             })
             .await;
-        assert_eq!(r.is_ok(), ok, "verify rows {verify:?}, request {app}: {:?}", r.err());
+        assert_eq!(
+            r.is_ok(),
+            ok,
+            "verify rows {verify:?}, request {app}: {:?}",
+            r.err()
+        );
     }
 }
 
@@ -936,11 +1221,20 @@ async fn zether_owner_statements() {
         mode: m,
         valid_until_block: 1000,
     };
-    let relay = || OwnerRelay { batch: "0".into(), envelope: env() };
+    let relay = || OwnerRelay {
+        batch: "0".into(),
+        envelope: env(),
+    };
     // nothing pending: refused
     counters(&c, &k, 1, 2, 2, 0);
-    assert_eq!(code(cf.prepare_zether_owner_roll_over(roll()).await), "Argument");
-    assert_eq!(code(cf.prepare_zether_owner_set_mode(mode(2)).await), "Argument");
+    assert_eq!(
+        code(cf.prepare_zether_owner_roll_over(roll()).await),
+        "Argument"
+    );
+    assert_eq!(
+        code(cf.prepare_zether_owner_set_mode(mode(2)).await),
+        "Argument"
+    );
     counters(&c, &k, 1, 3, 1, 4);
     // the direct forms: the Zether UA signs the owner statement under zether-owner, never metatx
     let p = cf.prepare_zether_owner_roll_over(roll()).await.unwrap();
@@ -986,21 +1280,39 @@ async fn zether_owner_statements() {
 async fn watch_reads_a_zether_account() {
     let c = fake();
     let url = serve(c.clone()).await;
-    let mut p = profile(vec![endpoint(&url, scaas_rpc::Class::Named)], scaas_rpc::Policy::Failover, Finality::Finalized);
-    p.tokens = vec![scaas_sdk::ListedToken { address: TOKEN.into(), symbol: "Z".into(), decimals: 0 }];
+    let mut p = profile(
+        vec![endpoint(&url, scaas_rpc::Class::Named)],
+        scaas_rpc::Policy::Failover,
+        Finality::Finalized,
+    );
+    p.tokens = vec![scaas_sdk::ListedToken {
+        address: TOKEN.into(),
+        symbol: "Z".into(),
+        decimals: 0,
+    }];
     let (s, seed) = sdk(p).await;
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
     zether_state(&c, &k, 5);
     {
         let mut g = c.lock().unwrap();
-        g.tokens.insert(TOKEN.into(), ("Z".into(), "Z".into(), 0, hash_of(0)));
+        g.tokens
+            .insert(TOKEN.into(), ("Z".into(), "Z".into(), 0, hash_of(0)));
         g.balances.insert(TOKEN.into(), 0);
     }
     // only an account a keystore row names (C2): the Zether UA's row first
-    assert_eq!(code(s.watch(k.ua.clone(), vec!["local".into()]).await), "Argument");
+    assert_eq!(
+        code(s.watch(k.ua.clone(), vec!["local".into()]).await),
+        "Argument"
+    );
     let row = s
         .account()
-        .add_ua(scaas_sdk::account::AddUa { seed: seed.clone(), name: "z".into(), kind: 0x0141, account: 0, index: 0 })
+        .add_ua(scaas_sdk::account::AddUa {
+            seed: seed.clone(),
+            name: "z".into(),
+            kind: 0x0141,
+            account: 0,
+            index: 0,
+        })
         .await
         .unwrap();
     assert_eq!(row.id_text, k.ua, "the row's UA is the Zether key's");
@@ -1019,5 +1331,12 @@ async fn watch_reads_a_zether_account() {
     while let Some(e) = sub.next(50).await {
         ev.push(e);
     }
-    assert!(ev.contains(&scaas_sdk::Event::BalanceChanged { account: k.ua.clone(), chain: "local".into(), token: TOKEN.into() }), "{ev:?}");
+    assert!(
+        ev.contains(&scaas_sdk::Event::BalanceChanged {
+            account: k.ua.clone(),
+            chain: "local".into(),
+            token: TOKEN.into()
+        }),
+        "{ev:?}"
+    );
 }

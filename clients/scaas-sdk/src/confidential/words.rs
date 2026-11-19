@@ -44,11 +44,19 @@ pub(crate) fn rec_slot(token: &[u8; 20]) -> W {
 
 /// `(contractClass, kind)` of `_rec[token]`'s word 1.
 pub(crate) fn class_kind(rec: &W) -> (u16, u16) {
-    (u16::from_be_bytes([rec[30], rec[31]]), u16::from_be_bytes([rec[28], rec[29]]))
+    (
+        u16::from_be_bytes([rec[30], rec[31]]),
+        u16::from_be_bytes([rec[28], rec[29]]),
+    )
 }
 
 /// One storage word at the read's block (R4).
-pub(crate) async fn word(pool: &EvmPool, at: &ReadAt<B256>, who: Address, slot: &W) -> Result<W, ReadError> {
+pub(crate) async fn word(
+    pool: &EvmPool,
+    at: &ReadAt<B256>,
+    who: Address,
+    slot: &W,
+) -> Result<W, ReadError> {
     Ok(pool
         .storage_at(at, who, U256::from_be_bytes(*slot))
         .await?

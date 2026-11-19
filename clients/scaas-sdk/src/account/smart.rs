@@ -94,7 +94,10 @@ pub enum SmartCall {
         amount: String,
     },
     /// `account.initiateRecovery(key)`: the signer's account is `account`'s guardian (CTR-ACC-03)
-    InitiateRecovery { account: String, key: SubjectKeyArgs },
+    InitiateRecovery {
+        account: String,
+        key: SubjectKeyArgs,
+    },
     /// any other call: `OpaqueCallRefused` without the marker
     Opaque {
         target: String,
@@ -141,7 +144,10 @@ fn key_words(key: &SubjectKeyArgs) -> Result<Vec<u8>, SdkError> {
 
 /// The calldata of `sig` with `args` (static words).
 fn direct_call(sig: &str, args: &[u8]) -> String {
-    let mut d = scaas_ua::keccak256(sig.as_bytes()).get(..4).unwrap_or_default().to_vec();
+    let mut d = scaas_ua::keccak256(sig.as_bytes())
+        .get(..4)
+        .unwrap_or_default()
+        .to_vec();
     d.extend_from_slice(args);
     hex(&d)
 }
@@ -153,19 +159,30 @@ const KEY_SLOTS_READ: u64 = 64;
 /// `keyAt(i)` from 0 until one equals it (removed slots read as zero). `SignerNotAccountKey` (owner 2026-11-19, P2): no slot
 /// holds it; `Argument`: an account of more than [`KEY_SLOTS_READ`] slots without it in them (the caller names the index), or
 /// a signer that is no EVM key.
-async fn key_index_of(sdk: &crate::Sdk, chain: &str, account: [u8; 20], signer: &KeyRef) -> Result<U256, SdkError> {
+async fn key_index_of(
+    sdk: &crate::Sdk,
+    chain: &str,
+    account: [u8; 20],
+    signer: &KeyRef,
+) -> Result<U256, SdkError> {
     use alloy::network::TransactionBuilder;
     let (_, _, pool) = crate::op::evm(sdk, chain)?;
     // an EVM key of the seed or imported (spec §6.7): its address
     let crate::op::Key::Native(_, k) = crate::op::key(sdk, signer)? else {
         return Err(SdkError::Argument);
     };
-    if !matches!(signer, KeyRef::Native { network, .. } | KeyRef::Imported { network, .. } if network == "evm") {
+    if !matches!(signer, KeyRef::Native { network, .. } | KeyRef::Imported { network, .. } if network == "evm")
+    {
         return Err(SdkError::Argument);
     }
-    let want = key_words(&SubjectKeyArgs::secp256k1(&k.address().ok_or(SdkError::Argument)?)?)?;
+    let want = key_words(&SubjectKeyArgs::secp256k1(
+        &k.address().ok_or(SdkError::Argument)?,
+    )?)?;
     let call = |sig: &str, arg: Option<u64>| {
-        let mut d = scaas_ua::keccak256(sig.as_bytes()).get(..4).unwrap_or_default().to_vec();
+        let mut d = scaas_ua::keccak256(sig.as_bytes())
+            .get(..4)
+            .unwrap_or_default()
+            .to_vec();
         if let Some(a) = arg {
             d.extend_from_slice(&U256::from(a).to_be_bytes::<32>());
         }
@@ -176,13 +193,20 @@ async fn key_index_of(sdk: &crate::Sdk, chain: &str, account: [u8; 20], signer: 
         async move { pool.call_tx(tx).await.map_err(crate::op::sim) }
     };
     let next = call("nextKeyIndex()", None).await?;
-    let next = u64::try_from(U256::from_be_slice(next.get(..32).ok_or(SdkError::Argument)?)).unwrap_or(u64::MAX);
+    let next = u64::try_from(U256::from_be_slice(
+        next.get(..32).ok_or(SdkError::Argument)?,
+    ))
+    .unwrap_or(u64::MAX);
     for i in 0..next.min(KEY_SLOTS_READ) {
         if call("keyAt(uint256)", Some(i)).await?.as_ref() == want.as_slice() {
             return Ok(U256::from(i));
         }
     }
-    Err(if next > KEY_SLOTS_READ { SdkError::Argument } else { SdkError::SignerNotAccountKey })
+    Err(if next > KEY_SLOTS_READ {
+        SdkError::Argument
+    } else {
+        SdkError::SignerNotAccountKey
+    })
 }
 
 impl Account {
@@ -209,7 +233,8 @@ impl Account {
                     Some(i) => U256::from_str_radix(i, 10).map_err(|_| SdkError::Argument)?,
                     None => key_index_of(&sdk, &op.chain, account, &op.signer).await?,
                 };
-                let mut d: Draft = crate::wallet::ops::draft(op.chain.clone(), name, kind, account, m, op.signer);
+                let mut d: Draft =
+                    crate::wallet::ops::draft(op.chain.clone(), name, kind, account, m, op.signer);
                 d.opaque = opaque;
                 d.key_index = key_index;
                 if let Some((call, review)) = decoded {
@@ -239,14 +264,22 @@ impl Account {
     }
 
     /// `AddKey` (CTR-ACC-10): `ProfileMismatch`, `Argument`, `WalletLocked`.
-    pub async fn prepare_smart_add_key(&self, op: SmartOp, key: SubjectKeyArgs) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_smart_add_key(
+        &self,
+        op: SmartOp,
+        key: SubjectKeyArgs,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let mut m = Map::new();
         key.put(&mut m)?;
         self.smart("AddKey", op, m, None, false).await
     }
 
     /// `RemoveKey` of the key at `index` (decimal).
-    pub async fn prepare_smart_remove_key(&self, op: SmartOp, index: String) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_smart_remove_key(
+        &self,
+        op: SmartOp,
+        index: String,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let mut m = Map::new();
         m.insert("index".into(), json!(index));
         self.smart("RemoveKey", op, m, None, false).await
@@ -266,19 +299,34 @@ impl Account {
     }
 
     /// `SetGuardian` (`0x` + 40 hex; zero: none); it also cancels the old guardian's pending recovery.
-    pub async fn prepare_smart_set_guardian(&self, op: SmartOp, guardian: String) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_smart_set_guardian(
+        &self,
+        op: SmartOp,
+        guardian: String,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let mut m = Map::new();
-        m.insert("guardian".into(), json!(hex(&addr20(&guardian.to_ascii_lowercase())?)));
+        m.insert(
+            "guardian".into(),
+            json!(hex(&addr20(&guardian.to_ascii_lowercase())?)),
+        );
         self.smart("SetGuardian", op, m, None, false).await
     }
 
     /// `CancelRecovery` of the pending recovery.
-    pub async fn prepare_smart_cancel_recovery(&self, op: SmartOp) -> Result<Arc<Prepared>, SdkError> {
-        self.smart("CancelRecovery", op, Map::new(), None, false).await
+    pub async fn prepare_smart_cancel_recovery(
+        &self,
+        op: SmartOp,
+    ) -> Result<Arc<Prepared>, SdkError> {
+        self.smart("CancelRecovery", op, Map::new(), None, false)
+            .await
     }
 
     /// `CancelNonce` of lane `lane` (decimal) on the account.
-    pub async fn prepare_smart_cancel_nonce(&self, op: SmartOp, lane: String) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_smart_cancel_nonce(
+        &self,
+        op: SmartOp,
+        lane: String,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let mut m = Map::new();
         m.insert("lane".into(), json!(lane));
         self.smart("CancelNonce", op, m, None, false).await
@@ -286,13 +334,25 @@ impl Account {
 
     /// `Execute`: a decoded call (spec §13.2), or an opaque one only under [`AllowOpaqueCall`] (`OpaqueCallRefused`
     /// otherwise), its review flagged `opaque`.
-    pub async fn prepare_smart_execute(&self, op: SmartOp, call: SmartCall) -> Result<Arc<Prepared>, SdkError> {
+    pub async fn prepare_smart_execute(
+        &self,
+        op: SmartOp,
+        call: SmartCall,
+    ) -> Result<Arc<Prepared>, SdkError> {
         let (decoded, review) = match &call {
             SmartCall::Transfer { token, to, amount } => {
                 U256::from_str_radix(amount, 10).map_err(|_| SdkError::Argument)?;
-                let (t, to20) = (addr20(&token.to_ascii_lowercase())?, addr20(&to.to_ascii_lowercase())?);
+                let (t, to20) = (
+                    addr20(&token.to_ascii_lowercase())?,
+                    addr20(&to.to_ascii_lowercase())?,
+                );
                 let review = vec![
-                    field("call", "transfer", "transfer(address,uint256)", Source::Signed),
+                    field(
+                        "call",
+                        "transfer",
+                        "transfer(address,uint256)",
+                        Source::Signed,
+                    ),
                     field("call.token", &hex(&t), &hex(&t), Source::Signed),
                     field("call.to", &hex(&to20), &hex(&to20), Source::Signed),
                     field("call.amount", amount, amount, Source::Signed),
@@ -308,15 +368,38 @@ impl Account {
                 let a = addr20(&account.to_ascii_lowercase())?;
                 let k = key.key()?;
                 let review = vec![
-                    field("call", "initiateRecovery", "initiateRecovery(SubjectKey)", Source::Signed),
+                    field(
+                        "call",
+                        "initiateRecovery",
+                        "initiateRecovery(SubjectKey)",
+                        Source::Signed,
+                    ),
                     field("call.account", &hex(&a), &hex(&a), Source::Signed),
-                    field("call.key.kind", &k.kind.to_string(), &k.kind.to_string(), Source::Signed),
+                    field(
+                        "call.key.kind",
+                        &k.kind.to_string(),
+                        &k.kind.to_string(),
+                        Source::Signed,
+                    ),
                     field("call.key.x", &hex(&k.x), &hex(&k.x), Source::Signed),
                     field("call.key.y", &hex(&k.y), &hex(&k.y), Source::Signed),
-                    field("call.key.rpIdHash", &hex(&k.rp_id_hash), &hex(&k.rp_id_hash), Source::Signed),
-                    field("call.key.originHash", &hex(&k.origin_hash), &hex(&k.origin_hash), Source::Signed),
+                    field(
+                        "call.key.rpIdHash",
+                        &hex(&k.rp_id_hash),
+                        &hex(&k.rp_id_hash),
+                        Source::Signed,
+                    ),
+                    field(
+                        "call.key.originHash",
+                        &hex(&k.origin_hash),
+                        &hex(&k.origin_hash),
+                        Source::Signed,
+                    ),
                 ];
-                (Some(DecodedCall::InitiateRecovery { account: a, key: k }), review)
+                (
+                    Some(DecodedCall::InitiateRecovery { account: a, key: k }),
+                    review,
+                )
             }
             SmartCall::Opaque { allow: None, .. } => return Err(SdkError::OpaqueCallRefused),
             SmartCall::Opaque { .. } => (None, vec![]),
@@ -326,20 +409,29 @@ impl Account {
             (Some(c), _) => {
                 let (target, value, data) = c.encode()?;
                 m.insert("target".into(), json!(hex(&target)));
-                m.insert("value".into(), json!(U256::from_be_bytes(value).to_string()));
+                m.insert(
+                    "value".into(),
+                    json!(U256::from_be_bytes(value).to_string()),
+                );
                 m.insert("data".into(), json!(hex(&data)));
             }
             (
                 None,
                 SmartCall::Opaque {
-                    target, value, data, ..
+                    target,
+                    value,
+                    data,
+                    ..
                 },
             ) => {
                 let data = unhex(&data.to_ascii_lowercase())?;
                 if data.len() > 128 * 1024 {
                     return Err(SdkError::Argument);
                 }
-                m.insert("target".into(), json!(hex(&addr20(&target.to_ascii_lowercase())?)));
+                m.insert(
+                    "target".into(),
+                    json!(hex(&addr20(&target.to_ascii_lowercase())?)),
+                );
                 m.insert("value".into(), json!(value));
                 m.insert("data".into(), json!(hex(&data)));
             }
@@ -365,7 +457,10 @@ impl Account {
         let mut args = key_words(&first_key)?;
         args.extend_from_slice(&[0; 12]);
         args.extend_from_slice(&addr20(&guardian.to_ascii_lowercase())?);
-        let data = direct_call("deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)", &args);
+        let data = direct_call(
+            "deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)",
+            &args,
+        );
         self.direct(key, chain, factory, data).await
     }
 
@@ -379,11 +474,20 @@ impl Account {
         account: String,
         new_key: SubjectKeyArgs,
     ) -> Result<NativeQuote, SdkError> {
-        let data = direct_call("completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32))", &key_words(&new_key)?);
+        let data = direct_call(
+            "completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32))",
+            &key_words(&new_key)?,
+        );
         self.direct(key, chain, account, data).await
     }
 
-    async fn direct(&self, key: KeyRef, chain: String, to: String, data: String) -> Result<NativeQuote, SdkError> {
+    async fn direct(
+        &self,
+        key: KeyRef,
+        chain: String,
+        to: String,
+        data: String,
+    ) -> Result<NativeQuote, SdkError> {
         let send = NativeSend {
             key,
             chain,
