@@ -376,3 +376,247 @@ fn pop_check() {
     assert!(!verify(K, &d, &pm, &[0u8; 128], true, false), "pop = O");
     assert!(!verify(K, &d, &[8u8; 32], &pop, true, false), "another popMsg");
 }
+
+// --- Task 2: PoP parts, partials, aggregation, builder (spec §4, §5.4) ---
+
+use bls_multi::{aggregate, aggregate_pop, build_key_data, member_pop, member_sign, pop_message, Error};
+
+fn sk32(sk: &Fr) -> [u8; 32] {
+    use ark_ff::{BigInteger, PrimeField};
+    let b = sk.into_bigint().to_bytes_be();
+    let mut out = [0u8; 32];
+    out[32 - b.len()..].copy_from_slice(&b);
+    out
+}
+fn pop_parts(d: &[u8], s: &[(Fr, u16)]) -> Vec<(u8, [u8; 128])> {
+    s.iter().enumerate().map(|(i, (sk, _))| (i as u8, member_pop(&sk32(sk), d).unwrap())).collect()
+}
+fn pop_ok(d: &[u8], pop: &[u8]) -> bool {
+    verify(K, d, &pop_message(d).unwrap(), pop, true, false)
+}
+fn h_pop(d: &[u8], i: usize) -> G1Projective {
+    let pk: [u8; 256] = d[260 + 258 * i..260 + 258 * i + 256].try_into().unwrap();
+    hash_to_g1_bls12381(&bls_multi::pop_member_message(&pop_message(d).unwrap(), &pk), bls_multi::DST_MULTI_POP).into_group()
+}
+fn enc(p: G1Projective) -> [u8; 128] {
+    g1_encode(&p.into_affine())
+}
+
+#[test]
+fn pop_positive_n_2_16_64() {
+    for n in [2u64, 16, 64] {
+        let (d, s) = group(&sks(n), 1);
+        let pop = aggregate_pop(&d, &pop_parts(&d, &s)).unwrap();
+        assert!(pop_ok(&d, &pop), "n {n}");
+    }
+}
+
+#[test]
+fn pop_missing_member_fails() {
+    let (d, s) = group(&sks(3), 2);
+    let parts = pop_parts(&d, &s);
+    assert!(pop_ok(&d, &aggregate_pop(&d, &parts).unwrap()), "positive control");
+    assert_eq!(aggregate_pop(&d, &parts[..2]), Err(Error::Missing(2)));
+    let two: G1Projective = (0..2).map(|i| h_pop(&d, i) * s[i].0).sum();
+    assert!(!pop_ok(&d, &enc(two)));
+}
+
+/// spec §4 (F10): `pk_M = x·g2 − pk_H`; under one shared message `pop = x·H(m)` passes `e(pop, g2) = e(H(m), apk)`, and fails
+/// the per-member check (it passes if `m_i` drops `pk_i` — the mutant).
+#[test]
+fn pop_rogue_shared_message() {
+    use ark_bls12_381::Bls12_381;
+    use ark_ec::pairing::Pairing;
+    let (a, x) = (Fr::from(31u64), Fr::from(32u64));
+    let pk_h = pk_of(&a);
+    let pk_m = (G2Affine::generator() * x - pk_h).into_affine();
+    let (d, _) = group_points(&[(pk_h, a, 1), (pk_m, Fr::from(0u64), 1)], 1);
+    assert!(validate_key_data(K, &d, false).is_ok());
+    let pm = pop_message(&d).unwrap();
+    let h = hash_to_g1_bls12381(&pm, bls_multi::DST_MULTI_POP);
+    let pop = (h * x).into_affine();
+    let apk = g2_decode_test(&d[..256]);
+    assert_eq!(Bls12_381::pairing(pop, G2Affine::generator()), Bls12_381::pairing(h, apk), "passes a shared-message check");
+    assert!(!pop_ok(&d, &g1_encode(&pop)));
+}
+fn g2_decode_test(b: &[u8]) -> G2Affine {
+    let fp = |o: usize| <Fq as ark_ff::PrimeField>::from_be_bytes_mod_order(&b[o + 16..o + 64]);
+    G2Affine::new(Fq2::new(fp(0), fp(64)), Fq2::new(fp(128), fp(192)))
+}
+
+/// A hash-to-G2 point (unknown log).
+fn h2(msg: &[u8]) -> G2Affine {
+    use ark_ec::hashing::{curve_maps::wb::WBMap, map_to_curve_hasher::MapToCurveBasedHasher, HashToCurve};
+    use ark_ff::field_hashers::DefaultFieldHasher;
+    MapToCurveBasedHasher::<G2Projective, DefaultFieldHasher<sha2::Sha256, 128>, WBMap<ark_bls12_381::g2::Config>>::new(b"TEST-H2G2")
+        .unwrap()
+        .hash(msg)
+        .unwrap()
+}
+
+/// spec §4 (i): `pk_1 = P`, `pk_2 = x·g2 − P`; every pop the attacker can form from `x` fails.
+#[test]
+fn pop_split_rogue() {
+    let x = Fr::from(77u64);
+    let p = h2(b"split");
+    let q = (G2Affine::generator() * x - p).into_affine();
+    let (d, _) = group_points(&[(p, Fr::from(0u64), 1), (q, Fr::from(0u64), 1)], 1);
+    assert!(validate_key_data(K, &d, false).is_ok());
+    let pm = pop_message(&d).unwrap();
+    let hm = hash_to_g1_bls12381(&pm, bls_multi::DST_MULTI_POP).into_group();
+    for cand in [h_pop(&d, 0) * x, h_pop(&d, 1) * x, (h_pop(&d, 0) + h_pop(&d, 1)) * x, hm * x] {
+        assert!(!pop_ok(&d, &enc(cand)));
+    }
+}
+
+/// spec §4 (ii): `pk_M1 = x·g2 − pk_H`, `pk_M2 = y·g2 + pk_H` around one honest key; the attacker's best pops fail.
+#[test]
+fn pop_two_rogues() {
+    let (a, x, y) = (Fr::from(5u64), Fr::from(6u64), Fr::from(7u64));
+    let pk_h = pk_of(&a);
+    let m1 = (G2Affine::generator() * x - pk_h).into_affine();
+    let m2 = (G2Affine::generator() * y + pk_h).into_affine();
+    let (d, s) = group_points(&[(pk_h, a, 1), (m1, x, 1), (m2, y, 1)], 1);
+    assert!(validate_key_data(K, &d, false).is_ok());
+    let at = |sk: Fr| (0..3).find(|i| s[*i].0 == sk).unwrap();
+    let (i1, i2) = (at(x), at(y));
+    let pm = pop_message(&d).unwrap();
+    let hm = hash_to_g1_bls12381(&pm, bls_multi::DST_MULTI_POP).into_group();
+    for cand in [h_pop(&d, i1) * x + h_pop(&d, i2) * y, hm * (x + y), (h_pop(&d, i1) + h_pop(&d, i2)) * (x + y)] {
+        assert!(!pop_ok(&d, &enc(cand)));
+    }
+}
+
+#[test]
+fn pop_other_threshold_fails() {
+    let m = sks(3);
+    let (d2, s2) = group(&m, 2);
+    let (d1, _) = group(&m, 1);
+    let pop = aggregate_pop(&d2, &pop_parts(&d2, &s2)).unwrap();
+    assert!(pop_ok(&d2, &pop), "positive control");
+    assert!(!pop_ok(&d1, &pop), "same keys, another threshold");
+    let mut w = m.clone();
+    w[0].1 = 2;
+    let (dw, _) = group(&w, 2);
+    assert!(!pop_ok(&dw, &pop), "same keys, other weights");
+}
+
+#[test]
+fn pop_identity_fails() {
+    let (d, _) = group(&sks(2), 1);
+    assert!(!pop_ok(&d, &[0u8; 128]));
+}
+
+#[test]
+fn member_pop_refuses_unlisted_key() {
+    let (d, s) = group(&sks(2), 1);
+    assert!(member_pop(&sk32(&s[0].0), &d).is_ok(), "positive control");
+    assert_eq!(member_pop(&sk32(&Fr::from(9_999u64)), &d), Err(Error::NotMember));
+    assert_eq!(member_sign(&sk32(&Fr::from(9_999u64)), &d, &MSG), Err(Error::NotMember));
+}
+
+#[test]
+fn member_pop_for_other_group_named() {
+    // a π_i made for d1 is named by aggregate_pop(d2, …), d2 another group listing the same key (N5)
+    let m = sks(2);
+    let (d1, s1) = group(&m, 2);
+    let (d2, s2) = group(&m, 1);
+    assert_eq!(s1, s2);
+    let mut parts = pop_parts(&d2, &s2);
+    assert!(aggregate_pop(&d2, &parts).is_ok(), "positive control");
+    parts[0].1 = member_pop(&sk32(&s1[0].0), &d1).unwrap();
+    assert_eq!(aggregate_pop(&d2, &parts), Err(Error::BadPartial { index: 0 }));
+}
+
+#[test]
+fn aggregate_pop_names_bad_part() {
+    let (d, s) = group(&sks(4), 2);
+    let mut parts = pop_parts(&d, &s);
+    parts[2].1 = parts[1].1;
+    assert_eq!(aggregate_pop(&d, &parts), Err(Error::BadPartial { index: 2 }));
+    let mut dup = pop_parts(&d, &s);
+    dup[3].0 = 1;
+    assert_eq!(aggregate_pop(&d, &dup), Err(Error::Index(1)));
+}
+
+fn partials(d: &[u8], s: &[(Fr, u16)], set: &[u8]) -> Vec<(u8, [u8; 128])> {
+    set.iter().map(|i| (*i, member_sign(&sk32(&s[*i as usize].0), d, &MSG).unwrap())).collect()
+}
+
+#[test]
+fn aggregate_default_minimal() {
+    let (d, s) = group(&sks(4), 2);
+    let a = aggregate(&d, &MSG, &partials(&d, &s, &[0, 1, 2, 3]), false).unwrap();
+    assert_eq!(a.signers.len(), 2, "minimal by default (N6)");
+    assert!(ok_min(&d, &MSG, &a.to_abi()));
+    let all = aggregate(&d, &MSG, &partials(&d, &s, &[0, 1, 2, 3]), true).unwrap();
+    assert_eq!(all.signers, vec![0, 1, 2, 3], "surplus only on request");
+    assert!(ok(&d, &MSG, &all.to_abi()) && !ok_min(&d, &MSG, &all.to_abi()));
+}
+
+#[test]
+fn aggregate_names_bad_partial() {
+    let (d, s) = group(&sks(3), 2);
+    let mut p = partials(&d, &s, &[0, 1, 2]);
+    p[0].1 = p[1].1;
+    let a = aggregate(&d, &MSG, &p, false).unwrap();
+    assert_eq!(a.dropped, vec![0], "named");
+    assert_eq!(a.signers, vec![1, 2]);
+    assert_eq!(aggregate(&d, &MSG, &p[..2], false), Err(Error::BadPartial { index: 0 }));
+    assert_eq!(aggregate(&d, &MSG, &partials(&d, &s, &[1]), false), Err(Error::BelowThreshold));
+}
+
+#[test]
+fn aggregate_duplicate_index_refused() {
+    let (d, s) = group(&sks(3), 2);
+    let p = partials(&d, &s, &[1, 1]);
+    assert_eq!(aggregate(&d, &MSG, &p, false), Err(Error::Index(1)));
+    let mut p = partials(&d, &s, &[0, 1]);
+    p[1].0 = 3;
+    assert_eq!(aggregate(&d, &MSG, &p, false), Err(Error::Index(3)));
+}
+
+#[test]
+fn aggregate_drops_and_still_signs() {
+    let (d, s) = group(&sks(5), 3);
+    let mut p = partials(&d, &s, &[0, 1, 2, 3]);
+    p[1].1 = [0u8; 128];
+    let a = aggregate(&d, &MSG, &p, false).unwrap();
+    assert_eq!((a.dropped.clone(), a.signers.clone()), (vec![1], vec![0, 2, 3]));
+    assert!(ok_min(&d, &MSG, &a.to_abi()));
+}
+
+#[test]
+fn aggregate_minimal_drops_surplus() {
+    let w: Vec<(Fr, u16)> = [3u16, 1, 1].iter().enumerate().map(|(i, w)| (Fr::from(90 + i as u64), *w)).collect();
+    let (d, s) = group(&w, 3);
+    let heavy = s.iter().position(|x| x.1 == 3).unwrap() as u8;
+    let a = aggregate(&d, &MSG, &partials(&d, &s, &[0, 1, 2]), false).unwrap();
+    assert_eq!(a.signers, vec![heavy]);
+    assert!(ok_min(&d, &MSG, &a.to_abi()));
+    let light: Vec<u8> = (0..3u8).filter(|i| *i != heavy).collect();
+    assert_eq!(aggregate(&d, &MSG, &partials(&d, &s, &light), false), Err(Error::BelowThreshold));
+}
+
+#[test]
+fn builder_order_and_index_map() {
+    // Review Focus 2: members in reverse key order with distinct weights give the same d as the sorted input
+    let keys: Vec<[u8; 256]> = (0..4u64).map(|i| g2_encode(&pk_of(&Fr::from(300 + i)))).collect();
+    let mut sorted: Vec<([u8; 256], u16)> = keys.iter().zip([1u16, 2, 3, 4]).map(|(k, w)| (*k, w)).collect();
+    sorted.sort_by_key(|a| a.0);
+    let reversed: Vec<([u8; 256], u16)> = sorted.iter().rev().cloned().collect();
+    let (d1, m1) = build_key_data(&sorted, 5).unwrap();
+    let (d2, m2) = build_key_data(&reversed, 5).unwrap();
+    assert_eq!(d1, d2);
+    assert_eq!(ua_of(&d1), ua_of(&d2));
+    assert_eq!(m1, vec![0, 1, 2, 3]);
+    assert_eq!(m2, vec![3, 2, 1, 0]);
+    for (i, (k, w)) in reversed.iter().enumerate() {
+        let o = 260 + 258 * m2[i];
+        assert_eq!(&d2[o..o + 256], &k[..]);
+        assert_eq!(u16::from_be_bytes([d2[o + 256], d2[o + 257]]), *w, "weights travel with keys");
+    }
+    let (du, _) = bls_multi::build_key_data_unweighted(&keys, 2).unwrap();
+    assert!(parse(&du).unwrap().members.iter().all(|m| m.1 == 1));
+    assert!(build_key_data(&sorted[..1], 1).is_err(), "n = 1");
+}

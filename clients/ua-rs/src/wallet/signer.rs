@@ -142,6 +142,16 @@ pub enum SignRequest {
     /// response is the assertion encoding of [`super::webauthn_assertion`] against this challenge.
     #[non_exhaustive]
     WebAuthn { challenge: [u8; 32] },
+    /// A `bls12381-multi` (`0x0121`) member key's part for the group `key_data` (`d`; spec 2026-11-19-bls12381-multi §4,
+    /// §5.4): [`SigRole::Authorization`] the partial over `memberDigest(ua, message)` under `DST_MULTI_SIG`, `message` the
+    /// group's `ua_msg`; [`SigRole::Pop`] the PoP part over `keccak256(message ‖ pk_i)` under `DST_MULTI_POP`, `message` the
+    /// `popMsg` derived from `key_data` here (N5), never a coordinator's.
+    #[non_exhaustive]
+    BlsMultiMember {
+        key_data: Vec<u8>,
+        message: [u8; 32],
+        role: SigRole,
+    },
 }
 
 /// The explicit opt-in of a raw-digest or raw-message signature (CLI-SGN-40, CLI-UAL-44): for Merkle roots and family envelopes
@@ -192,6 +202,20 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
             (verify(0x0100, key_data, challenge, &sig, false, false), sig)
         }
         (
+            KeyRef::Ua {
+                kind: 0x0121,
+                key_data: pk,
+            },
+            SignRequest::BlsMultiMember {
+                key_data,
+                message,
+                role,
+            },
+        ) => (
+            crate::bls_multi::part_ok(key_data, pk, message, *role == SigRole::Pop, &sig),
+            sig,
+        ),
+        (
             KeyRef::Native {
                 network,
                 public_key,
@@ -214,6 +238,7 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
                             pt.as_bytes().get(1..).ok_or(Error::Argument)?,
                             &digest,
                             &sig,
+                            false,
                             false,
                         ),
                         sig,
@@ -239,7 +264,6 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
     } else {
         Err(Error::ExternalSignature)
     }
-                            false,
 }
 
 /// Low-s for the ECDSA forms: P-256 `r ‖ s` (`0x0101`), secp256k1 `r ‖ s ‖ v` (`0x0108`, native keys; `v` 0 / 1 read as

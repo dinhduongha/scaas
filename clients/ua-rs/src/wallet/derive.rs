@@ -266,7 +266,8 @@ pub fn ua_secret(seed: &[u8], kind: u16, account: u32, index: u32) -> Result<Zer
         0x0104 | 0x0107 | 0x0112 => {
             Zeroizing::new(eip2333::<ark_bn254::Fr>(seed, &eip(254)?, BN254_SALT)?.to_vec())
         }
-        0x0105 | 0x0106 => {
+        // 0x0121: a bls12381-multi member key, 0x0106-format, on its own path (CTR-UA-10 layer 1; spec 2026-11-19 §0 B10)
+        0x0105 | 0x0106 | 0x0121 => {
             Zeroizing::new(eip2333::<ark_bls12_381::Fr>(seed, &eip(12381)?, BLS_SALT)?.to_vec())
         }
         0x0130 | 0x0131 | 0x0134 => hkdf_pq(seed, &kind_tag_string(kind)?, account, index, 32)?,
@@ -317,6 +318,8 @@ pub fn ua_key_data(kind: u16, s: &[u8]) -> Result<Vec<u8>> {
         0x0110 => secp_public(s, true),
         // the pairing kinds and the musig2-bn254 participant: `scaas_ct::secret_mul` (T3c)
         0x0104..=0x0107 | 0x0112 => super::pairing::key_data(kind, s),
+        // a bls12381-multi member: its individual 0x0106-format key (spec 2026-11-19 §0 B10)
+        0x0121 => super::pairing::key_data(0x0106, s),
         // Falcon: PQClean's seeded keygen (MD-8, equal to clientkeys' per T0), vendored
         0x0130..=0x0135 => Ok(super::pqsign::keypair(kind, s)?.1),
         _ => Err(Error::Argument),

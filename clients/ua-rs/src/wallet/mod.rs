@@ -818,8 +818,8 @@ impl Wallet {
         let (secret, key_data) = self.store.key(KeyId::Ua(kind, account, index), |seed| {
             derive::ua_key(kind, derive::ua_secret(seed, kind, account, index)?)
         })?;
-        // a MuSig2 participant (0x0110, 0x0112) has no UA of its own: its group is the UA
-        let ua = if matches!(kind, 0x0110 | 0x0112) {
+        // a MuSig2 participant (0x0110, 0x0112) or a bls12381-multi member (0x0121) has no UA of its own: its group is the UA
+        let ua = if matches!(kind, 0x0110 | 0x0112 | 0x0121) {
             None
         } else {
             Some(crate::derive_ua(kind, &key_data, false)?)

@@ -918,6 +918,54 @@ pub struct MuSig2Key {
     pub agg_key: Vec<u8>,
     pub member_keys: Vec<Vec<u8>>,
 }
+/// One `bls12381-multi` member (spec 2026-11-19-bls12381-multi §2): its EIP-2537 G2 key and weight (the builders default 1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlsMultiMember {
+    pub key: [u8; 256],
+    pub weight: u16,
+}
+/// A `bls12381-multi` group key (`registerBlsMulti`): assembled `agg_key ‖ u16 threshold ‖ u16 n ‖ n × (key ‖ u16 weight)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlsMultiKey {
+    pub agg_key: [u8; 256],
+    pub threshold: u16,
+    pub members: Vec<BlsMultiMember>,
+}
+impl BlsMultiKey {
+    /// The key of packed key data `d` (structure only; validity is the registry's).
+    pub fn from_key_data(d: &[u8]) -> Result<Self> {
+        let n = d
+            .get(258..260)
+            .map(|b| u16::from_be_bytes([b[0], b[1]]) as usize);
+        if n.is_none_or(|n| d.len() != 260 + 258 * n) {
+            return Err(UAError::KeyData("length"));
+        }
+        Ok(Self {
+            agg_key: d[..256].try_into().unwrap(),
+            threshold: u16::from_be_bytes([d[256], d[257]]),
+            members: d[260..]
+                .chunks(258)
+                .map(|m| BlsMultiMember {
+                    key: m[..256].try_into().unwrap(),
+                    weight: u16::from_be_bytes([m[256], m[257]]),
+                })
+                .collect(),
+        })
+    }
+    pub fn key_data(&self) -> Vec<u8> {
+        let mut o = [
+            &self.agg_key[..],
+            &self.threshold.to_be_bytes(),
+            &(self.members.len() as u16).to_be_bytes(),
+        ]
+        .concat();
+        for m in &self.members {
+            o.extend_from_slice(&m.key);
+            o.extend_from_slice(&m.weight.to_be_bytes());
+        }
+        o
+    }
+}
 /// One FROST member (TS-D13): `threshold` commitments, R_i, z_i.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FrostMember {
@@ -1089,6 +1137,13 @@ pub enum RegisterArgs {
         pop: Vec<u8>,
         pqz_pop: Vec<u8>,
     },
+    /// `registerBlsMulti(key, attrs, pop, pqzPop)` (`bls12381-multi`, spec 2026-11-19 §2).
+    RegisterBlsMulti {
+        key: BlsMultiKey,
+        attrs: UAAttrs,
+        pop: Vec<u8>,
+        pqz_pop: Vec<u8>,
+    },
 }
 /// `setKemKey(ua, version, kem, sig)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1190,6 +1245,22 @@ impl RegisterArgs {
                     + tail_len(pop)
                     + tail_len(pqz_pop)
             }
+            Self::RegisterBlsMulti {
+                key,
+                attrs,
+                pop,
+                pqz_pop,
+            } => {
+                // heads (key, attrs, pop, pqzPop); key: (aggKey, threshold, members) + aggKey + members' (offset, key, weight, key bytes)
+                4 + 128
+                    + 96
+                    + tail_len(&key.agg_key)
+                    + 32
+                    + key.members.len() * (32 + 64 + tail_len(&[0; 256]))
+                    + attrs_len(attrs)
+                    + tail_len(pop)
+                    + tail_len(pqz_pop)
+            }
         }
     }
     /// The registration attributes.
@@ -1199,7 +1270,8 @@ impl RegisterArgs {
             | Self::RegisterMsig { attrs, .. }
             | Self::RegisterWebAuthn { attrs, .. }
             | Self::RegisterMuSig2 { attrs, .. }
-            | Self::RegisterFrost { attrs, .. } => attrs,
+            | Self::RegisterFrost { attrs, .. }
+            | Self::RegisterBlsMulti { attrs, .. } => attrs,
         }
     }
     /// The packed key data the registry assembles (the id's input).
@@ -1210,6 +1282,7 @@ impl RegisterArgs {
             Self::RegisterWebAuthn { key, .. } => key.key_data(),
             Self::RegisterMuSig2 { key, .. } => key.key_data(),
             Self::RegisterFrost { key, .. } => key.key_data(),
+            Self::RegisterBlsMulti { key, .. } => key.key_data(),
         }
     }
 }
@@ -1327,6 +1400,12 @@ pub fn registration_args(i: &RegistrationInput) -> Result<Registration> {
             0x0111 | 0x0113 => RegisterArgs::RegisterFrost {
                 kind,
                 key: FrostKey::from_key_data(kind, &i.key_data)?,
+                attrs,
+                pop,
+                pqz_pop,
+            },
+            0x0121 => RegisterArgs::RegisterBlsMulti {
+                key: BlsMultiKey::from_key_data(&i.key_data)?,
                 attrs,
                 pop,
                 pqz_pop,
@@ -1644,6 +1723,11 @@ fn signature_ok(
     bits: &Bits,
 ) -> Result<bool> {
     let message = ua_message(kind, purpose, digest)?;
+    if crate::has_surplus_form(kind) {
+        // spec 2026-11-19-bls12381-multi §5.3 dispatch: `pop` v2 → verifyPop(d), every other purpose → verifyMinimal
+        let pop = *purpose == pop_v2_tag();
+        return Ok(crate::verify::verify(kind, d, &message, sig, pop, !pop));
+    }
     if kind != 0x0120 {
         return Ok(crate::verify::verify(kind, d, &message, sig, true, false));
     }
@@ -1712,22 +1796,20 @@ fn slot_ok(
     }
     Ok(s.members.is_empty() && leaf_ok(m, key, digest, md, &s.sig, true)?)
 }
+/// `minimal`: a stored path (every caller but [`auth_ok`]), where a surplus-form member (`0x0121`) takes its minimal form (spec
+/// 2026-11-19-bls12381-multi §5.3).
 fn leaf_ok(
     m: &MsigMember,
     key: &[u8],
     digest: &[u8; 32],
     md: &[u8; 32],
     sig: &[u8],
+    minimal: bool,
 ) -> Result<bool> {
     let vk = &key[..match point_size(m.kind) {
         0 => key.len(),
         head => head, // a group kind signs against its stored `vk`
     }];
-    if crate::has_surplus_form(kind) {
-        // spec 2026-11-19-bls12381-multi §5.3 dispatch: `pop` v2 → verifyPop(d), every other purpose → verifyMinimal
-        let pop = *purpose == pop_v2_tag();
-        return Ok(crate::verify::verify(kind, d, &message, sig, pop, !pop));
-    }
     Ok(match m.kind {
         0x0001 => {
             crate::verify::native_ecdsa(m.id[12..].try_into().expect("20 bytes"), digest, sig)
@@ -1739,6 +1821,7 @@ fn leaf_ok(
             &ua_message(k, &purpose_tag("member")?, md)?,
             sig,
             false,
+            minimal,
         ),
     })
 }
@@ -1796,15 +1879,12 @@ fn registration_attrs(
     };
     Ok(registration_digest(
         ua,
-/// `minimal`: a stored path (every caller but [`auth_ok`]), where a surplus-form member (`0x0121`) takes its minimal form (spec
-/// 2026-11-19-bls12381-multi §5.3).
         kind,
         &pqz_key_hash,
         &kem,
         &a.pqz_pop_hash,
     ))
 }
-    minimal: bool,
 
 /// A registration as `register` checks it, on bytes only (no state, no `keyHash`): the id from canonical key data, every
 /// `msig` member resolved, the attributes in `_attrs`' order, `keccak256(pqz_pop) == pqz_pop_hash` when proof bytes come,
@@ -1821,7 +1901,6 @@ pub fn check_registration(
     check_registration_with(kind, key_data, attrs, pop, pqz_pop, members, None)
 }
 /// [`check_registration`] on the target registry's accepted bits (CTR-UA-37): the `pop` accepts its own record's slots, never an inner
-            minimal,
 /// `msig`'s, so with no `accepted` a `pop` with an inner list is `NotVerifiable`. The same `accepted` in every `check_*_with`.
 pub fn check_registration_with(
     kind: u16,
@@ -2348,6 +2427,7 @@ fn auth_ok(
                     &ua_auth_digest(domain, &m.id, &purpose_tag("member")?, md),
                     md,
                     &s.sig,
+                    false,
                 )?
         };
         if !ok {
@@ -2373,4 +2453,3 @@ pub fn pqz_keys_distinct(entries: &[([u8; 32], &[u8])]) -> core::result::Result<
     }
     Ok(())
 }
-                    false,

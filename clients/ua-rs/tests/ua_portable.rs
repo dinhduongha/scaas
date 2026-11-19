@@ -1427,6 +1427,15 @@ fn args_json(r: &RegisterArgs) -> Value {
             "kind": kind, "key": { "groupKey": hx(&key.group_key), "threshold": key.threshold, "members": key.members.iter().map(|m| serde_json::json!({
                 "commitments": m.commitments.iter().map(|c| hx(c)).collect::<Vec<_>>(), "r": hx(&m.r), "z": hx(&m.z) })).collect::<Vec<_>>() },
             "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
+        RegisterArgs::RegisterBlsMulti {
+            key,
+            attrs,
+            pop,
+            pqz_pop,
+        } => serde_json::json!({ "entry": "registerBlsMulti",
+            "key": { "aggKey": hx(&key.agg_key), "threshold": key.threshold, "members": key.members.iter().map(|m| serde_json::json!({
+                "key": hx(&m.key), "weight": m.weight })).collect::<Vec<_>>() },
+            "attrs": attrs_json(attrs), "pqzPop": hx(pqz_pop), "pop": hx(pop) }),
     }
 }
 fn fill_json(f: &SetKemKeyArgs) -> Value {
@@ -2296,6 +2305,7 @@ fn check_refuses_negatives() {
                         &key,
                         &ua_message(m.kind, &mt, &md).unwrap(),
                         &s.sig,
+                        false,
                         false
                     ),
                     "{name}: slot {}",
@@ -2305,7 +2315,6 @@ fn check_refuses_negatives() {
             assert_eq!(code(check_row(&p, r)), Some(err), "{name}");
             refused += 1;
             continue;
-                        false,
         }
         let m = &n["mutation"];
         let set = &m["set"];
@@ -2368,6 +2377,7 @@ fn check_refuses_negatives() {
                                 &keys(&p)(mm.id).unwrap().1,
                                 &msg,
                                 &s.sig,
+                                false,
                                 false
                             ),
                             "{name}: slot {}",
@@ -2377,7 +2387,6 @@ fn check_refuses_negatives() {
                 }
                 let got = check_kem(
                     &p,
-                                false,
                     &k,
                     set.get("ua").unwrap_or(&k["ua"]),
                     &bytes(set.get("sig").unwrap_or(&k["sig"])),

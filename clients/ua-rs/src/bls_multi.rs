@@ -365,3 +365,283 @@ pub(crate) fn verify(
         verify_sig(key_data, message, sig, minimal)
     }
 }
+
+// --- partials, aggregation, PoP parts, builder (spec §4, §5.4; plan Task 2) ---
+
+/// Why a member operation or an aggregation was refused (spec §5.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Error {
+    /// The key data is not valid `0x0121` key data (or the builder's input does not make any).
+    KeyData(UAError),
+    /// The partial (or PoP part) of member `index` does not verify against its key: named, and dropped where the rest suffice.
+    BadPartial { index: u8 },
+    /// An index given twice, or at or above n.
+    Index(u8),
+    /// Member `index` gave no PoP part: registration needs all n (spec §4).
+    Missing(u8),
+    /// The accepted partials weigh less than `t`.
+    BelowThreshold,
+    /// The signer's key is not listed in the key data.
+    NotMember,
+    /// The secret is not a canonical non-zero scalar.
+    Secret,
+    /// The sum is the identity.
+    Identity,
+}
+
+impl From<UAError> for Error {
+    fn from(e: UAError) -> Self {
+        Error::KeyData(e)
+    }
+}
+
+/// An aggregate with its named fields (spec §5.1): `signature` σ (128 B), `signers` the strictly increasing member indices;
+/// `dropped` the partials refused as invalid and left out (spec §5.4: named and dropped).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlsMultiSig {
+    pub signature: [u8; 128],
+    pub signers: Vec<u8>,
+    pub dropped: Vec<u8>,
+}
+
+impl BlsMultiSig {
+    /// The ABI object `σ ‖ signers` (uint256 big-endian bitmap), what `UASig.signature` carries.
+    pub fn to_abi(&self) -> [u8; 160] {
+        let mut out = [0u8; 160];
+        out[..128].copy_from_slice(&self.signature);
+        out[128..].copy_from_slice(&indices_bitmap(&self.signers));
+        out
+    }
+}
+
+/// `popMsg = uaMessage(0x0121, PURPOSE_POP_V2, registrationDigest(UAPortableRecord{ua, 0x0121, 0, UAKemRecord{ua, 0, 0, 0}},
+/// 0))`, derived from `d` (spec §4, §6; N5).
+pub fn pop_message(d: &[u8]) -> Result<[u8; 32]> {
+    Ok(crate::ua_portable::holder_pop_message(KIND, &ua_of(d), d, None, None, None, None)?.message)
+}
+
+fn partial_ok(sig: &[u8; 128], pk: &[u8; 256], msg: &[u8; 32], dst: &[u8]) -> Option<G1Affine> {
+    let s = g1_valid(sig)?;
+    let pk =
+        g2_decode(pk).filter(|p| !p.is_zero() && p.is_in_correct_subgroup_assuming_on_curve())?;
+    (Bls12_381::pairing(s, G2Affine::generator())
+        == Bls12_381::pairing(hash_to_g1_bls12381(msg, dst), pk))
+    .then_some(s)
+}
+
+/// One member part as an external key returns it (`wallet::SignRequest::BlsMultiMember`): `pk` listed in `d`; `pop` the PoP
+/// part over `keccak256(message ‖ pk)` under [`DST_MULTI_POP`] (`message` = `popMsg`), else the partial over
+/// `keccak256(ua ‖ message)` under [`DST_MULTI_SIG`] (`message` = `ua_msg`).
+pub fn part_ok(d: &[u8], pk: &[u8], message: &[u8; 32], pop: bool, sig: &[u8]) -> bool {
+    let (Ok(kd), Ok(pk), Ok(sig)) = (
+        parse(d),
+        <&[u8; 256]>::try_from(pk),
+        <&[u8; 128]>::try_from(sig),
+    ) else {
+        return false;
+    };
+    if !kd.members.iter().any(|m| m.0 == *pk) {
+        return false;
+    }
+    if pop {
+        partial_ok(sig, pk, &pop_member_message(message, pk), DST_MULTI_POP).is_some()
+    } else {
+        partial_ok(sig, pk, &keccak(&[&ua_of(d), message]), DST_MULTI_SIG).is_some()
+    }
+}
+
+/// Spec §5.4: each partial checked against its member key on `m = keccak256(ua ‖ ua_msg)` under [`DST_MULTI_SIG`]; a
+/// duplicate index or one at or above n refused; an invalid partial named in `dropped` and left out; below `t` refused
+/// (naming the first bad partial when there is one). A minimal set unless `surplus` (N6): the heaviest accepted members
+/// first (ties by index) until `t`, so the last one taken is the lightest and every signer is necessary.
+pub fn aggregate(
+    d: &[u8],
+    ua_msg: &[u8; 32],
+    partials: &[(u8, [u8; 128])],
+    surplus: bool,
+) -> core::result::Result<BlsMultiSig, Error> {
+    let kd = parse(d)?;
+    let n = kd.members.len();
+    let m = keccak(&[&ua_of(d), ua_msg]);
+    let mut seen = [false; MAX_N];
+    let (mut ok, mut dropped) = (Vec::new(), Vec::new());
+    for (i, s) in partials {
+        let idx = *i as usize;
+        if idx >= n || seen[idx] {
+            return Err(Error::Index(*i));
+        }
+        seen[idx] = true;
+        match partial_ok(s, &kd.members[idx].0, &m, DST_MULTI_SIG) {
+            Some(p) => ok.push((*i, kd.members[idx].1, p)),
+            None => dropped.push(*i),
+        }
+    }
+    dropped.sort_unstable();
+    let t = u32::from(kd.threshold);
+    if ok.iter().map(|x| u32::from(x.1)).sum::<u32>() < t {
+        return Err(dropped
+            .first()
+            .map_or(Error::BelowThreshold, |i| Error::BadPartial { index: *i }));
+    }
+    if !surplus {
+        ok.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        let mut w = 0u32;
+        let take = ok
+            .iter()
+            .position(|x| {
+                w += u32::from(x.1);
+                w >= t
+            })
+            .expect("total ≥ t");
+        ok.truncate(take + 1);
+    }
+    ok.sort_by_key(|x| x.0);
+    let sigma: ark_bls12_381::G1Projective = ok.iter().map(|x| x.2.into_group()).sum();
+    Ok(BlsMultiSig {
+        signature: g1_encode(&sigma.into_affine()),
+        signers: ok.iter().map(|x| x.0).collect(),
+        dropped,
+    })
+}
+
+/// The registration `pop` from all n members' parts (spec §4): each `π_i` checked against `pk_i` on
+/// `m_i = keccak256(popMsg ‖ pk_i)` under [`DST_MULTI_POP`] (`popMsg` from [`pop_message`]), a bad one named; every index
+/// once; the sum not the identity.
+pub fn aggregate_pop(
+    d: &[u8],
+    parts: &[(u8, [u8; 128])],
+) -> core::result::Result<[u8; 128], Error> {
+    let kd = parse(d)?;
+    let n = kd.members.len();
+    let pm = pop_message(d)?;
+    let mut seen = [false; MAX_N];
+    let mut sum = ark_bls12_381::G1Projective::zero();
+    for (i, s) in parts {
+        let idx = *i as usize;
+        if idx >= n || seen[idx] {
+            return Err(Error::Index(*i));
+        }
+        seen[idx] = true;
+        let pk = &kd.members[idx].0;
+        sum += partial_ok(s, pk, &pop_member_message(&pm, pk), DST_MULTI_POP)
+            .ok_or(Error::BadPartial { index: *i })?;
+    }
+    if let Some(i) = (0..n).find(|i| !seen[*i]) {
+        return Err(Error::Missing(i as u8));
+    }
+    let sum = sum.into_affine();
+    if sum.is_zero() {
+        return Err(Error::Identity);
+    }
+    Ok(g1_encode(&sum))
+}
+
+/// The key data of a group (spec §2): members `(pk, weight)` in the caller's order, sorted here by key with each weight
+/// travelling with its key, `apk = Σ pk_i`; returns `d` and the map caller index → key-data index (Review Focus 2). The result
+/// is validated as the registry would.
+pub fn build_key_data(
+    members: &[([u8; 256], u16)],
+    threshold: u16,
+) -> Result<(Vec<u8>, Vec<usize>)> {
+    need((2..=MAX_N).contains(&members.len()), "n")?;
+    let mut order: Vec<usize> = (0..members.len()).collect();
+    order.sort_by(|a, b| members[*a].0.cmp(&members[*b].0));
+    let mut apk = G2Projective::zero();
+    for (k, _) in members {
+        apk += g2_decode(k).ok_or(UAError::KeyData("range"))?;
+    }
+    let mut d = g2_encode(&apk.into_affine()).to_vec();
+    d.extend_from_slice(&threshold.to_be_bytes());
+    d.extend_from_slice(&(members.len() as u16).to_be_bytes());
+    let mut map = vec![0usize; members.len()];
+    for (pos, i) in order.iter().enumerate() {
+        d.extend_from_slice(&members[*i].0);
+        d.extend_from_slice(&members[*i].1.to_be_bytes());
+        map[*i] = pos;
+    }
+    parse(&d)?;
+    Ok((d, map))
+}
+
+/// [`build_key_data`] with every weight 1 (the typed API's default).
+pub fn build_key_data_unweighted(
+    keys: &[[u8; 256]],
+    threshold: u16,
+) -> Result<(Vec<u8>, Vec<usize>)> {
+    build_key_data(&keys.iter().map(|k| (*k, 1)).collect::<Vec<_>>(), threshold)
+}
+
+#[cfg(feature = "signers")]
+mod member {
+    use super::*;
+    use ark_ec::short_weierstrass::Projective;
+    use zeroize::Zeroizing;
+
+    fn scalar(sk: &[u8; 32]) -> core::result::Result<Zeroizing<ark_bls12_381::Fr>, Error> {
+        let f = Zeroizing::new(ark_bls12_381::Fr::from_be_bytes_mod_order(sk));
+        let back = Zeroizing::new(f.into_bigint().to_bytes_be());
+        if back.as_slice() != sk || f.is_zero() {
+            return Err(Error::Secret);
+        }
+        Ok(f)
+    }
+
+    fn mul<P: ark_ec::short_weierstrass::SWCurveConfig>(
+        base: Projective<P>,
+        s: &P::ScalarField,
+    ) -> core::result::Result<Projective<P>, Error>
+    where
+        P::BaseField: scaas_ct::CtSwap,
+    {
+        scaas_ct::secret_mul(base, s).map_err(|_| Error::Secret)
+    }
+
+    /// The member's key (EIP-2537 G2) from its secret, through `secret_mul` only (spec §12 of ua-rs-sign).
+    pub fn member_key(sk: &[u8; 32]) -> core::result::Result<[u8; 256], Error> {
+        let s = scalar(sk)?;
+        Ok(g2_encode(
+            &mul(G2Affine::generator().into_group(), &*s)?.into_affine(),
+        ))
+    }
+
+    /// `(scalar, index of the member's own key in d)`, `NotMember` unless `d` lists it.
+    fn listed(
+        sk: &[u8; 32],
+        kd: &BlsMultiKeyData,
+    ) -> core::result::Result<(Zeroizing<ark_bls12_381::Fr>, usize), Error> {
+        let pk = member_key(sk)?;
+        let i = kd
+            .members
+            .iter()
+            .position(|m| m.0 == pk)
+            .ok_or(Error::NotMember)?;
+        Ok((scalar(sk)?, i))
+    }
+
+    /// Member `sk`'s partial over `memberDigest(ua, ua_msg)` under [`DST_MULTI_SIG`], `ua` derived from `d` (spec §5.4, N5).
+    pub fn member_sign(
+        sk: &[u8; 32],
+        d: &[u8],
+        ua_msg: &[u8; 32],
+    ) -> core::result::Result<[u8; 128], Error> {
+        let kd = parse(d)?;
+        let (s, _) = listed(sk, &kd)?;
+        let h = hash_to_g1_bls12381(&keccak(&[&ua_of(d), ua_msg]), DST_MULTI_SIG);
+        Ok(g1_encode(&mul(h.into_group(), &*s)?.into_affine()))
+    }
+
+    /// Member `sk`'s PoP part `π_i` over `m_i = keccak256(popMsg ‖ pk_i)` under [`DST_MULTI_POP`]: the record, the
+    /// registration digest and `popMsg` derived from `d` (never a coordinator's `popMsg`), `pk_i` the signer's own key found in
+    /// `d` (spec §4, N5).
+    pub fn member_pop(sk: &[u8; 32], d: &[u8]) -> core::result::Result<[u8; 128], Error> {
+        let kd = parse(d)?;
+        let (s, i) = listed(sk, &kd)?;
+        let h = hash_to_g1_bls12381(
+            &pop_member_message(&pop_message(d)?, &kd.members[i].0),
+            DST_MULTI_POP,
+        );
+        Ok(g1_encode(&mul(h.into_group(), &*s)?.into_affine()))
+    }
+}
+#[cfg(feature = "signers")]
+pub use member::{member_key, member_pop, member_sign};
