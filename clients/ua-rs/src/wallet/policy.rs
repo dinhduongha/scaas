@@ -1187,6 +1187,9 @@ pub fn fee_due(op: &str, message: &Value) -> Result<String> {
             p.clone(),
             get(p, "value").map(|v| uint(Some(v))).transpose()?,
         ),
+        // a row without the envelope (`UAWrapOrder`: its `fee` the DEX fee rate the order caps, no fee mode) pays its relayer
+        // no envelope fee (owner ruling G6, 2026-11-19: it was `PolicyRefused` at any fee for the missing mode)
+        _ if op_row(op).is_some_and(|o| !o.envelope) => return Ok("0".into()),
         _ => {
             let field = op_row(op).and_then(|o| o.amount).unwrap_or("value");
             let basis = get(&m, field).map(|v| uint(Some(v))).transpose()?;
