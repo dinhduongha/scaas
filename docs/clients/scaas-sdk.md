@@ -198,6 +198,13 @@ mode gets its inline verdict ([CTR-PQZ-29](../contracts/pq-zero-knowledge.md#CTR
 through `scaas-rpc`'s verifier client, checked before it is attached; refused or unreachable is `VerdictRefused` and nothing is sent. A
 PQZ token of another parameter set than the build's is `PqzSetMismatch`. The SDK builds no operation that drops a ciphertext from
 contract state.
+The Zether reading layer and part of the Zether operations are BUILT (plan T15; `clients/scaas-sdk/src/confidential/`,
+`tests/confidential.rs`; UNAUDITED): one read at the profile's final block through `Purpose::FeedsDecryption` fetches a fixed set of
+storage words and code (the factory's `_rec[token]`, the token's clone code and `ChainEnv`, `psid`, modes, auditor key, the account's
+six slots and every point's four data words, each named UA's registry record and key pointer code) and checks it only after the pool
+returned; `zether_balance` decrypts it in the facade; `zether_shield`, `zether_wrap_shield`, `UARollOver`, `UARollOverBatch`,
+`UAZetherTransferSingle` and `UAZetherUnshield` are prepared operations, the Zether UA signing through `sign_scaas`. The other Zether
+entries, the confidential watch and the anvil e2e are PLANNED (plan T15's status line).
 
 ## 7. App cores above the SDK
 

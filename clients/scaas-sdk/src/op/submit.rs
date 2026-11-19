@@ -92,6 +92,10 @@ pub(crate) fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
     let k = key(sdk, &p.signer())?;
     #[cfg(test)]
     sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    #[cfg(feature = "zether")]
+    if let super::Key::Zether(_, z) = &k {
+        z.approve(p.t.td.digest()?);
+    }
     let s = sign_scaas(k.signer(), &p.t.td, p.t.expect.clone())?;
     if !s.members.is_empty() {
         return Err(SdkError::Argument);

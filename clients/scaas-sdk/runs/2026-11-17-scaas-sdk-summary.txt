@@ -20,7 +20,6 @@ rpc-wasm | 81a8cbcf2 | 0 | -
 sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
 sdk-sets | 81a8cbcf2 | 0 | 6 passed, 0 failed, 0 ignored (3 binaries)
 sdk-deny | 81a8cbcf2 | 0 | -
-sdk-e2e | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 ua-c | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-c-release | 81a8cbcf2 | 0 | -
 ua-py | 81a8cbcf2 | 0 | -
@@ -34,13 +33,17 @@ frb-dart | 81a8cbcf2 | 0 | dart: +46:
 # Counts the runner does not parse: ua-c python 101 tests OK, ua-py 99 OK, ua-go 2 packages ok, ua-cs 61 passed.
 # Not applicable: `sync-api` (feature not built: plan T20b), bind-cpp (no bindings/cpp: T20b). wasm32: `cargo check` only
 # (sdk-wasm, rpc-wasm); no wasm32 test ran (wasm-bindgen-test is not in the offline tree).
-sdk-test | 82d0b1cf5 | 0 | 156 passed, 0 failed, 2 ignored (15 binaries); tree dirty
-sdk-wasm | 82d0b1cf5 | 0 | -; tree dirty
-sdk-min | 82d0b1cf5 | 101 | 30 passed, 1 failed, 0 ignored (3 binaries); tree dirty
-docs | 82d0b1cf5 | 0 | -; tree dirty
-features | 82d0b1cf5 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-bind-dart | 82d0b1cf5 | 0 | dart: +6:; tree dirty
-sdk-clippy | 82d0b1cf5 | 0 | -; tree dirty
 # T14 (history, watching, events) replaced seven rows above, run on the T14 tree before its commit. sdk-min's one red is
 # tests/config.rs open_checks_gas_tables_and_opt_ins, from the gas-table commits 64c8ed24d and 2df23400e (without `wallet` the
 # SDK holds no `reference` table, so the opt-in is refused); T14 touches no file of it. T14 mutants: 8/8 killed.
+sdk-test | 36621b5e5 | 0 | 169 passed, 0 failed, 2 ignored (16 binaries); tree dirty
+sdk-clippy | 36621b5e5 | 0 | -; tree dirty
+sdk-wasm | 36621b5e5 | 0 | -; tree dirty
+features | 36621b5e5 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+docs | 36621b5e5 | 0 | -; tree dirty
+sdk-min | 36621b5e5 | 101 | 30 passed, 1 failed, 0 ignored (3 binaries); tree dirty
+bind-dart | 36621b5e5 | 0 | dart: +6:; tree dirty
+sdk-e2e | 36621b5e5 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+# T15 (confidential: the reading layer, part of Zether) replaced eight rows above, run on the T15 tree before its commit.
+# sdk-min's one red is the same pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins (gas-table work on ua-rs-sign);
+# sdk-e2e is T12's pay (T15's anvil e2e is not built). bind-cpp not applicable (no bindings/cpp). T15 mutants: 9/9 killed.

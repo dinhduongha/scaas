@@ -16,6 +16,8 @@ compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 #[cfg(feature = "account")]
 pub mod account;
 pub mod config;
+#[cfg(feature = "zether")]
+pub mod confidential;
 pub mod error;
 pub mod events;
 #[cfg(feature = "frb")]

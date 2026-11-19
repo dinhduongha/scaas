@@ -71,6 +71,8 @@ pub struct Chain {
     pub genesis: String,
     /// `eth_call` and `eth_estimateGas` that send a value revert (a non-payable target)
     pub value_reverts: bool,
+    /// storage words by (contract, slot as `0x` + 64 hex), lower case; an absent word is 0 (plan T15)
+    pub storage: HashMap<(String, String), String>,
 }
 
 impl Default for Chain {
@@ -105,6 +107,7 @@ impl Default for Chain {
             gw_paths: vec![],
             genesis: hash_of(0),
             value_reverts: false,
+            storage: HashMap::new(),
         }
     }
 }
@@ -327,6 +330,18 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             .get(&p[0].as_str().unwrap_or_default().to_ascii_lowercase())
             .cloned()
             .unwrap_or("0x".into()))),
+        "eth_getStorageAt" => {
+            let who = p[0].as_str().unwrap_or_default().to_ascii_lowercase();
+            let slot = format!(
+                "0x{:0>64}",
+                p[1].as_str().unwrap_or_default().trim_start_matches("0x").to_ascii_lowercase()
+            );
+            ok(json!(c
+                .storage
+                .get(&(who, slot))
+                .cloned()
+                .unwrap_or_else(|| format!("0x{}", "00".repeat(32)))))
+        }
         "eth_getTransactionCount" => ok(json!("0x0")),
         "eth_getBalance" => {
             let at = match &p[1] {

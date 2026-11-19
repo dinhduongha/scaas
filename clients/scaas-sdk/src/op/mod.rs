@@ -67,6 +67,12 @@ impl Sdk {
 pub(crate) enum Key {
     Ua(#[allow(dead_code)] Arc<crate::vault::OpenSeed>, UaKey),
     Native(#[allow(dead_code)] Arc<crate::vault::OpenSeed>, NativeKey),
+    /// the Zether UA (`0x0141`, index 0): the facade's key, signing only the digest `submit` approved (plan T15)
+    #[cfg(feature = "zether")]
+    Zether(
+        #[allow(dead_code)] Arc<crate::vault::OpenSeed>,
+        crate::confidential::ZetherSigner,
+    ),
 }
 
 impl Key {
@@ -74,6 +80,8 @@ impl Key {
         match self {
             Key::Ua(_, k) => k,
             Key::Native(_, k) => k,
+            #[cfg(feature = "zether")]
+            Key::Zether(_, k) => k,
         }
     }
 }
@@ -87,6 +95,14 @@ pub(crate) fn key(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             account,
             index,
         } => {
+            #[cfg(feature = "zether")]
+            if *kind == crate::confidential::ZETHER_KIND {
+                if *index != 0 {
+                    return Err(SdkError::Argument);
+                }
+                let (s, k) = crate::confidential::handle(sdk, seed, *account)?;
+                return Ok(Key::Zether(s, crate::confidential::ZetherSigner::new(k)));
+            }
             let s = sdk.open_seed(seed)?;
             let k = s.wallet.ua_key(*kind, *account, *index)?;
             Key::Ua(s, k)

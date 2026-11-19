@@ -3871,6 +3871,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasmtimer",
  "zeroize",
+ "zether-prover",
 ]
 
 [[package]]

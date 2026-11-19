@@ -271,6 +271,8 @@ async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkEr
         .ok_or(SdkError::Argument)?;
     Ok(match (key_opened(sdk, signer).await?, ty.as_str()) {
         (Key::Ua(_, k), "bytes32") => hex(&k.ua().ok_or(SdkError::Argument)?),
+        #[cfg(feature = "zether")]
+        (Key::Zether(_, k), "bytes32") => hex(&k.ua()),
         (Key::Native(_, k), t) => {
             let a = addr20(&k.address().ok_or(SdkError::Argument)?.to_ascii_lowercase())?;
             if t == "address" {
@@ -456,7 +458,7 @@ impl Wallet {
     /// A plain row: `from`, the struct's fields, the envelope; checked under `Expect::Op`; the fields `token` and `underlying`
     /// listed as tokens touched.
     #[allow(clippy::too_many_arguments)]
-    async fn plain(
+    pub(crate) async fn plain(
         &self,
         name: &'static str,
         signer: KeyRef,

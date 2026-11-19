@@ -17,7 +17,9 @@ default = ["vault", "account", "wallet", "file-store", "mlock"]
 vault = ["scaas-ua/wallet"]
 account = ["vault", "scaas-rpc/evm", "dep:alloy"]
 wallet = ["vault", "scaas-rpc/evm", "scaas-rpc/node-client", "dep:alloy"]
-zether = ["vault", "scaas-ua/zether"]
+# T15: the reading layer reads through `scaas-rpc`'s EVM pool and the operations are `wallet`'s; the layout constants of
+# `scaas.zether` (`ROOT`, `LAYOUT`) are zether-prover's, the prover `scaas-ua`'s facade runs
+zether = ["wallet", "scaas-ua/zether", "dep:zether-prover"]
 pqz = ["vault", "scaas-ua/pqz"]
 pqz-set-n2048-kmax1024 = ["scaas-ua/pqz-set-n2048-kmax1024"]
 pqz-set-n2304-kmax4096 = ["scaas-ua/pqz-set-n2304-kmax4096"]
@@ -45,6 +47,8 @@ frb = []
 # default-features = false: scaas-ua's defaults enable `pqz` with one set, so a build asking for another would carry two (§3.2)
 scaas-ua = { path = "../ua-rs", default-features = false }
 scaas-rpc = { path = "../scaas-rpc", default-features = false }
+# feature `zether` (T15): the storage layout of `scaas.zether` only (`state::ROOT`, `state::LAYOUT`); no cryptography is called
+zether-prover = { path = "../zether-prover", default-features = false, optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 async-trait = "0.1"
@@ -111,3 +115,7 @@ required-features = ["wallet"]
 [[test]]
 name = "history"
 required-features = ["wallet"]
+
+[[test]]
+name = "confidential"
+required-features = ["zether"]
