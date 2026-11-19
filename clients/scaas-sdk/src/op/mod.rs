@@ -14,7 +14,7 @@ pub(crate) mod submit;
 mod tests;
 
 pub use crate::events::{InFlight, OpState};
-pub use gas::GasFrom;
+pub use gas::{GasFrom, GasSources};
 pub(crate) use prepared::{domain_name, field, Draft, ExpectFn};
 pub use prepared::{Prepared, ReviewField, Source};
 pub use quote::{SubmitPath, SubmitQuote};

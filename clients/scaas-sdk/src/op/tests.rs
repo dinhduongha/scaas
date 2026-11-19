@@ -173,25 +173,26 @@ async fn setup(gateways: usize, edit: impl FnOnce(&mut ChainProfile, &mut Limits
     }
 }
 
-/// A gas row of `g` for every entry and domain kind, signed by the tests' UA (0x0101) or a native EVM key, fresh lane or not.
-fn gas_rows(g: u64) -> Vec<crate::GasRow> {
-    let mut out = vec![];
+/// A base row of `g` for every entry and domain kind, fresh lane or not, and a verify row of 0 for the tests' UA (0x0101) and a
+/// native EVM key: the figure is `g`.
+fn gas_rows(g: u64) -> crate::GasRows {
+    let mut base = vec![];
     for r in scaas_ua::wallet::entries::entry_rows() {
         for k in r.kinds {
-            for signer in [0x0101, gas::NATIVE_EVM] {
-                for fresh in [true, false] {
-                    out.push(crate::GasRow {
-                        entry: r.entry.into(),
-                        kind: (*k).into(),
-                        signer,
-                        fresh,
-                        gas: g,
-                    });
-                }
+            for fresh in [true, false] {
+                base.push(crate::GasBase {
+                    entry: r.entry.into(),
+                    kind: (*k).into(),
+                    fresh,
+                    gas: g,
+                });
             }
         }
     }
-    out
+    let verify = [0x0101, gas::NATIVE_EVM]
+        .map(|signer| crate::GasVerify { signer, gas: 0 })
+        .to_vec();
+    crate::GasRows { base, verify }
 }
 
 fn ua() -> String {
@@ -1014,26 +1015,26 @@ async fn submit_signs_once_on_each_path() {
     assert_eq!(signs(&t), 2, "the self-relay path: one more");
 }
 
-/// Ruling B (P2-6): the quote's gas is the table's row for the whole key; a key without one is `GasUnquoted`, nothing estimated.
+/// Ruling B (P2-6), the split table (part 3b): the quote's gas is the base row of (entry, kind, lane state) plus the verify row
+/// of the signer kind; a key without either is `GasUnquoted`, nothing estimated.
 #[tokio::test(flavor = "multi_thread")]
 async fn an_operation_without_a_gas_row_is_gas_unquoted() {
     let only = |signer: u16, fresh: bool| {
         move |p: &mut ChainProfile, _: &mut Limits| {
-            p.gas = gas_rows(100_000)
-                .into_iter()
-                .filter(|r| r.signer == signer && r.fresh == fresh)
-                .collect()
+            let mut g = gas_rows(100_000);
+            g.base.retain(|r| r.fresh == fresh);
+            g.verify.retain(|r| r.signer == signer);
+            p.gas = g;
         }
     };
-    // rows for another signer kind only (an ML-DSA-65 UA's figure is not a P-256 one's)
+    // verify rows for another signer kind only (an ML-DSA-65 UA's figure is not a P-256 one's)
     let t = setup(0, |p, _| {
-        p.gas = gas_rows(100_000)
-            .into_iter()
-            .map(|mut r| {
-                r.signer = 0x0131;
-                r
-            })
-            .collect()
+        let mut g = gas_rows(100_000);
+        g.verify = vec![crate::GasVerify {
+            signer: 0x0131,
+            gas: 0,
+        }];
+        p.gas = g;
     })
     .await;
     let path = SubmitPath::SelfRelay { payer: payer(&t) };
@@ -1079,7 +1080,7 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
     // (`mtxCancelNonce_router`)
     for opt_in in [false, true] {
         let t = setup(0, |p, _| {
-            p.gas = vec![];
+            p.gas = Default::default();
             if opt_in {
                 p.gas_opt_in = vec![gas::REFERENCE.into()];
             }
@@ -1108,7 +1109,10 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
         assert_eq!(q.gas_limit, gas::with_margin(55_000 + 21_000 + 64 * len));
         assert_eq!(
             (q.gas, q.gas_from),
-            (Some(q.gas_limit), Some(GasFrom::Reference))
+            (
+                Some(q.gas_limit),
+                Some(GasSources::both(GasFrom::Reference))
+            )
         );
         assert_eq!(signs(&t), 0);
     }
@@ -1122,7 +1126,7 @@ async fn quote_names_its_gas_source_in_order() {
     let src = |opt: &'static [&'static str], chain: bool| {
         move |p: &mut ChainProfile, _: &mut Limits| {
             if !chain {
-                p.gas = vec![];
+                p.gas = Default::default();
             }
             p.gas_opt_in = opt.iter().map(|s| s.to_string()).collect();
         }
@@ -1142,7 +1146,7 @@ async fn quote_names_its_gas_source_in_order() {
     let t = setup(0, src(&["vault", "reference"], true)).await;
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
     let q = quote(&t, p.clone(), Some(500_000)).await.unwrap();
-    assert_eq!(q.gas_from, Some(GasFrom::Chain));
+    assert_eq!(q.gas_from, Some(GasSources::both(GasFrom::Chain)));
     assert_eq!(
         q.gas_limit,
         gas::with_margin(100_000 + 21_000 + 64 * len(&p))
@@ -1151,16 +1155,38 @@ async fn quote_names_its_gas_source_in_order() {
     let t = setup(0, src(&["vault"], false)).await;
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
     let q = quote(&t, p.clone(), Some(500_000)).await.unwrap();
-    assert_eq!(q.gas_from, Some(GasFrom::Module("vault".into())));
+    assert_eq!(
+        q.gas_from,
+        Some(GasSources::both(GasFrom::Module("vault".into())))
+    );
     assert_eq!(
         q.gas_limit,
         gas::with_margin(200_000 + 21_000 + 64 * len(&p))
+    );
+    // each part on its own: the chain's base rows, the module's verify rows (gas_from names both)
+    let t = setup(0, |p, _| {
+        p.gas.verify.clear();
+        p.gas_opt_in = vec!["vault".into()];
+    })
+    .await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = quote(&t, p.clone(), None).await.unwrap();
+    assert_eq!(
+        q.gas_from,
+        Some(GasSources {
+            base: GasFrom::Chain,
+            verify: GasFrom::Module("vault".into())
+        })
+    );
+    assert_eq!(
+        q.gas_limit,
+        gas::with_margin(100_000 + 21_000 + 64 * len(&p))
     );
     // the app's figure: no table row (nothing opted in), named `App`
     let t = setup(0, src(&[], false)).await;
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
     let q = quote(&t, p.clone(), Some(500_000)).await.unwrap();
-    assert_eq!(q.gas_from, Some(GasFrom::App));
+    assert_eq!(q.gas_from, Some(GasSources::both(GasFrom::App)));
     assert_eq!(
         q.gas_limit,
         gas::with_margin(500_000 + 21_000 + 64 * len(&p))
@@ -1187,9 +1213,9 @@ async fn gateway_quote_carries_gas_or_reports_it_unquoted() {
     let q = gateway_quote(&t, &p).await;
     let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
     assert_eq!(q.gas, Some(gas::with_margin(100_000 + 21_000 + 64 * len)));
-    assert_eq!(q.gas_from, Some(GasFrom::Chain));
+    assert_eq!(q.gas_from, Some(GasSources::both(GasFrom::Chain)));
     assert_eq!((q.gas_limit, q.max_cost.as_str()), (0, "0"));
-    let t = setup(1, |p, _| p.gas = vec![]).await;
+    let t = setup(1, |p, _| p.gas = Default::default()).await;
     let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
     let q = gateway_quote(&t, &p).await;
     assert_eq!(

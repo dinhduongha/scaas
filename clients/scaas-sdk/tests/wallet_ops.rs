@@ -19,8 +19,8 @@ use scaas_sdk::op::{KeyRef, Prepared, Source, SubmitPath};
 use scaas_sdk::vault::{ImportKey, ImportWords, MemoryStore};
 use scaas_sdk::wallet::*;
 use scaas_sdk::{
-    ChainProfile, EndpointConfig, Family, Finality, GasRow, Limits, ListedToken, RuntimeChoice,
-    Sdk, SdkConfig, SdkError,
+    ChainProfile, EndpointConfig, Family, Finality, GasBase, GasRows, GasVerify, Limits,
+    ListedToken, RuntimeChoice, Sdk, SdkConfig, SdkError,
 };
 use scaas_ua::wallet::SecretBytes;
 use serde_json::{json, Value};
@@ -526,7 +526,7 @@ fn leaves(prefix: &str, m: &Value, out: &mut Vec<(String, String)>) {
 /// The bodies the fake got, JSON-RPC and gateway, that carry `hex` (no `0x`).
 /// A gas row for every entry and domain kind (the transfer on ids too), signed by a native EVM key (the tests' imported key),
 /// on a fresh lane or not (owner 2026-11-19, ruling B: the profile's own rows).
-fn gas_rows() -> Vec<GasRow> {
+fn gas_rows() -> GasRows {
     let mut keys: Vec<(String, String)> = scaas_ua::wallet::entries::entry_rows()
         .into_iter()
         .flat_map(|r| {
@@ -538,17 +538,21 @@ fn gas_rows() -> Vec<GasRow> {
     keys.extend(
         ["token", "zether", "pqz"].map(|k| ("mtxExecuteTransfer".to_string(), k.to_string())),
     );
-    keys.into_iter()
+    let base = keys
+        .into_iter()
         .flat_map(|(entry, kind)| {
-            [true, false].map(|fresh| GasRow {
+            [true, false].map(|fresh| GasBase {
                 entry: entry.clone(),
                 kind: kind.clone(),
-                signer: 0,
                 fresh,
                 gas: 100_000,
             })
         })
-        .collect()
+        .collect();
+    GasRows {
+        base,
+        verify: vec![GasVerify { signer: 0, gas: 0 }],
+    }
 }
 
 /// `carried`, waited for (≤ 5 s): the simulation and the send run after `submit` returns (ruling A).

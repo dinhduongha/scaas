@@ -1,10 +1,18 @@
-# gas mutants at commit 403ed44f7 (name | outcome | test)
+# gas mutants at commit f3bddcb58 (name | outcome | test)
 the chain's rows not first | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in
 the chain's rows named as reference | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib quote_names_its_gas_source_in_order
 module tables read without opt-in | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in
 the reference read as a module (before the other modules) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in
 the reference read without opt-in | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib an_operation_without_a_gas_row_is_gas_unquoted
+the base row's lane state ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib an_operation_without_a_gas_row_is_gas_unquoted
+the base row's domain kind ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_parts_are_looked_up_independently
+the verify row's signer ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib an_operation_without_a_gas_row_is_gas_unquoted
+the verify part not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in
+the verify part read with the base part's order (base source for both) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib quote_names_its_gas_source_in_order
+the base part read as the verify part's (verify source for both) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_parts_are_looked_up_independently
 the app's figure ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib quote_names_its_gas_source_in_order
+the app's figure added to a part found | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_parts_are_looked_up_independently
+the app's figure before the tables | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in
 an app figure above max_gas accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib quote_names_its_gas_source_in_order
 the gateway quote drops the gas | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gateway_quote_carries_gas_or_reports_it_unquoted
 a relayed quote without a figure refused | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gateway_quote_carries_gas_or_reports_it_unquoted
@@ -12,8 +20,12 @@ a self-relay without a figure estimated | killed | ../../scripts/capped cargo te
 the file: a figure not a multiple of 1,000 | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
 the file: 1,000 above the measurement accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
 the file: measured above the table accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
-the file: one key twice | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+the file: a base figure of zero accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+the file: one base key twice | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+the file: one signer twice | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+the file: version 1 accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
+the file: the row bound on base rows only | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_parse_checks
 a reference row away from its source | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
 open: an opt-in naming no table | killed | ../../scripts/capped cargo test --locked --offline -j2 --test config open_checks_gas_tables_and_opt_ins
 open: a module table named reference | killed | ../../scripts/capped cargo test --locked --offline -j2 --test config open_checks_gas_tables_and_opt_ins
-17 mutants, 17 killed, 0 survived, 0 not loaded
+29 mutants, 29 killed, 0 survived, 0 not loaded

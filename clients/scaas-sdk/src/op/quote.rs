@@ -3,7 +3,7 @@
 //! maximum cost beside the operation's own fee; above the profile's caps (from the SDK's configuration, never the answering
 //! endpoint) `FeeAboveCap`; a gas limit above the chain's per-transaction cap or block limit `GasAboveTxCap`; a payer that is an
 //! EIP-7702 designator `PayerDelegated`.
-use super::gas::GasFrom;
+use super::gas::{GasFrom, GasSources};
 use super::prepared::{envelope, Prepared};
 use super::{evm, key, sim, KeyRef, Op};
 use crate::{Sdk, SdkError};
@@ -35,9 +35,9 @@ pub struct SubmitQuote {
     /// what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
     /// the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
     pub gas: Option<u64>,
-    /// where `gas` came from: the chain's measured rows, a module table, the reference table, the app's figure, or a native
-    /// send's estimate
-    pub gas_from: Option<GasFrom>,
+    /// where `gas` came from, its base part and its verify part each (owner 2026-11-19, part 3b): the chain's measured rows,
+    /// a module table, the reference table; the app's figure or a native send's estimate for both
+    pub gas_from: Option<GasSources>,
     pub max_fee_per_gas: String,
     pub max_priority_fee_per_gas: String,
     pub max_cost: String,
@@ -108,7 +108,7 @@ pub(crate) async fn self_relay(
     data: Bytes,
     fee_to_relayer: String,
     relayed: bool,
-    pinned: Option<(u64, GasFrom)>,
+    pinned: Option<(u64, GasSources)>,
 ) -> Result<SubmitQuote, SdkError> {
     let (profile, _, pool) = evm(sdk, chain)?;
     let from = payer_address(sdk, payer)?;
@@ -122,14 +122,14 @@ pub(crate) async fn self_relay(
     } else if relayed {
         return Err(SdkError::GasUnquoted);
     } else if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
-        (21_000, GasFrom::Estimate) // a plain transfer to an account without code
+        (21_000, GasSources::both(GasFrom::Estimate)) // a plain transfer to an account without code
     } else {
         // the estimate with the value sent (T13b ruling 5): a payable path's cost, a non-payable target's revert
         let g = pool
             .simulate_value(from, to, value, data)
             .await
             .map_err(sim)?;
-        (g, GasFrom::Estimate)
+        (g, GasSources::both(GasFrom::Estimate))
     };
     let block = pool.block_gas().await.map_err(sim)?;
     if profile.tx_gas_cap.is_some_and(|c| gas > c) || gas > block.limit {
@@ -209,8 +209,9 @@ impl Op {
         self.quote_inner(prepared, path, None).await
     }
 
-    /// [`Op::quote`] with the app's own gas figure for the operation (execution gas, as a table row), used only when no table
-    /// has a row for its key (owner 2026-11-19); the quote names it `App`. A figure above `Limits::max_gas` is `FeeAboveCap`.
+    /// [`Op::quote`] with the app's own gas figure for the operation (execution gas, one total for base and verify), used only
+    /// when the tables lack its base or its verify row (owner 2026-11-19); the quote names it `App` for both. A figure above
+    /// `Limits::max_gas` is `FeeAboveCap`.
     pub async fn quote_with_gas(
         &self,
         prepared: Arc<Prepared>,

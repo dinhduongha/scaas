@@ -40,7 +40,7 @@ fn profile(key: &str) -> ChainProfile {
         router: None,
         finality: Finality::Depth(12),
         tx_gas_cap: Some(1 << 24),
-        gas: vec![],
+        gas: Default::default(),
         max_valid_secs: None,
         gas_opt_in: vec![],
         tokens: vec![],
@@ -158,7 +158,7 @@ fn gas_table(name: &str, family: &str) -> GasTable {
     GasTable {
         name: name.into(),
         family: family.into(),
-        rows: vec![],
+        rows: Default::default(),
     }
 }
 

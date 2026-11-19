@@ -10,8 +10,8 @@ use scaas_sdk::op::{KeyRef, OpState, SubmitPath};
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::wallet::{Envelope, Pay, PayBody, PayMeta};
 use scaas_sdk::{
-    ChainProfile, EndpointConfig, Family, Finality, GasRow, Limits, ListedToken, RuntimeChoice,
-    Sdk, SdkConfig,
+    ChainProfile, EndpointConfig, Family, Finality, GasBase, GasRows, GasVerify, Limits,
+    ListedToken, RuntimeChoice, Sdk, SdkConfig,
 };
 use scaas_ua::wallet::{Network, SecretBytes, Wallet};
 use std::process::{Child, Command, Stdio};
@@ -161,13 +161,15 @@ async fn e2e_pay_on_anvil() {
             decimals: 0,
         }],
         // a measured figure for this chain (ruling B: the table has no native-key `mtxPay` row yet), rounded up
-        gas: vec![GasRow {
-            entry: "mtxPay".into(),
-            kind: "token".into(),
-            signer: 0,
-            fresh: true,
-            gas: 400_000,
-        }],
+        gas: GasRows {
+            base: vec![GasBase {
+                entry: "mtxPay".into(),
+                kind: "token".into(),
+                fresh: true,
+                gas: 400_000,
+            }],
+            verify: vec![GasVerify { signer: 0, gas: 0 }],
+        },
         max_valid_secs: None,
         gas_opt_in: vec![],
     };

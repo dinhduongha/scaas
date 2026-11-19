@@ -59,7 +59,7 @@ fn profile(rpc: Vec<String>, gateways: Vec<String>, uid: &str) -> ChainProfile {
         router: None,
         finality: Finality::Finalized,
         tx_gas_cap: Some(1 << 24),
-        gas: vec![],
+        gas: Default::default(),
         max_valid_secs: None,
         gas_opt_in: vec![],
         tokens: vec![
