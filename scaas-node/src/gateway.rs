@@ -158,14 +158,27 @@ fn unavailable(msg: impl ToString) -> Reply {
     )
 }
 
+/// The body cap of every gateway route but `/v1/op`.
+pub const BODY_MAX: usize = 64 * 1024;
+
+/// NODE-GW-08: the body cap of a job submission (`POST /v1/op`), on every chain: the largest PQZ debit as JSON with headroom.
+/// A debit's proof and ciphertexts are at most pqz-stmt's `MAX_INPUT` (524,288 B, every set: 5 + statement + proof), 1,048,576
+/// hex characters; with the largest single-key `auth` and `pqzAuth` (7,872 B each, 31,488 hex) and the named fields the body is
+/// under 1,088,000 B. 1.25 MiB leaves ≈ 20 % above that. The decode stays bounded: this length, and serde_json's nesting limit
+/// (128) for the depth.
+pub const OP_BODY_MAX: usize = 1_310_720;
+
 pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/v1/metatx", post(post_metatx))
         .route("/v1/ua-metatx", post(post_ua_metatx))
-        .route("/v1/op", post(post_op))
+        .route(
+            "/v1/op",
+            post(post_op).layer(DefaultBodyLimit::max(OP_BODY_MAX)),
+        )
         .merge(dex_routes())
-        .layer(DefaultBodyLimit::max(64 * 1024))
+        .layer(DefaultBodyLimit::max(BODY_MAX))
         .layer(GlobalConcurrencyLimitLayer::new(32))
         .with_state(state)
 }
@@ -545,6 +558,59 @@ mod tests {
                 .clone();
         b["hash"] = json!(format!("{hash:#x}"));
         b
+    }
+
+    /// NODE-GW-08: `/v1/op` takes a body of `OP_BODY_MAX` bytes (read and decoded: here an unknown chain, 400) and refuses one
+    /// byte more unread (413); every other route keeps `BODY_MAX`; a body nested past serde_json's depth limit is a 4xx, not a
+    /// crash.
+    #[tokio::test]
+    async fn op_body_cap_is_the_job_submission_cap() {
+        // the figure: `MAX_INPUT` (524,288 B) as hex, and 256 KiB for the signatures and named fields
+        assert_eq!(OP_BODY_MAX, 2 * 524_288 + 262_144);
+        let app = router(AppState::default());
+        let post = |uri: &str, body: Vec<u8>| {
+            let req = Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap();
+            let app = app.clone();
+            async move { app.oneshot(req).await.unwrap().status() }
+        };
+        let sized = |len: usize| {
+            let head = br#"{"chain":1,"op":{"pad":""#.to_vec();
+            let tail = br#""}}"#;
+            let mut b = head;
+            b.resize(len - tail.len(), b'x');
+            b.extend_from_slice(tail);
+            assert_eq!(b.len(), len);
+            b
+        };
+        assert_eq!(
+            post("/v1/op", sized(OP_BODY_MAX)).await,
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            post("/v1/op", sized(OP_BODY_MAX + 1)).await,
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        assert_ne!(
+            post("/v1/ua-metatx", sized(BODY_MAX)).await,
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        assert_eq!(
+            post("/v1/ua-metatx", sized(BODY_MAX + 1)).await,
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
+        let deep = [
+            &br#"{"chain":1,"op":"#[..],
+            &[b'['; 4096],
+            &[b']'; 4096],
+            b"}",
+        ]
+        .concat();
+        assert!(post("/v1/op", deep).await.is_client_error());
     }
 
     /// R55 (review S1-7): lane đứng ⇒ gateway trả 503 ngay, không nhận rồi để hết hạn trong kênh.

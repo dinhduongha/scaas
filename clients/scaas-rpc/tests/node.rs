@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Plan T10 / T11: the scaas-node client against fake gateways on 127.0.0.1:0 (CLI-RPC-10, F8). The node's own conformance test
 //! is `scaas-node/tests/rpc_client.rs`.
-use scaas_rpc::node::{NodeClient, NodeOutcome, UaMetaTxReq, BODY_MAX};
+use scaas_rpc::node::{NodeClient, NodeOutcome, UaMetaTxReq, BODY_MAX, OP_BODY_MAX};
 use scaas_rpc::{Class, Endpoint, EndpointAuth, NodeList, Policy, RpcError, Secret};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
@@ -118,22 +118,48 @@ async fn an_op_that_is_not_an_object_is_argument() {
     assert!(c.submit_op_at(0, 1, &op()).await.is_ok(), "control");
 }
 
+/// NODE-GW-08: `/v1/op` takes a body of `OP_BODY_MAX` bytes and refuses one byte more unsent; `/v1/ua-metatx` keeps
+/// `BODY_MAX` (64 KiB). Each bound with its positive control.
 #[tokio::test]
-async fn a_body_above_64_kib_is_refused_unsent() {
+async fn each_route_refuses_a_body_above_its_cap_unsent() {
     let (g, seen) = gateway(queued()).await;
     let c = client(&[(&g, None)]);
-    let mut big = op();
-    big["pad"] = json!("x".repeat(BODY_MAX));
+    // `{"chain":1,"op":` + the op + `}`: the op's own JSON is the body less 17 bytes
+    let sized = |len: usize| {
+        let mut o = op();
+        o["pad"] = json!("");
+        let base = serde_json::to_string(&o).unwrap().len() + 17;
+        o["pad"] = json!("x".repeat(len - base));
+        o
+    };
     assert!(matches!(
-        c.submit_op_at(0, 1, &big).await,
-        Err(RpcError::BodyTooLarge { cap: 65536, .. })
+        c.submit_op_at(0, 1, &sized(OP_BODY_MAX + 1)).await,
+        Err(RpcError::BodyTooLarge {
+            cap: 1_310_720,
+            len: 1_310_721
+        })
     ));
     assert!(seen.lock().unwrap().is_empty(), "nothing sent");
-    let mut fits = op();
-    fits["pad"] = json!("x".repeat(BODY_MAX - 400));
     assert!(
-        c.submit_op_at(0, 1, &fits).await.is_ok(),
-        "control: below the cap"
+        c.submit_op_at(0, 1, &sized(OP_BODY_MAX)).await.is_ok(),
+        "control: at the cap"
+    );
+    let req = |pad: usize| UaMetaTxReq {
+        chain: 7622,
+        token: "0xaa".into(),
+        contract: None,
+        struct_: Some("transfer".into()),
+        m: json!({"from": "0x01", "to": "0x02"}),
+        auth: json!({"signature": "0x01", "pad": "x".repeat(pad)}),
+    };
+    let n = serde_json::to_vec(&req(0)).unwrap().len();
+    assert!(matches!(
+        c.submit_ua_metatx_at(0, &req(BODY_MAX + 1 - n)).await,
+        Err(RpcError::BodyTooLarge { cap: 65536, .. })
+    ));
+    assert!(
+        c.submit_ua_metatx_at(0, &req(BODY_MAX - n)).await.is_ok(),
+        "control: at the cap"
     );
 }
 

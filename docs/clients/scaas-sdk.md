@@ -222,10 +222,13 @@ the registry's proven key the handle's. A verdict comes from `ChainProfile.verif
 against the verifier UA's registry record read at the same final block (T16-c). The six PQZ debits are BUILT (plan T16 part 3,
 `src/confidential/pqz_debit.rs`, UNAUDITED; spec §9.2): the recipients' and the auditor's keys as a second fixed word set, the
 envelope binding folded by the form, the facade's proof off the async workers, `PqzAuth` signed by the holder under `zether-auth`
-and attached, the checked verdict attached on an `OFFCHAIN` token, self-relayed only (above the gateway's body cap). An opening token
+and attached, the checked verdict attached on an `OFFCHAIN` token, relayed by a gateway (its job submission cap, NODE-GW-08) or
+self-relayed. An opening token
 is `PqzOpeningUnsupported`. A native-id verifier is checked (P-T16-3, `verdict_native_verifier`); `pqz_balance_all` sums the key
-versions (P-T16-5, `pqz_balance_all_versions`). `PqzRollOver` (opening tokens only), an `OFFCHAIN` holder's scoped key (the `pqz3k` handle) and the PQZ
-e2e on `anvil` (no PQZ precompile there, and an `OFFCHAIN` token needs the scoped key) are SPECIFIED.
+versions (P-T16-5, `pqz_balance_all_versions`). PLANNED (P-T16-7): an `OFFCHAIN` holder's
+debits, once `ua-rs`'s `PqzKeyHandle` can prove a debit with its scoped secret (today it opens one and proves its own
+registration only; until then such a holder is `LegKeyMismatch`), and `PqzRollOver` with the opening-token support it belongs to.
+The PQZ e2e waits for a local Nethermind runner with the precompile (the SDK round-end matrix).
 
 ## 7. App cores above the SDK
 

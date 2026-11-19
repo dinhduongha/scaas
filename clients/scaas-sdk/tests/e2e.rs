@@ -1340,6 +1340,47 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
         matches!(s2, OpState::Landed { .. }),
         "msig transfer: {s2:?}"
     );
+    // M1, `Op::member_sign` directly: slot 1 signs apart (its own device), slot 0 signs at submit with that `MemberSig` as a
+    // `Signed` slot; both prepared from the same request (one `validUntil`), so one digest. Several local slots: `Argument`.
+    let until = now() + 600;
+    let apart = |slots: Vec<MsigSlot>| {
+        sdk.wallet().prepare_transfer(Transfer {
+            signer: KeyRef::Msig {
+                ua: ua.clone(),
+                slots,
+            },
+            chain: "anvil".into(),
+            token: token.clone(),
+            to: format!("0x{}{}", "00".repeat(12), "cafe".repeat(10)),
+            value: "50".into(),
+            batch: "1".into(),
+            envelope: Envelope {
+                valid_until: until,
+                mode: 0,
+                relayer: None,
+                fee: "0".into(),
+                fee_recipient: None,
+            },
+        })
+    };
+    let two = apart(vec![slot(0), slot(1)]).await.unwrap();
+    assert!(
+        matches!(sdk.op().member_sign(two).await, Err(e) if e.code() == "Argument"),
+        "one local slot only"
+    );
+    let member = sdk
+        .op()
+        .member_sign(apart(vec![slot(1)]).await.unwrap())
+        .await
+        .unwrap();
+    let p = apart(vec![slot(0), MsigSlot::Signed { index: 1, member }])
+        .await
+        .unwrap();
+    let s3 = self_relay(&sdk, &seed, p).await;
+    assert!(
+        matches!(s3, OpState::Landed { .. }),
+        "msig transfer with a member signed apart: {s3:?}"
+    );
     // `updateMsig`: the third slot disabled, signed by slots 0 and 1 of the stored structure
     let block: u64 = cast(&["block-number", "--rpc-url", rpc]).parse().unwrap();
     let plan = acc

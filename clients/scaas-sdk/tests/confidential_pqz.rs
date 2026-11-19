@@ -1011,35 +1011,33 @@ async fn debit_setup(offchain: bool) -> (Arc<Sdk>, String, Fake, W, W, Arc<Memor
     (s, seed, c, a, b, store)
 }
 
-/// Self-relays `p` (a PQZ debit is above the gateway's body cap, P-T16-8) by the seed's EVM key; the operation's job (`op`)
-/// from its row in the store, the same JSON a gateway would take.
+/// Submits `p` through the gateway (NODE-GW-08: a PQZ debit fits the job submission's body cap, P-T16-8); the job (`op`) the
+/// gateway received, equal to the operation's row in the store, its body within `OP_BODY_MAX`.
 async fn relay(
     s: &Arc<Sdk>,
-    seed: &str,
+    c: &Fake,
     store: &Arc<MemoryStore>,
     p: Arc<scaas_sdk::op::Prepared>,
 ) -> (String, Value) {
     use scaas_sdk::vault::SecureStore;
-    let payer = KeyRef::Native {
-        seed: seed.into(),
-        network: "evm".into(),
-        index: 0,
-    };
-    assert_eq!(
-        code(
-            s.op()
-                .quote(p.clone(), scaas_sdk::op::SubmitPath::Gateway)
-                .await
-        ),
-        "SubmitPathNone",
-        "no gateway"
-    );
+    let before = c.lock().unwrap().bodies.len();
     let q = s
         .op()
-        .quote(p.clone(), scaas_sdk::op::SubmitPath::SelfRelay { payer })
+        .quote(p.clone(), scaas_sdk::op::SubmitPath::Gateway)
         .await
         .unwrap();
     let op = s.op().submit(p, q).await.unwrap();
+    let mut body = None;
+    for _ in 0..100 {
+        if let Some(b) = c.lock().unwrap().bodies.get(before) {
+            body = Some(b.clone());
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let body = body.expect("the gateway received the debit");
+    assert!(body.len() <= scaas_rpc::node::OP_BODY_MAX);
+    let body: Value = serde_json::from_str(&body).unwrap();
     let item = store
         .get("sdk.state".into(), "test".into())
         .await
@@ -1053,7 +1051,11 @@ async fn relay(
         .find(|r| r["op"] == serde_json::json!(op))
         .unwrap()
         .clone();
-    (op, row["op_json"].clone())
+    assert_eq!(
+        body["op"], row["op_json"],
+        "the row's job is what the gateway took"
+    );
+    (op, body["op"].clone())
 }
 
 /// The reviewed `PqzAuth` message of `p` and its typed digest in the token's domain.
@@ -1152,7 +1154,7 @@ async fn pqz_transfer_single_pairs() {
             (m["from"].as_str(), m["to"].as_str(), m["op"].as_u64()),
             (Some(hx(&b).as_str()), Some(hx(&a).as_str()), Some(1))
         );
-        let (_, op) = relay(&s, &seed, &store, p).await;
+        let (_, op) = relay(&s, &c, &store, p).await;
         assert_eq!(op["entry"], serde_json::json!(DEBITS[n]));
         pqz_auth_ok(&op, &d);
         let args = &op["args"]["args"];
@@ -1194,7 +1196,7 @@ fn hex_tail(w: &W) -> String {
 #[tokio::test(flavor = "multi_thread")]
 async fn pqz_transfer_multi_pairs() {
     use scaas_sdk::confidential::{PqzLeg, PqzTransferMulti};
-    let (s, seed, _, a, b, store) = debit_setup(false).await;
+    let (s, seed, c, a, b, store) = debit_setup(false).await;
     let cf = s.confidential();
     let r = || PqzTransferMulti {
         signer: signer(&seed, 1),
@@ -1223,7 +1225,7 @@ async fn pqz_transfer_multi_pairs() {
             (m["from"].as_str(), m["op"].as_u64()),
             (Some(hx(&b).as_str()), Some(7))
         );
-        let (_, op) = relay(&s, &seed, &store, p).await;
+        let (_, op) = relay(&s, &c, &store, p).await;
         assert_eq!(op["entry"], serde_json::json!(DEBITS[2 + n]));
         pqz_auth_ok(&op, &d);
         let args = &op["args"]["args"];
@@ -1245,7 +1247,7 @@ async fn pqz_transfer_multi_pairs() {
 #[tokio::test(flavor = "multi_thread")]
 async fn pqz_unshield_pairs() {
     use scaas_sdk::confidential::{PqzUnshield, PqzUnshieldUnwrap};
-    let (s, seed, _, _, b, store) = debit_setup(false).await;
+    let (s, seed, c, _, b, store) = debit_setup(false).await;
     let cf = s.confidential();
     let to = hx(&[3u8; 32]);
     let p = cf
@@ -1291,7 +1293,7 @@ async fn pqz_unshield_pairs() {
             ),
             (Some(hx(&b).as_str()), Some(to.as_str()), Some("7"), Some(2))
         );
-        let (_, op) = relay(&s, &seed, &store, p).await;
+        let (_, op) = relay(&s, &c, &store, p).await;
         assert_eq!(op["entry"], serde_json::json!(DEBITS[4 + n]));
         pqz_auth_ok(&op, &d);
         if n == 1 {
@@ -1343,7 +1345,7 @@ async fn pqz_auth_attached_by_the_facade() {
             "{k}"
         );
     }
-    let (_, op) = relay(&s, &seed, &store, p).await;
+    let (_, op) = relay(&s, &c, &store, p).await;
     pqz_auth_ok(&op, &d);
     // the arguments are the statement's parts: header ‖ pk_f ‖ pk_t ‖ T ‖ u ‖ v_t ‖ v_f
     let (pk, v) = (pqz_set().pk_len, V_BYTES);
@@ -1401,6 +1403,7 @@ async fn pqz_auth_attached_by_the_facade() {
     assert_eq!(pv["pqzVerifierEpoch"], serde_json::json!(EPOCH), "{op}");
     assert_eq!(body["proof"], op["args"]["proof"]);
     // a verifier that signs another statement: refused, nothing sent
+    let n = c.lock().unwrap().bodies.len();
     c.lock().unwrap().verdict_fn = None;
     c.lock().unwrap().verdict = Some((200, answer(&verdict_of(&hx(&stmt[32..64])), 7)));
     assert_eq!(
@@ -1411,7 +1414,8 @@ async fn pqz_auth_attached_by_the_facade() {
         ),
         "VerdictRefused"
     );
-    assert_eq!(c.lock().unwrap().sent.len(), 1, "nothing more sent");
+    let c = c.lock().unwrap();
+    assert_eq!((c.sent.len(), c.bodies.len()), (0, n), "nothing more sent");
 }
 
 /// The proof runs off the async workers: on a one-worker runtime a `seeds()` call answers at once while the proof runs (the

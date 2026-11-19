@@ -9,8 +9,20 @@ use crate::http::Http;
 use serde_json::Value;
 use std::sync::Arc;
 
-/// The body cap of `/v1/op`, `/v1/ua-metatx` and the DEX routes (the gateway's `DefaultBodyLimit`).
+/// The body cap of `/v1/ua-metatx` and the DEX routes (the gateway's `DefaultBodyLimit`).
 pub const BODY_MAX: usize = 64 << 10;
+/// The body cap of a job submission, `/v1/op` (NODE-GW-08, the node's `OP_BODY_MAX`): the largest PQZ debit as JSON (its proof
+/// and ciphertexts at most pqz-stmt's `MAX_INPUT`, 524,288 B, as hex, with the signatures and named fields) with ≈ 20 % headroom.
+pub const OP_BODY_MAX: usize = 1_310_720;
+
+/// The body cap of `route`.
+fn cap_of(route: &str) -> usize {
+    if route == "/v1/op" {
+        OP_BODY_MAX
+    } else {
+        BODY_MAX
+    }
+}
 /// A gateway answer's cap.
 pub const ANSWER_MAX: usize = 1 << 20;
 
@@ -202,10 +214,10 @@ impl NodeClient {
         route: &str,
         body: Vec<u8>,
     ) -> Result<NodeOutcome, RpcError> {
-        if body.len() > BODY_MAX {
+        if body.len() > cap_of(route) {
             return Err(RpcError::BodyTooLarge {
                 len: body.len(),
-                cap: BODY_MAX,
+                cap: cap_of(route),
             });
         }
         Ok(
@@ -407,10 +419,10 @@ impl NodeClient {
         route: &str,
         body: Vec<u8>,
     ) -> Result<SubmitOutcome, RpcError> {
-        if body.len() > BODY_MAX {
+        if body.len() > cap_of(route) {
             return Err(RpcError::BodyTooLarge {
                 len: body.len(),
-                cap: BODY_MAX,
+                cap: cap_of(route),
             });
         }
         let to: Vec<usize> = match fanout {
