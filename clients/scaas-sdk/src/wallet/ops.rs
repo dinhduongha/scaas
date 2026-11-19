@@ -269,6 +269,13 @@ async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkEr
         .find(|r| r.name == name)
         .and_then(|r| r.fields.split_once(" from").map(|(t, _)| t.to_string()))
         .ok_or(SdkError::Argument)?;
+    // an `msig` signs as its own UA (its slots sign at submit: `account::msig`)
+    if let KeyRef::Msig { ua, .. } = signer {
+        return match ty.as_str() {
+            "bytes32" => Ok(hex(&id32(ua)?)),
+            _ => Err(SdkError::Argument),
+        };
+    }
     Ok(match (key_opened(sdk, signer).await?, ty.as_str()) {
         (Key::Ua(_, k), "bytes32") => hex(&k.ua().ok_or(SdkError::Argument)?),
         #[cfg(feature = "zether")]

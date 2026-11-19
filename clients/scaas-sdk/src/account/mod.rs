@@ -4,6 +4,8 @@
 //! wallet takes the next free index, so no two wallets share one); the EIP-2333 kinds at index 0 only (CLI-UAL-15). Every change
 //! rewrites the seed's index MAC (the seed unlocked). A watch row holds no key and signs nothing. UNAUDITED.
 #[cfg(feature = "wallet")]
+pub(crate) mod msig;
+#[cfg(feature = "wallet")]
 mod register;
 mod restore;
 #[cfg(feature = "wallet")]
@@ -13,6 +15,11 @@ mod sponsor;
 
 #[cfg(feature = "wallet")]
 pub use register::{Register, RegisterAttrs, RegistrationState, RegistryWrite};
+#[cfg(feature = "wallet")]
+pub use msig::{
+    msig_structure, AcceptMembership, MsigMemberArgs, MsigRegister, MsigSlotState, MsigState, MsigStructureArgs,
+    MsigUpdatePlan, UpdateMsig,
+};
 #[cfg(feature = "wallet")]
 pub use smart::{smart_account_address, SmartCall, SmartOp, SubjectKeyArgs};
 #[cfg(feature = "wallet")]

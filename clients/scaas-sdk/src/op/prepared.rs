@@ -214,7 +214,10 @@ impl Op {
     /// struct refuses.
     pub(crate) async fn prepare(sdk: &Arc<Sdk>, d: Draft) -> Result<Arc<Prepared>, SdkError> {
         let (profile, chain_id, pool) = evm(sdk, &d.chain)?;
-        drop(super::key_opened(sdk, &d.signer).await?); // a locked seed refuses before any read
+        // a locked seed refuses before any read (an `msig`'s slot keys are opened when it signs)
+        if !matches!(d.signer, KeyRef::Msig { .. }) {
+            drop(super::key_opened(sdk, &d.signer).await?);
+        }
         let uid: [u8; 32] = super::unhex(&profile.chain_uid)?
             .try_into()
             .map_err(|_| SdkError::Argument)?;

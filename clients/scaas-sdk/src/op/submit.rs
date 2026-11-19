@@ -83,6 +83,9 @@ pub(crate) fn unsigned(p: &Prepared) -> Result<Built, SdkError> {
 /// The signature of `p` under its check, and the entry built with it (calldata and job op from one parse). A stored key row
 /// (a passkey, a secure-element key) signs through the platform's authenticator (`external`).
 pub(crate) async fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
+    if let super::KeyRef::Msig { ua, slots } = p.signer() {
+        return sign_msig(sdk, p, &ua, &slots).await;
+    }
     let k = super::key_opened(sdk, &p.signer()).await?;
     #[cfg(test)]
     sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -98,6 +101,36 @@ pub(crate) async fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
     }
     let s = sign_one(sdk, &k, &p.t.td, &p.t.expect).await?;
     build(p, &sig_json(p, &s.key_data, &s.signature)?, &extra)
+}
+
+/// An `msig` signer (`KeyRef::Msig`): its `UASig{"", "", members}` by `account::msig` under the entry's check, for a `UA*` entry
+/// only (an `msig` has no native or account form, no owner statement).
+#[cfg(feature = "account")]
+async fn sign_msig(
+    sdk: &Sdk,
+    p: &Prepared,
+    ua: &str,
+    slots: &[super::MsigSlot],
+) -> Result<Built, SdkError> {
+    let plan = entry_rows()
+        .into_iter()
+        .find(|r| r.name == p.t.name && r.kinds.contains(&p.t.kind))
+        .map(|r| r.plan)
+        .ok_or(SdkError::Argument)?;
+    let ua_form = plan.contains("@ua") || p.t.name.starts_with("UA") || p.t.name.starts_with("CancelUA");
+    if !ua_form || plan.contains("@bytes") || p.t.owner.is_some() {
+        return Err(SdkError::Argument);
+    }
+    #[cfg(test)]
+    sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let s = crate::account::msig::sign_typed(sdk, &p.chain(), ua, slots, &p.t.td, &p.t.expect).await?;
+    let sig: Value = serde_json::from_str(&scaas_ua::json::uasig_json(&s)).map_err(|_| SdkError::Internal)?;
+    build(p, &sig, &p.t.extra)
+}
+
+#[cfg(not(feature = "account"))]
+async fn sign_msig(_: &Sdk, _: &Prepared, _: &str, _: &[super::MsigSlot]) -> Result<Built, SdkError> {
+    Err(SdkError::FeatureMissing)
 }
 
 async fn sign_one(

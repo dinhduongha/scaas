@@ -1,0 +1,9 @@
+# t13msig mutants at commit 57269686a (name | outcome | test)
+a slot not accepted signs (no outer check) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact account::msig::tests::msig_minimal_sets
+an inner leaf not accepted signs | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact account::msig::tests::msig_minimal_sets
+a stale structure signed (the first, not the current) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact account::msig::tests::update_msig_current
+the update's version from zero, not the stored one | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact account::msig::tests::update_msig_current
+an operation signed without its check | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact account::msig::tests::update_msig_current
+landed from the receipt | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact account::msig::tests::msig_writes_landed_by_record
+acceptance landed by another slot's bit | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact account::msig::tests::msig_writes_landed_by_record
+7 mutants, 7 killed, 0 survived, 0 not loaded

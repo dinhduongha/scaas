@@ -11,6 +11,9 @@ use alloy::primitives::{Address, Bytes, U256};
 use scaas_rpc::Purpose;
 use std::sync::Arc;
 
+/// The `msig` kind: an `msig` signer's verify row (spec §13.3).
+const MSIG: u16 = 0x0120;
+
 /// How an operation reaches the chain (spec §13.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubmitPath {
@@ -252,6 +255,7 @@ impl Op {
                 let signer = match prepared.signer() {
                     KeyRef::Ua { kind, .. } => kind,
                     KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
+                    KeyRef::Msig { .. } => MSIG,
                     KeyRef::Key { .. } => match super::key_opened(&sdk, &prepared.signer()).await? {
                         super::Key::External(row, _) => row.kind,
                         _ => return Err(SdkError::Internal),

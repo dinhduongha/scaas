@@ -51,6 +51,11 @@ pub(crate) enum Landed {
     PqzPop(u64),
     /// `kemKeyAt(ua, v).kem.scheme != 0`
     Kem(u64),
+    /// `msigStateOf(ua).accepted` has bit `i`: the slot accepted (CTR-UA-37; enabled or not)
+    Accepted(u16),
+    /// `msigStateOf(ua).version >= v`: the `msig` at or past update `v` on this registry (CTR-UA-44; whoever sent it, as a
+    /// registration)
+    MsigVersion(u64),
 }
 
 impl Landed {
@@ -59,6 +64,8 @@ impl Landed {
             Landed::Registered => "registered".into(),
             Landed::PqzPop(v) => format!("pqzPop:{v}"),
             Landed::Kem(v) => format!("kem:{v}"),
+            Landed::Accepted(i) => format!("accepted:{i}"),
+            Landed::MsigVersion(v) => format!("msigVersion:{v}"),
         }
     }
     pub(crate) fn parse(s: &str) -> Option<Landed> {
@@ -66,6 +73,8 @@ impl Landed {
             None if s == "registered" => Some(Landed::Registered),
             Some(("pqzPop", v)) => v.parse().ok().map(Landed::PqzPop),
             Some(("kem", v)) => v.parse().ok().map(Landed::Kem),
+            Some(("accepted", i)) => i.parse().ok().map(Landed::Accepted),
+            Some(("msigVersion", v)) => v.parse().ok().map(Landed::MsigVersion),
             _ => None,
         }
     }
@@ -161,11 +170,12 @@ pub(crate) fn record_call(landed: Landed, ua: &[u8; 32]) -> Bytes {
         Landed::Registered => selector("isRegistered(bytes32)"),
         Landed::PqzPop(_) => selector("pqzPopOf(bytes32,uint64)"),
         Landed::Kem(_) => selector("kemKeyAt(bytes32,uint64)"),
+        Landed::Accepted(_) | Landed::MsigVersion(_) => selector("msigStateOf(bytes32)"),
     };
     d.extend_from_slice(ua);
     match landed {
         Landed::PqzPop(v) | Landed::Kem(v) => d.extend_from_slice(&word_u64(v)),
-        Landed::Registered => {}
+        Landed::Registered | Landed::Accepted(_) | Landed::MsigVersion(_) => {}
     }
     Bytes::from(d)
 }
@@ -193,6 +203,12 @@ pub(crate) fn record_holds(landed: Landed, out: &[u8]) -> Option<bool> {
             let off = usize::try_from(word(out, 0)?).ok()?;
             Some(!out.get(off..off + 32)?.iter().all(|b| *b == 0))
         }
+        // `(uint64 version, uint256 enabled, uint256 accepted)`
+        Landed::Accepted(i) => (out.len() == 96).then(|| i < 256 && word(out, 2).is_some_and(|w| w.bit(usize::from(i)))),
+        Landed::MsigVersion(v) => match (out.len(), word(out, 0)?) {
+            (96, w) if w <= U256::from(u64::MAX) => Some(w >= U256::from(v)),
+            _ => None,
+        },
     }
 }
 
@@ -284,7 +300,7 @@ fn flatten(prefix: &str, v: &Value, out: &mut Vec<ReviewField>) {
 }
 
 /// One write kept in the table.
-fn keep(
+pub(crate) fn keep(
     sdk: &Sdk,
     chain: &str,
     entry: &str,

@@ -53,6 +53,26 @@ pub enum KeyRef {
     /// the stored key row `id` of seed `seed` (`AccountRow::Key`: a passkey `webauthn-p256` with its credential id, a
     /// secure-element `p256` key with its handle), signing through the `Authenticator` (`external`)
     Key { seed: String, id: String },
+    /// the `msig` UA `ua` (`0x` + 64 hex) of the profile's registry, signing by the member slots named (CTR-UA-09, CTR-UA-38),
+    /// each slot's key one this SDK holds; a minimal set of enabled and accepted slots of its current structure (CTR-UA-07,
+    /// CTR-UA-37, CTR-UA-44). A slot's key is never an `Msig` itself (`Argument`).
+    Msig { ua: String, slots: Vec<MsigSlot> },
+}
+
+/// One slot of an `msig` signature (`KeyRef::Msig`; `scaas-ua` `Slot`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MsigSlot {
+    /// the signing (or native) member at `index` signs with `key`
+    Member { index: u16, key: KeyRef },
+    /// the `msig` member at `index` signs by its own slots, one level down
+    Msig { index: u16, members: Vec<MsigLeaf> },
+}
+
+/// A slot of an inner `msig`: its index there and its key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MsigLeaf {
+    pub index: u16,
+    pub key: KeyRef,
 }
 
 /// The operations module.
@@ -134,8 +154,8 @@ pub(crate) fn key(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             let k = s.wallet.imported_key(n, *index)?;
             Key::Native(s, k)
         }
-        // a stored key row is read from the keystore: `key_opened`
-        KeyRef::Key { .. } => return Err(SdkError::Argument),
+        // a stored key row is read from the keystore: `key_opened`; an `msig` signs by its slots (`account::msig`)
+        KeyRef::Key { .. } | KeyRef::Msig { .. } => return Err(SdkError::Argument),
     })
 }
 

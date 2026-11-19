@@ -914,3 +914,150 @@ async fn guardian_recovery_via_execute() {
     assert!(matches!(s, OpState::Landed { .. }), "after the two days, by anyone: {s:?}");
     assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "2");
 }
+
+// --- plan T13: msig ---
+
+/// A registry write's quote, submit and follow to `Landed`.
+#[cfg(feature = "account")]
+async fn land_write(sdk: &Arc<Sdk>, w: Arc<scaas_sdk::account::RegistryWrite>) {
+    let acc = sdk.account();
+    let q = acc.quote_registry_write(w.clone()).await.unwrap();
+    let op = acc.submit_registry_write(w.clone(), q).await.unwrap();
+    let s = follow(sdk, op).await;
+    assert!(matches!(s, OpState::Landed { .. }), "{}: {s:?}", w.entry());
+}
+
+/// Plan T13 `msig` on `anvil` (CTR-UA-37, CTR-UA-44): three ed25519 UAs of the seed registered, then a 2-of-3 `msig` over
+/// them (`registerMsig`, classical: an empty `pop`), not active until two slots accept (`acceptMembership`, each landed by its
+/// bit); the holder pays the `msig` 1000 of the demo token, the `msig` transfers 100 signed by its two accepted slots
+/// (`KeyRef::Msig`, self-relayed by the seed's EVM key, landed by the token's event), then `updateMsig` disables the third slot
+/// (version 1, landed by the registry's counter).
+#[cfg(feature = "account")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_msig_register_accept_transfer_update_on_anvil() {
+    use scaas_sdk::account::{msig_structure, AcceptMembership, MsigMemberArgs, MsigRegister, UpdateMsig};
+    use scaas_sdk::op::MsigSlot;
+    use scaas_sdk::wallet::Transfer;
+    const ED25519: u16 = 0x0102;
+    let (_anvil, rpc) = anvil(7).await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    let holder = funded_holder(rpc);
+    let dep = deploy(
+        rpc,
+        &format!("local-31337-{port}-testnet"),
+        &[("DEMO_SUPPLY", "1000000000000"), ("DEMO_HOLDER", &holder)],
+    );
+    let token = dep["demo_token"].as_str().unwrap().to_ascii_lowercase();
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let mut profile = registry_profile(rpc, &registry, Some(1 << 24));
+    profile.tokens = vec![ListedToken {
+        address: token.clone(),
+        symbol: "DEMO".into(),
+        decimals: 0,
+    }];
+    // measured figures of this chain, rounded up (the table has no `msig` rows)
+    let base = |entry: &str, fresh: bool| GasBase {
+        entry: entry.into(),
+        kind: "token".into(),
+        fresh,
+        gas: 500_000,
+    };
+    profile.gas = GasRows {
+        base: [true, false].iter().flat_map(|&f| [base("mtxPay", f), base("mtxExecuteTransfer", f)]).collect(),
+        verify: vec![GasVerify { signer: 0, gas: 0 }, GasVerify { signer: 0x0120, gas: 300_000 }],
+    };
+    let (sdk, seed) = sdk_on(profile).await;
+    let mut uas = vec![];
+    for account in 20..23 {
+        uas.push(register_with_sdk(&sdk, &seed, ED25519, account, false).await);
+    }
+    let key_of = |ua: &str| {
+        let a = 20 + uas.iter().position(|u| u == ua).unwrap() as u32;
+        KeyRef::Ua {
+            seed: seed.clone(),
+            kind: ED25519,
+            account: a,
+            index: 0,
+        }
+    };
+    let s = msig_structure(
+        uas.iter().map(|u| MsigMemberArgs { kind: ED25519, id: u.clone(), weight: 1 }).collect(),
+        2,
+    )
+    .unwrap();
+    let ua = s.ua().unwrap();
+    let acc = sdk.account();
+    let ws = acc
+        .prepare_msig_register(MsigRegister { chain: "anvil".into(), structure: s.clone(), slots: vec![], payer: key0(&seed) })
+        .await
+        .unwrap();
+    assert_eq!(ws.len(), 1);
+    land_write(&sdk, ws[0].clone()).await;
+    assert!(!acc.msig_state("anvil".into(), ua.clone()).await.unwrap().active, "no slot accepted yet");
+    let slot = |i: u16| MsigSlot::Member { index: i, key: key_of(&s.members[usize::from(i)].id) };
+    for i in [0u16, 1] {
+        let w = acc
+            .prepare_accept_membership(AcceptMembership { chain: "anvil".into(), ua: ua.clone(), slot: slot(i), payer: key0(&seed) })
+            .await
+            .unwrap()
+            .expect("not accepted yet");
+        land_write(&sdk, w).await;
+    }
+    let st = acc.msig_state("anvil".into(), ua.clone()).await.unwrap();
+    assert!(st.active && st.slots[0].accepted && st.slots[1].accepted && !st.slots[2].accepted, "{st:?}");
+    // the holder pays the msig, the msig transfers by slots 0 and 1
+    let p = sdk
+        .wallet()
+        .prepare_pay(Pay {
+            signer: key0(&seed),
+            chain: "anvil".into(),
+            token: token.clone(),
+            to: ua.clone(),
+            value: "1000".into(),
+            meta: PayMeta {
+                salt: None,
+                pay_no: Some("01890a5d-ac96-774b-bcce-b302099a8059".into()),
+                save: false,
+                body: PayBody::Note { note: "to the msig".into() },
+            },
+            envelope: Envelope { valid_until: now() + 600, mode: 0, relayer: None, fee: "0".into(), fee_recipient: None },
+        })
+        .await
+        .unwrap();
+    let s1 = self_relay(&sdk, &seed, p).await;
+    assert!(matches!(s1, OpState::Landed { .. }), "pay: {s1:?}");
+    let p = sdk
+        .wallet()
+        .prepare_transfer(Transfer {
+            signer: KeyRef::Msig { ua: ua.clone(), slots: vec![slot(0), slot(1)] },
+            chain: "anvil".into(),
+            token: token.clone(),
+            to: format!("0x{}{}", "00".repeat(12), "cafe".repeat(10)),
+            value: "100".into(),
+            batch: "1".into(),
+            envelope: Envelope { valid_until: now() + 600, mode: 0, relayer: None, fee: "0".into(), fee_recipient: None },
+        })
+        .await
+        .unwrap();
+    let s2 = self_relay(&sdk, &seed, p).await;
+    assert!(matches!(s2, OpState::Landed { .. }), "msig transfer: {s2:?}");
+    // `updateMsig`: the third slot disabled, signed by slots 0 and 1 of the stored structure
+    let block: u64 = cast(&["block-number", "--rpc-url", rpc]).parse().unwrap();
+    let plan = acc
+        .prepare_update_msig(UpdateMsig {
+            chain: "anvil".into(),
+            ua: ua.clone(),
+            structure: s.clone(),
+            enabled: vec![0, 1],
+            valid_until_block: block + 100,
+            slots: vec![slot(0), slot(1)],
+            payer: key0(&seed),
+        })
+        .await
+        .unwrap();
+    land_write(&sdk, plan.write).await;
+    let st = acc.msig_state("anvil".into(), ua).await.unwrap();
+    assert!(st.version == 1 && !st.slots[2].enabled && st.active, "{st:?}");
+}
