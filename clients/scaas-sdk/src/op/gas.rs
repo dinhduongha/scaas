@@ -276,12 +276,14 @@ pub(crate) fn quoted(
     let bytes = u64::try_from(len)
         .unwrap_or(u64::MAX)
         .saturating_mul(PER_BYTE);
-    Ok(lookup_by(chain, opt_in, tables, app, key, op)?.map(|(g, from)| {
-        (
-            with_margin(g.saturating_add(INTRINSIC).saturating_add(bytes)),
-            from,
-        )
-    }))
+    Ok(
+        lookup_by(chain, opt_in, tables, app, key, op)?.map(|(g, from)| {
+            (
+                with_margin(g.saturating_add(INTRINSIC).saturating_add(bytes)),
+                from,
+            )
+        }),
+    )
 }
 
 /// The calldata bytes a quote of signer kind `signer` counted (owner 2026-11-19, G3): the unsigned calldata (`unsigned`) plus
@@ -376,7 +378,9 @@ pub(crate) fn item_count(
                 Some(s) => s.as_array()?.len(),
                 None => 0,
             };
-            return u64::try_from(n).ok()?.checked_add(u64::try_from(skip).ok()?);
+            return u64::try_from(n)
+                .ok()?
+                .checked_add(u64::try_from(skip).ok()?);
         }
         "env_items" => {
             let env = message.get("env")?;
@@ -403,7 +407,10 @@ pub(crate) fn attached_kind(
     message: &serde_json::Value,
 ) -> Option<Option<u16>> {
     let (sig, owner) = match (extra.get("payerSig"), extra.get("consent")) {
-        (Some(s), _) => (s, super::prepared::envelope(message).and_then(|e| e.get("from"))),
+        (Some(s), _) => (
+            s,
+            super::prepared::envelope(message).and_then(|e| e.get("from")),
+        ),
         (None, Some(s)) => (s, message.get("newAuditor")),
         (None, None) => return None,
     };
@@ -840,7 +847,8 @@ mod tests {
                     o["entry"] == r["entry"]
                         && o["fresh"] == r["fresh"]
                         && o["kind"] != r["kind"]
-                        && o.get("ua_extra").is_some_and(|u| u.get("from_kind").is_none())
+                        && o.get("ua_extra")
+                            .is_some_and(|u| u.get("from_kind").is_none())
                 };
                 let best = base
                     .iter()
@@ -848,7 +856,11 @@ mod tests {
                     .map(|o| o["ua_extra"]["measured"].as_u64().unwrap())
                     .max()
                     .unwrap_or_else(|| panic!("no donor: {r}"));
-                assert_eq!(x["measured"].as_u64(), Some(best), "the largest on another kind: {r}");
+                assert_eq!(
+                    x["measured"].as_u64(),
+                    Some(best),
+                    "the largest on another kind: {r}"
+                );
                 assert!(
                     base.iter().filter(own).any(|o| o["kind"] == x["from_kind"]
                         && o["ua_extra"]["measured"] == x["measured"]),
@@ -865,10 +877,18 @@ mod tests {
                     })
                     .max()
                     .unwrap();
-                assert_eq!(x.is_some(), worst > 0, "ua_extra where the derived run costs more: {r}");
+                assert_eq!(
+                    x.is_some(),
+                    worst > 0,
+                    "ua_extra where the derived run costs more: {r}"
+                );
                 if let Some(x) = x {
                     assert!(x.get("from_kind").is_none(), "{r}");
-                    assert_eq!(listed, &fresh - &ua, "the variants without a derived run: {r}");
+                    assert_eq!(
+                        listed,
+                        &fresh - &ua,
+                        "the variants without a derived run: {r}"
+                    );
                 }
             }
         }
@@ -1037,20 +1057,44 @@ mod tests {
         };
         let mut r = rows(1_000, 10);
         let both = [("legs", 3), ("members", 5)];
-        assert_eq!(by(&r, &[], None, None), Ok(Some(1_010)), "absent: unchanged, no count read");
-        assert_eq!(by(&r, &both, None, None), Ok(Some(1_010)), "absent: a count adds nothing");
+        assert_eq!(
+            by(&r, &[], None, None),
+            Ok(Some(1_010)),
+            "absent: unchanged, no count read"
+        );
+        assert_eq!(
+            by(&r, &both, None, None),
+            Ok(Some(1_010)),
+            "absent: a count adds nothing"
+        );
         r.base[0].per_item = per_item("legs", 30_000);
         r.base[0].save = Some(331_000);
-        assert_eq!(by(&r, &both, None, None), Ok(Some(1_010 + 90_000)), "base: gas + per_item × 3");
-        assert_eq!(by(&r, &[("legs", 0)], None, None), Ok(Some(1_010)), "a count of 0: the row's figure");
+        assert_eq!(
+            by(&r, &both, None, None),
+            Ok(Some(1_010 + 90_000)),
+            "base: gas + per_item × 3"
+        );
+        assert_eq!(
+            by(&r, &[("legs", 0)], None, None),
+            Ok(Some(1_010)),
+            "a count of 0: the row's figure"
+        );
         r.verify[0].per_item = per_item("members", 450);
         assert_eq!(
             by(&r, &both, None, None),
             Ok(Some(1_010 + 90_000 + 2_250)),
             "verify: gas + per_item × 5, on top of the base's"
         );
-        for counts in [&[("legs", 3)][..], &[("members", 5)], &[("legs", 3), ("members", COUNT_MAX + 1)]] {
-            assert_eq!(by(&r, counts, Some(9), None), Err("GasCountUnknown"), "{counts:?}");
+        for counts in [
+            &[("legs", 3)][..],
+            &[("members", 5)],
+            &[("legs", 3), ("members", COUNT_MAX + 1)],
+        ] {
+            assert_eq!(
+                by(&r, counts, Some(9), None),
+                Err("GasCountUnknown"),
+                "{counts:?}"
+            );
         }
         assert_eq!(
             by(&r, &[("legs", COUNT_MAX), ("members", 0)], None, None),
@@ -1066,13 +1110,18 @@ mod tests {
         assert_eq!(plain.map_err(|e| e.code()), Err("GasCountUnknown"));
         chain.base[0].per_item = None;
         assert_eq!(
-            lookup_by(&chain, &opt, &later, None, K, &OpGas::PLAIN).unwrap().map(|f| f.0),
+            lookup_by(&chain, &opt, &later, None, K, &OpGas::PLAIN)
+                .unwrap()
+                .map(|f| f.0),
             Some(1_010),
             "control"
         );
         // overflow-safe: a figure past u64 saturates (2^63 × 2 wraps to 0)
         r.base[0].per_item = per_item("legs", 1 << 63);
-        assert_eq!(by(&r, &[("legs", 2), ("members", 0)], None, None), Ok(Some(u64::MAX)));
+        assert_eq!(
+            by(&r, &[("legs", 2), ("members", 0)], None, None),
+            Ok(Some(u64::MAX))
+        );
         // an attached signature's verify row with a per-item part: its count is not read, refused
         let mut r = rows(1_000, 10);
         r.verify.push(GasVerify {
@@ -1084,7 +1133,10 @@ mod tests {
         });
         assert_eq!(by(&r, &both, None, Some(Some(0x0102))), Ok(Some(1_015)));
         r.verify[1].per_item = per_item("members", 450);
-        assert_eq!(by(&r, &both, None, Some(Some(0x0102))), Err("GasCountUnknown"));
+        assert_eq!(
+            by(&r, &both, None, Some(Some(0x0102))),
+            Err("GasCountUnknown")
+        );
     }
 
     /// I1: the counts read from the operation's signed message, each item from its own field; `None` where it has none.
@@ -1094,30 +1146,84 @@ mod tests {
         let none = j!({});
         let item_count = |m: &serde_json::Value, i: &str| item_count(&none, m, i);
         let multi = j!({"from": "0x01", "args": {"legs": [{}, {}, {}], "u": [1]}});
-        assert_eq!(item_count(&multi, "legs"), Some(3), "a multi-recipient transfer's legs");
-        assert_eq!(item_count(&j!({"legs": [{}, {}]}), "legs"), Some(2), "mtxSetWrapLimits' legs");
-        assert_eq!(item_count(&j!({"uas": ["0x01", "0x02"]}), "accounts"), Some(2), "mtxRollOverBatch");
-        assert_eq!(item_count(&j!({"accounts": ["0x01"], "flags": [1, 2]}), "accounts"), Some(1));
-        assert_eq!(item_count(&j!({"n": "7"}), "entries"), Some(7), "a rollover's n, decimal");
+        assert_eq!(
+            item_count(&multi, "legs"),
+            Some(3),
+            "a multi-recipient transfer's legs"
+        );
+        assert_eq!(
+            item_count(&j!({"legs": [{}, {}]}), "legs"),
+            Some(2),
+            "mtxSetWrapLimits' legs"
+        );
+        assert_eq!(
+            item_count(&j!({"uas": ["0x01", "0x02"]}), "accounts"),
+            Some(2),
+            "mtxRollOverBatch"
+        );
+        assert_eq!(
+            item_count(&j!({"accounts": ["0x01"], "flags": [1, 2]}), "accounts"),
+            Some(1)
+        );
+        assert_eq!(
+            item_count(&j!({"n": "7"}), "entries"),
+            Some(7),
+            "a rollover's n, decimal"
+        );
         assert_eq!(item_count(&j!({"n": 9}), "entries"), Some(9));
         assert_eq!(item_count(&j!({"legs": []}), "legs"), Some(0));
         // K2: mtxCreateToken's TokenConfig.legs, in the op's extra (the message carries only its hash)
         let cfg = j!({"config": {"name": "W", "legs": [{}, {}, {}, {}]}});
-        assert_eq!(super::item_count(&cfg, &j!({"initHash": "0x01"}), "legs"), Some(4), "TokenConfig.legs");
-        assert_eq!(super::item_count(&j!({"config": {"legs": []}}), &none, "legs"), Some(0));
-        assert_eq!(super::item_count(&cfg, &j!({"legs": [{}]}), "legs"), Some(1), "the message's own first");
+        assert_eq!(
+            super::item_count(&cfg, &j!({"initHash": "0x01"}), "legs"),
+            Some(4),
+            "TokenConfig.legs"
+        );
+        assert_eq!(
+            super::item_count(&j!({"config": {"legs": []}}), &none, "legs"),
+            Some(0)
+        );
+        assert_eq!(
+            super::item_count(&cfg, &j!({"legs": [{}]}), "legs"),
+            Some(1),
+            "the message's own first"
+        );
         // P1: a signed rollover's skip marks added to n; none without the field
-        assert_eq!(item_count(&j!({"n": 3, "skip": [5, 9]}), "entries"), Some(5), "n + len(skip)");
-        assert_eq!(item_count(&j!({"n": 0, "skip": [5]}), "entries"), Some(1), "marks only");
-        assert_eq!(item_count(&j!({"n": 2, "skip": "x"}), "entries"), None, "a skip not a list");
+        assert_eq!(
+            item_count(&j!({"n": 3, "skip": [5, 9]}), "entries"),
+            Some(5),
+            "n + len(skip)"
+        );
+        assert_eq!(
+            item_count(&j!({"n": 0, "skip": [5]}), "entries"),
+            Some(1),
+            "marks only"
+        );
+        assert_eq!(
+            item_count(&j!({"n": 2, "skip": "x"}), "entries"),
+            None,
+            "a skip not a list"
+        );
         // P1, K2: an env publish's four arrays together
         let env = j!({"env": {"deps": ["0x01"], "params": ["0x02", "0x03"], "libs": ["0x04"], "libCodeHashes": ["0x05"]}});
-        assert_eq!(item_count(&env, "env_items"), Some(5), "every element of the four arrays");
+        assert_eq!(
+            item_count(&env, "env_items"),
+            Some(5),
+            "every element of the four arrays"
+        );
         let empty = j!({"env": {"deps": [], "params": [], "libs": [], "libCodeHashes": []}});
         assert_eq!(item_count(&empty, "env_items"), Some(0));
-        assert_eq!(item_count(&j!({"env": {"deps": []}}), "env_items"), None, "an array missing");
+        assert_eq!(
+            item_count(&j!({"env": {"deps": []}}), "env_items"),
+            None,
+            "an array missing"
+        );
         // K2: the DEX cancel's one order; a list of them counted
-        assert_eq!(item_count(&j!({"order": {"nonce": "1"}}), "orders"), Some(1), "the SDK's one order");
+        assert_eq!(
+            item_count(&j!({"order": {"nonce": "1"}}), "orders"),
+            Some(1),
+            "the SDK's one order"
+        );
         assert_eq!(item_count(&j!({"orders": [{}, {}]}), "orders"), Some(2));
         assert_eq!(item_count(&j!({"order": "0x01"}), "orders"), None);
         // K1: a rollover's n held to the set's ROLL_MAX (control: n at ROLL_MAX itself); every other count unclamped; a
@@ -1129,7 +1235,10 @@ mod tests {
                 assert_eq!(item_count(&j!({"n": n}), "entries"), Some(m), "{n}");
             }
             // P1: n clamped first, then the skip marks added
-            assert_eq!(item_count(&j!({"n": huge, "skip": [1, 2]}), "entries"), Some(m + 2));
+            assert_eq!(
+                item_count(&j!({"n": huge, "skip": [1, 2]}), "entries"),
+                Some(m + 2)
+            );
         } else {
             assert_eq!(item_count(&j!({"n": 1_000}), "entries"), Some(1_000));
             assert_eq!(item_count(&j!({"n": huge}), "entries"), None);
@@ -1245,31 +1354,86 @@ mod tests {
     /// file without them reads unchanged. Each refusal beside its control.
     #[test]
     fn gas_table_per_item_parse() {
-        let part = |g: u64, at: u64| format!(r#""per_item":{{"gas":{g},"base_count":{at},"source":"s"}}"#);
-        let base = |f: &str| file(&b(98_000, 97_947).replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)), "");
-        let verify = |f: &str| file("", &v(289, 1_000, 900).replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)));
+        let part =
+            |g: u64, at: u64| format!(r#""per_item":{{"gas":{g},"base_count":{at},"source":"s"}}"#);
+        let base = |f: &str| {
+            file(
+                &b(98_000, 97_947).replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)),
+                "",
+            )
+        };
+        let verify = |f: &str| {
+            file(
+                "",
+                &v(289, 1_000, 900).replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)),
+            )
+        };
         let ok = format!(r#""item":"legs",{}"#, part(31_000, 0));
-        assert_eq!(GasTable::parse(&base(&ok)).unwrap().rows.base[0].per_item, per_item("legs", 31_000));
+        assert_eq!(
+            GasTable::parse(&base(&ok)).unwrap().rows.base[0].per_item,
+            per_item("legs", 31_000)
+        );
         let members = format!(r#""item":"members",{}"#, part(450, 0));
-        assert_eq!(GasTable::parse(&verify(&members)).unwrap().rows.verify[0].per_item, per_item("members", 450));
-        assert_eq!(GasTable::parse(&file(&b(98_000, 97_947), "")).unwrap().rows.base[0].per_item, None, "absent");
-        assert!(GasTable::parse(&base(&format!(r#""item":"entries",{}"#, part(1 << 24, 0)))).is_ok());
+        assert_eq!(
+            GasTable::parse(&verify(&members)).unwrap().rows.verify[0].per_item,
+            per_item("members", 450)
+        );
+        assert_eq!(
+            GasTable::parse(&file(&b(98_000, 97_947), ""))
+                .unwrap()
+                .rows
+                .base[0]
+                .per_item,
+            None,
+            "absent"
+        );
+        assert!(
+            GasTable::parse(&base(&format!(r#""item":"entries",{}"#, part(1 << 24, 0)))).is_ok()
+        );
         for item in ["env_items", "orders"] {
             let f = format!(r#""item":"{item}",{}"#, part(450, 0));
-            assert_eq!(GasTable::parse(&base(&f)).unwrap().rows.base[0].per_item, per_item(item, 450), "{item}");
+            assert_eq!(
+                GasTable::parse(&base(&f)).unwrap().rows.base[0].per_item,
+                per_item(item, 450),
+                "{item}"
+            );
         }
         for row in [base, verify] {
             for (f, code) in [
                 (part(450, 0), "GasItemUnpaired"),
                 (r#""item":"legs""#.to_string(), "GasItemUnpaired"),
-                (format!(r#""item":"uas",{}"#, part(450, 0)), "GasItemUnknown"),
-                (format!(r#""item":"Legs",{}"#, part(450, 0)), "GasItemUnknown"),
+                (
+                    format!(r#""item":"uas",{}"#, part(450, 0)),
+                    "GasItemUnknown",
+                ),
+                (
+                    format!(r#""item":"Legs",{}"#, part(450, 0)),
+                    "GasItemUnknown",
+                ),
                 (format!(r#""item":"legs",{}"#, part(450, 1)), "Argument"),
                 (format!(r#""item":"legs",{}"#, part(0, 0)), "Argument"),
-                (format!(r#""item":"legs",{}"#, part((1 << 24) + 1, 0)), "Argument"),
-                (format!(r#""item":"env",{}"#, part(450, 0)), "GasItemUnknown"),
-                (format!(r#""item":"legs",{}"#, part(450, 0).replace(r#","source":"s""#, "")), "Argument"),
-                (format!(r#""item":"legs",{}"#, part(450, 0).replace(r#""base_count":0,"#, "")), "Argument"),
+                (
+                    format!(r#""item":"legs",{}"#, part((1 << 24) + 1, 0)),
+                    "Argument",
+                ),
+                (
+                    format!(r#""item":"env",{}"#, part(450, 0)),
+                    "GasItemUnknown",
+                ),
+                (
+                    format!(
+                        r#""item":"legs",{}"#,
+                        part(450, 0).replace(r#","source":"s""#, "")
+                    ),
+                    "Argument",
+                ),
+                (
+                    format!(
+                        r#""item":"legs",{}"#,
+                        part(450, 0).replace(r#""base_count":0,"#, "")
+                    ),
+                    "Argument",
+                ),
                 (format!(r#""item":7,{}"#, part(450, 0)), "Argument"),
                 (r#""item":"legs","per_item":450"#.to_string(), "Argument"),
                 // the part checked even when unpaired: a broken file stays `Argument`
@@ -1513,7 +1677,10 @@ mod tests {
         };
         assert_eq!(c(&r, Some(GasSources::both(GasFrom::Chain))), 628);
         assert_eq!(
-            c(&GasRows::default(), Some(src(GasFrom::Chain, module("vault")))),
+            c(
+                &GasRows::default(),
+                Some(src(GasFrom::Chain, module("vault")))
+            ),
             700,
             "the module's row, as the quote found it"
         );
@@ -1571,7 +1738,10 @@ mod tests {
         let consent = |kd: &str| serde_json::json!({"consent": {"keyData": kd, "signature": "0x01", "members": []}});
         let aud = |a: &str| serde_json::json!({"from": native, "target": "0x01", "newAuditor": a, "epoch": 1});
         assert_eq!(
-            attached_kind(&consent(&super::super::hex(&kd)), &aud(&super::super::hex(&ua))),
+            attached_kind(
+                &consent(&super::super::hex(&kd)),
+                &aud(&super::super::hex(&ua))
+            ),
             Some(Some(0x0101)),
             "the auditor's kind"
         );
@@ -1585,7 +1755,11 @@ mod tests {
             Some(None),
             "the consent's key is not the auditor's"
         );
-        assert_eq!(attached_kind(&serde_json::json!({}), &aud(&native)), None, "none attached");
+        assert_eq!(
+            attached_kind(&serde_json::json!({}), &aud(&native)),
+            None,
+            "none attached"
+        );
     }
 
     /// The new optional fields' parse: `save` and `fee_extra` held like a figure and positive, `sig_bytes` bounded.

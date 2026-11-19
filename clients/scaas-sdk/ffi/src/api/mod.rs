@@ -19,7 +19,9 @@ pub struct SdkFailure {
 
 impl From<SdkError> for SdkFailure {
     fn from(e: SdkError) -> Self {
-        SdkFailure { code: e.code().to_owned() }
+        SdkFailure {
+            code: e.code().to_owned(),
+        }
     }
 }
 
@@ -115,7 +117,8 @@ fn auth_error(f: AuthFailure) -> AuthError {
     }
 }
 
-fn unavailable<A, T: Send + 'static>() -> Box<dyn Fn(A) -> Fut<Result<T, AuthError>> + Send + Sync> {
+fn unavailable<A, T: Send + 'static>() -> Box<dyn Fn(A) -> Fut<Result<T, AuthError>> + Send + Sync>
+{
     Box::new(|_| Box::pin(async { Err(AuthError::Unavailable) }))
 }
 
@@ -148,7 +151,10 @@ pub struct SeedRow {
 #[allow(clippy::too_many_arguments)]
 pub async fn sdk_open(
     store_get: impl Fn(String) -> DartFnFuture<StoreGetAnswer> + Send + Sync + 'static,
-    store_put_if: impl Fn(String, Option<u64>, Vec<u8>) -> DartFnFuture<StoreAnswer> + Send + Sync + 'static,
+    store_put_if: impl Fn(String, Option<u64>, Vec<u8>) -> DartFnFuture<StoreAnswer>
+        + Send
+        + Sync
+        + 'static,
     store_delete: impl Fn(String) -> DartFnFuture<StoreAnswer> + Send + Sync + 'static,
     store_lock: impl Fn(String) -> DartFnFuture<StoreAnswer> + Send + Sync + 'static,
     store_unlock: impl Fn(u64) -> DartFnFuture<()> + Send + Sync + 'static,
@@ -169,7 +175,10 @@ pub async fn sdk_open(
                 let a = f.await;
                 match a.error {
                     Some(e) => Err(store_error(e)),
-                    None if a.found => Ok(Some(StoredItem { bytes: a.bytes, rev: a.rev })),
+                    None if a.found => Ok(Some(StoredItem {
+                        bytes: a.bytes,
+                        rev: a.rev,
+                    })),
                     None => Ok(None),
                 }
             })
@@ -252,8 +261,15 @@ impl SdkHandle {
     }
 
     /// `vault.generate`: the passphrase as a secret; the backup's one reveal back.
-    pub async fn generate(&self, label: String, vault_passphrase: &Secret) -> Result<Backup, SdkFailure> {
-        let req = Generate { label, vault_passphrase: vault_passphrase.0.clone() };
+    pub async fn generate(
+        &self,
+        label: String,
+        vault_passphrase: &Secret,
+    ) -> Result<Backup, SdkFailure> {
+        let req = Generate {
+            label,
+            vault_passphrase: vault_passphrase.0.clone(),
+        };
         Ok(Backup(self.0.vault().generate(req).await?.backup))
     }
 

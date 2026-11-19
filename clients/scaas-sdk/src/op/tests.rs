@@ -1232,19 +1232,42 @@ async fn a_counted_row_quotes_its_count_or_refuses() {
         let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
         let self_relay = SubmitPath::SelfRelay { payer: payer(&t) };
         if item == Some("legs") {
-            assert_eq!(code(t.sdk.op().quote(p.clone(), self_relay).await), "GasCountUnknown");
-            assert_eq!(code(t.sdk.op().quote(p.clone(), SubmitPath::Gateway).await), "GasCountUnknown");
-            let app = t.sdk.op().quote_with_gas(p, SubmitPath::SelfRelay { payer: payer(&t) }, 500_000).await;
-            assert_eq!(code(app), "GasCountUnknown", "never the app's figure instead");
+            assert_eq!(
+                code(t.sdk.op().quote(p.clone(), self_relay).await),
+                "GasCountUnknown"
+            );
+            assert_eq!(
+                code(t.sdk.op().quote(p.clone(), SubmitPath::Gateway).await),
+                "GasCountUnknown"
+            );
+            let app = t
+                .sdk
+                .op()
+                .quote_with_gas(p, SubmitPath::SelfRelay { payer: payer(&t) }, 500_000)
+                .await;
+            assert_eq!(
+                code(app),
+                "GasCountUnknown",
+                "never the app's figure instead"
+            );
             continue;
         }
         let q = t.sdk.op().quote(p.clone(), self_relay).await.unwrap();
-        assert_eq!(gateway_quote(&t, &p).await.gas, Some(q.gas_limit), "the same figure on both paths");
+        assert_eq!(
+            gateway_quote(&t, &p).await.gas,
+            Some(q.gas_limit),
+            "the same figure on both paths"
+        );
         figures.push((q.gas_limit, len));
     }
-    let [(plain, len), (counted, _)] = figures[..] else { panic!("{figures:?}") };
+    let [(plain, len), (counted, _)] = figures[..] else {
+        panic!("{figures:?}")
+    };
     assert_eq!(plain, gas::with_margin(100_000 + 21_000 + 64 * len));
-    assert_eq!(counted, gas::with_margin(100_000 + 3 * 7_000 + 21_000 + 64 * len));
+    assert_eq!(
+        counted,
+        gas::with_margin(100_000 + 3 * 7_000 + 21_000 + 64 * len)
+    );
 }
 
 /// The gas-table rulings (owner 2026-11-19): each source on the self-relay path, in the lookup order chain → module (opted in)
@@ -1859,7 +1882,10 @@ async fn signed_gas_is_recomputed_from_the_signature() {
         let got = t.sdk.op().submit(p.clone(), q.clone()).await;
         if over {
             assert_eq!(code(got), "SignedGasAboveCap");
-            assert!(state::rows(&t.sdk).await.unwrap().is_empty(), "nothing written");
+            assert!(
+                state::rows(&t.sdk).await.unwrap().is_empty(),
+                "nothing written"
+            );
             assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
             Op::known(&t.sdk, &p).expect("put back");
         } else {

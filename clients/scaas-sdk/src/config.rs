@@ -178,7 +178,14 @@ const GAS_MARGIN_MAX: u64 = 100_000;
 /// `mtxCreateToken`'s `extra.config.legs`), `accounts` (`uas` of `mtxRollOverBatch`, a list parameter `accounts`),
 /// `entries` (a PQZ rollover's `n` and its `skip` marks), `members` (a `0x0121` signer's n; not read by the SDK yet),
 /// `env_items` (an env publish's four `Env` arrays), `orders` (a DEX cancel's orders).
-pub(crate) const GAS_ITEMS: [&str; 6] = ["legs", "accounts", "entries", "members", "env_items", "orders"];
+pub(crate) const GAS_ITEMS: [&str; 6] = [
+    "legs",
+    "accounts",
+    "entries",
+    "members",
+    "env_items",
+    "orders",
+];
 /// A per-item part's largest `gas`: EIP-7825's transaction cap, 2^24 (a Zether leg is about 3.1 M).
 const GAS_PER_ITEM_MAX: u64 = 1 << 24;
 

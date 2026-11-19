@@ -13,7 +13,11 @@ pub unsafe extern "C" fn scaas_sdk_secret_write(id: u64, src: *const u8, len: us
     if src.is_null() && len > 0 {
         return -1;
     }
-    let src = if len == 0 { &[][..] } else { std::slice::from_raw_parts(src, len) };
+    let src = if len == 0 {
+        &[][..]
+    } else {
+        std::slice::from_raw_parts(src, len)
+    };
     scaas_ua::wallet::secret_write(id, src).map_or(-1, |()| 0)
 }
 
@@ -26,7 +30,11 @@ pub unsafe extern "C" fn scaas_sdk_secret_read(id: u64, dst: *mut u8, cap: usize
     if dst.is_null() && cap > 0 {
         return -1;
     }
-    let dst = if cap == 0 { &mut [][..] } else { std::slice::from_raw_parts_mut(dst, cap) };
+    let dst = if cap == 0 {
+        &mut [][..]
+    } else {
+        std::slice::from_raw_parts_mut(dst, cap)
+    };
     scaas_ua::wallet::secret_read(id, dst).map_or(-1, |n| i64::try_from(n).unwrap_or(-1))
 }
 
