@@ -1343,8 +1343,9 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
     // M1, `Op::member_sign` directly: slot 1 signs apart (its own device), slot 0 signs at submit with that `MemberSig` as a
     // `Signed` slot; both prepared from the same request (one `validUntil`), so one digest. Several local slots: `Argument`.
     let until = now() + 600;
+    let wallet = sdk.wallet();
     let apart = |slots: Vec<MsigSlot>| {
-        sdk.wallet().prepare_transfer(Transfer {
+        wallet.prepare_transfer(Transfer {
             signer: KeyRef::Msig {
                 ua: ua.clone(),
                 slots,
