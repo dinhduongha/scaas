@@ -1221,6 +1221,7 @@ async fn smart_execute_decoded_only() {
     let token = "0x5ca00000000000000000000000000000000000a1";
     let op = |account: &str| SmartOp {
         signer: t.signer.clone(),
+        key_index: Some("0".into()),
         chain: "local".into(),
         account: account.into(),
         batch: "3".into(),
@@ -1288,6 +1289,47 @@ async fn smart_execute_decoded_only() {
         .await
         .unwrap();
     t.sdk.op().submit(p, q).await.unwrap();
+    // the key index read from the account (owner 2026-11-19, S3, P2): slot 0 another key, slot 1 removed (zero), slot 2 the
+    // signer's; the entry is signed as `keyIndex` 2. With two slots the signer is in none: `SignerNotAccountKey`.
+    let sel = |s: &str| fake_chain::keccak_hex(s.as_bytes())[..10].to_string();
+    let words = |k: &SubjectKeyArgs| {
+        let w = [&k.x, &k.y, &k.rp_id_hash, &k.origin_hash].map(|x| x[2..].to_string()).concat();
+        format!("0x{:064x}{w}", k.kind)
+    };
+    let me = SubjectKeyArgs::secp256k1(v["key"]["address"].as_str().unwrap()).unwrap();
+    let other = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000dd").unwrap();
+    let slots = |next: u64| {
+        let at = |i: u64| format!("{}{i:064x}", sel("keyAt(uint256)"));
+        let mut c = t.chain.lock().unwrap();
+        c.answers.retain(|(to, _, _)| *to != account);
+        for (d, out) in [
+            (sel("nextKeyIndex()"), format!("0x{next:064x}")),
+            (at(0), words(&other)),
+            (at(1), format!("0x{}", "0".repeat(320))),
+            (at(2), words(&me)),
+        ] {
+            c.answers.push((account.clone(), d, out));
+        }
+    };
+    let read = |account: &str| SmartOp { key_index: None, ..op(account) };
+    let transfer = SmartCall::Transfer {
+        token: token.into(),
+        to: "0x00000000000000000000000000000000000000aa".into(),
+        amount: "78".into(),
+    };
+    slots(2);
+    assert_eq!(
+        code(acc.prepare_smart_execute(read(&account), transfer.clone()).await),
+        "SignerNotAccountKey",
+        "no slot holds the signer"
+    );
+    slots(3);
+    let p = acc.prepare_smart_execute(read(&account), transfer).await.unwrap();
+    let payer = SubmitPath::SelfRelay { payer: t.payer.clone() };
+    let q = t.sdk.op().quote(p.clone(), payer).await.unwrap();
+    t.sdk.op().submit(p, q).await.unwrap();
+    let sig_head = format!("{:064x}{:064x}{:064x}", 2, 0x60, 0x80);
+    assert!(carried_soon(&t, &sig_head).await, "AccountSig keyIndex 2");
     #[cfg(feature = "opaque-calls")]
     {
         let p = acc

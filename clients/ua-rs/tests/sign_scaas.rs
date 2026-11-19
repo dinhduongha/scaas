@@ -6,7 +6,8 @@
 use scaas_ua::purpose_tag;
 use scaas_ua::ua_portable::UASig;
 use scaas_ua::wallet::{
-    scaas_typed_data, sign_scaas, ua_sig, Error, Expect, NativeKey, Network, Signer, Wallet,
+    scaas_purpose, scaas_typed_data, sign_scaas, ua_sig, Error, Expect, ExternalKey, NativeKey,
+    Network, SignRequest, Signer, Wallet,
 };
 use serde_json::Value;
 
@@ -127,6 +128,11 @@ fn ua_key_signs_under_the_entrys_purpose() {
         )
         .unwrap();
         assert_eq!(
+            scaas_purpose(&td).unwrap(),
+            purpose_tag(purpose).unwrap(),
+            "{name}"
+        );
+        assert_eq!(
             sign_scaas(&key, &td, op(&r, name, &r.message)).unwrap(),
             want,
             "{name}: {purpose}"
@@ -181,6 +187,11 @@ fn owner_statements_sign_under_their_contract_purpose() {
             td.digest().unwrap().to_vec(),
             r.digest,
             "{name}: the row's digest"
+        );
+        assert_eq!(
+            scaas_purpose(&td).unwrap(),
+            purpose_tag(purpose).unwrap(),
+            "{name}"
         );
         let got = sign_scaas(&key, &td, op(&r, name, &r.message)).unwrap();
         let sig =
@@ -504,4 +515,52 @@ fn fee_due_is_the_amount_the_check_charges() {
     let mut none = r.message.clone();
     (none["mode"], none["fee"]) = (0.into(), "0".into());
     assert_eq!(fee_due("UABurn", &none).unwrap(), "0");
+}
+
+/// Owner 2026-11-19, P1 (S1): an external key's caller dry-runs `sign_scaas` through an `ExternalKey` that only refuses, so the
+/// policy check passes before the user is asked (a value not confirmed is `PolicyRefused` and the device is never asked); it
+/// then computes the `ua_msg` from `scaas_purpose(td)` and the digest, asks the device, and signs through an `ExternalKey`
+/// whose device returns that answer: the same `UASig` as the internal key's. The request the dry run would have sent is that
+/// `ua_msg`.
+#[test]
+fn external_key_dry_run_then_answer() {
+    let w = Wallet::from_mnemonic(WORDS, "").unwrap();
+    let key = w.ua_key(0x0101, 0, 0).unwrap(); // p256: RFC 6979, one signature per message
+    let name = "UAPayeeFee";
+    let r = row(name, "token");
+    let td = scaas_typed_data(
+        name,
+        Some("SCaaS MetaToken"),
+        &r.contract,
+        r.chain_id,
+        &r.uid,
+        &r.message,
+    )
+    .unwrap();
+    let seen = std::sync::Mutex::new(None);
+    let refuse = ExternalKey::new(key.key_ref(), |q: &SignRequest| {
+        *seen.lock().unwrap() = Some(q.clone());
+        Err(Error::ExternalSignature)
+    });
+    let mut other = r.message.clone();
+    other["fee"] = "1".into();
+    assert_eq!(
+        sign_scaas(&refuse, &td, op(&r, name, &other)).unwrap_err(),
+        Error::PolicyRefused
+    );
+    assert!(seen.lock().unwrap().is_none(), "refused before the device");
+    assert_eq!(
+        sign_scaas(&refuse, &td, op(&r, name, &r.message)).unwrap_err(),
+        Error::ExternalSignature
+    );
+    let asked = seen.lock().unwrap().clone().unwrap();
+    let ua_msg =
+        scaas_ua::ua_message(0x0101, &scaas_purpose(&td).unwrap(), &td.digest().unwrap()).unwrap();
+    assert!(matches!(&asked, SignRequest::UaMsg { ua_msg: m, .. } if *m == ua_msg));
+    let answer = key.sign_request(&asked).unwrap();
+    let device = ExternalKey::new(key.key_ref(), move |_: &SignRequest| Ok(answer.clone()));
+    assert_eq!(
+        sign_scaas(&device, &td, op(&r, name, &r.message)).unwrap(),
+        sign_scaas(&key, &td, op(&r, name, &r.message)).unwrap()
+    );
 }

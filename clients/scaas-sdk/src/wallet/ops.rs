@@ -452,6 +452,7 @@ pub(crate) fn draft(
         ids: false,
         relay_call: None,
         owner: None,
+        key_index: U256::ZERO,
     }
 }
 

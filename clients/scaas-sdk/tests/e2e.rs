@@ -519,30 +519,92 @@ async fn e2e_register_pq_kind_on_anvil() {
         "true",
         "fndsa512 enabled on this registry"
     );
-    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]);
-    let (sdk, seed) = sdk_on(ChainProfile {
-        key: "anvil".into(),
-        family: Family::Evm,
-        chain_id: Some(31337),
-        chain_uid: uid,
-        rpc: vec![endpoint(rpc)],
-        rpc_policy: scaas_rpc::Policy::Failover,
-        gateways: vec![],
-        registry: Some(registry),
-        factory: None,
-        router: None,
-        finality: Finality::Depth(0),
-        tx_gas_cap: Some(1 << 24),
-        tokens: vec![],
-        gas: GasRows::default(),
-        max_valid_secs: None,
-        gas_opt_in: vec![],
-    })
-    .await;
+    let (sdk, seed) = sdk_on(registry_profile(rpc, &registry, Some(1 << 24))).await;
     let ua = register_with_sdk(&sdk, &seed, FNDSA512, 0, true).await;
     let acc = sdk.account();
     let r = acc.registration_of("anvil".into(), ua).await.unwrap();
     assert!(r.registered && r.kem_stored, "{r:?}");
+}
+
+/// The profile of `anvil` at `rpc` with `registry` and the per-transaction cap `cap`.
+fn registry_profile(rpc: &str, registry: &str, cap: Option<u64>) -> ChainProfile {
+    ChainProfile {
+        key: "anvil".into(),
+        family: Family::Evm,
+        chain_id: Some(31337),
+        chain_uid: cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]),
+        rpc: vec![endpoint(rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: Some(registry.into()),
+        factory: None,
+        router: None,
+        finality: Finality::Depth(0),
+        tx_gas_cap: cap,
+        tokens: vec![],
+        gas: GasRows::default(),
+        max_valid_secs: None,
+        gas_opt_in: vec![],
+    }
+}
+
+/// Owner 2026-11-19, S2 (spec §7): an `fndsa512` UA with its PQZ key on a profile whose per-transaction cap is under the full
+/// registration's estimate (`cast estimate`) splits into the registration without `pqzPop`, then `storePqzPop`; each lands by
+/// its record, and the registry then shows the proof stored (`pqz_pop_stored`), whether a PoP verifier proved it or not. The
+/// cap is the estimate − 100,000, not − 1: each preparation makes a new PoP and `R_REG` proof, whose estimates differ by a few
+/// thousand gas (14,663,705 and 14,656,822 in one run); the part without the proof is millions below.
+#[cfg(feature = "pqz")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_pqz_pop_split_stored_on_anvil() {
+    use scaas_sdk::account::{Register, RegisterAttrs};
+    const FNDSA512: u16 = 0x0132;
+    let (_anvil, rpc) = anvil(6).await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    let payer_address = funded_holder(rpc);
+    let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let req = |seed: &str| Register {
+        key: KeyRef::Ua {
+            seed: seed.into(),
+            kind: FNDSA512,
+            account: 0,
+            index: 0,
+        },
+        chain: "anvil".into(),
+        attrs: RegisterAttrs {
+            pqz_key: true,
+            kem: false,
+        },
+        payer: KeyRef::Native {
+            seed: seed.into(),
+            network: "evm".into(),
+            index: 0,
+        },
+    };
+    // the full call, unsplit under no cap of the profile, and its estimate
+    let (sdk, seed) = sdk_on(registry_profile(rpc, &registry, None)).await;
+    let full = sdk.account().prepare_register(req(&seed)).await.unwrap();
+    assert_eq!(full.len(), 1, "no cap: one call");
+    let est: u64 = cast(&["estimate", "--from", &payer_address, &registry, &full[0].calldata(), "--rpc-url", rpc])
+        .parse()
+        .unwrap();
+    let (sdk, seed) = sdk_on(registry_profile(rpc, &registry, Some(est - 100_000))).await;
+    let acc = sdk.account();
+    let writes = acc.prepare_register(req(&seed)).await.unwrap();
+    let entries: Vec<_> = writes.iter().map(|w| w.entry()).collect();
+    assert_eq!(entries.len(), 2, "split under the full call's estimate: {entries:?}");
+    assert_eq!(entries[1], "storePqzPop");
+    let ua = writes[0].ua();
+    for w in writes {
+        let q = acc.quote_registry_write(w.clone()).await.unwrap();
+        let op = acc.submit_registry_write(w.clone(), q).await.unwrap();
+        let s = follow(&sdk, op).await;
+        assert!(matches!(s, OpState::Landed { .. }), "{}: {s:?}", w.entry());
+    }
+    let r = acc.registration_of("anvil".into(), ua).await.unwrap();
+    assert!(r.registered && r.pqz_pop_stored, "{r:?}");
 }
 
 /// Plan T13b's positive control (spec §7.1, §18 "Sponsored registration"): on `anvil` with the demo token held by the seed's
@@ -672,10 +734,10 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
 /// The profile of `anvil` at `rpc` with measured gas figures of the account's entries (the table has no `account` rows),
 /// rounded up.
 fn account_profile(rpc: &str) -> ChainProfile {
-    let row = |entry: &str| GasBase {
+    let row = |entry: &str, fresh: bool| GasBase {
         entry: entry.into(),
         kind: "account".into(),
-        fresh: true,
+        fresh,
         gas: 600_000,
     };
     ChainProfile {
@@ -693,7 +755,7 @@ fn account_profile(rpc: &str) -> ChainProfile {
         tx_gas_cap: Some(1 << 24),
         tokens: vec![],
         gas: GasRows {
-            base: vec![row("mtxAddKey"), row("mtxExecute")],
+            base: [true, false].iter().flat_map(|&f| [row("mtxAddKey", f), row("mtxExecute", f)]).collect(),
             verify: vec![GasVerify { signer: 0, gas: 0 }],
         },
         max_valid_secs: None,
@@ -731,6 +793,7 @@ fn smart_op(seed: &str, index: u32, account: &str) -> scaas_sdk::account::SmartO
             network: "evm".into(),
             index,
         },
+        key_index: None,
         chain: "anvil".into(),
         account: account.into(),
         batch: "1".into(),
@@ -782,6 +845,22 @@ async fn smart_account_add_key_self_relay() {
     let s = self_relay(&sdk, &seed, p).await;
     assert!(matches!(s, OpState::Landed { .. }), "{s:?}");
     assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "2");
+    // another key signs (owner 2026-11-19, S3): the seed's EVM key 2 added at index 2, an `AddKey` it signs with the
+    // index read from the account; a key the account does not hold is `SignerNotAccountKey` (P2)
+    let key2 = Wallet::from_mnemonic(REPO, "").unwrap().native_key(Network::Evm, 2, None).unwrap().address().unwrap();
+    let p = sdk
+        .account()
+        .prepare_smart_add_key(smart_op(&seed, 0, &account), SubjectKeyArgs::secp256k1(&key2).unwrap())
+        .await
+        .unwrap();
+    assert!(matches!(self_relay(&sdk, &seed, p).await, OpState::Landed { .. }));
+    let third = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000cc").unwrap();
+    let refused = sdk.account().prepare_smart_add_key(smart_op(&seed, 3, &account), third.clone()).await;
+    assert_eq!(refused.err().map(|e| e.code()), Some("SignerNotAccountKey"), "not a key of the account");
+    let p = sdk.account().prepare_smart_add_key(smart_op(&seed, 2, &account), third).await.unwrap();
+    let s = self_relay(&sdk, &seed, p).await;
+    assert!(matches!(s, OpState::Landed { .. }), "signed by key index 2: {s:?}");
+    assert_eq!(cast(&["call", &account, "keyCount()(uint256)", "--rpc-url", rpc]), "4");
 }
 
 /// Plan T13 `guardian_recovery_via_execute`: account A (the seed's EVM key 0) names the guardian `SmartKeyAccount` G (EVM key

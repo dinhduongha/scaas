@@ -99,6 +99,8 @@ own_codes! {
     /// A UA whose registry record does not hold the key the read expects: the holder's leg not the handle's key, or a recipient's
     /// record not its UA's key (spec §9.4 R6; owner 2026-11-19, C4).
     LegKeyMismatch,
+    /// A `SmartKeyAccount` entry's signer that is not a key of the account (owner 2026-11-19, P2).
+    SignerNotAccountKey,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

@@ -52,7 +52,7 @@ fn sig_json(p: &Prepared, key_data: &[u8], signature: &[u8]) -> Result<Value, Sd
     } else if ua {
         json!({"keyData": hex(key_data), "signature": hex(signature), "members": []})
     } else if p.t.kind == "account" {
-        json!({"keyIndex": "0", "proof": [], "signature": hex(signature)})
+        json!({"keyIndex": p.t.key_index.to_string(), "proof": [], "signature": hex(signature)})
     } else {
         json!(hex(signature))
     })

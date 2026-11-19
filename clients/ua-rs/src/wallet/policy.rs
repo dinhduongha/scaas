@@ -703,7 +703,13 @@ pub fn sign_scaas(
     if check(td, &expect)? != digest {
         return Err(Error::PolicyRefused);
     }
-    let purpose = match td.primary_type() {
+    super::uasig::ua_sig(key, None, &scaas_purpose(td)?, &digest)
+}
+
+/// The purpose tag a UA key signs the typed SCaaS struct `td` under in [`sign_scaas`] (its table, public so an external key's
+/// caller computes the challenge or `ua_msg` the device signs before asking it: owner 2026-11-19, P1).
+pub fn scaas_purpose(td: &TypedData) -> Result<[u8; 32]> {
+    Ok(crate::purpose_tag(match td.primary_type() {
         "UAPayeeFee" => "payee-fee",
         "UAWrapOrder" | "UATradeOrder" | "CancelUAOrder" | "CancelUAWrapOrder"
         | "UAInvalidateNonces" => "trade",
@@ -711,8 +717,7 @@ pub fn sign_scaas(
         "PqzRollOver" => "zether-auth",
         "AuditorConsent" => "auditor-consent",
         _ => "metatx",
-    };
-    super::uasig::ua_sig(key, None, &crate::purpose_tag(purpose)?, &digest)
+    })?)
 }
 
 // --- the ports of clientkeys `evm.js` (same order of checks; every refusal is `PolicyRefused`) ---

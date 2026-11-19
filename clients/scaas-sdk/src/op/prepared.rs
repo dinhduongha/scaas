@@ -57,6 +57,8 @@ pub(crate) struct Draft {
     /// an owner statement the same key signs first, passed as the entry's `ownerSig` (`UARollOverSigned`,
     /// `UASetRollOverMode`: its struct name and message; owner 2026-11-19, C3)
     pub owner: Option<(&'static str, Value)>,
+    /// a `SmartKeyAccount` entry's `AccountSig.keyIndex`: the signing key's index in the account (owner 2026-11-19, S3)
+    pub key_index: U256,
 }
 
 /// The parts `submit` needs; never in a record a caller could rebuild.
@@ -77,6 +79,8 @@ pub(crate) struct Typed {
     pub relay_call: Option<(Value, Vec<u8>)>,
     /// the owner statement signed before the entry, with its check
     pub owner: Option<(TypedData, Expect)>,
+    /// the signing key's index in a `SmartKeyAccount`
+    pub key_index: U256,
 }
 
 /// A prepared operation (spec §13.1): opaque, kept in the SDK's table; it holds no secret and nothing signed.
@@ -367,6 +371,7 @@ impl Op {
                 ids: d.ids,
                 relay_call: d.relay_call,
                 owner,
+                key_index: d.key_index,
             },
         });
         let mut table = sdk.prepared.lock().unwrap_or_else(PoisonError::into_inner);

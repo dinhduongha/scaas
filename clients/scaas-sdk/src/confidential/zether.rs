@@ -594,6 +594,7 @@ impl super::Confidential {
                     ids: false,
                     relay_call: None,
                     owner: None,
+                    key_index: alloy::primitives::U256::ZERO,
                 };
                 if let Some(relay) = relay {
                     let mut m = fields.as_object().cloned().ok_or(SdkError::Internal)?;
@@ -718,6 +719,7 @@ impl super::Confidential {
                     ids: false,
                     relay_call: None,
                     owner: None,
+                    key_index: alloy::primitives::U256::ZERO,
                 };
                 let prepared = Op::prepare(&sdk, d).await?;
                 // the facade's typed digest and scaas-ua's are one

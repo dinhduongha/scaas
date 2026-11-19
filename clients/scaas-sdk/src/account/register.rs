@@ -6,8 +6,9 @@
 //! limit, `Limits::max_gas`), or whose estimate fails, is sent as the registration without `pqzPop`, then `storePqzPop`; a part
 //! still above the cap is `GasAboveTxCap`. A KEM key in its hash-commit form is filled by `setKemKey(ua, 0, kem, UASig())`.
 //! A registry write is an opaque [`RegistryWrite`] kept in the SDK's table, quoted (the payer's estimate) and submitted like a
-//! native send (sign → write ahead → simulate → send); it lands **by its record** (`isRegistered`, `pqzKeyAt(…).proven`,
-//! `kemKeyAt(…)`), whoever sent it: a registration is portable, its PoP binds no caller (CTR-UA-07). UNAUDITED.
+//! native send (sign → write ahead → simulate → send); it lands **by its record** (`isRegistered`, `pqzPopOf(…)` non-empty:
+//! the proof stored, proven or not, as on a chain with no PoP verifier (owner 2026-11-19, S2), `kemKeyAt(…)`), whoever sent
+//! it: a registration is portable, its PoP binds no caller (CTR-UA-07). UNAUDITED.
 use super::Account;
 use crate::op::quote::{check_caps, payer_address, self_relay};
 use crate::op::state::{self, Row};
@@ -46,7 +47,7 @@ pub struct Register {
 pub(crate) enum Landed {
     /// `isRegistered(ua)`
     Registered,
-    /// `pqzKeyAt(ua, v).proven`
+    /// `pqzPopOf(ua, v)` non-empty: the proof stored, proven by a verifier or not (owner 2026-11-19, S2)
     PqzPop(u64),
     /// `kemKeyAt(ua, v).kem.scheme != 0`
     Kem(u64),
@@ -128,7 +129,9 @@ pub struct RegistrationState {
     pub kem_pk_hash: String,
     /// the KEM key of version 0 is stored (a commit filled, or the full key given at `register`)
     pub kem_stored: bool,
-    /// the PQZ key of version 0 has its stored proof
+    /// the PQZ key of version 0 has its proof stored (`pqzPopOf`; owner 2026-11-19, S2)
+    pub pqz_pop_stored: bool,
+    /// and a PoP verifier checked it (`pqzKeyAt(…).proven`; false on a chain with none)
     pub pqz_proven: bool,
 }
 
@@ -156,7 +159,7 @@ fn word_u64(v: u64) -> [u8; 32] {
 pub(crate) fn record_call(landed: Landed, ua: &[u8; 32]) -> Bytes {
     let mut d = match landed {
         Landed::Registered => selector("isRegistered(bytes32)"),
-        Landed::PqzPop(_) => selector("pqzKeyAt(bytes32,uint64)"),
+        Landed::PqzPop(_) => selector("pqzPopOf(bytes32,uint64)"),
         Landed::Kem(_) => selector("kemKeyAt(bytes32,uint64)"),
     };
     d.extend_from_slice(ua);
@@ -179,8 +182,12 @@ pub(crate) fn record_holds(landed: Landed, out: &[u8]) -> Option<bool> {
             (32, w) if w <= U256::from(1) => Some(w == U256::from(1)),
             _ => None,
         },
-        // `(address ptr, bytes32 pqzPopHash, bool proven)`
-        Landed::PqzPop(_) => Some(word(out, 2)? == U256::from(1)),
+        // `bytes`: its offset, then its length; stored when not empty
+        Landed::PqzPop(_) => {
+            let off = usize::try_from(word(out, 0)?).ok()?;
+            let len = usize::try_from(word(out, off / 32)?).ok()?;
+            (off % 32 == 0 && out.len() >= off + 32 + len).then_some(len > 0)
+        }
         // `(KemKey kem, bytes sig)`: the tuple's offset, then its first word the scheme
         Landed::Kem(_) => {
             let off = usize::try_from(word(out, 0)?).ok()?;
@@ -203,6 +210,23 @@ async fn read_record(
         last: None,
         failover_revert: None,
     }))
+}
+
+/// `pqzKeyAt(ua, 0).proven`: a PoP verifier checked version 0's proof.
+async fn pqz_proven(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<bool, SdkError> {
+    let mut d = selector("pqzKeyAt(bytes32,uint64)");
+    d.extend_from_slice(ua);
+    d.extend_from_slice(&word_u64(0));
+    let tx = TransactionRequest::default().with_to(registry).with_input(Bytes::from(d));
+    let out = pool.call_tx(tx).await.map_err(sim)?;
+    // `(address ptr, bytes32 pqzPopHash, bool proven)`
+    word(&out, 2)
+        .filter(|w| *w <= U256::from(1))
+        .map(|w| w == U256::from(1))
+        .ok_or(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
+            last: None,
+            failover_revert: None,
+        }))
 }
 
 /// `registrationOf(ua)`'s `attrs.kemPkHash` (zero for an unregistered UA).
@@ -641,7 +665,8 @@ impl Account {
                     registered,
                     kem_pk_hash: hex(&kem_pk_hash(&pool, registry, &ua).await?),
                     kem_stored: read_record(&pool, registry, Landed::Kem(0), &ua).await?,
-                    pqz_proven: read_record(&pool, registry, Landed::PqzPop(0), &ua).await?,
+                    pqz_pop_stored: read_record(&pool, registry, Landed::PqzPop(0), &ua).await?,
+                    pqz_proven: pqz_proven(&pool, registry, &ua).await?,
                 })
             })
             .await

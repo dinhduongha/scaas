@@ -7,7 +7,8 @@
 //! other call needs [`AllowOpaqueCall`] (feature `opaque-calls`), else `OpaqueCallRefused`. Guardian recovery: the guardian
 //! `SmartKeyAccount`'s `Execute` of the decoded `initiateRecovery(newKey)` on the account it guards
 //! ([`Account::prepare_initiate_recovery`]); `completeRecovery` is anyone's direct call after `RECOVERY_DELAY`. The account's
-//! key signs as `AccountSig { keyIndex: 0, proof: [], signature }`: the first key (index 0). UNAUDITED.
+//! key signs as `AccountSig { keyIndex, proof: [], signature }`, `keyIndex` the signing key's index in the account: the
+//! caller's, or read from the account by the signer's key (owner 2026-11-19, S3). UNAUDITED.
 use super::Account;
 use crate::op::{addr20, field, hex, unhex, Draft, KeyRef, Op, Prepared, Source};
 use crate::wallet::ops::{bound, ids, kind_of, put_envelope};
@@ -70,9 +71,11 @@ impl SubjectKeyArgs {
 }
 
 /// The part every `SmartKeyAccount` entry shares: the account (`0x` + 40 hex), the key of it that signs, the lane, the envelope.
+/// `key_index` (decimal) is the signer's index in the account; `None`: read from the account (S3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SmartOp {
     pub signer: KeyRef,
+    pub key_index: Option<String>,
     pub chain: String,
     pub account: String,
     pub batch: String,
@@ -124,6 +127,49 @@ pub fn smart_account_address(
     )))
 }
 
+/// The most key slots [`key_index_of`] reads; past it the caller names the index.
+const KEY_SLOTS_READ: u64 = 64;
+
+/// The index of `signer`'s key (an EVM key: `SubjectKey` kind 2, its address) in `account` (S3): `nextKeyIndex()`, then
+/// `keyAt(i)` from 0 until one equals it (removed slots read as zero). `SignerNotAccountKey` (owner 2026-11-19, P2): no slot
+/// holds it; `Argument`: an account of more than [`KEY_SLOTS_READ`] slots without it in them (the caller names the index), or
+/// a signer that is no EVM key.
+async fn key_index_of(sdk: &crate::Sdk, chain: &str, account: [u8; 20], signer: &KeyRef) -> Result<U256, SdkError> {
+    use alloy::network::TransactionBuilder;
+    let (_, _, pool) = crate::op::evm(sdk, chain)?;
+    // an EVM key of the seed or imported (spec §6.7): its address
+    let crate::op::Key::Native(_, k) = crate::op::key(sdk, signer)? else {
+        return Err(SdkError::Argument);
+    };
+    if !matches!(signer, KeyRef::Native { network, .. } | KeyRef::Imported { network, .. } if network == "evm") {
+        return Err(SdkError::Argument);
+    }
+    let me = SubjectKeyArgs::secp256k1(&k.address().ok_or(SdkError::Argument)?)?.key()?;
+    let mut want = U256::from(me.kind).to_be_bytes::<32>().to_vec();
+    for w in [me.x, me.y, me.rp_id_hash, me.origin_hash] {
+        want.extend_from_slice(&w);
+    }
+    let call = |sig: &str, arg: Option<u64>| {
+        let mut d = scaas_ua::keccak256(sig.as_bytes()).get(..4).unwrap_or_default().to_vec();
+        if let Some(a) = arg {
+            d.extend_from_slice(&U256::from(a).to_be_bytes::<32>());
+        }
+        let tx = alloy::rpc::types::TransactionRequest::default()
+            .with_to(alloy::primitives::Address::from(account))
+            .with_input(alloy::primitives::Bytes::from(d));
+        let pool = pool.clone();
+        async move { pool.call_tx(tx).await.map_err(crate::op::sim) }
+    };
+    let next = call("nextKeyIndex()", None).await?;
+    let next = u64::try_from(U256::from_be_slice(next.get(..32).ok_or(SdkError::Argument)?)).unwrap_or(u64::MAX);
+    for i in 0..next.min(KEY_SLOTS_READ) {
+        if call("keyAt(uint256)", Some(i)).await?.as_ref() == want.as_slice() {
+            return Ok(U256::from(i));
+        }
+    }
+    Err(if next > KEY_SLOTS_READ { SdkError::Argument } else { SdkError::SignerNotAccountKey })
+}
+
 impl Account {
     /// One entry: `from` the account, `fields` the struct's, the envelope; `Expect::Op` unless `expect` is given.
     async fn smart(
@@ -144,8 +190,13 @@ impl Account {
                 m.insert("from".into(), json!(hex(&account)));
                 m.extend(fields);
                 put_envelope(&mut m, &op.batch, &op.envelope);
+                let key_index = match &op.key_index {
+                    Some(i) => U256::from_str_radix(i, 10).map_err(|_| SdkError::Argument)?,
+                    None => key_index_of(&sdk, &op.chain, account, &op.signer).await?,
+                };
                 let mut d: Draft = crate::wallet::ops::draft(op.chain.clone(), name, kind, account, m, op.signer);
                 d.opaque = opaque;
+                d.key_index = key_index;
                 if let Some((call, review)) = decoded {
                     let (chain_id, chain_uid) = ids(&sdk, &op.chain)?;
                     let max_window = sdk.window(&op.chain);

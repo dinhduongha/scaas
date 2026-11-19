@@ -173,6 +173,12 @@ fn registry(t: &T, ua: &str, registered: bool, kem_pk_hash: &str, kem_stored: bo
         format!("{}{ua}", sel("pqzKeyAt(bytes32,uint64)")),
         format!("0x{}{}{}", w(0), w(0), w(0)),
     ));
+    // `bytes`: no proof stored
+    c.answers.push((
+        REGISTRY.into(),
+        format!("{}{ua}", sel("pqzPopOf(bytes32,uint64)")),
+        format!("0x{}{}", w(0x20), w(0)),
+    ));
     // `(KemKey kem, bytes sig)`: the tuple at 0x40, its scheme first
     c.answers.push((
         REGISTRY.into(),
@@ -555,6 +561,62 @@ async fn sponsored_pq_blob_split() {
         .unwrap();
     let entries: Vec<String> = ws.iter().map(|w| w.entry()).collect();
     assert_eq!(entries, ["register", "setKemKey"]);
+}
+
+/// `storePqzPop` lands when the record shows the proof stored, proven or not (owner 2026-11-19, S2): on a chain with no PoP
+/// verifier `pqzKeyAt(…).proven` stays false; nothing stored, the write stays in flight.
+#[tokio::test(flavor = "multi_thread")]
+async fn store_pqz_pop_landed_when_stored() {
+    let t = setup().await;
+    let b = blob("mldsa65/n2816-kmax65536/kem-commit");
+    let ua = b["ua"].as_str().unwrap().to_string();
+    registry(&t, &ua, false, &hx(&[0; 32]), false);
+    kind_enabled(&t, b["kind"].as_u64().unwrap() as u16, true);
+    t.chain.lock().unwrap().gas_of = Some(|input: &str| input.len() as u64 * 200);
+    let acc = t.sdk.account();
+    let blob = RegistrationBlob::from_json(&b.to_string()).unwrap();
+    let ws = acc
+        .prepare_submit_registration(blob, "local".into(), ua.clone(), t.payer.clone())
+        .await
+        .unwrap();
+    assert_eq!(ws[1].entry(), "storePqzPop");
+    t.chain.lock().unwrap().gas_of = Some(|_| 1_000_000);
+    let q = acc.quote_registry_write(ws[1].clone()).await.unwrap();
+    let op = acc.submit_registry_write(ws[1].clone(), q).await.unwrap();
+    for _ in 0..50 {
+        if !t.chain.lock().unwrap().sent.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(
+        matches!(t.sdk.op().state(op.clone()).await.unwrap(), OpState::InFlight { .. }),
+        "no proof stored yet"
+    );
+    // the proof stored, `proven` still false (no verifier)
+    let pop = b["args"]["pqzPop"].as_str().unwrap();
+    let n = (pop.len() - 2) / 2;
+    let body = format!("{}{}{}", w(0x20), w(n as u64), &pop[2..]);
+    let pad = "0".repeat((64 - (pop.len() - 2) % 64) % 64);
+    {
+        let mut c = t.chain.lock().unwrap();
+        let d = format!("{}{}", sel("pqzPopOf(bytes32,uint64)"), &ua[2..]);
+        c.answers.retain(|(_, x, _)| *x != d);
+        c.answers.insert(0, (REGISTRY.into(), d, format!("0x{body}{pad}")));
+    }
+    assert!(
+        matches!(t.sdk.op().state(op).await.unwrap(), OpState::Landed { .. }),
+        "stored is landed, proven or not"
+    );
+    registry(&t, &ua, true, &hx(&[0; 32]), false);
+    {
+        let mut c = t.chain.lock().unwrap();
+        let d = format!("{}{}", sel("pqzPopOf(bytes32,uint64)"), &ua[2..]);
+        c.answers.retain(|(_, x, _)| *x != d);
+        c.answers.insert(0, (REGISTRY.into(), d, format!("0x{body}{pad}")));
+    }
+    let s = acc.registration_of("local".into(), ua).await.unwrap();
+    assert!(s.pqz_pop_stored && !s.pqz_proven, "{s:?}");
 }
 
 /// A failed signing of the payer's transaction leaves the write submittable (owner 2026-11-19, R4): the payer's seed
