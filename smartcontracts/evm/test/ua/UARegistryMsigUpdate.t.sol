@@ -1166,6 +1166,41 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         emit log_named_uint("fixed (3 slots less 3 per-slot)", g[0] - 3 * ((g[3] - g[1]) / 240));
     }
 
+    /// Spec 2026-11-19-registry-verify-only-kinds §4 (owner P9, P15): `MSIG_REGISTER_GAS` covers the dearest registration of a
+    /// structure, 16 slots (the most a registration takes), no attributes (a PQZ key is the debit bound's, M2): regular gas,
+    /// intrinsic and calldata included (EIP-8037: the per-transaction cap binds the regular dimension). Logs the figures.
+    function test_gas_registerRowModel() public {
+        Member[] memory m = new Member[](16);
+        for (uint256 i; i < 16; ++i) {
+            m[i] = Member(EOA, _eoaId(0x1000 + i), 1);
+        }
+        bytes memory key = _msigKey(1, m);
+        bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, key);
+        IUARegistry.MemberSig[] memory pop;
+        _callOrRevert(address(r), abi.encodeCall(IUARegistry.registerMsig, (UACall.structure(key), _none(), pop, "")));
+        uint256 g = vm.lastCallGas().gasTotalUsed;
+        emit log_named_uint("registerMsig regular gas, 16 EOA slots", g);
+        emit log_named_uint("its state gas (the block's)", uint256(int256(vm.lastCallGas().gasStateUsed)));
+        assertLe(g, UARegistryRegLib.MSIG_REGISTER_GAS, "MSIG_REGISTER_GAS");
+    }
+
+    /// §4 (owner P15): `PQZ_KEY_WRITE_GAS` covers a `setPqzKey` of the largest PQZ key of the four sets (22,528 B) by a PQ
+    /// `msig` (two `mldsa65` members on the mock): regular gas, intrinsic and calldata included. Logs the figures.
+    function test_gas_pqzKeyWriteRowModel() public {
+        bytes32 ua = _pq3(r);
+        bytes memory key = new bytes(22_528);
+        key[0] = 0x01;
+        bytes32 hash = keccak256("proof");
+        bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
+        IUARegistry.UASig memory s = _auth(_sigs(r, r.msigOf(ua), ua, _ids(ml[1], ml[2]), UAKinds.PURPOSE_PQZ_KEY, rd, true));
+        _callOrRevert(address(r), abi.encodeCall(IUARegistry.setPqzKey, (ua, 0, key, hash, s)));
+        uint256 g = vm.lastCallGas().gasTotalUsed;
+        emit log_named_uint("setPqzKey regular gas, 22,528 B key, 2 mldsa65 members", g);
+        emit log_named_uint("its state gas (the block's)", uint256(int256(vm.lastCallGas().gasStateUsed)));
+        // the key's calldata at the EIP-7976 floor: 64 gas a byte where the measured run paid 16
+        assertLe(g + 48 * key.length, UARegistryRegLib.PQZ_KEY_WRITE_GAS, "PQZ_KEY_WRITE_GAS");
+    }
+
     /// The hot path: `requireAuthorized` of a 2-of-3 EOA `msig`, never updated and updated (the blob read replaces the registration
     /// blob's, and the record's slot is read once either way).
     function test_gas_requireAuthorized() public {

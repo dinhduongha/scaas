@@ -1299,7 +1299,9 @@ contract UARegistryUaPortableTest is UARegistryBase {
         _storedPop(r, _msigKey(9, m), 9);
         // 12 members, a budget that admits them
         c[0].verifier = address(new AcceptAll());
-        txCap = uint64(12 * 1_445_000 + uint256(1_000_000) / 63 + 3_500); // owner P17: a chain whose cap admits that budget
+        // owner P17: a chain whose cap admits that budget; P9 (spec 2026-11-19-registry-verify-only-kinds §4): and its hard bound, the
+        // signatures' calldata and the dearest write beside it (≈ 21.5 M)
+        txCap = 1 << 25;
         UARegistry big = _deploy(
             address(0x5cea1),
             chainUidA,
@@ -3946,7 +3948,9 @@ contract UARegistryUaPortableTest is UARegistryBase {
         // 12 x slhdsa128s members
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(0x0133, address(new AcceptAll()), 1_400_000, false, 0);
-        txCap = uint64(12 * 1_445_000 + uint256(1_000_000) / 63 + 3_500); // owner P17: a chain whose cap admits that budget
+        // owner P17: a chain whose cap admits that budget; P9 (spec 2026-11-19-registry-verify-only-kinds §4): and its hard bound, the
+        // signatures' calldata and the dearest write beside it (≈ 21.5 M)
+        txCap = 1 << 25;
         UARegistry big = _deploy(
             address(0x5cea2),
             chainUidA,

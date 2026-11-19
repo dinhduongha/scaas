@@ -319,6 +319,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     }
 
     function test_nested_mldsa65Precompile() public {
+        txCap = 1 << 25; // a verifyBudget capacity table: P9 (`UARegistryHardBound.t.sol`) refuses some shapes at 2^24
         _run(_case("mldsa65 200k 1L", 0x0131, 200_000, 3309, 16, _none256()));
         _run(_case("mldsa65 200k 2L [16x3]", 0x0131, 200_000, 3309, 0, _uints(16, 3)));
         uint256[] memory g = _uints(10, 5);
@@ -329,6 +330,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     /// A kind of cap 50 k (`bip340`, the group kinds, an ERC-1271 member without a clone implementation): the most signatures any
     /// shape reaches at 12 M, the leaf path of a classical key read from its registration blob.
     function test_nested_mostSignatures() public {
+        txCap = 1 << 25; // a verifyBudget capacity table: P9 (`UARegistryHardBound.t.sol`) refuses some shapes at 2^24
         uint256[] memory g = _uints(16, 8);
         g[7] = 10;
         _run(_case("bip340 cap 50k 2L [16x7,10]", 0x0103, 50_000, 64, 0, g));
@@ -473,7 +475,9 @@ contract UARegistryNestedGasTest is UARegistryBase {
         assertLe(spend, 1 << 24);
     }
 
-    /// The EIP-7976 floor, 64 per byte: a cheap-cap kind with long signatures meets it before the regular gas does.
+    /// The EIP-7976 floor, 64 per byte: a cheap-cap kind with long signatures meets it before the regular gas does. 24 signatures:
+    /// the hard bound (spec 2026-11-19-registry-verify-only-kinds §4, owner P9) admits the structure (its floor 64 × 192,384 B plus the
+    /// consumer reserve fits 2^24; at 32 signatures it does not, `UAKeyData(0x0120)` first), the debit's floor does not.
     function test_pqzHolderCalldataFloor() public {
         address burn = address(new BurnAll());
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
@@ -482,12 +486,12 @@ contract UARegistryNestedGasTest is UARegistryBase {
         Case memory c = _case("slh", 0x0133, 20_000, 7856, 0, _none256());
         Member[] memory m = new Member[](2);
         (, bytes32 i1) = _inner(r, c, 16);
-        (, bytes32 i2) = _inner(r, c, 16);
+        (, bytes32 i2) = _inner(r, c, 8);
         m[0] = Member(UAKinds.MSIG, i1, 1);
         m[1] = Member(UAKinds.MSIG, i2, 1);
         bytes memory d = _msigKey(2, m);
-        uint256 auth = 2 * 192 + 32 * (128 + 7_872);
-        uint256 w = 32 * (20_000 + MEMBER) + 2 * (MEMBER + ACCEPTED) + ACCEPTED;
+        uint256 auth = 2 * 192 + 24 * (128 + 7_872);
+        uint256 w = 24 * (20_000 + MEMBER) + 2 * (MEMBER + ACCEPTED) + ACCEPTED;
         assertLe(w + w / 63 + 5_000 + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * auth, 1 << 24, "the regular term alone admits it");
         assertGt(PqzSet.PQZ_DEBIT_MIN_GAS + 64 * auth, 1 << 24);
         bytes memory key = new bytes(PqzSet.PK);
@@ -560,6 +564,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     }
 
     function test_registrationCostRows() public {
+        txCap = 1 << 25; // a verifyBudget capacity table: P9 (`UARegistryHardBound.t.sol`) refuses some shapes at 2^24
         _regCost(_case("mldsa65 200k 1L", 0x0131, 200_000, 3309, 16, _none256()));
         _regCost(_case("mldsa65 200k [16x3]", 0x0131, 200_000, 3309, 0, _uints(16, 3)));
         _regCost(_case("mldsa65 200k [16x2]", 0x0131, 200_000, 3309, 0, _uints(16, 2)));

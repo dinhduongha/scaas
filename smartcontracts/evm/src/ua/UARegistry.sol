@@ -220,6 +220,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             k[slot] = uint256(uint160(c.verifier)) | uint256(c.cap) << 160 | (c.verifyOnly ? 1 << 224 : 0)
                 | uint256(c.keyForm) << 225;
         }
+        // M10 (d) (owner P16): where `0x0142` is on the line, each verify-only kind's single-key fallback within the PQZ debit bound
+        if (predecessor_ != address(0) && (k[18] != 0 || IUARegistry(predecessor_).kindHome(UAKinds.PQZ_MLWE) != address(0)))
+        {
+            _voDebit(predecessor_, kinds_, g, txGasCap_);
+        }
         (_CFG0, _CFG1, _CFG2, _CFG3) = (k[0], k[1], k[2], k[3]);
         (_CFG4, _CFG5, _CFG6, _CFG7) = (k[4], k[5], k[6], k[7]);
         (_CFG8, _CFG9, _CFG10, _CFG11) = (k[8], k[9], k[10], k[11]);
@@ -1112,6 +1117,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return
             c.keyForm == 0
                 || (PqUA.mldsaParts(c.kind) != 0 && UAStore.noPrecompile(IUARegistry(home).verifierOf(c.kind)));
+    }
+
+    /// M10 (d): `UARegistryRegLib.voDebitFits` per verify-only kind (its home's cap, the hops to it), else `UAConfig(kind)`.
+    function _voDebit(address pred, KindConfig[] memory kinds_, uint8 g, uint64 cap) private view {
+        for (uint256 i; i < kinds_.length; ++i) {
+            KindConfig memory c = kinds_[i];
+            if (!c.verifyOnly) continue;
+            IUARegistry h = IUARegistry(IUARegistry(pred).kindHome(c.kind));
+            if (!UARegistryRegLib.voDebitFits(c.kind, c.cap, h.verifyCap(c.kind), g - h.generation(), cap)) {
+                revert UAConfig(c.kind);
+            }
+        }
     }
 
     /// A one-word getter `sel` of `v`: false unless it answers exactly 32 bytes.
