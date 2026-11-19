@@ -4,7 +4,8 @@
 one mutant at a time, runs its test command from the worktree root (through scripts/capped, foreground), restores the files
 byte for byte, and records the outcome in the task's `-mutants.txt`: `killed` (the test failed), `survived` (it passed),
 `not loaded` (the text is missing or the mutant does not compile). Last line: `N mutants, K killed, S survived, L not loaded`.
-Full output in a git-ignored `.log` beside it."""
+`run <name>…` runs only those and keeps the record's other rows (the commit in its header is the last run's). Full output in
+a git-ignored `.log` beside it."""
 import hashlib
 import subprocess
 import sys
@@ -28,10 +29,18 @@ def run(task, mutants, only=None):
     log = Path(__file__).with_name(f"2026-11-17-scaas-sdk-{task}-mutants.log")
     sha = subprocess.run(["git", "rev-parse", "--short=9", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     rows, counts = [], {"killed": 0, "survived": 0, "not loaded": 0}
-    with log.open("w") as lg:
+    # a run of named mutants keeps the other rows of the record (one mutant per call stays short)
+    kept = {}
+    if only and out.exists():
+        for line in out.read_text().splitlines()[1:-1]:
+            kept[line.split(" | ")[0]] = line
+    with log.open("a" if only else "w") as lg:
         lg.write(f"# {task} mutants at commit {sha}\n")
         for k, (name, edits, cmd) in enumerate(mutants, 1):
             if only and name not in only:
+                if name in kept:
+                    rows.append(kept[name])
+                    counts[kept[name].split(" | ")[1]] += 1
                 continue
             files = {f: (ROOT / f).read_bytes() for f, _, _ in edits}
             digest = {f: hashlib.sha256(b).hexdigest() for f, b in files.items()}

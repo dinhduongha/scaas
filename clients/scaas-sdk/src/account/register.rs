@@ -367,6 +367,18 @@ fn known(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
     }
 }
 
+/// Takes `w` out of the table (one submit: a second, concurrent or later, is `PreparedUnknown`).
+fn take(sdk: &Sdk, w: &Arc<RegistryWrite>) -> Result<(), SdkError> {
+    let mut t = sdk.registry_writes.lock().unwrap_or_else(PoisonError::into_inner);
+    match t.get(&w.id) {
+        Some(x) if Arc::ptr_eq(x, w) => {
+            t.remove(&w.id);
+            Ok(())
+        }
+        _ => Err(SdkError::PreparedUnknown),
+    }
+}
+
 /// A seed key's registration by `scaas-ua` (`registration_args_json`; the PoP by `sign_ua` under `pop` v2, the Zether UA's by
 /// its facade): the UA and `{args, kemFill, …}`.
 pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result<([u8; 32], Value), SdkError> {
@@ -420,14 +432,14 @@ pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result
 }
 
 /// `ReceiverUnregistered` (spec §7.1): `to` a derived UA (not a native id: its top 12 bytes not all zero) that the profile's
-/// registry does not hold; a native id, or a profile naming no registry (the token's own refusal then stands), passes.
+/// registry does not hold, or on a profile naming no registry (fail closed: owner 2026-11-19, R3); a native id passes.
 pub(crate) async fn receiver_registered(sdk: &Sdk, chain: &str, to: &[u8; 32]) -> Result<(), SdkError> {
     if to.get(..12).is_some_and(|h| h.iter().all(|b| *b == 0)) {
         return Ok(());
     }
     let (profile, _, pool) = evm(sdk, chain)?;
     let Some(registry) = profile.registry.as_deref() else {
-        return Ok(());
+        return Err(SdkError::ReceiverUnregistered);
     };
     let registry: Address = registry.parse().map_err(|_| SdkError::Argument)?;
     match read_record(&pool, registry, Landed::Registered, to).await? {
@@ -481,7 +493,8 @@ impl Account {
 
     /// Signs the payer's transaction carrying exactly `write`, writes the operation's row, returns its id; the send runs on
     /// and reports as `Event::OpState`; `Op::state` follows it to `Landed` by the record. `PreparedUnknown` (a write not of
-    /// this SDK, or submitted already), `Argument` (a quote of another payer), `FeeAboveCap`.
+    /// this SDK, or submitted already), `Argument` (a quote of another payer), `FeeAboveCap`; a failed signing of the payer's
+    /// transaction (`WalletLocked`, …) leaves the write in the table, submittable again.
     pub async fn submit_registry_write(
         &self,
         write: Arc<RegistryWrite>,
@@ -502,19 +515,27 @@ impl Account {
                 let (profile, chain_id, pool) = evm(&sdk, &write.chain)?;
                 let registry = registry_of(&sdk, &write.chain)?;
                 let from_block = crate::op::final_number(&pool, &profile).await?;
-                // one submit of a write: taken out of the table before it is signed
-                sdk.registry_writes
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .remove(&write.id);
-                let (raw, id) = sign_tx(
+                // one submit of a write: taken out of the table before it is signed, put back when the signing fails (owner
+                // 2026-11-19, R4: as `Op::submit`)
+                take(&sdk, &write)?;
+                let (raw, id) = match sign_tx(
                     &sdk,
                     chain_id,
                     &quote,
                     registry.into_array(),
                     U256::ZERO,
                     write.calldata.clone(),
-                )?;
+                ) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        sdk.registry_writes
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .entry(write.id.clone())
+                            .or_insert_with(|| write.clone());
+                        return Err(e);
+                    }
+                };
                 let row = Row {
                     op: crate::vault::uuid4()?,
                     chain: write.chain.clone(),

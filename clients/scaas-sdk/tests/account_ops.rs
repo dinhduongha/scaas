@@ -13,7 +13,7 @@
 mod fake_chain;
 
 use fake_chain::{fake, keccak_hex, serve, Fake, CHAIN_ID};
-use scaas_sdk::account::{Register, RegisterAttrs};
+use scaas_sdk::account::{Register, RegisterAttrs, RegistrationBlob, BLOB_MAX};
 use scaas_sdk::op::{KeyRef, OpState};
 use scaas_sdk::vault::{ImportWords, MemoryStore};
 use scaas_sdk::{
@@ -56,6 +56,10 @@ struct T {
 }
 
 async fn setup() -> T {
+    setup_with(Some(REGISTRY)).await
+}
+
+async fn setup_with(registry: Option<&str>) -> T {
     let chain = fake();
     let url = serve(chain.clone()).await;
     let profile = ChainProfile {
@@ -71,7 +75,7 @@ async fn setup() -> T {
         }],
         rpc_policy: scaas_rpc::Policy::Failover,
         gateways: vec![],
-        registry: Some(REGISTRY.into()),
+        registry: registry.map(Into::into),
         factory: None,
         router: None,
         finality: Finality::Finalized,
@@ -352,13 +356,15 @@ fn blob(name: &str) -> Value {
 async fn registration_blob_is_clientkeys_form() {
     let t = setup().await;
     let (ua, calldata, args) = independent_register(ED25519);
-    let text = t
+    let blob = t
         .sdk
         .account()
         .registration_blob(ua_key(&t, ED25519), RegisterAttrs::default())
         .await
         .unwrap();
+    let text = blob.to_json().unwrap();
     let b: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(RegistrationBlob::from_json(&text).unwrap(), blob, "the text form reads back");
     let mut keys: Vec<&String> = b.as_object().unwrap().keys().collect();
     keys.sort();
     assert_eq!(keys, ["args", "kem", "kind", "ua", "v"]);
@@ -371,7 +377,7 @@ async fn registration_blob_is_clientkeys_form() {
     let ws = t
         .sdk
         .account()
-        .prepare_submit_registration(text, "local".into(), ua, t.payer.clone())
+        .prepare_submit_registration(blob, "local".into(), ua, t.payer.clone())
         .await
         .unwrap();
     assert_eq!(ws.len(), 1);
@@ -385,20 +391,18 @@ async fn sponsored_registration_checks() {
     let t = setup().await;
     let acc = t.sdk.account();
     let submit = |b: &Value, expected: &str| {
-        acc.prepare_submit_registration(b.to_string(), "local".into(), expected.into(), t.payer.clone())
+        let b = RegistrationBlob::from_json(&b.to_string());
+        let (acc, expected, payer) = (acc.clone(), expected.to_string(), t.payer.clone());
+        async move { acc.prepare_submit_registration(b?, "local".into(), expected, payer).await }
     };
-    // every single-key blob of the vectors passes (each kind enabled, none registered)
+    // every single-key blob of the vectors passes (each kind enabled, none registered), the PQ ones with their PQZ key's
+    // proof among them (owner 2026-11-19, R1)
     for b in load("ua/registration_blobs.json")["blobs"].as_array().unwrap() {
         let (name, b) = (b["name"].as_str().unwrap(), &b["blob"]);
         let ua = b["ua"].as_str().unwrap();
         registry(&t, ua, false, &hx(&[0; 32]), false);
         kind_enabled(&t, b["kind"].as_u64().unwrap() as u16, true);
-        let r = submit(b, ua).await;
-        if b.to_string().len() > 64 * 1024 {
-            assert_eq!(code(r), "Argument", "{name}: above 64 KiB");
-            continue;
-        }
-        let ws = r.unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        let ws = submit(b, ua).await.unwrap_or_else(|e| panic!("{name}: {e:?}"));
         let want = if b["kem"].is_null() { 1 } else { 2 };
         assert_eq!(ws.len(), want, "{name}");
         if want == 2 {
@@ -427,7 +431,7 @@ async fn sponsored_registration_checks() {
         .registration_blob(ua_key(&t, ED25519), RegisterAttrs::default())
         .await
         .unwrap();
-    let mut bad: Value = serde_json::from_str(&mine).unwrap();
+    let mut bad: Value = serde_json::from_str(&mine.to_json().unwrap()).unwrap();
     let mine_ua = bad["ua"].as_str().unwrap().to_string();
     registry(&t, &mine_ua, false, &hx(&[0; 32]), false);
     assert!(submit(&bad, &mine_ua).await.is_ok(), "the control");
@@ -456,6 +460,9 @@ async fn sponsored_registration_checks() {
     let mut unknown = ed.clone();
     unknown["memo"] = json!("x");
     assert_eq!(code(submit(&unknown, &ua).await), "Argument");
+    let mut nested = ed.clone();
+    nested["args"]["attrs"]["memo"] = json!("x");
+    assert_eq!(code(submit(&nested, &ua).await), "Argument", "an unknown field inside the arguments");
     let mut deep = ed.clone();
     deep["args"]["attrs"]["kem"]["scheme"] = json!({"a": 0});
     assert_eq!(code(submit(&deep, &ua).await), "Argument");
@@ -463,6 +470,73 @@ async fn sponsored_registration_checks() {
     v2["v"] = json!(2);
     assert_eq!(code(submit(&v2, &ua).await), "Argument");
     assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent by any check");
+}
+
+/// The blob's size cap (owner 2026-11-19, R1): the largest real blob passes; padded to the cap it still reads, one byte over
+/// is `Argument`.
+#[tokio::test(flavor = "multi_thread")]
+async fn registration_blob_size_cap() {
+    let big = blob("mldsa65/n2816-kmax65536/kem-commit").to_string();
+    assert!(big.len() > 64 * 1024, "the largest vector blob, above the old 64 KiB");
+    assert!(RegistrationBlob::from_json(&big).is_ok());
+    let at_cap = format!("{big}{}", " ".repeat(BLOB_MAX - big.len()));
+    assert_eq!(at_cap.len(), BLOB_MAX);
+    assert!(RegistrationBlob::from_json(&at_cap).is_ok(), "at the cap");
+    let over = format!("{at_cap} ");
+    assert_eq!(code(RegistrationBlob::from_json(&over)), "Argument", "one byte over the cap");
+}
+
+/// A PQ kind's blob split as T13's (spec §7.1): on a chain whose estimate grows with the calldata, the largest set's
+/// registration with its PQZ key's proof goes as `register` without `pqzPop`, then `storePqzPop`, then the KEM fill.
+#[tokio::test(flavor = "multi_thread")]
+async fn sponsored_pq_blob_split() {
+    let t = setup().await;
+    let b = blob("mldsa65/n2816-kmax65536/kem-commit");
+    let ua = b["ua"].as_str().unwrap().to_string();
+    registry(&t, &ua, false, &hx(&[0; 32]), false);
+    kind_enabled(&t, b["kind"].as_u64().unwrap() as u16, true);
+    // 400 gas per calldata byte: the full call (~63 KB) is above the 2^24 cap, the part without `pqzPop` (~28 KB) fits
+    t.chain.lock().unwrap().gas_of = Some(|input: &str| input.len() as u64 * 200);
+    let blob = RegistrationBlob::from_json(&b.to_string()).unwrap();
+    let ws = t
+        .sdk
+        .account()
+        .prepare_submit_registration(blob.clone(), "local".into(), ua.clone(), t.payer.clone())
+        .await
+        .unwrap();
+    let entries: Vec<String> = ws.iter().map(|w| w.entry()).collect();
+    assert_eq!(entries, ["register", "storePqzPop", "setKemKey"]);
+    // the control: an estimate within the cap sends it whole
+    t.chain.lock().unwrap().gas_of = Some(|_| 1_000_000);
+    let ws = t
+        .sdk
+        .account()
+        .prepare_submit_registration(blob, "local".into(), ua, t.payer.clone())
+        .await
+        .unwrap();
+    let entries: Vec<String> = ws.iter().map(|w| w.entry()).collect();
+    assert_eq!(entries, ["register", "setKemKey"]);
+}
+
+/// A failed signing of the payer's transaction leaves the write submittable (owner 2026-11-19, R4): the payer's seed
+/// locked, `WalletLocked`; unlocked again, the same write submits.
+#[tokio::test(flavor = "multi_thread")]
+async fn registry_write_kept_on_signing_failure() {
+    use scaas_sdk::vault::Unlock;
+    let t = setup().await;
+    let (ua, _, _) = independent_register(ED25519);
+    registry(&t, &ua, false, &hx(&[0; 32]), false);
+    let acc = t.sdk.account();
+    let ws = acc.prepare_register(req(&t, ED25519, false)).await.unwrap();
+    let q = acc.quote_registry_write(ws[0].clone()).await.unwrap();
+    t.sdk.vault().lock(t.seed.clone()).await;
+    assert_eq!(code(acc.submit_registry_write(ws[0].clone(), q.clone()).await), "WalletLocked");
+    t.sdk
+        .vault()
+        .unlock(t.seed.clone(), Unlock::Passphrase(sec(PASS.as_bytes())))
+        .await
+        .unwrap();
+    assert!(acc.submit_registry_write(ws[0].clone(), q).await.is_ok(), "the same write, again");
 }
 
 /// A pay to an unregistered derived UA is `ReceiverUnregistered` before anything is prepared; a registered one, or a native
@@ -498,4 +572,12 @@ async fn pay_to_unregistered_derived_ua() {
     assert_ne!(code(t.sdk.wallet().prepare_pay(pay(&ua)).await), "ReceiverUnregistered");
     let native = format!("0x{}{}", "00".repeat(12), "ca".repeat(20));
     assert_ne!(code(t.sdk.wallet().prepare_pay(pay(&native)).await), "ReceiverUnregistered");
+    // a profile naming no registry: fail closed for a derived UA (owner 2026-11-19, R3); a native id still passes
+    let n = setup_with(None).await;
+    let pay = |to: &str| Pay {
+        signer: n.payer.clone(),
+        ..pay(to)
+    };
+    assert_eq!(code(n.sdk.wallet().prepare_pay(pay(&ua)).await), "ReceiverUnregistered");
+    assert_ne!(code(n.sdk.wallet().prepare_pay(pay(&native)).await), "ReceiverUnregistered");
 }

@@ -6,9 +6,10 @@
 //! (`RegistrationUaMismatch`), the kind is enabled on the chain (`RegistrationKindDisabled`), the PoP verifies locally by
 //! `scaas-ua` (`RegistrationPopInvalid`), a committed KEM key is present and is the committed one (`RegistrationKemMissing`);
 //! an already registered UA is skipped, its KEM key added when missing. The blob is the named-field JSON clientkeys'
-//! `registrationBlob` writes (`smartcontracts/vectors/ua/registration_blobs.json`): at most 64 KiB, depth 4, unknown fields
-//! refused. The payment follows only after the registration's `Landed` (the app's order; `wallet` refuses a pay to an
-//! unregistered derived UA, `ReceiverUnregistered`). UNAUDITED.
+//! `registrationBlob` writes (`smartcontracts/vectors/ua/registration_blobs.json`), read into the typed [`RegistrationBlob`]
+//! (`RegistrationBlob::from_json`: at most [`BLOB_MAX`], depth 4, unknown fields refused; owner 2026-11-19, R1, R2). The
+//! payment follows only after the registration's `Landed` (the app's order; `wallet` refuses a pay to an unregistered derived
+//! UA, `ReceiverUnregistered`). UNAUDITED.
 use super::register::{build, registry_of, writes, RegisterAttrs, RegistryWrite};
 use super::Account;
 use crate::op::{evm, hex, sim, unhex, KeyRef};
@@ -17,59 +18,118 @@ use alloy::network::TransactionBuilder;
 use alloy::primitives::{Bytes, U256};
 use alloy::rpc::types::TransactionRequest;
 use scaas_ua::ua_portable::{check_registration, KemKey, UAAttrs, WebAuthnKey};
-use serde::Deserialize;
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::Arc;
 
-/// The blob's bounds (spec §7.1).
-const BLOB_MAX: usize = 64 * 1024;
+/// The blob's bounds (spec §7.1; owner 2026-11-19, R1): the largest registration any parameter set allows, as JSON, with
+/// headroom. An upper bound, part by part, as compact JSON hex (`0x` + 2 per byte): a `pqzPop` at the largest proof any set's
+/// precompile takes (`MAX_PROOF_PQZH` 327,680 B: 655,362 characters; PQZL's is 98,304 B), a `pqzKey` of the largest set's
+/// `PK` (`n2816-kmax65536`, 22,528 B: 45,058), the largest signing kind's key data and PoP of the vectors (`slhdsa128s`:
+/// 15,780), and the rest of the vectors' largest blob (`mldsa65/n2816-kmax65536/kem-commit`, 130,241 characters, less those
+/// four parts: 3,697, the KEM record's `kemPk` among it): 719,897. The cap, 768 KiB (786,432), leaves 66,535 (9 %).
+pub const BLOB_MAX: usize = 768 * 1024;
 const BLOB_DEPTH: usize = 4;
 
 /// The KEM key of version 0 a hash-commit registration carries beside its arguments.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct KemRecord {
-    version: u64,
-    kem_pk: String,
+pub struct KemRecord {
+    pub version: u64,
+    /// `0x` hex: `mlkemEk ‖ x25519` (`scaas-ua` `kem_pk`)
+    pub kem_pk: String,
 }
 
-#[derive(Debug, Deserialize)]
+/// A `registerWebAuthn` key, named.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct WebAuthnArgs {
+    pub x: String,
+    pub y: String,
+    pub rp_id_hash: String,
+}
+
+/// `KemKey`, named.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct KemArgs {
+    pub scheme: u8,
+    pub mlkem_ek: String,
+    pub x25519: String,
+}
+
+/// `UAAttrs`, named.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct AttrsArgs {
+    pub pqz_key: String,
+    pub pqz_pop_hash: String,
+    pub kem: KemArgs,
+    pub kem_pk_hash: String,
+}
+
+/// A single-key registration's arguments by name, as `scaas-ua`'s `registration_args` gives them: `register` (`kind`,
+/// `keyData`) or `registerWebAuthn` (`key`); bytes as `0x` hex.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct RegisterArgs {
+    pub entry: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_data: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<WebAuthnArgs>,
+    pub attrs: AttrsArgs,
+    pub pqz_pop: String,
+    pub pop: String,
+}
+
+/// The sponsored registration's blob (spec §7.1; owner 2026-11-19, R2): public data only, every field named. Its text form is
+/// clientkeys' `registrationBlob` (`smartcontracts/vectors/ua/registration_blobs.json`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Blob {
-    v: u32,
-    ua: String,
-    kind: u16,
-    args: Value,
-    kem: Option<KemRecord>,
+pub struct RegistrationBlob {
+    pub v: u32,
+    pub ua: String,
+    pub kind: u16,
+    pub args: RegisterArgs,
+    pub kem: Option<KemRecord>,
 }
 
-fn b32(v: &Value) -> Result<[u8; 32], SdkError> {
-    unhex(v.as_str().ok_or(SdkError::Argument)?)?
-        .try_into()
-        .map_err(|_| SdkError::Argument)
+impl RegistrationBlob {
+    /// The blob from its JSON text (passed out of band): `Argument` above [`BLOB_MAX`] bytes, deeper than 4, with an unknown
+    /// or missing field at any level, or of a version other than 1.
+    pub fn from_json(text: &str) -> Result<RegistrationBlob, SdkError> {
+        if text.len() > BLOB_MAX || scaas_ua::json::depth_within(text.as_bytes(), BLOB_DEPTH).is_err() {
+            return Err(SdkError::Argument);
+        }
+        let b: RegistrationBlob = serde_json::from_str(text).map_err(|_| SdkError::Argument)?;
+        if b.v != 1 {
+            return Err(SdkError::Argument);
+        }
+        Ok(b)
+    }
+
+    /// The JSON text (compact; clientkeys' form).
+    pub fn to_json(&self) -> Result<String, SdkError> {
+        serde_json::to_string(self).map_err(|_| SdkError::Internal)
+    }
 }
 
-fn bytes(v: &Value) -> Result<Vec<u8>, SdkError> {
-    unhex(v.as_str().ok_or(SdkError::Argument)?)
+fn b32(s: &str) -> Result<[u8; 32], SdkError> {
+    unhex(s)?.try_into().map_err(|_| SdkError::Argument)
 }
 
 /// The key data and kind the arguments register (single-key entries only: `register`, `registerWebAuthn`).
-fn key_of(args: &Value) -> Result<(u16, Vec<u8>), SdkError> {
-    match args.get("entry").and_then(Value::as_str) {
-        Some("register") => Ok((
-            args.get("kind")
-                .and_then(Value::as_u64)
-                .and_then(|k| u16::try_from(k).ok())
-                .ok_or(SdkError::Argument)?,
-            bytes(args.get("keyData").ok_or(SdkError::Argument)?)?,
-        )),
-        Some("registerWebAuthn") => {
-            let k = args.get("key").ok_or(SdkError::Argument)?;
-            let at = |n: &str| b32(k.get(n).ok_or(SdkError::Argument)?);
+fn key_of(a: &RegisterArgs) -> Result<(u16, Vec<u8>), SdkError> {
+    match (a.entry.as_str(), a.kind, &a.key_data, &a.key) {
+        ("register", Some(kind), Some(kd), None) => Ok((kind, unhex(kd)?)),
+        ("registerWebAuthn", None, None, Some(k)) => {
             let key = WebAuthnKey {
-                x: at("x")?,
-                y: at("y")?,
-                rp_id_hash: at("rpIdHash")?,
+                x: b32(&k.x)?,
+                y: b32(&k.y)?,
+                rp_id_hash: b32(&k.rp_id_hash)?,
             };
             Ok((0x0100, key.key_data()))
         }
@@ -78,51 +138,49 @@ fn key_of(args: &Value) -> Result<(u16, Vec<u8>), SdkError> {
 }
 
 /// `UAAttrs` from the arguments' named `attrs`.
-fn attrs_of(args: &Value) -> Result<UAAttrs, SdkError> {
-    let a = args.get("attrs").ok_or(SdkError::Argument)?;
-    let k = a.get("kem").ok_or(SdkError::Argument)?;
-    fn at<'a>(v: &'a Value, n: &str) -> Result<&'a Value, SdkError> {
-        v.get(n).ok_or(SdkError::Argument)
-    }
+fn attrs_of(a: &AttrsArgs) -> Result<UAAttrs, SdkError> {
     Ok(UAAttrs {
-        pqz_key: bytes(at(a, "pqzKey")?)?,
-        pqz_pop_hash: b32(at(a, "pqzPopHash")?)?,
+        pqz_key: unhex(&a.pqz_key)?,
+        pqz_pop_hash: b32(&a.pqz_pop_hash)?,
         kem: KemKey {
-            scheme: at(k, "scheme")?
-                .as_u64()
-                .and_then(|s| u8::try_from(s).ok())
-                .ok_or(SdkError::Argument)?,
-            mlkem_ek: bytes(at(k, "mlkemEk")?)?,
-            x25519: b32(at(k, "x25519")?)?,
+            scheme: a.kem.scheme,
+            mlkem_ek: unhex(&a.kem.mlkem_ek)?,
+            x25519: b32(&a.kem.x25519)?,
         },
-        kem_pk_hash: b32(at(a, "kemPkHash")?)?,
+        kem_pk_hash: b32(&a.kem_pk_hash)?,
     })
 }
 
 impl Account {
-    /// The receiver's blob (spec §7.1): the registration of `key` (a seed's UA key) as `prepare_register` builds it, as
-    /// named-field JSON with no secret: `{v: 1, ua, kind, args, kem}`. `WalletLocked`; `Argument` and `FeatureMissing` as
-    /// `prepare_register`.
-    pub async fn registration_blob(&self, key: KeyRef, attrs: RegisterAttrs) -> Result<String, SdkError> {
+    /// The receiver's blob (spec §7.1): the registration of `key` (a seed's UA key) as `prepare_register` builds it, named,
+    /// with no secret. `WalletLocked`; `Argument` and `FeatureMissing` as `prepare_register`.
+    pub async fn registration_blob(&self, key: KeyRef, attrs: RegisterAttrs) -> Result<RegistrationBlob, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
                 let (ua, r) = build(&sdk, &key, attrs)?;
-                let args = r.get("args").ok_or(SdkError::Internal)?;
-                let kind = args
-                    .get("kind")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0x0100);
+                let args: RegisterArgs =
+                    serde_json::from_value(r.get("args").cloned().ok_or(SdkError::Internal)?)
+                        .map_err(|_| SdkError::Internal)?;
                 let kem = match r.get("kemFill").filter(|f| !f.is_null()) {
                     Some(_) => {
                         let crate::op::Key::Ua(_, k) = crate::op::key(&sdk, &key)? else {
                             return Err(SdkError::Argument);
                         };
-                        json!({"version": 0, "kemPk": hex(&k.kem_key(0)?.kem_pk())})
+                        Some(KemRecord {
+                            version: 0,
+                            kem_pk: hex(&k.kem_key(0)?.kem_pk()),
+                        })
                     }
-                    None => Value::Null,
+                    None => None,
                 };
-                Ok(json!({"v": 1, "ua": hex(&ua), "kind": kind, "args": args, "kem": kem}).to_string())
+                Ok(RegistrationBlob {
+                    v: 1,
+                    ua: hex(&ua),
+                    kind: args.kind.unwrap_or(0x0100),
+                    args,
+                    kem,
+                })
             })
             .await
     }
@@ -130,13 +188,12 @@ impl Account {
     /// The sender's side (spec §7.1): every check of the module doc on `blob` before anything is sent, then the registry
     /// writes `payer` (a native `evm` key) pays for: the registration (split as `prepare_register`'s), then `setKemKey` when
     /// the KEM key is committed and not yet stored; none for a UA registered with its KEM key. Quote, submit and follow each
-    /// as `prepare_register`'s; prepare the payment only after the last one's `Landed`. `Argument` (a blob above 64 KiB, deeper
-    /// than 4, with an unknown field, of another version, an entry other than `register` / `registerWebAuthn`),
-    /// `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`,
-    /// `GasAboveTxCap`.
+    /// as `prepare_register`'s; prepare the payment only after the last one's `Landed`. `Argument` (another version, an
+    /// entry other than `register` / `registerWebAuthn`, a field that does not decode), `RegistrationUaMismatch`,
+    /// `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`, `GasAboveTxCap`.
     pub async fn prepare_submit_registration(
         &self,
-        blob: String,
+        blob: RegistrationBlob,
         chain: String,
         expected_ua: String,
         payer: KeyRef,
@@ -144,19 +201,12 @@ impl Account {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                if blob.len() > BLOB_MAX
-                    || scaas_ua::json::depth_within(blob.as_bytes(), BLOB_DEPTH).is_err()
-                {
-                    return Err(SdkError::Argument);
-                }
-                let b: Blob = serde_json::from_str(&blob).map_err(|_| SdkError::Argument)?;
+                let b = blob;
                 if b.v != 1 {
                     return Err(SdkError::Argument);
                 }
                 // the receiver the user means, and the one the key data gives
-                let ua: [u8; 32] = unhex(&b.ua.to_ascii_lowercase())?
-                    .try_into()
-                    .map_err(|_| SdkError::Argument)?;
+                let ua = b32(&b.ua.to_ascii_lowercase())?;
                 if !b.ua.eq_ignore_ascii_case(&expected_ua) {
                     return Err(SdkError::RegistrationUaMismatch);
                 }
@@ -182,11 +232,11 @@ impl Account {
                     return Err(SdkError::RegistrationKindDisabled);
                 }
                 // the PoP, locally (and the arguments well formed: the calldata builds)
-                let attrs = attrs_of(&b.args)?;
-                let pop = bytes(b.args.get("pop").ok_or(SdkError::Argument)?)?;
-                let pqz_pop = bytes(b.args.get("pqzPop").ok_or(SdkError::Argument)?)?;
-                let entry = b.args.get("entry").and_then(Value::as_str).ok_or(SdkError::Argument)?;
-                scaas_ua::wallet::entries::registry_call(entry, &b.args)?;
+                let attrs = attrs_of(&b.args.attrs)?;
+                let pop = unhex(&b.args.pop)?;
+                let pqz_pop = unhex(&b.args.pqz_pop)?;
+                let args = serde_json::to_value(&b.args).map_err(|_| SdkError::Internal)?;
+                scaas_ua::wallet::entries::registry_call(&b.args.entry, &args)?;
                 check_registration(kind, &key_data, &attrs, &pop, &pqz_pop, &|_| None)
                     .map_err(|_| SdkError::RegistrationPopInvalid)?;
                 // a committed KEM key: present, the committed one; the fill after the registration
@@ -210,7 +260,7 @@ impl Account {
                         }))
                     }
                 };
-                writes(&sdk, &chain, &payer, ua, &b.args, fill.as_ref()).await
+                writes(&sdk, &chain, &payer, ua, &args, fill.as_ref()).await
             })
             .await
     }

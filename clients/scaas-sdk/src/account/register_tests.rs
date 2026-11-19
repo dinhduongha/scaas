@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Plan T13 `pq_registration_split`: a PQ registration carrying its PQZ key's `pqzPop` (the `ua/portable.json` row
-//! `mldsa65/n2304-kmax4096`, a real one) on the fake chain whose estimate grows with the calldata. A blob of that size is
-//! above spec §7.1's 64 KiB and the PQZ key attribute is not built, so the split is driven here as both entries drive it.
+//! `mldsa65/n2304-kmax4096`, a real one) on the fake chain whose estimate grows with the calldata, driven here as both entries
+//! drive it (`tests/account_ops.rs` `sponsored_pq_blob_split` drives it through a blob).
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::expect_used)]
 // the fake chain of the integration tests, as `op::tests` takes it too (a test-only copy per module)
 #[allow(clippy::duplicate_mod)]

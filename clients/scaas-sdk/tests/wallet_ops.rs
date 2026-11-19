@@ -58,6 +58,8 @@ const KINDS: [(&str, &str); 4] = [
     ("wallet", "SCaaS MandateWallet"),
 ];
 
+const REGISTRY: &str = "0x5ca00000000000000000000000000000000004e6";
+
 struct T {
     sdk: Arc<Sdk>,
     chain: Fake,
@@ -84,6 +86,9 @@ async fn setup(gateways: usize) -> T {
         }
         c.gw_info["chains"][0]["chain_uid"] = json!(salt);
         c.genesis = salt.clone();
+        // the registry holds every receiver here (a pay to a derived UA needs a registry: owner 2026-11-19, R3)
+        let sel = fake_chain::keccak_hex(b"isRegistered(bytes32)")[..10].to_string();
+        c.answers.push((REGISTRY.into(), sel, format!("0x{}1", "0".repeat(63))));
     }
     let url = serve(chain.clone()).await;
     let mut gws = vec![];
@@ -98,7 +103,7 @@ async fn setup(gateways: usize) -> T {
         rpc: vec![endpoint(&url)],
         rpc_policy: scaas_rpc::Policy::Failover,
         gateways: gws,
-        registry: None,
+        registry: Some(REGISTRY.into()),
         factory: None,
         router: None,
         finality: Finality::Finalized,

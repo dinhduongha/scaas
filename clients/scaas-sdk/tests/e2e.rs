@@ -612,8 +612,9 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
         )
         .await
         .unwrap();
-    let to: serde_json::Value = serde_json::from_str(&blob).unwrap();
-    let to = to["ua"].as_str().unwrap().to_string();
+    // passed out of band as its JSON text, read back on the sender's side
+    let blob = scaas_sdk::account::RegistrationBlob::from_json(&blob.to_json().unwrap()).unwrap();
+    let to = blob.ua.clone();
     let payer = KeyRef::Native {
         seed: sseed,
         network: "evm".into(),
