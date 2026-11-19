@@ -104,6 +104,7 @@ async fn sdk() -> (Arc<Sdk>, Arc<MemoryStore>, Arc<Fake>) {
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap();
@@ -447,6 +448,7 @@ async fn change_passphrase_one_secret_for_both() {
             ..Limits::default()
         },
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap();

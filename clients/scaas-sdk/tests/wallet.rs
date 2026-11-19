@@ -61,6 +61,7 @@ fn profile(rpc: Vec<String>, gateways: Vec<String>, uid: &str) -> ChainProfile {
         tx_gas_cap: Some(1 << 24),
         gas: vec![],
         max_valid_secs: None,
+        gas_opt_in: vec![],
         tokens: vec![
             ListedToken {
                 address: VND.into(),
@@ -100,6 +101,7 @@ async fn sdk(p: ChainProfile) -> (Arc<Sdk>, String) {
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap();

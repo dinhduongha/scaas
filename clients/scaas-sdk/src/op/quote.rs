@@ -3,6 +3,7 @@
 //! maximum cost beside the operation's own fee; above the profile's caps (from the SDK's configuration, never the answering
 //! endpoint) `FeeAboveCap`; a gas limit above the chain's per-transaction cap or block limit `GasAboveTxCap`; a payer that is an
 //! EIP-7702 designator `PayerDelegated`.
+use super::gas::GasFrom;
 use super::prepared::{envelope, Prepared};
 use super::{evm, key, sim, KeyRef, Op};
 use crate::{Sdk, SdkError};
@@ -29,7 +30,14 @@ pub struct SubmitQuote {
     pub path: SubmitPath,
     /// the payer's address (a self-relay): linked on chain to the subject
     pub payer: Option<String>,
+    /// the self-relay transaction's gas limit (`gas`); 0 on the gateway path, where the holder sends no transaction
     pub gas_limit: u64,
+    /// what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
+    /// the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
+    pub gas: Option<u64>,
+    /// where `gas` came from: the chain's measured rows, a module table, the reference table, the app's figure, or a native
+    /// send's estimate
+    pub gas_from: Option<GasFrom>,
     pub max_fee_per_gas: String,
     pub max_priority_fee_per_gas: String,
     pub max_cost: String,
@@ -88,8 +96,8 @@ pub(crate) fn payer_address(sdk: &Sdk, payer: &KeyRef) -> Result<Address, SdkErr
 
 /// A self-relay's quote for `to` and `data` from `payer`: the code check, the gas, the chain's caps, the fees and the SDK's
 /// caps, the payer's nonce. The gas of a relayed operation (owner 2026-11-18, ruling 1: a quote never makes a signature;
-/// owner 2026-11-19, ruling B) is the gas table's figure for its key ([`super::gas`]), `pinned`; without one `GasUnquoted`.
-/// A native send's gas is its own estimate.
+/// owner 2026-11-19, ruling B and the gas-table rulings) is the figure of the lookup ([`super::gas`]), `pinned`, with its
+/// source; without one `GasUnquoted`. A native send's gas is its own estimate.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn self_relay(
     sdk: &Sdk,
@@ -100,7 +108,7 @@ pub(crate) async fn self_relay(
     data: Bytes,
     fee_to_relayer: String,
     relayed: bool,
-    pinned: Option<u64>,
+    pinned: Option<(u64, GasFrom)>,
 ) -> Result<SubmitQuote, SdkError> {
     let (profile, _, pool) = evm(sdk, chain)?;
     let from = payer_address(sdk, payer)?;
@@ -109,17 +117,19 @@ pub(crate) async fn self_relay(
     if relayed && delegated(&pool.code(from).await.map_err(sim)?) {
         return Err(SdkError::PayerDelegated);
     }
-    let gas = if let Some(g) = pinned {
+    let (gas, gas_from) = if let Some(g) = pinned {
         g
     } else if relayed {
         return Err(SdkError::GasUnquoted);
     } else if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
-        21_000 // a plain transfer to an account without code
+        (21_000, GasFrom::Estimate) // a plain transfer to an account without code
     } else {
         // the estimate with the value sent (T13b ruling 5): a payable path's cost, a non-payable target's revert
-        pool.simulate_value(from, to, value, data)
+        let g = pool
+            .simulate_value(from, to, value, data)
             .await
-            .map_err(sim)?
+            .map_err(sim)?;
+        (g, GasFrom::Estimate)
     };
     let block = pool.block_gas().await.map_err(sim)?;
     if profile.tx_gas_cap.is_some_and(|c| gas > c) || gas > block.limit {
@@ -143,6 +153,8 @@ pub(crate) async fn self_relay(
         },
         payer: Some(format!("{from:#x}")),
         gas_limit: gas,
+        gas: Some(gas),
+        gas_from: Some(gas_from),
         max_fee_per_gas: fees.max_fee_per_gas.to_string(),
         max_priority_fee_per_gas: fees.max_priority_fee_per_gas.to_string(),
         max_cost: cost.to_string(),
@@ -187,11 +199,35 @@ pub(crate) async fn check_gateways(sdk: &Sdk, chain: &str) -> Result<(), SdkErro
 
 impl Op {
     /// The quote of `prepared` on `path` (spec §13.3). `PreparedUnknown`, `PreparedStale` (expired or its lane nonce moved),
-    /// `SubmitPathNone`, `PayerDelegated`, `GasUnquoted` (no gas row for the operation's key), `GasAboveTxCap`, `FeeAboveCap`.
+    /// `SubmitPathNone`, `PayerDelegated`, `GasUnquoted` (a self-relay with no gas figure for the operation's key; a gateway
+    /// quote reports `gas: None` instead), `GasAboveTxCap`, `FeeAboveCap`.
     pub async fn quote(
         &self,
         prepared: Arc<Prepared>,
         path: SubmitPath,
+    ) -> Result<SubmitQuote, SdkError> {
+        self.quote_inner(prepared, path, None).await
+    }
+
+    /// [`Op::quote`] with the app's own gas figure for the operation (execution gas, as a table row), used only when no table
+    /// has a row for its key (owner 2026-11-19); the quote names it `App`. A figure above `Limits::max_gas` is `FeeAboveCap`.
+    pub async fn quote_with_gas(
+        &self,
+        prepared: Arc<Prepared>,
+        path: SubmitPath,
+        gas: u64,
+    ) -> Result<SubmitQuote, SdkError> {
+        if gas > self.sdk.limits.max_gas {
+            return Err(SdkError::FeeAboveCap);
+        }
+        self.quote_inner(prepared, path, Some(gas)).await
+    }
+
+    async fn quote_inner(
+        &self,
+        prepared: Arc<Prepared>,
+        path: SubmitPath,
+        app: Option<u64>,
     ) -> Result<SubmitQuote, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
@@ -203,16 +239,39 @@ impl Op {
                     Some(_) => scaas_ua::wallet::fee_due(prepared.t.name, &prepared.t.message)?,
                     None => "0".to_string(),
                 };
-                let gateways = sdk
+                let chain = sdk
                     .chains
                     .iter()
                     .find(|c| c.profile.key == prepared.chain())
-                    .and_then(|c| c.gateways.as_ref())
-                    .map_or(0, |g| g.len());
+                    .ok_or(SdkError::ChainUnknown)?;
+                let gateways = chain.gateways.as_ref().map_or(0, |g| g.len());
+                // no signature here (ruling 1): the gas figure of the operation's key (ruling B, the gas-table rulings), on
+                // every path
+                let unsigned = super::submit::unsigned(&prepared)?;
+                let signer = match prepared.signer() {
+                    KeyRef::Ua { kind, .. } => kind,
+                    KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
+                };
+                let fresh = prepared
+                    .t
+                    .lane
+                    .as_ref()
+                    .is_some_and(|(_, _, n)| n.is_zero());
+                let entry = prepared.entry();
+                let figure = super::gas::quoted(
+                    &chain.profile.gas,
+                    &chain.profile.gas_opt_in,
+                    &sdk.gas_tables,
+                    app,
+                    (&entry, prepared.t.kind, signer, fresh),
+                    unsigned.calldata.len(),
+                );
                 let gateway = || SubmitQuote {
                     path: SubmitPath::Gateway,
                     payer: None,
                     gas_limit: 0,
+                    gas: figure.as_ref().map(|f| f.0),
+                    gas_from: figure.as_ref().map(|f| f.1.clone()),
                     max_fee_per_gas: "0".into(),
                     max_priority_fee_per_gas: "0".into(),
                     max_cost: "0".into(),
@@ -232,26 +291,6 @@ impl Op {
                     SubmitPath::Auto { payer: None } => return Err(SdkError::SubmitPathNone),
                     SubmitPath::Auto { payer: Some(p) } | SubmitPath::SelfRelay { payer: p } => p,
                 };
-                // no signature here (ruling 1): the gas table's figure for the operation's key (ruling B)
-                let unsigned = super::submit::unsigned(&prepared)?;
-                let signer = match prepared.signer() {
-                    KeyRef::Ua { kind, .. } => kind,
-                    KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
-                };
-                let fresh = prepared
-                    .t
-                    .lane
-                    .as_ref()
-                    .is_some_and(|(_, _, n)| n.is_zero());
-                let (profile, _, _) = evm(&sdk, &prepared.chain())?;
-                let pinned = super::gas::quoted(
-                    &profile.gas,
-                    &prepared.entry(),
-                    prepared.t.kind,
-                    signer,
-                    fresh,
-                    unsigned.calldata.len(),
-                );
                 self_relay(
                     &sdk,
                     &prepared.chain(),
@@ -261,7 +300,7 @@ impl Op {
                     Bytes::from(unsigned.calldata),
                     fee,
                     true,
-                    pinned,
+                    figure,
                 )
                 .await
             })

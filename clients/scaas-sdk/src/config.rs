@@ -70,8 +70,13 @@ pub struct ChainProfile {
     pub tx_gas_cap: Option<u64>,
     /// the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
     pub tokens: Vec<ListedToken>,
-    /// gas figures measured for this chain, before the SDK's built-in table (owner 2026-11-19, ruling B; spec §13.3)
+    /// gas figures measured on this chain, shipped with its release data (owner 2026-11-19, gas-table rulings; spec §13.3);
+    /// first in every lookup
     pub gas: Vec<GasRow>,
+    /// the further gas tables this chain uses, by name, only because it names them here (explicit opt-in): module tables of
+    /// [`SdkConfig::gas_tables`] in this order, and `"reference"` for the SDK's forge-generated reference table, read after
+    /// every module table; a name the SDK does not hold is `Argument` at `Sdk::open`
+    pub gas_opt_in: Vec<String>,
     /// the longest an operation's `validUntil` may lie ahead of the SDK's clock on this chain, in seconds; `None`:
     /// `Limits::max_valid_secs` (default 86 400, one day) (owner 2026-11-19, T13b ruling 1)
     pub max_valid_secs: Option<u64>,
@@ -88,6 +93,92 @@ pub struct GasRow {
     pub signer: u16,
     pub fresh: bool,
     pub gas: u64,
+}
+
+/// A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 1, name, family, assumptions,
+/// rows}`, each row `{entry, kind, signer, fresh, gas, measured, source, stand_in?}`, read by [`GasTable::parse`]. One format
+/// for the chain's measured rows, a module's table and the SDK's reference table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GasTable {
+    /// a module's name, `reference`, or the chain key of a chain's measured rows
+    pub name: String,
+    /// `evm` (the only family with a table today)
+    pub family: String,
+    pub rows: Vec<GasRow>,
+}
+
+/// Bounds of a gas table's parse.
+const GAS_TABLE_MAX_BYTES: usize = 256 * 1024;
+const GAS_TABLE_MAX_ROWS: usize = 1_024;
+const GAS_NAME_MAX: usize = 64;
+
+impl GasTable {
+    /// Parses and checks a gas table file: at most 256 KiB and 1,024 rows; the format and version; `name`, `entry` and `kind`
+    /// 1–64 characters of `[A-Za-z0-9_:.-]`; `signer` a `u16`; each `gas` a positive multiple of 1,000 with `measured <= gas
+    /// < measured + 1000` (owner 2026-11-19: rounded up to the next 1,000); `source` present; no key twice. `Argument` on any
+    /// failure.
+    pub fn parse(text: &str) -> Result<GasTable, crate::SdkError> {
+        Self::parse_inner(text).ok_or(crate::SdkError::Argument)
+    }
+
+    fn parse_inner(text: &str) -> Option<GasTable> {
+        if text.len() > GAS_TABLE_MAX_BYTES {
+            return None;
+        }
+        let v: serde_json::Value = serde_json::from_str(text).ok()?;
+        if v.get("format")?.as_str()? != "scaas.gas-table" || v.get("v")?.as_u64()? != 1 {
+            return None;
+        }
+        let name = |x: &serde_json::Value, k: &str| {
+            x.get(k)
+                .and_then(|s| s.as_str())
+                .filter(|s| {
+                    !s.is_empty()
+                        && s.len() <= GAS_NAME_MAX
+                        && s.bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b"_:.-".contains(&b))
+                })
+                .map(str::to_string)
+        };
+        let rows = v.get("rows")?.as_array()?;
+        if rows.len() > GAS_TABLE_MAX_ROWS {
+            return None;
+        }
+        let mut out: Vec<GasRow> = Vec::with_capacity(rows.len());
+        for r in rows {
+            let row = GasRow {
+                entry: name(r, "entry")?,
+                kind: name(r, "kind")?,
+                signer: u16::try_from(r.get("signer")?.as_u64()?).ok()?,
+                fresh: r.get("fresh")?.as_bool()?,
+                gas: r.get("gas")?.as_u64()?,
+            };
+            let measured = r.get("measured")?.as_u64()?;
+            r.get("source")?.as_str().filter(|s| !s.is_empty())?;
+            if row.gas == 0
+                || !row.gas.is_multiple_of(1_000)
+                || measured > row.gas
+                || row.gas - measured >= 1_000
+            {
+                return None;
+            }
+            if out.iter().any(|o| o.key() == row.key()) {
+                return None;
+            }
+            out.push(row);
+        }
+        Some(GasTable {
+            name: name(&v, "name")?,
+            family: name(&v, "family")?,
+            rows: out,
+        })
+    }
+}
+
+impl GasRow {
+    pub(crate) fn key(&self) -> (&str, &str, u16, bool) {
+        (&self.entry, &self.kind, self.signer, self.fresh)
+    }
 }
 
 /// A token of a profile's reviewed list (spec §8.2).
@@ -163,6 +254,9 @@ pub struct SdkConfig {
     pub limits: Limits,
     /// the clock an operation's `validUntil` is held to; `None`: the device's
     pub clock: Option<Clock>,
+    /// module gas tables (a module above the SDK ships its own, [`GasTable::parse`]); a chain uses one only when its profile
+    /// names it in `gas_opt_in`; the name `reference` is the SDK's own and refused here (`Argument`), as are two of one name
+    pub gas_tables: Vec<GasTable>,
 }
 
 impl std::fmt::Debug for SdkConfig {
@@ -174,6 +268,7 @@ impl std::fmt::Debug for SdkConfig {
             .field("runtime", &self.runtime)
             .field("limits", &self.limits)
             .field("clock", &self.clock.is_some())
+            .field("gas_tables", &self.gas_tables)
             .finish()
     }
 }

@@ -110,6 +110,7 @@ async fn setup(gateways: usize) -> T {
         }],
         gas: gas_rows(),
         max_valid_secs: None,
+        gas_opt_in: vec![],
     };
     let store = MemoryStore::new();
     let sdk = Sdk::open(SdkConfig {
@@ -120,6 +121,7 @@ async fn setup(gateways: usize) -> T {
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
         clock: Some(std::sync::Arc::new(|| 1_800_000_000)),
+        gas_tables: vec![],
     })
     .await
     .unwrap();

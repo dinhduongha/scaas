@@ -105,6 +105,12 @@ async fn open_at(store: Arc<Flaky>, profile: ChainProfile, limits: Limits, now: 
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits,
         clock: Some(std::sync::Arc::new(move || now)),
+        // a module table every test SDK holds; read only by a profile that opts in to `vault`
+        gas_tables: vec![crate::GasTable {
+            name: "vault".into(),
+            family: "evm".into(),
+            rows: gas_rows(200_000),
+        }],
     })
     .await
     .unwrap()
@@ -138,6 +144,7 @@ async fn setup(gateways: usize, edit: impl FnOnce(&mut ChainProfile, &mut Limits
         }],
         gas: gas_rows(100_000),
         max_valid_secs: None,
+        gas_opt_in: vec![],
     };
     let mut limits = Limits::default();
     edit(&mut profile, &mut limits);
@@ -1068,22 +1075,130 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
         ),
         "Ok"
     );
-    // the built-in table: the router's ordered cancel by a native EVM key on a used lane (`mtxCancelNonce_router`)
-    let t = setup(0, |p, _| p.gas = vec![]).await;
-    t.chain.lock().unwrap().nonces.insert(OTHER.into(), 3);
-    let mut d = cancel(&t, "gov_router", OTHER, "5", "0");
-    d.signer = payer(&t);
-    d.message["from"] = json!(format!("0x{}{}", "00".repeat(12), &evm_address()[2..]));
-    let p = prepare(&t, d).await;
-    let q = t
-        .sdk
-        .op()
-        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
-        .await
-        .unwrap();
-    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
-    assert_eq!(q.gas_limit, gas::with_margin(73_000 + 21_000 + 64 * len));
+    // the reference table, only on the profile's opt-in: the router's ordered cancel by a native EVM key on a used lane
+    // (`mtxCancelNonce_router`)
+    for opt_in in [false, true] {
+        let t = setup(0, |p, _| {
+            p.gas = vec![];
+            if opt_in {
+                p.gas_opt_in = vec![gas::REFERENCE.into()];
+            }
+        })
+        .await;
+        t.chain.lock().unwrap().nonces.insert(OTHER.into(), 3);
+        let mut d = cancel(&t, "gov_router", OTHER, "5", "0");
+        d.signer = payer(&t);
+        d.message["from"] = json!(format!("0x{}{}", "00".repeat(12), &evm_address()[2..]));
+        let p = prepare(&t, d).await;
+        let r = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await;
+        if !opt_in {
+            assert_eq!(
+                code(r),
+                "GasUnquoted",
+                "the reference table is never read on its own"
+            );
+            continue;
+        }
+        let q = r.unwrap();
+        let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+        assert_eq!(q.gas_limit, gas::with_margin(73_000 + 21_000 + 64 * len));
+        assert_eq!(
+            (q.gas, q.gas_from),
+            (Some(q.gas_limit), Some(GasFrom::Reference))
+        );
+        assert_eq!(signs(&t), 0);
+    }
+}
+
+/// The gas-table rulings (owner 2026-11-19): each source on the self-relay path, in the lookup order chain → module (opted in)
+/// → reference (opted in) → the app's figure → `GasUnquoted`; the quote names the source; an app figure above `max_gas` is
+/// refused. No signature at quote time.
+#[tokio::test(flavor = "multi_thread")]
+async fn quote_names_its_gas_source_in_order() {
+    let src = |opt: &'static [&'static str], chain: bool| {
+        move |p: &mut ChainProfile, _: &mut Limits| {
+            if !chain {
+                p.gas = vec![];
+            }
+            p.gas_opt_in = opt.iter().map(|s| s.to_string()).collect();
+        }
+    };
+    let len = |p: &Arc<Prepared>| submit::unsigned(p).unwrap().calldata.len() as u64;
+    let quote = |t: &T, p: Arc<Prepared>, app: Option<u64>| {
+        let op = t.sdk.op();
+        let path = SubmitPath::SelfRelay { payer: payer(t) };
+        async move {
+            match app {
+                Some(g) => op.quote_with_gas(p, path, g).await,
+                None => op.quote(p, path).await,
+            }
+        }
+    };
+    // chain rows first, whatever is opted in and whatever the app passes
+    let t = setup(0, src(&["vault", "reference"], true)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = quote(&t, p.clone(), Some(500_000)).await.unwrap();
+    assert_eq!(q.gas_from, Some(GasFrom::Chain));
+    assert_eq!(
+        q.gas_limit,
+        gas::with_margin(100_000 + 21_000 + 64 * len(&p))
+    );
+    // the module table the profile opts in to
+    let t = setup(0, src(&["vault"], false)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = quote(&t, p.clone(), Some(500_000)).await.unwrap();
+    assert_eq!(q.gas_from, Some(GasFrom::Module("vault".into())));
+    assert_eq!(
+        q.gas_limit,
+        gas::with_margin(200_000 + 21_000 + 64 * len(&p))
+    );
+    // the app's figure: no table row (nothing opted in), named `App`
+    let t = setup(0, src(&[], false)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = quote(&t, p.clone(), Some(500_000)).await.unwrap();
+    assert_eq!(q.gas_from, Some(GasFrom::App));
+    assert_eq!(
+        q.gas_limit,
+        gas::with_margin(500_000 + 21_000 + 64 * len(&p))
+    );
+    assert_eq!(q.gas, Some(q.gas_limit));
+    // ... refused above `max_gas` (control: at it), and without it the self-relay is unquoted
+    let max = t.sdk.limits.max_gas;
+    assert_eq!(
+        code(quote(&t, p.clone(), Some(max + 1)).await),
+        "FeeAboveCap"
+    );
+    assert_ne!(code(quote(&t, p.clone(), Some(max)).await), "GasUnquoted");
+    assert_eq!(code(quote(&t, p, None).await), "GasUnquoted");
     assert_eq!(signs(&t), 0);
+}
+
+/// The gas-table rulings (owner 2026-11-19): the gateway quote carries the gas figure and its source for the user and the app
+/// (`gas_limit` and `max_cost` stay 0: the holder sends no transaction), and without a figure it reports the gas as unquoted
+/// (`gas: None`) and is not refused.
+#[tokio::test(flavor = "multi_thread")]
+async fn gateway_quote_carries_gas_or_reports_it_unquoted() {
+    let t = setup(1, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = gateway_quote(&t, &p).await;
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+    assert_eq!(q.gas, Some(gas::with_margin(100_000 + 21_000 + 64 * len)));
+    assert_eq!(q.gas_from, Some(GasFrom::Chain));
+    assert_eq!((q.gas_limit, q.max_cost.as_str()), (0, "0"));
+    let t = setup(1, |p, _| p.gas = vec![]).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let q = gateway_quote(&t, &p).await;
+    assert_eq!(
+        (q.gas, q.gas_from.clone()),
+        (None, None),
+        "unquoted, not refused"
+    );
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(signs(&t), 1, "the relayed submit goes on");
 }
 
 /// Ruling A (P1-1): sign → write the row → simulate → send. A simulation that reverts (or needs more gas than the confirmed
@@ -1235,6 +1350,8 @@ async fn hand_built_gateway_quote_is_checked() {
         path: SubmitPath::Gateway,
         payer: None,
         gas_limit: 0,
+        gas: None,
+        gas_from: None,
         max_fee_per_gas: "0".into(),
         max_priority_fee_per_gas: "0".into(),
         max_cost: "0".into(),

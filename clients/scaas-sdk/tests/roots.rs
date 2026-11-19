@@ -40,6 +40,7 @@ async fn sdk() -> Arc<Sdk> {
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap()
@@ -227,6 +228,7 @@ async fn one_secret_for_two_parameters_does_not_hang() {
             ..Limits::default()
         },
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap();

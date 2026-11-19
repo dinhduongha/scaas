@@ -33,6 +33,7 @@ async fn sdk() -> Arc<Sdk> {
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap()

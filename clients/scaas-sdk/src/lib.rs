@@ -29,7 +29,7 @@ pub mod vault;
 pub mod wallet;
 
 pub use config::{
-    ChainProfile, Clock, EndpointConfig, Family, Finality, GasRow, Limits, ListedToken,
+    ChainProfile, Clock, EndpointConfig, Family, Finality, GasRow, GasTable, Limits, ListedToken,
     RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
@@ -151,6 +151,10 @@ pub struct Sdk {
     #[allow(dead_code)]
     pub(crate) chains: Vec<Chain>,
     pub(crate) limits: Limits,
+    /// the module gas tables of the configuration and the SCaaS reference table (`reference`); a chain reads one only when its
+    /// profile opts in (spec §13.3)
+    #[allow(dead_code)] // read by the quote (`wallet`)
+    pub(crate) gas_tables: Vec<GasTable>,
     clock: Option<Clock>,
     pub(crate) rt: Option<Rt>,
     pub(crate) authenticator: Option<Arc<dyn platform::Authenticator>>,
@@ -183,11 +187,30 @@ pub struct Sdk {
     pub(crate) signs: std::sync::atomic::AtomicU32,
 }
 
+/// The configuration's module gas tables, then the SCaaS reference table: `Argument` for a module named `reference`, two of one
+/// name, or a family other than `evm` (the only one with a table today).
+fn gas_tables(modules: Vec<GasTable>) -> Result<Vec<GasTable>, SdkError> {
+    let mut names = HashSet::new();
+    for t in &modules {
+        if t.name == "reference" || t.family != "evm" || !names.insert(t.name.clone()) {
+            return Err(SdkError::Argument);
+        }
+    }
+    #[allow(unused_mut)]
+    let mut out = modules;
+    #[cfg(feature = "wallet")]
+    out.push(GasTable::parse(op::gas::REFERENCE_FILE)?);
+    Ok(out)
+}
+
 impl Sdk {
     /// Checks the configuration and builds the endpoint lists; no network I/O. Refuses: a profile without a `0x` + 64 hex
     /// `chain_uid` and two profiles with one `key` (`Argument`); an empty RPC list (`EndpointListEmpty`); `strict_majority` with
-    /// one endpoint, a scheme other than `http` / `https`, or two equal endpoints (`scaas-rpc`'s codes).
+    /// one endpoint, a scheme other than `http` / `https`, or two equal endpoints (`scaas-rpc`'s codes); a gas opt-in naming a
+    /// table the SDK does not hold (or one twice), a module gas table named `reference`, of a family other than `evm`, or two of
+    /// one name (`Argument`).
     pub async fn open(config: SdkConfig) -> Result<Arc<Sdk>, SdkError> {
+        let gas_tables = gas_tables(config.gas_tables)?;
         let mut keys = HashSet::new();
         let mut chains = Vec::with_capacity(config.profiles.len());
         for p in config.profiles {
@@ -195,6 +218,15 @@ impl Sdk {
                 return Err(SdkError::Argument);
             }
             if !keys.insert(p.key.clone()) {
+                return Err(SdkError::Argument);
+            }
+            // an opt-in names a table the SDK holds, once
+            let mut seen = HashSet::new();
+            if !p
+                .gas_opt_in
+                .iter()
+                .all(|n| seen.insert(n) && gas_tables.iter().any(|t| &t.name == n))
+            {
                 return Err(SdkError::Argument);
             }
             let rpc = list(&p.rpc, p.rpc_policy)?;
@@ -235,6 +267,7 @@ impl Sdk {
         Ok(Arc::new(Sdk {
             chains,
             limits: config.limits,
+            gas_tables,
             clock: config.clock,
             rt,
             authenticator: config.authenticator,

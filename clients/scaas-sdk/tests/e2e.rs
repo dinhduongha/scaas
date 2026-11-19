@@ -169,6 +169,7 @@ async fn e2e_pay_on_anvil() {
             gas: 400_000,
         }],
         max_valid_secs: None,
+        gas_opt_in: vec![],
     };
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],
@@ -178,6 +179,7 @@ async fn e2e_pay_on_anvil() {
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap();

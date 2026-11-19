@@ -222,6 +222,7 @@ pub async fn sdk_open(
         runtime: RuntimeChoice::Own,
         limits: Limits::default(),
         clock: None,
+        gas_tables: vec![],
     };
     Ok(SdkHandle(Sdk::open(config).await?))
 }

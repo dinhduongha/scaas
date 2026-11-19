@@ -155,9 +155,14 @@ or relayed by the holder** (SPECIFIED). Paths: a scaas-node gateway, for the ent
 ([NODE-GW-03](../node/gateway.md#NODE-GW-03): a registered token's `mtx*` entries, the transfer on ids, the DEX routes, and UA
 registration once served), with the same body to the gateways chosen ([CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)); or self-relay, for any
 entry, as a transaction (type 2 where the chain has a base fee, else 0) from the holder's own native account, which pays the gas, with the
-entry's calldata from `ua-rs`. The quote never makes or sends a signature: its gas is the gas table's row for (entry, domain kind, signer kind, fresh lane),
-rounded up to 1,000, with a margin, else `GasUnquoted` (owner 2026-11-18, ruling 1; owner 2026-11-19, ruling B); `submit` signs once,
-writes the row, then simulates the signed calldata (owner 2026-11-19, ruling A). Before
+entry's calldata from `ua-rs`. The quote never makes or sends a signature (owner 2026-11-18, ruling 1); its gas comes from the gas table for (entry, domain kind,
+signer kind, fresh lane), rounded up to 1,000, with a margin, in the order: the chain's measured rows, the module tables and the
+SCaaS reference table the profile opts in to, the app's own figure (at most `max_gas`); the quote carries the figure and names
+its source on every path (owner 2026-11-19, ruling B and the gas-table rulings; BUILT in the SDK, the forge generator PLANNED;
+EVM only today, the same principle per family PLANNED; spec §13.3). Without a figure a self-relay is `GasUnquoted`; a gateway
+quote reports the gas as unquoted and is not refused, the figure is for the user and the app only, never sent to the gateway,
+and the SDK never converts a token fee to or from gas. `submit` signs once, writes the row, then simulates the signed calldata
+(owner 2026-11-19, ruling A). Before
 `submit` a quote shows the payer, the gas limit, the maximum fee per gas and the maximum cost; the user confirms it; above the profile's
 caps it is `FeeAboveCap`, and the caps come from the SDK's configuration, never from the answering endpoint. A gas limit above the
 chain's per-transaction cap or the block limit is `GasAboveTxCap` (a PQ registration is split as the node splits it); a payer that is an

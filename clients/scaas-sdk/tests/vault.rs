@@ -33,6 +33,7 @@ async fn open_limits(store: Arc<dyn SecureStore>, limits: Limits) -> Arc<Sdk> {
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits,
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap()

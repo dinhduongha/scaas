@@ -5,8 +5,8 @@
 use scaas_rpc::{Class, EndpointAuth, Policy, Secret};
 use scaas_sdk::error::{OWN_CODES, SHARED_CODES};
 use scaas_sdk::{
-    bits, ChainProfile, EndpointConfig, Family, Finality, Limits, RuntimeChoice, Sdk, SdkConfig,
-    SdkError,
+    bits, ChainProfile, EndpointConfig, Family, Finality, GasTable, Limits, RuntimeChoice, Sdk,
+    SdkConfig, SdkError,
 };
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -42,6 +42,7 @@ fn profile(key: &str) -> ChainProfile {
         tx_gas_cap: Some(1 << 24),
         gas: vec![],
         max_valid_secs: None,
+        gas_opt_in: vec![],
         tokens: vec![],
     }
 }
@@ -55,6 +56,7 @@ fn config(profiles: Vec<ChainProfile>) -> SdkConfig {
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: Limits::default(),
         clock: None,
+        gas_tables: vec![],
     }
 }
 
@@ -150,6 +152,57 @@ fn broadcast_rejected_is_not_an_error() {
 #[test]
 fn api_version_is_1() {
     assert_eq!(Sdk::api_version(), 1);
+}
+
+fn gas_table(name: &str, family: &str) -> GasTable {
+    GasTable {
+        name: name.into(),
+        family: family.into(),
+        rows: vec![],
+    }
+}
+
+/// The gas-table rulings (owner 2026-11-19): a profile opts in only to tables the SDK holds (the reference table, a module
+/// table of the configuration), once each; a module table may not take the reference table's name or another table's, and is
+/// EVM (the only family with a table today). Each refusal beside its control.
+#[tokio::test]
+async fn open_checks_gas_tables_and_opt_ins() {
+    let with = |opt: &[&str], tables: Vec<GasTable>| {
+        let mut p = profile("a");
+        p.gas_opt_in = opt.iter().map(|s| s.to_string()).collect();
+        let mut c = config(vec![p]);
+        c.gas_tables = tables;
+        Sdk::open(c)
+    };
+    let ok = |r: Result<std::sync::Arc<Sdk>, SdkError>| code(r.map(|_| ()));
+    assert_eq!(
+        ok(with(&["reference", "vault"], vec![gas_table("vault", "evm")]).await),
+        "Ok"
+    );
+    assert_eq!(
+        ok(with(&["missing"], vec![gas_table("vault", "evm")]).await),
+        "Argument"
+    );
+    assert_eq!(
+        ok(with(&["vault", "vault"], vec![gas_table("vault", "evm")]).await),
+        "Argument"
+    );
+    assert_eq!(
+        ok(with(&[], vec![gas_table("reference", "evm")]).await),
+        "Argument"
+    );
+    assert_eq!(
+        ok(with(
+            &[],
+            vec![gas_table("vault", "evm"), gas_table("vault", "evm")]
+        )
+        .await),
+        "Argument"
+    );
+    assert_eq!(
+        ok(with(&[], vec![gas_table("vault", "soroban")]).await),
+        "Argument"
+    );
 }
 
 #[tokio::test]

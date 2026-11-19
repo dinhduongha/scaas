@@ -368,6 +368,7 @@ async fn passphrase_unlock_opens_every_vault() {
         runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: crate::Limits::default(),
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap();
@@ -464,6 +465,7 @@ async fn platform_session() -> (Arc<crate::Sdk>, String) {
         runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: crate::Limits::default(),
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap();
@@ -559,6 +561,7 @@ async fn import_key_failed_write_leaves_no_ghost_import() {
         runtime: crate::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits: crate::Limits::default(),
         clock: None,
+        gas_tables: vec![],
     })
     .await
     .unwrap();
