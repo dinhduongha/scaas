@@ -77,6 +77,8 @@ async fn pq_registration_split() {
         tokens: vec![],
         gas: Default::default(),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
     };
     let sdk = crate::Sdk::open(SdkConfig {

@@ -408,3 +408,100 @@ impl super::Confidential {
             .await
     }
 }
+
+// --- the PQZ rows without a proof (spec §9.2, §21): `wallet`'s plain path, the contract's domain must be a PQZ token's ---
+
+/// `pqz_shield` (`UAShield` on a PQZ token): `amount` of the signer's public balance into `to_ua`'s pending window.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PqzShield {
+    pub signer: KeyRef,
+    pub chain: String,
+    pub token: String,
+    pub batch: String,
+    pub to_ua: String,
+    pub amount: String,
+    pub envelope: crate::wallet::Envelope,
+}
+
+/// `pqz_wrap_shield` (`WrapShield` on a PQZ token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PqzWrapShield {
+    pub signer: KeyRef,
+    pub chain: String,
+    pub token: String,
+    pub batch: String,
+    pub underlying: String,
+    pub amount_in: String,
+    pub to_ua: String,
+    pub envelope: crate::wallet::Envelope,
+}
+
+/// `UAPrepareAcc` (`half` 0 or 1 of the materialisation) and `UAPqzRollOver` (`n` pending entries) of `ua`'s account at key
+/// version `key_version`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PqzAccountOp {
+    pub signer: KeyRef,
+    pub chain: String,
+    pub token: String,
+    pub batch: String,
+    pub ua: String,
+    pub key_version: u64,
+    /// `half` for `UAPrepareAcc`, `n` for `UAPqzRollOver`
+    pub value: String,
+    pub envelope: crate::wallet::Envelope,
+}
+
+impl super::Confidential {
+    #[allow(clippy::too_many_arguments)]
+    async fn pqz_plain(
+        &self,
+        name: &'static str,
+        signer: KeyRef,
+        chain: String,
+        token: String,
+        batch: String,
+        fields: serde_json::Map<String, Value>,
+        env: crate::wallet::Envelope,
+    ) -> Result<Arc<crate::op::Prepared>, SdkError> {
+        let p = self.sdk.wallet().plain(name, signer, chain, token, batch, fields, env).await?;
+        if p.t.kind != "pqz" {
+            return Err(SdkError::Argument);
+        }
+        Ok(p)
+    }
+
+    /// Prepares `pqz_shield` (`UAShield` on a PQZ token; spec §9.2): `ProfileMismatch`, `Argument` (not a PQZ token).
+    pub async fn prepare_pqz_shield(&self, r: PqzShield) -> Result<Arc<crate::op::Prepared>, SdkError> {
+        let mut f = serde_json::Map::new();
+        f.insert("toUA".into(), json!(r.to_ua));
+        f.insert("amount".into(), json!(r.amount));
+        self.pqz_plain("UAShield", r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+    }
+
+    /// Prepares `pqz_wrap_shield` (`WrapShield` on a PQZ token).
+    pub async fn prepare_pqz_wrap_shield(&self, r: PqzWrapShield) -> Result<Arc<crate::op::Prepared>, SdkError> {
+        let mut f = serde_json::Map::new();
+        f.insert("underlying".into(), json!(r.underlying));
+        f.insert("amountIn".into(), json!(r.amount_in));
+        f.insert("toUA".into(), json!(r.to_ua));
+        self.pqz_plain("WrapShield", r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+    }
+
+    /// Prepares `UAPrepareAcc` (`value`: the `half`).
+    pub async fn prepare_pqz_prepare_acc(&self, r: PqzAccountOp) -> Result<Arc<crate::op::Prepared>, SdkError> {
+        self.account_op("UAPrepareAcc", "half", r).await
+    }
+
+    /// Prepares `UAPqzRollOver` (`value`: the `n` entries rolled over).
+    pub async fn prepare_pqz_roll_over(&self, r: PqzAccountOp) -> Result<Arc<crate::op::Prepared>, SdkError> {
+        self.account_op("UAPqzRollOver", "n", r).await
+    }
+
+    async fn account_op(&self, name: &'static str, k: &str, r: PqzAccountOp) -> Result<Arc<crate::op::Prepared>, SdkError> {
+        let mut f = serde_json::Map::new();
+        f.insert("ua".into(), json!(r.ua));
+        f.insert("keyVersion".into(), json!(r.key_version.to_string()));
+        f.insert(k.into(), json!(r.value));
+        self.pqz_plain(name, r.signer, r.chain, r.token, r.batch, f, r.envelope).await
+    }
+}

@@ -12,20 +12,25 @@ pub(crate) mod read;
 mod zether;
 #[cfg(feature = "pqz")]
 pub(crate) mod pqz;
+#[cfg(feature = "pqz")]
+mod verdict;
 
 #[cfg(feature = "pqz")]
 pub use pqz::*;
+#[cfg(feature = "pqz")]
+pub use verdict::PqzVerdictRequest;
 #[cfg(feature = "zether")]
 pub use zether::*;
 
 #[cfg(feature = "zether")]
 use crate::vault::OpenSeed;
-use crate::{Sdk, SdkError};
+use crate::Sdk;
+#[cfg(feature = "zether")]
+use crate::SdkError;
 #[cfg(feature = "zether")]
 use scaas_ua::facade::zether::{ZetherKey, USE_CONF};
-use serde_json::Value;
 #[cfg(feature = "zether")]
-use serde_json::json;
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 /// The UA kind `zether-bls12381`.
@@ -94,11 +99,13 @@ pub(crate) fn handle(sdk: &Sdk, seed: &str, account: u32) -> Result<(Arc<OpenSee
     Ok((s, k))
 }
 
+#[cfg(feature = "zether")]
 /// The value at `path` in a facade answer (`Internal`: absent).
 pub(crate) fn at<'a>(v: &'a Value, path: &[&str]) -> Result<&'a Value, SdkError> {
     path.iter().try_fold(v, |v, k| v.get(*k).ok_or(SdkError::Internal))
 }
 
+#[cfg(feature = "zether")]
 /// `v`'s field `k` set to `x` (`Internal`: not an object).
 pub(crate) fn set(v: &mut Value, k: &str, x: Value) -> Result<(), SdkError> {
     v.as_object_mut().ok_or(SdkError::Internal)?.insert(k.into(), x);

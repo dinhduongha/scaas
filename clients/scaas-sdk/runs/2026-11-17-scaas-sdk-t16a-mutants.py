@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from mutants_lib import main
 
 P = "clients/scaas-sdk/src/confidential/pqz.rs"
-F = "vault,account,wallet,pqz,pqz-set-n2304-kmax4096"
+F = "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots"
 T = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features {F} --test confidential_pqz "
 MUTANTS = [
     ("the account words read for a token of another set", [(P, "(psid == pqzl || Some(psid) == pqzh, env)", "(true, env)")],

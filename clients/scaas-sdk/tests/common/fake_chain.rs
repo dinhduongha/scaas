@@ -79,6 +79,10 @@ pub struct Chain {
     pub gas_of: Option<fn(&str) -> u64>,
     /// `eth_estimateGas` reverts for the inputs this answers true (plan T13: a registry refusing a call)
     pub estimate_reverts: Option<fn(&str) -> bool>,
+    /// a PQZ verifier's answer to `POST /v1/pqz-verdict` (status, body) (plan T16); `None`: 503, unreachable
+    pub verdict: Option<(u16, Value)>,
+    /// every verdict request body, as received
+    pub verdict_bodies: Vec<String>,
 }
 
 impl Default for Chain {
@@ -117,6 +121,8 @@ impl Default for Chain {
             answers: vec![],
             gas_of: None,
             estimate_reverts: None,
+            verdict: None,
+            verdict_bodies: vec![],
         }
     }
 }
@@ -501,6 +507,9 @@ pub async fn serve(c: Fake) -> String {
                         let mut c = c.lock().unwrap();
                         if path.ends_with("/v1/gateway") {
                             (200, c.gw_info.clone())
+                        } else if path.ends_with("/v1/pqz-verdict") {
+                            c.verdict_bodies.push(String::from_utf8_lossy(&body).to_string());
+                            c.verdict.clone().unwrap_or((503, json!({"error": "BUSY"})))
                         } else if path.ends_with("/v1/op") || path.ends_with("/v1/ua-metatx") {
                             let text = String::from_utf8_lossy(&body).to_string();
                             c.bodies.push(text.clone());

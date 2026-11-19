@@ -42,6 +42,8 @@ fn profile(key: &str) -> ChainProfile {
         tx_gas_cap: Some(1 << 24),
         gas: Default::default(),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
         tokens: vec![],
     }

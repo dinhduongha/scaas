@@ -240,8 +240,11 @@ impl Op {
             lane = Some((from, batch, nonce));
         }
         let (_, now) = super::head(&pool).await?;
+        // the struct's primary type: the row's name, but for `UAPqzRollOver`, signed as the PQZ domain's `UARollOver` (scaas-ua
+        // `scaas_typed_data`: the domain named picks the row)
+        let primary = if d.name == "UAPqzRollOver" { "UARollOver" } else { d.name };
         let td = scaas_typed_data(
-            d.name,
+            primary,
             Some(domain_name(d.kind)?),
             &d.contract,
             chain_id,

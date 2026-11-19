@@ -48,7 +48,7 @@ pub enum Finality {
     Depth(u64),
 }
 
-/// A chain as the app's release pins it (spec §4). Tokens, DEXes and PQZ verifiers join with the tasks that read them.
+/// A chain as the app's release pins it (spec §4). DEXes join with the task that reads them.
 #[derive(Debug, Clone)]
 pub struct ChainProfile {
     /// `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
@@ -80,6 +80,11 @@ pub struct ChainProfile {
     /// the longest an operation's `validUntil` may lie ahead of the SDK's clock on this chain, in seconds; `None`:
     /// `Limits::max_valid_secs` (default 86 400, one day) (owner 2026-11-19, T13b ruling 1)
     pub max_valid_secs: Option<u64>,
+    /// the PQZ verifiers a verifier-mode token's verdict is asked of (spec §9.3): a list of endpoints with its own policy,
+    /// `failover` (the default) or `strict_majority` (ARCH-POS-15; owner 2026-11-19, T16-a), each with its own credential;
+    /// empty: no verdict on this chain (`VerdictRefused`)
+    pub verifiers: Vec<EndpointConfig>,
+    pub verifier_policy: Policy,
 }
 
 /// A base row (gas table v2, owner 2026-11-19): the execution gas of `entry` (`mtxCancelNonce`, `mtxExecuteTransfer`, …) on a

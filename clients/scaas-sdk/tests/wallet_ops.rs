@@ -115,6 +115,8 @@ async fn setup(gateways: usize) -> T {
         }],
         gas: gas_rows(),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
     };
     let store = MemoryStore::new();

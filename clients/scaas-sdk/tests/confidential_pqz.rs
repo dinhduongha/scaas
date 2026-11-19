@@ -125,6 +125,8 @@ fn profile(rpc: Vec<EndpointConfig>) -> ChainProfile {
         tx_gas_cap: Some(1 << 24),
         gas: Default::default(),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
         tokens: vec![],
     }
@@ -385,4 +387,293 @@ async fn pqz_word_failure_never_fails_over() {
     assert_eq!(code(s.confidential().pqz_balance(req(&seed, 1, 0)).await), "Argument");
     assert_eq!(b.lock().unwrap().requests.len(), 0, "no request to the next endpoint");
     assert_eq!(count(&a, "eth_getStorageAt"), words, "one read, never a second");
+}
+
+// --- verdicts (spec §9.3; owner 2026-11-19, T16-a, T16-c) ---
+
+/// The verifier's UA key (secp256k1 UA, `pq_kat` account 0, `index`), beside its wallet (a dropped wallet revokes it).
+fn verifier_key(index: u32) -> (scaas_ua::wallet::Wallet, scaas_ua::wallet::UaKey) {
+    let w = scaas_ua::wallet::Wallet::from_mnemonic(PQ_KAT, "").unwrap();
+    let k = w.ua_key(0x0108, 0, index).unwrap();
+    (w, k)
+}
+
+const VKEYPTR: &str = "0x5ca00000000000000000000000000000000000b9";
+const EPOCH: u64 = 3;
+
+/// The token names the verifier of `index` at epoch 3; the registry holds its record (kind 0x0108) and key.
+fn name_verifier(c: &Fake, index: u32) {
+    let (_w, k) = verifier_key(index);
+    let ua = k.ua().unwrap();
+    let root = root();
+    put(c, TOKEN, &add(&root, 13), &ua);
+    put(c, TOKEN, &add(&root, 15), &be(EPOCH));
+    let mut r = [0u8; 32];
+    r[5..25].copy_from_slice(&a20(VKEYPTR));
+    r[30] = 0x01;
+    r[31] = 0x08;
+    put(c, REGISTRY, &map(&ua, &be(0)), &r);
+    let mut code = vec![0u8];
+    code.extend(k.key_data());
+    c.lock().unwrap().code.insert(VKEYPTR.into(), hx(&code));
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+}
+
+const STMT: &str = "0x01020304";
+const PROOF: &str = "0x0a0b";
+
+/// The verifier's answer: `m` signed by the key of `index` under `pqz-verdict`.
+fn answer(m: &Value, index: u32) -> Value {
+    let uid: W = unhex(&hash_of(0)).try_into().unwrap();
+    let d = scaas_ua::wallet::pqz_verdict_typed_data(&a20(TOKEN), CHAIN_ID, &uid, m).unwrap().digest().unwrap();
+    let (_w, k) = verifier_key(index);
+    let s = scaas_ua::wallet::ua_sig(&k, None, &scaas_ua::purpose_tag("pqz-verdict").unwrap(), &d).unwrap();
+    serde_json::json!({"pqzVerdict": m, "pqzVerdictSig": {"keyData": hx(&s.key_data), "signature": hx(&s.signature), "members": []}})
+}
+
+fn verdict_of(psid: &str) -> Value {
+    serde_json::json!({"token": TOKEN, "chainId": CHAIN_ID, "proofSystemId": psid,
+        "statementHash": hx(&keccak256(&unhex(STMT))), "proofHash": hx(&keccak256(&unhex(PROOF))),
+        "pqzVerifierEpoch": EPOCH, "validUntil": now() + 600})
+}
+
+fn vreq() -> scaas_sdk::confidential::PqzVerdictRequest {
+    scaas_sdk::confidential::PqzVerdictRequest {
+        chain: "local".into(),
+        token: TOKEN.into(),
+        op: serde_json::json!({"entry": "mtxConfidentialTransferSingle", "args": {}}),
+        statement: STMT.into(),
+        proof: PROOF.into(),
+    }
+}
+
+/// A fake holding row B and naming the verifier of index 7, an SDK whose profile lists `verifiers` (the fake itself when
+/// `None`) under `policy`.
+async fn verdict_setup(verifiers: Option<Vec<String>>, policy: scaas_rpc::Policy) -> (Arc<Sdk>, Fake, String) {
+    let c = fake();
+    let url = serve(c.clone()).await;
+    let mut p = profile(vec![endpoint(&url)]);
+    p.verifiers = verifiers.unwrap_or_else(|| vec![url.clone()]).iter().map(|u| endpoint(u)).collect();
+    p.verifier_policy = policy;
+    let (s, seed) = sdk(p).await;
+    let r = row("B:");
+    pqz_state(&c, &ua_of(&s, &seed, 1).await, &r);
+    name_verifier(&c, 7);
+    (s, c, r["request"]["psid"].as_str().unwrap().to_string())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verdict_checked_before_attach() {
+    let (s, c, psid) = verdict_setup(None, scaas_rpc::Policy::Failover).await;
+    // control: the token's verifier signs the verdict of this statement and proof
+    c.lock().unwrap().verdict = Some((200, answer(&verdict_of(&psid), 7)));
+    let v = s.confidential().request_verdict(vreq()).await.unwrap();
+    assert_eq!(v["pqzVerdict"]["statementHash"], serde_json::json!(hx(&keccak256(&unhex(STMT)))));
+    assert_eq!(v["pqzVerdict"]["pqzVerifierEpoch"], EPOCH);
+    assert_eq!(v["sig"]["keyData"], serde_json::json!(hx(&verifier_key(7).1.key_data())));
+    let body: Value = serde_json::from_str(&c.lock().unwrap().verdict_bodies[0]).unwrap();
+    assert_eq!(body["pqzVerifierEpoch"], EPOCH, "the epoch read at the final block");
+    assert_eq!((body["statement"].as_str(), body["proof"].as_str(), body["chainId"].as_u64()), (Some(STMT), Some(PROOF), Some(CHAIN_ID)));
+    // signed by another UA; another statement, proof, epoch, token, set; past its validUntil: refused, nothing attached
+    let refuse = |m: Value, index: u32| {
+        let c = c.clone();
+        let s = s.clone();
+        async move {
+            c.lock().unwrap().verdict = Some((200, answer(&m, index)));
+            code(s.confidential().request_verdict(vreq()).await)
+        }
+    };
+    assert_eq!(refuse(verdict_of(&psid), 8).await, "VerdictRefused", "another signer");
+    // the verifier's own key, its signature over another verdict
+    let mut other = verdict_of(&psid);
+    other["validUntil"] = serde_json::json!(now() + 900);
+    let mut a = answer(&other, 7);
+    a["pqzVerdict"] = verdict_of(&psid);
+    c.lock().unwrap().verdict = Some((200, a));
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "VerdictRefused", "a signature over another verdict");
+    for (k, v) in [
+        ("statementHash", serde_json::json!(hx(&[1; 32]))),
+        ("proofHash", serde_json::json!(hx(&[2; 32]))),
+        ("pqzVerifierEpoch", serde_json::json!(EPOCH + 1)),
+        ("proofSystemId", serde_json::json!(hx(&[3; 32]))),
+        ("validUntil", serde_json::json!(now() - 1)),
+    ] {
+        let mut m = verdict_of(&psid);
+        m[k] = v;
+        assert_eq!(refuse(m, 7).await, "VerdictRefused", "{k}");
+    }
+    // the right key whose registry record names another kind
+    let ua = verifier_key(7).1.ua().unwrap();
+    let good: W = w(&serde_json::json!(c.lock().unwrap().storage[&(REGISTRY.to_ascii_lowercase(), hx(&map(&ua, &be(0))))].clone()));
+    let mut rec = good;
+    rec[31] = 0x07;
+    put(&c, REGISTRY, &map(&ua, &be(0)), &rec);
+    assert_eq!(refuse(verdict_of(&psid), 7).await, "VerdictRefused", "the record's kind");
+    put(&c, REGISTRY, &map(&ua, &be(0)), &good);
+    assert_eq!(refuse(verdict_of(&psid), 7).await, "Ok", "control again");
+    let cc = c.lock().unwrap();
+    assert!(cc.sent.is_empty() && cc.bodies.is_empty(), "nothing sent");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verdict_unreachable_sends_nothing() {
+    let (s, c, psid) = verdict_setup(None, scaas_rpc::Policy::Failover).await;
+    // unreachable (503), a refusal (4xx): VerdictRefused
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "VerdictRefused");
+    c.lock().unwrap().verdict = Some((422, serde_json::json!({"error": "PROOF_INVALID", "detail": "x"})));
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "VerdictRefused");
+    // a token naming no verifier: no verifier is asked
+    c.lock().unwrap().verdict = Some((200, answer(&verdict_of(&psid), 7)));
+    put(&c, TOKEN, &add(&root(), 13), &[0; 32]);
+    let n = c.lock().unwrap().verdict_bodies.len();
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "VerdictRefused");
+    assert_eq!(c.lock().unwrap().verdict_bodies.len(), n, "no request");
+    name_verifier(&c, 7);
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "Ok", "control");
+    assert!(c.lock().unwrap().sent.is_empty() && c.lock().unwrap().bodies.is_empty(), "nothing sent");
+    // a profile listing no verifier
+    let (s2, _, _) = verdict_setup(Some(vec![]), scaas_rpc::Policy::Failover).await;
+    assert_eq!(code(s2.confidential().request_verdict(vreq()).await), "VerdictRefused");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verdict_verifiers_strict_majority() {
+    // T16-a: the verifier list's own policy; two verifiers answering two different verdicts have no majority
+    let (a, b) = (fake(), fake());
+    let (ua, ub) = (serve(a.clone()).await, serve(b.clone()).await);
+    let (s, c, psid) = verdict_setup(Some(vec![ua, ub]), scaas_rpc::Policy::StrictMajority).await;
+    let m = verdict_of(&psid);
+    a.lock().unwrap().verdict = Some((200, answer(&m, 7)));
+    b.lock().unwrap().verdict = Some((200, answer(&m, 7)));
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "Ok", "control: both agree");
+    let mut m2 = m.clone();
+    m2["validUntil"] = serde_json::json!(now() + 900);
+    b.lock().unwrap().verdict = Some((200, answer(&m2, 7)));
+    assert_eq!(code(s.confidential().request_verdict(vreq()).await), "VerdictRefused");
+    assert!(c.lock().unwrap().verdict_bodies.is_empty(), "the chain's endpoint is no verifier here");
+}
+
+// --- the PQZ rows without a proof (spec §9.2, §21) ---
+
+fn env() -> scaas_sdk::wallet::Envelope {
+    scaas_sdk::wallet::Envelope {
+        valid_until: now() + 3600,
+        mode: 0,
+        relayer: None,
+        fee: "0".into(),
+        fee_recipient: None,
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pqz_plain_pairs() {
+    use scaas_sdk::confidential::{PqzAccountOp, PqzShield, PqzWrapShield};
+    let c = fake();
+    let url = serve(c.clone()).await;
+    let mut pr = profile(vec![endpoint(&url)]);
+    pr.gateways = vec![endpoint(&url)];
+    pr.gas = scaas_sdk::GasRows {
+        base: ["mtxShield", "mtxPrepareAcc", "mtxRollOver"]
+            .iter()
+            .flat_map(|e| {
+                [true, false].map(|fresh| scaas_sdk::GasBase {
+                    entry: (*e).into(),
+                    kind: "pqz".into(),
+                    fresh,
+                    gas: 100_000,
+                })
+            })
+            .collect(),
+        verify: vec![scaas_sdk::GasVerify { signer: KIND, gas: 0 }],
+    };
+    let (s, seed) = sdk(pr).await;
+    {
+        let mut cc = c.lock().unwrap();
+        cc.timestamp = now();
+        cc.domains.insert(TOKEN.into(), ("SCaaS PqzToken".into(), hash_of(0)));
+    }
+    let ua = hx(&ua_of(&s, &seed, 1).await);
+    let cf = s.confidential();
+    let acct = |value: &str| PqzAccountOp {
+        signer: signer(&seed, 1),
+        chain: "local".into(),
+        token: TOKEN.into(),
+        batch: "0".into(),
+        ua: ua.clone(),
+        key_version: 2,
+        value: value.into(),
+        envelope: env(),
+    };
+    let ps = [
+        cf.prepare_pqz_shield(PqzShield {
+            signer: signer(&seed, 1),
+            chain: "local".into(),
+            token: TOKEN.into(),
+            batch: "0".into(),
+            to_ua: ua.clone(),
+            amount: "4".into(),
+            envelope: env(),
+        })
+        .await
+        .unwrap(),
+        cf.prepare_pqz_prepare_acc(acct("1")).await.unwrap(),
+        cf.prepare_pqz_roll_over(acct("3")).await.unwrap(),
+    ];
+    for (p, (entry, field)) in ps.iter().zip([("mtxShield", ("amount", "4")), ("mtxPrepareAcc", ("half", "1")), ("mtxRollOver", ("n", "3"))]) {
+        assert_eq!(p.entry(), entry);
+        let has = |n: &str, v: &str| p.review().iter().any(|f| f.name == n && f.value == v);
+        assert!(has("from", &ua) && has(field.0, field.1), "{entry}");
+        if entry != "mtxShield" {
+            assert!(has("keyVersion", "2") && has("ua", &ua), "{entry}");
+        }
+    }
+    // each signed under its check by the ML-DSA UA and sent: the gateway receives the entry
+    for (n, p) in ps.into_iter().enumerate() {
+        let entry = p.entry();
+        let q = s.op().quote(p.clone(), scaas_sdk::op::SubmitPath::Gateway).await.unwrap();
+        s.op().submit(p, q).await.unwrap();
+        let mut body = Value::Null;
+        for _ in 0..100 {
+            if let Some(b) = c.lock().unwrap().bodies.get(n) {
+                body = serde_json::from_str(b).unwrap();
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        assert_eq!(body["op"]["entry"], serde_json::json!(entry));
+    }
+    let p = cf
+        .prepare_pqz_wrap_shield(PqzWrapShield {
+            signer: KeyRef::Native {
+                seed: seed.clone(),
+                network: "evm".into(),
+                index: 0,
+            },
+            chain: "local".into(),
+            token: TOKEN.into(),
+            batch: "0".into(),
+            underlying: "0x5ca00000000000000000000000000000000000a1".into(),
+            amount_in: "4".into(),
+            to_ua: ua.clone(),
+            envelope: env(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(p.entry(), "mtxWrapShield");
+    // another domain (a Zether token's) is not a PQZ pair, even for a struct both domains have
+    c.lock().unwrap().domains.insert(TOKEN.into(), ("SCaaS ZetherToken".into(), hash_of(0)));
+    assert_eq!(code(cf.prepare_pqz_roll_over(acct("3")).await), "Argument");
+    let shield = PqzShield {
+        signer: signer(&seed, 1),
+        chain: "local".into(),
+        token: TOKEN.into(),
+        batch: "0".into(),
+        to_ua: ua.clone(),
+        amount: "4".into(),
+        envelope: env(),
+    };
+    assert_eq!(code(cf.prepare_pqz_shield(shield).await), "Argument");
 }

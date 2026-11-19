@@ -131,6 +131,9 @@ pub(crate) struct Chain {
     pub(crate) pool: Option<Arc<scaas_rpc::evm::EvmPool>>,
     #[allow(dead_code)] // the gateways of a profile without the `wallet` feature
     pub(crate) gateways: Option<NodeList>,
+    /// the profile's PQZ verifiers (spec §9.3; owner 2026-11-19, T16-a)
+    #[cfg(feature = "pqz")]
+    pub(crate) verifiers: Option<scaas_rpc::node::VerifierClient>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -262,11 +265,20 @@ impl Sdk {
             };
             #[cfg(not(any(feature = "account", feature = "wallet")))]
             drop(rpc);
+            // T16-a: the PQZ verifiers, a list with its own policy (ARCH-POS-15)
+            #[cfg(feature = "pqz")]
+            let verifiers = if p.verifiers.is_empty() {
+                None
+            } else {
+                Some(scaas_rpc::node::VerifierClient::new(list(&p.verifiers, p.verifier_policy)?)?)
+            };
             chains.push(Chain {
                 profile: p,
                 #[cfg(any(feature = "account", feature = "wallet"))]
                 pool,
                 gateways,
+                #[cfg(feature = "pqz")]
+                verifiers,
             });
         }
         let rt = runtime(config.runtime)?;
@@ -418,6 +430,13 @@ impl Sdk {
             .find(|c| c.profile.key == chain)
             .and_then(|c| c.profile.max_valid_secs)
             .unwrap_or(self.limits.max_valid_secs)
+    }
+
+    /// The verifier client of chain `chain`'s PQZ verifiers (`ChainUnknown`; `VerdictRefused`: the profile lists none).
+    #[cfg(feature = "pqz")]
+    pub(crate) fn verifiers(&self, chain: &str) -> Result<scaas_rpc::node::VerifierClient, SdkError> {
+        let c = self.chains.iter().find(|c| c.profile.key == chain).ok_or(SdkError::ChainUnknown)?;
+        c.verifiers.clone().ok_or(SdkError::VerdictRefused)
     }
 
     /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).

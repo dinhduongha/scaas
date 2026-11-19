@@ -236,6 +236,8 @@ async fn e2e_pay_on_anvil() {
             verify: vec![GasVerify { signer: 0, gas: 0 }],
         },
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
     };
     let (sdk, seed) = sdk_on(profile).await;
@@ -396,6 +398,8 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
         tokens: vec![],
         gas: GasRows::default(),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
     })
     .await;
@@ -544,6 +548,8 @@ fn registry_profile(rpc: &str, registry: &str, cap: Option<u64>) -> ChainProfile
         tokens: vec![],
         gas: GasRows::default(),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
     }
 }
@@ -656,6 +662,8 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
             verify: vec![GasVerify { signer: 0, gas: 0 }],
         },
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
     };
     // the receiver's app and the sender's app: two SDKs (the same test seed, roles apart)
@@ -759,6 +767,8 @@ fn account_profile(rpc: &str) -> ChainProfile {
             verify: vec![GasVerify { signer: 0, gas: 0 }],
         },
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
     }
 }

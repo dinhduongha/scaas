@@ -81,6 +81,8 @@ async fn open(url: &str, n: usize, store: Arc<dyn SecureStore>, limits: Limits) 
         tx_gas_cap: Some(1 << 24),
         gas: Default::default(),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
         tokens: (0..n)
             .map(|i| ListedToken {
