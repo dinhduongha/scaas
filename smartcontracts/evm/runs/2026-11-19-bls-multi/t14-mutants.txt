@@ -1,0 +1,4 @@
+killed   | M1 uint16 weight sum | clients/ua-dart/lib/src/keydata.dart | rc=1 | expect valid rows | 2 failed: bls12381-multi rows, valid rows
+killed   | M2 order check <= instead of < | clients/ua-dart/lib/src/keydata.dart | rc=1 | expect invalid rows | 1 failed: invalid rows
+killed   | M3 no key check per member | clients/ua-dart/lib/src/keydata.dart | rc=1 | expect invalid rows | 1 failed: invalid rows
+3 mutants, 3 killed, 0 survived, 0 not loaded

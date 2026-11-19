@@ -47,7 +47,8 @@ def main(M):
                         {x.split()[1] for x in out.splitlines() if x.startswith(("FAIL: ", "ERROR: "))} |
                         {x.split()[2] for x in out.splitlines() if x.startswith("--- FAIL: ")} |
                         {x.split()[1] for x in out.splitlines() if x.lstrip().startswith("Failed Scaas")} |
-                        {x.split("] ", 1)[1].split("(")[0] for x in out.splitlines() if x.startswith("[FAIL") and "] " in x})
+                        {x.split("] ", 1)[1].split("(")[0] for x in out.splitlines() if x.startswith("[FAIL") and "] " in x} |
+                        {x.split(": ", 1)[1].rsplit(" [E]", 1)[0] for x in out.splitlines() if x.rstrip().endswith("[E]") and ": " in x})
         if not failed:  # no test names (a generator, a compile): the first error line
             failed = [x.strip() for x in out.splitlines() if x.lstrip().startswith(("Error", "error", "UAError", "thread "))][:1]
         if r.returncode == 0:
