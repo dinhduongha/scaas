@@ -244,6 +244,8 @@ mod ffi {
         fn key_address(k: &Key) -> Result<String>;
         fn sign_ua(k: &Key, purpose: &[u8], digest: &[u8]) -> Result<Vec<u8>>;
         fn sign_member(k: &Key, structure_ua: &[u8], structure_ua_msg: &[u8]) -> Result<Vec<u8>>;
+        fn sign_bls_multi(k: &Key, key_data: &[u8], ua_msg: &[u8]) -> Result<Vec<u8>>;
+        fn sign_bls_multi_pop(k: &Key, key_data: &[u8]) -> Result<Vec<u8>>;
         fn sign_typed(k: &Key, typed_data_json: &str, expect_json: &str) -> Result<Vec<u8>>;
         fn sign_typed_any(k: &Key, typed_data_json: &str) -> Result<Vec<u8>>;
         fn sign_transaction(k: &Key, tx_json: &str) -> Result<Vec<u8>>;
@@ -953,6 +955,12 @@ fn sign_ua(k: &Key, purpose: &[u8], digest: &[u8]) -> R<Vec<u8>> {
 }
 fn sign_member(k: &Key, structure_ua: &[u8], structure_ua_msg: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(ua_key(k)?.sign_member(&a(structure_ua)?, &a(structure_ua_msg)?)?))
+}
+fn sign_bls_multi(k: &Key, key_data: &[u8], ua_msg: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua_key(k)?.sign_bls_multi(key_data, &a(ua_msg)?)?))
+}
+fn sign_bls_multi_pop(k: &Key, key_data: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua_key(k)?.sign_bls_multi_pop(key_data)?))
 }
 fn sign_typed(k: &Key, typed_data_json: &str, expect_json: &str) -> R<Vec<u8>> {
     guard(|| {

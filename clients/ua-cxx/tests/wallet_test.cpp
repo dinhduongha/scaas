@@ -103,6 +103,36 @@ static KemKey kem_of(const json &r, const Wallet *w = nullptr) {
         .kemKey(u64(r["version"]));
 }
 
+// bls-multi T15: a 0x0121 member key's partial and PoP part (groups.json blsMulti.wallet) byte for byte, and the refusals
+static void bls_multi_json() {
+    json w = vec("groups.json")["blsMulti"]["wallet"];
+    Bytes d = bytes(w["keyData"]), m = bytes(w["uaMsg"]);
+    const Wallet &ww = W(w["mnemonic"].get<std::string>());
+    CHECK(w["members"].size() == 3, "members");
+    for (auto &r : w["members"]) {
+        std::string ctx = "account " + std::to_string(r["account"].get<uint32_t>());
+        Key k = ww.uaKey(0x0121, r["account"].get<uint32_t>(), w["index"].get<uint32_t>());
+        CHECK(hx(k.keyData()) == r["key"].get<std::string>(), ctx);
+        CHECK(hx(k.signBlsMulti(d, m)) == r["partial"].get<std::string>(), ctx);
+        CHECK(hx(k.signBlsMultiPop(d)) == r["popPart"].get<std::string>(), ctx);
+    }
+    Key member = ww.uaKey(0x0121, 0, 0), other = ww.uaKey(0x0121, 3, 0), single = ww.uaKey(0x0106, 0, 0);
+    Key evm = ww.nativeKey("evm", 0);
+    Bytes shortD(d.begin(), d.end() - 1);
+    for (auto &[label, k, kd] :
+         std::vector<std::tuple<std::string, const Key *, Bytes>>{{"a key the group does not list", &other, d},
+                                                                  {"a 0x0106 key", &single, d},
+                                                                  {"a native key", &evm, d},
+                                                                  {"key data one byte short", &member, shortD},
+                                                                  {"no key data", &member, Bytes()}}) {
+        CHECK(code_of([&] { k->signBlsMulti(kd, m); }) == "UAArgument", label);
+        CHECK(code_of([&] { k->signBlsMultiPop(kd); }) == "UAArgument", label);
+    }
+    CHECK(code_of([&] { member.signBlsMulti(d, Bytes(31)); }) == "UAArgument", "uaMsg of 31 bytes");
+    CHECK(code_of([&] { member.signUa(purposeTag("metatx"), Bytes(32)); }) == "UAArgument",
+          "no ua_msg signature of its own");
+}
+
 // --- load, secrets, handles ------------------------------------------------------------------------------------------------
 
 static void load_refuses_wrong_abi_or_features() {
@@ -1254,7 +1284,8 @@ int main(int argc, char **argv) {
         {"pqz_words", pqz_words},
         {"pqz_key_versions", pqz_key_versions},
         {"imported_ua_key", imported_ua_key},
-        {"native_json", native_json}};
+        {"native_json", native_json},
+        {"bls_multi_json", bls_multi_json}};
     if (argc != 2 || !tests.count(argv[1])) {
         std::fprintf(stderr, "usage: wallet_test <name>\n");
         return 2;

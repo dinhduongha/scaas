@@ -413,6 +413,10 @@ class Key : public Handle<ffi::Key> {
     std::string address() const;
     Bytes signUa(const Bytes &purposeTag, const Bytes &digest) const;
     Bytes signMember(const Bytes &structureUa, const Bytes &structureUaMsg) const;
+    // a bls12381-multi member key (0x0121): its partial (128 B) over uaMsg / its PoP part for the group keyData (d) listing it;
+    // another group, kind or a native key: UAArgument
+    Bytes signBlsMulti(const Bytes &keyData, const Bytes &uaMsg) const;
+    Bytes signBlsMultiPop(const Bytes &keyData) const;
     Bytes signTyped(const std::string &typedDataJson, const std::string &expectJson) const;
     Bytes signTypedAny(const std::string &typedDataJson) const;
     Bytes signTransaction(const std::string &txJson) const; // the raw transaction

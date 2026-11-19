@@ -332,6 +332,37 @@ void main() {
     expect((await evm.signKeyProof(challenge: utf8b('challenge'))).length, 65);
   });
 
+  // bls-multi T15: a 0x0121 member key's partial and PoP part (groups.json blsMulti.wallet) byte for byte, and the refusals
+  test('bls_multi_json', () async {
+    final bw = load_('groups.json')['blsMulti']['wallet'] as Map;
+    final d = bytes(bw['keyData']), m = bytes(bw['uaMsg']);
+    final wl = await w(bw['mnemonic']);
+    expect((bw['members'] as List).length, 3);
+    for (final r in bw['members'] as List) {
+      final k = await wl.uaKey(kind: 0x0121, account: r['account'], index: bw['index']);
+      expect(hx(k.keyData()), r['key']);
+      expect(hx(await k.signBlsMulti(keyData: d, uaMsg: m)), r['partial']);
+      expect(hx(await k.signBlsMultiPop(keyData: d)), r['popPart']);
+    }
+    final member = await wl.uaKey(kind: 0x0121, account: 0, index: 0);
+    final cases = <(String, UaKey, Uint8List)>[
+      ('a key the group does not list', await wl.uaKey(kind: 0x0121, account: 3, index: 0), d),
+      ('a 0x0106 key', await wl.uaKey(kind: 0x0106, account: 0, index: 0), d),
+      ('a native key', await wl.nativeKey(networkName: 'evm', index: 0), d),
+      ('key data one byte short', member, d.sublist(0, d.length - 1)),
+      ('no key data', member, Uint8List(0)),
+    ];
+    for (final (label, k, kd) in cases) {
+      expect(
+        await code(() => k.signBlsMulti(keyData: kd, uaMsg: m)),
+        'UAArgument',
+        reason: label,
+      );
+      expect(await code(() => k.signBlsMultiPop(keyData: kd)), 'UAArgument', reason: label);
+    }
+    expect(await code(() => member.signBlsMulti(keyData: d, uaMsg: m.sublist(1))), 'UAArgument');
+  });
+
   test('rs_signatures_json', () async {
     for (final r in load_('rs_signatures.json')['rows'] as List) {
       final kind = r['kind'] as int;
