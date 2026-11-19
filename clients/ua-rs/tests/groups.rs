@@ -1369,7 +1369,8 @@ fn bls_multi_section() -> Value {
     let ones = |n: usize| vec![1u16; n];
     let range = |n: u8| (0..n).collect::<Vec<u8>>();
 
-    let mut groups: Vec<(String, Vec<u8>, Vec<(Fr, u16)>)> = vec![];
+    type Group = (String, Vec<u8>, Vec<(Fr, u16)>); // name, d, member secrets and weights in key-data order
+    let mut groups: Vec<Group> = vec![];
     for (l, w, t) in [
         ("n2t2", ones(2), 2u16),
         ("n5t3", ones(5), 3),
@@ -1624,7 +1625,7 @@ fn bls_multi_section() -> Value {
         sigs.push(sig_row(
             "w311t3 the weight-3 member's 0x0106 signature over the member message",
             &d,
-            &sign(&d, &s, &[heavy], &scaas_ua::verify::BLS12381_DST_SIG[..]),
+            &sign(&d, &s, &[heavy], scaas_ua::verify::BLS12381_DST_SIG),
             false,
             false,
         ));
@@ -1721,6 +1722,58 @@ fn bls_multi_section() -> Value {
         "groups": group_rows,
         "pop": pops,
         "signatures": sigs,
+        "wallet": bls_multi_wallet(&msg),
+    })
+}
+
+/// `blsMulti.wallet` (bls-multi T15): the `0x0121` member keys of keys.json's `bip39_test` mnemonic at accounts 0, 1, 2 (index 0),
+/// weights 2, 1, 1, t = 2, in account order; each member's partial over `uaMsg` and its PoP part, the minimal aggregate and the
+/// PoP. A binding derives the keys through its wallet and reproduces every part byte for byte (BLS signing is deterministic).
+fn bls_multi_wallet(msg: &[u8; 32]) -> Value {
+    use scaas_ua::bls_multi as bm;
+    use scaas_ua::wallet::{UaKey, Wallet};
+    let k = read_json("../../smartcontracts/vectors/ua/keys.json");
+    let m = k["mnemonics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == "bip39_test")
+        .unwrap();
+    let w = Wallet::from_mnemonic(
+        m["words"].as_str().unwrap(),
+        m["passphrase"].as_str().unwrap(),
+    )
+    .unwrap();
+    let (accounts, weights) = ([0u32, 1, 2], [2u16, 1, 1]);
+    let keys: Vec<UaKey> = accounts
+        .iter()
+        .map(|a| w.ua_key(bm::KIND, *a, 0).unwrap())
+        .collect();
+    let members: Vec<([u8; 256], u16)> = keys
+        .iter()
+        .zip(weights)
+        .map(|(k, w)| (k.key_data().try_into().unwrap(), w))
+        .collect();
+    let (d, map) = bm::build_key_data(&members, 2).unwrap();
+    let part = |f: &dyn Fn(&UaKey) -> Vec<u8>| -> Vec<(u8, [u8; 128])> {
+        keys.iter()
+            .zip(&map)
+            .map(|(k, i)| (*i as u8, f(k).try_into().unwrap()))
+            .collect()
+    };
+    let partials = part(&|k| k.sign_bls_multi(&d, msg).unwrap());
+    let pop_parts = part(&|k| k.sign_bls_multi_pop(&d).unwrap());
+    let agg = bm::aggregate(&d, msg, &partials, false).unwrap();
+    let rows: Vec<Value> = (0..3)
+        .map(|i| {
+            json!({ "account": accounts[i], "weight": weights[i], "key": hx(&members[i].0), "keyDataIndex": map[i],
+                    "partial": hx(&partials[i].1), "popPart": hx(&pop_parts[i].1) })
+        })
+        .collect();
+    json!({
+        "mnemonic": "bip39_test", "kind": bm::KIND, "index": 0, "threshold": 2, "members": rows,
+        "keyData": hx(&d), "ua": hx(&bm::ua_of(&d)), "uaMsg": hx(msg), "popMessage": hx(&bm::pop_message(&d).unwrap()),
+        "signature": hx(&agg.signature), "signers": agg.signers, "pop": hx(&bm::aggregate_pop(&d, &pop_parts).unwrap()),
     })
 }
 
