@@ -62,6 +62,19 @@ pub mod qobject {
             structure_ua: &QString,
             structure_ua_msg: &QString,
         ) -> QString;
+        /// A bls12381-multi member key (0x0121): its partial (128 B) over `ua_msg` for the group `key_data` (d) listing it.
+        #[qinvokable]
+        #[cxx_name = "signBlsMulti"]
+        fn sign_bls_multi(
+            self: Pin<&mut Self>,
+            id: i32,
+            key_data: &QString,
+            ua_msg: &QString,
+        ) -> QString;
+        /// A bls12381-multi member key (0x0121): its PoP part (128 B) for the group `key_data` (d) listing it.
+        #[qinvokable]
+        #[cxx_name = "signBlsMultiPop"]
+        fn sign_bls_multi_pop(self: Pin<&mut Self>, id: i32, key_data: &QString) -> QString;
         /// Typed data through the signing policy: `expect_json` says what the user confirmed (spec §5.4).
         #[qinvokable]
         #[cxx_name = "signTyped"]
@@ -253,6 +266,17 @@ impl qobject::UaWallet {
         self.hex(|| {
             wallet(ua_key(&key(id)?)?.sign_member(&fixed(structure_ua)?, &fixed(structure_ua_msg)?))
         })
+    }
+    pub fn sign_bls_multi(
+        self: Pin<&mut Self>,
+        id: i32,
+        key_data: &QString,
+        ua_msg: &QString,
+    ) -> QString {
+        self.hex(|| wallet(ua_key(&key(id)?)?.sign_bls_multi(&bytes(key_data)?, &fixed(ua_msg)?)))
+    }
+    pub fn sign_bls_multi_pop(self: Pin<&mut Self>, id: i32, key_data: &QString) -> QString {
+        self.hex(|| wallet(ua_key(&key(id)?)?.sign_bls_multi_pop(&bytes(key_data)?)))
     }
     pub fn sign_typed(
         self: Pin<&mut Self>,

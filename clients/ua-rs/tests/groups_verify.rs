@@ -329,4 +329,37 @@ fn bls_multi_rows_verify() {
         sigs += 1;
     }
     assert_eq!((pops, sigs), (11, 30));
+    // T15: the wallet members' parts aggregate to the row's signature and pop, which verify (the bindings reproduce the parts)
+    let w = &s["wallet"];
+    let (d, m) = (bytes(&w["keyData"]), b32(&w["uaMsg"]));
+    let parts = |f: &str| -> Vec<(u8, [u8; 128])> {
+        arr(&w["members"])
+            .iter()
+            .map(|x| {
+                (
+                    x["keyDataIndex"].as_u64().unwrap() as u8,
+                    bytes(&x[f]).try_into().unwrap(),
+                )
+            })
+            .collect()
+    };
+    let agg = bm::aggregate(&d, &m, &parts("partial"), false).unwrap();
+    assert_eq!(&agg.signature[..], &bytes(&w["signature"])[..]);
+    let signers: Vec<u8> = arr(&w["signers"])
+        .iter()
+        .map(|i| i.as_u64().unwrap() as u8)
+        .collect();
+    assert_eq!(agg.signers, signers);
+    assert!(verify(0x0121, &d, &m, &agg.to_abi(), false, true));
+    let pop = bm::aggregate_pop(&d, &parts("popPart")).unwrap();
+    assert_eq!(&pop[..], &bytes(&w["pop"])[..]);
+    assert!(verify(
+        0x0121,
+        &d,
+        &b32(&w["popMessage"]),
+        &pop,
+        true,
+        false
+    ));
+    assert_eq!(derive_ua(0x0121, &d, false).unwrap(), b32(&w["ua"]));
 }

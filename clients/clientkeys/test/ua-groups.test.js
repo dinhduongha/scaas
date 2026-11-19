@@ -310,3 +310,39 @@ test("bls_multi: groups.json blsMulti rows", async () => {
   }
   assert.deepEqual([s.pop.length, s.signatures.length], [11, 30]);
 });
+
+// bls-multi T15: groups.json blsMulti.wallet: the 0x0121 member keys of keys.json's mnemonic derived here (uakey.js, EIP-2333),
+// each member's partial and PoP part signed here on noble, the minimal aggregate and the PoP: what every binding reproduces.
+test("bls_multi: groups.json blsMulti.wallet parts", async () => {
+  const bm = await import("../src/bls-multi.js");
+  const { verify } = await import("../src/ua-verify.js");
+  const { deriveUAKey } = await import("../src/uakey.js");
+  const { seedFromWords } = await import("../src/seed.js");
+  const w = V.blsMulti.wallet;
+  const m = JSON.parse(readFileSync(new URL("keys.json", dir))).mnemonics.find((x) => x.id === w.mnemonic);
+  const seed = seedFromWords(m.words, m.passphrase);
+  const keys = w.members.map((r) => deriveUAKey(seed, { kind: w.kind, account: r.account, index: w.index }));
+  assert.deepEqual(
+    keys.map((k) => hex(k.keyData)),
+    w.members.map((r) => r.key),
+  );
+  const { keyData, indexMap } = bm.buildKeyData(
+    keys.map((k, i) => ({ key: k.keyData, weight: w.members[i].weight })),
+    w.threshold,
+  );
+  assert.equal(hex(keyData), w.keyData);
+  assert.deepEqual(
+    indexMap,
+    w.members.map((r) => r.keyDataIndex),
+  );
+  keys.forEach((k, i) => {
+    assert.equal(hex(k.signBlsMulti(B(w.keyData), B(w.uaMsg))), w.members[i].partial);
+    assert.equal(hex(k.signBlsMultiPop(B(w.keyData))), w.members[i].popPart);
+  });
+  const parts = (f) => w.members.map((r) => [r.keyDataIndex, B(r[f])]);
+  const agg = bm.aggregate(w.keyData, w.uaMsg, parts("partial"));
+  assert.deepEqual([hex(agg.signature), agg.signers], [w.signature, w.signers]);
+  assert.ok(verify(0x0121, w.keyData, w.uaMsg, hex(bm.blsMultiAbi(agg)), false, true));
+  assert.equal(hex(bm.aggregatePop(w.keyData, parts("popPart"))), w.pop);
+  assert.ok(verify(0x0121, w.keyData, w.popMessage, w.pop, true));
+});
