@@ -55,14 +55,7 @@ ua-test (touched) | dfb10d2c8 | 0 | 93 passed, 0 failed, 0 ignored (6 binaries: 
 # script (an unobservable pre-check; dead code, removed).
 ua-clippy | 6e672164e | 0 | -
 ua-vectors | 6e672164e | 0 | 659 passed, 0 failed, 6 ignored (62 binaries)
-sdk-clippy | f525fa27f | 0 | -
-sdk-wasm | f525fa27f | 0 | -
-docs | f525fa27f | 0 | -
-features | f525fa27f | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-sdk-min | f525fa27f | 101 | 30 passed, 1 failed, 0 ignored (3 binaries)
-bind-dart | f525fa27f | 0 | dart: +6:
 ua-test | f525fa27f | 0 | 555 passed, 0 failed, 3 ignored (55 binaries)
-sdk-test | f525fa27f | 0 | 190 passed, 0 failed, 8 ignored (17 binaries)
 sdk-e2e | f525fa27f | 0 | 7 passed, 0 failed, 0 ignored (1 binaries)
 # T13 part 3 (owner rulings S1-S3, P1, P2 at 6e672164e; deploy and completeRecovery ea845adad; passkey and secure-element
 # signing f525fa27f): every SDK step at f525fa27f; ua-rs changed only at 6e672164e (ua-clippy, ua-vectors there; ua-test at
@@ -70,3 +63,20 @@ sdk-e2e | f525fa27f | 0 | 7 passed, 0 failed, 0 ignored (1 binaries)
 # on the SDK's deploy and completeRecovery. sdk-min's one red is the same pre-existing tests/config.rs
 # open_checks_gas_tables_and_opt_ins (fixed on ua-rs-sign, arrives by merge). format.sh --check (every part but tact) clean.
 # Mutants: t13s123 4/4, t13direct 2/2, t13external 2/2 killed, each by its intended assertion. msig not built.
+sdk-clippy | fdd34262d | 0 | -
+sdk-wasm | fdd34262d | 0 | -
+features | fdd34262d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+docs | fdd34262d | 0 | -
+sdk-test | fdd34262d | 0 | 197 passed, 0 failed, 11 ignored (17 binaries)
+bind-dart | fdd34262d | 0 | dart: +6:
+sdk-min | fdd34262d | 101 | 30 passed, 1 failed, 0 ignored (3 binaries)
+sdk-e2e | fdd34262d | 0 | 10 passed, 0 failed, 0 ignored (1 binaries; three runs of 4, 3, 3 tests)
+format | fdd34262d | 0 | format.sh --check, every part but tact: clean
+# T13 part 4 (msig d98a4c952) and the owner's T1-T4 of 2026-11-19 (152ed27a9, 8e4d88593, 6c29ffbea, fdd34262d): every SDK
+# step at fdd34262d. sdk-e2e ran as the runner's command split in three runs by test name (each under the session's foreground
+# limit; no anvil left), 10/10 with the new e2e_msig_register_accept_transfer_update_on_anvil, e2e_register_mldsa_cached_on_anvil
+# and e2e_register_passkey_row_on_anvil. sdk-min's one red is the same pre-existing tests/config.rs
+# open_checks_gas_tables_and_opt_ins. ua-rs untouched (no ua-rs step). bind-cpp: the runner refuses it, rc 3, no directory
+# clients/scaas-sdk/bindings/cpp yet (the C++ binding is a later task), so plan T13's gate box stays open.
+# Mutants: t13msig 7/7, t13cache 3/3, t13keyrows 2/2, t13policy 1/1, t13rpid 1/1 killed (t13cache's third by the entries
+# assertion: the prepare and the landed rule share the part reader, recorded in its name; every other by its intended one).
