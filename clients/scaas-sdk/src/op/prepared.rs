@@ -157,22 +157,12 @@ pub(crate) const QUOTABLE: &[(&str, &[&str])] = &[
     ("mtxRotateKey", &["account"]),
     ("mtxSetGuardian", &["account"]),
     ("mtxCancelRecovery", &["account"]),
-];
-#[cfg(test)] // the coverage test's
-const TOKEN_KINDS: &[&str] = &["token", "zether", "pqz"];
-/// What the SDK prepares without a reference row yet (PLANNED: their fixtures), each on the domain kinds listed.
-#[cfg(test)] // the coverage test's
-pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
     ("mtxAcceptAdmin", &["gov_router"]),
     ("mtxApproveDexRelease", &["gov_router"]),
     ("mtxApproveRelease", &["gov_router"]),
     ("mtxApproveTokenRelease", &["gov_router"]),
     ("mtxCancelGrant", &["gov_router"]),
     ("mtxCancelRate", &["gov_router"]),
-    ("mtxConfidentialTransfer", &["pqz", "zether"]),
-    ("mtxConfidentialTransferCompact", &["pqz", "zether"]),
-    ("mtxConfidentialTransferSingle", &["pqz", "zether"]),
-    ("mtxConfidentialTransferSingleCompact", &["pqz"]),
     ("mtxCreateDex", &["gov_router"]),
     ("mtxCreateInstance", &["gov_router"]),
     ("mtxCreateToken", &["gov_router"]),
@@ -193,7 +183,6 @@ pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
     ("mtxPqzCancelVerifier", &["gov_router"]),
     ("mtxPqzRevokeVerifier", &["gov_router"]),
     ("mtxPqzSetVerifier", &["gov_router"]),
-    ("mtxPrepareAcc", &["pqz"]),
     ("mtxProposeRate", &["gov_router"]),
     ("mtxPublishClassEnv", &["gov_router"]),
     ("mtxPublishDexEnv", &["gov_router"]),
@@ -204,12 +193,8 @@ pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
     ("mtxRevokeApproval", &["gov_router"]),
     ("mtxRevokeOrder", &["gov_router"]),
     ("mtxRevokeRole", &["gov_router"]),
-    ("mtxRollOver", &["pqz", "zether"]),
-    ("mtxRollOverBatch", &["zether"]),
-    ("mtxRollOverSigned", &["pqz", "zether"]),
     ("mtxSetAllowed", &["gov_router"]),
     ("mtxSetAuditorKey", &["gov_router"]),
-    ("mtxSetAuditorUA", &["gov_router"]),
     ("mtxSetChainEntries", &["gov_router"]),
     ("mtxSetClassKindEnabled", &["gov_router"]),
     ("mtxSetCompliance", &["gov_router"]),
@@ -223,17 +208,32 @@ pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
     ("mtxSetMaxSupply", &["gov_router"]),
     ("mtxSetMaxWrapSupply", &["gov_router"]),
     ("mtxSetProofStore", &["gov_router"]),
-    ("mtxSetRollOverMode", &["zether"]),
     ("mtxSetTaxRate", &["gov_router"]),
     ("mtxSetTaxRecipient", &["gov_router"]),
     ("mtxSetTokenKindEnabled", &["gov_router"]),
     ("mtxSetVerifierFee", &["gov_router"]),
     ("mtxSetWrapLimits", &["gov_router"]),
     ("mtxSetWrapMember", &["gov_router"]),
-    ("mtxShield", &["pqz", "zether"]),
     ("mtxTransferAdmin", &["gov_router"]),
     ("mtxUnfreeze", &["gov_router"]),
     ("mtxUnpause", &["gov_router"]),
+];
+#[cfg(test)] // the coverage test's
+const TOKEN_KINDS: &[&str] = &["token", "zether", "pqz"];
+/// What the SDK prepares without a reference row yet (PLANNED: their fixtures), each on the domain kinds listed.
+#[cfg(test)] // the coverage test's
+pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
+    ("mtxConfidentialTransfer", &["pqz", "zether"]),
+    ("mtxConfidentialTransferCompact", &["pqz", "zether"]),
+    ("mtxConfidentialTransferSingle", &["pqz", "zether"]),
+    ("mtxConfidentialTransferSingleCompact", &["pqz"]),
+    ("mtxPrepareAcc", &["pqz"]),
+    ("mtxRollOver", &["pqz", "zether"]),
+    ("mtxRollOverBatch", &["zether"]),
+    ("mtxRollOverSigned", &["pqz", "zether"]),
+    ("mtxSetAuditorUA", &["gov_router"]),
+    ("mtxSetRollOverMode", &["zether"]),
+    ("mtxShield", &["pqz", "zether"]),
     ("mtxUnshield", &["pqz", "zether"]),
     ("mtxUnshieldUnwrap", &["pqz", "zether"]),
     ("mtxWrapShield", &["pqz", "zether"]),

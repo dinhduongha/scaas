@@ -15,6 +15,7 @@
     "mtxExecute: the wallet's or the account's own cost, calling an account without code with no value; the target's cost is never in the row.",
     "Order entries (mtxCancelOrder, mtxInvalidateNonces, mtxWrapOrder; the DEX's mtxCancelOrders, one order, and mtxInvalidateNonces): no envelope or meta-tx lane, signed over the order under the UA purpose trade (a native key signs the digest itself), the DEX's by an address. The SDK keys a struct without a lane as used and mtxWrapOrder by its order nonce, so both rows are the worst case: nothing of the signer's on the batch written yet (the floor raised the first time, the wrapper holding none of the leg, the signer none of its units). The call sits on EIP-7976's calldata floor: measured inside the transaction, by a meter contract's gasleft around the call less the meter's own 3,038 (a cold callee and its opcodes; held equal to the transaction's figure on two rows off the floor).",
     "account (SmartKeyAccount): signed by its secp256k1 key 0 (the reference signer) in an AccountSig with an empty proof; the worst over the key kinds added, removed or replaced (a secp256k1 key or a passkey) and over a guardian set with or without a recovery pending; mtxExecute's data per byte measured inside the transaction as the order entries are.",
+    "gov_router (GovernanceRouter): each entry signed for its target by the role it needs, a native key where the role takes one, else an ERC-1271 wallet (the contract-only bits: RATE_ADJUSTABLE's rate entries, the regulated issuer's pause, freeze, force transfer and the compliance seat's order entries); the target in the state the governance sequence reaches just before the entry, every write a first write; the worst over the targets measured: a Normal, a regulated Normal (kind 8), a Wrapped, a hybrid with the wrap controls, the DEX, the factory, the compliance registry, an OFFCHAIN PQZ token, a Zether token; the factory's notice period 0 and no grant delay where a change applies at once; the list entries with one account, the directory with all four entries, mtxCreate* one new contract each.",
     "Verify rows: the copy-cost forwarder's check of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature."
   ],
   "base": [
@@ -1775,6 +1776,966 @@
       "gas": 153000,
       "measured": 152935,
       "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_mtxCancelNonce_used_account"
+    },
+    {
+      "entry": "mtxAcceptAdmin",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 291000,
+      "measured": 290226,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxAcceptAdmin_fresh_dex,gov_router_mtxAcceptAdmin_fresh_normal,gov_router_mtxAcceptAdmin_fresh_regulated,gov_router_mtxAcceptAdmin_fresh_wrapped"
+    },
+    {
+      "entry": "mtxAcceptAdmin",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 193000,
+      "measured": 192306,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxAcceptAdmin_used_dex,gov_router_mtxAcceptAdmin_used_normal,gov_router_mtxAcceptAdmin_used_regulated,gov_router_mtxAcceptAdmin_used_wrapped"
+    },
+    {
+      "entry": "mtxApproveDexRelease",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 266000,
+      "measured": 265961,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxApproveDexRelease_fresh_factory"
+    },
+    {
+      "entry": "mtxApproveDexRelease",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 169000,
+      "measured": 168041,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxApproveDexRelease_used_factory"
+    },
+    {
+      "entry": "mtxApproveRelease",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 268000,
+      "measured": 267290,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxApproveRelease_fresh_factory"
+    },
+    {
+      "entry": "mtxApproveRelease",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 170000,
+      "measured": 169370,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxApproveRelease_used_factory"
+    },
+    {
+      "entry": "mtxApproveTokenRelease",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 267000,
+      "measured": 266491,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxApproveTokenRelease_fresh_factory"
+    },
+    {
+      "entry": "mtxApproveTokenRelease",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 169000,
+      "measured": 168571,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxApproveTokenRelease_used_factory"
+    },
+    {
+      "entry": "mtxCancelGrant",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 197000,
+      "measured": 196842,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelGrant_fresh_normal,gov_router_mtxCancelGrant_fresh_regulated"
+    },
+    {
+      "entry": "mtxCancelGrant",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 99000,
+      "measured": 98922,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelGrant_used_normal,gov_router_mtxCancelGrant_used_regulated"
+    },
+    {
+      "entry": "mtxCancelRate",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 178000,
+      "measured": 177912,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelRate_fresh_wrapped"
+    },
+    {
+      "entry": "mtxCancelRate",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 80000,
+      "measured": 79992,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCancelRate_used_wrapped"
+    },
+    {
+      "entry": "mtxCreateDex",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 4346000,
+      "measured": 4345157,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateDex_fresh_dex"
+    },
+    {
+      "entry": "mtxCreateDex",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 4248000,
+      "measured": 4247237,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateDex_used_dex"
+    },
+    {
+      "entry": "mtxCreateInstance",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 1912000,
+      "measured": 1911596,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateInstance_fresh_note"
+    },
+    {
+      "entry": "mtxCreateInstance",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 1814000,
+      "measured": 1813676,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateInstance_used_note"
+    },
+    {
+      "entry": "mtxCreateToken",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 2272000,
+      "measured": 2271379,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_fresh_normal"
+    },
+    {
+      "entry": "mtxCreateToken",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 2174000,
+      "measured": 2173459,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_used_normal"
+    },
+    {
+      "entry": "mtxDeprecateDex",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 168000,
+      "measured": 167046,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDeprecateDex_fresh_factory"
+    },
+    {
+      "entry": "mtxDeprecateDex",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 70000,
+      "measured": 69126,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDeprecateDex_used_factory"
+    },
+    {
+      "entry": "mtxDeprecateRelease",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 170000,
+      "measured": 169373,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDeprecateRelease_fresh_factory"
+    },
+    {
+      "entry": "mtxDeprecateRelease",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 72000,
+      "measured": 71453,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDeprecateRelease_used_factory"
+    },
+    {
+      "entry": "mtxDeprecateToken",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 169000,
+      "measured": 168191,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDeprecateToken_fresh_factory"
+    },
+    {
+      "entry": "mtxDeprecateToken",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 71000,
+      "measured": 70271,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDeprecateToken_used_factory"
+    },
+    {
+      "entry": "mtxDisableFeature",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 176000,
+      "measured": 175762,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDisableFeature_fresh_normal,gov_router_mtxDisableFeature_fresh_regulated"
+    },
+    {
+      "entry": "mtxDisableFeature",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 78000,
+      "measured": 77842,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDisableFeature_used_normal,gov_router_mtxDisableFeature_used_regulated"
+    },
+    {
+      "entry": "mtxDisableWrap",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 178000,
+      "measured": 177604,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDisableWrap_fresh_wrapped"
+    },
+    {
+      "entry": "mtxDisableWrap",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 80000,
+      "measured": 79684,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxDisableWrap_used_wrapped"
+    },
+    {
+      "entry": "mtxEnableFeature",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 287000,
+      "measured": 286319,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxEnableFeature_fresh_regulated"
+    },
+    {
+      "entry": "mtxEnableFeature",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 189000,
+      "measured": 188399,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxEnableFeature_used_regulated"
+    },
+    {
+      "entry": "mtxExecuteRate",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 205000,
+      "measured": 204609,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxExecuteRate_fresh_wrapped"
+    },
+    {
+      "entry": "mtxExecuteRate",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 107000,
+      "measured": 106689,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxExecuteRate_used_wrapped"
+    },
+    {
+      "entry": "mtxForceTransfer",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 422000,
+      "measured": 421102,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxForceTransfer_fresh_regulated"
+    },
+    {
+      "entry": "mtxForceTransfer",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 324000,
+      "measured": 323182,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxForceTransfer_used_regulated"
+    },
+    {
+      "entry": "mtxFreeze",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 392000,
+      "measured": 391891,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxFreeze_fresh_regulated"
+    },
+    {
+      "entry": "mtxFreeze",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 294000,
+      "measured": 293971,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxFreeze_used_regulated"
+    },
+    {
+      "entry": "mtxGrantRole",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 514000,
+      "measured": 513223,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxGrantRole_fresh_normal,gov_router_mtxGrantRole_fresh_regulated"
+    },
+    {
+      "entry": "mtxGrantRole",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 416000,
+      "measured": 415303,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxGrantRole_used_normal,gov_router_mtxGrantRole_used_regulated"
+    },
+    {
+      "entry": "mtxMint",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 380000,
+      "measured": 379225,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxMint_fresh_normal,gov_router_mtxMint_fresh_regulated"
+    },
+    {
+      "entry": "mtxMint",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 282000,
+      "measured": 281305,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxMint_used_normal,gov_router_mtxMint_used_regulated"
+    },
+    {
+      "entry": "mtxMintToUA",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 405000,
+      "measured": 404255,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxMintToUA_fresh_normal,gov_router_mtxMintToUA_fresh_regulated"
+    },
+    {
+      "entry": "mtxMintToUA",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 307000,
+      "measured": 306335,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxMintToUA_used_normal,gov_router_mtxMintToUA_used_regulated"
+    },
+    {
+      "entry": "mtxOperatorTransfer",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 299000,
+      "measured": 298193,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxOperatorTransfer_fresh_regulated"
+    },
+    {
+      "entry": "mtxOperatorTransfer",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 201000,
+      "measured": 200273,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxOperatorTransfer_used_regulated"
+    },
+    {
+      "entry": "mtxPause",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 287000,
+      "measured": 286570,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPause_fresh_regulated"
+    },
+    {
+      "entry": "mtxPause",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 189000,
+      "measured": 188650,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPause_used_regulated"
+    },
+    {
+      "entry": "mtxPqzCancelVerifier",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 164000,
+      "measured": 163765,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzCancelVerifier_fresh_pqz"
+    },
+    {
+      "entry": "mtxPqzCancelVerifier",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 66000,
+      "measured": 65845,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzCancelVerifier_used_pqz"
+    },
+    {
+      "entry": "mtxPqzRevokeVerifier",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 303000,
+      "measured": 302287,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzRevokeVerifier_fresh_pqz"
+    },
+    {
+      "entry": "mtxPqzRevokeVerifier",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 205000,
+      "measured": 204367,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzRevokeVerifier_used_pqz"
+    },
+    {
+      "entry": "mtxPqzSetVerifier",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 301000,
+      "measured": 300901,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzSetVerifier_fresh_pqz"
+    },
+    {
+      "entry": "mtxPqzSetVerifier",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 203000,
+      "measured": 202981,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPqzSetVerifier_used_pqz"
+    },
+    {
+      "entry": "mtxProposeRate",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 286000,
+      "measured": 285290,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxProposeRate_fresh_wrapped"
+    },
+    {
+      "entry": "mtxProposeRate",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 188000,
+      "measured": 187370,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxProposeRate_used_wrapped"
+    },
+    {
+      "entry": "mtxPublishClassEnv",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 1731000,
+      "measured": 1730403,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishClassEnv_fresh_factory"
+    },
+    {
+      "entry": "mtxPublishClassEnv",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 1633000,
+      "measured": 1632483,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishClassEnv_used_factory"
+    },
+    {
+      "entry": "mtxPublishDexEnv",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 1730000,
+      "measured": 1729426,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishDexEnv_fresh_factory"
+    },
+    {
+      "entry": "mtxPublishDexEnv",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 1632000,
+      "measured": 1631506,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishDexEnv_used_factory"
+    },
+    {
+      "entry": "mtxPublishTokenEnv",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 1730000,
+      "measured": 1729897,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishTokenEnv_fresh_factory"
+    },
+    {
+      "entry": "mtxPublishTokenEnv",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 1632000,
+      "measured": 1631977,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxPublishTokenEnv_used_factory"
+    },
+    {
+      "entry": "mtxRecordOrder",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 607000,
+      "measured": 606981,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRecordOrder_fresh_regulated"
+    },
+    {
+      "entry": "mtxRecordOrder",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 510000,
+      "measured": 509061,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRecordOrder_used_regulated"
+    },
+    {
+      "entry": "mtxRenounceAdmin",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 188000,
+      "measured": 187943,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRenounceAdmin_fresh_normal,gov_router_mtxRenounceAdmin_fresh_regulated"
+    },
+    {
+      "entry": "mtxRenounceAdmin",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 91000,
+      "measured": 90023,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRenounceAdmin_used_normal,gov_router_mtxRenounceAdmin_used_regulated"
+    },
+    {
+      "entry": "mtxRenounceRole",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 304000,
+      "measured": 303241,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRenounceRole_fresh_normal,gov_router_mtxRenounceRole_fresh_regulated"
+    },
+    {
+      "entry": "mtxRenounceRole",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 206000,
+      "measured": 205321,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRenounceRole_used_normal,gov_router_mtxRenounceRole_used_regulated"
+    },
+    {
+      "entry": "mtxRevokeApproval",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 164000,
+      "measured": 163080,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeApproval_fresh_factory"
+    },
+    {
+      "entry": "mtxRevokeApproval",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 66000,
+      "measured": 65160,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeApproval_used_factory"
+    },
+    {
+      "entry": "mtxRevokeOrder",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 208000,
+      "measured": 207038,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeOrder_fresh_regulated"
+    },
+    {
+      "entry": "mtxRevokeOrder",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 110000,
+      "measured": 109118,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeOrder_used_regulated"
+    },
+    {
+      "entry": "mtxRevokeRole",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 278000,
+      "measured": 277372,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeRole_fresh_normal,gov_router_mtxRevokeRole_fresh_regulated"
+    },
+    {
+      "entry": "mtxRevokeRole",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 180000,
+      "measured": 179452,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxRevokeRole_used_normal,gov_router_mtxRevokeRole_used_regulated"
+    },
+    {
+      "entry": "mtxSetAllowed",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 273000,
+      "measured": 272133,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_fresh_regulated"
+    },
+    {
+      "entry": "mtxSetAllowed",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 175000,
+      "measured": 174213,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_used_regulated"
+    },
+    {
+      "entry": "mtxSetAuditorKey",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 900000,
+      "measured": 899162,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAuditorKey_fresh_zether"
+    },
+    {
+      "entry": "mtxSetAuditorKey",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 802000,
+      "measured": 801242,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAuditorKey_used_zether"
+    },
+    {
+      "entry": "mtxSetChainEntries",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 636000,
+      "measured": 635086,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetChainEntries_fresh_factory"
+    },
+    {
+      "entry": "mtxSetChainEntries",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 538000,
+      "measured": 537166,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetChainEntries_used_factory"
+    },
+    {
+      "entry": "mtxSetClassKindEnabled",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 263000,
+      "measured": 262303,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetClassKindEnabled_fresh_factory"
+    },
+    {
+      "entry": "mtxSetClassKindEnabled",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 165000,
+      "measured": 164383,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetClassKindEnabled_used_factory"
+    },
+    {
+      "entry": "mtxSetCompliance",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 267000,
+      "measured": 266532,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_fresh_registry"
+    },
+    {
+      "entry": "mtxSetCompliance",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 169000,
+      "measured": 168612,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_used_registry"
+    },
+    {
+      "entry": "mtxSetDenied",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 175000,
+      "measured": 174197,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_fresh_regulated"
+    },
+    {
+      "entry": "mtxSetDenied",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 77000,
+      "measured": 76277,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_used_regulated"
+    },
+    {
+      "entry": "mtxSetExchangeTarget",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 269000,
+      "measured": 268070,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetExchangeTarget_fresh_dex"
+    },
+    {
+      "entry": "mtxSetExchangeTarget",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 171000,
+      "measured": 170150,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetExchangeTarget_used_dex"
+    },
+    {
+      "entry": "mtxSetFeeSplit",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 171000,
+      "measured": 170213,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetFeeSplit_fresh_dex"
+    },
+    {
+      "entry": "mtxSetFeeSplit",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 73000,
+      "measured": 72293,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetFeeSplit_used_dex"
+    },
+    {
+      "entry": "mtxSetGrant",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 422000,
+      "measured": 421876,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetGrant_fresh_normal,gov_router_mtxSetGrant_fresh_regulated"
+    },
+    {
+      "entry": "mtxSetGrant",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 324000,
+      "measured": 323956,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetGrant_used_normal,gov_router_mtxSetGrant_used_regulated"
+    },
+    {
+      "entry": "mtxSetKycProvider",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 383000,
+      "measured": 382551,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetKycProvider_fresh_registry"
+    },
+    {
+      "entry": "mtxSetKycProvider",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 285000,
+      "measured": 284631,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetKycProvider_used_registry"
+    },
+    {
+      "entry": "mtxSetListedOnly",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 170000,
+      "measured": 169361,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetListedOnly_fresh_dex"
+    },
+    {
+      "entry": "mtxSetListedOnly",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 72000,
+      "measured": 71441,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetListedOnly_used_dex"
+    },
+    {
+      "entry": "mtxSetMarket",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 716000,
+      "measured": 715708,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMarket_fresh_dex"
+    },
+    {
+      "entry": "mtxSetMarket",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 618000,
+      "measured": 617788,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMarket_used_dex"
+    },
+    {
+      "entry": "mtxSetMaxSupply",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 181000,
+      "measured": 180025,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMaxSupply_fresh_hybrid"
+    },
+    {
+      "entry": "mtxSetMaxSupply",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 83000,
+      "measured": 82105,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMaxSupply_used_hybrid"
+    },
+    {
+      "entry": "mtxSetMaxWrapSupply",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 278000,
+      "measured": 277837,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMaxWrapSupply_fresh_hybrid"
+    },
+    {
+      "entry": "mtxSetMaxWrapSupply",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 180000,
+      "measured": 179917,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetMaxWrapSupply_used_hybrid"
+    },
+    {
+      "entry": "mtxSetProofStore",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 174000,
+      "measured": 173878,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetProofStore_fresh_pqz"
+    },
+    {
+      "entry": "mtxSetProofStore",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 76000,
+      "measured": 75958,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetProofStore_used_pqz"
+    },
+    {
+      "entry": "mtxSetTaxRate",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 277000,
+      "measured": 276011,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRate_fresh_regulated"
+    },
+    {
+      "entry": "mtxSetTaxRate",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 179000,
+      "measured": 178091,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRate_used_regulated"
+    },
+    {
+      "entry": "mtxSetTaxRecipient",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 179000,
+      "measured": 178877,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRecipient_fresh_regulated"
+    },
+    {
+      "entry": "mtxSetTaxRecipient",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 81000,
+      "measured": 80957,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTaxRecipient_used_regulated"
+    },
+    {
+      "entry": "mtxSetTokenKindEnabled",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 154000,
+      "measured": 153657,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTokenKindEnabled_fresh_factory"
+    },
+    {
+      "entry": "mtxSetTokenKindEnabled",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 56000,
+      "measured": 55737,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetTokenKindEnabled_used_factory"
+    },
+    {
+      "entry": "mtxSetVerifierFee",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 183000,
+      "measured": 182882,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetVerifierFee_fresh_pqz"
+    },
+    {
+      "entry": "mtxSetVerifierFee",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 85000,
+      "measured": 84962,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetVerifierFee_used_pqz"
+    },
+    {
+      "entry": "mtxSetWrapLimits",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 444000,
+      "measured": 443522,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_fresh_hybrid"
+    },
+    {
+      "entry": "mtxSetWrapLimits",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 346000,
+      "measured": 345602,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_used_hybrid"
+    },
+    {
+      "entry": "mtxSetWrapMember",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 274000,
+      "measured": 273518,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapMember_fresh_hybrid"
+    },
+    {
+      "entry": "mtxSetWrapMember",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 176000,
+      "measured": 175598,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapMember_used_hybrid"
+    },
+    {
+      "entry": "mtxTransferAdmin",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 270000,
+      "measured": 269178,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxTransferAdmin_fresh_dex,gov_router_mtxTransferAdmin_fresh_normal,gov_router_mtxTransferAdmin_fresh_regulated,gov_router_mtxTransferAdmin_fresh_wrapped"
+    },
+    {
+      "entry": "mtxTransferAdmin",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 172000,
+      "measured": 171258,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxTransferAdmin_used_dex,gov_router_mtxTransferAdmin_used_normal,gov_router_mtxTransferAdmin_used_regulated,gov_router_mtxTransferAdmin_used_wrapped"
+    },
+    {
+      "entry": "mtxUnfreeze",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 181000,
+      "measured": 180504,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxUnfreeze_fresh_regulated"
+    },
+    {
+      "entry": "mtxUnfreeze",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 83000,
+      "measured": 82584,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxUnfreeze_used_regulated"
+    },
+    {
+      "entry": "mtxUnpause",
+      "kind": "gov_router",
+      "fresh": true,
+      "gas": 188000,
+      "measured": 187461,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxUnpause_fresh_regulated"
+    },
+    {
+      "entry": "mtxUnpause",
+      "kind": "gov_router",
+      "fresh": false,
+      "gas": 90000,
+      "measured": 89541,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxUnpause_used_regulated"
     }
   ],
   "verify": [

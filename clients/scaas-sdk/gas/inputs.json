@@ -139,6 +139,51 @@
       "test/gas/SdkGasAccount.t.sol",
       "SdkGasAccountTest",
       "test_sdkGas_account_body"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterTokenTest",
+      "test_sdkGas_routerToken"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterWrappedTest",
+      "test_sdkGas_routerWrapped"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterWrappedTest",
+      "test_sdkGas_routerDex"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterRegulatedTest",
+      "test_sdkGas_routerRegulated"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterHybridTest",
+      "test_sdkGas_routerHybrid"
+    ],
+    [
+      "test/gas/SdkGasRouterAdmin.t.sol",
+      "SdkGasRouterAdminTest",
+      "test_sdkGas_routerAdmin"
+    ],
+    [
+      "test/gas/SdkGasRouterAdmin.t.sol",
+      "SdkGasRouterCreateTest",
+      "test_sdkGas_routerCreate"
+    ],
+    [
+      "test/gas/SdkGasRouterConf.t.sol",
+      "SdkGasRouterPqzTest",
+      "test_sdkGas_routerPqz"
+    ],
+    [
+      "test/gas/SdkGasRouterConf.t.sol",
+      "SdkGasRouterZetherTest",
+      "test_sdkGas_routerZether"
     ]
   ],
   "base": [
@@ -221,6 +266,73 @@
         "mtxExecute",
         "mtxCancelNonce"
       ]
+    },
+    {
+      "kinds": [
+        "gov_router"
+      ],
+      "entries": [
+        "mtxAcceptAdmin",
+        "mtxApproveDexRelease",
+        "mtxApproveRelease",
+        "mtxApproveTokenRelease",
+        "mtxCancelGrant",
+        "mtxCancelRate",
+        "mtxCreateDex",
+        "mtxCreateInstance",
+        "mtxCreateToken",
+        "mtxDeprecateDex",
+        "mtxDeprecateRelease",
+        "mtxDeprecateToken",
+        "mtxDisableFeature",
+        "mtxDisableWrap",
+        "mtxEnableFeature",
+        "mtxExecuteRate",
+        "mtxForceTransfer",
+        "mtxFreeze",
+        "mtxGrantRole",
+        "mtxMint",
+        "mtxMintToUA",
+        "mtxOperatorTransfer",
+        "mtxPause",
+        "mtxPqzCancelVerifier",
+        "mtxPqzRevokeVerifier",
+        "mtxPqzSetVerifier",
+        "mtxProposeRate",
+        "mtxPublishClassEnv",
+        "mtxPublishDexEnv",
+        "mtxPublishTokenEnv",
+        "mtxRecordOrder",
+        "mtxRenounceAdmin",
+        "mtxRenounceRole",
+        "mtxRevokeApproval",
+        "mtxRevokeOrder",
+        "mtxRevokeRole",
+        "mtxSetAllowed",
+        "mtxSetAuditorKey",
+        "mtxSetChainEntries",
+        "mtxSetClassKindEnabled",
+        "mtxSetCompliance",
+        "mtxSetDenied",
+        "mtxSetExchangeTarget",
+        "mtxSetFeeSplit",
+        "mtxSetGrant",
+        "mtxSetKycProvider",
+        "mtxSetListedOnly",
+        "mtxSetMarket",
+        "mtxSetMaxSupply",
+        "mtxSetMaxWrapSupply",
+        "mtxSetProofStore",
+        "mtxSetTaxRate",
+        "mtxSetTaxRecipient",
+        "mtxSetTokenKindEnabled",
+        "mtxSetVerifierFee",
+        "mtxSetWrapLimits",
+        "mtxSetWrapMember",
+        "mtxTransferAdmin",
+        "mtxUnfreeze",
+        "mtxUnpause"
+      ]
     }
   ],
   "ua_signer": 264,
@@ -260,6 +372,7 @@
     "mtxExecute: the wallet's or the account's own cost, calling an account without code with no value; the target's cost is never in the row.",
     "Order entries (mtxCancelOrder, mtxInvalidateNonces, mtxWrapOrder; the DEX's mtxCancelOrders, one order, and mtxInvalidateNonces): no envelope or meta-tx lane, signed over the order under the UA purpose trade (a native key signs the digest itself), the DEX's by an address. The SDK keys a struct without a lane as used and mtxWrapOrder by its order nonce, so both rows are the worst case: nothing of the signer's on the batch written yet (the floor raised the first time, the wrapper holding none of the leg, the signer none of its units). The call sits on EIP-7976's calldata floor: measured inside the transaction, by a meter contract's gasleft around the call less the meter's own 3,038 (a cold callee and its opcodes; held equal to the transaction's figure on two rows off the floor).",
     "account (SmartKeyAccount): signed by its secp256k1 key 0 (the reference signer) in an AccountSig with an empty proof; the worst over the key kinds added, removed or replaced (a secp256k1 key or a passkey) and over a guardian set with or without a recovery pending; mtxExecute's data per byte measured inside the transaction as the order entries are.",
+    "gov_router (GovernanceRouter): each entry signed for its target by the role it needs, a native key where the role takes one, else an ERC-1271 wallet (the contract-only bits: RATE_ADJUSTABLE's rate entries, the regulated issuer's pause, freeze, force transfer and the compliance seat's order entries); the target in the state the governance sequence reaches just before the entry, every write a first write; the worst over the targets measured: a Normal, a regulated Normal (kind 8), a Wrapped, a hybrid with the wrap controls, the DEX, the factory, the compliance registry, an OFFCHAIN PQZ token, a Zether token; the factory's notice period 0 and no grant delay where a change applies at once; the list entries with one account, the directory with all four entries, mtxCreate* one new contract each.",
     "Verify rows: the copy-cost forwarder's check of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature."
   ],
   "save": [
