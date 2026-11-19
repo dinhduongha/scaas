@@ -160,7 +160,8 @@ so the gas limit covers both; owner 2026-11-19): a base row for (entry, domain k
 own in the order the chain's measured rows, the module tables and the SCaaS reference table the profile opts in to; without
 both, the app's own figure, one total (at most `max_gas`); then a margin; the quote carries the figure and names both
 sources on every path (owner 2026-11-19, ruling B, the gas-table rulings and part 3b; BUILT in the SDK; the forge measurement, the generator and
-the reference table BUILT for the entries and signer kinds spec §13.3 lists, the rest PLANNED;
+the reference table BUILT for the entries and signer kinds spec §13.3 lists (the confidential, order, `account`, `dex` and
+router entries since item 8), the entries it names unmeasured PLANNED;
 EVM only today, the same principle per family PLANNED; spec §13.3). `mtxExecute`'s figure is the wallet's rows plus the app's figure for the inner call (`quote_with_gas`; ruling 5). Without a figure a self-relay is `GasUnquoted`; a gateway
 quote reports the gas as unquoted and is not refused, the figure is for the user and the app only, never sent to the gateway,
 and the SDK never converts a token fee to or from gas. `submit` signs once, writes the row, then simulates the signed calldata
