@@ -73,6 +73,10 @@ pub struct Chain {
     pub value_reverts: bool,
     /// storage words by (contract, slot as `0x` + 64 hex), lower case; an absent word is 0 (plan T15)
     pub storage: HashMap<(String, String), String>,
+    /// `eth_call` answers by `(to, calldata prefix)`, read first (plan T13: the registry's views)
+    pub answers: Vec<(String, String, String)>,
+    /// `eth_estimateGas` by the call's input (plan T13: a registration's size); `None`: `gas`
+    pub gas_of: Option<fn(&str) -> u64>,
 }
 
 impl Default for Chain {
@@ -108,6 +112,8 @@ impl Default for Chain {
             genesis: hash_of(0),
             value_reverts: false,
             storage: HashMap::new(),
+            answers: vec![],
+            gas_of: None,
         }
     }
 }
@@ -277,7 +283,13 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 t => named(c, t),
             };
             let meta = c.tokens.get(&to).cloned();
-            if data.starts_with(&sel("mtxNonce(bytes32,uint256)"))
+            if let Some((_, _, out)) = c
+                .answers
+                .iter()
+                .find(|(t, d, _)| *t == to && data.starts_with(d.as_str()))
+            {
+                ok(json!(out))
+            } else if data.starts_with(&sel("mtxNonce(bytes32,uint256)"))
                 || data.starts_with(&sel("mtxNonce(address,uint256)"))
             {
                 ok(json!(format!(
@@ -324,7 +336,10 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             }
         }
         "eth_estimateGas" if c.call_revert => err("execution reverted"),
-        "eth_estimateGas" => ok(json!(format!("{:#x}", c.gas))),
+        "eth_estimateGas" => {
+            let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap_or_default();
+            ok(json!(format!("{:#x}", c.gas_of.map_or(c.gas, |f| f(input)))))
+        }
         "eth_getCode" => ok(json!(c
             .code
             .get(&p[0].as_str().unwrap_or_default().to_ascii_lowercase())

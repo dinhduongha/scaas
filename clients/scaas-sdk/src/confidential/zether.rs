@@ -37,6 +37,14 @@ impl ZetherSigner {
     pub(crate) fn ua(&self) -> [u8; 32] {
         self.key.ua()
     }
+    /// The registration's key data (`Y`) and its portable PoP (`pop` v2 over the registration of no attributes), by the
+    /// facade's `pop` (plan T13).
+    pub(crate) fn pop(&self) -> Result<(Vec<u8>, Vec<u8>), SdkError> {
+        let out = self.key.call("pop", br#"{"curve":"bls12381"}"#)?;
+        let v: Value = serde_json::from_str(&out).map_err(|_| SdkError::Internal)?;
+        let get = |k: &str| v.get(k).and_then(Value::as_str).ok_or(SdkError::Internal).and_then(unhex);
+        Ok((get("Y")?, get("pop")?))
+    }
     /// The digest `submit` checked: the only one this signer signs.
     pub(crate) fn approve(&self, d: [u8; 32]) {
         *self.digest.lock().unwrap_or_else(PoisonError::into_inner) = Some(d);

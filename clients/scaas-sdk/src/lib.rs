@@ -179,6 +179,9 @@ pub struct Sdk {
     /// the operations prepared in this session, by id (spec §13.1: a `Prepared` not here is `PreparedUnknown`)
     #[cfg(feature = "wallet")]
     pub(crate) prepared: Mutex<HashMap<String, Arc<op::Prepared>>>,
+    /// the registry writes prepared in this session, by id (spec §7: one not here is `PreparedUnknown`)
+    #[cfg(all(feature = "account", feature = "wallet"))]
+    pub(crate) registry_writes: Mutex<HashMap<String, Arc<account::RegistryWrite>>>,
     /// tokens read in this session, by (chain, address) (spec §8.2: metadata read once per session)
     #[cfg(feature = "wallet")]
     pub(crate) tokens: Mutex<HashMap<(String, String), wallet::TokenInfo>>,
@@ -292,6 +295,8 @@ impl Sdk {
             store: config.store,
             #[cfg(feature = "wallet")]
             prepared: Mutex::new(HashMap::new()),
+            #[cfg(all(feature = "account", feature = "wallet"))]
+            registry_writes: Mutex::new(HashMap::new()),
             #[cfg(feature = "wallet")]
             tokens: Mutex::new(HashMap::new()),
             #[cfg(feature = "wallet")]

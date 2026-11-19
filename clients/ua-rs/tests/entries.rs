@@ -1202,3 +1202,76 @@ fn rows_name_entries_their_contracts_have() {
     }
     assert!(held > 100, "{held} rows held");
 }
+
+// --- scaas-sdk T13: the registry writes ---
+
+/// The registry rows are the node's `PLAIN` rows on `REG`, both ways (entry and fields), and the node's pinned selectors.
+#[test]
+fn registry_rows_equal_the_node() {
+    use scaas_ua::wallet::entries::registry_rows;
+    let src = std::fs::read_to_string(root("scaas-node/src/typed.rs")).unwrap();
+    let head = "const PLAIN: &[(&str, &[&str], &str)] = &[";
+    let i = src.find(head).unwrap();
+    let rest = &src[i + head.len()..];
+    let theirs: BTreeMap<String, String> = tuples(&rest[..rest.find("\n];").unwrap()])
+        .into_iter()
+        .filter(|t| t[1] == "REG")
+        .map(|t| (t[0].clone(), t[2].clone()))
+        .collect();
+    let ours: BTreeMap<String, String> = registry_rows()
+        .into_iter()
+        .map(|r| (r.entry.to_string(), r.fields.to_string()))
+        .collect();
+    assert_eq!(ours, theirs, "the registry rows are the node's, both ways");
+    // the node pins these (scaas-node/src/submit.rs, the UA-8 selector test)
+    let sel = |e: &str| {
+        let r = registry_rows().into_iter().find(|r| r.entry == e).unwrap();
+        hex::encode(&scaas_ua::keccak256(r.signature.as_bytes())[..4])
+    };
+    assert_eq!(sel("registerWebAuthn"), "ee03a1fe");
+    assert_eq!(sel("setKemKey"), "6a3318f9");
+    assert_eq!(sel("storePqzPop"), "9f7be2a3");
+}
+
+/// Every registration row of `ua/portable.json` encodes; its length is `RegisterArgs::calldata_len`'s (an independent count)
+/// for the single-key rows; a KEM record's `setKemKey` encodes; a field missing or unknown, or another entry, is `Argument`.
+#[test]
+fn registry_calls_of_portable_rows() {
+    use scaas_ua::ua_portable::{registration_args, RegistrationInput};
+    use scaas_ua::wallet::entries::registry_call;
+    let v = load("smartcontracts/vectors/ua/portable.json");
+    let mut n = 0;
+    for r in v["registrations"].as_array().unwrap() {
+        let a = &r["args"];
+        let entry = a["entry"].as_str().unwrap();
+        let cd = registry_call(entry, a).unwrap_or_else(|e| panic!("{}: {e:?}", r["name"]));
+        if entry != "registerMsig" {
+            let reg = registration_args(&RegistrationInput {
+                kind: r["kind"].as_u64().unwrap() as u16,
+                key_data: bytes(&r["keyData"]),
+                pqz_key: bytes(&r["attrs"]["pqzKey"]),
+                pqz_pop: bytes(&a["pqzPop"]),
+                kem_pk: bytes(&r["attrs"]["kemPk"]),
+                pop: bytes(&a["pop"]),
+                kem_commit: Some(false),
+                ..Default::default()
+            })
+            .unwrap();
+            assert_eq!(cd.len(), reg.args.calldata_len(), "{}", r["name"]);
+        }
+        n += 1;
+    }
+    assert!(n >= 20, "{n} registration rows");
+    for r in v["kemRecords"].as_array().unwrap() {
+        registry_call("setKemKey", &r["args"]).unwrap_or_else(|e| panic!("{}: {e:?}", r["name"]));
+    }
+    let a = &v["registrations"][1]["args"];
+    let mut missing = a.clone();
+    missing.as_object_mut().unwrap().remove("pqzPop");
+    assert_eq!(registry_call("register", &missing), Err(Error::Argument));
+    let mut extra = a.clone();
+    extra["memo"] = json!("0x");
+    assert_eq!(registry_call("register", &extra), Err(Error::Argument));
+    assert_eq!(registry_call("registerMsig", a), Err(Error::Argument));
+    assert!(registry_call("register", a).is_ok(), "the control");
+}

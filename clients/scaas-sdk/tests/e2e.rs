@@ -488,3 +488,79 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
     assert_eq!(balance(0, false).await, "1134", "the holder after the transfer");
     assert_eq!(balance(1, true).await, "100", "the recipient's pending after the transfer");
 }
+
+/// Plan T13's e2e (spec §7): the seed's `fndsa512` UA (a PQ kind) with its KEM key registered through the SDK on `anvil`'s
+/// registry, self-relayed by the seed's EVM key, each write followed to `Landed` by its record; the registry then holds the
+/// UA and its KEM key.
+#[cfg(feature = "account")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_register_pq_kind_on_anvil() {
+    use scaas_sdk::account::{Register, RegisterAttrs};
+    const FNDSA512: u16 = 0x0132;
+    let (_anvil, rpc) = anvil(2).await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    funded_holder(rpc);
+    let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    assert_eq!(
+        cast(&["call", "--rpc-url", rpc, &registry, "kindEnabled(uint16)(bool)", &FNDSA512.to_string()]),
+        "true",
+        "fndsa512 enabled on this registry"
+    );
+    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]);
+    let (sdk, seed) = sdk_on(ChainProfile {
+        key: "anvil".into(),
+        family: Family::Evm,
+        chain_id: Some(31337),
+        chain_uid: uid,
+        rpc: vec![endpoint(rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: Some(registry),
+        factory: None,
+        router: None,
+        finality: Finality::Depth(0),
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![],
+        gas: GasRows::default(),
+        max_valid_secs: None,
+        gas_opt_in: vec![],
+    })
+    .await;
+    let acc = sdk.account();
+    let key = KeyRef::Ua {
+        seed: seed.clone(),
+        kind: FNDSA512,
+        account: 0,
+        index: 0,
+    };
+    let payer = KeyRef::Native {
+        seed,
+        network: "evm".into(),
+        index: 0,
+    };
+    let writes = acc
+        .prepare_register(Register {
+            key,
+            chain: "anvil".into(),
+            attrs: RegisterAttrs {
+                pqz_key: false,
+                kem: true,
+            },
+            payer,
+        })
+        .await
+        .unwrap();
+    assert!(!writes.is_empty());
+    let ua = writes[0].ua();
+    for w in writes {
+        let q = acc.quote_registry_write(w.clone()).await.unwrap();
+        let op = acc.submit_registry_write(w.clone(), q).await.unwrap();
+        let s = follow(&sdk, op).await;
+        assert!(matches!(s, OpState::Landed { .. }), "{}: {s:?}", w.entry());
+    }
+    let r = acc.registration_of("anvil".into(), ua).await.unwrap();
+    assert!(r.registered && r.kem_stored, "{r:?}");
+}

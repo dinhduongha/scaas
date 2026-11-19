@@ -101,6 +101,10 @@ name = "account"
 required-features = ["account"]
 
 [[test]]
+name = "account_ops"
+required-features = ["account", "wallet"]
+
+[[test]]
 name = "wallet"
 required-features = ["wallet"]
 
