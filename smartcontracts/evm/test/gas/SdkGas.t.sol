@@ -2,25 +2,36 @@
 pragma solidity ^0.8.24;
 
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
-import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {RegFixture} from "../as/helpers/RegFixture.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
-import {SdkGasRows, SdkGasOps} from "./SdkGasOps.sol";
+import {SdkGasOps} from "./SdkGasOps.sol";
+import {SdkGasLedger} from "./SdkGasLedger.sol";
 
 /// The `token` domain kind's base rows on `NormalToken` and `WrappedToken` (the generator stores the worst over these and
-/// the regulated variants, `SdkGasRegulatedTest`); the wrap family on Wrapped only, the burn on Normal only.
-contract SdkGasTokenTest is SdkGasOps, UALedgerBase {
+/// the regulated variants, `SdkGasRegulatedTest`); the wrap family on Wrapped only, the burn on Normal only. A1 (owner
+/// 2026-11-19): the derived reference signer (`SdkGasLedger`) holds 1,000 units of the token in the ledger in its run, as the
+/// native signer holds them.
+contract SdkGasTokenTest is SdkGasLedger {
     function setUp() public override {
         super.setUp();
+        _sgVerifiers();
         sgPk = ALICE_PK;
-        _wrapFor(alice, 1_000);
-        _wrapL(alice, 1_000);
+        _wrapFor(alice, 2_000);
+        _wrapL(alice, 2_000);
         (sgLeg, sgLedgerLeg, sgUaTo) = (address(und), address(tok), uaP);
+        _sgUaSigner();
+    }
+
+    /// A1: the derived signer's 1,000 units of the token `c` (`tok`, `wrp`, `wrpL`), from the native signer, in its run only.
+    function _sgUaPrep(address c) internal override {
+        vm.prank(alice);
+        WrappedToken(payable(c)).transferToUA(UAKinds.uaOf(sgUaKind, sgUaKey), 1_000);
     }
 
     function test_sdkGas_token() public {

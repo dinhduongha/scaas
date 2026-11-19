@@ -97,6 +97,9 @@ pub struct GasBase {
     pub save: Option<u64>,
     /// the gas added when the operation's fee is > 0, measured paying a recipient holding nothing (owner 2026-11-19, ruling 3)
     pub fee_extra: Option<u64>,
+    /// the regular gas a derived-UA signer adds on this entry over the native reference signer, beyond its verify row (owner
+    /// 2026-11-19, A1: a derived id's ledger debit); added when the signer is a derived UA. `None`: nothing added
+    pub ua_extra: Option<u64>,
 }
 
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
@@ -114,8 +117,9 @@ pub struct GasVerify {
     pub signer: u16,
     pub gas: u64,
     /// the signer kind's signature length in calldata, `UASig` key data and signature ABI-padded (owner 2026-11-19, ruling
-    /// 2; for an `msig`, per member); the quote adds 64 gas a byte of it. `None`: nothing added
-    pub sig_bytes: Option<u64>,
+    /// 2; for an `msig`, per member); the quote adds 64 gas a byte of it. Required in every row (owner 2026-11-19, A4); a
+    /// variable-length kind's longest (A5)
+    pub sig_bytes: u64,
 }
 
 /// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
@@ -127,8 +131,8 @@ pub struct GasRows {
 
 /// A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
-/// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, stand_in?}`, each verify row `{signer, gas, measured,
-/// source, sig_bytes?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, stand_in?}`, each
+/// verify row `{signer, gas, measured, source, sig_bytes, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GasTable {
@@ -160,14 +164,20 @@ impl GasTable {
     /// 2; `name`, `entry` and `kind` 1–64 characters of `[A-Za-z0-9_:.-]`; `signer` a `u16`; each `gas` a multiple of 1,000
     /// with `measured <= gas < measured + 1000` (owner 2026-11-19: rounded up to the next 1,000), a base row's positive (a
     /// verify row's may be 0: the reference signer's own row); `source` present; a base row's optional `per_byte` names an
-    /// input of [`GasPerByte`] with a `gas` of 1–1,000 and its `source`; a base row's optional `save` and `fee_extra` are
-    /// `{gas, measured, source}` held like a row's figure, positive; a verify row's optional `sig_bytes` at most 65,536; no key
-    /// twice. `Argument` on any failure.
+    /// input of [`GasPerByte`] with a `gas` of 1–1,000 and its `source`; a base row's optional `save`, `fee_extra` and
+    /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536;
+    /// no key twice. `GasSigBytesMissing` when a verify row has no `sig_bytes` (owner 2026-11-19, A4) and the file is otherwise
+    /// sound; `Argument` on any other failure.
     pub fn parse(text: &str) -> Result<GasTable, crate::SdkError> {
-        Self::parse_inner(text).ok_or(crate::SdkError::Argument)
+        match Self::parse_inner(text) {
+            Some((t, false)) => Ok(t),
+            Some((_, true)) => Err(crate::SdkError::GasSigBytesMissing),
+            None => Err(crate::SdkError::Argument),
+        }
     }
 
-    fn parse_inner(text: &str) -> Option<GasTable> {
+    /// The table, and whether a verify row lacked `sig_bytes` (read as 0 so the rest is still checked).
+    fn parse_inner(text: &str) -> Option<(GasTable, bool)> {
         if text.len() > GAS_TABLE_MAX_BYTES {
             return None;
         }
@@ -198,6 +208,7 @@ impl GasTable {
             return None;
         }
         let mut rows = GasRows::default();
+        let mut no_sig_bytes = false;
         for r in base {
             let row = GasBase {
                 entry: name(r, "entry")?,
@@ -209,6 +220,10 @@ impl GasTable {
                     Some(x) => Some(figure(x).filter(|g| *g > 0)?),
                 },
                 fee_extra: match r.get("fee_extra") {
+                    None => None,
+                    Some(x) => Some(figure(x).filter(|g| *g > 0)?),
+                },
+                ua_extra: match r.get("ua_extra") {
                     None => None,
                     Some(x) => Some(figure(x).filter(|g| *g > 0)?),
                 },
@@ -237,8 +252,11 @@ impl GasTable {
                 signer: u16::try_from(r.get("signer")?.as_u64()?).ok()?,
                 gas: figure(r)?,
                 sig_bytes: match r.get("sig_bytes") {
-                    None => None,
-                    Some(b) => Some(b.as_u64().filter(|b| *b <= GAS_SIG_BYTES_MAX)?),
+                    None => {
+                        no_sig_bytes = true;
+                        0
+                    }
+                    Some(b) => b.as_u64().filter(|b| *b <= GAS_SIG_BYTES_MAX)?,
                 },
             };
             if rows.verify.iter().any(|o| o.signer == row.signer) {
@@ -246,11 +264,12 @@ impl GasTable {
             }
             rows.verify.push(row);
         }
-        Some(GasTable {
+        let t = GasTable {
             name: name(&v, "name")?,
             family: name(&v, "family")?,
             rows,
-        })
+        };
+        Some((t, no_sig_bytes))
     }
 }
 

@@ -188,6 +188,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
                     per_byte: None,
                     save: None,
                     fee_extra: None,
+                    ua_extra: None,
                 });
             }
         }
@@ -196,7 +197,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
         .map(|signer| crate::GasVerify {
             signer,
             gas: 0,
-            sig_bytes: None,
+            sig_bytes: 0,
         })
         .to_vec();
     crate::GasRows { base, verify }
@@ -1040,7 +1041,7 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
         g.verify = vec![crate::GasVerify {
             signer: 0x0131,
             gas: 0,
-            sig_bytes: None,
+            sig_bytes: 0,
         }];
         p.gas = g;
     })
@@ -1128,8 +1129,7 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
             .iter()
             .find(|v| v.signer == 0)
             .unwrap()
-            .sig_bytes
-            .unwrap();
+            .sig_bytes;
         assert_eq!(sig, 96);
         assert_eq!(
             q.gas_limit,

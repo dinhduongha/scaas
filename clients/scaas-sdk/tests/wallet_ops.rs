@@ -554,6 +554,7 @@ fn gas_rows() -> GasRows {
                 }),
                 save: Some(1_000), // ruling 1: a saving pay answered
                 fee_extra: (entry == "mtxPay").then_some(2_000), // ruling 3
+                ua_extra: None,
             })
         })
         .collect();
@@ -567,7 +568,7 @@ fn gas_rows() -> GasRows {
             .map(|signer| GasVerify {
                 signer,
                 gas: if signer == 0x0135 { 5_000 } else { 0 }, // the dearest (ruling 4)
-                sig_bytes: None,
+                sig_bytes: 0,
             })
             .collect(),
     }

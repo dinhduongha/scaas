@@ -18,7 +18,8 @@ import {
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
-import {SlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+import {SlhdsaVerifier, SlhDsaSha2128s} from "../../src/ua/SlhDsa.sol";
+import {PqUA} from "../../src/ua/PqUA.sol";
 import {GasBurner} from "../pqz/PqzStateGas.t.sol";
 import {UARegistryBase} from "../ua/UARegistryBase.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -40,6 +41,35 @@ contract SdkGasForwarder {
             require(SigCheck.isValid(address(uint160(uint256(from))), digest, auth.signature, SigCheck.ERC1271_GAS));
         } else {
             REG.requireAuthorized(from, purpose, digest, auth);
+        }
+    }
+}
+
+/// A5 (owner 2026-11-19): SLH-DSA-128s's verify path as `SlhDsaSha2128s.verify` runs it, each hypertree layer's WOTS+
+/// message the real one (`worst` false) or forced to 0 (`worst` true: 510 chain steps a layer, the most work any input can
+/// force; `PqGas.t.sol`'s `SlhWorstCase`). The difference of the two runs is what the worst case adds over the vector.
+contract SdkGasSlh {
+    function run(bytes calldata pk, bytes calldata mprime, bytes calldata sig, bool worst)
+        external
+        view
+        returns (uint256 node)
+    {
+        bytes32 seed = bytes32(pk[0:16]);
+        bytes32 inner = sha256(abi.encodePacked(bytes16(sig[0:16]), bytes16(seed), bytes16(pk[16:32]), mprime));
+        uint256 dg = uint256(sha256(abi.encodePacked(bytes16(sig[0:16]), bytes16(seed), inner, uint32(0))));
+        uint256 idxTree = (dg >> 32) & ((1 << 54) - 1);
+        uint256 idxLeaf = (dg >> 16) & 0x1ff;
+        uint256 b = SlhDsaSha2128s.buf(seed, 160);
+        uint256 t = SlhDsaSha2128s.buf(seed, 704);
+        node = SlhDsaSha2128s.forsPk(sig, dg >> 88, idxTree, idxLeaf, b, t);
+        for (uint256 j; j < 7; ++j) {
+            if (j != 0) {
+                idxLeaf = idxTree & 0x1ff;
+                idxTree >>= 9;
+            }
+            node = SlhDsaSha2128s.xmssPk(
+                sig, SlhDsaSha2128s.HT_OFF + j * SlhDsaSha2128s.XMSS_LEN, worst ? 0 : node, j, idxTree, idxLeaf, b, t
+            );
         }
     }
 }
@@ -164,23 +194,37 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         _pin(string.concat(key, "_sig_bytes"), _cd(ua, dg, a).length - _cd(ua, dg, none).length);
     }
 
-    /// The index of `j`'s first `metatx` signature row in `sigs[]` of row prefix `r`.
-    function _metatxRow(string memory j, string memory r) internal view returns (string memory) {
-        uint256 s;
-        while (
-            keccak256(bytes(vm.parseJsonString(j, string.concat(r, "sigs[", vm.toString(s), "].purpose"))))
-                != keccak256("metatx")
-        ) {
-            ++s;
+    /// `j`'s longest `metatx` signature row in `sigs[]` of row prefix `r` (owner 2026-11-19, A5: a variable-length signature
+    /// at its longest, WebAuthn's clientDataJSON; of equal lengths the first).
+    function _metatxRow(string memory j, string memory r) internal view returns (string memory best) {
+        uint256 n;
+        for (uint256 s; vm.keyExistsJson(j, string.concat(r, "sigs[", vm.toString(s), "]")); ++s) {
+            string memory p = string.concat(r, "sigs[", vm.toString(s), "].");
+            if (keccak256(bytes(vm.parseJsonString(j, string.concat(p, "purpose")))) != keccak256("metatx")) continue;
+            uint256 len = vm.parseJsonBytes(j, string.concat(p, "sig")).length;
+            if (len > n) (n, best) = (len, p);
         }
-        return string.concat(r, "sigs[", vm.toString(s), "].");
+        require(n != 0, "a metatx signature");
     }
 
-    /// One derived kind's row: its check of the vector signature, the difference to the native key's, its sig bytes.
-    function _row(uint16 kind, bytes32 ua, bytes32 dg, IUARegistry.UASig memory u, uint256 n) internal {
+    /// One derived kind's row: its check of the vector signature, the difference to the native key's plus `worst` (what
+    /// the kind's worst case adds over the vector, A5), its sig bytes.
+    function _row(uint16 kind, bytes32 ua, bytes32 dg, IUARegistry.UASig memory u, uint256 n, uint256 worst) internal {
         string memory key = string.concat("verify_", _hex4(kind));
-        _pin(string.concat(key, "_delta"), _metered(key, _cd(ua, dg, u)) - n); // the verify row's figure
+        _pin(string.concat(key, "_delta"), _metered(key, _cd(ua, dg, u)) - n + worst); // the verify row's figure
         _sigBytes(key, ua, dg, u);
+    }
+
+    /// A5 (owner 2026-11-19): what SLH-DSA-128s's forced worst case adds over the vector `sig` of key `pk` on `uaMsg`, both
+    /// paths metered alike (`SdkGasSlh`), pinned as `verify_0x0133_worst_extra`.
+    function _slhWorst(bytes memory pk, bytes32 uaMsg, bytes memory sig) internal returns (uint256 extra) {
+        SdkGasSlh slh = new SdkGasSlh();
+        bytes memory mp = PqUA.emptyContext(PqUA.pqMessage(keccak256("scaas.ua.slhdsa128s.v1"), uaMsg));
+        uint256 same = meter.run(address(slh), abi.encodeCall(SdkGasSlh.run, (pk, mp, sig, false)));
+        uint256 worst = meter.run(address(slh), abi.encodeCall(SdkGasSlh.run, (pk, mp, sig, true)));
+        assertGt(worst, same, "the forced case does more work");
+        extra = worst - same;
+        _pin("verify_0x0133_worst_extra", extra);
     }
 
     function test_sdkGas_verify() public {
@@ -195,7 +239,7 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             string memory row = _metatxRow(sj, string.concat(".derived[", vm.toString(i), "]."));
             IUARegistry.UASig memory u =
                 UACall.auth(ua, abi.encode(k, vm.parseJsonBytes(sj, string.concat(row, "sig"))));
-            _row(kind, ua, vm.parseJsonBytes32(sj, string.concat(row, "digest")), u, n);
+            _row(kind, ua, vm.parseJsonBytes32(sj, string.concat(row, "digest")), u, n, 0);
             ++rows;
         }
         assertEq(rows, 9, "0x0100 - 0x0108");
@@ -219,7 +263,9 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             string memory row = _metatxRow(pj, r);
             IUARegistry.UASig memory u;
             u.signature = vm.parseJsonBytes(pj, string.concat(row, "sig"));
-            _row(kind, ua, vm.parseJsonBytes32(pj, string.concat(row, "digest")), u, n);
+            uint256 worst =
+                kind == 0x0133 ? _slhWorst(pk, vm.parseJsonBytes32(pj, string.concat(row, "message")), u.signature) : 0;
+            _row(kind, ua, vm.parseJsonBytes32(pj, string.concat(row, "digest")), u, n, worst);
             ++rows;
         }
         assertEq(rows, 6, "0x0130 - 0x0135");

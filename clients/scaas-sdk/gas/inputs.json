@@ -143,6 +143,7 @@
       ]
     }
   ],
+  "ua_signer": 264,
   "per_byte": {
     "mtxPay": "meta.body",
     "mtxPayWithPayeeFee": "meta.body",

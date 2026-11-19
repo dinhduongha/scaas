@@ -122,20 +122,20 @@ impl OpGas<'_> {
     };
 }
 
-/// A verify part of signer kind `signer`: its row's gas plus 64 gas a byte of its `sig_bytes` (owner 2026-11-19, ruling 2:
-/// the quote's calldata is that of the operation built with an empty signature), and its source.
+/// A verify part of signer kind `signer`: its row's gas, plus 64 gas a byte of its `sig_bytes` when `bytes` (owner 2026-11-19,
+/// ruling 2: the quote's calldata is that of the operation built with an empty signature; A3: an attached signature's bytes
+/// are in that calldata already, so only its verify gas), and its source.
 fn verify_part(
     chain: &GasRows,
     opt_in: &[String],
     tables: &[GasTable],
     signer: u16,
+    bytes: bool,
 ) -> Option<(u64, GasFrom)> {
     part(chain, opt_in, tables, |r| {
         let v = r.verify.iter().find(|v| v.signer == signer)?;
-        Some(
-            v.gas
-                .saturating_add(v.sig_bytes.unwrap_or(0).saturating_mul(PER_BYTE)),
-        )
+        let b = if bytes { v.sig_bytes } else { 0 };
+        Some(v.gas.saturating_add(b.saturating_mul(PER_BYTE)))
     })
 }
 
@@ -143,10 +143,11 @@ fn verify_part(
 /// without both, the app's figure (one total); `None`: no figure. The base row adds (owner 2026-11-19) its per-byte part
 /// times the input's length (ruling B; an input the operation lacks: the row does not answer), its `save` when the operation
 /// saves its record (ruling 1; a row without one does not answer: fail closed), its `fee_extra` when the fee is > 0 (ruling
-/// 3; a row without one adds nothing: the entry's fee is its own payment); the verify part adds 64 gas a byte of its
-/// `sig_bytes` (ruling 2); a second signature adds its kind's verify part, or when its kind is unknown the most expensive
-/// of [`ACCEPTED_SIGNERS`] (ruling 4; a kind without a row: no answer). `mtxExecute` (ruling 5): the app's figure is its
-/// inner call's, added to the rows, never a total; without it, or without the rows, no figure.
+/// 3; a row without one adds nothing: the entry's fee is its own payment), its `ua_extra` when the signer is a derived UA
+/// (A1; a row without one adds nothing); the verify part adds 64 gas a byte of its `sig_bytes` (ruling 2); a second
+/// signature, the one attached (ruling 4 as A2 reads it), adds its kind's verify gas without its bytes (A3), or when its kind
+/// is unknown the most expensive of [`ACCEPTED_SIGNERS`] (a kind without a row: no answer). `mtxExecute` (ruling 5): the
+/// app's figure is its inner call's, added to the rows, never a total; without it, or without the rows, no figure.
 pub(crate) fn lookup_by(
     chain: &GasRows,
     opt_in: &[String],
@@ -168,15 +169,18 @@ pub(crate) fn lookup_by(
         if op.fee {
             g = g.saturating_add(b.fee_extra.unwrap_or(0));
         }
+        if signer != NATIVE_EVM {
+            g = g.saturating_add(b.ua_extra.unwrap_or(0));
+        }
         Some(g)
     });
-    let verify = verify_part(chain, opt_in, tables, signer);
+    let verify = verify_part(chain, opt_in, tables, signer, true);
     let second = match op.attached {
         None => Some(0),
-        Some(Some(k)) => verify_part(chain, opt_in, tables, k).map(|v| v.0),
+        Some(Some(k)) => verify_part(chain, opt_in, tables, k, false).map(|v| v.0),
         Some(None) => ACCEPTED_SIGNERS
             .iter()
-            .map(|k| verify_part(chain, opt_in, tables, *k).map(|v| v.0))
+            .map(|k| verify_part(chain, opt_in, tables, *k, false).map(|v| v.0))
             .try_fold(0, |m, v| v.map(|v| m.max(v))),
     };
     let execute = entry == EXECUTE;
@@ -298,11 +302,12 @@ mod tests {
                 per_byte: None,
                 save: None,
                 fee_extra: None,
+                ua_extra: None,
             }],
             verify: vec![GasVerify {
                 signer: 0x0101,
                 gas: verify,
-                sig_bytes: None,
+                sig_bytes: 0,
             }],
         }
     }
@@ -461,7 +466,9 @@ mod tests {
         )
     }
     fn v(signer: u64, gas: u64, measured: u64) -> String {
-        format!(r#"{{"signer":{signer},"gas":{gas},"measured":{measured},"source":"s"}}"#)
+        format!(
+            r#"{{"signer":{signer},"gas":{gas},"measured":{measured},"source":"s","sig_bytes":0}}"#
+        )
     }
 
     /// The table file's checks, on base and verify rows alike: the rounding (a multiple of 1,000, at least the measurement and
@@ -573,23 +580,25 @@ mod tests {
                 .max()
                 .unwrap();
             assert_eq!(worst, r["measured"].as_u64().unwrap(), "{r}");
-            // rulings 1 and 3: `save` and `fee_extra`, each the worst difference `a-b` of its source's key pairs
-            for f in ["save", "fee_extra"] {
+            // rulings 1 and 3, A1: `save`, `fee_extra` and `ua_extra`, each the worst `a-b[-c]` of its source's items (the
+            // first key less the others)
+            for f in ["save", "fee_extra", "ua_extra"] {
                 let Some(x) = r.get(f) else { continue };
                 let (p, pairs) = x["source"].as_str().unwrap().split_once('#').unwrap();
                 assert_eq!(p, path, "{r}");
                 let worst = pairs
                     .split(',')
                     .map(|ab| {
-                        let (a, b) = ab.split_once('-').unwrap();
-                        key(a) - key(b)
+                        let mut ks = ab.split('-');
+                        let a = key(ks.next().unwrap());
+                        ks.fold(a, |g, k| g - key(k))
                     })
                     .max()
                     .unwrap();
                 assert_eq!(worst, x["measured"].as_u64().unwrap(), "{f} {r}");
             }
-            // ruling 2: a verify row's `sig_bytes`, measured beside its delta
-            if let Some(n) = r.get("sig_bytes") {
+            // ruling 2 (A4: every verify row): a verify row's `sig_bytes`, measured beside its delta
+            if let Some(n) = r.get("sig_bytes").filter(|_| r.get("signer").is_some()) {
                 let k = keys.strip_suffix("_delta").unwrap();
                 assert_eq!(key(&format!("{k}_sig_bytes")), n.as_u64().unwrap(), "{r}");
                 assert_eq!(
@@ -612,6 +621,59 @@ mod tests {
                 assert_eq!(worst, p["gas"].as_u64().unwrap(), "{r}");
             }
         }
+    }
+
+    /// The sampled end-to-end check (spec §13.3; owner 2026-11-19, item 7 and A1): the `token` entries `SdkGasSample.t.sol`
+    /// signs end to end on `NormalToken` by the native key, P-256, ed25519 and secp256k1, both lanes, held to the SDK's own
+    /// composition (`lookup`: base + verify + `ua_extra`, the verify part's calldata bytes left out, the run being execution
+    /// gas) with the base row at that variant's own figure (the table's is the worst of the variants, regulated included):
+    /// measured <= composed < measured + 2,000. The sampled signature's bytes are the verify row's `sig_bytes`. Red today,
+    /// open for the owner (spec §13.3): run with `--ignored`; the bound is not loosened.
+    #[test]
+    #[ignore = "red: P-256 up to 2,350 over, ed25519 up to 559 under; open for the owner (spec 13.3)"]
+    fn sampled_end_to_end_check() {
+        let file = format!(
+            "{}/../../smartcontracts/evm/test/vectors/sdk_gas.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let m: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+        let key = |k: &str| m[k].as_u64().unwrap_or_else(|| panic!("{k}"));
+        let t = GasTable::parse(REFERENCE_FILE).unwrap();
+        let mut out = vec![];
+        for signer in [NATIVE_EVM, 0x0101, 0x0102, 0x0108] {
+            let s = format!("sample_{signer:04x}");
+            let v = t.rows.verify.iter().find(|v| v.signer == signer).unwrap();
+            assert_eq!(key(&format!("{s}_sig_bytes")), v.sig_bytes, "{s}");
+            for entry in ["mtxExecuteTransfer", "mtxPay", "mtxCancelNonce", "mtxBurn"] {
+                for (fresh, lane) in [(true, "fresh"), (false, "used")] {
+                    let mut rows = t.rows.clone();
+                    let own = key(&format!("token_{entry}_{lane}_normal")).div_ceil(1_000) * 1_000;
+                    for b in rows
+                        .base
+                        .iter_mut()
+                        .filter(|b| b.key() == (entry, "token", fresh))
+                    {
+                        b.gas = own;
+                    }
+                    let (g, _) =
+                        lookup(&rows, &[], &[], None, (entry, "token", signer, fresh)).unwrap();
+                    let composed = g - PER_BYTE * v.sig_bytes;
+                    let measured = key(&format!("{s}_{entry}_{lane}_normal"));
+                    out.push((
+                        s.clone(),
+                        entry,
+                        lane,
+                        composed.cast_signed() - measured.cast_signed(),
+                    ));
+                }
+            }
+        }
+        let bad: Vec<_> = out.iter().filter(|x| !(0..2_000).contains(&x.3)).collect();
+        assert!(
+            bad.is_empty(),
+            "measured <= base + verify + ua_extra < measured + 2,000; slack out of bounds: {bad:?}"
+        );
     }
 
     /// Owner 2026-11-19, ruling B: a base row's per-byte part adds its gas times the input's length, the input read from
@@ -701,12 +763,32 @@ mod tests {
         assert_eq!(by(&r, true, false), Some(1_010 + 331_000));
         assert_eq!(by(&r, false, true), Some(1_010 + 126_000));
         assert_eq!(by(&r, true, true), Some(1_010 + 331_000 + 126_000));
-        r.verify[0].sig_bytes = Some(128);
+        r.verify[0].sig_bytes = 128;
         assert_eq!(by(&r, false, false), Some(1_010 + 64 * 128));
     }
 
-    /// Owner 2026-11-19, ruling 4: a second signature adds its kind's verify part (with its `sig_bytes`); of an unknown kind,
-    /// the most expensive of the accepted kinds, and no answer when one of them has no row.
+    /// Owner 2026-11-19, A1: a derived-UA signer adds the row's `ua_extra`, the native key nothing; a row without one adds
+    /// nothing. Each beside its control.
+    #[test]
+    fn gas_ua_extra_for_a_derived_signer() {
+        let mut r = rows(1_000, 10);
+        r.verify.push(GasVerify {
+            signer: NATIVE_EVM,
+            gas: 0,
+            sig_bytes: 0,
+        });
+        let by = |r: &GasRows, signer: u16| {
+            lookup(r, &[], &[], None, ("mtxPay", "token", signer, false)).map(|f| f.0)
+        };
+        assert_eq!(by(&r, 0x0101), Some(1_010), "no ua_extra: nothing added");
+        r.base[0].ua_extra = Some(14_000);
+        assert_eq!(by(&r, 0x0101), Some(1_010 + 14_000), "a derived signer");
+        assert_eq!(by(&r, NATIVE_EVM), Some(1_000), "the native key");
+    }
+
+    /// Owner 2026-11-19, ruling 4 (A2: the attached signature): a second signature adds its kind's verify gas, not its
+    /// `sig_bytes` (A3: its bytes are in the unsigned calldata already); of an unknown kind, the most expensive of the accepted
+    /// kinds, and no answer when one of them has no row.
     #[test]
     fn gas_second_signature() {
         let mut r = rows(1_000, 10);
@@ -715,7 +797,7 @@ mod tests {
             .map(|s| GasVerify {
                 signer: *s,
                 gas: u64::from(*s),
-                sig_bytes: Some(1),
+                sig_bytes: 1,
             })
             .collect();
         let by = |r: &GasRows, attached| {
@@ -734,15 +816,19 @@ mod tests {
         };
         let own = 1_000 + 0x0101 + 64;
         assert_eq!(by(&r, None), Some(own));
-        assert_eq!(by(&r, Some(Some(0x0102))), Some(own + 0x0102 + 64));
-        assert_eq!(by(&r, Some(Some(0))), Some(own + 64));
+        assert_eq!(
+            by(&r, Some(Some(0x0102))),
+            Some(own + 0x0102),
+            "the attached kind's verify gas, not its bytes"
+        );
+        assert_eq!(by(&r, Some(Some(0))), Some(own));
         assert_eq!(
             by(&r, Some(None)),
-            Some(own + 0x0135 + 64),
+            Some(own + 0x0135),
             "unknown: the most expensive"
         );
         r.verify[3].gas = 1_000_000;
-        assert_eq!(by(&r, Some(None)), Some(own + 1_000_000 + 64));
+        assert_eq!(by(&r, Some(None)), Some(own + 1_000_000));
         assert_eq!(by(&r, Some(Some(0x0120))), None, "a kind without a row");
         r.verify.retain(|v| v.signer != 0x0133);
         assert_eq!(by(&r, Some(None)), None, "an accepted kind without a row");
@@ -833,13 +919,28 @@ mod tests {
             r#""save":{"gas":0,"measured":0,"source":"s"}"#,
             r#""fee_extra":{"gas":127000,"measured":125468,"source":"s"}"#,
             r#""fee_extra":1000"#,
+            r#""ua_extra":{"gas":15000,"measured":13475,"source":"s"}"#,
+            r#""ua_extra":{"gas":0,"measured":0,"source":"s"}"#,
+            r#""ua_extra":14000"#,
         ] {
             assert!(GasTable::parse(&base(bad)).is_err(), "{bad}");
         }
+        assert_eq!(
+            GasTable::parse(&base(
+                r#""ua_extra":{"gas":14000,"measured":13475,"source":"s"}"#
+            ))
+            .unwrap()
+            .rows
+            .base[0]
+                .ua_extra,
+            Some(14_000)
+        );
         let verify = |f: &str| {
             file(
                 "",
-                &v(257, 1_000, 900).replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)),
+                &v(257, 1_000, 900)
+                    .replace(r#","sig_bytes":0"#, "")
+                    .replace(r#""source":"s""#, &format!(r#""source":"s",{f}"#)),
             )
         };
         assert_eq!(
@@ -848,7 +949,7 @@ mod tests {
                 .rows
                 .verify[0]
                 .sig_bytes,
-            Some(65_536)
+            65_536
         );
         for bad in [
             r#""sig_bytes":65537"#,
@@ -857,6 +958,20 @@ mod tests {
         ] {
             assert!(GasTable::parse(&verify(bad)).is_err(), "{bad}");
         }
+    }
+
+    /// Owner 2026-11-19, A4: a verify row without `sig_bytes` is refused by name (`GasSigBytesMissing`), the reference
+    /// signer's row too; the same file with it parses; a file broken otherwise stays `Argument`.
+    #[test]
+    fn gas_verify_row_without_sig_bytes_is_refused() {
+        let without = |r: String| r.replace(r#","sig_bytes":0"#, "");
+        for row in [v(257, 1_000, 900), v(0, 0, 0)] {
+            assert!(GasTable::parse(&file("", &row)).is_ok(), "{row}");
+            let e = GasTable::parse(&file("", &without(row.clone()))).unwrap_err();
+            assert_eq!(e.code(), "GasSigBytesMissing", "{row}");
+        }
+        let broken = file("", &without(v(257, 1_000, 900))).replace(r#""v":2"#, r#""v":1"#);
+        assert_eq!(GasTable::parse(&broken).unwrap_err().code(), "Argument");
     }
 
     #[test]
@@ -946,7 +1061,7 @@ mod tests {
         for s in ACCEPTED_SIGNERS {
             let v = t.rows.verify.iter().find(|v| v.signer == s);
             assert!(
-                v.is_some_and(|v| v.sig_bytes.is_some()),
+                v.is_some_and(|v| v.sig_bytes > 0),
                 "signer {s:#06x}: a row with sig_bytes"
             );
         }

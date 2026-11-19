@@ -170,11 +170,12 @@ async fn e2e_pay_on_anvil() {
                 per_byte: None,
                 save: None,
                 fee_extra: None,
+                ua_extra: None,
             }],
             verify: vec![GasVerify {
                 signer: 0,
                 gas: 0,
-                sig_bytes: None,
+                sig_bytes: 0,
             }],
         },
         max_valid_secs: None,

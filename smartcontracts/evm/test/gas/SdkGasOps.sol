@@ -52,6 +52,14 @@ abstract contract SdkGasRows is Test {
     uint256 internal constant SG_BODY_HI = 1_024;
     /// ruling 3 (owner 2026-11-19): the envelope's fee (`FIXED`, the recipient unbound: the relayer, who holds nothing)
     uint256 internal sgFee;
+    /// the reference signer's key (a native key); a leg of the wrapper under measurement (an ERC-20 the signer holds and
+    /// approved)
+    uint256 internal sgPk;
+    address internal sgLeg;
+    /// the signer of a row: a UA of kind `sgKind` (0: the native key `sgPk`), its key data and secret (`SdkGasOps`)
+    uint16 internal sgKind;
+    bytes internal sgKeyData;
+    uint256 internal sgSk;
 
     /// The standard calldata gas of `cd`: 4 a zero byte, 16 a non-zero one.
     function _cdGas(bytes memory cd) internal pure returns (uint256 g) {
@@ -70,6 +78,12 @@ abstract contract SdkGasRows is Test {
     }
 
     function _pin(string memory key, uint256 v) internal {
+        this.sgPin(key, v);
+    }
+
+    /// `_pin`'s body in a call frame of its own, so the pin file it reads is freed on return (a test pins hundreds of keys,
+    /// and a file read in the test's own frame grows its memory past the gas limit).
+    function sgPin(string calldata key, uint256 v) external {
         if (vm.envOr("SDK_GAS_WRITE", false)) {
             string memory out = vm.envOr("SDK_GAS_OUT", SDK_GAS);
             if (vm.exists(out)) vm.serializeJson("sdkgas", vm.readFile(out));
@@ -105,7 +119,10 @@ abstract contract SdkGasRows is Test {
         _pin(key, g);
     }
 
-    /// One row on both lane states, each from the same snapshot: `build(c, nonce)` gives the calldata at that nonce.
+    /// One row on both lane states, each from the same snapshot: `build(c, nonce)` gives the calldata at that nonce. Owner
+    /// 2026-11-19, A1: when the fixture set a derived signer (`_sgUaHook`), the fresh lane once more signed by it
+    /// (`<kind>_<entry>_ua_<variant>`, on `sgUaAt[c]` when the fixture names another contract for it); A6: a wrap-in entry's
+    /// fee row with a signer who already holds units (`..._held_<variant>` at fee 0, `..._fee_<variant>` at fee 1).
     function _both(
         string memory kind,
         string memory entry,
@@ -124,21 +141,61 @@ abstract contract SdkGasRows is Test {
             sgFee = 1; // a revert restores this contract's storage too: back to 0 after it
             _measure(string.concat(kind, "_", entry, "_fee_", variant), c, build(c, 0));
             vm.revertToState(s);
+        } else if (_wrapIn(entry)) {
+            _sgHold(c);
+            _measure(string.concat(kind, "_", entry, "_held_", variant), c, build(c, 0));
+            vm.revertToState(s);
+            _sgHold(c);
+            sgFee = 1;
+            _measure(string.concat(kind, "_", entry, "_fee_", variant), c, build(c, 0));
+            vm.revertToState(s);
+        }
+        if (sgUaKind != 0 && !_wrapIn(entry)) {
+            address cu = sgUaAt[c] == address(0) ? c : sgUaAt[c];
+            _sgUaPrep(cu);
+            (sgKind, sgKeyData, sgSk) = (sgUaKind, sgUaKey, sgUaSk); // the revert below restores the native signer
+            _measure(string.concat(kind, "_", entry, "_ua_", variant), cu, build(cu, 0));
+            vm.revertToState(s);
         }
     }
+
+    /// A1: what the derived signer needs on `c` before its run, given inside the run's snapshot only (the native rows keep the
+    /// fixture's state: e.g. a ledger whose pool holds nothing yet, the worst case). None by default.
+    function _sgUaPrep(address c) internal virtual {}
+
+    /// A6 (owner 2026-11-19): the signer holds units of the wrapper `c` before a wrap-in entry's fee row: a direct wrap of
+    /// 100 units of the leg `sgLeg` it holds and approved.
+    function _sgHold(address c) internal {
+        vm.prank(vm.addr(sgPk));
+        IWrappedToken(c).wrap(sgLeg, 100);
+    }
+
+    /// The wrap-in entries: signed by a native address (`Envelope`), so no derived signer (A1: no `ua_extra`).
+    function _wrapIn(string memory entry) internal pure returns (bool) {
+        bytes32 e = keccak256(bytes(entry));
+        return e == keccak256("mtxWrap") || e == keccak256("mtxWrapLeg") || e == keccak256("mtxAddReserve")
+            || e == keccak256("mtxWrapToUA");
+    }
+
+    /// A1's derived reference signer (owner 2026-11-19): a UA of kind `sgUaKind` (0: none in this fixture), its key data
+    /// and secret, holding what the native signer holds; `sgUaAt[c]`: the contract it signs on instead of `c` (a wallet
+    /// it owns), 0 = `c`.
+    uint16 internal sgUaKind;
+    bytes internal sgUaKey;
+    uint256 internal sgUaSk;
+    mapping(address => address) internal sgUaAt;
 
     /// Ruling 3 (owner 2026-11-19): the entries whose envelope carries a fee, measured once more on a fresh lane with a fee
     /// of 1 (`<kind>_<entry>_fee_<variant>`; the generator's `fee_extra` is the worst difference to the fresh row): the
     /// token kinds' entries but `mtxRelayFee` and `mtxPayWithPayeeFee` (their fee is their own payment, already in the row
     /// to a recipient holding nothing; the payee-fee entry refuses an envelope fee, `PayeeFeeShape`) and the wrap-in entries
     /// (`mtxWrap`, `mtxWrapLeg`, `mtxAddReserve`, `mtxWrapToUA`: their fee is charged in units the signer holds before the
-    /// call, and their rows are measured with a signer holding none, `ERC20InsufficientBalance`); the wallet and the router
-    /// take fee `NONE` only.
+    /// call, so A6 measures it apart, against a signer who holds units, `_both`); the wallet and the router take fee `NONE`
+    /// only.
     function _feeable(string memory kind, string memory entry) internal pure returns (bool) {
         (bytes32 k, bytes32 e) = (keccak256(bytes(kind)), keccak256(bytes(entry)));
         return (k == keccak256("token") || k == keccak256("zether") || k == keccak256("pqz"))
-            && e != keccak256("mtxRelayFee") && e != keccak256("mtxPayWithPayeeFee") && e != keccak256("mtxWrap")
-            && e != keccak256("mtxWrapLeg") && e != keccak256("mtxAddReserve") && e != keccak256("mtxWrapToUA");
+            && e != keccak256("mtxRelayFee") && e != keccak256("mtxPayWithPayeeFee") && !_wrapIn(entry);
     }
 }
 
@@ -163,9 +220,6 @@ abstract contract SdkGasOps is SdkGasRows {
     uint256 internal constant SG_TAX_VALUE = 1_000;
     uint256 internal constant SG_TAX = 100;
 
-    uint256 internal sgPk;
-    /// a leg of the wrapper under measurement (an ERC-20 the signer holds and approved)
-    address internal sgLeg;
     /// a SCaaS ledger leg (`mtxUnwrapToUA`) and the UA a `…ToUA` entry credits
     address internal sgLedgerLeg;
     bytes32 internal sgUaTo;
@@ -182,11 +236,7 @@ abstract contract SdkGasOps is SdkGasRows {
         if (sgFee != 0) (mode, fee) = (MetaTxLib.MODE_FEE_FIXED, sgFee);
     }
 
-    /// Item 7's sampled signer: a UA of kind `sgKind` (0: the reference signer, the native key `sgPk`), its key data and
-    /// secret (`SdkGasSampleTest`); `sgNoSig`: an empty `UASig` (the operation the SDK quotes, ruling 2).
-    uint16 internal sgKind;
-    bytes internal sgKeyData;
-    uint256 internal sgSk;
+    /// `sgNoSig`: an empty `UASig` (the operation the SDK quotes, ruling 2).
     bool internal sgNoSig;
     uint256 internal constant SG_N_P256 = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
 

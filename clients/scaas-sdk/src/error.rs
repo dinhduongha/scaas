@@ -93,6 +93,8 @@ own_codes! {
     /// An operation's `validUntil` already past on the SDK's clock, or further ahead than the chain's window (owner 2026-11-19,
     /// T13b ruling 1).
     ValidUntilRefused,
+    /// A gas table's verify row without `sig_bytes` (owner 2026-11-19, A4): every verify row states its signature's length.
+    GasSigBytesMissing,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

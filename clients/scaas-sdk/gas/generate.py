@@ -14,9 +14,11 @@ script with --inputs and --out.
 A base row's figure is the worst of the kind's variants measured (`<kind>_<entry>_<fresh|used>_<variant>`), rounded up to
 the next 1,000; its per-byte part the worst `<kind>_<entry>_per_byte_<variant>`; its `save` (owner 2026-11-19, ruling 1)
 the worst `<kind>_<entry>_saved_<variant>` less `..._fresh_<variant>`, its `fee_extra` (ruling 3) the worst
-`..._fee_<variant>` less `..._fresh_<variant>` (a source item `a-b` is the difference of two keys); a verify row
-`verify_<kind>_delta`, its `sig_bytes` (ruling 2) `verify_<kind>_sig_bytes`, its `stand_in` from the input list. Prints its
-run time.
+`..._fee_<variant>` less `..._fresh_<variant>` (a wrap-in entry: less `..._held_<variant>`, the signer holding units, A6),
+its `ua_extra` (A1) the worst `..._ua_<variant>` (the derived reference signer `ua_signer` of the input list) less
+`..._fresh_<variant>` less that signer's verify delta, absent when not positive (a source item `a-b[-c]` is the first key less
+the others); a verify row `verify_<kind>_delta`, its `sig_bytes` (ruling 2, A4: every row) `verify_<kind>_sig_bytes`, its
+`stand_in` from the input list. Prints its run time.
 """
 
 import argparse
@@ -39,22 +41,31 @@ def variants(m, prefix):
     return sorted(k for k in m if k.startswith(prefix) and not k.endswith(("_regular", "_state")))
 
 
-def extra(m, src, kind, entry, what):
-    """The worst per-variant difference `<kind>_<entry>_<what>_<v>` less `<kind>_<entry>_fresh_<v>`, or None."""
+def extra(m, src, kind, entry, what, less=None):
+    """The worst per-variant difference `<kind>_<entry>_<what>_<v>` less its base, `<kind>_<entry>_held_<v>` where measured
+    (A6: a wrap-in entry's fee against a signer holding units) else `<kind>_<entry>_fresh_<v>`, less the key `less` if given
+    (A1: the derived signer's verify row); None when nothing is measured, or (with `less`) when nothing is added."""
     pre = f"{kind}_{entry}_{what}_"
-    pairs = [(k, f"{kind}_{entry}_fresh_{k[len(pre) :]}") for k in variants(m, pre)]
+    pairs = []
+    for k in variants(m, pre):
+        v = k[len(pre) :]
+        held = f"{kind}_{entry}_held_{v}"
+        pairs.append((k, held if what == "fee" and held in m else f"{kind}_{entry}_fresh_{v}"))
     if not pairs:
         return None
     for a, b in pairs:
         if b not in m:
-            raise SystemExit(f"no fresh row {b} for {a}")
-    measured = max(m[a] - m[b] for a, b in pairs)
+            raise SystemExit(f"no base row {b} for {a}")
+    measured = max(m[a] - m[b] for a, b in pairs) - (m[less] if less else 0)
+    tail = f"-{less}" if less else ""
     if measured <= 0:
+        if less:
+            return None  # A1: absent where the entry has no such cost
         raise SystemExit(f"{kind} {entry} {what}: no cost added ({measured})")
     return {
         "gas": ceil1000(measured),
         "measured": measured,
-        "source": f"{src}#{','.join(f'{a}-{b}' for a, b in pairs)}",
+        "source": f"{src}#{','.join(f'{a}-{b}{tail}' for a, b in pairs)}",
     }
 
 
@@ -93,6 +104,9 @@ def table(inputs, m):
                     fee = extra(m, src, kind, entry, "fee")
                     if fee is not None:
                         row["fee_extra"] = fee
+                    ua = extra(m, src, kind, entry, "ua", f"verify_0x{inputs['ua_signer']:04x}_delta")
+                    if ua is not None:
+                        row["ua_extra"] = ua
                     base.append(row)
     verify = [
         {
