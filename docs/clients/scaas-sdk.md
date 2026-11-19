@@ -208,7 +208,8 @@ fixed word set (CTR-UA-29) and shuffle every leg; the owner statements sign unde
 signature as `ownerSig` (owner 2026-11-19, C3). A failed check is a named error (`TokenUncatalogued`, `LegKeyMismatch`, C4; `ReceiverUnregistered` for a recipient with no
 registry record, P2). The Zether UA's verify gas of a multi-recipient proof is the gas table's `0x0141` verify row, else the
 request's `ua_signer_gas` (P1). The
-watch loop reads a watched Zether UA's words on its fixed schedule, nothing decrypted. The anvil e2e is PLANNED.
+watch loop reads a watched Zether UA's words on its fixed schedule, nothing decrypted. The anvil e2e (shield → roll-over →
+transfer → balances, the token made through the factory, the Zether UAs registered first) is BUILT (gate `sdk-e2e`).
 
 ## 7. App cores above the SDK
 

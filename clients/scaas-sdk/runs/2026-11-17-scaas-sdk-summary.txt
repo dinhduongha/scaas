@@ -32,18 +32,18 @@ frb-dart | 81a8cbcf2 | 0 | dart: +46:
 # tests/config.rs open_checks_gas_tables_and_opt_ins, from the gas-table commits 64c8ed24d and 2df23400e (without `wallet` the
 # SDK holds no `reference` table, so the opt-in is refused); T14 touches no file of it. T14 mutants: 8/8 killed.
 sdk-min | 36621b5e5 | 101 | 30 passed, 1 failed, 0 ignored (3 binaries); tree dirty
-sdk-e2e | 36621b5e5 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 # T15 (confidential: the reading layer, part of Zether) replaced eight rows above, run on the T15 tree before its commit.
 # sdk-min's one red is the same pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins (gas-table work on ua-rs-sign);
 # sdk-e2e is T12's pay (T15's anvil e2e is not built). bind-cpp not applicable (no bindings/cpp). T15 mutants: 9/9 killed.
 ua-clippy | 342b1c773 | 0 | -; tree dirty
 ua-test | 342b1c773 | 0 | 551 passed, 0 failed, 3 ignored (55 binaries); tree dirty
-sdk-wasm | 98b4eeb1d | 0 | -; tree dirty
-features | 98b4eeb1d | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-docs | 98b4eeb1d | 0 | -; tree dirty
-sdk-clippy | 98b4eeb1d | 0 | -; tree dirty
-sdk-test | 98b4eeb1d | 0 | 173 passed, 0 failed, 2 ignored (16 binaries); tree dirty
-bind-dart | 98b4eeb1d | 0 | dart: +6:; tree dirty
 rpc-wasm | 9172eb6dd | 0 | -; tree dirty
 rpc-test | 9172eb6dd | 0 | 332 passed, 0 failed, 20 ignored (32 binaries); tree dirty
 rpc-clippy | 9172eb6dd | 0 | -; tree dirty
+sdk-test | e924d70e4 | 0 | 174 passed, 0 failed, 3 ignored (16 binaries); tree dirty
+sdk-wasm | e924d70e4 | 0 | -; tree dirty
+features | e924d70e4 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+bind-dart | e924d70e4 | 0 | dart: +6:; tree dirty
+sdk-e2e | 1d5c5f9b3 | 0 | 2 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+sdk-clippy | 1d5c5f9b3 | 0 | -; tree dirty
+docs | 1d5c5f9b3 | 0 | -; tree dirty
