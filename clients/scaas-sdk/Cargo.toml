@@ -130,3 +130,7 @@ required-features = ["zether"]
 [[test]]
 name = "confidential_pqz"
 required-features = ["pqz"]
+
+[[test]]
+name = "dex"
+required-features = ["dex"]

@@ -91,9 +91,16 @@ impl Op {
                             dec(&row.nonce.clone().into())?,
                         ))
                     };
-                    let filter = Filter::new()
-                        .address(contract)
-                        .event_signature(executed_topic(&row.kind));
+                    // an order row: its order's event, the hash its first topic; else the executed event of the digest
+                    let (contract, topic, key) = match &row.fact {
+                        Some((c, e, h)) => (
+                            c.parse().map_err(|_| SdkError::Internal)?,
+                            B256::from(scaas_ua::keccak256(e.as_bytes())),
+                            Some(h.parse::<B256>().map_err(|_| SdkError::Internal)?),
+                        ),
+                        None => (contract, executed_topic(&row.kind), None),
+                    };
+                    let filter = Filter::new().address(contract).event_signature(topic);
                     let (kind, from_block) = (row.kind.clone(), row.from_block);
                     let (lane, filter, kind) = (&lane, &filter, kind.as_str());
                     let pool = &pool;
@@ -104,7 +111,11 @@ impl Op {
                             while lo <= at.number && landed.is_none() {
                                 let hi = at.number.min(lo.saturating_add(LOG_RANGE_MAX - 1));
                                 for l in pool.logs_at(&at, lo, hi, filter).await? {
-                                    if l.data.get(32..64) == Some(digest.as_slice()) {
+                                    let hit = match key {
+                                        Some(k) => l.topics.get(1) == Some(&k),
+                                        None => l.data.get(32..64) == Some(digest.as_slice()),
+                                    };
+                                    if hit {
                                         landed = Some((
                                             l.block_number.unwrap_or(at.number),
                                             format!("{:#x}", l.block_hash.unwrap_or_default()),

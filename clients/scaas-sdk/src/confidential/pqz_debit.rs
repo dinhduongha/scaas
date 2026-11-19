@@ -570,6 +570,7 @@ impl super::Confidential {
                         relay_call: None,
                         owner: Some(("PqzAuth", "pqzAuth", auth)),
                         key_index: U256::ZERO,
+                        target: None,
                     },
                 )
                 .await

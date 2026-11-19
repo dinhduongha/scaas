@@ -118,6 +118,8 @@ pub fn profile(
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
         tokens: vec![],
     }
 }

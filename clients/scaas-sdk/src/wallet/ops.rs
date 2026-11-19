@@ -269,14 +269,19 @@ async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkEr
         .find(|r| r.name == name)
         .and_then(|r| r.fields.split_once(" from").map(|(t, _)| t.to_string()))
         .ok_or(SdkError::Argument)?;
+    id_of(sdk, signer, &ty).await
+}
+
+/// The signer's id as a field of type `ty` takes it (`bytes32` or `address`).
+pub(crate) async fn id_of(sdk: &Sdk, signer: &KeyRef, ty: &str) -> Result<String, SdkError> {
     // an `msig` signs as its own UA (its slots sign at submit: `account::msig`)
     if let KeyRef::Msig { ua, .. } = signer {
-        return match ty.as_str() {
+        return match ty {
             "bytes32" => Ok(hex(&id32(ua)?)),
             _ => Err(SdkError::Argument),
         };
     }
-    Ok(match (key_opened(sdk, signer).await?, ty.as_str()) {
+    Ok(match (key_opened(sdk, signer).await?, ty) {
         (Key::Ua(_, k), "bytes32") => hex(&k.ua().ok_or(SdkError::Argument)?),
         #[cfg(feature = "zether")]
         (Key::Zether(_, k), "bytes32") => hex(&k.ua()),
@@ -297,7 +302,7 @@ fn pad(a: &[u8; 20]) -> String {
     format!("0x{}{}", "00".repeat(12), &hex(a)[2..])
 }
 
-fn id32(s: &str) -> Result<[u8; 32], SdkError> {
+pub(crate) fn id32(s: &str) -> Result<[u8; 32], SdkError> {
     unhex(&s.to_ascii_lowercase())?
         .try_into()
         .map_err(|_| SdkError::Argument)
@@ -461,6 +466,7 @@ pub(crate) fn draft(
         relay_call: None,
         owner: None,
         key_index: U256::ZERO,
+        target: None,
     }
 }
 

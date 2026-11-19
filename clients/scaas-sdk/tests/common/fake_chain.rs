@@ -534,6 +534,18 @@ pub async fn serve(c: Fake) -> String {
                                 (Some(f), Ok(v)) => f(&v),
                                 _ => c.verdict.clone().unwrap_or((503, json!({"error": "BUSY"}))),
                             }
+                        } else if path.contains("/v1/dex/") {
+                            // the DEX venue's routes (plan T17): every body and path recorded; a place answers its state, a
+                            // read its route, a refusing gateway the venue's `DEX_NOT_LISTED`
+                            c.bodies.push(String::from_utf8_lossy(&body).to_string());
+                            c.gw_paths.push(path.clone());
+                            match c.gw {
+                                Gw::Refuse => {
+                                    (422, json!({"code": "DEX_NOT_LISTED", "detail": "dex"}))
+                                }
+                                Gw::Queue if body.is_empty() => (200, json!({"route": path})),
+                                Gw::Queue => (201, json!({"status": "resting", "fills": []})),
+                            }
                         } else if path.ends_with("/v1/op") || path.ends_with("/v1/ua-metatx") {
                             let text = String::from_utf8_lossy(&body).to_string();
                             c.bodies.push(text.clone());

@@ -89,6 +89,8 @@ async fn setup_with(registry: Option<&str>) -> T {
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     };
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],

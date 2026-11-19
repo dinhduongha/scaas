@@ -59,6 +59,9 @@ pub(crate) struct Draft {
     pub owner: Option<(&'static str, &'static str, Value)>,
     /// a `SmartKeyAccount` entry's `AccountSig.keyIndex`: the signing key's index in the account (owner 2026-11-19, S3)
     pub key_index: U256,
+    /// the contract the entry is called on when it is not the domain's (`UAWrapOrder`: signed in the underlying's domain, sent
+    /// to the wrapper's `mtxWrapOrder`, job-api's Orders row; plan T17)
+    pub target: Option<[u8; 20]>,
 }
 
 /// The parts `submit` needs; never in a record a caller could rebuild.
@@ -81,6 +84,17 @@ pub(crate) struct Typed {
     pub owner: Option<(TypedData, Expect, &'static str)>,
     /// the signing key's index in a `SmartKeyAccount`
     pub key_index: U256,
+    /// the entry's contract when it is not the domain's
+    pub target: Option<[u8; 20]>,
+    /// an order row's closing fact: the contract, the event and the order hash (plan T17)
+    pub fact: Option<([u8; 20], &'static str, [u8; 32])>,
+}
+
+impl Typed {
+    /// The contract the entry is called on: the domain's, or the draft's `target`.
+    pub(crate) fn entry_contract(&self) -> [u8; 20] {
+        self.target.unwrap_or(self.contract)
+    }
 }
 
 /// A prepared operation (spec §13.1): opaque, kept in the SDK's table; it holds no secret and nothing signed.
@@ -257,6 +271,10 @@ pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
     ("mtxRollOverSigned", &["pqz"]),
 ];
 
+const CANCELLED_UA: &str = "UAOrderCancelled(bytes32,bytes32)";
+const CANCELLED: &str = "OrderCancelled(bytes32,address)";
+const FILLED_UA: &str = "UATradeFilled(bytes32,bytes32,uint256,uint256,uint256)";
+
 /// The EIP-712 domain's name of a domain kind (`typed_ops.json`'s `domains`).
 pub(crate) fn domain_name(kind: &str) -> Result<&'static str, SdkError> {
     Ok(match kind {
@@ -271,10 +289,14 @@ pub(crate) fn domain_name(kind: &str) -> Result<&'static str, SdkError> {
     })
 }
 
-/// The envelope's object: the message itself, or its `payment` (`UAPayeeFee`, `UAPayWithTax`).
+/// The envelope's object: the message itself, or its `payment` (`UAPayeeFee`, `UAPayWithTax`). An order (`UAWrapOrder`) has
+/// `from`, `batch` and `validUntil` but no fee `mode`: its nonce is an order lane's (`minNonce`), not an envelope's.
 pub(crate) fn envelope(m: &Value) -> Option<&Map<String, Value>> {
     let has = |o: &Map<String, Value>| {
-        o.contains_key("from") && o.contains_key("batch") && o.contains_key("validUntil")
+        o.contains_key("from")
+            && o.contains_key("batch")
+            && o.contains_key("validUntil")
+            && o.contains_key("mode")
     };
     match m.as_object() {
         Some(o) if has(o) => Some(o),
@@ -295,7 +317,7 @@ fn envelope_mut(m: &mut Value) -> Option<&mut Map<String, Value>> {
 }
 
 /// Every leaf of the signed message, by path.
-fn flatten(prefix: &str, v: &Value, out: &mut Vec<ReviewField>) {
+pub(crate) fn flatten(prefix: &str, v: &Value, out: &mut Vec<ReviewField>) {
     match v {
         Value::Object(o) => {
             for (k, x) in o {
@@ -465,6 +487,9 @@ impl Op {
             &hex(&d.contract),
             Source::Derived,
         ));
+        if let Some(t) = d.target {
+            review.push(field("target", &hex(&t), &hex(&t), Source::Derived));
+        }
         let mut touched = d.touched;
         if matches!(d.kind, "token" | "zether" | "pqz") {
             touched.insert(0, d.contract);
@@ -487,8 +512,36 @@ impl Op {
                 .map(|r| r.entry.to_string())
                 .ok_or(SdkError::Argument)?,
         };
+        // an order's `validUntil` (no envelope) ends it too
+        // an order row ends on its order's event, not an executed event (the token's and the DEX's trade events, R18)
+        let order_hash = |ty: &str, m: &Value| -> Result<[u8; 32], SdkError> {
+            Ok(scaas_typed_data(
+                ty,
+                Some(domain_name(d.kind)?),
+                &d.contract,
+                chain_id,
+                &uid,
+                m,
+            )?
+            .digest()?)
+        };
+        let inner = canonical.get("order").cloned().unwrap_or_default();
+        let fact = match d.name {
+            "CancelUAOrder" => Some((
+                d.contract,
+                CANCELLED_UA,
+                order_hash("UATradeOrder", &inner)?,
+            )),
+            "CancelUAWrapOrder" => {
+                Some((d.contract, CANCELLED_UA, order_hash("UAWrapOrder", &inner)?))
+            }
+            "CancelDexOrder" => Some((d.contract, CANCELLED, order_hash("DexOrder", &inner)?)),
+            "UAWrapOrder" => Some((d.contract, FILLED_UA, td.digest()?)),
+            _ => None,
+        };
         let expires_at = env
             .get("validUntil")
+            .or_else(|| canonical.get("validUntil"))
             .map(dec)
             .transpose()?
             .map_or(u64::MAX, |v| u64::try_from(v).unwrap_or(u64::MAX));
@@ -521,6 +574,8 @@ impl Op {
                 relay_call: d.relay_call,
                 owner,
                 key_index: d.key_index,
+                target: d.target,
+                fact,
             },
         });
         let mut table = sdk.prepared.lock().unwrap_or_else(PoisonError::into_inner);

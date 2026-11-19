@@ -48,7 +48,7 @@ pub enum Finality {
     Depth(u64),
 }
 
-/// A chain as the app's release pins it (spec §4). DEXes join with the task that reads them.
+/// A chain as the app's release pins it (spec §4).
 #[derive(Debug, Clone)]
 pub struct ChainProfile {
     /// `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
@@ -85,6 +85,28 @@ pub struct ChainProfile {
     /// empty: no verdict on this chain (`VerdictRefused`)
     pub verifiers: Vec<EndpointConfig>,
     pub verifier_policy: Policy,
+    /// the SCaaS DEXes of the chain (NET-ALL-24): an order or a cancel naming a DEX not here is refused before anything is
+    /// signed (CLI-SGN-35, `DexNotListed`)
+    pub dexes: Vec<ListedDex>,
+    /// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
+    pub wrappers: Vec<String>,
+}
+
+/// A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
+/// CTR-DEX-30) and the position readers reviewed for it, each beside its position manager.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListedDex {
+    /// `0x` + 40 hex
+    pub address: String,
+    pub liquidity: bool,
+    pub position_readers: Vec<PositionReader>,
+}
+
+/// A reviewed position reader of a position manager (a liquidity order that receives a position names one).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PositionReader {
+    pub manager: String,
+    pub reader: String,
 }
 
 /// A base row (gas table v2, owner 2026-11-19): the execution gas of `entry` (`mtxCancelNonce`, `mtxExecuteTransfer`, …) on a
@@ -542,6 +564,11 @@ impl std::fmt::Debug for SdkConfig {
 }
 
 /// `0x` and 64 hex digits.
+/// `0x` + 40 hex.
+pub(crate) fn is_address_hex(s: &str) -> bool {
+    s.len() == 42 && s.starts_with("0x") && s.bytes().skip(2).all(|b| b.is_ascii_hexdigit())
+}
+
 pub(crate) fn is_word_hex(s: &str) -> bool {
     s.len() == 66 && s.starts_with("0x") && s.bytes().skip(2).all(|b| b.is_ascii_hexdigit())
 }

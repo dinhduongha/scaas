@@ -84,6 +84,8 @@ async fn open(url: &str, n: usize, store: Arc<dyn SecureStore>, limits: Limits) 
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
         tokens: (0..n)
             .map(|i| ListedToken {
                 address: token_addr(i),

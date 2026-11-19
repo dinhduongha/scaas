@@ -162,6 +162,8 @@ async fn setup_with(
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     };
     let mut limits = Limits::default();
     edit(&mut profile, &mut limits);
@@ -279,6 +281,7 @@ fn cancel(t: &T, kind: &'static str, contract: &str, lane: &str, fee: &str) -> D
         relay_call: None,
         owner: None,
         key_index: alloy::primitives::U256::ZERO,
+        target: None,
     }
 }
 
@@ -361,6 +364,7 @@ async fn review_lists_every_named_field_with_its_source() {
         relay_call: None,
         owner: None,
         key_index: alloy::primitives::U256::ZERO,
+        target: None,
     };
     let p = prepare(&t, d).await;
     let r = p.review();

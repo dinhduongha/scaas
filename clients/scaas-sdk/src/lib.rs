@@ -18,6 +18,8 @@ pub mod account;
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod confidential;
 pub mod config;
+#[cfg(feature = "dex")]
+pub mod dex;
 pub mod error;
 pub mod events;
 #[cfg(feature = "frb")]
@@ -34,7 +36,8 @@ mod watch;
 
 pub use config::{
     ChainProfile, Clock, EndpointConfig, Family, Finality, GasBase, GasPerByte, GasPerItem,
-    GasRows, GasTable, GasVerify, Limits, ListedToken, RuntimeChoice, SdkConfig,
+    GasRows, GasTable, GasVerify, Limits, ListedDex, ListedToken, PositionReader, RuntimeChoice,
+    SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
@@ -234,6 +237,22 @@ impl Sdk {
                 return Err(SdkError::Argument);
             }
             if !keys.insert(p.key.clone()) {
+                return Err(SdkError::Argument);
+            }
+            // the DEX list and the wrapper list hold addresses (CLI-SGN-35)
+            let readers = p.dexes.iter().flat_map(|d| {
+                d.position_readers
+                    .iter()
+                    .flat_map(|r| [&r.manager, &r.reader])
+            });
+            if !p
+                .dexes
+                .iter()
+                .map(|d| &d.address)
+                .chain(&p.wrappers)
+                .chain(readers)
+                .all(|a| config::is_address_hex(a))
+            {
                 return Err(SdkError::Argument);
             }
             // an opt-in names a table the SDK holds, once

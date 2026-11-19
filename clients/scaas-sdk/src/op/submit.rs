@@ -65,7 +65,14 @@ fn build(p: &Prepared, sig: &Value, extra: &Value) -> Result<Built, SdkError> {
     if p.t.ids {
         return Ok(transfer_on_ids(p.t.kind, &p.t.contract, &p.t.message, sig)?);
     }
-    let mut b = entry(p.t.name, p.t.kind, &p.t.contract, &p.t.message, extra, sig)?;
+    let mut b = entry(
+        p.t.name,
+        p.t.kind,
+        &p.t.entry_contract(),
+        &p.t.message,
+        extra,
+        sig,
+    )?;
     // a relay fee's job carries the call it pays for (job-api's relay-fee job; owner 2026-11-19, ruling F)
     if let Some((op, calldata)) = &p.t.relay_call {
         let call = Built {
@@ -144,7 +151,7 @@ async fn sign_msig(
     Err(SdkError::FeatureMissing)
 }
 
-async fn sign_one(
+pub(crate) async fn sign_one(
     sdk: &Sdk,
     k: &super::Key,
     td: &scaas_ua::wallet::TypedData,
@@ -410,7 +417,7 @@ impl Op {
                             &sdk,
                             chain_id,
                             &quote,
-                            prepared.t.contract,
+                            prepared.t.entry_contract(),
                             U256::ZERO,
                             built.calldata.clone(),
                         )?;
@@ -434,7 +441,7 @@ impl Op {
                     entry: prepared.entry(),
                     name: prepared.t.name.into(),
                     kind: prepared.t.kind.into(),
-                    contract: hex(&prepared.t.contract),
+                    contract: hex(&prepared.t.entry_contract()),
                     from,
                     batch,
                     nonce,
@@ -449,6 +456,11 @@ impl Op {
                     signer_kind: Some(signer),
                     unsigned_len: Some(unsigned_len as u64),
                     ended_at: None,
+                    fact: prepared
+                        .t
+                        .fact
+                        .as_ref()
+                        .map(|(c, e, h)| (hex(c), (*e).to_string(), hex(h))),
                     message: prepared.t.message.clone(),
                     extra: prepared.t.extra.clone(),
                     path: if payer.is_some() { "self" } else { "gateway" }.into(),

@@ -64,6 +64,8 @@ fn profile(rpc: Vec<String>, gateways: Vec<String>, uid: &str) -> ChainProfile {
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
         tokens: vec![
             ListedToken {
                 address: VND.into(),

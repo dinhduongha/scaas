@@ -259,6 +259,8 @@ async fn e2e_pay_on_anvil() {
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     };
     let (sdk, seed) = sdk_on(profile).await;
     let key = KeyRef::Native {
@@ -432,6 +434,8 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     })
     .await;
     let zether = 0x0141; // zether-bls12381
@@ -601,6 +605,8 @@ fn registry_profile(rpc: &str, registry: &str, cap: Option<u64>) -> ChainProfile
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     }
 }
 
@@ -738,6 +744,8 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     };
     // the receiver's app and the sender's app: two SDKs (the same test seed, roles apart)
     let (receiver, rseed) = sdk_on(profile.clone()).await;
@@ -864,6 +872,8 @@ fn account_profile(rpc: &str) -> ChainProfile {
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     }
 }
 
@@ -1653,4 +1663,150 @@ async fn e2e_register_passkey_row_on_anvil() {
         )),
         "{k}"
     );
+}
+
+/// Plan T17 on `anvil`: the cancel of a SCaaS sell token's order, prepared by the SDK from the order's named fields
+/// (`CancelUAOrder`, signed by the seed's EVM key as its native id), is the digest the demo token computes
+/// (`cancelOrderDigest`), self-relayed and followed to `Landed`; the order is then closed on the token (`pulled`). The place
+/// through a venue is the fake gateway's (`tests/dex.rs`): this e2e runs no node.
+#[cfg(feature = "dex")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_dex_cancel_order_on_anvil() {
+    use scaas_sdk::dex::{CancelOrder, OrderTerms};
+    let (_anvil, rpc) = anvil(10).await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    let holder = funded_holder(rpc);
+    let dep = deploy(
+        rpc,
+        &format!("local-31337-{port}-testnet"),
+        &[("DEMO_SUPPLY", "1000000000000"), ("DEMO_HOLDER", &holder)],
+    );
+    let token = dep["demo_token"].as_str().unwrap().to_ascii_lowercase();
+    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]);
+    let row = |entry: &str, fresh: bool| GasBase {
+        entry: entry.into(),
+        kind: "token".into(),
+        fresh,
+        gas: 400_000,
+        per_byte: None,
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
+    };
+    let profile = ChainProfile {
+        key: "anvil".into(),
+        family: Family::Evm,
+        chain_id: Some(31337),
+        chain_uid: uid,
+        rpc: vec![endpoint(rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: None,
+        factory: None,
+        router: None,
+        finality: Finality::Depth(0),
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![],
+        // a figure for this chain (no table row for a native key's order cancel), rounded up
+        gas: GasRows {
+            base: vec![row("mtxCancelOrder", true), row("mtxCancelOrder", false)],
+            verify: vec![GasVerify {
+                signer: 0,
+                gas: 0,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            }],
+        },
+        max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
+        gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
+    };
+    let (sdk, seed) = sdk_on(profile).await;
+    let key = KeyRef::Native {
+        seed,
+        network: "evm".into(),
+        index: 0,
+    };
+    let from = format!("0x{}{}", "00".repeat(12), &holder.to_ascii_lowercase()[2..]);
+    let dex = "0x00000000000000000000000000000000000d0e0d";
+    let receive = "0x00000000000000000000000000000000000b0b0b";
+    let valid = (now() + 600).to_string();
+    let order = OrderTerms {
+        from: from.clone(),
+        receive_token: receive.into(),
+        amount: "1000".into(),
+        receive_amount: "2000".into(),
+        min_fill: "1000".into(),
+        fee: "3000".into(),
+        relayer: "0x0000000000000000000000000000000000000000".into(),
+        dex: dex.into(),
+        destination: format!("0x{}", "00".repeat(32)),
+        flags: 0,
+        batch: "7".into(),
+        nonce: "0".into(),
+        valid_until: valid.clone(),
+    };
+    let tuple = format!(
+        "({from},{receive},1000,2000,1000,3000,0x0000000000000000000000000000000000000000,{dex},0x{},0,7,0,{valid})",
+        "00".repeat(32)
+    );
+    let ty = "(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256)";
+    let p = sdk
+        .dex()
+        .prepare_cancel_order(CancelOrder {
+            signer: key.clone(),
+            chain: "anvil".into(),
+            sell_token: token.clone(),
+            order,
+        })
+        .await
+        .unwrap();
+    let digest = cast(&[
+        "call",
+        &token,
+        &format!("cancelOrderDigest({ty})(bytes32)"),
+        &tuple,
+        "--rpc-url",
+        rpc,
+    ]);
+    assert_eq!(
+        p.id(),
+        digest,
+        "the SDK's CancelUAOrder digest is the token's"
+    );
+    let h = cast(&[
+        "call",
+        &token,
+        &format!("tradeOrderDigest({ty})(bytes32)"),
+        &tuple,
+        "--rpc-url",
+        rpc,
+    ]);
+    let pulled = |h: &str| {
+        cast(&[
+            "call",
+            &token,
+            "pulled(bytes32)(uint256)",
+            h,
+            "--rpc-url",
+            rpc,
+        ])
+    };
+    assert_eq!(pulled(&h), "0", "open before the cancel");
+    let q = sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: key })
+        .await
+        .unwrap();
+    let op = sdk.op().submit(p, q).await.unwrap();
+    let last = follow(&sdk, op).await;
+    assert!(matches!(last, OpState::Landed { .. }), "{last:?}");
+    assert_ne!(pulled(&h), "0", "closed on the token");
 }

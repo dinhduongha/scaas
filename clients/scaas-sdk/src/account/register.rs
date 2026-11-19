@@ -862,6 +862,7 @@ impl Account {
                     signer_kind: None,
                     unsigned_len: None,
                     ended_at: None,
+                    fact: None,
                     message: Value::Null,
                     extra: Value::Null,
                 };

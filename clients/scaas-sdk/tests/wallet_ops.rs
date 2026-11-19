@@ -119,6 +119,8 @@ async fn setup(gateways: usize) -> T {
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     };
     let store = MemoryStore::new();
     let sdk = Sdk::open(SdkConfig {

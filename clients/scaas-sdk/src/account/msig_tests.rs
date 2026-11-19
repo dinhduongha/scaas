@@ -98,6 +98,8 @@ async fn setup_auth(
         verifiers: vec![],
         verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     };
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],

@@ -69,6 +69,10 @@ pub(crate) struct Row {
     /// self-relay `resend` recomputes the operation's own gas figure from them (PR A review, finding 2)
     #[serde(default)]
     pub extra: serde_json::Value,
+    /// an order row's closing fact (plan T17): the contract, the event's signature and the order hash its first topic names
+    /// (`UAOrderCancelled`, `OrderCancelled`, `UATradeFilled`); `None`: the executed event of the operation's digest
+    #[serde(default)]
+    pub fact: Option<(String, String, String)>,
 }
 
 impl Row {

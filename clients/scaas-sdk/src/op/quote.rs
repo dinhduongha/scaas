@@ -420,7 +420,7 @@ impl Op {
                     &sdk,
                     &prepared.chain(),
                     &payer,
-                    Address::from(prepared.t.contract),
+                    Address::from(prepared.t.entry_contract()),
                     U256::ZERO,
                     Bytes::from(unsigned.calldata),
                     fee,
