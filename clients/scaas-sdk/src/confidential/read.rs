@@ -209,7 +209,7 @@ fn registered(ua: &W, rec: &W, code: &[u8]) -> Result<Vec<u8>, SdkError> {
         {
             Ok(y.to_vec())
         }
-        _ => Err(SdkError::Argument),
+        _ => Err(SdkError::LegKeyMismatch),
     }
 }
 
@@ -219,10 +219,10 @@ fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: 
     let class = u16::from_be_bytes([r.rec[30], r.rec[31]]);
     let kind = u16::from_be_bytes([r.rec[28], r.rec[29]]);
     if class != CLASS_TOKEN || !ZETHER_KINDS.contains(&kind) {
-        return Err(SdkError::Argument);
+        return Err(SdkError::TokenUncatalogued);
     }
     // R4, R5: a clone of a chain-neutral release; R2: its chain is the profile's
-    let (_, env) = scaas_ua::factory::clone_env(&r.code).ok_or(SdkError::Argument)?;
+    let (_, env) = scaas_ua::factory::clone_env(&r.code).ok_or(SdkError::TokenUncatalogued)?;
     if env.chain_uid != *chain_uid {
         return Err(SdkError::ProfileMismatch);
     }
@@ -232,7 +232,7 @@ fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: 
         ys.push(registered(ua, rec, code)?);
     }
     if ys.first().map(Vec::as_slice) != Some(y) {
-        return Err(SdkError::Argument);
+        return Err(SdkError::LegKeyMismatch);
     }
     ys.remove(0);
     let y_aud = match r.auditor.split_first() {
@@ -261,9 +261,9 @@ fn check(r: Raw, block: u64, chain_id: u64, chain_uid: &W, token: &[u8; 20], y: 
 }
 
 /// The words of Zether token `token` on `chain` for the handle `(y, ua)` and the recipient UAs `others`, at the profile's final
-/// block (R1 to R7). `ChainUnknown`; `Argument`: no factory in the profile, a token not catalogued as Zether, not a clone, a UA
-/// not registered with its `Y`, the holder's `Y` not the handle's; `ProfileMismatch`: the token's `ChainEnv` of another chain;
-/// the pool's codes (`NoTrustedEndpoint`, `AgreementNeedsThree`, …).
+/// block (R1 to R7). `ChainUnknown`; `Argument`: no factory in the profile; `TokenUncatalogued`: a token not catalogued as Zether
+/// or not a clone; `LegKeyMismatch`: a UA not registered with its `Y`, the holder's `Y` not the handle's; `ProfileMismatch`: the
+/// token's `ChainEnv` of another chain; the pool's codes (`NoTrustedEndpoint`, `AgreementNeedsThree`, …).
 pub(crate) async fn zether(
     sdk: &Sdk,
     chain: &str,

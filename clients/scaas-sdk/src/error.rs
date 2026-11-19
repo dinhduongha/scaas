@@ -93,6 +93,12 @@ own_codes! {
     /// An operation's `validUntil` already past on the SDK's clock, or further ahead than the chain's window (owner 2026-11-19,
     /// T13b ruling 1).
     ValidUntilRefused,
+    /// A confidential token the profile's factory does not catalogue as a token of the family, or whose code is not the
+    /// factory's clone (spec §9.4 R5; owner 2026-11-19, C4).
+    TokenUncatalogued,
+    /// A UA whose registry record does not hold the key the read expects: the holder's leg not the handle's key, or a recipient's
+    /// record not its UA's key (spec §9.4 R6; owner 2026-11-19, C4).
+    LegKeyMismatch,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

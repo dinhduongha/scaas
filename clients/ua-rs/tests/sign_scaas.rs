@@ -157,6 +157,39 @@ fn ua_key_signs_under_the_entrys_purpose() {
     );
 }
 
+/// Owner 2026-11-19, ruling C3: the Zether owner statements sign under `zether-owner` (`ZetherLib`'s `requireAuthorized`), not
+/// `metatx`; the same class by the contracts: `PqzRollOver` under `zether-auth` (`PqzStateLib`, CTR-PQZ-41), `AuditorConsent`
+/// under `auditor-consent` (CTR-PQZ-43). Each row's signature equals `ua_sig` under that purpose and differs from `metatx`'s.
+#[test]
+fn owner_statements_sign_under_their_contract_purpose() {
+    let w = Wallet::from_mnemonic(WORDS, "").unwrap();
+    let key = w.ua_key(0x0101, 0, 0).unwrap();
+    for (name, kind, purpose) in [
+        ("ZetherRollOver", "zether", "zether-owner"),
+        ("ZetherSetRollOverMode", "zether", "zether-owner"),
+        ("PqzRollOver", "pqz", "zether-auth"),
+        ("AuditorConsent", "pqz", "auditor-consent"),
+    ] {
+        let r = row(name, kind);
+        let dn = ops()["ops"][name]["domains"][kind]["domain"]["name"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let td =
+            scaas_typed_data(name, Some(&dn), &r.contract, r.chain_id, &r.uid, &r.message).unwrap();
+        assert_eq!(
+            td.digest().unwrap().to_vec(),
+            r.digest,
+            "{name}: the row's digest"
+        );
+        let got = sign_scaas(&key, &td, op(&r, name, &r.message)).unwrap();
+        let sig =
+            |p: &str| ua_sig(&key, None, &purpose_tag(p).unwrap(), &td.digest().unwrap()).unwrap();
+        assert_eq!(got, sig(purpose), "{name}: {purpose}");
+        assert_ne!(got, sig("metatx"), "{name}: not metatx");
+    }
+}
+
 /// Owner 2026-11-19, ruling C (closing review P2-11): a mandate wallet's `UAExecute` under `Expect::Execute` signs only the
 /// decoded call: `ua-rs` rebuilds `target`, `value` and `data` from it. No byte format moves: the typed data and its digest are
 /// `scaas_typed_data`'s (the `typed_ops.json` row's domain and envelope), and the signature equals the one `Expect::Op` gives

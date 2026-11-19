@@ -663,8 +663,10 @@ pub fn sign_typed_by(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result
 /// scaas-sdk spec §13.2: the `UASig` of the typed SCaaS struct `td` for its named entry, once `expect` approves it (the same check
 /// as [`sign_typed_by`]; `PolicyRefused`, nothing signed, otherwise). A native EVM key: `{"", r ‖ s ‖ v over the digest, []}` (a
 /// native id signs the digest itself on a named entry, CTR-MTX-28); a UA key: [`super::ua_sig`] over the digest under the entry's
-/// purpose, `payee-fee` for `UAPayeeFee`, `trade` for the orders and their cancels (`TradeLib`), `metatx` for every other
-/// envelope. `Expect::Any` is `Argument` here: a SCaaS entry is always signed under its check.
+/// purpose, `payee-fee` for `UAPayeeFee`, `trade` for the orders and their cancels (`TradeLib`), `zether-owner` for the Zether
+/// owner statements `ZetherRollOver` and `ZetherSetRollOverMode` (`ZetherLib`, owner 2026-11-19 C3; the outer `UA*` forms carry
+/// that signature as `ownerSig`), `zether-auth` for `PqzRollOver` (`PqzStateLib`, CTR-PQZ-41), `auditor-consent` for
+/// `AuditorConsent` (`PqzStateLib`, CTR-PQZ-43), `metatx` for every other envelope. `Expect::Any` is `Argument` here: a SCaaS entry is always signed under its check.
 pub fn sign_scaas(
     key: &dyn Signer,
     td: &TypedData,
@@ -688,6 +690,9 @@ pub fn sign_scaas(
         "UAPayeeFee" => "payee-fee",
         "UAWrapOrder" | "UATradeOrder" | "CancelUAOrder" | "CancelUAWrapOrder"
         | "UAInvalidateNonces" => "trade",
+        "ZetherRollOver" | "ZetherSetRollOverMode" => "zether-owner",
+        "PqzRollOver" => "zether-auth",
+        "AuditorConsent" => "auditor-consent",
         _ => "metatx",
     };
     super::uasig::ua_sig(key, None, &crate::purpose_tag(purpose)?, &digest)

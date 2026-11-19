@@ -363,7 +363,7 @@ async fn code_hash_checked() {
     // the token's code not a clone of a release
     let good = c.lock().unwrap().code.get(TOKEN).cloned().unwrap();
     c.lock().unwrap().code.insert(TOKEN.into(), format!("{good}00"));
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "Argument");
+    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "TokenUncatalogued");
     // a clone of another chain
     let env = ChainEnv {
         chain_uid: [7; 32],
@@ -382,7 +382,7 @@ async fn code_hash_checked() {
     let mut k = vec![0u8];
     k.extend(unhex(&other.y));
     c.lock().unwrap().code.insert(KEYPTR.into(), hx(&k));
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "Argument");
+    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "LegKeyMismatch");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -395,7 +395,7 @@ async fn uncatalogued_token_refused() {
         rec[29] = kind;
         rec[31] = class;
         put(&c, FACTORY, &slot, &rec);
-        assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "Argument", "class {class} kind {kind}");
+        assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "TokenUncatalogued", "class {class} kind {kind}");
     }
 }
 
@@ -409,11 +409,11 @@ async fn leg_of_another_key_refused() {
     let good = c.lock().unwrap().storage.get(&(REGISTRY.into(), hx(&slot))).cloned().unwrap();
     // no record, a record of another kind
     put(&c, REGISTRY, &slot, &[0; 32]);
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "Argument");
+    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "LegKeyMismatch");
     let mut r: W = unhex(&good).try_into().unwrap();
     r[31] = 0x40;
     put(&c, REGISTRY, &slot, &r);
-    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "Argument");
+    assert_eq!(code(s.confidential().zether_balance(req(&seed)).await), "LegKeyMismatch");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -605,11 +605,11 @@ async fn zether_transfer_single_pair() {
     let mut other = vec![0u8];
     other.extend(unhex(&k3.y));
     c.lock().unwrap().code.insert(KEYPTR2.into(), hx(&other));
-    assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "Argument");
+    assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "LegKeyMismatch");
     c.lock().unwrap().code.insert(KEYPTR2.into(), good);
     // the recipient not registered: refused by the reading layer
     put(&c, REGISTRY, &map(&unhex(&k2.ua).try_into().unwrap(), &be(0)), &[0; 32]);
-    assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "Argument");
+    assert_eq!(code(s.confidential().prepare_zether_transfer(t("3")).await), "LegKeyMismatch");
 }
 
 #[tokio::test(flavor = "multi_thread")]
