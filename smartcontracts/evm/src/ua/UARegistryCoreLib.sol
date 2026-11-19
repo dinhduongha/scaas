@@ -821,6 +821,9 @@ library UARegistryCoreLib {
         if (uint160(cfg) == 0) {
             return UAStore.via(_pred(), ua, purpose, digest, IUARegistry.UASig("", sig, new IUARegistry.MemberSig[](0)));
         }
+        // `bls12381-multi`: only the registration PoP is ever checked under `DST_MULTI_POP` (spec 2026-11-19-bls12381-multi §4
+        // condition 2); its other stored paths need `verifyMinimal` (§5.3, plan Task 8, not built): refused until then (fail closed)
+        if (kind == UAKinds.BLS12381_MULTI && purpose != UAKinds.PURPOSE_POP_V2) return false;
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         bytes memory ek = UAStore.expanded(ua, kind); // ML-DSA: a complete cache is the key the PoP verifies on
         bytes memory data = ek.length != 0

@@ -29,8 +29,12 @@ contract UARegistryBlsMultiTest is Test {
     }
 
     function _registry(bytes32 uid, address v) internal returns (UARegistry) {
+        return _registry(uid, v, CAP);
+    }
+
+    function _registry(bytes32 uid, address v, uint64 cap) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](v == address(0) ? 0 : 1);
-        if (v != address(0)) k[0] = UARegistry.KindConfig(K, v, CAP);
+        if (v != address(0)) k[0] = UARegistry.KindConfig(K, v, cap);
         return new UARegistry(uid, address(0), false, BUDGET, address(0), true, k);
     }
 
@@ -238,6 +242,29 @@ contract UARegistryBlsMultiTest is Test {
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
             reg.requireAuthorized(g.ua, UAKinds.PURPOSE_METATX, digest, a);
         }
+    }
+
+    /// Until the stored-path dispatch (spec §5.3, plan Task 8) is built, every portable and app purpose of a `0x0121` signer is
+    /// refused, a valid minimal signature included: `verifyPop` (`DST_MULTI_POP`) runs on the registration PoP only (§4 condition 2).
+    /// On a registry whose 0x0121 cap admits `verifyPop` (a deployer may set any cap up to the budget; 330,000 would refuse it by gas).
+    function test_portablePurposes_failClosed() public {
+        reg = _registry(UID, address(verifier), 11_000_000);
+        BlsMultiKit.Group memory g = _kit(3, 2, 19);
+        reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+        bytes32 digest = keccak256("kem record");
+        bytes memory s = BlsMultiKit.sign(g, 3, UAKinds.uaMessage(K, UAKinds.PURPOSE_KEM, digest));
+        bytes memory app = BlsMultiKit.sign(g, 3, UAKinds.uaMessage(K, UAKinds.appPurpose(bytes32("app")), digest));
+        // N1's row: every member's distinct-message aggregate under DST_MULTI_POP over the app / KEM message (a "PoP" of that message)
+        bytes memory popLikeApp = BlsMultiKit.pop(g, UAKinds.uaMessage(K, UAKinds.appPurpose(bytes32("app")), digest));
+        bytes memory popLikeKem = BlsMultiKit.pop(g, UAKinds.uaMessage(K, UAKinds.PURPOSE_KEM, digest));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
+        reg.requirePortable(g.ua, UAKinds.PURPOSE_KEM, digest, _sig(s));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
+        reg.requirePortableApp(g.ua, bytes32("app"), digest, _sig(app));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
+        reg.requirePortableApp(g.ua, bytes32("app"), digest, _sig(popLikeApp));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, g.ua));
+        reg.requirePortable(g.ua, UAKinds.PURPOSE_KEM, digest, _sig(popLikeKem));
     }
 
     /// A registry that does not enable 0x0121 refuses both entries `UAKindDisabled` (Hedera's profile, a chain without EIP-2537).
