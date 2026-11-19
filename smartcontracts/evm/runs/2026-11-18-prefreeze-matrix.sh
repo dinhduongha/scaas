@@ -4,6 +4,7 @@
 #   smartcontracts/evm/runs/2026-11-18-prefreeze-matrix.sh --list
 #   smartcontracts/evm/runs/2026-11-18-prefreeze-matrix.sh --only <step>[,<step>…] [--force]
 #   smartcontracts/evm/runs/2026-11-18-prefreeze-matrix.sh --group <evm|sets|other> [--force]
+# FORMAT_PARTS limits the format step to those parts of scripts/format.sh (default every part).
 # Each step writes smartcontracts/evm/runs/2026-11-18-prefreeze-matrix/<step>.log (git-ignored *.log; first line
 # `# <step> at commit <sha>`, last `rc=<n>`) and one row `step | commit | rc | counts` of
 # runs/2026-11-18-prefreeze-matrix-summary.txt. A step done (rc=0) at the same commit on a clean tree is skipped unless
@@ -16,16 +17,18 @@ set -uo pipefail
 W=$(git rev-parse --show-toplevel)
 cd "$W" || exit 2
 R=smartcontracts/evm/runs
-L=$R/2026-11-18-prefreeze-matrix
-SUMMARY=$R/2026-11-18-prefreeze-matrix-summary.txt
+# MATRIX names a later round's log directory and summary (default this round's): MATRIX=2026-11-19-pr-a-matrix
+M=${MATRIX:-2026-11-18-prefreeze-matrix}
+L=$R/$M
+SUMMARY=$R/$M-summary.txt
 mkdir -p "$L"
 export PATH="$HOME/.foundry/bin:$PATH"
 cap="$W/scripts/capped"
 C="--locked -j1"
 N="CAPPED_MEM=6G $cap"
 SETS="n2048-kmax1024 n2560-kmax16384 n2816-kmax65536"
-FORGE_DIRS="account as confidential factory fork governance hedera liquidity merge metatx modules p6f pqchat pqz pqzh research ua
-  v2 wallet wrap zether"
+FORGE_DIRS="account as confidential factory fork gas governance hedera liquidity merge metatx modules p6f pqchat pqz pqzh research
+  ua v2 wallet wrap zether"
 SET_DIRS="as governance metatx pqz pqzh research ua v2 wrap"
 Q=$HOME/usr/Qt/6.12.0/gcc_64
 
@@ -100,7 +103,7 @@ STEPS=(
     "docs|other|.|python3 scripts/docs_check.py check && python3 scripts/docs_check.py paths && python3 scripts/docs_check.py consumer && python3 scripts/docs_check.py facts check && python3 scripts/test_docs_check.py && echo RESULT docs ok"
     "features|other|.|python3 scripts/check_test_features.py"
     "ci-guards|other|.|! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' && echo RESULT no temp path"
-    "format|other|.|scripts/format.sh --check"
+    "format|other|.|scripts/format.sh --check ${FORMAT_PARTS:-}"
 )
 for d in $FORGE_DIRS; do
     [ "$d" = modules ] || STEPS+=("forge-$d|evm|smartcontracts/evm|$(fdir "$d")")

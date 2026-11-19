@@ -1,0 +1,23 @@
+# gasQ mutants at commit 3b90438eb (name | outcome | test); run in four parts, merged
+Q3 ua-rs: the answer's cap removed | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_webauthn a_signer_cannot_bypass_the_cap
+Q3 ua-rs: a non-canonical answer passed | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_webauthn a_signer_cannot_bypass_the_cap
+Q3 ua-rs: ua_sig bypasses it | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_webauthn a_signer_cannot_bypass_the_cap
+Q3 ua-rs: ua_sig_app bypasses it | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_webauthn a_signer_cannot_bypass_the_cap
+Q3 ua-rs: an msig member slot bypasses it | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_webauthn a_signer_cannot_bypass_the_cap
+Q3 ua-rs: a container's sender bypasses it | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vectors --test wallet_webauthn a_signer_cannot_bypass_the_cap
+Q3 clientkeys: a member's answer uncapped | killed | ../../scripts/capped node --test test/ua-wallet.test.js
+Q3 clientkeys: a non-canonical answer passed | killed | ../../scripts/capped node --test test/ua-wallet.test.js
+Q3 clientkeys: the cap off by one | killed | ../../scripts/capped node --test test/ua-wallet.test.js
+Q4: encodeAssertion uncapped | killed | ../../scripts/capped node --test test/webauthn.test.js
+Q4: passkeyAssertion uncapped | killed | ../../scripts/capped node --test test/webauthn.test.js
+Q4: the cap off by one | killed | ../../scripts/capped node --test test/webauthn.test.js
+Q4: refused without its code | killed | ../../scripts/capped node --test test/webauthn.test.js
+Q5: resend not recomputed | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 resend_as_self_relay_recomputes_the_signed_gas
+Q5: the signer's kind not kept | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 resend_as_self_relay_recomputes_the_signed_gas
+Q5: the unsigned length not kept | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 resend_as_self_relay_recomputes_the_signed_gas
+Q5: the stored signed calldata not read | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 resend_as_self_relay_recomputes_the_signed_gas
+K1: no clamp | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 a_huge_rollover_is_quoted_at_roll_max
+K1: every count clamped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 item_count_reads_the_operations_counts
+K1: a set's figure wrong | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 roll_max_is_the_sets_own
+K1: another set's figure picked | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib --features pqz,pqz-set-n2304-kmax4096 roll_max_is_the_sets_own
+21 mutants, 21 killed, 0 survived, 0 not loaded

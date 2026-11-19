@@ -19,8 +19,8 @@ use scaas_sdk::op::{KeyRef, Prepared, Source, SubmitPath};
 use scaas_sdk::vault::{ImportKey, ImportWords, MemoryStore};
 use scaas_sdk::wallet::*;
 use scaas_sdk::{
-    ChainProfile, EndpointConfig, Family, Finality, GasBase, GasRows, GasVerify, Limits,
-    ListedToken, RuntimeChoice, Sdk, SdkConfig, SdkError,
+    ChainProfile, EndpointConfig, Family, Finality, GasBase, GasPerByte, GasRows, GasVerify,
+    Limits, ListedToken, RuntimeChoice, Sdk, SdkConfig, SdkError,
 };
 use scaas_ua::wallet::SecretBytes;
 use serde_json::{json, Value};
@@ -500,7 +500,8 @@ async fn prepare_row(
                 },
                 meta: pay_meta(&d["extra"]["meta"]),
                 payer_auth: PayerAuth {
-                    key_data: "0x".into(),
+                    // a test's own key data (ruling 4's unknown kind), else the vector's native id's
+                    key_data: d["extra"]["payerKeyData"].as_str().unwrap_or("0x").into(),
                     signature: s(&d["extra"]["payerSig"]),
                 },
                 fee: f("fee"),
@@ -553,12 +554,33 @@ fn gas_rows() -> GasRows {
                 kind: kind.clone(),
                 fresh,
                 gas: 100_000,
+                // ruling B: `mtxPay`'s body at 1,000 gas a byte (`pay_with_paymeta_v3` reads it)
+                per_byte: (entry == "mtxPay").then(|| GasPerByte {
+                    input: "meta.body".into(),
+                    gas: 1_000,
+                }),
+                save: Some(1_000), // ruling 1: a saving pay answered
+                fee_extra: (entry == "mtxPay").then_some(2_000), // ruling 3
+                ua_extra: None,
+                per_item: None,
             })
         })
         .collect();
     GasRows {
         base,
-        verify: vec![GasVerify { signer: 0, gas: 0 }],
+        // every signer kind the SDK accepts: a second signature of an unknown kind takes the dearest (ruling 4)
+        verify: [0u16]
+            .into_iter()
+            .chain(0x0101..=0x0108)
+            .chain(0x0130..=0x0135)
+            .map(|signer| GasVerify {
+                signer,
+                gas: if signer == 0x0135 { 5_000 } else { 0 }, // the dearest (ruling 4)
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            })
+            .collect(),
     }
 }
 
@@ -653,18 +675,18 @@ async fn every_wallet_pair_is_its_vector() {
                 // an unbound relayer / fee recipient is 0 as signed (the vectors' messages are canonical)
                 assert_eq!(got, val, "{name} on {kind}: {n}");
             }
-            // sign once at submit: the simulated calldata is the row's (the row's RFC 6979 signature in it)
-            let q = t
-                .sdk
-                .op()
-                .quote(
-                    p.clone(),
-                    SubmitPath::SelfRelay {
-                        payer: t.payer.clone(),
-                    },
-                )
-                .await
-                .unwrap();
+            // sign once at submit: the simulated calldata is the row's (the row's RFC 6979 signature in it); `mtxExecute`
+            // is quoted with the app's figure for its inner call (ruling 5, owner 2026-11-19)
+            let path = SubmitPath::SelfRelay {
+                payer: t.payer.clone(),
+            };
+            let op = t.sdk.op();
+            let q = if p.entry() == "mtxExecute" {
+                op.quote_with_gas(p.clone(), path, 50_000).await
+            } else {
+                op.quote(p.clone(), path).await
+            }
+            .unwrap();
             let sig = &d["signature"].as_str().unwrap()[2..];
             assert!(
                 !carried(&t, sig),
@@ -846,10 +868,92 @@ async fn pay_with_paymeta_v3() {
         .quote(p.clone(), SubmitPath::Gateway)
         .await
         .unwrap();
+    // owner 2026-11-19, ruling B: the quote adds the row's per-byte gas times the body's length (34 bytes of note here),
+    // beside the calldata's 64 a byte
+    let gas_of = |r: &Value| {
+        let (t, pay) = (&t, &pay);
+        let m = meta_of(r);
+        async move {
+            let p = t.sdk.wallet().prepare_pay(pay(m)).await.unwrap();
+            t.sdk
+                .op()
+                .quote(p, SubmitPath::Gateway)
+                .await
+                .unwrap()
+                .gas
+                .unwrap()
+        }
+    };
+    assert_eq!(rows[5]["name"], "note_utf8");
+    let (none, note) = (gas_of(&rows[0]).await, gas_of(&rows[5]).await);
+    assert!(note - none >= 1_000 * 34 * 3 / 2, "{none} {note}");
     t.sdk.op().submit(p, q).await.unwrap();
     let body = body_at(&t, 0).await;
     assert_eq!(body["op"]["entry"], "mtxPay");
     assert_eq!(body["op"]["args"]["meta"]["save"], true);
+    // owner 2026-11-19, ruling 1: a saving pay adds the row's `save` (1,000 here, with the margin); the same meta unsaved
+    // (one calldata byte changes, not the length) does not
+    assert_eq!(rows[2]["save"], true);
+    let mut unsaved = rows[2].clone();
+    unsaved["save"] = json!(false);
+    let (saved, plain) = (gas_of(&rows[2]).await, gas_of(&unsaved).await);
+    assert!(
+        (1_499..=1_501).contains(&(saved - plain)),
+        "{saved} {plain}"
+    );
+    // ruling 3: a fee > 0 adds the row's `fee_extra` (2,000 here, with the margin)
+    let fee = |fee: &str| {
+        let (t, pay, m) = (&t, &pay, meta_of(&rows[0]));
+        let mut p = pay(m);
+        (p.envelope.mode, p.envelope.fee) = (0x20, fee.to_string()); // FIXED
+        async move {
+            let p = t.sdk.wallet().prepare_pay(p).await.unwrap();
+            t.sdk
+                .op()
+                .quote(p, SubmitPath::Gateway)
+                .await
+                .unwrap()
+                .gas
+                .unwrap()
+        }
+    };
+    let (zero, two) = (fee("0").await, fee("2").await);
+    assert!((2_999..=3_001).contains(&(two - zero)), "{zero} {two}");
+}
+
+/// Owner 2026-11-19, ruling 4: `mtxPayWithPayeeFee`'s attached payer signature adds its kind's verify part (the vector's
+/// native id: the native row, 0 here); of a kind the SDK cannot determine (key data whose id is not the payer's), the
+/// dearest accepted kind's (0x0135's 5,000 here), beside 32 more calldata bytes at 64 gas a byte, with the margin.
+#[tokio::test(flavor = "multi_thread")]
+async fn payee_fee_quotes_the_attached_signature() {
+    let t = setup(1).await;
+    let v = load("smartcontracts/vectors/typed/typed_ops.json");
+    let (d, m) = (
+        &v["ops"]["UAPayeeFee"]["domains"]["token"],
+        &v["ops"]["UAPayeeFee"]["message"],
+    );
+    let gas = |d: Value| {
+        let t = &t;
+        async move {
+            let p = prepare_row(t, "UAPayeeFee", &d, m, true).await.unwrap();
+            t.sdk
+                .op()
+                .quote(p, SubmitPath::Gateway)
+                .await
+                .unwrap()
+                .gas
+                .unwrap()
+        }
+    };
+    let native = gas(d.clone()).await;
+    let mut other = d.clone();
+    other["extra"]["payerKeyData"] = json!(format!("0x{}", "11".repeat(32)));
+    let unknown = gas(other).await;
+    let want = (5_000 + 32 * 64) * 3 / 2;
+    assert!(
+        (want - 1..=want + 1).contains(&(unknown - native)),
+        "{native} {unknown}"
+    );
 }
 
 async fn body_at(t: &T, n: usize) -> Value {
@@ -1047,15 +1151,18 @@ async fn ua_execute_decoded_only() {
             .any(|f| f.name == "token" && f.value == token && f.display == "listed VND"),
         "the token touched, marked"
     );
+    let path = SubmitPath::SelfRelay {
+        payer: t.payer.clone(),
+    };
+    // ruling 5 (owner 2026-11-19): without the app's figure for the inner call, unquoted; with it, quoted
+    assert_eq!(
+        code(t.sdk.op().quote(p.clone(), path.clone()).await),
+        "GasUnquoted"
+    );
     let q = t
         .sdk
         .op()
-        .quote(
-            p.clone(),
-            SubmitPath::SelfRelay {
-                payer: t.payer.clone(),
-            },
-        )
+        .quote_with_gas(p.clone(), path, 50_000)
         .await
         .unwrap();
     t.sdk.op().submit(p, q).await.unwrap();
@@ -1279,14 +1386,16 @@ async fn smart_execute_decoded_only() {
     ] {
         assert_eq!(r.iter().find(|f| f.name == n).unwrap().value, want, "{n}");
     }
+    // `mtxExecute`: the app's figure is the inner call's (owner 2026-11-19, ruling 5)
     let q = t
         .sdk
         .op()
-        .quote(
+        .quote_with_gas(
             p.clone(),
             SubmitPath::SelfRelay {
                 payer: t.payer.clone(),
             },
+            50_000,
         )
         .await
         .unwrap();
@@ -1328,7 +1437,7 @@ async fn smart_execute_decoded_only() {
     slots(3);
     let p = acc.prepare_smart_execute(read(&account), transfer).await.unwrap();
     let payer = SubmitPath::SelfRelay { payer: t.payer.clone() };
-    let q = t.sdk.op().quote(p.clone(), payer).await.unwrap();
+    let q = t.sdk.op().quote_with_gas(p.clone(), payer, 50_000).await.unwrap();
     t.sdk.op().submit(p, q).await.unwrap();
     let sig_head = format!("{:064x}{:064x}{:064x}", 2, 0x60, 0x80);
     assert!(carried_soon(&t, &sig_head).await, "AccountSig keyIndex 2");

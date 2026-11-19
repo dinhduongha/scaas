@@ -178,10 +178,10 @@ Claude), no external audit.
 **C ABI 6** (`clients/ua-c`, `include/scaas_ua.h` by cbindgen; the v5 header is kept at `legacy/ua-rs-sign/scaas_ua.v5.h`).
 Every v5 declaration is unchanged. New: the opaque handles `ScaasUaWallet`, `ScaasUaKey` (UA or native), `ScaasUaKemKey`,
 `ScaasUaLinkSession`, `ScaasUaSeedBackup`, `ScaasUaZetherKey`, `ScaasUaPqzKey`; a call per row of the table above;
-`scaas_ua_zether_call` and `scaas_ua_pqz_call` for the facades' JSON; statuses 21 to 42 (`SealOpen`, `SealVersion`, `KemCheck`,
+`scaas_ua_zether_call` and `scaas_ua_pqz_call` for the facades' JSON; statuses 21 to 43 (`SealOpen`, `SealVersion`, `KemCheck`,
 `Aead`, `VaultOpen`, `VaultParams`, `VaultVersion`, `RawDigestRefused`, `PolicyRefused`, `ExternalSignature`, `WalletLocked`,
 `KeyRevoked`, `ContainerSender`, `ContainerReplay`, `BackupRollback`, `WebAuthnAssertion`, `KindUnavailable`, `WalletMismatch`,
-`Rng`, `PqzSetMismatch`, then group 3g's `PqzKeyVersion` 41 and `KeyInUse` 42, appended). `scaas_ua_features()` returns the build's bits: 0 `wallet`, 1 `pq`, 2 `falcon`, 3 `zether`, 4 `pqz`,
+`Rng`, `PqzSetMismatch`, then group 3g's `PqzKeyVersion` 41 and `KeyInUse` 42, and `WebAuthnTooLong` 43 (G3), appended). `scaas_ua_features()` returns the build's bits: 0 `wallet`, 1 `pq`, 2 `falcon`, 3 `zether`, 4 `pqz`,
 5 to 8 the four sets, 9 `external` (clear in this round), 10 `mlock`, 11 `vectors` (a binding refuses it), 12 `native_networks`
 (ua-rs-native: networks 9 to 12, `scaas_ua_sign_message_raw`, the four envelope calls, `scaas_ua_wallet_bitcoin_key`,
 `scaas_ua_wallet_polkadot_key`, `scaas_ua_key_address`, `scaas_ua_key_ss58_address`, `scaas_ua_key_witness_program`; the C-ABI
@@ -392,7 +392,12 @@ returns index 0 alone, and several keys of such a kind come from several `accoun
 is returned.** `webauthn_assertion(key_data, expected_challenge, authData, clientDataJSON, r, s)`, in order: `0 < r, s < n`; `s` to
 low-s; `clientDataJSON` kept as the exact signed bytes, UTF-8, accepted only by the chains' rule (`client_data_ok`) against
 `expected_challenge`, never the JSON's own; the whole encoding through `verify(0x0100, …)`. Any failure: `WebAuthnAssertion`, nothing
-returned. BUILT, clientkeys and `ua-rs`.
+returned. First, `authData` and `clientDataJSON` above 1,024 bytes together (`WEBAUTHN_MAX_ASSERTION`): `WebAuthnTooLong`, nothing
+returned, for the builder and for an external device's answer alike (owner 2026-11-19, G3), and in every `UASig` builder (`ua_sig`,
+`ua_sig_app`, an `msig` member slot, a sealed container's sender) on any `Signer`'s answer to a `WebAuthn` request, a non-canonical
+answer `WebAuthnAssertion` (Q3; clientkeys `msigMemberSigs` alike; its `encodeAssertion` and `metaop.js` `passkeyAssertion`, the
+`SmartKeyAccount` and NEAR / Algorand passkey paths, take the same cap, Q4; the basis in `webauthn.rs`: real
+assertions reach about 770 bytes; the chains take any length; `sign.json` rows at the cap and one above). BUILT, clientkeys and `ua-rs`.
 
 <a id="CLI-UAL-17"></a>**CLI-UAL-17** — **The signature role is set inside `ua-rs`.** `SigRole::{Authorization, Pop}` picks the BLS domain
 (SIG or POP) and every kind's post-verification: `sign_ua` maps a portable purpose (`pop` v2, `kem`, `pqz-key`) to `Pop` and every

@@ -1,6 +1,7 @@
 // Shared by the NEAR and Algorand clients (near-algorand T18): the scaas.metaop.v1 envelope parts both families use.
 import { keccak_256, concatBytes, utf8ToBytes, hex, fromHex, b64url } from "./bytes.js";
 import { metaPayIdV1 as metaPayId, payLane } from "./evm.js";
+import { assertionCapped } from "./webauthn.js";
 
 export const LABEL = utf8ToBytes("scaas.metaop.v1");
 
@@ -64,12 +65,15 @@ export function checkPayMeta(op, salt, meta) {
 }
 
 /** WebAuthn: the authenticator signs `challenge = digest`; the chains take low-s r‖s (a high-s signature is refused). The
- *  returned clientDataJSON must be valid UTF-8, type webauthn.get, challenge b64url(digest). */
+ *  returned clientDataJSON must be valid UTF-8, type webauthn.get, challenge b64url(digest); first, `authenticatorData` and
+ *  `clientDataJSON` above 1,024 bytes together: `WebAuthnTooLong` (owner 2026-11-19, Q4), either not bytes (a `Uint8Array`,
+ *  an `ArrayBuffer` as an authenticator returns it, or another view; read as bytes: PR A review, finding 5) `WebAuthnAssertion`. */
 export async function passkeyAssertion(digest, cred, derToRS) {
   const a = await cred.get(digest);
+  const [authenticatorData, clientDataJSON] = assertionCapped(a.authenticatorData, a.clientDataJSON);
   let cdj;
   try {
-    cdj = new TextDecoder("utf-8", { fatal: true }).decode(a.clientDataJSON);
+    cdj = new TextDecoder("utf-8", { fatal: true }).decode(clientDataJSON);
   } catch {
     throw new Error("clientDataJSON is not UTF-8 encoded");
   }
@@ -82,5 +86,5 @@ export async function passkeyAssertion(digest, cred, derToRS) {
   if (c.type !== "webauthn.get") throw new Error("clientDataJSON type is not webauthn.get");
   if (c.challenge !== b64url(u(digest))) throw new Error("clientDataJSON challenge is not the operation digest");
   const { r, s } = derToRS(a.signature);
-  return { authenticatorData: a.authenticatorData, clientDataJSON: cdj, signature: concatBytes(r, s) };
+  return { authenticatorData, clientDataJSON: cdj, signature: concatBytes(r, s) };
 }

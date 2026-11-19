@@ -1,4 +1,4 @@
-# gas mutants at commit f3bddcb58 (name | outcome | test)
+# gas mutants at commit 6d99b2332 (name | outcome | test)
 the chain's rows not first | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in
 the chain's rows named as reference | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib quote_names_its_gas_source_in_order
 module tables read without opt-in | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_lookup_order_and_opt_in

@@ -524,6 +524,12 @@ typedef struct {
  */
 #define SCAAS_UA_ERR_KEY_IN_USE 42
 
+/**
+ * "UAWebAuthnTooLong": an assertion whose authData and clientDataJSON together exceed 1,024 bytes (owner 2026-11-19, G3:
+ * appended, ABI 6 kept).
+ */
+#define SCAAS_UA_ERR_WEBAUTHN_TOO_LONG 43
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -1924,7 +1930,8 @@ ScaasUaStatus scaas_ua_pqz_seed_backup_warning(uint16_t kind,
 
 /**
  * The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` of an assertion against `expected_challenge32`
- * (low-s, the chains' clientDataJSON rule), verified with `key_data` before it is written: SCAAS_UA_ERR_WEBAUTHN_ASSERTION.
+ * (low-s, the chains' clientDataJSON rule), verified with `key_data` before it is written: SCAAS_UA_ERR_WEBAUTHN_ASSERTION;
+ * authData and clientDataJSON above 1,024 bytes together: SCAAS_UA_ERR_WEBAUTHN_TOO_LONG.
  */
 ScaasUaStatus scaas_ua_webauthn_assertion(const uint8_t *key_data,
                                           size_t key_data_len,

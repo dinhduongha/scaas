@@ -598,10 +598,15 @@ async fn pqz_plain_pairs() {
                     kind: "pqz".into(),
                     fresh,
                     gas: 100_000,
+                    per_byte: None,
+                    save: None,
+                    fee_extra: None,
+                    ua_extra: None,
+                    per_item: None,
                 })
             })
             .collect(),
-        verify: vec![scaas_sdk::GasVerify { signer: KIND, gas: 0 }],
+        verify: vec![scaas_sdk::GasVerify { signer: KIND, gas: 0, sig_bytes: 0, margin: 0, per_item: None }],
     };
     let (s, seed) = sdk(pr).await;
     {
@@ -727,10 +732,10 @@ async fn debit_setup(offchain: bool) -> (Arc<Sdk>, String, Fake, W, W, Arc<Memor
         base: DEBITS
             .iter()
             .flat_map(|e| {
-                [true, false].map(|fresh| scaas_sdk::GasBase { entry: (*e).into(), kind: "pqz".into(), fresh, gas: 100_000 })
+                [true, false].map(|fresh| scaas_sdk::GasBase { entry: (*e).into(), kind: "pqz".into(), fresh, gas: 100_000, per_byte: None, save: None, fee_extra: None, ua_extra: None, per_item: None })
             })
             .collect(),
-        verify: vec![scaas_sdk::GasVerify { signer: KIND, gas: 0 }],
+        verify: vec![scaas_sdk::GasVerify { signer: KIND, gas: 0, sig_bytes: 0, margin: 0, per_item: None }],
     };
     let (s, seed, store) = sdk_with(pr).await;
     let (a, b) = (ua_of(&s, &seed, 0).await, ua_of(&s, &seed, 1).await);

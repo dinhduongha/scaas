@@ -232,8 +232,19 @@ async fn e2e_pay_on_anvil() {
                 kind: "token".into(),
                 fresh: true,
                 gas: 400_000,
+                per_byte: None,
+                save: None,
+                fee_extra: None,
+                ua_extra: None,
+                per_item: None,
             }],
-            verify: vec![GasVerify { signer: 0, gas: 0 }],
+            verify: vec![GasVerify {
+                signer: 0,
+                gas: 0,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            }],
         },
         max_valid_secs: None,
         verifiers: vec![],
@@ -658,8 +669,13 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
                 kind: "token".into(),
                 fresh: true,
                 gas: 400_000,
+                per_byte: None,
+                save: None,
+                fee_extra: None,
+                ua_extra: None,
+                per_item: None,
             }],
-            verify: vec![GasVerify { signer: 0, gas: 0 }],
+            verify: vec![GasVerify { signer: 0, gas: 0, sig_bytes: 0, margin: 0, per_item: None }],
         },
         max_valid_secs: None,
         verifiers: vec![],
@@ -747,6 +763,11 @@ fn account_profile(rpc: &str) -> ChainProfile {
         kind: "account".into(),
         fresh,
         gas: 600_000,
+        per_byte: None,
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
     };
     ChainProfile {
         key: "anvil".into(),
@@ -764,7 +785,7 @@ fn account_profile(rpc: &str) -> ChainProfile {
         tokens: vec![],
         gas: GasRows {
             base: [true, false].iter().flat_map(|&f| [row("mtxAddKey", f), row("mtxExecute", f)]).collect(),
-            verify: vec![GasVerify { signer: 0, gas: 0 }],
+            verify: vec![GasVerify { signer: 0, gas: 0, sig_bytes: 0, margin: 0, per_item: None }],
         },
         max_valid_secs: None,
         verifiers: vec![],
@@ -836,7 +857,14 @@ async fn self_relay(sdk: &Arc<Sdk>, seed: &str, p: Arc<scaas_sdk::op::Prepared>)
         network: "evm".into(),
         index: 0,
     };
-    let q = sdk.op().quote(p.clone(), SubmitPath::SelfRelay { payer }).await.unwrap();
+    let path = SubmitPath::SelfRelay { payer };
+    // `mtxExecute`: the app's figure is the inner call's, added to the rows (owner 2026-11-19, ruling 5)
+    let q = if p.entry() == "mtxExecute" {
+        sdk.op().quote_with_gas(p.clone(), path, 100_000).await
+    } else {
+        sdk.op().quote(p.clone(), path).await
+    }
+    .unwrap();
     let op = sdk.op().submit(p, q).await.unwrap();
     follow(sdk, op).await
 }
@@ -973,10 +1001,15 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
         kind: "token".into(),
         fresh,
         gas: 500_000,
+        per_byte: None,
+        save: None,
+        fee_extra: None,
+        ua_extra: None,
+        per_item: None,
     };
     profile.gas = GasRows {
         base: [true, false].iter().flat_map(|&f| [base("mtxPay", f), base("mtxExecuteTransfer", f)]).collect(),
-        verify: vec![GasVerify { signer: 0, gas: 0 }, GasVerify { signer: 0x0120, gas: 300_000 }],
+        verify: vec![GasVerify { signer: 0, gas: 0, sig_bytes: 0, margin: 0, per_item: None }, GasVerify { signer: 0x0120, gas: 300_000, sig_bytes: 0, margin: 0, per_item: None }],
     };
     let (sdk, seed) = sdk_on(profile).await;
     let mut uas = vec![];

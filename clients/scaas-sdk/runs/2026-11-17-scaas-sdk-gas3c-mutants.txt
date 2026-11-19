@@ -1,0 +1,27 @@
+# gas3c mutants at commit 6d99b2332 (name | outcome | test)
+save not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
+a saving operation on a row without save answers | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
+the quote never saves | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops pay_with_paymeta_v3
+parse: save dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
+parse: save not held to its measurement | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
+sig_bytes not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
+sig_bytes at 16 gas a byte | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
+parse: sig_bytes unbounded | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
+parse: sig_bytes dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
+reference: a sig_bytes away from its measurement | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+fee_extra not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
+fee_extra added without a fee | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
+the quote reads no fee | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops pay_with_paymeta_v3
+parse: fee_extra dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
+a known second signature ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature
+an unknown second signature: the cheapest | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature
+an unknown second signature: a kind without a row skipped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature
+attached: empty key data native on any id | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib attached_signature_kind
+attached: members ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib attached_signature_kind
+attached: the first accepted kind | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib attached_signature_kind
+the quote attaches nothing | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops payee_fee_quotes_the_attached_signature
+execute: the app figure not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_execute_inner_call
+execute: the inner figure optional | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_execute_inner_call
+execute: the app figure as a total | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_execute_inner_call
+reference: a PQ verify row away from its measurement | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+25 mutants, 25 killed, 0 survived, 0 not loaded

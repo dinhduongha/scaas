@@ -525,10 +525,15 @@ async fn pairs_setup_verify(verify: &[u16]) -> (Arc<Sdk>, String, Fake, ZetherKe
                     kind: "zether".into(),
                     fresh,
                     gas: 100_000,
+                    per_byte: None,
+                    save: None,
+                    fee_extra: None,
+                    ua_extra: None,
+                    per_item: None,
                 })
             })
             .collect(),
-        verify: verify.iter().map(|&signer| scaas_sdk::GasVerify { signer, gas: 0 }).collect(),
+        verify: verify.iter().map(|&signer| scaas_sdk::GasVerify { signer, gas: 0, sig_bytes: 0, margin: 0, per_item: None }).collect(),
     };
     let (s, seed) = sdk(p).await;
     let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();

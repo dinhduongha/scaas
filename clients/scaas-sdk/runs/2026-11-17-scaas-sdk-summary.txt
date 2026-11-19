@@ -18,6 +18,12 @@ ua-go | 81a8cbcf2 | 0 | -
 ua-cs | 81a8cbcf2 | 0 | -
 ua-cxx | 81a8cbcf2 | 0 | ctest: 0 tests failed out of 43
 frb-dart | 81a8cbcf2 | 0 | dart: +46:
+rpc-test | 81a8cbcf2 | 0 | 162 passed, 0 failed, 10 ignored (16 binaries)
+rpc-clippy | 81a8cbcf2 | 0 | -
+rpc-wasm | 81a8cbcf2 | 0 | -
+sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
+sdk-sets | 81a8cbcf2 | 0 | 6 passed, 0 failed, 0 ignored (3 binaries)
+sdk-deny | 81a8cbcf2 | 0 | -
 # SDK round-end matrix (T0-T13b) at 81a8cbcf2: the 27 rows above, clean tree, every rc 0. The first full run at f1a93439a
 # started from `cargo clean` of scaas-sdk, its ffi, ua-rs, scaas-rpc, ua-c, ua-cxx and ua-dart-frb; it had two reds (sdk-min:
 # tests/e2e.rs without `wallet`; ua-go: the runner's library path), fixed at 81a8cbcf2, whose run reused that build.
@@ -88,3 +94,28 @@ format | 8ff3d4ebf | 0 | format.sh --check rust py toml sh: clean
 # tests/config.rs open_checks_gas_tables_and_opt_ins. bind-cpp: no binding directory yet. ck-test not run (clientkeys
 # untouched). Mutants: t16c 10/10, t16d 3/3, t13m 6/6 killed (t16c's "no verdict" by "the verifier asked", t13m's "combine
 # keeps the order" by UAPoP from the minimality check, its "another member digest" by ua-rs refusing the device's answer).
+ua-c | b0c917a2c | 0 | 9 passed, 0 failed, 0 ignored (2 binaries); tree dirty
+ua-c-release | b0c917a2c | 0 | -; tree dirty
+ua-py | b0c917a2c | 0 | -; tree dirty
+ua-go | b0c917a2c | 0 | -; tree dirty
+ua-cs | b0c917a2c | 0 | -; tree dirty
+ua-cxx | b0c917a2c | 0 | ctest: 0 tests failed out of 43; tree dirty
+frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
+ua-test | c0b97063f | 0 | 551 passed, 0 failed, 3 ignored (55 binaries)
+ua-clippy | c0b97063f | 0 | -
+ua-vectors | c0b97063f | 0 | 656 passed, 0 failed, 6 ignored (62 binaries)
+sdk-test | cd3cc4c93 | 0 | 177 passed, 0 failed, 2 ignored (14 binaries)
+sdk-min | cd3cc4c93 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
+sdk-clippy | cd3cc4c93 | 0 | -
+sdk-wasm | cd3cc4c93 | 0 | -
+features | cd3cc4c93 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+bind-dart | cd3cc4c93 | 0 | dart: +6:
+sdk-e2e | cd3cc4c93 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+ffi | cd3cc4c93 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+gas-gen | cd3cc4c93 | 0 | -
+ck-test | cd3cc4c93 | 0 | node: 482 pass, 0 fail, 4 skipped
+docs | cd3cc4c93 | 0 | -
+# PR A review fixes (findings 1-6) at cd3cc4c93, clean tree: the 11 rows above, every rc 0. One red first, at b4d5285fb:
+# sdk-test 84 passed, 1 failed (gas_verify_margin read a filler key "x" as "no margin"; finding 1 refuses it), fixed at
+# cd3cc4c93 (the control reads a row without `margin`, the filler asserted GasFieldUnknown). Also at cd3cc4c93: docs_check
+# paths 0; format.sh --check (every part but tact) ok; mutants gasR 21/21 killed (gasR-mutants.txt). ffi has no own tests.

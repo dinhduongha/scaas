@@ -1,0 +1,585 @@
+{
+  "format": "scaas.gas-inputs",
+  "name": "reference",
+  "family": "evm",
+  "measurements": "smartcontracts/evm/test/vectors/sdk_gas.json",
+  "forge_dir": "smartcontracts/evm",
+  "runs": [
+    [
+      "test/gas/SdkGas.t.sol",
+      "SdkGasTokenTest",
+      "test_sdkGas_token"
+    ],
+    [
+      "test/gas/SdkGas.t.sol",
+      "SdkGasTokenTest",
+      "test_sdkGas_token_body"
+    ],
+    [
+      "test/gas/SdkGas.t.sol",
+      "SdkGasRegulatedTest",
+      "test_sdkGas_tokenRegulated"
+    ],
+    [
+      "test/gas/SdkGas.t.sol",
+      "SdkGasRegulatedTest",
+      "test_sdkGas_tokenRegulated_body"
+    ],
+    [
+      "test/gas/SdkGasConfidential.t.sol",
+      "SdkGasZetherTest",
+      "test_sdkGas_kind"
+    ],
+    [
+      "test/gas/SdkGasConfidential.t.sol",
+      "SdkGasZetherTest",
+      "test_sdkGas_kindRegulated"
+    ],
+    [
+      "test/gas/SdkGasConfidential.t.sol",
+      "SdkGasZetherTest",
+      "test_sdkGas_kind_body"
+    ],
+    [
+      "test/gas/SdkGasConfidential.t.sol",
+      "SdkGasZetherTest",
+      "test_sdkGas_kindRegulated_body"
+    ],
+    [
+      "test/gas/SdkGasConfidential.t.sol",
+      "SdkGasPqzTest",
+      "test_sdkGas_kind"
+    ],
+    [
+      "test/gas/SdkGasConfidential.t.sol",
+      "SdkGasPqzTest",
+      "test_sdkGas_kindRegulated"
+    ],
+    [
+      "test/gas/SdkGasConfidential.t.sol",
+      "SdkGasPqzTest",
+      "test_sdkGas_kind_body"
+    ],
+    [
+      "test/gas/SdkGasConfidential.t.sol",
+      "SdkGasPqzTest",
+      "test_sdkGas_kindRegulated_body"
+    ],
+    [
+      "test/gas/SdkGasWallet.t.sol",
+      "SdkGasWalletTest",
+      "test_sdkGas_wallet"
+    ],
+    [
+      "test/gas/SdkGasWallet.t.sol",
+      "SdkGasWalletTest",
+      "test_sdkGas_wallet_body"
+    ],
+    [
+      "test/gas/SdkGasWallet.t.sol",
+      "SdkGasRouterTest",
+      "test_sdkGas_router"
+    ],
+    [
+      "test/gas/SdkGasVerify.t.sol",
+      "SdkGasVerifyTest",
+      "test_sdkGas_verify"
+    ],
+    [
+      "test/gas/SdkGasVerify.t.sol",
+      "SdkGasVerifyTest",
+      "test_sdkGas_verifyPq"
+    ],
+    [
+      "test/gas/SdkGasSample.t.sol",
+      "SdkGasSampleTest",
+      "test_sdkGas_sample"
+    ],
+    [
+      "test/gas/SdkGasOrder.t.sol",
+      "SdkGasOrderTokenTest",
+      "test_sdkGas_order_token"
+    ],
+    [
+      "test/gas/SdkGasOrder.t.sol",
+      "SdkGasOrderRegulatedTest",
+      "test_sdkGas_order_tokenRegulated"
+    ],
+    [
+      "test/gas/SdkGasOrder.t.sol",
+      "SdkGasOrderZetherTest",
+      "test_sdkGas_order_kind"
+    ],
+    [
+      "test/gas/SdkGasOrder.t.sol",
+      "SdkGasOrderZetherTest",
+      "test_sdkGas_order_kindRegulated"
+    ],
+    [
+      "test/gas/SdkGasOrder.t.sol",
+      "SdkGasOrderPqzTest",
+      "test_sdkGas_order_kind"
+    ],
+    [
+      "test/gas/SdkGasOrder.t.sol",
+      "SdkGasOrderPqzTest",
+      "test_sdkGas_order_kindRegulated"
+    ],
+    [
+      "test/gas/SdkGasOrder.t.sol",
+      "SdkGasOrderDexTest",
+      "test_sdkGas_order_dex"
+    ],
+    [
+      "test/gas/SdkGasAccount.t.sol",
+      "SdkGasAccountTest",
+      "test_sdkGas_account"
+    ],
+    [
+      "test/gas/SdkGasAccount.t.sol",
+      "SdkGasAccountTest",
+      "test_sdkGas_account_body"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterTokenTest",
+      "test_sdkGas_routerToken"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterTokenTest",
+      "test_sdkGas_routerToken_ua"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterWrappedTest",
+      "test_sdkGas_routerWrapped"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterWrappedTest",
+      "test_sdkGas_routerWrapped_ua"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterWrappedTest",
+      "test_sdkGas_routerDex"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterWrappedTest",
+      "test_sdkGas_routerDex_ua"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterRegulatedTest",
+      "test_sdkGas_routerRegulated"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterRegulatedTest",
+      "test_sdkGas_routerRegulated_ua"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterHybridTest",
+      "test_sdkGas_routerHybrid"
+    ],
+    [
+      "test/gas/SdkGasRouter.t.sol",
+      "SdkGasRouterHybridTest",
+      "test_sdkGas_routerHybrid_ua"
+    ],
+    [
+      "test/gas/SdkGasRouterAdmin.t.sol",
+      "SdkGasRouterAdminTest",
+      "test_sdkGas_routerAdmin"
+    ],
+    [
+      "test/gas/SdkGasRouterAdmin.t.sol",
+      "SdkGasRouterAdminTest",
+      "test_sdkGas_routerAdmin_ua"
+    ],
+    [
+      "test/gas/SdkGasRouterAdmin.t.sol",
+      "SdkGasRouterCreateTest",
+      "test_sdkGas_routerCreate"
+    ],
+    [
+      "test/gas/SdkGasRouterAdmin.t.sol",
+      "SdkGasRouterCreateTest",
+      "test_sdkGas_routerCreate_ua"
+    ],
+    [
+      "test/gas/SdkGasRouterConf.t.sol",
+      "SdkGasRouterPqzTest",
+      "test_sdkGas_routerPqz"
+    ],
+    [
+      "test/gas/SdkGasRouterConf.t.sol",
+      "SdkGasRouterPqzAuditorTest",
+      "test_sdkGas_routerPqzAuditor"
+    ],
+    [
+      "test/gas/SdkGasRouterConf.t.sol",
+      "SdkGasRouterZetherTest",
+      "test_sdkGas_routerZether"
+    ],
+    [
+      "test/gas/SdkGasConfZether.t.sol",
+      "SdkGasConfZetherTest",
+      "test_sdkGas_zetherConf"
+    ],
+    [
+      "test/gas/SdkGasConfZether.t.sol",
+      "SdkGasConfZetherTest",
+      "test_sdkGas_zetherConfRegulated"
+    ],
+    [
+      "test/gas/SdkGasConfZether.t.sol",
+      "SdkGasConfZetherTest",
+      "test_sdkGas_zetherConfCounted"
+    ],
+    [
+      "test/gas/SdkGasConfZether.t.sol",
+      "SdkGasConfZetherTest",
+      "test_sdkGas_zetherConfCountedWrapped"
+    ],
+    [
+      "test/gas/SdkGasConfZether.t.sol",
+      "SdkGasConfZetherTest",
+      "test_sdkGas_zetherConfCountedRegulated"
+    ],
+    [
+      "test/gas/SdkGasConfZether.t.sol",
+      "SdkGasConfZetherTest",
+      "test_sdkGas_zetherConfCountedRegulatedWrapped"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConf"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfRegulated"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfRoll"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfRollWrapped"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfRollRegulated"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfRollRegulatedWrapped"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfDebit"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfDebitWrapped"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfDebitRegulated"
+    ],
+    [
+      "test/gas/SdkGasConfPqz.t.sol",
+      "SdkGasConfPqzTest",
+      "test_sdkGas_pqzConfDebitRegulatedWrapped"
+    ]
+  ],
+  "base": [
+    {
+      "kinds": [
+        "token",
+        "zether",
+        "pqz"
+      ],
+      "entries": [
+        "mtxExecuteTransfer",
+        "mtxPay",
+        "mtxPayWithPayeeFee",
+        "mtxPayWithTax",
+        "mtxRelayFee",
+        "mtxCancelNonce",
+        "mtxBurn",
+        "mtxWrap",
+        "mtxWrapLeg",
+        "mtxAddReserve",
+        "mtxWrapToUA",
+        "mtxUnwrap",
+        "mtxUnwrapLeg",
+        "mtxUnwrapToUA"
+      ]
+    },
+    {
+      "kinds": [
+        "wallet"
+      ],
+      "entries": [
+        "mtxSetMandate",
+        "mtxSetPayee",
+        "mtxRevokeMandate",
+        "mtxExecute",
+        "mtxCancelNonce",
+        "mtxPayUnderMandate",
+        "mtxDelegateRevoke"
+      ]
+    },
+    {
+      "kinds": [
+        "gov_router"
+      ],
+      "entries": [
+        "mtxCancelNonce"
+      ]
+    },
+    {
+      "kinds": [
+        "token",
+        "zether",
+        "pqz"
+      ],
+      "entries": [
+        "mtxCancelOrder",
+        "mtxInvalidateNonces",
+        "mtxWrapOrder"
+      ]
+    },
+    {
+      "kinds": [
+        "dex"
+      ],
+      "entries": [
+        "mtxCancelOrders",
+        "mtxInvalidateNonces"
+      ]
+    },
+    {
+      "kinds": [
+        "account"
+      ],
+      "entries": [
+        "mtxAddKey",
+        "mtxRemoveKey",
+        "mtxRotateKey",
+        "mtxSetGuardian",
+        "mtxCancelRecovery",
+        "mtxExecute",
+        "mtxCancelNonce"
+      ]
+    },
+    {
+      "kinds": [
+        "gov_router"
+      ],
+      "entries": [
+        "mtxAcceptAdmin",
+        "mtxApproveDexRelease",
+        "mtxApproveRelease",
+        "mtxApproveTokenRelease",
+        "mtxCancelGrant",
+        "mtxCancelRate",
+        "mtxCreateDex",
+        "mtxCreateInstance",
+        "mtxCreateToken",
+        "mtxDeprecateDex",
+        "mtxDeprecateRelease",
+        "mtxDeprecateToken",
+        "mtxDisableFeature",
+        "mtxDisableWrap",
+        "mtxEnableFeature",
+        "mtxExecuteRate",
+        "mtxForceTransfer",
+        "mtxFreeze",
+        "mtxGrantRole",
+        "mtxMint",
+        "mtxMintToUA",
+        "mtxOperatorTransfer",
+        "mtxPause",
+        "mtxPqzCancelVerifier",
+        "mtxPqzRevokeVerifier",
+        "mtxPqzSetVerifier",
+        "mtxProposeRate",
+        "mtxPublishClassEnv",
+        "mtxPublishDexEnv",
+        "mtxPublishTokenEnv",
+        "mtxRecordOrder",
+        "mtxRenounceAdmin",
+        "mtxRenounceRole",
+        "mtxRevokeApproval",
+        "mtxRevokeOrder",
+        "mtxRevokeRole",
+        "mtxSetAllowed",
+        "mtxSetAuditorKey",
+        "mtxSetAuditorUA",
+        "mtxSetChainEntries",
+        "mtxSetClassKindEnabled",
+        "mtxSetCompliance",
+        "mtxSetDenied",
+        "mtxSetExchangeTarget",
+        "mtxSetFeeSplit",
+        "mtxSetGrant",
+        "mtxSetKycProvider",
+        "mtxSetListedOnly",
+        "mtxSetMarket",
+        "mtxSetMaxSupply",
+        "mtxSetMaxWrapSupply",
+        "mtxSetProofStore",
+        "mtxSetTaxRate",
+        "mtxSetTaxRecipient",
+        "mtxSetTokenKindEnabled",
+        "mtxSetVerifierFee",
+        "mtxSetWrapLimits",
+        "mtxSetWrapMember",
+        "mtxTransferAdmin",
+        "mtxUnfreeze",
+        "mtxUnpause"
+      ]
+    },
+    {
+      "kinds": [
+        "zether"
+      ],
+      "entries": [
+        "mtxShield",
+        "mtxWrapShield",
+        "mtxConfidentialTransferSingle",
+        "mtxUnshield",
+        "mtxUnshieldUnwrap",
+        "mtxRollOver",
+        "mtxRollOverSigned",
+        "mtxSetRollOverMode",
+        "mtxConfidentialTransfer",
+        "mtxConfidentialTransferCompact",
+        "mtxRollOverBatch"
+      ]
+    },
+    {
+      "kinds": [
+        "pqz"
+      ],
+      "entries": [
+        "mtxShield",
+        "mtxWrapShield",
+        "mtxPrepareAcc",
+        "mtxRollOver",
+        "mtxConfidentialTransferSingle",
+        "mtxConfidentialTransferSingleCompact",
+        "mtxUnshield",
+        "mtxUnshieldUnwrap"
+      ]
+    }
+  ],
+  "ua_signer": 264,
+  "ua_native": {
+    "kinds": [
+      "account",
+      "dex"
+    ],
+    "entries": [
+      "mtxWrap",
+      "mtxWrapLeg",
+      "mtxAddReserve",
+      "mtxWrapToUA",
+      "mtxWrapShield"
+    ]
+  },
+  "margin": {
+    "306": 1000,
+    "309": 1000
+  },
+  "per_byte": {
+    "mtxPay": "meta.body",
+    "mtxPayWithPayeeFee": "meta.body",
+    "mtxPayWithTax": "meta.body",
+    "mtxPayUnderMandate": "meta.body",
+    "mtxExecute": "data"
+  },
+  "verify": [
+    256,
+    257,
+    258,
+    259,
+    260,
+    261,
+    262,
+    263,
+    264,
+    304,
+    305,
+    306,
+    307,
+    308,
+    309,
+    321
+  ],
+  "assumptions": [
+    "Generated by clients/scaas-sdk/gas/generate.py from clients/scaas-sdk/gas/inputs.json and the forge measurement file it names; never edit by hand.",
+    "Foundry 1.8.5, foundry.toml: evm_version amsterdam, isolate = true (each top-level call its own transaction), bytecode_hash none.",
+    "A figure is execution gas: gasTotalUsed - 15,000 (the Amsterdam intrinsic cost) - the call's standard calldata gas (4 a zero byte, 16 a non-zero byte), plus the call's EIP-8037 state gas; a row whose transaction sat on EIP-7976's calldata floor is refused by the harness. The SDK adds 21,000 + 64 gas a byte of the unsigned calldata and its margin.",
+    "EIP-8037 state gas at its fixed cost per state byte, CPSB 1530 (EIP-8037's constant; revm 43 CPSB_GLAMSTERDAM, Nethermind GasCostOf.CostPerStateByte): 97,920 a new storage slot. CPSB does not depend on the block gas limit or any chain parameter.",
+    "Base rows: the reference signer, a native EVM key (no registry call); the UA registry, the governance router and every release env configured as a real deploy configures them (owner 2026-11-19, G4: DeployBase's gen-1 kind table on the real verifiers at the deploy's caps, budget 12,000,000, msig on, and the chain's SmartKeyAccount implementation, whose clone code hash a native signer's check reads); fee 0, relayer and fee recipient unbound (mtxPayWithPayeeFee binds its relayer, as the entry requires); every payee, fee recipient and credited account holding nothing before (a first write); a fresh lane has nonce 0, a used one nonce 1. A token kind's row is the worst of its Normal, Wrapped and regulated variants that have the entry (owner 2026-11-19, ruling A); a regulated token with the registry check (KYC; kinds 10-13 the deny mask) and TAX at 10 %.",
+    "per_byte (owner 2026-11-19, ruling B): whole gas a byte of the input, the slope between two lengths below where the calldata floor binds (PayMeta body: 256 and 1,024 bytes, a saved record; mtxExecute data: 32 and 160 bytes).",
+    "save (owner 2026-11-19, ruling 1): the fixed cost a pay entry adds when it saves its PayMeta record (save set, payNo non-zero): the worst difference, per variant, between the saved record with an empty body and the unsaved pay, both on a fresh lane; the SDK adds it when the operation saves.",
+    "fee_extra (owner 2026-11-19, ruling 3): the worst difference, per variant, between the entry with a fee of 1 (FIXED, amounts of 1 raised to 100 for the 1 % cap, the recipient unbound: the relayer, holding nothing) and without, both on a fresh lane; the SDK adds it when the fee is > 0. Not on mtxRelayFee and mtxPayWithPayeeFee (their payment is their fee, in the row) On the wrap-in entries (A6) the fee row less the same call at fee 0, the signer already holding units (their fee is charged in units the signer holds before the call).",
+    "mtxExecute: the wallet's or the account's own cost, calling an account without code with no value; the target's cost is never in the row.",
+    "Order entries (mtxCancelOrder, mtxInvalidateNonces, mtxWrapOrder; the DEX's mtxCancelOrders at 1, 2, 4 and 8 orders (K2; the SDK sends one), and mtxInvalidateNonces): no envelope or meta-tx lane, signed over the order under the UA purpose trade (a native key signs the digest itself), the DEX's by an address. The SDK keys a struct without a lane as used and mtxWrapOrder by its order nonce, so both rows are the worst case: nothing of the signer's on the batch written yet (the floor raised the first time, the wrapper holding none of the leg, the signer none of its units). The call sits on EIP-7976's calldata floor: measured inside the transaction, by a meter contract's gasleft around the call less the meter's own 3,038 (a cold callee and its opcodes; held equal to the transaction's figure on two rows off the floor).",
+    "account (SmartKeyAccount): signed by its secp256k1 key 0 (the reference signer) in an AccountSig with an empty proof; the worst over the key kinds added, removed or replaced (a secp256k1 key or a passkey) and over a guardian set with or without a recovery pending; mtxExecute's data per byte measured inside the transaction as the order entries are.",
+    "gov_router (GovernanceRouter): each entry signed for its target by the role it needs, a native key where the role takes one, else an ERC-1271 wallet (the contract-only bits: RATE_ADJUSTABLE's rate entries, the regulated issuer's pause, freeze, force transfer and the compliance seat's order entries); the target in the state the governance sequence reaches just before the entry, every write a first write; the worst over the targets measured: a Normal, a regulated Normal (kind 8), a Wrapped, a hybrid with the wrap controls, the DEX, the factory, the compliance registry, an OFFCHAIN PQZ token, a Zether token; the factory's notice period 0 and no grant delay where a change applies at once; the list entries (mtxSetAllowed, mtxSetDenied, mtxSetCompliance) at 1, 2, 4 and 8 accounts each holding nothing, mtxSetWrapLimits at 1, 2, 4 and 8 legs of a hybrid, the env publishes over seven env shapes (each Env array grown on its own from the empty env: deps 0 and 4, params 0 and 2, libs with their code hashes 0, 2 and 4; env_items counts every element of the four arrays), mtxCreateToken's Wrapped at 1, 2, 4 and 8 TokenConfig.legs (K2), the directory with all four entries, mtxCreate* one new contract each. ua_extra (G2): the whole sequence run once more with the native ids that sign (the admin, its successor) replaced by derived secp256k1 UAs on the router's registry, every row measured on its fresh lane; a role a native key cannot hold keeps its ERC-1271 wallet, so its row adds nothing. mtxSetAuditorUA (I3, owner 2026-11-19: the new auditor's consent an attached signature, ruling 4): to a registered ML-DSA-65 UA holding a PQZ key, without the consent's verify cost (the fixture's ML-DSA precompile mocked); the SDK adds the consent's verify row by the auditor's kind (unknown: the worst accepted kind). Its call sits on EIP-7976's calldata floor (the consent's 3,309 bytes): measured inside the transaction as the order entries are.",
+    "Confidential entries (Zether and PQZ apart): the enveloped (relayed) form on the kind's Normal and Wrapped tokens, plain and regulated, signed by the reference signer; Zether with real proofs (the fixture's prover, the real BLS12-381 verifiers), the transfer and unshields from an account holding a rolled-over balance, the receiver holding nothing; mtxRollOverSigned and mtxSetRollOverMode in their enveloped form, a superset of the owner-only form; Zether's multi transfers (mtxConfidentialTransfer, …Compact) at 1, 2, 4, 8 and 16 legs (the bound; one leg of 10, the rest decoys of 0, every receiver holding nothing) and mtxRollOverBatch at 1, 2, 4 and 8 accounts (each with one pending entry, no acc yet); PQZ at the build's parameter set n2304-kmax4096, mtxRollOver at 1, 2, 4, …, 64 entries (ROLL_MAX) on an account with both halves prepared and no acc yet, mtxPrepareAcc the worst of its two halves on an account never prepared. ua_extra as every row's (G2): the derived reference signer holds the native signer's public units and signs the envelope (mtxWrapShield, signed by a native address, has none).",
+    "Verify rows: the copy-cost forwarder's check (the token's own MtxPipelineLib._authorize) of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature. Worst cases (owner 2026-11-19, A5 and the sampled check's ruling 2): WebAuthn (Q2) at ua-rs's cap on an assertion (authenticatorData and clientDataJSON 1,024 bytes together) in its worst case there, the longest origin the cap leaves (WebAuthnClientData.parse scans it byte by byte; the cap vector's shape, a 21-byte origin and a filler member, is 182,593 below it), sig_bytes that assertion's; SLH-DSA-128s and ed25519 at their forced worst case (SLH-DSA: every hypertree layer's WOTS+ message 0; ed25519: every 4-bit window of S and of k nonzero, the worst of eight keys), the forced run less the vector's added to the delta; FN-DSA-512 / -1024 (rejection sampling, no bound) the most expensive of 64 salts, plus margin (64 further salts stay inside it). 0x0141 (the Zether UA kind): the vector's signature, key data empty (a stored kind). ua_extra (A1, G2): the worst per-variant difference of the derived reference signer (secp256k1, ua_signer) and the native one on a fresh lane, less that kind's verify delta; absent where not positive; measured on every variant a derived signer can sign, on the fixtures' deploy-configured registries (the regulated kinds 8-13, Zether, PQZ, the router, the orders); none on an entry only a native address signs (ua_native: the wrap-in entries, mtxWrapShield, the account and dex kinds). A variant without its own derived run is listed in its row's ua_extra.unmeasured and takes the largest measured on another variant; a row with none takes the largest measured for the same entry and lane state on another kind (from_kind); the generator fills both (G2). mtxPayWithPayeeFee (Q1): a derived payer and a derived payee both debited, ua_extra.second_party the second derived party over the first less its verify delta (measured -4,852: the payee's derived debit adds nothing beyond its verify row, so the one ua_extra covers both).",
+    "Counted rows (owner 2026-11-19, I1 part 2, K2; P3: measured at the entry's bound where feasible; P4 \"approved\"): measured at several counts; on one rising sequence whose chord from the first to the last measured point is at or above every point, per_item is the chord's whole-gas rise a count (rounded up) and the row's figure the chord's line at a count of 0; otherwise per_item is the worst whole-gas rise a count between two measured points and the figure the largest measured gas less per_item times its count; either way intercept + per_item × count is at least the measured gas at every measured count.",
+    "PQZ single debits (owner 2026-11-19, I2; stand_in): mtxConfidentialTransferSingle, …SingleCompact, mtxUnshield and mtxUnshieldUnwrap from alice's TRIVIAL entry with stand-ins for what the fixture mocks (each row's stand_in names them); their state gas (the ciphertexts kept in state, about 222 new slots) is most of the figure."
+  ],
+  "save": [
+    "mtxPay",
+    "mtxPayWithPayeeFee",
+    "mtxPayWithTax",
+    "mtxPayUnderMandate"
+  ],
+  "stand_in": {
+    "304": "ML-DSA-44 on a GasBurner standing in for its precompile (SCaaS testnet address 0x...5caa0012) at the calibrated 59,000 + 6 a message word; a chain without the precompile runs the registry's cached path, far dearer",
+    "305": "ML-DSA-65 on a GasBurner standing in for its precompile (0x...5caa0013) at the calibrated 100,000 + 6 a message word; a chain without the precompile runs the registry's cached path, far dearer",
+    "308": "ML-DSA-87 on a GasBurner standing in for its precompile (0x...5caa0014) at the calibrated 135,000 + 6 a message word; the kind is enabled only where a precompile verifies it (CTR-UA-39)"
+  },
+  "per_item": {
+    "zether:mtxConfidentialTransfer": "legs",
+    "zether:mtxConfidentialTransferCompact": "legs",
+    "zether:mtxRollOverBatch": "accounts",
+    "pqz:mtxRollOver": "entries",
+    "gov_router:mtxSetWrapLimits": "legs",
+    "gov_router:mtxSetAllowed": "accounts",
+    "gov_router:mtxSetDenied": "accounts",
+    "gov_router:mtxSetCompliance": "accounts",
+    "gov_router:mtxCreateToken": "legs",
+    "gov_router:mtxPublishTokenEnv": "env_items",
+    "gov_router:mtxPublishDexEnv": "env_items",
+    "gov_router:mtxPublishClassEnv": "env_items",
+    "dex:mtxCancelOrders": "orders"
+  },
+  "base_stand_in": {
+    "pqz:mtxConfidentialTransferSingle": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: TRANSFER 3,302,000 + 3 a word of its 139,977-byte input = 3,315,125, the worse of TRANSFER and TRANSFER0) and the holder's ML-DSA-65 authorization a GasBurner at 100,006 (PqzStateGas._precompiles), each less 2,900 (a cold stand-in against a warm precompile); the proof a filler of the row's 46,660 bytes",
+    "pqz:mtxConfidentialTransferSingleCompact": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: TRANSFER 3,302,000 + 3 a word of its 139,977-byte input = 3,315,125, the worse of TRANSFER and TRANSFER0) and the holder's ML-DSA-65 authorization a GasBurner at 100,006 (PqzStateGas._precompiles), each less 2,900 (a cold stand-in against a warm precompile); the proof a filler of the row's 46,660 bytes",
+    "pqz:mtxUnshield": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: BURN 3,335,000 + 3 a word of its 102,011-byte input = 3,344,564) and the holder's ML-DSA-65 authorization a GasBurner at 100,006 (PqzStateGas._precompiles), each less 2,900 (a cold stand-in against a warm precompile); the proof a filler of the row's 45,814 bytes",
+    "pqz:mtxUnshieldUnwrap": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: BURN 3,335,000 + 3 a word of its 102,011-byte input = 3,344,564) and the holder's ML-DSA-65 authorization a GasBurner at 100,006 (PqzStateGas._precompiles), each less 2,900 (a cold stand-in against a warm precompile); the proof a filler of the row's 45,814 bytes"
+  }
+}

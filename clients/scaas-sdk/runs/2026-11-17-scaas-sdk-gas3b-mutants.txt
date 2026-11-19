@@ -1,0 +1,18 @@
+# gas3b mutants at commit 6d99b2332 (name | outcome | test)
+the per-byte part ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_byte_part_adds_the_inputs_length
+a missing input answers as 0 | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_byte_part_adds_the_inputs_length
+data counted in hex digits | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_byte
+odd hex data accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_byte
+the body's length read as 0 | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_per_byte
+the quote passes no input length | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin --test wallet_ops pay_with_paymeta_v3
+parse: any per-byte input | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_byte_parse
+parse: a per-byte gas of 0 | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_byte_parse
+parse: no per-byte bound | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_byte_parse
+parse: a per-byte part without source | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_byte_parse
+parse: the per-byte part dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_per_byte_parse
+a reference row away from its source | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+a reference per-byte part away from its source | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
+a quotable key without its row | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_table_covers_every_quotable_key
+a measured key left as unmeasured | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_table_covers_every_quotable_key
+a PQ verify row without sig_bytes (was: a verify kind unmeasured but listed as measured) | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_table_covers_every_quotable_key
+16 mutants, 16 killed, 0 survived, 0 not loaded

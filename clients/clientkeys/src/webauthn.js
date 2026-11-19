@@ -103,8 +103,37 @@ export function derToRS(der) {
   return { r: to32(r), s: to32(s), highS };
 }
 
-/** Inner payload for a P-256 key: `abi.encode(authenticatorData, clientDataJSON, r, s)`. */
+/** The longest assertion encoded: `authenticatorData` and `clientDataJSON` together, 1,024 bytes (owner 2026-11-19: G3 for a
+ *  `webauthn-p256` UA, Q4 for a `SmartKeyAccount` passkey and the NEAR / Algorand passkey path; ua-rs `WEBAUTHN_MAX_ASSERTION`,
+ *  its basis there). */
+export const WEBAUTHN_MAX_ASSERTION = 1024;
+
+/** `b` as a `Uint8Array`: itself, an `ArrayBuffer`'s bytes (what an authenticator returns) or a typed array's / `DataView`'s
+ *  bytes; `null` for anything else (PR A review, finding 5: an `ArrayBuffer` has no `.length`, so a cap reading it summed
+ *  `NaN` and passed). */
+export function bytesOf(b) {
+  if (b instanceof Uint8Array) return b;
+  if (b instanceof ArrayBuffer) return new Uint8Array(b);
+  if (ArrayBuffer.isView(b)) return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+  return null;
+}
+
+const coded = (code, message) => Object.assign(new Error(`${code}: ${message}`), { code });
+
+/** `authenticatorData` and `clientDataJSON` as `Uint8Array`s ([`bytesOf`]); not bytes: `WebAuthnAssertion` (error `code`);
+ *  above the cap together: `WebAuthnTooLong`. */
+export function assertionCapped(authenticatorData, clientDataJSON) {
+  const [a, c] = [bytesOf(authenticatorData), bytesOf(clientDataJSON)];
+  if (!a || !c) throw coded("WebAuthnAssertion", "authenticatorData and clientDataJSON must be bytes");
+  if (a.length + c.length > WEBAUTHN_MAX_ASSERTION)
+    throw coded("WebAuthnTooLong", `authenticatorData and clientDataJSON above ${WEBAUTHN_MAX_ASSERTION} bytes`);
+  return [a, c];
+}
+
+/** Inner payload for a P-256 key: `abi.encode(authenticatorData, clientDataJSON, r, s)`; first, above the cap together:
+ *  `WebAuthnTooLong` (Q4). */
 export function encodeAssertion({ authenticatorData, clientDataJSON, signature }) {
+  const [a, c] = assertionCapped(authenticatorData, clientDataJSON);
   const { r, s } = derToRS(signature);
-  return abiEncode(["bytes", "bytes", "bytes32", "bytes32"], [authenticatorData, clientDataJSON, r, s]);
+  return abiEncode(["bytes", "bytes", "bytes32", "bytes32"], [a, c, r, s]);
 }

@@ -1,176 +1,142 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Test, Vm} from "forge-std/Test.sol";
-import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
-import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
-import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
-import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {IUARegistry} from "../../src/ua/IUARegistry.sol";
-import {UALedgerBase} from "../ua/UALedgerBase.sol";
-import {PayMetaKit} from "../helpers/PayMetaKit.sol";
-import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
+import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
+import {SdkGasRegFix} from "./SdkGasFixtures.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
+import {SdkGasLedger} from "./SdkGasLedger.sol";
 
-interface ISdkGasNonce {
-    function mtxNonce(bytes32 from, uint256 batch) external view returns (uint256);
-}
-
-interface ISdkGasBurn {
-    function mtxBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
-        external
-        returns (bytes memory);
-}
-
-/// @notice The SDK gas table's measurement (scaas-sdk spec §13.3, owner 2026-11-19, part 3b): each base row's execution gas
-///         of one isolated call (`foundry.toml`: `isolate = true`) signed by the reference signer, a native EVM key (no
-///         registry call): regular gas, `gasTotalUsed - 15,000 (the Amsterdam intrinsic cost) - the call's standard calldata
-///         gas (4 a zero byte, 16 a non-zero byte)`, plus the call's state gas (EIP-8037, `lastFrameGas().gasStateUsed`)
-///         (owner 2026-11-19, "approved"). A fresh lane has nonce 0; a used one has its nonce slot set to 1 before the call,
-///         everything else the same. Every call starts from the same snapshot, so the payee holds nothing before it: the
-///         worst case of a first write. `SDK_GAS_WRITE=true` merges `<key>` (the sum), `<key>_regular` and `<key>_state` into
-///         `SDK_GAS_OUT` (default `test/vectors/sdk_gas.json`); run it with `--threads 1`. Keys:
-///         `<kind>_<entry>_<fresh|used>_<variant>`.
-abstract contract SdkGasRows is Test {
-    string internal constant SDK_GAS = "test/vectors/sdk_gas.json";
-    address internal constant SG_RELAYER = address(0x5EAD);
-    address internal constant SG_PAYEE = address(0xFA11);
-    uint256 internal constant SG_LANE = 9;
-
-    /// The standard calldata gas of `cd`: 4 a zero byte, 16 a non-zero one.
-    function _cdGas(bytes memory cd) internal pure returns (uint256 g) {
-        for (uint256 i; i < cd.length; ++i) {
-            g += cd[i] == 0 ? 4 : 16;
-        }
-    }
-
-    /// `from`'s nonce on `lane` of `c` set to `n` (the slot `mtxNonce` reads, found by `vm.record`).
-    function _setNonce(address c, bytes32 from, uint256 lane, uint256 n) internal {
-        vm.record();
-        ISdkGasNonce(c).mtxNonce(from, lane);
-        (bytes32[] memory r,) = vm.accesses(c);
-        vm.store(c, r[r.length - 1], bytes32(n));
-        assertEq(ISdkGasNonce(c).mtxNonce(from, lane), n, "the lane's nonce slot");
-    }
-
-    /// The call by the relayer, its execution gas recorded under `key`.
-    function _measure(string memory key, address c, bytes memory cd) internal returns (uint256 g) {
-        vm.prank(SG_RELAYER);
-        (bool ok, bytes memory ret) = c.call(cd);
-        if (!ok) {
-            assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
-        }
-        Vm.Gas memory used = vm.lastFrameGas();
-        assertGe(used.gasStateUsed, 0, "net state gas of a top-level call");
-        uint256 regular = used.gasTotalUsed - 15_000 - _cdGas(cd);
-        uint256 state = uint256(int256(used.gasStateUsed));
-        g = regular + state;
-        if (vm.envOr("SDK_GAS_WRITE", false)) {
-            string memory out = vm.envOr("SDK_GAS_OUT", SDK_GAS);
-            if (vm.exists(out)) vm.serializeJson("sdkgas", vm.readFile(out));
-            vm.serializeUint("sdkgas", string.concat(key, "_regular"), regular);
-            vm.serializeUint("sdkgas", string.concat(key, "_state"), state);
-            vm.writeJson(vm.serializeUint("sdkgas", key, g), out);
-        }
-    }
-
-    /// One row on both lane states, each from the same snapshot: `build(c, nonce)` gives the calldata at that nonce.
-    function _both(
-        string memory kind,
-        string memory entry,
-        string memory variant,
-        address c,
-        bytes32 from,
-        function(address, uint256) internal view returns (bytes memory) build
-    ) internal {
-        uint256 s = vm.snapshotState();
-        _measure(string.concat(kind, "_", entry, "_fresh_", variant), c, build(c, 0));
-        vm.revertToState(s);
-        _setNonce(c, from, SG_LANE, 1);
-        _measure(string.concat(kind, "_", entry, "_used_", variant), c, build(c, 1));
-        vm.revertToState(s);
-    }
-}
-
-/// The `token` domain kind's base rows on `NormalToken` and `WrappedToken` (the generator stores the worst of the two): the
-/// transfer on ids, the pay, the ordered cancel, the burn (Normal only). Calldata by `abi.encodeCall` on the contracts' own
-/// functions, the digests from the type strings (`MtxDigest`) or the token's views, as the vector tests build them.
-contract SdkGasTokenTest is SdkGasRows, UALedgerBase {
-    string internal constant E_TAIL =
-        "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
-
+/// The `token` domain kind's base rows on `NormalToken` and `WrappedToken` (the generator stores the worst over these and
+/// the regulated variants, `SdkGasRegulatedTest`); the wrap family on Wrapped only, the burn on Normal only. A1 (owner
+/// 2026-11-19): the derived reference signer (`SdkGasLedger`) holds 1,000 units of the token in the ledger in its run, as the
+/// native signer holds them.
+contract SdkGasTokenTest is SdkGasLedger {
     function setUp() public override {
         super.setUp();
-        _wrapFor(alice, 1_000);
+        _sgVerifiers();
+        sgPk = ALICE_PK;
+        _wrapFor(alice, 2_000);
+        _wrapL(alice, 2_000);
+        (sgLeg, sgLedgerLeg, sgUaTo) = (address(und), address(tok), uaP);
+        _sgUaSigner();
     }
 
-    function _from() internal view returns (bytes32) {
-        return MetaTxLib.pad(alice);
-    }
-
-    function _t(uint256 nonce, bytes32 entryRef) internal view returns (MetaTxLib.UAMetaTransfer memory x) {
-        (x.from, x.to, x.value, x.entryRef) = (_from(), MetaTxLib.pad(SG_PAYEE), 1, entryRef);
-        (x.batch, x.nonce, x.validUntil) = (SG_LANE, nonce, block.timestamp + 600);
-    }
-
-    function _e(uint256 nonce) internal view returns (MetaTxLib.UAEnvelope memory e) {
-        (e.from, e.batch, e.nonce, e.validUntil) = (_from(), SG_LANE, nonce, block.timestamp + 600);
-    }
-
-    function _sig(bytes32 digest) internal view returns (IUARegistry.UASig memory a) {
-        a.signature = _ecdsa(ALICE_PK, digest);
-    }
-
-    /// `<head><E>` over `(from, args…, E)` in `c`'s domain, relayer and fee recipient unbound.
-    function _named(address c, string memory head, bytes memory args, MetaTxLib.UAEnvelope memory e)
-        internal
-        view
-        returns (IUARegistry.UASig memory)
-    {
-        bytes32 h = keccak256(
-            bytes.concat(
-                abi.encode(keccak256(bytes(string.concat(head, E_TAIL))), e.from),
-                args,
-                abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))
-            )
-        );
-        return _sig(MtxDigest.typed(c, h));
-    }
-
-    function _transfer(address c, uint256 nonce) internal view returns (bytes memory) {
-        MetaTxLib.UAMetaTransfer memory x = _t(nonce, 0);
-        return abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, _sig(NormalToken(c).mtxTransferDigest(x))));
-    }
-
-    function _pay(address c, uint256 nonce) internal view returns (bytes memory) {
-        MetaTxLib.PayMeta memory m = PayMetaKit.meta(keccak256("sdk-gas"));
-        MetaTxLib.UAMetaTransfer memory x = _t(nonce, PayMetaKit.id(m));
-        return abi.encodeCall(IMetaTokenV2.mtxPay, (x, _sig(NormalToken(c).mtxTransferDigest(x)), m));
-    }
-
-    function _cancel(address c, uint256 nonce) internal view returns (bytes memory) {
-        MetaTxLib.UAEnvelope memory e = _e(nonce);
-        uint256 lane = SG_LANE + 1;
-        return abi.encodeCall(
-            NormalToken.mtxCancelNonce,
-            (e, lane, _named(c, "UACancelNonce(bytes32 from,uint256 lane,", abi.encode(lane), e))
-        );
-    }
-
-    function _burn(address c, uint256 nonce) internal view returns (bytes memory) {
-        MetaTxLib.UAEnvelope memory e = _e(nonce);
-        return abi.encodeCall(
-            ISdkGasBurn.mtxBurn, (e, 1, _named(c, "UABurn(bytes32 from,uint256 amount,", abi.encode(uint256(1)), e))
-        );
+    /// A1: the derived signer's 1,000 units of the token `c` (`tok`, `wrp`, `wrpL`), from the native signer, in its run only.
+    function _sgUaPrep(address c) internal override {
+        vm.prank(alice);
+        WrappedToken(payable(c)).transferToUA(UAKinds.uaOf(sgUaKind, sgUaKey), 1_000);
     }
 
     function test_sdkGas_token() public {
-        _both("token", "mtxExecuteTransfer", "normal", address(tok), _from(), _transfer);
-        _both("token", "mtxExecuteTransfer", "wrapped", address(wrp), _from(), _transfer);
-        _both("token", "mtxPay", "normal", address(tok), _from(), _pay);
-        _both("token", "mtxPay", "wrapped", address(wrp), _from(), _pay);
-        _both("token", "mtxCancelNonce", "normal", address(tok), _from(), _cancel);
-        _both("token", "mtxCancelNonce", "wrapped", address(wrp), _from(), _cancel);
-        _both("token", "mtxBurn", "normal", address(tok), _from(), _burn);
+        _commonRows("token", "normal", address(tok));
+        _commonRows("token", "wrapped", address(wrp));
+        _both("token", "mtxBurn", "normal", address(tok), _sgFrom(), _burn);
+        _unwrapRows("token", "wrapped", address(wrp), address(wrpL));
+        // the wrap-in entries on a wrapper the signer holds nothing of (its first units: a first write)
+        WrappedToken w = _wrapper(address(und));
+        und.mint(alice, 1_000);
+        vm.prank(alice);
+        und.approve(address(w), 1_000);
+        _wrapInRows("token", "wrapped", address(w));
+    }
+
+    /// Ruling B: the `PayMeta` body's per-byte cost on the pay entries.
+    function test_sdkGas_token_body() public {
+        _bodyRows("token", "mtxPay", "normal", address(tok), _pay);
+        _bodyRows("token", "mtxPay", "wrapped", address(wrp), _pay);
+        _bodyRows("token", "mtxPayWithPayeeFee", "normal", address(tok), _payeeFee);
+        _bodyRows("token", "mtxPayWithPayeeFee", "wrapped", address(wrp), _payeeFee);
+    }
+}
+
+/// The same rows on the regulated variants (owner 2026-11-19, ruling A: they count toward the worst case): kinds 8 and 9
+/// with every control the fixture enables, the registry check (`KYC`, every party attested) and `TAX` at 10 %, where
+/// `mtxPayWithTax` lives; the UA a `…ToUA` entry credits a P-256 UA registered on the fixture's registry (G4: a real one).
+/// G2: the derived reference signer (secp256k1, attested) holds up to 10,000 units of the token in its run only.
+contract SdkGasRegulatedTest is SdkGasRegFix {
+    address internal constant SG_TAX_TO = address(0x7A0);
+    uint256 internal constant SG_TO_SK = 0xC0FFEE;
+    address internal t8k;
+    address internal t9k;
+
+    function _cfg(IFactoryToken.TokenConfig memory c) internal view returns (IFactoryToken.TokenConfig memory) {
+        c.features |= (1 << GovernanceBits.KYC) | (1 << GovernanceBits.TAX);
+        (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.taxRecipient) = (address(creg), KYC, nid(SG_TAX_TO));
+        return c;
+    }
+
+    function _reg(bool wrapped, IFactoryToken.TokenConfig memory c, bytes32 salt) internal returns (address t) {
+        IOpenFactory.TokenKind k =
+            wrapped ? IOpenFactory.TokenKind.WRAPPED_REGULATED : IOpenFactory.TokenKind.NORMAL_REGULATED;
+        t = f.createToken(k, 1, abi.encode(_cfg(c)), salt);
+        vm.prank(issuer);
+        IRegulatedToken(t).setTaxRate(100_000, EnvKit.codeUidOf(t));
+    }
+
+    function setUp() public override {
+        super.setUp();
+        sgPk = ALICE_PK;
+        address[6] memory parties = [alice, SG_PAYEE, vm.addr(SG_PAYEE_PK), SG_FEE_TO, SG_TAX_TO, SG_RELAYER];
+        for (uint256 i; i < parties.length; ++i) {
+            _attest(nid(parties[i]), KYC, type(uint64).max);
+        }
+        (bytes32 to,) = _sgRegisterOn(address(ureg), UAKinds.P256, SG_TO_SK); // the UA a `…ToUA` entry credits (G4)
+        _attest(to, KYC, type(uint64).max);
+        t8k = _reg(false, _cfg8(), "sg8");
+        t9k = _reg(true, _cfg9(), "sg9");
+        _wrapFor(t9k, alice, SUPPLY);
+        (sgLeg, sgUaTo) = (address(usd), to);
+        // G2: the derived reference signer and Q1's derived payee on the fixture's registry, attested as every party is
+        _attest(_sgUaSignerOn(address(ureg)), KYC, type(uint64).max);
+        _attest(_sgPayeeUa(), KYC, type(uint64).max);
+    }
+
+    /// G2: the derived signer's units of the token `c`, from the native signer, in its run only.
+    function _sgUaPrep(address c) internal override {
+        _sgUaFund(c, alice, 10_000);
+    }
+
+    function test_sdkGas_tokenRegulated() public {
+        _commonRows("token", "normal_reg", t8k);
+        _commonRows("token", "wrapped_reg", t9k);
+        _both("token", "mtxBurn", "normal_reg", t8k, _sgFrom(), _burn);
+        _both("token", "mtxPayWithTax", "normal_reg", t8k, _sgFrom(), _payWithTax);
+        _both("token", "mtxPayWithTax", "wrapped_reg", t9k, _sgFrom(), _payWithTax);
+        // a wrapper of a ledger leg for `mtxUnwrapToUA`, the signer holding its units (a factory `NORMAL` token: a leg with
+        // `FORCE` or `MODERATE`, as the regulated kinds have, is refused)
+        IFactoryToken.TokenConfig memory n;
+        (n.name, n.symbol, n.features, n.admin, n.grantDelay) =
+        ("Leg", "LEG", 1 << GovernanceBits.PAYABLE, nid(ownerA), GD);
+        (n.initialSupply, n.initialHolder) = (SUPPLY, address(this));
+        sgLedgerLeg = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(n), "sgleg");
+        IFactoryToken.TokenConfig memory c = _cfg9();
+        c.legs[0] = IFactoryToken.Leg(sgLedgerLeg, 1, 1);
+        address t9l = _reg(true, c, "sg9l");
+        _attest(nid(address(this)), KYC, type(uint64).max);
+        WrappedToken(payable(sgLedgerLeg)).approve(t9l, 1_000); // a SCaaS token's allowance: a contract's only
+        WrappedToken(payable(t9l)).wrap(1_000);
+        WrappedToken(payable(t9l)).transfer(alice, 1_000);
+        _unwrapRows("token", "wrapped_reg", t9k, t9l);
+        // the wrap-in entries on a wrapper the signer holds nothing of
+        address t9w = _reg(true, _cfg9(), "sg9w");
+        usd.mint(alice, 1_000);
+        vm.prank(alice);
+        usd.approve(t9w, 1_000);
+        _wrapInRows("token", "wrapped_reg", t9w);
+    }
+
+    function test_sdkGas_tokenRegulated_body() public {
+        _bodyRows("token", "mtxPay", "normal_reg", t8k, _pay);
+        _bodyRows("token", "mtxPay", "wrapped_reg", t9k, _pay);
+        _bodyRows("token", "mtxPayWithPayeeFee", "normal_reg", t8k, _payeeFee);
+        _bodyRows("token", "mtxPayWithPayeeFee", "wrapped_reg", t9k, _payeeFee);
+        _bodyRows("token", "mtxPayWithTax", "normal_reg", t8k, _payWithTax);
+        _bodyRows("token", "mtxPayWithTax", "wrapped_reg", t9k, _payWithTax);
     }
 }

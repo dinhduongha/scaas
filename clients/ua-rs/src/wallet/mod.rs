@@ -117,7 +117,7 @@ pub use uasig::{
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 #[cfg(feature = "vectors")]
 pub use vectors::{vectors_chunks_released, vectors_pause_after_copy};
-pub use webauthn::{webauthn_assertion, webauthn_challenge};
+pub use webauthn::{webauthn_assertion, webauthn_challenge, WEBAUTHN_MAX_ASSERTION};
 pub use zeroize::ZeroizeOnDrop;
 
 use crate::UAError;
@@ -185,6 +185,9 @@ pub enum Error {
     /// An external key's answer that, once normalised (low-s, `v`), does not verify against its [`KeyRef`] under the request's
     /// role (spec §9.4, MD-13): nothing is returned.
     ExternalSignature,
+    /// A WebAuthn assertion whose `authData` and `clientDataJSON` together exceed [`WEBAUTHN_MAX_ASSERTION`] (owner
+    /// 2026-11-19, G3): nothing returned.
+    WebAuthnTooLong,
     Ua(UAError),
 }
 
@@ -198,6 +201,7 @@ impl Error {
             Error::Rng => "Rng",
             Error::PolicyRefused => "PolicyRefused",
             Error::WebAuthnAssertion => "WebAuthnAssertion",
+            Error::WebAuthnTooLong => "WebAuthnTooLong",
             Error::KemHolder => "KemHolder",
             Error::KemCheck => "KemCheck",
             Error::Aead => "Aead",

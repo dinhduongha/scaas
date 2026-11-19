@@ -53,12 +53,22 @@ pub(crate) struct Row {
     /// a self-relay's confirmed gas limit: the signed calldata's simulation above it is `SimRefused`
     #[serde(default)]
     pub gas_limit: Option<u64>,
+    /// the signer's kind and the unsigned calldata's length at `submit`: a gateway operation's self-relay `resend` recomputes
+    /// its gas from the stored signed calldata with them (owner 2026-11-19, Q5)
+    #[serde(default)]
+    pub signer_kind: Option<u16>,
+    #[serde(default)]
+    pub unsigned_len: Option<u64>,
     /// when the row became terminal, on the SDK's clock (unix seconds): kept `Limits::state_retention_secs` after it
     #[serde(default)]
     pub ended_at: Option<u64>,
     /// the signed message, canonical (public: the calldata holds it): a retry is the same message but its `validUntil`
     #[serde(default)]
     pub message: serde_json::Value,
+    /// the prepared operation's unsigned arguments beside the message (public: the calldata holds them): a gateway row's
+    /// self-relay `resend` recomputes the operation's own gas figure from them (PR A review, finding 2)
+    #[serde(default)]
+    pub extra: serde_json::Value,
 }
 
 impl Row {

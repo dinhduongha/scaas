@@ -741,8 +741,11 @@ impl Account {
                     landed: None,
                     relayer_bound: false,
                     gas_limit: Some(quote.gas_limit),
+                    signer_kind: None,
+                    unsigned_len: None,
                     ended_at: None,
                     message: Value::Null,
+                    extra: Value::Null,
                 };
                 state::put(&sdk, &row).await?;
                 let (s2, op) = (sdk.clone(), row.op.clone());

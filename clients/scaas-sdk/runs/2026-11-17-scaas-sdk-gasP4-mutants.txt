@@ -1,0 +1,4 @@
+# gasP4 mutants at commit d0de4b097 (name | outcome | test)
+the chord taken below a point | killed | ../../scripts/capped forge test --match-path test/gas/SdkGasConfPqz.t.sol --match-test '^test_sdkGas_pqzConfRoll\('
+the chord's slope rounded down | killed | ../../scripts/capped forge test --match-path test/gas/SdkGasConfZether.t.sol --match-test '^test_sdkGas_zetherConfCounted\('
+2 mutants, 2 killed, 0 survived, 0 not loaded

@@ -183,7 +183,13 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
                 key_data,
             },
             SignRequest::WebAuthn { challenge },
-        ) => (verify(0x0100, key_data, challenge, &sig, false), sig),
+        ) => {
+            // G3: an authenticator's assertion above the cap is refused by name, before it is verified
+            if let Some((a, c)) = crate::verify::webauthn_fields(&sig) {
+                super::webauthn::capped(a.len(), c.len())?;
+            }
+            (verify(0x0100, key_data, challenge, &sig, false), sig)
+        }
         (
             KeyRef::Native {
                 network,
