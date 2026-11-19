@@ -1102,3 +1102,120 @@ async fn e2e_register_mldsa_cached_on_anvil() {
     assert!(acc.registration_of("anvil".into(), ua).await.unwrap().registered);
     assert!(acc.prepare_register(req()).await.unwrap().is_empty(), "nothing left to write");
 }
+
+// --- owner 2026-11-19, T2: a passkey row registered ---
+
+/// A test passkey on `scaas.example` over a fixed P-256 key: assertions with UP and UV, `r ‖ s` signatures; nothing else.
+struct Passkey(p256::ecdsa::SigningKey);
+
+impl Passkey {
+    fn new() -> Self {
+        Passkey(p256::ecdsa::SigningKey::from_slice(&scaas_ua::sha256(b"scaas-sdk.e2e.passkey")).unwrap())
+    }
+}
+
+#[async_trait::async_trait]
+impl scaas_sdk::platform::Authenticator for Passkey {
+    async fn create_passkey(
+        &self,
+        rp_id: String,
+        _: String,
+        _: Vec<Vec<u8>>,
+    ) -> Result<scaas_sdk::platform::PasskeyCreated, scaas_sdk::platform::AuthError> {
+        let xy = self.0.verifying_key().to_sec1_point(false).as_bytes()[1..].to_vec();
+        Ok(scaas_sdk::platform::PasskeyCreated {
+            credential_id: vec![7; 16],
+            key_data: [xy, scaas_ua::sha256(rp_id.as_bytes()).to_vec()].concat(),
+        })
+    }
+    async fn get_assertion(
+        &self,
+        req: scaas_sdk::platform::AssertionRequest,
+        _: Arc<SecretBytes>,
+    ) -> Result<scaas_sdk::platform::Assertion, scaas_sdk::platform::AuthError> {
+        use p256::ecdsa::signature::hazmat::PrehashSigner;
+        const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut challenge = String::new();
+        for c in req.challenge.chunks(3) {
+            let n = c.iter().enumerate().fold(0u32, |n, (i, x)| n | u32::from(*x) << (16 - 8 * i));
+            (0..=c.len()).for_each(|i| challenge.push(A[(n >> (18 - 6 * i) & 63) as usize] as char));
+        }
+        let auth = [&scaas_ua::sha256(req.rp_id.as_bytes())[..], &[0x05], &1u32.to_be_bytes()].concat();
+        let cdj = format!(r#"{{"type":"webauthn.get","challenge":"{challenge}","origin":"https://{}"}}"#, req.rp_id)
+            .into_bytes();
+        let pre = scaas_ua::sha256(&[auth.as_slice(), &scaas_ua::sha256(&cdj)].concat());
+        let sig: p256::ecdsa::Signature = self.0.sign_prehash(&pre).unwrap();
+        Ok(scaas_sdk::platform::Assertion {
+            credential_id: vec![7; 16],
+            authenticator_data: auth,
+            client_data_json: cdj,
+            signature: sig.to_bytes().to_vec(),
+            prf: false,
+        })
+    }
+    async fn platform_secret(
+        &self,
+        _: String,
+        _: Vec<u8>,
+        _: String,
+        _: Option<scaas_sdk::platform::KeyPolicy>,
+        _: Arc<SecretBytes>,
+    ) -> Result<(), scaas_sdk::platform::AuthError> {
+        Err(scaas_sdk::platform::AuthError::Unavailable)
+    }
+    async fn p256_generate(
+        &self,
+        _: scaas_sdk::platform::KeyPolicy,
+    ) -> Result<scaas_sdk::platform::SePublic, scaas_sdk::platform::AuthError> {
+        Err(scaas_sdk::platform::AuthError::Unavailable)
+    }
+    async fn p256_sign(&self, _: String, _: Vec<u8>, _: String) -> Result<Vec<u8>, scaas_sdk::platform::AuthError> {
+        Err(scaas_sdk::platform::AuthError::Unavailable)
+    }
+}
+
+/// Owner 2026-11-19, T2: a passkey key row (`create_passkey_key`, the RP ID the SDK's config gives) registers on `anvil`
+/// through the SDK: `registerWebAuthn` with the PoP the passkey answered, sent by the seed's EVM key, landed by
+/// `isRegistered`; the registry then holds its `webAuthnKeyOf`.
+#[cfg(feature = "account")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_register_passkey_row_on_anvil() {
+    use scaas_sdk::account::{CreatePasskeyKey, Register};
+    let (_anvil, rpc) = anvil(9).await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    funded_holder(rpc);
+    let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let sdk = Sdk::open(SdkConfig {
+        profiles: vec![registry_profile(rpc, &registry, Some(1 << 24))],
+        store: MemoryStore::new(),
+        authenticator: Some(Arc::new(Passkey::new())),
+        rp_id: Some("scaas.example".into()),
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let seed = sdk
+        .vault()
+        .import_words(ImportWords { label: "main".into(), words: sec(REPO), vault_passphrase: sec(PASS) })
+        .await
+        .unwrap()
+        .id;
+    let acc = sdk.account();
+    let key = acc.create_passkey_key(CreatePasskeyKey { seed: seed.clone(), name: "phone".into() }).await.unwrap();
+    let writes = acc
+        .prepare_register(Register { key, chain: "anvil".into(), attrs: Default::default(), payer: key0(&seed) })
+        .await
+        .unwrap();
+    assert_eq!(writes.iter().map(|w| w.entry()).collect::<Vec<_>>(), ["registerWebAuthn"]);
+    let ua = writes[0].ua();
+    land_write(&sdk, writes[0].clone()).await;
+    assert!(acc.registration_of("anvil".into(), ua.clone()).await.unwrap().registered);
+    let k = cast(&["call", "--rpc-url", rpc, &registry, "webAuthnKeyOf(bytes32)((bytes32,bytes32,bytes32))", &ua]);
+    assert!(k.contains(&format!("0x{}", alloy::hex::encode(scaas_ua::sha256(b"scaas.example")))), "{k}");
+}

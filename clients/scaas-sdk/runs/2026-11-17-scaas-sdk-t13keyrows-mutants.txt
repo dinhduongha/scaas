@@ -1,0 +1,4 @@
+# t13keyrows mutants at commit 152ed27a9 (name | outcome | test)
+the device asked over another digest than the registration's | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact op::tests::key_rows_register
+a KEM key asked for a key row taken silently | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact op::tests::key_rows_register
+2 mutants, 2 killed, 0 survived, 0 not loaded

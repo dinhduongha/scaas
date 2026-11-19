@@ -1909,3 +1909,65 @@ async fn se_key_message_mode() {
         assert!(t.chain.lock().unwrap().bodies.is_empty(), "nothing sent");
     }
 }
+
+/// Owner 2026-11-19, T2: a stored key row registers through the SDK: a passkey row as `registerWebAuthn`, a secure-element
+/// row as `register` (`p256`), each PoP (`pop` v2 over the registration digest) answered by the `Authenticator` once and
+/// verified by `scaas-ua`'s `check_registration`; a device answering with another key is refused before anything is kept; a
+/// KEM key asked for such a row is `Argument`; a key row as the payer is `Argument` (spec §13.3: a holder with no native key
+/// has no self-relay path).
+#[tokio::test(flavor = "multi_thread")]
+async fn key_rows_register() {
+    const REGISTRY: &str = "0x5ca00000000000000000000000000000000000c3";
+    for se in [false, true] {
+        let dev = Arc::new(Device::default());
+        let auth: Arc<dyn crate::platform::Authenticator> = dev.clone();
+        let t = setup_with(0, |p, _| p.registry = Some(REGISTRY.into()), Some(auth)).await;
+        let acc = t.sdk.account();
+        let key = if se {
+            let policy = crate::platform::KeyPolicy {
+                biometry_current_set: true,
+                invalidated_by_enrollment: true,
+            };
+            acc.create_se_key(crate::account::CreateSeKey { seed: t.seed.clone(), name: "element".into(), policy })
+                .await
+                .unwrap()
+        } else {
+            acc.create_passkey_key(crate::account::CreatePasskeyKey { seed: t.seed.clone(), name: "phone".into() })
+                .await
+                .unwrap()
+        };
+        let row = acc.accounts(t.seed.clone()).await.unwrap().into_iter().find(|r| r.shape == "key").unwrap();
+        let ua = row.id_text.clone();
+        t.chain.lock().unwrap().answers.push((
+            REGISTRY.into(),
+            format!("{}{}", &fake_chain::keccak_hex(b"isRegistered(bytes32)")[..10], &ua[2..]),
+            format!("0x{}", "00".repeat(32)),
+        ));
+        let payer = KeyRef::Native { seed: t.seed.clone(), network: "evm".into(), index: 0 };
+        let req = |attrs: crate::account::RegisterAttrs, payer: KeyRef| crate::account::Register {
+            key: key.clone(),
+            chain: "local".into(),
+            attrs,
+            payer,
+        };
+        let ws = acc.prepare_register(req(Default::default(), payer.clone())).await.unwrap();
+        assert_eq!(dev.asked.load(SeqCst), 1, "one answer for the PoP");
+        assert_eq!(ws.len(), 1);
+        assert_eq!(ws[0].entry(), if se { "register" } else { "registerWebAuthn" });
+        assert_eq!(ws[0].ua(), ua);
+        let pop = ws[0].review().into_iter().find(|f| f.name == "args.pop").unwrap().value;
+        let kind = row.kind.unwrap();
+        let kd = match se {
+            true => xy(&device_key(2)),
+            false => [xy(&device_key(1)), scaas_ua::sha256(RP_ID.as_bytes()).to_vec()].concat(),
+        };
+        let ok = scaas_ua::ua_portable::check_registration(kind, &kd, &Default::default(), &unhex(&pop).unwrap(), &[], &|_| None);
+        assert_eq!(ok, Ok(()), "the PoP verifies (se: {se})");
+        let kem = crate::account::RegisterAttrs { pqz_key: false, kem: true };
+        assert_eq!(code(acc.prepare_register(req(kem, payer.clone())).await), "Argument");
+        assert_eq!(code(acc.prepare_register(req(Default::default(), key.clone())).await), "Argument", "a key row pays nothing");
+        dev.wrong_key.store(true, SeqCst);
+        let refused = code(acc.prepare_register(req(Default::default(), payer.clone())).await);
+        assert_eq!(refused, if se { "ExternalSignature" } else { "AuthenticatorRefused" });
+    }
+}

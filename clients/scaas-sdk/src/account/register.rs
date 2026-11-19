@@ -495,20 +495,46 @@ pub(crate) fn build(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result
         }
         Key::Native(..) | Key::External(..) => return Err(SdkError::Argument),
     };
+    Ok((ua, args_of(kind, &key_data, &pqz_key, &pqz_pop, &kem_pk, &pop)?))
+}
+
+/// `scaas-ua`'s registration of these parts (`registration_args_json`): `{args, kemFill, …}`.
+fn args_of(kind: u16, key_data: &[u8], pqz_key: &[u8], pqz_pop: &[u8], kem_pk: &[u8], pop: &[u8]) -> Result<Value, SdkError> {
     let pop_hash = match pqz_pop.is_empty() {
         true => "0x".to_string(),
-        false => hex(&scaas_ua::keccak256(&pqz_pop)),
+        false => hex(&scaas_ua::keccak256(pqz_pop)),
     };
     let input = json!({
-        "kind": kind, "keyData": hex(&key_data), "pqzKey": hex(&pqz_key), "pqzPopHash": pop_hash, "pqzPop": hex(&pqz_pop),
-        "kemPk": hex(&kem_pk), "pop": hex(&pop),
+        "kind": kind, "keyData": hex(key_data), "pqzKey": hex(pqz_key), "pqzPopHash": pop_hash, "pqzPop": hex(pqz_pop),
+        "kemPk": hex(kem_pk), "pop": hex(pop),
     });
-    let r: Value = serde_json::from_str(
-        &scaas_ua::json::registration_args_json(&input.to_string())
-            .map_err(|_| SdkError::Argument)?,
+    serde_json::from_str(
+        &scaas_ua::json::registration_args_json(&input.to_string()).map_err(|_| SdkError::Argument)?,
     )
-    .map_err(|_| SdkError::Internal)?;
-    Ok((ua, r))
+    .map_err(|_| SdkError::Internal)
+}
+
+/// [`build`] for every key a registration takes (owner 2026-11-19, T2): a stored key row (a passkey's `registerWebAuthn`, a
+/// secure element's `p256` `register`) signs its PoP through the `Authenticator` (`external::answer`, then `scaas-ua`'s
+/// `ua_sig` over an `ExternalKey` returning that answer, which `scaas-ua` verifies); neither holds a KEM or PQZ key
+/// (`Argument`).
+pub(crate) async fn build_key(sdk: &Sdk, key_ref: &KeyRef, attrs: RegisterAttrs) -> Result<([u8; 32], Value), SdkError> {
+    if !matches!(key_ref, KeyRef::Key { .. }) {
+        return build(sdk, key_ref, attrs);
+    }
+    if attrs.kem || attrs.pqz_key {
+        return Err(SdkError::Argument);
+    }
+    let Key::External(row, _) = crate::op::key_opened(sdk, key_ref).await? else {
+        return Err(SdkError::Internal);
+    };
+    let hp = scaas_ua::holder_pop_message(row.kind, &row.ua, &row.key_data, None, None, None, None)
+        .map_err(|_| SdkError::Argument)?;
+    let tag = scaas_ua::ua_portable::pop_v2_tag();
+    let answer = crate::op::external::answer(sdk, &row, &tag, &hp.registration_digest).await?;
+    let device = scaas_ua::wallet::ExternalKey::new(row.key_ref(), move |_| Ok(answer.clone()));
+    let pop = scaas_ua::wallet::ua_sig(&device, None, &tag, &hp.registration_digest)?.signature;
+    Ok((row.ua, args_of(row.kind, &row.key_data, &[], &[], &[], &pop)?))
 }
 
 /// The PQZ key attribute of a seed's UA key (spec §7): the PQZ key of the same wallet account and index
@@ -579,7 +605,7 @@ impl Account {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let (ua, r) = build(&sdk, &req.key, req.attrs)?;
+                let (ua, r) = build_key(&sdk, &req.key, req.attrs).await?;
                 let args = r.get("args").ok_or(SdkError::Internal)?;
                 let fill = r.get("kemFill").filter(|f| !f.is_null());
                 writes(&sdk, &req.chain, &req.payer, ua, args, fill).await

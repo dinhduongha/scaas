@@ -10,7 +10,7 @@
 //! (`RegistrationBlob::from_json`: at most [`BLOB_MAX`], depth 4, unknown fields refused; owner 2026-11-19, R1, R2). The
 //! payment follows only after the registration's `Landed` (the app's order; `wallet` refuses a pay to an unregistered derived
 //! UA, `ReceiverUnregistered`). UNAUDITED.
-use super::register::{build, registry_of, writes, RegisterAttrs, RegistryWrite};
+use super::register::{build_key, registry_of, writes, RegisterAttrs, RegistryWrite};
 use super::Account;
 use crate::op::{evm, hex, sim, unhex, KeyRef};
 use crate::SdkError;
@@ -158,7 +158,7 @@ impl Account {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let (ua, r) = build(&sdk, &key, attrs)?;
+                let (ua, r) = build_key(&sdk, &key, attrs).await?;
                 let args: RegisterArgs =
                     serde_json::from_value(r.get("args").cloned().ok_or(SdkError::Internal)?)
                         .map_err(|_| SdkError::Internal)?;

@@ -81,7 +81,21 @@ pub(crate) async fn sign(sdk: &Sdk, row: &ExternalRow, td: &TypedData, expect: &
         // refused before any device would be asked: the policy's (or the typed data's) own error
         return Err(dry.err().map_or(SdkError::Internal, SdkError::from));
     }
-    let (purpose, digest) = (scaas_purpose(td)?, td.digest()?);
+    let answer = answer(sdk, row, &scaas_purpose(td)?, &td.digest()?).await?;
+    let device = ExternalKey::new(row.key_ref(), move |_| Ok(answer.clone()));
+    Ok(sign_scaas(&device, td, expect.clone())?)
+}
+
+/// The device's answer for `uaMessage(kind, purpose, digest)`: a passkey's assertion (built and verified by
+/// `webauthn_assertion`; `AuthenticatorRefused` otherwise), a secure element's `r ‖ s` over the `ua_msg` (MESSAGE mode). The
+/// caller signs through an `ExternalKey` returning it, which `scaas-ua` verifies again.
+pub(crate) async fn answer(
+    sdk: &Sdk,
+    row: &ExternalRow,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+) -> Result<Vec<u8>, SdkError> {
+    let (purpose, digest) = (*purpose, *digest);
     let auth = sdk.authenticator.clone().ok_or(SdkError::AuthenticatorRefused)?;
     let answer = match row.kind {
         PASSKEY => {
@@ -112,6 +126,5 @@ pub(crate) async fn sign(sdk: &Sdk, row: &ExternalRow, td: &TypedData, expect: &
         }
         _ => return Err(SdkError::Argument),
     };
-    let device = ExternalKey::new(row.key_ref(), move |_| Ok(answer.clone()));
-    Ok(sign_scaas(&device, td, expect.clone())?)
+    Ok(answer)
 }
