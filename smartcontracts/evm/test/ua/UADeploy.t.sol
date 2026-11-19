@@ -463,27 +463,29 @@ contract UADeployTest is Test {
     }
 
     /// NET-EVM-06: the registry and each of its libraries have the gate of a release (typed-signing R2; T66b 3.1b: two
-    /// libraries): the deploy refuses one below each figure, in the deploy's order (the registry, `UARegistryCoreLib`,
-    /// `UARegistryAuxLib`), and goes through at the largest gate of a plain deploy (the libraries', `NormalToken`'s and the
-    /// DEX's, whichever is largest).
+    /// libraries; owner 2026-11-19: three, `UARegistryRegLib` split from the core): the deploy refuses one below each figure,
+    /// in the deploy's order (the registry, `UARegistryCoreLib`, `UARegistryAuxLib`, `UARegistryRegLib`), and goes through at
+    /// the largest gate of a plain deploy (the libraries', `NormalToken`'s and the DEX's, whichever is largest).
     function test_registryDeployGate() public {
         DeployHarness h = new DeployHarness();
         string memory base = vm.readFile("./size-baseline.json");
         uint256 need = h.gasNeed("UARegistry");
         uint256 lib = h.gasNeed("UARegistryCoreLib");
         uint256 key = h.gasNeed("UARegistryAuxLib");
+        uint256 rl = h.gasNeed("UARegistryRegLib");
         assertEq(need, vm.parseJsonUint(base, ".UARegistry") * 1530 + 16_777_216);
         assertEq(lib, vm.parseJsonUint(base, ".UARegistryCoreLib") * 1530 + 16_777_216);
         assertEq(key, vm.parseJsonUint(base, ".UARegistryAuxLib") * 1530 + 16_777_216);
-        assertLt(need, lib);
-        // T66b 3.1c / 3.1d (owner): the Aux library's gate is implied by an earlier one. 3ze (CTR-UA-44): the Aux library
-        // (32,372 B) passed the registry (32,055 B) but stays below the Core library (35,165 B), whose gate is checked first
-        // (was `key < need` while the Aux library was below the registry)
-        assertLt(key, lib);
+        assertEq(rl, vm.parseJsonUint(base, ".UARegistryRegLib") * 1530 + 16_777_216);
+        // owner 2026-11-19 (the split, candidate (2)): the core (15,737 B) and the registration library (30,157 B) are below the
+        // registry (33,293 B), whose gate is checked first, so theirs are implied by it; the Aux library (35,417 B) is above it
+        // and is the next gate refused (was: the core above the registry, the Aux library between them)
+        assertLt(lib, need);
+        assertLt(rl, need);
+        assertGt(key, need);
         _refused(h, need - 1, need, "UARegistry");
-        _refused(h, need, lib, "UARegistryCoreLib");
-        if (key > lib) _refused(h, lib, key, "UARegistryAuxLib");
-        uint256 top = lib > key ? lib : key;
+        _refused(h, need, key, "UARegistryAuxLib");
+        uint256 top = key;
         uint256 token = h.gasNeed("NormalToken");
         uint256 dex = h.gasNeed("SCaaSDex");
         if (token > top) top = token;

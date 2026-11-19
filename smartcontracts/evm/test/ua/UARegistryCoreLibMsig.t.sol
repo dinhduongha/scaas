@@ -6,6 +6,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistryBase, MockVerifier, MockWallet} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
@@ -209,7 +210,7 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
             bool isCall = d[i].kind == VmSafe.AccountAccessKind.Call || d[i].kind == VmSafe.AccountAccessKind.StaticCall;
             if (
                 !isCall || d[i].account == at || d[i].account == address(UARegistryCoreLib)
-                    || d[i].account == address(UARegistryAuxLib)
+                    || d[i].account == address(UARegistryAuxLib) || d[i].account == address(UARegistryRegLib)
             ) continue;
             calls = keccak256(abi.encode(calls, d[i].kind, d[i].account, d[i].data));
             ++n;

@@ -35,6 +35,7 @@ import {UARegistry} from "../src/ua/UARegistry.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
 import {UARegistryCoreLib} from "../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../src/ua/UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "../src/ua/UARegistryRegLib.sol";
 import {RelayFeeRouter, RelayFeeExecutor} from "../src/metatx/RelayFeeRouter.sol";
 import {UAKinds} from "../src/ua/UAKinds.sol";
 import {PqUA} from "../src/ua/PqUA.sol";
@@ -475,7 +476,7 @@ abstract contract DeployBase is DeployBook {
         return false;
     }
 
-    /// @notice The token factory (`noticePeriod`) and the UA registry (`_deployUARegistry`, with its libraries `UARegistryCoreLib` and `UARegistryAuxLib`) by CREATE2; when the deployer
+    /// @notice The token factory (`noticePeriod`) and the UA registry (`_deployUARegistry`, with its libraries `UARegistryCoreLib`, `UARegistryAuxLib` and `UARegistryRegLib`) by CREATE2; when the deployer
     ///         is the registrar (plan 5g-Z2: only the factory deploys releases), env version 1 of `NORMAL` and of the DEX
     ///         (`_env`: the factory, `chain_uid`, the registry, the `SmartKeyAccount` implementation, Hedera, the linked
     ///         libraries with their code hashes), then the `NORMAL` release (on that registry: the UA ledger, CTR-UA-18)
@@ -1248,7 +1249,7 @@ abstract contract DeployBase is DeployBook {
         assembly ("memory-safe") {
             mstore(k, n)
         }
-        // `UARegistryCoreLib` and `UARegistryAuxLib` (T66b 3.1b) are linked like every library: forge deploys each by CREATE2
+        // `UARegistryCoreLib`, `UARegistryAuxLib` (T66b 3.1b) and `UARegistryRegLib` (owner 2026-11-19) are linked like every library: forge deploys each by CREATE2
         // before the script's first transaction (`create2_library_salt`), so their addresses, and through the code that embeds
         // them the registry's, depend on the sources only. Each one's own transaction is a release like the registry's: the
         // same gate.
@@ -1275,6 +1276,7 @@ abstract contract DeployBase is DeployBook {
         vm.serializeString("deploy", "mldsa_precompile", mldsaPrecompile ? "on" : "off");
         vm.serializeAddress("deploy", "ua_registry_core_lib", address(UARegistryCoreLib));
         vm.serializeAddress("deploy", "ua_registry_aux_lib", address(UARegistryAuxLib));
+        vm.serializeAddress("deploy", "ua_registry_reg_lib", address(UARegistryRegLib));
     }
 
     /// @notice `bls12381-multi`'s line in the deploy book (spec 2026-11-19-bls12381-multi §7, §10; ARCH-POS-18): its path where the
@@ -1286,7 +1288,7 @@ abstract contract DeployBase is DeployBook {
         return "refused: no EIP-2537 and no software BLS12-381 path built (ARCH-POS-18): a case for the owner";
     }
 
-    /// @notice The gates of the registry's release and of its two libraries', each its own transaction (CREATE2 of the
+    /// @notice The gates of the registry's release and of its three libraries', each its own transaction (CREATE2 of the
     ///         registry's init code with these arguments; each library's creation code).
     function _requireRegistryGas(bool isHedera, uint64 budget, address ska, UARegistry.KindConfig[] memory k) internal {
         _requireReleaseGas(
@@ -1296,6 +1298,7 @@ abstract contract DeployBase is DeployBook {
         );
         _requireReleaseGas("UARegistryCoreLib", address(0), vm.getCode("UARegistryCoreLib.sol:UARegistryCoreLib"));
         _requireReleaseGas("UARegistryAuxLib", address(0), vm.getCode("UARegistryAuxLib.sol:UARegistryAuxLib"));
+        _requireReleaseGas("UARegistryRegLib", address(0), vm.getCode("UARegistryRegLib.sol:UARegistryRegLib"));
     }
 
     /// @notice The gen-1 kind gate (U8S-D9, owner ruling 2026-10-31, option (a)): every gen-1 deploy carries every kind the

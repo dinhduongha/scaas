@@ -727,8 +727,15 @@ contract GovDeployTest is Test {
         h.setWrapped(true);
         h.limitBlockGas(type(uint64).max);
         (OpenFactory f,) = h.deploy(ZUID, false, ska);
-        string[6] memory names =
-            ["UARegistry", "UARegistryCoreLib", "UARegistryAuxLib", "NormalToken", "SCaaSDex", "WrappedToken"];
+        string[7] memory names = [
+            "UARegistry",
+            "UARegistryCoreLib",
+            "UARegistryAuxLib",
+            "UARegistryRegLib",
+            "NormalToken",
+            "SCaaSDex",
+            "WrappedToken"
+        ];
         uint256 most;
         for (uint256 i; i < names.length; ++i) {
             (uint256 regular, uint256 state) = h.measured(names[i]);
@@ -798,7 +805,7 @@ contract GovDeployTest is Test {
         assertFalse(h.publicGate(), "the default is the testnet gate");
         h.setGate(1);
         string memory base = vm.readFile("./size-baseline.json");
-        string[10] memory names = [
+        string[11] memory names = [
             "NormalToken",
             "WrappedToken",
             "NormalZetherToken",
@@ -808,7 +815,8 @@ contract GovDeployTest is Test {
             "SCaaSDex",
             "UARegistry",
             "UARegistryCoreLib",
-            "UARegistryAuxLib"
+            "UARegistryAuxLib",
+            "UARegistryRegLib"
         ];
         for (uint256 i; i < names.length; ++i) {
             assertEq(

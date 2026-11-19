@@ -8,6 +8,7 @@ import {UAStore} from "./UAStore.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
 import {PqUA} from "./PqUA.sol";
 import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
+import {UARegistryRegLib} from "./UARegistryRegLib.sol";
 import {IUAPopVerifier} from "./IUAVerifier.sol";
 import {PqzSet} from "../pqz/PqzSet.sol";
 
@@ -19,22 +20,24 @@ import {PqzSet} from "../pqz/PqzSet.sol";
 ///        `address(this)` is the registry and the storage is its `UAStore.Layout`; one DELEGATECALL per operation, as before.
 ///        Same check order, same stored bytes, same events and errors as when this code was in `UARegistryCoreLib`
 ///        (`legacy/ua-mtx-merge/t66b/src/ua/UARegistryLib.sol`, the reads `UARegistry.sol` there). The helpers it shares with registration (the appended words,
-///        the getters, the portable signature check, the PQZ proof, the holder checks) are `UARegistryCoreLib`'s: the large ones
-///        run there by one nested DELEGATECALL each (`_core`, T66b 3.1c, owner 2026-11-09), the small `internal` ones are
-///        compiled in: one source, one copy of the large code in the pair. Called directly every entry reverts (solc's library call protection; none
+///        the getters, the portable signature check) are `UARegistryCoreLib`'s, the registration-bound ones (the PQZ proof, the
+///        holder checks, the `msig` bound, `keyUa`) `UARegistryRegLib`'s (owner 2026-11-19): the large ones run there by one
+///        nested DELEGATECALL each (`_core`, T66b 3.1c, owner 2026-11-09), the small `internal` ones are compiled in: one
+///        source, one copy of the large code in the registry's libraries. Called directly every entry reverts (solc's library call protection; none
 ///        is `view` or `pure`). UNAUDITED.
 library UARegistryAuxLib {
-    /// `UARegistry.UAConfig(0)`: the core library this one is linked to has no code (T66b 3.1c).
+    /// `UARegistry.UAConfig(0)`: a library this one is linked to has no code (T66b 3.1c).
     error UAConfig(uint16 kind);
 
     // ----- the core's shared helpers (T66b 3.1c, owner 2026-11-09, spec §11 (f)) -----
 
-    /// Runs a `UARegistryCoreLib` helper by a nested DELEGATECALL: `call`, then the three words the registry appended to this
-    /// entry's calldata (its last 96 bytes), so the helper reads this frame's configuration; `address(this)` and the storage
-    /// stay the registry's. One level only: the core never calls back here. A core without code reverts `UAConfig(0)` (a
-    /// DELEGATECALL to it would succeed with nothing checked); the helper's revert data passes verbatim.
-    function _core(bytes memory call) private returns (bytes memory ret) {
-        address core = address(UARegistryCoreLib);
+    /// Runs a helper of `core` (`UARegistryCoreLib`, or since owner 2026-11-19 `UARegistryRegLib` for the registration-bound
+    /// ones) by a nested DELEGATECALL: `call`, then the three words the registry appended to this entry's calldata (its last 96
+    /// bytes), so the helper reads this frame's configuration; `address(this)` and the storage stay the registry's. One level
+    /// only: neither calls back here (`UARegistryRegLib` reaches only the core's `portableOk`, not from these helpers). A
+    /// library without code reverts `UAConfig(0)` (a DELEGATECALL to it would succeed with nothing checked); the helper's revert
+    /// data passes verbatim.
+    function _core(address core, bytes memory call) private returns (bytes memory ret) {
         if (core.code.length == 0) revert UAConfig(0);
         bool ok;
         (ok, ret) = core.delegatecall(bytes.concat(call, msg.data[msg.data.length - 96:]));
@@ -54,7 +57,10 @@ library UARegistryAuxLib {
         IUARegistry.UASig calldata sig
     ) private returns (bool) {
         return abi.decode(
-            _core(abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector, kind, d, ua, purpose, digest, sig)),
+            _core(
+                address(UARegistryCoreLib),
+                abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector, kind, d, ua, purpose, digest, sig)
+            ),
             (bool)
         );
     }
@@ -112,7 +118,10 @@ library UARegistryAuxLib {
         if (part >= PqUA.mldsaParts(kind) || v == address(0) || MldsaVerifier(v).PRECOMPILE() != address(0)) {
             revert IUARegistry.UAKeyCache(kind);
         }
-        ua = abi.decode(_core(abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector, kind, pk)), (bytes32));
+        ua = abi.decode(
+            _core(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.keyUa.selector, kind, pk)),
+            (bytes32)
+        );
         if (s.ekPtr[ua][part] != address(0)) return ua;
         address ptr = SSTORE2.write(MldsaVerifier(v).expandedKeyPart(pk, part));
         s.ekPtr[ua][part] = ptr;
@@ -133,7 +142,10 @@ library UARegistryAuxLib {
             : k.added
                 ? UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, h))
                 : _registerKeyMessage(ua, h, host);
-        _core(abi.encodeWithSelector(UARegistryCoreLib.pqzProof.selector, ua, version, key, pqzPop, h, message));
+        _core(
+            address(UARegistryRegLib),
+            abi.encodeWithSelector(UARegistryRegLib.pqzProof.selector, ua, version, key, pqzPop, h, message)
+        );
     }
 
     /// Version `version`'s record for `storePqzPop`, its proof hash `popHash` checked (`UAPqzPopHash`; no such version: the
@@ -209,14 +221,14 @@ library UARegistryAuxLib {
     ) external {
         UAStore.Layout storage s = UAStore.layout();
         (uint16 kind, bytes memory d, bool host) = _holderOf(ua);
-        _core(abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector, kind, d, ua, host));
+        _core(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.pqzHolder.selector, kind, d, ua, host));
         _pqzNext(ua, version, host);
-        bytes32 h = UARegistryCoreLib._pqzKeyHash(pqzKey);
+        bytes32 h = UARegistryRegLib._pqzKeyHash(pqzKey);
         // KV-1 (Codex #1): no two versions of one UA hold the same key, before any proof exists; a host reads gen 1's too
         if (s.pqzKeyUsed[ua][h] || (host && IUARegistry(UARegistryCoreLib._pred()).pqzKeyUsed(ua, h))) {
             revert IUARegistry.UAKeyInUse(h, ua);
         }
-        if (pqzPopHash == 0 || pqzPopHash == UARegistryCoreLib.EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
+        if (pqzPopHash == 0 || pqzPopHash == UARegistryRegLib.EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
         bytes32 rd = version == 0
             ? UAKinds.pqzKeyRecordDigest(ua, h, pqzPopHash)
             : UAKinds.pqzKeyVersionRecordDigest(ua, version, h, pqzPopHash);
@@ -278,7 +290,7 @@ library UARegistryAuxLib {
             u, UAKinds.msigUpdateDigest(ua, u.chainUid, address(this), version, u.st, enabled, validUntilBlock), sigs
         );
         _fresh(u); // 10
-        _core(abi.encodeWithSelector(UARegistryCoreLib.msigBound.selector, ua, u.t, u.stored)); // 11–13
+        _core(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.msigBound.selector, ua, u.t, u.stored)); // 11–13
         UAStore.layout().records[ua].keyPtr = SSTORE2.write(u.t);
         emit IUARegistry.UAMsigUpdated(ua, version, u.st.threshold, uint16(u.st.members.length), enabled);
     }
@@ -340,8 +352,10 @@ library UARegistryAuxLib {
     /// `requirePortable` `msig` arm under `PURPOSE_MSIG_UPDATE`; `UAUnauthorized`).
     function _quorumSigned(Update memory u, bytes32 typed, IUARegistry.MemberSig[] calldata sigs) private {
         bytes32 md = UAKinds.memberDigest(u.ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MSIG_UPDATE, typed));
-        bytes memory ok =
-            _core(abi.encodeWithSelector(UARegistryCoreLib.msigOk.selector, u.ua, md, typed, u.stored, sigs));
+        bytes memory ok = _core(
+            address(UARegistryCoreLib),
+            abi.encodeWithSelector(UARegistryCoreLib.msigOk.selector, u.ua, md, typed, u.stored, sigs)
+        );
         if (!abi.decode(ok, (bool))) revert IUARegistry.UAUnauthorized(u.ua);
     }
 
@@ -413,14 +427,17 @@ library UARegistryAuxLib {
         if (block.number > validUntilBlock) revert IUARegistry.UAPqzRecordExpired(ua);
         Scoped memory c;
         (c.kind, c.d, c.host) = _holderOf(ua);
-        _core(abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector, c.kind, c.d, ua, c.host));
+        _core(
+            address(UARegistryRegLib),
+            abi.encodeWithSelector(UARegistryRegLib.pqzHolder.selector, c.kind, c.d, ua, c.host)
+        );
         // ruling 9 (owner 2026-11-13): no `msig` holds the shared key at first
         if (scope == address(0) && c.kind == UAKinds.MSIG) revert IUARegistry.UAPqzHolder(ua);
         c.h = _scopedNext(ua, scope, version, pqzKey, c.host);
-        if (pqzPopHash == 0 || pqzPopHash == UARegistryCoreLib.EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
+        if (pqzPopHash == 0 || pqzPopHash == UARegistryRegLib.EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
         c.kemPk = UAKinds.kemPk(openKem);
         if ((c.kemPk.length != 0) != _opening(scope)) revert IUARegistry.UAPqzOpenKem(scope);
-        if (c.kemPk.length != 0) UARegistryCoreLib._checkKemPk(c.kemPk);
+        if (c.kemPk.length != 0) UARegistryRegLib._checkKemPk(c.kemPk);
         bytes32 rd = UAKinds.pqzScopedKeyRecordDigest(
             ua,
             _class(scope),
@@ -459,7 +476,7 @@ library UARegistryAuxLib {
         if (version != (p0 == address(0) ? 0 : s.scopedVersions[ua][scope].latest + 1)) {
             revert IUARegistry.UAPqzKeyVersion(ua, version);
         }
-        h = UARegistryCoreLib._pqzKeyHash(pqzKey);
+        h = UARegistryRegLib._pqzKeyHash(pqzKey);
         if (p0 != address(0) && pqzKey.length + 1 != p0.code.length) revert IUARegistry.UAKeyData(UAKinds.PQZ_MLWE);
         if (s.pqzKeyUsed[ua][h] || (host && IUARegistry(UARegistryCoreLib._pred()).pqzKeyUsed(ua, h))) {
             revert IUARegistry.UAKeyInUse(h, ua);
@@ -663,14 +680,14 @@ library UARegistryAuxLib {
         IUARegistry.Record memory r = s.records[ua];
         // UA8-D11 before `_sigOk`: its gen-1 fallback would verify a gen-1 holder's record here (A6 re-review)
         if (r.kind == 0) revert IUARegistry.UAUnauthorized(ua);
-        if (!UARegistryCoreLib._kemHolder(r.kind)) revert IUARegistry.UAKemHolder(ua); // CTR-UA-32: an `msig` holds no KEM key
+        if (!UARegistryRegLib._kemHolder(r.kind)) revert IUARegistry.UAKemHolder(ua); // CTR-UA-32: an `msig` holds no KEM key
         (bytes memory d,) = UAStore.registration(ua, r);
         // owner 2026-10-31: never overwrite (every version write-once); version 0 only to fill the `register` commit
         if (s.kem[ua][version].length != 0) revert IUARegistry.UAKemVersion(ua, version);
         bytes32 committed = version == 0 ? s.kemCommit[ua].kemPkHash : bytes32(0);
         if (version == 0 && committed == 0) revert IUARegistry.UAKemVersion(ua, 0);
         bytes memory kemPk = UAKinds.kemPk(kem);
-        UARegistryCoreLib._checkKemPk(kemPk);
+        UARegistryRegLib._checkKemPk(kemPk);
         bytes memory stored;
         if (version == 0) {
             // the PoP signed the committed record: no signature of its own, anyone may fill it (as `storePqzPop`)

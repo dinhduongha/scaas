@@ -5,6 +5,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
@@ -102,13 +103,14 @@ contract UARegistryPairTest is UARegistryBase {
 
     /// Positive control of the `expectCall` above: a writer runs in the library today.
     function test_r1_control_writerRunsInTheLibrary() public {
-        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.register.selector), 1);
+        vm.expectCall(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.register.selector), 1);
         try reg.register(0x0103, _key(0x0103), _none(), "", "") {} catch {}
     }
 
     /// The six `pure` views smaller than their stub stay in the registry (§5): no library call.
     function test_r1_smallViewsStay() public {
         vm.expectCall(address(UARegistryCoreLib), "", 0);
+        vm.expectCall(address(UARegistryRegLib), "", 0);
         reg.kindName(0x0103);
         reg.uaMessage(0x0103, bytes32(0), bytes32(0));
         reg.pqzKeyDigest(bytes32(0), bytes32(0));
@@ -236,6 +238,7 @@ contract UARegistryPairTest is UARegistryBase {
         IUARegistry.UASig memory none;
         vm.expectCall(address(UARegistryCoreLib), "", 0);
         vm.expectCall(address(UARegistryAuxLib), "", 0);
+        vm.expectCall(address(UARegistryRegLib), "", 0);
         _try(abi.encodeCall(UARegistry.requireAuthorized, (ua, bytes32(0), bytes32(0), none)));
         reg.kindOf(ua);
         reg.recordOf(ua);
@@ -252,16 +255,22 @@ contract UARegistryPairTest is UARegistryBase {
         reg.frostKeyOf(ua);
     }
 
-    function test_b_registrationRunsInTheFirstLibrary() public {
-        (address k, address r) = (address(UARegistryAuxLib), address(UARegistryCoreLib));
-        _routed(r, k, UARegistryCoreLib.register.selector);
+    /// The registry library split (owner 2026-11-19, candidate (2)): the `register` forms run in `UARegistryRegLib`, never in the
+    /// core or the auxiliary library; `requirePortable` in the core, never in the other two.
+    function test_b_registrationRunsInTheRegLibrary() public {
+        (address k, address r, address g) =
+            (address(UARegistryAuxLib), address(UARegistryCoreLib), address(UARegistryRegLib));
+        _routed(g, k, UARegistryRegLib.register.selector);
+        vm.expectCall(r, abi.encodeWithSelector(UARegistryRegLib.register.selector), 0);
         _try(abi.encodeCall(UARegistry.register, (0x0103, _key(0x0103), _none(), "", "")));
         IUARegistry.MsigStructure memory st;
-        _routed(r, k, UARegistryCoreLib.registerMsig.selector);
+        _routed(g, k, UARegistryRegLib.registerMsig.selector);
+        vm.expectCall(r, abi.encodeWithSelector(UARegistryRegLib.registerMsig.selector), 0);
         _try(abi.encodeCall(UARegistry.registerMsig, (st, _none(), new IUARegistry.MemberSig[](0), "")));
         IUARegistry.UASig memory none;
         vm.expectCall(r, abi.encodeWithSelector(UARegistryCoreLib.requirePortable.selector), 1);
         vm.expectCall(k, "", 0);
+        vm.expectCall(g, "", 0);
         _try(abi.encodeCall(UARegistry.requirePortable, (bytes32(uint256(7)), bytes32(0), bytes32(0), none)));
     }
 
@@ -269,6 +278,14 @@ contract UARegistryPairTest is UARegistryBase {
     function test_b_constructorNeedsTheAuxLibrary() public {
         new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock))); // the control
         vm.etch(address(UARegistryAuxLib), "");
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+    }
+
+    /// The same for the registration library (owner 2026-11-19): without its code every `register` would be a silent no-op.
+    function test_b_constructorNeedsTheRegLibrary() public {
+        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock))); // the control
+        vm.etch(address(UARegistryRegLib), "");
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
         new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
     }
@@ -321,7 +338,8 @@ contract UARegistryPairTest is UARegistryBase {
         assertEq(got.x25519, k.x25519, "stored");
     }
 
-    /// `setPqzKey` runs the core's `pqzHolder` and `portableOk`, `storePqzPop` its `pqzProof`, each once: the key is set,
+    /// `setPqzKey` runs the registration library's `pqzHolder` (owner 2026-11-19) and the core's `portableOk`, `storePqzPop` the
+    /// registration library's `pqzProof`, each once: the key is set,
     /// then proven (owned, current); a bad PQZ key signature is refused.
     function test_c_pqzWritesRunTheCoreHelpers() public {
         (UARegistry r, bytes32 ua, bytes memory pk) = _pqReg();
@@ -341,16 +359,17 @@ contract UARegistryPairTest is UARegistryBase {
         bad.signature = _sig(pk, bytes32(0));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         r.setPqzKey(ua, 0, key, popHash, bad);
-        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector), 1);
+        vm.expectCall(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.pqzHolder.selector), 1);
         vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector), 1);
         r.setPqzKey(ua, 0, key, popHash, s);
-        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.pqzProof.selector), 1);
+        vm.expectCall(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.pqzProof.selector), 1);
         r.storePqzPop(ua, 0, pqzPop);
         assertEq(r.keyOwner(h), ua, "proven: owned");
         assertEq(r.pqzPopOf(ua, 0), pqzPop, "proof stored");
     }
 
-    /// `cacheExpandedKey` validates the key and derives its id in the core (`keyUa`): its refusal passes verbatim.
+    /// `cacheExpandedKey` validates the key and derives its id in the registration library (`keyUa`, owner 2026-11-19): its
+    /// refusal passes verbatim.
     function test_c_cacheRunsTheCoreKeyCheck() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
         c[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);
@@ -358,7 +377,7 @@ contract UARegistryPairTest is UARegistryBase {
             UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000
         );
         UARegistry r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
-        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector), 1);
+        vm.expectCall(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.keyUa.selector), 1);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MLDSA44));
         r.cacheExpandedKey(UAKinds.MLDSA44, new bytes(5), 0);
     }
@@ -378,15 +397,17 @@ contract UARegistryPairTest is UARegistryBase {
             )
         );
         assertFalse(ok, "portableOk");
-        (ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector, uint16(0x0103), _key(0x0103)));
+        // owner 2026-11-19: the registration-bound helpers are the registration library's
+        address rl = address(UARegistryRegLib);
+        (ok,) = rl.call(abi.encodeWithSelector(UARegistryRegLib.keyUa.selector, uint16(0x0103), _key(0x0103)));
         assertFalse(ok, "keyUa");
-        (ok,) = core.call(
-            abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector, uint16(0x0103), bytes(""), bytes32(0), false)
+        (ok,) = rl.call(
+            abi.encodeWithSelector(UARegistryRegLib.pqzHolder.selector, uint16(0x0103), bytes(""), bytes32(0), false)
         );
         assertFalse(ok, "pqzHolder");
-        (ok,) = core.call(
+        (ok,) = rl.call(
             abi.encodeWithSelector(
-                UARegistryCoreLib.pqzProof.selector, bytes32(0), uint64(0), bytes(""), bytes(""), bytes32(0), bytes32(0)
+                UARegistryRegLib.pqzProof.selector, bytes32(0), uint64(0), bytes(""), bytes(""), bytes32(0), bytes32(0)
             )
         );
         assertFalse(ok, "pqzProof");
@@ -401,5 +422,22 @@ contract UARegistryPairTest is UARegistryBase {
         vm.etch(address(UARegistryCoreLib), "");
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
         r.setKemKey(ua, 1, k, s);
+    }
+
+    /// The registration library whose core has no code refuses (`UAConfig(0)`) at the step-6 PoP, its one nested DELEGATECALL
+    /// (owner 2026-11-19). The control: the same registration passes with the core in place, by `portableOk`, once.
+    function test_c_regNeedsItsCore() public {
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
+        c[0] = UARegistry.KindConfig(UAKinds.MLDSA44, address(mock), 4_250_000);
+        UARegistry r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        bytes memory pk = new bytes(1312);
+        pk[0] = 0x01;
+        uint256 snap = vm.snapshotState();
+        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector), 1);
+        _register(r, UAKinds.MLDSA44, pk); // the control
+        vm.revertToState(snap);
+        vm.etch(address(UARegistryCoreLib), "");
+        vm.expectRevert(abi.encodeWithSelector(UARegistryRegLib.UAConfig.selector, uint16(0)));
+        r.register(UAKinds.MLDSA44, pk, _none(), hex"01", ""); // steps 1–5 pass; step 6 needs the core
     }
 }

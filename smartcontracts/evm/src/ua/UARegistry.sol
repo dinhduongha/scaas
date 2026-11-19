@@ -11,6 +11,7 @@ import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
 import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "./UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "./UARegistryRegLib.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
 import {PqUA} from "./PqUA.sol";
 import {BlsMultiKeyData} from "./BlsMultiKeyData.sol";
@@ -86,15 +87,16 @@ import {BlsMultiKeyData} from "./BlsMultiKeyData.sol";
 ///         `storePqzPop`, `proven`, the owner and list entry of a proven key — and its PQZ reads prefer it (ruling A6-I1).
 ///
 ///         typed-signing R2 (owner 2026-11-01), T66b 3.1b (owner 2026-11-09, spec 2026-11-09-t66b-library-organisation.md
-///         §11 (f)): the writers run by DELEGATECALL (`_lib`), on this contract's storage (`UAStore.Layout`), in one of two
-///         libraries by domain: `UARegistryCoreLib` the `register` forms, the `msig`, `acceptMembership`, `requirePortable`;
-///         `UARegistryAuxLib` the key writes after registration (`setPqzKey`, `storePqzPop`, `setKemKey`, `cacheExpandedKey`).
-///         One DELEGATECALL per operation from here; an auxiliary writer runs the core's shared helpers by one nested
-///         DELEGATECALL each (T66b 3.1c). The reads off the hot path run there too, inside the view (`_libView`):
+///         §11 (f); owner 2026-11-19, candidate (2)): the writers run by DELEGATECALL (`_lib`), on this contract's storage
+///         (`UAStore.Layout`), in one of three libraries by domain: `UARegistryRegLib` the `register` forms;
+///         `UARegistryCoreLib` the portable `msig` check, `acceptMembership`, `requirePortable`; `UARegistryAuxLib` the key
+///         writes after registration (`setPqzKey`, `storePqzPop`, `setKemKey`, `cacheExpandedKey`, `updateMsig`). One
+///         DELEGATECALL per operation from here; an auxiliary or registration writer runs another library's shared helpers by
+///         one nested DELEGATECALL each (T66b 3.1c). The reads off the hot path run there too, inside the view (`_libView`):
 ///         `uaCount` in the core library; `registrationOf` (owner 2026-11-15, D1), `popOf`, `popSlotsOf`, `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`,
 ///         `uaAt`, `uaPage`, `uaIndex` in the auxiliary library. The hot views (`requireAuthorized`, `kindOf`, `recordOf`,
 ///         `checkedOf`, the key and member readers), `uaAuthDigest` and the immutables' getters stay here; `muSig2KeyOf` and
-///         `frostKeyOf` stay too (their typed return does not compile in a library: stack too deep). Both libraries'
+///         `frostKeyOf` stay too (their typed return does not compile in a library: stack too deep). The three libraries'
 ///         addresses are in this contract's code, so they are part of the registry's CREATE2 address.
 ///
 ///         T66b R-1 (spec §5): the `pure` views whose code the core library holds (`uaOf`, `keyHashOf` and five digests) run
@@ -119,10 +121,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// @notice A constructor argument is refused (kind outside this code's table, duplicate, verifier without code, cap
     ///         0 or above the budget, a keyHash group the predecessor enables, a predecessor of another chain/profile or
-    ///         without the UA-8 views), or `UARegistryCoreLib` is not deployed.
+    ///         without the UA-8 views), or one of its three libraries is not deployed.
     error UAConfig(uint16 kind);
 
-    /// @notice `UARegistryCoreLib` writes SSTORE2; solc lists only the errors a contract uses or declares, so this line keeps
+    /// @notice `UARegistryRegLib` and `UARegistryAuxLib` write SSTORE2; solc lists only the errors a contract uses or declares, so this line keeps
     ///         it on the registry's ABI.
     error SSTORE2WriteFailed();
 
@@ -180,7 +182,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         }
         // `_lib`'s DELEGATECALL would "succeed" on an empty account, every write a silent no-op; the library has no way to
         // leave once it is there (no SELFDESTRUCT, `LinkClosure.test_libraryOpcodes`)
-        if (address(UARegistryCoreLib).code.length == 0 || address(UARegistryAuxLib).code.length == 0) {
+        if (
+            address(UARegistryCoreLib).code.length == 0 || address(UARegistryAuxLib).code.length == 0
+                || address(UARegistryRegLib).code.length == 0
+        ) {
             revert UAConfig(0);
         }
         if (predecessor_ != address(0)) {
@@ -649,9 +654,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _s.ekPtr[ua];
     }
 
-    // ----- the writers and the reads off the hot path: in `UARegistryCoreLib` and `UARegistryAuxLib` -----
+    // ----- the writers and the reads off the hot path: in `UARegistryRegLib`, `UARegistryCoreLib` and `UARegistryAuxLib` -----
 
-    /// Runs the library `lib`'s entry `sel` by DELEGATECALL (`UARegistryCoreLib` or `UARegistryAuxLib`, by the entry's domain): this call's arguments as they came, then three words the
+    /// Runs the library `lib`'s entry `sel` by DELEGATECALL (`UARegistryRegLib`, `UARegistryCoreLib` or `UARegistryAuxLib`, by the entry's domain): this call's arguments as they came, then three words the
     /// library cannot read for itself, `_cfg(kind)`, `_cfg(0x0142)`, the clone codehash (`kind` is the kind the entry knows).
     /// They come from this contract's immutables only and sit past the caller's bytes; the library reads them from the end
     /// of its calldata. Its return data or revert data is this call's, byte for byte.
@@ -682,7 +687,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes calldata pop,
         bytes calldata pqzPop
     ) external returns (bytes32 ua) {
-        _lib(address(UARegistryCoreLib), UARegistryCoreLib.register.selector, kind);
+        _lib(address(UARegistryRegLib), UARegistryRegLib.register.selector, kind);
     }
 
     function registerWebAuthn(
@@ -691,7 +696,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes calldata pop,
         bytes calldata pqzPop
     ) external returns (bytes32 ua) {
-        _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerWebAuthn.selector, UAKinds.WEBAUTHN_P256);
+        _lib(address(UARegistryRegLib), UARegistryRegLib.registerWebAuthn.selector, UAKinds.WEBAUTHN_P256);
     }
 
     function registerMuSig2(
@@ -701,7 +706,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes calldata pop,
         bytes calldata pqzPop
     ) external returns (bytes32 ua) {
-        _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerMuSig2.selector, kind);
+        _lib(address(UARegistryRegLib), UARegistryRegLib.registerMuSig2.selector, kind);
     }
 
     function registerFrost(
@@ -711,7 +716,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes calldata pop,
         bytes calldata pqzPop
     ) external returns (bytes32 ua) {
-        _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerFrost.selector, kind);
+        _lib(address(UARegistryRegLib), UARegistryRegLib.registerFrost.selector, kind);
     }
 
     function registerBlsMulti(
@@ -720,7 +725,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes calldata pop,
         bytes calldata pqzPop
     ) external returns (bytes32 ua) {
-        _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerBlsMulti.selector, UAKinds.BLS12381_MULTI);
+        _lib(address(UARegistryRegLib), UARegistryRegLib.registerBlsMulti.selector, UAKinds.BLS12381_MULTI);
     }
 
     function registerMsig(
@@ -729,7 +734,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         MemberSig[] calldata pop,
         bytes calldata pqzPop
     ) external returns (bytes32 ua) {
-        _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerMsig.selector, UAKinds.MSIG);
+        _lib(address(UARegistryRegLib), UARegistryRegLib.registerMsig.selector, UAKinds.MSIG);
     }
 
     function storePqzPop(bytes32 ua, uint64 version, bytes calldata pqzPop) external {

@@ -10,6 +10,7 @@ import {IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SSTORE2} from "../../src/common/SSTORE2.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
@@ -3589,6 +3590,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
             if (
                 acc[i].kind == VmSafe.AccountAccessKind.Create && !acc[i].reverted
                     && acc[i].account != address(UARegistryCoreLib) && acc[i].account != address(UARegistryAuxLib)
+                    && acc[i].account != address(UARegistryRegLib)
             ) {
                 ++n;
                 bytes_ += acc[i].deployedCode.length - 1;

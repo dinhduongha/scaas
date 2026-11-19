@@ -5,7 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
-import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
@@ -842,7 +842,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
 
     /// Row 12's debit bound: caps chosen from this set's `PQZ_DEBIT_MIN_GAS` so that 2-of-3 passes and 3-of-3 does not.
     function test_refusedDebitBound() public {
-        uint256 room = UARegistryCoreLib.TX_GAS_CAP - PqzSet.PQZ_DEBIT_MIN_GAS; // what the authorization may take
+        uint256 room = UARegistryRegLib.TX_GAS_CAP - PqzSet.PQZ_DEBIT_MIN_GAS; // what the authorization may take
         uint64 cap = uint64(room * 63 / 64 / 3 + 50_000); // three such signers exceed it; two do not
         UARegistry x =
             _deploy(REG_X, keccak256("chain x"), address(0), false, 3 * cap + 300_000, address(0), true, _cfgsMl(cap));
@@ -859,10 +859,10 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
     /// is taken from the pinned constants, one more is refused.
     function test_refusedNextUpdate() public {
         bytes32 ua = _reg(r, 3, _ids(ml[1], ml[2], ml[3]), _w(3), _ids(ml[1], ml[2], ml[3]));
-        uint256 worst = 3 * (UARegistryCoreLib.MSIG_MEMBER_GAS + 400_000) + UARegistryCoreLib.MSIG_ACCEPTED_GAS;
+        uint256 worst = 3 * (UARegistryRegLib.MSIG_MEMBER_GAS + 400_000) + UARegistryRegLib.MSIG_ACCEPTED_GAS;
         worst += 16 * 3 * (192 + 3_328); // Fable P2-1: the quorum's signature calldata, three mldsa65 signatures (3,309 B each)
-        uint256 fit = (UARegistryCoreLib.TX_GAS_CAP - UARegistryCoreLib.MSIG_UPDATE_GAS - worst)
-            / UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS;
+        uint256 fit = (UARegistryRegLib.TX_GAS_CAP - UARegistryRegLib.MSIG_UPDATE_GAS - worst)
+            / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
         assertLt(fit, 256, "row 13 must be able to refuse here: heavier signers if the constants move");
         Up memory u = _next(r, ua);
         for (uint256 i = 3; i <= fit; ++i) {
@@ -883,15 +883,15 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         bytes32 i_ = _reg(r, 1, _ids(ml[1]), _w(1), _ids(ml[1]));
         innerSigners[i_] = _ids(ml[1]);
         bytes32 ua = _reg(r, 2, _ids(i_, a, b), _w(3), new bytes32[](0));
-        uint256 w = 2 * UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 50_000
-            + (UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 400_000);
+        uint256 w = 2 * UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 50_000
+            + (UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 400_000);
         uint256 calldata_ = 16 * ((192 + 128 + 3_328) + (192 + 1_024));
         uint256 fit =
-            (UARegistryCoreLib.TX_GAS_CAP
-                    - UARegistryCoreLib.MSIG_UPDATE_GAS
+            (UARegistryRegLib.TX_GAS_CAP
+                    - UARegistryRegLib.MSIG_UPDATE_GAS
                     - w
                     - calldata_
-                    - UARegistryCoreLib.MSIG_UPDATE_INNER_GAS) / UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS;
+                    - UARegistryRegLib.MSIG_UPDATE_INNER_GAS) / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
         assertLt(fit, 256);
         Up memory u = _next(r, ua);
         for (uint256 k = 3; k <= fit; ++k) {
@@ -1070,7 +1070,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         );
         uint256 total = _gasTotal(address(x), data);
         emit log_named_uint("updateMsig, 256 slots, a further update (regular + state)", total);
-        assertLe(total, UARegistryCoreLib.TX_GAS_CAP, "the next update fits one transaction");
+        assertLe(total, UARegistryRegLib.TX_GAS_CAP, "the next update fits one transaction");
         (, uint256 en,) = x.msigStateOf(ua);
         assertEq(en >> 255, 1);
     }
@@ -1133,7 +1133,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
             g[k] = _gasTotal(x, data);
             emit log_named_uint(string.concat("updateMsig total gas, slots ", vm.toString(ns[k])), g[k]);
             assertLe(
-                g[k], UARegistryCoreLib.MSIG_UPDATE_GAS + ns[k] * UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS, "row 13 model"
+                g[k], UARegistryRegLib.MSIG_UPDATE_GAS + ns[k] * UARegistryRegLib.MSIG_UPDATE_SLOT_GAS, "row 13 model"
             );
         }
         emit log_named_uint("per slot (256 - 16) / 240", (g[3] - g[1]) / 240);
@@ -1265,10 +1265,10 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         );
         uint256 total = _gasTotal(address(x), data);
         // w: 2 x 45 k + 3,500 + two inners of 45 k + 3,500 + 400 k; a: two inner slots of 192 + 128 + 3,328 B (one mldsa65 leaf each)
-        uint256 worst = 2 * UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 2
-            * (UARegistryCoreLib.MSIG_MEMBER_GAS + UARegistryCoreLib.MSIG_ACCEPTED_GAS + 400_000);
-        uint256 model = worst + 16 * 2 * (192 + 128 + 3_328) + UARegistryCoreLib.MSIG_UPDATE_GAS + (m + 2)
-            * UARegistryCoreLib.MSIG_UPDATE_SLOT_GAS + m * UARegistryCoreLib.MSIG_UPDATE_INNER_GAS;
+        uint256 worst = 2 * UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 2
+            * (UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 400_000);
+        uint256 model = worst + 16 * 2 * (192 + 128 + 3_328) + UARegistryRegLib.MSIG_UPDATE_GAS + (m + 2)
+            * UARegistryRegLib.MSIG_UPDATE_SLOT_GAS + m * UARegistryRegLib.MSIG_UPDATE_INNER_GAS;
         emit log_named_uint("updateMsig over 4 inner msigs of 250 slots (regular + state)", total);
         emit log_named_uint("row 13's model for it", model);
         assertLe(total, model, "row 13 covers the walk over wide inner msigs");
