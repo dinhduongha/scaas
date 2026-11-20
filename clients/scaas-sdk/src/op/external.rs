@@ -148,3 +148,79 @@ pub(crate) async fn answer(
     };
     Ok(answer)
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::rs;
+
+    /// `SEQUENCE { INTEGER r, INTEGER s }` of two encoded integers.
+    fn seq(r: &[u8], s: &[u8]) -> Vec<u8> {
+        let mut b = vec![0x02, r.len() as u8];
+        b.extend(r);
+        b.extend([0x02, s.len() as u8]);
+        b.extend(s);
+        let mut out = vec![0x30, b.len() as u8];
+        out.extend(b);
+        out
+    }
+
+    #[test]
+    fn der_signature_bounds() {
+        // T15 (review 2026-11-20): the device's DER answer, each malformation one change from the control
+        let (r, s) = ([0x11; 32], [0x22; 32]);
+        assert_eq!(rs(&seq(&r, &s)), Some((r, s)), "control");
+        let mut hi = [0x81; 32];
+        hi[31] = 1;
+        let mut padded = vec![0];
+        padded.extend(hi);
+        assert_eq!(
+            rs(&seq(&padded, &s)),
+            Some((hi, s)),
+            "control: a high integer with its zero"
+        );
+        assert_eq!(
+            rs(&seq(&[0x05], &s)).unwrap().0[31],
+            5,
+            "control: a short integer"
+        );
+        let mut long = seq(&r, &s);
+        long[1] += 1;
+        assert_eq!(rs(&long), None, "a wrong outer length");
+        let mut trailing = seq(&r, &s);
+        trailing.push(0);
+        assert_eq!(rs(&trailing), None, "trailing bytes after the SEQUENCE");
+        let mut inside = seq(&r, &s);
+        inside.push(0);
+        inside[1] += 1;
+        assert_eq!(rs(&inside), None, "trailing bytes inside the SEQUENCE");
+        let mut inner = seq(&r, &s);
+        inner[1] += 1;
+        inner[3] += 1;
+        inner.insert(4 + 32, 0);
+        assert_eq!(
+            rs(&inner),
+            None,
+            "an integer longer than its content allows"
+        );
+        assert_eq!(
+            rs(&seq(&hi, &s)),
+            None,
+            "a high integer without its zero (negative)"
+        );
+        // a leading zero not needed is read as its value (the answer is re-encoded as `r ‖ s` and verified by `scaas-ua`)
+        assert_eq!(
+            rs(&seq(&[0, 0x05], &s)).unwrap().0[31],
+            5,
+            "not minimal: the same value"
+        );
+        assert_eq!(rs(&seq(&[0x01; 33], &s)), None, "33 bytes");
+        assert_eq!(rs(&seq(&[], &s)), None, "an empty integer");
+        let mut lf = seq(&r, &s);
+        lf.splice(1..2, [0x81, lf[1]]);
+        assert_eq!(rs(&lf), None, "a long-form length");
+        let mut tag = seq(&r, &s);
+        tag[2] = 0x03;
+        assert_eq!(rs(&tag), None, "not an INTEGER");
+    }
+}

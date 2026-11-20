@@ -1,0 +1,5 @@
+killed   | M1 B1 gen-2 lists a gen-1 group | smartcontracts/evm/src/ua/UARegistryRegLib.sol | rc=1 | expect test_storedPath_noMultiVerifier_false | 1 failed: test_storedPath_noMultiVerifier_false
+killed   | M2 B3 a member slot by verify, not verifyMinimal | smartcontracts/evm/src/ua/UARegistryCoreLib.sol | rc=1 | expect test_updateMsig_blsMultiMember_minimalOnly | 6 failed: test_acceptMembership_minimalOnly, test_msigPop_blsMultiMember_minimalOnly, test_msigPortableApp_minimalOnly, test_portable_minimalOnly, test_updateMsig_blsMultiMember_minimalOnly, test_weighted_311_rows
+killed   | M3 B2 member slot signers ignored | scaas-node/src/typed.rs | rc=101 | expect bls_multi_member_slot_named | 1 failed: typed::tests::bls_multi_member_slot_named
+killed   | M4 B2 member slot keeps the packed 160 | scaas-node/src/typed.rs | rc=101 | expect bls_multi_member_slot_named | 2 failed: typed::tests::bls_multi_hex_blob_refused, typed::tests::bls_multi_member_slot_named
+4 mutants, 4 killed, 0 survived, 0 not loaded

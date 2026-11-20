@@ -22,17 +22,19 @@ contract Musig2Bn254Verifier is UASafeVerifier {
     /// verify = `schnorr-bn254`: valid ≈ 27 k inside `check`.
     constructor() UASafeVerifier(40_000) {}
 
-    function _checkGas(bool pop) internal view override returns (uint256) {
-        return pop ? POP_GAS : CHECK_GAS;
+    function _checkGas(Mode mode) internal view override returns (uint256) {
+        return mode == Mode.Pop ? POP_GAS : CHECK_GAS;
     }
 
-    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop)
+    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, Mode mode)
         external
         view
         override
         returns (bool)
     {
-        if (!pop) return keyData.length == 64 && CurveSigs.schnorr(SCHNORR_TAG, keyData, message, sig);
+        if (mode != Mode.Pop) {
+            return keyData.length == 64 && CurveSigs.schnorr(SCHNORR_TAG, keyData, message, sig);
+        }
         return keyAgg(keyData) && CurveSigs.schnorr(SCHNORR_TAG, keyData[0:64], message, sig);
     }
 

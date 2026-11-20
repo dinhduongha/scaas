@@ -360,7 +360,8 @@ async fn open(sdk: &Sdk, slots: &[MsigSlot]) -> Result<Vec<Key>, SdkError> {
             MsigSlot::Signed { .. } => vec![],
         };
         for r in refs {
-            if matches!(r, KeyRef::Msig { .. }) {
+            // a slot's key is a single key: never an `msig` nor a `bls12381-multi` group (M16; a group slot PLANNED)
+            if matches!(r, KeyRef::Msig { .. } | KeyRef::BlsMulti { .. }) {
                 return Err(SdkError::Argument);
             }
             keys.push(key_opened(sdk, r).await?);
@@ -440,9 +441,8 @@ fn structure(kd: &[u8]) -> Result<MsigStructure, SdkError> {
     MsigStructure::from_key_data(kd).map_err(ua_err)
 }
 
-/// The registry's domain for a native signer's `UAAuth` (gen 1 only: `predecessor() == 0`): an `msig`'s native member, a
-/// native auditor's consent (`Admin::sign_pqz_auditor_consent`).
-pub(crate) async fn domain(
+/// The registry's domain for a native member's `UAAuth` (gen 1 only: `predecessor() == 0`).
+async fn domain(
     sdk: &Sdk,
     chain: &str,
     pool: &EvmPool,
@@ -503,6 +503,27 @@ fn member_of(s: &str) -> Result<MemberSig, SdkError> {
             .collect::<Result<_, SdkError>>()?,
         sig: sig(&v)?,
     })
+}
+
+/// F1 (review 2026-11-20): a slot signed on another device names what it signed (`ua`, `purpose`, `digest`, as
+/// [`crate::op::Op::member_sign`] writes them); the submitting device combines it only over its own prepared operation:
+/// `PreparedStale` when it names another (that device prepared another nonce or `validUntil`, or the JSON is of another
+/// operation), `Argument` when it names none. The signatures themselves stay the registry's to check (PLANNED: a
+/// `scaas-ua` verifier of a `MemberSig`).
+fn bound_to(
+    member: &str,
+    ua: &[u8; 32],
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+) -> Result<(), SdkError> {
+    let v: Value = serde_json::from_str(member).map_err(|_| SdkError::Argument)?;
+    let got = |k: &str| -> Result<[u8; 32], SdkError> {
+        id32(v.get(k).and_then(Value::as_str).ok_or(SdkError::Argument)?)
+    };
+    if got("ua")? != *ua || got("purpose")? != *purpose || got("digest")? != *digest {
+        return Err(SdkError::PreparedStale);
+    }
+    Ok(())
 }
 
 /// One local slot's `MemberSig` (M1) over `uaMessage(msig, purpose, digest)`; a passkey or secure-element member through the
@@ -611,6 +632,7 @@ async fn uasig(
                 if m.index != *index {
                     return Err(SdkError::Argument);
                 }
+                bound_to(member, ua, purpose, digest)?;
                 m
             }
             _ => {
@@ -707,19 +729,45 @@ impl crate::op::Op {
                 let views = views(&pool, registry, &[ua]).await?;
                 let v = views.get(&ua).ok_or(SdkError::Internal)?;
                 slots_active(&views, v, &slots)?;
-                let native = matches!(slot, MsigSlot::Member { key: KeyRef::Native { .. }, .. })
-                    || matches!(slot, MsigSlot::Msig { members, .. } if members.iter().any(|l| matches!(l.key, KeyRef::Native { .. })));
-                let d = match native {
+                let d = match has_native(&sdk, slot).await? {
                     true => Some(domain(&sdk, &chain, &pool, registry).await?),
                     false => None,
                 };
                 let (purpose, digest) = (scaas_purpose(td)?, td.digest()?);
-                let m = slot_sig(&sdk, &views, &v.first, &ua, slot, &purpose, &digest, d.as_ref(), None).await?;
-                let j = members_json(&UASig { members: vec![m], ..Default::default() })?;
-                serde_json::to_string(j.get(0).ok_or(SdkError::Internal)?).map_err(|_| SdkError::Internal)
+                let m = slot_sig(
+                    &sdk,
+                    &views,
+                    &v.first,
+                    &ua,
+                    slot,
+                    &purpose,
+                    &digest,
+                    d.as_ref(),
+                    None,
+                )
+                .await?;
+                let j = members_json(&UASig {
+                    members: vec![m],
+                    ..Default::default()
+                })?;
+                let mut j = j.get(0).cloned().ok_or(SdkError::Internal)?;
+                // what it signed, for the submitting device's check (F1)
+                let o = j.as_object_mut().ok_or(SdkError::Internal)?;
+                o.insert("ua".into(), Value::from(hex(&ua)));
+                o.insert("purpose".into(), Value::from(hex(&purpose)));
+                o.insert("digest".into(), Value::from(hex(&digest)));
+                serde_json::to_string(&j).map_err(|_| SdkError::Internal)
             })
             .await
     }
+}
+
+/// Whether `slot` holds a native member, by its opened keys as `uasig` decides (F7: an imported EVM key is a native member too).
+async fn has_native(sdk: &Sdk, slot: &MsigSlot) -> Result<bool, SdkError> {
+    Ok(open(sdk, std::slice::from_ref(slot))
+        .await?
+        .iter()
+        .any(|k| matches!(k, Key::Native(..))))
 }
 
 /// `MemberSig[]` as the registry calls take them.

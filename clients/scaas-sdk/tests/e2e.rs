@@ -6,9 +6,9 @@
 //! `Landed` by the token's executed event. Local only; nothing leaves the machine.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use scaas_sdk::op::{KeyRef, OpState, SubmitPath};
+use scaas_sdk::op::{BlsMultiPart, KeyRef, OpState, SubmitPath};
 use scaas_sdk::vault::{ImportWords, MemoryStore};
-use scaas_sdk::wallet::{Envelope, Pay, PayBody, PayMeta};
+use scaas_sdk::wallet::{Envelope, Pay, PayBody, PayMeta, Transfer};
 use scaas_sdk::{
     ChainProfile, EndpointConfig, Family, Finality, GasBase, GasRows, GasVerify, Limits,
     ListedToken, RuntimeChoice, Sdk, SdkConfig,
@@ -63,11 +63,15 @@ fn endpoint(url: &str) -> EndpointConfig {
     }
 }
 
-/// An `anvil` on a port of this process (stopped on drop), ready to answer; its URL.
-async fn anvil(offset: u16) -> (Anvil, String) {
-    let port = 20_000 + offset + (std::process::id() % 10_000) as u16;
+/// An `anvil` (stopped on drop) on a port the OS gave as free, ready to answer as chain 31337 while the child is alive; its
+/// URL. Never a computed port: another node of the machine (another agent's `anvil`, the testnet stack) is never asked.
+async fn anvil() -> (Anvil, String) {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .expect("a free port")
+        .port();
     let rpc = format!("http://127.0.0.1:{port}");
-    let a = Anvil(
+    let mut a = Anvil(
         Command::new("anvil")
             .args([
                 "--chain-id",
@@ -88,16 +92,25 @@ async fn anvil(offset: u16) -> (Anvil, String) {
             .expect("anvil in PATH"),
     );
     for _ in 0..100 {
-        if Command::new("cast")
+        assert!(
+            a.0.try_wait().expect("anvil's state").is_none(),
+            "anvil exited (port {port} taken?)"
+        );
+        let id = Command::new("cast")
             .args(["chain-id", "--rpc-url", &rpc])
-            .output()
-            .is_ok_and(|o| o.status.success())
-        {
-            break;
+            .output();
+        if id.is_ok_and(|o| {
+            o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "31337"
+        }) {
+            assert!(
+                a.0.try_wait().expect("anvil's state").is_none(),
+                "the node on {port} is not this anvil"
+            );
+            return (a, rpc);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    (a, rpc)
+    panic!("anvil on {port} never answered as chain 31337");
 }
 
 /// The contracts' own `script/Deploy.s.sol` on `rpc` with `env`; its book (`deployments/<name>.json`, removed after reading).
@@ -203,7 +216,7 @@ fn now() -> u64 {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_pay_on_anvil() {
-    let (_anvil, rpc) = anvil(0).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     // the seed's EVM key 0: the token holder, the payer and the signer of the pay (a native id signs its own digest)
@@ -246,6 +259,7 @@ async fn e2e_pay_on_anvil() {
                 fee_extra: None,
                 ua_extra: None,
                 per_item: None,
+                regular: None,
             }],
             verify: vec![GasVerify {
                 signer: 0,
@@ -402,7 +416,7 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
     use scaas_sdk::confidential::{
         ZetherBalanceRequest, ZetherRollOver, ZetherShield, ZetherTransfer,
     };
-    let (_anvil, rpc) = anvil(1).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let holder = funded_holder(rpc);
@@ -559,7 +573,7 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_register_pq_kind_on_anvil() {
     const FNDSA512: u16 = 0x0132;
-    let (_anvil, rpc) = anvil(2).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -621,7 +635,7 @@ fn registry_profile(rpc: &str, registry: &str, cap: Option<u64>) -> ChainProfile
 async fn e2e_pqz_pop_split_stored_on_anvil() {
     use scaas_sdk::account::{Register, RegisterAttrs};
     const FNDSA512: u16 = 0x0132;
-    let (_anvil, rpc) = anvil(6).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let payer_address = funded_holder(rpc);
@@ -690,7 +704,7 @@ async fn e2e_pqz_pop_split_stored_on_anvil() {
 async fn e2e_sponsored_registration_then_pay_on_anvil() {
     use scaas_sdk::account::RegisterAttrs;
     const ED25519: u16 = 0x0102;
-    let (_anvil, rpc) = anvil(3).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let holder = funded_holder(rpc);
@@ -731,6 +745,7 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
                 fee_extra: None,
                 ua_extra: None,
                 per_item: None,
+                regular: None,
             }],
             verify: vec![GasVerify {
                 signer: 0,
@@ -840,6 +855,7 @@ fn account_profile(rpc: &str) -> ChainProfile {
         fee_extra: None,
         ua_extra: None,
         per_item: None,
+        regular: None,
     };
     ChainProfile {
         key: "anvil".into(),
@@ -982,7 +998,7 @@ async fn self_relay(sdk: &Arc<Sdk>, seed: &str, p: Arc<scaas_sdk::op::Prepared>)
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn smart_account_add_key_self_relay() {
     use scaas_sdk::account::SubjectKeyArgs;
-    let (_anvil, rpc) = anvil(4).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -1072,7 +1088,7 @@ async fn smart_account_add_key_self_relay() {
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn guardian_recovery_via_execute() {
     use scaas_sdk::account::SubjectKeyArgs;
-    let (_anvil, rpc) = anvil(5).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -1176,7 +1192,7 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
     use scaas_sdk::op::MsigSlot;
     use scaas_sdk::wallet::Transfer;
     const ED25519: u16 = 0x0102;
-    let (_anvil, rpc) = anvil(7).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let holder = funded_holder(rpc);
@@ -1204,6 +1220,7 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
         fee_extra: None,
         ua_extra: None,
         per_item: None,
+        regular: None,
     };
     profile.gas = GasRows {
         base: [true, false]
@@ -1425,7 +1442,7 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
 async fn e2e_register_mldsa_cached_on_anvil() {
     use scaas_sdk::account::{Register, RegisterAttrs};
     const MLDSA65: u16 = 0x0131;
-    let (_anvil, rpc) = anvil(8).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -1591,7 +1608,7 @@ impl scaas_sdk::platform::Authenticator for Passkey {
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_register_passkey_row_on_anvil() {
     use scaas_sdk::account::{CreatePasskeyKey, Register};
-    let (_anvil, rpc) = anvil(9).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -1674,7 +1691,7 @@ async fn e2e_register_passkey_row_on_anvil() {
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_dex_cancel_order_on_anvil() {
     use scaas_sdk::dex::{CancelOrder, OrderTerms};
-    let (_anvil, rpc) = anvil(10).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let holder = funded_holder(rpc);
@@ -1695,6 +1712,7 @@ async fn e2e_dex_cancel_order_on_anvil() {
         fee_extra: None,
         ua_extra: None,
         per_item: None,
+        regular: None,
     };
     let profile = ChainProfile {
         key: "anvil".into(),
@@ -1809,4 +1827,354 @@ async fn e2e_dex_cancel_order_on_anvil() {
     let last = follow(&sdk, op).await;
     assert!(matches!(last, OpState::Landed { .. }), "{last:?}");
     assert_ne!(pulled(&h), "0", "closed on the token");
+}
+
+/// A local anvil with the contracts' own `script/Deploy.s.sol` deployed (the demo token held by the seed's EVM key 0, funded):
+/// the node, its URL, the deploy book, the chain's `chain_uid` and that key's address (the bls-multi e2e's shape over
+/// [`anvil`] and [`deploy`]: a port from the OS, one forge script at a time).
+async fn deployed() -> (Anvil, String, serde_json::Value, String, String) {
+    let (a, rpc) = anvil().await;
+    let port = rpc.rsplit(':').next().unwrap().to_string();
+    let holder = funded_holder(&rpc);
+    let name = format!("local-31337-{port}-testnet");
+    let dep = deploy(
+        &rpc,
+        &name,
+        &[("DEMO_SUPPLY", "1000000000000"), ("DEMO_HOLDER", &holder)],
+    );
+    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", &rpc]);
+    (a, rpc, dep, uid, holder)
+}
+
+/// `op` followed to a terminal state (≤ 30 s): `Landed`.
+async fn landed(sdk: &Arc<Sdk>, op: &str) {
+    let mut last = None;
+    for _ in 0..60 {
+        let s = sdk.op().state(op.to_string()).await.unwrap();
+        if s.is_terminal() {
+            last = Some(s);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    assert!(matches!(last, Some(OpState::Landed { .. })), "{last:?}");
+}
+
+/// Plan Task 17 (spec 2026-11-19-bls12381-multi §4, §5.4, §8.4), on anvil with the deploy's registry (0x0121 enabled where
+/// EIP-2537 answers): a group of three of the seed's member keys (t = 2) registers by `registerBlsMulti` (every member's PoP
+/// part, the quote by n from the reference table, a self-relay by the EVM key), receives a pay, and spends by a transfer on
+/// ids that two members sign: partials collected, aggregated (minimal), self-relayed, `Landed`. Local only.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_bls_multi_on_anvil() {
+    let (_anvil, rpc, dep, uid, _) = deployed().await;
+    let token = dep["demo_token"].as_str().unwrap().to_ascii_lowercase();
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let profile = ChainProfile {
+        key: "anvil".into(),
+        family: Family::Evm,
+        chain_id: Some(31337),
+        chain_uid: uid,
+        rpc: vec![endpoint(&rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: Some(registry.clone()),
+        factory: None,
+        router: None,
+        finality: Finality::Depth(0),
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![ListedToken {
+            address: token.clone(),
+            symbol: "DEMO".into(),
+            decimals: 0,
+        }],
+        // the reference table's rows: the registration, the native pay, the transfer and signer 289's verify row
+        gas: GasRows {
+            base: vec![],
+            verify: vec![],
+        },
+        max_valid_secs: None,
+        gas_opt_in: vec!["reference".into()],
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
+        dexes: vec![],
+        wrappers: vec![],
+    };
+    let sdk = Sdk::open(SdkConfig {
+        profiles: vec![profile],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let seed = sdk
+        .vault()
+        .import_words(ImportWords {
+            label: "main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    let payer = KeyRef::Native {
+        seed: seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    // the group: member keys ua_key(0x0121, a, 0), a = 0, 1, 2; t = 2
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let keys: Vec<[u8; 256]> = (0..3)
+        .map(|a| {
+            w.ua_key(0x0121, a, 0)
+                .unwrap()
+                .key_data()
+                .try_into()
+                .unwrap()
+        })
+        .collect();
+    let (d, _) = scaas_ua::bls_multi::build_key_data_unweighted(&keys, 2).unwrap();
+    let ua = scaas_ua::bls_multi::ua_of(&d);
+    let d = format!("0x{}", alloy::hex::encode(&d));
+    let member = |account: u32| KeyRef::BlsMulti {
+        seed: seed.clone(),
+        account,
+        index: 0,
+        key_data: d.clone(),
+    };
+    let op = sdk.op();
+    let pops: Vec<BlsMultiPart> = (0..3)
+        .map(|a| op.bls_multi_pop_part(member(a)).unwrap())
+        .collect();
+    let q = op
+        .quote_register_bls_multi("anvil".into(), d.clone(), payer.clone())
+        .await
+        .unwrap();
+    let tx = op
+        .register_bls_multi("anvil".into(), d.clone(), pops, q)
+        .await
+        .unwrap();
+    let ua_hex = format!("0x{}", alloy::hex::encode(ua));
+    let mut registered = String::new();
+    for _ in 0..60 {
+        registered = cast(&[
+            "call",
+            &registry,
+            "isRegistered(bytes32)(bool)",
+            &ua_hex,
+            "--rpc-url",
+            &rpc,
+        ]);
+        if registered == "true" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    assert_eq!(registered, "true", "registerBlsMulti {tx}");
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let envelope = || Envelope {
+        valid_until: now + 600,
+        mode: 0,
+        relayer: None,
+        fee: "0".into(),
+        fee_recipient: None,
+    };
+    // the holder pays the group's UA
+    let p = sdk
+        .wallet()
+        .prepare_pay(Pay {
+            signer: payer.clone(),
+            chain: "anvil".into(),
+            token: token.clone(),
+            to: ua_hex.clone(),
+            value: "1000".into(),
+            meta: PayMeta {
+                salt: None,
+                pay_no: None,
+                save: false,
+                body: PayBody::None,
+            },
+            envelope: envelope(),
+        })
+        .await
+        .unwrap();
+    let q = op
+        .quote(
+            p.clone(),
+            SubmitPath::SelfRelay {
+                payer: payer.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    let paid = op.submit(p, q).await.unwrap();
+    landed(&sdk, &paid).await;
+    // the group spends: members 0 and 2 sign, member 0 coordinates
+    let p = sdk
+        .wallet()
+        .prepare_transfer(Transfer {
+            signer: member(0),
+            chain: "anvil".into(),
+            token: token.clone(),
+            to: format!("0x{}{}", "00".repeat(12), "beef".repeat(10)),
+            value: "7".into(),
+            batch: "3".into(),
+            envelope: envelope(),
+        })
+        .await
+        .unwrap();
+    let parts = vec![
+        op.bls_multi_part(p.clone(), member(0)).await.unwrap(),
+        op.bls_multi_part(p.clone(), member(2)).await.unwrap(),
+    ];
+    assert!(parts.iter().all(|x| op.bls_multi_part_ok(&p, x)));
+    let q = op
+        .quote(p.clone(), SubmitPath::SelfRelay { payer })
+        .await
+        .unwrap();
+    let spent = op.submit_bls_multi(p, q, parts, false).await.unwrap();
+    landed(&sdk, &spent).await;
+}
+
+/// Merged-tree review M20 (owner 2026-11-20): `register_bls_multi` of a 64-member group by self-relay against a node that
+/// enforces EIP-7825 under EIP-8037 (a local Nethermind copy, never the live stack): the quote's `gas_limit` and
+/// `regular_gas` beside the receipt's `gasUsed`. Env: `SCAAS_M20_RPC` (the copy's URL), `SCAAS_M20_BOOK` (the deploy book),
+/// `SCAAS_M20_CHAIN_ID`; the seed's EVM key 0 funded. Prints one `M20` line per figure; the run script records them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs a local Nethermind copy with Amsterdam rules (clients/scaas-sdk/runs/2026-11-20-m20-nethermind.sh)"]
+async fn e2e_bls_multi_64_on_a_node() {
+    let rpc = std::env::var("SCAAS_M20_RPC").expect("SCAAS_M20_RPC");
+    let dep: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(std::env::var("SCAAS_M20_BOOK").unwrap()).unwrap(),
+    )
+    .unwrap();
+    let chain_id: u64 = std::env::var("SCAAS_M20_CHAIN_ID")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", &rpc]);
+    let profile = ChainProfile {
+        key: "copy".into(),
+        family: Family::Evm,
+        chain_id: Some(chain_id),
+        chain_uid: uid,
+        rpc: vec![endpoint(&rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: Some(registry.clone()),
+        factory: None,
+        router: None,
+        finality: Finality::Depth(1),
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![],
+        gas: GasRows {
+            base: vec![],
+            verify: vec![],
+        },
+        max_valid_secs: None,
+        gas_opt_in: vec!["reference".into()],
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
+        dexes: vec![],
+        wrappers: vec![],
+    };
+    // the app raises `max_gas` for this run: the default 2^24 holds the whole gas limit
+    let sdk = Sdk::open(SdkConfig {
+        profiles: vec![profile],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits {
+            max_gas: 1 << 27,
+            ..Limits::default()
+        },
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let seed = sdk
+        .vault()
+        .import_words(ImportWords {
+            label: "main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    let payer = KeyRef::Native {
+        seed: seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let keys: Vec<[u8; 256]> = (0..64)
+        .map(|a| {
+            w.ua_key(0x0121, a, 0)
+                .unwrap()
+                .key_data()
+                .try_into()
+                .unwrap()
+        })
+        .collect();
+    let (d, _) = scaas_ua::bls_multi::build_key_data_unweighted(&keys, 33).unwrap();
+    let ua = scaas_ua::bls_multi::ua_of(&d);
+    let d = format!("0x{}", alloy::hex::encode(&d));
+    let member = |account: u32| KeyRef::BlsMulti {
+        seed: seed.clone(),
+        account,
+        index: 0,
+        key_data: d.clone(),
+    };
+    let op = sdk.op();
+    let pops: Vec<BlsMultiPart> = (0..64)
+        .map(|a| op.bls_multi_pop_part(member(a)).unwrap())
+        .collect();
+    let q = op
+        .quote_register_bls_multi("copy".into(), d.clone(), payer.clone())
+        .await
+        .unwrap();
+    println!(
+        "M20 quote gas_limit {} regular_gas {}",
+        q.gas_limit, q.regular_gas
+    );
+    let tx = op
+        .register_bls_multi("copy".into(), d.clone(), pops, q)
+        .await
+        .unwrap();
+    println!("M20 tx {tx}");
+    let ua_hex = format!("0x{}", alloy::hex::encode(ua));
+    let mut registered = String::new();
+    for _ in 0..120 {
+        registered = cast(&[
+            "call",
+            &registry,
+            "isRegistered(bytes32)(bool)",
+            &ua_hex,
+            "--rpc-url",
+            &rpc,
+        ]);
+        if registered == "true" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+    }
+    let receipt = cast(&["receipt", &tx, "--json", "--rpc-url", &rpc]);
+    let r: serde_json::Value = serde_json::from_str(&receipt).unwrap();
+    println!(
+        "M20 receipt status {} gasUsed {} block {}",
+        r["status"], r["gasUsed"], r["blockNumber"]
+    );
+    assert_eq!(registered, "true", "registerBlsMulti of 64 included {tx}");
 }

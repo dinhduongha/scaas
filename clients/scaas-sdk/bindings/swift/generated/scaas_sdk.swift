@@ -4660,11 +4660,32 @@ public func FfiConverterTypeForeignStore_lower(_ value: ForeignStore) -> UInt64 
  */
 public protocol OpProtocol: AnyObject, Sendable {
     
+    func blsMultiPart(prepared: Prepared, member: KeyRef) async throws  -> BlsMultiPart
+    
+    /**
+     * Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+     */
+    func blsMultiPartOk(prepared: Prepared, part: BlsMultiPart)  -> Bool
+    
+    /**
+     * Member `member`'s PoP part for its group's registration.
+     */
+    func blsMultiPopPart(member: KeyRef) throws  -> BlsMultiPart
+    
+    /**
+     * Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+     */
+    func blsMultiPopPartOk(keyData: String, part: BlsMultiPart)  -> Bool
+    
     func memberSign(prepared: Prepared) async throws  -> String
     
     func quote(prepared: Prepared, path: SubmitPath) async throws  -> SubmitQuote
     
+    func quoteRegisterBlsMulti(chain: String, keyData: String, payer: KeyRef) async throws  -> SubmitQuote
+    
     func quoteWithGas(prepared: Prepared, path: SubmitPath, gas: UInt64) async throws  -> SubmitQuote
+    
+    func registerBlsMulti(chain: String, keyData: String, parts: [BlsMultiPart], quote: SubmitQuote) async throws  -> String
     
     func resend(op: String, quote: SubmitQuote) async throws 
     
@@ -4673,6 +4694,8 @@ public protocol OpProtocol: AnyObject, Sendable {
     func state(op: String) async throws  -> OpState
     
     func submit(prepared: Prepared, quote: SubmitQuote) async throws  -> String
+    
+    func submitBlsMulti(prepared: Prepared, quote: SubmitQuote, parts: [BlsMultiPart], surplus: Bool) async throws  -> String
     
 }
 /**
@@ -4731,6 +4754,61 @@ open class Op: OpProtocol, @unchecked Sendable {
     
 
     
+open func blsMultiPart(prepared: Prepared, member: KeyRef)async throws  -> BlsMultiPart  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_op_bls_multi_part(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypePrepared_lower(prepared),FfiConverterTypeKeyRef_lower(member)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeBlsMultiPart_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+    /**
+     * Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+     */
+open func blsMultiPartOk(prepared: Prepared, part: BlsMultiPart) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok(
+            self.uniffiCloneHandle(),
+        FfiConverterTypePrepared_lower(prepared),
+        FfiConverterTypeBlsMultiPart_lower(part),$0
+    )
+})
+}
+    
+    /**
+     * Member `member`'s PoP part for its group's registration.
+     */
+open func blsMultiPopPart(member: KeyRef)throws  -> BlsMultiPart  {
+    return try  FfiConverterTypeBlsMultiPart_lift(try rustCallWithError(FfiConverterTypeSdkError_lift) {
+    uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeKeyRef_lower(member),$0
+    )
+})
+}
+    
+    /**
+     * Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+     */
+open func blsMultiPopPartOk(keyData: String, part: BlsMultiPart) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(keyData),
+        FfiConverterTypeBlsMultiPart_lower(part),$0
+    )
+})
+}
+    
 open func memberSign(prepared: Prepared)async throws  -> String  {
     return
         try  await uniffiRustCallAsync(
@@ -4765,6 +4843,23 @@ open func quote(prepared: Prepared, path: SubmitPath)async throws  -> SubmitQuot
         )
 }
     
+open func quoteRegisterBlsMulti(chain: String, keyData: String, payer: KeyRef)async throws  -> SubmitQuote  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(chain),FfiConverterString.lower(keyData),FfiConverterTypeKeyRef_lower(payer)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeSubmitQuote_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
 open func quoteWithGas(prepared: Prepared, path: SubmitPath, gas: UInt64)async throws  -> SubmitQuote  {
     return
         try  await uniffiRustCallAsync(
@@ -4778,6 +4873,23 @@ open func quoteWithGas(prepared: Prepared, path: SubmitPath, gas: UInt64)async t
             completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
             freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeSubmitQuote_lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func registerBlsMulti(chain: String, keyData: String, parts: [BlsMultiPart], quote: SubmitQuote)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_op_register_bls_multi(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(chain),FfiConverterString.lower(keyData),FfiConverterSequenceTypeBlsMultiPart.lower(parts),FfiConverterTypeSubmitQuote_lower(quote)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeSdkError_lift
         )
 }
@@ -4840,6 +4952,23 @@ open func submit(prepared: Prepared, quote: SubmitQuote)async throws  -> String 
                 uniffi_scaas_sdk_fn_method_op_submit(
                     self.uniffiCloneHandle(),
                     FfiConverterTypePrepared_lower(prepared),FfiConverterTypeSubmitQuote_lower(quote)
+                )
+            },
+            pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeSdkError_lift
+        )
+}
+    
+open func submitBlsMulti(prepared: Prepared, quote: SubmitQuote, parts: [BlsMultiPart], surplus: Bool)async throws  -> String  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_scaas_sdk_fn_method_op_submit_bls_multi(
+                    self.uniffiCloneHandle(),
+                    FfiConverterTypePrepared_lower(prepared),FfiConverterTypeSubmitQuote_lower(quote),FfiConverterSequenceTypeBlsMultiPart.lower(parts),FfiConverterBool.lower(surplus)
                 )
             },
             pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
@@ -8201,6 +8330,64 @@ public func FfiConverterTypeBindingConfig_lower(_ value: BindingConfig) -> RustB
 }
 
 
+/**
+ * A member's part (spec §5.4, §4): its index in the group's key data and its partial `σ_i` (or PoP part `π_i`), 128 bytes,
+ * `0x` hex.
+ */
+public struct BlsMultiPart: Equatable, Hashable {
+    public var index: UInt8
+    public var signature: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(index: UInt8, signature: String) {
+        self.index = index
+        self.signature = signature
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension BlsMultiPart: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBlsMultiPart: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BlsMultiPart {
+        return
+            try BlsMultiPart(
+                index: FfiConverterUInt8.read(from: &buf), 
+                signature: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: BlsMultiPart, into buf: inout [UInt8]) {
+        FfiConverterUInt8.write(value.index, into: &buf)
+        FfiConverterString.write(value.signature, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlsMultiPart_lift(_ buf: RustBuffer) throws -> BlsMultiPart {
+    return try FfiConverterTypeBlsMultiPart.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBlsMultiPart_lower(_ value: BlsMultiPart) -> RustBuffer {
+    return FfiConverterTypeBlsMultiPart.lower(value)
+}
+
+
 public struct Burn: Equatable, Hashable {
     public var signer: KeyRef
     public var chain: String
@@ -8611,7 +8798,9 @@ public struct ChainProfile: Equatable, Hashable {
     public var router: String?
     public var finality: Finality
     /**
-     * the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
+     * the chain's per-transaction cap of the **regular** gas (EIP-7825 on a chain applying EIP-8037) when it has one, from
+     * the release data: a quote's regular bound is held to it, its gas limit (regular + state) to the block gas limit. A
+     * chain capping the whole gas limit (EIP-7825 without EIP-8037) is not supported (merged-tree review M19, 2026-11-20)
      */
     public var txGasCap: UInt64?
     /**
@@ -8667,7 +8856,9 @@ public struct ChainProfile: Equatable, Hashable {
          * scaas-node gateways; empty: no gateway path on this chain
          */gateways: [EndpointConfig], registry: String?, factory: String?, router: String?, finality: Finality, 
         /**
-         * the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
+         * the chain's per-transaction cap of the **regular** gas (EIP-7825 on a chain applying EIP-8037) when it has one, from
+         * the release data: a quote's regular bound is held to it, its gas limit (regular + state) to the block gas limit. A
+         * chain capping the whole gas limit (EIP-7825 without EIP-8037) is not supported (merged-tree review M19, 2026-11-20)
          */txGasCap: UInt64?, 
         /**
          * the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
@@ -9696,6 +9887,12 @@ public struct GasBase: Equatable, Hashable {
      * the part that grows with a count the operation names (owner 2026-11-19, I1); `None`: no count, nothing added
      */
     public var perItem: GasPerItem?
+    /**
+     * the row's regular gas, its figure's part EIP-7825's per-transaction cap holds under EIP-8037 (controller call, owner
+     * auto-run 2026-11-19; at a count of 0 on a counted row, whose `per_item` then carries its slope); `None`: the whole
+     * figure is held to the cap
+     */
+    public var regular: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
@@ -9715,7 +9912,12 @@ public struct GasBase: Equatable, Hashable {
          */uaExtra: UInt64?, 
         /**
          * the part that grows with a count the operation names (owner 2026-11-19, I1); `None`: no count, nothing added
-         */perItem: GasPerItem?) {
+         */perItem: GasPerItem?, 
+        /**
+         * the row's regular gas, its figure's part EIP-7825's per-transaction cap holds under EIP-8037 (controller call, owner
+         * auto-run 2026-11-19; at a count of 0 on a counted row, whose `per_item` then carries its slope); `None`: the whole
+         * figure is held to the cap
+         */regular: UInt64?) {
         self.entry = entry
         self.kind = kind
         self.fresh = fresh
@@ -9725,6 +9927,7 @@ public struct GasBase: Equatable, Hashable {
         self.feeExtra = feeExtra
         self.uaExtra = uaExtra
         self.perItem = perItem
+        self.regular = regular
     }
 
     
@@ -9751,7 +9954,8 @@ public struct FfiConverterTypeGasBase: FfiConverterRustBuffer {
                 save: FfiConverterOptionUInt64.read(from: &buf), 
                 feeExtra: FfiConverterOptionUInt64.read(from: &buf), 
                 uaExtra: FfiConverterOptionUInt64.read(from: &buf), 
-                perItem: FfiConverterOptionTypeGasPerItem.read(from: &buf)
+                perItem: FfiConverterOptionTypeGasPerItem.read(from: &buf), 
+                regular: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
@@ -9765,6 +9969,7 @@ public struct FfiConverterTypeGasBase: FfiConverterRustBuffer {
         FfiConverterOptionUInt64.write(value.feeExtra, into: &buf)
         FfiConverterOptionUInt64.write(value.uaExtra, into: &buf)
         FfiConverterOptionTypeGasPerItem.write(value.perItem, into: &buf)
+        FfiConverterOptionUInt64.write(value.regular, into: &buf)
     }
 }
 
@@ -9851,12 +10056,30 @@ public func FfiConverterTypeGasPerByte_lower(_ value: GasPerByte) -> RustBuffer 
 public struct GasPerItem: Equatable, Hashable {
     public var item: String
     public var gas: UInt64
+    /**
+     * the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
+     */
+    public var regular: UInt64?
+    /**
+     * the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+     * extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+     */
+    public var measuredMax: UInt64?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(item: String, gas: UInt64) {
+    public init(item: String, gas: UInt64, 
+        /**
+         * the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
+         */regular: UInt64?, 
+        /**
+         * the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+         * extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+         */measuredMax: UInt64?) {
         self.item = item
         self.gas = gas
+        self.regular = regular
+        self.measuredMax = measuredMax
     }
 
     
@@ -9876,13 +10099,17 @@ public struct FfiConverterTypeGasPerItem: FfiConverterRustBuffer {
         return
             try GasPerItem(
                 item: FfiConverterString.read(from: &buf), 
-                gas: FfiConverterUInt64.read(from: &buf)
+                gas: FfiConverterUInt64.read(from: &buf), 
+                regular: FfiConverterOptionUInt64.read(from: &buf), 
+                measuredMax: FfiConverterOptionUInt64.read(from: &buf)
         )
     }
 
     public static func write(_ value: GasPerItem, into buf: inout [UInt8]) {
         FfiConverterString.write(value.item, into: &buf)
         FfiConverterUInt64.write(value.gas, into: &buf)
+        FfiConverterOptionUInt64.write(value.regular, into: &buf)
+        FfiConverterOptionUInt64.write(value.measuredMax, into: &buf)
     }
 }
 
@@ -10021,8 +10248,8 @@ public func FfiConverterTypeGasSources_lower(_ value: GasSources) -> RustBuffer 
  * A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
  * verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
  * save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
- * per_item?: {gas, base_count, source}, stand_in?}`, each verify row `{signer, gas, measured, source, sig_bytes, margin?,
- * item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+ * per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
+ * `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
  * and the SDK's reference table.
  */
 public struct GasTable: Equatable, Hashable {
@@ -15702,6 +15929,12 @@ public struct SubmitQuote: Equatable, Hashable {
      */
     public var gasLimit: UInt64
     /**
+     * the bound of `gas_limit`'s regular part, with the margin (EIP-8037; controller call, owner auto-run 2026-11-19): the part
+     * held to the profile's `tx_gas_cap` (EIP-7825 caps the regular gas only), the whole `gas_limit` where the split is not
+     * known (a native send's estimate, an app's figure); 0 on the gateway path
+     */
+    public var regularGas: UInt64
+    /**
      * what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
      * the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
      */
@@ -15744,6 +15977,11 @@ public struct SubmitQuote: Equatable, Hashable {
          * the self-relay transaction's gas limit (`gas`); 0 on the gateway path, where the holder sends no transaction
          */gasLimit: UInt64, 
         /**
+         * the bound of `gas_limit`'s regular part, with the margin (EIP-8037; controller call, owner auto-run 2026-11-19): the part
+         * held to the profile's `tx_gas_cap` (EIP-7825 caps the regular gas only), the whole `gas_limit` where the split is not
+         * known (a native send's estimate, an app's figure); 0 on the gateway path
+         */regularGas: UInt64, 
+        /**
          * what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
          * the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
          */gas: UInt64?, 
@@ -15766,6 +16004,7 @@ public struct SubmitQuote: Equatable, Hashable {
         self.path = path
         self.payer = payer
         self.gasLimit = gasLimit
+        self.regularGas = regularGas
         self.gas = gas
         self.gasFrom = gasFrom
         self.maxFeePerGas = maxFeePerGas
@@ -15796,6 +16035,7 @@ public struct FfiConverterTypeSubmitQuote: FfiConverterRustBuffer {
                 path: FfiConverterTypeSubmitPath.read(from: &buf), 
                 payer: FfiConverterOptionString.read(from: &buf), 
                 gasLimit: FfiConverterUInt64.read(from: &buf), 
+                regularGas: FfiConverterUInt64.read(from: &buf), 
                 gas: FfiConverterOptionUInt64.read(from: &buf), 
                 gasFrom: FfiConverterOptionTypeGasSources.read(from: &buf), 
                 maxFeePerGas: FfiConverterString.read(from: &buf), 
@@ -15812,6 +16052,7 @@ public struct FfiConverterTypeSubmitQuote: FfiConverterRustBuffer {
         FfiConverterTypeSubmitPath.write(value.path, into: &buf)
         FfiConverterOptionString.write(value.payer, into: &buf)
         FfiConverterUInt64.write(value.gasLimit, into: &buf)
+        FfiConverterUInt64.write(value.regularGas, into: &buf)
         FfiConverterOptionUInt64.write(value.gas, into: &buf)
         FfiConverterOptionTypeGasSources.write(value.gasFrom, into: &buf)
         FfiConverterString.write(value.maxFeePerGas, into: &buf)
@@ -25544,6 +25785,13 @@ public enum KeyRef: Equatable, Hashable {
      */
     case msig(ua: String, slots: [MsigSlot]
     )
+    /**
+     * a `bls12381-multi` (`0x0121`) group (plan Task 17): the seed's member key `ua_key(0x0121, account, index)` (EIP-2333:
+     * index 0) and the group's key data `d` (`0x` hex, spec 2026-11-19-bls12381-multi §2); the signer's id is the group's
+     * UA, its signature the members' aggregate ([`Op::submit_bls_multi`])
+     */
+    case blsMulti(seed: String, account: UInt32, index: UInt32, keyData: String
+    )
 
 
 
@@ -25578,6 +25826,9 @@ public struct FfiConverterTypeKeyRef: FfiConverterRustBuffer {
         )
         
         case 5: return .msig(ua: try FfiConverterString.read(from: &buf), slots: try FfiConverterSequenceTypeMsigSlot.read(from: &buf)
+        )
+        
+        case 6: return .blsMulti(seed: try FfiConverterString.read(from: &buf), account: try FfiConverterUInt32.read(from: &buf), index: try FfiConverterUInt32.read(from: &buf), keyData: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -25620,6 +25871,14 @@ public struct FfiConverterTypeKeyRef: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
             FfiConverterString.write(ua, into: &buf)
             FfiConverterSequenceTypeMsigSlot.write(slots, into: &buf)
+            
+        
+        case let .blsMulti(seed,account,index,keyData):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(seed, into: &buf)
+            FfiConverterUInt32.write(account, into: &buf)
+            FfiConverterUInt32.write(index, into: &buf)
+            FfiConverterString.write(keyData, into: &buf)
             
         }
     }
@@ -26364,6 +26623,11 @@ public enum SdkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
     case GasCountUnknown(message: String)
     
     /**
+     * bls12381-multi (plan Task 17): the valid partials' weight is below the group's threshold
+     */
+    case BlsMultiBelowThreshold(message: String)
+    
+    /**
      * A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
      * unknown part is refused, never dropped from a quote.
      */
@@ -26374,6 +26638,12 @@ public enum SdkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
      * wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
      */
     case DexNotListed(message: String)
+    
+    /**
+     * A PQZ auditor consent whose auditor is a native (address) key (controller call, owner auto-run 2026-11-19): a native id
+     * holds no PQZ key (CTR-UA-32), so the token refuses it on chain anyway; refused before anything is read or signed.
+     */
+    case PqzAuditorNative(message: String)
     
     /**
      * a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
@@ -26651,23 +26921,31 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 59: return .GasFieldUnknown(
+        case 59: return .BlsMultiBelowThreshold(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 60: return .DexNotListed(
+        case 60: return .GasFieldUnknown(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 61: return .Cancelled(
+        case 61: return .DexNotListed(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 62: return .Ua(
+        case 62: return .PqzAuditorNative(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 63: return .Rpc(
+        case 63: return .Cancelled(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 64: return .Ua(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 65: return .Rpc(
             message: try FfiConverterString.read(from: &buf)
         )
         
@@ -26798,16 +27076,20 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(57))
         case .GasCountUnknown(_ /* message is ignored*/):
             writeInt(&buf, Int32(58))
-        case .GasFieldUnknown(_ /* message is ignored*/):
+        case .BlsMultiBelowThreshold(_ /* message is ignored*/):
             writeInt(&buf, Int32(59))
-        case .DexNotListed(_ /* message is ignored*/):
+        case .GasFieldUnknown(_ /* message is ignored*/):
             writeInt(&buf, Int32(60))
-        case .Cancelled(_ /* message is ignored*/):
+        case .DexNotListed(_ /* message is ignored*/):
             writeInt(&buf, Int32(61))
-        case .Ua(_ /* message is ignored*/):
+        case .PqzAuditorNative(_ /* message is ignored*/):
             writeInt(&buf, Int32(62))
-        case .Rpc(_ /* message is ignored*/):
+        case .Cancelled(_ /* message is ignored*/):
             writeInt(&buf, Int32(63))
+        case .Ua(_ /* message is ignored*/):
+            writeInt(&buf, Int32(64))
+        case .Rpc(_ /* message is ignored*/):
+            writeInt(&buf, Int32(65))
 
         
         }
@@ -26850,6 +27132,11 @@ public enum SlotKey: Equatable, Hashable {
      */
     case msig(ua: String
     )
+    /**
+     * a `bls12381-multi` group's member key (as `KeyRef::BlsMulti`)
+     */
+    case blsMulti(seed: String, account: UInt32, index: UInt32, keyData: String
+    )
 
 
 
@@ -26884,6 +27171,9 @@ public struct FfiConverterTypeSlotKey: FfiConverterRustBuffer {
         )
         
         case 5: return .msig(ua: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 6: return .blsMulti(seed: try FfiConverterString.read(from: &buf), account: try FfiConverterUInt32.read(from: &buf), index: try FfiConverterUInt32.read(from: &buf), keyData: try FfiConverterString.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -26925,6 +27215,14 @@ public struct FfiConverterTypeSlotKey: FfiConverterRustBuffer {
         case let .msig(ua):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(ua, into: &buf)
+            
+        
+        case let .blsMulti(seed,account,index,keyData):
+            writeInt(&buf, Int32(6))
+            FfiConverterString.write(seed, into: &buf)
+            FfiConverterUInt32.write(account, into: &buf)
+            FfiConverterUInt32.write(index, into: &buf)
+            FfiConverterString.write(keyData, into: &buf)
             
         }
     }
@@ -28073,6 +28371,31 @@ fileprivate struct FfiConverterSequenceTypeAccountInfo: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeAccountInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeBlsMultiPart: FfiConverterRustBuffer {
+    typealias SwiftType = [BlsMultiPart]
+
+    public static func write(_ value: [BlsMultiPart], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeBlsMultiPart.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [BlsMultiPart] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [BlsMultiPart]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeBlsMultiPart.read(from: &buf))
         }
         return seq
     }
@@ -29780,13 +30103,31 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scaas_sdk_checksum_method_foreignstore_unlock() != 44840) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scaas_sdk_checksum_method_op_bls_multi_part() != 62133) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok() != 62102) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part() != 56760) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() != 1443) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scaas_sdk_checksum_method_op_member_sign() != 30667) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_op_quote() != 16358) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi() != 14540) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_scaas_sdk_checksum_method_op_quote_with_gas() != 30578) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_register_bls_multi() != 57695) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_op_resend() != 18971) {
@@ -29799,6 +30140,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_op_submit() != 38006) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_submit_bls_multi() != 27762) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_sdk_account() != 4122) {

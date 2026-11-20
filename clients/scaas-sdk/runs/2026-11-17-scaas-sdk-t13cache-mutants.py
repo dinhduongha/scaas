@@ -11,8 +11,8 @@ F = "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-
 T = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features {F} --test account_ops -- --exact "
 MUTANTS = [
     ("the cache written on a registry with the precompile (no probe)",
-     [(R, "            if pool.simulate_from(from, registry, Bytes::from(probe)).await.is_ok() {",
-          "            if pool.simulate_from(from, registry, Bytes::from(probe)).await.is_ok() || true {")],
+     [(R, "Bytes::from(probe))\n                .await\n                .is_ok()",
+          "Bytes::from(probe))\n                .await\n                .is_ok()\n                || true")],
      T + "mldsa_cache_then_register"),
     ("a stored part written again",
      [(R, "                    if !read_record(&pool, registry, Landed::Cached(p), &ua).await? {",

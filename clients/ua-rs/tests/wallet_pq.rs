@@ -189,7 +189,14 @@ fn rs_signatures_json_rows() {
         assert_eq!(ua_msg, b32(&r["uaMsg"]), "{r}");
         let pop = r["role"] == "pop";
         assert!(
-            scaas_ua::verify::verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"]), pop),
+            scaas_ua::verify::verify(
+                kind,
+                &key.key_data(),
+                &ua_msg,
+                &bytes(&r["signature"]),
+                pop,
+                false
+            ),
             "{r}"
         );
         kinds.insert(kind);
@@ -222,7 +229,8 @@ fn rs_signatures_json_rows() {
                 &key.key_data(),
                 &ua_msg,
                 &bytes(&r["signature"]),
-                true
+                true,
+                false
             ),
             "{r}"
         );
@@ -441,6 +449,7 @@ mod vectors {
                             &ua_msg,
                             &bytes(&sig),
                             pop,
+                            false,
                         )
                 })
             });
@@ -483,6 +492,7 @@ mod vectors {
                             &ua_msg,
                             &bytes(&sig),
                             true,
+                            false,
                         )
                 })
             });

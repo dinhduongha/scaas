@@ -8,8 +8,7 @@ from mutants_lib import main
 A = "clients/scaas-sdk/ffi/src/api/mod.rs"
 L = "clients/scaas-sdk/bindings/dart/lib/scaas_sdk.dart"
 # the source changed, its generated files not: the drift check is red; the regenerated files are put back after
-GEN = ("bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check; rc=$?; "
-       "git checkout -- clients/scaas-sdk/bindings/dart/lib/src/rust clients/scaas-sdk/ffi/src/frb_generated.rs; exit $rc")
+GEN = "bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check"
 DART = "cd clients/scaas-sdk/bindings/dart && bash ./run.sh"
 MUTANTS = [
     ("a stale generated file", [(A, "/// This library's feature bits (spec §3.3).", "/// This library's feature bits (spec §3.3); a stale binding.")], GEN),

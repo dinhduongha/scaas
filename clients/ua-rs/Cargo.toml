@@ -165,6 +165,11 @@ libc = "0.2"
 name = "groups"
 required-features = ["vectors"]
 
+# bls-multi T1-T2: 0x0121 key data, verify, PoP, member parts and aggregation (member_sign / member_pop need `signers`)
+[[test]]
+name = "bls_multi"
+required-features = ["signers"]
+
 [[test]]
 name = "json"
 required-features = ["json"]

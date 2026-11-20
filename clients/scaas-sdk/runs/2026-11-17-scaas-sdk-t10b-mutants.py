@@ -14,12 +14,11 @@ MUTANTS = [
     # the ruling's two
     ("quote signs", [(Q, "let unsigned = super::submit::unsigned(&prepared)?;", "let unsigned = super::submit::sign(&sdk, &prepared)?;")],
      U + "quote_makes_no_signature"),
-    ("submit signs twice", [(S, "let built = sign(&sdk, &prepared)?;", "let _ = sign(&sdk, &prepared)?;\n                let built = sign(&sdk, &prepared)?;")],
+    ("submit signs twice", [(S, "                    Signing::Key => sign(&sdk, &prepared).await,\n", "                    Signing::Key => {\n                        let _ = sign(&sdk, &prepared).await;\n                        sign(&sdk, &prepared).await\n                    }\n")],
      U + "submit_signs_once_on_each_path"),
     # each check of the task
-    ("submit skips the simulation's gas check", [(S, "> quote.gas_limit\n", "> u64::MAX\n")], U + "submit_refuses_more_gas_than_quoted"),
-    ("a refused unsigned form quoted at a guess", [(Q, "Err(SimError::Revert(_)) => return Err(SdkError::GasUnquoted),",
-                                                      "Err(SimError::Revert(_)) => 1_000_000,")], U + "unsigned_form_refused_is_gas_unquoted"),
+    ("submit skips the simulation's gas check", [(S, "Ok(g) if row.gas_limit.is_some_and(|l| g <= l) => {}", "Ok(_) => {}")], U + "sim_refused_is_written_and_followed"),
+    # removed 2026-11-20 (review T5): "a refused unsigned form quoted at a guess": the unsigned-form simulation is gone; a relayed operation without a row is GasUnquoted before any simulation (t13b "ruling B: a relayed op without a row is estimated")
     ("no margin", [(G, "g.saturating_add(g / 2)", "g")], U + "quote_shows_and_caps"),
 ]
 

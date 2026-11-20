@@ -69,6 +69,26 @@ interface ISdkGasPqz {
 /// `PqzStateGas._precompiles`); the proof a filler of the row's proof length, so the calldata's handling is the real size.
 /// The multi transfers (P2) are not here yet.
 contract SdkGasConfPqzTest is SdkGasPqzBase {
+    /// The SDK's gas table (`test/vectors/sdk_gas.json`, `clients/scaas-sdk/gas/reference.json`) is measured at the committed
+    /// set, the one every generated `PqzSet.sol` names ("The committed one is <set>;", `gen_set.py`). At another set
+    /// (`script/pqz/at-set.sh`) every row runs and nothing is pinned: the proof, the window (`ROLL_MAX`) and the precompile's
+    /// rows are the set's own (PR #22 CI, 2026-11-20).
+    function _sgCommittedSet() internal view returns (string memory) {
+        string memory f = vm.readFile("src/pqz/PqzSet.sol");
+        return vm.split(vm.split(f, "The committed one is ")[1], ";")[0];
+    }
+
+    function _sgPinned() internal view override returns (bool) {
+        return keccak256(bytes(PqzSet.NAME)) == keccak256(bytes(_sgCommittedSet()));
+    }
+
+    /// The pins hold at the committed set and only there.
+    function test_sdkGas_pqzPinnedAtTheCommittedSet() public view {
+        bool committed = keccak256(bytes(PqzSet.NAME)) == keccak256("n2304-kmax4096");
+        assertEq(keccak256(bytes(_sgCommittedSet())), keccak256("n2304-kmax4096"), "gen_set.py's committed set");
+        assertEq(_sgPinned(), committed, "pinned at the committed set only");
+    }
+
     function setUp() public override {
         super.setUp();
         sgPk = PK; // the fixture's debit builders sign by `signer`
@@ -143,15 +163,17 @@ contract SdkGasConfPqzTest is SdkGasPqzBase {
         tok.mtxPrepareAcc(more[3], 0, 0);
         tok.mtxPrepareAcc(more[3], 0, 1);
         vm.roll(block.number + 64);
+        // 1, 2, 4, … below ROLL_MAX, then ROLL_MAX itself (a power of two at the table's set, 64; not at every set)
         uint256 k = 1;
-        while (1 << k <= PqzSet.ROLL_MAX) {
+        while (1 << k < PqzSet.ROLL_MAX) {
             ++k;
         }
-        uint256[] memory counts = new uint256[](k); // 1, 2, 4, …, ROLL_MAX (a power of two)
+        uint256[] memory counts = new uint256[](k + 1);
         for (uint256 i; i < k; ++i) {
             counts[i] = 1 << i;
         }
-        assertEq(counts[k - 1], PqzSet.ROLL_MAX, "measured at the bound");
+        counts[k] = PqzSet.ROLL_MAX;
+        if (_sgPinned()) assertEq(PqzSet.ROLL_MAX, 64, "the table's set: its rows n1 .. n64");
         // P4 (owner 2026-11-19, "approved"): the chord does not hold (the rise an entry steps from 5,531 to 5,574 between 16
         // and 32 and back), so the worst slope's line, about 2,000 above the largest count; the excess pinned and stated
         sgLineLoose = true;

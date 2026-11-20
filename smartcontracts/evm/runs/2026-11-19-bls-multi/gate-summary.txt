@@ -1,0 +1,95 @@
+ci-guards | 1f2355253 | 0 | no temp path
+clientkeys | 87c697083 | 0 | -
+clientkeys-mldsa | 87c697083 | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+docs | 1f2355253 | 0 | docs ok
+features | 1f2355253 | 0 | -
+forge-account | 87c697083 | 0 | forge 103 passed, 0 failed, 0 skipped (6 suites)
+forge-as | 87c697083 | 0 | forge 568 passed, 0 failed, 0 skipped (92 suites)
+forge-confidential | 87c697083 | 0 | forge 5 passed, 0 failed, 0 skipped (1 suites)
+forge-factory | 87c697083 | 0 | forge 2 passed, 0 failed, 0 skipped (1 suites)
+forge-fork | 87c697083 | 0 | forge 0 passed, 0 failed, 1 skipped (1 suites)
+forge-gas | 87c697083 | 0 | forge 401 passed, 0 failed, 1 skipped (52 suites)
+forge-governance | 10552d5bd | 0 | forge 929 passed, 0 failed, 0 skipped (89 suites)
+forge-hedera | 87c697083 | 0 | forge 20 passed, 0 failed, 0 skipped (2 suites)
+forge-liquidity | 87c697083 | 0 | forge 93 passed, 0 failed, 1 skipped (9 suites)
+forge-merge | 87c697083 | 0 | forge 350 passed, 0 failed, 0 skipped (30 suites)
+forge-metatx | 39781596d | 0 | forge 548 passed, 0 failed, 1 skipped (44 suites)
+forge-modules | 87c697083 | 0 | forge 35 passed, 0 failed, 0 skipped (12 suites)
+forge-p6f | 39781596d | 0 | forge 4 passed, 0 failed, 0 skipped (1 suites)
+forge-pqchat | 6587b2fdd | 0 | forge 99 passed, 0 failed, 0 skipped (9 suites)
+forge-pqz | 10552d5bd | 0 | forge 693 passed, 0 failed, 4 skipped (64 suites)
+forge-pqzh | 39781596d | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+forge-research | 39781596d | 0 | forge 360 passed, 0 failed, 7 skipped (29 suites)
+forge-top | 87c697083 | 0 | forge 29 passed, 0 failed, 0 skipped (5 suites)
+forge-ua | 39781596d | 0 | forge 909 passed, 0 failed, 0 skipped (61 suites)
+forge-v2 | 9e2973b5c | 0 | forge 750 passed, 0 failed, 0 skipped (57 suites); tree dirty
+forge-wallet | 9e2973b5c | 0 | forge 185 passed, 0 failed, 0 skipped (12 suites); tree dirty
+forge-wrap | 9e2973b5c | 0 | forge 324 passed, 0 failed, 0 skipped (37 suites); tree dirty
+forge-zether | 10552d5bd | 0 | forge 474 passed, 0 failed, 4 skipped (38 suites); tree dirty
+format | 10552d5bd | 0 | -
+gen-set | 1f2355253 | 0 | generated files in sync
+node-clippy | 6587b2fdd | 0 | -
+node-e2e | 6587b2fdd | 0 | cargo 24 passed, 0 failed, 0 ignored (1 binaries)
+node-test | 6587b2fdd | 0 | cargo 864 passed, 0 failed, 72 ignored (18 binaries)
+set-n2048-kmax1024-as | 6587b2fdd | 0 | forge 106 passed, 0 failed, 0 skipped (34 suites)
+set-n2048-kmax1024-governance | 6587b2fdd | 0 | forge 237 passed, 0 failed, 0 skipped (41 suites)
+set-n2048-kmax1024-metatx | 6587b2fdd | 0 | forge 183 passed, 0 failed, 0 skipped (13 suites)
+set-n2048-kmax1024-pqz | 6587b2fdd | 0 | forge 519 passed, 0 failed, 3 skipped (49 suites)
+set-n2048-kmax1024-pqzh | 6587b2fdd | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+set-n2048-kmax1024-research | 6587b2fdd | 0 | forge 89 passed, 0 failed, 0 skipped (3 suites)
+set-n2048-kmax1024-ua | 6587b2fdd | 0 | forge 236 passed, 0 failed, 0 skipped (7 suites)
+set-n2048-kmax1024-v2 | 6587b2fdd | 0 | forge 37 passed, 0 failed, 0 skipped (4 suites)
+set-n2048-kmax1024-wrap | 6587b2fdd | 0 | forge 24 passed, 0 failed, 0 skipped (14 suites)
+set-n2560-kmax16384-as | 6587b2fdd | 0 | forge 106 passed, 0 failed, 0 skipped (34 suites)
+set-n2560-kmax16384-governance | 6587b2fdd | 0 | forge 237 passed, 0 failed, 0 skipped (41 suites)
+set-n2560-kmax16384-metatx | 6587b2fdd | 0 | forge 183 passed, 0 failed, 0 skipped (13 suites)
+set-n2560-kmax16384-pqz | 6587b2fdd | 0 | forge 515 passed, 0 failed, 7 skipped (49 suites)
+set-n2560-kmax16384-pqzh | 6587b2fdd | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+set-n2560-kmax16384-research | 6587b2fdd | 0 | forge 87 passed, 0 failed, 2 skipped (3 suites)
+set-n2560-kmax16384-ua | 6587b2fdd | 0 | forge 236 passed, 0 failed, 0 skipped (7 suites)
+set-n2560-kmax16384-v2 | 6587b2fdd | 0 | forge 37 passed, 0 failed, 0 skipped (4 suites)
+set-n2560-kmax16384-wrap | 6587b2fdd | 0 | forge 24 passed, 0 failed, 0 skipped (14 suites)
+set-n2816-kmax65536-as | 6587b2fdd | 0 | forge 106 passed, 0 failed, 0 skipped (34 suites)
+set-n2816-kmax65536-governance | 6587b2fdd | 0 | forge 237 passed, 0 failed, 0 skipped (41 suites)
+set-n2816-kmax65536-metatx | 6587b2fdd | 0 | forge 183 passed, 0 failed, 0 skipped (13 suites)
+set-n2816-kmax65536-pqz | 6587b2fdd | 0 | forge 510 passed, 0 failed, 12 skipped (49 suites)
+set-n2816-kmax65536-pqzh | 6587b2fdd | 0 | forge 42 passed, 0 failed, 0 skipped (3 suites)
+set-n2816-kmax65536-research | 6587b2fdd | 0 | forge 80 passed, 0 failed, 9 skipped (3 suites)
+set-n2816-kmax65536-ua | 6587b2fdd | 0 | forge 236 passed, 0 failed, 0 skipped (7 suites)
+set-n2816-kmax65536-v2 | 6587b2fdd | 0 | forge 37 passed, 0 failed, 0 skipped (4 suites)
+set-n2816-kmax65536-wrap | 6587b2fdd | 0 | forge 24 passed, 0 failed, 0 skipped (14 suites)
+size | 87c697083 | 0 | -
+testnet-build | 87c697083 | 0 | src and script built
+ua-c | 87c697083 | 0 | cargo 9 passed, 0 failed, 0 ignored (2 binaries); Ran 104 tests in 20.788s
+ua-c-release | 39781596d | 0 | release library built
+ua-cs | 39781596d | 0 | Passed!  - Failed:     0, Passed:    62, Skipped:     0, Total:    62, Duration: 1 m 49 s - Scaas.Ua.Tests.dll (net10.0)
+ua-cxx | 39781596d | 0 | 100% tests passed, 0 tests failed out of 45
+ua-dart | 39781596d | 0 | -
+ua-dart-frb | 9e2973b5c | 0 | cargo 3 passed, 0 failed, 0 ignored (1 binaries)
+uagas | 87c697083 | 0 | forge 29 passed, 0 failed, 0 skipped (3 suites)
+ua-go | 39781596d | 0 | -
+ua-py | 39781596d | 0 | Ran 102 tests in 26.184s
+ua-qt | 9e2973b5c | 0 | 100% tests passed, 0 tests failed out of 1
+ua-rs-default | 3b375a560 | 0 | cargo 586 passed, 0 failed, 3 ignored (56 binaries)
+ua-rs-json | 3b375a560 | 0 | cargo 8 passed, 0 failed, 0 ignored (1 binaries)
+ua-rs-pq | 87c697083 | 0 | cargo 39 passed, 0 failed, 0 ignored (2 binaries)
+ua-rs-pqz-n2048 | 87c697083 | 0 | cargo 83 passed, 0 failed, 3 ignored (7 binaries)
+ua-rs-pqz-n2048-vectors | 87c697083 | 0 | cargo 66 passed, 0 failed, 0 ignored (4 binaries)
+ua-rs-pqz-read | 87c697083 | 0 | cargo 13 passed, 0 failed, 0 ignored (2 binaries)
+ua-rs-signers | 3b375a560 | 0 | cargo 5 passed, 0 failed, 0 ignored (1 binaries)
+ua-rs-vectors | 3b375a560 | 0 | cargo 687 passed, 0 failed, 6 ignored (62 binaries)
+ua-rs-verify-only | 3b375a560 | 0 | cargo 87 passed, 0 failed, 0 ignored (18 binaries)
+ua-rs-wallet-mlock | 87c697083 | 0 | cargo 452 passed, 0 failed, 0 ignored (46 binaries)
+ua-rs-wallet-rows | 87c697083 | 0 | cargo 1 passed, 0 failed, 0 ignored (1 binaries)
+ua-rs-zether-only | 87c697083 | 0 | cargo 27 passed, 0 failed, 0 ignored (2 binaries)
+sdk: sdk-test | 9e2973b5c | 0 | 184 passed, 0 failed, 3 ignored (14 binaries)
+sdk: sdk-min | 9e2973b5c | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
+sdk: sdk-sets | 9e2973b5c | 0 | 6 passed, 0 failed, 0 ignored (3 binaries)
+sdk: sdk-clippy | 9e2973b5c | 0 | -
+sdk: sdk-opaque | 9e2973b5c | 0 | 10 passed, 0 failed, 0 ignored (1 binaries)
+sdk: gas-gen | 9e2973b5c | 0 | -
+sdk: ffi | 9e2973b5c | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+sdk: sdk-wasm | 9e2973b5c | 0 | -
+sdk: sdk-deny | 9e2973b5c | 0 | -
+sdk: bind-dart | 9e2973b5c | 0 | dart: +6:
+sdk: sdk-e2e | 10552d5bd | 0 | 2 passed, 0 failed, 0 ignored (1 binaries) (re-run after the deploy mutex; the first run at 9e2973b5c collided)

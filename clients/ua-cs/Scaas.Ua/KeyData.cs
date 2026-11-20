@@ -217,6 +217,84 @@ public static partial class UA
         }
     }
 
+    /// <summary>bls12381-multi (spec 2026-11-19-bls12381-multi §2), in its order: length, n (2..64), weights (≥ 1, summed unbounded), t
+    /// (1 ≤ t ≤ the sum); every member key a valid G2 key, strictly increasing; apk byte-equal to their sum and not the identity.</summary>
+    static void BlsMulti(ReadOnlySpan<byte> d)
+    {
+        var n = U16(d, 258);
+        Need(n is >= 2 and <= 64, "n");
+        Need(d.Length == 260 + 258 * n, "length");
+        long total = 0;
+        for (var i = 0; i < n; i++)
+        {
+            var w = U16(d, 516 + 258 * i);
+            Need(w >= 1, "weight");
+            total += w;
+        }
+        var t = U16(d, 256);
+        Need(t >= 1 && t <= total, "threshold");
+        Pt? acc = null;
+        for (var i = 0; i < n; i++)
+        {
+            var k = d.Slice(260 + 258 * i, 256);
+            BlsG2(k);
+            if (i > 0) Need(d.Slice(2 + 258 * i, 256).SequenceCompareTo(k) < 0, "order");
+            acc = AddPt(acc, new Pt(new Fp2(Be(k[16..64]), Be(k[80..128])), new Fp2(Be(k[144..192]), Be(k[208..256]))), BlsP);
+        }
+        Need(acc is not null, "identity");
+        Need(d[..256].SequenceEqual(G2Bytes(acc!)), "apk");
+    }
+
+    static byte[] G2Bytes(Pt p)
+    {
+        var o = new byte[256];
+        BigInteger[] c = [p.X.A0, p.X.A1, p.Y.A0, p.Y.A1];
+        for (var j = 0; j < 4; j++)
+        {
+            var b = c[j].ToByteArray(isUnsigned: true, isBigEndian: true);
+            b.CopyTo(o, 64 * j + 64 - b.Length);
+        }
+        return o;
+    }
+
+    /// <summary>bls12381-multi <c>d → s</c> (spec §2): each 64-byte limb without its 16 zero bytes.</summary>
+    public static byte[] BlsMultiCompress(byte[] d)
+    {
+        var n = U16(d, 258);
+        Need(d.Length == 260 + 258 * n, "length");
+        var o = new List<byte>(196 + 194 * n);
+        for (var i = 0; i <= n; i++)
+        {
+            var (at, tail) = i == 0 ? (0, 4) : (260 + 258 * (i - 1), 2);
+            for (var j = 0; j < 4; j++)
+            {
+                Need(d.AsSpan(at + 64 * j, 16).IndexOfAnyExcept((byte)0) < 0, "padding");
+                o.AddRange(d[(at + 64 * j + 16)..(at + 64 * j + 64)]);
+            }
+            o.AddRange(d[(at + 256)..(at + 256 + tail)]);
+        }
+        return [.. o];
+    }
+
+    /// <summary>bls12381-multi <c>s → d</c>: a 16-byte zero prefix per 48-byte limb.</summary>
+    public static byte[] BlsMultiExpand(byte[] s)
+    {
+        var n = U16(s, 194);
+        Need(s.Length == 196 + 194 * n, "length");
+        var o = new List<byte>(260 + 258 * n);
+        for (var i = 0; i <= n; i++)
+        {
+            var (at, tail) = i == 0 ? (0, 4) : (196 + 194 * (i - 1), 2);
+            for (var j = 0; j < 4; j++)
+            {
+                o.AddRange(new byte[16]);
+                o.AddRange(s[(at + 48 * j)..(at + 48 * j + 48)]);
+            }
+            o.AddRange(s[(at + 192)..(at + 192 + tail)]);
+        }
+        return [.. o];
+    }
+
     static void Msig(ReadOnlySpan<byte> d, bool hederaNative)
     {
         int threshold = U16(d, 0), count = U16(d, 2);
@@ -277,6 +355,7 @@ public static partial class UA
             case 0x0112: Musig2(d, BnG1, 64); break;
             case 0x0113: Frost(d, BnG1, 64, BnR); break;
             case 0x0120: Msig(d, hederaNative); break;
+            case 0x0121: BlsMulti(d); break;
             case 0x0132: Fndsa(d, 0x09, 512); break;
             case 0x0135: Fndsa(d, 0x0a, 1024); break;
             default: break; // mldsa44/65/87, slhdsa128s, pqz-mlwe: the length is the whole check

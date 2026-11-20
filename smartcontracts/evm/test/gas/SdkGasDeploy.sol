@@ -24,13 +24,14 @@ import {FrostBn254Verifier} from "../../src/ua/verifiers/FrostBn254Verifier.sol"
 import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
 import {SlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+import {BlsMultiBls12381Verifier} from "../../src/ua/verifiers/BlsMultiBls12381Verifier.sol";
 
 /// @notice The deploy's gen-1 kind table (`SdkGasDeploy`), its verifiers made by this contract's constructor.
 contract SdkGasKindTable {
     UARegistry.KindConfig[] internal table;
 
     constructor() {
-        UARegistry.KindConfig[19] memory d = [
+        UARegistry.KindConfig[20] memory d = [
             UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier()), 400_000),
             UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier()), 400_000),
             UARegistry.KindConfig(UAKinds.ED25519, address(new Ed25519Verifier()), 210_000),
@@ -53,7 +54,9 @@ contract SdkGasKindTable {
             ),
             UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(UAKinds.FNDSA512)), 2_500_000),
             UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhdsaVerifier()), 1_400_000),
-            UARegistry.KindConfig(UAKinds.FNDSA1024, address(new FndsaVerifier(UAKinds.FNDSA1024)), 5_250_000)
+            UARegistry.KindConfig(UAKinds.FNDSA1024, address(new FndsaVerifier(UAKinds.FNDSA1024)), 5_250_000),
+            // bls-multi Task 16: `bls12381-multi` as `DeployBase` enables it (EIP-2537), `CAP_BLS12381_MULTI`
+            UARegistry.KindConfig(UAKinds.BLS12381_MULTI, address(new BlsMultiBls12381Verifier()), 330_000)
         ];
         for (uint256 i; i < d.length; ++i) {
             table.push(d[i]);

@@ -355,6 +355,23 @@ fn args_json(r: &RegisterArgs) -> Value {
                 json!({ "kind": kind, "key": key, "pop": hx(pop) }),
             )
         }
+        RegisterArgs::RegisterBlsMulti {
+            key,
+            attrs,
+            pop,
+            pqz_pop,
+        } => {
+            let members: Vec<Value> = key
+                .members
+                .iter()
+                .map(|m| json!({ "key": hx(&m.key), "weight": m.weight }))
+                .collect();
+            let key = json!({ "aggKey": hx(&key.agg_key), "threshold": key.threshold, "members": members });
+            (
+                tail("registerBlsMulti", attrs, pqz_pop),
+                json!({ "key": key, "pop": hx(pop) }),
+            )
+        }
     };
     o.as_object_mut()
         .unwrap()

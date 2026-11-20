@@ -105,6 +105,7 @@ struct AttrsArgs;
 struct AuditorConsent;
 struct Balances;
 struct BindingConfig;
+struct BlsMultiPart;
 struct Burn;
 struct CancelAll;
 struct CancelNonce;
@@ -327,106 +328,74 @@ typedef std::string Secret;
 typedef std::string Value;
 
 
-enum class Policy: int32_t {
-    kFailover = 1,
-    kStrictMajority = 2
-};
-
-
 /**
- * A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
+ * A token and an amount of a liquidity order's plan.
  */
-enum class Family: int32_t {
-    kEvm = 1,
-    kSoroban = 2,
-    kSolana = 3,
-    kNear = 4,
-    kAlgorand = 5,
-    kAptos = 6,
-    kSui = 7,
-    kCosmos = 8,
-    kTon = 9
-};
-
-
-/**
- * The envelope's terms the user chooses (the lane's nonce is read; a pay's lane is its `payLane(entryRef)`).
- */
-struct Envelope {
-    /**
-     * unix seconds on the chain's clock
-     */
-    uint64_t valid_until;
-    /**
-     * the fee mode: bit 0 binds `relayer`, bit 1 binds `fee_recipient` (an unbound one is 0 in what is signed), the fee kind
-     * above
-     */
-    uint32_t mode;
-    std::optional<std::string> relayer;
-    /**
-     * the fee to the relayer in the token's smallest unit, decimal; 0 is a value
-     */
-    std::string fee;
-    std::optional<std::string> fee_recipient;
-};
-
-
-/**
- * One leg of an op 7: a registered PQZ holder and its amount (`"0"`: a decoy).
- */
-struct PqzLeg {
-    std::string to_ua;
+struct LiquidityToken {
+    std::string token;
     std::string amount;
 };
 
-
-/**
- * The second marker of `remove`, for a seed whose backup is `pending`.
- */
-struct ConfirmRemoveUnbacked {
-};
-
 namespace uniffi {
-struct FfiConverterPayBody;
+struct FfiConverterSlotKey;
 } // namespace uniffi
 
 /**
- * The `PayMeta` body by schema (pay-meta-tax spec §7.1), named.
+ * A slot's key: `KeyRef` without the slots of an `msig` (a slot's key is never one, spec §7).
  */
-struct PayBody {
-    friend uniffi::FfiConverterPayBody;
-    struct kNone {
+struct SlotKey {
+    friend uniffi::FfiConverterSlotKey;
+    struct kUa {
+        std::string seed;
+        uint16_t kind;
+        uint32_t account;
+        uint32_t index;
     };
-    struct kNote {
-        std::string note;
+    struct kNative {
+        std::string seed;
+        std::string network;
+        uint32_t index;
     };
-    struct kCreditorRef {
-        std::string creditor_ref;
-        uint64_t due_date;
+    struct kImported {
+        std::string seed;
+        std::string network;
+        uint32_t index;
     };
-    struct kBoundCall {
-        std::string chain_id;
-        std::string target;
-        std::string call_hash;
+    struct kKey {
+        std::string seed;
+        std::string id;
     };
-    struct kCiphertext {
-        std::string ciphertext;
+    /**
+     * refused at signing (`Argument`)
+     */
+    struct kMsig {
+        std::string ua;
     };
-    PayBody(kNone variant): variant(variant) {}
-    PayBody(kNote variant): variant(variant) {}
-    PayBody(kCreditorRef variant): variant(variant) {}
-    PayBody(kBoundCall variant): variant(variant) {}
-    PayBody(kCiphertext variant): variant(variant) {}
+    /**
+     * a `bls12381-multi` group's member key (as `KeyRef::BlsMulti`)
+     */
+    struct kBlsMulti {
+        std::string seed;
+        uint32_t account;
+        uint32_t index;
+        std::string key_data;
+    };
+    SlotKey(kUa variant): variant(variant) {}
+    SlotKey(kNative variant): variant(variant) {}
+    SlotKey(kImported variant): variant(variant) {}
+    SlotKey(kKey variant): variant(variant) {}
+    SlotKey(kMsig variant): variant(variant) {}
+    SlotKey(kBlsMulti variant): variant(variant) {}
 
-    PayBody(const PayBody &other): variant(other.variant) {}
-    PayBody(PayBody &&other): variant(std::move(other.variant)) {}
+    SlotKey(const SlotKey &other): variant(other.variant) {}
+    SlotKey(SlotKey &&other): variant(std::move(other.variant)) {}
 
-    PayBody &operator=(const PayBody &other) {
+    SlotKey &operator=(const SlotKey &other) {
         variant = other.variant;
         return *this;
     }
 
-    PayBody &operator=(PayBody &&other) {
+    SlotKey &operator=(SlotKey &&other) {
         variant = std::move(other.variant);
         return *this;
     }
@@ -434,33 +403,14 @@ struct PayBody {
     /**
      * Returns the variant of this enum
      */
-    const std::variant<kNone, kNote, kCreditorRef, kBoundCall, kCiphertext> &get_variant() const {
+    const std::variant<kUa, kNative, kImported, kKey, kMsig, kBlsMulti> &get_variant() const {
         return variant;
     }
 
 private:
-    std::variant<kNone, kNote, kCreditorRef, kBoundCall, kCiphertext> variant;
+    std::variant<kUa, kNative, kImported, kKey, kMsig, kBlsMulti> variant;
 
-    PayBody();
-};
-
-
-/**
- * A reviewed position reader of a position manager (a liquidity order that receives a position names one).
- */
-struct PositionReader {
-    std::string manager;
-    std::string reader;
-};
-
-
-/**
- * A `registerWebAuthn` key, named.
- */
-struct WebAuthnArgs {
-    std::string x;
-    std::string y;
-    std::string rp_id_hash;
+    SlotKey();
 };
 
 namespace uniffi {
@@ -531,6 +481,201 @@ private:
     GasFrom();
 };
 
+
+/**
+ * The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
+ * against a runaway quote, never a value assumed of a chain.
+ */
+struct Limits {
+    /**
+     * decimal wei
+     */
+    std::string max_fee_per_gas;
+    uint64_t max_gas;
+    /**
+     * decimal wei
+     */
+    std::string max_cost;
+    uint64_t watch_poll_ms;
+    /**
+     * accounts × chains × tokens per poll
+     */
+    uint32_t max_watch;
+    /**
+     * scrypt, Argon2id, proofs, slow key generation at once
+     */
+    uint32_t max_concurrent_heavy;
+    /**
+     * the longest an operation's `validUntil` may lie ahead of the SDK's clock, in seconds (the signing check's window), where
+     * a profile names none
+     */
+    uint64_t max_valid_secs;
+    uint32_t event_queue;
+    /**
+     * how long a terminal operation row stays in `sdk.state` after it ended, in seconds (default 90 days); a non-terminal row
+     * is never pruned (owner 2026-11-19, T13b ruling 2)
+     */
+    uint64_t state_retention_secs;
+};
+
+
+/**
+ * A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
+ * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+ */
+struct GasPerByte {
+    std::string input;
+    uint64_t gas;
+};
+
+namespace uniffi {
+struct FfiConverterFinality;
+} // namespace uniffi
+
+/**
+ * The block of every decisive and decryption read (§9.4 requirement 3).
+ */
+struct Finality {
+    friend uniffi::FfiConverterFinality;
+    struct kFinalized {
+    };
+    struct kDepth {
+        uint64_t v1;
+    };
+    Finality(kFinalized variant): variant(variant) {}
+    Finality(kDepth variant): variant(variant) {}
+
+    Finality(const Finality &other): variant(other.variant) {}
+    Finality(Finality &&other): variant(std::move(other.variant)) {}
+
+    Finality &operator=(const Finality &other) {
+        variant = other.variant;
+        return *this;
+    }
+
+    Finality &operator=(Finality &&other) {
+        variant = std::move(other.variant);
+        return *this;
+    }
+
+    /**
+     * Returns the variant of this enum
+     */
+    const std::variant<kFinalized, kDepth> &get_variant() const {
+        return variant;
+    }
+
+private:
+    std::variant<kFinalized, kDepth> variant;
+
+    Finality();
+};
+
+
+/**
+ * The first marker of `remove`.
+ */
+struct ConfirmRemove {
+};
+
+
+/**
+ * An order as it was signed: a `TradeOrder`'s 13 named fields, `from` and `destination` 32-byte ids for a SCaaS sell token's
+ * `UATradeOrder`, addresses for an outside token's.
+ */
+struct OrderTerms {
+    std::string from;
+    std::string receive_token;
+    std::string amount;
+    std::string receive_amount;
+    std::string min_fill;
+    std::string fee;
+    std::string relayer;
+    std::string dex;
+    std::string destination;
+    uint8_t flags;
+    std::string batch;
+    std::string nonce;
+    std::string valid_until;
+};
+
+
+/**
+ * A platform key's access policy (biometry of the current enrollment, invalidated by a new one: research decision 8).
+ */
+struct KeyPolicy {
+    bool biometry_current_set;
+    bool invalidated_by_enrollment;
+};
+
+
+/**
+ * One member of an `msig` structure (CTR-UA-09): its kind, its id (`0x` + 64 hex), its weight.
+ */
+struct MsigMemberArgs {
+    uint16_t kind;
+    std::string id;
+    uint16_t weight;
+};
+
+
+namespace uniffi {
+    struct FfiConverterRegistryWrite;
+} // namespace uniffi
+
+/**
+ * A registry write as the user reviews it (spec §7, §13.1): opaque, kept in the SDK's table; it holds public data only
+ * (the PoP binds no caller). `submit_registry_write` sends exactly its calldata to the profile's registry.
+ */
+struct RegistryWrite {
+    friend uniffi::FfiConverterRegistryWrite;
+
+    RegistryWrite() = delete;
+
+    RegistryWrite(RegistryWrite &&) = delete;
+
+    RegistryWrite &operator=(const RegistryWrite &) = delete;
+    RegistryWrite &operator=(RegistryWrite &&) = delete;
+
+    ~RegistryWrite();
+    std::string calldata();
+    std::string chain();
+    std::string entry();
+    std::string id();
+    KeyRef payer();
+    std::vector<ReviewField> review();
+    std::string ua();
+
+    private:
+    RegistryWrite(const RegistryWrite &);
+
+    RegistryWrite(uint64_t);
+
+    uint64_t _uniffi_internal_clone_handle() const;
+
+    uint64_t instance = 0;
+};
+
+
+enum class Policy: int32_t {
+    kFailover = 1,
+    kStrictMajority = 2
+};
+
+
+/**
+ * One token's balance.
+ */
+struct TokenBalance {
+    std::string address;
+    std::string display;
+    uint8_t decimals;
+    /**
+     * the smallest unit, decimal
+     */
+    std::string amount;
+};
+
 namespace uniffi {
 struct FfiConverterRescueOp;
 } // namespace uniffi
@@ -584,31 +729,88 @@ private:
 };
 
 
-/**
- * A token and an amount of a liquidity order's plan.
- */
-struct LiquidityToken {
-    std::string token;
-    std::string amount;
+namespace uniffi {
+    struct FfiConverterSecretBytes;
+} // namespace uniffi
+
+struct SecretBytes {
+    friend uniffi::FfiConverterSecretBytes;
+
+    SecretBytes() = delete;
+
+    SecretBytes(SecretBytes &&) = delete;
+
+    SecretBytes &operator=(const SecretBytes &) = delete;
+    SecretBytes &operator=(SecretBytes &&) = delete;
+
+    ~SecretBytes();
+
+    private:
+    SecretBytes(const SecretBytes &);
+
+    SecretBytes(uint64_t);
+
+    uint64_t _uniffi_internal_clone_handle() const;
+
+    uint64_t instance = 0;
 };
 
+namespace uniffi {
+struct FfiConverterPayBody;
+} // namespace uniffi
 
 /**
- * Where a reviewed value comes from (spec §13.1).
+ * The `PayMeta` body by schema (pay-meta-tax spec §7.1), named.
  */
-enum class Source: int32_t {
+struct PayBody {
+    friend uniffi::FfiConverterPayBody;
+    struct kNone {
+    };
+    struct kNote {
+        std::string note;
+    };
+    struct kCreditorRef {
+        std::string creditor_ref;
+        uint64_t due_date;
+    };
+    struct kBoundCall {
+        std::string chain_id;
+        std::string target;
+        std::string call_hash;
+    };
+    struct kCiphertext {
+        std::string ciphertext;
+    };
+    PayBody(kNone variant): variant(variant) {}
+    PayBody(kNote variant): variant(variant) {}
+    PayBody(kCreditorRef variant): variant(variant) {}
+    PayBody(kBoundCall variant): variant(variant) {}
+    PayBody(kCiphertext variant): variant(variant) {}
+
+    PayBody(const PayBody &other): variant(other.variant) {}
+    PayBody(PayBody &&other): variant(std::move(other.variant)) {}
+
+    PayBody &operator=(const PayBody &other) {
+        variant = other.variant;
+        return *this;
+    }
+
+    PayBody &operator=(PayBody &&other) {
+        variant = std::move(other.variant);
+        return *this;
+    }
+
     /**
-     * a field of the signed struct (or committed to by it, as a pay's `PayMeta`), decoded
+     * Returns the variant of this enum
      */
-    kSigned = 1,
-    /**
-     * what the request named and the signed struct holds only in encrypted form (a confidential amount, recipient)
-     */
-    kRequest = 2,
-    /**
-     * what the SDK chose or read: the contract, every token or market touched with its mark
-     */
-    kDerived = 3
+    const std::variant<kNone, kNote, kCreditorRef, kBoundCall, kCiphertext> &get_variant() const {
+        return variant;
+    }
+
+private:
+    std::variant<kNone, kNote, kCreditorRef, kBoundCall, kCiphertext> variant;
+
+    PayBody();
 };
 
 
@@ -657,134 +859,79 @@ enum class InFlight: int32_t {
 };
 
 
-namespace uniffi {
-    struct FfiConverterSecretBytes;
-} // namespace uniffi
-
-struct SecretBytes {
-    friend uniffi::FfiConverterSecretBytes;
-
-    SecretBytes() = delete;
-
-    SecretBytes(SecretBytes &&) = delete;
-
-    SecretBytes &operator=(const SecretBytes &) = delete;
-    SecretBytes &operator=(SecretBytes &&) = delete;
-
-    ~SecretBytes();
-
-    private:
-    SecretBytes(const SecretBytes &);
-
-    SecretBytes(uint64_t);
-
-    uint64_t _uniffi_internal_clone_handle() const;
-
-    uint64_t instance = 0;
-};
-
-namespace uniffi {
-struct FfiConverterSlotKey;
-} // namespace uniffi
-
 /**
- * A slot's key: `KeyRef` without the slots of an `msig` (a slot's key is never one, spec §7).
+ * A `SubjectKey` by name: `kind` 1 a passkey (`x`, `y` P-256, `rpIdHash`, `originHash`), 2 a secp256k1 key (`x` its address
+ * right-aligned, the rest 0); words as `0x` + 64 hex.
  */
-struct SlotKey {
-    friend uniffi::FfiConverterSlotKey;
-    struct kUa {
-        std::string seed;
-        uint16_t kind;
-        uint32_t account;
-        uint32_t index;
-    };
-    struct kNative {
-        std::string seed;
-        std::string network;
-        uint32_t index;
-    };
-    struct kImported {
-        std::string seed;
-        std::string network;
-        uint32_t index;
-    };
-    struct kKey {
-        std::string seed;
-        std::string id;
-    };
-    /**
-     * refused at signing (`Argument`)
-     */
-    struct kMsig {
-        std::string ua;
-    };
-    SlotKey(kUa variant): variant(variant) {}
-    SlotKey(kNative variant): variant(variant) {}
-    SlotKey(kImported variant): variant(variant) {}
-    SlotKey(kKey variant): variant(variant) {}
-    SlotKey(kMsig variant): variant(variant) {}
-
-    SlotKey(const SlotKey &other): variant(other.variant) {}
-    SlotKey(SlotKey &&other): variant(std::move(other.variant)) {}
-
-    SlotKey &operator=(const SlotKey &other) {
-        variant = other.variant;
-        return *this;
-    }
-
-    SlotKey &operator=(SlotKey &&other) {
-        variant = std::move(other.variant);
-        return *this;
-    }
-
-    /**
-     * Returns the variant of this enum
-     */
-    const std::variant<kUa, kNative, kImported, kKey, kMsig> &get_variant() const {
-        return variant;
-    }
-
-private:
-    std::variant<kUa, kNative, kImported, kKey, kMsig> variant;
-
-    SlotKey();
+struct SubjectKeyArgs {
+    uint8_t kind;
+    std::string x;
+    std::string y;
+    std::string rp_id_hash;
+    std::string origin_hash;
 };
 
 
 /**
- * The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
- * against a runaway quote, never a value assumed of a chain.
+ * One leg of an op 7: a registered PQZ holder and its amount (`"0"`: a decoy).
  */
-struct Limits {
+struct PqzLeg {
+    std::string to_ua;
+    std::string amount;
+};
+
+
+/**
+ * A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
+ */
+enum class Family: int32_t {
+    kEvm = 1,
+    kSoroban = 2,
+    kSolana = 3,
+    kNear = 4,
+    kAlgorand = 5,
+    kAptos = 6,
+    kSui = 7,
+    kCosmos = 8,
+    kTon = 9
+};
+
+
+/**
+ * The KEM key of version 0 a hash-commit registration carries beside its arguments.
+ */
+struct KemRecord {
+    uint64_t version;
     /**
-     * decimal wei
+     * `0x` hex: `mlkemEk ‖ x25519` (`scaas-ua` `kem_pk`)
      */
-    std::string max_fee_per_gas;
-    uint64_t max_gas;
-    /**
-     * decimal wei
-     */
-    std::string max_cost;
-    uint64_t watch_poll_ms;
-    /**
-     * accounts × chains × tokens per poll
-     */
-    uint32_t max_watch;
-    /**
-     * scrypt, Argon2id, proofs, slow key generation at once
-     */
-    uint32_t max_concurrent_heavy;
-    /**
-     * the longest an operation's `validUntil` may lie ahead of the SDK's clock, in seconds (the signing check's window), where
-     * a profile names none
-     */
-    uint64_t max_valid_secs;
-    uint32_t event_queue;
-    /**
-     * how long a terminal operation row stays in `sdk.state` after it ended, in seconds (default 90 days); a non-terminal row
-     * is never pruned (owner 2026-11-19, T13b ruling 2)
-     */
-    uint64_t state_retention_secs;
+    std::string kem_pk;
+};
+
+
+/**
+ * A `registerWebAuthn` key, named.
+ */
+struct WebAuthnArgs {
+    std::string x;
+    std::string y;
+    std::string rp_id_hash;
+};
+
+
+/**
+ * Whether the platform asks for the user before it gives the item.
+ */
+enum class Presence: int32_t {
+    kNone = 1,
+    kRequired = 2
+};
+
+
+enum class Class: int32_t {
+    kNamed = 1,
+    kDefault = 2,
+    kDiscovered = 3
 };
 
 
@@ -809,128 +956,64 @@ struct HistoryItem {
 
 
 /**
- * A wrap order as it was signed (`UAWrapOrder`'s named fields).
+ * A reviewed position reader of a position manager (a liquidity order that receives a position names one).
  */
-struct WrapOrderTerms {
-    std::string from;
-    std::string wrapped_token;
-    std::string amount;
-    std::string min_minted;
-    std::string min_fill;
-    std::string fee;
-    std::string relayer;
-    std::string destination;
-    uint8_t flags;
-    std::string batch;
-    std::string nonce;
-    std::string valid_until;
-};
-
-
-namespace uniffi {
-    struct FfiConverterRegistryWrite;
-} // namespace uniffi
-
-/**
- * A registry write as the user reviews it (spec §7, §13.1): opaque, kept in the SDK's table; it holds public data only
- * (the PoP binds no caller). `submit_registry_write` sends exactly its calldata to the profile's registry.
- */
-struct RegistryWrite {
-    friend uniffi::FfiConverterRegistryWrite;
-
-    RegistryWrite() = delete;
-
-    RegistryWrite(RegistryWrite &&) = delete;
-
-    RegistryWrite &operator=(const RegistryWrite &) = delete;
-    RegistryWrite &operator=(RegistryWrite &&) = delete;
-
-    ~RegistryWrite();
-    std::string calldata();
-    std::string chain();
-    std::string entry();
-    std::string id();
-    KeyRef payer();
-    std::vector<ReviewField> review();
-    std::string ua();
-
-    private:
-    RegistryWrite(const RegistryWrite &);
-
-    RegistryWrite(uint64_t);
-
-    uint64_t _uniffi_internal_clone_handle() const;
-
-    uint64_t instance = 0;
+struct PositionReader {
+    std::string manager;
+    std::string reader;
 };
 
 
 /**
- * An order as it was signed: a `TradeOrder`'s 13 named fields, `from` and `destination` 32-byte ids for a SCaaS sell token's
- * `UATradeOrder`, addresses for an outside token's.
+ * The envelope's terms the user chooses (the lane's nonce is read; a pay's lane is its `payLane(entryRef)`).
  */
-struct OrderTerms {
-    std::string from;
-    std::string receive_token;
-    std::string amount;
-    std::string receive_amount;
-    std::string min_fill;
-    std::string fee;
-    std::string relayer;
-    std::string dex;
-    std::string destination;
-    uint8_t flags;
-    std::string batch;
-    std::string nonce;
-    std::string valid_until;
-};
-
-
-/**
- * The KEM key of version 0 a hash-commit registration carries beside its arguments.
- */
-struct KemRecord {
-    uint64_t version;
+struct Envelope {
     /**
-     * `0x` hex: `mlkemEk ‖ x25519` (`scaas-ua` `kem_pk`)
+     * unix seconds on the chain's clock
      */
-    std::string kem_pk;
-};
-
-
-/**
- * A row's per-item part (owner 2026-11-19, I1), on a base or a verify row: `gas` (whole gas, the measured slope rounded
- * up) for each counted `item` of the operation, one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`,
- * `env_items`, `orders`). The row's own `gas` is its figure at a count of 0 (the line's intercept; the file states
- * `"base_count": 0`), so the quote adds `gas × count` with no offset.
- */
-struct GasPerItem {
-    std::string item;
-    uint64_t gas;
-};
-
-
-/**
- * One token's balance.
- */
-struct TokenBalance {
-    std::string address;
-    std::string display;
-    uint8_t decimals;
+    uint64_t valid_until;
     /**
-     * the smallest unit, decimal
+     * the fee mode: bit 0 binds `relayer`, bit 1 binds `fee_recipient` (an unbound one is 0 in what is signed), the fee kind
+     * above
      */
-    std::string amount;
+    uint32_t mode;
+    std::optional<std::string> relayer;
+    /**
+     * the fee to the relayer in the token's smallest unit, decimal; 0 is a value
+     */
+    std::string fee;
+    std::optional<std::string> fee_recipient;
 };
 
 
 /**
- * A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
- * variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
+ * `KemKey`, named.
  */
-struct GasPerByte {
-    std::string input;
-    uint64_t gas;
+struct KemArgs {
+    uint8_t scheme;
+    std::string mlkem_ek;
+    std::string x25519;
+};
+
+
+/**
+ * The payer's `UASig` over the payment (no members).
+ */
+struct PayerAuth {
+    /**
+     * `0x` hex; `0x` for a native id
+     */
+    std::string key_data;
+    std::string signature;
+};
+
+
+/**
+ * One real recipient of a multi-recipient transfer: a registered Zether UA and its amount.
+ */
+struct ZetherLeg {
+    std::string to_ua;
+    std::string amount;
 };
 
 
@@ -948,6 +1031,25 @@ struct ListedToken {
 
 
 /**
+ * One slot of an `msig` as the registry holds it now.
+ */
+struct MsigSlotState {
+    uint16_t kind;
+    std::string id;
+    uint16_t weight;
+    bool enabled;
+    /**
+     * accepted (CTR-UA-37; never cleared, whether enabled or not)
+     */
+    bool accepted;
+    /**
+     * `memberSigHashOf(ua, i)` (`0x` + 64 hex; zero for a slot not accepted): what a copy to another registry checks
+     */
+    std::string sig_hash;
+};
+
+
+/**
  * The payment a payee fee co-signs (the contract's shape: fee none, relayer bound).
  */
 struct Payment {
@@ -960,60 +1062,21 @@ struct Payment {
 
 
 /**
- * A decrypted PQZ balance, for the holder only.
+ * A seed as listed: public fields of the container entry, and whether it is unlocked (its MAC checked) in this session.
  */
-struct PqzBalance {
+struct SeedInfo {
+    std::string id;
+    std::string label;
+    uint32_t words;
+    std::string origin;
+    std::string class_;
+    std::vector<std::string> warnings;
+    std::string backup;
+    bool unlocked;
     /**
-     * the smallest unit, decimal: what a debit at this block may spend (the account and the window `[rolled, p)`)
+     * the index MAC of this entry was checked in this session (spec §6.2)
      */
-    std::string amount;
-    /**
-     * the final block the words were read at
-     */
-    uint64_t block;
-    /**
-     * the window's end and the UA's `sendCounter` at that block
-     */
-    uint64_t p;
-    uint64_t send_counter;
-};
-
-
-/**
- * Whether the platform asks for the user before it gives the item.
- */
-enum class Presence: int32_t {
-    kNone = 1,
-    kRequired = 2
-};
-
-
-/**
- * The first marker of `remove`.
- */
-struct ConfirmRemove {
-};
-
-
-/**
- * A `SubjectKey` by name: `kind` 1 a passkey (`x`, `y` P-256, `rpIdHash`, `originHash`), 2 a secp256k1 key (`x` its address
- * right-aligned, the rest 0); words as `0x` + 64 hex.
- */
-struct SubjectKeyArgs {
-    uint8_t kind;
-    std::string x;
-    std::string y;
-    std::string rp_id_hash;
-    std::string origin_hash;
-};
-
-
-/**
- * A position in a chain's logs: a page holds items strictly older than it.
- */
-struct Cursor {
-    uint64_t block;
-    uint64_t log_index;
+    bool verified;
 };
 
 
@@ -1060,78 +1123,9 @@ struct SeedBackup {
 
 
 /**
- * The payer's `UASig` over the payment (no members).
+ * The second marker of `remove`, for a seed whose backup is `pending`.
  */
-struct PayerAuth {
-    /**
-     * `0x` hex; `0x` for a native id
-     */
-    std::string key_data;
-    std::string signature;
-};
-
-
-/**
- * One real recipient of a multi-recipient transfer: a registered Zether UA and its amount.
- */
-struct ZetherLeg {
-    std::string to_ua;
-    std::string amount;
-};
-
-
-enum class Class: int32_t {
-    kNamed = 1,
-    kDefault = 2,
-    kDiscovered = 3
-};
-
-
-/**
- * One member of an `msig` structure (CTR-UA-09): its kind, its id (`0x` + 64 hex), its weight.
- */
-struct MsigMemberArgs {
-    uint16_t kind;
-    std::string id;
-    uint16_t weight;
-};
-
-
-/**
- * A platform key's access policy (biometry of the current enrollment, invalidated by a new one: research decision 8).
- */
-struct KeyPolicy {
-    bool biometry_current_set;
-    bool invalidated_by_enrollment;
-};
-
-
-/**
- * `KemKey`, named.
- */
-struct KemArgs {
-    uint8_t scheme;
-    std::string mlkem_ek;
-    std::string x25519;
-};
-
-
-/**
- * A seed as listed: public fields of the container entry, and whether it is unlocked (its MAC checked) in this session.
- */
-struct SeedInfo {
-    std::string id;
-    std::string label;
-    uint32_t words;
-    std::string origin;
-    std::string class_;
-    std::vector<std::string> warnings;
-    std::string backup;
-    bool unlocked;
-    /**
-     * the index MAC of this entry was checked in this session (spec §6.2)
-     */
-    bool verified;
+struct ConfirmRemoveUnbacked {
 };
 
 
@@ -1141,25 +1135,6 @@ struct SeedInfo {
 struct RegisterAttrs {
     bool pqz_key;
     bool kem;
-};
-
-
-/**
- * One slot of an `msig` as the registry holds it now.
- */
-struct MsigSlotState {
-    uint16_t kind;
-    std::string id;
-    uint16_t weight;
-    bool enabled;
-    /**
-     * accepted (CTR-UA-37; never cleared, whether enabled or not)
-     */
-    bool accepted;
-    /**
-     * `memberSigHashOf(ua, i)` (`0x` + 64 hex; zero for a slot not accepted): what a copy to another registry checks
-     */
-    std::string sig_hash;
 };
 
 
@@ -1176,65 +1151,138 @@ struct OpItem {
     std::optional<uint64_t> landed_block;
 };
 
-namespace uniffi {
-struct FfiConverterFinality;
-} // namespace uniffi
 
 /**
- * The block of every decisive and decryption read (§9.4 requirement 3).
+ * A wrap order as it was signed (`UAWrapOrder`'s named fields).
  */
-struct Finality {
-    friend uniffi::FfiConverterFinality;
-    struct kFinalized {
-    };
-    struct kDepth {
-        uint64_t v1;
-    };
-    Finality(kFinalized variant): variant(variant) {}
-    Finality(kDepth variant): variant(variant) {}
+struct WrapOrderTerms {
+    std::string from;
+    std::string wrapped_token;
+    std::string amount;
+    std::string min_minted;
+    std::string min_fill;
+    std::string fee;
+    std::string relayer;
+    std::string destination;
+    uint8_t flags;
+    std::string batch;
+    std::string nonce;
+    std::string valid_until;
+};
 
-    Finality(const Finality &other): variant(other.variant) {}
-    Finality(Finality &&other): variant(std::move(other.variant)) {}
 
-    Finality &operator=(const Finality &other) {
-        variant = other.variant;
-        return *this;
-    }
-
-    Finality &operator=(Finality &&other) {
-        variant = std::move(other.variant);
-        return *this;
-    }
-
+/**
+ * A row's per-item part (owner 2026-11-19, I1), on a base or a verify row: `gas` (whole gas, the measured slope rounded
+ * up) for each counted `item` of the operation, one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`,
+ * `env_items`, `orders`). The row's own `gas` is its figure at a count of 0 (the line's intercept; the file states
+ * `"base_count": 0`), so the quote adds `gas × count` with no offset.
+ */
+struct GasPerItem {
+    std::string item;
+    uint64_t gas;
     /**
-     * Returns the variant of this enum
+     * the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
      */
-    const std::variant<kFinalized, kDepth> &get_variant() const {
-        return variant;
-    }
-
-private:
-    std::variant<kFinalized, kDepth> variant;
-
-    Finality();
+    std::optional<uint64_t> regular;
+    /**
+     * the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+     * extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+     */
+    std::optional<uint64_t> measured_max;
 };
 
 
 /**
- * A prepared update: its write and `scaas-ua`'s warnings (`plan_msig_update`, none a refusal), in their `Debug` form.
+ * A decrypted PQZ balance, for the holder only.
  */
-struct MsigUpdatePlan {
-    std::shared_ptr<RegistryWrite> write;
-    std::vector<std::string> warnings;
+struct PqzBalance {
+    /**
+     * the smallest unit, decimal: what a debit at this block may spend (the account and the window `[rolled, p)`)
+     */
+    std::string amount;
+    /**
+     * the final block the words were read at
+     */
+    uint64_t block;
+    /**
+     * the window's end and the UA's `sendCounter` at that block
+     */
+    uint64_t p;
+    uint64_t send_counter;
 };
 
 
 /**
- * A new seed and its one reveal.
+ * Where a reviewed value comes from (spec §13.1).
  */
-struct NewSeed {
-    SeedInfo info;
-    std::shared_ptr<SeedBackup> backup;
+enum class Source: int32_t {
+    /**
+     * a field of the signed struct (or committed to by it, as a pay's `PayMeta`), decoded
+     */
+    kSigned = 1,
+    /**
+     * what the request named and the signed struct holds only in encrypted form (a confidential amount, recipient)
+     */
+    kRequest = 2,
+    /**
+     * what the SDK chose or read: the contract, every token or market touched with its mark
+     */
+    kDerived = 3
+};
+
+
+/**
+ * A position in a chain's logs: a page holds items strictly older than it.
+ */
+struct Cursor {
+    uint64_t block;
+    uint64_t log_index;
+};
+
+
+/**
+ * `UAZetherUnshieldUnwrap` (`WRAPPED_ZETHER`): `amount` out of the holder's Zether account, unwrapped by leg `underlying` to
+ * `recipient` (a 32-byte id: a native address zero-padded, or a derived UA in the leg's own ledger), at least `min_out` of
+ * the leg. The burn proof binds `recipient` and `amount` (the contract's `unshieldWith(b, proof, x.amount, x.recipient, …)`);
+ * the relayed form binds the envelope, never `unwrapBinding` (the direct call's).
+ */
+struct ZetherUnshieldUnwrap {
+    std::string seed;
+    uint32_t account;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    std::string underlying;
+    std::string recipient;
+    std::string amount;
+    std::string min_out;
+    uint64_t valid_until_block;
+    Envelope envelope;
+    std::optional<uint32_t> table_bits;
+    std::optional<uint32_t> bound_bits;
+};
+
+
+/**
+ * An `msig` structure: the threshold and the members, in slot order.
+ */
+struct MsigStructureArgs {
+    uint16_t threshold;
+    std::vector<MsigMemberArgs> members;
+};
+
+
+/**
+ * A verdict request (spec §9.3): the verifier's named fields of the operation (`op`: `{entry, args, binding?, amount?,
+ * recipient?, unwrap?}`, the proof-carrying entry and its argument struct, as `POST /v1/pqz-verdict` takes them), the
+ * statement the token rebuilds and the proof, `0x` hex.
+ */
+struct PqzVerdictRequest {
+    std::string chain;
+    std::string token;
+    Value op;
+    std::string statement;
+    std::string proof;
 };
 
 namespace uniffi {
@@ -1311,36 +1359,47 @@ private:
 
 
 /**
- * A base row (gas table v2, owner 2026-11-19): the execution gas of `entry` (`mtxCancelNonce`, `mtxExecuteTransfer`, …) on a
- * contract of domain kind `kind` (`token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `gov_router`), on a lane whose nonce
- * is 0 (`fresh`) or above, signed by the reference signer, a native EVM key (its path makes no registry call).
+ * `UAAttrs`, named.
  */
-struct GasBase {
-    std::string entry;
-    std::string kind;
-    bool fresh;
-    uint64_t gas;
+struct AttrsArgs {
+    std::string pqz_key;
+    std::string pqz_pop_hash;
+    KemArgs kem;
+    std::string kem_pk_hash;
+};
+
+
+/**
+ * `vault.derive_from_signature`'s request (root (c)): the external wallet's account and the seed-set number `set` it signed
+ * for, its two signatures of [`Vault::key_derivation_typed_data`] (65 bytes each; a 64-byte EIP-2098 one goes through
+ * [`Vault::signature_from_compact`] first), the derivation passphrase (≥ 10 code points), the new seed's label and vault
+ * passphrase.
+ */
+struct DeriveFromSignature {
+    std::string label;
     /**
-     * the part that grows with an input's length (owner 2026-11-19, ruling B)
+     * `0x` and 40 hex digits, any case
      */
-    std::optional<GasPerByte> per_byte;
-    /**
-     * the fixed gas added when the operation saves its `PayMeta` record (owner 2026-11-19, ruling 1)
-     */
-    std::optional<uint64_t> save;
-    /**
-     * the gas added when the operation's fee is > 0, measured paying a recipient holding nothing (owner 2026-11-19, ruling 3)
-     */
-    std::optional<uint64_t> fee_extra;
-    /**
-     * the regular gas a derived-UA signer adds on this entry over the native reference signer, beyond its verify row (owner
-     * 2026-11-19, A1: a derived id's ledger debit); added when the signer is a derived UA. `None`: nothing added
-     */
-    std::optional<uint64_t> ua_extra;
-    /**
-     * the part that grows with a count the operation names (owner 2026-11-19, I1); `None`: no count, nothing added
-     */
-    std::optional<GasPerItem> per_item;
+    std::string account;
+    uint32_t set;
+    std::shared_ptr<SecretBytes> signature1;
+    std::shared_ptr<SecretBytes> signature2;
+    std::shared_ptr<SecretBytes> derivation_passphrase;
+    std::shared_ptr<SecretBytes> vault_passphrase;
+};
+
+
+/**
+ * `vault.derive_from_key`'s request (root (d)): a 32-byte key of `network` (`evm` only: `Argument` otherwise), the derivation
+ * passphrase (empty, or ≥ 10 code points), the seed-set number `index`, the new seed's label and vault passphrase.
+ */
+struct DeriveFromKey {
+    std::string label;
+    std::string network;
+    std::shared_ptr<SecretBytes> key;
+    std::shared_ptr<SecretBytes> derivation_passphrase;
+    uint32_t index;
+    std::shared_ptr<SecretBytes> vault_passphrase;
 };
 
 
@@ -1362,141 +1421,17 @@ struct PqzBalanceAll {
 
 
 /**
- * A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
- * CTR-DEX-30) and the position readers reviewed for it, each beside its position manager.
+ * `vault.import_key`'s request (spec §6.7): a classical private key of `network` (32 bytes) as a leaf of a seed, sealed as the
+ * new label vault `native-import:<network>:<n>` under the seed's vault passphrase.
  */
-struct ListedDex {
-    /**
-     * `0x` + 40 hex
-     */
-    std::string address;
-    bool liquidity;
-    std::vector<PositionReader> position_readers;
-};
-
-namespace uniffi {
-struct FfiConverterEndpointAuth;
-} // namespace uniffi
-
-struct EndpointAuth {
-    friend uniffi::FfiConverterEndpointAuth;
-    struct kBearer {
-        Secret v1;
-    };
-    struct kHmac {
-        Secret v1;
-    };
-    struct kHeader {
-        std::string name;
-        Secret value;
-    };
-    EndpointAuth(kBearer variant): variant(variant) {}
-    EndpointAuth(kHmac variant): variant(variant) {}
-    EndpointAuth(kHeader variant): variant(variant) {}
-
-    EndpointAuth(const EndpointAuth &other): variant(other.variant) {}
-    EndpointAuth(EndpointAuth &&other): variant(std::move(other.variant)) {}
-
-    EndpointAuth &operator=(const EndpointAuth &other) {
-        variant = other.variant;
-        return *this;
-    }
-
-    EndpointAuth &operator=(EndpointAuth &&other) {
-        variant = std::move(other.variant);
-        return *this;
-    }
-
-    /**
-     * Returns the variant of this enum
-     */
-    const std::variant<kBearer, kHmac, kHeader> &get_variant() const {
-        return variant;
-    }
-
-private:
-    std::variant<kBearer, kHmac, kHeader> variant;
-
-    EndpointAuth();
-};
-
-
-/**
- * `create_se_key`: a new secure-element P-256 key under `policy`, named `name` beside seed `seed`.
- */
-struct CreateSeKey {
+struct ImportKey {
     std::string seed;
-    std::string name;
-    KeyPolicy policy;
-};
-
-
-/**
- * A pay's `PayMeta` v3 (CTR-MTX-26): committed to by the signed `entryRef` (`metaPayId`).
- */
-struct PayMeta {
     /**
-     * `0x` + 64 hex; `None`: 32 random bytes
+     * `ua-rs`'s network name (`evm`, `cosmos`, `hedera_ecdsa`, `hedera_ed25519`, `sui`, `stellar`, `ton`, `aptos`, `solana`)
      */
-    std::optional<std::string> salt;
-    /**
-     * a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
-     */
-    std::optional<std::string> pay_no;
-    /**
-     * store the payment's record under `pay_no` on chain
-     */
-    bool save;
-    PayBody body;
-};
-
-
-/**
- * `UAZetherTransfer` / `UAZetherTransferCompact`: the real `recipients` and `decoys` legs of amount 0 drawn uniformly from
- * the registry's `0x0141` list (CTR-UA-29, the default), every leg's position shuffled. `decoy_fee`: the per-leg fee the
- * token pays (decimal, `"0"` none; the token's `minDecoyFee` is the contract's check). `ua_signer_gas`: the Zether UA's
- * verify gas the prover's gas-cap check adds for the relayed build (zether-prover `uaSignerGas`), the app's figure: a verify
- * row for `0x0141` in the gas tables (chain → module → reference) wins over it (owner 2026-11-19, P1).
- */
-struct ZetherTransferMulti {
-    std::string seed;
-    uint32_t account;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    std::vector<ZetherLeg> recipients;
-    uint32_t decoys;
-    std::string decoy_fee;
-    uint64_t ua_signer_gas;
-    uint64_t valid_until_block;
-    Envelope envelope;
-    std::optional<uint32_t> table_bits;
-    std::optional<uint32_t> bound_bits;
-};
-
-
-/**
- * A verify row (gas table v2): what a signer of UA kind `signer` (`0`: a native EVM key, the reference) adds over the
- * reference signer's execution gas.
- */
-struct GasVerify {
-    uint16_t signer;
-    uint64_t gas;
-    /**
-     * the signer kind's signature length in calldata, `UASig` key data and signature ABI-padded (owner 2026-11-19, ruling
-     * 2; for an `msig`, per member); the quote adds 64 gas a byte of it. Required in every row (owner 2026-11-19, A4); a
-     * variable-length kind's longest (A5)
-     */
-    uint64_t sig_bytes;
-    /**
-     * a safety margin added to the row's gas, where the kind's worst case cannot be determined and the row is the most
-     * expensive of many measurements (owner 2026-11-19, the sampled check's ruling 2 (b)); 0 when absent
-     */
-    uint64_t margin;
-    /**
-     * the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
-     */
-    std::optional<GasPerItem> per_item;
+    std::string network;
+    std::shared_ptr<SecretBytes> secret;
+    std::shared_ptr<SecretBytes> vault_passphrase;
 };
 
 namespace uniffi {
@@ -1552,6 +1487,56 @@ private:
     std::variant<kTransfer, kOpaque> variant;
 
     ExecuteCall();
+};
+
+
+/**
+ * A slot of an inner `msig`: its index there and its key.
+ */
+struct MsigLeafValue {
+    uint16_t index;
+    SlotKey key;
+};
+
+
+/**
+ * A pay's `PayMeta` v3 (CTR-MTX-26): committed to by the signed `entryRef` (`metaPayId`).
+ */
+struct PayMeta {
+    /**
+     * `0x` + 64 hex; `None`: 32 random bytes
+     */
+    std::optional<std::string> salt;
+    /**
+     * a UUIDv7 in its text form, or `0x` + 64 hex; `None`: no number
+     */
+    std::optional<std::string> pay_no;
+    /**
+     * store the payment's record under `pay_no` on chain
+     */
+    bool save;
+    PayBody body;
+};
+
+
+/**
+ * `vault.remove`'s request.
+ */
+struct Remove {
+    std::string seed;
+    ConfirmRemove confirm;
+    std::optional<ConfirmRemoveUnbacked> unbacked;
+};
+
+
+/**
+ * One reviewed value: its name (a path for a nested field, `payment.value`), the value as signed, its display form.
+ */
+struct ReviewField {
+    std::string name;
+    std::string value;
+    std::string display;
+    Source source;
 };
 
 namespace uniffi {
@@ -1619,15 +1604,22 @@ private:
 
 
 /**
- * An account's balances at one block.
+ * `vault.derive_child`'s request: a stored seed (never a hidden set), the child's label and vault passphrase.
  */
-struct Balances {
-    uint64_t block;
-    /**
-     * the native balance of an address or a native id (`None` for a derived UA: it holds no native coin)
-     */
-    std::optional<std::string> native;
-    std::vector<TokenBalance> tokens;
+struct DeriveChild {
+    std::string parent;
+    std::string label;
+    std::shared_ptr<SecretBytes> vault_passphrase;
+};
+
+
+/**
+ * `vault.import_words`'s request: 12 to 24 English words as a secret.
+ */
+struct ImportWords {
+    std::string label;
+    std::shared_ptr<SecretBytes> words;
+    std::shared_ptr<SecretBytes> vault_passphrase;
 };
 
 namespace uniffi {
@@ -1678,84 +1670,27 @@ private:
 
 
 /**
- * A page of history.
+ * A verify row (gas table v2): what a signer of UA kind `signer` (`0`: a native EVM key, the reference) adds over the
+ * reference signer's execution gas.
  */
-struct HistoryPage {
-    std::vector<HistoryItem> items;
+struct GasVerify {
+    uint16_t signer;
+    uint64_t gas;
     /**
-     * on the first page (`before` none) only
+     * the signer kind's signature length in calldata, `UASig` key data and signature ABI-padded (owner 2026-11-19, ruling
+     * 2; for an `msig`, per member); the quote adds 64 gas a byte of it. Required in every row (owner 2026-11-19, A4); a
+     * variable-length kind's longest (A5)
      */
-    std::vector<OpItem> ops;
+    uint64_t sig_bytes;
     /**
-     * where the next page starts; `None` after block 0
+     * a safety margin added to the row's gas, where the kind's worst case cannot be determined and the row is the most
+     * expensive of many measurements (owner 2026-11-19, the sampled check's ruling 2 (b)); 0 when absent
      */
-    std::optional<Cursor> next;
-};
-
-
-/**
- * `vault.import_key`'s request (spec §6.7): a classical private key of `network` (32 bytes) as a leaf of a seed, sealed as the
- * new label vault `native-import:<network>:<n>` under the seed's vault passphrase.
- */
-struct ImportKey {
-    std::string seed;
+    uint64_t margin;
     /**
-     * `ua-rs`'s network name (`evm`, `cosmos`, `hedera_ecdsa`, `hedera_ed25519`, `sui`, `stellar`, `ton`, `aptos`, `solana`)
+     * the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
      */
-    std::string network;
-    std::shared_ptr<SecretBytes> secret;
-    std::shared_ptr<SecretBytes> vault_passphrase;
-};
-
-
-/**
- * An `msig` structure: the threshold and the members, in slot order.
- */
-struct MsigStructureArgs {
-    uint16_t threshold;
-    std::vector<MsigMemberArgs> members;
-};
-
-
-/**
- * The envelope of an owner statement's relayed form (`UARollOverSigned`, `UASetRollOverMode`): the Zether UA's own lane.
- */
-struct OwnerRelay {
-    std::string batch;
-    Envelope envelope;
-};
-
-
-/**
- * `vault.derive_from_key`'s request (root (d)): a 32-byte key of `network` (`evm` only: `Argument` otherwise), the derivation
- * passphrase (empty, or ≥ 10 code points), the seed-set number `index`, the new seed's label and vault passphrase.
- */
-struct DeriveFromKey {
-    std::string label;
-    std::string network;
-    std::shared_ptr<SecretBytes> key;
-    std::shared_ptr<SecretBytes> derivation_passphrase;
-    uint32_t index;
-    std::shared_ptr<SecretBytes> vault_passphrase;
-};
-
-
-/**
- * `vault.generate`'s request: the seed's label and its new vault passphrase (vault v1's rule).
- */
-struct Generate {
-    std::string label;
-    std::shared_ptr<SecretBytes> vault_passphrase;
-};
-
-
-/**
- * The sources of a quote's figure: its base row's and its verify row's (owner 2026-11-19, part 3b). An app's figure, one
- * total, is `App` for both; a native send's estimate `Estimate` for both.
- */
-struct GasSources {
-    GasFrom base;
-    GasFrom verify;
+    std::optional<GasPerItem> per_item;
 };
 
 
@@ -1770,11 +1705,44 @@ struct StorePolicy {
 
 
 /**
- * A slot of an inner `msig`: its index there and its key.
+ * A prepared update: its write and `scaas-ua`'s warnings (`plan_msig_update`, none a refusal), in their `Debug` form.
  */
-struct MsigLeafValue {
-    uint16_t index;
-    SlotKey key;
+struct MsigUpdatePlan {
+    std::shared_ptr<RegistryWrite> write;
+    std::vector<std::string> warnings;
+};
+
+
+/**
+ * `create_se_key`: a new secure-element P-256 key under `policy`, named `name` beside seed `seed`.
+ */
+struct CreateSeKey {
+    std::string seed;
+    std::string name;
+    KeyPolicy policy;
+};
+
+
+/**
+ * The envelope of an owner statement's relayed form (`UARollOverSigned`, `UASetRollOverMode`): the Zether UA's own lane.
+ */
+struct OwnerRelay {
+    std::string batch;
+    Envelope envelope;
+};
+
+
+/**
+ * A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
+ * CTR-DEX-30) and the position readers reviewed for it, each beside its position manager.
+ */
+struct ListedDex {
+    /**
+     * `0x` + 40 hex
+     */
+    std::string address;
+    bool liquidity;
+    std::vector<PositionReader> position_readers;
 };
 
 
@@ -1801,33 +1769,26 @@ struct ZetherTransfer {
 
 
 /**
- * One reviewed value: its name (a path for a nested field, `payment.value`), the value as signed, its display form.
+ * `UAZetherTransfer` / `UAZetherTransferCompact`: the real `recipients` and `decoys` legs of amount 0 drawn uniformly from
+ * the registry's `0x0141` list (CTR-UA-29, the default), every leg's position shuffled. `decoy_fee`: the per-leg fee the
+ * token pays (decimal, `"0"` none; the token's `minDecoyFee` is the contract's check). `ua_signer_gas`: the Zether UA's
+ * verify gas the prover's gas-cap check adds for the relayed build (zether-prover `uaSignerGas`), the app's figure: a verify
+ * row for `0x0141` in the gas tables (chain → module → reference) wins over it (owner 2026-11-19, P1).
  */
-struct ReviewField {
-    std::string name;
-    std::string value;
-    std::string display;
-    Source source;
-};
-
-
-/**
- * `vault.import_words`'s request: 12 to 24 English words as a secret.
- */
-struct ImportWords {
-    std::string label;
-    std::shared_ptr<SecretBytes> words;
-    std::shared_ptr<SecretBytes> vault_passphrase;
-};
-
-
-/**
- * `vault.remove`'s request.
- */
-struct Remove {
+struct ZetherTransferMulti {
     std::string seed;
-    ConfirmRemove confirm;
-    std::optional<ConfirmRemoveUnbacked> unbacked;
+    uint32_t account;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    std::vector<ZetherLeg> recipients;
+    uint32_t decoys;
+    std::string decoy_fee;
+    uint64_t ua_signer_gas;
+    uint64_t valid_until_block;
+    Envelope envelope;
+    std::optional<uint32_t> table_bits;
+    std::optional<uint32_t> bound_bits;
 };
 
 
@@ -1850,140 +1811,120 @@ struct ZetherUnshield {
 
 
 /**
- * `vault.derive_child`'s request: a stored seed (never a hidden set), the child's label and vault passphrase.
+ * A new seed and its one reveal.
  */
-struct DeriveChild {
-    std::string parent;
-    std::string label;
-    std::shared_ptr<SecretBytes> vault_passphrase;
+struct NewSeed {
+    SeedInfo info;
+    std::shared_ptr<SeedBackup> backup;
 };
 
 
 /**
- * `vault.derive_from_signature`'s request (root (c)): the external wallet's account and the seed-set number `set` it signed
- * for, its two signatures of [`Vault::key_derivation_typed_data`] (65 bytes each; a 64-byte EIP-2098 one goes through
- * [`Vault::signature_from_compact`] first), the derivation passphrase (≥ 10 code points), the new seed's label and vault
- * passphrase.
+ * A base row (gas table v2, owner 2026-11-19): the execution gas of `entry` (`mtxCancelNonce`, `mtxExecuteTransfer`, …) on a
+ * contract of domain kind `kind` (`token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `gov_router`), on a lane whose nonce
+ * is 0 (`fresh`) or above, signed by the reference signer, a native EVM key (its path makes no registry call).
  */
-struct DeriveFromSignature {
-    std::string label;
-    /**
-     * `0x` and 40 hex digits, any case
-     */
-    std::string account;
-    uint32_t set;
-    std::shared_ptr<SecretBytes> signature1;
-    std::shared_ptr<SecretBytes> signature2;
-    std::shared_ptr<SecretBytes> derivation_passphrase;
-    std::shared_ptr<SecretBytes> vault_passphrase;
-};
-
-
-/**
- * A verdict request (spec §9.3): the verifier's named fields of the operation (`op`: `{entry, args, binding?, amount?,
- * recipient?, unwrap?}`, the proof-carrying entry and its argument struct, as `POST /v1/pqz-verdict` takes them), the
- * statement the token rebuilds and the proof, `0x` hex.
- */
-struct PqzVerdictRequest {
-    std::string chain;
-    std::string token;
-    Value op;
-    std::string statement;
-    std::string proof;
-};
-
-
-/**
- * `UAAttrs`, named.
- */
-struct AttrsArgs {
-    std::string pqz_key;
-    std::string pqz_pop_hash;
-    KemArgs kem;
-    std::string kem_pk_hash;
-};
-
-
-/**
- * `UAZetherUnshieldUnwrap` (`WRAPPED_ZETHER`): `amount` out of the holder's Zether account, unwrapped by leg `underlying` to
- * `recipient` (a 32-byte id: a native address zero-padded, or a derived UA in the leg's own ledger), at least `min_out` of
- * the leg. The burn proof binds `recipient` and `amount` (the contract's `unshieldWith(b, proof, x.amount, x.recipient, …)`);
- * the relayed form binds the envelope, never `unwrapBinding` (the direct call's).
- */
-struct ZetherUnshieldUnwrap {
-    std::string seed;
-    uint32_t account;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    std::string underlying;
-    std::string recipient;
-    std::string amount;
-    std::string min_out;
-    uint64_t valid_until_block;
-    Envelope envelope;
-    std::optional<uint32_t> table_bits;
-    std::optional<uint32_t> bound_bits;
-};
-
-
-/**
- * A single-key registration's arguments by name, as `scaas-ua`'s `registration_args` gives them: `register` (`kind`,
- * `keyData`) or `registerWebAuthn` (`key`); bytes as `0x` hex.
- */
-struct RegisterArgs {
+struct GasBase {
     std::string entry;
-    std::optional<uint16_t> kind;
-    std::optional<std::string> key_data;
-    std::optional<WebAuthnArgs> key;
-    AttrsArgs attrs;
-    std::string pqz_pop;
-    std::string pop;
+    std::string kind;
+    bool fresh;
+    uint64_t gas;
+    /**
+     * the part that grows with an input's length (owner 2026-11-19, ruling B)
+     */
+    std::optional<GasPerByte> per_byte;
+    /**
+     * the fixed gas added when the operation saves its `PayMeta` record (owner 2026-11-19, ruling 1)
+     */
+    std::optional<uint64_t> save;
+    /**
+     * the gas added when the operation's fee is > 0, measured paying a recipient holding nothing (owner 2026-11-19, ruling 3)
+     */
+    std::optional<uint64_t> fee_extra;
+    /**
+     * the regular gas a derived-UA signer adds on this entry over the native reference signer, beyond its verify row (owner
+     * 2026-11-19, A1: a derived id's ledger debit); added when the signer is a derived UA. `None`: nothing added
+     */
+    std::optional<uint64_t> ua_extra;
+    /**
+     * the part that grows with a count the operation names (owner 2026-11-19, I1); `None`: no count, nothing added
+     */
+    std::optional<GasPerItem> per_item;
+    /**
+     * the row's regular gas, its figure's part EIP-7825's per-transaction cap holds under EIP-8037 (controller call, owner
+     * auto-run 2026-11-19; at a count of 0 on a counted row, whose `per_item` then carries its slope); `None`: the whole
+     * figure is held to the cap
+     */
+    std::optional<uint64_t> regular;
+};
+
+
+/**
+ * An account's balances at one block.
+ */
+struct Balances {
+    uint64_t block;
+    /**
+     * the native balance of an address or a native id (`None` for a derived UA: it holds no native coin)
+     */
+    std::optional<std::string> native;
+    std::vector<TokenBalance> tokens;
+};
+
+
+/**
+ * A page of history.
+ */
+struct HistoryPage {
+    std::vector<HistoryItem> items;
+    /**
+     * on the first page (`before` none) only
+     */
+    std::vector<OpItem> ops;
+    /**
+     * where the next page starts; `None` after block 0
+     */
+    std::optional<Cursor> next;
+};
+
+
+/**
+ * `vault.generate`'s request: the seed's label and its new vault passphrase (vault v1's rule).
+ */
+struct Generate {
+    std::string label;
+    std::shared_ptr<SecretBytes> vault_passphrase;
 };
 
 namespace uniffi {
-struct FfiConverterMsigSlotValue;
+struct FfiConverterEndpointAuth;
 } // namespace uniffi
 
-/**
- * One slot of an `msig` signature (`KeyRef::Msig`), as `MsigSlot`.
- */
-struct MsigSlotValue {
-    friend uniffi::FfiConverterMsigSlotValue;
-    /**
-     * the signing (or native) member at `index` signs with `key`
-     */
-    struct kMember {
-        uint16_t index;
-        SlotKey key;
+struct EndpointAuth {
+    friend uniffi::FfiConverterEndpointAuth;
+    struct kBearer {
+        Secret v1;
     };
-    /**
-     * the `msig` member at `index` signs by its own slots, one level down
-     */
-    struct kMsig {
-        uint16_t index;
-        std::vector<MsigLeafValue> members;
+    struct kHmac {
+        Secret v1;
     };
-    /**
-     * the slot at `index` already signed on another device: its `MemberSig` JSON as `Op::member_sign` returned it
-     */
-    struct kSigned {
-        uint16_t index;
-        std::string member;
+    struct kHeader {
+        std::string name;
+        Secret value;
     };
-    MsigSlotValue(kMember variant): variant(variant) {}
-    MsigSlotValue(kMsig variant): variant(variant) {}
-    MsigSlotValue(kSigned variant): variant(variant) {}
+    EndpointAuth(kBearer variant): variant(variant) {}
+    EndpointAuth(kHmac variant): variant(variant) {}
+    EndpointAuth(kHeader variant): variant(variant) {}
 
-    MsigSlotValue(const MsigSlotValue &other): variant(other.variant) {}
-    MsigSlotValue(MsigSlotValue &&other): variant(std::move(other.variant)) {}
+    EndpointAuth(const EndpointAuth &other): variant(other.variant) {}
+    EndpointAuth(EndpointAuth &&other): variant(std::move(other.variant)) {}
 
-    MsigSlotValue &operator=(const MsigSlotValue &other) {
+    EndpointAuth &operator=(const EndpointAuth &other) {
         variant = other.variant;
         return *this;
     }
 
-    MsigSlotValue &operator=(MsigSlotValue &&other) {
+    EndpointAuth &operator=(EndpointAuth &&other) {
         variant = std::move(other.variant);
         return *this;
     }
@@ -1991,58 +1932,33 @@ struct MsigSlotValue {
     /**
      * Returns the variant of this enum
      */
-    const std::variant<kMember, kMsig, kSigned> &get_variant() const {
+    const std::variant<kBearer, kHmac, kHeader> &get_variant() const {
         return variant;
     }
 
 private:
-    std::variant<kMember, kMsig, kSigned> variant;
+    std::variant<kBearer, kHmac, kHeader> variant;
 
-    MsigSlotValue();
+    EndpointAuth();
 };
 
 
 /**
- * One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint
- * only and is built by the app from its own secret source.
+ * The sources of a quote's figure: its base row's and its verify row's (owner 2026-11-19, part 3b). An app's figure, one
+ * total, is `App` for both; a native send's estimate `Estimate` for both.
  */
-struct EndpointConfig {
-    std::string url;
-    Class class_;
-    std::optional<std::string> label;
-    std::optional<EndpointAuth> auth;
+struct GasSources {
+    GasFrom base;
+    GasFrom verify;
 };
 
 
 /**
- * An `msig` on the profile's registry (`msig_state`).
+ * The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
  */
-struct MsigState {
-    std::string ua;
-    /**
-     * the structure the id derives from (`registrationOf`)
-     */
-    MsigStructureArgs first;
-    /**
-     * the current threshold (`msigOf`)
-     */
-    uint16_t threshold;
-    /**
-     * the current slots, disabled ones included
-     */
-    std::vector<MsigSlotState> slots;
-    /**
-     * `msigStateOf`'s update counter (0: never updated here)
-     */
-    uint64_t version;
-    /**
-     * the weight of the slots enabled and accepted
-     */
-    uint32_t active_weight;
-    /**
-     * that weight reaches the threshold: until then the `msig` authorizes nothing (CTR-UA-37)
-     */
-    bool active;
+struct GasRows {
+    std::vector<GasBase> base;
+    std::vector<GasVerify> verify;
 };
 
 namespace uniffi {
@@ -2144,26 +2060,123 @@ private:
     Event();
 };
 
+namespace uniffi {
+struct FfiConverterMsigSlotValue;
+} // namespace uniffi
 
 /**
- * The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
+ * One slot of an `msig` signature (`KeyRef::Msig`), as `MsigSlot`.
  */
-struct GasRows {
-    std::vector<GasBase> base;
-    std::vector<GasVerify> verify;
+struct MsigSlotValue {
+    friend uniffi::FfiConverterMsigSlotValue;
+    /**
+     * the signing (or native) member at `index` signs with `key`
+     */
+    struct kMember {
+        uint16_t index;
+        SlotKey key;
+    };
+    /**
+     * the `msig` member at `index` signs by its own slots, one level down
+     */
+    struct kMsig {
+        uint16_t index;
+        std::vector<MsigLeafValue> members;
+    };
+    /**
+     * the slot at `index` already signed on another device: its `MemberSig` JSON as `Op::member_sign` returned it
+     */
+    struct kSigned {
+        uint16_t index;
+        std::string member;
+    };
+    MsigSlotValue(kMember variant): variant(variant) {}
+    MsigSlotValue(kMsig variant): variant(variant) {}
+    MsigSlotValue(kSigned variant): variant(variant) {}
+
+    MsigSlotValue(const MsigSlotValue &other): variant(other.variant) {}
+    MsigSlotValue(MsigSlotValue &&other): variant(std::move(other.variant)) {}
+
+    MsigSlotValue &operator=(const MsigSlotValue &other) {
+        variant = other.variant;
+        return *this;
+    }
+
+    MsigSlotValue &operator=(MsigSlotValue &&other) {
+        variant = std::move(other.variant);
+        return *this;
+    }
+
+    /**
+     * Returns the variant of this enum
+     */
+    const std::variant<kMember, kMsig, kSigned> &get_variant() const {
+        return variant;
+    }
+
+private:
+    std::variant<kMember, kMsig, kSigned> variant;
+
+    MsigSlotValue();
 };
 
 
 /**
- * The sponsored registration's blob (spec §7.1; owner 2026-11-19, R2): public data only, every field named. Its text form is
- * clientkeys' `registrationBlob` (`smartcontracts/vectors/ua/registration_blobs.json`).
+ * A single-key registration's arguments by name, as `scaas-ua`'s `registration_args` gives them: `register` (`kind`,
+ * `keyData`) or `registerWebAuthn` (`key`); bytes as `0x` hex.
  */
-struct RegistrationBlob {
-    uint32_t v;
+struct RegisterArgs {
+    std::string entry;
+    std::optional<uint16_t> kind;
+    std::optional<std::string> key_data;
+    std::optional<WebAuthnArgs> key;
+    AttrsArgs attrs;
+    std::string pqz_pop;
+    std::string pop;
+};
+
+
+/**
+ * One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint
+ * only and is built by the app from its own secret source.
+ */
+struct EndpointConfig {
+    std::string url;
+    Class class_;
+    std::optional<std::string> label;
+    std::optional<EndpointAuth> auth;
+};
+
+
+/**
+ * An `msig` on the profile's registry (`msig_state`).
+ */
+struct MsigState {
     std::string ua;
-    uint16_t kind;
-    RegisterArgs args;
-    std::optional<KemRecord> kem;
+    /**
+     * the structure the id derives from (`registrationOf`)
+     */
+    MsigStructureArgs first;
+    /**
+     * the current threshold (`msigOf`)
+     */
+    uint16_t threshold;
+    /**
+     * the current slots, disabled ones included
+     */
+    std::vector<MsigSlotState> slots;
+    /**
+     * `msigStateOf`'s update counter (0: never updated here)
+     */
+    uint64_t version;
+    /**
+     * the weight of the slots enabled and accepted
+     */
+    uint32_t active_weight;
+    /**
+     * that weight reaches the threshold: until then the `msig` authorizes nothing (CTR-UA-37)
+     */
+    bool active;
 };
 
 
@@ -2171,8 +2184,8 @@ struct RegistrationBlob {
  * A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
  * verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
  * save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
- * per_item?: {gas, base_count, source}, stand_in?}`, each verify row `{signer, gas, measured, source, sig_bytes, margin?,
- * item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+ * per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
+ * `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
  * and the SDK's reference table.
  */
 struct GasTable {
@@ -2185,6 +2198,78 @@ struct GasTable {
      */
     std::string family;
     GasRows rows;
+};
+
+
+/**
+ * A chain as the app's release pins it (spec §4).
+ */
+struct ChainProfile {
+    /**
+     * `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
+     */
+    std::string key;
+    Family family;
+    /**
+     * EVM and Hedera
+     */
+    std::optional<uint64_t> chain_id;
+    /**
+     * `0x` + 64 hex (NET-ALL-24): every SCaaS EIP-712 domain's salt, pinned on every connection
+     */
+    std::string chain_uid;
+    std::vector<EndpointConfig> rpc;
+    Policy rpc_policy;
+    /**
+     * scaas-node gateways; empty: no gateway path on this chain
+     */
+    std::vector<EndpointConfig> gateways;
+    std::optional<std::string> registry;
+    std::optional<std::string> factory;
+    std::optional<std::string> router;
+    Finality finality;
+    /**
+     * the chain's per-transaction cap of the **regular** gas (EIP-7825 on a chain applying EIP-8037) when it has one, from
+     * the release data: a quote's regular bound is held to it, its gas limit (regular + state) to the block gas limit. A
+     * chain capping the whole gas limit (EIP-7825 without EIP-8037) is not supported (merged-tree review M19, 2026-11-20)
+     */
+    std::optional<uint64_t> tx_gas_cap;
+    /**
+     * the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
+     */
+    std::vector<ListedToken> tokens;
+    /**
+     * gas figures measured on this chain, shipped with its release data (owner 2026-11-19, gas-table rulings; spec §13.3);
+     * first in every lookup, base and verify each on its own
+     */
+    GasRows gas;
+    /**
+     * the further gas tables this chain uses, by name, only because it names them here (explicit opt-in): module tables of
+     * [`SdkConfig::gas_tables`] in this order, and `"reference"` for the SDK's forge-generated reference table, read after
+     * every module table; a name the SDK does not hold is `Argument` at `Sdk::open`
+     */
+    std::vector<std::string> gas_opt_in;
+    /**
+     * the longest an operation's `validUntil` may lie ahead of the SDK's clock on this chain, in seconds; `None`:
+     * `Limits::max_valid_secs` (default 86 400, one day) (owner 2026-11-19, T13b ruling 1)
+     */
+    std::optional<uint64_t> max_valid_secs;
+    /**
+     * the PQZ verifiers a verifier-mode token's verdict is asked of (spec §9.3): a list of endpoints with its own policy,
+     * `failover` (the default) or `strict_majority` (ARCH-POS-15; owner 2026-11-19, T16-a), each with its own credential;
+     * empty: no verdict on this chain (`VerdictRefused`)
+     */
+    std::vector<EndpointConfig> verifiers;
+    Policy verifier_policy;
+    /**
+     * the SCaaS DEXes of the chain (NET-ALL-24): an order or a cancel naming a DEX not here is refused before anything is
+     * signed (CLI-SGN-35, `DexNotListed`)
+     */
+    std::vector<ListedDex> dexes;
+    /**
+     * the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
+     */
+    std::vector<std::string> wrappers;
 };
 
 namespace uniffi {
@@ -2236,11 +2321,23 @@ struct KeyRef {
         std::string ua;
         std::vector<MsigSlot> slots;
     };
+    /**
+     * a `bls12381-multi` (`0x0121`) group (plan Task 17): the seed's member key `ua_key(0x0121, account, index)` (EIP-2333:
+     * index 0) and the group's key data `d` (`0x` hex, spec 2026-11-19-bls12381-multi §2); the signer's id is the group's
+     * UA, its signature the members' aggregate ([`Op::submit_bls_multi`])
+     */
+    struct kBlsMulti {
+        std::string seed;
+        uint32_t account;
+        uint32_t index;
+        std::string key_data;
+    };
     KeyRef(kUa variant): variant(variant) {}
     KeyRef(kNative variant): variant(variant) {}
     KeyRef(kImported variant): variant(variant) {}
     KeyRef(kKey variant): variant(variant) {}
     KeyRef(kMsig variant): variant(variant) {}
+    KeyRef(kBlsMulti variant): variant(variant) {}
 
     KeyRef(const KeyRef &other): variant(other.variant) {}
     KeyRef(KeyRef &&other): variant(std::move(other.variant)) {}
@@ -2258,92 +2355,53 @@ struct KeyRef {
     /**
      * Returns the variant of this enum
      */
-    const std::variant<kUa, kNative, kImported, kKey, kMsig> &get_variant() const {
+    const std::variant<kUa, kNative, kImported, kKey, kMsig, kBlsMulti> &get_variant() const {
         return variant;
     }
 
 private:
-    std::variant<kUa, kNative, kImported, kKey, kMsig> variant;
+    std::variant<kUa, kNative, kImported, kKey, kMsig, kBlsMulti> variant;
 
     KeyRef();
 };
 
 
 /**
- * A chain as the app's release pins it (spec §4).
+ * The sponsored registration's blob (spec §7.1; owner 2026-11-19, R2): public data only, every field named. Its text form is
+ * clientkeys' `registrationBlob` (`smartcontracts/vectors/ua/registration_blobs.json`).
  */
-struct ChainProfile {
+struct RegistrationBlob {
+    uint32_t v;
+    std::string ua;
+    uint16_t kind;
+    RegisterArgs args;
+    std::optional<KemRecord> kem;
+};
+
+
+struct SetPayee {
+    KeyRef signer;
+    std::string chain;
     /**
-     * `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
      */
-    std::string key;
-    Family family;
+    std::string contract;
     /**
-     * EVM and Hedera
+     * the lane, decimal
      */
-    std::optional<uint64_t> chain_id;
-    /**
-     * `0x` + 64 hex (NET-ALL-24): every SCaaS EIP-712 domain's salt, pinned on every connection
-     */
-    std::string chain_uid;
-    std::vector<EndpointConfig> rpc;
-    Policy rpc_policy;
-    /**
-     * scaas-node gateways; empty: no gateway path on this chain
-     */
-    std::vector<EndpointConfig> gateways;
-    std::optional<std::string> registry;
-    std::optional<std::string> factory;
-    std::optional<std::string> router;
-    Finality finality;
-    /**
-     * the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
-     */
-    std::optional<uint64_t> tx_gas_cap;
-    /**
-     * the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
-     */
-    std::vector<ListedToken> tokens;
-    /**
-     * gas figures measured on this chain, shipped with its release data (owner 2026-11-19, gas-table rulings; spec §13.3);
-     * first in every lookup, base and verify each on its own
-     */
-    GasRows gas;
-    /**
-     * the further gas tables this chain uses, by name, only because it names them here (explicit opt-in): module tables of
-     * [`SdkConfig::gas_tables`] in this order, and `"reference"` for the SDK's forge-generated reference table, read after
-     * every module table; a name the SDK does not hold is `Argument` at `Sdk::open`
-     */
-    std::vector<std::string> gas_opt_in;
-    /**
-     * the longest an operation's `validUntil` may lie ahead of the SDK's clock on this chain, in seconds; `None`:
-     * `Limits::max_valid_secs` (default 86 400, one day) (owner 2026-11-19, T13b ruling 1)
-     */
-    std::optional<uint64_t> max_valid_secs;
-    /**
-     * the PQZ verifiers a verifier-mode token's verdict is asked of (spec §9.3): a list of endpoints with its own policy,
-     * `failover` (the default) or `strict_majority` (ARCH-POS-15; owner 2026-11-19, T16-a), each with its own credential;
-     * empty: no verdict on this chain (`VerdictRefused`)
-     */
-    std::vector<EndpointConfig> verifiers;
-    Policy verifier_policy;
-    /**
-     * the SCaaS DEXes of the chain (NET-ALL-24): an order or a cancel naming a DEX not here is refused before anything is
-     * signed (CLI-SGN-35, `DexNotListed`)
-     */
-    std::vector<ListedDex> dexes;
-    /**
-     * the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
-     */
-    std::vector<std::string> wrappers;
+    std::string batch;
+    std::string token;
+    std::string payee;
+    bool allowed;
+    Envelope envelope;
 };
 
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAUnpause
+ * UASetMaxSupply
  */
-struct UaUnpause {
+struct UaSetMaxSupply {
     KeyRef signer;
     std::string chain;
     /**
@@ -2351,11 +2409,605 @@ struct UaUnpause {
      */
     std::string batch;
     std::string target;
-    std::string ref_id;
+    std::string max_supply;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
     std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * `UAExecute` on a mandate wallet: the owner's call, decoded only.
+ */
+struct Execute {
+    KeyRef signer;
+    std::string chain;
+    std::string wallet;
+    ExecuteCall call;
+    std::string batch;
+    Envelope envelope;
+};
+
+
+/**
+ * `UARollOverBatch`: roll each of `uas` over.
+ */
+struct ZetherRollOverBatch {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    std::vector<std::string> uas;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetMarket
+ */
+struct UaSetMarket {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string base;
+    std::string quote;
+    bool listed;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A trade order (`TradeOrder`'s named fields, CTR-DEX-15): sold `amount` of `sell_token` for at least `receive_amount` of
+ * `receive_token`, each settlement at least `min_fill` unless it closes the order.
+ */
+struct TradeOrder {
+    KeyRef signer;
+    std::string chain;
+    std::string sell_token;
+    /**
+     * a DEX of the profile's list (CLI-SGN-35)
+     */
+    std::string dex;
+    std::string receive_token;
+    std::string amount;
+    std::string receive_amount;
+    std::string min_fill;
+    /**
+     * the DEX fee rate the order accepts on what it receives, in millionths (at most 10,000)
+     */
+    std::string fee;
+    std::string relayer;
+    /**
+     * `None`: 0 (the signer receives)
+     */
+    std::optional<std::string> destination;
+    /**
+     * 1 IOC, 2 ESCROW (with IOC, SCaaS sell tokens only), 4 reserved by the venue
+     */
+    uint8_t flags;
+    /**
+     * the order lane, decimal (not an envelope's lane)
+     */
+    std::string batch;
+    /**
+     * `None`: the lane's floor (`minNonce(from, batch)` on the sell token, or on the DEX for an outside token) read now
+     */
+    std::optional<std::string> nonce;
+    /**
+     * unix seconds on the chain's clock
+     */
+    uint64_t valid_until;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAGrantRole
+ */
+struct UaGrantRole {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string bit;
+    std::string account;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetAuditorKey
+ */
+struct UaSetAuditorKey {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string new_key;
+    std::string epoch;
+    std::string pop;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetListedOnly
+ */
+struct UaSetListedOnly {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    bool on;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAPublishTokenEnv
+ */
+struct UaPublishTokenEnv {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string kind;
+    std::string env_version;
+    std::string env;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetMaxWrapSupply
+ */
+struct UaSetMaxWrapSupply {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string max_wrap_supply;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+struct WrapLeg {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string underlying;
+    std::string amount;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetFeeSplit
+ */
+struct UaSetFeeSplit {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string relayer_share_ppm;
+    std::string treasury;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * The cancel of one wrap order (`CancelUAWrapOrder` on the underlying `token`).
+ */
+struct CancelWrapOrder {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    WrapOrderTerms order;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UADeprecateDex
+ */
+struct UaDeprecateDex {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string version;
+    std::string reason;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+struct Unwrap {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string wrapped;
+    std::string recipient;
+    std::string min_out;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAMint
+ */
+struct UaMint {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string to;
+    std::string amount;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+struct UnwrapLeg {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string underlying;
+    std::string wrapped;
+    std::string recipient;
+    std::string min_out;
+    Envelope envelope;
+};
+
+
+/**
+ * `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
+ * fee (decimal; at least the token's `minDecoyFee`, the contract's check).
+ */
+struct PqzTransferMulti {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    uint64_t key_version;
+    std::vector<PqzLeg> legs;
+    std::string decoy_fee;
+    uint64_t valid_until_block;
+    Envelope envelope;
+};
+
+
+/**
+ * The transfer on ids (`UAMetaTransfer`, entry `mtxExecuteTransfer`, `POST /v1/ua-metatx`; owner 2026-11-18, ruling 6): a plain
+ * transfer, `entryRef = 0` on the lane `batch` the caller names, its nonce read, signed under `Expect::Transfer` (owner
+ * 2026-11-19, ruling D): not recorded on chain as a payment, and a retry of the same request reads the same lane nonce.
+ */
+struct Transfer {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    /**
+     * the receiver's 32-byte id (a native address zero-padded, or a UA)
+     */
+    std::string to;
+    std::string value;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetDenied
+ */
+struct UaSetDenied {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::vector<std::string> accounts;
+    bool on;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAPublishClassEnv
+ */
+struct UaPublishClassEnv {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string contract_class;
+    std::string kind;
+    std::string env_version;
+    std::string env;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+struct UnwrapToUa {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string underlying;
+    std::string wrapped;
+    std::string to;
+    std::string min_out;
+    Envelope envelope;
+};
+
+
+struct Burn {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string amount;
+    Envelope envelope;
+};
+
+
+struct RevokeMandate {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string token;
+    Envelope envelope;
+};
+
+
+/**
+ * The ordered cancel of a lane's nonce on ids (a token kind or a mandate wallet).
+ */
+struct CancelNonce {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string lane;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAApproveTokenRelease
+ */
+struct UaApproveTokenRelease {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string kind;
+    std::string version;
+    std::string env_version;
+    std::string initcode_hash;
+    std::string impl_args_hash;
+    std::string factory;
+    std::string admin_generation;
+    std::string until;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAPqzRevokeVerifier
+ */
+struct UaPqzRevokeVerifier {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetKycProvider
+ */
+struct UaSetKycProvider {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string provider;
+    bool enabled;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetProofStore
+ */
+struct UaSetProofStore {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string next;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * `UARollOver`: roll `ua`'s pending balance over (`n`: the entries to take).
+ */
+struct ZetherRollOver {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    std::string ua;
+    std::string n;
     Envelope envelope;
 };
 
@@ -2373,10 +3025,28 @@ struct MsigRegister {
 
 
 /**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetGrant
+ * `UAPqzUnshieldUnwrap` (`WRAPPED_PQZ`): `amount` out, unwrapped by leg `underlying` to `recipient`, at least `min_out`.
  */
-struct UaSetGrant {
+struct PqzUnshieldUnwrap {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    uint64_t key_version;
+    std::string underlying;
+    std::string recipient;
+    std::string amount;
+    std::string min_out;
+    uint64_t valid_until_block;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAApproveRelease
+ */
+struct UaApproveRelease {
     KeyRef signer;
     std::string chain;
     /**
@@ -2384,9 +3054,17 @@ struct UaSetGrant {
      */
     std::string batch;
     std::string target;
-    std::string bit;
-    std::string holder;
-    std::string terms;
+    std::string contract_class;
+    std::string kind;
+    std::string version;
+    std::string env_version;
+    std::string init_selector;
+    std::string interface_id;
+    std::string initcode_hash;
+    std::string impl_args_hash;
+    std::string factory;
+    std::string admin_generation;
+    std::string until;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -2397,9 +3075,9 @@ struct UaSetGrant {
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetTaxRecipient
+ * UASetWrapLimits
  */
-struct UaSetTaxRecipient {
+struct UaSetWrapLimits {
     KeyRef signer;
     std::string chain;
     /**
@@ -2407,28 +3085,10 @@ struct UaSetTaxRecipient {
      */
     std::string batch;
     std::string target;
-    std::string tax_recipient;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetVerifierFee
- */
-struct UaSetVerifierFee {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string next;
+    std::string legs;
+    bool net_unwrap;
+    bool wrap_list;
+    bool unwrap_list;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -2480,559 +3140,6 @@ struct LiquidityOrder {
      * a partial withdraw or fee collect (it must receive the position back)
      */
     bool partial;
-};
-
-
-/**
- * `UAPayWithTax` (regulated kinds): the payer's payment and its tax.
- */
-struct PayWithTax {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string to;
-    std::string value;
-    PayMeta meta;
-    uint8_t tax_mode;
-    std::string tax;
-    Envelope envelope;
-};
-
-
-/**
- * `UARollOver`: roll `ua`'s pending balance over (`n`: the entries to take).
- */
-struct ZetherRollOver {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    std::string ua;
-    std::string n;
-    Envelope envelope;
-};
-
-
-/**
- * `zether_wrap_shield` (`WrapShield` on a Zether token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
- */
-struct ZetherWrapShield {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    std::string underlying;
-    std::string amount_in;
-    std::string to_ua;
-    Envelope envelope;
-};
-
-
-/**
- * `UARelayFee` (CTR-MTX-27): a fee to `payee` for relaying the operation `call`, bound by the hash of its signed calldata; the
- * gateway job carries that operation as its `call` (`scaas-ua` `relay_fee_op`; owner 2026-11-19, ruling F).
- */
-struct RelayFee {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    /**
-     * the operation paid for: an operation id of this SDK (`Op::submit`'s), signed, on this chain, with a gateway job form;
-     * its contract is the signed `target`
-     */
-    std::string call;
-    std::string payee;
-    std::string value;
-    std::string batch;
-    uint64_t valid_until;
-    std::string relayer;
-};
-
-
-/**
- * `UARollOverBatch`: roll each of `uas` over.
- */
-struct ZetherRollOverBatch {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    std::vector<std::string> uas;
-    Envelope envelope;
-};
-
-
-/**
- * `prepare_register`: the UA key `key` (a seed's `KeyRef::Ua`) registered on `chain`, its writes self-relayed by `payer` (a
- * native `evm` key).
- */
-struct Register {
-    KeyRef key;
-    std::string chain;
-    RegisterAttrs attrs;
-    KeyRef payer;
-};
-
-
-/**
- * `UAPrepareAcc` (`half` 0 or 1 of the materialisation) and `UAPqzRollOver` (`n` pending entries) of `ua`'s account at key
- * version `key_version`.
- */
-struct PqzAccountOp {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    std::string ua;
-    uint64_t key_version;
-    /**
-     * `half` for `UAPrepareAcc`, `n` for `UAPqzRollOver`
-     */
-    std::string value;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UACancelGrant
- */
-struct UaCancelGrant {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string bit;
-    std::string account;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAPqzCancelVerifier
- */
-struct UaPqzCancelVerifier {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UATransferAdmin
- */
-struct UaTransferAdmin {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string new_admin;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAApproveRelease
- */
-struct UaApproveRelease {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string contract_class;
-    std::string kind;
-    std::string version;
-    std::string env_version;
-    std::string init_selector;
-    std::string interface_id;
-    std::string initcode_hash;
-    std::string impl_args_hash;
-    std::string factory;
-    std::string admin_generation;
-    std::string until;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * `UAExecute` on a mandate wallet: the owner's call, decoded only.
- */
-struct Execute {
-    KeyRef signer;
-    std::string chain;
-    std::string wallet;
-    ExecuteCall call;
-    std::string batch;
-    Envelope envelope;
-};
-
-
-/**
- * `UAPqzTransfer` / `UAPqzTransferCompact`: the `legs` (their count one the set builds, 1, 2, 4 or 8), `decoy_fee` the per-leg
- * fee (decimal; at least the token's `minDecoyFee`, the contract's check).
- */
-struct PqzTransferMulti {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    uint64_t key_version;
-    std::vector<PqzLeg> legs;
-    std::string decoy_fee;
-    uint64_t valid_until_block;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAEnableFeature
- */
-struct UaEnableFeature {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string bit;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAPqzRevokeVerifier
- */
-struct UaPqzRevokeVerifier {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-struct SetPayee {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string token;
-    std::string payee;
-    bool allowed;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UADisableFeature
- */
-struct UaDisableFeature {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string bit;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAPublishTokenEnv
- */
-struct UaPublishTokenEnv {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string kind;
-    std::string env_version;
-    std::string env;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetListedOnly
- */
-struct UaSetListedOnly {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    bool on;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetWrapLimits
- */
-struct UaSetWrapLimits {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string legs;
-    bool net_unwrap;
-    bool wrap_list;
-    bool unwrap_list;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetTokenKindEnabled
- */
-struct UaSetTokenKindEnabled {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string kind;
-    bool on;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A wrap order (`UAWrapOrder`, CTR-TOK wrap orders): `amount` of the SCaaS token `token` wrapped into `wrapped_token`, at least
- * `min_minted` minted; fills whole (`min_fill` = `amount`).
- */
-struct WrapOrder {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the underlying: the order's domain
-     */
-    std::string token;
-    /**
-     * a wrapper of the profile's list
-     */
-    std::string wrapped_token;
-    std::string amount;
-    std::string min_minted;
-    std::string min_fill;
-    std::string fee;
-    std::string relayer;
-    std::optional<std::string> destination;
-    uint8_t flags;
-    std::string batch;
-    /**
-     * `None`: the lane's floor on the underlying
-     */
-    std::optional<std::string> nonce;
-    uint64_t valid_until;
-};
-
-
-/**
- * `update_msig` (CTR-UA-44): the `msig` `ua` on `chain`'s registry becomes `structure` (every slot, the stored ones unchanged,
- * new members appended), `enabled` the slots that count, valid to block `valid_until_block`; signed by `slots` of the
- * **stored** structure, sent by `payer`.
- */
-struct UpdateMsig {
-    std::string chain;
-    std::string ua;
-    MsigStructureArgs structure;
-    std::vector<uint16_t> enabled;
-    uint64_t valid_until_block;
-    std::vector<MsigSlot> slots;
-    KeyRef payer;
-    /**
-     * the caller's facts for `plan_msig_update` (M4, owner 2026-11-19): a token names this `msig` as its PQZ verifier; the UA is
-     * in use on a family with no `msig` update yet. Whether it holds a PQZ key is read (`pqzKeyAt(ua, 0)`).
-     */
-    bool verifier;
-    bool family_without_update;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAMintToUA
- */
-struct UaMintToUa {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string to;
-    std::string amount;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UACancelNonce
- */
-struct UaCancelNonce {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string lane;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetChainEntries
- */
-struct UaSetChainEntries {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string entries;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-struct UnwrapLeg {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string underlying;
-    std::string wrapped;
-    std::string recipient;
-    std::string min_out;
-    Envelope envelope;
-};
-
-
-/**
- * `pqz_shield` (`UAShield` on a PQZ token): `amount` of the signer's public balance into `to_ua`'s pending window.
- */
-struct PqzShield {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    std::string to_ua;
-    std::string amount;
-    Envelope envelope;
 };
 
 namespace uniffi {
@@ -3095,9 +3202,9 @@ private:
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAOperatorTransfer
+ * UASetClassKindEnabled
  */
-struct UaOperatorTransfer {
+struct UaSetClassKindEnabled {
     KeyRef signer;
     std::string chain;
     /**
@@ -3105,90 +3212,30 @@ struct UaOperatorTransfer {
      */
     std::string batch;
     std::string target;
-    std::string account;
-    std::string to;
-    std::string amount;
+    std::string contract_class;
+    std::string kind;
+    bool on;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAUnpause
+ */
+struct UaUnpause {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
     std::string ref_id;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * The new auditor's consent to a set-auditor (spec 2026-11-18 set-auditor §5.2): `AuditorConsent(token, auditor, epoch,
- * chainUid)` in the confidential token's domain.
- */
-struct AuditorConsent {
-    /**
-     * PQZ: the auditor's UA key; Zether: the auditor's Zether UA (`kind` 0x0141)
-     */
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    uint32_t epoch;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UACancelRate
- */
-struct UaCancelRate {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UADisableWrap
- */
-struct UaDisableWrap {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string leg;
-    std::string reason;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAFreeze
- */
-struct UaFreeze {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string account;
-    std::string ref_id;
-    std::string record_id;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -3221,24 +3268,10 @@ struct UaSetWrapMember {
 
 
 /**
- * The part every `SmartKeyAccount` entry shares: the account (`0x` + 40 hex), the key of it that signs, the lane, the envelope.
- * `key_index` (decimal) is the signer's index in the account; `None`: read from the account (S3).
- */
-struct SmartOp {
-    KeyRef signer;
-    std::optional<std::string> key_index;
-    std::string chain;
-    std::string account;
-    std::string batch;
-    Envelope envelope;
-};
-
-
-/**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAApproveTokenRelease
+ * UAMintToUA
  */
-struct UaApproveTokenRelease {
+struct UaMintToUa {
     KeyRef signer;
     std::string chain;
     /**
@@ -3246,14 +3279,8 @@ struct UaApproveTokenRelease {
      */
     std::string batch;
     std::string target;
-    std::string kind;
-    std::string version;
-    std::string env_version;
-    std::string initcode_hash;
-    std::string impl_args_hash;
-    std::string factory;
-    std::string admin_generation;
-    std::string until;
+    std::string to;
+    std::string amount;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -3263,341 +3290,25 @@ struct UaApproveTokenRelease {
 
 
 /**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAPublishDexEnv
+ * `pqz_wrap_shield` (`WrapShield` on a PQZ token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
  */
-struct UaPublishDexEnv {
+struct PqzWrapShield {
     KeyRef signer;
     std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string env_version;
-    std::string env;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UARevokeApproval
- */
-struct UaRevokeApproval {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string key;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UARevokeOrder
- */
-struct UaRevokeOrder {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string record_id;
-    std::string reason_ref;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetProofStore
- */
-struct UaSetProofStore {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string next;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetTaxRate
- */
-struct UaSetTaxRate {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string rate_ppm;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-struct Unwrap {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string wrapped;
-    std::string recipient;
-    std::string min_out;
-    Envelope envelope;
-};
-
-
-struct DelegateRevoke {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
     std::string token;
-    std::string epoch;
-    Envelope envelope;
-};
-
-
-struct WrapLeg {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
     std::string batch;
     std::string underlying;
-    std::string amount;
-    Envelope envelope;
-};
-
-
-/**
- * A PQZ balance read (spec §9.2, §9.4): the account of the UA key `signer` (a PQZ-capable kind, `KeyRef::Ua`) at key
- * version `key_version`, whose PQZ key is the wallet's `pqz_key_version(account, index, key_version)` of the same account and
- * index (spec §7).
- */
-struct PqzBalanceRequest {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the token, `0x` + 40 hex
-     */
-    std::string token;
-    uint64_t key_version;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetCompliance
- */
-struct UaSetCompliance {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::vector<std::string> accounts;
-    std::vector<std::string> flags;
-    std::vector<std::string> until;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * The cancel of one wrap order (`CancelUAWrapOrder` on the underlying `token`).
- */
-struct CancelWrapOrder {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    WrapOrderTerms order;
-};
-
-
-/**
- * The cancel of every order of one lane below `min_nonce` (`POST /v1/dex/cancel-all`).
- */
-struct CancelAll {
-    KeyRef signer;
-    std::string chain;
-    std::string sell_token;
-    /**
-     * the DEX whose factory names the sell token's form; on the profile's list
-     */
-    std::string dex;
-    std::string batch;
-    /**
-     * `None`: the lane's floor read now plus one (every order signed at the floor)
-     */
-    std::optional<std::string> min_nonce;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetAuditorKey
- */
-struct UaSetAuditorKey {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string new_key;
-    std::string epoch;
-    std::string pop;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetFeeSplit
- */
-struct UaSetFeeSplit {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string relayer_share_ppm;
-    std::string treasury;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A trade order (`TradeOrder`'s named fields, CTR-DEX-15): sold `amount` of `sell_token` for at least `receive_amount` of
- * `receive_token`, each settlement at least `min_fill` unless it closes the order.
- */
-struct TradeOrder {
-    KeyRef signer;
-    std::string chain;
-    std::string sell_token;
-    /**
-     * a DEX of the profile's list (CLI-SGN-35)
-     */
-    std::string dex;
-    std::string receive_token;
-    std::string amount;
-    std::string receive_amount;
-    std::string min_fill;
-    /**
-     * the DEX fee rate the order accepts on what it receives, in millionths (at most 10,000)
-     */
-    std::string fee;
-    std::string relayer;
-    /**
-     * `None`: 0 (the signer receives)
-     */
-    std::optional<std::string> destination;
-    /**
-     * 1 IOC, 2 ESCROW (with IOC, SCaaS sell tokens only), 4 reserved by the venue
-     */
-    uint8_t flags;
-    /**
-     * the order lane, decimal (not an envelope's lane)
-     */
-    std::string batch;
-    /**
-     * `None`: the lane's floor (`minNonce(from, batch)` on the sell token, or on the DEX for an outside token) read now
-     */
-    std::optional<std::string> nonce;
-    /**
-     * unix seconds on the chain's clock
-     */
-    uint64_t valid_until;
-};
-
-
-/**
- * `zether_shield` (`UAShield` on a Zether token): `amount` of the signer's public balance into `to_ua`'s pending balance.
- */
-struct ZetherShield {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string batch;
+    std::string amount_in;
     std::string to_ua;
-    std::string amount;
     Envelope envelope;
 };
 
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UACreateToken
+ * UAAcceptAdmin
  */
-struct UaCreateToken {
+struct UaAcceptAdmin {
     KeyRef signer;
     std::string chain;
     /**
@@ -3605,169 +3316,6 @@ struct UaCreateToken {
      */
     std::string batch;
     std::string target;
-    std::string kind;
-    std::string version;
-    std::string salt;
-    std::string config;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-struct UnwrapToUa {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string underlying;
-    std::string wrapped;
-    std::string to;
-    std::string min_out;
-    Envelope envelope;
-};
-
-
-struct AddReserve {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string underlying;
-    std::string amount;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UADeprecateRelease
- */
-struct UaDeprecateRelease {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string contract_class;
-    std::string kind;
-    std::string version;
-    std::string reason;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-struct SetMandate {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string token;
-    std::string delegate;
-    std::string max_per_payment;
-    std::string max_per_period;
-    std::string period_seconds;
-    std::string expiry;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetMaxWrapSupply
- */
-struct UaSetMaxWrapSupply {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string max_wrap_supply;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-struct Burn {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string amount;
-    Envelope envelope;
-};
-
-
-/**
- * `UAPqzUnshieldUnwrap` (`WRAPPED_PQZ`): `amount` out, unwrapped by leg `underlying` to `recipient`, at least `min_out`.
- */
-struct PqzUnshieldUnwrap {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    uint64_t key_version;
-    std::string underlying;
-    std::string recipient;
-    std::string amount;
-    std::string min_out;
-    uint64_t valid_until_block;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UADeprecateToken
- */
-struct UaDeprecateToken {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string kind;
-    std::string version;
-    std::string reason;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -3777,71 +3325,23 @@ struct UaDeprecateToken {
 
 
 /**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAPublishClassEnv
+ * `UARelayFee` (CTR-MTX-27): a fee to `payee` for relaying the operation `call`, bound by the hash of its signed calldata; the
+ * gateway job carries that operation as its `call` (`scaas-ua` `relay_fee_op`; owner 2026-11-19, ruling F).
  */
-struct UaPublishClassEnv {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string contract_class;
-    std::string kind;
-    std::string env_version;
-    std::string env;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * The transfer on ids (`UAMetaTransfer`, entry `mtxExecuteTransfer`, `POST /v1/ua-metatx`; owner 2026-11-18, ruling 6): a plain
- * transfer, `entryRef = 0` on the lane `batch` the caller names, its nonce read, signed under `Expect::Transfer` (owner
- * 2026-11-19, ruling D): not recorded on chain as a payment, and a retry of the same request reads the same lane nonce.
- */
-struct Transfer {
+struct RelayFee {
     KeyRef signer;
     std::string chain;
     std::string token;
     /**
-     * the receiver's 32-byte id (a native address zero-padded, or a UA)
+     * the operation paid for: an operation id of this SDK (`Op::submit`'s), signed, on this chain, with a gateway job form;
+     * its contract is the signed `target`
      */
-    std::string to;
+    std::string call;
+    std::string payee;
     std::string value;
-    /**
-     * the lane, decimal
-     */
     std::string batch;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetAuditorUA
- */
-struct UaSetAuditorUa {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string new_auditor;
-    std::string epoch;
-    std::string consent;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
+    uint64_t valid_until;
+    std::string relayer;
 };
 
 
@@ -3874,9 +3374,9 @@ struct UaApproveDexRelease {
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAExecuteRate
+ * UARecordOrder
  */
-struct UaExecuteRate {
+struct UaRecordOrder {
     KeyRef signer;
     std::string chain;
     /**
@@ -3884,11 +3384,177 @@ struct UaExecuteRate {
      */
     std::string batch;
     std::string target;
+    std::string order_id;
+    std::string document_hash;
+    std::string subject;
+    std::string beneficiary;
+    std::string max_amount;
+    std::string freeze_until;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
     std::optional<std::string> chain_uid;
     Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetCompliance
+ */
+struct UaSetCompliance {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::vector<std::string> accounts;
+    std::vector<std::string> flags;
+    std::vector<std::string> until;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+struct AddReserve {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string underlying;
+    std::string amount;
+    Envelope envelope;
+};
+
+
+/**
+ * `UAPrepareAcc` (`half` 0 or 1 of the materialisation) and `UAPqzRollOver` (`n` pending entries) of `ua`'s account at key
+ * version `key_version`.
+ */
+struct PqzAccountOp {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    std::string ua;
+    uint64_t key_version;
+    /**
+     * `half` for `UAPrepareAcc`, `n` for `UAPqzRollOver`
+     */
+    std::string value;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAPublishDexEnv
+ */
+struct UaPublishDexEnv {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string env_version;
+    std::string env;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAEnableFeature
+ */
+struct UaEnableFeature {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string bit;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UADisableWrap
+ */
+struct UaDisableWrap {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string leg;
+    std::string reason;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UATransferAdmin
+ */
+struct UaTransferAdmin {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string new_admin;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * The new auditor's consent to a set-auditor (spec 2026-11-18 set-auditor §5.2): `AuditorConsent(token, auditor, epoch,
+ * chainUid)` in the confidential token's domain.
+ */
+struct AuditorConsent {
+    /**
+     * PQZ: the auditor's UA key; Zether: the auditor's Zether UA (`kind` 0x0141)
+     */
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    uint32_t epoch;
 };
 
 
@@ -3918,32 +3584,97 @@ struct UaCreateInstance {
 
 
 /**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAGrantRole
+ * `mtxPay`: a `UAMetaTransfer` whose `entryRef` is `metaPayId(meta)`, on its pay lane, signed under `Expect::PayMeta`.
  */
-struct UaGrantRole {
+struct Pay {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string to;
+    std::string value;
+    PayMeta meta;
+    Envelope envelope;
+};
+
+
+/**
+ * A wrap order (`UAWrapOrder`, CTR-TOK wrap orders): `amount` of the SCaaS token `token` wrapped into `wrapped_token`, at least
+ * `min_minted` minted; fills whole (`min_fill` = `amount`).
+ */
+struct WrapOrder {
     KeyRef signer;
     std::string chain;
     /**
-     * the lane, decimal
+     * the underlying: the order's domain
      */
-    std::string batch;
-    std::string target;
-    std::string bit;
-    std::string account;
+    std::string token;
     /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     * a wrapper of the profile's list
      */
-    std::optional<std::string> chain_uid;
+    std::string wrapped_token;
+    std::string amount;
+    std::string min_minted;
+    std::string min_fill;
+    std::string fee;
+    std::string relayer;
+    std::optional<std::string> destination;
+    uint8_t flags;
+    std::string batch;
+    /**
+     * `None`: the lane's floor on the underlying
+     */
+    std::optional<std::string> nonce;
+    uint64_t valid_until;
+};
+
+
+/**
+ * `pqz_shield` (`UAShield` on a PQZ token): `amount` of the signer's public balance into `to_ua`'s pending window.
+ */
+struct PqzShield {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    std::string to_ua;
+    std::string amount;
+    Envelope envelope;
+};
+
+
+/**
+ * A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
+ * SDK's own (`RuntimeChoice::Own`) and the clock the device's.
+ */
+struct BindingConfig {
+    std::vector<ChainProfile> profiles;
+    std::optional<std::string> rp_id;
+    Limits limits;
+    std::vector<GasTable> gas_tables;
+};
+
+
+/**
+ * `UAPqzUnshield`: `amount` out of the holder's account to `recipient` (a 32-byte id: a padded address or a registered UA).
+ */
+struct PqzUnshield {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    uint64_t key_version;
+    std::string recipient;
+    std::string amount;
+    uint64_t valid_until_block;
     Envelope envelope;
 };
 
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAPqzSetVerifier
+ * UAFreeze
  */
-struct UaPqzSetVerifier {
+struct UaFreeze {
     KeyRef signer;
     std::string chain;
     /**
@@ -3951,27 +3682,13 @@ struct UaPqzSetVerifier {
      */
     std::string batch;
     std::string target;
-    std::string next;
+    std::string account;
+    std::string ref_id;
+    std::string record_id;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
     std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-struct RevokeMandate {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string token;
     Envelope envelope;
 };
 
@@ -3998,9 +3715,9 @@ struct UaRenounceAdmin {
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetKycProvider
+ * UASetAuditorUA
  */
-struct UaSetKycProvider {
+struct UaSetAuditorUa {
     KeyRef signer;
     std::string chain;
     /**
@@ -4008,8 +3725,9 @@ struct UaSetKycProvider {
      */
     std::string batch;
     std::string target;
-    std::string provider;
-    bool enabled;
+    std::string new_auditor;
+    std::string epoch;
+    std::string consent;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -4020,9 +3738,9 @@ struct UaSetKycProvider {
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetMarket
+ * UAExecuteRate
  */
-struct UaSetMarket {
+struct UaExecuteRate {
     KeyRef signer;
     std::string chain;
     /**
@@ -4030,9 +3748,6 @@ struct UaSetMarket {
      */
     std::string batch;
     std::string target;
-    std::string base;
-    std::string quote;
-    bool listed;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -4042,62 +3757,59 @@ struct UaSetMarket {
 
 
 /**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAUnfreeze
+ * `zether_shield` (`UAShield` on a Zether token): `amount` of the signer's public balance into `to_ua`'s pending balance.
  */
-struct UaUnfreeze {
+struct ZetherShield {
     KeyRef signer;
     std::string chain;
-    /**
-     * the lane, decimal
-     */
+    std::string token;
     std::string batch;
-    std::string target;
-    std::string account;
-    std::string ref_id;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetClassKindEnabled
- */
-struct UaSetClassKindEnabled {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string contract_class;
-    std::string kind;
-    bool on;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-struct Wrap {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
+    std::string to_ua;
     std::string amount;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UADeprecateToken
+ */
+struct UaDeprecateToken {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string kind;
+    std::string version;
+    std::string reason;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAPqzSetVerifier
+ */
+struct UaPqzSetVerifier {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string next;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
     Envelope envelope;
 };
 
@@ -4144,6 +3856,249 @@ struct UaCreateDex {
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UACancelNonce
+ */
+struct UaCancelNonce {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string lane;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+struct DelegateRevoke {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string token;
+    std::string epoch;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UACancelRate
+ */
+struct UaCancelRate {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UACreateToken
+ */
+struct UaCreateToken {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string kind;
+    std::string version;
+    std::string salt;
+    std::string config;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UADeprecateRelease
+ */
+struct UaDeprecateRelease {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string contract_class;
+    std::string kind;
+    std::string version;
+    std::string reason;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * `zether_wrap_shield` (`WrapShield` on a Zether token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
+ */
+struct ZetherWrapShield {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string batch;
+    std::string underlying;
+    std::string amount_in;
+    std::string to_ua;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAPqzCancelVerifier
+ */
+struct UaPqzCancelVerifier {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UARevokeRole
+ */
+struct UaRevokeRole {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string bit;
+    std::string account;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * `UAPayWithTax` (regulated kinds): the payer's payment and its tax.
+ */
+struct PayWithTax {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    std::string to;
+    std::string value;
+    PayMeta meta;
+    uint8_t tax_mode;
+    std::string tax;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAUnfreeze
+ */
+struct UaUnfreeze {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string account;
+    std::string ref_id;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetTaxRecipient
+ */
+struct UaSetTaxRecipient {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string tax_recipient;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetTokenKindEnabled
+ */
+struct UaSetTokenKindEnabled {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string kind;
+    bool on;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
  * UAForceTransfer
  */
 struct UaForceTransfer {
@@ -4155,28 +4110,6 @@ struct UaForceTransfer {
     std::string batch;
     std::string target;
     std::string record_id;
-    std::string amount;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAMint
- */
-struct UaMint {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string to;
     std::string amount;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
@@ -4209,60 +4142,26 @@ struct UaSetExchangeTarget {
 
 
 /**
- * The cancel of one order (`CancelUAOrder` on its SCaaS sell token, `CancelDexOrder` on the DEX for an outside token's).
+ * A PQZ balance read (spec §9.2, §9.4): the account of the UA key `signer` (a PQZ-capable kind, `KeyRef::Ua`) at key
+ * version `key_version`, whose PQZ key is the wallet's `pqz_key_version(account, index, key_version)` of the same account and
+ * index (spec §7).
  */
-struct CancelOrder {
-    KeyRef signer;
-    std::string chain;
-    std::string sell_token;
-    OrderTerms order;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAProposeRate
- */
-struct UaProposeRate {
+struct PqzBalanceRequest {
     KeyRef signer;
     std::string chain;
     /**
-     * the lane, decimal
+     * the token, `0x` + 40 hex
      */
-    std::string batch;
-    std::string target;
-    std::string leg;
-    std::string num;
-    std::string den;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * `UAPqzUnshield`: `amount` out of the holder's account to `recipient` (a 32-byte id: a padded address or a registered UA).
- */
-struct PqzUnshield {
-    KeyRef signer;
-    std::string chain;
     std::string token;
-    std::string batch;
     uint64_t key_version;
-    std::string recipient;
-    std::string amount;
-    uint64_t valid_until_block;
-    Envelope envelope;
 };
 
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetMaxSupply
+ * UASetVerifierFee
  */
-struct UaSetMaxSupply {
+struct UaSetVerifierFee {
     KeyRef signer;
     std::string chain;
     /**
@@ -4270,173 +4169,11 @@ struct UaSetMaxSupply {
      */
     std::string batch;
     std::string target;
-    std::string max_supply;
+    std::string next;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
     std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-struct WrapToUa {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string underlying;
-    std::string amount;
-    std::string to;
-    Envelope envelope;
-};
-
-
-/**
- * The ordered cancel of a lane's nonce on ids (a token kind or a mandate wallet).
- */
-struct CancelNonce {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the contract (`0x` + 40 hex): a token, or a mandate wallet
-     */
-    std::string contract;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string lane;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAPause
- */
-struct UaPause {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    std::string ref_id;
-    std::string until;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UAAcceptAdmin
- */
-struct UaAcceptAdmin {
-    KeyRef signer;
-    std::string chain;
-    /**
-     * the lane, decimal
-     */
-    std::string batch;
-    std::string target;
-    /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
-     */
-    std::optional<std::string> chain_uid;
-    Envelope envelope;
-};
-
-
-/**
- * The rescue vault's signature request: the vault's admin key (a native EVM key) and the operation.
- */
-struct RescueVault {
-    KeyRef signer;
-    std::string vault;
-    RescueOp op;
-};
-
-
-/**
- * `UAPayUnderMandate`: the delegate's payment from the mandate wallet, its `entryRef` `metaPayId(meta)`.
- */
-struct PayUnderMandate {
-    KeyRef signer;
-    std::string chain;
-    std::string wallet;
-    std::string token;
-    std::string payee;
-    std::string amount;
-    std::string epoch;
-    std::string batch;
-    PayMeta meta;
-    Envelope envelope;
-};
-
-
-/**
- * `mtxPay`: a `UAMetaTransfer` whose `entryRef` is `metaPayId(meta)`, on its pay lane, signed under `Expect::PayMeta`.
- */
-struct Pay {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string to;
-    std::string value;
-    PayMeta meta;
-    Envelope envelope;
-};
-
-
-/**
- * `UAPayeeFee` (CTR-MTX-86): the payee's co-signature of its fee over the payment it expects; signed by the payee.
- */
-struct PayeeFee {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    Payment payment;
-    PayMeta meta;
-    PayerAuth payer_auth;
-    std::string fee;
-    std::string fee_recipient;
-    uint64_t valid_until;
-};
-
-
-/**
- * `accept_membership` (CTR-UA-37): slot `slot` of the `msig` `ua` accepts on `chain`, sent by `payer`.
- */
-struct AcceptMembership {
-    std::string chain;
-    std::string ua;
-    MsigSlot slot;
-    KeyRef payer;
-};
-
-
-/**
- * `pqz_wrap_shield` (`WrapShield` on a PQZ token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
- */
-struct PqzWrapShield {
-    KeyRef signer;
-    std::string chain;
-    std::string token;
-    std::string batch;
-    std::string underlying;
-    std::string amount_in;
-    std::string to_ua;
     Envelope envelope;
 };
 
@@ -4472,6 +4209,61 @@ struct NativeSend {
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UAProposeRate
+ */
+struct UaProposeRate {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string leg;
+    std::string num;
+    std::string den;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetChainEntries
+ */
+struct UaSetChainEntries {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string entries;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * `accept_membership` (CTR-UA-37): slot `slot` of the `msig` `ua` accepts on `chain`, sent by `payer`.
+ */
+struct AcceptMembership {
+    std::string chain;
+    std::string ua;
+    MsigSlot slot;
+    KeyRef payer;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
  * UASetAllowed
  */
 struct UaSetAllowed {
@@ -4493,10 +4285,26 @@ struct UaSetAllowed {
 
 
 /**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UASetDenied
+ * `UAPayeeFee` (CTR-MTX-86): the payee's co-signature of its fee over the payment it expects; signed by the payee.
  */
-struct UaSetDenied {
+struct PayeeFee {
+    KeyRef signer;
+    std::string chain;
+    std::string token;
+    Payment payment;
+    PayMeta meta;
+    PayerAuth payer_auth;
+    std::string fee;
+    std::string fee_recipient;
+    uint64_t valid_until;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UADisableFeature
+ */
+struct UaDisableFeature {
     KeyRef signer;
     std::string chain;
     /**
@@ -4504,8 +4312,7 @@ struct UaSetDenied {
      */
     std::string batch;
     std::string target;
-    std::vector<std::string> accounts;
-    bool on;
+    std::string bit;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -4516,9 +4323,9 @@ struct UaSetDenied {
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UADeprecateDex
+ * UAPause
  */
-struct UaDeprecateDex {
+struct UaPause {
     KeyRef signer;
     std::string chain;
     /**
@@ -4526,8 +4333,8 @@ struct UaDeprecateDex {
      */
     std::string batch;
     std::string target;
-    std::string version;
-    std::string reason;
+    std::string ref_id;
+    std::string until;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -4537,22 +4344,187 @@ struct UaDeprecateDex {
 
 
 /**
- * A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
- * SDK's own (`RuntimeChoice::Own`) and the clock the device's.
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetGrant
  */
-struct BindingConfig {
-    std::vector<ChainProfile> profiles;
-    std::optional<std::string> rp_id;
-    Limits limits;
-    std::vector<GasTable> gas_tables;
+struct UaSetGrant {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string bit;
+    std::string holder;
+    std::string terms;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * `UAPayUnderMandate`: the delegate's payment from the mandate wallet, its `entryRef` `metaPayId(meta)`.
+ */
+struct PayUnderMandate {
+    KeyRef signer;
+    std::string chain;
+    std::string wallet;
+    std::string token;
+    std::string payee;
+    std::string amount;
+    std::string epoch;
+    std::string batch;
+    PayMeta meta;
+    Envelope envelope;
 };
 
 
 /**
  * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UARevokeRole
+ * UAOperatorTransfer
  */
-struct UaRevokeRole {
+struct UaOperatorTransfer {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string account;
+    std::string to;
+    std::string amount;
+    std::string ref_id;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * `prepare_register`: the UA key `key` (a seed's `KeyRef::Ua`) registered on `chain`, its writes self-relayed by `payer` (a
+ * native `evm` key).
+ */
+struct Register {
+    KeyRef key;
+    std::string chain;
+    RegisterAttrs attrs;
+    KeyRef payer;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UARevokeOrder
+ */
+struct UaRevokeOrder {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string record_id;
+    std::string reason_ref;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+struct WrapToUa {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string underlying;
+    std::string amount;
+    std::string to;
+    Envelope envelope;
+};
+
+
+/**
+ * The rescue vault's signature request: the vault's admin key (a native EVM key) and the operation.
+ */
+struct RescueVault {
+    KeyRef signer;
+    std::string vault;
+    RescueOp op;
+};
+
+
+/**
+ * The cancel of one order (`CancelUAOrder` on its SCaaS sell token, `CancelDexOrder` on the DEX for an outside token's).
+ */
+struct CancelOrder {
+    KeyRef signer;
+    std::string chain;
+    std::string sell_token;
+    OrderTerms order;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UARevokeApproval
+ */
+struct UaRevokeApproval {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string key;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * The cancel of every order of one lane below `min_nonce` (`POST /v1/dex/cancel-all`).
+ */
+struct CancelAll {
+    KeyRef signer;
+    std::string chain;
+    std::string sell_token;
+    /**
+     * the DEX whose factory names the sell token's form; on the profile's list
+     */
+    std::string dex;
+    std::string batch;
+    /**
+     * `None`: the lane's floor read now plus one (every order signed at the floor)
+     */
+    std::optional<std::string> min_nonce;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UACancelGrant
+ */
+struct UaCancelGrant {
     KeyRef signer;
     std::string chain;
     /**
@@ -4562,6 +4534,27 @@ struct UaRevokeRole {
     std::string target;
     std::string bit;
     std::string account;
+    /**
+     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     */
+    std::optional<std::string> chain_uid;
+    Envelope envelope;
+};
+
+
+/**
+ * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
+ * UASetTaxRate
+ */
+struct UaSetTaxRate {
+    KeyRef signer;
+    std::string chain;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string target;
+    std::string rate_ppm;
     /**
      * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
      */
@@ -4592,27 +4585,74 @@ struct UaRenounceRole {
 
 
 /**
- * A request on the profile's `GovernanceRouter` (spec §11) for the row named below.
- * UARecordOrder
+ * `update_msig` (CTR-UA-44): the `msig` `ua` on `chain`'s registry becomes `structure` (every slot, the stored ones unchanged,
+ * new members appended), `enabled` the slots that count, valid to block `valid_until_block`; signed by `slots` of the
+ * **stored** structure, sent by `payer`.
  */
-struct UaRecordOrder {
+struct UpdateMsig {
+    std::string chain;
+    std::string ua;
+    MsigStructureArgs structure;
+    std::vector<uint16_t> enabled;
+    uint64_t valid_until_block;
+    std::vector<MsigSlot> slots;
+    KeyRef payer;
+    /**
+     * the caller's facts for `plan_msig_update` (M4, owner 2026-11-19): a token names this `msig` as its PQZ verifier; the UA is
+     * in use on a family with no `msig` update yet. Whether it holds a PQZ key is read (`pqzKeyAt(ua, 0)`).
+     */
+    bool verifier;
+    bool family_without_update;
+};
+
+
+/**
+ * The part every `SmartKeyAccount` entry shares: the account (`0x` + 40 hex), the key of it that signs, the lane, the envelope.
+ * `key_index` (decimal) is the signer's index in the account; `None`: read from the account (S3).
+ */
+struct SmartOp {
+    KeyRef signer;
+    std::optional<std::string> key_index;
+    std::string chain;
+    std::string account;
+    std::string batch;
+    Envelope envelope;
+};
+
+
+struct SetMandate {
     KeyRef signer;
     std::string chain;
+    /**
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
+     */
+    std::string contract;
     /**
      * the lane, decimal
      */
     std::string batch;
-    std::string target;
-    std::string order_id;
-    std::string document_hash;
-    std::string subject;
-    std::string beneficiary;
-    std::string max_amount;
-    std::string freeze_until;
+    std::string token;
+    std::string delegate;
+    std::string max_per_payment;
+    std::string max_per_period;
+    std::string period_seconds;
+    std::string expiry;
+    Envelope envelope;
+};
+
+
+struct Wrap {
+    KeyRef signer;
+    std::string chain;
     /**
-     * the target's chain word (CTR-GOV-28) where the struct signs one; `None`: the profile's `chain_uid`
+     * the contract (`0x` + 40 hex): a token, or a mandate wallet
      */
-    std::optional<std::string> chain_uid;
+    std::string contract;
+    /**
+     * the lane, decimal
+     */
+    std::string batch;
+    std::string amount;
     Envelope envelope;
 };
 
@@ -4633,6 +4673,12 @@ struct SubmitQuote {
      * the self-relay transaction's gas limit (`gas`); 0 on the gateway path, where the holder sends no transaction
      */
     uint64_t gas_limit;
+    /**
+     * the bound of `gas_limit`'s regular part, with the margin (EIP-8037; controller call, owner auto-run 2026-11-19): the part
+     * held to the profile's `tx_gas_cap` (EIP-7825 caps the regular gas only), the whole `gas_limit` where the split is not
+     * known (a native send's estimate, an app's figure); 0 on the gateway path
+     */
+    uint64_t regular_gas;
     /**
      * what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
      * the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
@@ -4998,13 +5044,29 @@ struct Op {
     Op &operator=(Op &&) = delete;
 
     ~Op();
+    BlsMultiPart bls_multi_part_blocking(const std::shared_ptr<Prepared> &prepared, KeyRef member, std::shared_ptr<CancelToken> cancel);
+    /**
+     * Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+     */
+    bool bls_multi_part_ok(const std::shared_ptr<Prepared> &prepared, const BlsMultiPart &part);
+    /**
+     * Member `member`'s PoP part for its group's registration.
+     */
+    BlsMultiPart bls_multi_pop_part(KeyRef member);
+    /**
+     * Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+     */
+    bool bls_multi_pop_part_ok(const std::string &key_data, const BlsMultiPart &part);
     std::string member_sign_blocking(const std::shared_ptr<Prepared> &prepared, std::shared_ptr<CancelToken> cancel);
     SubmitQuote quote_blocking(const std::shared_ptr<Prepared> &prepared, SubmitPath path, std::shared_ptr<CancelToken> cancel);
+    SubmitQuote quote_register_bls_multi_blocking(const std::string &chain, const std::string &key_data, KeyRef payer, std::shared_ptr<CancelToken> cancel);
     SubmitQuote quote_with_gas_blocking(const std::shared_ptr<Prepared> &prepared, SubmitPath path, uint64_t gas, std::shared_ptr<CancelToken> cancel);
+    std::string register_bls_multi_blocking(const std::string &chain, const std::string &key_data, const std::vector<BlsMultiPart> &parts, const SubmitQuote &quote, std::shared_ptr<CancelToken> cancel);
     void resend_blocking(const std::string &op, const SubmitQuote &quote, std::shared_ptr<CancelToken> cancel);
     uint32_t resume_blocking(std::shared_ptr<CancelToken> cancel);
     OpState state_blocking(const std::string &op, std::shared_ptr<CancelToken> cancel);
     std::string submit_blocking(const std::shared_ptr<Prepared> &prepared, const SubmitQuote &quote, std::shared_ptr<CancelToken> cancel);
+    std::string submit_bls_multi_blocking(const std::shared_ptr<Prepared> &prepared, const SubmitQuote &quote, const std::vector<BlsMultiPart> &parts, bool surplus, std::shared_ptr<CancelToken> cancel);
 
     private:
     Op(const Op &);
@@ -5570,6 +5632,16 @@ struct AssertionRequest {
     std::vector<uint8_t> challenge;
     std::vector<std::vector<uint8_t>> allow;
     std::optional<std::vector<uint8_t>> prf_salt;
+};
+
+
+/**
+ * A member's part (spec §5.4, §4): its index in the group's key data and its partial `σ_i` (or PoP part `π_i`), 128 bytes,
+ * `0x` hex.
+ */
+struct BlsMultiPart {
+    uint8_t index;
+    std::string signature;
 };
 
 
@@ -7075,6 +7147,24 @@ protected:
 };
 
 /**
+ * bls12381-multi (plan Task 17): the valid partials' weight is below the group's threshold
+ */
+struct BlsMultiBelowThreshold: SdkError {
+
+    BlsMultiBelowThreshold() : SdkError("") {}
+    BlsMultiBelowThreshold(const std::string &what_arg) : SdkError(what_arg) {}
+
+    void throw_underlying() override {
+        throw *this;
+    }
+
+protected:
+    int32_t get_variant_idx() const override {
+        return 59;
+    }
+};
+
+/**
  * A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
  * unknown part is refused, never dropped from a quote.
  */
@@ -7089,7 +7179,7 @@ struct GasFieldUnknown: SdkError {
 
 protected:
     int32_t get_variant_idx() const override {
-        return 59;
+        return 60;
     }
 };
 
@@ -7108,7 +7198,26 @@ struct DexNotListed: SdkError {
 
 protected:
     int32_t get_variant_idx() const override {
-        return 60;
+        return 61;
+    }
+};
+
+/**
+ * A PQZ auditor consent whose auditor is a native (address) key (controller call, owner auto-run 2026-11-19): a native id
+ * holds no PQZ key (CTR-UA-32), so the token refuses it on chain anyway; refused before anything is read or signed.
+ */
+struct PqzAuditorNative: SdkError {
+
+    PqzAuditorNative() : SdkError("") {}
+    PqzAuditorNative(const std::string &what_arg) : SdkError(what_arg) {}
+
+    void throw_underlying() override {
+        throw *this;
+    }
+
+protected:
+    int32_t get_variant_idx() const override {
+        return 62;
     }
 };
 
@@ -7126,7 +7235,7 @@ struct Cancelled: SdkError {
 
 protected:
     int32_t get_variant_idx() const override {
-        return 61;
+        return 63;
     }
 };
 
@@ -7144,7 +7253,7 @@ struct Ua: SdkError {
 
 protected:
     int32_t get_variant_idx() const override {
-        return 62;
+        return 64;
     }
 };
 
@@ -7162,7 +7271,7 @@ struct Rpc: SdkError {
 
 protected:
     int32_t get_variant_idx() const override {
-        return 63;
+        return 65;
     }
 };
 } // namespace sdk_error
@@ -7660,6 +7769,14 @@ struct FfiConverterTypeBindingConfig {
     static BindingConfig read(RustStream &);
     static void write(RustStream &, const BindingConfig &);
     static uint64_t allocation_size(const BindingConfig &);
+};
+
+struct FfiConverterTypeBlsMultiPart {
+    static BlsMultiPart lift(RustBuffer);
+    static RustBuffer lower(const BlsMultiPart &);
+    static BlsMultiPart read(RustStream &);
+    static void write(RustStream &, const BlsMultiPart &);
+    static uint64_t allocation_size(const BlsMultiPart &);
 };
 
 struct FfiConverterTypeBurn {
@@ -9574,6 +9691,14 @@ struct FfiConverterSequenceTypeAccountInfo {
     static std::vector<AccountInfo> read(RustStream &);
     static void write(RustStream &, const std::vector<AccountInfo> &);
     static uint64_t allocation_size(const std::vector<AccountInfo> &);
+};
+
+struct FfiConverterSequenceTypeBlsMultiPart {
+    static std::vector<BlsMultiPart> lift(RustBuffer);
+    static RustBuffer lower(const std::vector<BlsMultiPart> &);
+    static std::vector<BlsMultiPart> read(RustStream &);
+    static void write(RustStream &, const std::vector<BlsMultiPart> &);
+    static uint64_t allocation_size(const std::vector<BlsMultiPart> &);
 };
 
 struct FfiConverterSequenceTypeChainProfile {

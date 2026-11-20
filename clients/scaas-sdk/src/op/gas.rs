@@ -59,8 +59,8 @@ impl GasSources {
 }
 
 /// The transaction's base cost and calldata at the highest price per byte (EIP-7976's floor, 64 gas a byte).
-const INTRINSIC: u64 = 21_000;
-const PER_BYTE: u64 = 64;
+pub(crate) const INTRINSIC: u64 = 21_000;
+pub(crate) const PER_BYTE: u64 = 64;
 
 /// The largest count a per-item part is quoted at (owner 2026-11-19, I1: a bounded count); above it the operation is
 /// refused as `GasCountUnknown`.
@@ -109,13 +109,17 @@ fn part(
     None
 }
 
-/// The signer kinds the SDK accepts (spec §13.3: each UA kind `ua_key` derives that can sign alone, and the native key): the
-/// verify rows the reference table carries, and the kinds an attached signature of unknown kind may be (owner 2026-11-19,
-/// ruling 4).
-pub(crate) const ACCEPTED_SIGNERS: [u16; 15] = [
-    NATIVE_EVM, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0130, 0x0131,
-    0x0132, 0x0133, 0x0134, 0x0135,
+/// The signer kinds the SDK accepts (spec §13.3: each UA kind `ua_key` derives that can sign alone, the native key, and
+/// `bls12381-multi` `0x0121`, a group of member keys, plan Task 17): the verify rows the reference table carries, and the
+/// kinds an attached signature of unknown kind may be (owner 2026-11-19, ruling 4).
+pub(crate) const ACCEPTED_SIGNERS: [u16; 16] = [
+    NATIVE_EVM, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0121, 0x0130,
+    0x0131, 0x0132, 0x0133, 0x0134, 0x0135,
 ];
+
+/// `bls12381-multi`'s member cap (spec 2026-11-19-bls12381-multi §8.3, the registry's `UAKeyData(0x0121)` above it): the count
+/// `members` an attached signature of unknown kind is quoted at.
+const BLS_MULTI_MAX: u64 = 64;
 
 /// The entry whose inner call the app prices (owner 2026-11-19, ruling 5).
 pub(crate) const EXECUTE: &str = "mtxExecute";
@@ -182,7 +186,8 @@ fn verify_part(
 /// 3; a row without one adds nothing: the entry's fee is its own payment), its `ua_extra` once when either party the entry
 /// debits is a derived UA, the signer or an attached signature's owner (A1, G1; a row without one adds nothing); the verify
 /// part adds 64 gas a byte of its `sig_bytes` (ruling 2); a second signature, the one attached (ruling 4 as A2 reads it), adds its kind's verify gas without its bytes (A3), or when its kind
-/// is unknown the most expensive of [`ACCEPTED_SIGNERS`] (a kind without a row: no answer). `mtxExecute` (ruling 5): the
+/// is unknown the most expensive of [`ACCEPTED_SIGNERS`] (a kind without a row: no answer; a row counting `members` at
+/// `bls12381-multi`'s cap of 64). `mtxExecute` (ruling 5): the
 /// app's figure is its inner call's, added to the rows, never a total; without it, or without the rows, no figure. A base
 /// or verify row's `per_item` (I1) adds its gas times the count it names, read by `op.count` (the signer's verify row) and
 /// at most [`COUNT_MAX`]; a row read whose count is unknown or above it refuses the operation, `GasCountUnknown` (fail
@@ -196,21 +201,44 @@ pub(crate) fn lookup_by(
     key: (&str, &str, u16, bool),
     op: &OpGas,
 ) -> Result<Option<(u64, GasSources)>, SdkError> {
+    lookup_in(chain, opt_in, tables, app, key, op, false)
+}
+
+/// [`lookup_by`], or with `regular` its bound of the regular gas (EIP-8037; controller call, owner auto-run 2026-11-19): the
+/// base row's `regular` figure and its `per_item`'s `regular` slope in place of their whole gas where the row has them, every
+/// other part (and a row without them, an app's figure) counted whole.
+fn lookup_in(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    app: Option<u64>,
+    key: (&str, &str, u16, bool),
+    op: &OpGas,
+    regular: bool,
+) -> Result<Option<(u64, GasSources)>, SdkError> {
     let (entry, kind, signer, fresh) = key;
     let uncounted = std::cell::Cell::new(false);
-    let items = |p: &Option<GasPerItem>, count: &dyn Fn(&str) -> Option<u64>| {
+    let items = |p: &Option<GasPerItem>, reg: bool, count: &dyn Fn(&str) -> Option<u64>| {
         let Some(p) = p else { return Some(0) };
-        let n = count(&p.item).filter(|n| *n <= COUNT_MAX);
+        // M18: never above the largest measured count (the line is not extrapolated past its points)
+        let n =
+            count(&p.item).filter(|n| *n <= COUNT_MAX && p.measured_max.is_none_or(|m| *n <= m));
         if n.is_none() {
             uncounted.set(true);
         }
-        Some(p.gas.saturating_mul(n?))
+        let per = if reg {
+            p.regular.unwrap_or(p.gas)
+        } else {
+            p.gas
+        };
+        Some(per.saturating_mul(n?))
     };
-    let own = |p: &Option<GasPerItem>| items(p, op.count);
-    let attached = |p: &Option<GasPerItem>| items(p, &|_| None);
+    let own = |p: &Option<GasPerItem>| items(p, false, op.count);
+    let attached = |p: &Option<GasPerItem>| items(p, false, &|_| None);
     let base = part(chain, opt_in, tables, |r| {
         let b = r.base.iter().find(|b| b.key() == (entry, kind, fresh))?;
-        let mut g = b.gas;
+        let reg = regular && b.regular.is_some();
+        let mut g = b.regular.filter(|_| reg).unwrap_or(b.gas);
         if let Some(p) = &b.per_byte {
             g = g.saturating_add(p.gas.saturating_mul((op.len)(&p.input)?));
         }
@@ -225,16 +253,23 @@ pub(crate) fn lookup_by(
         if signer != NATIVE_EVM || op.attached.is_some_and(|k| k != Some(NATIVE_EVM)) || op.holder {
             g = g.saturating_add(b.ua_extra.unwrap_or(0));
         }
-        g = g.saturating_add(own(&b.per_item)?);
+        g = g.saturating_add(items(&b.per_item, reg, op.count)?);
         Some(g)
     });
     let verify = verify_part(chain, opt_in, tables, signer, true, &own);
     let second = match op.attached {
         None => Some(0),
         Some(Some(k)) => verify_part(chain, opt_in, tables, k, false, &attached).map(|v| v.0),
+        // an unknown kind may be a group's (0x0121), whose n is not read: its `members` at the kind's cap (controller call,
+        // owner auto-run 2026-11-19: a bound of the kind's own rule, as K1's `ROLL_MAX`; a known kind's count stays unread)
         Some(None) => ACCEPTED_SIGNERS
             .iter()
-            .map(|k| verify_part(chain, opt_in, tables, *k, false, &attached).map(|v| v.0))
+            .map(|k| {
+                let capped = |p: &Option<GasPerItem>| {
+                    items(p, false, &|i| (i == "members").then_some(BLS_MULTI_MAX))
+                };
+                verify_part(chain, opt_in, tables, *k, false, &capped).map(|v| v.0)
+            })
             .try_fold(0, |m, v| v.map(|v| m.max(v))),
     };
     if uncounted.get() {
@@ -254,6 +289,57 @@ pub(crate) fn lookup_by(
         _ if execute => None,
         _ => app.map(|g| (g, GasSources::both(GasFrom::App))),
     })
+}
+
+/// The execution gas of a group registration (`entry`, kind `account`: `registerBlsMulti`, spec 2026-11-19-bls12381-multi
+/// §8.4) of `n` members and its source: the base row of the registry's first registration of the kind (`fresh`), its gas
+/// plus `per_item × n` when the row counts `members`; no verify part (no signer: the PoP authorizes it) and no other part.
+/// `None`: no row; `GasCountUnknown`: a row counting another item, or `n` above [`COUNT_MAX`] (fail closed, as [`lookup_by`]).
+/// Returns the figure, its regular part's bound (EIP-8037: the row's `regular` and its slope where it has them, else the
+/// figure) and the source.
+pub(crate) fn registration_gas(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    entry: &str,
+    n: u64,
+) -> Result<Option<(u64, u64, GasFrom)>, SdkError> {
+    let uncounted = std::cell::Cell::new(false);
+    // the figure, or with `regular` its regular bound (the row's `regular` and slope where it has them)
+    let find = |regular: bool| {
+        part(chain, opt_in, tables, |r| {
+            let b = r
+                .base
+                .iter()
+                .find(|b| b.key() == (entry, "account", true))?;
+            let reg = regular && b.regular.is_some();
+            let per = match &b.per_item {
+                None => 0,
+                Some(p)
+                    if p.item == "members"
+                        && n <= COUNT_MAX
+                        && p.measured_max.is_none_or(|m| n <= m) =>
+                {
+                    p.regular.filter(|_| reg).unwrap_or(p.gas).saturating_mul(n)
+                }
+                Some(_) => {
+                    uncounted.set(true);
+                    return None;
+                }
+            };
+            Some(
+                b.regular
+                    .filter(|_| reg)
+                    .unwrap_or(b.gas)
+                    .saturating_add(per),
+            )
+        })
+    };
+    let (found, regular) = (find(false), find(true));
+    if uncounted.get() {
+        return Err(SdkError::GasCountUnknown);
+    }
+    Ok(found.map(|(g, from)| (g, regular.map_or(g, |r| r.0.min(g)), from)))
 }
 
 /// [`lookup_by`] of an operation without a variable-length input, a saved record, a fee, a second signature or a count
@@ -286,8 +372,44 @@ pub(crate) fn verify_or(
     .unwrap_or((app, GasFrom::App))
 }
 
-/// The quote's gas of a key whose unsigned calldata is `len` bytes: the figure plus the intrinsic cost and the calldata, with
-/// the margin, and its sources; `None`: unquoted; `GasCountUnknown` as [`lookup_by`].
+/// A quote's gas (controller call, owner auto-run 2026-11-19, EIP-8037): `gas`, regular + state, the transaction's gas
+/// limit, held to the block gas limit; `regular`, the bound of its regular part (at most `gas`), held to the chain's
+/// per-transaction cap (EIP-7825 caps the regular gas only under EIP-8037); and the sources.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Figure {
+    pub gas: u64,
+    pub regular: u64,
+    pub from: GasSources,
+}
+
+impl Figure {
+    /// A figure whose split is not known (an estimate, an app's figure): the whole of it held to the cap.
+    pub(crate) fn whole(gas: u64, from: GasSources) -> Self {
+        Figure {
+            gas,
+            regular: gas,
+            from,
+        }
+    }
+}
+
+/// The figure `g` and its regular bound `r` of a transaction whose calldata is `len` bytes: each plus the intrinsic cost and
+/// the calldata, with the margin; the regular bound at most the gas.
+pub(crate) fn with_calldata(g: u64, r: u64, len: usize, from: GasSources) -> Figure {
+    let bytes = u64::try_from(len)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(PER_BYTE);
+    let total = |x: u64| with_margin(x.saturating_add(INTRINSIC).saturating_add(bytes));
+    let gas = total(g);
+    Figure {
+        gas,
+        regular: total(r).min(gas),
+        from,
+    }
+}
+
+/// The quote's gas of a key whose unsigned calldata is `len` bytes ([`with_calldata`] of [`lookup_by`]'s figure and its
+/// regular bound); `None`: unquoted; `GasCountUnknown` as [`lookup_by`].
 pub(crate) fn quoted(
     chain: &GasRows,
     opt_in: &[String],
@@ -296,18 +418,12 @@ pub(crate) fn quoted(
     key: (&str, &str, u16, bool),
     len: usize,
     op: &OpGas,
-) -> Result<Option<(u64, GasSources)>, SdkError> {
-    let bytes = u64::try_from(len)
-        .unwrap_or(u64::MAX)
-        .saturating_mul(PER_BYTE);
-    Ok(
-        lookup_by(chain, opt_in, tables, app, key, op)?.map(|(g, from)| {
-            (
-                with_margin(g.saturating_add(INTRINSIC).saturating_add(bytes)),
-                from,
-            )
-        }),
-    )
+) -> Result<Option<Figure>, SdkError> {
+    let Some((g, from)) = lookup_by(chain, opt_in, tables, app, key, op)? else {
+        return Ok(None);
+    };
+    let r = lookup_in(chain, opt_in, tables, app, key, op, true)?.map_or(g, |(r, _)| r);
+    Ok(Some(with_calldata(g, r, len, from)))
 }
 
 /// The calldata bytes a quote of signer kind `signer` counted (owner 2026-11-19, G3): the unsigned calldata (`unsigned`) plus
@@ -382,8 +498,9 @@ pub(crate) fn input_len(
 /// set's [`roll_max`] (owner 2026-11-19, K1: the contract's own bound, so an app's huge `n` meaning "all" is quoted at
 /// `ROLL_MAX`), plus the length of its `skip` marks where it has them (P1, "approved": min(n, ROLL_MAX) + len(skip));
 /// `env_items` (P1, K2), the elements of an env publish's four `Env` arrays (`env.deps`, `env.params`, `env.libs`,
-/// `env.libCodeHashes`) together; `orders` (K2), a DEX cancel's orders, 1 for its one `order`; `members` is not read (no
-/// `0x0121` signer in the SDK yet). `None`: the operation has no such count.
+/// `env.libCodeHashes`) together; `orders` (K2), a DEX cancel's orders, 1 for its one `order`; `members` is not read here: it
+/// is a `0x0121` signer's n, which the quote reads from the signer's key data (plan Task 17). `None`: the operation has no such
+/// count.
 pub(crate) fn item_count(
     extra: &serde_json::Value,
     message: &serde_json::Value,
@@ -493,6 +610,7 @@ mod tests {
                 fee_extra: None,
                 ua_extra: None,
                 per_item: None,
+                regular: None,
             }],
             verify: vec![GasVerify {
                 signer: 0x0101,
@@ -577,11 +695,59 @@ mod tests {
         );
         assert_eq!(
             quoted(&rows(1_000, 10), &[], &tables, None, K, 10, &OpGas::PLAIN).unwrap(),
-            Some((
+            Some(Figure::whole(
                 (1_010 + 21_000 + 640) * 3 / 2,
                 src(GasFrom::Chain, GasFrom::Chain)
             ))
         );
+    }
+
+    /// EIP-8037 (controller call, owner auto-run 2026-11-19): a quote's regular bound takes the base row's `regular` figure and
+    /// its `per_item`'s `regular` slope in place of their whole gas, every other part whole, with the intrinsic cost, the
+    /// calldata and the margin; a row without them: the whole figure; never above the gas.
+    #[test]
+    fn quoted_regular_bound() {
+        let k = ("mtxPay", "token", 0x0101, false);
+        let mut r = rows(10_000_000, 10);
+        r.base[0].regular = Some(1_000_000);
+        r.base[0].per_item = Some(GasPerItem {
+            item: "members".into(),
+            gas: 100,
+            regular: Some(40),
+            measured_max: None,
+        });
+        let op = OpGas {
+            count: &|i| (i == "members").then_some(5),
+            ..OpGas::PLAIN
+        };
+        let total = |g: u64| (g + 21_000 + 640) * 3 / 2;
+        let f = quoted(&r, &[], &[], None, k, 10, &op).unwrap().unwrap();
+        assert_eq!(f.gas, total(10_000_000 + 500 + 10));
+        assert_eq!(
+            f.regular,
+            total(1_000_000 + 200 + 10),
+            "the row's regular part and slope"
+        );
+        r.base[0].fee_extra = Some(7_000);
+        let fee = OpGas { fee: true, ..op };
+        let f = quoted(&r, &[], &[], None, k, 10, &fee).unwrap().unwrap();
+        assert_eq!(
+            f.regular,
+            total(1_000_000 + 200 + 10 + 7_000),
+            "another part counted whole"
+        );
+        r.base[0].regular = None;
+        r.base[0].per_item.as_mut().unwrap().regular = None;
+        let f = quoted(&r, &[], &[], None, k, 10, &op).unwrap().unwrap();
+        assert_eq!(f.regular, f.gas, "no split: the whole figure");
+        r.base[0].regular = Some(20_000_000);
+        r.base[0].per_item.as_mut().unwrap().regular = Some(40);
+        let f = quoted(&r, &[], &[], None, k, 10, &op).unwrap().unwrap();
+        assert_eq!(f.regular, f.gas, "never above the gas");
+        let app = quoted(&GasRows::default(), &[], &[], Some(9), k, 10, &op)
+            .unwrap()
+            .unwrap();
+        assert_eq!(app.regular, app.gas, "an app's figure: whole");
     }
 
     /// Base and verify are looked up independently (owner 2026-11-19, part 3b), each through its own order; `gas_from` names
@@ -727,6 +893,58 @@ mod tests {
         let at = format!("{one}{}", " ".repeat(1024 * 1024 - one.len()));
         assert!(GasTable::parse(&at).is_ok(), "a table of exactly 1 MiB");
         assert!(GasTable::parse(&format!("{at} ")).is_err(), "above 1 MiB");
+    }
+
+    /// EIP-8037: a base row's `regular` (held like a figure) and its `per_item`'s `regular` are read; on a counted row they come
+    /// together; never on a verify row; a `regular` part with a key outside the format is `GasFieldUnknown`.
+    #[test]
+    fn gas_table_regular_parse() {
+        let reg = r#","regular":{"gas":5000,"measured":4100,"source":"s"}"#;
+        let row = |extra: &str| {
+            b(98_000, 97_947).replace(r#","source":"s"}"#, &format!(r#","source":"s"{extra}}}"#))
+        };
+        let item = |r: &str| {
+            format!(r#","item":"members","per_item":{{"gas":100,"base_count":0,"source":"s"{r}}}"#)
+        };
+        let t = GasTable::parse(&file(
+            &row(&format!("{reg}{}", item(r#","regular":40"#))),
+            "",
+        ))
+        .unwrap();
+        assert_eq!(t.rows.base[0].regular, Some(5_000));
+        assert_eq!(t.rows.base[0].per_item.as_ref().unwrap().regular, Some(40));
+        assert_eq!(
+            GasTable::parse(&file(&row(reg), "")).unwrap().rows.base[0].regular,
+            Some(5_000),
+            "an uncounted row"
+        );
+        for bad in [
+            row(&format!("{reg}{}", item(""))), // a counted row's figure without its slope
+            row(&item(r#","regular":40"#)),     // a slope without the figure
+            row(&reg.replace("5000", "5500")),  // not rounded
+            row(&reg.replace("4100", "6000")),  // below its measurement
+            file(
+                "",
+                &v(289, 1_000, 900).replace(
+                    r#""sig_bytes":0"#,
+                    &format!(r#""sig_bytes":0{}"#, item(r#","regular":40"#)),
+                ),
+            ),
+        ] {
+            let bad = if bad.starts_with('{') && !bad.contains("scaas.gas-table") {
+                file(&bad, "")
+            } else {
+                bad
+            };
+            assert!(GasTable::parse(&bad).is_err(), "{bad}");
+        }
+        assert!(matches!(
+            GasTable::parse(&file(
+                &row(&reg.replace(r#""source":"s""#, r#""source":"s","x":1"#)),
+                ""
+            )),
+            Err(SdkError::GasFieldUnknown)
+        ));
     }
 
     /// The SCaaS reference table parses, is named `reference`, and is EVM.
@@ -1072,6 +1290,8 @@ mod tests {
         Some(GasPerItem {
             item: item.into(),
             gas,
+            regular: None,
+            measured_max: None,
         })
     }
 
@@ -1145,6 +1365,19 @@ mod tests {
             Ok(Some(1_010 + 30_000 * COUNT_MAX)),
             "the bound itself"
         );
+        // M18: a row measured up to 8 counts: 8 quoted, 9 refused (never a line extrapolated past its points)
+        r.base[0].per_item.as_mut().unwrap().measured_max = Some(8);
+        assert_eq!(
+            by(&r, &[("legs", 8), ("members", 0)], None, None),
+            Ok(Some(1_010 + 30_000 * 8)),
+            "at the largest measured count"
+        );
+        assert_eq!(
+            by(&r, &[("legs", 9), ("members", 0)], None, None),
+            Err("GasCountUnknown"),
+            "above it"
+        );
+        r.base[0].per_item.as_mut().unwrap().measured_max = None;
         // a count unknown on the chain's row refuses, though a later table's row would answer without one (fail closed)
         let mut chain = rows(1_000, 10);
         chain.base[0].per_item = per_item("legs", 30_000);
@@ -2116,5 +2349,171 @@ mod tests {
                 "signer {s:#06x}: a row with sig_bytes"
             );
         }
+    }
+
+    /// bls-multi Task 16 (spec 2026-11-19-bls12381-multi §8.4, owner ruling R2-Q2 / I1): the reference table's
+    /// `registerBlsMulti` base row and signer 289's verify row each quote `gas + per_item × n`, `n` the group's member count
+    /// (`members`), and the quote is at or above the forge measurement at n = 2, 16, 32, 64
+    /// (`account_registerBlsMulti_n<n>_fresh_registry`, `verify_0x0121_n<n>`); without the count the row refuses
+    /// (`GasCountUnknown`), never a figure at a count of 0.
+    #[test]
+    fn gas_bls_multi_rows_quote_by_members() {
+        let t = GasTable::parse(REFERENCE_FILE).unwrap();
+        let b = t
+            .rows
+            .base
+            .iter()
+            .find(|b| b.key() == ("registerBlsMulti", "account", true))
+            .unwrap();
+        let v = t.rows.verify.iter().find(|v| v.signer == 0x0121).unwrap();
+        let (bp, vp) = (b.per_item.clone().unwrap(), v.per_item.clone().unwrap());
+        assert_eq!((bp.item.as_str(), vp.item.as_str()), ("members", "members"));
+        let file = format!(
+            "{}/../../smartcontracts/evm/test/vectors/sdk_gas.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let m: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+        let reference = [REFERENCE.to_string()];
+        let empty = GasRows {
+            base: vec![],
+            verify: vec![],
+        };
+        // M18: the reference row was measured up to 64 members: a group of 65 is refused, never extrapolated
+        assert_eq!(bp.measured_max, Some(64));
+        assert_eq!(
+            registration_gas(
+                &empty,
+                &reference,
+                std::slice::from_ref(&t),
+                "registerBlsMulti",
+                65
+            )
+            .map_err(|e| e.code()),
+            Err("GasCountUnknown")
+        );
+        for n in [2u64, 16, 32, 64] {
+            let tables = std::slice::from_ref(&t);
+            let (g, r, from) = registration_gas(&empty, &reference, tables, "registerBlsMulti", n)
+                .unwrap()
+                .unwrap();
+            assert_eq!(from, GasFrom::Reference);
+            assert_eq!(g, b.gas + bp.gas * n, "base: gas + per_item × {n}");
+            let measured = m[format!("account_registerBlsMulti_n{n}_fresh_registry")]
+                .as_u64()
+                .unwrap();
+            assert!(g >= measured, "base n {n}: {g} < {measured}");
+            // EIP-8037: the regular bound, the row's regular line, at or above the measured regular point
+            assert_eq!(
+                r,
+                b.regular.unwrap() + bp.regular.unwrap() * n,
+                "regular: its figure + slope × {n}"
+            );
+            let measured = m[format!("account_registerBlsMulti_n{n}_fresh_registry_regular")]
+                .as_u64()
+                .unwrap();
+            assert!(r >= measured, "regular n {n}: {r} < {measured}");
+            let items = |p: &Option<GasPerItem>| Some(p.as_ref().map_or(0, |p| p.gas * n));
+            let (vg, _) = verify_part(
+                &empty,
+                &reference,
+                std::slice::from_ref(&t),
+                0x0121,
+                false,
+                &items,
+            )
+            .unwrap();
+            assert_eq!(vg, v.gas + vp.gas * n, "verify: gas + per_item × {n}");
+            let measured = m[format!("verify_0x0121_n{n}")].as_u64().unwrap();
+            assert!(vg >= measured, "verify n {n}: {vg} < {measured}");
+        }
+        let tables = std::slice::from_ref(&t);
+        assert!(
+            matches!(
+                registration_gas(
+                    &empty,
+                    &reference,
+                    tables,
+                    "registerBlsMulti",
+                    COUNT_MAX + 1
+                ),
+                Err(SdkError::GasCountUnknown)
+            ),
+            "a count above COUNT_MAX: refused"
+        );
+        let mut other = t.clone();
+        for b in other
+            .rows
+            .base
+            .iter_mut()
+            .filter(|b| b.entry == "registerBlsMulti")
+        {
+            b.per_item.as_mut().unwrap().item = "legs".into();
+        }
+        assert!(
+            matches!(
+                registration_gas(&empty, &reference, &[other], "registerBlsMulti", 2),
+                Err(SdkError::GasCountUnknown)
+            ),
+            "a row counting another item: refused"
+        );
+        assert!(
+            registration_gas(&empty, &[], tables, "registerBlsMulti", 2)
+                .unwrap()
+                .is_none(),
+            "the reference not opted in: no figure"
+        );
+    }
+
+    /// bls-multi Task 17: an attached signature of unknown kind may be a `bls12381-multi` group's, whose n the SDK does not read:
+    /// a row counting `members` is quoted at the kind's cap, 64 (controller call, owner auto-run 2026-11-19), so it may be the
+    /// dearest; a known kind's count stays unread (`GasCountUnknown`, I1).
+    #[test]
+    fn gas_attached_unknown_counts_members_at_the_cap() {
+        let mut r = rows(1_000, 10);
+        r.verify = ACCEPTED_SIGNERS
+            .iter()
+            .map(|s| GasVerify {
+                signer: *s,
+                gas: if *s == 0x0135 { 5_000 } else { 0 },
+                sig_bytes: 0,
+                margin: 0,
+                per_item: (*s == 0x0121).then(|| GasPerItem {
+                    item: "members".into(),
+                    gas: 100,
+                    regular: None,
+                    measured_max: None,
+                }),
+            })
+            .collect();
+        let by = |r: &GasRows, attached| {
+            lookup_by(
+                r,
+                &[],
+                &[],
+                None,
+                K,
+                &OpGas {
+                    attached,
+                    ..OpGas::PLAIN
+                },
+            )
+            .map(|f| f.map(|f| f.0))
+        };
+        assert_eq!(
+            by(&r, Some(None)).unwrap(),
+            Some(1_000 + 100 * 64),
+            "the group's row at 64 members, dearer than 0x0135's 5,000"
+        );
+        assert!(
+            matches!(by(&r, Some(Some(0x0121))), Err(SdkError::GasCountUnknown)),
+            "a known group kind: its count unread"
+        );
+        r.verify.retain(|v| v.signer != 0x0121);
+        assert_eq!(
+            by(&r, Some(None)).unwrap(),
+            None,
+            "a table without the group's row: no answer"
+        );
     }
 }

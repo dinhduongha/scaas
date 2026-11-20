@@ -522,13 +522,31 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_dex_trades_blocking() != 17136) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_op_bls_multi_part_blocking() != 19347) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok() != 62102) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part() != 56760) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() != 1443) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_op_member_sign_blocking() != 16375) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_op_quote_blocking() != 57851) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi_blocking() != 29521) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_op_quote_with_gas_blocking() != 52997) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_register_bls_multi_blocking() != 55393) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_op_resend_blocking() != 42455) {
@@ -541,6 +559,9 @@ void ensure_initialized() {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_op_submit_blocking() != 40377) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
+    if (uniffi_scaas_sdk_checksum_method_op_submit_bls_multi_blocking() != 17305) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_sdk_account() != 4122) {
@@ -2223,6 +2244,30 @@ Op::Op(const Op &other) : instance(0) {
 
 
 
+BlsMultiPart Op::bls_multi_part_blocking(const std::shared_ptr<Prepared> &prepared, KeyRef member, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterTypeBlsMultiPart::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_op_bls_multi_part_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterPrepared::lower(prepared), uniffi::FfiConverterKeyRef::lower(member), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
+bool Op::bls_multi_part_ok(const std::shared_ptr<Prepared> &prepared, const BlsMultiPart &part) {
+    return uniffi::FfiConverterBool::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok,
+        nullptr,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterPrepared::lower(prepared), uniffi::FfiConverterTypeBlsMultiPart::lower(part)));
+}
+BlsMultiPart Op::bls_multi_pop_part(KeyRef member) {
+    return uniffi::FfiConverterTypeBlsMultiPart::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterKeyRef::lower(member)));
+}
+bool Op::bls_multi_pop_part_ok(const std::string &key_data, const BlsMultiPart &part) {
+    return uniffi::FfiConverterBool::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok,
+        nullptr,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(key_data), uniffi::FfiConverterTypeBlsMultiPart::lower(part)));
+}
 std::string Op::member_sign_blocking(const std::shared_ptr<Prepared> &prepared, std::shared_ptr<CancelToken> cancel) {
     return uniffi::FfiConverterString::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_op_member_sign_blocking,
@@ -2235,11 +2280,23 @@ SubmitQuote Op::quote_blocking(const std::shared_ptr<Prepared> &prepared, Submit
         uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterPrepared::lower(prepared), uniffi::FfiConverterSubmitPath::lower(path), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
 }
+SubmitQuote Op::quote_register_bls_multi_blocking(const std::string &chain, const std::string &key_data, KeyRef payer, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterTypeSubmitQuote::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(chain), uniffi::FfiConverterString::lower(key_data), uniffi::FfiConverterKeyRef::lower(payer), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
 SubmitQuote Op::quote_with_gas_blocking(const std::shared_ptr<Prepared> &prepared, SubmitPath path, uint64_t gas, std::shared_ptr<CancelToken> cancel) {
     return uniffi::FfiConverterTypeSubmitQuote::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_op_quote_with_gas_blocking,
         uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterPrepared::lower(prepared), uniffi::FfiConverterSubmitPath::lower(path), uniffi::FfiConverterUInt64::lower(gas), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
+std::string Op::register_bls_multi_blocking(const std::string &chain, const std::string &key_data, const std::vector<BlsMultiPart> &parts, const SubmitQuote &quote, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterString::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_op_register_bls_multi_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(chain), uniffi::FfiConverterString::lower(key_data), uniffi::FfiConverterSequenceTypeBlsMultiPart::lower(parts), uniffi::FfiConverterTypeSubmitQuote::lower(quote), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
 }
 void Op::resend_blocking(const std::string &op, const SubmitQuote &quote, std::shared_ptr<CancelToken> cancel) {
     uniffi::rust_call(
@@ -2264,6 +2321,12 @@ std::string Op::submit_blocking(const std::shared_ptr<Prepared> &prepared, const
         uniffi_scaas_sdk_fn_method_op_submit_blocking,
         uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterPrepared::lower(prepared), uniffi::FfiConverterTypeSubmitQuote::lower(quote), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
+}
+std::string Op::submit_bls_multi_blocking(const std::shared_ptr<Prepared> &prepared, const SubmitQuote &quote, const std::vector<BlsMultiPart> &parts, bool surplus, std::shared_ptr<CancelToken> cancel) {
+    return uniffi::FfiConverterString::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_op_submit_bls_multi_blocking,
+        uniffi::FfiConverterSdkError::lift,
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterPrepared::lower(prepared), uniffi::FfiConverterTypeSubmitQuote::lower(quote), uniffi::FfiConverterSequenceTypeBlsMultiPart::lower(parts), uniffi::FfiConverterBool::lower(surplus), uniffi::FfiConverterOptionalCancelToken::lower(cancel)));
 }
 
 Op::~Op() {
@@ -4198,6 +4261,10 @@ uint64_t Wallet::_uniffi_internal_clone_handle() const {
 
 
 
+
+
+
+
 namespace uniffi {
 
 
@@ -5238,6 +5305,45 @@ uint64_t FfiConverterTypeBindingConfig::allocation_size(const BindingConfig &val
 }
 
 
+BlsMultiPart FfiConverterTypeBlsMultiPart::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeBlsMultiPart::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeBlsMultiPart::lower(const BlsMultiPart &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeBlsMultiPart::write(stream, val);
+
+    return std::move(buf);
+}
+
+BlsMultiPart FfiConverterTypeBlsMultiPart::read(RustStream &stream) {
+    return {
+        FfiConverterUInt8::read(stream),
+        FfiConverterString::read(stream)
+    };
+}
+
+void FfiConverterTypeBlsMultiPart::write(RustStream &stream, const BlsMultiPart &val) {
+    FfiConverterUInt8::write(stream, val.index);
+    FfiConverterString::write(stream, val.signature);
+}
+
+uint64_t FfiConverterTypeBlsMultiPart::allocation_size(const BlsMultiPart &val) {
+    
+    return 
+        FfiConverterUInt8::allocation_size(val.index) +
+        FfiConverterString::allocation_size(val.signature);
+    
+}
+
+
 Burn FfiConverterTypeBurn::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = FfiConverterTypeBurn::read(stream);
@@ -6175,7 +6281,8 @@ GasBase FfiConverterTypeGasBase::read(RustStream &stream) {
         FfiConverterOptionalUInt64::read(stream),
         FfiConverterOptionalUInt64::read(stream),
         FfiConverterOptionalUInt64::read(stream),
-        FfiConverterOptionalTypeGasPerItem::read(stream)
+        FfiConverterOptionalTypeGasPerItem::read(stream),
+        FfiConverterOptionalUInt64::read(stream)
     };
 }
 
@@ -6189,6 +6296,7 @@ void FfiConverterTypeGasBase::write(RustStream &stream, const GasBase &val) {
     FfiConverterOptionalUInt64::write(stream, val.fee_extra);
     FfiConverterOptionalUInt64::write(stream, val.ua_extra);
     FfiConverterOptionalTypeGasPerItem::write(stream, val.per_item);
+    FfiConverterOptionalUInt64::write(stream, val.regular);
 }
 
 uint64_t FfiConverterTypeGasBase::allocation_size(const GasBase &val) {
@@ -6202,7 +6310,8 @@ uint64_t FfiConverterTypeGasBase::allocation_size(const GasBase &val) {
         FfiConverterOptionalUInt64::allocation_size(val.save) +
         FfiConverterOptionalUInt64::allocation_size(val.fee_extra) +
         FfiConverterOptionalUInt64::allocation_size(val.ua_extra) +
-        FfiConverterOptionalTypeGasPerItem::allocation_size(val.per_item);
+        FfiConverterOptionalTypeGasPerItem::allocation_size(val.per_item) +
+        FfiConverterOptionalUInt64::allocation_size(val.regular);
     
 }
 
@@ -6267,20 +6376,26 @@ RustBuffer FfiConverterTypeGasPerItem::lower(const GasPerItem &val) {
 GasPerItem FfiConverterTypeGasPerItem::read(RustStream &stream) {
     return {
         FfiConverterString::read(stream),
-        FfiConverterUInt64::read(stream)
+        FfiConverterUInt64::read(stream),
+        FfiConverterOptionalUInt64::read(stream),
+        FfiConverterOptionalUInt64::read(stream)
     };
 }
 
 void FfiConverterTypeGasPerItem::write(RustStream &stream, const GasPerItem &val) {
     FfiConverterString::write(stream, val.item);
     FfiConverterUInt64::write(stream, val.gas);
+    FfiConverterOptionalUInt64::write(stream, val.regular);
+    FfiConverterOptionalUInt64::write(stream, val.measured_max);
 }
 
 uint64_t FfiConverterTypeGasPerItem::allocation_size(const GasPerItem &val) {
     
     return 
         FfiConverterString::allocation_size(val.item) +
-        FfiConverterUInt64::allocation_size(val.gas);
+        FfiConverterUInt64::allocation_size(val.gas) +
+        FfiConverterOptionalUInt64::allocation_size(val.regular) +
+        FfiConverterOptionalUInt64::allocation_size(val.measured_max);
     
 }
 
@@ -10010,6 +10125,7 @@ SubmitQuote FfiConverterTypeSubmitQuote::read(RustStream &stream) {
         FfiConverterSubmitPath::read(stream),
         FfiConverterOptionalString::read(stream),
         FfiConverterUInt64::read(stream),
+        FfiConverterUInt64::read(stream),
         FfiConverterOptionalUInt64::read(stream),
         FfiConverterOptionalTypeGasSources::read(stream),
         FfiConverterString::read(stream),
@@ -10026,6 +10142,7 @@ void FfiConverterTypeSubmitQuote::write(RustStream &stream, const SubmitQuote &v
     FfiConverterSubmitPath::write(stream, val.path);
     FfiConverterOptionalString::write(stream, val.payer);
     FfiConverterUInt64::write(stream, val.gas_limit);
+    FfiConverterUInt64::write(stream, val.regular_gas);
     FfiConverterOptionalUInt64::write(stream, val.gas);
     FfiConverterOptionalTypeGasSources::write(stream, val.gas_from);
     FfiConverterString::write(stream, val.max_fee_per_gas);
@@ -10043,6 +10160,7 @@ uint64_t FfiConverterTypeSubmitQuote::allocation_size(const SubmitQuote &val) {
         FfiConverterSubmitPath::allocation_size(val.path) +
         FfiConverterOptionalString::allocation_size(val.payer) +
         FfiConverterUInt64::allocation_size(val.gas_limit) +
+        FfiConverterUInt64::allocation_size(val.regular_gas) +
         FfiConverterOptionalUInt64::allocation_size(val.gas) +
         FfiConverterOptionalTypeGasSources::allocation_size(val.gas_from) +
         FfiConverterString::allocation_size(val.max_fee_per_gas) +
@@ -16608,6 +16726,14 @@ KeyRef FfiConverterKeyRef::read(RustStream &stream) {
             .slots = FfiConverterSequenceTypeMsigSlot::read(stream),
         };
         
+    case 6:
+        return KeyRef::kBlsMulti {
+            .seed = FfiConverterString::read(stream),
+            .account = FfiConverterUInt32::read(stream),
+            .index = FfiConverterUInt32::read(stream),
+            .key_data = FfiConverterString::read(stream),
+        };
+        
     default:
         throw std::runtime_error("No matching KeyRef variant");
     }
@@ -16643,6 +16769,12 @@ void FfiConverterKeyRef::write(RustStream &stream, const KeyRef &val) {
         else if constexpr (std::is_same_v<T, KeyRef::kMsig>) {
             FfiConverterString::write(stream, arg.ua);
             FfiConverterSequenceTypeMsigSlot::write(stream, arg.slots);
+        }
+        else if constexpr (std::is_same_v<T, KeyRef::kBlsMulti>) {
+            FfiConverterString::write(stream, arg.seed);
+            FfiConverterUInt32::write(stream, arg.account);
+            FfiConverterUInt32::write(stream, arg.index);
+            FfiConverterString::write(stream, arg.key_data);
         }
         else {
             static_assert(always_false_v<T>, "non-exhaustive KeyRef visitor");
@@ -16687,6 +16819,14 @@ uint64_t FfiConverterKeyRef::allocation_size(const KeyRef &val) {
             uint64_t size = 0;
             size += FfiConverterString::allocation_size(arg.ua);
             size += FfiConverterSequenceTypeMsigSlot::allocation_size(arg.slots);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, KeyRef::kBlsMulti>) {
+            uint64_t size = 0;
+            size += FfiConverterString::allocation_size(arg.seed);
+            size += FfiConverterUInt32::allocation_size(arg.account);
+            size += FfiConverterUInt32::allocation_size(arg.index);
+            size += FfiConverterString::allocation_size(arg.key_data);
             return size;
         }
         else {
@@ -17448,18 +17588,24 @@ std::shared_ptr<SdkError> FfiConverterSdkError::read(RustStream &stream) {
         return std::make_shared<sdk_error::GasCountUnknown>(FfiConverterString::read(stream));
     
     case 59:
-        return std::make_shared<sdk_error::GasFieldUnknown>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::BlsMultiBelowThreshold>(FfiConverterString::read(stream));
     
     case 60:
-        return std::make_shared<sdk_error::DexNotListed>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::GasFieldUnknown>(FfiConverterString::read(stream));
     
     case 61:
-        return std::make_shared<sdk_error::Cancelled>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::DexNotListed>(FfiConverterString::read(stream));
     
     case 62:
-        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::PqzAuditorNative>(FfiConverterString::read(stream));
     
     case 63:
+        return std::make_shared<sdk_error::Cancelled>(FfiConverterString::read(stream));
+    
+    case 64:
+        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+    
+    case 65:
         return std::make_shared<sdk_error::Rpc>(FfiConverterString::read(stream));
     
     default:
@@ -17534,6 +17680,14 @@ SlotKey FfiConverterSlotKey::read(RustStream &stream) {
             .ua = FfiConverterString::read(stream),
         };
         
+    case 6:
+        return SlotKey::kBlsMulti {
+            .seed = FfiConverterString::read(stream),
+            .account = FfiConverterUInt32::read(stream),
+            .index = FfiConverterUInt32::read(stream),
+            .key_data = FfiConverterString::read(stream),
+        };
+        
     default:
         throw std::runtime_error("No matching SlotKey variant");
     }
@@ -17568,6 +17722,12 @@ void FfiConverterSlotKey::write(RustStream &stream, const SlotKey &val) {
         }
         else if constexpr (std::is_same_v<T, SlotKey::kMsig>) {
             FfiConverterString::write(stream, arg.ua);
+        }
+        else if constexpr (std::is_same_v<T, SlotKey::kBlsMulti>) {
+            FfiConverterString::write(stream, arg.seed);
+            FfiConverterUInt32::write(stream, arg.account);
+            FfiConverterUInt32::write(stream, arg.index);
+            FfiConverterString::write(stream, arg.key_data);
         }
         else {
             static_assert(always_false_v<T>, "non-exhaustive SlotKey visitor");
@@ -17611,6 +17771,14 @@ uint64_t FfiConverterSlotKey::allocation_size(const SlotKey &val) {
         else if constexpr (std::is_same_v<T, SlotKey::kMsig>) {
             uint64_t size = 0;
             size += FfiConverterString::allocation_size(arg.ua);
+            return size;
+        }
+        else if constexpr (std::is_same_v<T, SlotKey::kBlsMulti>) {
+            uint64_t size = 0;
+            size += FfiConverterString::allocation_size(arg.seed);
+            size += FfiConverterUInt32::allocation_size(arg.account);
+            size += FfiConverterUInt32::allocation_size(arg.index);
+            size += FfiConverterString::allocation_size(arg.key_data);
             return size;
         }
         else {
@@ -19462,6 +19630,57 @@ uint64_t FfiConverterSequenceTypeAccountInfo::allocation_size(const std::vector<
 
     for (const auto &elem : val) {
         size += FfiConverterTypeAccountInfo::allocation_size(elem);
+    }
+
+    return size;
+}
+
+
+std::vector<BlsMultiPart> FfiConverterSequenceTypeBlsMultiPart::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = read(stream);
+
+    rustbuffer_free(buf);
+
+    return ret;
+}
+
+RustBuffer FfiConverterSequenceTypeBlsMultiPart::lower(const std::vector<BlsMultiPart> &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    write(stream, val);
+
+    return buf;
+}
+
+std::vector<BlsMultiPart> FfiConverterSequenceTypeBlsMultiPart::read(RustStream &stream) {
+    std::vector<BlsMultiPart> ret;
+    int32_t count;
+    stream >> count;
+
+    ret.reserve(count);
+
+    for (decltype(count) i = 0; i < count; i++) {
+        ret.push_back(FfiConverterTypeBlsMultiPart::read(stream));
+    }
+
+    return ret;
+}
+
+void FfiConverterSequenceTypeBlsMultiPart::write(RustStream &stream, const std::vector<BlsMultiPart> &val) {
+    stream << static_cast<int32_t>(val.size());
+
+    for (const auto &elem : val) {
+        FfiConverterTypeBlsMultiPart::write(stream, elem);
+    }
+}
+
+uint64_t FfiConverterSequenceTypeBlsMultiPart::allocation_size(const std::vector<BlsMultiPart> &val) {
+    uint64_t size = sizeof(int32_t);
+
+    for (const auto &elem : val) {
+        size += FfiConverterTypeBlsMultiPart::allocation_size(elem);
     }
 
     return size;

@@ -99,6 +99,10 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
       ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequestPtr;
 
   CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_PreparedPtr => wire
+      ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPreparedPtr;
+
+  CrossPlatformFinalizerArg
   get rust_arc_decrement_strong_count_SdkErrorPtr => wire
       ._rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkErrorPtr;
 
@@ -339,6 +343,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  Prepared
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    dynamic raw,
+  );
+
+  @protected
   SdkError
   dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     dynamic raw,
@@ -514,6 +524,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  Prepared
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    dynamic raw,
+  );
+
+  @protected
   SdkError
   dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     dynamic raw,
@@ -586,6 +602,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Balances dco_decode_balances(dynamic raw);
 
   @protected
+  BlsMultiPart dco_decode_bls_multi_part(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
@@ -629,6 +648,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   AuthError dco_decode_box_autoadd_auth_error(dynamic raw);
+
+  @protected
+  BlsMultiPart dco_decode_box_autoadd_bls_multi_part(dynamic raw);
 
   @protected
   Burn dco_decode_box_autoadd_burn(dynamic raw);
@@ -1268,6 +1290,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   List<AccountRow> dco_decode_list_account_row(dynamic raw);
+
+  @protected
+  List<BlsMultiPart> dco_decode_list_bls_multi_part(dynamic raw);
 
   @protected
   List<ChainProfile> dco_decode_list_chain_profile(dynamic raw);
@@ -2190,6 +2215,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  Prepared
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   SdkError
   sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     SseDeserializer deserializer,
@@ -2313,6 +2344,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  Prepared
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   SdkError
   sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     SseDeserializer deserializer,
@@ -2385,6 +2422,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Balances sse_decode_balances(SseDeserializer deserializer);
 
   @protected
+  BlsMultiPart sse_decode_bls_multi_part(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
@@ -2432,6 +2472,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   AuthError sse_decode_box_autoadd_auth_error(SseDeserializer deserializer);
+
+  @protected
+  BlsMultiPart sse_decode_box_autoadd_bls_multi_part(
+    SseDeserializer deserializer,
+  );
 
   @protected
   Burn sse_decode_box_autoadd_burn(SseDeserializer deserializer);
@@ -3223,6 +3268,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   List<AccountRow> sse_decode_list_account_row(SseDeserializer deserializer);
+
+  @protected
+  List<BlsMultiPart> sse_decode_list_bls_multi_part(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<ChainProfile> sse_decode_list_chain_profile(
@@ -4274,6 +4324,13 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    Prepared self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
   sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     SdkError self,
     SseSerializer serializer,
@@ -4479,6 +4536,13 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    Prepared self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
   sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     SdkError self,
     SseSerializer serializer,
@@ -4566,6 +4630,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_balances(Balances self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bls_multi_part(BlsMultiPart self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
@@ -4631,6 +4698,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   void sse_encode_box_autoadd_auth_error(
     AuthError self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_bls_multi_part(
+    BlsMultiPart self,
     SseSerializer serializer,
   );
 
@@ -5658,6 +5731,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   void sse_encode_list_account_row(
     List<AccountRow> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_bls_multi_part(
+    List<BlsMultiPart> self,
     SseSerializer serializer,
   );
 
@@ -7217,6 +7296,40 @@ class ScaasSdkWire implements BaseWire {
       );
   late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest =
       _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequestPtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPreparedPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_scaas_sdk_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared',
+      );
+  late final _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared =
+      _rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPreparedPtr
+          .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    ffi.Pointer<ffi.Void> ptr,
+  ) {
+    return _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+      ptr,
+    );
+  }
+
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPreparedPtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
+        'frbgen_scaas_sdk_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared',
+      );
+  late final _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared =
+      _rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPreparedPtr
           .asFunction<void Function(ffi.Pointer<ffi.Void>)>();
 
   void

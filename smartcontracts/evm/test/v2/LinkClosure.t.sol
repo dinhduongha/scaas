@@ -22,6 +22,7 @@ import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {ZUID} from "../zether/helpers/ZetherFixture.sol";
@@ -51,6 +52,7 @@ contract LinkClosureTest is Test {
         "PqzWrappedLib",
         "UARegistryCoreLib",
         "UARegistryAuxLib",
+        "UARegistryRegLib",
         "RegulatedLib"
     ];
 
@@ -70,6 +72,7 @@ contract LinkClosureTest is Test {
         if (h == keccak256("PqzWrappedLib")) return address(PqzWrappedLib);
         if (h == keccak256("UARegistryCoreLib")) return address(UARegistryCoreLib);
         if (h == keccak256("UARegistryAuxLib")) return address(UARegistryAuxLib);
+        if (h == keccak256("UARegistryRegLib")) return address(UARegistryRegLib);
         if (h == keccak256("RegulatedLib")) return address(RegulatedLib);
         revert(string.concat("unknown library ", n));
     }
@@ -267,7 +270,9 @@ contract LinkClosureTest is Test {
     }
 
     /// typed-signing R2, T66b 3.1b: the registry's link closure is `UARegistryCoreLib` and `UARegistryAuxLib` (1 -> 2); T66b 3.1c:
-    /// the auxiliary library links the core (its shared helpers, by a nested DELEGATECALL), the core links nothing. The deployed registry
+    /// the auxiliary library links the core (its shared helpers, by a nested DELEGATECALL), the core links nothing. Owner
+    /// 2026-11-19 (the split, candidate (2)): + `UARegistryRegLib` (2 -> 3), which links the core (the step-6 PoP); the
+    /// auxiliary library links both (1 -> 2). The deployed registry
     /// (through `DeployBase`, CREATE2) holds exactly two DELEGATECALLs, `_lib`'s (to either library, by the entry) and (T66b R-1)
     /// `_libRaw`'s (1 -> 2), and both targets are in its code.
     function test_registryClosure() public {
@@ -279,10 +284,21 @@ contract LinkClosureTest is Test {
         }
         assertEq(_closure("UARegistryCoreLib", new string[](0)).length, 0, "UARegistryCoreLib links nothing");
         string[] memory aux = _closure("UARegistryAuxLib", new string[](0));
-        assertEq(aux.length, 1, "UARegistryAuxLib links one library");
+        assertEq(aux.length, 2, "UARegistryAuxLib links two libraries");
         assertEq(_addr(aux[0]), address(UARegistryCoreLib), "UARegistryAuxLib links the core");
+        assertEq(_addr(aux[1]), address(UARegistryRegLib), "UARegistryAuxLib links the registration library");
         assertTrue(
             _holds(address(UARegistryAuxLib).code, address(UARegistryCoreLib)), "the core is in the auxiliary code"
+        );
+        assertTrue(
+            _holds(address(UARegistryAuxLib).code, address(UARegistryRegLib)),
+            "the registration library is in the auxiliary code"
+        );
+        string[] memory rg = _closure("UARegistryRegLib", new string[](0));
+        assertEq(rg.length, 1, "UARegistryRegLib links one library");
+        assertEq(_addr(rg[0]), address(UARegistryCoreLib), "UARegistryRegLib links the core");
+        assertTrue(
+            _holds(address(UARegistryRegLib).code, address(UARegistryCoreLib)), "the core is in the registration code"
         );
 
         DeployHarness h = new DeployHarness();
@@ -290,12 +306,14 @@ contract LinkClosureTest is Test {
         address reg = vm.parseJsonAddress(json, ".ua_registry");
         assertEq(vm.parseJsonAddress(json, ".ua_registry_aux_lib"), want[0]);
         assertEq(vm.parseJsonAddress(json, ".ua_registry_core_lib"), want[1]);
+        assertEq(vm.parseJsonAddress(json, ".ua_registry_reg_lib"), want[2]);
         (uint256 delegates, bool destruct, bool callcode) = _walk(reg.code);
         assertEq(delegates, 2, "UARegistry: DELEGATECALL count");
         assertFalse(destruct, "UARegistry: SELFDESTRUCT");
         assertFalse(callcode, "UARegistry: CALLCODE");
         assertTrue(_holds(reg.code, want[0]), "the auxiliary library is in the code");
         assertTrue(_holds(reg.code, want[1]), "the core library is in the code");
+        assertTrue(_holds(reg.code, want[2]), "the registration library is in the code");
     }
 
     /// `code` holds the 20 bytes of `a`.
@@ -316,7 +334,8 @@ contract LinkClosureTest is Test {
     /// reference), in `ZetherWrappedLib` (exactly 2, -> `WrappedLib`, `ZetherLib`, its init: size lever 1, owner 2026-11-01),
     /// in `PqzWrappedLib` (exactly 2, -> `WrappedLib`, `PqzStateLib`, the same) and in `RegulatedLib` (exactly 1, ->
     /// `GovernanceLib.useLimited`, plan T28) and in `UARegistryAuxLib` (exactly 1, -> `UARegistryCoreLib`'s shared helpers,
-    /// T66b 3.1c, owner 2026-11-09).
+    /// T66b 3.1c, owner 2026-11-09, and since owner 2026-11-19 `UARegistryRegLib`'s, the same site) and in `UARegistryRegLib`
+    /// (exactly 1, -> `UARegistryCoreLib.portableOk`, owner 2026-11-19).
     function test_libraryOpcodes() public view {
         for (uint256 n; n < names.length; ++n) {
             string memory name = names[n];
@@ -332,7 +351,7 @@ contract LinkClosureTest is Test {
             uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib")
                 || h == keccak256("PqzWrappedLib") || h == keccak256("WrappedLib") || h == keccak256("RegulatedLib")
                 ? 2
-                : h == keccak256("UARegistryAuxLib") ? 1 : 0;
+                : h == keccak256("UARegistryAuxLib") || h == keccak256("UARegistryRegLib") ? 1 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }

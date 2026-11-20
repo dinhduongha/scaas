@@ -692,14 +692,14 @@ impl Wallet {
 
     /// `(index, ua)` of the UA keys `kind` of `account` at indices `0..gap` (BIP-44 style, gap 20; index 0 alone for the
     /// EIP-2333 kinds `0x0104`–`0x0107`), derived and dropped: nothing is stored or written to the manifest. The registry scan
-    /// is the caller's. `Argument` for `gap > 1024`, an account ≥ 2^31 or a kind with no UA of its own (`0x0110`, `0x0112`).
+    /// is the caller's. `Argument` for `gap > 1024`, an account ≥ 2^31 or a kind with no UA of its own (`0x0110`, `0x0112`, `0x0121`).
     pub fn discover_candidates(
         &self,
         kind: u16,
         account: u32,
         gap: u32,
     ) -> Result<Vec<(u32, [u8; 32])>> {
-        if gap > GAP_MAX || matches!(kind, 0x0110 | 0x0112) {
+        if gap > GAP_MAX || matches!(kind, 0x0110 | 0x0112 | 0x0121) {
             return Err(Error::Argument);
         }
         let n = if (0x0104..=0x0107).contains(&kind) {

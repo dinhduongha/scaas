@@ -121,12 +121,17 @@ own_codes! {
     /// An operation whose gas row grows with a count (`per_item`) that the SDK cannot read from the operation, or above
     /// 65,536 (owner 2026-11-19, I1): refused, never quoted without it.
     GasCountUnknown,
+    /// bls12381-multi (plan Task 17): the valid partials' weight is below the group's threshold
+    BlsMultiBelowThreshold,
     /// A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
     /// unknown part is refused, never dropped from a quote.
     GasFieldUnknown,
     /// An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
     /// wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
     DexNotListed,
+    /// A PQZ auditor consent whose auditor is a native (address) key (controller call, owner auto-run 2026-11-19): a native id
+    /// holds no PQZ key (CTR-UA-32), so the token refuses it on chain anyway; refused before anything is read or signed.
+    PqzAuditorNative,
     /// a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
     Cancelled,
 }

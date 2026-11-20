@@ -36,8 +36,7 @@ MUTANTS = [
     ("a committed KEM key not compared", [(S, "                            || scaas_ua::keccak256(&kem_pk) != attrs.kem_pk_hash\n", "")],
      T + "sponsored_registration_checks"),
     # the depth bound is not observable by outcome (every deeper blob also fails its field types); the size bound is
-    ("no 64 KiB bound", [(S, "                if blob.len() > BLOB_MAX\n                    || ", "                if ")],
-     T + "sponsored_registration_checks"),
+    # removed 2026-11-20 (review T5): "no 64 KiB bound": the sponsor's own bound gave way to RegistrationBlob::from_json's 768 KiB bound in 3d0110340 (t13rulings "R1: no size bound")
 ]
 
 if __name__ == "__main__":

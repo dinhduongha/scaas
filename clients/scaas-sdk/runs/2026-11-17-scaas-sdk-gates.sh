@@ -4,7 +4,8 @@
 #   clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gates.sh --list
 #   clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gates.sh --only <step>[,<step>…] [--force]
 # Each step writes clients/scaas-sdk/runs/2026-11-17-scaas-sdk-<step>.log (git-ignored; first line `# <step> at commit <sha>`,
-# last `rc=<n>`) and one row `step | commit | rc | counts` of 2026-11-17-scaas-sdk-summary.txt. A step done (rc=0) at the same
+# last `rc=<n>`) and, on a clean tree only, one row `step | commit | rc | counts` of 2026-11-17-scaas-sdk-summary.txt (no row is
+# written by hand; notes are `#` lines). A step done (rc=0) at the same
 # commit on a clean tree (no tracked change) is skipped unless --force. Heavy steps run through scripts/capped, in the
 # foreground; the e2e at CAPPED_MEM=6G. Counts: cargo's `test result:` lines, node's `# pass` / `# fail`, ctest's summary,
 # dart's last `+N` line. An unknown step exits 2 and writes nothing.
@@ -26,7 +27,8 @@ for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do
     SETS_CMD+="$cap cargo check $C $m && $cap cargo test $C $m --test sets && "
 done
 SETS_CMD+="true"
-TREE="if [ -f Cargo.toml ]; then $cap cargo test $C --test feature_tree; else echo 'RESULT feature_tree not run (crate absent)'; fi"
+# every mutant script loads (its `old` texts occur once); the stale records are printed, not failed (plan Global constraints)
+MCHECK='python3 -I clients/scaas-sdk/runs/test_mutants_lib.py || exit 1; bad=0; for f in clients/scaas-sdk/runs/*-mutants.py; do python3 "$f" check || bad=1; done; exit $bad'
 
 # step | directory | command (run with bash -c from the directory)
 STEPS=(
@@ -66,7 +68,9 @@ STEPS=(
     "ffi|clients/scaas-sdk/ffi|$cap cargo clippy $C --all-targets -- -D warnings && $cap cargo clippy $C --all-targets --features uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features sync-api -- -D warnings && $cap cargo test $C"
     "gas-gen|clients/scaas-sdk/gas|python3 -I generate.py --check && python3 -I test_generate.py"
     "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
-    "features|.|python3 scripts/check_test_features.py && cd clients/scaas-sdk 2>/dev/null; $TREE"
+    "features|.|python3 scripts/check_test_features.py && cd clients/scaas-sdk && $cap cargo test $C --test feature_tree"
+    "sdk-raw|clients/scaas-sdk|$cap cargo test $C --lib --features $F,native-networks,raw-native && $cap cargo clippy $C --all-targets --features $F,native-networks,raw-native -- -D warnings"
+    "mutants-check|.|$MCHECK"
 )
 
 cmd_of() {
@@ -159,8 +163,8 @@ for s in "${WANT[@]}"; do
     wait "$hb" 2>/dev/null
     echo "rc=$rc" >>"$log"
     n=$(counts "$log")
-    [[ $state == dirty ]] && n="$n; tree dirty"
-    row "$name" "$sha" "$rc" "$n"
+    # a summary row is the runner's record of a clean tree only; a dirty run keeps its log and prints its result
+    if [[ $state == clean ]]; then row "$name" "$sha" "$rc" "$n"; else n="$n; tree dirty, no summary row"; fi
     if ((rc == 0)); then echo "[G] $name ok in $((SECONDS - t0)) s: $n"; else
         echo "[G] $name FAIL rc=$rc in $((SECONDS - t0)) s: $n (see $log)"
         worst=$rc

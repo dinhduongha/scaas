@@ -107,6 +107,10 @@ macro_rules! binding_list {
                 async quote / quote_blocking (prepared: Arc<Prepared>, path: SubmitPath) -> SubmitQuote;
                 async quote_with_gas / quote_with_gas_blocking (prepared: Arc<Prepared>, path: SubmitPath, gas: u64) -> SubmitQuote;
                 async submit / submit_blocking (prepared: Arc<Prepared>, quote: SubmitQuote) -> String;
+                async bls_multi_part / bls_multi_part_blocking (prepared: Arc<Prepared>, member: KeyRef) -> BlsMultiPart;
+                async submit_bls_multi / submit_bls_multi_blocking (prepared: Arc<Prepared>, quote: SubmitQuote, parts: Vec<BlsMultiPart>, surplus: bool) -> String;
+                async quote_register_bls_multi / quote_register_bls_multi_blocking (chain: String, key_data: String, payer: KeyRef) -> SubmitQuote;
+                async register_bls_multi / register_bls_multi_blocking (chain: String, key_data: String, parts: Vec<BlsMultiPart>, quote: SubmitQuote) -> String;
                 async resume / resume_blocking () -> u32;
                 async resend / resend_blocking (op: String, quote: SubmitQuote) -> ();
             }

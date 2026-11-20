@@ -22,12 +22,12 @@ U = "cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline 
 G1 = "        if signer != NATIVE_EVM || op.attached.is_some_and(|k| k != Some(NATIVE_EVM)) {\n"
 MUTANTS = [
     # G1: either party debited
-    ("G1: the attached owner ignored (signer only, as before)", [(G, G1, "        if signer != NATIVE_EVM {\n")],
+    ("G1: the attached owner ignored (signer only, as before)", [(G, " || op.attached.is_some_and(|k| k != Some(NATIVE_EVM))", "")],
      U + "gas_ua_extra_for_a_derived_signer"),
     ("G1: an attached signature of unknown kind read as native",
-     [(G, G1, "        if signer != NATIVE_EVM || op.attached.is_some_and(|k| k.is_some_and(|k| k != NATIVE_EVM)) {\n")],
+     [(G, "op.attached.is_some_and(|k| k != Some(NATIVE_EVM))", "op.attached.is_some_and(|k| k.is_some_and(|k| k != NATIVE_EVM))")],
      U + "gas_ua_extra_for_a_derived_signer"),
-    ("G1: a native attached owner counted", [(G, G1, "        if signer != NATIVE_EVM || op.attached.is_some() {\n")],
+    ("G1: a native attached owner counted", [(G, "op.attached.is_some_and(|k| k != Some(NATIVE_EVM))", "op.attached.is_some()")],
      U + "gas_ua_extra_for_a_derived_signer"),
     ("G1: added twice when both are derived",
      [(G, "            g = g.saturating_add(b.ua_extra.unwrap_or(0));\n",
@@ -72,7 +72,7 @@ MUTANTS = [
      UA + "--test wallet_external an_external_assertion_above_the_cap_is_refused"),
     # G3, clientkeys: the same cap
     ("G3 clientkeys: the cap removed",
-     [(K, "  if ((authData?.length ?? 0) + (clientDataJSON?.length ?? 0) > WEBAUTHN_MAX_ASSERTION)\n", "  if (false)\n")], CK),
+     [(K, "  if (authData.length + clientDataJSON.length > WEBAUTHN_MAX_ASSERTION)\n", "  if (false)\n")], CK),
 ]
 
 if __name__ == "__main__":

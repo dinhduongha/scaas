@@ -54,7 +54,7 @@ pub enum Rule {
     SelfAuth,
     /// A DEX on the chain's DEX list (`dex`), bound to this chain.
     Dex,
-    /// The chain's `UARegistry` (`ua_registry`), bound to this chain: its writes (UA-8, ruling R-node; `registerMsig` since typed-signing R1, `registerWebAuthn` / `registerMuSig2` / `registerFrost` since R1b).
+    /// The chain's `UARegistry` (`ua_registry`), bound to this chain: its writes (UA-8, ruling R-node; `registerMsig` since typed-signing R1, `registerWebAuthn` / `registerMuSig2` / `registerFrost` since R1b, `registerBlsMulti` since bls-multi Task 10).
     UaRegistry,
     /// One of the chain's `GovernanceRouter`s (`governance_routers`), bound to this chain (spec 2026-11-02-governance §12.7): its
     /// typed entries only; a router is no target of any other kind's row.
@@ -2232,6 +2232,10 @@ mod tests {
             sel("registerFrost", "registry"),
             U::registerFrostCall::SELECTOR
         );
+        assert_eq!(
+            sel("registerBlsMulti", "registry"),
+            U::registerBlsMultiCall::SELECTOR
+        );
         assert_eq!(sel("setKemKey", "registry"), U::setKemKeyCall::SELECTOR);
         assert_eq!(sel("storePqzPop", "registry"), U::storePqzPopCall::SELECTOR);
         assert_eq!(sel("setPqzKey", "registry"), U::setPqzKeyCall::SELECTOR);
@@ -2598,11 +2602,11 @@ mod tests {
         // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`;
         // round 3zc (CTR-GOV-30): -> 143, the router's two cap setters; CTR-UA-44 (TODO 3ze): -> 144, the registry's `updateMsig`
         // NODE-JOB-29 (TODO 3zh MD-14): -> 145, the registry's `cacheExpandedKey`; set-auditor (CTR-GOV-31): -> 147, the router's
-        // `mtxSetAuditorKey`, `mtxSetAuditorUA`
+        // `mtxSetAuditorKey`, `mtxSetAuditorUA`; bls-multi Task 10: -> 148, the registry's `registerBlsMulti`
         assert_eq!(
             typed::rows().iter().filter(|r| !r.entry.is_empty()).count(),
-            147,
-            "table rows: 111 typed with an entry, 36 plain"
+            148,
+            "table rows: 111 typed with an entry, 37 plain"
         );
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
@@ -4500,7 +4504,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // NODE-JOB-29 (TODO 3zh MD-14): -> 307, the registry's `cacheExpandedKey` (PERMISSIONLESS)
     // set-auditor (CTR-GOV-31): -> 309, the router's `mtxSetAuditorKey`, `mtxSetAuditorUA`; GOVERNED 309 -> 317, `setAuditorKey`
     // BIT(32) on the Zether kinds 2, 3, 10, 11 and `setAuditorUA` BIT(32) on the PQZ kinds 4, 5, 12, 13
-    const ROWED: usize = 309;
+    // bls-multi Task 10: -> 310, the registry's `registerBlsMulti` (SIGNED)
+    const ROWED: usize = 310;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 206;
     const GOVERNED: usize = 317;

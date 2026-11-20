@@ -75,6 +75,13 @@ KINDS = (
     (0x0108, "secp256k1", False, (64,), "secp256k1"),  # 2026-10-17, appended as in kinds.json
     (0x0134, "mldsa87", False, (2592,), "mldsa87"),  # CTR-UA-39, 2026-11-04, appended as in kinds.json
     (0x0135, "fndsa1024", False, (1793,), "fndsa1024"),  # CTR-UA-40, 2026-11-04, appended as in kinds.json
+    (
+        0x0121,
+        "bls12381-multi",
+        False,
+        (),
+        None,
+    ),  # spec 2026-11-19-bls12381-multi, appended as in kinds.json; no keyHash
 )
 # Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
 PQZ_KEY_LENGTHS = (16384, 18432, 20480, 22528)  # the PQZ parameter sets' public key lengths (PqzSet.PK)
@@ -199,7 +206,12 @@ def is_zether(kind):
 
 
 def is_signing(kind):
-    return kind == 0x0120 or kind == 0x0141 or _single_signing(kind)
+    return kind in (0x0120, 0x0121, 0x0141) or _single_signing(kind)
+
+
+def has_surplus_form(kind):
+    """The kinds whose signatures have a surplus form (spec 2026-11-19-bls12381-multi §5.3): bls12381-multi only."""
+    return kind == 0x0121
 
 
 def is_pqz_holder(kind):
@@ -210,7 +222,7 @@ def is_pqz_holder(kind):
 
 def is_member(kind, hedera_native=False):
     """An msig too, one level down: a record that holds one is refused as a member by the registry."""
-    return _single_signing(kind) or kind in (0x0001, 0x0002, 0x0120) or (hedera_native and kind == 0x0003)
+    return _single_signing(kind) or kind in (0x0001, 0x0002, 0x0120, 0x0121) or (hedera_native and kind == 0x0003)
 
 
 def kind_tag_string(kind):
@@ -867,6 +879,67 @@ def _msig(d, hedera_native):
     _need(1 <= threshold <= total, "threshold")
 
 
+def _bls_g2_bytes(pt):
+    x, y = _bls.normalize(pt)
+    return b"".join(
+        bytes(16) + int(c).to_bytes(48, "big") for c in (x.coeffs[0], x.coeffs[1], y.coeffs[0], y.coeffs[1])
+    )
+
+
+def _bls_multi(d):
+    """bls12381-multi (spec 2026-11-19-bls12381-multi §2), in its order: length, n (2..64), weights (>= 1, summed unbounded), t
+    (1 <= t <= the sum); every member key a valid G2 key (canonical, on the curve, in the subgroup, not the identity), strictly
+    increasing; apk byte-equal to the sum of the keys and not the identity."""
+    _need(len(d) >= 260, "length")
+    n = _u16(d, 258)
+    _need(2 <= n <= 64, "n")
+    _need(len(d) == 260 + 258 * n, "length")
+    weights = [_u16(d, 516 + 258 * i) for i in range(n)]
+    _need(all(w >= 1 for w in weights), "weight")
+    t = _u16(d, 256)
+    _need(1 <= t <= sum(weights), "threshold")
+    acc = None
+    for i in range(n):
+        o = 260 + 258 * i
+        k = d[o : o + 256]
+        _bls_g2(k)
+        if i:
+            _need(d[o - 258 : o - 2] < k, "order")
+        x0, x1, y0, y1 = (_int(k[64 * j + 16 : 64 * j + 64]) for j in range(4))
+        pt = (_bls.FQ2([x0, x1]), _bls.FQ2([y0, y1]), _bls.FQ2.one())
+        acc = pt if acc is None else _bls.add(acc, pt)
+    _need(not _bls.is_inf(acc), "identity")
+    _need(d[:256] == _bls_g2_bytes(acc), "apk")
+
+
+def bls_multi_compress(key_data):
+    """``d -> s`` (spec §2): each 64-byte limb without its 16 zero bytes; the registry's stored form after the 32-byte ``ua``."""
+    d = _bytes(key_data)
+    _need(len(d) >= 260 and len(d) == 260 + 258 * _u16(d, 258), "length")
+    out = bytearray()
+    for i in range(_u16(d, 258) + 1):
+        o = 0 if i == 0 else 260 + 258 * (i - 1)
+        for j in range(4):
+            limb = d[o + 64 * j : o + 64 * j + 64]
+            _need(limb[:16] == bytes(16), "padding")
+            out += limb[16:]
+        out += d[o + 256 : o + 260] if i == 0 else d[o + 256 : o + 258]
+    return bytes(out)
+
+
+def bls_multi_expand(s):
+    """``s -> d`` (spec §2): a 16-byte zero prefix per 48-byte limb."""
+    s = _bytes(s)
+    _need(len(s) >= 196 and len(s) == 196 + 194 * _u16(s, 194), "length")
+    out = bytearray()
+    for i in range(_u16(s, 194) + 1):
+        o = 0 if i == 0 else 196 + 194 * (i - 1)
+        for j in range(4):
+            out += bytes(16) + s[o + 48 * j : o + 48 * j + 48]
+        out += s[o + 192 : o + 196] if i == 0 else s[o + 192 : o + 194]
+    return bytes(out)
+
+
 def _fndsa(d, head, n):
     """head ‖ n × 14-bit h_i, each < q: 0x09, n = 512 (fndsa512); 0x0A, n = 1,024 (fndsa1024)."""
     _need(d[0] == head, "header")
@@ -909,6 +982,8 @@ def validate_key_data(kind, key_data, hedera_native=False):
         _frost(d, _bn_g1, 64, BN_R)
     elif kind == 0x0120:
         _msig(d, hedera_native)
+    elif kind == 0x0121:
+        _bls_multi(d)
     elif kind == 0x0132:
         _fndsa(d, 0x09, 512)
     elif kind == 0x0135:
@@ -962,6 +1037,16 @@ def typed_key(kind, key_data):
     of 33 B on secp256k1, 64 B on bn254); None for any other kind. The registry assembles the same bytes (same id)."""
     d = _bytes(key_data)
     at = lambda o, n: _hx(d[o : o + n])
+    if (
+        kind == 0x0121
+    ):  # BlsMultiKey{aggKey, threshold, members: BlsMultiMember{key, weight}[]} (spec 2026-11-19-bls12381-multi §2)
+        n = _u16(d, 258)
+        _need(len(d) == 260 + 258 * n, "length")
+        return {
+            "aggKey": at(0, 256),
+            "threshold": _u16(d, 256),
+            "members": [{"key": at(260 + 258 * i, 256), "weight": _u16(d, 516 + 258 * i)} for i in range(n)],
+        }
     if kind == 0x0100:
         _need(len(d) == 96, "length")
         return {"x": at(0, 32), "y": at(32, 32), "rpIdHash": at(64, 32)}
@@ -1111,6 +1196,8 @@ def registry_calldata_length(entry, a):
         return 4 + 160 + _tail(a["keyData"]) + rest
     if entry == "registerWebAuthn":
         return 4 + 192 + rest
+    if entry == "registerBlsMulti":  # heads 128; key 96 + aggKey + members (offset, key, weight, key bytes)
+        return 4 + 128 + 96 + _tail(k["aggKey"]) + 32 + sum(32 + 64 + _tail(m["key"]) for m in k["members"]) + rest
     if entry == "registerMuSig2":
         return 4 + 160 + 64 + _tail(k["aggKey"]) + _bytes_arr(k["memberKeys"]) + rest
     if entry == "registerFrost":
@@ -1133,6 +1220,7 @@ _TYPED_ENTRY = {
     0x0111: "registerFrost",
     0x0113: "registerFrost",
     0x0120: "registerMsig",
+    0x0121: "registerBlsMulti",
 }
 
 
@@ -1157,7 +1245,7 @@ def registration_args(
     tail = {"attrs": attrs, "pqzPop": _hx(pqz_pop or b"")}
     if entry == "registerMsig":
         args = {"entry": entry, "structure": msig_structure(key_data), **tail, "pop": _member_sigs(pop or ())}
-    elif entry == "registerWebAuthn":
+    elif entry in ("registerWebAuthn", "registerBlsMulti"):
         args = {"entry": entry, "key": typed_key(kind, key_data), **tail, "pop": _hx(pop or b"")}
     elif entry == "register":
         args = {"entry": entry, "kind": kind, "keyData": _hx(key_data), **tail, "pop": _hx(pop or b"")}

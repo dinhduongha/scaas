@@ -140,4 +140,90 @@ async fn pq_registration_split() {
     let ws = writes(&sdk, "local", &payer, ua, args, None).await.unwrap();
     assert_eq!(ws.len(), 1);
     assert_eq!(ws[0].calldata, registry_call("register", args).unwrap());
+
+    // M1 (review 2026-11-20): the first part landed, the app restarted, the key proved again (a hedged proof: other bytes,
+    // another hash). The registry committed to the first proof's hash; the split kept that proof, so the second part is
+    // prepared with it, never with the new one
+    let pop = args["pqzPop"].as_str().unwrap();
+    let committed = scaas_ua::keccak256(&unhex(pop).unwrap());
+    {
+        let mut c = chain.lock().unwrap();
+        let reg = keccak_hex(b"isRegistered(bytes32)")[..10].to_string();
+        c.answers.retain(|(_, d, _)| *d != reg);
+        c.answers
+            .push((REGISTRY.into(), reg, format!("0x{}01", "00".repeat(31))));
+        let at = keccak_hex(b"pqzKeyAt(bytes32,uint64)")[..10].to_string();
+        c.answers.push((
+            REGISTRY.into(),
+            at,
+            format!(
+                "0x{}{}{}",
+                "00".repeat(32),
+                &hex(&committed)[2..],
+                "00".repeat(32)
+            ),
+        ));
+        let of = keccak_hex(b"pqzPopOf(bytes32,uint64)")[..10].to_string();
+        c.answers
+            .push((REGISTRY.into(), of, format!("0x{}{}", word(0x20), word(0))));
+    }
+    let mut again = args.clone();
+    let mut other = unhex(pop).unwrap();
+    other[100] ^= 1;
+    again["pqzPop"] = json!(hex(&other));
+    let store = |p: &str| {
+        registry_call(
+            "storePqzPop",
+            &json!({"ua": hex(&ua), "version": 0, "pqzPop": p}),
+        )
+        .unwrap()
+    };
+    let ws = writes(&sdk, "local", &payer, ua, &again, None)
+        .await
+        .unwrap();
+    let entries: Vec<String> = ws.iter().map(|w| w.entry()).collect();
+    assert_eq!(entries, ["storePqzPop"]);
+    assert_eq!(
+        ws[0].calldata,
+        store(pop),
+        "the kept proof, the one committed"
+    );
+    // nothing kept (another device): the new proof hashes otherwise, refused by name; the committed one itself is taken
+    crate::op::state::keep_pop(&sdk, &hex(&ua), None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        writes(&sdk, "local", &payer, ua, &again, None).await,
+        Err(SdkError::RegistrationPopInvalid)
+    ));
+    let ws = writes(&sdk, "local", &payer, ua, args, None).await.unwrap();
+    assert_eq!(ws[0].calldata, store(pop));
+}
+
+/// A 32-byte word of `n` (hex, no prefix).
+fn word(n: u64) -> String {
+    format!("{n:064x}")
+}
+
+/// M5 (review 2026-11-20), F24: offsets from an RPC answer near `usize::MAX` are refused, never wrap or panic; the controls
+/// read well-formed answers.
+#[test]
+fn record_offsets_added_checked() {
+    let w = |n: u64| {
+        let mut b = [0u8; 32];
+        b[24..].copy_from_slice(&n.to_be_bytes());
+        b.to_vec()
+    };
+    // `bytes`: offset, length, one word
+    let ok = [w(0x20), w(1), vec![0xaa; 32]].concat();
+    assert_eq!(record_holds(Landed::PqzPop(0), &ok), Some(true));
+    let near = [w(u64::MAX - 8), w(1), vec![0xaa; 32]].concat();
+    assert_eq!(record_holds(Landed::PqzPop(0), &near), None);
+    let len_near = [w(0x20), w(u64::MAX - 8), vec![0xaa; 32]].concat();
+    assert_eq!(record_holds(Landed::PqzPop(0), &len_near), None);
+    // `(KemKey, bytes)`: the tuple's offset, its first word the scheme
+    let kem = [w(0x20), w(1)].concat();
+    assert_eq!(record_holds(Landed::Kem(0), &kem), Some(true));
+    let kem_near = [w(u64::MAX - 8), w(1)].concat();
+    assert_eq!(record_holds(Landed::Kem(0), &kem_near), None);
 }

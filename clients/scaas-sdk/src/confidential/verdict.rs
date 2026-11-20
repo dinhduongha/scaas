@@ -269,7 +269,7 @@ fn checked(
         return None;
     }
     let msg = scaas_ua::ua_message(kind, &purpose, &digest).ok()?;
-    if !scaas_ua::verify::verify(kind, &key_data, &msg, &sig, false) {
+    if !scaas_ua::verify::verify(kind, &key_data, &msg, &sig, false, false) {
         return None;
     }
     Some(

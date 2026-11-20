@@ -391,6 +391,31 @@ impl Vault {
     }
 }
 
+#[cfg(feature = "wallet")]
+#[wasm_bindgen]
+impl Op {
+    /// Whether `part` is a valid partial of the prepared operation `prepared` (a handle) of its group (spec §5.4).
+    pub fn bls_multi_part_ok(&self, prepared: u32, part: JsValue) -> Result<bool, JsValue> {
+        let p = super::get::<Prepared>(prepared).ok_or_else(|| err(SdkError::Argument))?;
+        Ok(self.m.bls_multi_part_ok(&p, &from_js(part).map_err(err)?))
+    }
+    /// Member `member`'s PoP part for its group's registration.
+    pub fn bls_multi_pop_part(&self, member: JsValue) -> Result<JsValue, JsValue> {
+        to_js(
+            &self
+                .m
+                .bls_multi_pop_part(from_js(member).map_err(err)?)
+                .map_err(err)?,
+        )
+    }
+    /// Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+    pub fn bls_multi_pop_part_ok(&self, key_data: String, part: JsValue) -> Result<bool, JsValue> {
+        Ok(self
+            .m
+            .bls_multi_pop_part_ok(&key_data, &from_js(part).map_err(err)?))
+    }
+}
+
 #[cfg(feature = "admin")]
 #[wasm_bindgen]
 impl Admin {

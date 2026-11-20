@@ -65,7 +65,7 @@ fn derived_positives_verify() {
             let m = ua_message(kind, &ua_portable::pop_v2_tag(), &rd).unwrap();
             assert_eq!(m, b32(&p["message"]));
             assert!(
-                verify(kind, &kd, &m, &bytes(&p["sig"]), true),
+                verify(kind, &kd, &m, &bytes(&p["sig"]), true, false),
                 "{} pop {}",
                 r["name"],
                 p["context"]
@@ -81,7 +81,7 @@ fn derived_positives_verify() {
             .unwrap();
             assert_eq!(m, b32(&x["message"]));
             assert!(
-                verify(kind, &kd, &m, &bytes(&x["sig"]), false),
+                verify(kind, &kd, &m, &bytes(&x["sig"]), false, false),
                 "{} {} {}",
                 r["name"],
                 x["purpose"],
@@ -101,7 +101,14 @@ fn derived_negatives_refused() {
         let (kind, kd) = (num(&r["kind"]) as u16, bytes(&r["keyData"]));
         for x in arr(&r["negatives"]) {
             let pop = x["verifyPop"].as_bool().unwrap();
-            if verify(kind, &kd, &b32(&x["message"]), &bytes(&x["sig"]), pop) {
+            if verify(
+                kind,
+                &kd,
+                &b32(&x["message"]),
+                &bytes(&x["sig"]),
+                pop,
+                false,
+            ) {
                 accepted.push(format!("{} {}", r["name"], x["name"]));
             }
             n += 1;
@@ -225,6 +232,7 @@ fn msig_ok(
                         &ua_message(kind, &member, &md).unwrap(),
                         sig,
                         false,
+                        false,
                     )
                 })
         };
@@ -277,6 +285,7 @@ fn bip340_official_vectors() {
             &bytes(&t["publicKey"]),
             &b32(&t["message"]),
             &bytes(&t["sig"]),
+            false,
             false,
         );
         assert_eq!(ok, t["valid"].as_bool().unwrap(), "vector {}", t["index"]);

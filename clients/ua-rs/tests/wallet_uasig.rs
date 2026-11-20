@@ -962,7 +962,8 @@ fn single_key_uasig_forms() {
                 &key.key_data(),
                 &ua_message(kind, &purpose, &digest).unwrap(),
                 &sig.signature,
-                pop
+                pop,
+                false
             ),
             "{kind:#06x}"
         );
@@ -1349,7 +1350,7 @@ fn pqz_scoped_key_uasig_is_bare_and_pop() {
         assert!(s.key_data.is_empty() && s.members.is_empty(), "{kind:#06x}");
         let m = ua_message(kind, &p, &d).unwrap();
         assert!(
-            verify(kind, &key.key_data(), &m, &s.signature, true),
+            verify(kind, &key.key_data(), &m, &s.signature, true, false),
             "{kind:#06x}: verifyPop"
         );
         assert_eq!(
@@ -1660,6 +1661,7 @@ fn msig_update_rows_native_signs_the_update_digest() {
             &key_data,
             &ua_message(m.kind, &purpose_tag("member").unwrap(), &md).unwrap(),
             &s.sig,
+            false,
             false
         ));
     }
@@ -1735,7 +1737,8 @@ fn native_auditor_consent_signs_the_registry_form() {
         let chain_id: u64 = dom["chainId"].as_str().unwrap().parse().unwrap();
         let salt = b32(&dom["salt"]);
         let build = |auditor: &Value, epoch: u64| {
-            let mut m = row["message"].clone();
+            // the domain's own message: it names this token
+            let mut m = d["message"].clone();
             m["auditor"] = auditor.clone();
             m["epoch"] = epoch.into();
             let td = scaas_typed_data(

@@ -763,6 +763,37 @@ pub fn scaas_purpose(td: &TypedData) -> Result<[u8; 32]> {
     })?)
 }
 
+/// The `ua_msg` a `bls12381-multi` (`0x0121`) group signs for the typed SCaaS struct `td`: `uaMessage(0x0121, purpose,
+/// digest)`, the purpose as [`sign_scaas`] takes it (spec 2026-11-19-bls12381-multi §5.4). What an aggregator checks the
+/// partials on; it signs nothing.
+pub fn scaas_bls_multi_message(td: &TypedData) -> Result<[u8; 32]> {
+    crate::ua_message(crate::bls_multi::KIND, &scaas_purpose(td)?, &td.digest()?)
+        .map_err(|_| Error::Argument)
+}
+
+/// [`sign_scaas`] for a `bls12381-multi` member key (`key`, kind `0x0121`) of the group `key_data` (`d`): once `expect`
+/// approves `td` (`PolicyRefused`, nothing signed, otherwise; `Expect::Any` `Argument`), the member's partial (128 bytes) over
+/// `memberDigest(ua, ua_msg)`, `ua_msg` [`scaas_bls_multi_message`], `ua` derived from `d` (spec §5.4, N5); `Argument` unless
+/// `d` lists the key.
+pub fn sign_scaas_bls_multi(
+    key: &dyn Signer,
+    key_data: &[u8],
+    td: &TypedData,
+    expect: Expect,
+) -> Result<Vec<u8>> {
+    if matches!(expect, Expect::Any(_)) {
+        return Err(Error::Argument);
+    }
+    if check(td, &expect)? != td.digest()? {
+        return Err(Error::PolicyRefused);
+    }
+    key.sign_request(&SignRequest::BlsMultiMember {
+        key_data: key_data.to_vec(),
+        message: scaas_bls_multi_message(td)?,
+        role: super::signer::SigRole::Authorization,
+    })
+}
+
 // --- the ports of clientkeys `evm.js` (same order of checks; every refusal is `PolicyRefused`) ---
 
 fn refuse<T>() -> Result<T> {

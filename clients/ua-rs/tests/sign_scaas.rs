@@ -593,3 +593,72 @@ fn fee_due_of_a_struct_without_the_envelope_is_zero() {
         "an envelope without its mode"
     );
 }
+
+/// bls-multi Task 17 (spec 2026-11-19-bls12381-multi §5.4): a `bls12381-multi` member key signs its partial of a typed SCaaS
+/// struct only under the struct's check, over `memberDigest(ua, uaMessage(0x0121, purpose, digest))`; the partials of the
+/// group aggregate to a signature the verifier accepts. A refused check, `Expect::Any` and a key the group does not list sign
+/// nothing. Each beside its control.
+#[test]
+fn bls_multi_member_signs_under_the_check() {
+    use scaas_ua::bls_multi;
+    use scaas_ua::wallet::{scaas_bls_multi_message, sign_scaas_bls_multi, AllowAnyTypedData};
+    let r = row("UACancelNonce", "token");
+    let td = scaas_typed_data(
+        "UACancelNonce",
+        Some("SCaaS MetaToken"),
+        &r.contract,
+        r.chain_id,
+        &r.uid,
+        &r.message,
+    )
+    .unwrap();
+    let w = Wallet::from_mnemonic(WORDS, "").unwrap();
+    let ks: Vec<_> = (0..3).map(|a| w.ua_key(0x0121, a, 0).unwrap()).collect(); // EIP-2333: index 0
+    let pk = |i: usize| -> [u8; 256] { ks[i].key_data().try_into().unwrap() };
+    let (d, map) = bls_multi::build_key_data_unweighted(&[pk(0), pk(1)], 2).unwrap();
+    let ua_msg = scaas_bls_multi_message(&td).unwrap();
+    assert_eq!(
+        ua_msg,
+        scaas_ua::ua_message(
+            0x0121,
+            &purpose_tag("metatx").unwrap(),
+            &td.digest().unwrap()
+        )
+        .unwrap()
+    );
+    let parts: Vec<(u8, [u8; 128])> = (0..2)
+        .map(|i| {
+            let s =
+                sign_scaas_bls_multi(&ks[i], &d, &td, op(&r, "UACancelNonce", &r.message)).unwrap();
+            assert!(bls_multi::part_ok(&d, &pk(i), &ua_msg, false, &s));
+            (map[i] as u8, s.try_into().unwrap())
+        })
+        .collect();
+    let agg = bls_multi::aggregate(&d, &ua_msg, &parts, false).unwrap();
+    assert!(scaas_ua::verify::verify(
+        0x0121,
+        &d,
+        &ua_msg,
+        &agg.to_abi(),
+        false,
+        true
+    ));
+    // the check refuses another message: nothing signed
+    let mut other = r.message.clone();
+    other["nonce"] = Value::String("99".into());
+    assert!(matches!(
+        sign_scaas_bls_multi(&ks[0], &d, &td, op(&r, "UACancelNonce", &other)),
+        Err(Error::PolicyRefused)
+    ));
+    assert!(matches!(
+        sign_scaas_bls_multi(&ks[0], &d, &td, Expect::Any(AllowAnyTypedData)),
+        Err(Error::Argument)
+    ));
+    // a key the group does not list
+    assert!(matches!(
+        sign_scaas_bls_multi(&ks[2], &d, &td, op(&r, "UACancelNonce", &r.message)),
+        Err(Error::Argument)
+    ));
+    // sign_scaas itself does not sign for a member key (no single-key UASig of 0x0121)
+    assert!(sign_scaas(&ks[0], &td, op(&r, "UACancelNonce", &r.message)).is_err());
+}

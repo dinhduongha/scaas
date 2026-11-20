@@ -14,7 +14,7 @@ typed-signing C8: `pqzAuth` is the typed `PqzAuth` of the statement (`K.auth_dig
 the named entries (`NAMED`: `UAEnvelope` first, the op's explicit parameters, the entry's own typed struct from clientkeys,
 sections 5b and 6b; ua-mtx-merge R1, R47: one merged `mtx<entry>` per op over the `UA` struct for every subject, an EOA by its
 own key in `UASig.signature`, `WrapShield` alone on an address `Envelope`), the generic `mtxExecute(UAMetaTransaction, UASig)`
-of section 5 stays as the path of an op without one (TS-D14); `UARegistryCoreLib` and `UARegistryAuxLib` are linked and deployed with the registry; one PQZ holder is an msig (`registerMsig`, `UASig.members`).
+of section 5 stays as the path of an op without one (TS-D14); `UARegistryCoreLib`, `UARegistryAuxLib` and `UARegistryRegLib` are linked and deployed with the registry; one PQZ holder is an msig (`registerMsig`, `UASig.members`).
 It needs the `PQZ` and ML-DSA precompiles, so a chain run waits for the next reset; `--self-test` is what runs without one.
 
 Plan 5h Task 8d part 2: the parameter set is pqz_kat's (PQZ_SET, default n2304-kmax4096; the contracts must be built at
@@ -1713,8 +1713,9 @@ def run(kd, kr, ke):
         (SECP256K1, secv, 50_000),
     ]
     require_release_gas("UARegistry")
-    require_release_gas("UARegistryCoreLib")  # D.deploy links both (D.linked)
+    require_release_gas("UARegistryCoreLib")  # D.deploy links all three (D.linked)
     require_release_gas("UARegistryAuxLib")
+    require_release_gas("UARegistryRegLib")
     reg = D.deploy(
         "UARegistry",
         encs(["w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))], [uid, 0, 0, BUDGET, 0, 1, kinds]),

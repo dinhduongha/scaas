@@ -776,9 +776,10 @@ impl super::Confidential {
                 if let Some((legs, decoys)) = &p.multi {
                     // CTR-UA-29: the decoys drawn uniformly from the `0x0141` list (never the holder or a real recipient), then
                     // every leg's position shuffled; both draws by the facade's CSPRNG (`pickDecoys`), on public data only
-                    let cands = read::candidates(&sdk, &p.chain, &p.token).await?;
                     let mut exclude = vec![hex(&ua)];
                     exclude.extend(legs.iter().map(|l| hex(&l.0)));
+                    let want = u64::from(*decoys).saturating_add(exclude.len() as u64);
+                    let cands = read::candidates(&sdk, &p.chain, &p.token, want).await?;
                     let hx = |v: &[[u8; 32]]| v.iter().map(|u| hex(u)).collect::<Vec<_>>();
                     let req = json!({"candidates": hx(&cands), "exclude": exclude, "count": decoys});
                     let d = call(&sdk, handle(&sdk, &p.seed, p.account)?, "pickDecoys", req).await?;

@@ -30,7 +30,8 @@
     "registry": [
       {"label": "UARegistry", "artifact": "UARegistry.sol/UARegistry"},
       {"label": "UARegistryCoreLib", "artifact": "UARegistryCoreLib.sol/UARegistryCoreLib", "via": ["UARegistry"]},
-      {"label": "UARegistryAuxLib", "artifact": "UARegistryAuxLib.sol/UARegistryAuxLib", "via": ["UARegistry"]}
+      {"label": "UARegistryAuxLib", "artifact": "UARegistryAuxLib.sol/UARegistryAuxLib", "via": ["UARegistry"]},
+      {"label": "UARegistryRegLib", "artifact": "UARegistryRegLib.sol/UARegistryRegLib", "via": ["UARegistry"]}
     ],
     "factory": [
       {"label": "OpenFactory", "artifact": "OpenFactory.sol/OpenFactory"}

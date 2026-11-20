@@ -1199,6 +1199,26 @@ uint64_t uniffi_scaas_sdk_fn_clone_op(uint64_t handle, RustCallStatus *_Nonnull 
 void uniffi_scaas_sdk_fn_free_op(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_BLS_MULTI_PART
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_BLS_MULTI_PART
+uint64_t uniffi_scaas_sdk_fn_method_op_bls_multi_part(uint64_t ptr, uint64_t prepared, RustBuffer member
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_BLS_MULTI_PART_OK
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_BLS_MULTI_PART_OK
+int8_t uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok(uint64_t ptr, uint64_t prepared, RustBuffer part, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_BLS_MULTI_POP_PART
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_BLS_MULTI_POP_PART
+RustBuffer uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part(uint64_t ptr, RustBuffer member, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_BLS_MULTI_POP_PART_OK
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_BLS_MULTI_POP_PART_OK
+int8_t uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok(uint64_t ptr, RustBuffer key_data, RustBuffer part, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_MEMBER_SIGN
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_MEMBER_SIGN
 uint64_t uniffi_scaas_sdk_fn_method_op_member_sign(uint64_t ptr, uint64_t prepared
@@ -1209,9 +1229,19 @@ uint64_t uniffi_scaas_sdk_fn_method_op_member_sign(uint64_t ptr, uint64_t prepar
 uint64_t uniffi_scaas_sdk_fn_method_op_quote(uint64_t ptr, uint64_t prepared, RustBuffer path
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_QUOTE_REGISTER_BLS_MULTI
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_QUOTE_REGISTER_BLS_MULTI
+uint64_t uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi(uint64_t ptr, RustBuffer chain, RustBuffer key_data, RustBuffer payer
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_QUOTE_WITH_GAS
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_QUOTE_WITH_GAS
 uint64_t uniffi_scaas_sdk_fn_method_op_quote_with_gas(uint64_t ptr, uint64_t prepared, RustBuffer path, uint64_t gas
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_REGISTER_BLS_MULTI
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_REGISTER_BLS_MULTI
+uint64_t uniffi_scaas_sdk_fn_method_op_register_bls_multi(uint64_t ptr, RustBuffer chain, RustBuffer key_data, RustBuffer parts, RustBuffer quote
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_RESEND
@@ -1232,6 +1262,11 @@ uint64_t uniffi_scaas_sdk_fn_method_op_state(uint64_t ptr, RustBuffer op
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_SUBMIT
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_SUBMIT
 uint64_t uniffi_scaas_sdk_fn_method_op_submit(uint64_t ptr, uint64_t prepared, RustBuffer quote
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_SUBMIT_BLS_MULTI
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_OP_SUBMIT_BLS_MULTI
+uint64_t uniffi_scaas_sdk_fn_method_op_submit_bls_multi(uint64_t ptr, uint64_t prepared, RustBuffer quote, RustBuffer parts, int8_t surplus
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_CLONE_SDK
@@ -3149,6 +3184,30 @@ uint16_t uniffi_scaas_sdk_checksum_method_foreignstore_unlock(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_PART
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_PART
+uint16_t uniffi_scaas_sdk_checksum_method_op_bls_multi_part(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_PART_OK
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_PART_OK
+uint16_t uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_POP_PART
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_POP_PART
+uint16_t uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_POP_PART_OK
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_BLS_MULTI_POP_PART_OK
+uint16_t uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_MEMBER_SIGN
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_MEMBER_SIGN
 uint16_t uniffi_scaas_sdk_checksum_method_op_member_sign(void
@@ -3161,9 +3220,21 @@ uint16_t uniffi_scaas_sdk_checksum_method_op_quote(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_QUOTE_REGISTER_BLS_MULTI
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_QUOTE_REGISTER_BLS_MULTI
+uint16_t uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_QUOTE_WITH_GAS
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_QUOTE_WITH_GAS
 uint16_t uniffi_scaas_sdk_checksum_method_op_quote_with_gas(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_REGISTER_BLS_MULTI
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_REGISTER_BLS_MULTI
+uint16_t uniffi_scaas_sdk_checksum_method_op_register_bls_multi(void
     
 );
 #endif
@@ -3188,6 +3259,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_op_state(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_SUBMIT
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_SUBMIT
 uint16_t uniffi_scaas_sdk_checksum_method_op_submit(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_SUBMIT_BLS_MULTI
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_OP_SUBMIT_BLS_MULTI
+uint16_t uniffi_scaas_sdk_checksum_method_op_submit_bls_multi(void
     
 );
 #endif

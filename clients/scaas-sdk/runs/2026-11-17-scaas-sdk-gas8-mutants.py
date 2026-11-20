@@ -32,7 +32,7 @@ MUTANTS = [
      U + "reference_table_covers_every_quotable_key"),
     ("an unmeasured entry listed as quotable",
      [(P, '    ("mtxPrepareAcc", &["pqz"]),\n', '    ("mtxPrepareAcc", &["pqz"]),\n    ("mtxSetAuditorUA", &["gov_router"]),\n'),
-      (P, '    ("mtxSetAuditorUA", &["gov_router"]),\n];', "];")],
+      (P, "    (\"mtxSetAuditorUA\", &[\"gov_router\"]),\n", "")],
      U + "reference_table_covers_every_quotable_key"),
     # the newly quotable entry quotes the reference row (its quote fails closed without it)
     ("the account's fresh cancel row gone from the table",

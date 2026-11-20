@@ -280,3 +280,69 @@ test("group kinds as msig members: id, member digest, secp256k1 group slots; the
   }
   assert.equal(n, 12);
 });
+
+// bls-multi T4: groups.json blsMulti (written by clients/ua-rs tests/groups.rs, checked here on noble): the H_G1 KATs under both DSTs,
+// every group's id, stored form, popMsg and pop, every PoP row and every signature row (verify and verifyMinimal) as written.
+test("bls_multi: groups.json blsMulti rows", async () => {
+  const bm = await import("../src/bls-multi.js");
+  const { verify } = await import("../src/ua-verify.js");
+  const { bls12_381 } = await import("@noble/curves/bls12-381.js");
+  const s = V.blsMulti;
+  assert.deepEqual([s.dsts.sig, s.dsts.pop], [bm.DST_MULTI_SIG, bm.DST_MULTI_POP]);
+  for (const r of s.hashToG1) {
+    const P = bls12_381.G1.hashToCurve(B(r.msg), { DST: r.dst === "sig" ? bm.DST_MULTI_SIG : bm.DST_MULTI_POP });
+    assert.equal(hex(bm.g1Bytes(P)), r.point);
+  }
+  for (const g of s.groups) {
+    assert.equal(hex(ua.deriveUA(0x0121, B(g.keyData))), g.ua, g.name);
+    assert.equal(hex(bm.storedBlsMulti(g.keyData)), g.stored, g.name);
+    assert.equal(hex(bm.popMessage(g.keyData)), g.popMessage, g.name);
+    assert.ok(verify(0x0121, g.keyData, g.popMessage, g.pop, true), g.name);
+  }
+  for (const r of s.pop) {
+    assert.equal(hex(bm.popMessage(r.keyData)), r.popMessage, r.name);
+    assert.equal(verify(0x0121, r.keyData, r.popMessage, r.pop, true), r.valid, r.name);
+  }
+  for (const r of s.signatures) {
+    assert.equal(hex(bm.storedBlsMulti(r.keyData)), r.stored, r.name);
+    assert.equal(verify(0x0121, r.keyData, r.uaMsg, r.signature, false, false), r.verify, r.name);
+    assert.equal(verify(0x0121, r.keyData, r.uaMsg, r.signature, false, true), r.minimal, r.name);
+  }
+  assert.deepEqual([s.pop.length, s.signatures.length], [11, 30]);
+});
+
+// bls-multi T15: groups.json blsMulti.wallet: the 0x0121 member keys of keys.json's mnemonic derived here (uakey.js, EIP-2333),
+// each member's partial and PoP part signed here on noble, the minimal aggregate and the PoP: what every binding reproduces.
+test("bls_multi: groups.json blsMulti.wallet parts", async () => {
+  const bm = await import("../src/bls-multi.js");
+  const { verify } = await import("../src/ua-verify.js");
+  const { deriveUAKey } = await import("../src/uakey.js");
+  const { seedFromWords } = await import("../src/seed.js");
+  const w = V.blsMulti.wallet;
+  const m = JSON.parse(readFileSync(new URL("keys.json", dir))).mnemonics.find((x) => x.id === w.mnemonic);
+  const seed = seedFromWords(m.words, m.passphrase);
+  const keys = w.members.map((r) => deriveUAKey(seed, { kind: w.kind, account: r.account, index: w.index }));
+  assert.deepEqual(
+    keys.map((k) => hex(k.keyData)),
+    w.members.map((r) => r.key),
+  );
+  const { keyData, indexMap } = bm.buildKeyData(
+    keys.map((k, i) => ({ key: k.keyData, weight: w.members[i].weight })),
+    w.threshold,
+  );
+  assert.equal(hex(keyData), w.keyData);
+  assert.deepEqual(
+    indexMap,
+    w.members.map((r) => r.keyDataIndex),
+  );
+  keys.forEach((k, i) => {
+    assert.equal(hex(k.signBlsMulti(B(w.keyData), B(w.uaMsg))), w.members[i].partial);
+    assert.equal(hex(k.signBlsMultiPop(B(w.keyData))), w.members[i].popPart);
+  });
+  const parts = (f) => w.members.map((r) => [r.keyDataIndex, B(r[f])]);
+  const agg = bm.aggregate(w.keyData, w.uaMsg, parts("partial"));
+  assert.deepEqual([hex(agg.signature), agg.signers], [w.signature, w.signers]);
+  assert.ok(verify(0x0121, w.keyData, w.uaMsg, hex(bm.blsMultiAbi(agg)), false, true));
+  assert.equal(hex(bm.aggregatePop(w.keyData, parts("popPart"))), w.pop);
+  assert.ok(verify(0x0121, w.keyData, w.popMessage, w.pop, true));
+});

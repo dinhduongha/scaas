@@ -176,6 +176,13 @@ pub enum SlotKey {
     Msig {
         ua: String,
     },
+    /// a `bls12381-multi` group's member key (as `KeyRef::BlsMulti`)
+    BlsMulti {
+        seed: String,
+        account: u32,
+        index: u32,
+        key_data: String,
+    },
 }
 
 #[cfg(feature = "wallet")]
@@ -213,6 +220,17 @@ impl From<KeyRef> for SlotKey {
             },
             KeyRef::Key { seed, id } => SlotKey::Key { seed, id },
             KeyRef::Msig { ua, .. } => SlotKey::Msig { ua },
+            KeyRef::BlsMulti {
+                seed,
+                account,
+                index,
+                key_data,
+            } => SlotKey::BlsMulti {
+                seed,
+                account,
+                index,
+                key_data,
+            },
         }
     }
 }
@@ -252,6 +270,17 @@ impl From<SlotKey> for KeyRef {
             },
             SlotKey::Key { seed, id } => KeyRef::Key { seed, id },
             SlotKey::Msig { ua } => KeyRef::Msig { ua, slots: vec![] },
+            SlotKey::BlsMulti {
+                seed,
+                account,
+                index,
+                key_data,
+            } => KeyRef::BlsMulti {
+                seed,
+                account,
+                index,
+                key_data,
+            },
         }
     }
 }
@@ -556,6 +585,23 @@ impl Vault {
         sig: Arc<SecretBytes>,
     ) -> Result<Arc<SecretBytes>, SdkError> {
         self.m.signature_from_compact(sig)
+    }
+}
+
+#[cfg(feature = "wallet")]
+#[uniffi::export]
+impl Op {
+    /// Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+    pub fn bls_multi_part_ok(&self, prepared: Arc<Prepared>, part: BlsMultiPart) -> bool {
+        self.m.bls_multi_part_ok(&prepared, &part)
+    }
+    /// Member `member`'s PoP part for its group's registration.
+    pub fn bls_multi_pop_part(&self, member: KeyRef) -> Result<BlsMultiPart, SdkError> {
+        self.m.bls_multi_pop_part(member)
+    }
+    /// Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+    pub fn bls_multi_pop_part_ok(&self, key_data: String, part: BlsMultiPart) -> bool {
+        self.m.bls_multi_pop_part_ok(&key_data, &part)
     }
 }
 

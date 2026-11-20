@@ -1,0 +1,10 @@
+bls-multi, the registry library split (owner 2026-11-19, candidate (2): UARegistryRegLib) | step | rc | counts
+size gate (forge build src --sizes) | 0 | 0 errors, 174 contracts; UARegistryCoreLib 36,844 -> 15,737, UARegistryRegLib 30,157 (new, library), UARegistryAuxLib 35,284 -> 35,417 (T-1 35,694), UARegistry 33,293 (init 40,957 -> 40,996)
+forge test/ua/UARegistryPair.t.sol | 0 | 20 passed (+ test_b_constructorNeedsTheRegLibrary, test_c_regNeedsItsCore)
+forge test/v2/LinkClosure.t.sol | 0 | 5 passed (closure 3 libraries; RegLib -> core; Aux -> core, reg; DELEGATECALL RegLib 1)
+forge UADeploy, UARegistryCoreLibMsig, UAStoreLayout, UARegistryBlsMulti | 1 | 44 passed, 1 failed: CoreLibMsig test_gasHotPath requireAuthorized 256 17,113 > 17,109 (red before the split, unchanged: the hot path does not move; re-pinned after Task 8)
+forge UARegistry, MsigUpdate, NestedGas, Membership, Nested, Portable, PortableApp, MsigGroupMember, Pq, PqzBound, UA6 | 0 | 211 passed
+forge test/ua the other 35 suites (UAGas included) | 0 | 430 passed
+forge UARegistryUaPortable (two runs: test_ua_portable*, the rest) | 1 | 85 passed, 3 failed: register webauthn-p256 190,665 > pin 182,197 (the nested PoP call); popOf mldsa65/v2 20,273 > 20,229 and registrationOf msig-pq gen 2 146,755 > 146,516 (over before the split); re-pinned once after Task 8
+forge GovDeploy, SelectorAudit | 1 | 27 passed, 2 failed, both from Task 5 (+16 B on every token, not the split): test_routerAndRelayFeeRouterNewAddresses (GovernanceRouter address), test_wrappedReleaseIsGated (WrappedToken 19,947 -> 19,963 B); re-pinned with the deferred pins
+mutants split-mutants.py | 0 | 5, 5 killed by the intended test

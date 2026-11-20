@@ -728,6 +728,59 @@ async fn sponsored_pq_blob_split() {
     assert_eq!(entries, ["register", "setKemKey"]);
 }
 
+/// F22 (review 2026-11-20): the split's first part landed, its `storePqzPop` never did (the app closed between the two): a
+/// new prepare gives the `storePqzPop` again from the registration's own `pqzPop`; with the proof stored, nothing of it.
+#[tokio::test(flavor = "multi_thread")]
+async fn split_second_part_prepared_again_after_the_first_landed() {
+    let t = setup().await;
+    let b = blob("mldsa65/n2816-kmax65536/kem-commit");
+    let ua = b["ua"].as_str().unwrap().to_string();
+    kind_enabled(&t, b["kind"].as_u64().unwrap() as u16, true);
+    t.chain.lock().unwrap().gas_of = Some(|input: &str| input.len() as u64 * 200);
+    let blob = RegistrationBlob::from_json(&b.to_string()).unwrap();
+    let acc = t.sdk.account();
+    // registered (the first part landed), no proof stored; the registration committed to the blob's proof (M1)
+    registry(&t, &ua, true, &hx(&[0; 32]), false);
+    let pop_hash = scaas_ua::keccak256(
+        &alloy::hex::decode(&b["args"]["pqzPop"].as_str().unwrap()[2..]).unwrap(),
+    );
+    t.chain.lock().unwrap().answers.insert(
+        0,
+        (
+            REGISTRY.into(),
+            format!("{}{}", sel("pqzKeyAt(bytes32,uint64)"), &ua[2..]),
+            format!("0x{}{}{}", w(0x1234), &hx(&pop_hash)[2..], w(0)),
+        ),
+    );
+    let ws = acc
+        .prepare_submit_registration(blob.clone(), "local".into(), ua.clone(), t.payer.clone())
+        .await
+        .unwrap();
+    let entries: Vec<String> = ws.iter().map(|w| w.entry()).collect();
+    assert_eq!(
+        entries.first().map(String::as_str),
+        Some("storePqzPop"),
+        "{entries:?}"
+    );
+    assert!(!entries.iter().any(|e| e == "register"), "{entries:?}");
+    // the control: the proof stored, no `storePqzPop`
+    let pop = b["args"]["pqzPop"].as_str().unwrap();
+    let n = (pop.len() - 2) / 2;
+    let pad = "0".repeat((64 - (pop.len() - 2) % 64) % 64);
+    {
+        let mut c = t.chain.lock().unwrap();
+        let d = format!("{}{}", sel("pqzPopOf(bytes32,uint64)"), &ua[2..]);
+        c.answers.retain(|(_, x, _)| *x != d);
+        let body = format!("0x{}{}{}{pad}", w(0x20), w(n as u64), &pop[2..]);
+        c.answers.insert(0, (REGISTRY.into(), d, body));
+    }
+    let ws = acc
+        .prepare_submit_registration(blob, "local".into(), ua, t.payer.clone())
+        .await
+        .unwrap();
+    assert!(!ws.iter().any(|w| w.entry() == "storePqzPop"));
+}
+
 /// `storePqzPop` lands when the record shows the proof stored, proven or not (owner 2026-11-19, S2): on a chain with no PoP
 /// verifier `pqzKeyAt(…).proven` stays false; nothing stored, the write stays in flight.
 #[tokio::test(flavor = "multi_thread")]

@@ -1544,3 +1544,68 @@ func TestGovernanceBitsRows(t *testing.T) {
 		}
 	}
 }
+
+// TestBlsMulti: bls12381-multi (0x0121, spec 2026-11-19-bls12381-multi §2): kinds.json's ten valid rows (d, s, the stored ua ‖ s,
+// keyOf, the typed key; Review Focus 1's weights {65535, 65535}), its 18 refusals (TestInvalidRows), portable.json
+// blsMultiRegistrations (registerBlsMulti's named args, the calldata length). This library verifies no BLS signature, so
+// groups.json's signature rows are not its.
+func TestBlsMulti(t *testing.T) {
+	if !HasSurplusForm(0x0121) || HasSurplusForm(0x0106) || HasSurplusForm(0x0120) {
+		t.Fatal("surplus form")
+	}
+	n := 0
+	for _, r := range rows(load(t, "kinds.json"), "valid") {
+		if kind(r["kind"]) != 0x0121 {
+			continue
+		}
+		name := r["name"].(string)
+		d := bs(r["keyData"])
+		if err := ValidateKeyData(0x0121, d, false); err != nil {
+			t.Fatal(name, err)
+		}
+		s, err := BlsMultiCompress(d)
+		if err != nil || hx(s) != r["compressed"] {
+			t.Fatal(name, err)
+		}
+		if e, err := BlsMultiExpand(s); err != nil || !bytes.Equal(e, d) {
+			t.Fatal(name, err)
+		}
+		ua, err := UAOf(0x0121, d)
+		if err != nil || hx(append(ua[:], s...)) != r["stored"] || hx(d[:256]) != r["keyOf"] {
+			t.Fatal(name, err)
+		}
+		k, err := TypedKey(0x0121, d)
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		bk := k.(*BlsMultiKey)
+		packed := append(append([]byte{}, bk.AggKey...), byte(bk.Threshold>>8), byte(bk.Threshold), 0, byte(len(bk.Members)))
+		for _, m := range bk.Members {
+			packed = append(append(packed, m.Key...), byte(m.Weight>>8), byte(m.Weight))
+		}
+		if !bytes.Equal(packed, d) {
+			t.Fatal(name, "typed key")
+		}
+		n++
+	}
+	if n != 10 {
+		t.Fatal(n)
+	}
+	bad := append([]byte{1}, bs(rows(load(t, "kinds.json"), "valid")[0]["keyData"])...)
+	if _, err := BlsMultiCompress(bad); err == nil {
+		t.Fatal("a length off by one")
+	}
+	for _, row := range rows(load(t, "portable.json"), "blsMultiRegistrations") {
+		name := row["name"].(string)
+		in := regInput(row)
+		args, fill, err := RegistrationArgs(in)
+		if err != nil || fill != nil {
+			t.Fatal(name, err)
+		}
+		sameJSON(t, name, args, row["args"])
+		m := len(args.Key.(*BlsMultiKey).Members)
+		if args.CalldataLength() != 4+128+96+288+32+384*m+288+160+32 { // empty attrs, a 128-byte pop, no pqzPop
+			t.Fatal(name, args.CalldataLength())
+		}
+	}
+}

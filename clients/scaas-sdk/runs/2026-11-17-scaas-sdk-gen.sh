@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # Regenerates every generated binding of scaas-sdk (plan T20, T20b-T20h; spec §16.1), from the worktree root:
 #   clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh            regenerate in place
-#   clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check    regenerate, then fail if a generated file differs from the
-#                                                                 committed one (the drift test, as ua-c's header test)
+#   clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check    regenerate, fail if a generated file differs from HEAD's (the
+#                                                                 drift test, as ua-c's header test), then put the working
+#                                                                 tree's generated files back as they were
 #   SCAAS_GEN=<part>[,<part>…] limits it to those parts (a CI job with one generator); default every part:
 #   dart  the FRB Dart surface (flutter_rust_bridge_codegen 2.13.0, the pin of the ffi crate's flutter_rust_bridge):
 #         bindings/dart/lib/src/rust/ (the freezed classes of the data-carrying enums by build_runner, which the codegen runs)
@@ -24,6 +25,11 @@ W=$(git rev-parse --show-toplevel)
 D="$W/clients/scaas-sdk"
 PARTS=",${SCAAS_GEN:-dart,cpp,cs,python,kotlin,swift},"
 GEN=()
+if [[ $PARTS == *,dart,* ]]; then GEN+=(bindings/dart/lib/src/rust ffi/src/frb_generated.rs); fi
+for p in cpp cs python kotlin swift; do
+    if [[ $PARTS == *,$p,* ]]; then GEN+=("bindings/$p/generated"); fi
+done
+[ ${#GEN[@]} -gt 0 ] || { echo "[gen] FAIL no part in SCAAS_GEN=${SCAAS_GEN:-}" >&2 && exit 2; }
 cap=("$W/scripts/capped")
 [ -n "${CI:-}" ] && cap=()
 off=(--offline)
@@ -35,8 +41,14 @@ pin() { # <tool> <version> [<package>]: the generator on PATH is the pin, as car
         { echo "[gen] FAIL $1 is not the pin $2" >&2 && exit 2; }
 }
 lib() { echo "$D/ffi/target/lib-$1/libscaas_sdk_ffi.so"; }
+if [ "${1:-}" = --check ]; then
+    # the check leaves the working tree as it found it: the generated files (committed or not) are copied first and put back
+    # on exit; the regenerated ones are compared with HEAD, never with the index
+    keep=$(mktemp -d)
+    (cd "$D" && for g in "${GEN[@]}"; do [ ! -e "$g" ] || cp -a --parents "$g" "$keep/"; done)
+    trap 'cd "$D" && rm -rf "${GEN[@]}" && cp -a "$keep/." "$D/" && rm -rf "$keep"' EXIT
+fi
 if [[ $PARTS == *,dart,* ]]; then
-    GEN+=(bindings/dart/lib/src/rust ffi/src/frb_generated.rs)
     want=2.13.0
     have=$(flutter_rust_bridge_codegen --version | awk '{print $2}')
     if [ "$have" != "$want" ]; then
@@ -49,7 +61,6 @@ if [[ $PARTS == *,dart,* ]]; then
     echo "[gen] ok: FRB Dart"
 fi
 if [[ $PARTS == *,cpp,* ]]; then
-    GEN+=(bindings/cpp/generated)
     echo "[gen] start: C++ (sync-api)"
     pin uniffi-bindgen-cpp "0.10.0+v0.31.0"
     bash "$D/bindings/lib.sh" sync-api >/dev/null
@@ -68,7 +79,6 @@ if [[ $PARTS == *,cpp,* ]]; then
     echo "[gen] ok: C++"
 fi
 if [[ $PARTS == *,cs,* ]]; then
-    GEN+=(bindings/cs/generated)
     echo "[gen] start: C# (uniffi)"
     pin uniffi-bindgen-cs "0.11.1+v0.31.0"
     bash "$D/bindings/lib.sh" uniffi >/dev/null
@@ -79,7 +89,6 @@ if [[ $PARTS == *,cs,* ]]; then
     echo "[gen] ok: C#"
 fi
 if [[ $PARTS == *,python,* ]]; then
-    GEN+=(bindings/python/generated)
     echo "[gen] start: Python (uniffi)"
     pin uniffi-bindgen "0.31.0" uniffi
     bash "$D/bindings/lib.sh" uniffi >/dev/null
@@ -89,7 +98,6 @@ if [[ $PARTS == *,python,* ]]; then
     echo "[gen] ok: Python"
 fi
 if [[ $PARTS == *,kotlin,* ]]; then
-    GEN+=(bindings/kotlin/generated)
     echo "[gen] start: Kotlin (uniffi)"
     pin uniffi-bindgen "0.31.0" uniffi
     bash "$D/bindings/lib.sh" uniffi >/dev/null
@@ -99,7 +107,6 @@ if [[ $PARTS == *,kotlin,* ]]; then
     echo "[gen] ok: Kotlin"
 fi
 if [[ $PARTS == *,swift,* ]]; then
-    GEN+=(bindings/swift/generated)
     echo "[gen] start: Swift (uniffi)"
     pin uniffi-bindgen "0.31.0" uniffi
     bash "$D/bindings/lib.sh" uniffi >/dev/null
@@ -108,10 +115,9 @@ if [[ $PARTS == *,swift,* ]]; then
         --out-dir "$D/bindings/swift/generated" >/dev/null)
     echo "[gen] ok: Swift"
 fi
-[ ${#GEN[@]} -gt 0 ] || { echo "[gen] FAIL no part in SCAAS_GEN=${SCAAS_GEN:-}" >&2 && exit 2; }
 if [ "${1:-}" = --check ]; then
     cd "$D"
-    if ! git diff --exit-code --stat -- "${GEN[@]}" || [ -n "$(git status --porcelain -- "${GEN[@]}")" ]; then
+    if ! git diff --exit-code --stat HEAD -- "${GEN[@]}" || [ -n "$(git status --porcelain --untracked-files=all -- "${GEN[@]}" | grep '^??')" ]; then
         echo "[gen] FAIL a generated file differs from the committed one (run this script without --check and commit)" >&2
         exit 1
     fi

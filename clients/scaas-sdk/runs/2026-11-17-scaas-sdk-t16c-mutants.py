@@ -35,14 +35,12 @@ MUTANTS = [
      [(Q, "    let out = sdk\n        .heavy(move || {\n            let (_seed, k) = key;\n            Ok(k.call(cmd, &body)?)\n        })\n        .await?;",
        "    let out = (move || -> Result<String, SdkError> {\n            let (_seed, k) = key;\n            Ok(k.call(cmd, &body)?)\n        })()?;")],
      T + "proof_runs_off_the_async_workers"),
-    ("a PQZ debit through the gateway",
-     [(O, ' && !(p.t.kind == "pqz" && PQZ_DEBITS.contains(&p.t.name))', "")],
-     T + "pqz_unshield_pairs"),
+    # removed 2026-11-20 (review T5): "a PQZ debit through the gateway": a PQZ debit is gateway-relayable since 9f3e640dd (NODE-GW-08); nothing to mutate
     ("P-T16-4: an opening token is a set mismatch",
      [(Q, "    if r.psid == PQZL_SPLIT_ID {", "    if false && r.psid == PQZL_SPLIT_ID {")],
      T + "opening_token_refused"),
     ("a recipient key the token would refuse",
-     [(Q, "let ok = (record[11] == 1 || offchain) && code.len()", "let ok = true || (record[11] == 1 || offchain) && code.len()")],
+     [(Q, "let ok = (record[11] == 1 || offchain)", "let ok = true || (record[11] == 1 || offchain)")],
      T + "pqz_transfer_single_pairs"),
 ]
 

@@ -566,6 +566,7 @@ fn gas_rows() -> GasRows {
                 fee_extra: (entry == "mtxPay").then_some(2_000), // ruling 3
                 ua_extra: None,
                 per_item: None,
+                regular: None,
             })
         })
         .collect();
@@ -575,6 +576,7 @@ fn gas_rows() -> GasRows {
         verify: [0u16]
             .into_iter()
             .chain(0x0101..=0x0108)
+            .chain([0x0121]) // bls-multi Task 17: a group signer
             .chain(0x0130..=0x0135)
             .map(|signer| GasVerify {
                 signer,

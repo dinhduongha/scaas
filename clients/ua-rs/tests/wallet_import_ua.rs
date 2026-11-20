@@ -245,7 +245,14 @@ fn sign_json_imported_rows() {
         };
         assert_eq!(sig, h(&x["signature"]), "{}", x["id"]);
         assert!(
-            verify(key.kind(), &key.key_data(), &msg, &sig, x["what"] == "pop"),
+            verify(
+                key.kind(),
+                &key.key_data(),
+                &msg,
+                &sig,
+                x["what"] == "pop",
+                false
+            ),
             "{}",
             x["id"]
         );
@@ -321,14 +328,14 @@ fn sign_json_imported_separation() {
             x["id"]
         );
         assert!(
-            !verify(key.kind(), &key.key_data(), &msg, &native_sig, false),
+            !verify(key.kind(), &key.key_data(), &msg, &native_sig, false, false),
             "{}: native as UA refused",
             x["id"]
         );
         let ua_sig = key.sign_ua(&metatx, &digest).unwrap();
         assert_eq!(ua_sig, h(&x["uaSignature"]), "{}", x["id"]);
         assert!(
-            verify(key.kind(), &key.key_data(), &msg, &ua_sig, false),
+            verify(key.kind(), &key.key_data(), &msg, &ua_sig, false, false),
             "{}: UA positive control",
             x["id"]
         );

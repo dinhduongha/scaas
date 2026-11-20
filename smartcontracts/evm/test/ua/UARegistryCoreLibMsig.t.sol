@@ -6,7 +6,9 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {SSTORE2} from "../../src/common/SSTORE2.sol";
 import {UARegistryBase, MockVerifier, MockWallet} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
 import {GasMeter} from "./GroupFixtures.sol";
@@ -209,7 +211,7 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
             bool isCall = d[i].kind == VmSafe.AccountAccessKind.Call || d[i].kind == VmSafe.AccountAccessKind.StaticCall;
             if (
                 !isCall || d[i].account == at || d[i].account == address(UARegistryCoreLib)
-                    || d[i].account == address(UARegistryAuxLib)
+                    || d[i].account == address(UARegistryAuxLib) || d[i].account == address(UARegistryRegLib)
             ) continue;
             calls = keccak256(abi.encode(calls, d[i].kind, d[i].account, d[i].data));
             ++n;
@@ -298,16 +300,17 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         }
     }
 
-    /// An offset inside a struct is checked where it is read, and in the library the calldata is 96 B longer than the entry's. A `pqzKey`
-    /// offset aimed at the appended clone word (0 here) reads as the empty key, which is what the well-formed call has: the same record,
-    /// nothing the caller could not send. Aimed past those 96 B it is past the calldata, and refused.
+    /// An offset inside a struct is checked where it is read, and in the library the calldata is 128 B longer than the entry's (96 B
+    /// before the fourth word, spec 2026-11-19-bls12381-multi §5.3, N1). A `pqzKey` offset aimed at the appended clone word (0 here)
+    /// reads as the empty key, which is what the well-formed call has: the same record, nothing the caller could not send. Aimed past
+    /// those 128 B it is past the calldata, and refused.
     function test_nestedOffsetReadsAWordAsItsOwnArgument() public {
         bytes memory good = _plain(SLH, _pk(SLH, 1));
         uint256 attrs = 4 + uint256(_word(good, 4 + 2 * 32));
         _deploy(R1, chainUidA, address(0), false, BUDGET, address(0), true, _one(SLH, address(mock), PQ));
         _deploy(R2, chainUidA, address(0), false, BUDGET, address(0), true, _one(SLH, address(mock), PQ));
 
-        (bool ok, bytes memory ret) = R2.call(_aimed(good, attrs, good.length + 96));
+        (bool ok, bytes memory ret) = R2.call(_aimed(good, attrs, good.length + 128));
         assertFalse(ok, "past the calldata");
         assertEq(ret.length, 0);
         (ok,) = R2.call(_aimed(good, attrs, good.length + 64));
@@ -327,17 +330,18 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
     /// column; `register` state gas in `_stateBefore`). `0`: not a row. Re-pinned on `mldsa87` (CTR-UA-39, kind 0x0134: `vkLength`'s
     /// and `_slot`'s extra arm, the immutable `_CFG12`), old -> new in its commit: 0x0100-0x0107 +84, 0x0108 +116, 0x0141 +86. Re-pinned
     /// for `fndsa1024` (CTR-UA-40, kind 0x0135: `vkLength`'s and `_slot`'s arm, `_CFG20`, `_cfg`'s slot-19/20 branch), old -> new in its
-    /// commit.
+    /// commit. bls-multi Task 5 (kind 0x0121: `vkLength`'s and `_slot`'s arm, `_CFG21`; owner 2026-11-19), re-pinned after Task 8
+    /// (the split and the fourth word leave the hot path as it was): 0x0100-0x0108 +68 (17,045 -> 17,113 … 17,563 -> 17,631).
     function _before(uint256 kind) internal pure returns (uint256) {
-        if (kind == 256) return 17045;
-        if (kind == 257) return 17072;
-        if (kind == 258) return 17091;
-        if (kind == 259) return 17148;
-        if (kind == 260) return 17239;
-        if (kind == 261) return 17393;
-        if (kind == 262) return 17622;
-        if (kind == 263) return 17508;
-        if (kind == 264) return 17563;
+        if (kind == 256) return 17113;
+        if (kind == 257) return 17140;
+        if (kind == 258) return 17159;
+        if (kind == 259) return 17216;
+        if (kind == 260) return 17307;
+        if (kind == 261) return 17461;
+        if (kind == 262) return 17690;
+        if (kind == 263) return 17576;
+        if (kind == 264) return 17631;
         if (kind == 272) return 19557;
         if (kind == 273) return 19614;
         if (kind == 274) return 19692;
@@ -352,6 +356,7 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         if (kind == 308) return 24456;
         if (kind == 309) return 21562; // fndsa1024 (CTR-UA-40), added on its branch (mock verifier)
         if (kind == 321) return 19661;
+        if (kind == 289) return 20297; // bls12381-multi (0x0121, mock verifier; its hot path verifies the stored `ua ‖ s`), added
         return 0;
     }
 
@@ -372,6 +377,7 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         if (kind == 308) return 5168340; // mldsa87 (CTR-UA-39), added on its branch
         if (kind == 309) return 3945870; // fndsa1024 (CTR-UA-40), added on its branch
         if (kind == 321) return 1398420;
+        if (kind == 289) return 2047140; // bls12381-multi (0x0121), added: the kinds.json row (n = 2, `ua ‖ s` and the blob)
         return 0;
     }
 
@@ -401,6 +407,11 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         IUARegistry.UASig memory s;
         bytes memory key = UARegistry(at).keyOf(ua);
         if (key.length == 0) (s.keyData, key) = (d, d);
+        if (k == UAKinds.BLS12381_MULTI) {
+            // spec 2026-11-19-bls12381-multi §2: the hot path verifies the stored `ua ‖ s` (`keyOf` is the `apk` only)
+            (IUARegistry.Record memory r,) = UARegistry(at).recordOf(ua);
+            key = SSTORE2.read(r.keyPtr);
+        }
         s.signature = _sig(key, UAKinds.uaMessage(k, UAKinds.PURPOSE_METATX, DIGEST));
         assertGt(_before(k), 0, n);
         _meter(at, ua, s, string.concat("requireAuthorized ", n), _before(k), SLACK);
@@ -415,10 +426,12 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         bytes memory ds = _msigKey(2, m);
         bytes32 mu = UARegistry(at).registerMsig(UACall.structure(ds), _none(), new IUARegistry.MemberSig[](0), "");
         uint256 used = vm.lastCallGas().gasTotalUsed;
-        emit log_string(string.concat("GAS|registerMsig regular|145524|", vm.toString(used)));
+        emit log_string(string.concat("GAS|registerMsig regular|153387|", vm.toString(used)));
         // pqz-three-keys step 3 (K3-3): 143,284 -> 143,464 (+180, the registry face dispatches eleven more selectors)
         // CTR-UA-44 (TODO 3ze): 143,464 -> 145,524 (+2,060: the bound walks the enabled slots, `_signs` per slot, packed arrays)
-        assertLe(used, 145524 + SLACK, "registerMsig");
+        // bls-multi (owner 2026-11-19, the registry library split): 145,524 -> 153,387 (+7,863: the step-6 check by one nested
+        // DELEGATECALL to `UARegistryCoreLib.portableOk`, which answers an empty `pop` of a classical `msig`)
+        assertLe(used, 153387 + SLACK, "registerMsig");
         UARegistry(at).acceptMembership(mu, _acceptEoaSig(ds, ALICE));
         UARegistry(at).acceptMembership(mu, _acceptKeySig(ds, 0x0101, _key(0x0101)));
         bytes32 md = _memberDigest(mu, UAKinds.PURPOSE_METATX, DIGEST);

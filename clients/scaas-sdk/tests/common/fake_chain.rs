@@ -2,8 +2,10 @@
 //! A fake EVM chain and scaas-node gateway on 127.0.0.1:0 (plan T10; local only), shared by the operation tests: chain 31337,
 //! block 0 hash `0x60…`, block `n`'s hash `0x…7000+n`, one timestamp for every block. It answers the reads `scaas-rpc` makes,
 //! keeps a lane nonce per contract, logs, receipts and code by address, records every raw transaction and every gateway body,
-//! and **enforces a per-transaction gas cap**: a transaction whose gas limit is above `tx_cap` is refused at the send, as a
-//! chain enforcing EIP-7825 does (its estimate still answers what the call needs).
+//! and **enforces EIP-8037 with EIP-7825** at the send: a transaction whose gas limit (regular + state) is above the block gas
+//! limit is refused, and so is one whose regular gas is above `tx_cap` (2^24), the regular gas being the call's `regular_of`
+//! figure (default: its estimate, all regular) since the fake executes nothing: an independent control of the SDK's own
+//! bound (merged-tree review M8, 2026-11-20). Its estimate still answers what the call needs.
 #![allow(
     dead_code,
     clippy::unwrap_used,
@@ -35,7 +37,6 @@ pub struct Chain {
     pub timestamp: u64,
     pub gas: u64,
     pub block_gas_limit: u64,
-    pub tx_cap: u64,
     /// the priority fee and base fee of `eth_feeHistory`
     pub prio: u64,
     pub base_fee: u64,
@@ -80,6 +81,10 @@ pub struct Chain {
     pub answers: Vec<(String, String, String)>,
     /// `eth_estimateGas` by the call's input (plan T13: a registration's size); `None`: `gas`
     pub gas_of: Option<fn(&str) -> u64>,
+    /// the regular gas a transaction's input executes, held to `tx_cap` at the send; `None`: its estimate (`gas_of` / `gas`)
+    pub regular_of: Option<fn(&str) -> u64>,
+    /// EIP-7825's per-transaction cap of the regular gas (2^24)
+    pub tx_cap: u64,
     /// `eth_estimateGas` reverts for the inputs this answers true (plan T13: a registry refusing a call)
     pub estimate_reverts: Option<fn(&str) -> bool>,
     /// a PQZ verifier's answer to `POST /v1/pqz-verdict` (status, body) (plan T16); `None`: 503, unreachable
@@ -98,7 +103,6 @@ impl Default for Chain {
             timestamp: 1_800_000_000,
             gas: 100_000,
             block_gas_limit: 30_000_000,
-            tx_cap: 1 << 24,
             prio: 1,
             base_fee: 7,
             nonces: HashMap::new(),
@@ -125,6 +129,8 @@ impl Default for Chain {
             storage: HashMap::new(),
             answers: vec![],
             gas_of: None,
+            regular_of: None,
+            tx_cap: 1 << 24,
             estimate_reverts: None,
             verdict: None,
             verdict_bodies: vec![],
@@ -209,6 +215,32 @@ fn rlp_uint_at(raw: &[u8], n: usize) -> u64 {
         return raw[i] as u64;
     }
     raw[s..s + l].iter().fold(0u64, |a, x| a << 8 | *x as u64)
+}
+
+/// The bytes of field `n` of the RLP list `raw` (a string item; one byte below 0x80 is itself).
+fn rlp_bytes_at(raw: &[u8], n: usize) -> Vec<u8> {
+    let head = |b: &[u8], i: usize| -> (usize, usize) {
+        let p = b[i];
+        let long = |l: usize| {
+            b[i + 1..i + 1 + l]
+                .iter()
+                .fold(0usize, |a, x| a << 8 | *x as usize)
+        };
+        match p {
+            0..=0x7f => (i, 1),
+            0x80..=0xb7 => (i + 1, (p - 0x80) as usize),
+            0xb8..=0xbf => (i + 1 + (p - 0xb7) as usize, long((p - 0xb7) as usize)),
+            0xc0..=0xf7 => (i + 1, (p - 0xc0) as usize),
+            _ => (i + 1 + (p - 0xf7) as usize, long((p - 0xf7) as usize)),
+        }
+    };
+    let (mut i, _) = head(raw, 0);
+    for _ in 0..n {
+        let (s, l) = head(raw, i);
+        i = s + l;
+    }
+    let (s, l) = head(raw, i);
+    raw[s..s + l].to_vec()
 }
 
 pub fn keccak_hex(b: &[u8]) -> String {
@@ -413,8 +445,18 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             let hex_raw = p[0].as_str().unwrap_or_default().to_string();
             let raw = alloy::hex::decode(hex_raw.trim_start_matches("0x")).unwrap();
             // type 2: [chainId, nonce, maxPrio, maxFee, gasLimit, …]
-            if raw.first() == Some(&2) && rlp_uint_at(&raw[1..], 4) > c.tx_cap {
-                return err("transaction gas limit too high (cap)");
+            if raw.first() == Some(&2) && rlp_uint_at(&raw[1..], 4) > c.block_gas_limit {
+                return err("transaction gas limit exceeds the block gas limit");
+            }
+            // type 2's data is field 7: its regular gas held to the cap (EIP-7825 under EIP-8037)
+            if raw.first() == Some(&2) {
+                let input = format!("0x{}", alloy::hex::encode(rlp_bytes_at(&raw[1..], 7)));
+                let regular = c
+                    .regular_of
+                    .map_or_else(|| c.gas_of.map_or(c.gas, |f| f(&input)), |f| f(&input));
+                if regular > c.tx_cap {
+                    return err("transaction regular gas above the per-transaction cap");
+                }
             }
             c.sent.push(hex_raw);
             ok(json!(keccak_hex(&raw)))

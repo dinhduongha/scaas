@@ -1,0 +1,8 @@
+killed   | M1 m_i without pk_i | clients/ua-rs/src/bls_multi.rs | rc=101 | expect pop_rogue_shared_message | 2 failed: pop_rogue_shared_message, pop_split_rogue
+killed   | M2 popMsg without d (m_i = keccak256(pk_i)) | clients/ua-rs/src/bls_multi.rs | rc=101 | expect member_pop_for_other_group_named | 3 failed: member_pop_for_other_group_named, pop_check, pop_other_threshold_fails
+killed   | M3 no per-partial check | clients/ua-rs/src/bls_multi.rs | rc=101 | expect aggregate_names_bad_partial | 1 failed: aggregate_names_bad_partial
+killed   | M4 weights not moved with keys in the builder | clients/ua-rs/src/bls_multi.rs | rc=101 | expect builder_order_and_index_map | 1 failed: builder_order_and_index_map
+killed   | M5 member_pop on a popMsg not derived from d | clients/ua-rs/src/bls_multi.rs | rc=101 | expect member_pop_for_other_group_named | 5 failed: aggregate_pop_names_bad_part, member_pop_for_other_group_named, pop_missing_member_fails, pop_other_threshold_fails, pop_positive_n_2_16_64
+killed   | M6 aggregate defaults to surplus | clients/ua-rs/src/bls_multi.rs | rc=101 | expect aggregate_default_minimal | 2 failed: aggregate_default_minimal, aggregate_minimal_drops_surplus
+6 mutants, 6 killed, 0 survived, 0 not loaded
+M2: the attacks of spec §4 (i) and (ii) stay refused under this weaker form (pop_split_rogue, pop_two_rogues pass); recorded as the weaker form (spec §4 (iii)); killed by the N5 and other-threshold rows.

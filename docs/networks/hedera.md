@@ -347,7 +347,10 @@ failed or undecodable query ⇒ `HtsQueryFailed`.
 Classical Zether never runs on Hedera: HSCS has the bn254 precompiles (`0x06`–`0x08`) but not BLS12-381 (EIP-2537),
 and classical Zether is BLS12-381 only ([CTR-ZTH-32](../contracts/zether.md#CTR-ZTH-32); the bn254 line is legacy,
 `smartcontracts/evm/legacy/ua6/`). `ZetherLayer` refuses a Hedera env, `DEPLOY_ZETHER` a Hedera deploy, and the Hedera
-registry gets no `zether-bls12381` ([CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-52)). PQZ never runs on Hedera either
+registry gets no `zether-bls12381` ([CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-52)). `bls12381-multi` (`0x0121`) is **disabled** on Hedera for
+the same reason (owner-confirmed 2026-11-19, [ARCH-POS-18](../decisions.md#ARCH-POS-18), Q-SW1: a software BLS12-381 registration
+would cost 5 to 23 times the 15 M per-transaction limit): the deploy probe fails, the registry gets no `0x0121` verifier and the
+deploy book names the kind's path (`ua_kind_0x0121`), BUILT; [CTR-UA-54](../contracts/accounts.md#CTR-UA-54). PQZ never runs on Hedera either
 (`PqzLayer` refuses a Hedera env; HSCS has no `PQZ` precompile), in both verifier modes: the refusal is the release flag
 `env.hedera`, independent of `pqzVerifyMode`, a retained exception to the one-rule wording of the verifier mode until a later
 Hedera item ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)).

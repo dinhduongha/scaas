@@ -10,6 +10,7 @@ import {IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SSTORE2} from "../../src/common/SSTORE2.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
@@ -535,13 +536,14 @@ contract UARegistryUaPortableTest is UARegistryBase {
     /// A11 / UA8-D16: the four UA-8 registry writes keep these selectors; scaas-node's `ua_portable_registry_writes_are_call_jobs`
     /// pins the same literals, so an ABI change fails a test on both sides. typed-signing R1 (TS-D10 … TS-D12): the
     /// explicit ABI moved `register`, `setKemKey`, `setPqzKey` and added `registerMsig`; R1b (TS-D13) added
-    /// `registerWebAuthn`, `registerMuSig2`, `registerFrost`.
+    /// `registerWebAuthn`, `registerMuSig2`, `registerFrost`; bls-multi Task 7 `registerBlsMulti`.
     function test_ua_portable_writeSelectorsPinned() public pure {
         assert(IUARegistry.register.selector == bytes4(0x4e229efb));
         assert(IUARegistry.registerMsig.selector == bytes4(0x61947129));
         assert(IUARegistry.registerWebAuthn.selector == bytes4(0xee03a1fe));
         assert(IUARegistry.registerMuSig2.selector == bytes4(0xe1eddcdf));
         assert(IUARegistry.registerFrost.selector == bytes4(0x7bd63410));
+        assert(IUARegistry.registerBlsMulti.selector == bytes4(0x5f0c0ad6)); // bls12381-multi (spec 2026-11-19)
         assert(IUARegistry.setKemKey.selector == bytes4(0x6a3318f9));
         assert(IUARegistry.storePqzPop.selector == bytes4(0x9f7be2a3)); // group 3g: 0x7fac161a -> versioned
         assert(IUARegistry.setPqzKey.selector == bytes4(0xbd97b6a1)); // group 3g: 0x0052c1b5 -> versioned
@@ -560,7 +562,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
             uint16 kind = uint16(vm.parseJsonUint(j, string.concat(p, ".kind")));
             assertEq(a.kindName(kind), vm.parseJsonString(j, string.concat(p, ".name")));
         }
-        assertEq(n, 33); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40)
+        assertEq(n, 34); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40), bls12381-multi (0x0121, spec 2026-11-19)
         assertEq(a.kindName(uint16(vm.parseJsonUint(j, ".schemes[0].kind"))), vm.parseJsonString(j, ".schemes[0].name"));
         assertFalse(a.kindEnabled(0x0011));
         assertEq(a.kindName(0x0011), "stellar-account");
@@ -3588,6 +3590,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
             if (
                 acc[i].kind == VmSafe.AccountAccessKind.Create && !acc[i].reverted
                     && acc[i].account != address(UARegistryCoreLib) && acc[i].account != address(UARegistryAuxLib)
+                    && acc[i].account != address(UARegistryRegLib)
             ) {
                 ++n;
                 bytes_ += acc[i].deployedCode.length - 1;
@@ -3641,6 +3644,7 @@ contract UARegistryUaPortableTest is UARegistryBase {
     function _pin(string memory name) internal pure returns (uint256, uint256) {
         bytes32 h = keccak256(bytes(name));
         // PINS: name -> (regular gas, state gas); the rows of all four sets (a set's rows carry its name)
+        // bls-multi (owner 2026-11-19: the registry library split, UARegistryRegLib, one nested DELEGATECALL for the step-6 PoP; Task 7 / Task 8: 0x0121's dispatch arms, the fourth appended word; n2304-kmax4096, the other sets by at-set): register webauthn-p256: 182,197 -> 190,627; register p256: 164,813 -> 172,888; register ed25519: 324,313 -> 332,379; register bip340: 161,606 -> 169,668; register secp256k1: 160,625 -> 168,728; register schnorr-bn254: 176,010 -> 184,040; register schnorr-bls12381: 203,145 -> 211,272; register bls12381-minsig: 339,025 -> 347,257; register bls-bn254-minsig: 353,799 -> 361,890; register zether-bls12381: 215,867 -> 224,031; register mldsa44: 4,349,431 -> 4,360,664; register fndsa512: 2,747,020 -> 2,756,408; register slhdsa128s: 1,123,594 -> 1,138,973; register msig-classical: 169,998 -> 177,750; register msig-pq-native: 333,373 -> 347,822; popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096: 20,229 -> 20,298; setKemKey fndsa512/v2 n2304-kmax4096: 2,524,767 -> 2,524,867; popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096: 17,772 -> 17,841; popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop): 17,439 -> 17,511; popOf unregistered (view baseline): 10,819 -> 10,913; registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096: 146,516 -> 146,805; registrationOf msig-pq on gen 1 n2304-kmax4096: 100,137 -> 100,291; at-set: popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024: 20,229 -> 20,298; setKemKey fndsa512/v2 n2048-kmax1024: 2,524,767 -> 2,524,867; popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024: 17,772 -> 17,841; registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024: 136,136 -> 136,429; registrationOf msig-pq on gen 1 n2048-kmax1024: 93,483 -> 93,641; popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384: 20,229 -> 20,298; setKemKey fndsa512/v2 n2560-kmax16384: 2,524,767 -> 2,524,867; popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384: 17,772 -> 17,841; registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384: 157,343 -> 157,636; registrationOf msig-pq on gen 1 n2560-kmax16384: 107,050 -> 107,208; popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536: 20,229 -> 20,298; setKemKey fndsa512/v2 n2816-kmax65536: 2,524,767 -> 2,524,867; popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536: 17,772 -> 17,841; registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536: 176,851 -> 177,144; registrationOf msig-pq on gen 1 n2816-kmax65536: 122,263 -> 122,421
         // pqvault R1 (CTR-UA-46: `_single` split out of `_sigOk`, one more selector in `UARegistryCoreLib`'s dispatch; the rows of the other sets by at-set): setKemKey fndsa512/v2 n2304-kmax4096: 2,524,662 -> 2,524,767; n2048-kmax1024, n2560-kmax16384, n2816-kmax65536: 2,524,650 -> 2,524,767
         // D1 at n2816-kmax65536 (owner 2026-11-15: `registrationOf` from `UARegistryCoreLib` to `UARegistryAuxLib`; at-set on 967576671): registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536: 176,607 -> 176,851; registrationOf msig-pq on gen 1 n2816-kmax65536: 122,189 -> 122,263
         // D1 at n2560-kmax16384 (owner 2026-11-15: `registrationOf` from `UARegistryCoreLib` to `UARegistryAuxLib`; at-set on 967576671): registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384: 157,099 -> 157,343; registrationOf msig-pq on gen 1 n2560-kmax16384: 106,976 -> 107,050
@@ -3649,91 +3653,91 @@ contract UARegistryUaPortableTest is UARegistryBase {
         // 3zh (owner 2026-11-15: `_consent` / `requirePortable` ask `UAKeyNotCached` on a refused check; `UAStore.expanded` reads up to three part pointers; n2304-kmax4096, the other sets by at-set): register webauthn-p256: 182,158 -> 182,197; register p256: 164,700 -> 164,739; register ed25519: 324,200 -> 324,239; register bip340: 161,494 -> 161,532; register secp256k1: 160,513 -> 160,551; register schnorr-bn254: 175,898 -> 175,936; register schnorr-bls12381: 203,033 -> 203,071; register bls12381-minsig: 338,913 -> 338,951; register bls-bn254-minsig: 353,687 -> 353,725; register zether-bls12381: 215,754 -> 215,793; register mldsa44: 4,348,778 -> 4,349,357; register fndsa512: 2,746,904 -> 2,746,940; register slhdsa128s: 1,123,486 -> 1,123,520; register msig-classical: 169,945 -> 169,998; setKemKey fndsa512/v2 n2304-kmax4096: 2,524,650 -> 2,524,662
         // CTR-UA-44 (TODO 3ze: updateMsig, msigStateOf in the dispatch; `registration(ua, Record)`; the bound walks enabled slots; at
         // n2304-kmax4096, the other sets by at-set): register webauthn-p256: 182,139 -> 182,158; register p256: 164,635 -> 164,700; register ed25519: 324,135 -> 324,200; register bip340: 161,429 -> 161,494; register secp256k1: 160,448 -> 160,513; register schnorr-bn254: 175,833 -> 175,898; register schnorr-bls12381: 202,968 -> 203,033; register bls12381-minsig: 338,848 -> 338,913; register bls-bn254-minsig: 353,626 -> 353,687; register zether-bls12381: 215,689 -> 215,754; register mldsa44: 4,348,713 -> 4,348,778; register fndsa512: 2,746,837 -> 2,746,904; register slhdsa128s: 1,123,421 -> 1,123,486; register msig-classical: 166,449 -> 169,945; register msig-pq-native: 331,080 -> 333,373; setKemKey fndsa512/v2 n2304-kmax4096: 2,524,272 -> 2,524,650; registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096: 145,981 -> 146,268; registrationOf msig-pq on gen 1 n2304-kmax4096: 99,640 -> 100,059; at-set: setKemKey fndsa512/v2 n2048-kmax1024: 2,524,272 -> 2,524,650; registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024: 135,605 -> 135,892; registrationOf msig-pq on gen 1 n2048-kmax1024: 92,990 -> 93,409; setKemKey fndsa512/v2 n2560-kmax16384: 2,524,272 -> 2,524,650; registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384: 156,812 -> 157,099; registrationOf msig-pq on gen 1 n2560-kmax16384: 106,557 -> 106,976; setKemKey fndsa512/v2 n2816-kmax65536: 2,524,272 -> 2,524,650; registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536: 176,320 -> 176,607; registrationOf msig-pq on gen 1 n2816-kmax65536: 121,770 -> 122,189
-        if (h == keccak256("register webauthn-p256")) return (182197, 1702890);
-        if (h == keccak256("register p256")) return (164813, 1164330);
-        if (h == keccak256("register ed25519")) return (324313, 1115370);
-        if (h == keccak256("register bip340")) return (161606, 1115370);
-        if (h == keccak256("register secp256k1")) return (160625, 1213290);
-        if (h == keccak256("register schnorr-bn254")) return (176010, 1213290);
-        if (h == keccak256("register schnorr-bls12381")) return (203145, 1409130);
-        if (h == keccak256("register bls12381-minsig")) return (339025, 1556010);
-        if (h == keccak256("register bls-bn254-minsig")) return (353799, 1262250);
-        if (h == keccak256("register zether-bls12381")) return (215867, 1594260);
-        if (h == keccak256("register mldsa44")) return (4349431, 6881940);
+        if (h == keccak256("register webauthn-p256")) return (190627, 1702890);
+        if (h == keccak256("register p256")) return (172888, 1164330);
+        if (h == keccak256("register ed25519")) return (332379, 1115370);
+        if (h == keccak256("register bip340")) return (169668, 1115370);
+        if (h == keccak256("register secp256k1")) return (168728, 1213290);
+        if (h == keccak256("register schnorr-bn254")) return (184040, 1213290);
+        if (h == keccak256("register schnorr-bls12381")) return (211272, 1409130);
+        if (h == keccak256("register bls12381-minsig")) return (347257, 1556010);
+        if (h == keccak256("register bls-bn254-minsig")) return (361890, 1262250);
+        if (h == keccak256("register zether-bls12381")) return (224031, 1594260);
+        if (h == keccak256("register mldsa44")) return (4360664, 6881940);
         if (h == keccak256("register mldsa65#1")) return (387992, 9232020);
         if (h == keccak256("register mldsa65#2")) return (387992, 9134100);
         if (h == keccak256("register mldsa65/n2048-kmax1024")) return (3341208, 81415890);
         // pqz-three-keys step 3 (K3-3, the scoped records; the registry and Aux dispatchers carry eleven more selectors): register fndsa512 2,746,835 -> 2,746,837; popOf 20,118 -> 20,229; register msig-classical: 166,225 -> 166,449; register msig-pq-native: 330,779 -> 331,080; setKemKey fndsa512/v2 n2048-kmax1024: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024: 17,661 -> 17,772; popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop): 17,328 -> 17,439; popOf unregistered (view baseline): 10,784 -> 10,819; setKemKey fndsa512/v2 n2304-kmax4096: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096: 17,661 -> 17,772; setKemKey fndsa512/v2 n2560-kmax16384: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384: 17,661 -> 17,772; setKemKey fndsa512/v2 n2816-kmax65536: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536: 17,661 -> 17,772 (the rows of the other sets by the same delta, re-measured by at-set)
-        if (h == keccak256("register fndsa512")) return (2747020, 6384690);
-        if (h == keccak256("register slhdsa128s")) return (1123594, 13246740);
-        if (h == keccak256("register msig-classical")) return (169998, 1115370);
-        if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3468184, 73446120);
-        if (h == keccak256("register msig-pq-native")) return (333373, 1360170);
+        if (h == keccak256("register fndsa512")) return (2756408, 6384690);
+        if (h == keccak256("register slhdsa128s")) return (1138973, 13246740);
+        if (h == keccak256("register msig-classical")) return (177879, 1115370);
+        if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3367832, 70713540);
+        if (h == keccak256("register msig-pq-native")) return (347865, 1360170);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (357272, 7991190);
-        if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (20229, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2524767, 3947400);
-        if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024")) return (17772, 0);
+        if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (20298, 0);
+        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2524867, 3947400);
+        if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024")) return (17841, 0);
         if (
             h
                 == keccak256(
                     "popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop)"
                 )
-        ) return (17439, 0);
-        if (h == keccak256("popOf unregistered (view baseline)")) return (10819, 0);
+        ) return (17511, 0);
+        if (h == keccak256("popOf unregistered (view baseline)")) return (10913, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2048-kmax1024")) return (3341208, 81513810);
         if (h == keccak256("register mldsa65 without pqzPop n2048-kmax1024")) return (1536920, 37608930);
         if (h == keccak256("storePqzPop mldsa65 n2048-kmax1024")) return (1827736, 43904880);
         if (h == keccak256("storePqzPop again (no-op) n2048-kmax1024")) return (1827736, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (1827736, 44100720);
-        if (h == keccak256("register msig-pq without pqzPop n2048-kmax1024")) return (1663896, 29737080);
+        if (h == keccak256("register msig-pq without pqzPop n2048-kmax1024")) return (1563544, 27004500);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2048-kmax1024")) return (1827736, 43904880);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (136136, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2048-kmax1024")) return (93483, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024")) return (136429, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2048-kmax1024")) return (93641, 0);
         if (h == keccak256("register mldsa65/n2304-kmax4096")) return (3613592, 87900030);
-        if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3740568, 79930260);
+        if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3640216, 77197680);
         if (h == keccak256("setKemKey mldsa65/v2 n2304-kmax4096")) return (357272, 7991190);
-        if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (20229, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2524767, 3947400);
-        if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096")) return (17772, 0);
+        if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (20298, 0);
+        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2524867, 3947400);
+        if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096")) return (17841, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2304-kmax4096")) return (3613592, 87997950);
         if (h == keccak256("register mldsa65 without pqzPop n2304-kmax4096")) return (1667992, 40742370);
         if (h == keccak256("storePqzPop mldsa65 n2304-kmax4096")) return (1969048, 47255580);
         if (h == keccak256("storePqzPop again (no-op) n2304-kmax4096")) return (1969048, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (1969048, 47451420);
-        if (h == keccak256("register msig-pq without pqzPop n2304-kmax4096")) return (1794968, 32870520);
+        if (h == keccak256("register msig-pq without pqzPop n2304-kmax4096")) return (1694616, 30137940);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2304-kmax4096")) return (1969048, 47255580);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (146516, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2304-kmax4096")) return (100137, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096")) return (146805, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2304-kmax4096")) return (100291, 0);
         if (h == keccak256("register mldsa65/n2560-kmax16384")) return (3881880, 94335210);
-        if (h == keccak256("register msig-pq/n2560-kmax16384")) return (4008856, 86365440);
+        if (h == keccak256("register msig-pq/n2560-kmax16384")) return (3908504, 83632860);
         if (h == keccak256("setKemKey mldsa65/v2 n2560-kmax16384")) return (357272, 7991190);
-        if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384")) return (20229, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2524767, 3947400);
-        if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384")) return (17772, 0);
+        if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384")) return (20298, 0);
+        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2524867, 3947400);
+        if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384")) return (17841, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2560-kmax16384")) return (3881880, 94433130);
         if (h == keccak256("register mldsa65 without pqzPop n2560-kmax16384")) return (1799064, 43875810);
         if (h == keccak256("storePqzPop mldsa65 n2560-kmax16384")) return (2106264, 50557320);
         if (h == keccak256("storePqzPop again (no-op) n2560-kmax16384")) return (2106264, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (2106264, 50753160);
-        if (h == keccak256("register msig-pq without pqzPop n2560-kmax16384")) return (1926040, 36003960);
+        if (h == keccak256("register msig-pq without pqzPop n2560-kmax16384")) return (1825688, 33271380);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2560-kmax16384")) return (2106264, 50557320);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (157343, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2560-kmax16384")) return (107050, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384")) return (157636, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2560-kmax16384")) return (107208, 0);
         if (h == keccak256("register mldsa65/n2816-kmax65536")) return (4201368, 102249900);
-        if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4328344, 94280130);
+        if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4227992, 91547550);
         if (h == keccak256("setKemKey mldsa65/v2 n2816-kmax65536")) return (357272, 7991190);
-        if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536")) return (20229, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2524767, 3947400);
-        if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536")) return (17772, 0);
+        if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536")) return (20298, 0);
+        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2524867, 3947400);
+        if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536")) return (17841, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2816-kmax65536")) return (4201368, 102347820);
         if (h == keccak256("register mldsa65 without pqzPop n2816-kmax65536")) return (1930136, 47009250);
         if (h == keccak256("storePqzPop mldsa65 n2816-kmax65536")) return (2294680, 55338570);
         if (h == keccak256("storePqzPop again (no-op) n2816-kmax65536")) return (2294680, 0);
         if (h == keccak256("storePqzPop msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (2294680, 55534410);
-        if (h == keccak256("register msig-pq without pqzPop n2816-kmax65536")) return (2057112, 39137400);
+        if (h == keccak256("register msig-pq without pqzPop n2816-kmax65536")) return (1956760, 36404820);
         if (h == keccak256("storePqzPop msig-pq on gen 1 n2816-kmax65536")) return (2294680, 55338570);
-        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (176851, 0);
-        if (h == keccak256("registrationOf msig-pq on gen 1 n2816-kmax65536")) return (122263, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536")) return (177144, 0);
+        if (h == keccak256("registrationOf msig-pq on gen 1 n2816-kmax65536")) return (122421, 0);
         return (0, 0); // an unpinned name fails its check
     }
 

@@ -323,8 +323,8 @@ fn nested_fields_are_bounded() {
     assert_eq!(nested("1").unwrap_err().code(), "Argument");
 }
 
-/// The PQZ consent (`AuditorConsent` under `auditor-consent`) of a derived auditor UA and of a native one; another domain
-/// kind refused by the PQZ entry and the Zether entry alike.
+/// The PQZ consent (`AuditorConsent` under `auditor-consent`) of a derived auditor UA; a native auditor refused by name
+/// (`PqzAuditorNative`); another domain kind refused by the PQZ entry and the Zether entry alike.
 #[tokio::test(flavor = "multi_thread")]
 async fn pqz_auditor_consent_of_a_derived_ua() {
     let (sdk, signer, v) = setup().await;
@@ -352,31 +352,64 @@ async fn pqz_auditor_consent_of_a_derived_ua() {
         },
         ..req(token.clone())
     };
+    let derived_req = derived.clone();
     let consent: Value =
         serde_json::from_str(&a.sign_pqz_auditor_consent(derived).await.unwrap()).unwrap();
-    assert!(
-        consent["keyData"].as_str().unwrap().len() > 2
-            && consent["signature"].as_str().unwrap().len() > 2
-    );
-    // a native auditor (controller call, auto-run 2026-11-19): the registry's `UAAuth` form under context A, the typed_ops
-    // row's `consent.native` byte for byte, never the typed digest signed bare
-    let native: Value = serde_json::from_str(
-        &a.sign_pqz_auditor_consent(req(token.clone()))
-            .await
-            .unwrap(),
-    )
-    .unwrap();
-    let want = &row["domains"]["pqz"]["consent"]["native"];
+    // T9 (review 2026-11-20): the signature verifies under `auditor-consent` over this token's consent of the derived UA
+    let kd = crate::op::unhex(consent["keyData"].as_str().unwrap()).unwrap();
+    let sig = crate::op::unhex(consent["signature"].as_str().unwrap()).unwrap();
+    let auditor = scaas_ua::derive_ua(0x0101, &kd, false).unwrap();
+    let (chain_id, uid) = ids(&sdk, "local").unwrap();
+    let t20 = addr20(&token.to_ascii_lowercase()).unwrap();
+    let digest_of = |t: &[u8; 20]| {
+        let m = serde_json::json!({"token": hex(t), "auditor": hex(&auditor), "epoch": 1, "chainUid": hex(&uid)});
+        scaas_ua::wallet::scaas_typed_data(
+            "AuditorConsent",
+            Some(crate::op::domain_name("pqz").unwrap()),
+            t,
+            chain_id,
+            &uid,
+            &m,
+        )
+        .unwrap()
+        .digest()
+        .unwrap()
+    };
+    let verifies = |purpose: &str, digest: &[u8; 32]| {
+        let msg =
+            scaas_ua::ua_message(0x0101, &scaas_ua::purpose_tag(purpose).unwrap(), digest).unwrap();
+        scaas_ua::verify::verify(0x0101, &kd, &msg, &sig, false, false)
+    };
+    assert!(verifies("auditor-consent", &digest_of(&t20)));
+    // the controls of the check itself: another purpose, another token's consent
+    assert!(!verifies("metatx", &digest_of(&t20)));
+    assert!(!verifies("auditor-consent", &digest_of(&[9; 20])));
+    // a native (address) auditor: refused up front by name (controller call, owner auto-run 2026-11-19): a native id holds
+    // no PQZ key (CTR-UA-32), so the token refuses it at `_keyOf` before the consent is read; nothing signed
     assert_eq!(
-        native,
-        json!({"keyData": "0x", "signature": want["signature"], "members": []}),
-        "the row's native consent"
+        a.sign_pqz_auditor_consent(req(token.clone()))
+            .await
+            .unwrap_err()
+            .code(),
+        "PqzAuditorNative"
     );
     assert_eq!(
         a.sign_pqz_auditor_consent(req(other.clone()))
             .await
             .unwrap_err()
             .code(),
+        "PqzAuditorNative",
+        "before the token's kind is read"
+    );
+    // another domain kind: refused by the PQZ entry (a derived auditor) and the Zether entry alike
+    assert_eq!(
+        a.sign_pqz_auditor_consent(AuditorConsent {
+            token: other.clone(),
+            ..derived_req.clone()
+        })
+        .await
+        .unwrap_err()
+        .code(),
         "Argument"
     );
     assert_eq!(
@@ -409,14 +442,16 @@ async fn zether_auditor_consent_against_the_rows() {
     let salt = text(&d["domain"]["salt"]);
     let contract: [u8; 20] = unhex(&token).unwrap().try_into().unwrap();
     let uid: [u8; 32] = unhex(&salt).unwrap().try_into().unwrap();
-    // the row's message names the PQZ row's token in both domains; the SDK's consent names the token it is for
-    let digest = |auditor: &str, epoch: u32, token: Option<&str>| {
-        let mut m = row["message"].clone();
+    // the Zether domain's own message: it names the Zether token, as the SDK's consent does
+    assert_eq!(
+        text(&d["message"]["token"]),
+        token,
+        "the row names its own token"
+    );
+    let digest = |auditor: &str, epoch: u32| {
+        let mut m = d["message"].clone();
         m["auditor"] = auditor.into();
         m["epoch"] = epoch.into();
-        if let Some(t) = token {
-            m["token"] = t.into();
-        }
         scaas_ua::wallet::scaas_typed_data(
             "AuditorConsent",
             Some("SCaaS ZetherToken"),
@@ -431,7 +466,7 @@ async fn zether_auditor_consent_against_the_rows() {
     };
     let native = &d["consent"]["native"];
     assert_eq!(
-        hex(&digest(&text(&native["ua"]), 1, None)),
+        hex(&digest(&text(&native["ua"]), 1)),
         text(&native["digest"]),
         "the builder gives the row's digest"
     );
@@ -457,14 +492,14 @@ async fn zether_auditor_consent_against_the_rows() {
         .unwrap();
     let y = decode_point::<Bls12381>(&unhex(&key.y).unwrap()).unwrap();
     let pop = unhex(&pop).unwrap();
-    verify_auditor_pop::<Bls12381>(&y, &digest(&key.ua, 1, Some(&token)), &pop).unwrap();
+    verify_auditor_pop::<Bls12381>(&y, &digest(&key.ua, 1), &pop).unwrap();
     let row_digest: [u8; 32] = unhex(&text(&native["digest"])).unwrap().try_into().unwrap();
     assert!(
         verify_auditor_pop::<Bls12381>(&y, &row_digest, &pop).is_err(),
         "another auditor"
     );
     assert!(
-        verify_auditor_pop::<Bls12381>(&y, &digest(&key.ua, 2, Some(&token)), &pop).is_err(),
+        verify_auditor_pop::<Bls12381>(&y, &digest(&key.ua, 2), &pop).is_err(),
         "another epoch"
     );
 }

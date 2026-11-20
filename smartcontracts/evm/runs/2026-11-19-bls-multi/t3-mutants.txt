@@ -1,0 +1,19 @@
+killed   | M1 verify under 0x0106's DST_SIG | clients/clientkeys/src/bls-multi.js | rc=1 | expect dstsSeparate | 13 failed: aggregateDefaultMinimal, aggregateDropsAndStillSigns, aggregateMinimalDropsSurplus, apkPathBoundary, crossGroup, derive0x0121Path, dstsSeparate, f12CancellingPairDocumented, kindVerify passes minimal and pop through, minimalRows, subtractCancellingPair, verifyPaths, weightSumWide
+killed   | M2 DST_MULTI_POP equal to DST_MULTI_SIG | clients/clientkeys/src/bls-multi.js | rc=1 | expect dstsSeparate | 1 failed: dstsSeparate
+killed   | M3 no memberDigest | clients/clientkeys/src/bls-multi.js | rc=1 | expect crossGroup | 9 failed: apkPathBoundary, crossGroup, dstsSeparate, f12CancellingPairDocumented, kindVerify passes minimal and pop through, minimalRows, subtractCancellingPair, verifyPaths, weightSumWide
+killed   | M4 min over all members | clients/clientkeys/src/bls-multi.js | rc=1 | expect minimalRows | 1 failed: minimalRows
+killed   | M5 weight >= t as > t | clients/clientkeys/src/bls-multi.js | rc=1 | expect verifyPaths | 11 failed: aggregateDefaultMinimal, aggregateDropsAndStillSigns, aggregateMinimalDropsSurplus, crossGroup, derive0x0121Path, dstsSeparate, f12CancellingPairDocumented, minimalRows, subtractCancellingPair, verifyPaths, weightSumWide
+killed   | M6 no high-bit check | clients/clientkeys/src/bls-multi.js | rc=1 | expect verifyPaths | 1 failed: verifyPaths
+SURVIVED | M7 no identity check on apk(S) | clients/clientkeys/src/bls-multi.js | rc=0 | expect EQUIVALENT | 0 failed: 
+killed   | M8 a w_i <= t bound added | clients/clientkeys/src/ua.js | rc=1 | expect keyDataValidRows | 1 failed: keyDataValidRows
+killed   | M9 u16 weight sum in validation | clients/clientkeys/src/ua.js | rc=1 | expect weightSumWide | 1 failed: weightSumWide
+killed   | M10 u16 weight sum in verify | clients/clientkeys/src/bls-multi.js | rc=1 | expect weightSumWide | 1 failed: weightSumWide
+killed   | M11 negation maps 0 to p_381 | clients/clientkeys/src/bls-multi.js | rc=1 | expect subtractCancellingPair | 2 failed: negationZeroComponent, subtractCancellingPair
+killed   | M12 m_i without pk_i | clients/clientkeys/src/bls-multi.js | rc=1 | expect popRogueSharedMessage | 2 failed: popRogueSharedMessage, popSplitRogue
+killed   | M13 popMsg without d (m_i = keccak256(pk_i)) | clients/clientkeys/src/bls-multi.js | rc=1 | expect memberPopForOtherGroupNamed | 2 failed: memberPopForOtherGroupNamed, popOtherThresholdFails
+killed   | M14 no per-partial check | clients/clientkeys/src/bls-multi.js | rc=1 | expect aggregateNamesBadPartial | 1 failed: aggregateNamesBadPartial
+killed   | M15 weights not moved with keys in the builder | clients/clientkeys/src/bls-multi.js | rc=1 | expect builderOrderAndIndexMap | 1 failed: builderOrderAndIndexMap
+killed   | M16 memberPop on a popMsg not derived from d | clients/clientkeys/src/bls-multi.js | rc=1 | expect memberPopForOtherGroupNamed | 6 failed: aggregatePopNamesBadPart, derive0x0121Path, memberPopForOtherGroupNamed, popMissingMemberFails, popOtherThresholdFails, popPositiveN_2_16_64
+killed   | M17 aggregate defaults to surplus | clients/clientkeys/src/bls-multi.js | rc=1 | expect aggregateDefaultMinimal | 2 failed: aggregateDefaultMinimal, aggregateMinimalDropsSurplus
+17 mutants, 16 killed, 1 survived, 0 not loaded
+M7: equivalent by construction (spec §5.2; noble's pairing also throws on the identity, a refusal).

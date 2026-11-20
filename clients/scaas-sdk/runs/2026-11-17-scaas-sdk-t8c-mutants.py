@@ -13,7 +13,7 @@ MUTANTS = [
     ("a wrong selector on mtxPrepareAcc", [(K, '"UAPrepareAcc", "mtxPrepareAcc",', '"UAPrepareAcc", "mtxPrepare",')], UA + "entries_pqz"),
     ("drop the unsigned pqzAuth of the debits", [(K, 'const PQZ_PLAN: &str = "E args proof pqzAuth:UASig accHint @ verdict";', 'const PQZ_PLAN: &str = "E args proof accHint @ verdict";')], UA + "entries_pqz"),
     ("drop the verdict of the debits", [(K, 'const PQZ_PLAN: &str = "E args proof pqzAuth:UASig accHint @ verdict";', 'const PQZ_PLAN: &str = "E args proof pqzAuth:UASig accHint @";')], UA + "entries_pqz"),
-    ("a signed verdict left out of the job", [(M, "if a.iter().any(|f| f != &Val::Raw(vec![]) && f != &Val::List(vec![])) {", "if a.is_empty() {")], UA + "entries_pqz"),
+    ("a signed verdict left out of the job", [(M, "a.iter()\n                .any(|f| f != &Val::Raw(vec![]) && f != &Val::List(vec![]))", "a.is_empty()")], UA + "entries_pqz"),
 ]
 
 if __name__ == "__main__":

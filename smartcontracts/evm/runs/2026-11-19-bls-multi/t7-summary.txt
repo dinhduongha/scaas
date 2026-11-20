@@ -1,0 +1,7 @@
+bls-multi Task 7 (registry: registerBlsMulti, blsMultiKeyOf, stored ua ‖ s, keyOf, deploy) | step | rc | counts
+forge test/ua/UARegistryBlsMulti.t.sol | 0 | 12 passed (state gas per member 296,820 = 194 x 1,530)
+forge test/ua/UADeploy.t.sol | 0 | 23 passed (+ 0x0121 rows; test_otherChains / test_mldsa87_precompileOrCache each split: five deploys passed the test gas_limit)
+forge SelectorAudit, UAStoreLayout, UARegistryUaPortable selectors / kind names | 0 | all passed
+forge test/ua/UARegistryCoreLibMsig.t.sol | 1 | 5 passed (the 0x0121 slot fixed its setUp), test_gasHotPath: requireAuthorized 256 17,113 > 17,045 + 64; the 0x0121 row needs its own figure; re-pinned after Task 8
+mutants t7-mutants.py | 0 | 5, 5 killed by the intended test
+size gate | 1 | UARegistryCoreLib 36,798 > its library T-1 line 35,694 (60 M deploy): STOP, the owner decides (decisions.md: "a task past a T-1 line stops and asks"); UARegistryAuxLib 35,284 (T-1 35,694, 410 B free), UARegistry 33,293

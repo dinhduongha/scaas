@@ -28,8 +28,17 @@ pub const BN254_LABEL_POP: &[u8] = b"SCAAS-UA-BLS-BN254-POP-V1";
 /// changes the BLS kinds' domain. The group kinds 0x0110–0x0113 (UA-2c, `groups.rs`): `pop = false` takes the stored `vk`
 /// (`Q`/`Y`: 33 bytes SEC1 compressed or 64 bytes bn254) and checks a group signature; `pop = true` takes the full key
 /// data and the registration `pop` blob and runs the whole group check. The PQ kinds need feature `pq`, else `false`.
+/// `bls12381-multi` (0x0121): `key_data` is `d`; `pop` runs the registration PoP (spec §4), else `minimal` picks `verifyMinimal`
+/// (every stored path, spec §5.3) over `verify`; every other kind ignores `minimal`.
 /// Other kinds: `false`.
-pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: bool) -> bool {
+pub fn verify(
+    kind: u16,
+    key_data: &[u8],
+    message: &[u8; 32],
+    sig: &[u8],
+    pop: bool,
+    minimal: bool,
+) -> bool {
     match kind {
         0x0100 => webauthn_p256(key_data, message, sig),
         0x0101 => {
@@ -53,6 +62,7 @@ pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: b
                 && native_ecdsa(keccak(&[key_data])[12..].try_into().unwrap(), message, sig)
         }
         0x0110..=0x0113 => crate::groups::verify(kind, key_data, message, sig, pop),
+        0x0121 => crate::bls_multi::verify(key_data, message, sig, pop, minimal),
         #[cfg(feature = "pq")]
         0x0130..=0x0135 => crate::pq::verify(kind, key_data, message, sig),
         _ => false,

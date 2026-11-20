@@ -412,6 +412,44 @@ pub(crate) async fn read(
     op7: bool,
     others: &[W],
 ) -> Result<PqzRead, SdkError> {
+    let (choice, pool, uid, t, plan) = setup(sdk, chain, token, ua, version, op7, others)?;
+    let (pool, plan) = (&pool, &plan);
+    let a = pool
+        .read_at_block(choice, PURPOSE, |at| fetch(pool, at, plan))
+        .await?;
+    check(
+        a.value,
+        a.number,
+        &uid,
+        &t,
+        &ua,
+        version,
+        pk,
+        op7,
+        others.len(),
+    )
+}
+
+/// The profile's final block, pool, `chain_uid` and the token of a read, and its plan.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn setup(
+    sdk: &Sdk,
+    chain: &str,
+    token: &str,
+    ua: W,
+    version: u64,
+    op7: bool,
+    others: &[W],
+) -> Result<
+    (
+        scaas_rpc::pool::BlockChoice,
+        Arc<EvmPool>,
+        W,
+        [u8; 20],
+        Plan,
+    ),
+    SdkError,
+> {
     let (profile, _, pool) = evm(sdk, chain)?;
     let factory = addr20(
         &profile
@@ -432,21 +470,61 @@ pub(crate) async fn read(
         op7,
         others: others.to_vec(),
     };
+    Ok((final_block(&profile), pool, uid, t, plan))
+}
+
+/// The latest key version a `pqzVersions` word names.
+fn latest_of(versions: &W) -> u64 {
+    versions
+        .get(24..)
+        .and_then(|b| b.try_into().ok())
+        .map_or(0, u64::from_be_bytes)
+}
+
+/// [`read`] of every key version `0..=latest` of `ua` (`latest` from version 0's `pqzVersions` word) in one `read_at_block`:
+/// one final block for the whole set (F3, review 2026-11-20), each version checked by its own `pk(version)`. `Argument`: a
+/// `latest` of `max` or more (nothing past version 0 read); `pk`'s codes; [`read`]'s codes, each version apart.
+pub(crate) async fn read_all(
+    sdk: &Sdk,
+    chain: &str,
+    token: &str,
+    ua: W,
+    max: u64,
+    pk: impl Fn(u64) -> Result<Vec<u8>, SdkError>,
+) -> Result<Vec<Result<PqzRead, SdkError>>, SdkError> {
+    let (choice, pool, uid, t, plan) = setup(sdk, chain, token, ua, 0, false, &[])?;
     let (pool, plan) = (&pool, &plan);
     let a = pool
-        .read_at_block(final_block(&profile), PURPOSE, |at| fetch(pool, at, plan))
+        .read_at_block(choice, PURPOSE, |at| async move {
+            let first = fetch(pool, at.clone(), plan).await?;
+            let latest = first
+                .rest
+                .as_ref()
+                .map_or(0, |x| latest_of(&x.key_versions));
+            let mut all = vec![first];
+            if latest >= max {
+                return Ok((all, false));
+            }
+            for v in 1..=latest {
+                let p = Plan {
+                    version: v,
+                    others: vec![],
+                    ..*plan
+                };
+                all.push(fetch(pool, at.clone(), &p).await?);
+            }
+            Ok((all, true))
+        })
         .await?;
-    check(
-        a.value,
-        a.number,
-        &uid,
-        &t,
-        &ua,
-        version,
-        pk,
-        op7,
-        others.len(),
-    )
+    let (raws, within) = a.value;
+    if !within {
+        return Err(SdkError::Argument);
+    }
+    let mut out = Vec::with_capacity(raws.len());
+    for (v, r) in (0u64..).zip(raws) {
+        out.push(pk(v).and_then(|k| check(r, a.number, &uid, &t, &ua, v, &k, false, 0)));
+    }
+    Ok(out)
 }
 
 /// A PQZ balance read (spec §9.2, §9.4): the account of the UA key `signer` (a PQZ-capable kind, `KeyRef::Ua`) at key
@@ -539,35 +617,40 @@ impl super::Confidential {
                 let (ua, key) = holder(&sdk, &r.signer, r.key_version)?;
                 let pk = key.1.pk();
                 let w = read(&sdk, &r.chain, &r.token, ua, r.key_version, &pk, false, &[]).await?;
-                let out = call(&sdk, key, "balance", &w.words).await?;
-                let n = |k: &str| out.get(k).and_then(Value::as_u64).ok_or(SdkError::Internal);
-                let versions: W = w
-                    .words
-                    .get("keyVersions")
-                    .and_then(Value::as_str)
-                    .map(unhex)
-                    .transpose()?
-                    .and_then(|b| b.try_into().ok())
-                    .ok_or(SdkError::Internal)?;
-                let latest = versions
-                    .get(24..)
-                    .and_then(|b| b.try_into().ok())
-                    .map_or(0, u64::from_be_bytes);
-                Ok((
-                    PqzBalance {
-                        amount: out
-                            .get("value")
-                            .map(|v| v.to_string().trim_matches('"').to_string())
-                            .ok_or(SdkError::Internal)?,
-                        block: w.block,
-                        p: n("p")?,
-                        send_counter: n("sendCounter")?,
-                    },
-                    latest,
-                ))
+                decrypt(&sdk, key, w).await
             })
             .await
     }
+}
+
+/// The facade's balance of a checked read `w` by its key, and the `latest` version of the `pqzVersions` word it read.
+async fn decrypt(
+    sdk: &Sdk,
+    key: (Arc<OpenSeed>, PqzKey),
+    w: PqzRead,
+) -> Result<(PqzBalance, u64), SdkError> {
+    let out = call(sdk, key, "balance", &w.words).await?;
+    let n = |k: &str| out.get(k).and_then(Value::as_u64).ok_or(SdkError::Internal);
+    let versions: W = w
+        .words
+        .get("keyVersions")
+        .and_then(Value::as_str)
+        .map(unhex)
+        .transpose()?
+        .and_then(|b| b.try_into().ok())
+        .ok_or(SdkError::Internal)?;
+    Ok((
+        PqzBalance {
+            amount: out
+                .get("value")
+                .map(|v| v.to_string().trim_matches('"').to_string())
+                .ok_or(SdkError::Internal)?,
+            block: w.block,
+            p: n("p")?,
+            send_counter: n("sendCounter")?,
+        },
+        latest_of(&versions),
+    ))
 }
 
 /// Every key version's balance of `signer` on `token` and their sum (P-T16-5): versions `0..=latest`, `latest` the registry's
@@ -590,28 +673,29 @@ impl super::Confidential {
     /// The holder's PQZ balance over every key version up to `pqzVersions.latest` (P-T16-5). `key_version` of the request is
     /// ignored. The codes of [`Self::pqz_balance`]; `Argument`: more than 64 versions.
     pub async fn pqz_balance_all(&self, r: PqzBalanceRequest) -> Result<PqzBalanceAll, SdkError> {
-        let mut first = r.clone();
-        first.key_version = 0;
-        let (b0, latest) = self.balance_of(first).await?;
-        if latest >= VERSIONS_MAX {
-            return Err(SdkError::Argument);
-        }
-        let mut versions = vec![b0];
-        for v in 1..=latest {
-            let mut q = r.clone();
-            q.key_version = v;
-            versions.push(self.balance_of(q).await?.0);
-        }
-        let mut sum: u128 = 0;
-        for b in &versions {
-            sum = sum
-                .checked_add(b.amount.parse::<u128>().map_err(|_| SdkError::Internal)?)
-                .ok_or(SdkError::Internal)?;
-        }
-        Ok(PqzBalanceAll {
-            amount: sum.to_string(),
-            versions,
-        })
+        let sdk = self.sdk.clone();
+        self.sdk
+            .spawn(async move {
+                // every version's words at one final block (F3)
+                let (ua, _) = holder(&sdk, &r.signer, 0)?;
+                let pk = |v: u64| holder(&sdk, &r.signer, v).map(|(_, k)| k.1.pk());
+                let reads = read_all(&sdk, &r.chain, &r.token, ua, VERSIONS_MAX, pk).await?;
+                let mut versions = Vec::with_capacity(reads.len());
+                for (v, w) in (0u64..).zip(reads) {
+                    versions.push(decrypt(&sdk, holder(&sdk, &r.signer, v)?.1, w?).await?.0);
+                }
+                let mut sum: u128 = 0;
+                for b in &versions {
+                    sum = sum
+                        .checked_add(b.amount.parse::<u128>().map_err(|_| SdkError::Internal)?)
+                        .ok_or(SdkError::Internal)?;
+                }
+                Ok(PqzBalanceAll {
+                    amount: sum.to_string(),
+                    versions,
+                })
+            })
+            .await
     }
 }
 

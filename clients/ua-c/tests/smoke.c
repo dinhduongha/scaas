@@ -87,6 +87,17 @@ int main(void) {
     CHECK(scaas_ua_sign_ua(bls, purpose, digest, sig, &len) == SCAAS_UA_OK && len == 128 &&
           memcmp(sig, want_sig, 128) == 0);
 
+    // bls12381-multi member (0x0121): no signature of its own; a part only for a group listing it (vectors: test_vectors.py)
+    ScaasUaKey *member = NULL;
+    CHECK(scaas_ua_wallet_ua_key(w, 0x0121, 0, 0, &member) == SCAAS_UA_OK);
+    len = sizeof sig;
+    CHECK(scaas_ua_sign_ua(member, purpose, digest, sig, &len) == SCAAS_UA_ERR_ARGUMENT);
+    len = sizeof sig;
+    CHECK(scaas_ua_sign_bls_multi(member, digest, sizeof digest, digest, sig, &len) == SCAAS_UA_ERR_ARGUMENT);
+    len = sizeof sig;
+    CHECK(scaas_ua_sign_bls_multi_pop(bls, digest, sizeof digest, sig, &len) == SCAAS_UA_ERR_ARGUMENT);
+    scaas_ua_key_free(member);
+
     // PQ: mldsa44 (hedged: its length)
     ScaasUaKey *mldsa = NULL;
     CHECK(scaas_ua_wallet_ua_key(w, 0x0130, 0, 0, &mldsa) == SCAAS_UA_OK);

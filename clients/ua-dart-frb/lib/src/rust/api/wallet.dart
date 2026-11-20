@@ -9,8 +9,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'ua.dart';
 
 // These functions are ignored because they are not marked as `pub`: `a`, `alg`, `alloc`, `arg`, `container`, `get_mut`, `get`, `k32`, `key`, `native`, `network`, `new`, `out`, `raw`, `read`, `read`, `restore`, `signer`, `text`, `ua`, `unlock`, `with`, `with`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Block`, `KeyInner`, `Live`, `Opening`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `drop`, `from`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `KeyInner`, `Live`, `Opening`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `from`
 
 /// A new secret of `len` zero bytes (`UAArgument` above 16 MiB); Dart's `SecretBytes.take` fills it.
 SecretBytes secretAlloc({required PlatformInt64 len}) =>
@@ -447,6 +447,15 @@ abstract class UaKey implements RustOpaqueInterface {
 
   /// "" for a UA key.
   String networkName();
+
+  /// A bls12381-multi member key (0x0121): its partial (128 B) over `ua_msg` for the group `key_data` (d) listing it.
+  Future<Uint8List> signBlsMulti({
+    required List<int> keyData,
+    required List<int> uaMsg,
+  });
+
+  /// A bls12381-multi member key (0x0121): its PoP part (128 B) for the group `key_data` (d) listing it.
+  Future<Uint8List> signBlsMultiPop({required List<int> keyData});
 
   /// A native key only: `UARawDigestRefused` for a UA key.
   Future<Uint8List> signDigestRaw({required List<int> digest});

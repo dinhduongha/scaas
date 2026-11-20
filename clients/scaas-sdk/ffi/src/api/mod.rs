@@ -12,8 +12,10 @@
 //! - the error's code (`SdkError::code` returns a `&'static str`), the two `scaas-rpc` enums and the one `scaas-ua` record a
 //!   profile and a seed's info hold (mirrors), and the endpoint credential's constructors.
 //!
-//! Secrets: `Arc<SecretBytes>` is an opaque handle on every path; its bytes move only through the two C copy calls of `lib.rs`
-//! (spec §5), never FRB's codec. Rust-only items (`RuntimeChoice::Adopt`, the clock, `MemoryStore`, `FileStore`, `poll`,
+//! Secrets: key material and passphrases are `Arc<SecretBytes>`, an opaque handle on every path; its bytes move only through
+//! the two C copy calls of `lib.rs` (spec §5), never FRB's codec. The one exception: an endpoint's credential (a bearer
+//! token, an HMAC secret, a header value) crosses the codec as a `String` in the three `endpoint_auth_*` constructors (F16,
+//! review 2026-11-20; PLANNED: `Arc<SecretBytes>` for them). Rust-only items (`RuntimeChoice::Adopt`, the clock, `MemoryStore`, `FileStore`, `poll`,
 //! `heavy_peak`, `authenticator`) are marked `#[frb(ignore)]` in the SDK (`frb_hint!`).
 use flutter_rust_bridge::{frb, DartFnFuture};
 pub use scaas_rpc::{Class, EndpointAuth, Policy};

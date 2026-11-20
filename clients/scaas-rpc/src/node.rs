@@ -494,13 +494,31 @@ pub const PROBE_ROUTE: &str = "/v1/pqz-verdict/probe";
 /// refuses above its set's figure). ponytail: one cap for every set; the verifier's per-set limit is the real bound.
 pub const VERDICT_BODY_MAX: usize = 8 << 20;
 
+/// What `strict_majority` compares of a verdict answer: its `pqzVerdict` without `validUntil`, which each verifier sets from
+/// its own clock (F14, review 2026-11-20); the group's answer with the median `validUntil` is returned (M3).
+fn verdict_compared(v: &Value) -> Value {
+    let mut c = v["pqzVerdict"].clone();
+    if let Some(o) = c.as_object_mut() {
+        o.remove("validUntil");
+    }
+    c
+}
+
+/// A verdict answer's `validUntil` (a number or a decimal string); `u64::MAX` when absent or unreadable (never preferred).
+fn valid_until(v: &Value) -> u64 {
+    let x = &v["pqzVerdict"]["validUntil"];
+    x.as_u64()
+        .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
+        .unwrap_or(u64::MAX)
+}
+
 /// The client of a list of PQZ verifiers, each endpoint with its own credential (spec §6.1, §6.3: no redirect followed, answers
 /// bounded by [`ANSWER_MAX`] and depth). ARCH-POS-15 by the list's policy: `failover` (the default) takes the first endpoint's
 /// 2xx answer in list order, moving on past an unreachable one (transport, timeout, 3xx, 5xx: the verifier's `BUSY`,
 /// `RPC_UNAVAILABLE`), and a 4xx is the verifier's refusal, final (`NodeRefused` by its `error` code, never retried elsewhere);
 /// `strict_majority` asks every endpoint and needs more than half of them to give a 2xx answer equal in what is compared (a
-/// verdict's `pqzVerdict`, the signature apart; a probe's whole answer), else `EndpointNoMajority`. The answer is returned
-/// as the verifier sent it: the caller checks the verdict's typed data and its signer before it attaches it.
+/// verdict's `pqzVerdict` without `validUntil`, the signature apart, and of the group the answer whose `validUntil` is the
+/// median; a probe's whole answer), else `EndpointNoMajority`. The answer is returned as the verifier sent it: the caller checks the verdict's typed data and its signer before it attaches it.
 #[derive(Clone)]
 pub struct VerifierClient {
     list: Arc<NodeList>,
@@ -526,8 +544,7 @@ impl VerifierClient {
     /// `POST /v1/pqz-verdict` with `req` (the verifier's named fields), serialised once and sent byte for byte: its
     /// `{pqzVerdict, pqzVerdictSig}`.
     pub async fn verdict(&self, req: &Value) -> Result<Value, RpcError> {
-        self.post(VERDICT_ROUTE, req, |v| v["pqzVerdict"].clone())
-            .await
+        self.post(VERDICT_ROUTE, req, verdict_compared).await
     }
 
     /// `POST /v1/pqz-verdict/probe` with `req`: the verifier's answer.
@@ -599,10 +616,20 @@ impl VerifierClient {
         }
         let need = n / 2 + 1;
         let mut largest = 0;
-        for (c, v) in &answers {
-            let k = answers.iter().filter(|(d, _)| d == c).count();
+        for (c, _) in &answers {
+            let mut group: Vec<&Value> = answers
+                .iter()
+                .filter(|(d, _)| d == c)
+                .map(|(_, v)| v)
+                .collect();
+            let k = group.len();
             if k >= need {
-                return Ok(v.clone());
+                // each verifier sets `validUntil` from its own clock: the group's median answer, so no one replica (a clock
+                // behind or far ahead) decides the outcome (merged-tree review M3)
+                group.sort_by_key(|v| valid_until(v));
+                if let Some(v) = group.get(k / 2) {
+                    return Ok((*v).clone());
+                }
             }
             largest = largest.max(k);
         }

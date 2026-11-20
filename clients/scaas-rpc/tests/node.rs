@@ -704,6 +704,42 @@ async fn verifier_strict_majority_compares_the_verdict() {
         3
     );
     assert_eq!(c.probe(&json!({"a": 1})).await.unwrap()["epoch"], 3);
+    // F14: two verifiers whose clocks differ set another `validUntil`: still a majority; M3: the group's median answer
+    let (d, _) = gateway(Arc::new(|path, _| {
+        if path == "/v1/pqz-verdict" {
+            (200, json!({"pqzVerdict": {"pqzVerifierEpoch": 3, "validUntil": "98"}, "pqzVerdictSig": {"signature": "0xee"}}))
+        } else {
+            (200, json!({"serves": true, "epoch": 3}))
+        }
+    }))
+    .await;
+    let c = verifiers(&[&d, &a], Policy::StrictMajority);
+    let v = c.verdict(&json!({"a": 1})).await.unwrap();
+    assert_eq!(
+        v["pqzVerdict"]["validUntil"], "99",
+        "of two the later (the median of an even group is its upper)"
+    );
+    // M3: one replica whose clock is behind (a verdict already expired) does not decide: the median of three agreeing
+    let (late, _) = gateway(Arc::new(|path, _| {
+        if path == "/v1/pqz-verdict" {
+            (200, json!({"pqzVerdict": {"pqzVerifierEpoch": 3, "validUntil": "10"}, "pqzVerdictSig": {"signature": "0xdd"}}))
+        } else {
+            (200, json!({"serves": true, "epoch": 3}))
+        }
+    }))
+    .await;
+    let (b3, _) = gateway(verdict(3)).await;
+    for order in [[&late, &d, &b3], [&d, &late, &b3], [&b3, &d, &late]] {
+        let v = verifiers(&order.map(String::as_str), Policy::StrictMajority)
+            .verdict(&json!({"a": 1}))
+            .await
+            .unwrap();
+        assert_eq!(
+            v["pqzVerdict"]["validUntil"], "98",
+            "the median, whatever the order"
+        );
+        assert_eq!(v["pqzVerdictSig"]["signature"], "0xee");
+    }
     // two of three disagree and the third refuses: no majority
     let (no, _) = gateway(Arc::new(|_, _| (422, json!({"error": "PROOF_INVALID"})))).await;
     let c = verifiers(&[&a, &c3, &no], Policy::StrictMajority);

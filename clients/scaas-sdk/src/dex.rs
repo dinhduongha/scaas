@@ -429,6 +429,15 @@ fn canonical(td: &TypedData) -> Result<Value, SdkError> {
 }
 
 /// The signer's signature in an order's form: a `UASig` for a 32-byte `from`, else the bytes.
+/// A `bls12381-multi` group signs by its members' aggregate (`Op::submit_bls_multi`), never as an order's or a lane's single
+/// key: refused at prepare, before anything is read (M16, review 2026-11-20; PLANNED: a group as an order's signer).
+pub(crate) fn no_group(signer: &KeyRef) -> Result<(), SdkError> {
+    if matches!(signer, KeyRef::BlsMulti { .. }) {
+        return Err(SdkError::Argument);
+    }
+    Ok(())
+}
+
 fn signature_json(ua: bool, s: &scaas_ua::ua_portable::UASig) -> Value {
     if ua {
         json!({"keyData": hex(&s.key_data), "signature": hex(&s.signature), "members": []})
@@ -492,6 +501,7 @@ impl Dex {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
+                no_group(&req.signer)?;
                 let dex = addr20(&req.dex.to_ascii_lowercase())?;
                 listed(&sdk, &req.chain, &dex)?;
                 let sell = addr20(&req.sell_token.to_ascii_lowercase())?;
@@ -629,6 +639,7 @@ impl Dex {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
+                no_group(&req.signer)?;
                 let dex = addr20(&req.dex.to_ascii_lowercase())?;
                 listed(&sdk, &req.chain, &dex)?;
                 let sell = addr20(&req.sell_token.to_ascii_lowercase())?;
@@ -837,6 +848,7 @@ impl Dex {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
+                no_group(&req.signer)?;
                 let dex = addr20(&req.dex.to_ascii_lowercase())?;
                 let entry = listed(&sdk, &req.chain, &dex)?;
                 if !entry.liquidity {

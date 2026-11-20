@@ -1,3 +1,3 @@
-# t13policy mutants at commit 8e4d88593 (name | outcome | test)
-the device asked before the policy's dry run passes | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact op::tests::policy_refusal_asks_no_device
+# t13policy mutants (name | outcome | commit | test | first failure line)
+the device asked before the policy's dry run passes | killed | 844cc8934 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact op::tests::policy_refusal_asks_no_device | panicked at src/op/tests.rs:2257:9:
 1 mutants, 1 killed, 0 survived, 0 not loaded

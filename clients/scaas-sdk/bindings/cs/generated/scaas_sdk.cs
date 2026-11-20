@@ -1426,6 +1426,20 @@ static class _UniFFILib {
     
     
     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
     static _UniFFILib() {
         _UniFFILib.uniffiCheckContractApiVersion();
@@ -3357,6 +3371,50 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ulong uniffi_scaas_sdk_fn_method_op_bls_multi_part(ulong @ptr,ulong @prepared,RustBuffer @member
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     sbyte uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok(ulong @ptr,ulong @prepared,RustBuffer @part,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     RustBuffer uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part(ulong @ptr,RustBuffer @member,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     sbyte uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok(ulong @ptr,RustBuffer @keyData,RustBuffer @part,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ulong uniffi_scaas_sdk_fn_method_op_member_sign(ulong @ptr,ulong @prepared
     );
 
@@ -3379,7 +3437,29 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ulong uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi(ulong @ptr,RustBuffer @chain,RustBuffer @keyData,RustBuffer @payer
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ulong uniffi_scaas_sdk_fn_method_op_quote_with_gas(ulong @ptr,ulong @prepared,RustBuffer @path,ulong @gas
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ulong uniffi_scaas_sdk_fn_method_op_register_bls_multi(ulong @ptr,RustBuffer @chain,RustBuffer @keyData,RustBuffer @parts,RustBuffer @quote
     );
 
     #if NET8_0_OR_GREATER
@@ -3424,6 +3504,17 @@ static class _UniFFILib {
     public static extern
 #endif
      ulong uniffi_scaas_sdk_fn_method_op_submit(ulong @ptr,ulong @prepared,RustBuffer @quote
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ulong uniffi_scaas_sdk_fn_method_op_submit_bls_multi(ulong @ptr,ulong @prepared,RustBuffer @quote,RustBuffer @parts,sbyte @surplus
     );
 
     #if NET8_0_OR_GREATER
@@ -7240,6 +7331,50 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_op_bls_multi_part(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_op_member_sign(
     );
 
@@ -7262,7 +7397,29 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_op_quote_with_gas(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_method_op_register_bls_multi(
     );
 
     #if NET8_0_OR_GREATER
@@ -7307,6 +7464,17 @@ static class _UniFFILib {
     public static extern
 #endif
      ushort uniffi_scaas_sdk_checksum_method_op_submit(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     ushort uniffi_scaas_sdk_checksum_method_op_submit_bls_multi(
     );
 
     #if NET8_0_OR_GREATER
@@ -9240,6 +9408,30 @@ static class _UniFFILib {
             }
         }
         {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part();
+            if (checksum != 62133) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_bls_multi_part` checksum `62133`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok();
+            if (checksum != 62102) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok` checksum `62102`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part();
+            if (checksum != 56760) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part` checksum `56760`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok();
+            if (checksum != 1443) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok` checksum `1443`, library returned `{checksum}`");
+            }
+        }
+        {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_member_sign();
             if (checksum != 30667) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_member_sign` checksum `30667`, library returned `{checksum}`");
@@ -9252,9 +9444,21 @@ static class _UniFFILib {
             }
         }
         {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi();
+            if (checksum != 14540) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi` checksum `14540`, library returned `{checksum}`");
+            }
+        }
+        {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_quote_with_gas();
             if (checksum != 30578) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_quote_with_gas` checksum `30578`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_register_bls_multi();
+            if (checksum != 57695) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_register_bls_multi` checksum `57695`, library returned `{checksum}`");
             }
         }
         {
@@ -9279,6 +9483,12 @@ static class _UniFFILib {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_submit();
             if (checksum != 38006) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_submit` checksum `38006`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_op_submit_bls_multi();
+            if (checksum != 27762) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_op_submit_bls_multi` checksum `27762`, library returned `{checksum}`");
             }
         }
         {
@@ -15219,11 +15429,30 @@ class FfiConverterTypeForeignStore: FfiConverter<ForeignStore, ulong> {
 /// </summary>
 internal interface IOp {
     /// <exception cref="SdkException"></exception>
+    Task<BlsMultiPart> BlsMultiPart(Prepared @prepared, KeyRef @member);
+    /// <summary>
+    /// Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+    /// </summary>
+    bool BlsMultiPartOk(Prepared @prepared, BlsMultiPart @part);
+    /// <summary>
+    /// Member `member`'s PoP part for its group's registration.
+    /// </summary>
+    /// <exception cref="SdkException"></exception>
+    BlsMultiPart BlsMultiPopPart(KeyRef @member);
+    /// <summary>
+    /// Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+    /// </summary>
+    bool BlsMultiPopPartOk(string @keyData, BlsMultiPart @part);
+    /// <exception cref="SdkException"></exception>
     Task<string> MemberSign(Prepared @prepared);
     /// <exception cref="SdkException"></exception>
     Task<SubmitQuote> Quote(Prepared @prepared, SubmitPath @path);
     /// <exception cref="SdkException"></exception>
+    Task<SubmitQuote> QuoteRegisterBlsMulti(string @chain, string @keyData, KeyRef @payer);
+    /// <exception cref="SdkException"></exception>
     Task<SubmitQuote> QuoteWithGas(Prepared @prepared, SubmitPath @path, ulong @gas);
+    /// <exception cref="SdkException"></exception>
+    Task<string> RegisterBlsMulti(string @chain, string @keyData, BlsMultiPart[] @parts, SubmitQuote @quote);
     /// <exception cref="SdkException"></exception>
     Task Resend(string @op, SubmitQuote @quote);
     /// <exception cref="SdkException"></exception>
@@ -15232,6 +15461,8 @@ internal interface IOp {
     Task<OpState> State(string @op);
     /// <exception cref="SdkException"></exception>
     Task<string> Submit(Prepared @prepared, SubmitQuote @quote);
+    /// <exception cref="SdkException"></exception>
+    Task<string> SubmitBlsMulti(Prepared @prepared, SubmitQuote @quote, BlsMultiPart[] @parts, bool @surplus);
 }
 /// <summary>
 /// Operations: quote, submit, follow (spec §13).
@@ -15326,6 +15557,62 @@ internal class Op : IOp, IDisposable {
 
     
     /// <exception cref="SdkException"></exception>
+    public async Task<BlsMultiPart> BlsMultiPart(Prepared @prepared, KeyRef @member) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_op_bls_multi_part(thisPtr, FfiConverterTypePrepared.INSTANCE.Lower(@prepared), FfiConverterTypeKeyRef.INSTANCE.Lower(@member));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // Lift
+        (result) => FfiConverterTypeBlsMultiPart.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <summary>
+    /// Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+    /// </summary>
+    public bool BlsMultiPartOk(Prepared @prepared, BlsMultiPart @part) {
+        return CallWithPointer(thisPtr => FfiConverterBoolean.INSTANCE.Lift(
+    _UniffiHelpers.RustCall( (ref UniffiRustCallStatus _status) =>
+    _UniFFILib.uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok(thisPtr, FfiConverterTypePrepared.INSTANCE.Lower(@prepared), FfiConverterTypeBlsMultiPart.INSTANCE.Lower(@part), ref _status)
+)));
+    }
+    
+    
+    /// <summary>
+    /// Member `member`'s PoP part for its group's registration.
+    /// </summary>
+    /// <exception cref="SdkException"></exception>
+    public BlsMultiPart BlsMultiPopPart(KeyRef @member) {
+        return CallWithPointer(thisPtr => FfiConverterTypeBlsMultiPart.INSTANCE.Lift(
+    _UniffiHelpers.RustCallWithError(FfiConverterTypeSdkError.INSTANCE, (ref UniffiRustCallStatus _status) =>
+    _UniFFILib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part(thisPtr, FfiConverterTypeKeyRef.INSTANCE.Lower(@member), ref _status)
+)));
+    }
+    
+    
+    /// <summary>
+    /// Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+    /// </summary>
+    public bool BlsMultiPopPartOk(string @keyData, BlsMultiPart @part) {
+        return CallWithPointer(thisPtr => FfiConverterBoolean.INSTANCE.Lift(
+    _UniffiHelpers.RustCall( (ref UniffiRustCallStatus _status) =>
+    _UniFFILib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok(thisPtr, FfiConverterString.INSTANCE.Lower(@keyData), FfiConverterTypeBlsMultiPart.INSTANCE.Lower(@part), ref _status)
+)));
+    }
+    
+    
+    /// <exception cref="SdkException"></exception>
     public async Task<string> MemberSign(Prepared @prepared) {
     return await _UniFFIAsync.UniffiRustCallAsync(
         // Get rust future
@@ -15370,6 +15657,28 @@ internal class Op : IOp, IDisposable {
     }
     
     /// <exception cref="SdkException"></exception>
+    public async Task<SubmitQuote> QuoteRegisterBlsMulti(string @chain, string @keyData, KeyRef @payer) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi(thisPtr, FfiConverterString.INSTANCE.Lower(@chain), FfiConverterString.INSTANCE.Lower(@keyData), FfiConverterTypeKeyRef.INSTANCE.Lower(@payer));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // Lift
+        (result) => FfiConverterTypeSubmitQuote.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
     public async Task<SubmitQuote> QuoteWithGas(Prepared @prepared, SubmitPath @path, ulong @gas) {
     return await _UniFFIAsync.UniffiRustCallAsync(
         // Get rust future
@@ -15386,6 +15695,28 @@ internal class Op : IOp, IDisposable {
         (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
         // Lift
         (result) => FfiConverterTypeSubmitQuote.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task<string> RegisterBlsMulti(string @chain, string @keyData, BlsMultiPart[] @parts, SubmitQuote @quote) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_op_register_bls_multi(thisPtr, FfiConverterString.INSTANCE.Lower(@chain), FfiConverterString.INSTANCE.Lower(@keyData), FfiConverterSequenceTypeBlsMultiPart.INSTANCE.Lower(@parts), FfiConverterTypeSubmitQuote.INSTANCE.Lower(@quote));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // Lift
+        (result) => FfiConverterString.INSTANCE.Lift(result),
         // Error
         FfiConverterTypeSdkError.INSTANCE
     );
@@ -15459,6 +15790,28 @@ internal class Op : IOp, IDisposable {
         // Get rust future
         CallWithPointer(thisPtr => {
             return _UniFFILib.uniffi_scaas_sdk_fn_method_op_submit(thisPtr, FfiConverterTypePrepared.INSTANCE.Lower(@prepared), FfiConverterTypeSubmitQuote.INSTANCE.Lower(@quote));
+        }),
+        // Poll
+        (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
+        // Complete
+        (ulong future, ref UniffiRustCallStatus status) => {
+            return _UniFFILib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, ref status);
+        },
+        // Free
+        (ulong future) => _UniFFILib.ffi_scaas_sdk_rust_future_free_rust_buffer(future),
+        // Lift
+        (result) => FfiConverterString.INSTANCE.Lift(result),
+        // Error
+        FfiConverterTypeSdkError.INSTANCE
+    );
+    }
+    
+    /// <exception cref="SdkException"></exception>
+    public async Task<string> SubmitBlsMulti(Prepared @prepared, SubmitQuote @quote, BlsMultiPart[] @parts, bool @surplus) {
+    return await _UniFFIAsync.UniffiRustCallAsync(
+        // Get rust future
+        CallWithPointer(thisPtr => {
+            return _UniFFILib.uniffi_scaas_sdk_fn_method_op_submit_bls_multi(thisPtr, FfiConverterTypePrepared.INSTANCE.Lower(@prepared), FfiConverterTypeSubmitQuote.INSTANCE.Lower(@quote), FfiConverterSequenceTypeBlsMultiPart.INSTANCE.Lower(@parts), FfiConverterBoolean.INSTANCE.Lower(@surplus));
         }),
         // Poll
         (ulong future, IntPtr continuation, ulong data) => _UniFFILib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, continuation, data),
@@ -18830,6 +19183,40 @@ class FfiConverterTypeBindingConfig: FfiConverterRustBuffer<BindingConfig> {
 
 
 
+/// <summary>
+/// A member's part (spec §5.4, §4): its index in the group's key data and its partial `σ_i` (or PoP part `π_i`), 128 bytes,
+/// `0x` hex.
+/// </summary>
+internal record BlsMultiPart (
+    byte Index, 
+    string Signature
+) {
+}
+
+class FfiConverterTypeBlsMultiPart: FfiConverterRustBuffer<BlsMultiPart> {
+    public static FfiConverterTypeBlsMultiPart INSTANCE = new FfiConverterTypeBlsMultiPart();
+
+    public override BlsMultiPart Read(BigEndianStream stream) {
+        return new BlsMultiPart(
+            Index: FfiConverterUInt8.INSTANCE.Read(stream),
+            Signature: FfiConverterString.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(BlsMultiPart value) {
+        return 0
+            + FfiConverterUInt8.INSTANCE.AllocationSize(value.Index)
+            + FfiConverterString.INSTANCE.AllocationSize(value.Signature);
+    }
+
+    public override void Write(BlsMultiPart value, BigEndianStream stream) {
+            FfiConverterUInt8.INSTANCE.Write(value.Index, stream);
+            FfiConverterString.INSTANCE.Write(value.Signature, stream);
+    }
+}
+
+
+
 /// <param name="Contract">
 /// the contract (`0x` + 40 hex): a token, or a mandate wallet
 /// </param>
@@ -19108,7 +19495,9 @@ class FfiConverterTypeCancelWrapOrder: FfiConverterRustBuffer<CancelWrapOrder> {
 /// scaas-node gateways; empty: no gateway path on this chain
 /// </param>
 /// <param name="TxGasCap">
-/// the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
+/// the chain's per-transaction cap of the **regular** gas (EIP-7825 on a chain applying EIP-8037) when it has one, from
+/// the release data: a quote's regular bound is held to it, its gas limit (regular + state) to the block gas limit. A
+/// chain capping the whole gas limit (EIP-7825 without EIP-8037) is not supported (merged-tree review M19, 2026-11-20)
 /// </param>
 /// <param name="Tokens">
 /// the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
@@ -19163,7 +19552,9 @@ internal record ChainProfile (
     string? Router, 
     Finality Finality, 
     /// <summary>
-    /// the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
+    /// the chain's per-transaction cap of the **regular** gas (EIP-7825 on a chain applying EIP-8037) when it has one, from
+    /// the release data: a quote's regular bound is held to it, its gas limit (regular + state) to the block gas limit. A
+    /// chain capping the whole gas limit (EIP-7825 without EIP-8037) is not supported (merged-tree review M19, 2026-11-20)
     /// </summary>
     ulong? TxGasCap, 
     /// <summary>
@@ -19886,6 +20277,11 @@ class FfiConverterTypeExecute: FfiConverterRustBuffer<Execute> {
 /// <param name="PerItem">
 /// the part that grows with a count the operation names (owner 2026-11-19, I1); `None`: no count, nothing added
 /// </param>
+/// <param name="Regular">
+/// the row's regular gas, its figure's part EIP-7825's per-transaction cap holds under EIP-8037 (controller call, owner
+/// auto-run 2026-11-19; at a count of 0 on a counted row, whose `per_item` then carries its slope); `None`: the whole
+/// figure is held to the cap
+/// </param>
 internal record GasBase (
     string Entry, 
     string Kind, 
@@ -19911,7 +20307,13 @@ internal record GasBase (
     /// <summary>
     /// the part that grows with a count the operation names (owner 2026-11-19, I1); `None`: no count, nothing added
     /// </summary>
-    GasPerItem? PerItem
+    GasPerItem? PerItem, 
+    /// <summary>
+    /// the row's regular gas, its figure's part EIP-7825's per-transaction cap holds under EIP-8037 (controller call, owner
+    /// auto-run 2026-11-19; at a count of 0 on a counted row, whose `per_item` then carries its slope); `None`: the whole
+    /// figure is held to the cap
+    /// </summary>
+    ulong? Regular
 ) {
 }
 
@@ -19928,7 +20330,8 @@ class FfiConverterTypeGasBase: FfiConverterRustBuffer<GasBase> {
             Save: FfiConverterOptionalUInt64.INSTANCE.Read(stream),
             FeeExtra: FfiConverterOptionalUInt64.INSTANCE.Read(stream),
             UaExtra: FfiConverterOptionalUInt64.INSTANCE.Read(stream),
-            PerItem: FfiConverterOptionalTypeGasPerItem.INSTANCE.Read(stream)
+            PerItem: FfiConverterOptionalTypeGasPerItem.INSTANCE.Read(stream),
+            Regular: FfiConverterOptionalUInt64.INSTANCE.Read(stream)
         );
     }
 
@@ -19942,7 +20345,8 @@ class FfiConverterTypeGasBase: FfiConverterRustBuffer<GasBase> {
             + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.Save)
             + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.FeeExtra)
             + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.UaExtra)
-            + FfiConverterOptionalTypeGasPerItem.INSTANCE.AllocationSize(value.PerItem);
+            + FfiConverterOptionalTypeGasPerItem.INSTANCE.AllocationSize(value.PerItem)
+            + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.Regular);
     }
 
     public override void Write(GasBase value, BigEndianStream stream) {
@@ -19955,6 +20359,7 @@ class FfiConverterTypeGasBase: FfiConverterRustBuffer<GasBase> {
             FfiConverterOptionalUInt64.INSTANCE.Write(value.FeeExtra, stream);
             FfiConverterOptionalUInt64.INSTANCE.Write(value.UaExtra, stream);
             FfiConverterOptionalTypeGasPerItem.INSTANCE.Write(value.PerItem, stream);
+            FfiConverterOptionalUInt64.INSTANCE.Write(value.Regular, stream);
     }
 }
 
@@ -20000,9 +20405,25 @@ class FfiConverterTypeGasPerByte: FfiConverterRustBuffer<GasPerByte> {
 /// `env_items`, `orders`). The row's own `gas` is its figure at a count of 0 (the line's intercept; the file states
 /// `"base_count": 0`), so the quote adds `gas × count` with no offset.
 /// </summary>
+/// <param name="Regular">
+/// the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
+/// </param>
+/// <param name="MeasuredMax">
+/// the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+/// extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+/// </param>
 internal record GasPerItem (
     string Item, 
-    ulong Gas
+    ulong Gas, 
+    /// <summary>
+    /// the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
+    /// </summary>
+    ulong? Regular, 
+    /// <summary>
+    /// the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+    /// extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+    /// </summary>
+    ulong? MeasuredMax
 ) {
 }
 
@@ -20012,19 +20433,25 @@ class FfiConverterTypeGasPerItem: FfiConverterRustBuffer<GasPerItem> {
     public override GasPerItem Read(BigEndianStream stream) {
         return new GasPerItem(
             Item: FfiConverterString.INSTANCE.Read(stream),
-            Gas: FfiConverterUInt64.INSTANCE.Read(stream)
+            Gas: FfiConverterUInt64.INSTANCE.Read(stream),
+            Regular: FfiConverterOptionalUInt64.INSTANCE.Read(stream),
+            MeasuredMax: FfiConverterOptionalUInt64.INSTANCE.Read(stream)
         );
     }
 
     public override int AllocationSize(GasPerItem value) {
         return 0
             + FfiConverterString.INSTANCE.AllocationSize(value.Item)
-            + FfiConverterUInt64.INSTANCE.AllocationSize(value.Gas);
+            + FfiConverterUInt64.INSTANCE.AllocationSize(value.Gas)
+            + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.Regular)
+            + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.MeasuredMax);
     }
 
     public override void Write(GasPerItem value, BigEndianStream stream) {
             FfiConverterString.INSTANCE.Write(value.Item, stream);
             FfiConverterUInt64.INSTANCE.Write(value.Gas, stream);
+            FfiConverterOptionalUInt64.INSTANCE.Write(value.Regular, stream);
+            FfiConverterOptionalUInt64.INSTANCE.Write(value.MeasuredMax, stream);
     }
 }
 
@@ -20101,8 +20528,8 @@ class FfiConverterTypeGasSources: FfiConverterRustBuffer<GasSources> {
 /// A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 /// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
-/// per_item?: {gas, base_count, source}, stand_in?}`, each verify row `{signer, gas, measured, source, sig_bytes, margin?,
-/// item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
+/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 /// </summary>
 /// <param name="Name">
@@ -24005,6 +24432,11 @@ class FfiConverterTypeSubjectKeyArgs: FfiConverterRustBuffer<SubjectKeyArgs> {
 /// <param name="GasLimit">
 /// the self-relay transaction's gas limit (`gas`); 0 on the gateway path, where the holder sends no transaction
 /// </param>
+/// <param name="RegularGas">
+/// the bound of `gas_limit`'s regular part, with the margin (EIP-8037; controller call, owner auto-run 2026-11-19): the part
+/// held to the profile's `tx_gas_cap` (EIP-7825 caps the regular gas only), the whole `gas_limit` where the split is not
+/// known (a native send's estimate, an app's figure); 0 on the gateway path
+/// </param>
 /// <param name="Gas">
 /// what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
 /// the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
@@ -24038,6 +24470,12 @@ internal record SubmitQuote (
     /// the self-relay transaction's gas limit (`gas`); 0 on the gateway path, where the holder sends no transaction
     /// </summary>
     ulong GasLimit, 
+    /// <summary>
+    /// the bound of `gas_limit`'s regular part, with the margin (EIP-8037; controller call, owner auto-run 2026-11-19): the part
+    /// held to the profile's `tx_gas_cap` (EIP-7825 caps the regular gas only), the whole `gas_limit` where the split is not
+    /// known (a native send's estimate, an app's figure); 0 on the gateway path
+    /// </summary>
+    ulong RegularGas, 
     /// <summary>
     /// what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
     /// the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
@@ -24078,6 +24516,7 @@ class FfiConverterTypeSubmitQuote: FfiConverterRustBuffer<SubmitQuote> {
             Path: FfiConverterTypeSubmitPath.INSTANCE.Read(stream),
             Payer: FfiConverterOptionalString.INSTANCE.Read(stream),
             GasLimit: FfiConverterUInt64.INSTANCE.Read(stream),
+            RegularGas: FfiConverterUInt64.INSTANCE.Read(stream),
             Gas: FfiConverterOptionalUInt64.INSTANCE.Read(stream),
             GasFrom: FfiConverterOptionalTypeGasSources.INSTANCE.Read(stream),
             MaxFeePerGas: FfiConverterString.INSTANCE.Read(stream),
@@ -24095,6 +24534,7 @@ class FfiConverterTypeSubmitQuote: FfiConverterRustBuffer<SubmitQuote> {
             + FfiConverterTypeSubmitPath.INSTANCE.AllocationSize(value.Path)
             + FfiConverterOptionalString.INSTANCE.AllocationSize(value.Payer)
             + FfiConverterUInt64.INSTANCE.AllocationSize(value.GasLimit)
+            + FfiConverterUInt64.INSTANCE.AllocationSize(value.RegularGas)
             + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.Gas)
             + FfiConverterOptionalTypeGasSources.INSTANCE.AllocationSize(value.GasFrom)
             + FfiConverterString.INSTANCE.AllocationSize(value.MaxFeePerGas)
@@ -24110,6 +24550,7 @@ class FfiConverterTypeSubmitQuote: FfiConverterRustBuffer<SubmitQuote> {
             FfiConverterTypeSubmitPath.INSTANCE.Write(value.Path, stream);
             FfiConverterOptionalString.INSTANCE.Write(value.Payer, stream);
             FfiConverterUInt64.INSTANCE.Write(value.GasLimit, stream);
+            FfiConverterUInt64.INSTANCE.Write(value.RegularGas, stream);
             FfiConverterOptionalUInt64.INSTANCE.Write(value.Gas, stream);
             FfiConverterOptionalTypeGasSources.INSTANCE.Write(value.GasFrom, stream);
             FfiConverterString.INSTANCE.Write(value.MaxFeePerGas, stream);
@@ -31645,6 +32086,18 @@ internal record KeyRef {
         MsigSlot[] Slots
     ) : KeyRef {}
     
+    /// <summary>
+    /// a `bls12381-multi` (`0x0121`) group (plan Task 17): the seed's member key `ua_key(0x0121, account, index)` (EIP-2333:
+    /// index 0) and the group's key data `d` (`0x` hex, spec 2026-11-19-bls12381-multi §2); the signer's id is the group's
+    /// UA, its signature the members' aggregate ([`Op::submit_bls_multi`])
+    /// </summary>
+    public record BlsMulti (
+        string Seed,
+        uint Account,
+        uint Index,
+        string KeyData
+    ) : KeyRef {}
+    
 
     
 }
@@ -31684,6 +32137,13 @@ class FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                     FfiConverterString.INSTANCE.Read(stream),
                     FfiConverterSequenceTypeMsigSlot.INSTANCE.Read(stream)
                 );
+            case 6:
+                return new KeyRef.BlsMulti(
+                    FfiConverterString.INSTANCE.Read(stream),
+                    FfiConverterUInt32.INSTANCE.Read(stream),
+                    FfiConverterUInt32.INSTANCE.Read(stream),
+                    FfiConverterString.INSTANCE.Read(stream)
+                );
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeKeyRef.Read()", value));
         }
@@ -31715,6 +32175,12 @@ class FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 return 4
                     + FfiConverterString.INSTANCE.AllocationSize(variant_value.UaValue)
                     + FfiConverterSequenceTypeMsigSlot.INSTANCE.AllocationSize(variant_value.Slots);
+            case KeyRef.BlsMulti variant_value:
+                return 4
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Seed)
+                    + FfiConverterUInt32.INSTANCE.AllocationSize(variant_value.Account)
+                    + FfiConverterUInt32.INSTANCE.AllocationSize(variant_value.Index)
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.KeyData);
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeKeyRef.AllocationSize()", value));
         }
@@ -31750,6 +32216,13 @@ class FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 stream.WriteInt(5);
                 FfiConverterString.INSTANCE.Write(variant_value.UaValue, stream);
                 FfiConverterSequenceTypeMsigSlot.INSTANCE.Write(variant_value.Slots, stream);
+                break;
+            case KeyRef.BlsMulti variant_value:
+                stream.WriteInt(6);
+                FfiConverterString.INSTANCE.Write(variant_value.Seed, stream);
+                FfiConverterUInt32.INSTANCE.Write(variant_value.Account, stream);
+                FfiConverterUInt32.INSTANCE.Write(variant_value.Index, stream);
+                FfiConverterString.INSTANCE.Write(variant_value.KeyData, stream);
                 break;
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeKeyRef.Write()", value));
@@ -32583,6 +33056,13 @@ internal class SdkException: UniffiException {
     }
     
     /// <summary>
+    /// bls12381-multi (plan Task 17): the valid partials' weight is below the group's threshold
+    /// </summary>
+    public class BlsMultiBelowThreshold: SdkException {
+        public BlsMultiBelowThreshold(string message): base(message) {}
+    }
+    
+    /// <summary>
     /// A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
     /// unknown part is refused, never dropped from a quote.
     /// </summary>
@@ -32596,6 +33076,14 @@ internal class SdkException: UniffiException {
     /// </summary>
     public class DexNotListed: SdkException {
         public DexNotListed(string message): base(message) {}
+    }
+    
+    /// <summary>
+    /// A PQZ auditor consent whose auditor is a native (address) key (controller call, owner auto-run 2026-11-19): a native id
+    /// holds no PQZ key (CTR-UA-32), so the token refuses it on chain anyway; refused before anything is read or signed.
+    /// </summary>
+    public class PqzAuditorNative: SdkException {
+        public PqzAuditorNative(string message): base(message) {}
     }
     
     /// <summary>
@@ -32685,11 +33173,13 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case 56: return new SdkException.GasItemUnpaired(FfiConverterString.INSTANCE.Read(stream));
             case 57: return new SdkException.GasItemUnknown(FfiConverterString.INSTANCE.Read(stream));
             case 58: return new SdkException.GasCountUnknown(FfiConverterString.INSTANCE.Read(stream));
-            case 59: return new SdkException.GasFieldUnknown(FfiConverterString.INSTANCE.Read(stream));
-            case 60: return new SdkException.DexNotListed(FfiConverterString.INSTANCE.Read(stream));
-            case 61: return new SdkException.Cancelled(FfiConverterString.INSTANCE.Read(stream));
-            case 62: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
-            case 63: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
+            case 59: return new SdkException.BlsMultiBelowThreshold(FfiConverterString.INSTANCE.Read(stream));
+            case 60: return new SdkException.GasFieldUnknown(FfiConverterString.INSTANCE.Read(stream));
+            case 61: return new SdkException.DexNotListed(FfiConverterString.INSTANCE.Read(stream));
+            case 62: return new SdkException.PqzAuditorNative(FfiConverterString.INSTANCE.Read(stream));
+            case 63: return new SdkException.Cancelled(FfiConverterString.INSTANCE.Read(stream));
+            case 64: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
+            case 65: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Read()", value));
         }
@@ -32875,20 +33365,26 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case SdkException.GasCountUnknown:
                 stream.WriteInt(58);
                 break;
-            case SdkException.GasFieldUnknown:
+            case SdkException.BlsMultiBelowThreshold:
                 stream.WriteInt(59);
                 break;
-            case SdkException.DexNotListed:
+            case SdkException.GasFieldUnknown:
                 stream.WriteInt(60);
                 break;
-            case SdkException.Cancelled:
+            case SdkException.DexNotListed:
                 stream.WriteInt(61);
                 break;
-            case SdkException.Ua:
+            case SdkException.PqzAuditorNative:
                 stream.WriteInt(62);
                 break;
-            case SdkException.Rpc:
+            case SdkException.Cancelled:
                 stream.WriteInt(63);
+                break;
+            case SdkException.Ua:
+                stream.WriteInt(64);
+                break;
+            case SdkException.Rpc:
+                stream.WriteInt(65);
                 break;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Write()", value));
@@ -32936,6 +33432,16 @@ internal record SlotKey {
         string UaValue
     ) : SlotKey {}
     
+    /// <summary>
+    /// a `bls12381-multi` group's member key (as `KeyRef::BlsMulti`)
+    /// </summary>
+    public record BlsMulti (
+        string Seed,
+        uint Account,
+        uint Index,
+        string KeyData
+    ) : SlotKey {}
+    
 
     
 }
@@ -32974,6 +33480,13 @@ class FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
                 return new SlotKey.Msig(
                     FfiConverterString.INSTANCE.Read(stream)
                 );
+            case 6:
+                return new SlotKey.BlsMulti(
+                    FfiConverterString.INSTANCE.Read(stream),
+                    FfiConverterUInt32.INSTANCE.Read(stream),
+                    FfiConverterUInt32.INSTANCE.Read(stream),
+                    FfiConverterString.INSTANCE.Read(stream)
+                );
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeSlotKey.Read()", value));
         }
@@ -33004,6 +33517,12 @@ class FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
             case SlotKey.Msig variant_value:
                 return 4
                     + FfiConverterString.INSTANCE.AllocationSize(variant_value.UaValue);
+            case SlotKey.BlsMulti variant_value:
+                return 4
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.Seed)
+                    + FfiConverterUInt32.INSTANCE.AllocationSize(variant_value.Account)
+                    + FfiConverterUInt32.INSTANCE.AllocationSize(variant_value.Index)
+                    + FfiConverterString.INSTANCE.AllocationSize(variant_value.KeyData);
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeSlotKey.AllocationSize()", value));
         }
@@ -33038,6 +33557,13 @@ class FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
             case SlotKey.Msig variant_value:
                 stream.WriteInt(5);
                 FfiConverterString.INSTANCE.Write(variant_value.UaValue, stream);
+                break;
+            case SlotKey.BlsMulti variant_value:
+                stream.WriteInt(6);
+                FfiConverterString.INSTANCE.Write(variant_value.Seed, stream);
+                FfiConverterUInt32.INSTANCE.Write(variant_value.Account, stream);
+                FfiConverterUInt32.INSTANCE.Write(variant_value.Index, stream);
+                FfiConverterString.INSTANCE.Write(variant_value.KeyData, stream);
                 break;
             default:
                 throw new InternalException(String.Format("invalid enum value '{0}' in FfiConverterTypeSlotKey.Write()", value));
@@ -34454,6 +34980,52 @@ class FfiConverterSequenceTypeAccountInfo: FfiConverterRustBuffer<AccountInfo[]>
 
         stream.WriteInt(value.Length);
         var writerFn = FfiConverterTypeAccountInfo.INSTANCE.Write;
+        value.ForEach(item => writerFn(item, stream));
+    }
+}
+
+
+
+
+class FfiConverterSequenceTypeBlsMultiPart: FfiConverterRustBuffer<BlsMultiPart[]> {
+    public static FfiConverterSequenceTypeBlsMultiPart INSTANCE = new FfiConverterSequenceTypeBlsMultiPart();
+
+    public override BlsMultiPart[]  Read(BigEndianStream stream) {
+        var length = stream.ReadInt();
+        if (length == 0) {
+            return [];
+        }
+
+        var result = new BlsMultiPart[length];
+        var readFn = FfiConverterTypeBlsMultiPart.INSTANCE.Read;
+        for (int i = 0; i < length; i++) {
+            result[i] = readFn(stream);
+        }
+        return result;
+    }
+
+    public override int AllocationSize(BlsMultiPart[]  value) {
+        var sizeForLength = 4;
+
+        // details/1-empty-list-as-default-method-parameter.md
+        if (value == null) {
+            return sizeForLength;
+        }
+
+        var allocationSizeFn = FfiConverterTypeBlsMultiPart.INSTANCE.AllocationSize;
+        var sizeForItems = value.Sum(item => allocationSizeFn(item));
+        return sizeForLength + sizeForItems;
+    }
+
+    public override void Write(BlsMultiPart[] value, BigEndianStream stream) {
+        // details/1-empty-list-as-default-method-parameter.md
+        if (value == null) {
+            stream.WriteInt(0);
+            return;
+        }
+
+        stream.WriteInt(value.Length);
+        var writerFn = FfiConverterTypeBlsMultiPart.INSTANCE.Write;
         value.ForEach(item => writerFn(item, stream));
     }
 }

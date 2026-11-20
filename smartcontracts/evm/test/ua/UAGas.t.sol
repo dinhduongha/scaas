@@ -14,6 +14,14 @@ import {
 import {Ed25519Verifier} from "../../src/ua/verifiers/Ed25519Verifier.sol";
 import {UARegistryBase, MockWallet} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
+import {Test} from "forge-std/Test.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
+import {SSTORE2} from "../../src/common/SSTORE2.sol";
+import {BlsMultiBls12381Verifier} from "../../src/ua/verifiers/BlsMultiBls12381Verifier.sol";
+import {BlsMultiKit} from "./BlsMultiKit.sol";
+import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
+import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 
 /// T-GAS (accounts.md §1.15/§1.16) for the UA-2a registry: the `msig` per-member overhead behind `MSIG_MEMBER_GAS`,
 /// the structure bound, the native paths, and the gas a `register` of the heaviest kind needs. Per-kind verifier
@@ -663,5 +671,329 @@ contract UAGasTest is UARegistryBase {
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, dg, au617);
         emit log_named_uint("requireAuthorized ed25519", g - gasleft());
         assertLe(hi, HEADROOM_ED25519); // F185: was cap + 100,000 (288,524 on Osaka); A8: the UA-8 record, 1,460,619; typed-signing P3 (typed portable digest): 1,461,571
+    }
+}
+
+/// Plan Task 9 (spec 2026-11-19-bls12381-multi §8): `bls12381-multi` (0x0121) gas rows with the real verifier on the EIP-2537
+/// precompiles, two columns (regular, EIP-8037 state) under `--isolate`; the cap gate (owner ruling Q4: regular gas of
+/// `registerBlsMulti` at n = 64 at most 75 % of 2^24 = 12,582,912); `CHECK_GAS`, `POP_GAS` and `DeployBase.CAP_BLS12381_MULTI`
+/// against the measured worst; N4, an `msig` of `0x0121` members at n = 64 registered exactly at `verifyBudget`. Rows
+/// `GAS|label|regular|state` with `-vv`. Forge gas is deterministic, not calibration (owner ruling 2026-11-19). UNAUDITED.
+contract UAGasBlsMultiTest is Test {
+    uint16 internal constant K = 0x0121;
+    bytes32 internal constant UID = keccak256("scaas.bls-multi.gas");
+    uint64 internal constant BUDGET = 12_000_000; // DeployBase.UA_VERIFY_BUDGET
+    uint64 internal constant CAP = 330_000; // DeployBase.CAP_BLS12381_MULTI
+    uint256 internal constant CAP_GATE = 12_582_912; // 75 % of 2^24 (owner ruling Q4)
+
+    BlsMultiBls12381Verifier internal verifier;
+    CheckMeter internal meter;
+
+    function setUp() public {
+        verifier = new BlsMultiBls12381Verifier();
+        meter = new CheckMeter();
+    }
+
+    function _reg(uint64 budget, uint64 cap) internal returns (UARegistry) {
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
+        k[0] = UARegistry.KindConfig(K, address(verifier), cap);
+        return new UARegistry(UID, address(0), false, budget, address(0), true, k);
+    }
+
+    function _none() internal pure returns (IUARegistry.UAAttrs memory) {}
+
+    function _group(uint256 n, uint16 t, uint256 seed) internal view returns (BlsMultiKit.Group memory) {
+        uint256[] memory sks = new uint256[](n);
+        uint16[] memory w = new uint16[](n);
+        for (uint256 i; i < n; ++i) {
+            sks[i] = uint256(keccak256(abi.encode(seed, i)))
+                % 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001;
+            w[i] = 1;
+        }
+        return BlsMultiKit.group(sks, w, t);
+    }
+
+    function _typed(bytes memory d) internal pure returns (IUARegistry.BlsMultiKey memory key) {
+        uint256 n = uint16(bytes2(BlsMultiKit._cut(d, 258, 2)));
+        key.aggKey = BlsMultiKit._cut(d, 0, 256);
+        key.threshold = uint16(bytes2(BlsMultiKit._cut(d, 256, 2)));
+        key.members = new IUARegistry.BlsMultiMember[](n);
+        for (uint256 i; i < n; ++i) {
+            key.members[i] = IUARegistry.BlsMultiMember(
+                BlsMultiKit._cut(d, 260 + 258 * i, 256), uint16(bytes2(BlsMultiKit._cut(d, 516 + 258 * i, 2)))
+            );
+        }
+    }
+
+    function _row(string memory label, uint256 regular, uint256 state) internal {
+        emit log_string(string.concat("GAS|", label, "|", vm.toString(regular), "|", vm.toString(state)));
+    }
+
+    /// `registerBlsMulti` at n = 2, 16, 32, 64 (t = n / 2): regular and state gas of the call, each on a registry where the
+    /// kind's list already has a row (its count slot is not new); the cap gate on n = 64's regular gas.
+    function test_T_GAS_registerBlsMulti_n2_16_32_64() public {
+        UARegistry r = _reg(BUDGET, CAP);
+        BlsMultiKit.Group memory g0 = _group(2, 1, 900);
+        r.register(K, g0.d, _none(), BlsMultiKit.pop(g0, BlsMultiKit.popMsg(g0.ua)), "");
+        uint256[4] memory ns = [uint256(2), 16, 32, 64];
+        uint256 last;
+        for (uint256 i; i < 4; ++i) {
+            BlsMultiKit.Group memory g = _group(ns[i], uint16(ns[i] / 2), 901 + i);
+            (IUARegistry.BlsMultiKey memory key, bytes memory pop) =
+                (_typed(g.d), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)));
+            r.registerBlsMulti(key, _none(), pop, "");
+            Vm.Gas memory lg = vm.lastCallGas();
+            (uint256 regular, uint256 st) = (lg.gasTotalUsed, uint256(int256(lg.gasStateUsed))); // as `UARegistryUaPortable._gas`
+            _row(string.concat("registerBlsMulti n", vm.toString(ns[i])), regular, st);
+            last = regular;
+        }
+        assertLe(last, CAP_GATE, "the cap gate: registerBlsMulti n = 64 regular gas over 75 % of 2^24 (cap 32)");
+    }
+
+    /// The state column is EIP-8037's charge for what a registration creates: 1,530 a byte of new code (the stored `ua ‖ s`, the
+    /// registration blob), 183,600 a new account (120 x 1,530, measured) and 97,920 a new storage slot (n = 16; the count slot not
+    /// new).
+    function test_T_GAS_blsMultiStateEqualsBytes() public {
+        UARegistry r = _reg(BUDGET, CAP);
+        BlsMultiKit.Group memory g0 = _group(2, 1, 910);
+        r.register(K, g0.d, _none(), BlsMultiKit.pop(g0, BlsMultiKit.popMsg(g0.ua)), "");
+        BlsMultiKit.Group memory g = _group(16, 8, 911);
+        bytes memory pop = BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua));
+        vm.startStateDiffRecording();
+        r.register(K, g.d, _none(), pop, "");
+        uint256 st = uint256(int256(vm.lastCallGas().gasStateUsed));
+        Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        (uint256 codeBytes, uint256 slots, uint256 accounts) = (0, 0, 0);
+        for (uint256 i; i < acc.length; ++i) {
+            // not the linked libraries: forge books their creation in a test's first recording
+            if (
+                acc[i].kind == VmSafe.AccountAccessKind.Create && !acc[i].reverted
+                    && acc[i].account != address(UARegistryCoreLib) && acc[i].account != address(UARegistryAuxLib)
+                    && acc[i].account != address(UARegistryRegLib)
+            ) {
+                codeBytes += acc[i].deployedCode.length;
+                ++accounts;
+            }
+            for (uint256 j; j < acc[i].storageAccesses.length; ++j) {
+                Vm.StorageAccess memory a = acc[i].storageAccesses[j];
+                if (a.isWrite && !a.reverted && a.previousValue == 0 && a.newValue != 0) ++slots;
+            }
+        }
+        _row("registerBlsMulti n16 state (code bytes | new slots)", codeBytes, slots);
+        emit log_named_uint("new accounts", accounts);
+        // measured: each new account (an SSTORE2 contract) is charged 183,600 = 120 x 1,530 besides its code (plan Task 9's
+        // formula has no account term; a proposal for the plan's correction, not a ruling)
+        assertEq(
+            st,
+            1530 * (codeBytes + 120 * accounts) + 97_920 * slots,
+            "state = 1,530 x (code bytes + 120 x new accounts) + 97,920 x new slots"
+        );
+    }
+
+    /// The verify rows inside `check` (n, k): (2, 2), (16, 8), (64, 1), (64, 32) add, (64, 33) subtract with the negation, (64, 64)
+    /// the stored apk; `verify` and `verifyMinimal` (unit weights, t = k: every row minimal). The worst within `CHECK_GAS`.
+    function test_T_GAS_blsMultiVerify() public {
+        UARegistry r = _reg(BUDGET, CAP);
+        uint256[2][6] memory rows = [
+            [uint256(2), 2], [uint256(16), 8], [uint256(64), 1], [uint256(64), 32], [uint256(64), 33], [uint256(64), 64]
+        ];
+        BlsMultiKit.Group memory g64;
+        uint256 worst;
+        for (uint256 i; i < 6; ++i) {
+            (uint256 n, uint256 k) = (rows[i][0], rows[i][1]);
+            BlsMultiKit.Group memory g;
+            if (n == 64 && g64.sk.length != 0) {
+                g = g64; // the same keys, another threshold: only `t` and the id differ
+                g = BlsMultiKit.group(g.sk, _ones(64), uint16(k));
+            } else {
+                g = _group(n, uint16(k), 920 + n);
+                if (n == 64) g64 = g;
+            }
+            r.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+            (IUARegistry.Record memory rec,) = r.recordOf(g.ua);
+            bytes memory p = SSTORE2.read(rec.keyPtr);
+            bytes32 m = UAKinds.uaMessage(K, UAKinds.PURPOSE_METATX, keccak256("op"));
+            bytes memory sig = BlsMultiKit.sign(g, k == 64 ? type(uint64).max : (uint256(1) << k) - 1, m);
+            uint256 gv = meter.measure(verifier, p, m, sig, UASafeVerifier.Mode.Verify);
+            uint256 gm = meter.measure(verifier, p, m, sig, UASafeVerifier.Mode.Minimal);
+            string memory label = string.concat("verify n", vm.toString(n), " k", vm.toString(k));
+            _row(label, gv, 0);
+            _row(string.concat(label, " minimal"), gm, 0);
+            if (gv > worst) worst = gv;
+            if (gm > worst) worst = gm;
+        }
+        emit log_named_uint("worst check", worst);
+        assertLe(worst, verifier.CHECK_GAS(), "CHECK_GAS below the measured worst");
+    }
+
+    /// The registration PoP inside `check` (n + 1 pairings, n hash-to-G1 in Solidity) at n = 2, 16, 64; the worst within `POP_GAS`.
+    function test_T_GAS_blsMultiPop() public {
+        uint256[3] memory ns = [uint256(2), 16, 64];
+        uint256 worst;
+        for (uint256 i; i < 3; ++i) {
+            BlsMultiKit.Group memory g = _group(ns[i], 1, 940 + i);
+            bytes32 pm = BlsMultiKit.popMsg(g.ua);
+            uint256 gp = meter.measure(verifier, g.d, pm, BlsMultiKit.pop(g, pm), UASafeVerifier.Mode.Pop);
+            _row(string.concat("pop n", vm.toString(ns[i])), gp, 0);
+            if (gp > worst) worst = gp;
+        }
+        assertLe(worst, verifier.POP_GAS(), "POP_GAS below the measured worst");
+    }
+
+    /// The least `verifyCap` at which the worst verify (n = 64, k = 33, the subtract path) passes on the hot path
+    /// (`requireAuthorized`: `verify`) and on a stored path (`requirePortable`: `verifyMinimal`), each with the registry's hold
+    /// and the stored `p` (12,644 B) as calldata; `CAP_BLS12381_MULTI` at or above both.
+    function test_T_GAS_blsMultiLeastCap() public {
+        BlsMultiKit.Group memory g = _group(64, 33, 950);
+        bytes memory pop = BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua));
+        bytes32 digest = keccak256("op");
+        bytes memory hot =
+            BlsMultiKit.sign(g, (uint256(1) << 33) - 1, UAKinds.uaMessage(K, UAKinds.PURPOSE_METATX, digest));
+        bytes memory kem =
+            BlsMultiKit.sign(g, (uint256(1) << 33) - 1, UAKinds.uaMessage(K, UAKinds.PURPOSE_KEM, digest));
+        uint256[2] memory least;
+        for (uint256 path; path < 2; ++path) {
+            (uint256 lo, uint256 hi) = (250_000, 400_000);
+            while (hi - lo > 1) {
+                uint256 mid = (lo + hi) / 2;
+                UARegistry r = _reg(BUDGET, uint64(mid));
+                r.register(K, g.d, _none(), pop, "");
+                IUARegistry.UASig memory a;
+                a.signature = path == 0 ? hot : kem;
+                bool ok;
+                if (path == 0) {
+                    try r.requireAuthorized(g.ua, UAKinds.PURPOSE_METATX, digest, a) {
+                        ok = true;
+                    } catch {}
+                } else {
+                    try r.requirePortable(g.ua, UAKinds.PURPOSE_KEM, digest, a) {
+                        ok = true;
+                    } catch {}
+                }
+                if (ok) hi = mid;
+                else lo = mid;
+            }
+            least[path] = hi;
+        }
+        _row("least verifyCap n64 k33: requireAuthorized | requirePortable", least[0], least[1]);
+        assertGe(CAP, least[0], "CAP_BLS12381_MULTI below the hot path's need");
+        assertGe(CAP, least[1], "CAP_BLS12381_MULTI below the stored path's need");
+    }
+
+    function _ones(uint256 n) internal pure returns (uint16[] memory w) {
+        w = new uint16[](n);
+        for (uint256 i; i < n; ++i) {
+            w[i] = 1;
+        }
+    }
+
+    /// `POP_GAS` (with the hold) fits the deploy budget; `CAP_BLS12381_MULTI` holds `CHECK_GAS` with its hold.
+    function test_T_GAS_blsMultiCapsWithinBudget() public view {
+        uint256 pop = verifier.POP_GAS();
+        assertLe(pop + pop / 63 + 5_000, BUDGET, "POP_GAS with the hold over the budget");
+        uint256 c = verifier.CHECK_GAS();
+        assertGe(CAP, c + c / 63 + 5_000, "the cap below CHECK_GAS with the hold");
+    }
+
+    /// N4 (beside `UAGasTest.test_T_GAS_msigPqAtBudget`): an `msig` of 16 `0x0121` members (the most enabled slots), each n = 64 with
+    /// t = 33 … 48 (every minimal set on the subtract path, the worst verify), threshold 16 (every member), each member cap 400,000
+    /// (so the bound, 16 x (400,000 + MSIG_MEMBER_GAS) + MSIG_ACCEPTED_GAS, holds a registration's `POP_GAS`), registered exactly at
+    /// `verifyBudget` (one gas less: `UAKeyData(msig)`); it authorises within the bound on the hot path (`requireAuthorized`) and on
+    /// a stored path (`requirePortableApp`, every slot accepted), the frame given exactly the bound.
+    function test_T_GAS_msigBlsMultiAtBudget() public {
+        uint64 cap = 400_000;
+        uint256 bound = 16 * (cap + 45_000) + 3_500;
+        UARegistry tight = _reg(uint64(bound - 1), cap);
+        UARegistry r = _reg(uint64(bound), cap);
+        BlsMultiKit.Group memory g = _group(64, 33, 930);
+        IUARegistry.MsigStructure memory st;
+        st.threshold = 16;
+        st.members = new IUARegistry.MsigMember[](16);
+        BlsMultiKit.Group[] memory gs = new BlsMultiKit.Group[](16);
+        for (uint256 i; i < 16; ++i) {
+            gs[i] = BlsMultiKit.group(g.sk, _ones(64), uint16(33 + i));
+            bytes memory pop = BlsMultiKit.pop(gs[i], BlsMultiKit.popMsg(gs[i].ua));
+            tight.register(K, gs[i].d, _none(), pop, "");
+            r.register(K, gs[i].d, _none(), pop, "");
+        }
+        _sortById(gs);
+        for (uint256 i; i < 16; ++i) {
+            st.members[i] = IUARegistry.MsigMember(K, gs[i].ua, 1);
+        }
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
+        tight.registerMsig(st, _none(), new IUARegistry.MemberSig[](0), "");
+        bytes32 mu = r.registerMsig(st, _none(), new IUARegistry.MemberSig[](0), "");
+        for (uint16 i; i < 16; ++i) {
+            bytes32 md = UAKinds.memberDigest(
+                mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_MEMBERSHIP, UAKinds.membershipDigest(mu, gs[i].ua))
+            );
+            r.acceptMembership(mu, _slot(gs[i], i, md));
+        }
+        bytes32 digest = keccak256("op");
+        IUARegistry.UASig memory hot =
+            _quorum(gs, UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_METATX, digest)));
+        uint256 least =
+            _least(address(r), abi.encodeCall(r.requireAuthorized, (mu, UAKinds.PURPOSE_METATX, digest, hot)), bound);
+        _row("msig 16 x 0x0121 n64 requireAuthorized least frame gas (bound)", least, bound);
+        bytes32 app = UAKinds.appPurpose(bytes32("app"));
+        IUARegistry.UASig memory stored =
+            _quorum(gs, UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, app, digest)));
+        least = _least(address(r), abi.encodeCall(r.requirePortableApp, (mu, bytes32("app"), digest, stored)), bound);
+        _row("msig 16 x 0x0121 n64 requirePortableApp least frame gas (bound)", least, bound);
+    }
+
+    /// Slot `i`'s signature by its group's minimal set (the first t members) over `md` under `member`.
+    function _slot(BlsMultiKit.Group memory g, uint16 i, bytes32 md)
+        internal
+        view
+        returns (IUARegistry.MemberSig memory s)
+    {
+        uint256 t = uint16(bytes2(BlsMultiKit._cut(g.d, 256, 2)));
+        s.index = i;
+        s.sig = BlsMultiKit.sign(g, (uint256(1) << t) - 1, UAKinds.uaMessage(K, UAKinds.PURPOSE_MEMBER, md));
+    }
+
+    function _quorum(BlsMultiKit.Group[] memory gs, bytes32 md) internal view returns (IUARegistry.UASig memory a) {
+        a.members = new IUARegistry.MemberSig[](16);
+        for (uint16 i; i < 16; ++i) {
+            a.members[i] = _slot(gs[i], i, md);
+        }
+    }
+
+    function _sortById(BlsMultiKit.Group[] memory gs) internal pure {
+        for (uint256 i = 1; i < gs.length; ++i) {
+            for (uint256 j = i; j > 0 && uint256(gs[j].ua) < uint256(gs[j - 1].ua); --j) {
+                (gs[j], gs[j - 1]) = (gs[j - 1], gs[j]);
+            }
+        }
+    }
+
+    /// `call` on `r` succeeds with `bound` gas for its frame; the least frame gas that succeeds.
+    function _least(address r, bytes memory call, uint256 bound) internal returns (uint256 hi) {
+        GasProbe p = new GasProbe();
+        assertTrue(p.probe(r, call, bound), "authorizes with verifyBudget");
+        uint256 lo;
+        for (hi = bound; hi - lo > 1;) {
+            uint256 mid = (lo + hi) / 2;
+            if (p.probe(r, call, mid)) hi = mid;
+            else lo = mid;
+        }
+    }
+}
+
+/// The execution gas of one `check` (what `UASafeVerifier` gives its self-call, `CHECK_GAS` / `POP_GAS`), measured inside one frame:
+/// under `--isolate` a test's own top-level call is a transaction of its own (intrinsic and calldata gas, the EIP-7976 floor).
+contract CheckMeter {
+    function measure(
+        BlsMultiBls12381Verifier v,
+        bytes calldata keyData,
+        bytes32 message,
+        bytes calldata sig,
+        UASafeVerifier.Mode mode
+    ) external view returns (uint256 g) {
+        g = gasleft();
+        bool ok = v.check(keyData, message, sig, mode);
+        g -= gasleft();
+        require(ok, "check");
     }
 }

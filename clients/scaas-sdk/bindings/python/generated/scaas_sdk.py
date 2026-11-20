@@ -823,11 +823,23 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_foreignstore_unlock() != 44840:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part() != 62133:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok() != 62102:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part() != 56760:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() != 1443:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_op_member_sign() != 30667:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_op_quote() != 16358:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi() != 14540:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_op_quote_with_gas() != 30578:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_op_register_bls_multi() != 57695:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_op_resend() != 18971:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -836,6 +848,8 @@ def _uniffi_check_api_checksums(lib):
     if lib.uniffi_scaas_sdk_checksum_method_op_state() != 3893:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_op_submit() != 38006:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_op_submit_bls_multi() != 27762:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_prepared_chain() != 53667:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -2417,6 +2431,32 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_foreignstore_unlock.argtypes = (
     ctypes.c_uint64,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_foreignstore_unlock.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_part.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_part.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok.restype = ctypes.c_int8
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok.restype = ctypes.c_int8
 _UniffiLib.uniffi_scaas_sdk_fn_method_op_member_sign.argtypes = (
     ctypes.c_uint64,
     ctypes.c_uint64,
@@ -2428,6 +2468,13 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_op_quote.argtypes = (
     _UniffiRustBuffer,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_op_quote.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_op_quote_with_gas.argtypes = (
     ctypes.c_uint64,
     ctypes.c_uint64,
@@ -2435,6 +2482,14 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_op_quote_with_gas.argtypes = (
     ctypes.c_uint64,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_op_quote_with_gas.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_register_bls_multi.argtypes = (
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_register_bls_multi.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_op_resend.argtypes = (
     ctypes.c_uint64,
     _UniffiRustBuffer,
@@ -2456,6 +2511,14 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_op_submit.argtypes = (
     _UniffiRustBuffer,
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_op_submit.restype = ctypes.c_uint64
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_submit_bls_multi.argtypes = (
+    ctypes.c_uint64,
+    ctypes.c_uint64,
+    _UniffiRustBuffer,
+    _UniffiRustBuffer,
+    ctypes.c_int8,
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_op_submit_bls_multi.restype = ctypes.c_uint64
 _UniffiLib.uniffi_scaas_sdk_fn_method_prepared_chain.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -3408,15 +3471,33 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_foreignstore_lock.restype = ctypes.c
 _UniffiLib.uniffi_scaas_sdk_checksum_method_foreignstore_unlock.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_foreignstore_unlock.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_member_sign.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_member_sign.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_quote.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_quote.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_quote_with_gas.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_quote_with_gas.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_register_bls_multi.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_register_bls_multi.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_resend.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_resend.restype = ctypes.c_uint16
@@ -3429,6 +3510,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_op_state.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_submit.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_op_submit.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_submit_bls_multi.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_op_submit_bls_multi.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_prepared_chain.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_prepared_chain.restype = ctypes.c_uint16
@@ -4045,6 +4129,48 @@ class SlotKey:
                 return False
             return True
 
+    @dataclass
+    class BLS_MULTI:
+        """
+        a `bls12381-multi` group's member key (as `KeyRef::BlsMulti`)
+"""
+        
+        def __init__(self, seed:str, account:int, index:int, key_data:str):
+            self.seed = seed
+            
+            
+            self.account = account
+            
+            
+            self.index = index
+            
+            
+            self.key_data = key_data
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "SlotKey.BLS_MULTI(seed={}, account={}, index={}, key_data={})".format(self.seed, self.account, self.index, self.key_data)
+        def __eq__(self, other):
+            if not isinstance(other, SlotKey):
+                return NotImplemented
+            if not other.is_BLS_MULTI():
+                return False
+            if self.seed != other.seed:
+                return False
+            if self.account != other.account:
+                return False
+            if self.index != other.index:
+                return False
+            if self.key_data != other.key_data:
+                return False
+            return True
+
     
 
     # For each variant, we have `is_NAME` and `is_name` methods for easily checking
@@ -4069,6 +4195,10 @@ class SlotKey:
         return isinstance(self, SlotKey.MSIG)
     def is_msig(self) -> bool:
         return isinstance(self, SlotKey.MSIG)
+    def is_BLS_MULTI(self) -> bool:
+        return isinstance(self, SlotKey.BLS_MULTI)
+    def is_bls_multi(self) -> bool:
+        return isinstance(self, SlotKey.BLS_MULTI)
     
 
 # Now, a little trick - we make each nested variant class be a subclass of the main
@@ -4079,6 +4209,7 @@ SlotKey.NATIVE = type("SlotKey.NATIVE", (SlotKey.NATIVE, SlotKey,), {})  # type:
 SlotKey.IMPORTED = type("SlotKey.IMPORTED", (SlotKey.IMPORTED, SlotKey,), {})  # type: ignore
 SlotKey.KEY = type("SlotKey.KEY", (SlotKey.KEY, SlotKey,), {})  # type: ignore
 SlotKey.MSIG = type("SlotKey.MSIG", (SlotKey.MSIG, SlotKey,), {})  # type: ignore
+SlotKey.BLS_MULTI = type("SlotKey.BLS_MULTI", (SlotKey.BLS_MULTI, SlotKey,), {})  # type: ignore
 
 
 
@@ -4115,6 +4246,13 @@ class _UniffiFfiConverterTypeSlotKey(_UniffiConverterRustBuffer):
             return SlotKey.MSIG(
                 _UniffiFfiConverterString.read(buf),
             )
+        if variant == 6:
+            return SlotKey.BLS_MULTI(
+                _UniffiFfiConverterString.read(buf),
+                _UniffiFfiConverterUInt32.read(buf),
+                _UniffiFfiConverterUInt32.read(buf),
+                _UniffiFfiConverterString.read(buf),
+            )
         raise InternalError("Raw enum value doesn't match any cases")
 
     @staticmethod
@@ -4141,6 +4279,12 @@ class _UniffiFfiConverterTypeSlotKey(_UniffiConverterRustBuffer):
             return
         if value.is_MSIG():
             _UniffiFfiConverterString.check_lower(value.ua)
+            return
+        if value.is_BLS_MULTI():
+            _UniffiFfiConverterString.check_lower(value.seed)
+            _UniffiFfiConverterUInt32.check_lower(value.account)
+            _UniffiFfiConverterUInt32.check_lower(value.index)
+            _UniffiFfiConverterString.check_lower(value.key_data)
             return
         raise ValueError(value)
 
@@ -4169,6 +4313,12 @@ class _UniffiFfiConverterTypeSlotKey(_UniffiConverterRustBuffer):
         if value.is_MSIG():
             buf.write_i32(5)
             _UniffiFfiConverterString.write(value.ua, buf)
+        if value.is_BLS_MULTI():
+            buf.write_i32(6)
+            _UniffiFfiConverterString.write(value.seed, buf)
+            _UniffiFfiConverterUInt32.write(value.account, buf)
+            _UniffiFfiConverterUInt32.write(value.index, buf)
+            _UniffiFfiConverterString.write(value.key_data, buf)
 
 
 
@@ -4667,6 +4817,50 @@ class KeyRef:
                 return False
             return True
 
+    @dataclass
+    class BLS_MULTI:
+        """
+        a `bls12381-multi` (`0x0121`) group (plan Task 17): the seed's member key `ua_key(0x0121, account, index)` (EIP-2333:
+        index 0) and the group's key data `d` (`0x` hex, spec 2026-11-19-bls12381-multi §2); the signer's id is the group's
+        UA, its signature the members' aggregate ([`Op::submit_bls_multi`])
+"""
+        
+        def __init__(self, seed:str, account:int, index:int, key_data:str):
+            self.seed = seed
+            
+            
+            self.account = account
+            
+            
+            self.index = index
+            
+            
+            self.key_data = key_data
+            
+            
+            pass
+
+    
+            
+            
+    
+        def __str__(self):
+            return "KeyRef.BLS_MULTI(seed={}, account={}, index={}, key_data={})".format(self.seed, self.account, self.index, self.key_data)
+        def __eq__(self, other):
+            if not isinstance(other, KeyRef):
+                return NotImplemented
+            if not other.is_BLS_MULTI():
+                return False
+            if self.seed != other.seed:
+                return False
+            if self.account != other.account:
+                return False
+            if self.index != other.index:
+                return False
+            if self.key_data != other.key_data:
+                return False
+            return True
+
     
 
     # For each variant, we have `is_NAME` and `is_name` methods for easily checking
@@ -4691,6 +4885,10 @@ class KeyRef:
         return isinstance(self, KeyRef.MSIG)
     def is_msig(self) -> bool:
         return isinstance(self, KeyRef.MSIG)
+    def is_BLS_MULTI(self) -> bool:
+        return isinstance(self, KeyRef.BLS_MULTI)
+    def is_bls_multi(self) -> bool:
+        return isinstance(self, KeyRef.BLS_MULTI)
     
 
 # Now, a little trick - we make each nested variant class be a subclass of the main
@@ -4701,6 +4899,7 @@ KeyRef.NATIVE = type("KeyRef.NATIVE", (KeyRef.NATIVE, KeyRef,), {})  # type: ign
 KeyRef.IMPORTED = type("KeyRef.IMPORTED", (KeyRef.IMPORTED, KeyRef,), {})  # type: ignore
 KeyRef.KEY = type("KeyRef.KEY", (KeyRef.KEY, KeyRef,), {})  # type: ignore
 KeyRef.MSIG = type("KeyRef.MSIG", (KeyRef.MSIG, KeyRef,), {})  # type: ignore
+KeyRef.BLS_MULTI = type("KeyRef.BLS_MULTI", (KeyRef.BLS_MULTI, KeyRef,), {})  # type: ignore
 
 
 
@@ -4738,6 +4937,13 @@ class _UniffiFfiConverterTypeKeyRef(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterString.read(buf),
                 _UniffiFfiConverterSequenceTypeMsigSlot.read(buf),
             )
+        if variant == 6:
+            return KeyRef.BLS_MULTI(
+                _UniffiFfiConverterString.read(buf),
+                _UniffiFfiConverterUInt32.read(buf),
+                _UniffiFfiConverterUInt32.read(buf),
+                _UniffiFfiConverterString.read(buf),
+            )
         raise InternalError("Raw enum value doesn't match any cases")
 
     @staticmethod
@@ -4765,6 +4971,12 @@ class _UniffiFfiConverterTypeKeyRef(_UniffiConverterRustBuffer):
         if value.is_MSIG():
             _UniffiFfiConverterString.check_lower(value.ua)
             _UniffiFfiConverterSequenceTypeMsigSlot.check_lower(value.slots)
+            return
+        if value.is_BLS_MULTI():
+            _UniffiFfiConverterString.check_lower(value.seed)
+            _UniffiFfiConverterUInt32.check_lower(value.account)
+            _UniffiFfiConverterUInt32.check_lower(value.index)
+            _UniffiFfiConverterString.check_lower(value.key_data)
             return
         raise ValueError(value)
 
@@ -4794,6 +5006,12 @@ class _UniffiFfiConverterTypeKeyRef(_UniffiConverterRustBuffer):
             buf.write_i32(5)
             _UniffiFfiConverterString.write(value.ua, buf)
             _UniffiFfiConverterSequenceTypeMsigSlot.write(value.slots, buf)
+        if value.is_BLS_MULTI():
+            buf.write_i32(6)
+            _UniffiFfiConverterString.write(value.seed, buf)
+            _UniffiFfiConverterUInt32.write(value.account, buf)
+            _UniffiFfiConverterUInt32.write(value.index, buf)
+            _UniffiFfiConverterString.write(value.key_data, buf)
 
 
 
@@ -6537,19 +6755,25 @@ class GasPerItem:
     `env_items`, `orders`). The row's own `gas` is its figure at a count of 0 (the line's intercept; the file states
     `"base_count": 0`), so the quote adds `gas × count` with no offset.
 """
-    def __init__(self, *, item:str, gas:int):
+    def __init__(self, *, item:str, gas:int, regular:typing.Optional[int], measured_max:typing.Optional[int]):
         self.item = item
         self.gas = gas
+        self.regular = regular
+        self.measured_max = measured_max
         
         
 
     
     def __str__(self):
-        return "GasPerItem(item={}, gas={})".format(self.item, self.gas)
+        return "GasPerItem(item={}, gas={}, regular={}, measured_max={})".format(self.item, self.gas, self.regular, self.measured_max)
     def __eq__(self, other):
         if self.item != other.item:
             return False
         if self.gas != other.gas:
+            return False
+        if self.regular != other.regular:
+            return False
+        if self.measured_max != other.measured_max:
             return False
         return True
 
@@ -6559,17 +6783,23 @@ class _UniffiFfiConverterTypeGasPerItem(_UniffiConverterRustBuffer):
         return GasPerItem(
             item=_UniffiFfiConverterString.read(buf),
             gas=_UniffiFfiConverterUInt64.read(buf),
+            regular=_UniffiFfiConverterOptionalUInt64.read(buf),
+            measured_max=_UniffiFfiConverterOptionalUInt64.read(buf),
         )
 
     @staticmethod
     def check_lower(value):
         _UniffiFfiConverterString.check_lower(value.item)
         _UniffiFfiConverterUInt64.check_lower(value.gas)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.regular)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.measured_max)
 
     @staticmethod
     def write(value, buf):
         _UniffiFfiConverterString.write(value.item, buf)
         _UniffiFfiConverterUInt64.write(value.gas, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.regular, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.measured_max, buf)
 
 class _UniffiFfiConverterOptionalTypeGasPerItem(_UniffiConverterRustBuffer):
     @classmethod
@@ -6603,7 +6833,7 @@ class GasBase:
     contract of domain kind `kind` (`token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `gov_router`), on a lane whose nonce
     is 0 (`fresh`) or above, signed by the reference signer, a native EVM key (its path makes no registry call).
 """
-    def __init__(self, *, entry:str, kind:str, fresh:bool, gas:int, per_byte:typing.Optional[GasPerByte], save:typing.Optional[int], fee_extra:typing.Optional[int], ua_extra:typing.Optional[int], per_item:typing.Optional[GasPerItem]):
+    def __init__(self, *, entry:str, kind:str, fresh:bool, gas:int, per_byte:typing.Optional[GasPerByte], save:typing.Optional[int], fee_extra:typing.Optional[int], ua_extra:typing.Optional[int], per_item:typing.Optional[GasPerItem], regular:typing.Optional[int]):
         self.entry = entry
         self.kind = kind
         self.fresh = fresh
@@ -6613,12 +6843,13 @@ class GasBase:
         self.fee_extra = fee_extra
         self.ua_extra = ua_extra
         self.per_item = per_item
+        self.regular = regular
         
         
 
     
     def __str__(self):
-        return "GasBase(entry={}, kind={}, fresh={}, gas={}, per_byte={}, save={}, fee_extra={}, ua_extra={}, per_item={})".format(self.entry, self.kind, self.fresh, self.gas, self.per_byte, self.save, self.fee_extra, self.ua_extra, self.per_item)
+        return "GasBase(entry={}, kind={}, fresh={}, gas={}, per_byte={}, save={}, fee_extra={}, ua_extra={}, per_item={}, regular={})".format(self.entry, self.kind, self.fresh, self.gas, self.per_byte, self.save, self.fee_extra, self.ua_extra, self.per_item, self.regular)
     def __eq__(self, other):
         if self.entry != other.entry:
             return False
@@ -6638,6 +6869,8 @@ class GasBase:
             return False
         if self.per_item != other.per_item:
             return False
+        if self.regular != other.regular:
+            return False
         return True
 
 class _UniffiFfiConverterTypeGasBase(_UniffiConverterRustBuffer):
@@ -6653,6 +6886,7 @@ class _UniffiFfiConverterTypeGasBase(_UniffiConverterRustBuffer):
             fee_extra=_UniffiFfiConverterOptionalUInt64.read(buf),
             ua_extra=_UniffiFfiConverterOptionalUInt64.read(buf),
             per_item=_UniffiFfiConverterOptionalTypeGasPerItem.read(buf),
+            regular=_UniffiFfiConverterOptionalUInt64.read(buf),
         )
 
     @staticmethod
@@ -6666,6 +6900,7 @@ class _UniffiFfiConverterTypeGasBase(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalUInt64.check_lower(value.fee_extra)
         _UniffiFfiConverterOptionalUInt64.check_lower(value.ua_extra)
         _UniffiFfiConverterOptionalTypeGasPerItem.check_lower(value.per_item)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.regular)
 
     @staticmethod
     def write(value, buf):
@@ -6678,6 +6913,7 @@ class _UniffiFfiConverterTypeGasBase(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalUInt64.write(value.fee_extra, buf)
         _UniffiFfiConverterOptionalUInt64.write(value.ua_extra, buf)
         _UniffiFfiConverterOptionalTypeGasPerItem.write(value.per_item, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.regular, buf)
 
 class _UniffiFfiConverterSequenceTypeGasBase(_UniffiConverterRustBuffer):
     @classmethod
@@ -7234,8 +7470,8 @@ class GasTable:
     A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
     verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
     save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
-    per_item?: {gas, base_count, source}, stand_in?}`, each verify row `{signer, gas, measured, source, sig_bytes, margin?,
-    item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+    per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
+    `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
     and the SDK's reference table.
 """
     def __init__(self, *, name:str, family:str, rows:GasRows):
@@ -7352,6 +7588,46 @@ class _UniffiFfiConverterTypeBindingConfig(_UniffiConverterRustBuffer):
         _UniffiFfiConverterOptionalString.write(value.rp_id, buf)
         _UniffiFfiConverterTypeLimits.write(value.limits, buf)
         _UniffiFfiConverterSequenceTypeGasTable.write(value.gas_tables, buf)
+
+@dataclass
+class BlsMultiPart:
+    """
+    A member's part (spec §5.4, §4): its index in the group's key data and its partial `σ_i` (or PoP part `π_i`), 128 bytes,
+    `0x` hex.
+"""
+    def __init__(self, *, index:int, signature:str):
+        self.index = index
+        self.signature = signature
+        
+        
+
+    
+    def __str__(self):
+        return "BlsMultiPart(index={}, signature={})".format(self.index, self.signature)
+    def __eq__(self, other):
+        if self.index != other.index:
+            return False
+        if self.signature != other.signature:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeBlsMultiPart(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return BlsMultiPart(
+            index=_UniffiFfiConverterUInt8.read(buf),
+            signature=_UniffiFfiConverterString.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt8.check_lower(value.index)
+        _UniffiFfiConverterString.check_lower(value.signature)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt8.write(value.index, buf)
+        _UniffiFfiConverterString.write(value.signature, buf)
 
 @dataclass
 class Burn:
@@ -10725,10 +11001,11 @@ class SubmitQuote:
     """
     A quote the user confirms (spec §13.3); `submit` takes exactly it. Amounts are decimal strings of wei.
 """
-    def __init__(self, *, path:SubmitPath, payer:typing.Optional[str], gas_limit:int, gas:typing.Optional[int], gas_from:typing.Optional[GasSources], max_fee_per_gas:str, max_priority_fee_per_gas:str, max_cost:str, fee_to_relayer:str, gateways:typing.List[int], tx_nonce:int, tx_type:int):
+    def __init__(self, *, path:SubmitPath, payer:typing.Optional[str], gas_limit:int, regular_gas:int, gas:typing.Optional[int], gas_from:typing.Optional[GasSources], max_fee_per_gas:str, max_priority_fee_per_gas:str, max_cost:str, fee_to_relayer:str, gateways:typing.List[int], tx_nonce:int, tx_type:int):
         self.path = path
         self.payer = payer
         self.gas_limit = gas_limit
+        self.regular_gas = regular_gas
         self.gas = gas
         self.gas_from = gas_from
         self.max_fee_per_gas = max_fee_per_gas
@@ -10743,13 +11020,15 @@ class SubmitQuote:
 
     
     def __str__(self):
-        return "SubmitQuote(path={}, payer={}, gas_limit={}, gas={}, gas_from={}, max_fee_per_gas={}, max_priority_fee_per_gas={}, max_cost={}, fee_to_relayer={}, gateways={}, tx_nonce={}, tx_type={})".format(self.path, self.payer, self.gas_limit, self.gas, self.gas_from, self.max_fee_per_gas, self.max_priority_fee_per_gas, self.max_cost, self.fee_to_relayer, self.gateways, self.tx_nonce, self.tx_type)
+        return "SubmitQuote(path={}, payer={}, gas_limit={}, regular_gas={}, gas={}, gas_from={}, max_fee_per_gas={}, max_priority_fee_per_gas={}, max_cost={}, fee_to_relayer={}, gateways={}, tx_nonce={}, tx_type={})".format(self.path, self.payer, self.gas_limit, self.regular_gas, self.gas, self.gas_from, self.max_fee_per_gas, self.max_priority_fee_per_gas, self.max_cost, self.fee_to_relayer, self.gateways, self.tx_nonce, self.tx_type)
     def __eq__(self, other):
         if self.path != other.path:
             return False
         if self.payer != other.payer:
             return False
         if self.gas_limit != other.gas_limit:
+            return False
+        if self.regular_gas != other.regular_gas:
             return False
         if self.gas != other.gas:
             return False
@@ -10778,6 +11057,7 @@ class _UniffiFfiConverterTypeSubmitQuote(_UniffiConverterRustBuffer):
             path=_UniffiFfiConverterTypeSubmitPath.read(buf),
             payer=_UniffiFfiConverterOptionalString.read(buf),
             gas_limit=_UniffiFfiConverterUInt64.read(buf),
+            regular_gas=_UniffiFfiConverterUInt64.read(buf),
             gas=_UniffiFfiConverterOptionalUInt64.read(buf),
             gas_from=_UniffiFfiConverterOptionalTypeGasSources.read(buf),
             max_fee_per_gas=_UniffiFfiConverterString.read(buf),
@@ -10794,6 +11074,7 @@ class _UniffiFfiConverterTypeSubmitQuote(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeSubmitPath.check_lower(value.path)
         _UniffiFfiConverterOptionalString.check_lower(value.payer)
         _UniffiFfiConverterUInt64.check_lower(value.gas_limit)
+        _UniffiFfiConverterUInt64.check_lower(value.regular_gas)
         _UniffiFfiConverterOptionalUInt64.check_lower(value.gas)
         _UniffiFfiConverterOptionalTypeGasSources.check_lower(value.gas_from)
         _UniffiFfiConverterString.check_lower(value.max_fee_per_gas)
@@ -10809,6 +11090,7 @@ class _UniffiFfiConverterTypeSubmitQuote(_UniffiConverterRustBuffer):
         _UniffiFfiConverterTypeSubmitPath.write(value.path, buf)
         _UniffiFfiConverterOptionalString.write(value.payer, buf)
         _UniffiFfiConverterUInt64.write(value.gas_limit, buf)
+        _UniffiFfiConverterUInt64.write(value.regular_gas, buf)
         _UniffiFfiConverterOptionalUInt64.write(value.gas, buf)
         _UniffiFfiConverterOptionalTypeGasSources.write(value.gas_from, buf)
         _UniffiFfiConverterString.write(value.max_fee_per_gas, buf)
@@ -11346,6 +11628,13 @@ class SdkError:  # type: ignore
         def __repr__(self):
             return "SdkError.GasCountUnknown({})".format(repr(str(self)))
     _UniffiTempSdkError.GasCountUnknown = GasCountUnknown # type: ignore
+    class BlsMultiBelowThreshold(_UniffiTempSdkError):
+        """
+        bls12381-multi (plan Task 17): the valid partials' weight is below the group's threshold
+"""
+        def __repr__(self):
+            return "SdkError.BlsMultiBelowThreshold({})".format(repr(str(self)))
+    _UniffiTempSdkError.BlsMultiBelowThreshold = BlsMultiBelowThreshold # type: ignore
     class GasFieldUnknown(_UniffiTempSdkError):
         """
         A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
@@ -11362,6 +11651,14 @@ class SdkError:  # type: ignore
         def __repr__(self):
             return "SdkError.DexNotListed({})".format(repr(str(self)))
     _UniffiTempSdkError.DexNotListed = DexNotListed # type: ignore
+    class PqzAuditorNative(_UniffiTempSdkError):
+        """
+        A PQZ auditor consent whose auditor is a native (address) key (controller call, owner auto-run 2026-11-19): a native id
+        holds no PQZ key (CTR-UA-32), so the token refuses it on chain anyway; refused before anything is read or signed.
+"""
+        def __repr__(self):
+            return "SdkError.PqzAuditorNative({})".format(repr(str(self)))
+    _UniffiTempSdkError.PqzAuditorNative = PqzAuditorNative # type: ignore
     class Cancelled(_UniffiTempSdkError):
         """
         a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
@@ -11625,22 +11922,30 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 59:
-            return SdkError.GasFieldUnknown(
+            return SdkError.BlsMultiBelowThreshold(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 60:
-            return SdkError.DexNotListed(
+            return SdkError.GasFieldUnknown(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 61:
-            return SdkError.Cancelled(
+            return SdkError.DexNotListed(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 62:
-            return SdkError.Ua(
+            return SdkError.PqzAuditorNative(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 63:
+            return SdkError.Cancelled(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 64:
+            return SdkError.Ua(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 65:
             return SdkError.Rpc(
                 _UniffiFfiConverterString.read(buf),
             )
@@ -11764,9 +12069,13 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
             return
         if isinstance(value, SdkError.GasCountUnknown):
             return
+        if isinstance(value, SdkError.BlsMultiBelowThreshold):
+            return
         if isinstance(value, SdkError.GasFieldUnknown):
             return
         if isinstance(value, SdkError.DexNotListed):
+            return
+        if isinstance(value, SdkError.PqzAuditorNative):
             return
         if isinstance(value, SdkError.Cancelled):
             return
@@ -11893,16 +12202,20 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
             buf.write_i32(57)
         if isinstance(value, SdkError.GasCountUnknown):
             buf.write_i32(58)
-        if isinstance(value, SdkError.GasFieldUnknown):
+        if isinstance(value, SdkError.BlsMultiBelowThreshold):
             buf.write_i32(59)
-        if isinstance(value, SdkError.DexNotListed):
+        if isinstance(value, SdkError.GasFieldUnknown):
             buf.write_i32(60)
-        if isinstance(value, SdkError.Cancelled):
+        if isinstance(value, SdkError.DexNotListed):
             buf.write_i32(61)
-        if isinstance(value, SdkError.Ua):
+        if isinstance(value, SdkError.PqzAuditorNative):
             buf.write_i32(62)
-        if isinstance(value, SdkError.Rpc):
+        if isinstance(value, SdkError.Cancelled):
             buf.write_i32(63)
+        if isinstance(value, SdkError.Ua):
+            buf.write_i32(64)
+        if isinstance(value, SdkError.Rpc):
+            buf.write_i32(65)
 
 
 class SeedBackupProtocol(typing.Protocol):
@@ -28357,17 +28670,61 @@ class _UniffiFfiConverterTypeForeignStore:
     def write(cls, value: ForeignStore, buf: _UniffiRustBuffer):
         buf.write_u64(cls.lower(value))
 
+class _UniffiFfiConverterSequenceTypeBlsMultiPart(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeBlsMultiPart.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeBlsMultiPart.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeBlsMultiPart.read(buf) for i in range(count)
+        ]
+
 
 class OpProtocol(typing.Protocol):
     """
     Operations: quote, submit, follow (spec §13).
 """
     
+    async def bls_multi_part(self, prepared: Prepared,member: KeyRef) -> BlsMultiPart:
+        raise NotImplementedError
+    def bls_multi_part_ok(self, prepared: Prepared,part: BlsMultiPart) -> bool:
+        """
+        Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+"""
+        raise NotImplementedError
+    def bls_multi_pop_part(self, member: KeyRef) -> BlsMultiPart:
+        """
+        Member `member`'s PoP part for its group's registration.
+"""
+        raise NotImplementedError
+    def bls_multi_pop_part_ok(self, key_data: str,part: BlsMultiPart) -> bool:
+        """
+        Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+"""
+        raise NotImplementedError
     async def member_sign(self, prepared: Prepared) -> str:
         raise NotImplementedError
     async def quote(self, prepared: Prepared,path: SubmitPath) -> SubmitQuote:
         raise NotImplementedError
+    async def quote_register_bls_multi(self, chain: str,key_data: str,payer: KeyRef) -> SubmitQuote:
+        raise NotImplementedError
     async def quote_with_gas(self, prepared: Prepared,path: SubmitPath,gas: int) -> SubmitQuote:
+        raise NotImplementedError
+    async def register_bls_multi(self, chain: str,key_data: str,parts: typing.List[BlsMultiPart],quote: SubmitQuote) -> str:
         raise NotImplementedError
     async def resend(self, op: str,quote: SubmitQuote) -> None:
         raise NotImplementedError
@@ -28376,6 +28733,8 @@ class OpProtocol(typing.Protocol):
     async def state(self, op: str) -> OpState:
         raise NotImplementedError
     async def submit(self, prepared: Prepared,quote: SubmitQuote) -> str:
+        raise NotImplementedError
+    async def submit_bls_multi(self, prepared: Prepared,quote: SubmitQuote,parts: typing.List[BlsMultiPart],surplus: bool) -> str:
         raise NotImplementedError
 
 class Op(OpProtocol):
@@ -28405,6 +28764,86 @@ class Op(OpProtocol):
         inst = cls.__new__(cls)
         inst._handle = handle
         return inst
+    async def bls_multi_part(self, prepared: Prepared,member: KeyRef) -> BlsMultiPart:
+        
+        _UniffiFfiConverterTypePrepared.check_lower(prepared)
+
+        _UniffiFfiConverterTypeKeyRef.check_lower(member)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypePrepared.lower(prepared),
+            _UniffiFfiConverterTypeKeyRef.lower(member),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBlsMultiPart.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_part(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    def bls_multi_part_ok(self, prepared: Prepared,part: BlsMultiPart) -> bool:
+        """
+        Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+"""
+        
+        _UniffiFfiConverterTypePrepared.check_lower(prepared)
+
+        _UniffiFfiConverterTypeBlsMultiPart.check_lower(part)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypePrepared.lower(prepared),
+            _UniffiFfiConverterTypeBlsMultiPart.lower(part),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def bls_multi_pop_part(self, member: KeyRef) -> BlsMultiPart:
+        """
+        Member `member`'s PoP part for its group's registration.
+"""
+        
+        _UniffiFfiConverterTypeKeyRef.check_lower(member)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypeKeyRef.lower(member),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeBlsMultiPart.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def bls_multi_pop_part_ok(self, key_data: str,part: BlsMultiPart) -> bool:
+        """
+        Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+"""
+        
+        _UniffiFfiConverterString.check_lower(key_data)
+
+        _UniffiFfiConverterTypeBlsMultiPart.check_lower(part)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterString.lower(key_data),
+            _UniffiFfiConverterTypeBlsMultiPart.lower(part),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterBoolean.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
     async def member_sign(self, prepared: Prepared) -> str:
         
         _UniffiFfiConverterTypePrepared.check_lower(prepared)
@@ -28442,6 +28881,29 @@ class Op(OpProtocol):
             _uniffi_lift_return,
             _uniffi_error_converter,
         )
+    async def quote_register_bls_multi(self, chain: str,key_data: str,payer: KeyRef) -> SubmitQuote:
+        
+        _UniffiFfiConverterString.check_lower(chain)
+
+        _UniffiFfiConverterString.check_lower(key_data)
+
+        _UniffiFfiConverterTypeKeyRef.check_lower(payer)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterString.lower(chain),
+            _UniffiFfiConverterString.lower(key_data),
+            _UniffiFfiConverterTypeKeyRef.lower(payer),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterTypeSubmitQuote.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
     async def quote_with_gas(self, prepared: Prepared,path: SubmitPath,gas: int) -> SubmitQuote:
         
         _UniffiFfiConverterTypePrepared.check_lower(prepared)
@@ -28459,6 +28921,32 @@ class Op(OpProtocol):
         _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_scaas_sdk_fn_method_op_quote_with_gas(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def register_bls_multi(self, chain: str,key_data: str,parts: typing.List[BlsMultiPart],quote: SubmitQuote) -> str:
+        
+        _UniffiFfiConverterString.check_lower(chain)
+
+        _UniffiFfiConverterString.check_lower(key_data)
+
+        _UniffiFfiConverterSequenceTypeBlsMultiPart.check_lower(parts)
+
+        _UniffiFfiConverterTypeSubmitQuote.check_lower(quote)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterString.lower(chain),
+            _UniffiFfiConverterString.lower(key_data),
+            _UniffiFfiConverterSequenceTypeBlsMultiPart.lower(parts),
+            _UniffiFfiConverterTypeSubmitQuote.lower(quote),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterString.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_op_register_bls_multi(*_uniffi_lowered_args),
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
             _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
             _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
@@ -28530,6 +29018,32 @@ class Op(OpProtocol):
         _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_scaas_sdk_fn_method_op_submit(*_uniffi_lowered_args),
+            _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
+            _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
+            _uniffi_lift_return,
+            _uniffi_error_converter,
+        )
+    async def submit_bls_multi(self, prepared: Prepared,quote: SubmitQuote,parts: typing.List[BlsMultiPart],surplus: bool) -> str:
+        
+        _UniffiFfiConverterTypePrepared.check_lower(prepared)
+
+        _UniffiFfiConverterTypeSubmitQuote.check_lower(quote)
+
+        _UniffiFfiConverterSequenceTypeBlsMultiPart.check_lower(parts)
+
+        _UniffiFfiConverterBoolean.check_lower(surplus)
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+            _UniffiFfiConverterTypePrepared.lower(prepared),
+            _UniffiFfiConverterTypeSubmitQuote.lower(quote),
+            _UniffiFfiConverterSequenceTypeBlsMultiPart.lower(parts),
+            _UniffiFfiConverterBoolean.lower(surplus),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterString.lift
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
+        return await _uniffi_rust_call_async(
+            _UniffiLib.uniffi_scaas_sdk_fn_method_op_submit_bls_multi(*_uniffi_lowered_args),
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
             _UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer,
             _UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer,
@@ -30651,6 +31165,7 @@ __all__ = [
     "Limits",
     "GasTable",
     "BindingConfig",
+    "BlsMultiPart",
     "Burn",
     "CancelAll",
     "CancelNonce",

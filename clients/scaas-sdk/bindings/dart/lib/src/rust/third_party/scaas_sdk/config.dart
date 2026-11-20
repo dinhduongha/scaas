@@ -35,7 +35,9 @@ class ChainProfile {
   final String? router;
   final Finality finality;
 
-  /// the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
+  /// the chain's per-transaction cap of the **regular** gas (EIP-7825 on a chain applying EIP-8037) when it has one, from
+  /// the release data: a quote's regular bound is held to it, its gas limit (regular + state) to the block gas limit. A
+  /// chain capping the whole gas limit (EIP-7825 without EIP-8037) is not supported (merged-tree review M19, 2026-11-20)
   final BigInt? txGasCap;
 
   /// the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
@@ -206,6 +208,11 @@ class GasBase {
   /// the part that grows with a count the operation names (owner 2026-11-19, I1); `None`: no count, nothing added
   final GasPerItem? perItem;
 
+  /// the row's regular gas, its figure's part EIP-7825's per-transaction cap holds under EIP-8037 (controller call, owner
+  /// auto-run 2026-11-19; at a count of 0 on a counted row, whose `per_item` then carries its slope); `None`: the whole
+  /// figure is held to the cap
+  final BigInt? regular;
+
   const GasBase({
     required this.entry,
     required this.kind,
@@ -216,6 +223,7 @@ class GasBase {
     this.feeExtra,
     this.uaExtra,
     this.perItem,
+    this.regular,
   });
 
   @override
@@ -228,7 +236,8 @@ class GasBase {
       save.hashCode ^
       feeExtra.hashCode ^
       uaExtra.hashCode ^
-      perItem.hashCode;
+      perItem.hashCode ^
+      regular.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -243,7 +252,8 @@ class GasBase {
           save == other.save &&
           feeExtra == other.feeExtra &&
           uaExtra == other.uaExtra &&
-          perItem == other.perItem;
+          perItem == other.perItem &&
+          regular == other.regular;
 }
 
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
@@ -274,10 +284,23 @@ class GasPerItem {
   final String item;
   final BigInt gas;
 
-  const GasPerItem({required this.item, required this.gas});
+  /// the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
+  final BigInt? regular;
+
+  /// the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+  /// extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+  final BigInt? measuredMax;
+
+  const GasPerItem({
+    required this.item,
+    required this.gas,
+    this.regular,
+    this.measuredMax,
+  });
 
   @override
-  int get hashCode => item.hashCode ^ gas.hashCode;
+  int get hashCode =>
+      item.hashCode ^ gas.hashCode ^ regular.hashCode ^ measuredMax.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -285,7 +308,9 @@ class GasPerItem {
       other is GasPerItem &&
           runtimeType == other.runtimeType &&
           item == other.item &&
-          gas == other.gas;
+          gas == other.gas &&
+          regular == other.regular &&
+          measuredMax == other.measuredMax;
 }
 
 /// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
@@ -313,8 +338,8 @@ class GasRows {
 /// A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 /// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
-/// per_item?: {gas, base_count, source}, stand_in?}`, each verify row `{signer, gas, measured, source, sig_bytes, margin?,
-/// item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
+/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 class GasTable {
   /// a module's name, `reference`, or the chain key of a chain's measured rows
@@ -338,7 +363,9 @@ class GasTable {
   /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536,
   /// its optional `margin` 1–100,000; a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
   /// I1), `item` one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`, `env_items`, `orders`), `per_item` `{gas,
-  /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); no key twice.
+  /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); a base row's
+  /// optional `regular` (EIP-8037, the part EIP-7825's cap holds) held like a row's figure, positive, and on a counted row
+  /// together with its `per_item`'s `regular` (0–2^24), never on a verify row; no key twice.
   /// By name when the file is otherwise sound (the first such fault): `GasSigBytesMissing` when a verify row has no
   /// `sig_bytes` (owner 2026-11-19, A4), `GasItemUnpaired` when a row has `per_item` without `item` or the reverse,
   /// `GasItemUnknown` when an `item` is not one of `GAS_ITEMS`, `GasFieldUnknown` when a key is outside the format (at the top,

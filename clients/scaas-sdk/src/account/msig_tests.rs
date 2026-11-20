@@ -261,7 +261,7 @@ fn tail(calldata: &[u8], i: usize, next: Option<usize>) -> Vec<u8> {
 /// #1 w2, threshold 2) and `msig-nested-heavy-outer` (`msig-inner-pq` w2 over fndsa512 #0, #1; fndsa512 #2 w1; threshold 2), each
 /// structure read from the registry: a minimal set signs and verifies; a set with a slot more, or an inner list short of its
 /// threshold, is `UAPoP` (`scaas-ua`'s refusal before anything is signed); a slot or leaf not accepted on this registry is
-/// `Argument` (CTR-UA-37), its control signing.
+/// `MsigSlotInactive` (CTR-UA-37, M2), its control signing.
 #[tokio::test(flavor = "multi_thread")]
 async fn msig_minimal_sets() {
     let n = load("nested.json");
@@ -851,7 +851,7 @@ async fn msig_members_apart() {
     )
     .await
     .unwrap();
-    let j = serde_json::to_string(
+    let bare = serde_json::to_string(
         &members_json(&UASig {
             members: vec![m],
             ..Default::default()
@@ -859,6 +859,15 @@ async fn msig_members_apart() {
         .unwrap()[0],
     )
     .unwrap();
+    // what `Op::member_sign` adds: the operation the slot signed (F1)
+    let bound = |d: &[u8; 32]| {
+        let mut v: serde_json::Value = serde_json::from_str(&bare).unwrap();
+        v["ua"] = hex(&ua).into();
+        v["purpose"] = hex(&purpose).into();
+        v["digest"] = hex(d).into();
+        v.to_string()
+    };
+    let j = bound(&digest);
     let slots = vec![
         MsigSlot::Member {
             index: si,
@@ -928,6 +937,53 @@ async fn msig_members_apart() {
         code(uasig(&t.sdk, "local", &ua, &twice, &purpose, &digest).await),
         "Argument"
     );
+    // F1 / T10: a slot from another device over another digest (its own preparation), one naming nothing, one past a
+    // bound: each refused before the local device is asked; the bound's edges beside them
+    let asked = se.n.load(std::sync::atomic::Ordering::SeqCst);
+    let with = |member: String| {
+        vec![
+            MsigSlot::Signed { index: fi, member },
+            MsigSlot::Member {
+                index: si,
+                key: row.clone(),
+            },
+        ]
+    };
+    let at = |w: Vec<MsigSlot>| {
+        let t = &t;
+        async move { code(uasig(&t.sdk, "local", &ua, &w, &purpose, &digest).await) }
+    };
+    assert_eq!(at(with(bound(&[6u8; 32]))).await, "PreparedStale");
+    // M5: another `ua`, another `purpose` (the same digest): each its own stale case
+    let renamed = |k: &str, v: String| {
+        let mut x: serde_json::Value = serde_json::from_str(&j).unwrap();
+        x[k] = v.into();
+        x.to_string()
+    };
+    assert_eq!(
+        at(with(renamed("ua", hex(&[9u8; 32])))).await,
+        "PreparedStale"
+    );
+    let other_purpose = scaas_ua::purpose_tag("membership").unwrap();
+    assert_eq!(
+        at(with(renamed("purpose", hex(&other_purpose)))).await,
+        "PreparedStale"
+    );
+    assert_eq!(at(with(bare.clone())).await, "Argument");
+    let pad = |n: usize| format!("{j}{}", " ".repeat(n - j.len()));
+    assert_eq!(at(with(pad((64 << 10) + 1))).await, "Argument");
+    let mut inner: serde_json::Value = serde_json::from_str(&j).unwrap();
+    inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 257]);
+    assert_eq!(at(with(inner.to_string())).await, "Argument");
+    assert_eq!(
+        se.n.load(std::sync::atomic::Ordering::SeqCst),
+        asked,
+        "no device asked"
+    );
+    // the controls: at 64 KiB and at 256 inner signatures the slot is read (combined; the registry checks the signatures)
+    assert_eq!(at(with(pad(64 << 10))).await, "Ok");
+    inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 256]);
+    assert_eq!(at(with(inner.to_string())).await, "Ok");
     // the secure-element slot not accepted: its own code, no device asked
     record(&t, REGISTRY, &kd, &kd, 0, 0b11, 1 << fi);
     let n = se.n.load(std::sync::atomic::Ordering::SeqCst);
@@ -939,5 +995,166 @@ async fn msig_members_apart() {
         se.n.load(std::sync::atomic::Ordering::SeqCst),
         n,
         "no device asked"
+    );
+}
+
+/// Extra item 3 (controller call, owner auto-run 2026-11-19): an `msig` auditor's PQZ consent (`AuditorConsent` under
+/// `auditor-consent`): the consent names the `msig`'s own UA and comes back as its `UASig{"", "", members}` signed by the slots
+/// named; a slot set below the threshold refused.
+#[cfg(feature = "pqz")]
+#[tokio::test(flavor = "multi_thread")]
+async fn msig_auditor_pqz_consent() {
+    let t = setup(REGISTRY, None).await;
+    let token = "0x5ca00000000000000000000000000000000000a3";
+    {
+        let mut c = t.chain.lock().unwrap();
+        let g = c.genesis.clone();
+        c.domains.insert(token.into(), ("SCaaS PqzToken".into(), g));
+    }
+    let wallet = Wallet::from_mnemonic(REPO, "").unwrap();
+    let id_of = |i: u32| hex(&wallet.ua_key(FNDSA512, 0, i).unwrap().ua().unwrap());
+    let ids: Vec<MsigMemberArgs> = (0..2)
+        .map(|i| MsigMemberArgs {
+            kind: FNDSA512,
+            id: id_of(i),
+            weight: 1,
+        })
+        .collect();
+    let s = msig_structure(ids, 2).unwrap();
+    let kd = s.typed().unwrap().key_data();
+    record(&t, REGISTRY, &kd, &kd, 0, 0b11, 0b11);
+    let ua = s.ua().unwrap();
+    let slot_of = |i: u32| s.members.iter().position(|m| m.id == id_of(i)).unwrap() as u16;
+    let req = |slots: Vec<MsigSlot>| crate::admin::AuditorConsent {
+        signer: KeyRef::Msig {
+            ua: ua.clone(),
+            slots,
+        },
+        chain: "local".into(),
+        token: token.into(),
+        epoch: 1,
+    };
+    let both = vec![
+        member(&t, slot_of(0), FNDSA512, 0),
+        member(&t, slot_of(1), FNDSA512, 1),
+    ];
+    let out: Value = serde_json::from_str(
+        &t.sdk
+            .admin()
+            .sign_pqz_auditor_consent(req(both))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(out["keyData"], "0x");
+    assert_eq!(out["signature"], "0x");
+    // M2 (review 2026-11-20): each slot's signature verifies under `auditor-consent` over this token's consent of the
+    // msig's own UA; another purpose and another token's consent are the controls
+    let members: Vec<MemberSig> = out["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| member_of(&m.to_string()).unwrap())
+        .collect();
+    assert_eq!(members.len(), 2, "both slots");
+    let (chain_id, uid) = crate::wallet::ops::ids(&t.sdk, "local").unwrap();
+    let ua32 = id32(&ua).unwrap();
+    let digest_of = |tok: &str| {
+        let t20 = crate::op::addr20(tok).unwrap();
+        let m = serde_json::json!({"token": hex(&t20), "auditor": hex(&ua32), "epoch": 1, "chainUid": hex(&uid)});
+        scaas_ua::wallet::scaas_typed_data(
+            "AuditorConsent",
+            Some(crate::op::domain_name("pqz").unwrap()),
+            &t20,
+            chain_id,
+            &uid,
+            &m,
+        )
+        .unwrap()
+        .digest()
+        .unwrap()
+    };
+    let lookup = |id: [u8; 32]| {
+        (0..2).find_map(|i| {
+            let k = wallet.ua_key(FNDSA512, 0, i).unwrap();
+            (k.ua() == Some(id)).then(|| (FNDSA512, k.key_data()))
+        })
+    };
+    let verify = |purpose: &str, digest: [u8; 32]| {
+        check_authorization_current(
+            &kd,
+            &ua32,
+            &scaas_ua::purpose_tag(purpose).unwrap(),
+            &digest,
+            &members,
+            &domain(),
+            &lookup,
+            &|_| None,
+            Some(&all),
+        )
+    };
+    assert_eq!(verify("auditor-consent", digest_of(token)), Ok(()));
+    assert!(
+        verify("metatx", digest_of(token)).is_err(),
+        "another purpose"
+    );
+    assert!(
+        verify(
+            "auditor-consent",
+            digest_of("0x5ca00000000000000000000000000000000000a4")
+        )
+        .is_err(),
+        "another token's consent"
+    );
+    // below the threshold: refused by name (a set short of the threshold is not minimal), nothing returned
+    assert_eq!(
+        code(
+            t.sdk
+                .admin()
+                .sign_pqz_auditor_consent(req(vec![member(&t, slot_of(0), FNDSA512, 0)]))
+                .await
+        ),
+        "UAPoP"
+    );
+}
+
+/// M5 (review 2026-11-20), F7: a native member is told by its opened key, an imported EVM key as a derived one: an `msig`
+/// slot holding the seed's imported EVM key is native (its member signs under the registry's domain), a UA key's slot is not.
+#[tokio::test(flavor = "multi_thread")]
+async fn imported_evm_key_is_a_native_member() {
+    let t = setup(REGISTRY, None).await;
+    let k = t
+        .sdk
+        .vault()
+        .import_key(crate::vault::ImportKey {
+            seed: t.seed.clone(),
+            network: "evm".into(),
+            secret: Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(vec![0x11; 32])).unwrap()),
+            vault_passphrase: Arc::new(
+                SecretBytes::from_zeroizing(Zeroizing::new(
+                    "river-otter-7 ünï".as_bytes().to_vec(),
+                ))
+                .unwrap(),
+            ),
+        })
+        .await
+        .unwrap();
+    let imported = MsigSlot::Member {
+        index: 0,
+        key: KeyRef::Imported {
+            seed: t.seed.clone(),
+            network: "evm".into(),
+            index: k.index,
+        },
+    };
+    assert!(
+        has_native(&t.sdk, &imported).await.unwrap(),
+        "an imported EVM key"
+    );
+    assert!(
+        !has_native(&t.sdk, &member(&t, 0, FNDSA512, 0))
+            .await
+            .unwrap(),
+        "a UA key: the control"
     );
 }

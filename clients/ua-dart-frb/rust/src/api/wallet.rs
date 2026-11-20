@@ -904,6 +904,14 @@ impl UaKey {
             .ua()?
             .sign_member(&a(&structure_ua)?, &a(&structure_ua_msg)?)?)
     }
+    /// A bls12381-multi member key (0x0121): its partial (128 B) over `ua_msg` for the group `key_data` (d) listing it.
+    pub fn sign_bls_multi(&self, key_data: Vec<u8>, ua_msg: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.ua()?.sign_bls_multi(&key_data, &a(&ua_msg)?)?)
+    }
+    /// A bls12381-multi member key (0x0121): its PoP part (128 B) for the group `key_data` (d) listing it.
+    pub fn sign_bls_multi_pop(&self, key_data: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.ua()?.sign_bls_multi_pop(&key_data)?)
+    }
     /// Typed data through the signing policy (`expect_json`: what the user confirmed, spec §5.4).
     pub fn sign_typed(&self, typed_data_json: String, expect_json: String) -> R<Vec<u8>> {
         let td = uw::TypedData::from_json(typed_data_json.as_bytes())?;

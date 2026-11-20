@@ -1093,11 +1093,23 @@ external fun uniffi_scaas_sdk_checksum_method_foreignstore_lock(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_foreignstore_unlock(
 ): Short
+external fun uniffi_scaas_sdk_checksum_method_op_bls_multi_part(
+): Short
+external fun uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok(
+): Short
+external fun uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part(
+): Short
+external fun uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_op_member_sign(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_op_quote(
 ): Short
+external fun uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_op_quote_with_gas(
+): Short
+external fun uniffi_scaas_sdk_checksum_method_op_register_bls_multi(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_op_resend(
 ): Short
@@ -1106,6 +1118,8 @@ external fun uniffi_scaas_sdk_checksum_method_op_resume(
 external fun uniffi_scaas_sdk_checksum_method_op_state(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_op_submit(
+): Short
+external fun uniffi_scaas_sdk_checksum_method_op_submit_bls_multi(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_sdk_account(
 ): Short
@@ -1627,11 +1641,23 @@ external fun uniffi_scaas_sdk_fn_clone_op(`handle`: Long,uniffi_out_err: UniffiR
 ): Long
 external fun uniffi_scaas_sdk_fn_free_op(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+external fun uniffi_scaas_sdk_fn_method_op_bls_multi_part(`ptr`: Long,`prepared`: Long,`member`: RustBuffer.ByValue,
+): Long
+external fun uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok(`ptr`: Long,`prepared`: Long,`part`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+external fun uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part(`ptr`: Long,`member`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok(`ptr`: Long,`keyData`: RustBuffer.ByValue,`part`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 external fun uniffi_scaas_sdk_fn_method_op_member_sign(`ptr`: Long,`prepared`: Long,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_op_quote(`ptr`: Long,`prepared`: Long,`path`: RustBuffer.ByValue,
 ): Long
+external fun uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi(`ptr`: Long,`chain`: RustBuffer.ByValue,`keyData`: RustBuffer.ByValue,`payer`: RustBuffer.ByValue,
+): Long
 external fun uniffi_scaas_sdk_fn_method_op_quote_with_gas(`ptr`: Long,`prepared`: Long,`path`: RustBuffer.ByValue,`gas`: Long,
+): Long
+external fun uniffi_scaas_sdk_fn_method_op_register_bls_multi(`ptr`: Long,`chain`: RustBuffer.ByValue,`keyData`: RustBuffer.ByValue,`parts`: RustBuffer.ByValue,`quote`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_op_resend(`ptr`: Long,`op`: RustBuffer.ByValue,`quote`: RustBuffer.ByValue,
 ): Long
@@ -1640,6 +1666,8 @@ external fun uniffi_scaas_sdk_fn_method_op_resume(`ptr`: Long,
 external fun uniffi_scaas_sdk_fn_method_op_state(`ptr`: Long,`op`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_op_submit(`ptr`: Long,`prepared`: Long,`quote`: RustBuffer.ByValue,
+): Long
+external fun uniffi_scaas_sdk_fn_method_op_submit_bls_multi(`ptr`: Long,`prepared`: Long,`quote`: RustBuffer.ByValue,`parts`: RustBuffer.ByValue,`surplus`: Byte,
 ): Long
 external fun uniffi_scaas_sdk_fn_clone_sdk(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
@@ -2527,13 +2555,31 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_scaas_sdk_checksum_method_foreignstore_unlock() != 44840.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part() != 62133.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_part_ok() != 62102.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part() != 56760.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_op_bls_multi_pop_part_ok() != 1443.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_scaas_sdk_checksum_method_op_member_sign() != 30667.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_op_quote() != 16358.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_scaas_sdk_checksum_method_op_quote_register_bls_multi() != 14540.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_scaas_sdk_checksum_method_op_quote_with_gas() != 30578.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_op_register_bls_multi() != 57695.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_op_resend() != 18971.toShort()) {
@@ -2546,6 +2592,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_op_submit() != 38006.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_op_submit_bls_multi() != 27762.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_sdk_account() != 4122.toShort()) {
@@ -8752,11 +8801,32 @@ public object FfiConverterTypeForeignStore: FfiConverter<ForeignStore, Long> {
  */
 public interface OpInterface {
     
+    suspend fun `blsMultiPart`(`prepared`: Prepared, `member`: KeyRef): BlsMultiPart
+    
+    /**
+     * Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+     */
+    fun `blsMultiPartOk`(`prepared`: Prepared, `part`: BlsMultiPart): kotlin.Boolean
+    
+    /**
+     * Member `member`'s PoP part for its group's registration.
+     */
+    fun `blsMultiPopPart`(`member`: KeyRef): BlsMultiPart
+    
+    /**
+     * Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+     */
+    fun `blsMultiPopPartOk`(`keyData`: kotlin.String, `part`: BlsMultiPart): kotlin.Boolean
+    
     suspend fun `memberSign`(`prepared`: Prepared): kotlin.String
     
     suspend fun `quote`(`prepared`: Prepared, `path`: SubmitPath): SubmitQuote
     
+    suspend fun `quoteRegisterBlsMulti`(`chain`: kotlin.String, `keyData`: kotlin.String, `payer`: KeyRef): SubmitQuote
+    
     suspend fun `quoteWithGas`(`prepared`: Prepared, `path`: SubmitPath, `gas`: kotlin.ULong): SubmitQuote
+    
+    suspend fun `registerBlsMulti`(`chain`: kotlin.String, `keyData`: kotlin.String, `parts`: List<BlsMultiPart>, `quote`: SubmitQuote): kotlin.String
     
     suspend fun `resend`(`op`: kotlin.String, `quote`: SubmitQuote)
     
@@ -8765,6 +8835,8 @@ public interface OpInterface {
     suspend fun `state`(`op`: kotlin.String): OpState
     
     suspend fun `submit`(`prepared`: Prepared, `quote`: SubmitQuote): kotlin.String
+    
+    suspend fun `submitBlsMulti`(`prepared`: Prepared, `quote`: SubmitQuote, `parts`: List<BlsMultiPart>, `surplus`: kotlin.Boolean): kotlin.String
     
     companion object
 }
@@ -8871,6 +8943,76 @@ open class Op: Disposable, AutoCloseable, OpInterface
     
     @Throws(SdkException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `blsMultiPart`(`prepared`: Prepared, `member`: KeyRef) : BlsMultiPart {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_part(
+                uniffiHandle,
+                FfiConverterTypePrepared.lower(`prepared`),FfiConverterTypeKeyRef.lower(`member`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeBlsMultiPart.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Whether `part` is a valid partial of `prepared`'s group on it (`bls12381-multi`, spec §5.4).
+     */override fun `blsMultiPartOk`(`prepared`: Prepared, `part`: BlsMultiPart): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_part_ok(
+        it,
+        FfiConverterTypePrepared.lower(`prepared`),FfiConverterTypeBlsMultiPart.lower(`part`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Member `member`'s PoP part for its group's registration.
+     */
+    @Throws(SdkException::class)override fun `blsMultiPopPart`(`member`: KeyRef): BlsMultiPart {
+            return FfiConverterTypeBlsMultiPart.lift(
+    callWithHandle {
+    uniffiRustCallWithError(SdkException) { _status ->
+    UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part(
+        it,
+        FfiConverterTypeKeyRef.lower(`member`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Whether `part` is a valid PoP part of the group `key_data` (`0x` hex).
+     */override fun `blsMultiPopPartOk`(`keyData`: kotlin.String, `part`: BlsMultiPart): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_scaas_sdk_fn_method_op_bls_multi_pop_part_ok(
+        it,
+        FfiConverterString.lower(`keyData`),FfiConverterTypeBlsMultiPart.lower(`part`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `memberSign`(`prepared`: Prepared) : kotlin.String {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
@@ -8913,6 +9055,27 @@ open class Op: Disposable, AutoCloseable, OpInterface
     
     @Throws(SdkException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `quoteRegisterBlsMulti`(`chain`: kotlin.String, `keyData`: kotlin.String, `payer`: KeyRef) : SubmitQuote {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_op_quote_register_bls_multi(
+                uniffiHandle,
+                FfiConverterString.lower(`chain`),FfiConverterString.lower(`keyData`),FfiConverterTypeKeyRef.lower(`payer`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeSubmitQuote.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `quoteWithGas`(`prepared`: Prepared, `path`: SubmitPath, `gas`: kotlin.ULong) : SubmitQuote {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
@@ -8926,6 +9089,27 @@ open class Op: Disposable, AutoCloseable, OpInterface
         { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeSubmitQuote.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `registerBlsMulti`(`chain`: kotlin.String, `keyData`: kotlin.String, `parts`: List<BlsMultiPart>, `quote`: SubmitQuote) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_op_register_bls_multi(
+                uniffiHandle,
+                FfiConverterString.lower(`chain`),FfiConverterString.lower(`keyData`),FfiConverterSequenceTypeBlsMultiPart.lower(`parts`),FfiConverterTypeSubmitQuote.lower(`quote`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
         // Error FFI converter
         SdkException.ErrorHandler,
     )
@@ -9004,6 +9188,27 @@ open class Op: Disposable, AutoCloseable, OpInterface
             UniffiLib.uniffi_scaas_sdk_fn_method_op_submit(
                 uniffiHandle,
                 FfiConverterTypePrepared.lower(`prepared`),FfiConverterTypeSubmitQuote.lower(`quote`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_scaas_sdk_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        SdkException.ErrorHandler,
+    )
+    }
+
+    
+    @Throws(SdkException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `submitBlsMulti`(`prepared`: Prepared, `quote`: SubmitQuote, `parts`: List<BlsMultiPart>, `surplus`: kotlin.Boolean) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_scaas_sdk_fn_method_op_submit_bls_multi(
+                uniffiHandle,
+                FfiConverterTypePrepared.lower(`prepared`),FfiConverterTypeSubmitQuote.lower(`quote`),FfiConverterSequenceTypeBlsMultiPart.lower(`parts`),FfiConverterBoolean.lower(`surplus`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -13703,6 +13908,48 @@ public object FfiConverterTypeBindingConfig: FfiConverterRustBuffer<BindingConfi
 
 
 
+/**
+ * A member's part (spec §5.4, §4): its index in the group's key data and its partial `σ_i` (or PoP part `π_i`), 128 bytes,
+ * `0x` hex.
+ */
+data class BlsMultiPart (
+    var `index`: kotlin.UByte
+    , 
+    var `signature`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBlsMultiPart: FfiConverterRustBuffer<BlsMultiPart> {
+    override fun read(buf: ByteBuffer): BlsMultiPart {
+        return BlsMultiPart(
+            FfiConverterUByte.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: BlsMultiPart) = (
+            FfiConverterUByte.allocationSize(value.`index`) +
+            FfiConverterString.allocationSize(value.`signature`)
+    )
+
+    override fun write(value: BlsMultiPart, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`index`, buf)
+            FfiConverterString.write(value.`signature`, buf)
+    }
+}
+
+
+
 data class Burn (
     var `signer`: KeyRef
     , 
@@ -14042,7 +14289,9 @@ data class ChainProfile (
     var `finality`: Finality
     , 
     /**
-     * the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
+     * the chain's per-transaction cap of the **regular** gas (EIP-7825 on a chain applying EIP-8037) when it has one, from
+     * the release data: a quote's regular bound is held to it, its gas limit (regular + state) to the block gas limit. A
+     * chain capping the whole gas limit (EIP-7825 without EIP-8037) is not supported (merged-tree review M19, 2026-11-20)
      */
     var `txGasCap`: kotlin.ULong?
     , 
@@ -14917,6 +15166,13 @@ data class GasBase (
      * the part that grows with a count the operation names (owner 2026-11-19, I1); `None`: no count, nothing added
      */
     var `perItem`: GasPerItem?
+    , 
+    /**
+     * the row's regular gas, its figure's part EIP-7825's per-transaction cap holds under EIP-8037 (controller call, owner
+     * auto-run 2026-11-19; at a count of 0 on a counted row, whose `per_item` then carries its slope); `None`: the whole
+     * figure is held to the cap
+     */
+    var `regular`: kotlin.ULong?
     
 ){
     
@@ -14942,6 +15198,7 @@ public object FfiConverterTypeGasBase: FfiConverterRustBuffer<GasBase> {
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalTypeGasPerItem.read(buf),
+            FfiConverterOptionalULong.read(buf),
         )
     }
 
@@ -14954,7 +15211,8 @@ public object FfiConverterTypeGasBase: FfiConverterRustBuffer<GasBase> {
             FfiConverterOptionalULong.allocationSize(value.`save`) +
             FfiConverterOptionalULong.allocationSize(value.`feeExtra`) +
             FfiConverterOptionalULong.allocationSize(value.`uaExtra`) +
-            FfiConverterOptionalTypeGasPerItem.allocationSize(value.`perItem`)
+            FfiConverterOptionalTypeGasPerItem.allocationSize(value.`perItem`) +
+            FfiConverterOptionalULong.allocationSize(value.`regular`)
     )
 
     override fun write(value: GasBase, buf: ByteBuffer) {
@@ -14967,6 +15225,7 @@ public object FfiConverterTypeGasBase: FfiConverterRustBuffer<GasBase> {
             FfiConverterOptionalULong.write(value.`feeExtra`, buf)
             FfiConverterOptionalULong.write(value.`uaExtra`, buf)
             FfiConverterOptionalTypeGasPerItem.write(value.`perItem`, buf)
+            FfiConverterOptionalULong.write(value.`regular`, buf)
     }
 }
 
@@ -15024,6 +15283,17 @@ data class GasPerItem (
     var `item`: kotlin.String
     , 
     var `gas`: kotlin.ULong
+    , 
+    /**
+     * the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
+     */
+    var `regular`: kotlin.ULong?
+    , 
+    /**
+     * the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+     * extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+     */
+    var `measuredMax`: kotlin.ULong?
     
 ){
     
@@ -15042,17 +15312,23 @@ public object FfiConverterTypeGasPerItem: FfiConverterRustBuffer<GasPerItem> {
         return GasPerItem(
             FfiConverterString.read(buf),
             FfiConverterULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
         )
     }
 
     override fun allocationSize(value: GasPerItem) = (
             FfiConverterString.allocationSize(value.`item`) +
-            FfiConverterULong.allocationSize(value.`gas`)
+            FfiConverterULong.allocationSize(value.`gas`) +
+            FfiConverterOptionalULong.allocationSize(value.`regular`) +
+            FfiConverterOptionalULong.allocationSize(value.`measuredMax`)
     )
 
     override fun write(value: GasPerItem, buf: ByteBuffer) {
             FfiConverterString.write(value.`item`, buf)
             FfiConverterULong.write(value.`gas`, buf)
+            FfiConverterOptionalULong.write(value.`regular`, buf)
+            FfiConverterOptionalULong.write(value.`measuredMax`, buf)
     }
 }
 
@@ -15145,8 +15421,8 @@ public object FfiConverterTypeGasSources: FfiConverterRustBuffer<GasSources> {
  * A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
  * verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
  * save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
- * per_item?: {gas, base_count, source}, stand_in?}`, each verify row `{signer, gas, measured, source, sig_bytes, margin?,
- * item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+ * per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
+ * `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
  * and the SDK's reference table.
  */
 data class GasTable (
@@ -19692,6 +19968,13 @@ data class SubmitQuote (
     var `gasLimit`: kotlin.ULong
     , 
     /**
+     * the bound of `gas_limit`'s regular part, with the margin (EIP-8037; controller call, owner auto-run 2026-11-19): the part
+     * held to the profile's `tx_gas_cap` (EIP-7825 caps the regular gas only), the whole `gas_limit` where the split is not
+     * known (a native send's estimate, an app's figure); 0 on the gateway path
+     */
+    var `regularGas`: kotlin.ULong
+    , 
+    /**
      * what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
      * the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
      */
@@ -19747,6 +20030,7 @@ public object FfiConverterTypeSubmitQuote: FfiConverterRustBuffer<SubmitQuote> {
             FfiConverterTypeSubmitPath.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalTypeGasSources.read(buf),
             FfiConverterString.read(buf),
@@ -19763,6 +20047,7 @@ public object FfiConverterTypeSubmitQuote: FfiConverterRustBuffer<SubmitQuote> {
             FfiConverterTypeSubmitPath.allocationSize(value.`path`) +
             FfiConverterOptionalString.allocationSize(value.`payer`) +
             FfiConverterULong.allocationSize(value.`gasLimit`) +
+            FfiConverterULong.allocationSize(value.`regularGas`) +
             FfiConverterOptionalULong.allocationSize(value.`gas`) +
             FfiConverterOptionalTypeGasSources.allocationSize(value.`gasFrom`) +
             FfiConverterString.allocationSize(value.`maxFeePerGas`) +
@@ -19778,6 +20063,7 @@ public object FfiConverterTypeSubmitQuote: FfiConverterRustBuffer<SubmitQuote> {
             FfiConverterTypeSubmitPath.write(value.`path`, buf)
             FfiConverterOptionalString.write(value.`payer`, buf)
             FfiConverterULong.write(value.`gasLimit`, buf)
+            FfiConverterULong.write(value.`regularGas`, buf)
             FfiConverterOptionalULong.write(value.`gas`, buf)
             FfiConverterOptionalTypeGasSources.write(value.`gasFrom`, buf)
             FfiConverterString.write(value.`maxFeePerGas`, buf)
@@ -28305,6 +28591,23 @@ sealed class KeyRef {
         companion object
     }
     
+    /**
+     * a `bls12381-multi` (`0x0121`) group (plan Task 17): the seed's member key `ua_key(0x0121, account, index)` (EIP-2333:
+     * index 0) and the group's key data `d` (`0x` hex, spec 2026-11-19-bls12381-multi §2); the signer's id is the group's
+     * UA, its signature the members' aggregate ([`Op::submit_bls_multi`])
+     */
+    data class BlsMulti(
+        val `seed`: kotlin.String, 
+        val `account`: kotlin.UInt, 
+        val `index`: kotlin.UInt, 
+        val `keyData`: kotlin.String) : KeyRef()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
 
@@ -28344,6 +28647,12 @@ public object FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
             5 -> KeyRef.Msig(
                 FfiConverterString.read(buf),
                 FfiConverterSequenceTypeMsigSlot.read(buf),
+                )
+            6 -> KeyRef.BlsMulti(
+                FfiConverterString.read(buf),
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
+                FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -28394,6 +28703,16 @@ public object FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 + FfiConverterSequenceTypeMsigSlot.allocationSize(value.`slots`)
             )
         }
+        is KeyRef.BlsMulti -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`seed`)
+                + FfiConverterUInt.allocationSize(value.`account`)
+                + FfiConverterUInt.allocationSize(value.`index`)
+                + FfiConverterString.allocationSize(value.`keyData`)
+            )
+        }
     }
 
     override fun write(value: KeyRef, buf: ByteBuffer) {
@@ -28430,6 +28749,14 @@ public object FfiConverterTypeKeyRef : FfiConverterRustBuffer<KeyRef>{
                 buf.putInt(5)
                 FfiConverterString.write(value.`ua`, buf)
                 FfiConverterSequenceTypeMsigSlot.write(value.`slots`, buf)
+                Unit
+            }
+            is KeyRef.BlsMulti -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.`seed`, buf)
+                FfiConverterUInt.write(value.`account`, buf)
+                FfiConverterUInt.write(value.`index`, buf)
+                FfiConverterString.write(value.`keyData`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -29243,6 +29570,11 @@ sealed class SdkException(message: String): kotlin.Exception(message) {
         class GasCountUnknown(message: String) : SdkException(message)
         
     /**
+     * bls12381-multi (plan Task 17): the valid partials' weight is below the group's threshold
+     */
+        class BlsMultiBelowThreshold(message: String) : SdkException(message)
+        
+    /**
      * A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
      * unknown part is refused, never dropped from a quote.
      */
@@ -29253,6 +29585,12 @@ sealed class SdkException(message: String): kotlin.Exception(message) {
      * wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
      */
         class DexNotListed(message: String) : SdkException(message)
+        
+    /**
+     * A PQZ auditor consent whose auditor is a native (address) key (controller call, owner auto-run 2026-11-19): a native id
+     * holds no PQZ key (CTR-UA-32), so the token refuses it on chain anyway; refused before anything is read or signed.
+     */
+        class PqzAuditorNative(message: String) : SdkException(message)
         
     /**
      * a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
@@ -29340,11 +29678,13 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
             56 -> SdkException.GasItemUnpaired(FfiConverterString.read(buf))
             57 -> SdkException.GasItemUnknown(FfiConverterString.read(buf))
             58 -> SdkException.GasCountUnknown(FfiConverterString.read(buf))
-            59 -> SdkException.GasFieldUnknown(FfiConverterString.read(buf))
-            60 -> SdkException.DexNotListed(FfiConverterString.read(buf))
-            61 -> SdkException.Cancelled(FfiConverterString.read(buf))
-            62 -> SdkException.Ua(FfiConverterString.read(buf))
-            63 -> SdkException.Rpc(FfiConverterString.read(buf))
+            59 -> SdkException.BlsMultiBelowThreshold(FfiConverterString.read(buf))
+            60 -> SdkException.GasFieldUnknown(FfiConverterString.read(buf))
+            61 -> SdkException.DexNotListed(FfiConverterString.read(buf))
+            62 -> SdkException.PqzAuditorNative(FfiConverterString.read(buf))
+            63 -> SdkException.Cancelled(FfiConverterString.read(buf))
+            64 -> SdkException.Ua(FfiConverterString.read(buf))
+            65 -> SdkException.Rpc(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
         
@@ -29588,24 +29928,32 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
                 buf.putInt(58)
                 Unit
             }
-            is SdkException.GasFieldUnknown -> {
+            is SdkException.BlsMultiBelowThreshold -> {
                 buf.putInt(59)
                 Unit
             }
-            is SdkException.DexNotListed -> {
+            is SdkException.GasFieldUnknown -> {
                 buf.putInt(60)
                 Unit
             }
-            is SdkException.Cancelled -> {
+            is SdkException.DexNotListed -> {
                 buf.putInt(61)
                 Unit
             }
-            is SdkException.Ua -> {
+            is SdkException.PqzAuditorNative -> {
                 buf.putInt(62)
                 Unit
             }
-            is SdkException.Rpc -> {
+            is SdkException.Cancelled -> {
                 buf.putInt(63)
+                Unit
+            }
+            is SdkException.Ua -> {
+                buf.putInt(64)
+                Unit
+            }
+            is SdkException.Rpc -> {
+                buf.putInt(65)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -29676,6 +30024,21 @@ sealed class SlotKey {
         companion object
     }
     
+    /**
+     * a `bls12381-multi` group's member key (as `KeyRef::BlsMulti`)
+     */
+    data class BlsMulti(
+        val `seed`: kotlin.String, 
+        val `account`: kotlin.UInt, 
+        val `index`: kotlin.UInt, 
+        val `keyData`: kotlin.String) : SlotKey()
+        
+    {
+        
+
+        companion object
+    }
+    
 
     
 
@@ -29713,6 +30076,12 @@ public object FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
                 FfiConverterString.read(buf),
                 )
             5 -> SlotKey.Msig(
+                FfiConverterString.read(buf),
+                )
+            6 -> SlotKey.BlsMulti(
+                FfiConverterString.read(buf),
+                FfiConverterUInt.read(buf),
+                FfiConverterUInt.read(buf),
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -29763,6 +30132,16 @@ public object FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
                 + FfiConverterString.allocationSize(value.`ua`)
             )
         }
+        is SlotKey.BlsMulti -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`seed`)
+                + FfiConverterUInt.allocationSize(value.`account`)
+                + FfiConverterUInt.allocationSize(value.`index`)
+                + FfiConverterString.allocationSize(value.`keyData`)
+            )
+        }
     }
 
     override fun write(value: SlotKey, buf: ByteBuffer) {
@@ -29798,6 +30177,14 @@ public object FfiConverterTypeSlotKey : FfiConverterRustBuffer<SlotKey>{
             is SlotKey.Msig -> {
                 buf.putInt(5)
                 FfiConverterString.write(value.`ua`, buf)
+                Unit
+            }
+            is SlotKey.BlsMulti -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.`seed`, buf)
+                FfiConverterUInt.write(value.`account`, buf)
+                FfiConverterUInt.write(value.`index`, buf)
+                FfiConverterString.write(value.`keyData`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -31188,6 +31575,34 @@ public object FfiConverterSequenceTypeAccountInfo: FfiConverterRustBuffer<List<A
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeAccountInfo.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeBlsMultiPart: FfiConverterRustBuffer<List<BlsMultiPart>> {
+    override fun read(buf: ByteBuffer): List<BlsMultiPart> {
+        val len = buf.getInt()
+        return List<BlsMultiPart>(len) {
+            FfiConverterTypeBlsMultiPart.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<BlsMultiPart>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeBlsMultiPart.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<BlsMultiPart>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeBlsMultiPart.write(it, buf)
         }
     }
 }

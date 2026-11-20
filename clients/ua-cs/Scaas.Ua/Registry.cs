@@ -21,6 +21,10 @@ public static partial class UA
     public sealed record WebAuthnKey(byte[] X, byte[] Y, byte[] RpIdHash);
     public sealed record MuSig2Key(byte[] AggKey, byte[][] MemberKeys);
     public sealed record FrostMember(byte[][] Commitments, byte[] R, byte[] Z);
+    /// <summary>One member of a BlsMultiKey (spec 2026-11-19-bls12381-multi §2): its G2 key (256 B, EIP-2537) and weight.</summary>
+    public sealed record BlsMultiMember(byte[] Key, ushort Weight);
+    /// <summary>The typed key of 0x0121: apk, threshold, the members sorted by key.</summary>
+    public sealed record BlsMultiKey(byte[] AggKey, ushort Threshold, BlsMultiMember[] Members);
     public sealed record FrostKey(byte[] GroupKey, ushort Threshold, FrostMember[] Members);
     /// <summary>One signature of a member of an inner msig: its slot there. No list of its own: a third level has no form.</summary>
     public sealed record InnerSig(ushort Index, byte[] Sig);
@@ -59,6 +63,8 @@ public static partial class UA
             return Key switch
             {
                 WebAuthnKey => 4 + 192 + rest,
+                // heads 128; key 96 + aggKey + members (offset, key, weight, key bytes)
+                BlsMultiKey k => 4 + 128 + 96 + TailLen(k.AggKey) + 32 + k.Members.Sum(m => 32 + 64 + TailLen(m.Key)) + rest,
                 MuSig2Key k => 4 + 160 + 64 + TailLen(k.AggKey) + BytesArrLen(k.MemberKeys) + rest,
                 FrostKey k => 4 + 160 + 96 + TailLen(k.GroupKey) + 32 + k.Members.Sum(m => 32 + 96 + BytesArrLen(m.Commitments) + TailLen(m.R)) + rest,
                 _ => 4 + 160 + TailLen(KeyData!) + rest,
@@ -112,6 +118,13 @@ public static partial class UA
     public static object? TypedKey(ushort kind, byte[] keyData)
     {
         var d = keyData;
+        if (kind == 0x0121)
+        {
+            var m = U16(d, 258);
+            Need(d.Length == 260 + 258 * m, "length");
+            return new BlsMultiKey(d[..256], (ushort)U16(d, 256),
+                [.. Enumerable.Range(0, m).Select(i => 260 + 258 * i).Select(o => new BlsMultiMember(d[o..(o + 256)], (ushort)U16(d, o + 256)))]);
+        }
         if (kind == 0x0100)
         {
             Need(d.Length == 96, "length");
@@ -201,6 +214,7 @@ public static partial class UA
         {
             0x0120 => ("registerMsig", false),
             0x0100 => ("registerWebAuthn", false),
+            0x0121 => ("registerBlsMulti", false),
             0x0110 or 0x0112 => ("registerMuSig2", true),
             0x0111 or 0x0113 => ("registerFrost", true),
             _ => ("register", true),

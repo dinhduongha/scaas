@@ -220,7 +220,9 @@ pub(crate) fn record_holds2(landed: Landed, out: &[u8]) -> Option<bool> {
 }
 
 fn word(out: &[u8], i: usize) -> Option<U256> {
-    out.get(i * 32..i * 32 + 32).map(U256::from_be_slice)
+    // F24 / M5: `i` may come from an RPC answer
+    let at = i.checked_mul(32)?;
+    out.get(at..at.checked_add(32)?).map(U256::from_be_slice)
 }
 
 /// The record's answer: present or not; `None` for an answer of another shape.
@@ -235,12 +237,14 @@ pub(crate) fn record_holds(landed: Landed, out: &[u8]) -> Option<bool> {
         Landed::PqzPop(_) => {
             let off = usize::try_from(word(out, 0)?).ok()?;
             let len = usize::try_from(word(out, off / 32)?).ok()?;
-            (off % 32 == 0 && out.len() >= off + 32 + len).then_some(len > 0)
+            // F24: offsets from an RPC answer, added checked
+            let end = off.checked_add(32)?.checked_add(len)?;
+            (off % 32 == 0 && out.len() >= end).then_some(len > 0)
         }
         // `(KemKey kem, bytes sig)`: the tuple's offset, then its first word the scheme
         Landed::Kem(_) => {
             let off = usize::try_from(word(out, 0)?).ok()?;
-            Some(!out.get(off..off + 32)?.iter().all(|b| *b == 0))
+            Some(!out.get(off..off.checked_add(32)?)?.iter().all(|b| *b == 0))
         }
         // `(uint64 version, uint256 enabled, uint256 accepted)`
         Landed::Accepted(i) => (out.len() == 96)
@@ -307,6 +311,28 @@ async fn pqz_proven(pool: &EvmPool, registry: Address, ua: &[u8; 32]) -> Result<
         }))
 }
 
+/// `pqzKeyAt(ua, 0).pqzPopHash`: the hash of the proof the registration committed to (`storePqzPop` takes only that proof).
+async fn pqz_pop_hash(
+    pool: &EvmPool,
+    registry: Address,
+    ua: &[u8; 32],
+) -> Result<[u8; 32], SdkError> {
+    let mut d = selector("pqzKeyAt(bytes32,uint64)");
+    d.extend_from_slice(ua);
+    d.extend_from_slice(&word_u64(0));
+    let tx = TransactionRequest::default()
+        .with_to(registry)
+        .with_input(Bytes::from(d));
+    let out = pool.call_tx(tx).await.map_err(sim)?;
+    // `(address ptr, bytes32 pqzPopHash, bool proven)`
+    out.get(32..64)
+        .and_then(|w| w.try_into().ok())
+        .ok_or(SdkError::Rpc(scaas_rpc::RpcError::EndpointAllFailed {
+            last: None,
+            failover_revert: None,
+        }))
+}
+
 /// `registrationOf(ua)`'s `attrs.kemPkHash` (zero for an unregistered UA).
 async fn kem_pk_hash(
     pool: &EvmPool,
@@ -329,7 +355,8 @@ async fn kem_pk_hash(
     let off = word(&out, 2)
         .and_then(|w| usize::try_from(w).ok())
         .ok_or_else(bad)?;
-    out.get(off + 96..off + 128)
+    let at = off.checked_add(96).ok_or_else(bad)?;
+    out.get(at..at.checked_add(32).ok_or_else(bad)?)
         .and_then(|w| w.try_into().ok())
         .ok_or_else(bad)
 }
@@ -407,7 +434,8 @@ pub(crate) fn keep(
 
 /// The writes of a registration with its arguments `args` (named fields, `entry` among them, as `scaas-ua`'s
 /// `registration_args_json` gives them) and `kem_fill` (the `setKemKey` of a hash-committed KEM key): skipped when `ua` is
-/// registered already (its KEM fill added when the commit is unfilled); split as the node's rule when it carries a `pqzPop`
+/// registered already (its KEM fill added when the commit is unfilled, its `storePqzPop` when a split's second part never
+/// landed); split as the node's rule when it carries a `pqzPop`
 /// and does not fit (module doc). `GasAboveTxCap`: a part above the cap.
 pub(crate) async fn writes(
     sdk: &Arc<Sdk>,
@@ -506,6 +534,8 @@ pub(crate) async fn writes(
                 payer,
                 Landed::PqzPop(0),
             )?);
+            // the second part's proof outlives this process (M1)
+            crate::op::state::keep_pop(sdk, &hex(&ua), Some(pqz_pop)).await?;
         } else {
             out.push(keep(
                 sdk,
@@ -515,6 +545,35 @@ pub(crate) async fn writes(
                 args,
                 payer,
                 Landed::Registered,
+            )?);
+        }
+    }
+    // F22, M1 (reviews 2026-11-20): a split whose first part landed and whose `storePqzPop` did not (the app closed between
+    // the two parts, a lost handle, a failed submit): the second part again, with the proof the registration committed to
+    // (`pqzKeyAt(ua, 0).pqzPopHash`): the one kept at the split, or this call's when it hashes the same (a sponsor's blob);
+    // a proof proved again hashes otherwise (hedged), so none matching is `RegistrationPopInvalid`
+    let pqz_pop = args.get("pqzPop").and_then(Value::as_str).unwrap_or("0x");
+    let uah = hex(&ua);
+    if registered && pqz_pop != "0x" {
+        if read_record(&pool, registry, Landed::PqzPop(0), &ua).await? {
+            crate::op::state::keep_pop(sdk, &uah, None).await?;
+        } else {
+            let want = pqz_pop_hash(&pool, registry, &ua).await?;
+            let kept = crate::op::state::kept_pop(sdk, &uah).await?;
+            let pop = [Some(pqz_pop.to_string()), kept]
+                .into_iter()
+                .flatten()
+                .find(|p| unhex(p).is_ok_and(|b| scaas_ua::keccak256(&b) == want))
+                .ok_or(SdkError::RegistrationPopInvalid)?;
+            let store = json!({"ua": uah, "version": 0, "pqzPop": pop});
+            out.push(keep(
+                sdk,
+                chain,
+                "storePqzPop",
+                ua,
+                &store,
+                payer,
+                Landed::PqzPop(0),
             )?);
         }
     }
@@ -861,6 +920,7 @@ impl Account {
                     tx_nonce: Some(quote.tx_nonce),
                     path: "self".into(),
                     payer: Some(format!("{:#x}", payer_address(&sdk, &write.payer)?)),
+                    members: None,
                     from_block,
                     state: "signed".into(),
                     detail: "Signed".into(),

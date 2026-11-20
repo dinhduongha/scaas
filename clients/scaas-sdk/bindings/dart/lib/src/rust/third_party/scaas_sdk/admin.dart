@@ -246,7 +246,8 @@ abstract class Admin implements RustOpaqueInterface {
   });
 
   /// The new auditor's consent on a PQZ token (`AuditorConsent`, for `UASetAuditorUA`): the auditor UA's `UASig` under
-  /// `auditor-consent`, JSON (the `consent` argument). `Argument` for another domain kind.
+  /// `auditor-consent`, JSON (the `consent` argument). `PqzAuditorNative` for a native (address) auditor, before any read;
+  /// `Argument` for another domain kind.
   Future<String> signPqzAuditorConsent({required AuditorConsent req});
 
   /// Signs a rescue-vault operation (CTR-GOV-25): the typed data `scaas-ua` builds from the named fields

@@ -443,7 +443,8 @@ impl Admin {
     }
 
     /// The new auditor's consent on a PQZ token (`AuditorConsent`, for `UASetAuditorUA`): the auditor UA's `UASig` under
-    /// `auditor-consent`, JSON (the `consent` argument). `Argument` for another domain kind.
+    /// `auditor-consent`, JSON (the `consent` argument). `PqzAuditorNative` for a native (address) auditor, before any read;
+    /// `Argument` for another domain kind.
     pub async fn sign_pqz_auditor_consent(&self, req: AuditorConsent) -> Result<String, SdkError> {
         self.consent(req, "pqz").await
     }
@@ -459,6 +460,15 @@ impl Admin {
     }
 
     async fn consent(&self, req: AuditorConsent, want: &'static str) -> Result<String, SdkError> {
+        // a group auditor has no consent path (M16; PLANNED)
+        if matches!(req.signer, KeyRef::BlsMulti { .. }) {
+            return Err(SdkError::Argument);
+        }
+        // a native (address) auditor of a PQZ token: refused up front (controller call, owner auto-run 2026-11-19); a native id
+        // holds no PQZ key (CTR-UA-32), so the token refuses it at `_keyOf` before the consent is read
+        if want == "pqz" && matches!(req.signer, KeyRef::Native { .. } | KeyRef::Imported { .. }) {
+            return Err(SdkError::PqzAuditorNative);
+        }
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
@@ -495,15 +505,15 @@ impl Admin {
                             now: 0,
                             max_window: 0,
                         };
+                        // an `msig` auditor: its `UASig{"", "", members}` by the slots named (`account::msig`)
+                        #[cfg(feature = "account")]
+                        if let KeyRef::Msig { ua, slots } = &req.signer {
+                            let s = crate::account::msig::sign_typed(&sdk, &req.chain, ua, slots, &td, &ex)
+                                .await?;
+                            return Ok(scaas_ua::json::uasig_json(&s));
+                        }
                         let k = key_opened(&sdk, &req.signer).await?;
-                        let s = if matches!(req.signer, KeyRef::Native { .. } | KeyRef::Imported { .. }) {
-                            // a native auditor: the token checks the consent through the registry (`requireAuthorized`),
-                            // so its key signs the registry's `UAAuth` form under the profile's registry domain (the
-                            // typed_ops row's `native`), never the digest bare (controller call, auto-run 2026-11-19)
-                            native_consent(&sdk, &req.chain, &k, &td, ex).await?
-                        } else {
-                            crate::op::submit::sign_one(&sdk, &k, &td, &ex).await?
-                        };
+                        let s = crate::op::submit::sign_one(&sdk, &k, &td, &ex).await?;
                         Ok(json!({"keyData": hex(&s.key_data), "signature": hex(&s.signature), "members": []})
                             .to_string())
                     }
@@ -531,39 +541,3 @@ impl Admin {
 #[cfg(test)]
 #[path = "admin_tests.rs"]
 mod tests;
-
-/// A native auditor's PQZ consent: `scaas-ua`'s `sign_auditor_consent_native` under the registry domain of the profile's
-/// registry (generation 1). An external key or a build without `account` (the registry's reads): refused.
-#[cfg(feature = "pqz")]
-async fn native_consent(
-    sdk: &Sdk,
-    chain: &str,
-    k: &crate::op::Key,
-    td: &scaas_ua::wallet::TypedData,
-    ex: scaas_ua::wallet::Expect,
-) -> Result<scaas_ua::ua_portable::UASig, SdkError> {
-    #[cfg(feature = "account")]
-    {
-        if matches!(k, crate::op::Key::External(..)) {
-            return Err(SdkError::Argument);
-        }
-        let (profile, _, pool) = crate::op::evm(sdk, chain)?;
-        let registry: alloy::primitives::Address = profile
-            .registry
-            .as_deref()
-            .and_then(|r| r.parse().ok())
-            .ok_or(SdkError::Argument)?;
-        let reg = crate::account::msig::domain(sdk, chain, &pool, registry).await?;
-        Ok(scaas_ua::wallet::sign_auditor_consent_native(
-            k.signer(),
-            td,
-            ex,
-            &reg,
-        )?)
-    }
-    #[cfg(not(feature = "account"))]
-    {
-        let _ = (sdk, chain, k, td, ex);
-        Err(SdkError::FeatureMissing)
-    }
-}

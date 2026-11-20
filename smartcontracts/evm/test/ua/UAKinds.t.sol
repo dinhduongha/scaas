@@ -5,11 +5,24 @@ import {Test} from "forge-std/Test.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
 import {UAStore} from "../../src/ua/UAStore.sol";
+import {BlsMultiKeyData} from "../../src/ua/BlsMultiKeyData.sol";
 
 /// External wrapper so a revert of the library is observable with try/catch.
 contract UAKindsHarness {
     function validate(uint16 kind, bytes memory keyData, bool hederaNative) external view {
         UAKinds.validateKeyData(kind, keyData, hederaNative);
+    }
+
+    function compress(bytes memory d) external pure returns (bytes memory) {
+        return BlsMultiKeyData.compress(d);
+    }
+
+    function expand(bytes memory s) external pure returns (bytes memory) {
+        return BlsMultiKeyData.expand(s);
+    }
+
+    function point(bytes memory p, uint256 i) external pure returns (bytes memory) {
+        return BlsMultiKeyData.point(p, i);
     }
 }
 
@@ -45,7 +58,7 @@ contract UAKindsTest is Test {
     function test_kindTable() public view {
         string memory j = _k();
         uint256 n = _count(j, "kinds");
-        assertEq(n, 33); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40)
+        assertEq(n, 34); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40), bls12381-multi (0x0121, spec 2026-11-19)
         for (uint256 i; i < n; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("kinds", i, "kind")));
             bool native = vm.parseJsonBool(j, _at("kinds", i, "native"));
@@ -55,10 +68,14 @@ contract UAKindsTest is Test {
             assertEq(UAKinds.isZether(kind), vm.parseJsonBool(j, _at("kinds", i, "zether")));
             assertEq(UAKinds.isMember(kind, false), vm.parseJsonBool(j, _at("kinds", i, "member")));
             assertEq(UAKinds.isMember(kind, true), vm.parseJsonBool(j, _at("kinds", i, "memberHedera")));
+            assertEq(UAKinds.hasSurplusForm(kind), vm.parseJsonBool(j, _at("kinds", i, "surplusForm")));
             if (native) continue;
             assertEq(UAKinds.tag(kind), vm.parseJsonBytes32(j, _at("kinds", i, "TAG")));
-            if (kind == UAKinds.MSIG) assertEq(bytes(UAKinds.groupName(kind)).length, 0);
-            else assertEq(UAKinds.groupName(kind), vm.parseJsonString(j, _at("kinds", i, "group")));
+            if (kind == UAKinds.MSIG || kind == UAKinds.BLS12381_MULTI) {
+                assertEq(bytes(UAKinds.groupName(kind)).length, 0);
+            } else {
+                assertEq(UAKinds.groupName(kind), vm.parseJsonString(j, _at("kinds", i, "group")));
+            }
         }
     }
 
@@ -136,7 +153,9 @@ contract UAKindsTest is Test {
             assertEq(UAKinds.name(kind), vm.parseJsonString(j, _at("valid", i, "name")));
             assertEq(ua, vm.parseJsonBytes32(j, _at("valid", i, "ua")), UAKinds.name(kind));
             assertFalse(UAKinds.inNativeSpace(ua));
-            bytes32 want = kind == UAKinds.MSIG ? bytes32(0) : vm.parseJsonBytes32(j, _at("valid", i, "keyHash"));
+            bytes32 want = kind == UAKinds.MSIG || kind == UAKinds.BLS12381_MULTI
+                ? bytes32(0)
+                : vm.parseJsonBytes32(j, _at("valid", i, "keyHash"));
             assertEq(UAKinds.keyHashOf(kind, d), want, UAKinds.name(kind));
         }
     }
@@ -627,5 +646,155 @@ contract UAKindsTest is Test {
         assertEq(UAKinds.CHECKED_CHAIN, vm.parseJsonUint(j, ".checked.chain"));
         assertEq(UAKinds.CHECKED_RELAYER, vm.parseJsonUint(j, ".checked.relayer"));
         assertEq(UAKinds.KEM_PK_LENGTH, vm.parseJsonUint(j, ".kemPkLength"));
+    }
+
+    // ----- bls12381-multi (0x0121, spec 2026-11-19-bls12381-multi §2; plan Task 5) -----
+
+    uint16 internal constant MULTI = 0x0121;
+
+    function _multiRow(string memory j, string memory labelPrefix) internal view returns (uint256 row) {
+        uint256 n = _count(j, "valid");
+        for (uint256 i; i < n; ++i) {
+            if (vm.parseJsonUint(j, _at("valid", i, "kind")) != MULTI) continue;
+            if (_startsWith(vm.parseJsonString(j, _at("valid", i, "label")), labelPrefix)) return i;
+        }
+        revert(string.concat("no 0x0121 row ", labelPrefix));
+    }
+
+    function _startsWith(string memory s, string memory p) internal pure returns (bool) {
+        bytes memory a = bytes(s);
+        bytes memory b = bytes(p);
+        return a.length >= b.length && keccak256(_slice(a, 0, b.length)) == keccak256(b);
+    }
+
+    /// Every 0x0121 row of kinds.json: valid accepted with its id, no keyHash, its `s`, `p` and `keyOf`; invalid `UAKeyData(0x0121)`.
+    function test_blsMulti_kinds_json_rows() public {
+        vm.pauseGasMetering();
+        string memory j = _k();
+        (uint256 n, uint256 valid, uint256 invalid) = (_count(j, "valid"), 0, 0);
+        for (uint256 i; i < n; ++i) {
+            if (vm.parseJsonUint(j, _at("valid", i, "kind")) != MULTI) continue;
+            bytes memory d = vm.parseJsonBytes(j, _at("valid", i, "keyData"));
+            h.validate(MULTI, d, false);
+            bytes32 ua = UAKinds.uaOf(MULTI, d);
+            assertEq(ua, vm.parseJsonBytes32(j, _at("valid", i, "ua")));
+            assertEq(UAKinds.keyHashOf(MULTI, d), bytes32(0));
+            bytes memory s = h.compress(d);
+            assertEq(s, vm.parseJsonBytes(j, _at("valid", i, "compressed")));
+            assertEq(bytes.concat(ua, s), vm.parseJsonBytes(j, _at("valid", i, "stored")));
+            assertEq(h.point(bytes.concat(ua, s), 0), vm.parseJsonBytes(j, _at("valid", i, "keyOf")));
+            ++valid;
+        }
+        n = _count(j, "invalid");
+        for (uint256 i; i < n; ++i) {
+            if (vm.parseJsonUint(j, _at("invalid", i, "kind")) != MULTI) continue;
+            bytes memory d = vm.parseJsonBytes(j, _at("invalid", i, "keyData"));
+            try h.validate(MULTI, d, false) {
+                revert(string.concat("accepted: ", vm.parseJsonString(j, _at("invalid", i, "reason"))));
+            } catch (bytes memory got) {
+                assertEq(got, abi.encodeWithSelector(UAKinds.UAKeyData.selector, MULTI));
+            }
+            ++invalid;
+        }
+        assertEq(valid, 10);
+        assertEq(invalid, 18);
+    }
+
+    /// Review Focus 1: weights {65535, 65535}, t = 65535: the sum (131,070) exceeds 16 bits and t ≤ Σ w holds.
+    function test_blsMulti_weightSumWide() public {
+        string memory j = _k();
+        h.validate(MULTI, vm.parseJsonBytes(j, _at("valid", _multiRow(j, "weights {65535"), "keyData")), false);
+    }
+
+    /// R2-Q3: a weight above t is valid (weights {5, 1}, t = 2); a `w_i ≤ t` bound is the mutant this refuses.
+    function test_blsMulti_weightAboveT_valid() public {
+        string memory j = _k();
+        h.validate(MULTI, vm.parseJsonBytes(j, _at("valid", _multiRow(j, "weights {5, 1}"), "keyData")), false);
+    }
+
+    /// F14: a call with gas for every G2MSM check but not for the G2ADD calls reverts `UAVerifyGas`, never `UAKeyData`.
+    function test_blsMulti_starvedG2Add_UAVerifyGas() public {
+        string memory j = _k();
+        bytes memory d = vm.parseJsonBytes(j, _at("valid", _multiRow(j, "n64 t1"), "keyData"));
+        (uint256 lo, uint256 hi) = (1_000_000, 4_000_000); // lo fails, hi passes
+        (bool okHi,) = address(h).call{gas: hi}(abi.encodeCall(h.validate, (MULTI, d, false)));
+        assertTrue(okHi);
+        while (hi - lo > 1) {
+            uint256 mid = (lo + hi) / 2;
+            (bool ok,) = address(h).call{gas: mid}(abi.encodeCall(h.validate, (MULTI, d, false)));
+            if (ok) hi = mid;
+            else lo = mid;
+        }
+        // the largest failing gas: the last G2ADD's pre-check (the 64 G2MSM checks passed with their caps)
+        (bool okLo, bytes memory got) = address(h).call{gas: lo}(abi.encodeCall(h.validate, (MULTI, d, false)));
+        assertFalse(okLo);
+        assertEq(got, abi.encodeWithSelector(UAKinds.UAVerifyGas.selector));
+        for (uint256 g = lo; g > lo - 40_000; g -= 997) {
+            (bool ok, bytes memory e) = address(h).call{gas: g}(abi.encodeCall(h.validate, (MULTI, d, false)));
+            assertFalse(ok);
+            assertEq(e, abi.encodeWithSelector(UAKinds.UAVerifyGas.selector));
+        }
+    }
+
+    /// F14's order: a key outside the subgroup first in an n = 64 group fails at its G2MSM check, before any G2ADD runs.
+    function test_blsMulti_invalidKeyFailsBeforeG2Add() public {
+        string memory j = _k();
+        bytes memory d = vm.parseJsonBytes(j, _at("valid", _multiRow(j, "n64 t1"), "keyData"));
+        bytes memory q = vm.parseJsonBytes(j, string.concat(".invalid[", vm.toString(_outsideRow(j)), "].keyData"));
+        // the 0x0106 refusal row "outside the subgroup": its 256-byte point, smaller than every key of the group
+        for (uint256 i; i < 256; ++i) {
+            d[260 + i] = q[i];
+        }
+        uint256 before = gasleft();
+        try h.validate{gas: 5_000_000}(MULTI, d, false) {
+            revert("accepted");
+        } catch (bytes memory got) {
+            assertEq(got, abi.encodeWithSelector(UAKinds.UAKeyData.selector, MULTI));
+        }
+        // measured 90,391: the 16 KB argument's copy and decode plus one burnt G2MSM cap (45,000); the 63 G2ADD calls of a
+        // G2ADD-first order would add ≈ 50,000
+        assertLt(before - gasleft(), 110_000);
+    }
+
+    function _outsideRow(string memory j) internal view returns (uint256) {
+        uint256 n = _count(j, "invalid");
+        for (uint256 i; i < n; ++i) {
+            if (vm.parseJsonUint(j, _at("invalid", i, "kind")) != UAKinds.BLS12381_MINSIG) continue;
+            if (_contains(vm.parseJsonString(j, _at("invalid", i, "reason")), "outside the subgroup")) return i;
+        }
+        revert("no row");
+    }
+
+    function test_blsMulti_signingMemberSurplus() public pure {
+        assertTrue(UAKinds.isSigning(MULTI));
+        assertTrue(UAKinds.isMember(MULTI, false));
+        assertTrue(UAKinds.isDerived(MULTI));
+        assertEq(UAKinds.name(MULTI), "bls12381-multi");
+        for (uint256 k; k < 0x0200; ++k) {
+            assertEq(UAKinds.hasSurplusForm(uint16(k)), k == MULTI);
+        }
+    }
+
+    /// Owner ruling 2026-11-19 (R2-Q1's conditions): `vkLength(0x0121)` is not 0 (228, the fixed part of `p`).
+    function test_blsMulti_vkLength() public pure {
+        assertEq(UAStore.vkLength(MULTI), 228);
+    }
+
+    function test_blsMulti_compressExpand() public {
+        vm.pauseGasMetering();
+        string memory j = _k();
+        uint256 n = _count(j, "valid");
+        for (uint256 i; i < n; ++i) {
+            if (vm.parseJsonUint(j, _at("valid", i, "kind")) != MULTI) continue;
+            bytes memory d = vm.parseJsonBytes(j, _at("valid", i, "keyData"));
+            bytes memory s = h.compress(d);
+            assertEq(s.length, d.length - 64 * (1 + (d.length - 260) / 258));
+            assertEq(h.expand(s), d);
+            bytes memory p = bytes.concat(UAKinds.uaOf(MULTI, d), s);
+            uint256 m = (d.length - 260) / 258;
+            for (uint256 k = 1; k <= m; k += m - 1) {
+                assertEq(h.point(p, k), _slice(d, 260 + 258 * (k - 1), 256));
+            }
+        }
     }
 }

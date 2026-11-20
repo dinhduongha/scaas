@@ -756,3 +756,8 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   `relayfee` or `meta` after the deploy.
 - **Owed.** A two-passkey relay may exceed the 9,200 exec-gas ceiling (unmeasured); measure it on a localnet or testnet
   (TODO.md). Commits: T14 `78c67cff`, fix 1 `d48c51f9`.
+
+<a id="bls12381-multi"></a>**`bls12381-multi` (`0x0121`) — PLANNED** in the `ua-aptos` round: the family must support it
+([ARCH-POS-18](../decisions.md#ARCH-POS-18), [CTR-UA-54](../contracts/accounts.md#CTR-UA-54)): its BLS12-381 host functions where
+present, else software, with the same checks (subgroup, infinity, the minimal form on stored paths) and the 64-member cap; the
+round measures its path and brings infeasibility to the owner with numbers.

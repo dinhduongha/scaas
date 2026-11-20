@@ -1,0 +1,10 @@
+killed   | M1 job op keeps the 160-byte UASig | clients/scaas-sdk/src/op/bls_multi.rs | rc=101 | expect bls_multi_sign_collect_aggregate_submit | 3 failed: op::tests::bls_multi_bad_partial_named, op::tests::bls_multi_sign_collect_aggregate_submit, op::tests::bls_multi_stored_path_minimal
+killed   | M2 aggregate always surplus | clients/scaas-sdk/src/op/bls_multi.rs | rc=101 | expect bls_multi_stored_path_minimal | 2 failed: op::tests::bls_multi_sign_collect_aggregate_submit, op::tests::bls_multi_stored_path_minimal
+killed   | M3 quote reads no members | clients/scaas-sdk/src/op/quote.rs | rc=101 | expect bls_multi_stored_path_minimal | 1 failed: op::tests::bls_multi_stored_path_minimal
+killed   | M4 member of another group accepted | clients/scaas-sdk/src/op/bls_multi.rs | rc=101 | expect bls_multi_sign_collect_aggregate_submit | 1 failed: op::tests::bls_multi_sign_collect_aggregate_submit
+killed   | M5 registration keeps the quote's gas | clients/scaas-sdk/src/op/bls_multi.rs | rc=101 | expect bls_multi_register_sends_the_pop | 1 failed: op::tests::bls_multi_register_sends_the_pop
+killed   | M6 registration quote without per_item | clients/scaas-sdk/src/op/gas.rs | rc=101 | expect bls_multi_register_quote_by_n | 2 failed: op::gas::tests::gas_bls_multi_rows_quote_by_members, op::tests::bls_multi_register_quote_by_n
+killed   | M7 unknown attached kind: members unread | clients/scaas-sdk/src/op/gas.rs | rc=101 | expect gas_attached_unknown_counts_members_at_the_cap | 1 failed: op::gas::tests::gas_attached_unknown_counts_members_at_the_cap
+killed   | M8 member signs without the check | clients/ua-rs/src/wallet/policy.rs | rc=101 | expect bls_multi_member_signs_under_the_check | 1 failed: bls_multi_member_signs_under_the_check
+killed   | M9 member signs under another purpose | clients/ua-rs/src/wallet/policy.rs | rc=101 | expect bls_multi_member_signs_under_the_check | 1 failed: bls_multi_member_signs_under_the_check
+9 mutants, 9 killed, 0 survived, 0 not loaded

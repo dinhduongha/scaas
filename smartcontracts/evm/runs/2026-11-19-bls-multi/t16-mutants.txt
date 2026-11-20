@@ -1,0 +1,6 @@
+killed   | M1 registration without per_item | clients/scaas-sdk/src/op/gas.rs | rc=101 | expect gas_bls_multi_rows_quote_by_members | 1 failed: op::gas::tests::gas_bls_multi_rows_quote_by_members
+killed   | M2 registration counts any item | clients/scaas-sdk/src/op/gas.rs | rc=101 | expect gas_bls_multi_rows_quote_by_members | 1 failed: op::gas::tests::gas_bls_multi_rows_quote_by_members
+killed   | M3 registration without COUNT_MAX | clients/scaas-sdk/src/op/gas.rs | rc=101 | expect gas_bls_multi_rows_quote_by_members | 1 failed: op::gas::tests::gas_bls_multi_rows_quote_by_members
+killed   | M4 fit without the lifted intercept | smartcontracts/evm/test/gas/SdkGasVerify.t.sol | rc=1 | expect test_sdkGas_verifyBlsMulti | 1 failed: test_sdkGas_verifyBlsMulti
+killed   | M5 fit slope rounded down | smartcontracts/evm/test/gas/SdkGasVerify.t.sol | rc=1 | expect test_sdkGas_verifyBlsMulti | 1 failed: test_sdkGas_verifyBlsMulti
+5 mutants, 5 killed, 0 survived, 0 not loaded

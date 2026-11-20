@@ -23,7 +23,7 @@ MUTANTS = [
     ("2: a non-terminal row pruned too", [(f"{OP}/state.rs", "!r.terminal() || r.ended_at.is_none_or(|e| e.saturating_add(keep) > now)",
                                          "r.ended_at.unwrap_or(r.valid_until.min(now)).saturating_add(keep) > now")],
      L + "terminal_rows_pruned_after_retention"),
-    ("5: the native estimate without its value", [(f"{OP}/quote.rs", "pool.simulate_value(from, to, value, data)", "pool.simulate_value(from, to, U256::ZERO, data)")],
+    ("5: the native estimate without its value", [(f"{OP}/quote.rs", ".simulate_value(from, to, value, data)", ".simulate_value(from, to, U256::ZERO, data)")],
      C + "--test wallet native_send_estimate_carries_the_value"),
     ("5: simulate_value drops the value", [("clients/scaas-rpc/src/evm.rs", "            .with_value(value)\n", "")],
      RPC + "simulate_value_carries_the_value"),

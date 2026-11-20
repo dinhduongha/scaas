@@ -37,10 +37,9 @@ MUTANTS = [
      [(Q, "    } else if relayed {\n        return Err(SdkError::GasUnquoted);", "    } else if false {\n        return Err(SdkError::GasUnquoted);")],
      U + "an_operation_without_a_gas_row_is_gas_unquoted"),
     ("ruling B: the signer kind left out of the key",
-     [(G, "r.entry == entry && r.kind == kind && r.signer == signer && r.fresh == fresh", "r.entry == entry && r.kind == kind && r.fresh == fresh")],
+     [(G, "let v = r.verify.iter().find(|v| v.signer == signer)?;", "let v = r.verify.iter().find(|_| true)?;")],
      U + "an_operation_without_a_gas_row_is_gas_unquoted"),
-    ("ruling B: a row below its pin", [(G, "        false,\n        98_000,\n", "        false,\n        97_000,\n")],
-     U + "built_in_rows_cover_their_pins"),
+    # removed 2026-11-20 (review T5): "ruling B: a row below its pin": the built-in gas rows and their pin test left in 64c8ed24d (gas tables are data)
 ]
 
 if __name__ == "__main__":
