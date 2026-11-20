@@ -1,0 +1,371 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+pragma solidity ^0.8.24;
+
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {IPqChat} from "../../src/pqchat/IPqChat.sol";
+import {IPqVault} from "../../src/pqvault/IPqVault.sol";
+import {PqVault} from "../../src/pqvault/PqVault.sol";
+import {PqVaultTypes} from "../../src/pqvault/PqVaultTypes.sol";
+import {PqVaultBase} from "./PqVaultBase.sol";
+
+/// PqVault plan V3: PqChat's epoch suite ported (the removal attack, the slot, replicas, leavers, removals, an `msig` admin) with
+/// PqVault's rule that every rekey is an admin's (CTR-PQV-13, VC16). Vaults of three members in mode 0: `ids[0]` creator and only
+/// admin. Every refusal beside its positive control.
+contract PqVaultEpochsTest is PqVaultBase {
+    bytes32 internal vid;
+
+    function setUp() public override {
+        super.setUp();
+        (vid,) = _newVault(3, 0);
+    }
+
+    function _admins() internal view returns (bytes32[] memory) {
+        return _list(ids[0]);
+    }
+
+    function _leave(PqVault c, bytes32 epochId, bytes32 member, uint64 nonce) internal {
+        IPqVault.PqVaultLeave memory l = IPqVault.PqVaultLeave(vid, epochId, member, nonce);
+        c.leaveVault(l, _sig(member, h.leave(l, PqVaultTypes.DS_V)));
+    }
+
+    function _rm(bytes32 epochId, uint64 next, bytes32[] memory members, bytes32 admin, uint64 nonce)
+        internal
+        view
+        returns (IPqVault.PqVaultRemove memory)
+    {
+        return IPqVault.PqVaultRemove(vid, epochId, next, members, admin, nonce);
+    }
+
+    function _remove(PqVault c, IPqVault.PqVaultRemove memory r) internal {
+        c.removeVaultMembers(r, _sig(r.admin, h.remove(r, PqVaultTypes.DS_V)));
+    }
+
+    function _refusedRemove(IPqVault.PqVaultRemove memory r, bytes32 signer, bytes memory err) internal {
+        IUARegistry.UASig memory sig = _sig(signer, h.remove(r, PqVaultTypes.DS_V));
+        vm.expectRevert(err);
+        vault.removeVaultMembers(r, sig);
+    }
+
+    function _refusedRekey(IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w, bytes memory err) internal {
+        IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
+        vm.expectRevert(err);
+        vault.rekeyVault(e, w, sig);
+    }
+
+    // ----- every rekey is an admin's (CTR-PQV-13) -----
+
+    /// A member who is no admin is refused `PqVaultNotAdmin` even for a rekey that keeps everyone (PqChat would call it plain);
+    /// the admin's rekey lands, the record and its full `UASig` read back.
+    function test_rekey_onlyAnAdmin() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[1], 1, 1, vid, _admins(), _members(3));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[1]));
+        (e, w) = _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        bytes32 eid = PqVaultTypes.epochId(vid, ids[0], 1);
+        vm.expectEmit(address(vault));
+        emit IPqVault.PqVaultEpochAdded(vid, eid, vid, 1, ids[0]);
+        vm.prank(STRANGER);
+        assertEq(_rekey(vault, e, w, 0), eid);
+        assertEq(vault.childOf(vid), eid, "the home slot");
+        bytes memory got = _raw(address(vault), abi.encodeCall(IPqVault.epochOf, (eid)));
+        assertEq(got, abi.encode(e, _sig(e.author, h.epoch(e, PqVaultTypes.DS_V))), "the record and its full UASig");
+        assertEq(keccak256(abi.encode(abi.decode(got, (IPqVault.PqVaultEpoch)))), keccak256(abi.encode(e)));
+        assertTrue(vault.nonceUsed(PqVaultTypes.scopeEpoch(vid, ids[0]), 1));
+        assertEq(vault.epochCount(vid), 2);
+        assertEq(vault.latestEpoch(vid), eid);
+        assertEq(vault.epochsOf(vid, 0, 9)[1], eid);
+    }
+
+    /// A removed admin is refused `PqVaultNotAdmin`; the other admin is the control.
+    function test_rekey_removedAdminRefused() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _list(ids[0], ids[1]), _members(3));
+        bytes32 e1 = _rekey(vault, e, w, 0); // ids[1] made an admin
+        _remove(vault, _rm(e1, 2, _list(ids[1]), ids[0], 2));
+        (e, w) = _epoch(vid, ids[1], 3, 2, e1, _admins(), _without(_members(3), ids[1]));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[1]));
+        (e, w) = _epoch(vid, ids[0], 3, 2, e1, _admins(), _without(_members(3), ids[1]));
+        _rekey(vault, e, w, 0);
+    }
+
+    /// The admin adds, drops and changes admins in one rekey; the added member's `vaultsOf` gains the vault.
+    function test_rekey_adminChangesMembership() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _list(ids[0], ids[1]), _without(_members(4), ids[2]));
+        assertEq(vault.vaultCount(ids[3]), 0);
+        _rekey(vault, e, w, 0);
+        assertEq(vault.vaultCount(ids[3]), 1);
+        assertEq(vault.vaultCount(ids[1]), 1, "a kept member gains no entry");
+    }
+
+    /// A passphrase change is an admin's rekey (VC10): the shape rule holds on epochs too.
+    function test_rekey_passphraseShape() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        e.passSalt = 0;
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultShape.selector));
+        e.passKdf = 0;
+        _rekey(vault, e, w, 0); // off: the control
+    }
+
+    // ----- removal by an admin (CTR-CHAT-20 as PqVault's) -----
+
+    /// The race: after the admin removes `ids[2]` from epoch 0, an admin's child keeping it is refused `PqVaultRemovedKept` at
+    /// completion; the admin's child without it lands; the record and its full `UASig` are in state.
+    function test_remove_raceIsClosed() public {
+        IPqVault.PqVaultRemove memory r = _rm(vid, 1, _list(ids[2]), ids[0], 7);
+        vm.expectEmit(address(vault));
+        emit IPqVault.PqVaultRemoved(vid, vid, ids[0], _list(ids[2]));
+        vm.prank(STRANGER);
+        _remove(vault, r);
+        assertTrue(vault.removedIn(vid, ids[2]));
+        assertFalse(vault.removedIn(vid, ids[1]));
+        assertEq(vault.removalCount(vid), 1);
+        bytes memory got = _raw(address(vault), abi.encodeCall(IPqVault.removalAt, (vid, 0)));
+        assertEq(got, abi.encode(r, _sig(r.admin, h.remove(r, PqVaultTypes.DS_V))), "the record and its full UASig");
+        assertTrue(vault.nonceUsed(PqVaultTypes.scopeEpoch(vid, ids[0]), 7));
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultRemovedKept.selector, vid, ids[2]));
+        (e, w) = _epoch(vid, ids[0], 1, 1, vid, _admins(), _without(_members(3), ids[2]));
+        bytes32 eid = _rekey(vault, e, w, 0);
+        assertEq(vault.childOf(vid), eid);
+    }
+
+    /// A child stored incomplete before the removal (keeping the member) cannot complete after it.
+    function test_remove_incompleteChildCannotComplete() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        bytes32 kept = vault.rekeyVault(e, _slice(w, 0, 1), _sig(e.author, h.epoch(e, PqVaultTypes.DS_V)));
+        _remove(vault, _rm(vid, 1, _list(ids[2]), ids[0], 7));
+        IPqChat.Wrap[] memory rest = _slice(w, 1, 3);
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultRemovedKept.selector, vid, ids[2]));
+        vault.addVaultWraps(kept, 1, rest);
+        (e, w) = _epoch(vid, ids[0], 2, 1, vid, _admins(), _without(_members(3), ids[2]));
+        bytes32 eid = _rekey(vault, e, w, 0);
+        assertEq(vault.childOf(vid), eid);
+    }
+
+    /// The child may not keep a removed UA among its admins either.
+    function test_remove_childAdminsExcludeRemoved() public {
+        IPqChat.MemberKey[] memory m = _members(3);
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _list(ids[0], ids[1]), m);
+        bytes32 e1 = _rekey(vault, e, w, 0);
+        _remove(vault, _rm(e1, 2, _list(ids[1]), ids[0], 8));
+        (e, w) = _epoch(vid, ids[0], 9, 2, e1, _list(ids[0], ids[1]), _without(m, ids[1]));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultRemovedKept.selector, e1, ids[1]));
+        (e, w) = _epoch(vid, ids[0], 9, 2, e1, _admins(), _without(m, ids[1]));
+        _rekey(vault, e, w, 0);
+    }
+
+    function test_remove_refusals() public {
+        IPqVault.PqVaultRemove memory r = _rm(vid, 1, _list(ids[2]), ids[0], 7);
+        _refusedRemove(r, ids[1], _unauthorized(ids[0])); // forged
+        r.admin = ids[1];
+        _refusedRemove(r, ids[1], abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[1]));
+        r.admin = ids[0];
+        r.nextEpoch = 2;
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultEpochNumber.selector, uint64(1), uint64(2)));
+        r.nextEpoch = 1;
+        r.members = new bytes32[](0);
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultShape.selector));
+        r.members = new bytes32[](17);
+        for (uint256 i; i < 17; ++i) {
+            r.members[i] = bytes32(i + 1);
+        }
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultShape.selector));
+        r.members = new bytes32[](2);
+        (r.members[0], r.members[1]) = (ids[2], ids[1]); // not sorted
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultShape.selector));
+        r.members = _list(keccak256("stranger"));
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultNotMember.selector, keccak256("stranger")));
+        bytes32 x = keccak256("unknown epoch");
+        r.members = _list(ids[2]);
+        r.epochId = x;
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultUnknown.selector, x));
+        r.epochId = vid;
+        _remove(vault, r); // the control
+        _refusedRemove(
+            r,
+            ids[0],
+            abi.encodeWithSelector(IPqVault.PqVaultNonceUsed.selector, PqVaultTypes.scopeEpoch(vid, ids[0]), uint64(7))
+        );
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _without(_members(3), ids[2]));
+        bytes32 eid = _rekey(vault, e, w, 0);
+        r.nonce = 8;
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultEpochTaken.selector, vid, eid));
+    }
+
+    // ----- the slot, the parent, nonces (P9, P10) -----
+
+    /// The removal attack: once the admin's child holds the slot, another child of the same parent cannot land.
+    function test_rekey_slotTaken() public {
+        (IPqVault.PqVaultEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _without(_members(3), ids[2]));
+        bytes32 e1 = _rekey(vault, a, aw, 0);
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 2, 1, vid, _admins(), _members(3));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultEpochTaken.selector, vid, e1));
+        (e, w) = _epoch(vid, ids[0], 3, 1000, vid, _admins(), _members(3));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultEpochNumber.selector, uint64(1), uint64(1000)));
+        // the removed member, no admin, from the admin's epoch: refused
+        (e, w) = _epoch(vid, ids[2], 1, 2, e1, _admins(), _members(3));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[2]));
+        (e, w) = _epoch(vid, ids[0], 4, 2, e1, _admins(), _without(_members(3), ids[2]));
+        _rekey(vault, e, w, 0); // the control
+    }
+
+    /// An incomplete child never takes the slot; anyone finishes it; once another child holds the slot it cannot land.
+    function test_rekey_incompleteChildNeverTakesSlot() public {
+        (IPqVault.PqVaultEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        bytes32 ea = vault.rekeyVault(a, _slice(aw, 0, 1), _sig(a.author, h.epoch(a, PqVaultTypes.DS_V)));
+        assertEq(vault.childOf(vid), bytes32(0));
+        (IPqVault.PqVaultEpoch memory b, IPqChat.Wrap[] memory bw) =
+            _epoch(vid, ids[0], 2, 1, vid, _admins(), _without(_members(3), ids[2]));
+        bytes32 eb = _rekey(vault, b, bw, 0);
+        assertEq(vault.childOf(vid), eb);
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultEpochTaken.selector, vid, eb));
+        vault.addVaultWraps(ea, 1, _slice(aw, 1, 3));
+        (IPqVault.PqVaultEpoch memory c, IPqChat.Wrap[] memory cw) = _epoch(vid, ids[0], 3, 2, eb, _admins(), b.members);
+        bytes32 ec = vault.rekeyVault(c, _slice(cw, 0, 1), _sig(c.author, h.epoch(c, PqVaultTypes.DS_V)));
+        vm.prank(STRANGER);
+        vault.addVaultWraps(ec, 1, _slice(cw, 1, 2));
+        assertEq(vault.childOf(eb), ec);
+    }
+
+    /// A parent not complete, unknown, of another vault; a record naming another vault than its parent's (review r2 R11).
+    function test_rekey_parentRules() public {
+        (IPqVault.PqVaultEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        bytes32 ea = vault.rekeyVault(a, _slice(aw, 0, 1), _sig(a.author, h.epoch(a, PqVaultTypes.DS_V)));
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 2, 2, ea, _admins(), _members(3));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultIncomplete.selector, ea));
+        bytes32 x = keccak256("x");
+        (e, w) = _epoch(vid, ids[0], 3, 1, x, _admins(), _members(3));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultUnknown.selector, x));
+        (IPqVault.PqVaultCreate memory v2, IPqChat.Wrap[] memory w2) = _vault(3, 2, 0, address(vault));
+        bytes32 vid2 = _create(vault, v2, w2);
+        (e, w) = _epoch(vid, ids[0], 4, 1, vid2, _admins(), _members(3));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultUnknown.selector, vid2)); // another vault's epoch
+        (e, w) = _epoch(vid2, ids[0], 5, 1, vid, _admins(), _members(3));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultUnknown.selector, vid)); // the record names vid2
+        vault.addVaultWraps(ea, 1, _slice(aw, 1, 3));
+        (e, w) = _epoch(vid, ids[0], 2, 2, ea, _admins(), _members(3));
+        _rekey(vault, e, w, 0); // the control
+    }
+
+    function test_rekey_nonceAndShapes() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _members(3));
+        bytes32 e1 = _rekey(vault, e, w, 0);
+        (e, w) = _epoch(vid, ids[0], 1, 2, e1, _admins(), _members(3));
+        _refusedRekey(
+            e,
+            w,
+            abi.encodeWithSelector(IPqVault.PqVaultNonceUsed.selector, PqVaultTypes.scopeEpoch(vid, ids[0]), uint64(1))
+        );
+        (e, w) = _epoch(vid, ids[0], 2, 2, e1, _admins(), _members(3));
+        IUARegistry.UASig memory sig = _sig(ids[1], h.epoch(e, PqVaultTypes.DS_V));
+        vm.expectRevert(_unauthorized(ids[0]));
+        vault.rekeyVault(e, w, sig);
+        assertFalse(vault.nonceUsed(PqVaultTypes.scopeEpoch(vid, ids[0]), 2), "a forged record burns no nonce");
+        IPqChat.MemberKey[] memory m = _members(3);
+        (m[0], m[1]) = (m[1], m[0]);
+        (e, w) = _epoch(vid, ids[0], 2, 2, e1, _admins(), m);
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultShape.selector));
+        (e, w) = _epoch(vid, ids[0], 2, 2, e1, _admins(), new IPqChat.MemberKey[](0));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultShape.selector)); // at least one member
+        (e, w) = _epoch(vid, ids[0], 2, 2, e1, _admins(), _members(1));
+        _rekey(vault, e, w, 0); // the control: one member
+    }
+
+    // ----- replicas (mode 0) -----
+
+    /// The same records in instance B: every complete child lands, `childOf` reads 0, in any order; at home the second is
+    /// refused.
+    function test_replica_storesEveryChild() public {
+        (IPqVault.PqVaultCreate memory v0, IPqChat.Wrap[] memory vw) = _vault(3, 1, 0, address(vault));
+        vaultB.createVault(v0, vw, _createSig(v0, address(vault)));
+        (IPqVault.PqVaultEpoch memory a, IPqChat.Wrap[] memory aw) =
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _without(_members(3), ids[2]));
+        (IPqVault.PqVaultEpoch memory b, IPqChat.Wrap[] memory bw) =
+            _epoch(vid, ids[0], 2, 1, vid, _admins(), _members(3));
+        bytes32 ea = _rekey(vault, a, aw, 0);
+        IUARegistry.UASig memory bs = _sig(b.author, h.epoch(b, PqVaultTypes.DS_V));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultEpochTaken.selector, vid, ea));
+        vault.rekeyVault(b, bw, bs);
+        bytes32 eb = vaultB.rekeyVault(b, bw, bs);
+        assertEq(_rekey(vaultB, a, aw, 0), ea);
+        assertTrue(vaultB.epochComplete(ea) && vaultB.epochComplete(eb));
+        assertEq(vaultB.childOf(vid), bytes32(0));
+        assertEq(vault.childOf(vid), ea);
+    }
+
+    // ----- leavers; no admin left (O4) -----
+
+    /// Dropping a member that left is an admin's rekey; a member that left authors nothing.
+    function test_leave_thenAdminDrops() public {
+        _leave(vault, vid, ids[2], 1);
+        assertTrue(vault.leftIn(vid, ids[2]));
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[2], 2, 1, vid, _admins(), _without(_members(3), ids[2]));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[2]));
+        (e, w) = _epoch(vid, ids[0], 1, 1, vid, _admins(), _without(_members(3), ids[2]));
+        bytes32 eid = _rekey(vault, e, w, 0);
+        assertEq(vault.childOf(vid), eid);
+    }
+
+    /// O4: the only admin left; nobody can rekey (membership and keys frozen).
+    function test_noAdminLeft_frozen() public {
+        _leave(vault, vid, ids[0], 1);
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[1], 1, 1, vid, new bytes32[](0), _without(_members(3), ids[0]));
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[1]));
+    }
+
+    function test_leave_rules() public {
+        IPqVault.PqVaultLeave memory l = IPqVault.PqVaultLeave(vid, vid, ids[3], 1);
+        IUARegistry.UASig memory sig = _sig(ids[3], h.leave(l, PqVaultTypes.DS_V));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultNotMember.selector, ids[3]));
+        vault.leaveVault(l, sig);
+        l = IPqVault.PqVaultLeave(vid, vid, ids[2], 1);
+        sig = _sig(ids[1], h.leave(l, PqVaultTypes.DS_V));
+        vm.expectRevert(_unauthorized(ids[2]));
+        vault.leaveVault(l, sig);
+        assertFalse(vault.nonceUsed(PqVaultTypes.scopeEpoch(vid, ids[2]), 1));
+        l = IPqVault.PqVaultLeave(keccak256("x"), vid, ids[2], 1);
+        sig = _sig(ids[2], h.leave(l, PqVaultTypes.DS_V));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultUnknown.selector, vid));
+        vault.leaveVault(l, sig); // the record names another vault than its epoch's
+        vm.expectEmit(address(vault));
+        emit IPqVault.PqVaultLeft(vid, vid, ids[2]);
+        _leave(vault, vid, ids[2], 1);
+        assertTrue(vault.leftIn(vid, ids[2]));
+        l = IPqVault.PqVaultLeave(vid, vid, ids[2], 1);
+        sig = _sig(ids[2], h.leave(l, PqVaultTypes.DS_V));
+        vm.expectRevert(
+            abi.encodeWithSelector(IPqVault.PqVaultNonceUsed.selector, PqVaultTypes.scopeEpoch(vid, ids[2]), uint64(1))
+        );
+        vault.leaveVault(l, sig);
+    }
+
+    // ----- an msig admin (a derived quorum) -----
+
+    function test_msigAdminSignsByQuorum() public {
+        bytes32 ms = _nativeMsig();
+        (IPqVault.PqVaultCreate memory v, IPqChat.Wrap[] memory w) = _vault(3, 4, 0, address(vault));
+        v.admins = _list(ms, ids[0]);
+        bytes32 vid2 = _create(vault, v, w);
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory ew) =
+            _epoch(vid2, ms, 1, 1, vid2, v.admins, _without(_members(3), ids[2]));
+        IUARegistry.UASig memory bad = _nativeMsigSig(ms, h.epoch(e, PqVaultTypes.DS_V), 1); // the mode-1 form
+        vm.expectRevert(_unauthorized(ms));
+        vault.rekeyVault(e, ew, bad);
+        vault.rekeyVault(e, ew, _nativeMsigSig(ms, h.epoch(e, PqVaultTypes.DS_V), 0));
+        assertTrue(vault.epochComplete(PqVaultTypes.epochId(vid2, ms, 1)));
+    }
+}
