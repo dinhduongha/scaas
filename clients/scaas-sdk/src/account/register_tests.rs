@@ -204,3 +204,26 @@ async fn pq_registration_split() {
 fn word(n: u64) -> String {
     format!("{n:064x}")
 }
+
+/// M5 (review 2026-11-20), F24: offsets from an RPC answer near `usize::MAX` are refused, never wrap or panic; the controls
+/// read well-formed answers.
+#[test]
+fn record_offsets_added_checked() {
+    let w = |n: u64| {
+        let mut b = [0u8; 32];
+        b[24..].copy_from_slice(&n.to_be_bytes());
+        b.to_vec()
+    };
+    // `bytes`: offset, length, one word
+    let ok = [w(0x20), w(1), vec![0xaa; 32]].concat();
+    assert_eq!(record_holds(Landed::PqzPop(0), &ok), Some(true));
+    let near = [w(u64::MAX - 8), w(1), vec![0xaa; 32]].concat();
+    assert_eq!(record_holds(Landed::PqzPop(0), &near), None);
+    let len_near = [w(0x20), w(u64::MAX - 8), vec![0xaa; 32]].concat();
+    assert_eq!(record_holds(Landed::PqzPop(0), &len_near), None);
+    // `(KemKey, bytes)`: the tuple's offset, its first word the scheme
+    let kem = [w(0x20), w(1)].concat();
+    assert_eq!(record_holds(Landed::Kem(0), &kem), Some(true));
+    let kem_near = [w(u64::MAX - 8), w(1)].concat();
+    assert_eq!(record_holds(Landed::Kem(0), &kem_near), None);
+}

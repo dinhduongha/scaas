@@ -954,6 +954,21 @@ async fn msig_members_apart() {
         async move { code(uasig(&t.sdk, "local", &ua, &w, &purpose, &digest).await) }
     };
     assert_eq!(at(with(bound(&[6u8; 32]))).await, "PreparedStale");
+    // M5: another `ua`, another `purpose` (the same digest): each its own stale case
+    let renamed = |k: &str, v: String| {
+        let mut x: serde_json::Value = serde_json::from_str(&j).unwrap();
+        x[k] = v.into();
+        x.to_string()
+    };
+    assert_eq!(
+        at(with(renamed("ua", hex(&[9u8; 32])))).await,
+        "PreparedStale"
+    );
+    let other_purpose = scaas_ua::purpose_tag("membership").unwrap();
+    assert_eq!(
+        at(with(renamed("purpose", hex(&other_purpose)))).await,
+        "PreparedStale"
+    );
     assert_eq!(at(with(bare.clone())).await, "Argument");
     let pad = |n: usize| format!("{j}{}", " ".repeat(n - j.len()));
     assert_eq!(at(with(pad((64 << 10) + 1))).await, "Argument");
@@ -1100,5 +1115,46 @@ async fn msig_auditor_pqz_consent() {
                 .await
         ),
         "UAPoP"
+    );
+}
+
+/// M5 (review 2026-11-20), F7: a native member is told by its opened key, an imported EVM key as a derived one: an `msig`
+/// slot holding the seed's imported EVM key is native (its member signs under the registry's domain), a UA key's slot is not.
+#[tokio::test(flavor = "multi_thread")]
+async fn imported_evm_key_is_a_native_member() {
+    let t = setup(REGISTRY, None).await;
+    let k = t
+        .sdk
+        .vault()
+        .import_key(crate::vault::ImportKey {
+            seed: t.seed.clone(),
+            network: "evm".into(),
+            secret: Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(vec![0x11; 32])).unwrap()),
+            vault_passphrase: Arc::new(
+                SecretBytes::from_zeroizing(Zeroizing::new(
+                    "river-otter-7 ünï".as_bytes().to_vec(),
+                ))
+                .unwrap(),
+            ),
+        })
+        .await
+        .unwrap();
+    let imported = MsigSlot::Member {
+        index: 0,
+        key: KeyRef::Imported {
+            seed: t.seed.clone(),
+            network: "evm".into(),
+            index: k.index,
+        },
+    };
+    assert!(
+        has_native(&t.sdk, &imported).await.unwrap(),
+        "an imported EVM key"
+    );
+    assert!(
+        !has_native(&t.sdk, &member(&t, 0, FNDSA512, 0))
+            .await
+            .unwrap(),
+        "a UA key: the control"
     );
 }

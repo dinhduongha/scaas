@@ -712,12 +712,7 @@ impl crate::op::Op {
                 let views = views(&pool, registry, &[ua]).await?;
                 let v = views.get(&ua).ok_or(SdkError::Internal)?;
                 slots_active(&views, v, &slots)?;
-                // by the opened key, as `uasig` decides (F7: an imported EVM key is a native member too)
-                let native = open(&sdk, std::slice::from_ref(slot))
-                    .await?
-                    .iter()
-                    .any(|k| matches!(k, Key::Native(..)));
-                let d = match native {
+                let d = match has_native(&sdk, slot).await? {
                     true => Some(domain(&sdk, &chain, &pool, registry).await?),
                     false => None,
                 };
@@ -748,6 +743,14 @@ impl crate::op::Op {
             })
             .await
     }
+}
+
+/// Whether `slot` holds a native member, by its opened keys as `uasig` decides (F7: an imported EVM key is a native member too).
+async fn has_native(sdk: &Sdk, slot: &MsigSlot) -> Result<bool, SdkError> {
+    Ok(open(sdk, std::slice::from_ref(slot))
+        .await?
+        .iter()
+        .any(|k| matches!(k, Key::Native(..))))
 }
 
 /// `MemberSig[]` as the registry calls take them.

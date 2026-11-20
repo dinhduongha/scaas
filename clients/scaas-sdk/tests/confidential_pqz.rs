@@ -736,6 +736,13 @@ async fn verdict_checked_before_attach() {
         "VerdictRefused",
         "the record's key"
     );
+    // M6 (review 2026-11-20): that other key also signs: the key data matches the pointer and the signature verifies, but
+    // the key is not the verifier UA's (its derived id differs): refused
+    assert_eq!(
+        refuse(verdict_of(&psid), 8).await,
+        "VerdictRefused",
+        "a key that is not the verifier's"
+    );
     c.lock().unwrap().code.insert(VKEYPTR.into(), kc);
     assert_eq!(refuse(verdict_of(&psid), 7).await, "Ok", "control again");
     let cc = c.lock().unwrap();
@@ -1717,4 +1724,21 @@ async fn pqz_balance_all_versions() {
     );
     assert_eq!(all.amount, (v0 + v1).to_string());
     assert_eq!(count(&c, "eth_call"), 0, "storage and code only");
+    // M5 (review 2026-11-20), F3: both versions read at one final block: the block requests of two versions are those of
+    // one version's read, and both name the same block
+    let blocks = |c: &Fake| count(c, "eth_getBlockByNumber") + count(c, "eth_blockNumber");
+    c.lock().unwrap().requests.clear();
+    s.confidential()
+        .pqz_balance(req(&seed, 0, 0))
+        .await
+        .unwrap();
+    let one = blocks(&c);
+    c.lock().unwrap().requests.clear();
+    let all = s
+        .confidential()
+        .pqz_balance_all(req(&seed, 0, 7))
+        .await
+        .unwrap();
+    assert_eq!(blocks(&c), one, "one block read for every version");
+    assert_eq!(all.versions[0].block, all.versions[1].block);
 }

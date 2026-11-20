@@ -213,7 +213,9 @@ pub(crate) fn record_holds2(landed: Landed, out: &[u8]) -> Option<bool> {
 }
 
 fn word(out: &[u8], i: usize) -> Option<U256> {
-    out.get(i * 32..i * 32 + 32).map(U256::from_be_slice)
+    // F24 / M5: `i` may come from an RPC answer
+    let at = i.checked_mul(32)?;
+    out.get(at..at.checked_add(32)?).map(U256::from_be_slice)
 }
 
 /// The record's answer: present or not; `None` for an answer of another shape.
