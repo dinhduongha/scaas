@@ -2408,7 +2408,7 @@ generation trusts its predecessors fully** (owner rulings W3, W4, W5, P13; M8; B
 Generation 1 carries `holderOf`, `kindHome`, `verifierOf`, `verifyOnly`, `pqzHomeOf`, `txGasCap` and a forwarding `expandedKeyOf`;
 each generation's constructor probes every predecessor for them and for `checkedOf`, `memberSigHashOf`, `msigStateOf` (`try` …
 `catch` ⇒ `UAConfig(0)`), so a read of a predecessor fails only by gas. What a successor, the node and the SDK call on a
-predecessor is frozen and pinned by `RegistryWalkInterfaceIsPinned` (54 entries, `lineReaches` among them since the round's review, their full signatures with return types and
+predecessor is frozen and pinned by `RegistryWalkInterfaceIsPinned` (54 entries, `lineReaches` among them since the round's review, owner 2026-11-20: approved, their full signatures with return types and
 selectors and the list's hash; the error selectors `UAVerifyGas`, `UAKeyNotCached`, `UAKeyCache`, `UAKeyData`, `UAPoP`,
 `UAUnauthorized`, `UAVerifyOnly`; the `UASig` / `MemberSig` encodings; the verifier getters `PRECOMPILE()`, `KEY_FORM()`,
 `verifyCached`; the hold's `GAS_MARGIN` 5,000; `expandedKeyOf`'s pointer form): a change moves the pin old → new and needs the

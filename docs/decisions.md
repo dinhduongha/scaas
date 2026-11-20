@@ -5239,7 +5239,7 @@ Controller calls (owner auto-run 2026-11-19, not owner rulings): `verifierOf` re
 `6546768be` an inner `msig` held elsewhere bounded on its holder's path; `4984efa8c` the verify-only verifier bound to its rows
 (`GEN_VERIFY_ONLY_UNBOUND`), the differential's ok required (`GEN_DIFFERENTIAL_MISSING`), its cap over 2 x `CALL_GAS`
 (`GEN_VERIFY_ONLY_CAP`), no sibling over an older book (`GEN_NOT_LATEST`); `ed2537302` the node's `registerMsig` without a line
-target). P3 fixed: P3-5 `lineReaches` in the frozen list (`001f11c08`), P3-6 the tx-cap probe's error classes (`869ee608c`), P3-7,
+target). P3 fixed: P3-5 `lineReaches` in the frozen list (`001f11c08`; owner 2026-11-20: approved, see CTR-UA-72), P3-6 the tx-cap probe's error classes (`869ee608c`), P3-7,
 P3-8, P3-9, P3-10 docs. P3 deferred, each with its reason:
 - P3-1 (the fallback's nested 63/64 holds not counted in the hard and debit bounds, ≈ 3–5 % of the holder's cap): the fix moves
   every hard-bound and debit boundary row and pin, and it is only justified by an at-the-bound fallback run through a consumer
@@ -5391,6 +5391,10 @@ Controller calls (owner auto-run 2026-11-19, not owner rulings): `UARegistryAuxL
 **Why.** Later generations are later code; what they call on a predecessor must not move.
 **Cost if wrong.** A faulty middle generation can answer for any id; recovery is a sibling line losing its records and every later one's.
 **Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (W3, W4, W5, P13; M8).
+Change (owner 2026-11-20: approved; owner: yes; status: BUILT, `001f11c08`): `lineReaches(address)` joins the frozen list
+(53 -> 54 entries; list hash `0x9b671c727828678393537179834b1d5f55dd6ee4c21a17031ad4f4705987df8c` ->
+`0x3b34c54d64d7c8c3a5984af50db132f9aa744fff8d92a9d299dc118469272ebf`): `OpenFactory`'s env check ([CTR-UA-67](contracts/accounts.md#CTR-UA-67))
+asks it of a later generation, so later registry code must keep it (the round's Fable review, P3-5).
 
 ## 25. Contracts — Post-quantum Zether
 
