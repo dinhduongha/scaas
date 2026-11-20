@@ -130,4 +130,5 @@ sdk-clippy | 51b1973d1 | 0 | -
 sdk-deny | b5b5ec89c | 0 | -
 sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (--features <the set>,sync-api)
 bind-cs | dad0a2f3d | 0 | dotnet: 3 passed, 0 failed
-bind-gen | dad0a2f3d | 0 | -
+bind-python | bf66d9973 | 0 | unittest: 3 ran, OK
+bind-gen | bf66d9973 | 0 | -
