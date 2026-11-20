@@ -384,8 +384,10 @@ pub(crate) fn registry_gas(
     // (gas, regular) of the fixed-cost parts [0] and of the data-dependent ones [1]
     let (mut parts, mut base) = ([(0u64, 0u64); 2], None);
     let mut add = |dependent: bool, g: u64, r: u64| {
-        let p = &mut parts[usize::from(dependent)];
-        *p = (p.0.saturating_add(g), p.1.saturating_add(r));
+        // a bool's index is 0 or 1: always a part (`get_mut`: the crate denies indexing)
+        if let Some(p) = parts.get_mut(usize::from(dependent)) {
+            *p = (p.0.saturating_add(g), p.1.saturating_add(r));
+        }
     };
     for (entry, kind) in rows {
         let Some((x, y, from)) = base_gas(chain, opt_in, tables, entry, kind, members)? else {
