@@ -5,3 +5,5 @@ p2-3-unbound-accepted | test_deploy_voUnbound_named | 1 | test_deploy_voUnbound_
 p2-3-no-differential | test_deploy_voDifferentialMissing_named | 1 | test_deploy_voDifferentialMissing_named
 p2-4-cap-unchecked | test_deploy_voCapBelowCallGas_named | 1 | test_deploy_voCapBelowCallGas_named
 p3-5-lineReaches-unpinned | test_walkInterface_signaturesSelectorsAndHash | 1 | test_walkInterface_signaturesSelectorsAndHash
+p3-6-any-error-refused (script/tx_gas_cap.py, by hand) | rpc_errors_classified | 1 | rpc_errors_classified
+p3-6-start-at-2-24 (script/tx_gas_cap.py, by hand) | block_below_2_24 | 1 | block_below_2_24

@@ -12,6 +12,7 @@ against the probe; --rows-out writes {tx_gas_cap, tx_gas_cap_probe_rows, tx_gas_
 an RPC URL may hold a key) for the book. UNAUDITED tooling."""
 
 import json
+import re
 import sys
 import urllib.request
 
@@ -40,10 +41,13 @@ def probe(nodes, block_gas_limit, book=None):
     if not nodes:
         raise ProbeError("GEN_TX_CAP_NODES: no node")
     rows = []
-    if not _ask(nodes, EIP7825, rows):
-        raise ProbeError(f"GEN_TX_CAP_UNKNOWN: 2^24 refused (rows {rows})")
+    first = min(EIP7825, block_gas_limit)  # a block below 2^24 bounds every transaction first (review P3-6)
+    if not _ask(nodes, first, rows):
+        raise ProbeError(f"GEN_TX_CAP_UNKNOWN: {first} refused (rows {rows})")
     cap = None
-    if not _ask(nodes, EIP7825 + 1, rows):
+    if first < EIP7825:
+        pass  # no cap below the block limit: the book's owner-set value, else GEN_TX_CAP_UNKNOWN
+    elif not _ask(nodes, EIP7825 + 1, rows):
         cap = EIP7825
     elif not _ask(nodes, block_gas_limit, rows):
         lo, hi = EIP7825 + 1, block_gas_limit  # lo accepted, hi refused
@@ -77,11 +81,25 @@ def _rpc(url, method, params):
         raise ProbeError(f"GEN_TX_CAP_NODES: a node did not answer {method} ({type(e).__name__})") from None
 
 
-def rpc_node(url):
+# A node's refusal of a gas above its per-transaction cap (EIP-7825), as the clients word it (geth "transaction gas limit too
+# high (cap: …)", Nethermind's gas-limit errors, others "exceeds … gas"): only such an answer is a refusal; any other error
+# (a rate limit, a failed node, an unknown method) stops the probe by name, never lowers the cap (review P3-6)
+CAP_REFUSAL = re.compile(r"gas.{0,40}(too high|exceed|above|over|cap|max)|(exceed|above|over).{0,40}gas", re.I | re.S)
+
+
+def rpc_node(url, rpc=None):
     zero = "0x" + "00" * 20
+    rpc = rpc or (lambda method, params: _rpc(url, method, params))
 
     def accepts(gas):
-        return "error" not in _rpc(url, "eth_call", [{"from": zero, "to": zero, "gas": hex(gas)}, "latest"])
+        r = rpc("eth_call", [{"from": zero, "to": zero, "gas": hex(gas)}, "latest"])
+        if "error" not in r:
+            return True
+        e = r["error"]
+        msg = str(e.get("message", "")) + " " + str(e.get("data", "")) if isinstance(e, dict) else str(e)
+        if CAP_REFUSAL.search(msg):
+            return False
+        raise ProbeError(f"GEN_TX_CAP_RPC_ERROR: gas {gas}: the node answered an error that is no cap refusal: {msg.strip()[:200]}")
 
     return accepts
 

@@ -65,8 +65,30 @@ def probe_nodes_disagree_refused():
     assert cap == 1 << 24, cap
 
 
+def rpc_errors_classified():
+    """Review P3-6: only a cap refusal votes `refused`; any other node error stops the probe by name."""
+    def fake(answer):
+        return tx_gas_cap.rpc_node("x", rpc=lambda m, p: answer(int(p[0]["gas"], 16)))
+
+    cap = fake(lambda g: {"result": "0x"} if g <= 1 << 24 else
+               {"error": {"code": -32000, "message": "transaction gas limit too high (cap: 16777216, tx: 16777217)"}})
+    assert cap(1 << 24) is True and cap((1 << 24) + 1) is False
+    assert tx_gas_cap.probe([cap] * 3, BLOCK)[0] == 1 << 24
+    limited = fake(lambda g: {"error": {"code": -32005, "message": "rate limit reached"}})
+    refused(lambda: tx_gas_cap.probe([limited], BLOCK), "GEN_TX_CAP_RPC_ERROR")
+
+
+def block_below_2_24():
+    """Review P3-6: a block gas limit of 10 M: the probe starts there; no cap below it: the owner-set value, else unknown."""
+    at_block = node(10_000_000)  # a node refuses what its block cannot hold
+    refused(lambda: tx_gas_cap.probe([at_block], 10_000_000), "GEN_TX_CAP_UNKNOWN")
+    book = {"txGasCap": 10_000_000, "txGasCapOwnerSet": True}
+    assert tx_gas_cap.probe([at_block], 10_000_000, book)[0] == 10_000_000
+
+
 def main():
-    tests = [probe_cap_2_24, probe_cap_30m, probe_no_cap_unknown, probe_book_mismatch, probe_nodes_disagree_refused]
+    tests = [probe_cap_2_24, probe_cap_30m, probe_no_cap_unknown, probe_book_mismatch, probe_nodes_disagree_refused,
+             rpc_errors_classified, block_below_2_24]
     for t in tests:
         t()
         print(f"ok {t.__name__}")
