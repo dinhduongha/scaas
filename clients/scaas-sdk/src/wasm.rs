@@ -7,7 +7,8 @@
 //! The JS side: each module call returns a `Promise`; records and enums are plain JS objects (`serde-wasm-bindgen`: an enum
 //! externally tagged, a 64-bit integer a `BigInt`, names as in Rust); an error rejects with an `Error` whose `message` is the
 //! code (spec §15). Objects other than the module objects (`Prepared`, `PreparedOrder`, `RegistryWrite`, `SeedBackup`) and
-//! secrets are numbered handles: `release(handle)` drops the binding's reference (a secret's last one zeroes it). A secret's
+//! secrets are numbered handles: `release(handle)` drops the binding's reference (a secret's last one zeroes it); every handle
+//! a call returns, inside a record too (each serialization makes a new one), is the app's to release. A secret's
 //! bytes cross only by the copy calls `secret_write` (the caller's `Uint8Array` zeroed before it returns) and `secret_read`.
 //!
 //! Without wasm threads only (refused below): the platform traits are `Send + Sync` and hold JS objects here, which is sound only
@@ -28,11 +29,16 @@ thread_local! {
     static HANDLES: RefCell<Handles> = RefCell::new((0, HashMap::new()));
 }
 
-/// A new handle for `v` (from 1).
+/// A new handle for `v` (from 1). After the counter wraps, a number still held is skipped, never overwritten (review B5).
 pub(crate) fn put<T: 'static>(v: Arc<T>) -> u32 {
     HANDLES.with(|h| {
         let mut h = h.borrow_mut();
-        h.0 = h.0.wrapping_add(1).max(1);
+        loop {
+            h.0 = h.0.wrapping_add(1).max(1);
+            if !h.1.contains_key(&h.0) {
+                break;
+            }
+        }
         let id = h.0;
         h.1.insert(id, Box::new(v));
         id

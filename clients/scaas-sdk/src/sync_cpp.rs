@@ -104,9 +104,10 @@ pub trait SyncAuthenticator: Send + Sync {
         exclude: Vec<Vec<u8>>,
     ) -> Result<PasskeyCreated, AuthError>;
     fn get_assertion(&self, req: AssertionRequest, prf_out: u64) -> Result<Assertion, AuthError>;
+    /// `key_handle`: the platform key's handle (named as in the async `ForeignAuthenticator`)
     fn platform_secret(
         &self,
-        handle: String,
+        key_handle: String,
         salt: Vec<u8>,
         reason: String,
         policy: Option<KeyPolicy>,
@@ -115,7 +116,7 @@ pub trait SyncAuthenticator: Send + Sync {
     fn p256_generate(&self, policy: KeyPolicy) -> Result<SePublic, AuthError>;
     fn p256_sign(
         &self,
-        handle: String,
+        key_handle: String,
         ua_msg: Vec<u8>,
         reason: String,
     ) -> Result<Vec<u8>, AuthError>;
@@ -239,7 +240,7 @@ pub fn open_blocking(
         return Err(SdkError::Internal);
     }
     let auth = authenticator.map(|a| Arc::new(AuthAdapter(a)) as Arc<dyn Authenticator>);
-    let config = config.sdk_config(Arc::new(StoreAdapter(store)), auth);
+    let config = config.sdk_config(Arc::new(StoreAdapter(store)), auth)?;
     // the opening's keystore read needs a runtime before the SDK's own exists: a current-thread one for that call
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()

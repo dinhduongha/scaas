@@ -124,6 +124,18 @@ pub mod bits {
     pub const OPAQUE_CALLS: u64 = 1 << 25;
 }
 
+/// The load check of a binding (spec §16.3): `AbiMismatch` unless this library's `api_version` is `expect_api`, it has every
+/// bit of `need_features`, and `scaas-ua` is not the test-only `vectors` build (ARCH-POS-13). Every binding's opening runs it
+/// first (`BindingConfig`'s `expect_api` and `need_features`); Dart runs its own in its loader.
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+pub fn load_check(expect_api: u32, need_features: u64) -> Result<(), SdkError> {
+    if expect_api != API_VERSION || features() & need_features != need_features || scaas_ua::VECTORS
+    {
+        return Err(SdkError::AbiMismatch);
+    }
+    Ok(())
+}
+
 /// The bits of this build's features.
 #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub fn features() -> u64 {

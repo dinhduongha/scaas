@@ -22,12 +22,13 @@ public interface VaultInterface {
     public java.util.concurrent.CompletableFuture<java.lang.Boolean> keystoreRollback() ;
     
     /**
-     * Locks `seed`: the ids of the hidden sets abandoned with it.
-     */public java.util.concurrent.CompletableFuture<java.util.List<java.lang.String>> lock(java.lang.String seed);
+     * Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+     * answer: the seed is then not known locked.
+     */public java.util.concurrent.CompletableFuture<java.util.List<java.lang.String>> lock(java.lang.String seed) ;
     
     /**
-     * Locks every seed.
-     */public java.util.concurrent.CompletableFuture<java.util.List<java.lang.String>> lockAll();
+     * Locks every seed (a failed call is its error, as `lock`).
+     */public java.util.concurrent.CompletableFuture<java.util.List<java.lang.String>> lockAll() ;
     
     /**
      * The memory protection of an unlocked seed's arena.

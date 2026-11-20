@@ -12,7 +12,6 @@ Secrets go in only by the copy call. Run: python3 -I test_smoke.py (gate `bind-p
 
 import asyncio
 import atexit
-import ctypes
 import importlib
 import json
 import shutil
@@ -26,17 +25,14 @@ ROOT = HERE.parents[3]
 PKG = Path(tempfile.mkdtemp(prefix="scaas-sdk-py-")) / "scaas_bind"
 PKG.mkdir()
 atexit.register(shutil.rmtree, PKG.parent, True)
-for f in (HERE / "generated").glob("*.py"):
+for f in [*(HERE / "generated").glob("*.py"), HERE / "copycall.py"]:
     shutil.copy(f, PKG)
 shutil.copy(HERE.parents[1] / "ffi/target/lib-uniffi/libscaas_sdk_ffi.so", PKG)
 (PKG / "__init__.py").write_text("")
 sys.path.insert(0, str(PKG.parent))
 s = importlib.import_module("scaas_bind.scaas_sdk")
 ffi = importlib.import_module("scaas_bind.scaas_sdk_ffi")
-
-_lib = ctypes.CDLL(str(PKG / "libscaas_sdk_ffi.so"))
-_lib.scaas_sdk_secret_write.argtypes = [ctypes.c_uint64, ctypes.c_char_p, ctypes.c_size_t]
-_lib.scaas_sdk_secret_write.restype = ctypes.c_int32
+copy = importlib.import_module("scaas_bind.copycall").CopyCall(PKG / "libscaas_sdk_ffi.so")
 
 REPO = (
     "bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author capable act festival "
@@ -45,15 +41,12 @@ REPO = (
 PASS = "river-otter-7 ünï"
 
 
-def write(secret_id, b):
-    return _lib.scaas_sdk_secret_write(secret_id, b, len(b))
-
-
 def secret(v):
-    b = v.encode()
+    """A secret holding `v`, by the copy call (its buffer zeroed by it; asserted)."""
+    b = bytearray(v.encode())
     x = s.secret_new(len(b))
-    if write(s.secret_id(x), b) != 0:
-        raise RuntimeError("copy call")
+    copy.write(s.secret_id(x), b)
+    assert not any(b), "the copy call zeroes the caller's buffer"
     return x
 
 
@@ -100,9 +93,8 @@ class FakeAuth(s.ForeignAuthenticator):
         if req.prf_salt is None:
             raise s.AuthError.Refused()
         salt = req.prf_salt
-        out = bytes(salt[i % len(salt)] ^ 0x5A ^ i for i in range(32))
-        if write(prf_out, out) != 0:
-            raise s.AuthError.Refused()
+        out = bytearray(salt[i % len(salt)] ^ 0x5A ^ i for i in range(32))
+        copy.write(prf_out, out)
         return s.Assertion(
             credential_id=b"\xc1\xed", authenticator_data=bytes(37), client_data_json=b"", signature=bytes(64), prf=True
         )
@@ -117,8 +109,15 @@ class FakeAuth(s.ForeignAuthenticator):
         raise s.AuthError.Unavailable()
 
 
-def config():
-    return s.BindingConfig(profiles=[], rp_id="wallet.example", limits=s.limits_default(), gas_tables=[])
+def config(expect_api=1):
+    return s.BindingConfig(
+        expect_api=expect_api,
+        need_features=s.features(),
+        profiles=[],
+        rp_id="wallet.example",
+        limits=s.limits_default(),
+        gas_tables=[],
+    )
 
 
 async def over(text):
@@ -141,8 +140,32 @@ class Smoke(unittest.IsolatedAsyncioTestCase):
         # the SDK calls the store and the authenticator from its own runtime's threads: their coroutines run on this loop
         s.uniffi_set_event_loop(asyncio.get_running_loop())
 
-    def test_load_check(self):
+    async def test_load_check(self):
         self.assertEqual(s.api_version(), 1)
+        # the opening refuses a library of another api_version or without a needed feature (spec §16.3)
+        self.assertEqual(await failure(s.open(config(expect_api=2), MemStore(), None)), "AbiMismatch")
+        c = config()
+        c.need_features = 1 << 62
+        self.assertEqual(await failure(s.open(c, MemStore(), None)), "AbiMismatch")
+        # control: this library's
+        await s.open(config(), MemStore(), None)
+
+    async def test_copy_calls_reveal_dispose(self):
+        sdk = await s.open(config(), MemStore(), FakeAuth())
+        new = await sdk.vault().generate(s.Generate(label="Fresh", vault_passphrase=secret(PASS)))
+        words = new.backup.reveal()
+        text = copy.read(s.secret_id(words), s.secret_len(words))
+        self.assertEqual(len(text.decode().split(" ")), 24, "the revealed words, read by the copy call")
+        text[:] = bytes(len(text))
+        self.assertTrue(copy.dispose(s.secret_id(words)))
+        with self.assertRaises(ValueError):
+            copy.read(s.secret_id(words), 1)
+        # an opaque call without the marker: the SDK's code, not the binding's internal error (review B2)
+        key = s.KeyRef.UA(seed=new.info.id, kind=0, account=0, index=0)
+        env = s.Envelope(valid_until=0, mode=0, relayer=None, fee="0", fee_recipient=None)
+        call = s.ExecuteCall.OPAQUE(target="0x" + "11" * 20, value="0", data="0x", allow=False)
+        req = s.Execute(signer=key, chain="x", wallet="0x" + "22" * 20, call=call, batch="0", envelope=env)
+        self.assertEqual(await failure(sdk.wallet().prepare_execute(req)), "OpaqueCallRefused")
 
     async def test_keystore_rows(self):
         d = json.loads((ROOT / "smartcontracts/vectors/keystore/keystore.json").read_text(encoding="utf-8"))
@@ -205,7 +228,7 @@ class Smoke(unittest.IsolatedAsyncioTestCase):
         await sdk.vault().lock(seed)
         auth.throws = True
         ea = await failure(sdk.vault().unlock(seed, s.Unlock.PASSKEY()))
-        self.assertNotIn(ea, ("Ok", "Internal"))
+        self.assertEqual(ea, "AuthenticatorRefused")
         auth.throws = False
         # a Python exception in the store: Unexpected, the store's failure (VaultIo)
         st.throws = True

@@ -6,34 +6,27 @@
 // `next` on the subscription, a panic as Internal, a Kotlin exception in the store and in the authenticator (Unexpected on the
 // Rust side: the SDK's error, no panic), the load check. Secrets go in only by the copy call. Run by ./run.sh (gate
 // `bind-kotlin`).
-import com.sun.jna.Library
-import com.sun.jna.Native
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.runBlocking
 import uniffi.scaas_sdk.*
 import uniffi.scaas_sdk_ffi.panicInCall
 
-interface CopyCalls : Library {
-    fun scaas_sdk_secret_write(id: Long, src: ByteArray, len: Long): Int
-}
-
-val copy: CopyCalls = Native.load("scaas_sdk_ffi", CopyCalls::class.java)
 var bad = 0
 
 fun check(c: Boolean, what: () -> String) {
     if (!c) {
-        println("FAIL ${what()}")
+        println("FAIL: ${what()}")
         bad++
     }
 }
 
-fun write(id: ULong, b: ByteArray) = copy.scaas_sdk_secret_write(id.toLong(), b, b.size.toLong())
-
+// a secret holding `v`, by the copy call (its buffer zeroed by it; asserted)
 fun secret(v: String): SecretBytes {
     val b = v.toByteArray()
     val s = secretNew(b.size.toUInt())
-    check(write(secretId(s), b) == 0) { "copy call" }
+    check(CopyCall.write(secretId(s), b)) { "copy call" }
+    check(b.all { it == 0.toByte() }) { "the copy call zeroes the caller's buffer" }
     return s
 }
 
@@ -78,7 +71,7 @@ class FakeAuth : ForeignAuthenticator {
         if (throws) throw IllegalStateException("the app's authenticator threw")
         val salt = req.prfSalt ?: throw AuthException.Refused()
         val out = ByteArray(32) { i -> (salt[i % salt.size].toInt() xor 0x5a xor i).toByte() }
-        if (write(prfOut, out) != 0) throw AuthException.Refused()
+        if (!CopyCall.write(prfOut, out)) throw AuthException.Refused()
         return Assertion(byteArrayOf(0xc1.toByte(), 0xed.toByte()), ByteArray(37), ByteArray(0), ByteArray(64), true)
     }
 
@@ -90,7 +83,8 @@ class FakeAuth : ForeignAuthenticator {
     override suspend fun p256Sign(keyHandle: String, uaMsg: ByteArray, reason: String): ByteArray = throw AuthException.Unavailable()
 }
 
-fun config() = BindingConfig(listOf(), "wallet.example", limitsDefault(), listOf())
+fun config(expectApi: UInt = 1u, needFeatures: ULong = features()) =
+    BindingConfig(expectApi, needFeatures, listOf(), "wallet.example", limitsDefault(), listOf())
 
 suspend fun start(st: MemStore, auth: FakeAuth = FakeAuth()) = `open`(config(), st, auth)
 
@@ -158,7 +152,21 @@ suspend fun rows(path: String) {
 
 fun main(args: Array<String>) = runBlocking {
     check(apiVersion() == 1u) { "load check: apiVersion ${apiVersion()}" }
+    // the opening refuses a library of another api_version or without a needed feature (spec §16.3)
+    check(failure { `open`(config(expectApi = 2u), MemStore(), null) } == "AbiMismatch") { "load check: api_version 2" }
+    check(failure { `open`(config(needFeatures = 1uL shl 62), MemStore(), null) } == "AbiMismatch") { "load check: a feature" }
+    check(failure { `open`(config(), MemStore(), null) } == "Ok") { "load check: control" }
     rows(args[0])
+
+    // the copy calls: a backup's words revealed and read out, then disposed (review B12)
+    val fresh = start(MemStore()).vault().generate(Generate("Fresh", secret(PASS)))
+    val words = fresh.backup.reveal()
+    val text = CopyCall.read(secretId(words), secretLen(words).toInt())
+    check(text != null && String(text).split(" ").size == 24) { "the revealed words, read by the copy call" }
+    text?.fill(0)
+    check(CopyCall.dispose(secretId(words))) { "dispose" }
+    check(CopyCall.read(secretId(words), 1) == null) { "a disposed secret is refused" }
+    println("ok copy calls: write zeroes the buffer, a backup revealed and read, disposed")
 
     val st = MemStore()
     val auth = FakeAuth()
@@ -184,7 +192,7 @@ fun main(args: Array<String>) = runBlocking {
     sdk.vault().lock(id)
     auth.throws = true
     val ea = failure { sdk.vault().unlock(id, Unlock.Passkey) }
-    check(ea != "Ok" && ea != "Internal") { "authenticator exception: $ea" }
+    check(ea == "AuthenticatorRefused") { "authenticator exception: $ea" }
     auth.throws = false
     // a Kotlin exception in the store: Unexpected, the store's failure (VaultIo)
     st.throws = true

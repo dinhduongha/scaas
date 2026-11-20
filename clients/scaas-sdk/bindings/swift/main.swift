@@ -12,23 +12,22 @@ import Foundation
     import Glibc
 #endif
 
-typealias SecretWrite = @convention(c) (UInt64, UnsafePointer<UInt8>?, Int) -> Int32
-let secretWriteC = unsafeBitCast(dlsym(dlopen(nil, RTLD_NOW), "scaas_sdk_secret_write"), to: SecretWrite.self)
 
 var bad = 0
 func check(_ c: Bool, _ what: @autoclosure () -> String) {
     if !c {
-        print("FAIL \(what())")
+        print("FAIL: \(what())")
         bad += 1
     }
 }
 
-func write(_ id: UInt64, _ b: [UInt8]) -> Int32 { b.withUnsafeBufferPointer { secretWriteC(id, $0.baseAddress, b.count) } }
 
+// a secret holding `v`, by the copy call (its buffer zeroed by it; asserted)
 func secret(_ v: String) throws -> SecretBytes {
-    let b = Array(v.utf8)
+    var b = Array(v.utf8)
     let s = try secretNew(len: UInt32(b.count))
-    check(write(secretId(s: s), b) == 0, "copy call")
+    check(CopyCall.write(secretId(s: s), &b), "copy call")
+    check(b.allSatisfy { $0 == 0 }, "the copy call zeroes the caller's buffer")
     return s
 }
 
@@ -72,7 +71,8 @@ final class FakeAuth: ForeignAuthenticator, @unchecked Sendable {
         if throwsNow { throw Thrown() }
         guard let salt = req.prfSalt.map(Array.init) else { throw AuthError.Refused }
         let out = (0..<32).map { i in salt[i % salt.count] ^ 0x5a ^ UInt8(i) }
-        if write(prfOut, out) != 0 { throw AuthError.Refused }
+        var buf = out
+        if !CopyCall.write(prfOut, &buf) { throw AuthError.Refused }
         return Assertion(
             credentialId: Data([0xc1, 0xed]), authenticatorData: Data(count: 37), clientDataJson: Data(),
             signature: Data(count: 64), prf: true)
@@ -87,7 +87,11 @@ final class FakeAuth: ForeignAuthenticator, @unchecked Sendable {
     func p256Sign(keyHandle: String, uaMsg: Data, reason: String) async throws -> Data { throw AuthError.Unavailable }
 }
 
-func config() -> BindingConfig { BindingConfig(profiles: [], rpId: "wallet.example", limits: limitsDefault(), gasTables: []) }
+func config(expectApi: UInt32 = 1, needFeatures: UInt64 = features()) -> BindingConfig {
+    BindingConfig(
+        expectApi: expectApi, needFeatures: needFeatures, profiles: [], rpId: "wallet.example", limits: limitsDefault(),
+        gasTables: [])
+}
 
 func start(_ st: MemStore, _ auth: FakeAuth = FakeAuth()) async throws -> Sdk {
     try await `open`(config: config(), store: st, authenticator: auth)
@@ -184,16 +188,30 @@ func rows(_ path: String) async throws {
 
 func smoke() async throws {
     check(apiVersion() == 1, "load check: apiVersion \(apiVersion())")
+    // the opening refuses a library of another api_version or without a needed feature (spec §16.3)
+    check(await failure { _ = try await `open`(config: config(expectApi: 2), store: MemStore(), authenticator: nil) } == "AbiMismatch", "load check: api_version 2")
+    check(await failure { _ = try await `open`(config: config(needFeatures: 1 << 62), store: MemStore(), authenticator: nil) } == "AbiMismatch", "load check: a feature")
+    check(await failure { _ = try await `open`(config: config(), store: MemStore(), authenticator: nil) } == "Ok", "load check: control")
+
+    // the copy calls: a backup's words revealed and read out, then disposed (review B12)
+    let fresh = try await start(MemStore()).vault().generate(req: Generate(label: "Fresh", vaultPassphrase: try secret(PASS)))
+    let words = try fresh.backup.reveal()
+    var text = CopyCall.read(secretId(s: words), cap: Int(secretLen(s: words))) ?? []
+    check(String(decoding: text, as: UTF8.self).split(separator: " ").count == 24, "the revealed words, read by the copy call")
+    for i in text.indices { text[i] = 0 }
+    check(CopyCall.dispose(secretId(s: words)), "dispose")
+    check(CopyCall.read(secretId(s: words), cap: 1) == nil, "a disposed secret is refused")
+    print("ok copy calls: write zeroes the buffer, a backup revealed and read, disposed")
     try await rows(CommandLine.arguments[1])
 
     let st = MemStore()
     let auth = FakeAuth()
     let sdk = try await start(st, auth)
     let sub = sdk.subscribe()
-    check(await sub.next(timeoutMs: 50) == nil, "next: nothing yet")
+    check(try await sub.next(timeoutMs: 50) == nil, "next: nothing yet")
     let id = try await sdk.vault().importWords(req: ImportWords(label: "Main", words: try secret(REPO), vaultPassphrase: try secret(PASS))).id
     var changed = false
-    while let ev = await sub.next(timeoutMs: 200) {
+    while let ev = try await sub.next(timeoutMs: 200) {
         if case .keystoreChanged = ev { changed = true }
     }
     check(changed, "next: KeystoreChanged")
@@ -209,7 +227,7 @@ func smoke() async throws {
     _ = try await sdk.vault().lock(seed: id)
     auth.throwsNow = true
     let ea = await failure { try await sdk.vault().unlock(seed: id, unlock: .passkey) }
-    check(ea != "Ok" && ea != "Internal", "authenticator error: \(ea)")
+    check(ea == "AuthenticatorRefused", "authenticator error: \(ea)")
     auth.throwsNow = false
     // a Swift error in the store: Unexpected, the store's failure (VaultIo)
     st.m.withLock { st.throwsNow = true }
@@ -229,7 +247,7 @@ func smoke() async throws {
 do {
     try await smoke()
 } catch {
-    print("FAIL unexpected error: \(error)")
+    print("FAIL: unexpected error: \(error)")
     bad += 1
 }
 print(bad == 0 ? "RESULT swift: PASS (0 failures)" : "RESULT swift: FAIL (\(bad) failures)")

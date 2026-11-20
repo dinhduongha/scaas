@@ -16,7 +16,7 @@ mkdir -p build
 echo "[swift] start: swiftc"
 "${cap[@]}" "${SWIFTC:-swiftc}" -swift-version 5 -suppress-warnings -I generated \
     -Xcc -fmodule-map-file=generated/scaas_sdkFFI.modulemap -Xcc -fmodule-map-file=generated/scaas_sdk_ffiFFI.modulemap \
-    -L "$LIB" -lscaas_sdk_ffi -Xlinker -rpath -Xlinker "$LIB" -o build/smoke main.swift generated/*.swift
+    -L "$LIB" -lscaas_sdk_ffi -Xlinker -rpath -Xlinker "$LIB" -o build/smoke main.swift CopyCall.swift generated/*.swift
 echo "[swift] ok: swiftc"
 python3 -I ../rows.py "$W/smartcontracts/vectors/keystore/keystore.json" build/rows.tsv
 "${cap[@]}" build/smoke build/rows.tsv

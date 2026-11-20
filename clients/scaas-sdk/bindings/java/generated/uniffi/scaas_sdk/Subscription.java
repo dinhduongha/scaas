@@ -129,7 +129,7 @@ public class Subscription implements AutoCloseable, SubscriptionInterface {
         // lift function
         (it) -> FfiConverterOptionalTypeEvent.INSTANCE.lift(it),
         // Error FFI converter
-        new UniffiNullRustCallStatusErrorHandler()
+        new SdkExceptionErrorHandler()
     );
     }
 

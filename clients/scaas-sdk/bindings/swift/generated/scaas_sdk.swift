@@ -6170,7 +6170,7 @@ public protocol SubscriptionProtocol: AnyObject, Sendable {
     /**
      * The next event, or `None` within `timeout_ms`.
      */
-    func next(timeoutMs: UInt64) async  -> Event?
+    func next(timeoutMs: UInt64) async throws  -> Event?
     
 }
 /**
@@ -6232,9 +6232,9 @@ open class Subscription: SubscriptionProtocol, @unchecked Sendable {
     /**
      * The next event, or `None` within `timeout_ms`.
      */
-open func next(timeoutMs: UInt64)async  -> Event?  {
+open func next(timeoutMs: UInt64)async throws  -> Event?  {
     return
-        try!  await uniffiRustCallAsync(
+        try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_scaas_sdk_fn_method_subscription_next(
                     self.uniffiCloneHandle(),
@@ -6245,8 +6245,7 @@ open func next(timeoutMs: UInt64)async  -> Event?  {
             completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
             freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
             liftFunc: FfiConverterOptionTypeEvent.lift,
-            errorHandler: nil
-            
+            errorHandler: FfiConverterTypeSdkError_lift
         )
 }
     
@@ -6335,14 +6334,15 @@ public protocol VaultProtocol: AnyObject, Sendable {
     func keystoreRollback() async throws  -> Bool
     
     /**
-     * Locks `seed`: the ids of the hidden sets abandoned with it.
+     * Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+     * answer: the seed is then not known locked.
      */
-    func lock(seed: String) async  -> [String]
+    func lock(seed: String) async throws  -> [String]
     
     /**
-     * Locks every seed.
+     * Locks every seed (a failed call is its error, as `lock`).
      */
-    func lockAll() async  -> [String]
+    func lockAll() async throws  -> [String]
     
     /**
      * The memory protection of an unlocked seed's arena.
@@ -6646,11 +6646,12 @@ open func keystoreRollback()async throws  -> Bool  {
 }
     
     /**
-     * Locks `seed`: the ids of the hidden sets abandoned with it.
+     * Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+     * answer: the seed is then not known locked.
      */
-open func lock(seed: String)async  -> [String]  {
+open func lock(seed: String)async throws  -> [String]  {
     return
-        try!  await uniffiRustCallAsync(
+        try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_scaas_sdk_fn_method_vault_lock(
                     self.uniffiCloneHandle(),
@@ -6661,17 +6662,16 @@ open func lock(seed: String)async  -> [String]  {
             completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
             freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: nil
-            
+            errorHandler: FfiConverterTypeSdkError_lift
         )
 }
     
     /**
-     * Locks every seed.
+     * Locks every seed (a failed call is its error, as `lock`).
      */
-open func lockAll()async  -> [String]  {
+open func lockAll()async throws  -> [String]  {
     return
-        try!  await uniffiRustCallAsync(
+        try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_scaas_sdk_fn_method_vault_lock_all(
                     self.uniffiCloneHandle()
@@ -6682,8 +6682,7 @@ open func lockAll()async  -> [String]  {
             completeFunc: ffi_scaas_sdk_rust_future_complete_rust_buffer,
             freeFunc: ffi_scaas_sdk_rust_future_free_rust_buffer,
             liftFunc: FfiConverterSequenceString.lift,
-            errorHandler: nil
-            
+            errorHandler: FfiConverterTypeSdkError_lift
         )
 }
     
@@ -8290,9 +8289,13 @@ public func FfiConverterTypeBalances_lower(_ value: Balances) -> RustBuffer {
 
 /**
  * A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
- * SDK's own (`RuntimeChoice::Own`) and the clock the device's.
+ * SDK's own (`RuntimeChoice::Own`) and the clock the device's. `expect_api` and `need_features` are the binding's load check
+ * (spec §16.3): the `api_version` it was generated against and the feature bits it needs; the opening refuses another
+ * library with `AbiMismatch`.
  */
 public struct BindingConfig: Equatable, Hashable {
+    public var expectApi: UInt32
+    public var needFeatures: UInt64
     public var profiles: [ChainProfile]
     public var rpId: String?
     public var limits: Limits
@@ -8300,7 +8303,9 @@ public struct BindingConfig: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(profiles: [ChainProfile], rpId: String?, limits: Limits, gasTables: [GasTable]) {
+    public init(expectApi: UInt32, needFeatures: UInt64, profiles: [ChainProfile], rpId: String?, limits: Limits, gasTables: [GasTable]) {
+        self.expectApi = expectApi
+        self.needFeatures = needFeatures
         self.profiles = profiles
         self.rpId = rpId
         self.limits = limits
@@ -8323,6 +8328,8 @@ public struct FfiConverterTypeBindingConfig: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BindingConfig {
         return
             try BindingConfig(
+                expectApi: FfiConverterUInt32.read(from: &buf), 
+                needFeatures: FfiConverterUInt64.read(from: &buf), 
                 profiles: FfiConverterSequenceTypeChainProfile.read(from: &buf), 
                 rpId: FfiConverterOptionString.read(from: &buf), 
                 limits: FfiConverterTypeLimits.read(from: &buf), 
@@ -8331,6 +8338,8 @@ public struct FfiConverterTypeBindingConfig: FfiConverterRustBuffer {
     }
 
     public static func write(_ value: BindingConfig, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.expectApi, into: &buf)
+        FfiConverterUInt64.write(value.needFeatures, into: &buf)
         FfiConverterSequenceTypeChainProfile.write(value.profiles, into: &buf)
         FfiConverterOptionString.write(value.rpId, into: &buf)
         FfiConverterTypeLimits.write(value.limits, into: &buf)
@@ -30431,7 +30440,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scaas_sdk_checksum_method_sdk_watch() != 24897) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scaas_sdk_checksum_method_subscription_next() != 29929) {
+    if (uniffi_scaas_sdk_checksum_method_subscription_next() != 46941) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580) {
@@ -30473,10 +30482,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scaas_sdk_checksum_method_vault_keystore_rollback() != 2571) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scaas_sdk_checksum_method_vault_lock() != 39795) {
+    if (uniffi_scaas_sdk_checksum_method_vault_lock() != 6366) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scaas_sdk_checksum_method_vault_lock_all() != 19133) {
+    if (uniffi_scaas_sdk_checksum_method_vault_lock_all() != 17781) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_vault_memory_protection() != 33961) {

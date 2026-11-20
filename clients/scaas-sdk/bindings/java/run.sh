@@ -15,7 +15,7 @@ bash ../lib.sh uniffi
 rm -rf build && mkdir -p build
 python3 -I ../rows.py "$W/smartcontracts/vectors/keystore/keystore.json" build/rows.tsv
 find generated -name '*.java' >build/sources
-echo Smoke.java >>build/sources
+printf 'CopyCall.java\nSmoke.java\n' >>build/sources
 echo "[java] start: javac"
 "${cap[@]}" "${bin}javac" -nowarn -d build/classes @build/sources
 echo "[java] ok: javac"

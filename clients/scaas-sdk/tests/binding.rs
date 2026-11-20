@@ -1,29 +1,29 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The UniFFI surface's list (plan T20b; spec §16.1): every exported async call of the SDK's module objects has its entry in
-//! `binding::surface()` with its `<call>_blocking` twin, and every entry names an async call of the SDK (both ways). Needs the
+//! `binding::surface()` with its `<call>_blocking` twin, and every entry names an async call of the SDK (both ways); every
+//! typed entry point and every plain call of a module object is exported (review B7). Needs the
 //! features of the reference library and `uniffi`; with `sync-api` too, the sync surface's own tests (module `sync`).
 use std::collections::BTreeSet;
 
-/// `(object, call)` of every `pub async fn` in an `impl <Module>` block of `src/` (the Rust-only calls excluded).
-fn exported_async() -> BTreeSet<(String, String)> {
-    let modules = [
-        "Sdk",
-        "Vault",
-        "Account",
-        "Wallet",
-        "Op",
-        "Confidential",
-        "Dex",
-        "Admin",
-    ];
-    let rust_only = [
-        ("Sdk", "open"),
-        ("Sdk", "spawn"),
-        ("Sdk", "poll"),
-        ("Wallet", "native_sign"),
-        ("Vault", "lock"),
-        ("Vault", "lock_all"),
-    ];
+const MODULES: [&str; 8] = [
+    "Sdk",
+    "Vault",
+    "Account",
+    "Wallet",
+    "Op",
+    "Confidential",
+    "Dex",
+    "Admin",
+];
+
+/// `(object, call)` of every `pub async fn` (`asynchronous`) or plain `pub fn` in an `impl <Module>` block of `src/`, the
+/// binding modules excluded. A macro-made call reads as `$f`: [`entry_points`] names those.
+fn exported(asynchronous: bool) -> BTreeSet<(String, String)> {
+    let prefix = if asynchronous {
+        "pub async fn "
+    } else {
+        "pub fn "
+    };
     let mut out = BTreeSet::new();
     let mut stack = vec![std::path::PathBuf::from("src")];
     while let Some(d) = stack.pop() {
@@ -34,7 +34,10 @@ fn exported_async() -> BTreeSet<(String, String)> {
                 continue;
             }
             let name = p.to_string_lossy().to_string();
-            if !name.ends_with(".rs") || name.ends_with("tests.rs") || name.ends_with("binding.rs")
+            if !name.ends_with(".rs")
+                || name.ends_with("tests.rs")
+                || name.ends_with("binding.rs")
+                || name.contains("/wasm")
             {
                 continue;
             }
@@ -44,20 +47,43 @@ fn exported_async() -> BTreeSet<(String, String)> {
                 if let Some(rest) = t.strip_prefix("impl ") {
                     let ty = rest.split([' ', '{']).next().unwrap_or("");
                     let ty = ty.rsplit("::").next().unwrap_or("").to_string();
-                    obj = modules.contains(&ty.as_str()).then_some(ty);
-                } else if let (Some(o), Some(rest)) = (&obj, t.strip_prefix("pub async fn ")) {
+                    obj = MODULES.contains(&ty.as_str()).then_some(ty);
+                } else if let (Some(o), Some(rest)) = (&obj, t.strip_prefix(prefix)) {
                     let f: String = rest
                         .chars()
                         .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '$')
                         .collect();
-                    if !rust_only.contains(&(o.as_str(), f.as_str())) {
-                        out.insert((o.clone(), f));
-                    }
+                    out.insert((o.clone(), f));
                 }
             }
         }
     }
     out
+}
+
+/// The SDK's typed entry points (`src/surface.rs`, held equal to the vectors by `tests/completeness.rs`): the calls its
+/// macros make, by name.
+fn entry_points() -> BTreeSet<String> {
+    scaas_sdk::surface::ENTRY_POINTS
+        .iter()
+        .map(|e| e.function.to_string())
+        .collect()
+}
+
+/// `(object, call)` of every `pub async fn` in an `impl <Module>` block of `src/` (the Rust-only calls excluded).
+fn exported_async() -> BTreeSet<(String, String)> {
+    let rust_only = [
+        ("Sdk", "open"),
+        ("Sdk", "spawn"),
+        ("Sdk", "poll"),
+        ("Wallet", "native_sign"),
+        ("Vault", "lock"),
+        ("Vault", "lock_all"),
+    ];
+    exported(true)
+        .into_iter()
+        .filter(|(o, f)| !rust_only.contains(&(o.as_str(), f.as_str())))
+        .collect()
 }
 
 #[test]
@@ -79,16 +105,81 @@ fn every_async_call_has_a_blocking_twin() {
         missing.is_empty(),
         "async calls without a twin: {missing:?}"
     );
+    // a macro-made call is named by the SDK's own table of typed entry points (review B7), not by a prefix
+    let eps = entry_points();
     let unknown: Vec<_> = listed
         .iter()
-        .filter(|(o, f)| {
-            !src_named.contains(&(o.clone(), f.clone()))
-                && !(f.starts_with("admin_ua_") || f.starts_with("prepare_"))
-        })
+        .filter(|(o, f)| !src_named.contains(&(o.clone(), f.clone())) && !eps.contains(f))
         .collect();
     assert!(
         unknown.is_empty(),
         "entries naming no SDK async call: {unknown:?}"
+    );
+}
+
+/// Review B7: every typed entry point of the SDK (`ENTRY_POINTS`, the macro-made calls among them) is a call of the list.
+#[test]
+fn every_typed_entry_point_is_listed() {
+    let listed: BTreeSet<String> = scaas_sdk::binding::surface()
+        .iter()
+        .map(|(_, f, _)| f.to_string())
+        .collect();
+    let eps = entry_points();
+    assert!(eps.len() > 60, "control: the table is read ({})", eps.len());
+    let missing: Vec<_> = eps.difference(&listed).collect();
+    assert!(
+        missing.is_empty(),
+        "typed entry points not in the binding list: {missing:?}"
+    );
+}
+
+/// Review B7: every plain `pub fn` of the SDK's module objects is exported by `binding.rs` (a method of the same object), or
+/// named Rust-only here.
+#[test]
+fn every_sync_call_is_exported() {
+    // Rust-only (the header of src/binding.rs): the platform authenticator in use, the heavy-job peak of a test; the load
+    // check's two values are free functions of the binding (`api_version`, `features`)
+    let rust_only = [
+        ("Sdk", "authenticator"),
+        ("Sdk", "heavy_peak"),
+        ("Sdk", "api_version"),
+        ("Sdk", "features"),
+    ];
+    let binding = std::fs::read_to_string("src/binding.rs").unwrap();
+    let mut exported_here = BTreeSet::new();
+    let mut obj: Option<String> = None;
+    for line in binding.lines() {
+        let t = line.trim_start();
+        if !line.starts_with(' ') {
+            obj = t
+                .strip_prefix("impl ")
+                .map(|r| r.split([' ', '{']).next().unwrap_or("").to_string());
+            continue;
+        }
+        if let (Some(o), Some(rest)) = (&obj, t.strip_prefix("pub fn ")) {
+            let f: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            exported_here.insert((o.clone(), f.trim_end_matches("_blocking").to_string()));
+        }
+    }
+    let sync = exported(false);
+    assert!(
+        sync.len() > 5,
+        "control: the source is read ({})",
+        sync.len()
+    );
+    let missing: Vec<_> = sync
+        .iter()
+        .filter(|(o, f)| {
+            !exported_here.contains(&(o.clone(), f.clone()))
+                && !rust_only.contains(&(o.as_str(), f.as_str()))
+        })
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "sync calls of the module objects without a binding export: {missing:?}"
     );
 }
 
@@ -310,6 +401,8 @@ mod sync {
 
     fn config() -> BindingConfig {
         BindingConfig {
+            expect_api: 1,
+            need_features: scaas_sdk::features(),
             profiles: vec![],
             rp_id: Some("wallet.example".into()),
             limits: Limits::default(),
@@ -422,7 +515,7 @@ mod sync {
         s.vault()
             .enable_passkey_unlock_blocking(id.clone(), sec(PASS), None)
             .unwrap();
-        s.vault().lock_blocking(id.clone());
+        s.vault().lock_blocking(id.clone()).unwrap();
         assert!(!s.vault().seed_blocking(id.clone(), None).unwrap().unlocked);
         s.vault()
             .unlock_blocking(id.clone(), Unlock::Passkey, None)
@@ -434,10 +527,14 @@ mod sync {
     fn next_blocking_on_the_subscription() {
         let s = open(Arc::new(Store::default()));
         let sub = s.subscribe();
-        assert_eq!(sub.next_blocking(50), None, "nothing yet: the timeout");
+        assert_eq!(
+            sub.next_blocking(50).unwrap(),
+            None,
+            "nothing yet: the timeout"
+        );
         import(&s);
         let mut seen = vec![];
-        while let Some(e) = sub.next_blocking(200) {
+        while let Some(e) = sub.next_blocking(200).unwrap() {
             seen.push(e);
         }
         assert!(
@@ -455,5 +552,51 @@ mod sync {
             .unwrap();
         let r = rt.block_on(async { s.vault().seeds_blocking(None) });
         assert_eq!(r.map_err(|e| e.code()), Err("Internal"));
+    }
+
+    /// Review B1: a lock that cannot run is its error, never an empty answer; the seed is still reported unlocked.
+    #[test]
+    fn a_lock_that_cannot_run_is_internal() {
+        let s = open(Arc::new(Store::default()));
+        let id = import(&s);
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let r = rt.block_on(async { s.vault().lock_blocking(id.clone()) });
+        assert_eq!(r.map_err(|e| e.code()), Err("Internal"));
+        let r = rt.block_on(async { s.vault().lock_all_blocking() });
+        assert_eq!(r.map_err(|e| e.code()), Err("Internal"));
+        assert!(s.vault().seed_blocking(id.clone(), None).unwrap().unlocked);
+        // control: off the runtime the lock runs
+        assert_eq!(
+            s.vault().lock_blocking(id.clone()).unwrap(),
+            Vec::<String>::new()
+        );
+        assert!(!s.vault().seed_blocking(id, None).unwrap().unlocked);
+    }
+
+    /// Review B11: the load check refuses another `api_version`, a missing feature bit; control: this library's.
+    #[test]
+    fn the_opening_runs_the_load_check() {
+        let refused = |c: BindingConfig| {
+            open_blocking(c, Arc::new(Store::default()), None)
+                .err()
+                .map(|e| e.code())
+        };
+        assert_eq!(
+            refused(BindingConfig {
+                expect_api: 2,
+                ..config()
+            }),
+            Some("AbiMismatch")
+        );
+        assert_eq!(
+            refused(BindingConfig {
+                need_features: 1 << 62,
+                ..config()
+            }),
+            Some("AbiMismatch")
+        );
+        assert_eq!(refused(config()), None);
     }
 }

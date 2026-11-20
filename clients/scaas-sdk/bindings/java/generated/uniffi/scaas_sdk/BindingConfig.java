@@ -2,20 +2,30 @@ package uniffi.scaas_sdk;
 
 /**
  * A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
- * SDK's own (`RuntimeChoice::Own`) and the clock the device's.
+ * SDK's own (`RuntimeChoice::Own`) and the clock the device's. `expect_api` and `need_features` are the binding's load check
+ * (spec §16.3): the `api_version` it was generated against and the feature bits it needs; the opening refuses another
+ * library with `AbiMismatch`.
  */
 public class BindingConfig {
+    private int expectApi;
+    private long needFeatures;
     private java.util.List<ChainProfile> profiles;
     private java.lang.String rpId;
     private Limits limits;
     private java.util.List<GasTable> gasTables;
 
     public BindingConfig(
+        int expectApi, 
+        long needFeatures, 
         java.util.List<ChainProfile> profiles, 
         java.lang.String rpId, 
         Limits limits, 
         java.util.List<GasTable> gasTables
     ) {
+        
+        this.expectApi = expectApi;
+        
+        this.needFeatures = needFeatures;
         
         this.profiles = profiles;
         
@@ -24,6 +34,14 @@ public class BindingConfig {
         this.limits = limits;
         
         this.gasTables = gasTables;
+    }
+    
+    public int expectApi() {
+        return this.expectApi;
+    }
+    
+    public long needFeatures() {
+        return this.needFeatures;
     }
     
     public java.util.List<ChainProfile> profiles() {
@@ -40,6 +58,12 @@ public class BindingConfig {
     
     public java.util.List<GasTable> gasTables() {
         return this.gasTables;
+    }
+    public void setExpectApi(int expectApi) {
+        this.expectApi = expectApi;
+    }
+    public void setNeedFeatures(long needFeatures) {
+        this.needFeatures = needFeatures;
     }
     public void setProfiles(java.util.List<ChainProfile> profiles) {
         this.profiles = profiles;
@@ -62,6 +86,10 @@ public class BindingConfig {
         if (other instanceof BindingConfig) {
             BindingConfig t = (BindingConfig) other;
             return (
+              expectApi == t.expectApi && 
+              
+              needFeatures == t.needFeatures && 
+              
               java.util.Objects.equals(profiles, t.profiles) && 
               
               java.util.Objects.equals(rpId, t.rpId) && 
@@ -77,6 +105,8 @@ public class BindingConfig {
     @Override
     public int hashCode() {
         int result = 17;
+        result = 31 * result + java.lang.Integer.hashCode(expectApi);
+        result = 31 * result + java.lang.Long.hashCode(needFeatures);
         result = 31 * result + java.util.Objects.hashCode(profiles);
         result = 31 * result + java.util.Objects.hashCode(rpId);
         result = 31 * result + java.util.Objects.hashCode(limits);

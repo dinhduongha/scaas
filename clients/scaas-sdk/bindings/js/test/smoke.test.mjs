@@ -83,7 +83,14 @@ class FakeAuth {
   }
 }
 
-const config = () => ({ profiles: [], rp_id: "wallet.example", limits: sdk.limits_default(), gas_tables: [] });
+const config = (expect_api = 1, need_features = sdk.features()) => ({
+  expect_api,
+  need_features,
+  profiles: [],
+  rp_id: "wallet.example",
+  limits: sdk.limits_default(),
+  gas_tables: [],
+});
 
 function over(text) {
   const st = new MemStore();
@@ -101,8 +108,39 @@ async function failure(p) {
   }
 }
 
-test("load check", () => {
+test("load check", async () => {
   assert.equal(sdk.api_version(), 1);
+  // the opening refuses a library of another api_version or without a needed feature (spec §16.3)
+  assert.equal(await failure(sdk.open(config(2), new MemStore())), "AbiMismatch");
+  assert.equal(await failure(sdk.open(config(1, 1n << 62n), new MemStore())), "AbiMismatch");
+  assert.equal(await failure(sdk.open(config(), new MemStore())), "Ok");
+});
+
+test("copy calls: a backup revealed and read, nothing left in wasm memory", async () => {
+  const s = await sdk.open(config(), new MemStore(), new FakeAuth());
+  const fresh = await s.vault().generate({ label: "Fresh", vault_passphrase: secret(PASS) });
+  const words = sdk.seed_backup_reveal(fresh.backup);
+  const text = new Uint8Array(sdk.secret_len(words));
+  sdk.secret_read(words, text);
+  assert.equal(new TextDecoder().decode(text).split(" ").length, 24, "the revealed words, read by the copy call");
+  text.fill(0);
+  assert.ok(sdk.release(words) && sdk.release(fresh.backup));
+  // a marker written in and read out leaves no copy in the SDK's memory once released (review B3)
+  const marker = new TextEncoder().encode("marker-9f3c-" + "q".repeat(40));
+  const h = sdk.secret_new(marker.length);
+  sdk.secret_write(h, marker.slice());
+  const out = new Uint8Array(marker.length);
+  sdk.secret_read(h, out);
+  assert.deepEqual(out, marker);
+  assert.ok(sdk.release(h));
+  const mem = new Uint8Array(sdk.wasm_memory().buffer);
+  assert.equal(Buffer.from(mem).indexOf(Buffer.from(marker)), -1, "no plaintext left in wasm memory");
+  // an opaque call without the marker: OpaqueCallRefused, as on every binding (review B2)
+  const call = { Opaque: { target: "0x" + "11".repeat(20), value: "0", data: "0x", allow: false } };
+  const env = { valid_until: 0n, mode: 0, relayer: null, fee: "0", fee_recipient: null };
+  const key = { Ua: { seed: fresh.info.id, kind: 0, account: 0, index: 0 } };
+  const req = { signer: key, chain: "x", wallet: "0x" + "22".repeat(20), call, batch: "0", envelope: env };
+  assert.equal(await failure(s.wallet().prepare_execute(req)), "OpaqueCallRefused");
 });
 
 test("keystore rows", async () => {
@@ -174,7 +212,7 @@ test("store, authenticator, PRF, events, copy calls", async () => {
   await s.vault().lock(id);
   auth.throws = true;
   const ea = await failure(s.vault().unlock(id, "Passkey"));
-  assert.ok(ea !== "Ok" && ea !== "Internal", `authenticator exception: ${ea}`);
+  assert.equal(ea, "AuthenticatorRefused", "authenticator exception");
   auth.throws = false;
   // a JS exception in the store: Unexpected, the store's failure (VaultIo)
   st.throws = true;

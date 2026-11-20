@@ -6,13 +6,6 @@
 // (passkey unlock), `next` on the subscription, a panic as Internal, a Java exception in the store and in the authenticator
 // (Unexpected on the Rust side: the SDK's error, no panic), the load check. Secrets go in only by the copy call. Run by
 // ./run.sh (gate `bind-java`).
-import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
-import java.lang.invoke.MethodHandle;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,27 +30,20 @@ public final class Smoke {
         }
     }
 
-    static final MethodHandle SECRET_WRITE = Linker.nativeLinker().downcallHandle(
-            SymbolLookup.libraryLookup(System.getProperty("scaas.lib"), Arena.global())
-                    .find("scaas_sdk_secret_write").orElseThrow(),
-            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.JAVA_LONG));
+    static final CopyCall COPY = new CopyCall(System.getProperty("scaas.lib"));
 
     static int write(long id, byte[] b) {
-        try (Arena a = Arena.ofConfined()) {
-            MemorySegment m = a.allocate(Math.max(1, b.length));
-            MemorySegment.copy(b, 0, m, ValueLayout.JAVA_BYTE, 0, b.length);
-            int r = (int) SECRET_WRITE.invokeExact(id, m, (long) b.length);
-            m.fill((byte) 0);
-            return r;
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
-        }
+        return COPY.write(id, b) ? 0 : -1;
     }
 
+    /** A secret holding `v`, by the copy call (its buffer zeroed by it; asserted). */
     static SecretBytes secret(String v) throws SdkException {
         byte[] b = v.getBytes(StandardCharsets.UTF_8);
         SecretBytes s = ScaasSdk.secretNew(b.length);
         check(write(ScaasSdk.secretId(s), b) == 0, "copy call");
+        boolean zero = true;
+        for (byte x : b) zero &= x == 0;
+        check(zero, "the copy call zeroes the caller's buffer");
         return s;
     }
 
@@ -134,8 +120,12 @@ public final class Smoke {
         }
     }
 
+    static BindingConfig config(int expectApi, long needFeatures) {
+        return new BindingConfig(expectApi, needFeatures, List.of(), "wallet.example", ScaasSdk.limitsDefault(), List.of());
+    }
+
     static BindingConfig config() {
-        return new BindingConfig(List.of(), "wallet.example", ScaasSdk.limitsDefault(), List.of());
+        return config(1, ScaasSdk.features());
     }
 
     static Sdk start(MemStore st, FakeAuth auth) throws Exception {
@@ -237,7 +227,21 @@ public final class Smoke {
 
     static void smoke(String[] args) throws Exception {
         check(ScaasSdk.apiVersion() == 1, "load check: apiVersion " + ScaasSdk.apiVersion());
+        // the opening refuses a library of another api_version or without a needed feature (spec §16.3)
+        check(failure(() -> ScaasSdk.open(config(2, ScaasSdk.features()), new MemStore(), null)).equals("AbiMismatch"), "load check: api_version 2");
+        check(failure(() -> ScaasSdk.open(config(1, 1L << 62), new MemStore(), null)).equals("AbiMismatch"), "load check: a feature");
+        check(failure(() -> ScaasSdk.open(config(), new MemStore(), null)).equals("Ok"), "load check: control");
         rows(args[0]);
+
+        // the copy calls: a backup's words revealed and read out, then disposed (review B12)
+        NewSeed fresh = start(new MemStore(), new FakeAuth()).vault().generate(new Generate("Fresh", secret(PASS))).get();
+        SecretBytes words = fresh.backup().reveal();
+        byte[] text = COPY.read(ScaasSdk.secretId(words), ScaasSdk.secretLen(words));
+        check(text != null && new String(text, StandardCharsets.UTF_8).split(" ").length == 24, "the revealed words, read by the copy call");
+        if (text != null) java.util.Arrays.fill(text, (byte) 0);
+        check(COPY.dispose(ScaasSdk.secretId(words)), "dispose");
+        check(COPY.read(ScaasSdk.secretId(words), 1) == null, "a disposed secret is refused");
+        System.out.println("ok copy calls: write zeroes the buffer, a backup revealed and read, disposed");
 
         MemStore st = new MemStore();
         FakeAuth auth = new FakeAuth();
@@ -260,7 +264,7 @@ public final class Smoke {
         sdk.vault().lock(id).get();
         auth.throwsNow = true;
         String ea = failure(() -> sdk.vault().unlock(id, new Unlock.Passkey()));
-        check(!ea.equals("Ok") && !ea.equals("Internal"), "authenticator exception: " + ea);
+        check(ea.equals("AuthenticatorRefused"), "authenticator exception: " + ea);
         auth.throwsNow = false;
         // a Java exception in the store: Unexpected, the store's failure (VaultIo)
         st.throwsNow = true;

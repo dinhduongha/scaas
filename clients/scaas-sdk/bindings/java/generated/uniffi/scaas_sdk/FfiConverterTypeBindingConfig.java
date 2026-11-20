@@ -7,6 +7,8 @@ public enum FfiConverterTypeBindingConfig implements FfiConverterRustBuffer<Bind
   @Override
   public BindingConfig read(java.nio.ByteBuffer buf) {
     return new BindingConfig(
+      FfiConverterInteger.INSTANCE.read(buf),
+      FfiConverterLong.INSTANCE.read(buf),
       FfiConverterSequenceTypeChainProfile.INSTANCE.read(buf),
       FfiConverterOptionalString.INSTANCE.read(buf),
       FfiConverterTypeLimits.INSTANCE.read(buf),
@@ -17,6 +19,8 @@ public enum FfiConverterTypeBindingConfig implements FfiConverterRustBuffer<Bind
   @Override
   public long allocationSize(BindingConfig value) {
       return (
+            FfiConverterInteger.INSTANCE.allocationSize(value.expectApi()) +
+            FfiConverterLong.INSTANCE.allocationSize(value.needFeatures()) +
             FfiConverterSequenceTypeChainProfile.INSTANCE.allocationSize(value.profiles()) +
             FfiConverterOptionalString.INSTANCE.allocationSize(value.rpId()) +
             FfiConverterTypeLimits.INSTANCE.allocationSize(value.limits()) +
@@ -26,6 +30,8 @@ public enum FfiConverterTypeBindingConfig implements FfiConverterRustBuffer<Bind
 
   @Override
   public void write(BindingConfig value, java.nio.ByteBuffer buf) {
+      FfiConverterInteger.INSTANCE.write(value.expectApi(), buf);
+      FfiConverterLong.INSTANCE.write(value.needFeatures(), buf);
       FfiConverterSequenceTypeChainProfile.INSTANCE.write(value.profiles(), buf);
       FfiConverterOptionalString.INSTANCE.write(value.rpId(), buf);
       FfiConverterTypeLimits.INSTANCE.write(value.limits(), buf);

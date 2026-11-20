@@ -9589,8 +9589,8 @@ static class _UniFFILib {
         }
         {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_subscription_next();
-            if (checksum != 29929) {
-                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_subscription_next` checksum `29929`, library returned `{checksum}`");
+            if (checksum != 46941) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_subscription_next` checksum `46941`, library returned `{checksum}`");
             }
         }
         {
@@ -9673,14 +9673,14 @@ static class _UniFFILib {
         }
         {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_vault_lock();
-            if (checksum != 39795) {
-                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_vault_lock` checksum `39795`, library returned `{checksum}`");
+            if (checksum != 6366) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_vault_lock` checksum `6366`, library returned `{checksum}`");
             }
         }
         {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_vault_lock_all();
-            if (checksum != 19133) {
-                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_vault_lock_all` checksum `19133`, library returned `{checksum}`");
+            if (checksum != 17781) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_vault_lock_all` checksum `17781`, library returned `{checksum}`");
             }
         }
         {
@@ -17098,6 +17098,7 @@ internal interface ISubscription {
     /// <summary>
     /// The next event, or `None` within `timeout_ms`.
     /// </summary>
+    /// <exception cref="SdkException"></exception>
     Task<Event?> Next(ulong @timeoutMs);
 }
 /// <summary>
@@ -17195,6 +17196,7 @@ internal class Subscription : ISubscription, IDisposable {
     /// <summary>
     /// The next event, or `None` within `timeout_ms`.
     /// </summary>
+    /// <exception cref="SdkException"></exception>
     public async Task<Event?> Next(ulong @timeoutMs) {
     return await _UniFFIAsync.UniffiRustCallAsync(
         // Get rust future
@@ -17212,8 +17214,7 @@ internal class Subscription : ISubscription, IDisposable {
         // Lift
         (result) => FfiConverterOptionalTypeEvent.INSTANCE.Lift(result),
         // Error
-        NullCallStatusErrorHandler.INSTANCE
-        
+        FfiConverterTypeSdkError.INSTANCE
     );
     }
     
@@ -17281,12 +17282,15 @@ internal interface IVault {
     /// <exception cref="SdkException"></exception>
     Task<bool> KeystoreRollback();
     /// <summary>
-    /// Locks `seed`: the ids of the hidden sets abandoned with it.
+    /// Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+    /// answer: the seed is then not known locked.
     /// </summary>
+    /// <exception cref="SdkException"></exception>
     Task<string[]> Lock(string @seed);
     /// <summary>
-    /// Locks every seed.
+    /// Locks every seed (a failed call is its error, as `lock`).
     /// </summary>
+    /// <exception cref="SdkException"></exception>
     Task<string[]> LockAll();
     /// <summary>
     /// The memory protection of an unlocked seed's arena.
@@ -17664,8 +17668,10 @@ internal class Vault : IVault, IDisposable {
     }
     
     /// <summary>
-    /// Locks `seed`: the ids of the hidden sets abandoned with it.
+    /// Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+    /// answer: the seed is then not known locked.
     /// </summary>
+    /// <exception cref="SdkException"></exception>
     public async Task<string[]> Lock(string @seed) {
     return await _UniFFIAsync.UniffiRustCallAsync(
         // Get rust future
@@ -17683,14 +17689,14 @@ internal class Vault : IVault, IDisposable {
         // Lift
         (result) => FfiConverterSequenceString.INSTANCE.Lift(result),
         // Error
-        NullCallStatusErrorHandler.INSTANCE
-        
+        FfiConverterTypeSdkError.INSTANCE
     );
     }
     
     /// <summary>
-    /// Locks every seed.
+    /// Locks every seed (a failed call is its error, as `lock`).
     /// </summary>
+    /// <exception cref="SdkException"></exception>
     public async Task<string[]> LockAll() {
     return await _UniFFIAsync.UniffiRustCallAsync(
         // Get rust future
@@ -17708,8 +17714,7 @@ internal class Vault : IVault, IDisposable {
         // Lift
         (result) => FfiConverterSequenceString.INSTANCE.Lift(result),
         // Error
-        NullCallStatusErrorHandler.INSTANCE
-        
+        FfiConverterTypeSdkError.INSTANCE
     );
     }
     
@@ -19196,9 +19201,13 @@ class FfiConverterTypeBalances: FfiConverterRustBuffer<Balances> {
 
 /// <summary>
 /// A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
-/// SDK's own (`RuntimeChoice::Own`) and the clock the device's.
+/// SDK's own (`RuntimeChoice::Own`) and the clock the device's. `expect_api` and `need_features` are the binding's load check
+/// (spec §16.3): the `api_version` it was generated against and the feature bits it needs; the opening refuses another
+/// library with `AbiMismatch`.
 /// </summary>
 internal record BindingConfig (
+    uint ExpectApi, 
+    ulong NeedFeatures, 
     ChainProfile[] Profiles, 
     string? RpId, 
     Limits Limits, 
@@ -19211,6 +19220,8 @@ class FfiConverterTypeBindingConfig: FfiConverterRustBuffer<BindingConfig> {
 
     public override BindingConfig Read(BigEndianStream stream) {
         return new BindingConfig(
+            ExpectApi: FfiConverterUInt32.INSTANCE.Read(stream),
+            NeedFeatures: FfiConverterUInt64.INSTANCE.Read(stream),
             Profiles: FfiConverterSequenceTypeChainProfile.INSTANCE.Read(stream),
             RpId: FfiConverterOptionalString.INSTANCE.Read(stream),
             Limits: FfiConverterTypeLimits.INSTANCE.Read(stream),
@@ -19220,6 +19231,8 @@ class FfiConverterTypeBindingConfig: FfiConverterRustBuffer<BindingConfig> {
 
     public override int AllocationSize(BindingConfig value) {
         return 0
+            + FfiConverterUInt32.INSTANCE.AllocationSize(value.ExpectApi)
+            + FfiConverterUInt64.INSTANCE.AllocationSize(value.NeedFeatures)
             + FfiConverterSequenceTypeChainProfile.INSTANCE.AllocationSize(value.Profiles)
             + FfiConverterOptionalString.INSTANCE.AllocationSize(value.RpId)
             + FfiConverterTypeLimits.INSTANCE.AllocationSize(value.Limits)
@@ -19227,6 +19240,8 @@ class FfiConverterTypeBindingConfig: FfiConverterRustBuffer<BindingConfig> {
     }
 
     public override void Write(BindingConfig value, BigEndianStream stream) {
+            FfiConverterUInt32.INSTANCE.Write(value.ExpectApi, stream);
+            FfiConverterUInt64.INSTANCE.Write(value.NeedFeatures, stream);
             FfiConverterSequenceTypeChainProfile.INSTANCE.Write(value.Profiles, stream);
             FfiConverterOptionalString.INSTANCE.Write(value.RpId, stream);
             FfiConverterTypeLimits.INSTANCE.Write(value.Limits, stream);

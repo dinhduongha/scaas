@@ -45,8 +45,14 @@ fn to_js<T: Serialize + ?Sized>(v: &T) -> Result<JsValue, JsValue> {
     v.serialize(&s).map_err(|_| err(SdkError::Internal))
 }
 
+/// A JS value as `T`; a refused opaque-call marker is `OpaqueCallRefused` (as on every binding), any other refusal `Argument`.
 fn from_js<T: DeserializeOwned>(v: JsValue) -> Result<T, SdkError> {
-    serde_wasm_bindgen::from_value(v).map_err(|_| SdkError::Argument)
+    serde_wasm_bindgen::from_value(v).map_err(|e| {
+        match e.to_string().contains("OpaqueCallRefused") {
+            true => SdkError::OpaqueCallRefused,
+            false => SdkError::Argument,
+        }
+    })
 }
 
 /// The type a list entry names, for the choice below of how a value of it crosses: an `Arc<T>` (a secret or an object) as a
@@ -252,6 +258,13 @@ free! {
     fn seed_backup_verify(b: Arc<SeedBackup>, answers: Arc<SecretBytes>) -> bool = b.verify(answers);
 }
 
+/// The SDK's wasm linear memory (a page's script can read it anyway): for a check that a secret leaves no copy there, as the
+/// smoke does after `secret_read` (spec §16.4, review B3).
+#[wasm_bindgen]
+pub fn wasm_memory() -> JsValue {
+    wasm_bindgen::memory()
+}
+
 /// Drops the binding's reference of a handle (a secret's last one zeroes it); whether it was held.
 #[wasm_bindgen]
 pub fn release(handle: u32) -> bool {
@@ -269,12 +282,21 @@ pub fn secret_write(handle: u32, bytes: &mut [u8]) -> Result<(), JsValue> {
     r
 }
 
-/// The copy call out: secret `handle` into `into` (at least its length); its length.
+/// The copy call out: secret `handle` into the caller's `into` (at least its length; the caller zeroes it once done); its
+/// length. One copy straight into the JS array from a buffer of the SDK's own that is zeroed on drop, so no plaintext stays
+/// in freed wasm memory (review B3; a `&mut [u8]` argument would leave wasm-bindgen's unzeroed temporary behind).
 #[wasm_bindgen]
-pub fn secret_read(handle: u32, into: &mut [u8]) -> Result<u32, JsValue> {
+pub fn secret_read(handle: u32, into: &Uint8Array) -> Result<u32, JsValue> {
     let s = super::get::<SecretBytes>(handle).ok_or_else(|| err(SdkError::Argument))?;
-    let n = scaas_ua::wallet::secret_read(s.id(), into).map_err(|e| err(e.into()))?;
-    u32::try_from(n).map_err(|_| err(SdkError::Internal))
+    let mut buf = zeroize::Zeroizing::new(vec![0u8; s.len()]);
+    let n = scaas_ua::wallet::secret_read(s.id(), &mut buf).map_err(|e| err(e.into()))?;
+    let n32 = u32::try_from(n).map_err(|_| err(SdkError::Internal))?;
+    if into.length() < n32 {
+        return Err(err(SdkError::Argument));
+    }
+    into.subarray(0, n32)
+        .copy_from(buf.get(..n).ok_or_else(|| err(SdkError::Internal))?);
+    Ok(n32)
 }
 
 #[wasm_bindgen]
@@ -601,6 +623,22 @@ impl JsAuth {
     }
 }
 
+/// A secret lent to the app's authenticator by handle for one call: released when the call ends, returns early or is dropped
+/// (review B4).
+struct Held(u32);
+
+impl Held {
+    fn new(s: Arc<SecretBytes>) -> Held {
+        Held(super::put(s))
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        super::release_handle(self.0);
+    }
+}
+
 fn arg<T: Serialize>(v: &T) -> Result<JsValue, AuthError> {
     to_js(v).map_err(|_| AuthError::Unexpected)
 }
@@ -628,10 +666,9 @@ impl Authenticator for JsAuth {
         prf_out: Arc<SecretBytes>,
     ) -> Result<Assertion, AuthError> {
         Local(async move {
-            let h = super::put(prf_out);
-            let r = self.call("get_assertion", &[arg(&req)?, h.into()]).await;
-            super::release_handle(h);
-            r
+            let req = arg(&req)?;
+            let h = Held::new(prf_out);
+            self.call("get_assertion", &[req, h.0.into()]).await
         })
         .await
     }
@@ -644,24 +681,16 @@ impl Authenticator for JsAuth {
         out: Arc<SecretBytes>,
     ) -> Result<(), AuthError> {
         Local(async move {
-            let h = super::put(out);
-            let r = self
-                .0
+            let (salt, policy) = (arg(&salt)?, arg(&policy)?);
+            let h = Held::new(out);
+            self.0
                 .call(
                     "platform_secret",
-                    &[
-                        handle.into(),
-                        arg(&salt)?,
-                        reason.into(),
-                        arg(&policy)?,
-                        h.into(),
-                    ],
+                    &[handle.into(), salt, reason.into(), policy, h.0.into()],
                 )
                 .await
                 .map(|_| ())
-                .map_err(auth_err);
-            super::release_handle(h);
-            r
+                .map_err(auth_err)
         })
         .await
     }
@@ -682,9 +711,12 @@ impl Authenticator for JsAuth {
     }
 }
 
-/// A binding's configuration (spec §4), as `binding.rs`'s: the profiles, the passkey RP ID, the limits, the module gas tables.
+/// A binding's configuration (spec §4), as `binding.rs`'s: the load check's `expect_api` and `need_features` (spec §16.3), the
+/// profiles, the passkey RP ID, the limits, the module gas tables.
 #[derive(serde::Deserialize)]
 struct BindingConfig {
+    expect_api: u32,
+    need_features: u64,
     profiles: Vec<ChainProfile>,
     rp_id: Option<String>,
     limits: Limits,
@@ -696,6 +728,7 @@ struct BindingConfig {
 pub fn open(config: JsValue, store: JsValue, authenticator: JsValue) -> Promise {
     future_to_promise(async move {
         let c: BindingConfig = from_js(config).map_err(err)?;
+        crate::load_check(c.expect_api, c.need_features).map_err(err)?;
         let authenticator = (!authenticator.is_undefined() && !authenticator.is_null())
             .then(|| Arc::new(JsAuth(JsObj(authenticator))) as Arc<dyn Authenticator>);
         let config = crate::SdkConfig {

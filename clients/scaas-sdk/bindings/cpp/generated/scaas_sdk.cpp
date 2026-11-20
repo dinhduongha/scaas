@@ -600,7 +600,7 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_sdk_watch_blocking() != 54951) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
-    if (uniffi_scaas_sdk_checksum_method_subscription_next_blocking() != 59495) {
+    if (uniffi_scaas_sdk_checksum_method_subscription_next_blocking() != 19717) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_vault_change_passphrase_blocking() != 7889) {
@@ -642,10 +642,10 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_vault_keystore_rollback_blocking() != 4207) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
-    if (uniffi_scaas_sdk_checksum_method_vault_lock_all_blocking() != 47612) {
+    if (uniffi_scaas_sdk_checksum_method_vault_lock_all_blocking() != 40578) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
-    if (uniffi_scaas_sdk_checksum_method_vault_lock_blocking() != 63108) {
+    if (uniffi_scaas_sdk_checksum_method_vault_lock_blocking() != 51953) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_vault_memory_protection() != 33961) {
@@ -798,13 +798,13 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_syncauthenticator_get_assertion() != 18245) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
-    if (uniffi_scaas_sdk_checksum_method_syncauthenticator_platform_secret() != 9423) {
+    if (uniffi_scaas_sdk_checksum_method_syncauthenticator_platform_secret() != 7231) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_syncauthenticator_p256_generate() != 65439) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
-    if (uniffi_scaas_sdk_checksum_method_syncauthenticator_p256_sign() != 39259) {
+    if (uniffi_scaas_sdk_checksum_method_syncauthenticator_p256_sign() != 39100) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
     if (uniffi_scaas_sdk_checksum_method_syncstore_get() != 48485) {
@@ -2777,7 +2777,7 @@ Subscription::Subscription(const Subscription &other) : instance(0) {
 std::optional<Event> Subscription::next_blocking(uint64_t timeout_ms) {
     return uniffi::FfiConverterOptionalEvent::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_subscription_next_blocking,
-        nullptr,
+        uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterUInt64::lower(timeout_ms)));
 }
 
@@ -2844,11 +2844,11 @@ namespace uniffi {
         rust_call_trait_interface_with_error<AuthError>(out_status, make_call, write_value, FfiConverterAuthError::lower);
     
 }
- void UniffiCallbackInterfaceSyncAuthenticator::platform_secret(uint64_t uniffi_handle,RustBuffer handle,RustBuffer salt,RustBuffer reason,RustBuffer policy,uint64_t out,void * uniffi_out_return,RustCallStatus *out_status) {
+ void UniffiCallbackInterfaceSyncAuthenticator::platform_secret(uint64_t uniffi_handle,RustBuffer key_handle,RustBuffer salt,RustBuffer reason,RustBuffer policy,uint64_t out,void * uniffi_out_return,RustCallStatus *out_status) {
     auto obj = FfiConverterSyncAuthenticator::handle_map.at(uniffi_handle);
 
     auto make_call = [&]()  {
-        auto arg0 =FfiConverterString::lift(handle);
+        auto arg0 =FfiConverterString::lift(key_handle);
         auto arg1 =FfiConverterBytes::lift(salt);
         auto arg2 =FfiConverterString::lift(reason);
         auto arg3 =FfiConverterOptionalTypeKeyPolicy::lift(policy);
@@ -2886,11 +2886,11 @@ namespace uniffi {
         rust_call_trait_interface_with_error<AuthError>(out_status, make_call, write_value, FfiConverterAuthError::lower);
     
 }
- void UniffiCallbackInterfaceSyncAuthenticator::p256_sign(uint64_t uniffi_handle,RustBuffer handle,RustBuffer ua_msg,RustBuffer reason,RustBuffer & uniffi_out_return,RustCallStatus *out_status) {
+ void UniffiCallbackInterfaceSyncAuthenticator::p256_sign(uint64_t uniffi_handle,RustBuffer key_handle,RustBuffer ua_msg,RustBuffer reason,RustBuffer & uniffi_out_return,RustCallStatus *out_status) {
     auto obj = FfiConverterSyncAuthenticator::handle_map.at(uniffi_handle);
 
     auto make_call = [&]() -> std::vector<uint8_t> {
-        auto arg0 =FfiConverterString::lift(handle);
+        auto arg0 =FfiConverterString::lift(key_handle);
         auto arg1 =FfiConverterBytes::lift(ua_msg);
         auto arg2 =FfiConverterString::lift(reason);return obj->p256_sign(
         arg0, 
@@ -2949,11 +2949,11 @@ Assertion SyncAuthenticatorImpl::get_assertion(const AssertionRequest &req, uint
         uniffi::FfiConverterAuthError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterTypeAssertionRequest::lower(req), uniffi::FfiConverterUInt64::lower(prf_out)));
 }
-void SyncAuthenticatorImpl::platform_secret(const std::string &handle, const std::vector<uint8_t> &salt, const std::string &reason, std::optional<KeyPolicy> policy, uint64_t out) {
+void SyncAuthenticatorImpl::platform_secret(const std::string &key_handle, const std::vector<uint8_t> &salt, const std::string &reason, std::optional<KeyPolicy> policy, uint64_t out) {
     uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_syncauthenticator_platform_secret,
         uniffi::FfiConverterAuthError::lift,
-        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(handle), uniffi::FfiConverterBytes::lower(salt), uniffi::FfiConverterString::lower(reason), uniffi::FfiConverterOptionalTypeKeyPolicy::lower(policy), uniffi::FfiConverterUInt64::lower(out));
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(key_handle), uniffi::FfiConverterBytes::lower(salt), uniffi::FfiConverterString::lower(reason), uniffi::FfiConverterOptionalTypeKeyPolicy::lower(policy), uniffi::FfiConverterUInt64::lower(out));
 }
 SePublic SyncAuthenticatorImpl::p256_generate(const KeyPolicy &policy) {
     return uniffi::FfiConverterTypeSePublic::lift(uniffi::rust_call(
@@ -2961,11 +2961,11 @@ SePublic SyncAuthenticatorImpl::p256_generate(const KeyPolicy &policy) {
         uniffi::FfiConverterAuthError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterTypeKeyPolicy::lower(policy)));
 }
-std::vector<uint8_t> SyncAuthenticatorImpl::p256_sign(const std::string &handle, const std::vector<uint8_t> &ua_msg, const std::string &reason) {
+std::vector<uint8_t> SyncAuthenticatorImpl::p256_sign(const std::string &key_handle, const std::vector<uint8_t> &ua_msg, const std::string &reason) {
     return uniffi::FfiConverterBytes::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_syncauthenticator_p256_sign,
         uniffi::FfiConverterAuthError::lift,
-        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(handle), uniffi::FfiConverterBytes::lower(ua_msg), uniffi::FfiConverterString::lower(reason)));
+        this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(key_handle), uniffi::FfiConverterBytes::lower(ua_msg), uniffi::FfiConverterString::lower(reason)));
 }
 
 SyncAuthenticatorImpl::~SyncAuthenticatorImpl() {
@@ -3256,13 +3256,13 @@ bool Vault::keystore_rollback_blocking(std::shared_ptr<CancelToken> cancel) {
 std::vector<std::string> Vault::lock_all_blocking() {
     return uniffi::FfiConverterSequenceString::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_vault_lock_all_blocking,
-        nullptr,
+        uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle()));
 }
 std::vector<std::string> Vault::lock_blocking(const std::string &seed) {
     return uniffi::FfiConverterSequenceString::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_vault_lock_blocking,
-        nullptr,
+        uniffi::FfiConverterSdkError::lift,
         this->_uniffi_internal_clone_handle(), uniffi::FfiConverterString::lower(seed)));
 }
 MemoryProtection Vault::memory_protection(const std::string &seed) {
@@ -5297,6 +5297,8 @@ RustBuffer FfiConverterTypeBindingConfig::lower(const BindingConfig &val) {
 
 BindingConfig FfiConverterTypeBindingConfig::read(RustStream &stream) {
     return {
+        FfiConverterUInt32::read(stream),
+        FfiConverterUInt64::read(stream),
         FfiConverterSequenceTypeChainProfile::read(stream),
         FfiConverterOptionalString::read(stream),
         FfiConverterTypeLimits::read(stream),
@@ -5305,6 +5307,8 @@ BindingConfig FfiConverterTypeBindingConfig::read(RustStream &stream) {
 }
 
 void FfiConverterTypeBindingConfig::write(RustStream &stream, const BindingConfig &val) {
+    FfiConverterUInt32::write(stream, val.expect_api);
+    FfiConverterUInt64::write(stream, val.need_features);
     FfiConverterSequenceTypeChainProfile::write(stream, val.profiles);
     FfiConverterOptionalString::write(stream, val.rp_id);
     FfiConverterTypeLimits::write(stream, val.limits);
@@ -5314,6 +5318,8 @@ void FfiConverterTypeBindingConfig::write(RustStream &stream, const BindingConfi
 uint64_t FfiConverterTypeBindingConfig::allocation_size(const BindingConfig &val) {
     
     return 
+        FfiConverterUInt32::allocation_size(val.expect_api) +
+        FfiConverterUInt64::allocation_size(val.need_features) +
         FfiConverterSequenceTypeChainProfile::allocation_size(val.profiles) +
         FfiConverterOptionalString::allocation_size(val.rp_id) +
         FfiConverterTypeLimits::allocation_size(val.limits) +

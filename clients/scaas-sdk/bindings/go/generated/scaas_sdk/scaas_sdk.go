@@ -2224,7 +2224,7 @@ func uniffiCheckChecksums() {
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_subscription_next()
 		})
-		if checksum != 29929 {
+		if checksum != 46941 {
 			// If this happens try cleaning and rebuilding your project
 			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_subscription_next: UniFFI API checksum mismatch")
 		}
@@ -2350,7 +2350,7 @@ func uniffiCheckChecksums() {
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_vault_lock()
 		})
-		if checksum != 39795 {
+		if checksum != 6366 {
 			// If this happens try cleaning and rebuilding your project
 			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_vault_lock: UniFFI API checksum mismatch")
 		}
@@ -2359,7 +2359,7 @@ func uniffiCheckChecksums() {
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_vault_lock_all()
 		})
-		if checksum != 19133 {
+		if checksum != 17781 {
 			// If this happens try cleaning and rebuilding your project
 			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_vault_lock_all: UniFFI API checksum mismatch")
 		}
@@ -10780,7 +10780,7 @@ func (_ FfiDestroyerSeedBackup) Destroy(value *SeedBackup) {
 // A subscription to the SDK's events (spec §14): a bounded queue, `Lagged { missed }` for a slow reader.
 type SubscriptionInterface interface {
 	// The next event, or `None` within `timeout_ms`.
-	Next(timeoutMs uint64) *Event
+	Next(timeoutMs uint64) (*Event, error)
 }
 
 // A subscription to the SDK's events (spec §14): a bounded queue, `Lagged { missed }` for a slow reader.
@@ -10789,11 +10789,11 @@ type Subscription struct {
 }
 
 // The next event, or `None` within `timeout_ms`.
-func (_self *Subscription) Next(timeoutMs uint64) *Event {
+func (_self *Subscription) Next(timeoutMs uint64) (*Event, error) {
 	_pointer := _self.ffiObject.incrementPointer("*Subscription")
 	defer _self.ffiObject.decrementPointer()
-	res, _ := uniffiRustCallAsync[error](
-		nil,
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
 		// completeFn
 		func(handle C.uint64_t, status *C.RustCallStatus) RustBufferI {
 			res := C.ffi_scaas_sdk_rust_future_complete_rust_buffer(handle, status)
@@ -10817,7 +10817,11 @@ func (_self *Subscription) Next(timeoutMs uint64) *Event {
 		},
 	)
 
-	return res
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
 }
 func (object *Subscription) Destroy() {
 	runtime.SetFinalizer(object, nil)
@@ -10891,10 +10895,11 @@ type VaultInterface interface {
 	// Root (c)'s typed data for the account `account_hex` and set `set` (spec §6.6).
 	KeyDerivationTypedData(accountHex string, set uint32) (string, error)
 	KeystoreRollback() (bool, error)
-	// Locks `seed`: the ids of the hidden sets abandoned with it.
-	Lock(seed string) []string
-	// Locks every seed.
-	LockAll() []string
+	// Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+	// answer: the seed is then not known locked.
+	Lock(seed string) ([]string, error)
+	// Locks every seed (a failed call is its error, as `lock`).
+	LockAll() ([]string, error)
 	// The memory protection of an unlocked seed's arena.
 	MemoryProtection(seed string) (MemoryProtection, error)
 	OpenHidden(seed string, unlock Unlock, bip39Passphrase *SecretBytes) (SessionSet, error)
@@ -11330,12 +11335,13 @@ func (_self *Vault) KeystoreRollback() (bool, error) {
 	return res, err
 }
 
-// Locks `seed`: the ids of the hidden sets abandoned with it.
-func (_self *Vault) Lock(seed string) []string {
+// Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+// answer: the seed is then not known locked.
+func (_self *Vault) Lock(seed string) ([]string, error) {
 	_pointer := _self.ffiObject.incrementPointer("*Vault")
 	defer _self.ffiObject.decrementPointer()
-	res, _ := uniffiRustCallAsync[error](
-		nil,
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
 		// completeFn
 		func(handle C.uint64_t, status *C.RustCallStatus) RustBufferI {
 			res := C.ffi_scaas_sdk_rust_future_complete_rust_buffer(handle, status)
@@ -11359,15 +11365,19 @@ func (_self *Vault) Lock(seed string) []string {
 		},
 	)
 
-	return res
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
 }
 
-// Locks every seed.
-func (_self *Vault) LockAll() []string {
+// Locks every seed (a failed call is its error, as `lock`).
+func (_self *Vault) LockAll() ([]string, error) {
 	_pointer := _self.ffiObject.incrementPointer("*Vault")
 	defer _self.ffiObject.decrementPointer()
-	res, _ := uniffiRustCallAsync[error](
-		nil,
+	res, err := uniffiRustCallAsync[*SdkError](
+		FfiConverterSdkErrorINSTANCE,
 		// completeFn
 		func(handle C.uint64_t, status *C.RustCallStatus) RustBufferI {
 			res := C.ffi_scaas_sdk_rust_future_complete_rust_buffer(handle, status)
@@ -11391,7 +11401,11 @@ func (_self *Vault) LockAll() []string {
 		},
 	)
 
-	return res
+	if err == nil {
+		return res, nil
+	}
+
+	return res, err
 }
 
 // The memory protection of an unlocked seed's arena.
@@ -13285,15 +13299,21 @@ func (_ FfiDestroyerBalances) Destroy(value Balances) {
 }
 
 // A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
-// SDK's own (`RuntimeChoice::Own`) and the clock the device's.
+// SDK's own (`RuntimeChoice::Own`) and the clock the device's. `expect_api` and `need_features` are the binding's load check
+// (spec §16.3): the `api_version` it was generated against and the feature bits it needs; the opening refuses another
+// library with `AbiMismatch`.
 type BindingConfig struct {
-	Profiles  []ChainProfile
-	RpId      *string
-	Limits    Limits
-	GasTables []GasTable
+	ExpectApi    uint32
+	NeedFeatures uint64
+	Profiles     []ChainProfile
+	RpId         *string
+	Limits       Limits
+	GasTables    []GasTable
 }
 
 func (r *BindingConfig) Destroy() {
+	FfiDestroyerUint32{}.Destroy(r.ExpectApi)
+	FfiDestroyerUint64{}.Destroy(r.NeedFeatures)
 	FfiDestroyerSequenceChainProfile{}.Destroy(r.Profiles)
 	FfiDestroyerOptionalString{}.Destroy(r.RpId)
 	FfiDestroyerLimits{}.Destroy(r.Limits)
@@ -13310,6 +13330,8 @@ func (c FfiConverterBindingConfig) Lift(rb RustBufferI) BindingConfig {
 
 func (c FfiConverterBindingConfig) Read(reader io.Reader) BindingConfig {
 	return BindingConfig{
+		FfiConverterUint32INSTANCE.Read(reader),
+		FfiConverterUint64INSTANCE.Read(reader),
 		FfiConverterSequenceChainProfileINSTANCE.Read(reader),
 		FfiConverterOptionalStringINSTANCE.Read(reader),
 		FfiConverterLimitsINSTANCE.Read(reader),
@@ -13326,6 +13348,8 @@ func (c FfiConverterBindingConfig) LowerExternal(value BindingConfig) ExternalCR
 }
 
 func (c FfiConverterBindingConfig) Write(writer io.Writer, value BindingConfig) {
+	FfiConverterUint32INSTANCE.Write(writer, value.ExpectApi)
+	FfiConverterUint64INSTANCE.Write(writer, value.NeedFeatures)
 	FfiConverterSequenceChainProfileINSTANCE.Write(writer, value.Profiles)
 	FfiConverterOptionalStringINSTANCE.Write(writer, value.RpId)
 	FfiConverterLimitsINSTANCE.Write(writer, value.Limits)

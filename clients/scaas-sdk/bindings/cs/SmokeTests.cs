@@ -17,21 +17,14 @@ namespace Scaas.Sdk.Smoke;
 
 static class Native
 {
-    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
-    static extern unsafe int scaas_sdk_secret_write(ulong id, byte* src, nuint len);
-
-    public static unsafe int Write(ulong id, byte[] v)
-    {
-        fixed (byte* p = v)
-            return scaas_sdk_secret_write(id, p, (nuint)v.Length);
-    }
-
+    /// <summary>A secret holding `v`, by the copy call (its buffer zeroed by it; asserted).</summary>
     public static SecretBytes Secret(string v)
     {
         var b = Encoding.UTF8.GetBytes(v);
         var s = ScaasSdkMethods.SecretNew((uint)b.Length);
-        if (Write(ScaasSdkMethods.SecretId(s), b) != 0)
+        if (!Scaas.Sdk.CopyCall.Write(ScaasSdkMethods.SecretId(s), b))
             throw new InvalidOperationException("copy call");
+        Assert.True(b.All(x => x == 0), "the copy call zeroes the caller's buffer");
         return s;
     }
 }
@@ -91,7 +84,7 @@ class FakeAuth : ForeignAuthenticator
         var o = new byte[32];
         for (var i = 0; i < 32; i++)
             o[i] = (byte)(salt[i % salt.Length] ^ 0x5a ^ i);
-        if (Native.Write(prfOut, o) != 0)
+        if (!Scaas.Sdk.CopyCall.Write(prfOut, o))
             throw new AuthException.Refused();
         return new Assertion([0xc1, 0xed], new byte[37], [], new byte[64], true);
     }
@@ -111,7 +104,7 @@ public class SmokeTests
     const string Pass = "river-otter-7 ünï";
 
     static Task<uniffi.scaas_sdk.Sdk> Open(MemStore st, FakeAuth? auth = null) =>
-        ScaasSdkMethods.Open(new BindingConfig([], "wallet.example", ScaasSdkMethods.LimitsDefault(), []), st, auth ?? new FakeAuth());
+        ScaasSdkMethods.Open(new BindingConfig(1, ScaasSdkMethods.Features(), [], "wallet.example", ScaasSdkMethods.LimitsDefault(), []), st, auth ?? new FakeAuth());
 
     static Task<uniffi.scaas_sdk.Sdk> Over(string text)
     {
@@ -143,7 +136,31 @@ public class SmokeTests
     }
 
     [Fact]
-    public void LoadCheck() => Assert.Equal(1u, ScaasSdkMethods.ApiVersion());
+    public async Task LoadCheck()
+    {
+        Assert.Equal(1u, ScaasSdkMethods.ApiVersion());
+        // the opening refuses a library of another api_version or without a needed feature (spec §16.3)
+        var limits = ScaasSdkMethods.LimitsDefault();
+        Assert.Equal("AbiMismatch", await Failure(() => ScaasSdkMethods.Open(new BindingConfig(2, ScaasSdkMethods.Features(), [], null, limits, []), new MemStore(), null)));
+        Assert.Equal("AbiMismatch", await Failure(() => ScaasSdkMethods.Open(new BindingConfig(1, 1UL << 62, [], null, limits, []), new MemStore(), null)));
+        // control: this library's
+        await ScaasSdkMethods.Open(new BindingConfig(1, ScaasSdkMethods.Features(), [], null, limits, []), new MemStore(), null);
+    }
+
+    [Fact]
+    public async Task CopyCallsRevealDispose()
+    {
+        var sdk = await Open(new MemStore());
+        var fresh = await sdk.Vault().Generate(new Generate("Fresh", Native.Secret(Pass)));
+        var words = fresh.Backup.Reveal();
+        var id = ScaasSdkMethods.SecretId(words);
+        var text = Scaas.Sdk.CopyCall.Read(id, (int)ScaasSdkMethods.SecretLen(words));
+        Assert.NotNull(text);
+        Assert.Equal(24, Encoding.UTF8.GetString(text!).Split(' ').Length);
+        Array.Clear(text!);
+        Assert.True(Scaas.Sdk.CopyCall.Dispose(id));
+        Assert.Null(Scaas.Sdk.CopyCall.Read(id, 1));
+    }
 
     [Fact]
     public async Task KeystoreRows()
@@ -222,7 +239,7 @@ public class SmokeTests
         await sdk.Vault().Lock(id);
         auth.Throws = true;
         var ea = await Failure(() => sdk.Vault().Unlock(id, new Unlock.Passkey()));
-        Assert.True(ea != "Ok" && ea != "Internal", $"authenticator exception: {ea}");
+        Assert.Equal("AuthenticatorRefused", ea);
         auth.Throws = false;
         // a C# exception in the store: Unexpected, the store's failure (VaultIo)
         st.Throws = true;

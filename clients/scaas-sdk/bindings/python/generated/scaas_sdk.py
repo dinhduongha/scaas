@@ -917,7 +917,7 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_seedbackup_verify() != 53176:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_scaas_sdk_checksum_method_subscription_next() != 29929:
+    if lib.uniffi_scaas_sdk_checksum_method_subscription_next() != 46941:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -945,9 +945,9 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_vault_keystore_rollback() != 2571:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_scaas_sdk_checksum_method_vault_lock() != 39795:
+    if lib.uniffi_scaas_sdk_checksum_method_vault_lock() != 6366:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_scaas_sdk_checksum_method_vault_lock_all() != 19133:
+    if lib.uniffi_scaas_sdk_checksum_method_vault_lock_all() != 17781:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_vault_memory_protection() != 33961:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -7551,9 +7551,13 @@ class _UniffiFfiConverterSequenceTypeGasTable(_UniffiConverterRustBuffer):
 class BindingConfig:
     """
     A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
-    SDK's own (`RuntimeChoice::Own`) and the clock the device's.
+    SDK's own (`RuntimeChoice::Own`) and the clock the device's. `expect_api` and `need_features` are the binding's load check
+    (spec §16.3): the `api_version` it was generated against and the feature bits it needs; the opening refuses another
+    library with `AbiMismatch`.
 """
-    def __init__(self, *, profiles:typing.List[ChainProfile], rp_id:typing.Optional[str], limits:Limits, gas_tables:typing.List[GasTable]):
+    def __init__(self, *, expect_api:int, need_features:int, profiles:typing.List[ChainProfile], rp_id:typing.Optional[str], limits:Limits, gas_tables:typing.List[GasTable]):
+        self.expect_api = expect_api
+        self.need_features = need_features
         self.profiles = profiles
         self.rp_id = rp_id
         self.limits = limits
@@ -7563,8 +7567,12 @@ class BindingConfig:
 
     
     def __str__(self):
-        return "BindingConfig(profiles={}, rp_id={}, limits={}, gas_tables={})".format(self.profiles, self.rp_id, self.limits, self.gas_tables)
+        return "BindingConfig(expect_api={}, need_features={}, profiles={}, rp_id={}, limits={}, gas_tables={})".format(self.expect_api, self.need_features, self.profiles, self.rp_id, self.limits, self.gas_tables)
     def __eq__(self, other):
+        if self.expect_api != other.expect_api:
+            return False
+        if self.need_features != other.need_features:
+            return False
         if self.profiles != other.profiles:
             return False
         if self.rp_id != other.rp_id:
@@ -7579,6 +7587,8 @@ class _UniffiFfiConverterTypeBindingConfig(_UniffiConverterRustBuffer):
     @staticmethod
     def read(buf):
         return BindingConfig(
+            expect_api=_UniffiFfiConverterUInt32.read(buf),
+            need_features=_UniffiFfiConverterUInt64.read(buf),
             profiles=_UniffiFfiConverterSequenceTypeChainProfile.read(buf),
             rp_id=_UniffiFfiConverterOptionalString.read(buf),
             limits=_UniffiFfiConverterTypeLimits.read(buf),
@@ -7587,6 +7597,8 @@ class _UniffiFfiConverterTypeBindingConfig(_UniffiConverterRustBuffer):
 
     @staticmethod
     def check_lower(value):
+        _UniffiFfiConverterUInt32.check_lower(value.expect_api)
+        _UniffiFfiConverterUInt64.check_lower(value.need_features)
         _UniffiFfiConverterSequenceTypeChainProfile.check_lower(value.profiles)
         _UniffiFfiConverterOptionalString.check_lower(value.rp_id)
         _UniffiFfiConverterTypeLimits.check_lower(value.limits)
@@ -7594,6 +7606,8 @@ class _UniffiFfiConverterTypeBindingConfig(_UniffiConverterRustBuffer):
 
     @staticmethod
     def write(value, buf):
+        _UniffiFfiConverterUInt32.write(value.expect_api, buf)
+        _UniffiFfiConverterUInt64.write(value.need_features, buf)
         _UniffiFfiConverterSequenceTypeChainProfile.write(value.profiles, buf)
         _UniffiFfiConverterOptionalString.write(value.rp_id, buf)
         _UniffiFfiConverterTypeLimits.write(value.limits, buf)
@@ -29350,7 +29364,7 @@ class Subscription(SubscriptionProtocol):
             _UniffiFfiConverterUInt64.lower(timeout_ms),
         )
         _uniffi_lift_return = _UniffiFfiConverterOptionalTypeEvent.lift
-        _uniffi_error_converter = None
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_scaas_sdk_fn_method_subscription_next(*_uniffi_lowered_args),
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
@@ -29449,12 +29463,13 @@ class VaultProtocol(typing.Protocol):
         raise NotImplementedError
     async def lock(self, seed: str) -> typing.List[str]:
         """
-        Locks `seed`: the ids of the hidden sets abandoned with it.
+        Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+        answer: the seed is then not known locked.
 """
         raise NotImplementedError
     async def lock_all(self, ) -> typing.List[str]:
         """
-        Locks every seed.
+        Locks every seed (a failed call is its error, as `lock`).
 """
         raise NotImplementedError
     def memory_protection(self, seed: str) -> MemoryProtection:
@@ -29751,7 +29766,8 @@ class Vault(VaultProtocol):
         )
     async def lock(self, seed: str) -> typing.List[str]:
         """
-        Locks `seed`: the ids of the hidden sets abandoned with it.
+        Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+        answer: the seed is then not known locked.
 """
         
         _UniffiFfiConverterString.check_lower(seed)
@@ -29760,7 +29776,7 @@ class Vault(VaultProtocol):
             _UniffiFfiConverterString.lower(seed),
         )
         _uniffi_lift_return = _UniffiFfiConverterSequenceString.lift
-        _uniffi_error_converter = None
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_scaas_sdk_fn_method_vault_lock(*_uniffi_lowered_args),
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,
@@ -29771,13 +29787,13 @@ class Vault(VaultProtocol):
         )
     async def lock_all(self, ) -> typing.List[str]:
         """
-        Locks every seed.
+        Locks every seed (a failed call is its error, as `lock`).
 """
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
         )
         _uniffi_lift_return = _UniffiFfiConverterSequenceString.lift
-        _uniffi_error_converter = None
+        _uniffi_error_converter = _UniffiFfiConverterTypeSdkError
         return await _uniffi_rust_call_async(
             _UniffiLib.uniffi_scaas_sdk_fn_method_vault_lock_all(*_uniffi_lowered_args),
             _UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer,

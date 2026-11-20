@@ -77,7 +77,7 @@ pub struct SecretBytes;
 uniffi::custom_type!(Value, String, {
     remote,
     lower: |v| v.to_string(),
-    try_lift: |s| Ok(serde_json::from_str(&s)?),
+    try_lift: |s| serde_json::from_str(&s).map_err(|_| SdkError::Argument.into()),
 });
 
 // the opaque-call marker (spec §13.2): `true` lifts only in a build with `opaque-calls`, as the Rust marker is constructible
@@ -92,13 +92,13 @@ fn marker(b: bool) -> uniffi::Result<AllowOpaqueCall> {
     if b {
         Ok(AllowOpaqueCall::new())
     } else {
-        Err(uniffi::deps::anyhow::anyhow!("OpaqueCallRefused"))
+        Err(SdkError::OpaqueCallRefused.into())
     }
 }
 
 #[cfg(all(feature = "wallet", not(feature = "opaque-calls")))]
 fn marker(_b: bool) -> uniffi::Result<AllowOpaqueCall> {
-    Err(uniffi::deps::anyhow::anyhow!("OpaqueCallRefused"))
+    Err(SdkError::OpaqueCallRefused.into())
 }
 
 // `KeyRef` and `MsigSlot` hold each other (an `msig` signer's slots hold keys), and uniffi-bindgen-cpp refuses any cycle among
@@ -501,12 +501,11 @@ pub struct Subscription {
 #[uniffi::export]
 impl Subscription {
     /// The next event, or `None` within `timeout_ms`.
-    pub async fn next(&self, timeout_ms: u64) -> Option<Event> {
+    pub async fn next(&self, timeout_ms: u64) -> Result<Option<Event>, SdkError> {
         let m = self.m.clone();
         self.sdk
             .spawn(async move { Ok(m.next(timeout_ms).await) })
             .await
-            .unwrap_or(None)
     }
 }
 
@@ -514,48 +513,40 @@ impl Subscription {
 #[uniffi::export]
 impl Subscription {
     /// The next event, or `None` within `timeout_ms` (blocks the calling thread; never a UI thread).
-    pub fn next_blocking(&self, timeout_ms: u64) -> Option<Event> {
+    pub fn next_blocking(&self, timeout_ms: u64) -> Result<Option<Event>, SdkError> {
         let m = self.m.clone();
         crate::sync_cpp::block(&self.sdk, None, async move { Ok(m.next(timeout_ms).await) })
-            .unwrap_or(None)
     }
 }
 
 #[cfg(not(feature = "sync-api"))]
 #[uniffi::export]
 impl Vault {
-    /// Locks `seed`: the ids of the hidden sets abandoned with it.
-    pub async fn lock(&self, seed: String) -> Vec<String> {
+    /// Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+    /// answer: the seed is then not known locked.
+    pub async fn lock(&self, seed: String) -> Result<Vec<String>, SdkError> {
         let m = self.m.clone();
-        self.sdk
-            .spawn(async move { Ok(m.lock(seed).await) })
-            .await
-            .unwrap_or_default()
+        self.sdk.spawn(async move { Ok(m.lock(seed).await) }).await
     }
-    /// Locks every seed.
-    pub async fn lock_all(&self) -> Vec<String> {
+    /// Locks every seed (a failed call is its error, as `lock`).
+    pub async fn lock_all(&self) -> Result<Vec<String>, SdkError> {
         let m = self.m.clone();
-        self.sdk
-            .spawn(async move { Ok(m.lock_all().await) })
-            .await
-            .unwrap_or_default()
+        self.sdk.spawn(async move { Ok(m.lock_all().await) }).await
     }
 }
 
 #[cfg(feature = "sync-api")]
 #[uniffi::export]
 impl Vault {
-    /// Locks `seed` (blocking twin of `lock`).
-    pub fn lock_blocking(&self, seed: String) -> Vec<String> {
+    /// Locks `seed` (blocking twin of `lock`; a failed call, such as one from a runtime thread, is `Internal`).
+    pub fn lock_blocking(&self, seed: String) -> Result<Vec<String>, SdkError> {
         let m = self.m.clone();
         crate::sync_cpp::block(&self.sdk, None, async move { Ok(m.lock(seed).await) })
-            .unwrap_or_default()
     }
     /// Locks every seed (blocking twin of `lock_all`).
-    pub fn lock_all_blocking(&self) -> Vec<String> {
+    pub fn lock_all_blocking(&self) -> Result<Vec<String>, SdkError> {
         let m = self.m.clone();
         crate::sync_cpp::block(&self.sdk, None, async move { Ok(m.lock_all().await) })
-            .unwrap_or_default()
     }
 }
 
@@ -887,9 +878,13 @@ pub fn registration_blob_to_json(blob: RegistrationBlob) -> Result<String, SdkEr
 }
 
 /// A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
-/// SDK's own (`RuntimeChoice::Own`) and the clock the device's.
+/// SDK's own (`RuntimeChoice::Own`) and the clock the device's. `expect_api` and `need_features` are the binding's load check
+/// (spec §16.3): the `api_version` it was generated against and the feature bits it needs; the opening refuses another
+/// library with `AbiMismatch`.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct BindingConfig {
+    pub expect_api: u32,
+    pub need_features: u64,
     pub profiles: Vec<ChainProfile>,
     pub rp_id: Option<String>,
     pub limits: Limits,
@@ -901,8 +896,9 @@ impl BindingConfig {
         self,
         store: Arc<dyn SecureStore>,
         authenticator: Option<Arc<dyn Authenticator>>,
-    ) -> crate::SdkConfig {
-        crate::SdkConfig {
+    ) -> Result<crate::SdkConfig, SdkError> {
+        crate::load_check(self.expect_api, self.need_features)?;
+        Ok(crate::SdkConfig {
             profiles: self.profiles,
             store,
             authenticator,
@@ -911,7 +907,7 @@ impl BindingConfig {
             limits: self.limits,
             clock: None,
             gas_tables: self.gas_tables,
-        }
+        })
     }
 }
 
@@ -1068,7 +1064,36 @@ pub async fn open(
     authenticator: Option<Arc<dyn ForeignAuthenticator>>,
 ) -> Result<Arc<Sdk>, SdkError> {
     let auth = authenticator.map(|a| Arc::new(AuthAdapter(a)) as Arc<dyn Authenticator>);
-    let config = config.sdk_config(Arc::new(StoreAdapter(store)), auth);
-    // `Sdk::open` starts the runtime; its one read of the keystore runs on that runtime too (spec §14)
+    let config = config.sdk_config(Arc::new(StoreAdapter(store)), auth)?;
+    // `Sdk::open` starts the runtime; its one read of the keystore is awaited here, on the caller's executor (it takes no
+    // store lock and needs no reactor; spec §14)
     Ok(Sdk::new(crate::Sdk::open(config).await?))
+}
+
+/// Review B2: a refused lift is the SDK's code (UniFFI hands the call's error type only an error that downcasts to it).
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use uniffi::{Lift, Lower};
+
+    #[test]
+    fn a_refused_lift_is_the_sdk_code() {
+        let code = |e: uniffi::deps::anyhow::Error| e.downcast::<SdkError>().ok().map(|e| e.code());
+        #[cfg(all(feature = "wallet", not(feature = "opaque-calls")))]
+        {
+            let e = <AllowOpaqueCall as Lift<crate::UniFfiTag>>::try_lift(1)
+                .err()
+                .unwrap();
+            assert_eq!(code(e), Some("OpaqueCallRefused"));
+        }
+        let bad = <String as Lower<crate::UniFfiTag>>::lower("{not json".into());
+        let e = <Value as Lift<crate::UniFfiTag>>::try_lift(bad)
+            .err()
+            .unwrap();
+        assert_eq!(code(e), Some("Argument"));
+        // control: text that parses lifts
+        let good = <String as Lower<crate::UniFfiTag>>::lower("{\"a\":1}".into());
+        assert!(<Value as Lift<crate::UniFfiTag>>::try_lift(good).is_ok());
+    }
 }

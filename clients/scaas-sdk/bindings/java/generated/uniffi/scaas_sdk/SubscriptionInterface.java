@@ -7,7 +7,7 @@ public interface SubscriptionInterface {
     
     /**
      * The next event, or `None` within `timeout_ms`.
-     */public java.util.concurrent.CompletableFuture<Event> next(long timeoutMs);
+     */public java.util.concurrent.CompletableFuture<Event> next(long timeoutMs) ;
     
 }
 

@@ -432,7 +432,8 @@ public class Vault implements AutoCloseable, VaultInterface {
 
   
     /**
-     * Locks `seed`: the ids of the hidden sets abandoned with it.
+     * Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+     * answer: the seed is then not known locked.
      */
     @Override
     public java.util.concurrent.CompletableFuture<java.util.List<java.lang.String>> lock(java.lang.String seed){
@@ -453,13 +454,13 @@ public class Vault implements AutoCloseable, VaultInterface {
         // lift function
         (it) -> FfiConverterSequenceString.INSTANCE.lift(it),
         // Error FFI converter
-        new UniffiNullRustCallStatusErrorHandler()
+        new SdkExceptionErrorHandler()
     );
     }
 
   
     /**
-     * Locks every seed.
+     * Locks every seed (a failed call is its error, as `lock`).
      */
     @Override
     public java.util.concurrent.CompletableFuture<java.util.List<java.lang.String>> lockAll(){
@@ -480,7 +481,7 @@ public class Vault implements AutoCloseable, VaultInterface {
         // lift function
         (it) -> FfiConverterSequenceString.INSTANCE.lift(it),
         // Error FFI converter
-        new UniffiNullRustCallStatusErrorHandler()
+        new SdkExceptionErrorHandler()
     );
     }
 

@@ -37,6 +37,6 @@ bash ../lib.sh uniffi
 python3 -I ../rows.py "$W/smartcontracts/vectors/keystore/keystore.json" build/rows.tsv
 echo "[kotlin] start: kotlinc"
 "${cap[@]}" "${KOTLINC:-kotlinc}" -nowarn -cp "$CP" -include-runtime -d build/smoke.jar \
-    $(find generated -name '*.kt') Smoke.kt
+    $(find generated -name '*.kt') CopyCall.kt Smoke.kt
 echo "[kotlin] ok: kotlinc"
 "${cap[@]}" java -Djna.library.path="$W/clients/scaas-sdk/ffi/target/lib-uniffi" -cp "build/smoke.jar:$CP" SmokeKt build/rows.tsv

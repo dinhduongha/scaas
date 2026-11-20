@@ -2637,7 +2637,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_scaas_sdk_checksum_method_sdk_watch() != 24897.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_scaas_sdk_checksum_method_subscription_next() != 29929.toShort()) {
+    if (lib.uniffi_scaas_sdk_checksum_method_subscription_next() != 46941.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_vault_change_passphrase() != 63580.toShort()) {
@@ -2679,10 +2679,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_scaas_sdk_checksum_method_vault_keystore_rollback() != 2571.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_scaas_sdk_checksum_method_vault_lock() != 39795.toShort()) {
+    if (lib.uniffi_scaas_sdk_checksum_method_vault_lock() != 6366.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_scaas_sdk_checksum_method_vault_lock_all() != 19133.toShort()) {
+    if (lib.uniffi_scaas_sdk_checksum_method_vault_lock_all() != 17781.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_vault_memory_protection() != 33961.toShort()) {
@@ -11551,6 +11551,7 @@ open class Subscription: Disposable, AutoCloseable, SubscriptionInterface
     /**
      * The next event, or `None` within `timeout_ms`.
      */
+    @Throws(SdkException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `next`(`timeoutMs`: kotlin.ULong) : Event? {
         return uniffiRustCallAsync(
@@ -11566,7 +11567,7 @@ open class Subscription: Disposable, AutoCloseable, SubscriptionInterface
         // lift function
         { FfiConverterOptionalTypeEvent.lift(it) },
         // Error FFI converter
-        UniffiNullRustCallStatusErrorHandler,
+        SdkException.ErrorHandler,
     )
     }
 
@@ -11739,12 +11740,13 @@ public interface VaultInterface {
     suspend fun `keystoreRollback`(): kotlin.Boolean
     
     /**
-     * Locks `seed`: the ids of the hidden sets abandoned with it.
+     * Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+     * answer: the seed is then not known locked.
      */
     suspend fun `lock`(`seed`: kotlin.String): List<kotlin.String>
     
     /**
-     * Locks every seed.
+     * Locks every seed (a failed call is its error, as `lock`).
      */
     suspend fun `lockAll`(): List<kotlin.String>
     
@@ -12153,8 +12155,10 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
 
     
     /**
-     * Locks `seed`: the ids of the hidden sets abandoned with it.
+     * Locks `seed`: the ids of the hidden sets abandoned with it. A failed call is its error (`Internal`), never an empty
+     * answer: the seed is then not known locked.
      */
+    @Throws(SdkException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `lock`(`seed`: kotlin.String) : List<kotlin.String> {
         return uniffiRustCallAsync(
@@ -12170,14 +12174,15 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         // lift function
         { FfiConverterSequenceString.lift(it) },
         // Error FFI converter
-        UniffiNullRustCallStatusErrorHandler,
+        SdkException.ErrorHandler,
     )
     }
 
     
     /**
-     * Locks every seed.
+     * Locks every seed (a failed call is its error, as `lock`).
      */
+    @Throws(SdkException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `lockAll`() : List<kotlin.String> {
         return uniffiRustCallAsync(
@@ -12193,7 +12198,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         // lift function
         { FfiConverterSequenceString.lift(it) },
         // Error FFI converter
-        UniffiNullRustCallStatusErrorHandler,
+        SdkException.ErrorHandler,
     )
     }
 
@@ -13894,9 +13899,15 @@ public object FfiConverterTypeBalances: FfiConverterRustBuffer<Balances> {
 
 /**
  * A binding's configuration (spec §4): the profiles, the passkey RP ID, the limits, the module gas tables; the runtime is the
- * SDK's own (`RuntimeChoice::Own`) and the clock the device's.
+ * SDK's own (`RuntimeChoice::Own`) and the clock the device's. `expect_api` and `need_features` are the binding's load check
+ * (spec §16.3): the `api_version` it was generated against and the feature bits it needs; the opening refuses another
+ * library with `AbiMismatch`.
  */
 data class BindingConfig (
+    var `expectApi`: kotlin.UInt
+    , 
+    var `needFeatures`: kotlin.ULong
+    , 
     var `profiles`: List<ChainProfile>
     , 
     var `rpId`: kotlin.String?
@@ -13920,6 +13931,8 @@ data class BindingConfig (
 public object FfiConverterTypeBindingConfig: FfiConverterRustBuffer<BindingConfig> {
     override fun read(buf: ByteBuffer): BindingConfig {
         return BindingConfig(
+            FfiConverterUInt.read(buf),
+            FfiConverterULong.read(buf),
             FfiConverterSequenceTypeChainProfile.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterTypeLimits.read(buf),
@@ -13928,6 +13941,8 @@ public object FfiConverterTypeBindingConfig: FfiConverterRustBuffer<BindingConfi
     }
 
     override fun allocationSize(value: BindingConfig) = (
+            FfiConverterUInt.allocationSize(value.`expectApi`) +
+            FfiConverterULong.allocationSize(value.`needFeatures`) +
             FfiConverterSequenceTypeChainProfile.allocationSize(value.`profiles`) +
             FfiConverterOptionalString.allocationSize(value.`rpId`) +
             FfiConverterTypeLimits.allocationSize(value.`limits`) +
@@ -13935,6 +13950,8 @@ public object FfiConverterTypeBindingConfig: FfiConverterRustBuffer<BindingConfi
     )
 
     override fun write(value: BindingConfig, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`expectApi`, buf)
+            FfiConverterULong.write(value.`needFeatures`, buf)
             FfiConverterSequenceTypeChainProfile.write(value.`profiles`, buf)
             FfiConverterOptionalString.write(value.`rpId`, buf)
             FfiConverterTypeLimits.write(value.`limits`, buf)

@@ -313,9 +313,9 @@ void uniffi_scaas_sdk_fn_free_syncauthenticator(uint64_t handle, RustCallStatus 
 void uniffi_scaas_sdk_fn_init_callback_vtable_syncauthenticator(const UniffiVTableCallbackInterfaceSyncAuthenticator & vtable);
 RustBuffer uniffi_scaas_sdk_fn_method_syncauthenticator_create_passkey(uint64_t ptr, RustBuffer rp_id, RustBuffer user_name, RustBuffer exclude, RustCallStatus *out_status);
 RustBuffer uniffi_scaas_sdk_fn_method_syncauthenticator_get_assertion(uint64_t ptr, RustBuffer req, uint64_t prf_out, RustCallStatus *out_status);
-void uniffi_scaas_sdk_fn_method_syncauthenticator_platform_secret(uint64_t ptr, RustBuffer handle, RustBuffer salt, RustBuffer reason, RustBuffer policy, uint64_t out, RustCallStatus *out_status);
+void uniffi_scaas_sdk_fn_method_syncauthenticator_platform_secret(uint64_t ptr, RustBuffer key_handle, RustBuffer salt, RustBuffer reason, RustBuffer policy, uint64_t out, RustCallStatus *out_status);
 RustBuffer uniffi_scaas_sdk_fn_method_syncauthenticator_p256_generate(uint64_t ptr, RustBuffer policy, RustCallStatus *out_status);
-RustBuffer uniffi_scaas_sdk_fn_method_syncauthenticator_p256_sign(uint64_t ptr, RustBuffer handle, RustBuffer ua_msg, RustBuffer reason, RustCallStatus *out_status);
+RustBuffer uniffi_scaas_sdk_fn_method_syncauthenticator_p256_sign(uint64_t ptr, RustBuffer key_handle, RustBuffer ua_msg, RustBuffer reason, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_clone_syncstore(uint64_t handle, RustCallStatus *out_status);
 void uniffi_scaas_sdk_fn_free_syncstore(uint64_t handle, RustCallStatus *out_status);
 void uniffi_scaas_sdk_fn_init_callback_vtable_syncstore(const UniffiVTableCallbackInterfaceSyncStore & vtable);

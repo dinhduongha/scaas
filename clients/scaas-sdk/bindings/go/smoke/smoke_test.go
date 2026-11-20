@@ -33,6 +33,11 @@ func secret(t *testing.T, v string) *sdk.SecretBytes {
 	if copycall.Write(sdk.SecretId(s), b) != 0 {
 		t.Fatal("copy call")
 	}
+	for _, x := range b {
+		if x != 0 {
+			t.Fatal("the copy call zeroes the caller's buffer")
+		}
+	}
 	return s
 }
 
@@ -122,10 +127,14 @@ func (a *fakeAuth) P256Sign(keyHandle string, uaMsg []byte, reason string) ([]by
 	return nil, sdk.NewAuthErrorUnavailable()
 }
 
-func open(t *testing.T, st *memStore, auth *fakeAuth) *sdk.Sdk {
+func config() sdk.BindingConfig {
 	rp := "wallet.example"
+	return sdk.BindingConfig{ExpectApi: 1, NeedFeatures: sdk.Features(), RpId: &rp, Limits: sdk.LimitsDefault()}
+}
+
+func open(t *testing.T, st *memStore, auth *fakeAuth) *sdk.Sdk {
 	var a sdk.ForeignAuthenticator = auth
-	s, err := sdk.Open(sdk.BindingConfig{RpId: &rp, Limits: sdk.LimitsDefault()}, st, &a)
+	s, err := sdk.Open(config(), st, &a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,6 +182,43 @@ type seed struct {
 func TestLoadCheck(t *testing.T) {
 	if v := sdk.ApiVersion(); v != 1 {
 		t.Fatalf("api_version %d", v)
+	}
+	// the opening refuses a library of another api_version or without a needed feature (spec §16.3)
+	c := config()
+	c.ExpectApi = 2
+	if _, err := sdk.Open(c, newStore(), nil); code(err) != "AbiMismatch" {
+		t.Errorf("load check: api_version 2: %s", code(err))
+	}
+	c = config()
+	c.NeedFeatures = 1 << 62
+	if _, err := sdk.Open(c, newStore(), nil); code(err) != "AbiMismatch" {
+		t.Errorf("load check: a feature: %s", code(err))
+	}
+	if _, err := sdk.Open(config(), newStore(), nil); err != nil {
+		t.Errorf("load check: control: %v", err)
+	}
+}
+
+// TestCopyCalls reveals a backup's words, reads them out by the copy call and disposes of them (review B12).
+func TestCopyCalls(t *testing.T) {
+	s := open(t, newStore(), &fakeAuth{})
+	fresh, err := s.Vault().Generate(sdk.Generate{Label: "Fresh", VaultPassphrase: secret(t, pass)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	words, err := fresh.Backup.Reveal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := copycall.Read(sdk.SecretId(words), int(sdk.SecretLen(words)))
+	if len(strings.Split(string(text), " ")) != 24 {
+		t.Error("the revealed words, read by the copy call")
+	}
+	for i := range text {
+		text[i] = 0
+	}
+	if !copycall.Dispose(sdk.SecretId(words)) || copycall.Read(sdk.SecretId(words), 1) != nil {
+		t.Error("a disposed secret is refused")
 	}
 }
 
@@ -240,8 +286,7 @@ func TestKeystoreRows(t *testing.T) {
 		st := newStore()
 		st.items["keystore"] = []byte(r.Text)
 		var a sdk.ForeignAuthenticator = &fakeAuth{}
-		rp := "wallet.example"
-		s, err := sdk.Open(sdk.BindingConfig{RpId: &rp, Limits: sdk.LimitsDefault()}, st, &a)
+		s, err := sdk.Open(config(), st, &a)
 		if err == nil {
 			_, err = s.Vault().Seeds()
 		}
@@ -259,15 +304,22 @@ func TestStoreAuthenticatorPanicAndErrors(t *testing.T) {
 	st, auth := newStore(), &fakeAuth{}
 	s := open(t, st, auth)
 	sub := s.Subscribe()
-	if ev := sub.Next(50); ev != nil {
-		t.Fatalf("next: %v", *ev)
+	if ev, err := sub.Next(50); ev != nil || err != nil {
+		t.Fatalf("next: %v %v", ev, err)
 	}
 	info, err := s.Vault().ImportWords(sdk.ImportWords{Label: "Main", Words: secret(t, repo), VaultPassphrase: secret(t, pass)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	changed := false
-	for ev := sub.Next(200); ev != nil; ev = sub.Next(200) {
+	for {
+		ev, err := sub.Next(200)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ev == nil {
+			break
+		}
 		if _, ok := (*ev).(sdk.EventKeystoreChanged); ok {
 			changed = true
 		}
@@ -293,7 +345,7 @@ func TestStoreAuthenticatorPanicAndErrors(t *testing.T) {
 	auth.mu.Lock()
 	auth.throws = true
 	auth.mu.Unlock()
-	if e := code(s.Vault().Unlock(info.Id, sdk.UnlockPasskey{})); e == "Ok" || e == "Internal" {
+	if e := code(s.Vault().Unlock(info.Id, sdk.UnlockPasskey{})); e != "AuthenticatorRefused" {
 		t.Errorf("authenticator error: %s", e)
 	}
 	auth.mu.Lock()

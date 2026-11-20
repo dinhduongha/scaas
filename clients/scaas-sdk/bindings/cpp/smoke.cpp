@@ -14,9 +14,7 @@
 #include <mutex>
 #include <sstream>
 
-extern "C" {
-int32_t scaas_sdk_secret_write(uint64_t id, const uint8_t *src, size_t len);
-}
+#include "copycall.hpp"
 
 namespace s = scaas_sdk;
 
@@ -24,7 +22,7 @@ static int bad = 0;
 #define CHECK(c, ...)                                                                                                  \
     do {                                                                                                               \
         if (!(c)) {                                                                                                    \
-            std::printf("FAIL " __VA_ARGS__);                                                                          \
+            std::printf("FAIL: " __VA_ARGS__);                                                                         \
             std::puts("");                                                                                             \
             bad++;                                                                                                     \
         }                                                                                                              \
@@ -37,10 +35,15 @@ static std::string unhex(const std::string &h) {
     return out;
 }
 
+// a secret holding `v`, by the copy call (its buffer zeroed by it; asserted)
 static std::shared_ptr<s::SecretBytes> sec(const std::string &v) {
     auto x = s::secret_new(uint32_t(v.size()));
-    if (scaas_sdk_secret_write(s::secret_id(x), reinterpret_cast<const uint8_t *>(v.data()), v.size()) != 0)
-        throw std::runtime_error("copy call");
+    std::vector<uint8_t> b(v.begin(), v.end());
+    scaas_copycall::write(s::secret_id(x), b);
+    bool zero = true;
+    for (auto c : b)
+        zero = zero && c == 0;
+    CHECK(zero, "the copy call zeroes the caller's buffer");
     return x;
 }
 
@@ -87,11 +90,10 @@ struct FakeAuth : s::SyncAuthenticator {
             throw std::runtime_error("the app's authenticator threw");
         if (!req.prf_salt)
             throw s::auth_error::Refused();
-        uint8_t out[32];
+        std::vector<uint8_t> out(32);
         for (size_t i = 0; i < 32; i++)
             out[i] = uint8_t((*req.prf_salt)[i % req.prf_salt->size()] ^ 0x5a ^ i);
-        if (scaas_sdk_secret_write(prf_out, out, 32) != 0)
-            throw s::auth_error::Refused();
+        scaas_copycall::write(prf_out, out);
         return s::Assertion{{0xc1, 0xed}, std::vector<uint8_t>(37), {}, std::vector<uint8_t>(64), true};
     }
     void platform_secret(const std::string &, const std::vector<uint8_t> &, const std::string &,
@@ -104,7 +106,9 @@ struct FakeAuth : s::SyncAuthenticator {
     }
 };
 
-static s::BindingConfig config() { return s::BindingConfig{{}, "wallet.example", s::limits_default(), {}}; }
+static s::BindingConfig config(uint32_t expect_api = 1, uint64_t need_features = s::features()) {
+    return s::BindingConfig{expect_api, need_features, {}, "wallet.example", s::limits_default(), {}};
+}
 
 static std::shared_ptr<s::Sdk> open(std::shared_ptr<MemStore> st,
                                     std::shared_ptr<FakeAuth> auth = std::make_shared<FakeAuth>()) {
@@ -217,6 +221,35 @@ int main(int argc, char **argv) {
     if (argc < 2)
         return 2;
     CHECK(s::api_version() == 1, "load check: api_version %u", s::api_version());
+    // the opening refuses a library of another api_version or without a needed feature (spec §16.3)
+    auto refused = [](s::BindingConfig c) {
+        return failure([&] { s::open_blocking(c, std::make_shared<MemStore>(), nullptr); });
+    };
+    CHECK(refused(config(2)) == "AbiMismatch", "load check: api_version 2");
+    CHECK(refused(config(1, uint64_t(1) << 62)) == "AbiMismatch", "load check: a feature");
+    CHECK(refused(config()) == "Ok", "load check: control");
+
+    // the copy calls: a backup's words revealed and read out, then disposed (review B12)
+    {
+        auto fresh =
+            open(std::make_shared<MemStore>())->vault()->generate_blocking(s::Generate{"Fresh", sec(PASS)}, nullptr);
+        auto words = fresh.backup->reveal();
+        auto text = scaas_copycall::read(s::secret_id(words), s::secret_len(words));
+        size_t n = 1;
+        for (auto c : text)
+            n += c == ' ';
+        CHECK(n == 24, "the revealed words, read by the copy call (%zu)", n);
+        std::fill(text.begin(), text.end(), 0);
+        CHECK(scaas_copycall::dispose(s::secret_id(words)), "dispose");
+        bool refused_read = false;
+        try {
+            scaas_copycall::read(s::secret_id(words), 1);
+        } catch (const std::invalid_argument &) {
+            refused_read = true;
+        }
+        CHECK(refused_read, "a disposed secret is refused");
+        std::puts("ok copy calls: write zeroes the buffer, a backup revealed and read, disposed");
+    }
     rows(argv[1]);
 
     // the PRF return: a C++ authenticator writes it by the copy call; the passkey unlock opens the seed with it
@@ -241,7 +274,7 @@ int main(int argc, char **argv) {
     sdk->vault()->lock_blocking(id);
     auth->throws = true;
     auto ea = failure([&] { sdk->vault()->unlock_blocking(id, s::Unlock(s::Unlock::kPasskey{}), nullptr); });
-    CHECK(ea != "Ok" && ea != "Internal", "authenticator exception: %s", ea.c_str());
+    CHECK(ea == "AuthenticatorRefused", "authenticator exception: %s", ea.c_str());
     auth->throws = false;
     // a C++ exception in the store: Unexpected, the store's failure (VaultIo)
     st->throws = true;
