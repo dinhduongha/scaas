@@ -33,3 +33,30 @@ mtxConfidentialTransferSingle (the PQZ debit) | 46,445,076 | 13,733,076 | 27,049
 # steps used about 89.4 M together, which matches the earlier one-transaction run (uncapped profile, before the table quote:
 # about 90.0 M quoted by the node's estimate, included). The quotes stand 1.54 to 1.77 above the receipts; lowering the
 # registry-write margin (owner 2026-11-20) is the next step.
+# run 0 (uncapped profile, node estimate): before registry writes were quoted from the gas table (e6f847525), registrations
+# on a profile without tx_gas_cap, so each quoted by the node's estimate, whole (regular = whole); receipts not read then.
+step | quote gas_limit | quote regular_gas | receipt gasUsed | status
+register UA 1: form one transaction | 90,038,847 | 90,038,847 | not recorded | included (proven true)
+register UA 2: form one transaction | 89,830,326 | 89,830,326 | not recorded | included (proven true)
+shield | 771,324 | 330,324 | not recorded | landed
+prepare_acc UA 1 / UA 2 | 35,529,168 / 35,382,168 | 4,537,668 | not recorded | landed
+mtxConfidentialTransferSingle | 46,448,148 | 13,736,148 | not recorded | landed
+# run 2, after lowering the registry-write margin (commit efaee68d0, owner 2026-11-20): the runner and test as in run 1
+# (the test now asserts every receipt's gasUsed <= its quote), a fresh copy (chain 31990, 200 M block), capped profile.
+step | quote gas_limit | quote regular_gas | receipt gasUsed | status
+register UA 1 (ML-DSA-65 + PQZ key): form one transaction | 97,766,240 | 12,602,240 | 89,359,769 | 1
+register UA 2: form one transaction | 97,766,240 | 12,602,240 | 89,159,757 | 1
+shield | 771,324 | 330,324 | 656,790 | 1
+prepare_acc UA 1 | 35,529,168 | 4,537,668 | 23,482,253 | 1
+prepare_acc UA 2 | 35,382,168 | 4,537,668 | 23,176,405 | 1
+mtxConfidentialTransferSingle (the PQZ debit) | 46,445,076 | 13,733,076 | 27,049,699 | 1
+# Why one transaction: the table's one-transaction figure without the margin on its fixed-cost rows (ML-DSA-65's register
+# row, pqz-pop, the intrinsic cost, the calldata at 64 gas a byte) is 97,766,240 whole, within 50 % of the 200 M block, and
+# 12,602,240 regular, within 2^24; the node's estimate is below it, so the table's figure is the gas limit.
+# Run 1 quote -> run 2 quote vs receipt (quote / measured):
+#   registration UA 1: register 68,633,460 + storePqzPop 78,124,572 (x1.77, x1.54; two transactions, 146,758,032)
+#     -> one transaction 97,766,240 vs 89,359,769 (x1.094)
+#   registration UA 2: 68,633,460 + 78,124,572 (x1.77, x1.55) -> 97,766,240 vs 89,159,757 (x1.097)
+#   shield 771,324 -> 771,324 vs 656,790 (x1.174); unchanged (an operation keeps its margin)
+#   prepare_acc 35,529,168 / 35,382,168 -> the same vs 23,482,253 / 23,176,405 (x1.513, x1.527); unchanged
+#   mtxConfidentialTransferSingle 46,445,076 -> 46,445,076 vs 27,049,699 (x1.717); unchanged
