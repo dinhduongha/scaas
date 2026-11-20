@@ -11,6 +11,7 @@ use std::sync::{Arc, PoisonError};
 
 /// Where a reviewed value comes from (spec §13.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Source {
     /// a field of the signed struct (or committed to by it, as a pay's `PayMeta`), decoded
     Signed,
@@ -22,6 +23,7 @@ pub enum Source {
 
 /// One reviewed value: its name (a path for a nested field, `payment.value`), the value as signed, its display form.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ReviewField {
     pub name: String,
     pub value: String,
@@ -98,6 +100,7 @@ impl Typed {
 }
 
 /// A prepared operation (spec §13.1): opaque, kept in the SDK's table; it holds no secret and nothing signed.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct Prepared {
     id: String,
     chain: String,

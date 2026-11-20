@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 /// An item and its revision (its JSON `rev`; `u64::MAX` when the bytes hold none, so no `put_if` matches it).
 #[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct StoredItem {
     pub bytes: Vec<u8>,
     pub rev: u64,
@@ -27,6 +28,7 @@ impl std::fmt::Debug for StoredItem {
 
 /// Whether the platform asks for the user before it gives the item.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Presence {
     #[default]
     None,
@@ -35,6 +37,7 @@ pub enum Presence {
 
 /// How an item is kept: on this device only, out of cloud backups, behind user presence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct StorePolicy {
     pub device_only: bool,
     pub no_cloud_backup: bool,
@@ -53,6 +56,7 @@ impl Default for StorePolicy {
 
 /// A store's failure; `Unexpected` is a foreign exception inside an app's implementation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
 pub enum StoreError {
     /// `put_if`: the stored revision is not the expected one
     Conflict,

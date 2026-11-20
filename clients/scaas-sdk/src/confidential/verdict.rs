@@ -110,6 +110,7 @@ fn native(ua: &W) -> bool {
 /// statement the token rebuilds and the proof, `0x` hex.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PqzVerdictRequest {
     pub chain: String,
     pub token: String,

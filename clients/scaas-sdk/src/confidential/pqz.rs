@@ -453,6 +453,7 @@ pub(crate) async fn read(
 /// version `key_version`, whose PQZ key is the wallet's `pqz_key_version(account, index, key_version)` of the same account and
 /// index (spec §7).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PqzBalanceRequest {
     pub signer: KeyRef,
     pub chain: String,
@@ -463,6 +464,7 @@ pub struct PqzBalanceRequest {
 
 /// A decrypted PQZ balance, for the holder only.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PqzBalance {
     /// the smallest unit, decimal: what a debit at this block may spend (the account and the window `[rolled, p)`)
     pub amount: String,
@@ -570,6 +572,7 @@ impl super::Confidential {
 /// `pqzVersions` word read with version 0's words; each version a [`super::Confidential::pqz_balance`] read of its own fixed
 /// word set (R1 to R7), decrypted by its own key.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PqzBalanceAll {
     /// the sum, decimal
     pub amount: String,
@@ -613,6 +616,7 @@ impl super::Confidential {
 
 /// `pqz_shield` (`UAShield` on a PQZ token): `amount` of the signer's public balance into `to_ua`'s pending window.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PqzShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -625,6 +629,7 @@ pub struct PqzShield {
 
 /// `pqz_wrap_shield` (`WrapShield` on a PQZ token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PqzWrapShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -639,6 +644,7 @@ pub struct PqzWrapShield {
 /// `UAPrepareAcc` (`half` 0 or 1 of the materialisation) and `UAPqzRollOver` (`n` pending entries) of `ua`'s account at key
 /// version `key_version`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PqzAccountOp {
     pub signer: KeyRef,
     pub chain: String,

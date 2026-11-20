@@ -2,7 +2,9 @@
 //! `scaas-sdk`: the one API apps call (CLI-SDK-01, docs/clients/scaas-sdk.md; spec docs/superpowers/specs/2026-11-17-scaas-sdk.md).
 //! Every signature comes from `scaas-ua`, every chain read and send goes through `scaas-rpc`; the SDK holds no cryptography of
 //! its own and no transport. UNAUDITED.
-#![forbid(unsafe_code)]
+// The SDK's own code has no unsafe: held by every build without `uniffi`; UniFFI's generated scaffolding (feature `uniffi`,
+// spec §16.1) carries the FFI's unsafe, which a crate-level forbid would refuse.
+#![cfg_attr(not(feature = "uniffi"), forbid(unsafe_code))]
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -32,10 +34,16 @@ macro_rules! frb_hint {
 #[cfg(not(feature = "vault"))]
 compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!("scaas_sdk");
+
 #[cfg(feature = "account")]
 pub mod account;
 #[cfg(feature = "admin")]
 pub mod admin;
+#[cfg(feature = "uniffi")]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+pub mod binding;
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod confidential;
 pub mod config;
@@ -50,6 +58,9 @@ pub mod frb;
 pub mod op;
 pub mod platform;
 pub mod surface;
+#[cfg(feature = "sync-api")]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
+pub mod sync_cpp;
 pub(crate) mod text;
 pub mod vault;
 #[cfg(feature = "wallet")]

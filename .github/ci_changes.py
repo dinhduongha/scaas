@@ -98,6 +98,8 @@ JOBS = {
     + UARS,
     "scaas-sdk-wasm": ["clients/scaas-sdk/", "clients/scaas-rpc/"] + UARS,
     "scaas-sdk-bindings": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/"] + UARS,
+    # the UniFFI bindings (plan T20b-T20h): the reference library with one UniFFI surface, a generator, a smoke test each
+    "scaas-sdk-cpp": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
     "keystore-vectors": ["clients/scaas-sdk/", "clients/clientkeys/", "smartcontracts/vectors/keystore/"] + UARS,
     # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
     # zether-prover or pqz-ffi
@@ -232,6 +234,7 @@ if __name__ == "__main__":
         "scaas-sdk",
         "scaas-sdk-wasm",
         "scaas-sdk-bindings",
+        "scaas-sdk-cpp",
         "keystore-vectors",
     }
     # plan T20: the SDK's jobs; its generator under runs/ starts the bindings' drift check, other runs/ files nothing
@@ -289,6 +292,7 @@ if __name__ == "__main__":
         "scaas-sdk",
         "scaas-sdk-wasm",
         "scaas-sdk-bindings",
+        "scaas-sdk-cpp",
         "keystore-vectors",
     }
     # the network crate: its own job and the node's (the node builds it); ua-rs (its depth scan) runs it too

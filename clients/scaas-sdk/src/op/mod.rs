@@ -32,6 +32,7 @@ use std::sync::Arc;
 /// authenticator (a passkey or a secure-element key, a row of the seed: owner 2026-11-19, S1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum KeyRef {
     Ua {
         seed: String,

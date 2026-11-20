@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 /// for, its two signatures of [`Vault::key_derivation_typed_data`] (65 bytes each; a 64-byte EIP-2098 one goes through
 /// [`Vault::signature_from_compact`] first), the derivation passphrase (≥ 10 code points), the new seed's label and vault
 /// passphrase.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct DeriveFromSignature {
     pub label: String,
     /// `0x` and 40 hex digits, any case
@@ -27,6 +28,7 @@ pub struct DeriveFromSignature {
 
 /// `vault.derive_from_key`'s request (root (d)): a 32-byte key of `network` (`evm` only: `Argument` otherwise), the derivation
 /// passphrase (empty, or ≥ 10 code points), the seed-set number `index`, the new seed's label and vault passphrase.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct DeriveFromKey {
     pub label: String,
     pub network: String,

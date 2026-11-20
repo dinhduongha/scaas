@@ -100,6 +100,7 @@ impl Signer for ZetherSigner {
 
 /// `zether_shield` (`UAShield` on a Zether token): `amount` of the signer's public balance into `to_ua`'s pending balance.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -112,6 +113,7 @@ pub struct ZetherShield {
 
 /// `zether_wrap_shield` (`WrapShield` on a Zether token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherWrapShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -125,6 +127,7 @@ pub struct ZetherWrapShield {
 
 /// `UARollOver`: roll `ua`'s pending balance over (`n`: the entries to take).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherRollOver {
     pub signer: KeyRef,
     pub chain: String,
@@ -137,6 +140,7 @@ pub struct ZetherRollOver {
 
 /// `UARollOverBatch`: roll each of `uas` over.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherRollOverBatch {
     pub signer: KeyRef,
     pub chain: String,
@@ -151,6 +155,7 @@ pub struct ZetherRollOverBatch {
 /// `UAZetherTransferSingle`: `amount` from the holder's Zether account (`seed`, `account`) to `to_ua` (a registered Zether
 /// UA), the proof valid until block `valid_until_block`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherTransfer {
     pub seed: String,
     pub account: u32,
@@ -168,6 +173,7 @@ pub struct ZetherTransfer {
 
 /// `UAZetherUnshield`: `amount` out of the holder's Zether account to `recipient` (a 32-byte id).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherUnshield {
     pub seed: String,
     pub account: u32,
@@ -187,6 +193,7 @@ pub struct ZetherUnshield {
 /// the leg. The burn proof binds `recipient` and `amount` (the contract's `unshieldWith(b, proof, x.amount, x.recipient, …)`);
 /// the relayed form binds the envelope, never `unwrapBinding` (the direct call's).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherUnshieldUnwrap {
     pub seed: String,
     pub account: u32,
@@ -205,6 +212,7 @@ pub struct ZetherUnshieldUnwrap {
 
 /// One real recipient of a multi-recipient transfer: a registered Zether UA and its amount.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherLeg {
     pub to_ua: String,
     pub amount: String,
@@ -216,6 +224,7 @@ pub struct ZetherLeg {
 /// verify gas the prover's gas-cap check adds for the relayed build (zether-prover `uaSignerGas`), the app's figure: a verify
 /// row for `0x0141` in the gas tables (chain → module → reference) wins over it (owner 2026-11-19, P1).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherTransferMulti {
     pub seed: String,
     pub account: u32,
@@ -236,6 +245,7 @@ pub struct ZetherTransferMulti {
 /// pending entry up to the account's `pendingSeq` at the final block, signed by the Zether UA under `zether-owner` (owner
 /// 2026-11-19, C3).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherOwnerRollOver {
     pub seed: String,
     pub account: u32,
@@ -246,6 +256,7 @@ pub struct ZetherOwnerRollOver {
 
 /// The owner's roll-over mode (`ZetherSetRollOverMode`; or `UASetRollOverMode`): `mode` 0 PUBLIC, 1 OWNER_ONLY.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ZetherOwnerSetMode {
     pub seed: String,
     pub account: u32,
@@ -257,6 +268,7 @@ pub struct ZetherOwnerSetMode {
 
 /// The envelope of an owner statement's relayed form (`UARollOverSigned`, `UASetRollOverMode`): the Zether UA's own lane.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct OwnerRelay {
     pub batch: String,
     pub envelope: Envelope,

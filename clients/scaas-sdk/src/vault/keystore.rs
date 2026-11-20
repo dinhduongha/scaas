@@ -75,6 +75,7 @@ pub struct SeedEntry {
 /// An account row, by shape (spec §6.1), each with its fields in the written order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum AccountRow {
     Ua {
         id: String,

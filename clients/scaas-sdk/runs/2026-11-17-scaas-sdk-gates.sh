@@ -14,6 +14,9 @@ cd "$W" || exit 2
 R=clients/scaas-sdk/runs
 SUMMARY=$R/2026-11-17-scaas-sdk-summary.txt
 export PATH="$HOME/.foundry/bin:$PATH"
+# the pinned UniFFI generators and toolchains (plan T20b-T20h), installed user-local in the main checkout's git-ignored scratchpad
+TOOLS="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/scratchpad/tools"
+export PATH="$TOOLS/uniffi/bin:$PATH"
 C="--locked --offline ${J:--j2}"
 cap="$W/scripts/capped"
 F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots"
@@ -41,7 +44,8 @@ STEPS=(
     "frb-dart|clients/ua-dart-frb|(cd rust && $cap cargo build $C) && $cap dart test --reporter expanded --no-color"
     "bind-dart|clients/scaas-sdk/bindings/dart|bash ./run.sh"
     "bind-gen|.|bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check"
-    "bind-cpp|clients/scaas-sdk/bindings/cpp|$cap cmake -B build && $cap cmake --build build && cd build && $cap ctest --output-on-failure"
+    "bind-cpp|clients/scaas-sdk/bindings/cpp|bash ../lib.sh sync-api && $cap cmake -B build && $cap cmake --build build -j2 && cd build && $cap ctest --output-on-failure"
+    "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
     "sdk-opaque|clients/scaas-sdk|$cap cargo test $C --features $F,opaque-calls --test wallet_ops"
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"
     "ua-verify-only|clients/ua-rs|$cap cargo test $C --no-default-features"
@@ -54,7 +58,7 @@ STEPS=(
     "ua-go|clients/ua-go|go vet ./... && $cap env LD_LIBRARY_PATH=$W/clients/ua-c/target/release go test -count=1 ./..."
     "ua-cs|clients/ua-cs|$cap dotnet test Scaas.Ua.Tests; rc=\$?; dotnet build-server shutdown >/dev/null 2>&1; exit \$rc"
     "ua-cxx|clients/ua-cxx|$cap cargo clippy $C --all-targets -- -D warnings && $cap cmake -S . -B build -G Ninja && $cap cmake --build build && $cap ctest --test-dir build"
-    "ffi|clients/scaas-sdk/ffi|$cap cargo clippy $C --all-targets -- -D warnings && $cap cargo test $C"
+    "ffi|clients/scaas-sdk/ffi|$cap cargo clippy $C --all-targets -- -D warnings && $cap cargo clippy $C --all-targets --features uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features sync-api -- -D warnings && $cap cargo test $C"
     "gas-gen|clients/scaas-sdk/gas|python3 -I generate.py --check && python3 -I test_generate.py"
     "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
     "features|.|python3 scripts/check_test_features.py && cd clients/scaas-sdk 2>/dev/null; $TREE"

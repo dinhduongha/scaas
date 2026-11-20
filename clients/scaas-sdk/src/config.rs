@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 /// A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Family {
     Evm,
     Soroban,
@@ -25,6 +26,7 @@ pub enum Family {
 /// only and is built by the app from its own secret source.
 #[derive(Clone)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct EndpointConfig {
     pub url: String,
     pub class: Class,
@@ -45,6 +47,7 @@ impl std::fmt::Debug for EndpointConfig {
 /// The block of every decisive and decryption read (§9.4 requirement 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Finality {
     Finalized,
     Depth(u64),
@@ -52,6 +55,7 @@ pub enum Finality {
 
 /// A chain as the app's release pins it (spec §4).
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ChainProfile {
     /// `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
     pub key: String,
@@ -97,6 +101,7 @@ pub struct ChainProfile {
 /// A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
 /// CTR-DEX-30) and the position readers reviewed for it, each beside its position manager.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ListedDex {
     /// `0x` + 40 hex
     pub address: String,
@@ -106,6 +111,7 @@ pub struct ListedDex {
 
 /// A reviewed position reader of a position manager (a liquidity order that receives a position names one).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct PositionReader {
     pub manager: String,
     pub reader: String,
@@ -115,6 +121,7 @@ pub struct PositionReader {
 /// contract of domain kind `kind` (`token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `gov_router`), on a lane whose nonce
 /// is 0 (`fresh`) or above, signed by the reference signer, a native EVM key (its path makes no registry call).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct GasBase {
     pub entry: String,
     pub kind: String,
@@ -138,6 +145,7 @@ pub struct GasBase {
 /// `env_items`, `orders`). The row's own `gas` is its figure at a count of 0 (the line's intercept; the file states
 /// `"base_count": 0`), so the quote adds `gas × count` with no offset.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct GasPerItem {
     pub item: String,
     pub gas: u64,
@@ -146,6 +154,7 @@ pub struct GasPerItem {
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
 /// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct GasPerByte {
     pub input: String,
     pub gas: u64,
@@ -154,6 +163,7 @@ pub struct GasPerByte {
 /// A verify row (gas table v2): what a signer of UA kind `signer` (`0`: a native EVM key, the reference) adds over the
 /// reference signer's execution gas.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct GasVerify {
     pub signer: u16,
     pub gas: u64,
@@ -170,6 +180,7 @@ pub struct GasVerify {
 
 /// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct GasRows {
     pub base: Vec<GasBase>,
     pub verify: Vec<GasVerify>,
@@ -182,6 +193,7 @@ pub struct GasRows {
 /// item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct GasTable {
     /// a module's name, `reference`, or the chain key of a chain's measured rows
     pub name: String,
@@ -475,6 +487,7 @@ impl GasBase {
 
 /// A token of a profile's reviewed list (spec §8.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ListedToken {
     /// `0x` + 40 hex
     pub address: String,
@@ -485,6 +498,7 @@ pub struct ListedToken {
 /// The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
 /// against a runaway quote, never a value assumed of a chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Limits {
     /// decimal wei
     pub max_fee_per_gas: String,

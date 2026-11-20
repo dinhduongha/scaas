@@ -43,6 +43,7 @@ const MSIG: u16 = 0x0120;
 
 /// One member of an `msig` structure (CTR-UA-09): its kind, its id (`0x` + 64 hex), its weight.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MsigMemberArgs {
     pub kind: u16,
     pub id: String,
@@ -51,6 +52,7 @@ pub struct MsigMemberArgs {
 
 /// An `msig` structure: the threshold and the members, in slot order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MsigStructureArgs {
     pub threshold: u16,
     pub members: Vec<MsigMemberArgs>,
@@ -123,6 +125,7 @@ pub fn msig_structure(
 
 /// One slot of an `msig` as the registry holds it now.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MsigSlotState {
     pub kind: u16,
     pub id: String,
@@ -136,6 +139,7 @@ pub struct MsigSlotState {
 
 /// An `msig` on the profile's registry (`msig_state`).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MsigState {
     pub ua: String,
     /// the structure the id derives from (`registrationOf`)
@@ -155,6 +159,7 @@ pub struct MsigState {
 /// `prepare_msig_register`: the `msig` `structure` registered on `chain` (`registerMsig`), its `pop` signed by `slots` (a
 /// minimal set, CTR-UA-07; none: an empty `pop`, a classical-dominant `msig`'s), sent by `payer`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MsigRegister {
     pub chain: String,
     pub structure: MsigStructureArgs,
@@ -164,6 +169,7 @@ pub struct MsigRegister {
 
 /// `accept_membership` (CTR-UA-37): slot `slot` of the `msig` `ua` accepts on `chain`, sent by `payer`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct AcceptMembership {
     pub chain: String,
     pub ua: String,
@@ -175,6 +181,7 @@ pub struct AcceptMembership {
 /// new members appended), `enabled` the slots that count, valid to block `valid_until_block`; signed by `slots` of the
 /// **stored** structure, sent by `payer`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct UpdateMsig {
     pub chain: String,
     pub ua: String,
@@ -192,6 +199,7 @@ pub struct UpdateMsig {
 /// A prepared update: its write and `scaas-ua`'s warnings (`plan_msig_update`, none a refusal), in their `Debug` form.
 #[derive(Debug)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MsigUpdatePlan {
     pub write: Arc<RegistryWrite>,
     pub warnings: Vec<String>,

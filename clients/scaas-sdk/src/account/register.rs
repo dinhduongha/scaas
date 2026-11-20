@@ -29,6 +29,7 @@ use std::sync::{Arc, PoisonError};
 
 /// What a registration carries besides the key (spec §7): the PQZ key with its `R_REG` proof, the KEM key (version 0).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct RegisterAttrs {
     pub pqz_key: bool,
     pub kem: bool,
@@ -37,6 +38,7 @@ pub struct RegisterAttrs {
 /// `prepare_register`: the UA key `key` (a seed's `KeyRef::Ua`) registered on `chain`, its writes self-relayed by `payer` (a
 /// native `evm` key).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Register {
     pub key: KeyRef,
     pub chain: String,
@@ -93,6 +95,7 @@ impl Landed {
 
 /// A registry write as the user reviews it (spec §7, §13.1): opaque, kept in the SDK's table; it holds public data only
 /// (the PoP binds no caller). `submit_registry_write` sends exactly its calldata to the profile's registry.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
 pub struct RegistryWrite {
     id: String,
     chain: String,
@@ -145,6 +148,7 @@ impl RegistryWrite {
 
 /// A registration as the registry holds it (`registration_of`).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct RegistrationState {
     pub registered: bool,
     /// the hash commit of the KEM key (`attrs.kemPkHash`, `0x` + 64 hex; all zero: none)
