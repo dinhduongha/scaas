@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """PqVault plan V3-V6 (spec §11 "Negative tests that can fail"): each mutant replaces one literal line (exactly one match) in a
-source file, runs the PqVault suites (test/pqvault, the default set, -j 1, through scripts/capped) and restores the file; a
+source file, runs the PqVault suites (test/pqvault but the gas pins, which a mutant moves by its own bytes; the default set,
+-j 1, through scripts/capped) and restores the file; a
 mutant is killed when the run fails. One line per mutant on stdout and in runs/2026-11-21-pqvault/mutants/<name>.log
 (git-ignored). Usage, from smartcontracts/evm:
   python3 runs/2026-11-21-pqvault/mutants.py [name ...]      (no name: every mutant)
@@ -89,7 +90,8 @@ def run(name, path, old, new):
         open(path, "w").write(src.replace(old, new))
         env = dict(os.environ, FOUNDRY_TEST="test/pqvault", FOUNDRY_OUT="out/pv-mut", FOUNDRY_CACHE_PATH="cache/pv-mut")
         with open(log, "w") as f:
-            r = subprocess.run(["../../scripts/capped", "forge", "test", "-j", "1"], env=env, stdout=f, stderr=subprocess.STDOUT)
+            r = subprocess.run(["../../scripts/capped", "forge", "test", "-j", "1", "--no-match-path", "test/pqvault/PqVaultGas.t.sol"],
+                               env=env, stdout=f, stderr=subprocess.STDOUT)
     finally:
         open(path, "w").write(src)
     t = open(log, errors="replace").read()

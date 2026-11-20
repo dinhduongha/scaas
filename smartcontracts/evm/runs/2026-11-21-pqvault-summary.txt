@@ -11,3 +11,7 @@ V4 | forge test/pqvault (red first: 40 of the new item, batch and mode tests fai
 V4 mutants | mutants.py, the 19 item mutants (version, member, left, removed, epoch taken, incomplete, the record-vault equality in createItem, createItems and editItem, the three batch field equalities, an empty batch, each nonce mark, the two ciphertext bounds) | V4 tree | - | 19 of 19 killed
 V5 | forge test/pqvault (red first: 3 of PqVaultRecovery.t.sol failed against the itemsOf / latestRange stubs) | V5 tree | 0 | 75 passed 0 failed 0 skipped (forge)
 V5 mutants | latest-range-clamp, items-range-clamp, latest-not-latest, page-end | V5 tree | - | 4 of 4 killed
+V6 | forge test/pqvault PqVaultInvariant.t.sol (64 runs x depth 32, fail_on_revert) | V6 tree | 0 | 2 passed 0 failed 0 skipped (forge)
+V6 | forge test/pqvault PqVaultGas.t.sol (GAS_MEASURE=true, then pinned) | V6 tree | 0 | 8 passed 0 failed 0 skipped (forge)
+V6 | size (size_gate.py --self-test; forge build src --sizes; size_gate.py) | V6 tree | 0 | size gate: 0 error(s), 176 contracts; PqVault 30,152 B runtime, 30,845 B init
+V6 mutants | mutants.py, all 45 on the V6 tree (the gas pins left out of a mutant's run) | V6 tree | - | 44 killed; create-min-member-0 survived: equivalent (see V3)
