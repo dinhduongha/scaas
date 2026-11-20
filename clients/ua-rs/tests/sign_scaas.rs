@@ -6,7 +6,8 @@
 use scaas_ua::purpose_tag;
 use scaas_ua::ua_portable::UASig;
 use scaas_ua::wallet::{
-    scaas_typed_data, sign_scaas, ua_sig, Error, Expect, NativeKey, Network, Signer, Wallet,
+    scaas_purpose, scaas_typed_data, sign_scaas, ua_sig, Error, Expect, ExternalKey, NativeKey,
+    Network, SignRequest, Signer, Wallet,
 };
 use serde_json::Value;
 
@@ -127,6 +128,11 @@ fn ua_key_signs_under_the_entrys_purpose() {
         )
         .unwrap();
         assert_eq!(
+            scaas_purpose(&td).unwrap(),
+            purpose_tag(purpose).unwrap(),
+            "{name}"
+        );
+        assert_eq!(
             sign_scaas(&key, &td, op(&r, name, &r.message)).unwrap(),
             want,
             "{name}: {purpose}"
@@ -155,6 +161,46 @@ fn ua_key_signs_under_the_entrys_purpose() {
         sign_scaas(&key, &td, op(&r, "UACancelNonce", &other)).unwrap_err(),
         Error::PolicyRefused
     );
+}
+
+/// Owner 2026-11-19, ruling C3: the Zether owner statements sign under `zether-owner` (`ZetherLib`'s `requireAuthorized`), not
+/// `metatx`; the same class by the contracts: `PqzRollOver` under `zether-auth` (`PqzStateLib`, CTR-PQZ-41), `AuditorConsent`
+/// under `auditor-consent` (CTR-PQZ-43), and `PqzAuth` under `zether-auth` (`PqzCore.requireHolder`; P-T16-1). Each row's signature equals `ua_sig` under that purpose and differs from `metatx`'s.
+#[test]
+fn owner_statements_sign_under_their_contract_purpose() {
+    let w = Wallet::from_mnemonic(WORDS, "").unwrap();
+    let key = w.ua_key(0x0101, 0, 0).unwrap();
+    for (name, kind, purpose) in [
+        ("ZetherRollOver", "zether", "zether-owner"),
+        ("ZetherSetRollOverMode", "zether", "zether-owner"),
+        ("PqzRollOver", "pqz", "zether-auth"),
+        // P-T16-1: the debit's `pqzAuth` (`PqzCore.requireHolder`, `PURPOSE_ZETHER_AUTH`)
+        ("PqzAuth", "pqz", "zether-auth"),
+        ("AuditorConsent", "pqz", "auditor-consent"),
+    ] {
+        let r = row(name, kind);
+        let dn = ops()["ops"][name]["domains"][kind]["domain"]["name"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let td =
+            scaas_typed_data(name, Some(&dn), &r.contract, r.chain_id, &r.uid, &r.message).unwrap();
+        assert_eq!(
+            td.digest().unwrap().to_vec(),
+            r.digest,
+            "{name}: the row's digest"
+        );
+        assert_eq!(
+            scaas_purpose(&td).unwrap(),
+            purpose_tag(purpose).unwrap(),
+            "{name}"
+        );
+        let got = sign_scaas(&key, &td, op(&r, name, &r.message)).unwrap();
+        let sig =
+            |p: &str| ua_sig(&key, None, &purpose_tag(p).unwrap(), &td.digest().unwrap()).unwrap();
+        assert_eq!(got, sig(purpose), "{name}: {purpose}");
+        assert_ne!(got, sig("metatx"), "{name}: not metatx");
+    }
 }
 
 /// Owner 2026-11-19, ruling C (closing review P2-11): a mandate wallet's `UAExecute` under `Expect::Execute` signs only the
@@ -251,6 +297,95 @@ fn execute_signs_only_the_decoded_call() {
         .encode()
         .unwrap()
         .2
+    }
+}
+
+/// scaas-sdk T13: a `SmartKeyAccount`'s `Execute` under `Expect::Execute` signs only the decoded call, here a guardian's
+/// `initiateRecovery(key)` on the account it guards (CTR-ACC-03): the same bytes as `Expect::Op` over the rebuilt message (the
+/// control); another key, account or value in the typed data is refused.
+#[test]
+fn account_execute_signs_only_the_decoded_recovery() {
+    use scaas_ua::wallet::{DecodedCall, SubjectKey};
+    let r = row("Execute", "account");
+    let key = SubjectKey {
+        kind: 2,
+        x: {
+            let mut x = [0u8; 32];
+            x[12..].copy_from_slice(&[0x33; 20]);
+            x
+        },
+        y: [0; 32],
+        rp_id_hash: [0; 32],
+        origin_hash: [0; 32],
+    };
+    let call = DecodedCall::InitiateRecovery {
+        account: [0x44; 20],
+        key: key.clone(),
+    };
+    let (target, _, data) = call.encode().unwrap();
+    assert_eq!(target, [0x44; 20]);
+    assert_eq!(
+        &data[..4],
+        &scaas_ua::keccak256(b"initiateRecovery((uint8,bytes32,bytes32,bytes32,bytes32))")[..4]
+    );
+    assert_eq!(data.len(), 4 + 5 * 32);
+    let typed = |m: &Value| {
+        scaas_typed_data(
+            "Execute",
+            Some("SCaaS SmartKeyAccount"),
+            &r.contract,
+            r.chain_id,
+            &r.uid,
+            m,
+        )
+        .unwrap()
+    };
+    let mut m = r.message.clone();
+    m["target"] = format!("0x{}", hex::encode(target)).into();
+    m["value"] = "0".into();
+    m["data"] = format!("0x{}", hex::encode(&data)).into();
+    let exec = |msg: &Value| Expect::Execute {
+        wallet: r.contract,
+        chain_id: r.chain_id,
+        chain_uid: r.uid,
+        message: msg.clone(),
+        call: call.clone(),
+        max_fee: "0".into(),
+        fee_recipient: None,
+        relayer: None,
+        now: 1,
+        max_window: u64::MAX / 2,
+    };
+    let (_w, n) = native();
+    let canon = typed(&m).to_value()["message"].clone();
+    let s = sign_scaas(&n, &typed(&m), exec(&canon)).unwrap();
+    assert_eq!(
+        s,
+        sign_scaas(&n, &typed(&m), op(&r, "Execute", &canon)).unwrap(),
+        "the control"
+    );
+    let other = DecodedCall::InitiateRecovery {
+        account: [0x44; 20],
+        key: SubjectKey { y: [1; 32], ..key },
+    };
+    for (k, v) in [
+        (
+            "data",
+            Value::from(format!("0x{}", hex::encode(other.encode().unwrap().2))),
+        ),
+        (
+            "target",
+            Value::from(format!("0x{}", hex::encode([0x45u8; 20]))),
+        ),
+        ("value", "1".into()),
+    ] {
+        let mut x = m.clone();
+        x[k] = v;
+        assert_eq!(
+            sign_scaas(&n, &typed(&x), exec(&canon)).unwrap_err(),
+            Error::PolicyRefused,
+            "{k}"
+        );
     }
 }
 
@@ -382,6 +517,54 @@ fn fee_due_is_the_amount_the_check_charges() {
     let mut none = r.message.clone();
     (none["mode"], none["fee"]) = (0.into(), "0".into());
     assert_eq!(fee_due("UABurn", &none).unwrap(), "0");
+}
+
+/// Owner 2026-11-19, P1 (S1): an external key's caller dry-runs `sign_scaas` through an `ExternalKey` that only refuses, so the
+/// policy check passes before the user is asked (a value not confirmed is `PolicyRefused` and the device is never asked); it
+/// then computes the `ua_msg` from `scaas_purpose(td)` and the digest, asks the device, and signs through an `ExternalKey`
+/// whose device returns that answer: the same `UASig` as the internal key's. The request the dry run would have sent is that
+/// `ua_msg`.
+#[test]
+fn external_key_dry_run_then_answer() {
+    let w = Wallet::from_mnemonic(WORDS, "").unwrap();
+    let key = w.ua_key(0x0101, 0, 0).unwrap(); // p256: RFC 6979, one signature per message
+    let name = "UAPayeeFee";
+    let r = row(name, "token");
+    let td = scaas_typed_data(
+        name,
+        Some("SCaaS MetaToken"),
+        &r.contract,
+        r.chain_id,
+        &r.uid,
+        &r.message,
+    )
+    .unwrap();
+    let seen = std::sync::Mutex::new(None);
+    let refuse = ExternalKey::new(key.key_ref(), |q: &SignRequest| {
+        *seen.lock().unwrap() = Some(q.clone());
+        Err(Error::ExternalSignature)
+    });
+    let mut other = r.message.clone();
+    other["fee"] = "1".into();
+    assert_eq!(
+        sign_scaas(&refuse, &td, op(&r, name, &other)).unwrap_err(),
+        Error::PolicyRefused
+    );
+    assert!(seen.lock().unwrap().is_none(), "refused before the device");
+    assert_eq!(
+        sign_scaas(&refuse, &td, op(&r, name, &r.message)).unwrap_err(),
+        Error::ExternalSignature
+    );
+    let asked = seen.lock().unwrap().clone().unwrap();
+    let ua_msg =
+        scaas_ua::ua_message(0x0101, &scaas_purpose(&td).unwrap(), &td.digest().unwrap()).unwrap();
+    assert!(matches!(&asked, SignRequest::UaMsg { ua_msg: m, .. } if *m == ua_msg));
+    let answer = key.sign_request(&asked).unwrap();
+    let device = ExternalKey::new(key.key_ref(), move |_: &SignRequest| Ok(answer.clone()));
+    assert_eq!(
+        sign_scaas(&device, &td, op(&r, name, &r.message)).unwrap(),
+        sign_scaas(&key, &td, op(&r, name, &r.message)).unwrap()
+    );
 }
 
 /// Owner ruling G6 (2026-11-19): a struct without the envelope (`UAWrapOrder`, its `fee` the DEX fee rate the order caps, no

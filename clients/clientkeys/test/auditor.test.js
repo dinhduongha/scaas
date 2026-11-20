@@ -79,8 +79,11 @@ test("AuditorConsent: typed under each confidential token domain, no entry of it
   const r = V.ops.AuditorConsent;
   assert.deepEqual(Object.keys(r.domains).sort(), ["pqz", "zether"]);
   for (const [kind, d] of Object.entries(r.domains)) {
-    const td = evm.OP_BUILDERS.auditorConsentTypedData({ ...domainOf(r, d), message: r.message });
+    assert.equal(d.message.token, d.domain.verifyingContract, `${kind}: the consent names its own token`);
+    assert.deepEqual({ ...d.message, token: r.message.token }, r.message, `${kind}: only the token differs`);
+    const td = evm.OP_BUILDERS.auditorConsentTypedData({ ...domainOf(r, d), message: d.message });
     assert.equal(hex(evm.hashTypedData(td)), d.digest, kind);
+    assert.equal(hex(evm.hashStruct(td.types, "AuditorConsent", td.message)), d.structHash, kind);
     assert.equal(d.calldata, undefined, `${kind}: no entry`);
   }
 });
@@ -102,7 +105,7 @@ test("AuditorConsent: the consent rows, a native, a derived and an msig signer, 
     const typed = (auditor) =>
       hex(
         evm.hashTypedData(
-          evm.OP_BUILDERS.auditorConsentTypedData({ ...domainOf(r, d), message: { ...r.message, auditor } }),
+          evm.OP_BUILDERS.auditorConsentTypedData({ ...domainOf(r, d), message: { ...d.message, auditor } }),
         ),
       );
     const n = d.consent.native;

@@ -11,8 +11,12 @@ use alloy::primitives::{Address, Bytes, U256};
 use scaas_rpc::Purpose;
 use std::sync::Arc;
 
+/// The `msig` kind: an `msig` signer's verify row (spec §13.3).
+const MSIG: u16 = 0x0120;
+
 /// How an operation reaches the chain (spec §13.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum SubmitPath {
     /// a gateway when the profile has one and the entry is one a gateway takes (door A), else a self-relay by `payer` when
     /// given, else `SubmitPathNone`
@@ -55,7 +59,8 @@ pub struct SubmitQuote {
     pub tx_type: u8,
 }
 
-/// A gateway takes it (NODE-GW-03 door A: a registered token's `mtx*` entries on `POST /v1/op`).
+/// A gateway takes it (NODE-GW-03 door A: a registered token's `mtx*` entries on `POST /v1/op`; a PQZ debit fits the job
+/// submission's body cap, NODE-GW-08, P-T16-8).
 pub(crate) fn door_a(p: &Prepared) -> bool {
     matches!(p.t.kind, "token" | "zether" | "pqz")
 }
@@ -188,12 +193,17 @@ pub(crate) fn above_caps(
 }
 
 /// The signer kind of `p`'s quote: a UA key's kind, else the native EVM key (the reference signer).
-pub(crate) fn signer_kind(p: &Prepared) -> u16 {
-    match p.signer() {
+pub(crate) async fn signer_kind(sdk: &Sdk, p: &Prepared) -> Result<u16, SdkError> {
+    Ok(match p.signer() {
         KeyRef::Ua { kind, .. } => kind,
         KeyRef::BlsMulti { .. } => scaas_ua::bls_multi::KIND,
         KeyRef::Native { .. } | KeyRef::Imported { .. } => super::gas::NATIVE_EVM,
-    }
+        KeyRef::Msig { .. } => MSIG,
+        KeyRef::Key { .. } => match super::key_opened(sdk, &p.signer()).await? {
+            super::Key::External(row, _) => row.kind,
+            _ => return Err(SdkError::Internal),
+        },
+    })
 }
 
 /// The amount an operation's relayer takes (a PERCENT envelope's computed fee, never its rate: P2-4); "0" without an envelope.
@@ -272,10 +282,18 @@ pub(crate) async fn signed_quote(
         .iter()
         .find(|c| c.profile.key == chain)
         .ok_or(SdkError::ChainUnknown)?;
-    let (base, base_regular, gas_from) = match own {
-        Some(f) if f.gas > q.gas_limit => (f.gas, f.regular, Some(f.from)),
-        _ => (q.gas_limit, q.regular_gas, q.gas_from.clone()),
+    // M17 (review 2026-11-20): the caller's quote never lowers the regular bound either: a quote naming no regular part (0)
+    // is read as whole, and the operation's own bound (`own`) is the floor
+    let q_regular = match q.regular_gas {
+        0 => q.gas_limit,
+        r => r,
     };
+    let own_regular = own.as_ref().map_or(0, |f| f.regular);
+    let (base, base_regular, gas_from) = match own {
+        Some(f) if f.gas > q.gas_limit => (f.gas, f.regular.max(q_regular), Some(f.from)),
+        _ => (q.gas_limit, q_regular.max(own_regular), q.gas_from.clone()),
+    };
+    let base_regular = base_regular.min(base);
     let counted = super::gas::counted_bytes(
         &c.profile.gas,
         &c.profile.gas_opt_in,
@@ -286,17 +304,18 @@ pub(crate) async fn signed_quote(
         unsigned,
     );
     let gas = super::gas::signed_gas(base, counted, signed);
-    if gas == q.gas_limit {
-        return Ok(q.clone());
-    }
     if gas > sdk.limits.max_gas {
         return Err(SdkError::SignedGasAboveCap);
     }
-    let (_, _, pool) = evm(sdk, chain)?;
-    let block = pool.block_gas().await.map_err(sim)?;
     // the signature's growth is calldata: regular gas
     let regular = base_regular.saturating_add(gas.saturating_sub(base));
+    // the caps held whether or not anything grew (M17)
+    let (_, _, pool) = evm(sdk, chain)?;
+    let block = pool.block_gas().await.map_err(sim)?;
     above_caps(&c.profile, regular, gas, block.limit)?;
+    if gas == q.gas_limit && regular == q.regular_gas {
+        return Ok(q.clone());
+    }
     let fee = q
         .max_fee_per_gas
         .parse::<u128>()
@@ -396,7 +415,7 @@ impl Op {
                 // no signature here (ruling 1): the gas figure of the operation's key (ruling B, the gas-table rulings), on
                 // every path
                 let unsigned = super::submit::unsigned(&prepared)?;
-                let signer = signer_kind(&prepared);
+                let signer = signer_kind(&sdk, &prepared).await?;
                 let fresh = prepared
                     .t
                     .lane
@@ -446,7 +465,7 @@ impl Op {
                     &sdk,
                     &prepared.chain(),
                     &payer,
-                    Address::from(prepared.t.contract),
+                    Address::from(prepared.t.entry_contract()),
                     U256::ZERO,
                     Bytes::from(unsigned.calldata),
                     fee,

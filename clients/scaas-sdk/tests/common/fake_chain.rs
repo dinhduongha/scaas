@@ -2,9 +2,10 @@
 //! A fake EVM chain and scaas-node gateway on 127.0.0.1:0 (plan T10; local only), shared by the operation tests: chain 31337,
 //! block 0 hash `0x60…`, block `n`'s hash `0x…7000+n`, one timestamp for every block. It answers the reads `scaas-rpc` makes,
 //! keeps a lane nonce per contract, logs, receipts and code by address, records every raw transaction and every gateway body,
-//! and **enforces EIP-8037's inclusion rule**: a transaction whose gas limit (regular + state) is above the block gas limit is
-//! refused at the send (its estimate still answers what the call needs). EIP-7825's 2^24 holds the regular gas only, which the
-//! fake does not execute: the SDK's own check holds it.
+//! and **enforces EIP-8037 with EIP-7825** at the send: a transaction whose gas limit (regular + state) is above the block gas
+//! limit is refused, and so is one whose regular gas is above `tx_cap` (2^24), the regular gas being the call's `regular_of`
+//! figure (default: its estimate, all regular) since the fake executes nothing: an independent control of the SDK's own
+//! bound (merged-tree review M8, 2026-11-20). Its estimate still answers what the call needs.
 #![allow(
     dead_code,
     clippy::unwrap_used,
@@ -21,6 +22,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 pub const CHAIN_ID: u64 = 31337;
 
 /// How the gateway answers `POST /v1/op`.
+/// A verifier's answer `(status, body)` from its request.
+pub type VerdictFn = fn(&Value) -> (u16, Value);
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Gw {
     Queue,
@@ -74,6 +78,24 @@ pub struct Chain {
     /// `kindHome(uint16)` by registry (lower-case `0x` hex): the home it answers for every kind; a registry not listed answers
     /// itself (a generation 1 registering every kind)
     pub kind_home: HashMap<String, String>,
+    /// storage words by (contract, slot as `0x` + 64 hex), lower case; an absent word is 0 (plan T15)
+    pub storage: HashMap<(String, String), String>,
+    /// `eth_call` answers by `(to, calldata prefix)`, read first (plan T13: the registry's views)
+    pub answers: Vec<(String, String, String)>,
+    /// `eth_estimateGas` by the call's input (plan T13: a registration's size); `None`: `gas`
+    pub gas_of: Option<fn(&str) -> u64>,
+    /// the regular gas a transaction's input executes, held to `tx_cap` at the send; `None`: its estimate (`gas_of` / `gas`)
+    pub regular_of: Option<fn(&str) -> u64>,
+    /// EIP-7825's per-transaction cap of the regular gas (2^24)
+    pub tx_cap: u64,
+    /// `eth_estimateGas` reverts for the inputs this answers true (plan T13: a registry refusing a call)
+    pub estimate_reverts: Option<fn(&str) -> bool>,
+    /// a PQZ verifier's answer to `POST /v1/pqz-verdict` (status, body) (plan T16); `None`: 503, unreachable
+    pub verdict: Option<(u16, Value)>,
+    /// every verdict request body, as received
+    pub verdict_bodies: Vec<String>,
+    /// a verifier answering from the request (plan T16: a verdict over the statement it was sent); read before `verdict`
+    pub verdict_fn: Option<VerdictFn>,
 }
 
 impl Default for Chain {
@@ -108,6 +130,15 @@ impl Default for Chain {
             genesis: hash_of(0),
             value_reverts: false,
             kind_home: HashMap::new(),
+            storage: HashMap::new(),
+            answers: vec![],
+            gas_of: None,
+            regular_of: None,
+            tx_cap: 1 << 24,
+            estimate_reverts: None,
+            verdict: None,
+            verdict_bodies: vec![],
+            verdict_fn: None,
         }
     }
 }
@@ -188,6 +219,32 @@ fn rlp_uint_at(raw: &[u8], n: usize) -> u64 {
         return raw[i] as u64;
     }
     raw[s..s + l].iter().fold(0u64, |a, x| a << 8 | *x as u64)
+}
+
+/// The bytes of field `n` of the RLP list `raw` (a string item; one byte below 0x80 is itself).
+fn rlp_bytes_at(raw: &[u8], n: usize) -> Vec<u8> {
+    let head = |b: &[u8], i: usize| -> (usize, usize) {
+        let p = b[i];
+        let long = |l: usize| {
+            b[i + 1..i + 1 + l]
+                .iter()
+                .fold(0usize, |a, x| a << 8 | *x as usize)
+        };
+        match p {
+            0..=0x7f => (i, 1),
+            0x80..=0xb7 => (i + 1, (p - 0x80) as usize),
+            0xb8..=0xbf => (i + 1 + (p - 0xb7) as usize, long((p - 0xb7) as usize)),
+            0xc0..=0xf7 => (i + 1, (p - 0xc0) as usize),
+            _ => (i + 1 + (p - 0xf7) as usize, long((p - 0xf7) as usize)),
+        }
+    };
+    let (mut i, _) = head(raw, 0);
+    for _ in 0..n {
+        let (s, l) = head(raw, i);
+        i = s + l;
+    }
+    let (s, l) = head(raw, i);
+    raw[s..s + l].to_vec()
 }
 
 pub fn keccak_hex(b: &[u8]) -> String {
@@ -277,7 +334,13 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 t => named(c, t),
             };
             let meta = c.tokens.get(&to).cloned();
-            if data.starts_with(&sel("mtxNonce(bytes32,uint256)"))
+            if let Some((_, _, out)) = c
+                .answers
+                .iter()
+                .find(|(t, d, _)| *t == to && data.starts_with(d.as_str()))
+            {
+                ok(json!(out))
+            } else if data.starts_with(&sel("mtxNonce(bytes32,uint256)"))
                 || data.starts_with(&sel("mtxNonce(address,uint256)"))
             {
                 ok(json!(format!(
@@ -327,12 +390,46 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             }
         }
         "eth_estimateGas" if c.call_revert => err("execution reverted"),
-        "eth_estimateGas" => ok(json!(format!("{:#x}", c.gas))),
+        "eth_estimateGas"
+            if c.estimate_reverts.is_some_and(|f| {
+                f(p[0]["input"]
+                    .as_str()
+                    .or(p[0]["data"].as_str())
+                    .unwrap_or_default())
+            }) =>
+        {
+            err("execution reverted")
+        }
+        "eth_estimateGas" => {
+            let input = p[0]["input"]
+                .as_str()
+                .or(p[0]["data"].as_str())
+                .unwrap_or_default();
+            ok(json!(format!(
+                "{:#x}",
+                c.gas_of.map_or(c.gas, |f| f(input))
+            )))
+        }
         "eth_getCode" => ok(json!(c
             .code
             .get(&p[0].as_str().unwrap_or_default().to_ascii_lowercase())
             .cloned()
             .unwrap_or("0x".into()))),
+        "eth_getStorageAt" => {
+            let who = p[0].as_str().unwrap_or_default().to_ascii_lowercase();
+            let slot = format!(
+                "0x{:0>64}",
+                p[1].as_str()
+                    .unwrap_or_default()
+                    .trim_start_matches("0x")
+                    .to_ascii_lowercase()
+            );
+            ok(json!(c
+                .storage
+                .get(&(who, slot))
+                .cloned()
+                .unwrap_or_else(|| format!("0x{}", "00".repeat(32)))))
+        }
         "eth_getTransactionCount" => ok(json!("0x0")),
         "eth_getBalance" => {
             let at = match &p[1] {
@@ -358,20 +455,40 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             if raw.first() == Some(&2) && rlp_uint_at(&raw[1..], 4) > c.block_gas_limit {
                 return err("transaction gas limit exceeds the block gas limit");
             }
+            // type 2's data is field 7: its regular gas held to the cap (EIP-7825 under EIP-8037)
+            if raw.first() == Some(&2) {
+                let input = format!("0x{}", alloy::hex::encode(rlp_bytes_at(&raw[1..], 7)));
+                let regular = c
+                    .regular_of
+                    .map_or_else(|| c.gas_of.map_or(c.gas, |f| f(&input)), |f| f(&input));
+                if regular > c.tx_cap {
+                    return err("transaction regular gas above the per-transaction cap");
+                }
+            }
             c.sent.push(hex_raw);
             ok(json!(keccak_hex(&raw)))
         }
         "eth_getLogs" => {
             let f = &p[0];
             let (lo, hi) = (named(c, &f["fromBlock"]), named(c, &f["toBlock"]));
-            let addr = f["address"]
-                .as_str()
-                .map(str::to_ascii_lowercase)
-                .or(f["address"][0].as_str().map(str::to_ascii_lowercase));
-            let t0 = f["topics"][0]
-                .as_str()
-                .or(f["topics"][0][0].as_str())
-                .map(str::to_string);
+            let addr: Option<Vec<Value>> = match &f["address"] {
+                Value::String(a) => Some(vec![json!(a.to_ascii_lowercase())]),
+                Value::Array(a) => Some(
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(|a| json!(a.to_ascii_lowercase()))
+                        .collect(),
+                ),
+                _ => None,
+            };
+            let ts: Vec<Option<String>> = (0..4)
+                .map(|i| {
+                    f["topics"][i]
+                        .as_str()
+                        .or(f["topics"][i][0].as_str())
+                        .map(str::to_string)
+                })
+                .collect();
             let logs: Vec<Value> = c
                 .logs
                 .iter()
@@ -379,8 +496,11 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                     let n = named(c, &l["blockNumber"]);
                     n >= lo
                         && n <= hi
-                        && addr.as_ref().is_none_or(|a| l["address"] == json!(a))
-                        && t0.as_ref().is_none_or(|t| l["topics"][0] == json!(t))
+                        && addr.as_ref().is_none_or(|a| a.contains(&l["address"]))
+                        && ts
+                            .iter()
+                            .enumerate()
+                            .all(|(i, t)| t.as_ref().is_none_or(|t| l["topics"][i] == json!(t)))
                 })
                 .cloned()
                 .collect();
@@ -456,6 +576,25 @@ pub async fn serve(c: Fake) -> String {
                         let mut c = c.lock().unwrap();
                         if path.ends_with("/v1/gateway") {
                             (200, c.gw_info.clone())
+                        } else if path.ends_with("/v1/pqz-verdict") {
+                            c.verdict_bodies
+                                .push(String::from_utf8_lossy(&body).to_string());
+                            match (c.verdict_fn, serde_json::from_slice::<Value>(&body)) {
+                                (Some(f), Ok(v)) => f(&v),
+                                _ => c.verdict.clone().unwrap_or((503, json!({"error": "BUSY"}))),
+                            }
+                        } else if path.contains("/v1/dex/") {
+                            // the DEX venue's routes (plan T17): every body and path recorded; a place answers its state, a
+                            // read its route, a refusing gateway the venue's `DEX_NOT_LISTED`
+                            c.bodies.push(String::from_utf8_lossy(&body).to_string());
+                            c.gw_paths.push(path.clone());
+                            match c.gw {
+                                Gw::Refuse => {
+                                    (422, json!({"code": "DEX_NOT_LISTED", "detail": "dex"}))
+                                }
+                                Gw::Queue if body.is_empty() => (200, json!({"route": path})),
+                                Gw::Queue => (201, json!({"status": "resting", "fills": []})),
+                            }
                         } else if path.ends_with("/v1/op") || path.ends_with("/v1/ua-metatx") {
                             let text = String::from_utf8_lossy(&body).to_string();
                             c.bodies.push(text.clone());

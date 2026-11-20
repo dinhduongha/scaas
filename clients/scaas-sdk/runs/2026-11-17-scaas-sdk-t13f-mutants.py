@@ -25,7 +25,7 @@ MUTANTS = [
      C + "--test children remove_then_derive_never_reuses"),
     ("clientkeys: the AAD without the id", [("clients/clientkeys/src/vault.js", "const aad = (vault, part) => `${vault.id}|${vault.label}|${part}`;",
                                            "const aad = (vault, part) => `${vault.label}|${part}`;")], CK + "test/vault.test.js"),
-    ("clientkeys: the MAC without the vault texts", [("clients/clientkeys/src/keystore-mac.js", "'backup', 'accounts', 'vaults']);", "'backup', 'accounts']);")],
+    ("clientkeys: the MAC without the vault texts", [("clients/clientkeys/src/keystore-mac.js", "  \"vaults\",\n]);", "]);")],
      CK + "test/keystore.test.js"),
     ("clientkeys: a vault of another seed's id parsed", [("clients/clientkeys/src/keystore.js",
       "if (inner.v !== 2 || inner.id !== s.id)", "if (inner.v !== 2)")], CK + "test/keystore.test.js"),

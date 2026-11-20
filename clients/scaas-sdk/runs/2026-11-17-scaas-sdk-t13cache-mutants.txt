@@ -1,0 +1,5 @@
+# t13cache mutants (name | outcome | commit | test | first failure line)
+the cache written on a registry with the precompile (no probe) | killed | f4c422ef6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops -- --exact mldsa_cache_then_register | panicked at tests/account_ops.rs:1004:5:
+a stored part written again | killed | f4c422ef6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops -- --exact mldsa_cache_then_register | panicked at tests/account_ops.rs:950:5:
+a part's record read from another part's pointer (prepare and landed share the reader) | killed | f4c422ef6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops -- --exact mldsa_cache_then_register | panicked at tests/account_ops.rs:950:5:
+3 mutants, 3 killed, 0 survived, 0 not loaded

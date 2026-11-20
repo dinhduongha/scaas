@@ -25,7 +25,7 @@ MUTANTS = [
     ("an unlisted name not stripped", [(W + "tokens.rs", ".filter(|c| !crate::text::hidden(*c))", ".filter(|_| true)")], T + "unlisted_name_is_sanitised"),
     ("the gateway's chain_uid not compared", [(Q, ".is_some_and(|u| u.eq_ignore_ascii_case(&c.profile.chain_uid))", ".is_some()")],
      U + "gateway_chain_uid_mismatch_is_refused"),
-    ("only type 4 refused", [(W + "native_evm.rs", "if req.tx_type != 2 {", "if req.tx_type == 4 {")], T + "native_send_refuses_type4"),
+    ("only type 4 refused", [(W + "native_evm.rs", "if req.tx_type.is_some_and(|t| t > 2) {", "if req.tx_type.is_some_and(|t| t == 4) {")], T + "native_send_types"),
     ("the index's tokens shown listed", [(W + "tokens.rs", "                listed: false,\n", "                listed: true,\n")],
      T + "factory_index_token_off_list_is_unlisted"),
 ]

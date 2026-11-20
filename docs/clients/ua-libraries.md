@@ -311,8 +311,10 @@ nested object, and hands the key itself to the prover: `key`, `revealSecret` and
 Every signing path goes through `trait Signer { key_ref, sign_request }`; `UaKey` and `NativeKey` implement it, the `UASig`, typed,
 transaction, key-proof and raw-digest builders take `&dyn Signer` (`sign_typed_by`, `sign_transaction_by`, `sign_key_proof_by`,
 `sign_digest_by`). `SignRequest` has no public constructor. `ua-rs` normalises a device's answer (low-s, `v`) and verifies it
-against the `KeyRef` under the request's role before returning it, else `ExternalSignature`. A test `TestExternalKey` (under
-`vectors`) runs the `sign.json` rows through the interface. BUILT. The C header declares `ScaasUaExternalSigner` and
+against the `KeyRef` under the request's role before returning it, else `ExternalSignature`. `ExternalKey` (every build; owner
+2026-11-19, S1) is that implementation: its device closure returns the answer the caller obtained from the device (the caller
+computes the challenge or `ua_msg` first, by `scaas_purpose(td)` for a SCaaS struct, P1), and `ua-rs` verifies it before use;
+`TestExternalKey` (under `vectors`) is its alias, and runs the `sign.json` rows through the interface. BUILT. The C header declares `ScaasUaExternalSigner` and
 `scaas_ua_external_key_new`, which returns `KIND_UNAVAILABLE` in every build with the feature bit `external` clear. Secure Enclave,
 StrongBox, Android Keystore, Ledger and passkey implementations: PLANNED; an external key has no KEM key.
 

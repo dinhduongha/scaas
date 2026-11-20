@@ -1,0 +1,15 @@
+# Merged-tree review M20 (owner 2026-11-20), BLS part: the SDK's per-transaction cap rule against a node that enforces it.
+# Runner: clients/scaas-sdk/runs/2026-11-20-m20-nethermind.sh (its log git-ignored), on the tree of commit 9e16e4cc8.
+# Node: a throwaway copy of the SCaaS testnet's chain (pqz-core/nethermind/chain/copy.sh, compose project pqzcopy, its own
+# port 127.0.0.1:18545, data from mktemp, removed after), image scaas/nethermind-pqz:2.2.0-pqz11 (the reset-5 engine),
+# Amsterdam from block 1 (copygen.py: EIP-8037 state gas, EIP-7825 on the regular gas), EIP-2537 on, chain id 31990, block
+# gas limit held at 200 M; contracts by smartcontracts/scripts/deploy.sh evm (85 transactions, PQZ releases included).
+# The live stack, its containers, volumes and port were never touched.
+step | result
+register_bls_multi n = 64 (threshold 33), SDK self-relay, Limits::max_gas 2^27 | included, status 1, block 72
+  quote gas_limit | 44,983,452 (above 2^24 = 16,777,216)
+  quote regular_gas | 14,240,076 (at most 2^24: the SDK let it through)
+  receipt gasUsed | 28,600,373 (regular + state; the node reports no split in the receipt)
+negative control: initcode looping for ever (0x5b600056) | eth_estimateGas refused ("gas required exceeds allowance")
+  sent with a gas limit of 30,000,000 | included, status 0, gasUsed 16,777,216 = 2^24: the node stopped the regular gas at the cap
+# The PQZ-debit half (mtxConfidentialTransferSingle by SDK self-relay on the copy): see the summary's M20 line.

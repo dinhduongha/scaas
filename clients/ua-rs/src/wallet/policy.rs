@@ -145,9 +145,10 @@ pub enum Expect {
         now: u64,
         max_window: u64,
     },
-    /// A mandate wallet's `UAExecute` of a decoded call (scaas-sdk spec §13.2; owner 2026-11-19, ruling C): `checkOp` over `message`
-    /// with `target`, `value` and `data` rebuilt from `call`, so only the decoded call is signed. No clientkeys counterpart and no
-    /// JSON form (built by the SDK).
+    /// A mandate wallet's `UAExecute` of a decoded call (scaas-sdk spec §13.2; owner 2026-11-19, ruling C), or a `SmartKeyAccount`'s
+    /// `Execute` (scaas-sdk T13; the typed data's primary type names which, `wallet` the contract): `checkOp` over `message` with
+    /// `target`, `value` and `data` rebuilt from `call`, so only the decoded call is signed. No clientkeys counterpart and no JSON
+    /// form (built by the SDK).
     Execute {
         wallet: [u8; 20],
         chain_id: u64,
@@ -261,6 +262,9 @@ pub enum DecodedCall {
         to: [u8; 20],
         amount: String,
     },
+    /// `account.initiateRecovery(key)` on a `SmartKeyAccount` by its guardian (CTR-ACC-03; scaas-sdk T13: a guardian
+    /// `SmartKeyAccount`'s `Execute`), value 0
+    InitiateRecovery { account: [u8; 20], key: SubjectKey },
 }
 
 impl DecodedCall {
@@ -277,6 +281,19 @@ impl DecodedCall {
                 data.extend_from_slice(to);
                 data.extend_from_slice(&n);
                 Ok((*token, [0u8; 32], data))
+            }
+            DecodedCall::InitiateRecovery { account, key } => {
+                let mut data =
+                    keccak256(b"initiateRecovery((uint8,bytes32,bytes32,bytes32,bytes32))")
+                        .get(..4)
+                        .ok_or(Error::Argument)?
+                        .to_vec();
+                let mut kind = [0u8; 32];
+                kind[31] = key.kind;
+                for w in [&kind, &key.x, &key.y, &key.rp_id_hash, &key.origin_hash] {
+                    data.extend_from_slice(w);
+                }
+                Ok((*account, [0u8; 32], data))
             }
         }
     }
@@ -663,8 +680,11 @@ pub fn sign_typed_by(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result
 /// scaas-sdk spec §13.2: the `UASig` of the typed SCaaS struct `td` for its named entry, once `expect` approves it (the same check
 /// as [`sign_typed_by`]; `PolicyRefused`, nothing signed, otherwise). A native EVM key: `{"", r ‖ s ‖ v over the digest, []}` (a
 /// native id signs the digest itself on a named entry, CTR-MTX-28); a UA key: [`super::ua_sig`] over the digest under the entry's
-/// purpose, `payee-fee` for `UAPayeeFee`, `trade` for the orders and their cancels (`TradeLib`), `metatx` for every other
-/// envelope. `Expect::Any` is `Argument` here: a SCaaS entry is always signed under its check.
+/// purpose, `payee-fee` for `UAPayeeFee`, `trade` for the orders and their cancels (`TradeLib`), `zether-owner` for the Zether
+/// owner statements `ZetherRollOver` and `ZetherSetRollOverMode` (`ZetherLib`, owner 2026-11-19 C3; the outer `UA*` forms carry
+/// that signature as `ownerSig`), `zether-auth` for `PqzRollOver` (`PqzStateLib`, CTR-PQZ-41) and a debit's `PqzAuth`
+/// (`PqzCore.requireHolder`, P-T16-1), `auditor-consent` for
+/// `AuditorConsent` (`PqzStateLib`, CTR-PQZ-43), `metatx` for every other envelope. `Expect::Any` is `Argument` here: a SCaaS entry is always signed under its check.
 pub fn sign_scaas(
     key: &dyn Signer,
     td: &TypedData,
@@ -674,6 +694,10 @@ pub fn sign_scaas(
         return Err(Error::Argument);
     }
     if let super::signer::KeyRef::Native { .. } = key.key_ref() {
+        // the token checks a consent through the registry, never the digest itself: [`sign_auditor_consent_native`]
+        if td.primary_type() == "AuditorConsent" {
+            return Err(Error::Argument);
+        }
         return Ok(crate::ua_portable::UASig {
             key_data: vec![],
             signature: sign_typed_by(key, td, expect)?,
@@ -684,29 +708,67 @@ pub fn sign_scaas(
     if check(td, &expect)? != digest {
         return Err(Error::PolicyRefused);
     }
-    super::uasig::ua_sig(key, None, &crate::purpose_tag(scaas_purpose(td))?, &digest)
+    super::uasig::ua_sig(key, None, &scaas_purpose(td)?, &digest)
 }
 
-/// The purpose a typed SCaaS struct is signed under for its entry ([`sign_scaas`]).
-fn scaas_purpose(td: &TypedData) -> &'static str {
-    match td.primary_type() {
+/// A native (EVM address) auditor's consent to a set-auditor (`AuditorConsent`, set-auditor spec §5.2): the PQZ token checks it
+/// through the registry (`PqzStateLib._auditorChecks`: `requireAuthorized(auditor, PURPOSE_AUDITOR_CONSENT, digest, consent)`),
+/// so the key signs `UAAuth(id, auditor-consent, digest)` under the registry's domain `registry` over the consent's typed
+/// digest, never that digest bare: `{"", r ‖ s ‖ v, []}`. Checked against `expect` as [`sign_scaas`] checks a UA key
+/// (`PolicyRefused`, nothing signed); `Argument` for a key other than a native EVM key, another primary type, or a consent
+/// whose `auditor` is not the key's own id.
+pub fn sign_auditor_consent_native(
+    key: &dyn Signer,
+    td: &TypedData,
+    expect: Expect,
+    registry: &crate::Domain,
+) -> Result<crate::ua_portable::UASig> {
+    if matches!(expect, Expect::Any(_)) || td.primary_type() != "AuditorConsent" {
+        return Err(Error::Argument);
+    }
+    let digest = td.digest()?;
+    if check(td, &expect)? != digest {
+        return Err(Error::PolicyRefused);
+    }
+    let id = super::uasig::native_id(&key.key_ref()).ok_or(Error::Argument)?;
+    let v = td.to_value();
+    let auditor = v
+        .get("message")
+        .and_then(|m| m.get("auditor"))
+        .and_then(Value::as_str)
+        .map(str::to_ascii_lowercase);
+    let own: String = id.iter().map(|b| format!("{b:02x}")).collect();
+    if auditor != Some(format!("0x{own}")) {
+        return Err(Error::Argument);
+    }
+    super::uasig::ua_sig(
+        key,
+        Some(registry),
+        &crate::purpose_tag("auditor-consent")?,
+        &digest,
+    )
+}
+
+/// The purpose tag a UA key signs the typed SCaaS struct `td` under in [`sign_scaas`] (its table, public so an external key's
+/// caller computes the challenge or `ua_msg` the device signs before asking it: owner 2026-11-19, P1).
+pub fn scaas_purpose(td: &TypedData) -> Result<[u8; 32]> {
+    Ok(crate::purpose_tag(match td.primary_type() {
         "UAPayeeFee" => "payee-fee",
         "UAWrapOrder" | "UATradeOrder" | "CancelUAOrder" | "CancelUAWrapOrder"
         | "UAInvalidateNonces" => "trade",
+        "ZetherRollOver" | "ZetherSetRollOverMode" => "zether-owner",
+        "PqzRollOver" | "PqzAuth" => "zether-auth",
+        "AuditorConsent" => "auditor-consent",
         _ => "metatx",
-    }
+    })?)
 }
 
 /// The `ua_msg` a `bls12381-multi` (`0x0121`) group signs for the typed SCaaS struct `td`: `uaMessage(0x0121, purpose,
 /// digest)`, the purpose as [`sign_scaas`] takes it (spec 2026-11-19-bls12381-multi §5.4). What an aggregator checks the
 /// partials on; it signs nothing.
 pub fn scaas_bls_multi_message(td: &TypedData) -> Result<[u8; 32]> {
-    crate::ua_message(
-        crate::bls_multi::KIND,
-        &crate::purpose_tag(scaas_purpose(td))?,
-        &td.digest()?,
-    )
-    .map_err(|_| Error::Argument)
+    crate::ua_message(crate::bls_multi::KIND, &scaas_purpose(td)?, &td.digest()?)
+        .map_err(|_| Error::Argument)
 }
 
 /// [`sign_scaas`] for a `bls12381-multi` member key (`key`, kind `0x0121`) of the group `key_data` (`d`): once `expect`
@@ -914,9 +976,15 @@ fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
             m.insert("target".into(), to_hex(&target).into());
             m.insert("value".into(), dec(&value));
             m.insert("data".into(), to_hex(&data).into());
+            // a mandate wallet's `UAExecute`, or a `SmartKeyAccount`'s `Execute` (scaas-sdk T13): `check_op` holds the typed
+            // data to that struct's row and `wallet` as its verifying contract either way
+            let op = match td.primary_type() {
+                "Execute" => "Execute",
+                _ => "UAExecute",
+            };
             check_op(
                 td,
-                "UAExecute",
+                op,
                 wallet,
                 *chain_id,
                 chain_uid,

@@ -96,8 +96,8 @@ async fn remove_then_derive_never_reuses() {
     let c0 = s.vault().derive_child(child(&parent, "C0")).await.unwrap();
     let r = Remove {
         seed: c0.info.id.clone(),
-        confirm: ConfirmRemove,
-        unbacked: Some(ConfirmRemoveUnbacked),
+        confirm: ConfirmRemove {},
+        unbacked: Some(ConfirmRemoveUnbacked {}),
     };
     s.vault().remove(r).await.unwrap();
     // lock and unlock the parent: the index comes from the stored manifest, not from memory

@@ -8,10 +8,10 @@ from mutants_lib import main
 K = "clients/clientkeys/src/keystore.js"
 T = "cd clients/clientkeys && ../../scripts/capped node --test test/keystore.test.js"
 MUTANTS = [
-    ("drop the duplicate-label check", [(K, "for (const k of ['id', 'label'])", "for (const k of ['id'])")], T),
+    ("drop the duplicate-label check", [(K, "for (const k of [\"id\", \"label\"])", "for (const k of [\"id\"])")], T),
     ("accept words: 13", [(K, "const WORDS = [12, 15, 18, 21, 24];", "const WORDS = [12, 13, 15, 18, 21, 24];")], T),
     ("skip the inner-label comparison", [(K, "if (!isObj(inner) || inner.label !== k)", "if (!isObj(inner))")], T),
-    ("accept a missing indexMac", [(K, "'accounts', 'indexMac'];", "'accounts', 'indexMac?'];"),
+    ("accept a missing indexMac", [(K, "  \"indexMac\",\n", "  \"indexMac?\",\n"),
                                    (K, "if (!isStr(s.indexMac) || !/^[0-9a-f]{64}$/.test(s.indexMac))",
                                     "if (Object.hasOwn(s, 'indexMac') && (!isStr(s.indexMac) || !/^[0-9a-f]{64}$/.test(s.indexMac)))")], T),
 ]

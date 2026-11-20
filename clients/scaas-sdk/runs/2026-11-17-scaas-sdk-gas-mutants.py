@@ -67,7 +67,7 @@ MUTANTS = [
     ),
     (
         "the verify row's signer ignored",
-        [(G, "r.verify.iter().find(|v| v.signer == signer)", "r.verify.iter().find(|_| true)")],
+        [(G, "let v = r.verify.iter().find(|v| v.signer == signer)?;", "let v = r.verify.iter().find(|_| true)?;")],
         U + "an_operation_without_a_gas_row_is_gas_unquoted",
     ),
     (
@@ -75,8 +75,8 @@ MUTANTS = [
         [
             (
                 G,
-                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { base, verify },",
-                "b.saturating_add(s).saturating_add(inner),\n                GasSources { base, verify },",
+                "b.saturating_add(v).saturating_add(s).saturating_add(inner),",
+                "b.saturating_add(s).saturating_add(inner),",
             )
         ],
         U + "gas_lookup_order_and_opt_in",
@@ -86,8 +86,8 @@ MUTANTS = [
         [
             (
                 G,
-                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { base, verify },",
-                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { verify: base.clone(), base },",
+                "GasSources { base, verify },",
+                "GasSources { verify: base.clone(), base },",
             )
         ],
         U + "quote_names_its_gas_source_in_order",
@@ -97,8 +97,8 @@ MUTANTS = [
         [
             (
                 G,
-                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { base, verify },",
-                "b.saturating_add(v).saturating_add(s).saturating_add(inner),\n                GasSources { base: verify.clone(), verify },",
+                "GasSources { base, verify },",
+                "GasSources { base: verify.clone(), verify },",
             )
         ],
         U + "gas_parts_are_looked_up_independently",
@@ -140,7 +140,7 @@ MUTANTS = [
     # the paths
     (
         "the gateway quote drops the gas",
-        [(Q, "                    gas: figure.as_ref().map(|f| f.0),", "                    gas: None,")],
+        [(Q, "                    gas: figure.as_ref().map(|f| f.gas),", "                    gas: None,")],
         U + "gateway_quote_carries_gas_or_reports_it_unquoted",
     ),
     (
@@ -208,7 +208,7 @@ MUTANTS = [
     ),
     (
         "a reference row away from its source",
-        [("clients/scaas-sdk/gas/reference.json", '"measured": 151958,', '"measured": 151000,')],  # part 3b's table
+        [("clients/scaas-sdk/gas/reference.json", "\"measured\": 151969,", "\"measured\": 151000,")],  # part 3b's table
         U + "reference_rows_hold_their_sources",
     ),
     (

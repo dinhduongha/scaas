@@ -1,0 +1,12 @@
+# t16c mutants at commit 764661283 (name | outcome | test)
+P-T16-1: PqzAuth under metatx (the old mapping) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas owner_statements_sign_under_their_contract_purpose
+PqzAuth's op word always op 1 | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_transfer_multi_pairs
+an OFFCHAIN debit attaches no verdict | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_auth_attached_by_the_facade
+the transfer's envelope word without the form's mode | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_auth_attached_by_the_facade
+vTo and vFrom swapped | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_auth_attached_by_the_facade
+a Compact entry in the token's default form | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_transfer_single_pairs
+the proof on the async worker | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz proof_runs_off_the_async_workers
+a PQZ debit through the gateway | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_unshield_pairs
+P-T16-4: an opening token is a set mismatch | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz opening_token_refused
+a recipient key the token would refuse | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_transfer_single_pairs
+10 mutants, 10 killed, 0 survived, 0 not loaded

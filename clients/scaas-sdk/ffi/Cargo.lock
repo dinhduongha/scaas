@@ -36,6 +36,7 @@ dependencies = [
  "cfg-if",
  "cipher",
  "cpufeatures 0.2.17",
+ "zeroize",
 ]
 
 [[package]]
@@ -707,6 +708,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures 0.2.17",
+ "password-hash",
+ "zeroize",
+]
+
+[[package]]
 name = "ark-bls12-381"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1182,6 +1196,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90dbd31c98227229239363921e60fcf5e558e43ec69094d46fc4996f08d1d5bc"
 dependencies = [
  "bitcoin_hashes",
+ "serde",
  "unicode-normalization",
  "zeroize",
 ]
@@ -2404,6 +2419,7 @@ checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
  "polyval",
+ "zeroize",
 ]
 
 [[package]]
@@ -3327,6 +3343,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3438,6 +3465,7 @@ dependencies = [
  "cpufeatures 0.2.17",
  "opaque-debug",
  "universal-hash",
+ "zeroize",
 ]
 
 [[package]]
@@ -3468,6 +3496,44 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
+]
+
+[[package]]
+name = "pqz-ffi"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "aes-gcm",
+ "curve25519-dalek",
+ "ghash",
+ "hkdf",
+ "ml-kem",
+ "polyval",
+ "pqz-stmt",
+ "pqzh-ligero",
+ "pqzl",
+ "sha2 0.10.9",
+ "sha3 0.10.8",
+]
+
+[[package]]
+name = "pqz-stmt"
+version = "0.1.0"
+
+[[package]]
+name = "pqzh-ligero"
+version = "0.1.0"
+dependencies = [
+ "pqz-stmt",
+ "sha3 0.10.8",
+]
+
+[[package]]
+name = "pqzl"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -4076,6 +4142,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasmtimer",
  "zeroize",
+ "zether-prover",
 ]
 
 [[package]]
@@ -4086,6 +4153,7 @@ dependencies = [
  "scaas-rpc",
  "scaas-sdk",
  "scaas-ua",
+ "serde_json",
  "tokio",
 ]
 
@@ -4096,6 +4164,7 @@ dependencies = [
  "aes-gcm",
  "aes-gcm-siv",
  "alloy-rlp",
+ "argon2",
  "ark-bls12-381",
  "ark-bn254",
  "ark-ec",
@@ -4120,6 +4189,7 @@ dependencies = [
  "ml-kem",
  "p256",
  "pbkdf2",
+ "pqz-ffi",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "ripemd",
@@ -4130,8 +4200,10 @@ dependencies = [
  "sha2 0.10.9",
  "sha3 0.10.8",
  "slh-dsa",
+ "subtle",
  "unicode-normalization",
  "zeroize",
+ "zether-prover",
 ]
 
 [[package]]
@@ -5462,4 +5534,31 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.8",
+]
+
+[[package]]
+name = "zether-prover"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "ark-bls12-381",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "ark-std 0.5.0",
+ "bip39",
+ "getrandom 0.2.17",
+ "hex",
+ "hkdf",
+ "hmac 0.12.1",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+ "scaas-ct",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sha3 0.10.8",
+ "thiserror",
+ "wasm-bindgen",
+ "zeroize",
 ]

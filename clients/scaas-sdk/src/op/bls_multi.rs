@@ -128,6 +128,11 @@ pub(crate) fn sign(
     parts: &[BlsMultiPart],
     surplus: bool,
 ) -> Result<scaas_ua::wallet::entries::Built, SdkError> {
+    // an owner statement (`ownerSig`, `pqzAuth`) is signed by one key before the entry: a group has no such path (M15,
+    // review 2026-11-20; as `sign_msig`)
+    if p.t.owner.is_some() {
+        return Err(SdkError::Argument);
+    }
     let d = key_data(&p.signer())?;
     let ua_msg = scaas_ua::wallet::scaas_bls_multi_message(&p.t.td)?;
     let parts = parts
@@ -145,7 +150,7 @@ pub(crate) fn sign(
     if sig.get("members").is_none() {
         return Err(SdkError::Argument); // a group signs only an entry that takes a `UASig`
     }
-    let mut b = super::submit::build(p, &sig)?;
+    let mut b = super::submit::build(p, &sig, &p.t.extra)?;
     let named = json!({"signature": hex(&agg.signature), "signers": agg.signers});
     if let Some(op) = b.op.as_mut() {
         if name_sig(op, &abi, &named) == 0 {

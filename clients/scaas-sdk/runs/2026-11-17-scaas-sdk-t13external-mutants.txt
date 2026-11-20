@@ -1,0 +1,4 @@
+# t13external mutants (name | outcome | commit | test | first failure line)
+ua-rs: skip the external answer's verification | killed | f4c422ef6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- se_key_message_mode | panicked at src/op/tests.rs:2103:9:
+digest-mode SE call (the SDK hashes ua_msg first) | killed | f4c422ef6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- se_key_message_mode | panicked at src/op/tests.rs:2093:35:
+2 mutants, 2 killed, 0 survived, 0 not loaded

@@ -63,6 +63,18 @@
 #   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; cargo test --locked --manifest-path rust/Cargo.toml
 #                          (the binding's own Rust tests: secrets never cross frb's codec; T15o); dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
+#   scaas-sdk:             in clients/scaas-sdk: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots;
+#                          cargo test --locked --no-default-features --features vault,file-store; cargo test --locked --lib --features <the same>,native-networks,raw-native;
+#                          cargo clippy --locked --all-targets --features <the same>,native-networks,raw-native -- -D warnings; per PQZ set
+#                          (n2048-kmax1024, n2560-kmax16384, n2816-kmax65536): cargo test --locked --no-default-features --features vault,account,wallet,pqz,pqz-set-<set> --test sets;
+#                          cargo test --locked --test feature_tree (the e2e on anvil, 6 GB, stays the local gate sdk-e2e)
+#   scaas-sdk-wasm:        in clients/scaas-sdk: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet
+#   scaas-sdk-bindings:    clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check (flutter_rust_bridge_codegen 2.13.0 with cargo-expand 1.0.127: the
+#                          generated FRB Dart surface of the whole SDK equals the committed one); in clients/scaas-sdk/ffi: cargo clippy --locked --all-targets
+#                          -- -D warnings; cargo build --locked; in clients/scaas-sdk/bindings/dart: dart pub get --enforce-lockfile; dart test (the load check,
+#                          the vault and keystore rows, the e2e smoke on a local anvil: foundry v1.8.5)
+#   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
+#                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
 #                          in a production manifest or in the cargo tree -e features graph of ua-c, ua-cxx, ua-qt, ua-dart-frb, zether-prover)
 #   UA-8 portable registrations: smartcontracts/vectors/ua/portable.json is read by ua-rs, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-qt, ua-dart, ua-dart-frb,
@@ -179,6 +191,10 @@ jobs:
       ua_dart_frb: ${{ steps.f.outputs.ua_dart_frb }}
       ua_deps: ${{ steps.f.outputs.ua_deps }}
       ua_dart: ${{ steps.f.outputs.ua_dart }}
+      scaas_sdk: ${{ steps.f.outputs.scaas_sdk }}
+      scaas_sdk_wasm: ${{ steps.f.outputs.scaas_sdk_wasm }}
+      scaas_sdk_bindings: ${{ steps.f.outputs.scaas_sdk_bindings }}
+      keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
       - uses: actions/checkout@v4
@@ -1112,6 +1128,125 @@ jobs:
       - run: dart test
       # optional drift guard: cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
       #   && flutter_rust_bridge_codegen generate && git diff --exit-code
+
+  # the SDK apps call (CLI-SDK-01, plan T20): its tests at the full feature set and the minimal one, the raw entry, clippy, each
+  # PQZ set's build and its set-sensitive tests, one PQZ set in the feature tree
+  scaas-sdk:
+    needs: changes
+    if: needs.changes.outputs.scaas_sdk == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-sdk
+      - name: cargo test (full feature set)
+        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots
+      - name: cargo test (vault and file store only)
+        run: cargo test --locked --no-default-features --features vault,file-store
+      - name: the raw native entry and native networks
+        run: cargo test --locked --lib --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,native-networks,raw-native
+      - name: cargo clippy
+        run: cargo clippy --locked --all-targets --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,native-networks,raw-native -- -D warnings
+      - name: each other PQZ set
+        run: |
+          for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do
+            cargo test --locked --no-default-features --features "vault,account,wallet,pqz,pqz-set-$s" --test sets
+          done
+      - name: one PQZ set in the feature tree
+        run: cargo test --locked --test feature_tree
+
+  scaas-sdk-wasm:
+    needs: changes
+    if: needs.changes.outputs.scaas_sdk_wasm == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-sdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-sdk
+      - name: compiles for wasm32 (not run)
+        run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet
+
+  # the generated bindings (spec §16): the FRB Dart surface regenerated equals the committed one; the reference library and
+  # the Dart tests over it
+  scaas-sdk-bindings:
+    needs: changes
+    if: needs.changes.outputs.scaas_sdk_bindings == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-sdk/ffi
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.12.2
+      # the Dart test's e2e smoke runs a local anvil
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - name: flutter_rust_bridge_codegen 2.13.0 and cargo-expand 1.0.127 (its scan of the scaas-sdk crate)
+        run: |
+          cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
+          cargo install cargo-expand --version 1.0.127 --locked
+      - name: the generated FRB surface has no drift
+        run: bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check
+      - name: the reference library
+        working-directory: clients/scaas-sdk/ffi
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo build --locked
+      - name: dart test
+        working-directory: clients/scaas-sdk/bindings/dart
+        run: |
+          dart pub get --enforce-lockfile
+          dart test --reporter expanded
+
+  # the keystore container's vectors (plan T2b, T2c): clientkeys writes them, the SDK reads every row
+  keystore-vectors:
+    needs: changes
+    if: needs.changes.outputs.keystore_vectors == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.8.1
+          cache: npm
+          cache-dependency-path: clients/clientkeys/package-lock.json
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-sdk
+      - name: clientkeys
+        working-directory: clients/clientkeys
+        run: |
+          npm ci --ignore-scripts
+          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js
+      - name: scaas-sdk
+        working-directory: clients/scaas-sdk
+        run: cargo test --locked --test keystore_vectors
 
   ua-dart:
     needs: changes

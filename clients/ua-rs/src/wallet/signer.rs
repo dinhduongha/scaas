@@ -171,7 +171,6 @@ pub trait Signer: Send + Sync {
 /// An external key's answer to `req` (phase 2, spec §9.4, MD-13): normalised (P-256 and secp256k1 low-s; `v` 0 / 1 → 27 / 28,
 /// flipped with `s`), then verified against `key` with this crate's verifier under the request's role; `ExternalSignature` when
 /// it does not verify, `Argument` for a request `key` does not sign. Every external key returns only what passes here.
-#[cfg_attr(not(feature = "vectors"), allow(dead_code))]
 pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> Result<Vec<u8>> {
     let (ok, sig) = match (key, req) {
         (
@@ -294,31 +293,30 @@ fn low_s(kind: u16, mut sig: Vec<u8>) -> Vec<u8> {
     sig
 }
 
-/// A test external key (feature `vectors`, MD-13; phase 2 adds the device constructors): `device` answers each request, read
-/// only; [`external_answer`] checks the answer before it leaves.
-#[cfg(feature = "vectors")]
-pub struct TestExternalKey<'a> {
+/// An external key (spec §9.4, MD-13; owner 2026-11-19, S1): a passkey, a secure element, a hardware wallet, another member's
+/// device. The caller computes what the device signs first (`webauthn_challenge`, `ua_message`), asks the device (an async
+/// call outside this crate), and returns its answer from `device`; [`external_answer`] normalises and verifies that answer
+/// against `key_ref` under the request's role before it leaves (`ExternalSignature` otherwise), so a wrong-key answer, a
+/// WebAuthn assertion without UV, or a P-256 signature in digest mode is never used. `device` is read only.
+pub struct ExternalKey<'a> {
     key_ref: KeyRef,
     device: Device<'a>,
 }
-#[cfg(feature = "vectors")]
 type Device<'a> = Box<dyn Fn(&SignRequest) -> Result<Vec<u8>> + Send + Sync + 'a>;
 
-#[cfg(feature = "vectors")]
-impl<'a> TestExternalKey<'a> {
+impl<'a> ExternalKey<'a> {
     pub fn new(
         key_ref: KeyRef,
         device: impl Fn(&SignRequest) -> Result<Vec<u8>> + Send + Sync + 'a,
     ) -> Self {
-        TestExternalKey {
+        ExternalKey {
             key_ref,
             device: Box::new(device),
         }
     }
 }
 
-#[cfg(feature = "vectors")]
-impl Signer for TestExternalKey<'_> {
+impl Signer for ExternalKey<'_> {
     fn key_ref(&self) -> KeyRef {
         self.key_ref.clone()
     }
@@ -326,3 +324,7 @@ impl Signer for TestExternalKey<'_> {
         external_answer(&self.key_ref, req, (self.device)(req)?)
     }
 }
+
+/// The test helper's former name (feature `vectors`): [`ExternalKey`] itself.
+#[cfg(feature = "vectors")]
+pub type TestExternalKey<'a> = ExternalKey<'a>;

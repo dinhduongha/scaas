@@ -10,15 +10,17 @@ description = "SCaaS SDK: the one API apps call (CLI-SDK-01). Signs only through
 
 # docs/clients/scaas-sdk.md (CLI-SDK-*), spec docs/superpowers/specs/2026-11-17-scaas-sdk.md §3.2, §3.3. Each feature's bit is
 # the table's (`Sdk::features`, src/lib.rs): appended only, never reused (bit 12, the withdrawn `chat`, stays unused).
-# Not defined yet, by the plan: `native-networks` (3) and `raw-native` (23) in T19, `app-core` (26) and `pqchat-records` (27) in
-# T21.
+# Not defined yet, by the plan: `app-core` (26) and `pqchat-records` (27) in T21.
 [features]
 default = ["vault", "account", "wallet", "file-store", "mlock"]
 vault = ["scaas-ua/wallet"]
 account = ["vault", "scaas-rpc/evm", "dep:alloy"]
 wallet = ["vault", "scaas-rpc/evm", "scaas-rpc/node-client", "dep:alloy"]
-zether = ["vault", "scaas-ua/zether"]
-pqz = ["vault", "scaas-ua/pqz"]
+# T15: the reading layer reads through `scaas-rpc`'s EVM pool and the operations are `wallet`'s; the layout constants of
+# `scaas.zether` (`ROOT`, `LAYOUT`) are zether-prover's, the prover `scaas-ua`'s facade runs
+zether = ["wallet", "scaas-ua/zether", "dep:zether-prover"]
+# T16: the PQZ reading layer reads through `scaas-rpc`'s EVM pool and the operations are `wallet`'s, as `zether`
+pqz = ["wallet", "scaas-ua/pqz"]
 pqz-set-n2048-kmax1024 = ["scaas-ua/pqz-set-n2048-kmax1024"]
 pqz-set-n2304-kmax4096 = ["scaas-ua/pqz-set-n2304-kmax4096"]
 pqz-set-n2560-kmax16384 = ["scaas-ua/pqz-set-n2560-kmax16384"]
@@ -38,6 +40,10 @@ file-store = ["vault"]
 # roots (c) and (d) (spec §6.6; T6): scaas-ua's Argon2id roots
 classical-roots = ["vault", "scaas-ua/roots"]
 opaque-calls = []
+# T19: Bitcoin (P2WPKH, P2TR), NEAR and Polkadot native keys (spec §8.5); the raw native entry for an app's own encoder of a
+# non-EVM chain (spec §8.6), off by default and never in the default generated surface
+native-networks = ["wallet"]
+raw-native = ["wallet"]
 # the Dart adapter (src/frb.rs): the platform interfaces as records of async closures; no dependency of its own
 frb = []
 
@@ -45,6 +51,8 @@ frb = []
 # default-features = false: scaas-ua's defaults enable `pqz` with one set, so a build asking for another would carry two (§3.2)
 scaas-ua = { path = "../ua-rs", default-features = false }
 scaas-rpc = { path = "../scaas-rpc", default-features = false }
+# feature `zether` (T15): the storage layout of `scaas.zether` only (`state::ROOT`, `state::LAYOUT`); no cryptography is called
+zether-prover = { path = "../zether-prover", default-features = false, optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 async-trait = "0.1"
@@ -80,6 +88,8 @@ wasmtimer = "0.4"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "net", "io-util"] }
 # the tests' mnemonics of every length (the reference outside the SDK; the pin of scaas-ua)
 bip39 = { version = "=2.2.2", default-features = false, features = ["alloc"] }
+# the test device's passkey and secure-element keys (plan T13, S1); scaas-ua's pin
+p256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa"] }
 
 # scrypt (N = 2^17) and the ML-KEM / arkworks code crawl unoptimised: the dependencies built at opt-level 3, as ua-rs
 [profile.dev.package."*"]
@@ -98,6 +108,10 @@ name = "account"
 required-features = ["account"]
 
 [[test]]
+name = "account_ops"
+required-features = ["account", "wallet"]
+
+[[test]]
 name = "wallet"
 required-features = ["wallet"]
 
@@ -108,3 +122,31 @@ required-features = ["wallet"]
 [[test]]
 name = "e2e"
 required-features = ["wallet"]
+
+[[test]]
+name = "history"
+required-features = ["wallet"]
+
+[[test]]
+name = "confidential"
+required-features = ["zether"]
+
+[[test]]
+name = "confidential_pqz"
+required-features = ["pqz"]
+
+[[test]]
+name = "dex"
+required-features = ["dex"]
+
+[[test]]
+name = "completeness"
+required-features = ["wallet"]
+
+[[test]]
+name = "governance_delay"
+required-features = ["admin"]
+
+[lints.rust]
+# `frb_expand`: flutter_rust_bridge_codegen's scan (`frb_hint!`, src/lib.rs)
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

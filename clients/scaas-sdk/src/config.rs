@@ -24,6 +24,7 @@ pub enum Family {
 /// One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint
 /// only and is built by the app from its own secret source.
 #[derive(Clone)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub struct EndpointConfig {
     pub url: String,
     pub class: Class,
@@ -43,12 +44,13 @@ impl std::fmt::Debug for EndpointConfig {
 
 /// The block of every decisive and decryption read (§9.4 requirement 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum Finality {
     Finalized,
     Depth(u64),
 }
 
-/// A chain as the app's release pins it (spec §4). Tokens, DEXes and PQZ verifiers join with the tasks that read them.
+/// A chain as the app's release pins it (spec §4).
 #[derive(Debug, Clone)]
 pub struct ChainProfile {
     /// `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
@@ -66,7 +68,9 @@ pub struct ChainProfile {
     pub factory: Option<String>,
     pub router: Option<String>,
     pub finality: Finality,
-    /// the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
+    /// the chain's per-transaction cap of the **regular** gas (EIP-7825 on a chain applying EIP-8037) when it has one, from
+    /// the release data: a quote's regular bound is held to it, its gas limit (regular + state) to the block gas limit. A
+    /// chain capping the whole gas limit (EIP-7825 without EIP-8037) is not supported (merged-tree review M19, 2026-11-20)
     pub tx_gas_cap: Option<u64>,
     /// the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
     pub tokens: Vec<ListedToken>,
@@ -80,6 +84,33 @@ pub struct ChainProfile {
     /// the longest an operation's `validUntil` may lie ahead of the SDK's clock on this chain, in seconds; `None`:
     /// `Limits::max_valid_secs` (default 86 400, one day) (owner 2026-11-19, T13b ruling 1)
     pub max_valid_secs: Option<u64>,
+    /// the PQZ verifiers a verifier-mode token's verdict is asked of (spec §9.3): a list of endpoints with its own policy,
+    /// `failover` (the default) or `strict_majority` (ARCH-POS-15; owner 2026-11-19, T16-a), each with its own credential;
+    /// empty: no verdict on this chain (`VerdictRefused`)
+    pub verifiers: Vec<EndpointConfig>,
+    pub verifier_policy: Policy,
+    /// the SCaaS DEXes of the chain (NET-ALL-24): an order or a cancel naming a DEX not here is refused before anything is
+    /// signed (CLI-SGN-35, `DexNotListed`)
+    pub dexes: Vec<ListedDex>,
+    /// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
+    pub wrappers: Vec<String>,
+}
+
+/// A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
+/// CTR-DEX-30) and the position readers reviewed for it, each beside its position manager.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListedDex {
+    /// `0x` + 40 hex
+    pub address: String,
+    pub liquidity: bool,
+    pub position_readers: Vec<PositionReader>,
+}
+
+/// A reviewed position reader of a position manager (a liquidity order that receives a position names one).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PositionReader {
+    pub manager: String,
+    pub reader: String,
 }
 
 /// A base row (gas table v2, owner 2026-11-19): the execution gas of `entry` (`mtxCancelNonce`, `mtxExecuteTransfer`, …) on a
@@ -118,6 +149,9 @@ pub struct GasPerItem {
     pub gas: u64,
     /// the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
     pub regular: Option<u64>,
+    /// the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+    /// extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+    pub measured_max: Option<u64>,
 }
 
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
@@ -269,7 +303,10 @@ const GAS_VERIFY_KEYS: &[&str] = &[
 /// A row's parts, each with its keys (`second_party` is a part of `ua_extra`).
 const GAS_PART_KEYS: &[(&str, &[&str])] = &[
     ("per_byte", &["input", "gas", "source"]),
-    ("per_item", &["gas", "base_count", "source", "regular"]),
+    (
+        "per_item",
+        &["gas", "base_count", "source", "regular", "measured_max"],
+    ),
     ("save", &["gas", "measured", "source"]),
     ("fee_extra", &["gas", "measured", "source"]),
     (
@@ -514,10 +551,18 @@ fn per_item(
         None => None,
         Some(x) => Some(x.as_u64().filter(|g| *g <= GAS_PER_ITEM_MAX)?),
     };
+    let measured_max = match p.get("measured_max") {
+        None => None,
+        Some(x) => Some(
+            x.as_u64()
+                .filter(|n| (1..=u64::from(u32::MAX)).contains(n))?,
+        ),
+    };
     Some(Some(GasPerItem {
         item: item.to_string(),
         gas,
         regular,
+        measured_max,
     }))
 }
 
@@ -587,6 +632,7 @@ impl Default for Limits {
 
 /// The tokio runtime the SDK spawns every exported async call on (§14): the app's, or one the SDK starts (two workers).
 #[derive(Debug, Clone)]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub enum RuntimeChoice {
     Adopt(tokio::runtime::Handle),
     Own,
@@ -598,6 +644,7 @@ pub type Clock = std::sync::Arc<dyn Fn() -> u64 + Send + Sync>;
 
 /// Everything `Sdk::open` takes.
 #[derive(Clone)]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub struct SdkConfig {
     pub profiles: Vec<ChainProfile>,
     /// where the keystore and the SDK's state live (spec §6.9); `FileStore` on native by default

@@ -173,8 +173,8 @@ Non-loopback `[api] bind` or `admin_bind` requires TLS in front. `Config::valida
 mode without an issuer, two enabled listeners on one port (same host, or either on the wildcard address),
 `[app] enabled` without `dir/index.html`, and more than the capacity caps (16 chains, 8 lanes per chain, 32
 namespaces, 64 tokens per chain, 256 watched wrapper legs; admin routes answer `422 LIMIT`,
-[NODE-OPS-13](ops.md#NODE-OPS-13)). `MAX_BODY` is a per-listener parameter: gateway 64 KiB (1 MiB on the PQZ chain
-profile only), job API 1 MiB.
+[NODE-OPS-13](ops.md#NODE-OPS-13)). `MAX_BODY` is a per-route parameter: gateway 64 KiB, a job submission (`POST /v1/op`) 1.25 MiB on every chain
+([NODE-GW-08](gateway.md#NODE-GW-08)), job API 1 MiB.
 
 Toml sections of the listeners (toml-only per [NODE-STO-03](store.md#NODE-STO-03), except the bootstrap list, which
 is imported into the store):

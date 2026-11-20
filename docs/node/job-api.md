@@ -5,7 +5,7 @@ transactional outbox) hand signed work to the node and learn what happened to it
 (default `127.0.0.1:8548`). Status: **SPECIFIED**; the built path is the legacy pull adapter
 ([legacy pull](#legacy-pull)). The client side of every route is in [integration.md](../integration.md).
 
-All bodies JSON, body cap 1 MiB, no cookies, no redirects, no CORS (a browser cannot call it cross-origin even with a
+All bodies JSON, body cap 1 MiB (a job submission's the gateway's [NODE-GW-08](gateway.md#NODE-GW-08) cap, 1.25 MiB: a PQZ debit), no cookies, no redirects, no CORS (a browser cannot call it cross-origin even with a
 leaked key). Authentication [NODE-JOB-05](#NODE-JOB-05) on every route. Errors:
 `{"error": "<CODE>", "detail": "<text ≤ 300 chars>", …}`, i.e. `{"error": "<CODE>", "detail": "<text ≤ 300 chars>"}`
 plus code-specific fields (the gateway's contract is

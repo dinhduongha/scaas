@@ -1018,7 +1018,7 @@ fn ua_portable_kind_name_table() {
         );
         known.push(kind);
     }
-    assert_eq!(known.len(), 34); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40), named though not enabled
+    assert_eq!(known.len(), 35); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40), bls12381-multi (0x0121), named though not enabled
     for kind in (0..0x0200)
         .chain([0x1_0120, u32::MAX])
         .filter(|k| !known.contains(k))

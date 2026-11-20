@@ -2541,7 +2541,13 @@ pub mod testkit {
     ) -> (Option<Value>, Value, Option<Value>) {
         let o = &v["ops"][name];
         let d = &o["domains"][kind];
-        let mut args = o["message"].as_object().unwrap().clone();
+        // a domain's own message (`AuditorConsent` names its token), else the op's
+        let mut args = d
+            .get("message")
+            .unwrap_or(&o["message"])
+            .as_object()
+            .unwrap()
+            .clone();
         let mut env = Map::new();
         if row.enveloped {
             for k in ["from"].into_iter().chain(ENV) {
@@ -2792,7 +2798,10 @@ mod tests {
                 let h = a.struct_hash.unwrap();
                 assert_eq!(
                     format!("{h:#x}"),
-                    o["structHash"].as_str().unwrap(),
+                    d.get("structHash")
+                        .unwrap_or(&o["structHash"])
+                        .as_str()
+                        .unwrap(),
                     "{name}"
                 );
                 let (chain_id, at, uid) = domain_of(d);

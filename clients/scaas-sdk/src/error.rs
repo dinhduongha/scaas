@@ -19,6 +19,7 @@ macro_rules! own_codes {
         /// The SDK's own codes, in declaration order.
         pub const OWN_CODES: &[&str] = &[$(stringify!($v),)*];
 
+        #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
         impl SdkError {
             /// The stable code: the variant's name, or the lower layer's code.
             pub fn code(&self) -> &'static str {
@@ -93,6 +94,19 @@ own_codes! {
     /// An operation's `validUntil` already past on the SDK's clock, or further ahead than the chain's window (owner 2026-11-19,
     /// T13b ruling 1).
     ValidUntilRefused,
+    /// A confidential token the profile's factory does not catalogue as a token of the family, or whose code is not the
+    /// factory's clone (spec §9.4 R5; owner 2026-11-19, C4).
+    TokenUncatalogued,
+    /// A UA whose registry record does not hold the key the read expects: the holder's leg not the handle's key, or a recipient's
+    /// record not its UA's key (spec §9.4 R6; owner 2026-11-19, C4).
+    LegKeyMismatch,
+    /// A `SmartKeyAccount` entry's signer that is not a key of the account (owner 2026-11-19, P2).
+    SignerNotAccountKey,
+    /// A PQZ token with the sealed opening (`proofSystemId` `PQZL_SPLIT_ID`, CTR-PQZ-38): its keys and debits are the `pqz3k`
+    /// handles', not built in the SDK yet (P-T16-4, controller call 2026-11-19).
+    PqzOpeningUnsupported,
+    /// An `msig` slot (or an inner leaf) that is not both enabled and accepted: it cannot sign (spec §15; M2, owner 2026-11-19).
+    MsigSlotInactive,
     /// A gas table's verify row without `sig_bytes` (owner 2026-11-19, A4): every verify row states its signature's length.
     GasSigBytesMissing,
     /// A self-relay whose gas, recomputed after signing from the signed calldata (the real signature's length; owner
@@ -117,6 +131,12 @@ own_codes! {
     UaUnregistered,
     /// A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
     PqzHomeNone,
+    /// An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
+    /// wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
+    DexNotListed,
+    /// A PQZ auditor consent whose auditor is a native (address) key (controller call, owner auto-run 2026-11-19): a native id
+    /// holds no PQZ key (CTR-UA-32), so the token refuses it on chain anyway; refused before anything is read or signed.
+    PqzAuditorNative,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

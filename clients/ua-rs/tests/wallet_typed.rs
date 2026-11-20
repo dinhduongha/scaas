@@ -99,14 +99,17 @@ fn typed_ops_json_rows() {
         let mut names = vec![];
         let primary = op["primaryType"].as_str().unwrap_or(name); // a row names its primary type where it is not the row name
         for d in op["domains"].as_object().unwrap().values() {
-            let v = json!({"types": op["types"], "primaryType": primary, "domain": d["domain"], "message": op["message"]});
+            // a domain's own message and struct hash (`AuditorConsent` names its token), else the op's
+            let msg = d.get("message").unwrap_or(&op["message"]);
+            let sh = d.get("structHash").unwrap_or(&op["structHash"]);
+            let v = json!({"types": op["types"], "primaryType": primary, "domain": d["domain"], "message": msg});
             let x = td(&v).unwrap_or_else(|e| panic!("{name}: {e:?}"));
             assert_eq!(
                 x.encode_type(),
                 op["typeString"].as_str().unwrap(),
                 "{name}"
             );
-            assert_eq!(x.struct_hash().unwrap(), b32(&op["structHash"]), "{name}");
+            assert_eq!(x.struct_hash().unwrap(), b32(sh), "{name}");
             assert_eq!(
                 x.domain_separator().unwrap(),
                 b32(&d["domainSeparator"]),
@@ -123,7 +126,7 @@ fn typed_ops_json_rows() {
                 &b20(&dom["verifyingContract"]),
                 chain_id(&dom["chainId"]),
                 &b32(&dom["salt"]),
-                &op["message"],
+                msg,
             )
             .unwrap_or_else(|e| panic!("{name} in {n}: {e:?}"));
             assert_eq!(built.digest().unwrap(), dg, "{name} in {n}: the builder");
@@ -1941,7 +1944,8 @@ fn auditor_consent_rows() {
     for (kind, d) in row["domains"].as_object().unwrap() {
         let dom = &d["domain"];
         let typed = |auditor: &Value| {
-            let mut m = row["message"].clone();
+            // the domain's own message: it names this token
+            let mut m = d["message"].clone();
             m["auditor"] = auditor.clone();
             scaas_typed_data(
                 "AuditorConsent",

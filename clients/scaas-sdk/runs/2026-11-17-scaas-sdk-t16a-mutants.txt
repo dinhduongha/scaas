@@ -1,0 +1,9 @@
+# t16a mutants at commit aba354bcc (name | outcome | test)
+the account words read for a token of another set | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz set_mismatch_before_parse
+no set check | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz set_mismatch_before_parse
+proofStore not checked (T16-b) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_token_checks
+a token of a Zether kind taken (R5) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_token_checks
+an unproven key record taken (R6) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_leg_of_another_key_refused
+the registry's key not compared with the handle's (R6) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_leg_of_another_key_refused
+a facade refusal reads again (R7) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_word_failure_never_fails_over
+7 mutants, 7 killed, 0 survived, 0 not loaded

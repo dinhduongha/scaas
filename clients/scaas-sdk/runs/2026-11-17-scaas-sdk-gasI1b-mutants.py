@@ -39,7 +39,7 @@ MUTANTS = [
         [(G, ".filter(|o| o.is_object()).map(|_| 1))?,", ".filter(|o| o.is_object()).map(|_| 0))?,")],
         COUNT,
     ),
-    ("env_items not an item", [(C, '"members", "env_items", "orders"]', '"members", "orders", "orders"]')], PARSE),
+    ("env_items not an item", [(C, "    \"env_items\",\n    \"orders\",\n];", "    \"orders\",\n    \"orders\",\n];")], PARSE),
     (
         "the old per-item bound",
         [(C, "const GAS_PER_ITEM_MAX: u64 = 1 << 24;", "const GAS_PER_ITEM_MAX: u64 = 1_000_000;")],

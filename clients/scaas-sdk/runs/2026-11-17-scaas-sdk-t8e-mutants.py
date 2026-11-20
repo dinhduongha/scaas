@@ -14,7 +14,7 @@ MUTANTS = [
     ("a wrong selector on mtxSetGuardian", [(K, '"SetGuardian", "mtxSetGuardian",', '"SetGuardian", "mtxSetGuardians",')], UA + "entries_account"),
     ("the account's own entries signed as bytes (no AccountSig)", [(M, "} else if *kinds == A {", "} else if kinds.is_empty() {")], UA + "entries_account"),
     ("the guardian left-aligned in the salt", [(F, "g[12..].copy_from_slice(guardian);", "g[..20].copy_from_slice(guardian);")], UA + "smart_key_account_address"),
-    ("another EIP-1167 head", [(F, "[0x3d, 0x60, 0x2d, 0x80,", "[0x3d, 0x60, 0x2c, 0x80,")], UA + "smart_key_account_address"),
+    ("another EIP-1167 head", [(F, "0x3d, 0x60, 0x2d, 0x80,", "0x3d, 0x60, 0x2c, 0x80,")], UA + "smart_key_account_address"),
 ]
 
 if __name__ == "__main__":

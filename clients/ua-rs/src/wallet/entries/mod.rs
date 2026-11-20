@@ -15,6 +15,7 @@ use serde_json::{json, Map, Value};
 mod account;
 mod dex;
 mod pqz;
+mod registry;
 mod router;
 mod token;
 mod wallet;
@@ -73,6 +74,16 @@ const NESTED: &[(&str, &str)] = &[
     ("MemberSig", "uint16 index,InnerSig[] members,bytes sig"),
     ("UASig", "bytes keyData,bytes signature,MemberSig[] members"),
     ("AccountSig", "uint256 keyIndex,bytes32[] proof,bytes signature"),
+    // the registry's writes (scaas-sdk T13): `UARegistry`'s named arguments, the node's `NESTED`
+    ("SubjectKey", "uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash"),
+    ("KemKey", "uint8 scheme,bytes mlkemEk,bytes32 x25519"),
+    ("UAAttrs", "bytes pqzKey,bytes32 pqzPopHash,KemKey kem,bytes32 kemPkHash"),
+    ("MsigMember", "uint16 kind,bytes32 id,uint16 weight"),
+    ("MsigStructure", "uint16 threshold,MsigMember[] members"),
+    ("WebAuthnKey", "bytes32 x,bytes32 y,bytes32 rpIdHash"),
+    ("MuSig2Key", "bytes aggKey,bytes[] memberKeys"),
+    ("FrostMember", "bytes[] commitments,bytes r,bytes32 z"),
+    ("FrostKey", "bytes groupKey,uint16 threshold,FrostMember[] members"),
     ("GrantTerms", "uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope"),
     ("WrapLimit", "uint24 perUser,uint64 tokenWide,uint32 period"),
     ("WrapLegLimits", "address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong"),
@@ -120,6 +131,8 @@ pub struct EntryRow {
     /// A node row: a job may carry it (false: the release approvals, self-relay only, release management is no node job).
     pub node: bool,
 }
+
+pub use registry::{registry_call, registry_rows, RegistryRow};
 
 /// Every row (the copy of the node's `TYPED`, then the rows the node does not take).
 pub fn entry_rows() -> Vec<EntryRow> {

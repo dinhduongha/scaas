@@ -20,7 +20,6 @@ use sha2::Sha256;
 use crate::submit::now;
 
 const SKEW: u64 = 300;
-const MAX_BODY: usize = 64 * 1024;
 const BODY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 /// Trần đồng thời NGOÀI lớp xác thực: request chưa xác thực cũng không giữ quá chừng này task/bộ đệm.
 const MAX_INFLIGHT: usize = 64;
@@ -111,7 +110,13 @@ pub async fn check(State(auth): State<Auth>, req: Request, next: Next) -> Respon
                 return deny("bad nonce");
             }
             let (parts, body) = req.into_parts();
-            let Ok(Ok(bytes)) = tokio::time::timeout(BODY_TIMEOUT, to_bytes(body, MAX_BODY)).await
+            // the route's own cap (NODE-GW-08): a job submission's, else every other route's
+            let cap = if parts.uri.path() == "/v1/op" {
+                crate::gateway::OP_BODY_MAX
+            } else {
+                crate::gateway::BODY_MAX
+            };
+            let Ok(Ok(bytes)) = tokio::time::timeout(BODY_TIMEOUT, to_bytes(body, cap)).await
             else {
                 return deny("body too large or too slow");
             };
@@ -169,7 +174,11 @@ mod tests {
         wrap(
             axum::Router::new()
                 .route("/healthz", get(|| async { "ok" }))
-                .route("/v1/x", post(|body: String| async move { body })),
+                .route("/v1/x", post(|body: String| async move { body }))
+                .route(
+                    "/v1/op",
+                    post(|body: String| async move { body.len().to_string() }),
+                ),
             auth,
         )
     }
@@ -213,6 +222,43 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         assert_eq!(status(&app, health).await, StatusCode::OK);
+    }
+
+    /// NODE-GW-08: the HMAC check reads a job submission's body up to `OP_BODY_MAX`, every other route's up to `BODY_MAX`;
+    /// one byte above is refused unread (positive control at each bound).
+    #[tokio::test]
+    async fn hmac_reads_each_route_up_to_its_cap() {
+        let secret = b"0123456789abcdef-hmac".to_vec();
+        let app = app(Auth::from_mode("hmac", Some(secret.clone())).unwrap());
+        let ts = now().to_string();
+        let mut n = 0;
+        let mut at = |path: &str, len: usize| {
+            n += 1;
+            let (nonce, body) = (format!("b{n}"), "x".repeat(len));
+            Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("x-scaas-timestamp", &ts)
+                .header("x-scaas-nonce", &nonce)
+                .header(
+                    "x-scaas-signature",
+                    sign_at(&secret, &ts, &nonce, path, &body),
+                )
+                .body(Body::from(body))
+                .unwrap()
+        };
+        let op = crate::gateway::OP_BODY_MAX;
+        let other = crate::gateway::BODY_MAX;
+        assert_eq!(status(&app, at("/v1/op", op)).await, StatusCode::OK);
+        assert_eq!(
+            status(&app, at("/v1/op", op + 1)).await,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(status(&app, at("/v1/x", other)).await, StatusCode::OK);
+        assert_eq!(
+            status(&app, at("/v1/x", other + 1)).await,
+            StatusCode::UNAUTHORIZED
+        );
     }
 
     #[tokio::test]

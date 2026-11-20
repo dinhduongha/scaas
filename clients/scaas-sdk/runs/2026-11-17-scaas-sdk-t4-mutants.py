@@ -16,7 +16,7 @@ MUTANTS = [
      T + "import_accepts_12_to_24"),
     ("a hidden set emits an event", [(U, "                Ok(SessionSet { id })", "                sdk.emit(Event::KeystoreChanged { rev: 0 });\n                Ok(SessionSet { id })")],
      T + "hidden_set_writes_and_emits_nothing"),
-    ("skip the MAC check", [(U, "if mac(&w, e)? != e.index_mac {", "if false {")], T + "mac_mismatch_keeps_the_seed_locked"),
+    ("skip the MAC check", [(U, "if !mac_ok(&w, e)? {", "if false {")], T + "mac_mismatch_keeps_the_seed_locked"),
     ("mark a locked row verified", [(S, "        verified: unlocked,\n", "        verified: true,\n")], T + "locked_rows_are_unverified"),
     ("accept a 7-character passphrase", [(V, "if p.chars().count() < 8 || !other {", "if p.chars().count() < 7 || !other {")],
      T + "vault_passphrase_rule"),

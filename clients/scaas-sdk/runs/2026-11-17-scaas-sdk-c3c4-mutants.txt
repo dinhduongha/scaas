@@ -1,0 +1,8 @@
+# c3c4 mutants at commit 342b1c773 (name | outcome | test)
+C3: the owner statements under metatx (the old mapping) | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas owner_statements_sign_under_their_contract_purpose
+C3 class: PqzRollOver under metatx | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas owner_statements_sign_under_their_contract_purpose
+C3 class: AuditorConsent under metatx | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas owner_statements_sign_under_their_contract_purpose
+C4: an uncatalogued token is Argument | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential uncatalogued_token_refused
+C4: the clone check dropped (R6 refuses it under its own code) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential code_hash_checked
+C4: a leg of another key is Argument | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential leg_of_another_key_refused
+6 mutants, 6 killed, 0 survived, 0 not loaded

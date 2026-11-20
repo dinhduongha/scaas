@@ -77,6 +77,8 @@ impl Op {
                 let choice = final_block(&profile);
                 let now = if row.kind == "native" {
                     native_state(&pool, &row, choice).await
+                } else if row.kind == "registry" {
+                    registry_state(&pool, &row, choice).await?
                 } else {
                     let contract: Address = row.contract.parse().map_err(|_| SdkError::Argument)?;
                     let digest: B256 = row.digest.parse().map_err(|_| SdkError::Argument)?;
@@ -89,9 +91,16 @@ impl Op {
                             dec(&row.nonce.clone().into())?,
                         ))
                     };
-                    let filter = Filter::new()
-                        .address(contract)
-                        .event_signature(executed_topic(&row.kind));
+                    // an order row: its order's event, the hash its first topic; else the executed event of the digest
+                    let (contract, topic, key) = match &row.fact {
+                        Some((c, e, h)) => (
+                            c.parse().map_err(|_| SdkError::Internal)?,
+                            B256::from(scaas_ua::keccak256(e.as_bytes())),
+                            Some(h.parse::<B256>().map_err(|_| SdkError::Internal)?),
+                        ),
+                        None => (contract, executed_topic(&row.kind), None),
+                    };
+                    let filter = Filter::new().address(contract).event_signature(topic);
                     let (kind, from_block) = (row.kind.clone(), row.from_block);
                     let (lane, filter, kind) = (&lane, &filter, kind.as_str());
                     let pool = &pool;
@@ -102,7 +111,11 @@ impl Op {
                             while lo <= at.number && landed.is_none() {
                                 let hi = at.number.min(lo.saturating_add(LOG_RANGE_MAX - 1));
                                 for l in pool.logs_at(&at, lo, hi, filter).await? {
-                                    if l.data.get(32..64) == Some(digest.as_slice()) {
+                                    let hit = match key {
+                                        Some(k) => l.topics.get(1) == Some(&k),
+                                        None => l.data.get(32..64) == Some(digest.as_slice()),
+                                    };
+                                    if hit {
                                         landed = Some((
                                             l.block_number.unwrap_or(at.number),
                                             format!("{:#x}", l.block_hash.unwrap_or_default()),
@@ -234,4 +247,62 @@ async fn tx_detail(
         Ok(TxState::Final { .. } | TxState::Included { .. }) => InFlight::TxIncluded,
         _ => last,
     }
+}
+
+/// A registry write (plan T13) by its record at the final block: present is `Landed` (whoever sent it: a registration is
+/// portable), on a decisive read as the operations'; else the payer's transaction's own facts as a native send's (final and
+/// failed `Reverted`, replaced `Consumed`).
+#[cfg(feature = "account")]
+async fn registry_state(
+    pool: &scaas_rpc::evm::EvmPool,
+    row: &Row,
+    choice: scaas_rpc::pool::BlockChoice,
+) -> Result<OpState, SdkError> {
+    use crate::account::{record_call, record_call2, record_holds, record_holds2, Landed};
+    let landed = Landed::parse(&row.batch).ok_or(SdkError::Internal)?;
+    let ua: [u8; 32] = unhex(&row.from)?
+        .try_into()
+        .map_err(|_| SdkError::Internal)?;
+    let registry: Address = row.contract.parse().map_err(|_| SdkError::Internal)?;
+    let a = pool
+        .read_at_block(choice, Purpose::Plain, |at| async move {
+            let out = pool
+                .call_at(&at, registry, record_call(landed, &ua))
+                .await?;
+            let bad = || {
+                ReadError::Failure(scaas_rpc::EndpointFailure::new(
+                    at.endpoint,
+                    scaas_rpc::FailureKind::AnswerMalformed,
+                    "a registry record of another shape",
+                ))
+            };
+            let mut holds = record_holds(landed, &out).ok_or_else(bad)?;
+            // M3: an update's structure too, at the same block
+            if let (true, Some(c2)) = (holds, record_call2(landed, &ua)) {
+                let out = pool.call_at(&at, registry, c2).await?;
+                holds = record_holds2(landed, &out).ok_or_else(bad)?;
+            }
+            Ok::<_, ReadError>((holds, at.number, format!("{:#x}", at.hash)))
+        })
+        .await?;
+    let strict = pool.pool().policy() == Policy::StrictMajority;
+    let decisive = strict || (a.members == [0] && pool.pool().class(0) != Class::Discovered);
+    Ok(match a.value {
+        (true, block, hash) if decisive => OpState::Landed { block, hash },
+        _ => match native_state(pool, row, choice).await {
+            OpState::Landed { .. } => OpState::InFlight {
+                detail: InFlight::TxIncluded,
+            },
+            s => s,
+        },
+    })
+}
+
+#[cfg(not(feature = "account"))]
+async fn registry_state(
+    _: &scaas_rpc::evm::EvmPool,
+    _: &Row,
+    _: scaas_rpc::pool::BlockChoice,
+) -> Result<OpState, SdkError> {
+    Err(SdkError::FeatureMissing)
 }

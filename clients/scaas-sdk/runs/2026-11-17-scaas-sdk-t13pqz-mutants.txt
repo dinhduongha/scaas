@@ -1,0 +1,4 @@
+# t13pqz mutants (name | outcome | commit | test | first failure line)
+the PoP leaves out the PQZ key | killed | 844cc8934 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops registration_with_pqz_key | panicked at tests/account_ops.rs:396:10:
+pqzPopHash not the proof's hash (ua-rs refuses the arguments) | killed | 844cc8934 | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops registration_with_pqz_key | panicked at tests/account_ops.rs:354:60:
+2 mutants, 2 killed, 0 survived, 0 not loaded

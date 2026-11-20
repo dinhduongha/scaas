@@ -1,0 +1,4 @@
+# t13keyrows mutants (name | outcome | commit | test | first failure line)
+the device asked over another digest than the registration's | killed | f4c422ef6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact op::tests::key_rows_register | panicked at src/op/tests.rs:2176:14:
+a KEM key asked for a key row taken silently | killed | f4c422ef6 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib -- --exact op::tests::key_rows_register | panicked at src/op/tests.rs:2212:9:
+2 mutants, 2 killed, 0 survived, 0 not loaded

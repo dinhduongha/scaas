@@ -1,0 +1,7 @@
+# t18 mutants at commit 01a284f17 (name | outcome | test)
+map one pair twice | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test completeness every_pair_has_one_entry_point
+leave one pair unmapped | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test completeness every_pair_has_one_entry_point
+zether_shield and pqz_shield in one entry | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test completeness zether_and_pqz_pairs_are_apart
+the wallet takes the router's cancel | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib admin::tests::wallet_refuses_the_router_admin_takes_it
+a nested field one level deeper | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib admin::tests::nested_fields_are_bounded
+5 mutants, 5 killed, 0 survived, 0 not loaded

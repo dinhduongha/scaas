@@ -1,0 +1,8 @@
+# t16e mutants at commit 96d4c5363 (name | outcome | test)
+the job submission route without its own cap | killed | ../scripts/capped cargo test --locked --offline -j2 --lib op_body_cap_is_the_job_submission_cap
+the node's cap one byte larger | killed | ../scripts/capped cargo test --locked --offline -j2 --lib op_body_cap_is_the_job_submission_cap
+the HMAC check reads every route at 64 KiB | killed | ../scripts/capped cargo test --locked --offline -j2 --lib hmac_reads_each_route_up_to_its_cap
+the HMAC check reads every route at the job cap | killed | ../scripts/capped cargo test --locked --offline -j2 --lib hmac_reads_each_route_up_to_its_cap
+scaas-rpc sends /v1/op at 64 KiB | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node each_route_refuses_a_body_above_its_cap_unsent
+the SDK keeps PQZ debits off the gateway | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_unshield_pairs
+6 mutants, 6 killed, 0 survived, 0 not loaded

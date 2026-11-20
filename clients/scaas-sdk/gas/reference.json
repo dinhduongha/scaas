@@ -2580,7 +2580,8 @@
         "gas": 127099,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_per_item_dex",
-        "regular": 29291
+        "regular": 29291,
+        "measured_max": 8
       },
       "regular": {
         "gas": 41000,
@@ -2600,7 +2601,8 @@
         "gas": 127099,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#dex_mtxCancelOrders_per_item_dex",
-        "regular": 29291
+        "regular": 29291,
+        "measured_max": 8
       },
       "regular": {
         "gas": 41000,
@@ -3116,7 +3118,8 @@
         "gas": 787063,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_per_item_ua_wrapped,gov_router_mtxCreateToken_per_item_wrapped",
-        "regular": 101631
+        "regular": 101631,
+        "measured_max": 8
       },
       "regular": {
         "gas": 310000,
@@ -3136,7 +3139,8 @@
         "gas": 787063,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxCreateToken_per_item_ua_wrapped,gov_router_mtxCreateToken_per_item_wrapped",
-        "regular": 101631
+        "regular": 101631,
+        "measured_max": 8
       },
       "regular": {
         "gas": 310000,
@@ -4029,7 +4033,8 @@
         "gas": 112484,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_per_item_regulated,gov_router_mtxSetAllowed_per_item_ua_regulated",
-        "regular": 14564
+        "regular": 14564,
+        "measured_max": 8
       },
       "regular": {
         "gas": 77000,
@@ -4054,7 +4059,8 @@
         "gas": 112484,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetAllowed_per_item_regulated,gov_router_mtxSetAllowed_per_item_ua_regulated",
-        "regular": 14564
+        "regular": 14564,
+        "measured_max": 8
       },
       "regular": {
         "gas": 77000,
@@ -4213,7 +4219,8 @@
         "gas": 114591,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_per_item_registry,gov_router_mtxSetCompliance_per_item_ua_registry",
-        "regular": 16672
+        "regular": 16672,
+        "measured_max": 8
       },
       "regular": {
         "gas": 71000,
@@ -4238,7 +4245,8 @@
         "gas": 114591,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetCompliance_per_item_registry,gov_router_mtxSetCompliance_per_item_ua_registry",
-        "regular": 16672
+        "regular": 16672,
+        "measured_max": 8
       },
       "regular": {
         "gas": 71000,
@@ -4263,7 +4271,8 @@
         "gas": 112454,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_per_item_regulated,gov_router_mtxSetDenied_per_item_ua_regulated",
-        "regular": 14534
+        "regular": 14534,
+        "measured_max": 8
       },
       "regular": {
         "gas": 77000,
@@ -4288,7 +4297,8 @@
         "gas": 112454,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetDenied_per_item_regulated,gov_router_mtxSetDenied_per_item_ua_regulated",
-        "regular": 14534
+        "regular": 14534,
+        "measured_max": 8
       },
       "regular": {
         "gas": 77000,
@@ -4781,7 +4791,8 @@
         "gas": 264241,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_per_item_hybrid,gov_router_mtxSetWrapLimits_per_item_ua_hybrid",
-        "regular": 68438
+        "regular": 68438,
+        "measured_max": 8
       },
       "regular": {
         "gas": 150000,
@@ -4806,7 +4817,8 @@
         "gas": 264241,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#gov_router_mtxSetWrapLimits_per_item_hybrid,gov_router_mtxSetWrapLimits_per_item_ua_hybrid",
-        "regular": 68438
+        "regular": 68438,
+        "measured_max": 8
       },
       "regular": {
         "gas": 150000,
@@ -5263,7 +5275,8 @@
         "gas": 3108169,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransfer_per_item_normal,zether_mtxConfidentialTransfer_per_item_normal_reg,zether_mtxConfidentialTransfer_per_item_wrapped,zether_mtxConfidentialTransfer_per_item_wrapped_reg",
-        "regular": 876156
+        "regular": 876156,
+        "measured_max": 16
       },
       "regular": {
         "gas": 1712000,
@@ -5288,7 +5301,8 @@
         "gas": 3108169,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransfer_per_item_normal,zether_mtxConfidentialTransfer_per_item_normal_reg,zether_mtxConfidentialTransfer_per_item_wrapped,zether_mtxConfidentialTransfer_per_item_wrapped_reg",
-        "regular": 876156
+        "regular": 876156,
+        "measured_max": 16
       },
       "regular": {
         "gas": 1712000,
@@ -5313,7 +5327,8 @@
         "gas": 2935281,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferCompact_per_item_normal,zether_mtxConfidentialTransferCompact_per_item_normal_reg,zether_mtxConfidentialTransferCompact_per_item_wrapped,zether_mtxConfidentialTransferCompact_per_item_wrapped_reg",
-        "regular": 734961
+        "regular": 734961,
+        "measured_max": 16
       },
       "regular": {
         "gas": 1735000,
@@ -5338,7 +5353,8 @@
         "gas": 2935281,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxConfidentialTransferCompact_per_item_normal,zether_mtxConfidentialTransferCompact_per_item_normal_reg,zether_mtxConfidentialTransferCompact_per_item_wrapped,zether_mtxConfidentialTransferCompact_per_item_wrapped_reg",
-        "regular": 734961
+        "regular": 734961,
+        "measured_max": 16
       },
       "regular": {
         "gas": 1735000,
@@ -5368,7 +5384,8 @@
         "gas": 763906,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_per_item_normal,zether_mtxRollOverBatch_per_item_normal_reg,zether_mtxRollOverBatch_per_item_wrapped,zether_mtxRollOverBatch_per_item_wrapped_reg",
-        "regular": 176401
+        "regular": 176401,
+        "measured_max": 8
       },
       "regular": {
         "gas": 66000,
@@ -5398,7 +5415,8 @@
         "gas": 763906,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#zether_mtxRollOverBatch_per_item_normal,zether_mtxRollOverBatch_per_item_normal_reg,zether_mtxRollOverBatch_per_item_wrapped,zether_mtxRollOverBatch_per_item_wrapped_reg",
-        "regular": 176401
+        "regular": 176401,
+        "measured_max": 8
       },
       "regular": {
         "gas": 66000,
@@ -5546,7 +5564,8 @@
         "gas": 5574,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_per_item_normal,pqz_mtxRollOver_per_item_normal_reg,pqz_mtxRollOver_per_item_wrapped,pqz_mtxRollOver_per_item_wrapped_reg",
-        "regular": 5574
+        "regular": 5574,
+        "measured_max": 64
       },
       "regular": {
         "gas": 5540000,
@@ -5576,7 +5595,8 @@
         "gas": 5574,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_mtxRollOver_per_item_normal,pqz_mtxRollOver_per_item_normal_reg,pqz_mtxRollOver_per_item_wrapped,pqz_mtxRollOver_per_item_wrapped_reg",
-        "regular": 5574
+        "regular": 5574,
+        "measured_max": 64
       },
       "regular": {
         "gas": 5540000,
@@ -5748,7 +5768,8 @@
         "gas": 414333,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_registerBlsMulti_per_item_registry",
-        "regular": 119152
+        "regular": 119152,
+        "measured_max": 64
       },
       "regular": {
         "gas": 207000,
@@ -5768,7 +5789,8 @@
         "gas": 414333,
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_registerBlsMulti_per_item_registry",
-        "regular": 119152
+        "regular": 119152,
+        "measured_max": 64
       },
       "regular": {
         "gas": 207000,
