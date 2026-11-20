@@ -104,3 +104,10 @@ records, opaque objects, owned records, error codes). The generated Dart and `fr
 - `clients/scaas-sdk/ffi/{Cargo.toml,Cargo.lock,src/lib.rs,src/api/mod.rs,src/frb_generated.rs}`, `clients/scaas-sdk/src/frb.rs`,
   `clients/scaas-sdk/bindings/dart/{pubspec.yaml,pubspec.lock,flutter_rust_bridge.yaml,run.sh,lib/,test/spike_test.dart}`: the
   FRB half.
+
+## The C# half (plan T20c, 2026-11-20)
+
+The same probe, built with `async-fn,async-callback`, through `uniffi-bindgen-cs` v0.11.1+v0.31.0 (git tag, commit `7b1aaae1`,
+`cargo install --git … --tag … --locked`): rc 0, one `sdk_spike_probe.cs`; `ping_async` and `read_async` are `async Task<uint>`,
+`AsyncStore` a C# interface with `Task<byte[]?> Get(string)`. C# therefore takes the SDK's async API; the binding and its smoke
+test over the whole surface are `clients/scaas-sdk/bindings/cs/` (decisions CLI-SDK-30, T20c change).

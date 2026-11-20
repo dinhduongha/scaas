@@ -10,6 +10,8 @@
 #         and ffi/src/frb_generated.rs, from ffi/src/api and the scaas-sdk crate itself (`rust_input`)
 #   cpp   the sync C++ surface (uniffi-bindgen-cpp v0.10.0+v0.31.0) over the reference library with `sync-api`
 #         (bindings/lib.sh): bindings/cpp/generated/ (compared as sorted lines: the generator's type order varies by run)
+#   cs    the C# binding (uniffi-bindgen-cs v0.11.1+v0.31.0, its renames in bindings/cs/uniffi.toml) over the reference library
+#         with the async API (`uniffi`): bindings/cs/generated/
 # A UniFFI generator is the pin when `cargo install` recorded that version in the root it runs from (locally
 # `cargo install --locked --root <main checkout>/scratchpad/tools/uniffi`, on PATH). Each part's old output is removed first,
 # so a file the surface no longer produces cannot stay behind. The codegen runs through scripts/capped, in the foreground (on
@@ -17,7 +19,7 @@
 set -euo pipefail
 W=$(git rev-parse --show-toplevel)
 D="$W/clients/scaas-sdk"
-PARTS=",${SCAAS_GEN:-dart,cpp},"
+PARTS=",${SCAAS_GEN:-dart,cpp,cs},"
 GEN=()
 cap=("$W/scripts/capped")
 [ -n "${CI:-}" ] && cap=()
@@ -61,6 +63,17 @@ if [[ $PARTS == *,cpp,* ]]; then
         fi
     done
     echo "[gen] ok: C++"
+fi
+if [[ $PARTS == *,cs,* ]]; then
+    GEN+=(bindings/cs/generated)
+    echo "[gen] start: C# (uniffi)"
+    pin uniffi-bindgen-cs "0.11.1+v0.31.0"
+    bash "$D/bindings/lib.sh" uniffi >/dev/null
+    rm -rf "$D/bindings/cs/generated"
+    # the generator's own output: CSharpier is not run (it warns that it is not installed)
+    out=$(cd "$D/ffi" && uniffi-bindgen-cs --library "$(lib uniffi)" --config "$D/bindings/cs/uniffi.toml" \
+        --out-dir "$D/bindings/cs/generated" 2>&1) || { echo "$out" >&2 && exit 1; }
+    echo "[gen] ok: C#"
 fi
 [ ${#GEN[@]} -gt 0 ] || { echo "[gen] FAIL no part in SCAAS_GEN=${SCAAS_GEN:-}" >&2 && exit 2; }
 if [ "${1:-}" = --check ]; then
