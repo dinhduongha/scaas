@@ -4,7 +4,7 @@
 # usage: verify-blockscout.sh [broadcast.json ...] [e2e-run-log ...]  (paths relative to smartcontracts/evm; an argument
 #   ending in .json is a broadcast; default broadcast/Deploy.s.sol/7622/run-latest.json and, when present,
 #   broadcast/ZetherE2E.s.sol/7622/run-latest.json)
-#   env BLOCKSCOUT_API (default http://127.0.0.1:8557/api: the SCaaS testnet's Blockscout API, host port 8557 since owner 2026-11-20), RPC (default http://127.0.0.1:8545; loopback: the host's LAN
+#   env BLOCKSCOUT_API (default http://127.0.0.1:8548/api: the SCaaS testnet's Blockscout API, host port 8548 since owner 2026-11-20), RPC (default http://127.0.0.1:8545; loopback: the host's LAN
 #   address is not fixed),
 #   FOUNDRY_PROFILE (default scaas-testnet)
 # Run after every 7622 reset or deploy. Broadcast: the CREATE / CREATE2 rows and the contracts they create
@@ -49,7 +49,7 @@ for B in "${bs[@]}"; do [ -f "$B" ] || {
     exit 2
 }; done
 B="${bs[0]}"
-API="${BLOCKSCOUT_API:-http://127.0.0.1:8557/api}"
+API="${BLOCKSCOUT_API:-http://127.0.0.1:8548/api}"
 RPC="${RPC:-http://127.0.0.1:8545}"
 export FOUNDRY_PROFILE="${FOUNDRY_PROFILE:-scaas-testnet}"
 CAPPED="$(git rev-parse --show-toplevel)/scripts/capped"

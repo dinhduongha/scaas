@@ -1022,10 +1022,10 @@ config files; `admin_nodeInfo` on either sidecar prints them.
 
 Services `explorer-db` (postgres:18, `mem_limit` 1g, `cpus` 1.0), `explorer-backend` (`ghcr.io/blockscout/blockscout:9.0.2`,
 2g, 1.5), `explorer-frontend` (`ghcr.io/blockscout/frontend@sha256:4b69f44148414b55c6b8550bc3270c63c9f99e923d54ef0b307e762af6bac90a`,
-v2.3.5, 512m, 0.5); `restart: unless-stopped` (owner ruling 2026-10-31: a crashed backend had stayed down); UI `http://192.168.1.72:8558` (owner 2026-10-31: not 3000; compose `8558:3000`,
-`NEXT_PUBLIC_APP_PORT` 8558, the container listens on `PORT` 3000), API and WebSocket on host port 8557 (owner 2026-11-20;
-was 4000; the backend listens on 4000 in its container; the browser calls it directly; CORS `*`, `CHECK_ORIGIN` off). Host ports
-published by Blockscout: 8558 and 8557. Since owner 2026-11-20 Blockscout is a compose project of its own in
+v2.3.5, 512m, 0.5); `restart: unless-stopped` (owner ruling 2026-10-31: a crashed backend had stayed down); UI `http://192.168.1.72:8549` (owner 2026-11-20; was 8558, owner 2026-10-31: not 3000; compose `8549:3000`,
+`NEXT_PUBLIC_APP_PORT` 8549, the container listens on `PORT` 3000), API and WebSocket on host port 8548 (owner 2026-11-20;
+was 4000, then 8557; the backend listens on 4000 in its container; the browser calls it directly; CORS `*`, `CHECK_ORIGIN` off). Host ports
+published by Blockscout: 8549 and 8548. Since owner 2026-11-20 Blockscout is a compose project of its own in
 `~dockers/mba-chain-nethermind/blockscout/` (with `sc-verifier`); the chain's compose in `pqz-nethermind/` holds the sealer and
 `rpc` only; the all-in-one form is `docker-compose-full.yml` at the stack's top (this directory's `docker-compose.yml` is that
 all-in-one form). The
