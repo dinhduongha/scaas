@@ -3,3 +3,4 @@
 V1 | ua-rs-pqvault (clippy -D warnings + --test pqvault_pass, --no-default-features --features pqvault) | V1 tree | 0 | 3 passed 0 failed 0 ignored (cargo)
 V1 | clientkeys (npm test, test/pqvault.test.js included: the generator reproduces the four files) | V1 tree | 0 | 531 passed 0 failed 5 skipped (node)
 V1 mutants | src/pqvault.js, test/pqvault.test.js on the committed vectors | V1 tree | - | 10 of 10 killed: aad-no-home, vaultid-no-mode, keywrap-no-usage, seal-label-allowed, passkdf-unknown-ok, usage-unchecked, ct-max, ct-min, vkey-no-passkdf, mode2-ok
+V2 | forge test/pqvault (PqVaultTypes.t.sol; red first: PqVaultTypes.sol absent, compile error) | V2 tree | 0 | 6 passed 0 failed 0 skipped (forge)
