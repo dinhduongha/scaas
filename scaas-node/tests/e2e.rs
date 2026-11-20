@@ -5105,7 +5105,7 @@ async fn pqz_rotation_on_anvil() {
     let state = Arc::new(Mutex::new(FakeExternalPull::default()));
     let external_pull = external_pull_at(start_fake(state.clone()).await);
     let mut cfg = chain_cfg(chain_id, &rpc, None);
-    cfg.ua_registry = Some(registry);
+    cfg.ua_registries = vec![registry];
     cfg.max_gas_per_tx = 64_000_000; // a Falcon registration with its KEM key, the SCaaS testnet's relayer cap
     let mut s = Submitter::start(
         Chain::with_signer(&cfg, key(RELAYER)).unwrap(),
@@ -5218,13 +5218,13 @@ async fn pqz_rotation_on_anvil() {
             head,
             &mut vec![],
             None,
-            Some(registry),
+            &[registry],
         ))
         .await
         .unwrap();
     let rows = scaas_node::indexer::pqz_key_origin(
         scaas_node::indexer::pay_events(&logs, None),
-        Some(registry),
+        &scaas_node::indexer::Line::one(registry),
     );
     let feed = |f: &str| {
         rows.iter()
@@ -6044,7 +6044,7 @@ impl OffchainStack {
         }));
         let external_pull = external_pull_at(start_fake(state.clone()).await);
         let mut cfg = chain_cfg(self.chain_id, &self.rpc, None);
-        cfg.ua_registry = Some(self.registry);
+        cfg.ua_registries = vec![self.registry];
         cfg.max_gas_per_tx = 64_000_000;
         cfg.pqz_verifier = pqz;
         let s = Submitter::start(

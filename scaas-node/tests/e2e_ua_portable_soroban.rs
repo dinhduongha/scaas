@@ -1186,7 +1186,7 @@ impl EvmLane {
             stuck_after_secs: 60,
             max_gas_per_tx: 60_000_000,
             max_fee_cap_gwei: 500,
-            ua_registry: Some(e.registry),
+            ua_registries: vec![e.registry],
             ..Default::default()
         };
         let lane: PrivateKeySigner = LANE_KEY.parse().unwrap();
