@@ -124,9 +124,10 @@ sdk-e2e | c1a17c82f | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # test_docs_check ok. No vector file changed (the consent rows were already in typed_ops.json). Mutants t20b 8/8 killed,
 # each by its intended assertion (t20b-mutants.txt).
 sdk-uniffi | c1e777dcb | 0 | 9 passed, 0 failed, 0 ignored (2 binaries); tree dirty
-bind-gen | 51b1973d1 | 0 | -
 bind-cpp | 51b1973d1 | 0 | ctest: 0 tests failed out of 1
 ffi | 51b1973d1 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 sdk-clippy | 51b1973d1 | 0 | -
 sdk-deny | b5b5ec89c | 0 | -
 sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (--features <the set>,sync-api)
+bind-cs | dad0a2f3d | 0 | dotnet: 3 passed, 0 failed
+bind-gen | dad0a2f3d | 0 | -
