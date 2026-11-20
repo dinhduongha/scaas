@@ -2043,3 +2043,138 @@ async fn e2e_bls_multi_on_anvil() {
     let spent = op.submit_bls_multi(p, q, parts, false).await.unwrap();
     landed(&sdk, &spent).await;
 }
+
+/// Merged-tree review M20 (owner 2026-11-20): `register_bls_multi` of a 64-member group by self-relay against a node that
+/// enforces EIP-7825 under EIP-8037 (a local Nethermind copy, never the live stack): the quote's `gas_limit` and
+/// `regular_gas` beside the receipt's `gasUsed`. Env: `SCAAS_M20_RPC` (the copy's URL), `SCAAS_M20_BOOK` (the deploy book),
+/// `SCAAS_M20_CHAIN_ID`; the seed's EVM key 0 funded. Prints one `M20` line per figure; the run script records them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs a local Nethermind copy with Amsterdam rules (clients/scaas-sdk/runs/2026-11-20-m20-nethermind.sh)"]
+async fn e2e_bls_multi_64_on_a_node() {
+    let rpc = std::env::var("SCAAS_M20_RPC").expect("SCAAS_M20_RPC");
+    let dep: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(std::env::var("SCAAS_M20_BOOK").unwrap()).unwrap(),
+    )
+    .unwrap();
+    let chain_id: u64 = std::env::var("SCAAS_M20_CHAIN_ID")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let uid = cast(&["block", "0", "--field", "hash", "--rpc-url", &rpc]);
+    let profile = ChainProfile {
+        key: "copy".into(),
+        family: Family::Evm,
+        chain_id: Some(chain_id),
+        chain_uid: uid,
+        rpc: vec![endpoint(&rpc)],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: Some(registry.clone()),
+        factory: None,
+        router: None,
+        finality: Finality::Depth(1),
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![],
+        gas: GasRows {
+            base: vec![],
+            verify: vec![],
+        },
+        max_valid_secs: None,
+        gas_opt_in: vec!["reference".into()],
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
+        dexes: vec![],
+        wrappers: vec![],
+    };
+    // the app raises `max_gas` for this run: the default 2^24 holds the whole gas limit
+    let sdk = Sdk::open(SdkConfig {
+        profiles: vec![profile],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits {
+            max_gas: 1 << 27,
+            ..Limits::default()
+        },
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let seed = sdk
+        .vault()
+        .import_words(ImportWords {
+            label: "main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    let payer = KeyRef::Native {
+        seed: seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let keys: Vec<[u8; 256]> = (0..64)
+        .map(|a| {
+            w.ua_key(0x0121, a, 0)
+                .unwrap()
+                .key_data()
+                .try_into()
+                .unwrap()
+        })
+        .collect();
+    let (d, _) = scaas_ua::bls_multi::build_key_data_unweighted(&keys, 33).unwrap();
+    let ua = scaas_ua::bls_multi::ua_of(&d);
+    let d = format!("0x{}", alloy::hex::encode(&d));
+    let member = |account: u32| KeyRef::BlsMulti {
+        seed: seed.clone(),
+        account,
+        index: 0,
+        key_data: d.clone(),
+    };
+    let op = sdk.op();
+    let pops: Vec<BlsMultiPart> = (0..64)
+        .map(|a| op.bls_multi_pop_part(member(a)).unwrap())
+        .collect();
+    let q = op
+        .quote_register_bls_multi("copy".into(), d.clone(), payer.clone())
+        .await
+        .unwrap();
+    println!(
+        "M20 quote gas_limit {} regular_gas {}",
+        q.gas_limit, q.regular_gas
+    );
+    let tx = op
+        .register_bls_multi("copy".into(), d.clone(), pops, q)
+        .await
+        .unwrap();
+    println!("M20 tx {tx}");
+    let ua_hex = format!("0x{}", alloy::hex::encode(ua));
+    let mut registered = String::new();
+    for _ in 0..120 {
+        registered = cast(&[
+            "call",
+            &registry,
+            "isRegistered(bytes32)(bool)",
+            &ua_hex,
+            "--rpc-url",
+            &rpc,
+        ]);
+        if registered == "true" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+    }
+    let receipt = cast(&["receipt", &tx, "--json", "--rpc-url", &rpc]);
+    let r: serde_json::Value = serde_json::from_str(&receipt).unwrap();
+    println!(
+        "M20 receipt status {} gasUsed {} block {}",
+        r["status"], r["gasUsed"], r["blockNumber"]
+    );
+    assert_eq!(registered, "true", "registerBlsMulti of 64 included {tx}");
+}
