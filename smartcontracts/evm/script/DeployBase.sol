@@ -227,10 +227,53 @@ abstract contract DeployBase is DeployBook {
     /// path (`verifyMinimal`), both set by `CHECK_GAS`'s floor; 330,000 keeps 19,177 (6.2 %) over it.
     uint64 internal constant CAP_BLS12381_MULTI = 330_000;
 
-    /// @notice The ML-DSA precompile candidates, probed in order (CTR-UA-23 / CTR-UA-39): EIP-8355's `0x12` / `0x13` / `0x14`,
-    ///         then the SCaaS testnet's `MLDSA44` / `MLDSA65` / `MLDSA87` `0x…5caa0012` / `…0013` / `…0014`; `i` 0, 1, 2 = 44, 65, 87.
-    function _mldsaCandidates(uint256 i) internal pure returns (address[2] memory) {
-        return [address(uint160(0x12 + i)), address(uint160(0x5caa0012 + i))];
+    /// @notice The ML-DSA precompile candidates, probed in order (CTR-UA-69, owner R9; CTR-UA-23 / CTR-UA-39): by default the
+    ///         addresses of an EIP in Final status (none for ML-DSA today) and the chain's own, the SCaaS chains'
+    ///         `0x…5caa0012` / `…0013` / `…0014`; EIP-8355's Draft `0x12` / `0x13` / `0x14` only after them and only under the
+    ///         chain's `probe_draft_precompiles` flag with the owner's confirmation in the book (`_draftProbe`), probed then with
+    ///         the fuller probe (`_mldsaPrecompile`). `i` 0, 1, 2 = 44, 65, 87.
+    function _mldsaCandidates(uint256 i) internal view returns (address[] memory c) {
+        bool draft = _draftProbe();
+        c = new address[](draft ? 2 : 1);
+        c[0] = address(uint160(0x5caa0012 + i));
+        if (draft) c[1] = address(uint160(0x12 + i));
+    }
+
+    /// @notice CTR-UA-69 (owner R9, C5): the Draft candidates are probed only where the chain's row in `chain-uids.json` sets
+    ///         `probe_draft_precompiles: true` and the chain's book records the owner's confirmation
+    ///         (`probe_draft_precompiles_owner`, its reason); the flag without it refuses by name (`DRAFT_PROBE_UNCONFIRMED`).
+    function _draftProbe() internal view returns (bool) {
+        if (!_draftFlag()) return false;
+        require(
+            _draftConfirmed(),
+            "DRAFT_PROBE_UNCONFIRMED: chain-uids.json sets probe_draft_precompiles, the book has no probe_draft_precompiles_owner (CTR-UA-69)"
+        );
+        return true;
+    }
+
+    /// @notice The chain's `probe_draft_precompiles` (its `chain-uids.json` row by chain id and `uid`; absent: false).
+    function _draftFlag() internal view virtual returns (bool) {
+        string memory j = vm.readFile("./chain-uids.json");
+        for (uint256 i;; ++i) {
+            string memory p = string.concat(".chains[", vm.toString(i), "]");
+            if (!vm.keyExistsJson(j, p)) return false;
+            if (
+                vm.parseJsonUint(j, string.concat(p, ".chainId")) == block.chainid
+                    && vm.parseJsonBytes32(j, string.concat(p, ".chainUid")) == uid
+            ) {
+                string memory f = string.concat(p, ".probe_draft_precompiles");
+                return vm.keyExistsJson(j, f) && vm.parseJsonBool(j, f);
+            }
+        }
+    }
+
+    /// @notice The owner's confirmation of the Draft probe in the chain's book (`probe_draft_precompiles_owner`, non-empty).
+    function _draftConfirmed() internal view virtual returns (bool) {
+        string memory path = _bookPath(uid, ".json");
+        if (!vm.exists(path)) return false;
+        string memory b = vm.readFile(path);
+        return vm.keyExistsJson(b, ".probe_draft_precompiles_owner")
+            && bytes(vm.parseJsonString(b, ".probe_draft_precompiles_owner")).length != 0;
     }
 
     /// @notice C5-1, NET-EVM-06. A release is one CREATE2 of the whole implementation in the registrar's transaction.
@@ -1605,7 +1648,9 @@ abstract contract DeployBase is DeployBook {
         (bytes memory v44, bytes memory b44) = _mldsaProbe(0);
         (bytes memory v65, bytes memory b65) = _mldsaProbe(1);
         (bytes memory v87, bytes memory b87) = _mldsaProbe(2);
-        return abi.encodePacked(type(PqPrecompileProbe).creationCode, abi.encode(v44, b44, v65, b65, v87, b87));
+        return abi.encodePacked(
+            type(PqPrecompileProbe).creationCode, abi.encode(v44, b44, v65, b65, v87, b87, _draftProbe())
+        );
     }
 
     /// @notice The `pq_kat.json` EIP-8355 probe inputs of ML-DSA kind `i` (0, 1, 2 = 44, 65, 87): valid ⇒ the word 1, flipped ⇒ 0.
@@ -1616,13 +1661,43 @@ abstract contract DeployBase is DeployBook {
         invalid = vm.parseJsonBytes(kat, string.concat(k, ".eip8355_probe_invalid"));
     }
 
+    /// @notice The `pq_kat.json` mutation rows of ML-DSA kind `i` as EIP-8355 inputs `pk ‖ sig ‖ pq_msg` (each invalid).
+    function _mldsaEdgeRows(uint256 i) internal view returns (bytes[] memory rows) {
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        string memory k = string.concat(".kinds.mldsa", ["44", "65", "87"][i], ".mutations");
+        uint256 n;
+        while (vm.keyExistsJson(kat, string.concat(k, "[", vm.toString(n), "]"))) ++n;
+        rows = new bytes[](n);
+        bytes32 t = PqUA.tag([UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87][i]);
+        for (uint256 r; r < n; ++r) {
+            string memory m = string.concat(k, "[", vm.toString(r), "]");
+            rows[r] = abi.encodePacked(
+                vm.parseJsonBytes(kat, string.concat(m, ".pk")),
+                vm.parseJsonBytes(kat, string.concat(m, ".sig")),
+                PqUA.pqMessage(t, vm.parseJsonBytes32(kat, string.concat(m, ".ua_msg")))
+            );
+        }
+    }
+
     /// @notice CTR-UA-23 / CTR-UA-39: the first candidate (`_mldsaCandidates`) that answers ML-DSA kind `i`'s probe exactly in
     ///         this run's EVM, with the probe inputs the verifier checks again; else 0 (forge's EVM: none, unless a test mocks one).
+    ///         A Draft candidate (`0x12` + i) is taken only with the fuller probe of CTR-UA-69: the valid row, the flipped row and
+    ///         every `pq_kat.json` mutation row as its EIP-8355 input (`_mldsaEdgeRows`), each answered exactly.
     function _mldsaPrecompile(uint256 i) internal view returns (address p, bytes memory valid, bytes memory invalid) {
         (valid, invalid) = _mldsaProbe(i);
-        address[2] memory c = _mldsaCandidates(i);
-        if (PqUA.probe(c[0], valid, invalid)) p = c[0];
-        else if (PqUA.probe(c[1], valid, invalid)) p = c[1];
+        address[] memory c = _mldsaCandidates(i);
+        for (uint256 j; j < c.length && p == address(0); ++j) {
+            if (!PqUA.probe(c[j], valid, invalid)) continue;
+            if (c[j] == address(uint160(0x12 + i))) {
+                bytes[] memory rows = _mldsaEdgeRows(i);
+                bool all = true;
+                for (uint256 r; r < rows.length && all; ++r) {
+                    all = PqUA.probe(c[j], valid, rows[r]);
+                }
+                if (!all) continue;
+            }
+            p = c[j];
+        }
     }
 
     /// @notice The chain's own verdict on its PQ precompiles (`PqPrecompileProbe`: the `PQZ` self-test; each ML-DSA kind's KAT

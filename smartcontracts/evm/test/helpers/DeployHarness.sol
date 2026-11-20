@@ -25,6 +25,30 @@ contract DeployHarness is DeployBase {
         txGasCap = 1 << 24; // `TX_GAS_CAP` (owner X1): a test chain under EIP-7825 (`setTxGasCap` for another)
     }
 
+    bool internal draftFlag;
+    bool internal draftOwner;
+
+    /// Stands in for the chain row's `probe_draft_precompiles` and the book's `probe_draft_precompiles_owner` (CTR-UA-69).
+    function setDraft(bool flag, bool owner) external {
+        (draftFlag, draftOwner) = (flag, owner);
+    }
+
+    function mldsaCandidates(uint256 i) external view returns (address[] memory) {
+        return _mldsaCandidates(i);
+    }
+
+    function mldsaPrecompileOf(uint256 i) external view returns (address p) {
+        (p,,) = _mldsaPrecompile(i);
+    }
+
+    function _draftFlag() internal view override returns (bool) {
+        return draftFlag;
+    }
+
+    function _draftConfirmed() internal view override returns (bool) {
+        return draftOwner;
+    }
+
     /// Stands in for `TX_GAS_CAP` (the process env is shared by parallel tests).
     function setTxGasCap(uint64 cap) external {
         txGasCap = cap;

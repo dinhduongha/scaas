@@ -7,8 +7,9 @@ real chain BEFORE Deploy.s.sol, with script/pqz/e2e.py's builders and probes (P6
     (statement_register.json row 0, proof_pqzl.json row 4: the constructor's probe), when the precompile answers its
     OP_SELFTEST with the set's hash; after the deploy `isSupportedOnThisChain()` must be true;
   - with `MLDSA_PRECOMPILE=on` (the default; owner 2026-11-15, MD-6 / MD-7): `MldsaVerifier(kind, candidate, probe valid, probe
-    invalid)` for `mldsa44` 0x0130, `mldsa65` 0x0131 and `mldsa87` 0x0134, each on the first candidate (EIP-8355's 0x12 / 0x13 /
-    0x14, then the SCaaS testnet's 0x...5caa0012 / 13 / 14, DeployBase._mldsaCandidates) that answers that level's pq_kat.json
+    invalid)` for `mldsa44` 0x0130, `mldsa65` 0x0131 and `mldsa87` 0x0134, each on the first candidate (the chain's own
+    0x...5caa0012 / 13 / 14; EIP-8355's Draft 0x12 / 0x13 / 0x14 after them only under the chain's probe_draft_precompiles flag
+    with the owner's confirmation in the book, then with the fuller probe: CTR-UA-69, DeployBase._mldsaCandidates) that answers that level's pq_kat.json
     EIP-8355 probe exactly (valid => the word 1, flipped => 0); after the deploy `PRECOMPILE()` must be that candidate, and
     `verify` of the level's pq_kat.json row with gas cap + cap / 63 (DeployBase's precompile-path cap, the registry's hold)
     must answer true, its flipped message false (F-6); `MLDSA_PRECOMPILE=off`: none of them (DeployBase builds the cache path).
@@ -33,8 +34,32 @@ E.OUT_DIR = os.environ.get("FOUNDRY_OUT", "out")
 MLDSA = ((0x0130, "mldsa44", 200_000), (0x0131, "mldsa65", 200_000), (0x0134, "mldsa87", 250_000))
 
 
-def candidates(i):
-    return ("0x" + f"{0x12 + i:040x}", "0x" + f"{0x5CAA0012 + i:040x}")
+def candidates(i, draft=False):
+    """CTR-UA-69 (owner R9): the chain's own address first (the Final EIP addresses with it: none for ML-DSA today); EIP-8355's
+    Draft 0x12 / 0x13 / 0x14 after it, only when `draft_allowed`."""
+    own = "0x" + f"{0x5CAA0012 + i:040x}"
+    return (own, "0x" + f"{0x12 + i:040x}") if draft else (own,)
+
+
+def draft_allowed(row, book):
+    """The chain row's `probe_draft_precompiles` (chain-uids.json, owner C5) with the owner's confirmation in the chain's book
+    (`probe_draft_precompiles_owner`, its reason); the flag without it: DRAFT_PROBE_UNCONFIRMED."""
+    if not (row or {}).get("probe_draft_precompiles"):
+        return False
+    if not (book or {}).get("probe_draft_precompiles_owner"):
+        raise SystemExit(
+            "[deploy] pq-verifiers FAIL DRAFT_PROBE_UNCONFIRMED: chain-uids.json sets probe_draft_precompiles, the book has "
+            "no probe_draft_precompiles_owner (CTR-UA-69)"
+        )
+    return True
+
+
+def edge_rows(k, name):
+    """The fuller probe's extra rows (CTR-UA-69): each pq_kat.json mutation of level `name` as its EIP-8355 input
+    `pk ‖ sig ‖ pq_msg` (pq_msg = keccak256(TAG(kind) ‖ ua_msg), PqUA.pqMessage), each to be answered with the word 0."""
+    t = E.keccak256(f"scaas.ua.{name}.v1".encode())
+    b = lambda h: bytes.fromhex(h.removeprefix("0x"))  # noqa: E731
+    return [b(m["pk"]) + b(m["sig"]) + E.keccak256(t + b(m["ua_msg"])) for m in k["mutations"]]
 
 
 def say(s):
@@ -146,6 +171,13 @@ def main(rpc):
     if mode not in ("on", "off"):
         raise SystemExit("[deploy] pq-verifiers FAIL MLDSA_PRECOMPILE: on or off")
     kat = json.load(open(os.path.join(E.EVM, "../vectors/ua/pq_kat.json")))["kinds"]
+    sys.path.insert(0, HERE)
+    import deploybook
+
+    uid = "0x" + E.CTX[1].hex()
+    row = next((r for r in deploybook.rows() if r["chainId"] == chain and r["chainUid"].lower() == uid), None)
+    bp = os.path.join(deploybook.EVM, "deployments", f"{row['key']}.json") if row else None
+    draft = draft_allowed(row, json.load(open(bp)) if bp and os.path.exists(bp) else None)
     for i, (kind, name, cap) in enumerate(MLDSA):
         if mode == "off":
             say(f"skip MldsaVerifier({kind:#06x}): MLDSA_PRECOMPILE=off (the registry's expanded-key cache)")
@@ -154,12 +186,14 @@ def main(rpc):
         valid, bad = bytes.fromhex(k["eip8355_probe_valid"][2:]), bytes.fromhex(k["eip8355_probe_invalid"][2:])
 
         def answers(at):
+            # a Draft address: the fuller probe, every mutation row too (CTR-UA-69)
+            neg = [bad] + (edge_rows(k, name) if int(at, 16) < 0x100 else [])
             try:
-                return E.call(at, valid) == "0x" + "00" * 31 + "01" and E.call(at, bad) == "0x" + "00" * 32
+                return E.call(at, valid) == "0x" + "00" * 31 + "01" and all(E.call(at, x) == "0x" + "00" * 32 for x in neg)
             except RuntimeError:
                 return False
 
-        cs = candidates(i)
+        cs = candidates(i, draft)
         cand = next((c for c in cs if answers(c)), None)
         if cand is None:
             say(f"skip MldsaVerifier({kind:#06x}): no {name} precompile answers the KAT probe at {', '.join(cs)}")

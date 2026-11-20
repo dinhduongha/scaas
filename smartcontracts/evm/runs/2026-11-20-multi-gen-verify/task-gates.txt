@@ -67,3 +67,7 @@ t13 DeployBase dependants | task 13 | 1 | GovDeploy, ReleaseList, CodeCeiling, D
 t13 local e2e (anvil) | task 13 | 0 | tx-cap probe: GEN_TX_CAP_UNKNOWN without an owner value (anvil has no cap), 16,777,216 with it (3 rows); gen 1 by Deploy.s.sol, gen 2 and gen 3 by DeployUAGen.s.sol (generation, predecessor, txGasCap, msig read back; gen-2 book gen_check ok, ua_registry_line gen1; gen 3 walk ok 1-2); a stale book naming gen 3 as latest: GEN_NOT_LATEST
 t13 mutants | task 13 | 0 | 3 of 3 killed (task13-mutants.txt)
 t13 size gate | task 13 | 0 | no src change: UARegistry 35,166, CoreLib 23,465, RegLib 31,665, AuxLib 33,858, OpenFactory 35,238 unchanged
+t14 UADeploy + GovDeploy + ZetherDeploy + ReleaseList + LinkClosure | task 14 | 0 | 71 passed (UADeploy 37: test_candidates_default_noDraft, test_candidates_flag_withoutBook_refused, test_candidates_flag_fullerProbe new, written with the code: the mutants show they bite); changed row: test_mldsa87_precompileOrCache (the Draft 0x14 no longer probed by default: the cache; the chain's own 0x5caa0014: the precompile)
+t14 python | task 14 | 0 | test_pq_verifiers 7/7 (draft_not_probed_by_default, draft_probed_under_flag_and_book: the edge rows' pq_msg equals the KAT probe's)
+t14 mutants | task 14 | 0 | 2 of 2 killed (task14-mutants.txt); a crash at 08:16 left draft-first-again in DeployBase.sol: found by grep, restored, the run repeated
+t14 size gate | task 14 | 0 | no src change

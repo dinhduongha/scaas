@@ -4,6 +4,7 @@
 against fake nodes (no chain):
   python3 -I script/test_pq_verifiers.py      (from smartcontracts/evm)"""
 
+import json
 import os
 import sys
 
@@ -67,7 +68,29 @@ def kat_rows_shape():
     assert r[0][4] is True and len(r) == 9 and all(not x[4] for x in r[1:])
 
 
-for t in (diff_agree_precompile_and_cache, diff_lax_verify_only_refused, diff_nodes_disagree_refused,
+def draft_not_probed_by_default():
+    assert P.candidates(1) == ("0x" + f"{0x5CAA0013:040x}",)
+    assert not P.draft_allowed(None, None) and not P.draft_allowed({"key": "x"}, {"probe_draft_precompiles_owner": "r"})
+    try:
+        P.draft_allowed({"probe_draft_precompiles": True}, {})
+    except SystemExit as e:
+        assert "DRAFT_PROBE_UNCONFIRMED" in str(e)
+    else:
+        raise AssertionError("the flag without the owner's confirmation")
+
+
+def draft_probed_under_flag_and_book():
+    assert P.draft_allowed({"probe_draft_precompiles": True}, {"probe_draft_precompiles_owner": "owner: reason"})
+    c = P.candidates(1, True)
+    assert c[0].endswith("5caa0013") and int(c[1], 16) == 0x13, c  # the chain's own first, the Draft after it
+    k = json.load(open(os.path.join(HERE, "..", "..", "vectors", "ua", "pq_kat.json")))["kinds"]["mldsa65"]
+    rows = P.edge_rows(k, "mldsa65")
+    valid = bytes.fromhex(k["eip8355_probe_valid"][2:])
+    assert len(rows) == len(k["mutations"]) and valid not in rows
+    assert rows[0][-32:] == valid[-32:], "pq_msg as PqUA.pqMessage builds it (mutation 0 keeps ua_msg)"
+
+
+for t in (draft_not_probed_by_default, draft_probed_under_flag_and_book, diff_agree_precompile_and_cache, diff_lax_verify_only_refused, diff_nodes_disagree_refused,
           diff_majority_outvotes_one, kat_rows_shape):
     t()
     print("ok", t.__name__)

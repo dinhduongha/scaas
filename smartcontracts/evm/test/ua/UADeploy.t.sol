@@ -96,12 +96,18 @@ contract UADeployTest is Test {
         bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
         bytes memory invalid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid");
         address[2] memory at = [address(0x14), 0x000000000000000000000000000000005caA0014];
+        // CTR-UA-69 (owner R9, plan Task 14): the Draft 0x14 is not probed without the chain's flag: the cache; the chain's own
+        // 0x…5caa0014: the precompile path (was: both on the precompile, the Draft first)
         for (uint256 i; i < 2; ++i) {
             vm.mockCall(at[i], valid, abi.encode(uint256(1)));
             vm.mockCall(at[i], invalid, abi.encode(uint256(0)));
             IUARegistry reg = _registry(31337, i == 1);
             assertTrue(reg.kindEnabled(0x0134));
-            assertEq(reg.verifyCap(0x0134), 250_000, "the precompile path's cap (provisional)");
+            assertEq(
+                reg.verifyCap(0x0134),
+                i == 0 ? 8_850_000 : 250_000,
+                i == 0 ? "a Draft address unprobed: the cache" : "the precompile path's cap (provisional)"
+            );
             vm.clearMockedCalls();
         }
         vm.mockCall(at[1], bytes(""), abi.encode(uint256(1))); // the word 1 to every input
@@ -707,5 +713,63 @@ contract UADeployTest is Test {
         (address r,) = abi.decode(ret, (address, string));
         assertEq(UARegistry(r).txGasCap(), 30_000_000);
         _named(h, vm.replace(b, ',"tx_gas_cap":30000000', ""), "GEN_TX_CAP_UNKNOWN");
+    }
+
+    // ----- the Draft precompile probe flag (spec §9 CTR-UA-69, owner R9, C5; plan Task 14) -----
+
+    /// A precompile stand-in at the Draft address `0x13` answering the mldsa65 KAT probe (valid 1, every other input 0), lax
+    /// (answer 1) on the `lax`-th mutation row (1-based; 0 none).
+    function _draft65(uint256 lax) internal {
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa65.eip8355_probe_valid");
+        bytes[] memory rows = new bytes[](lax == 0 ? 0 : 1);
+        if (lax != 0) {
+            string memory m = string.concat(".kinds.mldsa65.mutations[", vm.toString(lax - 1), "]");
+            rows[0] = abi.encodePacked(
+                vm.parseJsonBytes(kat, string.concat(m, ".pk")),
+                vm.parseJsonBytes(kat, string.concat(m, ".sig")),
+                keccak256(abi.encodePacked(keccak256("scaas.ua.mldsa65.v1"), vm.parseJsonBytes32(kat, string.concat(m, ".ua_msg"))))
+            );
+        }
+        address at = address(0x13);
+        vm.etch(at, address(new PcStandIn()).code);
+        PcStandIn(at).set(keccak256(valid), rows, 0, lax == 0 ? 0 : 1);
+    }
+
+    function test_candidates_default_noDraft() public {
+        DeployHarness h = new DeployHarness();
+        address[] memory c = h.mldsaCandidates(1);
+        assertEq(c.length, 1);
+        assertEq(c[0], address(0x5CAa0013), "the chain's own only");
+        _draft65(0);
+        assertEq(h.mldsaPrecompileOf(1), address(0), "a Draft address that answers is not probed without the flag");
+    }
+
+    function test_candidates_flag_withoutBook_refused() public {
+        DeployHarness h = new DeployHarness();
+        h.setDraft(true, false);
+        vm.expectRevert(
+            bytes(
+                "DRAFT_PROBE_UNCONFIRMED: chain-uids.json sets probe_draft_precompiles, the book has no probe_draft_precompiles_owner (CTR-UA-69)"
+            )
+        );
+        h.mldsaCandidates(1);
+    }
+
+    /// Under the flag and the owner's confirmation the Draft address comes after the chain's own and is taken only when it answers
+    /// every row of the fuller probe; one lax mutation row (each in turn) and it is not taken.
+    function test_candidates_flag_fullerProbe() public {
+        DeployHarness h = new DeployHarness();
+        h.setDraft(true, true);
+        address[] memory c = h.mldsaCandidates(1);
+        assertEq(c.length, 2);
+        assertEq(c[0], address(0x5CAa0013));
+        assertEq(c[1], address(0x13));
+        _draft65(0);
+        assertEq(h.mldsaPrecompileOf(1), address(0x13), "every row answered exactly");
+        for (uint256 r = 1; r <= 8; ++r) { // pq_kat.json's 8 mldsa65 mutation rows
+            _draft65(r);
+            assertEq(h.mldsaPrecompileOf(1), address(0), string.concat("lax on mutation row ", vm.toString(r)));
+        }
     }
 }
