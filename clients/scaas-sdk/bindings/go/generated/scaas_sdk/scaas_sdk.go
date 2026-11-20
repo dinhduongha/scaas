@@ -629,6 +629,15 @@ func uniffiCheckChecksums() {
 	}
 	{
 		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
+			return C.uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas()
+		})
+		if checksum != 6697 {
+			// If this happens try cleaning and rebuilding your project
+			panic("scaas_sdk: uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas: UniFFI API checksum mismatch")
+		}
+	}
+	{
+		checksum := rustCall(func(_uniffiStatus *C.RustCallStatus) C.uint16_t {
 			return C.uniffi_scaas_sdk_checksum_method_registrywrite_review()
 		})
 		if checksum != 57538 {
@@ -10190,6 +10199,8 @@ type RegistryWriteInterface interface {
 	Entry() string
 	Id() string
 	Payer() KeyRef
+	// A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+	RegistrationGas() *RegistrationGas
 	Review() []ReviewField
 	Ua() string
 }
@@ -10250,6 +10261,18 @@ func (_self *RegistryWrite) Payer() KeyRef {
 	return FfiConverterKeyRefINSTANCE.Lift(rustCall(func(_uniffiStatus *C.RustCallStatus) RustBufferI {
 		return GoRustBuffer{
 			inner: C.uniffi_scaas_sdk_fn_method_registrywrite_payer(
+				_pointer, _uniffiStatus),
+		}
+	}))
+}
+
+// A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+func (_self *RegistryWrite) RegistrationGas() *RegistrationGas {
+	_pointer := _self.ffiObject.incrementPointer("*RegistryWrite")
+	defer _self.ffiObject.decrementPointer()
+	return FfiConverterOptionalRegistrationGasINSTANCE.Lift(rustCall(func(_uniffiStatus *C.RustCallStatus) RustBufferI {
+		return GoRustBuffer{
+			inner: C.uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(
 				_pointer, _uniffiStatus),
 		}
 	}))
@@ -18146,6 +18169,60 @@ func (_ FfiDestroyerRegistrationBlob) Destroy(value RegistrationBlob) {
 	value.Destroy()
 }
 
+// A registration carrying its PQZ key's proof as the SDK quoted it at prepare (owner 2026-11-20): one transaction, or two
+// (`register` without the proof, then `storePqzPop`, F22's restart-safe flow) when the one transaction's gas is above half
+// the chain's block gas limit or its regular gas above the per-transaction cap; each step's gas and the total.
+type RegistrationGas struct {
+	// 1 or 2
+	Transactions uint32
+	// the steps prepared, in the order they land (after a restart between the two, the second alone)
+	Steps []StepGas
+	// the steps' gas added; `None` when a step's is not known
+	TotalGas *uint64
+}
+
+func (r *RegistrationGas) Destroy() {
+	FfiDestroyerUint32{}.Destroy(r.Transactions)
+	FfiDestroyerSequenceStepGas{}.Destroy(r.Steps)
+	FfiDestroyerOptionalUint64{}.Destroy(r.TotalGas)
+}
+
+type FfiConverterRegistrationGas struct{}
+
+var FfiConverterRegistrationGasINSTANCE = FfiConverterRegistrationGas{}
+
+func (c FfiConverterRegistrationGas) Lift(rb RustBufferI) RegistrationGas {
+	return LiftFromRustBuffer[RegistrationGas](c, rb)
+}
+
+func (c FfiConverterRegistrationGas) Read(reader io.Reader) RegistrationGas {
+	return RegistrationGas{
+		FfiConverterUint32INSTANCE.Read(reader),
+		FfiConverterSequenceStepGasINSTANCE.Read(reader),
+		FfiConverterOptionalUint64INSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterRegistrationGas) Lower(value RegistrationGas) C.RustBuffer {
+	return LowerIntoRustBuffer[RegistrationGas](c, value)
+}
+
+func (c FfiConverterRegistrationGas) LowerExternal(value RegistrationGas) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[RegistrationGas](c, value))
+}
+
+func (c FfiConverterRegistrationGas) Write(writer io.Writer, value RegistrationGas) {
+	FfiConverterUint32INSTANCE.Write(writer, value.Transactions)
+	FfiConverterSequenceStepGasINSTANCE.Write(writer, value.Steps)
+	FfiConverterOptionalUint64INSTANCE.Write(writer, value.TotalGas)
+}
+
+type FfiDestroyerRegistrationGas struct{}
+
+func (_ FfiDestroyerRegistrationGas) Destroy(value RegistrationGas) {
+	value.Destroy()
+}
+
 // A registration as the registry holds it (`registration_of`).
 type RegistrationState struct {
 	Registered bool
@@ -19020,6 +19097,60 @@ func (c FfiConverterSmartOp) Write(writer io.Writer, value SmartOp) {
 type FfiDestroyerSmartOp struct{}
 
 func (_ FfiDestroyerSmartOp) Destroy(value SmartOp) {
+	value.Destroy()
+}
+
+// One step of a registration carrying its PQZ key's proof as quoted at prepare (owner 2026-11-20).
+type StepGas struct {
+	// `register` (or `registerWebAuthn`, `registerMsig`), with or without the proof, or `storePqzPop`
+	Entry string
+	// the step's gas limit: max(the node's estimate, the gas table's figure), the table's with the intrinsic cost, the
+	// calldata and the margin; `None` where neither is known yet (a later step is not estimated before the one before it
+	// landed)
+	Gas *uint64
+	// the bound of its regular part (EIP-8037): the table's; the estimate, whole, where the table has no row
+	RegularGas *uint64
+}
+
+func (r *StepGas) Destroy() {
+	FfiDestroyerString{}.Destroy(r.Entry)
+	FfiDestroyerOptionalUint64{}.Destroy(r.Gas)
+	FfiDestroyerOptionalUint64{}.Destroy(r.RegularGas)
+}
+
+type FfiConverterStepGas struct{}
+
+var FfiConverterStepGasINSTANCE = FfiConverterStepGas{}
+
+func (c FfiConverterStepGas) Lift(rb RustBufferI) StepGas {
+	return LiftFromRustBuffer[StepGas](c, rb)
+}
+
+func (c FfiConverterStepGas) Read(reader io.Reader) StepGas {
+	return StepGas{
+		FfiConverterStringINSTANCE.Read(reader),
+		FfiConverterOptionalUint64INSTANCE.Read(reader),
+		FfiConverterOptionalUint64INSTANCE.Read(reader),
+	}
+}
+
+func (c FfiConverterStepGas) Lower(value StepGas) C.RustBuffer {
+	return LowerIntoRustBuffer[StepGas](c, value)
+}
+
+func (c FfiConverterStepGas) LowerExternal(value StepGas) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[StepGas](c, value))
+}
+
+func (c FfiConverterStepGas) Write(writer io.Writer, value StepGas) {
+	FfiConverterStringINSTANCE.Write(writer, value.Entry)
+	FfiConverterOptionalUint64INSTANCE.Write(writer, value.Gas)
+	FfiConverterOptionalUint64INSTANCE.Write(writer, value.RegularGas)
+}
+
+type FfiDestroyerStepGas struct{}
+
+func (_ FfiDestroyerStepGas) Destroy(value StepGas) {
 	value.Destroy()
 }
 
@@ -27777,6 +27908,7 @@ var ErrSdkErrorBlsMultiBelowThreshold = fmt.Errorf("SdkErrorBlsMultiBelowThresho
 var ErrSdkErrorGasFieldUnknown = fmt.Errorf("SdkErrorGasFieldUnknown")
 var ErrSdkErrorDexNotListed = fmt.Errorf("SdkErrorDexNotListed")
 var ErrSdkErrorPqzAuditorNative = fmt.Errorf("SdkErrorPqzAuditorNative")
+var ErrSdkErrorGasAboveBlockShare = fmt.Errorf("SdkErrorGasAboveBlockShare")
 var ErrSdkErrorCancelled = fmt.Errorf("SdkErrorCancelled")
 var ErrSdkErrorUa = fmt.Errorf("SdkErrorUa")
 var ErrSdkErrorRpc = fmt.Errorf("SdkErrorRpc")
@@ -29020,6 +29152,31 @@ func (self SdkErrorPqzAuditorNative) Is(target error) bool {
 	return target == ErrSdkErrorPqzAuditorNative
 }
 
+// A registration step whose gas (regular + state) is above half the chain's block gas limit (owner 2026-11-20): a
+// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
+// sent.
+type SdkErrorGasAboveBlockShare struct {
+	message string
+}
+
+// A registration step whose gas (regular + state) is above half the chain's block gas limit (owner 2026-11-20): a
+// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
+// sent.
+func NewSdkErrorGasAboveBlockShare() *SdkError {
+	return &SdkError{err: &SdkErrorGasAboveBlockShare{}}
+}
+
+func (e SdkErrorGasAboveBlockShare) destroy() {
+}
+
+func (err SdkErrorGasAboveBlockShare) Error() string {
+	return fmt.Sprintf("GasAboveBlockShare: %s", err.message)
+}
+
+func (self SdkErrorGasAboveBlockShare) Is(target error) bool {
+	return target == ErrSdkErrorGasAboveBlockShare
+}
+
 // a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
 type SdkErrorCancelled struct {
 	message string
@@ -29229,10 +29386,12 @@ func (c FfiConverterSdkError) Read(reader io.Reader) *SdkError {
 	case 62:
 		return &SdkError{&SdkErrorPqzAuditorNative{message}}
 	case 63:
-		return &SdkError{&SdkErrorCancelled{message}}
+		return &SdkError{&SdkErrorGasAboveBlockShare{message}}
 	case 64:
-		return &SdkError{&SdkErrorUa{message}}
+		return &SdkError{&SdkErrorCancelled{message}}
 	case 65:
+		return &SdkError{&SdkErrorUa{message}}
+	case 66:
 		return &SdkError{&SdkErrorRpc{message}}
 	default:
 		panic(fmt.Sprintf("Unknown error code %d in FfiConverterSdkError.Read()", errorID))
@@ -29366,12 +29525,14 @@ func (c FfiConverterSdkError) Write(writer io.Writer, value *SdkError) {
 		writeInt32(writer, 61)
 	case *SdkErrorPqzAuditorNative:
 		writeInt32(writer, 62)
-	case *SdkErrorCancelled:
+	case *SdkErrorGasAboveBlockShare:
 		writeInt32(writer, 63)
-	case *SdkErrorUa:
+	case *SdkErrorCancelled:
 		writeInt32(writer, 64)
-	case *SdkErrorRpc:
+	case *SdkErrorUa:
 		writeInt32(writer, 65)
+	case *SdkErrorRpc:
+		writeInt32(writer, 66)
 	default:
 		_ = variantValue
 		panic(fmt.Sprintf("invalid error value `%v` in FfiConverterSdkError.Write", value))
@@ -29505,6 +29666,8 @@ func (_ FfiDestroyerSdkError) Destroy(value *SdkError) {
 	case SdkErrorDexNotListed:
 		variantValue.destroy()
 	case SdkErrorPqzAuditorNative:
+		variantValue.destroy()
+	case SdkErrorGasAboveBlockShare:
 		variantValue.destroy()
 	case SdkErrorCancelled:
 		variantValue.destroy()
@@ -30795,6 +30958,47 @@ type FfiDestroyerOptionalKeyPolicy struct{}
 func (_ FfiDestroyerOptionalKeyPolicy) Destroy(value *KeyPolicy) {
 	if value != nil {
 		FfiDestroyerKeyPolicy{}.Destroy(*value)
+	}
+}
+
+type FfiConverterOptionalRegistrationGas struct{}
+
+var FfiConverterOptionalRegistrationGasINSTANCE = FfiConverterOptionalRegistrationGas{}
+
+func (c FfiConverterOptionalRegistrationGas) Lift(rb RustBufferI) *RegistrationGas {
+	return LiftFromRustBuffer[*RegistrationGas](c, rb)
+}
+
+func (_ FfiConverterOptionalRegistrationGas) Read(reader io.Reader) *RegistrationGas {
+	if readInt8(reader) == 0 {
+		return nil
+	}
+	temp := FfiConverterRegistrationGasINSTANCE.Read(reader)
+	return &temp
+}
+
+func (c FfiConverterOptionalRegistrationGas) Lower(value *RegistrationGas) C.RustBuffer {
+	return LowerIntoRustBuffer[*RegistrationGas](c, value)
+}
+
+func (c FfiConverterOptionalRegistrationGas) LowerExternal(value *RegistrationGas) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[*RegistrationGas](c, value))
+}
+
+func (_ FfiConverterOptionalRegistrationGas) Write(writer io.Writer, value *RegistrationGas) {
+	if value == nil {
+		writeInt8(writer, 0)
+	} else {
+		writeInt8(writer, 1)
+		FfiConverterRegistrationGasINSTANCE.Write(writer, *value)
+	}
+}
+
+type FfiDestroyerOptionalRegistrationGas struct{}
+
+func (_ FfiDestroyerOptionalRegistrationGas) Destroy(value *RegistrationGas) {
+	if value != nil {
+		FfiDestroyerRegistrationGas{}.Destroy(*value)
 	}
 }
 
@@ -32257,6 +32461,53 @@ type FfiDestroyerSequenceSeedInfo struct{}
 func (FfiDestroyerSequenceSeedInfo) Destroy(sequence []SeedInfo) {
 	for _, value := range sequence {
 		FfiDestroyerSeedInfo{}.Destroy(value)
+	}
+}
+
+type FfiConverterSequenceStepGas struct{}
+
+var FfiConverterSequenceStepGasINSTANCE = FfiConverterSequenceStepGas{}
+
+func (c FfiConverterSequenceStepGas) Lift(rb RustBufferI) []StepGas {
+	return LiftFromRustBuffer[[]StepGas](c, rb)
+}
+
+func (c FfiConverterSequenceStepGas) Read(reader io.Reader) []StepGas {
+	length := readInt32(reader)
+	if length == 0 {
+		return nil
+	}
+	result := make([]StepGas, 0, length)
+	for i := int32(0); i < length; i++ {
+		result = append(result, FfiConverterStepGasINSTANCE.Read(reader))
+	}
+	return result
+}
+
+func (c FfiConverterSequenceStepGas) Lower(value []StepGas) C.RustBuffer {
+	return LowerIntoRustBuffer[[]StepGas](c, value)
+}
+
+func (c FfiConverterSequenceStepGas) LowerExternal(value []StepGas) ExternalCRustBuffer {
+	return RustBufferFromC(LowerIntoRustBuffer[[]StepGas](c, value))
+}
+
+func (c FfiConverterSequenceStepGas) Write(writer io.Writer, value []StepGas) {
+	if len(value) > math.MaxInt32 {
+		panic("[]StepGas is too large to fit into Int32")
+	}
+
+	writeInt32(writer, int32(len(value)))
+	for _, item := range value {
+		FfiConverterStepGasINSTANCE.Write(writer, item)
+	}
+}
+
+type FfiDestroyerSequenceStepGas struct{}
+
+func (FfiDestroyerSequenceStepGas) Destroy(sequence []StepGas) {
+	for _, value := range sequence {
+		FfiDestroyerStepGas{}.Destroy(value)
 	}
 }
 

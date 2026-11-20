@@ -791,6 +791,8 @@ external fun uniffi_scaas_sdk_checksum_method_registrywrite_id(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_registrywrite_payer(
 ): Short
+external fun uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas(
+): Short
 external fun uniffi_scaas_sdk_checksum_method_registrywrite_review(
 ): Short
 external fun uniffi_scaas_sdk_checksum_method_registrywrite_ua(
@@ -1306,6 +1308,8 @@ external fun uniffi_scaas_sdk_fn_method_registrywrite_entry(`ptr`: Long,uniffi_o
 external fun uniffi_scaas_sdk_fn_method_registrywrite_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_scaas_sdk_fn_method_registrywrite_payer(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+external fun uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 external fun uniffi_scaas_sdk_fn_method_registrywrite_review(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -2100,6 +2104,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_registrywrite_payer() != 40740.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas() != 6697.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_registrywrite_review() != 57538.toShort()) {
@@ -10056,6 +10063,11 @@ public interface RegistryWriteInterface {
     
     fun `payer`(): KeyRef
     
+    /**
+     * A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+     */
+    fun `registrationGas`(): RegistrationGas?
+    
     fun `review`(): List<ReviewField>
     
     fun `ua`(): kotlin.String
@@ -10220,6 +10232,22 @@ open class RegistryWrite: Disposable, AutoCloseable, RegistryWriteInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_payer(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+     */override fun `registrationGas`(): RegistrationGas? {
+            return FfiConverterOptionalTypeRegistrationGas.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(
         it,
         _status)
 }
@@ -18931,6 +18959,63 @@ public object FfiConverterTypeRegistrationBlob: FfiConverterRustBuffer<Registrat
 
 
 /**
+ * A registration carrying its PQZ key's proof as the SDK quoted it at prepare (owner 2026-11-20): one transaction, or two
+ * (`register` without the proof, then `storePqzPop`, F22's restart-safe flow) when the one transaction's gas is above half
+ * the chain's block gas limit or its regular gas above the per-transaction cap; each step's gas and the total.
+ */
+data class RegistrationGas (
+    /**
+     * 1 or 2
+     */
+    var `transactions`: kotlin.UInt
+    , 
+    /**
+     * the steps prepared, in the order they land (after a restart between the two, the second alone)
+     */
+    var `steps`: List<StepGas>
+    , 
+    /**
+     * the steps' gas added; `None` when a step's is not known
+     */
+    var `totalGas`: kotlin.ULong?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegistrationGas: FfiConverterRustBuffer<RegistrationGas> {
+    override fun read(buf: ByteBuffer): RegistrationGas {
+        return RegistrationGas(
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeStepGas.read(buf),
+            FfiConverterOptionalULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RegistrationGas) = (
+            FfiConverterUInt.allocationSize(value.`transactions`) +
+            FfiConverterSequenceTypeStepGas.allocationSize(value.`steps`) +
+            FfiConverterOptionalULong.allocationSize(value.`totalGas`)
+    )
+
+    override fun write(value: RegistrationGas, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`transactions`, buf)
+            FfiConverterSequenceTypeStepGas.write(value.`steps`, buf)
+            FfiConverterOptionalULong.write(value.`totalGas`, buf)
+    }
+}
+
+
+
+/**
  * A registration as the registry holds it (`registration_of`).
  */
 data class RegistrationState (
@@ -19807,6 +19892,63 @@ public object FfiConverterTypeSmartOp: FfiConverterRustBuffer<SmartOp> {
             FfiConverterString.write(value.`account`, buf)
             FfiConverterString.write(value.`batch`, buf)
             FfiConverterTypeEnvelope.write(value.`envelope`, buf)
+    }
+}
+
+
+
+/**
+ * One step of a registration carrying its PQZ key's proof as quoted at prepare (owner 2026-11-20).
+ */
+data class StepGas (
+    /**
+     * `register` (or `registerWebAuthn`, `registerMsig`), with or without the proof, or `storePqzPop`
+     */
+    var `entry`: kotlin.String
+    , 
+    /**
+     * the step's gas limit: max(the node's estimate, the gas table's figure), the table's with the intrinsic cost, the
+     * calldata and the margin; `None` where neither is known yet (a later step is not estimated before the one before it
+     * landed)
+     */
+    var `gas`: kotlin.ULong?
+    , 
+    /**
+     * the bound of its regular part (EIP-8037): the table's; the estimate, whole, where the table has no row
+     */
+    var `regularGas`: kotlin.ULong?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeStepGas: FfiConverterRustBuffer<StepGas> {
+    override fun read(buf: ByteBuffer): StepGas {
+        return StepGas(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: StepGas) = (
+            FfiConverterString.allocationSize(value.`entry`) +
+            FfiConverterOptionalULong.allocationSize(value.`gas`) +
+            FfiConverterOptionalULong.allocationSize(value.`regularGas`)
+    )
+
+    override fun write(value: StepGas, buf: ByteBuffer) {
+            FfiConverterString.write(value.`entry`, buf)
+            FfiConverterOptionalULong.write(value.`gas`, buf)
+            FfiConverterOptionalULong.write(value.`regularGas`, buf)
     }
 }
 
@@ -29601,6 +29743,13 @@ sealed class SdkException(message: String): kotlin.Exception(message) {
         class PqzAuditorNative(message: String) : SdkException(message)
         
     /**
+     * A registration step whose gas (regular + state) is above half the chain's block gas limit (owner 2026-11-20): a
+     * registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
+     * sent.
+     */
+        class GasAboveBlockShare(message: String) : SdkException(message)
+        
+    /**
      * a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
      */
         class Cancelled(message: String) : SdkException(message)
@@ -29690,9 +29839,10 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
             60 -> SdkException.GasFieldUnknown(FfiConverterString.read(buf))
             61 -> SdkException.DexNotListed(FfiConverterString.read(buf))
             62 -> SdkException.PqzAuditorNative(FfiConverterString.read(buf))
-            63 -> SdkException.Cancelled(FfiConverterString.read(buf))
-            64 -> SdkException.Ua(FfiConverterString.read(buf))
-            65 -> SdkException.Rpc(FfiConverterString.read(buf))
+            63 -> SdkException.GasAboveBlockShare(FfiConverterString.read(buf))
+            64 -> SdkException.Cancelled(FfiConverterString.read(buf))
+            65 -> SdkException.Ua(FfiConverterString.read(buf))
+            66 -> SdkException.Rpc(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
         
@@ -29952,16 +30102,20 @@ public object FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException> {
                 buf.putInt(62)
                 Unit
             }
-            is SdkException.Cancelled -> {
+            is SdkException.GasAboveBlockShare -> {
                 buf.putInt(63)
                 Unit
             }
-            is SdkException.Ua -> {
+            is SdkException.Cancelled -> {
                 buf.putInt(64)
                 Unit
             }
-            is SdkException.Rpc -> {
+            is SdkException.Ua -> {
                 buf.putInt(65)
+                Unit
+            }
+            is SdkException.Rpc -> {
+                buf.putInt(66)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -31201,6 +31355,38 @@ public object FfiConverterOptionalTypeKeyPolicy: FfiConverterRustBuffer<KeyPolic
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeRegistrationGas: FfiConverterRustBuffer<RegistrationGas?> {
+    override fun read(buf: ByteBuffer): RegistrationGas? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeRegistrationGas.read(buf)
+    }
+
+    override fun allocationSize(value: RegistrationGas?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeRegistrationGas.allocationSize(value)
+        }
+    }
+
+    override fun write(value: RegistrationGas?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeRegistrationGas.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeStoredItem: FfiConverterRustBuffer<StoredItem?> {
     override fun read(buf: ByteBuffer): StoredItem? {
         if (buf.get().toInt() == 0) {
@@ -32115,6 +32301,34 @@ public object FfiConverterSequenceTypeSeedInfo: FfiConverterRustBuffer<List<Seed
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeSeedInfo.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeStepGas: FfiConverterRustBuffer<List<StepGas>> {
+    override fun read(buf: ByteBuffer): List<StepGas> {
+        val len = buf.getInt()
+        return List<StepGas>(len) {
+            FfiConverterTypeStepGas.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<StepGas>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeStepGas.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<StepGas>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeStepGas.write(it, buf)
         }
     }
 }

@@ -1440,6 +1440,8 @@ static class _UniFFILib {
     
     
     
+    
+    
 
     static _UniFFILib() {
         _UniFFILib.uniffiCheckContractApiVersion();
@@ -1524,6 +1526,17 @@ static class _UniFFILib {
     public static extern
 #endif
      RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_payer(ulong @ptr,ref UniffiRustCallStatus _uniffi_out_err
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
+     RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(ulong @ptr,ref UniffiRustCallStatus _uniffi_out_err
     );
 
     #if NET8_0_OR_GREATER
@@ -5670,6 +5683,17 @@ static class _UniFFILib {
     [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
     public static extern
 #endif
+     ushort uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas(
+    );
+
+    #if NET8_0_OR_GREATER
+    [LibraryImport("scaas_sdk_ffi")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static partial
+#else
+    [DllImport("scaas_sdk_ffi", CallingConvention = CallingConvention.Cdecl)]
+    public static extern
+#endif
      ushort uniffi_scaas_sdk_checksum_method_registrywrite_review(
     );
 
@@ -8499,6 +8523,12 @@ static class _UniFFILib {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_registrywrite_payer();
             if (checksum != 40740) {
                 throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_registrywrite_payer` checksum `40740`, library returned `{checksum}`");
+            }
+        }
+        {
+            var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas();
+            if (checksum != 6697) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas` checksum `6697`, library returned `{checksum}`");
             }
         }
         {
@@ -16259,6 +16289,10 @@ internal interface IRegistryWrite {
     string Entry();
     string Id();
     KeyRef Payer();
+    /// <summary>
+    /// A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+    /// </summary>
+    RegistrationGas? RegistrationGas();
     ReviewField[] Review();
     string Ua();
 }
@@ -16391,6 +16425,17 @@ internal class RegistryWrite : IRegistryWrite, IDisposable {
         return CallWithPointer(thisPtr => FfiConverterTypeKeyRef.INSTANCE.Lift(
     _UniffiHelpers.RustCall( (ref UniffiRustCallStatus _status) =>
     _UniFFILib.uniffi_scaas_sdk_fn_method_registrywrite_payer(thisPtr,  ref _status)
+)));
+    }
+    
+    
+    /// <summary>
+    /// A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+    /// </summary>
+    public RegistrationGas? RegistrationGas() {
+        return CallWithPointer(thisPtr => FfiConverterOptionalTypeRegistrationGas.INSTANCE.Lift(
+    _UniffiHelpers.RustCall( (ref UniffiRustCallStatus _status) =>
+    _UniFFILib.uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(thisPtr,  ref _status)
 )));
     }
     
@@ -23561,6 +23606,63 @@ class FfiConverterTypeRegistrationBlob: FfiConverterRustBuffer<RegistrationBlob>
 
 
 /// <summary>
+/// A registration carrying its PQZ key's proof as the SDK quoted it at prepare (owner 2026-11-20): one transaction, or two
+/// (`register` without the proof, then `storePqzPop`, F22's restart-safe flow) when the one transaction's gas is above half
+/// the chain's block gas limit or its regular gas above the per-transaction cap; each step's gas and the total.
+/// </summary>
+/// <param name="Transactions">
+/// 1 or 2
+/// </param>
+/// <param name="Steps">
+/// the steps prepared, in the order they land (after a restart between the two, the second alone)
+/// </param>
+/// <param name="TotalGas">
+/// the steps' gas added; `None` when a step's is not known
+/// </param>
+internal record RegistrationGas (
+    /// <summary>
+    /// 1 or 2
+    /// </summary>
+    uint Transactions, 
+    /// <summary>
+    /// the steps prepared, in the order they land (after a restart between the two, the second alone)
+    /// </summary>
+    StepGas[] Steps, 
+    /// <summary>
+    /// the steps' gas added; `None` when a step's is not known
+    /// </summary>
+    ulong? TotalGas
+) {
+}
+
+class FfiConverterTypeRegistrationGas: FfiConverterRustBuffer<RegistrationGas> {
+    public static FfiConverterTypeRegistrationGas INSTANCE = new FfiConverterTypeRegistrationGas();
+
+    public override RegistrationGas Read(BigEndianStream stream) {
+        return new RegistrationGas(
+            Transactions: FfiConverterUInt32.INSTANCE.Read(stream),
+            Steps: FfiConverterSequenceTypeStepGas.INSTANCE.Read(stream),
+            TotalGas: FfiConverterOptionalUInt64.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(RegistrationGas value) {
+        return 0
+            + FfiConverterUInt32.INSTANCE.AllocationSize(value.Transactions)
+            + FfiConverterSequenceTypeStepGas.INSTANCE.AllocationSize(value.Steps)
+            + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.TotalGas);
+    }
+
+    public override void Write(RegistrationGas value, BigEndianStream stream) {
+            FfiConverterUInt32.INSTANCE.Write(value.Transactions, stream);
+            FfiConverterSequenceTypeStepGas.INSTANCE.Write(value.Steps, stream);
+            FfiConverterOptionalUInt64.INSTANCE.Write(value.TotalGas, stream);
+    }
+}
+
+
+
+/// <summary>
 /// A registration as the registry holds it (`registration_of`).
 /// </summary>
 /// <param name="KemPkHash">
@@ -24307,6 +24409,65 @@ class FfiConverterTypeSmartOp: FfiConverterRustBuffer<SmartOp> {
             FfiConverterString.INSTANCE.Write(value.Account, stream);
             FfiConverterString.INSTANCE.Write(value.Batch, stream);
             FfiConverterTypeEnvelope.INSTANCE.Write(value.Envelope, stream);
+    }
+}
+
+
+
+/// <summary>
+/// One step of a registration carrying its PQZ key's proof as quoted at prepare (owner 2026-11-20).
+/// </summary>
+/// <param name="Entry">
+/// `register` (or `registerWebAuthn`, `registerMsig`), with or without the proof, or `storePqzPop`
+/// </param>
+/// <param name="Gas">
+/// the step's gas limit: max(the node's estimate, the gas table's figure), the table's with the intrinsic cost, the
+/// calldata and the margin; `None` where neither is known yet (a later step is not estimated before the one before it
+/// landed)
+/// </param>
+/// <param name="RegularGas">
+/// the bound of its regular part (EIP-8037): the table's; the estimate, whole, where the table has no row
+/// </param>
+internal record StepGas (
+    /// <summary>
+    /// `register` (or `registerWebAuthn`, `registerMsig`), with or without the proof, or `storePqzPop`
+    /// </summary>
+    string Entry, 
+    /// <summary>
+    /// the step's gas limit: max(the node's estimate, the gas table's figure), the table's with the intrinsic cost, the
+    /// calldata and the margin; `None` where neither is known yet (a later step is not estimated before the one before it
+    /// landed)
+    /// </summary>
+    ulong? Gas, 
+    /// <summary>
+    /// the bound of its regular part (EIP-8037): the table's; the estimate, whole, where the table has no row
+    /// </summary>
+    ulong? RegularGas
+) {
+}
+
+class FfiConverterTypeStepGas: FfiConverterRustBuffer<StepGas> {
+    public static FfiConverterTypeStepGas INSTANCE = new FfiConverterTypeStepGas();
+
+    public override StepGas Read(BigEndianStream stream) {
+        return new StepGas(
+            Entry: FfiConverterString.INSTANCE.Read(stream),
+            Gas: FfiConverterOptionalUInt64.INSTANCE.Read(stream),
+            RegularGas: FfiConverterOptionalUInt64.INSTANCE.Read(stream)
+        );
+    }
+
+    public override int AllocationSize(StepGas value) {
+        return 0
+            + FfiConverterString.INSTANCE.AllocationSize(value.Entry)
+            + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.Gas)
+            + FfiConverterOptionalUInt64.INSTANCE.AllocationSize(value.RegularGas);
+    }
+
+    public override void Write(StepGas value, BigEndianStream stream) {
+            FfiConverterString.INSTANCE.Write(value.Entry, stream);
+            FfiConverterOptionalUInt64.INSTANCE.Write(value.Gas, stream);
+            FfiConverterOptionalUInt64.INSTANCE.Write(value.RegularGas, stream);
     }
 }
 
@@ -33095,6 +33256,15 @@ internal class SdkException: UniffiException {
     }
     
     /// <summary>
+    /// A registration step whose gas (regular + state) is above half the chain's block gas limit (owner 2026-11-20): a
+    /// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
+    /// sent.
+    /// </summary>
+    public class GasAboveBlockShare: SdkException {
+        public GasAboveBlockShare(string message): base(message) {}
+    }
+    
+    /// <summary>
     /// a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
     /// </summary>
     public class Cancelled: SdkException {
@@ -33185,9 +33355,10 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case 60: return new SdkException.GasFieldUnknown(FfiConverterString.INSTANCE.Read(stream));
             case 61: return new SdkException.DexNotListed(FfiConverterString.INSTANCE.Read(stream));
             case 62: return new SdkException.PqzAuditorNative(FfiConverterString.INSTANCE.Read(stream));
-            case 63: return new SdkException.Cancelled(FfiConverterString.INSTANCE.Read(stream));
-            case 64: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
-            case 65: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
+            case 63: return new SdkException.GasAboveBlockShare(FfiConverterString.INSTANCE.Read(stream));
+            case 64: return new SdkException.Cancelled(FfiConverterString.INSTANCE.Read(stream));
+            case 65: return new SdkException.Ua(FfiConverterString.INSTANCE.Read(stream));
+            case 66: return new SdkException.Rpc(FfiConverterString.INSTANCE.Read(stream));
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Read()", value));
         }
@@ -33385,14 +33556,17 @@ class FfiConverterTypeSdkError : FfiConverterRustBuffer<SdkException>, CallStatu
             case SdkException.PqzAuditorNative:
                 stream.WriteInt(62);
                 break;
-            case SdkException.Cancelled:
+            case SdkException.GasAboveBlockShare:
                 stream.WriteInt(63);
                 break;
-            case SdkException.Ua:
+            case SdkException.Cancelled:
                 stream.WriteInt(64);
                 break;
-            case SdkException.Rpc:
+            case SdkException.Ua:
                 stream.WriteInt(65);
+                break;
+            case SdkException.Rpc:
+                stream.WriteInt(66);
                 break;
             default:
                 throw new InternalException(String.Format("invalid error value '{0}' in FfiConverterTypeSdkError.Write()", value));
@@ -34495,6 +34669,37 @@ class FfiConverterOptionalTypeKeyPolicy: FfiConverterRustBuffer<KeyPolicy?> {
         } else {
             stream.WriteByte(1);
             FfiConverterTypeKeyPolicy.INSTANCE.Write((KeyPolicy)value, stream);
+        }
+    }
+}
+
+
+
+
+class FfiConverterOptionalTypeRegistrationGas: FfiConverterRustBuffer<RegistrationGas?> {
+    public static FfiConverterOptionalTypeRegistrationGas INSTANCE = new FfiConverterOptionalTypeRegistrationGas();
+
+    public override RegistrationGas? Read(BigEndianStream stream) {
+        if (stream.ReadByte() == 0) {
+            return null;
+        }
+        return FfiConverterTypeRegistrationGas.INSTANCE.Read(stream);
+    }
+
+    public override int AllocationSize(RegistrationGas? value) {
+        if (value == null) {
+            return 1;
+        } else {
+            return 1 + FfiConverterTypeRegistrationGas.INSTANCE.AllocationSize((RegistrationGas)value);
+        }
+    }
+
+    public override void Write(RegistrationGas? value, BigEndianStream stream) {
+        if (value == null) {
+            stream.WriteByte(0);
+        } else {
+            stream.WriteByte(1);
+            FfiConverterTypeRegistrationGas.INSTANCE.Write((RegistrationGas)value, stream);
         }
     }
 }
@@ -35862,6 +36067,52 @@ class FfiConverterSequenceTypeSeedInfo: FfiConverterRustBuffer<SeedInfo[]> {
 
         stream.WriteInt(value.Length);
         var writerFn = FfiConverterTypeSeedInfo.INSTANCE.Write;
+        value.ForEach(item => writerFn(item, stream));
+    }
+}
+
+
+
+
+class FfiConverterSequenceTypeStepGas: FfiConverterRustBuffer<StepGas[]> {
+    public static FfiConverterSequenceTypeStepGas INSTANCE = new FfiConverterSequenceTypeStepGas();
+
+    public override StepGas[]  Read(BigEndianStream stream) {
+        var length = stream.ReadInt();
+        if (length == 0) {
+            return [];
+        }
+
+        var result = new StepGas[length];
+        var readFn = FfiConverterTypeStepGas.INSTANCE.Read;
+        for (int i = 0; i < length; i++) {
+            result[i] = readFn(stream);
+        }
+        return result;
+    }
+
+    public override int AllocationSize(StepGas[]  value) {
+        var sizeForLength = 4;
+
+        // details/1-empty-list-as-default-method-parameter.md
+        if (value == null) {
+            return sizeForLength;
+        }
+
+        var allocationSizeFn = FfiConverterTypeStepGas.INSTANCE.AllocationSize;
+        var sizeForItems = value.Sum(item => allocationSizeFn(item));
+        return sizeForLength + sizeForItems;
+    }
+
+    public override void Write(StepGas[] value, BigEndianStream stream) {
+        // details/1-empty-list-as-default-method-parameter.md
+        if (value == null) {
+            stream.WriteInt(0);
+            return;
+        }
+
+        stream.WriteInt(value.Length);
+        var writerFn = FfiConverterTypeStepGas.INSTANCE.Write;
         value.ForEach(item => writerFn(item, stream));
     }
 }

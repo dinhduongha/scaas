@@ -1,17 +1,25 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Registration (spec §7 "Registration"; plan T13): a UA key's registry write built by `scaas-ua` (`registration_args`, the
 //! PoP by `sign_ua` under `pop` v2, role Pop, CLI-UAL-17; the calldata by `entries::registry_call`), self-relayed by the
-//! user's payer while the gateway's `POST /v1/ua/register` is not served (§13.3). The node's split (gateway.md): a
-//! registration carrying a `pqzPop` whose full call's gas is above min(the chain's per-transaction cap, its block gas
-//! limit, `Limits::max_gas`), or whose estimate fails, is sent as the registration without `pqzPop`, then `storePqzPop`; a part
-//! still above the cap is `GasAboveTxCap`. A KEM key in its hash-commit form is filled by `setKemKey(ua, 0, kem, UASig())`.
+//! user's payer while the gateway's `POST /v1/ua/register` is not served (§13.3). Owner 2026-11-20: a registration carrying a
+//! `pqzPop` is quoted in one transaction first; when its whole gas is above half the chain's block gas limit (read from the
+//! node), its regular gas above the per-transaction cap, its whole above `Limits::max_gas`, or its estimate fails, it goes in
+//! two steps, the registration without `pqzPop`, then `storePqzPop` (F22's restart-safe flow); each step held to the same
+//! (`GasAboveTxCap`, `GasAboveBlockShare`, `FeeAboveCap`), nothing kept or sent otherwise, and [`RegistryWrite::registration_gas`]
+//! states the transactions, each step's gas and the total. A KEM key in its hash-commit form is filled by `setKemKey(ua, 0, kem, UASig())`.
 //! An ML-DSA key on a registry that caches expanded keys (`cacheExpandedKey(kind, pk, 0)` simulates; with the precompile the
 //! registry refuses it) first gets each part `expandedKeyOf(ua)` shows missing (CTR-UA-23 MD-3; owner 2026-11-19, T1).
-//! A registry write is an opaque [`RegistryWrite`] kept in the SDK's table, quoted (the payer's estimate) and submitted like a
-//! native send (sign → write ahead → simulate → send); it lands **by its record** (`isRegistered`, `pqzPopOf(…)` non-empty:
+//! A registry write is an opaque [`RegistryWrite`] kept in the SDK's table, quoted and submitted like a native send (sign →
+//! write ahead → simulate → send). Its gas (controller call, owner auto-run 2026-11-19): where the gas table has its form's rows
+//! ([`GasShape`]: `register` by the UA's kind, plus a KEM key's and a PQZ key's (with or without its proof) additions,
+//! `registerWebAuthn`, `storePqzPop`, `setKemKey`, `cacheExpandedKey`, `registerMsig` / `acceptMembership` / `updateMsig` by
+//! `members` plus each signing slot's verify row), the regular bound is the table's and the gas limit max(the node's estimate,
+//! the table's); without them the estimate, whole, held to the cap (a successful estimate is never read as proof that the
+//! regular gas fits: anvil and a node that does not enforce the cap pass anything); it lands **by its record** (`isRegistered`, `pqzPopOf(…)` non-empty:
 //! the proof stored, proven or not, as on a chain with no PoP verifier (owner 2026-11-19, S2), `kemKeyAt(…)`), whoever sent
 //! it: a registration is portable, its PoP binds no caller (CTR-UA-07). UNAUDITED.
 use super::Account;
+use crate::op::gas::{Figure, GasFrom, GasSources};
 use crate::op::quote::{check_caps, payer_address, self_relay};
 use crate::op::state::{self, Row};
 use crate::op::submit::{detach, send, sign_tx};
@@ -95,6 +103,46 @@ impl Landed {
     }
 }
 
+/// One step of a registration carrying its PQZ key's proof as quoted at prepare (owner 2026-11-20).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+pub struct StepGas {
+    /// `register` (or `registerWebAuthn`, `registerMsig`), with or without the proof, or `storePqzPop`
+    pub entry: String,
+    /// the step's gas limit: max(the node's estimate, the gas table's figure), the table's with the intrinsic cost, the
+    /// calldata and the margin; `None` where neither is known yet (a later step is not estimated before the one before it
+    /// landed)
+    pub gas: Option<u64>,
+    /// the bound of its regular part (EIP-8037): the table's; the estimate, whole, where the table has no row
+    pub regular_gas: Option<u64>,
+}
+
+/// A registration carrying its PQZ key's proof as the SDK quoted it at prepare (owner 2026-11-20): one transaction, or two
+/// (`register` without the proof, then `storePqzPop`, F22's restart-safe flow) when the one transaction's gas is above half
+/// the chain's block gas limit or its regular gas above the per-transaction cap; each step's gas and the total.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
+pub struct RegistrationGas {
+    /// 1 or 2
+    pub transactions: u32,
+    /// the steps prepared, in the order they land (after a restart between the two, the second alone)
+    pub steps: Vec<StepGas>,
+    /// the steps' gas added; `None` when a step's is not known
+    pub total_gas: Option<u64>,
+}
+
+/// What a registry write's gas rows read (controller call, owner auto-run 2026-11-19; spec §13.3): its base rows `(entry,
+/// kind)`, added, at a fresh lane; the `members` count the counted ones read; the signing slots whose verify rows it adds (an
+/// `msig`'s PoP, update or acceptance slots, by verify-row signer: an EOA member the native reference, 0).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct GasShape {
+    pub rows: Vec<(String, String)>,
+    pub members: u64,
+    pub signers: Vec<u16>,
+}
+
 /// A registry write as the user reviews it (spec §7, §13.1): opaque, kept in the SDK's table; it holds public data only
 /// (the PoP binds no caller). `submit_registry_write` sends exactly its calldata to the profile's registry.
 #[cfg_attr(feature = "uniffi", derive(uniffi::Object))]
@@ -107,6 +155,8 @@ pub struct RegistryWrite {
     payer: KeyRef,
     pub(crate) calldata: Vec<u8>,
     pub(crate) landed: Landed,
+    pub(crate) shape: GasShape,
+    registration: Option<RegistrationGas>,
 }
 
 impl std::fmt::Debug for RegistryWrite {
@@ -145,6 +195,11 @@ impl RegistryWrite {
     /// The payer whose transaction sends it (linked on chain to the UA's registration).
     pub fn payer(&self) -> KeyRef {
         self.payer.clone()
+    }
+    /// A registration carrying its PQZ key's proof (`register` and its `storePqzPop`): one transaction or two, each step's gas
+    /// and the total as quoted at prepare (owner 2026-11-20); `None` for any other write.
+    pub fn registration_gas(&self) -> Option<RegistrationGas> {
+        self.registration.clone()
     }
 }
 
@@ -361,15 +416,166 @@ async fn kem_pk_hash(
         .ok_or_else(bad)
 }
 
-/// The gas cap a registry write must fit: min(the chain's per-transaction cap, its block gas limit, `Limits::max_gas`).
-async fn gas_cap(sdk: &Sdk, chain: &str, pool: &EvmPool) -> Result<u64, SdkError> {
-    let (profile, _, _) = evm(sdk, chain)?;
-    let block = pool.block_gas().await.map_err(sim)?;
-    Ok(profile
-        .tx_gas_cap
-        .unwrap_or(u64::MAX)
-        .min(block.limit)
-        .min(sdk.limits.max_gas))
+/// A verify row's signer of an `msig` slot of kind `kind`: an EOA member the native reference (0), any other its kind (a kind
+/// without a row leaves the write without a figure).
+pub(crate) fn slot_signer(kind: u16) -> u16 {
+    match kind {
+        1 => crate::op::gas::NATIVE_EVM,
+        k => k,
+    }
+}
+
+/// The rows a registry write's arguments name (controller call, owner auto-run 2026-11-19): the form's base row, then a KEM
+/// key's addition (full or committed) and a PQZ key's (`pqz-pop` with its proof, `pqz-key` without), an `msig` structure's
+/// `members` and its `pop` slots' signers. `acceptMembership` and `updateMsig` take their count and signers from the
+/// registry's structure ([`keep_with`]).
+pub(crate) fn shape_of(entry: &str, args: &Value) -> GasShape {
+    let mut g = GasShape::default();
+    let ua = |k: u64| format!("ua-{k:#06x}");
+    let base = match entry {
+        "register" | "cacheExpandedKey" => args.get("kind").and_then(Value::as_u64).map(ua),
+        "registerWebAuthn" => Some(ua(0x0100)),
+        "registerMsig" | "acceptMembership" | "updateMsig" => Some("msig".into()),
+        "storePqzPop" => Some("pqz".into()),
+        "setKemKey" => Some("kem".into()),
+        _ => None,
+    };
+    let Some(base) = base else { return g };
+    g.rows.push((entry.into(), base));
+    let set = |v: Option<&Value>| {
+        v.and_then(Value::as_str)
+            .is_some_and(|h| h.trim_start_matches("0x").bytes().any(|b| b != b'0'))
+    };
+    if let (true, Some(a)) = (entry.starts_with("register"), args.get("attrs")) {
+        let kem = a
+            .pointer("/kem/scheme")
+            .and_then(Value::as_u64)
+            .is_some_and(|k| k != 0);
+        if kem || set(a.get("kemPkHash")) {
+            g.rows.push(("register".into(), "kem".into()));
+        }
+        if a.get("pqzKey")
+            .and_then(Value::as_str)
+            .is_some_and(|k| k != "0x")
+        {
+            let pop = args
+                .get("pqzPop")
+                .and_then(Value::as_str)
+                .is_some_and(|p| p != "0x");
+            let kind = if pop { "pqz-pop" } else { "pqz-key" };
+            g.rows.push(("register".into(), kind.into()));
+        }
+    }
+    if entry == "registerMsig" {
+        let members = args.pointer("/structure/members").and_then(Value::as_array);
+        g.members = members.map_or(0, |m| m.len() as u64);
+        let kind = |i: u64| {
+            members?
+                .get(usize::try_from(i).ok()?)?
+                .get("kind")?
+                .as_u64()
+        };
+        for slot in args
+            .get("pop")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let k = slot.get("index").and_then(Value::as_u64).and_then(kind);
+            // a slot whose kind cannot be read: a signer without a row (no figure)
+            g.signers.push(
+                k.and_then(|k| u16::try_from(k).ok())
+                    .map_or(u16::MAX, slot_signer),
+            );
+        }
+    }
+    g
+}
+
+/// The gas table's figure of `shape` on `chain` for `len` bytes of calldata (with the intrinsic cost and the margin); `None`
+/// without every row.
+fn table_figure(
+    sdk: &Sdk,
+    chain: &str,
+    shape: &GasShape,
+    len: usize,
+) -> Result<Option<Figure>, SdkError> {
+    let c = sdk
+        .chains
+        .iter()
+        .find(|c| c.profile.key == chain)
+        .ok_or(SdkError::ChainUnknown)?;
+    Ok(crate::op::gas::registry_gas(
+        &c.profile.gas,
+        &c.profile.gas_opt_in,
+        &sdk.gas_tables,
+        &shape.rows,
+        shape.members,
+        &shape.signers,
+    )?
+    .map(|(g, r, from)| crate::op::gas::with_calldata(g, r, len, from)))
+}
+
+/// What a registration step is held to (owner 2026-11-20): its regular gas to the profile's per-transaction cap, its whole to
+/// half the block gas limit (the node's latest block, the read the quote does) and to `Limits::max_gas`.
+struct Caps {
+    tx: Option<u64>,
+    half: u64,
+    max: u64,
+}
+
+impl Caps {
+    async fn of(sdk: &Sdk, chain: &str, pool: &EvmPool) -> Result<Caps, SdkError> {
+        let (profile, _, _) = evm(sdk, chain)?;
+        let block = pool.block_gas().await.map_err(sim)?;
+        Ok(Caps {
+            tx: profile.tx_gas_cap,
+            half: block.limit / 2,
+            max: sdk.limits.max_gas,
+        })
+    }
+
+    /// The step's refusal, `None` where it fits (a figure not known yet is not held).
+    fn refusal(&self, s: &StepGas) -> Option<SdkError> {
+        if s.regular_gas.zip(self.tx).is_some_and(|(r, c)| r > c) {
+            return Some(SdkError::GasAboveTxCap);
+        }
+        if s.gas.is_some_and(|g| g > self.half) {
+            return Some(SdkError::GasAboveBlockShare);
+        }
+        s.gas
+            .is_some_and(|g| g > self.max)
+            .then_some(SdkError::FeeAboveCap)
+    }
+}
+
+/// A step's gas (owner 2026-11-20): the table's figure of `entry` with `args`, and with `estimate` the node's (`None` when the
+/// estimate fails); the gas the larger, the regular bound the table's, else the estimate, whole.
+#[allow(clippy::too_many_arguments)]
+async fn step(
+    sdk: &Sdk,
+    chain: &str,
+    pool: &EvmPool,
+    from: Address,
+    registry: Address,
+    entry: &str,
+    args: &Value,
+    estimate: bool,
+) -> Result<Option<StepGas>, SdkError> {
+    let cd = registry_call(entry, args)?;
+    let table = table_figure(sdk, chain, &shape_of(entry, args), cd.len())?;
+    let est = match estimate {
+        false => None,
+        true => match pool.simulate_from(from, registry, Bytes::from(cd)).await {
+            Ok(g) => Some(g),
+            Err(_) => return Ok(None),
+        },
+    };
+    Ok(Some(StepGas {
+        entry: entry.into(),
+        gas: est.max(table.as_ref().map(|t| t.gas)),
+        regular_gas: table.map(|t| t.regular).or(est),
+    }))
 }
 
 fn flatten(prefix: &str, v: &Value, out: &mut Vec<ReviewField>) {
@@ -392,7 +598,7 @@ fn flatten(prefix: &str, v: &Value, out: &mut Vec<ReviewField>) {
     }
 }
 
-/// One write kept in the table.
+/// One write kept in the table, its gas rows read from its arguments ([`shape_of`]).
 pub(crate) fn keep(
     sdk: &Sdk,
     chain: &str,
@@ -401,6 +607,23 @@ pub(crate) fn keep(
     args: &Value,
     payer: &KeyRef,
     landed: Landed,
+) -> Result<Arc<RegistryWrite>, SdkError> {
+    let shape = shape_of(entry, args);
+    keep_with(sdk, chain, entry, ua, args, payer, landed, shape, None)
+}
+
+/// [`keep`] with its gas rows `shape` and, for a registration carrying its proof, the plan it was quoted in.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn keep_with(
+    sdk: &Sdk,
+    chain: &str,
+    entry: &str,
+    ua: [u8; 32],
+    args: &Value,
+    payer: &KeyRef,
+    landed: Landed,
+    shape: GasShape,
+    registration: Option<RegistrationGas>,
 ) -> Result<Arc<RegistryWrite>, SdkError> {
     let registry = registry_of(sdk, chain)?;
     let calldata = registry_call(entry, args)?;
@@ -424,6 +647,8 @@ pub(crate) fn keep(
         payer: payer.clone(),
         calldata,
         landed,
+        shape,
+        registration,
     });
     sdk.registry_writes
         .lock()
@@ -435,8 +660,8 @@ pub(crate) fn keep(
 /// The writes of a registration with its arguments `args` (named fields, `entry` among them, as `scaas-ua`'s
 /// `registration_args_json` gives them) and `kem_fill` (the `setKemKey` of a hash-committed KEM key): skipped when `ua` is
 /// registered already (its KEM fill added when the commit is unfilled, its `storePqzPop` when a split's second part never
-/// landed); split as the node's rule when it carries a `pqzPop`
-/// and does not fit (module doc). `GasAboveTxCap`: a part above the cap.
+/// landed); in two steps when it carries a `pqzPop` and does not fit one transaction (module doc). `GasAboveTxCap`,
+/// `GasAboveBlockShare`, `FeeAboveCap`: a step that alone does not fit.
 pub(crate) async fn writes(
     sdk: &Arc<Sdk>,
     chain: &str,
@@ -495,48 +720,15 @@ pub(crate) async fn writes(
                 }
             }
         }
-        let full = registry_call(&entry, args)?;
         let pqz_pop = args.get("pqzPop").and_then(Value::as_str).unwrap_or("0x");
-        let cap = gas_cap(sdk, chain, &pool).await?;
-        let fits = |g: Result<u64, _>| matches!(g, Ok(g) if g <= cap);
-        // with the cache pending the registration cannot be estimated yet (`UAKeyNotCached`): a `pqzPop` goes apart, each
-        // part quoted after the one before it landed
-        let split = pqz_pop != "0x"
-            && (cache_pending
-                || !fits(pool.simulate_from(from, registry, Bytes::from(full)).await));
-        if split {
-            let mut first = args.clone();
-            first
-                .as_object_mut()
-                .ok_or(SdkError::Argument)?
-                .insert("pqzPop".into(), json!("0x"));
-            let part = registry_call(&entry, &first)?;
-            if !cache_pending && !fits(pool.simulate_from(from, registry, Bytes::from(part)).await)
-            {
-                return Err(SdkError::GasAboveTxCap);
-            }
-            out.push(keep(
-                sdk,
-                chain,
-                &entry,
-                ua,
-                &first,
-                payer,
-                Landed::Registered,
-            )?);
-            let store = json!({"ua": hex(&ua), "version": 0, "pqzPop": pqz_pop});
-            out.push(keep(
-                sdk,
-                chain,
-                "storePqzPop",
-                ua,
-                &store,
-                payer,
-                Landed::PqzPop(0),
-            )?);
-            // the second part's proof outlives this process (M1)
-            crate::op::state::keep_pop(sdk, &hex(&ua), Some(pqz_pop)).await?;
-        } else {
+        // owner 2026-11-20: the one transaction first; with the cache pending it cannot be estimated yet
+        // (`UAKeyNotCached`): two steps, each quoted after the one before it landed
+        let caps = Caps::of(sdk, chain, &pool).await?;
+        let one = match pqz_pop != "0x" && !cache_pending {
+            true => step(sdk, chain, &pool, from, registry, &entry, args, true).await?,
+            false => None,
+        };
+        if pqz_pop == "0x" {
             out.push(keep(
                 sdk,
                 chain,
@@ -546,6 +738,90 @@ pub(crate) async fn writes(
                 payer,
                 Landed::Registered,
             )?);
+        } else if let Some(s) = one.filter(|s| caps.refusal(s).is_none()) {
+            let plan = RegistrationGas {
+                transactions: 1,
+                total_gas: s.gas,
+                steps: vec![s],
+            };
+            let shape = shape_of(&entry, args);
+            out.push(keep_with(
+                sdk,
+                chain,
+                &entry,
+                ua,
+                args,
+                payer,
+                Landed::Registered,
+                shape,
+                Some(plan),
+            )?);
+        } else {
+            let mut first = args.clone();
+            first
+                .as_object_mut()
+                .ok_or(SdkError::Argument)?
+                .insert("pqzPop".into(), json!("0x"));
+            let store = json!({"ua": hex(&ua), "version": 0, "pqzPop": pqz_pop});
+            // a first step the node cannot estimate (it reverts) is not sent
+            let s1 = step(
+                sdk,
+                chain,
+                &pool,
+                from,
+                registry,
+                &entry,
+                &first,
+                !cache_pending,
+            )
+            .await?
+            .ok_or(SdkError::GasAboveTxCap)?;
+            let s2 = step(
+                sdk,
+                chain,
+                &pool,
+                from,
+                registry,
+                "storePqzPop",
+                &store,
+                false,
+            )
+            .await?
+            .ok_or(SdkError::Internal)?;
+            if let Some(e) = caps.refusal(&s1).or_else(|| caps.refusal(&s2)) {
+                return Err(e);
+            }
+            let plan = RegistrationGas {
+                transactions: 2,
+                total_gas: s1.gas.zip(s2.gas).map(|(a, b)| a.saturating_add(b)),
+                steps: vec![s1, s2],
+            };
+            let shape = shape_of(&entry, &first);
+            out.push(keep_with(
+                sdk,
+                chain,
+                &entry,
+                ua,
+                &first,
+                payer,
+                Landed::Registered,
+                shape,
+                Some(plan.clone()),
+            )?);
+            let shape = shape_of("storePqzPop", &store);
+            out.push(keep_with(
+                sdk,
+                chain,
+                "storePqzPop",
+                ua,
+                &store,
+                payer,
+                Landed::PqzPop(0),
+                shape,
+                Some(plan),
+            )?);
+            // the second part's proof outlives this process (M1)
+            crate::op::state::keep_pop(sdk, &hex(&ua), Some(pqz_pop)).await?;
         }
     }
     // F22, M1 (reviews 2026-11-20): a split whose first part landed and whose `storePqzPop` did not (the app closed between
@@ -566,7 +842,44 @@ pub(crate) async fn writes(
                 .find(|p| unhex(p).is_ok_and(|b| scaas_ua::keccak256(&b) == want))
                 .ok_or(SdkError::RegistrationPopInvalid)?;
             let store = json!({"ua": uah, "version": 0, "pqzPop": pop});
-            out.push(keep(
+            // the second of two steps (owner 2026-11-20), held as at the split: estimated now the registration landed (the
+            // table's alone where the node cannot)
+            let est = step(
+                sdk,
+                chain,
+                &pool,
+                from,
+                registry,
+                "storePqzPop",
+                &store,
+                true,
+            )
+            .await?;
+            let s2 = match est {
+                Some(s) => s,
+                None => step(
+                    sdk,
+                    chain,
+                    &pool,
+                    from,
+                    registry,
+                    "storePqzPop",
+                    &store,
+                    false,
+                )
+                .await?
+                .ok_or(SdkError::Internal)?,
+            };
+            if let Some(e) = Caps::of(sdk, chain, &pool).await?.refusal(&s2) {
+                return Err(e);
+            }
+            let plan = RegistrationGas {
+                transactions: 2,
+                total_gas: s2.gas,
+                steps: vec![s2],
+            };
+            let shape = shape_of("storePqzPop", &store);
+            out.push(keep_with(
                 sdk,
                 chain,
                 "storePqzPop",
@@ -574,6 +887,8 @@ pub(crate) async fn writes(
                 &store,
                 payer,
                 Landed::PqzPop(0),
+                shape,
+                Some(plan),
             )?);
         }
     }
@@ -827,9 +1142,12 @@ impl Account {
             .await
     }
 
-    /// The quote of `write` by its payer (spec §13.3): the estimate of its calldata, the chain's and the SDK's caps, the
-    /// payer's nonce. Quote a later part only after the one before it landed (its estimate reverts before).
-    /// `PreparedUnknown`, `GasAboveTxCap`, `FeeAboveCap`.
+    /// The quote of `write` by its payer (spec §13.3): its gas (controller call, owner auto-run 2026-11-19: where the gas table
+    /// has the write's rows, the regular bound the table's and the gas limit max(the estimate of its calldata, the table's);
+    /// else the estimate, whole), the chain's and the SDK's caps (a registration step also half the block gas limit, owner
+    /// 2026-11-20), the payer's nonce. Quote a later step only after the one before it landed (its estimate reverts before).
+    /// `PreparedUnknown`, `GasAboveTxCap`, `GasAboveBlockShare`, `GasCountUnknown` (an `msig` above the counts measured),
+    /// `FeeAboveCap`.
     pub async fn quote_registry_write(
         &self,
         write: Arc<RegistryWrite>,
@@ -839,6 +1157,31 @@ impl Account {
             .spawn(async move {
                 known(&sdk, &write)?;
                 let registry = registry_of(&sdk, &write.chain)?;
+                let (_, _, pool) = evm(&sdk, &write.chain)?;
+                let from = payer_address(&sdk, &write.payer)?;
+                let est = pool
+                    .simulate_from(from, registry, Bytes::from(write.calldata.clone()))
+                    .await
+                    .map_err(sim)?;
+                let len = write.calldata.len();
+                let fig = match table_figure(&sdk, &write.chain, &write.shape, len)? {
+                    Some(t) => Figure {
+                        gas: t.gas.max(est),
+                        regular: t.regular,
+                        from: t.from,
+                    },
+                    None => Figure::whole(est, GasSources::both(GasFrom::Estimate)),
+                };
+                if write.registration.is_some() {
+                    let s = StepGas {
+                        entry: write.entry.clone(),
+                        gas: Some(fig.gas),
+                        regular_gas: Some(fig.regular),
+                    };
+                    if let Some(e) = Caps::of(&sdk, &write.chain, &pool).await?.refusal(&s) {
+                        return Err(e);
+                    }
+                }
                 self_relay(
                     &sdk,
                     &write.chain,
@@ -848,7 +1191,7 @@ impl Account {
                     Bytes::from(write.calldata.clone()),
                     "0".into(),
                     false,
-                    None,
+                    Some(fig),
                 )
                 .await
             })

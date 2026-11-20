@@ -50,6 +50,7 @@ RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_chain(uint64_t ptr, RustCall
 RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_entry(uint64_t ptr, RustCallStatus *out_status);
 RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_id(uint64_t ptr, RustCallStatus *out_status);
 RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_payer(uint64_t ptr, RustCallStatus *out_status);
+RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(uint64_t ptr, RustCallStatus *out_status);
 RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_review(uint64_t ptr, RustCallStatus *out_status);
 RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_ua(uint64_t ptr, RustCallStatus *out_status);
 uint64_t uniffi_scaas_sdk_fn_clone_account(uint64_t handle, RustCallStatus *out_status);
@@ -383,6 +384,7 @@ uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_chain();
 uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_entry();
 uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_id();
 uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_payer();
+uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas();
 uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_review();
 uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_ua();
 uint16_t uniffi_scaas_sdk_checksum_method_account_accounts_blocking();

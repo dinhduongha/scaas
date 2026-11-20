@@ -132,6 +132,10 @@ own_codes! {
     /// A PQZ auditor consent whose auditor is a native (address) key (controller call, owner auto-run 2026-11-19): a native id
     /// holds no PQZ key (CTR-UA-32), so the token refuses it on chain anyway; refused before anything is read or signed.
     PqzAuditorNative,
+    /// A registration step whose gas (regular + state) is above half the chain's block gas limit (owner 2026-11-20): a
+    /// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
+    /// sent.
+    GasAboveBlockShare,
     /// a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
     Cancelled,
 }

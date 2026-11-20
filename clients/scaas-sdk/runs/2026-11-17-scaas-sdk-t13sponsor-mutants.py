@@ -26,7 +26,8 @@ MUTANTS = [
     ("skip the setKemKey when kemPkHash is set", [(R, "    if let Some(fill) = kem_fill {", "    if let Some(fill) = kem_fill.filter(|_| false) {")],
      T + "sponsored_registration_checks"),
     # T13's: no split for a PQ registration
-    ("no split for a PQ registration", [(R, "        let split = pqz_pop != \"0x\"", "        let split = false\n            && pqz_pop != \"0x\"")],
+    ("no split for a PQ registration", [(R, "} else if let Some(s) = one.filter(|s| caps.refusal(s).is_none()) {",
+                                         "} else if let Some(s) = one.filter(|_| true) {")],
      L + "pq_registration_split"),
     # each check of the task
     ("the kind not read", [(S, "if out.len() != 32 || U256::from_be_slice(&out) != U256::from(1) {", "if out.len() != 32 {")],

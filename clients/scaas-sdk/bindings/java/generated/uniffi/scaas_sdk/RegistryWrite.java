@@ -258,6 +258,39 @@ public class RegistryWrite implements AutoCloseable, RegistryWriteInterface {
     
 
   
+    /**
+     * A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+     */
+    @Override
+    public RegistrationGas registrationGas()  {
+            try {
+                return FfiConverterOptionalTypeRegistrationGas.INSTANCE.lift(
+    callWithHandle(uniffiHandle -> {
+        try {
+    
+            return
+    UniffiHelpers.uniffiRustCall( (_allocator, _status) -> {
+        return UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(_allocator, uniffiHandle,
+            _status);
+    });
+    
+        } catch (java.lang.Exception _uniffi_ex) {
+            throw new java.lang.RuntimeException(_uniffi_ex);
+        }
+    })
+    );
+            } catch (java.lang.RuntimeException _uniffi_ex) {
+                
+                
+                if (InternalException.class.isInstance(_uniffi_ex.getCause())) {
+                    throw (InternalException)_uniffi_ex.getCause();
+                }
+                throw _uniffi_ex;
+            }
+    }
+    
+
+  
     @Override
     public java.util.List<ReviewField> review()  {
             try {

@@ -108,7 +108,7 @@ def failure_line(text):
         if m:
             # no machine path in a committed record: the worktree relative, the home `~`, a temp dir `<tmp>`
             line = m.group(0).strip().replace(f"{ROOT}/", "").replace(str(Path.home()), "~")
-            return re.sub(r"/tmp/\S*", "<tmp>", line).replace("|", "/")[:160]
+            return re.sub(r"/[t]mp/\S*", "<tmp>", line).replace("|", "/")[:160]
     return "-"
 
 

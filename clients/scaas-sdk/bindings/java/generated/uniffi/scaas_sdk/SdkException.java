@@ -454,6 +454,17 @@ public class SdkException extends java.lang.Exception {
     }
     
     /**
+     * A registration step whose gas (regular + state) is above half the chain's block gas limit (owner 2026-11-20): a
+     * registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
+     * sent.
+     */
+    public static class GasAboveBlockShare extends SdkException {
+      public GasAboveBlockShare(java.lang.String message) {
+        super(message);
+      }
+    }
+    
+    /**
      * a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
      */
     public static class Cancelled extends SdkException {

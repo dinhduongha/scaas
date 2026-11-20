@@ -571,6 +571,11 @@ RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_id(uint64_t ptr, RustCallSta
 RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_payer(uint64_t ptr, RustCallStatus *out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_REGISTRYWRITE_REGISTRATION_GAS
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_REGISTRYWRITE_REGISTRATION_GAS
+RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(uint64_t ptr, RustCallStatus *out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_REGISTRYWRITE_REVIEW
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_REGISTRYWRITE_REVIEW
 RustBuffer uniffi_scaas_sdk_fn_method_registrywrite_review(uint64_t ptr, RustCallStatus *out_status
@@ -2482,6 +2487,12 @@ uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_id(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_REGISTRYWRITE_PAYER
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_REGISTRYWRITE_PAYER
 uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_payer(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_REGISTRYWRITE_REGISTRATION_GAS
+#define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_CHECKSUM_METHOD_REGISTRYWRITE_REGISTRATION_GAS
+uint16_t uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas(void
     
 );
 #endif

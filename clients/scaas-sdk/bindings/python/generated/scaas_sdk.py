@@ -883,6 +883,8 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_registrywrite_payer() != 40740:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    if lib.uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas() != 6697:
+        raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_registrywrite_review() != 57538:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_registrywrite_ua() != 49442:
@@ -2599,6 +2601,11 @@ _UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_payer.argtypes = (
     ctypes.POINTER(_UniffiRustCallStatus),
 )
 _UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_payer.restype = _UniffiRustBuffer
+_UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_registration_gas.argtypes = (
+    ctypes.c_uint64,
+    ctypes.POINTER(_UniffiRustCallStatus),
+)
+_UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_registration_gas.restype = _UniffiRustBuffer
 _UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_review.argtypes = (
     ctypes.c_uint64,
     ctypes.POINTER(_UniffiRustCallStatus),
@@ -3561,6 +3568,9 @@ _UniffiLib.uniffi_scaas_sdk_checksum_method_registrywrite_id.restype = ctypes.c_
 _UniffiLib.uniffi_scaas_sdk_checksum_method_registrywrite_payer.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_registrywrite_payer.restype = ctypes.c_uint16
+_UniffiLib.uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas.argtypes = (
+)
+_UniffiLib.uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas.restype = ctypes.c_uint16
 _UniffiLib.uniffi_scaas_sdk_checksum_method_registrywrite_review.argtypes = (
 )
 _UniffiLib.uniffi_scaas_sdk_checksum_method_registrywrite_review.restype = ctypes.c_uint16
@@ -10269,6 +10279,146 @@ class _UniffiFfiConverterTypeMsigState(_UniffiConverterRustBuffer):
         _UniffiFfiConverterUInt32.write(value.active_weight, buf)
         _UniffiFfiConverterBoolean.write(value.active, buf)
 
+@dataclass
+class StepGas:
+    """
+    One step of a registration carrying its PQZ key's proof as quoted at prepare (owner 2026-11-20).
+"""
+    def __init__(self, *, entry:str, gas:typing.Optional[int], regular_gas:typing.Optional[int]):
+        self.entry = entry
+        self.gas = gas
+        self.regular_gas = regular_gas
+        
+        
+
+    
+    def __str__(self):
+        return "StepGas(entry={}, gas={}, regular_gas={})".format(self.entry, self.gas, self.regular_gas)
+    def __eq__(self, other):
+        if self.entry != other.entry:
+            return False
+        if self.gas != other.gas:
+            return False
+        if self.regular_gas != other.regular_gas:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeStepGas(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return StepGas(
+            entry=_UniffiFfiConverterString.read(buf),
+            gas=_UniffiFfiConverterOptionalUInt64.read(buf),
+            regular_gas=_UniffiFfiConverterOptionalUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterString.check_lower(value.entry)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.gas)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.regular_gas)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterString.write(value.entry, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.gas, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.regular_gas, buf)
+
+class _UniffiFfiConverterSequenceTypeStepGas(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        for item in value:
+            _UniffiFfiConverterTypeStepGas.check_lower(item)
+
+    @classmethod
+    def write(cls, value, buf):
+        items = len(value)
+        buf.write_i32(items)
+        for item in value:
+            _UniffiFfiConverterTypeStepGas.write(item, buf)
+
+    @classmethod
+    def read(cls, buf):
+        count = buf.read_i32()
+        if count < 0:
+            raise InternalError("Unexpected negative sequence length")
+
+        return [
+            _UniffiFfiConverterTypeStepGas.read(buf) for i in range(count)
+        ]
+
+@dataclass
+class RegistrationGas:
+    """
+    A registration carrying its PQZ key's proof as the SDK quoted it at prepare (owner 2026-11-20): one transaction, or two
+    (`register` without the proof, then `storePqzPop`, F22's restart-safe flow) when the one transaction's gas is above half
+    the chain's block gas limit or its regular gas above the per-transaction cap; each step's gas and the total.
+"""
+    def __init__(self, *, transactions:int, steps:typing.List[StepGas], total_gas:typing.Optional[int]):
+        self.transactions = transactions
+        self.steps = steps
+        self.total_gas = total_gas
+        
+        
+
+    
+    def __str__(self):
+        return "RegistrationGas(transactions={}, steps={}, total_gas={})".format(self.transactions, self.steps, self.total_gas)
+    def __eq__(self, other):
+        if self.transactions != other.transactions:
+            return False
+        if self.steps != other.steps:
+            return False
+        if self.total_gas != other.total_gas:
+            return False
+        return True
+
+class _UniffiFfiConverterTypeRegistrationGas(_UniffiConverterRustBuffer):
+    @staticmethod
+    def read(buf):
+        return RegistrationGas(
+            transactions=_UniffiFfiConverterUInt32.read(buf),
+            steps=_UniffiFfiConverterSequenceTypeStepGas.read(buf),
+            total_gas=_UniffiFfiConverterOptionalUInt64.read(buf),
+        )
+
+    @staticmethod
+    def check_lower(value):
+        _UniffiFfiConverterUInt32.check_lower(value.transactions)
+        _UniffiFfiConverterSequenceTypeStepGas.check_lower(value.steps)
+        _UniffiFfiConverterOptionalUInt64.check_lower(value.total_gas)
+
+    @staticmethod
+    def write(value, buf):
+        _UniffiFfiConverterUInt32.write(value.transactions, buf)
+        _UniffiFfiConverterSequenceTypeStepGas.write(value.steps, buf)
+        _UniffiFfiConverterOptionalUInt64.write(value.total_gas, buf)
+
+class _UniffiFfiConverterOptionalTypeRegistrationGas(_UniffiConverterRustBuffer):
+    @classmethod
+    def check_lower(cls, value):
+        if value is not None:
+            _UniffiFfiConverterTypeRegistrationGas.check_lower(value)
+
+    @classmethod
+    def write(cls, value, buf):
+        if value is None:
+            buf.write_u8(0)
+            return
+
+        buf.write_u8(1)
+        _UniffiFfiConverterTypeRegistrationGas.write(value, buf)
+
+    @classmethod
+    def read(cls, buf):
+        flag = buf.read_u8()
+        if flag == 0:
+            return None
+        elif flag == 1:
+            return _UniffiFfiConverterTypeRegistrationGas.read(buf)
+        else:
+            raise InternalError("Unexpected flag byte for optional type")
+
 
 
 
@@ -10420,6 +10570,11 @@ class RegistryWriteProtocol(typing.Protocol):
         raise NotImplementedError
     def payer(self, ) -> KeyRef:
         raise NotImplementedError
+    def registration_gas(self, ) -> typing.Optional[RegistrationGas]:
+        """
+        A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+"""
+        raise NotImplementedError
     def review(self, ) -> typing.List[ReviewField]:
         raise NotImplementedError
     def ua(self, ) -> str:
@@ -10510,6 +10665,21 @@ class RegistryWrite(RegistryWriteProtocol):
         _uniffi_ffi_result = _uniffi_rust_call_with_error(
             _uniffi_error_converter,
             _UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_payer,
+            *_uniffi_lowered_args,
+        )
+        return _uniffi_lift_return(_uniffi_ffi_result)
+    def registration_gas(self, ) -> typing.Optional[RegistrationGas]:
+        """
+        A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+"""
+        _uniffi_lowered_args = (
+            self._uniffi_clone_handle(),
+        )
+        _uniffi_lift_return = _UniffiFfiConverterOptionalTypeRegistrationGas.lift
+        _uniffi_error_converter = None
+        _uniffi_ffi_result = _uniffi_rust_call_with_error(
+            _uniffi_error_converter,
+            _UniffiLib.uniffi_scaas_sdk_fn_method_registrywrite_registration_gas,
             *_uniffi_lowered_args,
         )
         return _uniffi_lift_return(_uniffi_ffi_result)
@@ -11659,6 +11829,15 @@ class SdkError:  # type: ignore
         def __repr__(self):
             return "SdkError.PqzAuditorNative({})".format(repr(str(self)))
     _UniffiTempSdkError.PqzAuditorNative = PqzAuditorNative # type: ignore
+    class GasAboveBlockShare(_UniffiTempSdkError):
+        """
+        A registration step whose gas (regular + state) is above half the chain's block gas limit (owner 2026-11-20): a
+        registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
+        sent.
+"""
+        def __repr__(self):
+            return "SdkError.GasAboveBlockShare({})".format(repr(str(self)))
+    _UniffiTempSdkError.GasAboveBlockShare = GasAboveBlockShare # type: ignore
     class Cancelled(_UniffiTempSdkError):
         """
         a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
@@ -11938,14 +12117,18 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 63:
-            return SdkError.Cancelled(
+            return SdkError.GasAboveBlockShare(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 64:
-            return SdkError.Ua(
+            return SdkError.Cancelled(
                 _UniffiFfiConverterString.read(buf),
             )
         if variant == 65:
+            return SdkError.Ua(
+                _UniffiFfiConverterString.read(buf),
+            )
+        if variant == 66:
             return SdkError.Rpc(
                 _UniffiFfiConverterString.read(buf),
             )
@@ -12076,6 +12259,8 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
         if isinstance(value, SdkError.DexNotListed):
             return
         if isinstance(value, SdkError.PqzAuditorNative):
+            return
+        if isinstance(value, SdkError.GasAboveBlockShare):
             return
         if isinstance(value, SdkError.Cancelled):
             return
@@ -12210,12 +12395,14 @@ class _UniffiFfiConverterTypeSdkError(_UniffiConverterRustBuffer):
             buf.write_i32(61)
         if isinstance(value, SdkError.PqzAuditorNative):
             buf.write_i32(62)
-        if isinstance(value, SdkError.Cancelled):
+        if isinstance(value, SdkError.GasAboveBlockShare):
             buf.write_i32(63)
-        if isinstance(value, SdkError.Ua):
+        if isinstance(value, SdkError.Cancelled):
             buf.write_i32(64)
-        if isinstance(value, SdkError.Rpc):
+        if isinstance(value, SdkError.Ua):
             buf.write_i32(65)
+        if isinstance(value, SdkError.Rpc):
+            buf.write_i32(66)
 
 
 class SeedBackupProtocol(typing.Protocol):
@@ -31210,6 +31397,8 @@ __all__ = [
     "MsigRegister",
     "MsigSlotState",
     "MsigState",
+    "StepGas",
+    "RegistrationGas",
     "ReviewField",
     "MsigUpdatePlan",
     "NativeAddress",

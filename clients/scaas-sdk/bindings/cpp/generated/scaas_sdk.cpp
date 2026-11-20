@@ -99,6 +99,9 @@ void ensure_initialized() {
     if (uniffi_scaas_sdk_checksum_method_registrywrite_payer() != 40740) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
+    if (uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas() != 6697) {
+        throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
+    }
     if (uniffi_scaas_sdk_checksum_method_registrywrite_review() != 57538) {
         throw std::runtime_error("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
     }
@@ -2529,6 +2532,12 @@ KeyRef RegistryWrite::payer() {
         nullptr,
         this->_uniffi_internal_clone_handle()));
 }
+std::optional<RegistrationGas> RegistryWrite::registration_gas() {
+    return uniffi::FfiConverterOptionalTypeRegistrationGas::lift(uniffi::rust_call(
+        uniffi_scaas_sdk_fn_method_registrywrite_registration_gas,
+        nullptr,
+        this->_uniffi_internal_clone_handle()));
+}
 std::vector<ReviewField> RegistryWrite::review() {
     return uniffi::FfiConverterSequenceTypeReviewField::lift(uniffi::rust_call(
         uniffi_scaas_sdk_fn_method_registrywrite_review,
@@ -3517,6 +3526,14 @@ uint64_t Wallet::_uniffi_internal_clone_handle() const {
         this->instance
     );
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -9247,6 +9264,48 @@ uint64_t FfiConverterTypeRegistrationBlob::allocation_size(const RegistrationBlo
 }
 
 
+RegistrationGas FfiConverterTypeRegistrationGas::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeRegistrationGas::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeRegistrationGas::lower(const RegistrationGas &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeRegistrationGas::write(stream, val);
+
+    return std::move(buf);
+}
+
+RegistrationGas FfiConverterTypeRegistrationGas::read(RustStream &stream) {
+    return {
+        FfiConverterUInt32::read(stream),
+        FfiConverterSequenceTypeStepGas::read(stream),
+        FfiConverterOptionalUInt64::read(stream)
+    };
+}
+
+void FfiConverterTypeRegistrationGas::write(RustStream &stream, const RegistrationGas &val) {
+    FfiConverterUInt32::write(stream, val.transactions);
+    FfiConverterSequenceTypeStepGas::write(stream, val.steps);
+    FfiConverterOptionalUInt64::write(stream, val.total_gas);
+}
+
+uint64_t FfiConverterTypeRegistrationGas::allocation_size(const RegistrationGas &val) {
+    
+    return 
+        FfiConverterUInt32::allocation_size(val.transactions) +
+        FfiConverterSequenceTypeStepGas::allocation_size(val.steps) +
+        FfiConverterOptionalUInt64::allocation_size(val.total_gas);
+    
+}
+
+
 RegistrationState FfiConverterTypeRegistrationState::lift(RustBuffer buf) {
     auto stream = RustStream(&buf);
     auto ret = FfiConverterTypeRegistrationState::read(stream);
@@ -9969,6 +10028,48 @@ uint64_t FfiConverterTypeSmartOp::allocation_size(const SmartOp &val) {
         FfiConverterString::allocation_size(val.account) +
         FfiConverterString::allocation_size(val.batch) +
         FfiConverterTypeEnvelope::allocation_size(val.envelope);
+    
+}
+
+
+StepGas FfiConverterTypeStepGas::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterTypeStepGas::read(stream);
+
+    rustbuffer_free(buf);
+
+    return std::move(ret);
+}
+
+RustBuffer FfiConverterTypeStepGas::lower(const StepGas &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterTypeStepGas::write(stream, val);
+
+    return std::move(buf);
+}
+
+StepGas FfiConverterTypeStepGas::read(RustStream &stream) {
+    return {
+        FfiConverterString::read(stream),
+        FfiConverterOptionalUInt64::read(stream),
+        FfiConverterOptionalUInt64::read(stream)
+    };
+}
+
+void FfiConverterTypeStepGas::write(RustStream &stream, const StepGas &val) {
+    FfiConverterString::write(stream, val.entry);
+    FfiConverterOptionalUInt64::write(stream, val.gas);
+    FfiConverterOptionalUInt64::write(stream, val.regular_gas);
+}
+
+uint64_t FfiConverterTypeStepGas::allocation_size(const StepGas &val) {
+    
+    return 
+        FfiConverterString::allocation_size(val.entry) +
+        FfiConverterOptionalUInt64::allocation_size(val.gas) +
+        FfiConverterOptionalUInt64::allocation_size(val.regular_gas);
     
 }
 
@@ -17600,12 +17701,15 @@ std::shared_ptr<SdkError> FfiConverterSdkError::read(RustStream &stream) {
         return std::make_shared<sdk_error::PqzAuditorNative>(FfiConverterString::read(stream));
     
     case 63:
-        return std::make_shared<sdk_error::Cancelled>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::GasAboveBlockShare>(FfiConverterString::read(stream));
     
     case 64:
-        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+        return std::make_shared<sdk_error::Cancelled>(FfiConverterString::read(stream));
     
     case 65:
+        return std::make_shared<sdk_error::Ua>(FfiConverterString::read(stream));
+    
+    case 66:
         return std::make_shared<sdk_error::Rpc>(FfiConverterString::read(stream));
     
     default:
@@ -18995,6 +19099,53 @@ uint64_t FfiConverterOptionalTypeKeyPolicy::allocation_size(const std::optional<
 
     if (val) {
         ret += FfiConverterTypeKeyPolicy::allocation_size(val.value());
+    }
+
+    return ret;
+}
+
+std::optional<RegistrationGas> FfiConverterOptionalTypeRegistrationGas::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = FfiConverterOptionalTypeRegistrationGas::read(stream);
+
+    rustbuffer_free(buf);
+
+    return ret;
+}
+
+RustBuffer FfiConverterOptionalTypeRegistrationGas::lower(const std::optional<RegistrationGas>& val) {
+    auto buf = rustbuffer_alloc(FfiConverterOptionalTypeRegistrationGas::allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    FfiConverterOptionalTypeRegistrationGas::write(stream, val);
+
+    return buf;
+}
+
+std::optional<RegistrationGas> FfiConverterOptionalTypeRegistrationGas::read(RustStream &stream) {
+    char has_value;
+
+    stream.get(has_value);
+    if (has_value) {
+        return std::make_optional(FfiConverterTypeRegistrationGas::read(stream));
+    } else {
+        return std::nullopt;
+    }
+}
+
+void FfiConverterOptionalTypeRegistrationGas::write(RustStream &stream, const std::optional<RegistrationGas>& value) {
+    stream.put(static_cast<uint8_t>(!!value));
+
+    if (value) {
+        FfiConverterTypeRegistrationGas::write(stream, value.value());
+    }
+}
+
+uint64_t FfiConverterOptionalTypeRegistrationGas::allocation_size(const std::optional<RegistrationGas> &val) {
+    uint64_t ret = 1;
+
+    if (val) {
+        ret += FfiConverterTypeRegistrationGas::allocation_size(val.value());
     }
 
     return ret;
@@ -20599,6 +20750,57 @@ uint64_t FfiConverterSequenceTypeSeedInfo::allocation_size(const std::vector<See
 
     for (const auto &elem : val) {
         size += FfiConverterTypeSeedInfo::allocation_size(elem);
+    }
+
+    return size;
+}
+
+
+std::vector<StepGas> FfiConverterSequenceTypeStepGas::lift(RustBuffer buf) {
+    auto stream = RustStream(&buf);
+    auto ret = read(stream);
+
+    rustbuffer_free(buf);
+
+    return ret;
+}
+
+RustBuffer FfiConverterSequenceTypeStepGas::lower(const std::vector<StepGas> &val) {
+    auto buf = rustbuffer_alloc(allocation_size(val));
+    auto stream = RustStream(&buf);
+
+    write(stream, val);
+
+    return buf;
+}
+
+std::vector<StepGas> FfiConverterSequenceTypeStepGas::read(RustStream &stream) {
+    std::vector<StepGas> ret;
+    int32_t count;
+    stream >> count;
+
+    ret.reserve(count);
+
+    for (decltype(count) i = 0; i < count; i++) {
+        ret.push_back(FfiConverterTypeStepGas::read(stream));
+    }
+
+    return ret;
+}
+
+void FfiConverterSequenceTypeStepGas::write(RustStream &stream, const std::vector<StepGas> &val) {
+    stream << static_cast<int32_t>(val.size());
+
+    for (const auto &elem : val) {
+        FfiConverterTypeStepGas::write(stream, elem);
+    }
+}
+
+uint64_t FfiConverterSequenceTypeStepGas::allocation_size(const std::vector<StepGas> &val) {
+    uint64_t size = sizeof(int32_t);
+
+    for (const auto &elem : val) {
+        size += FfiConverterTypeStepGas::allocation_size(elem);
     }
 
     return size;

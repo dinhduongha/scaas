@@ -245,6 +245,8 @@ free! {
     fn registry_write_calldata(w: Arc<RegistryWrite>) -> String = Ok(w.calldata());
     #[cfg(all(feature = "account", feature = "wallet"))]
     fn registry_write_payer(w: Arc<RegistryWrite>) -> KeyRef = Ok(w.payer());
+    #[cfg(all(feature = "account", feature = "wallet"))]
+    fn registry_write_registration_gas(w: Arc<RegistryWrite>) -> Option<RegistrationGas> = Ok(w.registration_gas());
     fn seed_backup_reveal(b: Arc<SeedBackup>) -> Arc<SecretBytes> = b.reveal();
     fn seed_backup_challenge(b: Arc<SeedBackup>) -> Vec<u32> = b.challenge();
     fn seed_backup_verify(b: Arc<SeedBackup>, answers: Arc<SecretBytes>) -> bool = b.verify(answers);

@@ -712,6 +712,11 @@ impl RegistryWrite {
     pub fn binding_payer(&self) -> KeyRef {
         self.payer()
     }
+    /// A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+    #[uniffi::method(name = "registration_gas")]
+    pub fn binding_registration_gas(&self) -> Option<RegistrationGas> {
+        self.registration_gas()
+    }
 }
 
 #[uniffi::export]

@@ -10,6 +10,10 @@ public interface RegistryWriteInterface {
     public java.lang.String entry();
     public java.lang.String id();
     public KeyRef payer();
+    
+    /**
+     * A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+     */public RegistrationGas registrationGas();
     public java.util.List<ReviewField> review();
     public java.lang.String ua();
     

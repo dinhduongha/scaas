@@ -69,9 +69,10 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case 60 -> new SdkException.GasFieldUnknown(FfiConverterString.INSTANCE.read(buf));
             case 61 -> new SdkException.DexNotListed(FfiConverterString.INSTANCE.read(buf));
             case 62 -> new SdkException.PqzAuditorNative(FfiConverterString.INSTANCE.read(buf));
-            case 63 -> new SdkException.Cancelled(FfiConverterString.INSTANCE.read(buf));
-            case 64 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
-            case 65 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
+            case 63 -> new SdkException.GasAboveBlockShare(FfiConverterString.INSTANCE.read(buf));
+            case 64 -> new SdkException.Cancelled(FfiConverterString.INSTANCE.read(buf));
+            case 65 -> new SdkException.Ua(FfiConverterString.INSTANCE.read(buf));
+            case 66 -> new SdkException.Rpc(FfiConverterString.INSTANCE.read(buf));
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };
     }
@@ -270,14 +271,17 @@ public enum FfiConverterTypeSdkError implements FfiConverterRustBuffer<SdkExcept
             case SdkException.PqzAuditorNative x -> {
                 buf.putInt(62);
             }
-            case SdkException.Cancelled x -> {
+            case SdkException.GasAboveBlockShare x -> {
                 buf.putInt(63);
             }
-            case SdkException.Ua x -> {
+            case SdkException.Cancelled x -> {
                 buf.putInt(64);
             }
-            case SdkException.Rpc x -> {
+            case SdkException.Ua x -> {
                 buf.putInt(65);
+            }
+            case SdkException.Rpc x -> {
+                buf.putInt(66);
             }
             default -> throw new java.lang.RuntimeException("invalid error enum value, something is very wrong!!");
         };

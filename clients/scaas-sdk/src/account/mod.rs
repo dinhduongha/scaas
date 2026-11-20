@@ -23,7 +23,9 @@ pub(crate) use register::{
     receiver_registered, record_call, record_call2, record_holds, record_holds2, Landed,
 };
 #[cfg(feature = "wallet")]
-pub use register::{Register, RegisterAttrs, RegistrationState, RegistryWrite};
+pub use register::{
+    Register, RegisterAttrs, RegistrationGas, RegistrationState, RegistryWrite, StepGas,
+};
 pub use restore::Restore;
 #[cfg(feature = "wallet")]
 pub use smart::{smart_account_address, SmartCall, SmartOp, SubjectKeyArgs};

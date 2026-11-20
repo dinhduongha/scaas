@@ -5417,6 +5417,11 @@ public protocol RegistryWriteProtocol: AnyObject, Sendable {
     
     func payer()  -> KeyRef
     
+    /**
+     * A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+     */
+    func registrationGas()  -> RegistrationGas?
+    
     func review()  -> [ReviewField]
     
     func ua()  -> String
@@ -5514,6 +5519,17 @@ open func id() -> String  {
 open func payer() -> KeyRef  {
     return try!  FfiConverterTypeKeyRef_lift(try! rustCall() {
     uniffi_scaas_sdk_fn_method_registrywrite_payer(
+            self.uniffiCloneHandle(),$0
+    )
+})
+}
+    
+    /**
+     * A registration carrying its PQZ key's proof: one transaction or two, each step's gas (owner 2026-11-20).
+     */
+open func registrationGas() -> RegistrationGas?  {
+    return try!  FfiConverterOptionTypeRegistrationGas.lift(try! rustCall() {
+    uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(
             self.uniffiCloneHandle(),$0
     )
 })
@@ -14621,6 +14637,87 @@ public func FfiConverterTypeRegistrationBlob_lower(_ value: RegistrationBlob) ->
 
 
 /**
+ * A registration carrying its PQZ key's proof as the SDK quoted it at prepare (owner 2026-11-20): one transaction, or two
+ * (`register` without the proof, then `storePqzPop`, F22's restart-safe flow) when the one transaction's gas is above half
+ * the chain's block gas limit or its regular gas above the per-transaction cap; each step's gas and the total.
+ */
+public struct RegistrationGas: Equatable, Hashable {
+    /**
+     * 1 or 2
+     */
+    public var transactions: UInt32
+    /**
+     * the steps prepared, in the order they land (after a restart between the two, the second alone)
+     */
+    public var steps: [StepGas]
+    /**
+     * the steps' gas added; `None` when a step's is not known
+     */
+    public var totalGas: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * 1 or 2
+         */transactions: UInt32, 
+        /**
+         * the steps prepared, in the order they land (after a restart between the two, the second alone)
+         */steps: [StepGas], 
+        /**
+         * the steps' gas added; `None` when a step's is not known
+         */totalGas: UInt64?) {
+        self.transactions = transactions
+        self.steps = steps
+        self.totalGas = totalGas
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension RegistrationGas: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRegistrationGas: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RegistrationGas {
+        return
+            try RegistrationGas(
+                transactions: FfiConverterUInt32.read(from: &buf), 
+                steps: FfiConverterSequenceTypeStepGas.read(from: &buf), 
+                totalGas: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RegistrationGas, into buf: inout [UInt8]) {
+        FfiConverterUInt32.write(value.transactions, into: &buf)
+        FfiConverterSequenceTypeStepGas.write(value.steps, into: &buf)
+        FfiConverterOptionUInt64.write(value.totalGas, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRegistrationGas_lift(_ buf: RustBuffer) throws -> RegistrationGas {
+    return try FfiConverterTypeRegistrationGas.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRegistrationGas_lower(_ value: RegistrationGas) -> RustBuffer {
+    return FfiConverterTypeRegistrationGas.lower(value)
+}
+
+
+/**
  * A registration as the registry holds it (`registration_of`).
  */
 public struct RegistrationState: Equatable, Hashable {
@@ -15729,6 +15826,89 @@ public func FfiConverterTypeSmartOp_lift(_ buf: RustBuffer) throws -> SmartOp {
 #endif
 public func FfiConverterTypeSmartOp_lower(_ value: SmartOp) -> RustBuffer {
     return FfiConverterTypeSmartOp.lower(value)
+}
+
+
+/**
+ * One step of a registration carrying its PQZ key's proof as quoted at prepare (owner 2026-11-20).
+ */
+public struct StepGas: Equatable, Hashable {
+    /**
+     * `register` (or `registerWebAuthn`, `registerMsig`), with or without the proof, or `storePqzPop`
+     */
+    public var entry: String
+    /**
+     * the step's gas limit: max(the node's estimate, the gas table's figure), the table's with the intrinsic cost, the
+     * calldata and the margin; `None` where neither is known yet (a later step is not estimated before the one before it
+     * landed)
+     */
+    public var gas: UInt64?
+    /**
+     * the bound of its regular part (EIP-8037): the table's; the estimate, whole, where the table has no row
+     */
+    public var regularGas: UInt64?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `register` (or `registerWebAuthn`, `registerMsig`), with or without the proof, or `storePqzPop`
+         */entry: String, 
+        /**
+         * the step's gas limit: max(the node's estimate, the gas table's figure), the table's with the intrinsic cost, the
+         * calldata and the margin; `None` where neither is known yet (a later step is not estimated before the one before it
+         * landed)
+         */gas: UInt64?, 
+        /**
+         * the bound of its regular part (EIP-8037): the table's; the estimate, whole, where the table has no row
+         */regularGas: UInt64?) {
+        self.entry = entry
+        self.gas = gas
+        self.regularGas = regularGas
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension StepGas: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeStepGas: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> StepGas {
+        return
+            try StepGas(
+                entry: FfiConverterString.read(from: &buf), 
+                gas: FfiConverterOptionUInt64.read(from: &buf), 
+                regularGas: FfiConverterOptionUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: StepGas, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.entry, into: &buf)
+        FfiConverterOptionUInt64.write(value.gas, into: &buf)
+        FfiConverterOptionUInt64.write(value.regularGas, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStepGas_lift(_ buf: RustBuffer) throws -> StepGas {
+    return try FfiConverterTypeStepGas.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeStepGas_lower(_ value: StepGas) -> RustBuffer {
+    return FfiConverterTypeStepGas.lower(value)
 }
 
 
@@ -26654,6 +26834,13 @@ public enum SdkError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErro
     case PqzAuditorNative(message: String)
     
     /**
+     * A registration step whose gas (regular + state) is above half the chain's block gas limit (owner 2026-11-20): a
+     * registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
+     * sent.
+     */
+    case GasAboveBlockShare(message: String)
+    
+    /**
      * a `*_blocking` call whose cancel token fired (spec §16.1, feature `sync-api`); the work goes on as a dropped future
      */
     case Cancelled(message: String)
@@ -26945,15 +27132,19 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 63: return .Cancelled(
+        case 63: return .GasAboveBlockShare(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 64: return .Ua(
+        case 64: return .Cancelled(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 65: return .Rpc(
+        case 65: return .Ua(
+            message: try FfiConverterString.read(from: &buf)
+        )
+        
+        case 66: return .Rpc(
             message: try FfiConverterString.read(from: &buf)
         )
         
@@ -27092,12 +27283,14 @@ public struct FfiConverterTypeSdkError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(61))
         case .PqzAuditorNative(_ /* message is ignored*/):
             writeInt(&buf, Int32(62))
-        case .Cancelled(_ /* message is ignored*/):
+        case .GasAboveBlockShare(_ /* message is ignored*/):
             writeInt(&buf, Int32(63))
-        case .Ua(_ /* message is ignored*/):
+        case .Cancelled(_ /* message is ignored*/):
             writeInt(&buf, Int32(64))
-        case .Rpc(_ /* message is ignored*/):
+        case .Ua(_ /* message is ignored*/):
             writeInt(&buf, Int32(65))
+        case .Rpc(_ /* message is ignored*/):
+            writeInt(&buf, Int32(66))
 
         
         }
@@ -28069,6 +28262,30 @@ fileprivate struct FfiConverterOptionTypeKeyPolicy: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeRegistrationGas: FfiConverterRustBuffer {
+    typealias SwiftType = RegistrationGas?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeRegistrationGas.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeRegistrationGas.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeStoredItem: FfiConverterRustBuffer {
     typealias SwiftType = StoredItem?
 
@@ -28854,6 +29071,31 @@ fileprivate struct FfiConverterSequenceTypeSeedInfo: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeSeedInfo.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeStepGas: FfiConverterRustBuffer {
+    typealias SwiftType = [StepGas]
+
+    public static func write(_ value: [StepGas], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeStepGas.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [StepGas] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [StepGas]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeStepGas.read(from: &buf))
         }
         return seq
     }
@@ -29656,6 +29898,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_registrywrite_payer() != 40740) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas() != 6697) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_registrywrite_review() != 57538) {

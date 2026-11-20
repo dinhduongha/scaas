@@ -14829,6 +14829,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  RegistrationGas dco_decode_box_autoadd_registration_gas(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_registration_gas(raw);
+  }
+
+  @protected
   RelayFee dco_decode_box_autoadd_relay_fee(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_relay_fee(raw);
@@ -16415,6 +16421,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  List<StepGas> dco_decode_list_step_gas(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_step_gas).toList();
+  }
+
+  @protected
   List<TokenBalance> dco_decode_list_token_balance(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_token_balance).toList();
@@ -16839,6 +16851,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   PasskeyCreated? dco_decode_opt_box_autoadd_passkey_created(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_passkey_created(raw);
+  }
+
+  @protected
+  RegistrationGas? dco_decode_opt_box_autoadd_registration_gas(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_registration_gas(raw);
   }
 
   @protected
@@ -17387,6 +17405,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  RegistrationGas dco_decode_registration_gas(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return RegistrationGas(
+      transactions: dco_decode_u_32(arr[0]),
+      steps: dco_decode_list_step_gas(arr[1]),
+      totalGas: dco_decode_opt_box_autoadd_u_64(arr[2]),
+    );
+  }
+
+  @protected
   RegistrationState dco_decode_registration_state(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -17405,8 +17436,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   RegistryWriteView dco_decode_registry_write_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return RegistryWriteView(
       id: dco_decode_String(arr[0]),
       chain: dco_decode_String(arr[1]),
@@ -17415,6 +17446,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       review: dco_decode_list_review_field(arr[4]),
       calldata: dco_decode_String(arr[5]),
       payer: dco_decode_key_ref(arr[6]),
+      registrationGas: dco_decode_opt_box_autoadd_registration_gas(arr[7]),
     );
   }
 
@@ -17705,6 +17737,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   Source dco_decode_source(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return Source.values[raw as int];
+  }
+
+  @protected
+  StepGas dco_decode_step_gas(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return StepGas(
+      entry: dco_decode_String(arr[0]),
+      gas: dco_decode_opt_box_autoadd_u_64(arr[1]),
+      regularGas: dco_decode_opt_box_autoadd_u_64(arr[2]),
+    );
   }
 
   @protected
@@ -20989,6 +21034,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  RegistrationGas sse_decode_box_autoadd_registration_gas(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_registration_gas(deserializer));
+  }
+
+  @protected
   RelayFee sse_decode_box_autoadd_relay_fee(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_relay_fee(deserializer));
@@ -22941,6 +22994,18 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  List<StepGas> sse_decode_list_step_gas(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <StepGas>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_step_gas(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<TokenBalance> sse_decode_list_token_balance(
     SseDeserializer deserializer,
   ) {
@@ -23482,6 +23547,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_passkey_created(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  RegistrationGas? sse_decode_opt_box_autoadd_registration_gas(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_registration_gas(deserializer));
     } else {
       return null;
     }
@@ -24152,6 +24230,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  RegistrationGas sse_decode_registration_gas(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_transactions = sse_decode_u_32(deserializer);
+    var var_steps = sse_decode_list_step_gas(deserializer);
+    var var_totalGas = sse_decode_opt_box_autoadd_u_64(deserializer);
+    return RegistrationGas(
+      transactions: var_transactions,
+      steps: var_steps,
+      totalGas: var_totalGas,
+    );
+  }
+
+  @protected
   RegistrationState sse_decode_registration_state(
     SseDeserializer deserializer,
   ) {
@@ -24182,6 +24273,9 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     var var_review = sse_decode_list_review_field(deserializer);
     var var_calldata = sse_decode_String(deserializer);
     var var_payer = sse_decode_key_ref(deserializer);
+    var var_registrationGas = sse_decode_opt_box_autoadd_registration_gas(
+      deserializer,
+    );
     return RegistryWriteView(
       id: var_id,
       chain: var_chain,
@@ -24190,6 +24284,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       review: var_review,
       calldata: var_calldata,
       payer: var_payer,
+      registrationGas: var_registrationGas,
     );
   }
 
@@ -24499,6 +24594,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
     return Source.values[inner];
+  }
+
+  @protected
+  StepGas sse_decode_step_gas(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_entry = sse_decode_String(deserializer);
+    var var_gas = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_regularGas = sse_decode_opt_box_autoadd_u_64(deserializer);
+    return StepGas(entry: var_entry, gas: var_gas, regularGas: var_regularGas);
   }
 
   @protected
@@ -28526,6 +28630,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_registration_gas(
+    RegistrationGas self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_registration_gas(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_relay_fee(
     RelayFee self,
     SseSerializer serializer,
@@ -30383,6 +30496,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  void sse_encode_list_step_gas(List<StepGas> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_step_gas(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_token_balance(
     List<TokenBalance> self,
     SseSerializer serializer,
@@ -30851,6 +30973,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_passkey_created(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_registration_gas(
+    RegistrationGas? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_registration_gas(self, serializer);
     }
   }
 
@@ -31334,6 +31469,17 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  void sse_encode_registration_gas(
+    RegistrationGas self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.transactions, serializer);
+    sse_encode_list_step_gas(self.steps, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.totalGas, serializer);
+  }
+
+  @protected
   void sse_encode_registration_state(
     RegistrationState self,
     SseSerializer serializer,
@@ -31359,6 +31505,10 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_list_review_field(self.review, serializer);
     sse_encode_String(self.calldata, serializer);
     sse_encode_key_ref(self.payer, serializer);
+    sse_encode_opt_box_autoadd_registration_gas(
+      self.registrationGas,
+      serializer,
+    );
   }
 
   @protected
@@ -31573,6 +31723,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   void sse_encode_source(Source self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_step_gas(StepGas self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.entry, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.gas, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.regularGas, serializer);
   }
 
   @protected
@@ -33348,9 +33506,12 @@ class AccountImpl extends RustOpaque implements Account {
         req: req,
       );
 
-  /// The quote of `write` by its payer (spec §13.3): the estimate of its calldata, the chain's and the SDK's caps, the
-  /// payer's nonce. Quote a later part only after the one before it landed (its estimate reverts before).
-  /// `PreparedUnknown`, `GasAboveTxCap`, `FeeAboveCap`.
+  /// The quote of `write` by its payer (spec §13.3): its gas (controller call, owner auto-run 2026-11-19: where the gas table
+  /// has the write's rows, the regular bound the table's and the gas limit max(the estimate of its calldata, the table's);
+  /// else the estimate, whole), the chain's and the SDK's caps (a registration step also half the block gas limit, owner
+  /// 2026-11-20), the payer's nonce. Quote a later step only after the one before it landed (its estimate reverts before).
+  /// `PreparedUnknown`, `GasAboveTxCap`, `GasAboveBlockShare`, `GasCountUnknown` (an `msig` above the counts measured),
+  /// `FeeAboveCap`.
   Future<SubmitQuote> quoteRegistryWrite({required ArcRegistryWrite write}) =>
       ScaasSdk.instance.api.scaasSdkAccountAccountQuoteRegistryWrite(
         that: this,

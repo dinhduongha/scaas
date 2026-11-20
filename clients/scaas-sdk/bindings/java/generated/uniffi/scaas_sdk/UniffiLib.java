@@ -83,6 +83,15 @@ final class UniffiLib {
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
+    // uniffi_scaas_sdk_fn_method_registrywrite_registration_gas
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_registrywrite_registration_gas = findDowncallHandle("uniffi_scaas_sdk_fn_method_registrywrite_registration_gas", java.lang.foreign.FunctionDescriptor.of(RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.ADDRESS));
+
+    static java.lang.foreign.MemorySegment uniffi_scaas_sdk_fn_method_registrywrite_registration_gas(java.lang.foreign.SegmentAllocator _allocator, long ptr, java.lang.foreign.MemorySegment uniffiOutErr) {
+        try {
+            return (java.lang.foreign.MemorySegment) MH_uniffi_scaas_sdk_fn_method_registrywrite_registration_gas.invokeExact(_allocator, ptr, uniffiOutErr);
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
     // uniffi_scaas_sdk_fn_method_registrywrite_review
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_registrywrite_review = findDowncallHandle("uniffi_scaas_sdk_fn_method_registrywrite_review", java.lang.foreign.FunctionDescriptor.of(RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.ADDRESS));
 
@@ -3464,6 +3473,15 @@ final class UniffiLib {
     static short uniffi_scaas_sdk_checksum_method_registrywrite_payer() {
         try {
             return (short) MH_uniffi_scaas_sdk_checksum_method_registrywrite_payer.invokeExact();
+        } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
+    }
+
+    // uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas
+    private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas = findDowncallHandle("uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_SHORT));
+
+    static short uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas() {
+        try {
+            return (short) MH_uniffi_scaas_sdk_checksum_method_registrywrite_registration_gas.invokeExact();
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
