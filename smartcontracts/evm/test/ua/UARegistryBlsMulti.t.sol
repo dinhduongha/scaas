@@ -493,9 +493,9 @@ contract UARegistryBlsMultiTest is Test {
     /// key (version 0 latest, its signature stored as `abi.encode(members)`).
     function test_setPqzKey_blsMultiMember_minimalOnly() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(K, address(verifier), CAP);
-        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000);
-        reg = new UARegistry(UID, address(0), false, BUDGET, address(0), true, k);
+        k[0] = UARegistry.KindConfig(K, address(verifier), CAP, false, 0);
+        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000, false, 0);
+        reg = new UARegistry(UID, address(0), false, BUDGET, 1 << 24, address(0), true, k);
         BlsMultiKit.Group memory g = _kit(3, 2, 59);
         reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
         bytes32 slh = reg.register(0x0133, abi.encodePacked(keccak256("slh-pqz")), _none(), hex"01", "");
