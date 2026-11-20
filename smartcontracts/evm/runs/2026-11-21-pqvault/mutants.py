@@ -70,8 +70,13 @@ M = [
     ("edit-nonce", V, "_useNonce(PqVaultTypes.scopeItem(vid, d.author), d.nonce);", ""),
     ("ct-min", V, "if (c.length < CT_MIN || c.length > CT_MAX) revert PqVaultShape();", "if (c.length > CT_MAX) revert PqVaultShape();"),
     ("ct-max", V, "if (c.length < CT_MIN || c.length > CT_MAX) revert PqVaultShape();", "if (c.length < CT_MIN) revert PqVaultShape();"),
+    # V5: recovery views
+    ("latest-range-clamp", V, "_page(_v().items[vid], offset, limit, LATEST_RANGE_MAX);", "_page(_v().items[vid], offset, limit, 1000);"),
+    ("items-range-clamp", V, "_page(_v().items[vid], offset, limit, ITEMS_RANGE_MAX);", "_page(_v().items[vid], offset, limit, 1000);"),
+    ("latest-not-latest", V, "VersionView memory w = versionAt(iids[i], c);", "VersionView memory w = versionAt(iids[i], 1);"),
+    ("page-end", V, "uint256 end = n - offset > limit ? offset + limit : n;\n        page = new bytes32[](end - offset);\n        for (uint256 i; i < page.length; ++i) {\n            page[i] = l[offset + i];",
+     "uint256 end = offset + limit;\n        page = new bytes32[](end - offset);\n        for (uint256 i; i < page.length; ++i) {\n            page[i] = l[offset + i];"),
 ]
-
 
 
 def run(name, path, old, new):

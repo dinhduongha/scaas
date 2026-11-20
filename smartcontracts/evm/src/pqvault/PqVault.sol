@@ -467,8 +467,8 @@ contract PqVault is IPqVault, PqGroupBase {
         return _v().items[vid].length;
     }
 
-    function itemsOf(bytes32, uint256, uint256) external pure returns (bytes32[] memory) {
-        revert PqVaultShape(); // V5
+    function itemsOf(bytes32 vid, uint256 offset, uint256 limit) external view returns (bytes32[] memory) {
+        return _page(_v().items[vid], offset, limit, ITEMS_RANGE_MAX);
     }
 
     function itemOf(bytes32 iid) external view returns (ItemView memory) {
@@ -490,8 +490,15 @@ contract PqVault is IPqVault, PqGroupBase {
         return VersionView(d.epochId, d.author, d.nonce, version, d.ciphertext, dh);
     }
 
-    function latestRange(bytes32, uint256, uint256) external pure returns (LatestView[] memory) {
-        revert PqVaultShape(); // V5
+    /// @notice The latest version of each item of the page, 16 at most: 16 x 16,416 B ciphertext, about 270 KB a call (VC9).
+    function latestRange(bytes32 vid, uint256 offset, uint256 limit) external view returns (LatestView[] memory page) {
+        bytes32[] memory iids = _page(_v().items[vid], offset, limit, LATEST_RANGE_MAX);
+        page = new LatestView[](iids.length);
+        for (uint256 i; i < iids.length; ++i) {
+            uint32 c = uint32(_v().edits[iids[i]].length) + 1;
+            VersionView memory w = versionAt(iids[i], c);
+            page[i] = LatestView(iids[i], c, w.epochId, w.author, w.ciphertext);
+        }
     }
 
     /// @notice The header blob `abi.encode(vaultId, epochId, author, nonce, itemIds, sigHash)` is exactly the return's encoding.
