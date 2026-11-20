@@ -9,6 +9,7 @@ import {SSTORE2} from "../../src/common/SSTORE2.sol";
 import {BlsMultiBls12381Verifier} from "../../src/ua/verifiers/BlsMultiBls12381Verifier.sol";
 import {BlsMultiKit} from "./BlsMultiKit.sol";
 import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
+import {PqzSet} from "../../src/pqz/PqzSet.sol";
 
 /// `bls12381-multi` (0x0121) in the registry (spec 2026-11-19-bls12381-multi §2, §4, §6, §7; plan Task 7): `registerBlsMulti` and the
 /// packed `register`, the stored `ua ‖ s`, `registrationOf` / `blsMultiKeyOf` returning `d`, `keyOf` returning `apk`, no keyHash,
@@ -484,6 +485,44 @@ contract UARegistryBlsMultiTest is Test {
         reg.updateMsig(mu, v + 1, st, en, until, pop, cu);
         (uint64 v2,,) = reg.msigStateOf(mu);
         assertEq(v2, v + 1);
+    }
+
+    /// Fable build review B3: `setPqzKey` (version 0, the `msig` registered without one) of a PQ-eligible `msig` with a `0x0121`
+    /// member, the other route through `UARegistryAuxLib._core` (the fourth word forwarded) to `_memberOk`: the group's slot
+    /// signature is the minimal form (`verifyMinimal`): a surplus set (3 of a 2-of-3) is `UAUnauthorized`, a minimal one stores the
+    /// key (version 0 latest, its signature stored as `abi.encode(members)`).
+    function test_setPqzKey_blsMultiMember_minimalOnly() public {
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
+        k[0] = UARegistry.KindConfig(K, address(verifier), CAP);
+        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000);
+        reg = new UARegistry(UID, address(0), false, BUDGET, address(0), true, k);
+        BlsMultiKit.Group memory g = _kit(3, 2, 59);
+        reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
+        bytes32 slh = reg.register(0x0133, abi.encodePacked(keccak256("slh-pqz")), _none(), hex"01", "");
+        IUARegistry.MsigStructure memory st;
+        st.threshold = 2;
+        st.members = new IUARegistry.MsigMember[](2);
+        uint16 gi = uint256(g.ua) < uint256(slh) ? 0 : 1;
+        st.members[gi] = IUARegistry.MsigMember(K, g.ua, 1);
+        st.members[1 - gi] = IUARegistry.MsigMember(0x0133, slh, 1);
+        IUARegistry.UASig memory s;
+        s.members = new IUARegistry.MemberSig[](2);
+        s.members[1 - gi].index = 1 - gi;
+        s.members[1 - gi].sig = hex"01";
+        s.members[gi] = _memberSig(g, gi, _msigPopMd(st), 5);
+        bytes32 mu = reg.registerMsig(st, _none(), s.members, "");
+        bytes memory pqzKey = new bytes(PqzSet.PK);
+        pqzKey[0] = 0x42;
+        bytes32 ph = keccak256("pqz pop");
+        bytes32 rd = UAKinds.pqzKeyRecordDigest(mu, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqzKey), ph);
+        bytes32 md = UAKinds.memberDigest(mu, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_PQZ_KEY, rd));
+        s.members[gi] = _memberSig(g, gi, md, 7); // surplus
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, mu));
+        reg.setPqzKey(mu, 0, pqzKey, ph, s);
+        s.members[gi] = _memberSig(g, gi, md, 5); // minimal
+        reg.setPqzKey(mu, 0, pqzKey, ph, s);
+        assertEq(reg.pqzKeyLatest(mu), 0);
+        assertEq(reg.pqzKeySigOf(mu, 0), abi.encode(s.members));
     }
 
     /// The `member` digest of an `msig`'s registration `pop` (no attributes): `memberDigest(mu, uaMessage(msig, pop v2, rd))`.
