@@ -111,8 +111,8 @@ TX=$(grep '^M20 tx ' "$LOG" | awk '{print $3}')
 # the estimate is refused, and a transaction with a gas limit of 30 M, above 2^24, stops at the cap (status 0)
 say "control estimate: $(cast estimate --rpc-url "$RPC" --from "$HOLDER" --create 0x5b600056 2>&1 | tail -1 | cut -c1-160)"
 KEY0=$(cast wallet private-key --mnemonic "$REPO")
-CTX=$(cast send --private-key "$KEY0" --rpc-url "$RPC" --gas-limit 30000000 --create 0x5b600056 --json 2>>"$LOG" \
-    | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["transactionHash"])' || true)
+CTX=$(cast send --private-key "$KEY0" --rpc-url "$RPC" --gas-limit 30000000 --create 0x5b600056 --json 2>>"$LOG" |
+    python3 -I -c 'import json,sys; print(json.load(sys.stdin)["transactionHash"])' || true)
 if [ -n "$CTX" ]; then
     say "control 30 M gas limit: $(cast receipt "$CTX" --rpc-url "$RPC" --json | python3 -I -c 'import json,sys; r=json.load(sys.stdin); print({k: r.get(k) for k in ("status","gasUsed","blockNumber")})')"
 else

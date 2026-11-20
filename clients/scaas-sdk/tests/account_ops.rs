@@ -749,7 +749,7 @@ async fn split_second_part_prepared_again_after_the_first_landed() {
         (
             REGISTRY.into(),
             format!("{}{}", sel("pqzKeyAt(bytes32,uint64)"), &ua[2..]),
-            format!("0x{}{}{}", w(0x1234), hx(&pop_hash)[2..].to_string(), w(0)),
+            format!("0x{}{}{}", w(0x1234), &hx(&pop_hash)[2..], w(0)),
         ),
     );
     let ws = acc

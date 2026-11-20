@@ -14,6 +14,7 @@ const ROWS: &[(&str, &str)] = &[
     ("registerWebAuthn", "WebAuthnKey key,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("registerMuSig2", "uint16 kind,MuSig2Key key,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("registerFrost", "uint16 kind,FrostKey key,UAAttrs attrs,bytes pop,bytes pqzPop"),
+    ("registerBlsMulti", "BlsMultiKey key,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("setKemKey", "bytes32 ua,uint64 version,KemKey kem,UASig sig"),
     ("storePqzPop", "bytes32 ua,uint64 version,bytes pqzPop"),
     ("setPqzKey", "bytes32 ua,uint64 version,bytes pqzKey,bytes32 pqzPopHash,UASig sig"),
