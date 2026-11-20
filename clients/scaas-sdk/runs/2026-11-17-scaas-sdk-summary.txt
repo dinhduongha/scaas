@@ -102,12 +102,9 @@ rpc-clippy | 9f3e640dd | 0 | -
 # tests), clippy --all-targets -D warnings clean. format.sh --check rust clean. Mutants t17 7/7, t18 5/5, t18b 3/3, t19 6/6
 # killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
 # T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
-sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
 sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
-sdk-test | 7f5e03caf | 0 | 264 passed, 0 failed, 12 ignored (21 binaries); tree dirty
-sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
 features | 7f5e03caf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
@@ -134,7 +131,6 @@ ck-test | 6dded4e97 | 0 | node: 484 pass, 0 fail, 4 skipped
 # (Argument), then green; admin::tests + account::msig::tests 12/12; clippy --all-targets (full features) clean; docs 0
 # errors; mutant t20c 3/3 killed (the new one by the test's unwrap). Not run: sdk-test whole, sdk-e2e, bind-gen (no public
 # item changed).
-sdk-test | 58099349c | 0 | 265 passed, 0 failed, 12 ignored (21 binaries)
 sdk-raw | f4c422ef6 | 0 | 114 passed, 0 failed, 0 ignored (1 binaries)
 features | f4c422ef6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 docs | f4c422ef6 | 0 | -
@@ -189,20 +185,22 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # M20  the cap rule never run against an enforcing node (a recorded Nethermind run of a 64-member registration and a PQZ debit)
 sdk-deny | b5b5ec89c | 0 | -
 sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (--features <the set>,sync-api)
-bind-gen | 4e9aabf8b | 0 | -
-sdk-uniffi | 4e9aabf8b | 101 | 18 passed, 0 failed, 0 ignored (2 binaries)
-sdk-clippy | 4e9aabf8b | 101 | -
-ffi | 4e9aabf8b | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-sdk-wasm | 4e9aabf8b | 0 | -
-bind-cpp | 4e9aabf8b | 0 | ctest: 0 tests failed out of 1
-bind-cs | 4e9aabf8b | 0 | dotnet: 4 passed, 0 failed
-bind-python | 4e9aabf8b | 0 | unittest: 6 ran, OK
-bind-kotlin | 4e9aabf8b | 0 | kotlin: PASS (0 failures)
-bind-swift | 4e9aabf8b | 0 | swift: PASS (0 failures)
-bind-java | 4e9aabf8b | 0 | java: PASS (0 failures); unittest: 4 ran, OK
-bind-go | 4e9aabf8b | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
-bind-js | 4e9aabf8b | 0 | node: 4 pass, 0 fail, 0 skipped
-bind-dart | 4e9aabf8b | 0 | dart: +14:
 # the rows above at 4e9aabf8b (the merge of ua-rs-sign 34f882da6): sdk-uniffi and sdk-clippy rc 101 on one clippy error in
 # ua-rs-sign's src/op/gas.rs (indexing_slicing), fixed by c21803966 (clippy clean on the four feature sets by hand; the two
 # gate steps not rerun); sdk-test stopped for the machine's shutdown, not recorded.
+bind-gen | 0b43541d3 | 0 | -
+sdk-uniffi | 0b43541d3 | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
+sdk-clippy | 0b43541d3 | 0 | -
+ffi | 0b43541d3 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+sdk-wasm | 0b43541d3 | 0 | -
+bind-cpp | 0b43541d3 | 0 | ctest: 0 tests failed out of 1
+bind-cs | 0b43541d3 | 0 | dotnet: 4 passed, 0 failed
+bind-python | 0b43541d3 | 0 | unittest: 6 ran, OK
+bind-kotlin | 0b43541d3 | 0 | kotlin: PASS (0 failures)
+bind-swift | 0b43541d3 | 0 | swift: PASS (0 failures)
+bind-java | 0b43541d3 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
+bind-go | 0b43541d3 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-js | 0b43541d3 | 0 | node: 4 pass, 0 fail, 0 skipped
+bind-dart | 0b43541d3 | 0 | dart: +14:
+sdk-test | 0b43541d3 | 0 | 294 passed, 0 failed, 15 ignored (21 binaries)
+sdk-min | 0b43541d3 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
