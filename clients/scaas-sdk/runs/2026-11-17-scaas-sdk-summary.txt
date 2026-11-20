@@ -105,17 +105,13 @@ rpc-clippy | 9f3e640dd | 0 | -
 # killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
 # T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
 bind-dart | 7f5e03caf | 0 | dart: +14:; tree dirty
-ffi | 7f5e03caf | 0 | 0 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 sdk-test | 7f5e03caf | 0 | 264 passed, 0 failed, 12 ignored (21 binaries); tree dirty
 sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
-sdk-clippy | 7f5e03caf | 0 | -; tree dirty
 sdk-wasm | 7f5e03caf | 0 | -; tree dirty
 features | 7f5e03caf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 ua-clippy | 1233ed00d | 0 | -; tree dirty
-bind-gen | c1a17c82f | 0 | -
 docs | c1a17c82f | 0 | -
 ua-vectors | c1a17c82f | 0 | 665 passed, 0 failed, 6 ignored (62 binaries)
 sdk-e2e | c1a17c82f | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
@@ -127,3 +123,10 @@ sdk-e2e | c1a17c82f | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # ci_changes.py self-tests ok, format.sh --check rust dart sh toml yaml py clean, docs check 0 errors, paths 0,
 # test_docs_check ok. No vector file changed (the consent rows were already in typed_ops.json). Mutants t20b 8/8 killed,
 # each by its intended assertion (t20b-mutants.txt).
+sdk-uniffi | c1e777dcb | 0 | 9 passed, 0 failed, 0 ignored (2 binaries); tree dirty
+bind-gen | 51b1973d1 | 0 | -
+bind-cpp | 51b1973d1 | 0 | ctest: 0 tests failed out of 1
+ffi | 51b1973d1 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+sdk-clippy | 51b1973d1 | 0 | -
+sdk-deny | b5b5ec89c | 0 | -
+sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (--features <the set>,sync-api)
