@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Vm} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IUAKindVerifier, IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
@@ -861,7 +862,7 @@ contract UARegistryPqTest is UARegistryBase {
         m[1] = Member(UAKinds.EVM_EOA, _pad(a), 1);
         bytes memory d = _msigKey(2, m);
         // gen 1's hold inside gen 2's 63/64, and the walk of one generation (LINE_HOP_GAS, spec 2026-11-19-registry-verify-only-kinds §4 P3)
-        uint256 held = CAP_MLDSA65 + CAP_MLDSA65 / 63 + 5_000 + 10_000;
+        uint256 held = CAP_MLDSA65 + CAP_MLDSA65 / 63 + 5_000 + UARegistryRegLib.LINE_HOP_GAS;
         uint256 bound = 445_000 + 45_000 + held + (held - 400_000) / 63 + 3_500; // MSIG_ACCEPTED_GAS (3ze: 2,500 -> 3,500)
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
         UARegistry tight =

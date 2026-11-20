@@ -242,7 +242,7 @@ contract UAGasTest is UARegistryBase {
             uint16 kind = uint16(bytes2(abi.encodePacked(d[4 + 36 * j], d[5 + 36 * j])));
             uint256 cap = kind < 0x0100 ? SMART_KEY_1271_GAS : _cap(kind);
             // handed: one hand-off and the walk of one generation (`LINE_HOP_GAS`, spec 2026-11-19-registry-verify-only-kinds §4 P3)
-            uint256 e = cap + (handed && kind >= 0x0100 ? cap / 63 + 5_000 + 10_000 : 0);
+            uint256 e = cap + (handed && kind >= 0x0100 ? cap / 63 + 5_000 + UARegistryRegLib.LINE_HOP_GAS : 0);
             b += e + MSIG_MEMBER_GAS;
             if (e > held) held = e;
         }

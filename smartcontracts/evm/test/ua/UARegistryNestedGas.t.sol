@@ -377,14 +377,14 @@ contract UARegistryNestedGasTest is UARegistryBase {
     // ----- generations -----
 
     /// gen 2's bound of the outer `c` whose inner `msig`s and signing kind are gen 1's: a handed leaf counts `cap + cap / 63 + margin`,
-    /// a handed inner `msig` the same again over its whole worst case; each plus its walk of one generation (`LINE_HOP_GAS` 10,000,
+    /// a handed inner `msig` the same again over its whole worst case; each plus its walk of one generation (`LINE_HOP_GAS`,
     /// spec 2026-11-19-registry-verify-only-kinds §4 P3).
     function _boundGen2(Case memory c) internal pure returns (uint256 b) {
-        uint256 leaf = c.cap + c.cap / 63 + 5_000 + 10_000;
+        uint256 leaf = c.cap + c.cap / 63 + 5_000 + UARegistryRegLib.LINE_HOP_GAS;
         b = ACCEPTED + c.plain * (leaf + MEMBER);
         for (uint256 i; i < c.groups.length; ++i) {
             uint256 w = c.groups[i] * (leaf + MEMBER) + ACCEPTED;
-            b += w + w / 63 + 5_000 + 10_000 + MEMBER;
+            b += w + w / 63 + 5_000 + UARegistryRegLib.LINE_HOP_GAS + MEMBER;
         }
         if (leaf > SMART) b += (leaf - SMART) / 63;
     }
