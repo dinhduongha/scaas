@@ -393,3 +393,249 @@ fn scope_arena_and_lock() {
         Error::KeyRevoked
     );
 }
+
+// ------------------------------------------------------------------ app records (spec §12.4; plan T21 part 3)
+
+use scaas_ua::wallet::{
+    app_record_digest, is_scaas_purpose, sign_app_record, verify_app_record_key, AppPath, KeyRef,
+    Signer, TypedData, SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES,
+};
+
+fn src(rel: &str) -> String {
+    std::fs::read_to_string(format!(
+        "{}/../../smartcontracts/evm/src/{rel}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
+}
+
+/// Drift (review r2 R14): the generated purpose list is exactly `UAKinds.sol`'s `PURPOSE_*` and `APP_PURPOSE_NS` constants, each
+/// an ASCII `scaas.ua.purpose.*` string shorter than 64 bytes; the domain names hold the registry's two and every token's.
+#[test]
+fn refusal_lists_match_the_contracts() {
+    let kinds = src("ua/UAKinds.sol");
+    let mut found = vec![];
+    for line in kinds.lines() {
+        let l = line.trim();
+        let Some(rest) = l.strip_prefix("bytes32 internal constant ") else {
+            continue;
+        };
+        let (name, tail) = rest.split_once(" = keccak256(\"").unwrap_or(("", ""));
+        if !(name.starts_with("PURPOSE_") || name == "APP_PURPOSE_NS") {
+            continue;
+        }
+        found.push((
+            name.to_string(),
+            tail.split('"').next().unwrap().to_string(),
+        ));
+    }
+    let listed: Vec<(String, String)> = SCAAS_PURPOSES
+        .iter()
+        .map(|(n, s)| (n.to_string(), s.to_string()))
+        .collect();
+    assert_eq!(
+        found, listed,
+        "run clients/ua-rs/scripts/gen_app_refusals.py"
+    );
+    for (n, s) in SCAAS_PURPOSES {
+        assert!(
+            s.is_ascii() && s.starts_with("scaas.ua.purpose.") && s.len() < 64,
+            "{n}"
+        );
+    }
+    // the domain names: every "SCaaS ..." literal of smartcontracts/evm/src (legacy/ apart), as the generator collects them
+    fn walk(dir: &std::path::Path, out: &mut std::collections::BTreeSet<String>) {
+        for e in std::fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() && p.file_name().unwrap() != "legacy" {
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "sol") {
+                let t = std::fs::read_to_string(&p).unwrap();
+                for (i, _) in t.match_indices("\"SCaaS ") {
+                    let rest = &t[i + 1..];
+                    let end = rest.find('"').unwrap();
+                    let lit = &rest[..end];
+                    if lit.chars().all(|c| c.is_ascii_alphanumeric() || c == ' ') {
+                        out.insert(lit.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+    let mut names = std::collections::BTreeSet::new();
+    walk(
+        std::path::Path::new(&format!(
+            "{}/../../smartcontracts/evm/src",
+            env!("CARGO_MANIFEST_DIR")
+        )),
+        &mut names,
+    );
+    assert_eq!(
+        names.into_iter().collect::<Vec<_>>(),
+        SCAAS_DOMAIN_NAMES
+            .iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>(),
+        "run clients/ua-rs/scripts/gen_app_refusals.py"
+    );
+    for n in [
+        "SCaaS UARegistry",
+        "SCaaS UA Portable",
+        "SCaaS MetaToken",
+        "SCaaS PqzToken",
+        "SCaaS ZetherToken",
+        "SCaaS Dex",
+        "SCaaS PqChat",
+    ] {
+        assert!(SCAAS_DOMAIN_NAMES.contains(&n), "{n}");
+    }
+}
+
+const APP: [u8; 32] = [0x5a; 32];
+
+fn portable(app_id: &[u8; 32], name: &str, extra: Option<(&str, &str)>) -> TypedData {
+    let mut domain =
+        serde_json::json!({"name": name, "version": "1", "salt": format!("0x{}", hexs(app_id))});
+    if let Some((k, v)) = extra {
+        domain[k] = serde_json::json!(v);
+    }
+    TypedData::from_value_for_tests(domain)
+}
+
+fn chain_bound(name: &str, with_contract: bool) -> TypedData {
+    let mut domain = serde_json::json!({"name": name, "version": "1", "chainId": "7622"});
+    if with_contract {
+        domain["verifyingContract"] =
+            serde_json::json!("0x00000000000000000000000000000000000000aa");
+    }
+    TypedData::from_value_for_tests(domain)
+}
+
+fn hexs(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+trait ForTests {
+    fn from_value_for_tests(domain: Value) -> TypedData;
+}
+impl ForTests for TypedData {
+    fn from_value_for_tests(domain: Value) -> TypedData {
+        let mut fields = vec![
+            serde_json::json!({"name": "name", "type": "string"}),
+            serde_json::json!({"name": "version", "type": "string"}),
+        ];
+        for (k, t) in [
+            ("chainId", "uint256"),
+            ("verifyingContract", "address"),
+            ("salt", "bytes32"),
+        ] {
+            if domain.get(k).is_some() {
+                fields.push(serde_json::json!({"name": k, "type": t}));
+            }
+        }
+        let v = serde_json::json!({
+            "types": {"EIP712Domain": fields, "Note": [{"name": "id", "type": "bytes32"}, {"name": "body", "type": "string"}]},
+            "primaryType": "Note",
+            "domain": domain,
+            "message": {"id": format!("0x{}", "11".repeat(32)), "body": "hello"},
+        });
+        TypedData::from_json(&serde_json::to_vec(&v).unwrap()).unwrap()
+    }
+}
+
+/// Each path: a positive control signed and verified by a UA key; then one change at a time, each refusal by name.
+#[test]
+fn app_record_paths_and_refusals() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let key = w.ua_key(0x0108, 0, 0).unwrap();
+    let KeyRef::Ua { kind, key_data } = key.key_ref() else {
+        panic!()
+    };
+    let purpose = scaas_ua::keccak256(b"an app's own purpose");
+    let a = AppPath::Portable { app_id: APP };
+    let b = AppPath::ChainBound { purpose };
+    // the controls
+    let pa = portable(&APP, "My App", None);
+    let sig = sign_app_record(&key, None, &a, &pa).unwrap();
+    assert!(sig.key_data.is_empty() && sig.members.is_empty());
+    assert!(verify_app_record_key(
+        kind,
+        &key_data,
+        &a,
+        &pa,
+        &sig.signature
+    ));
+    let cb = chain_bound("My App", true);
+    let sig_b = sign_app_record(&key, None, &b, &cb).unwrap();
+    assert!(verify_app_record_key(
+        kind,
+        &key_data,
+        &b,
+        &cb,
+        &sig_b.signature
+    ));
+    // a signature does not cross paths, apps or purposes
+    assert!(!verify_app_record_key(
+        kind,
+        &key_data,
+        &AppPath::Portable { app_id: [0x5b; 32] },
+        &portable(&[0x5b; 32], "My App", None),
+        &sig.signature
+    ));
+    assert!(!verify_app_record_key(
+        kind,
+        &key_data,
+        &AppPath::ChainBound { purpose: [9; 32] },
+        &cb,
+        &sig_b.signature
+    ));
+    // path B: every SCaaS purpose constant, one row each, the seal purpose
+    for (n, s) in SCAAS_PURPOSES {
+        let p = AppPath::ChainBound {
+            purpose: scaas_ua::keccak256(s.as_bytes()),
+        };
+        assert_eq!(
+            sign_app_record(&key, None, &p, &cb).err(),
+            Some(Error::AppPurposeRefused),
+            "{n}"
+        );
+    }
+    assert!(is_scaas_purpose(&scaas_ua::seal_purpose_tag()));
+    assert!(!is_scaas_purpose(&purpose));
+    // every SCaaS domain name, on both paths
+    for n in SCAAS_DOMAIN_NAMES {
+        assert_eq!(
+            app_record_digest(&a, &portable(&APP, n, None)).err(),
+            Some(Error::AppDomainRefused),
+            "{n}"
+        );
+        assert_eq!(
+            app_record_digest(&b, &chain_bound(n, true)).err(),
+            Some(Error::AppDomainRefused),
+            "{n}"
+        );
+    }
+    // path A: another field set, another salt, app_id 0
+    let with_chain = portable(&APP, "My App", Some(("chainId", "1")));
+    assert_eq!(
+        app_record_digest(&a, &with_chain).err(),
+        Some(Error::AppDomainRefused)
+    );
+    assert_eq!(
+        app_record_digest(&a, &portable(&[0x5b; 32], "My App", None)).err(),
+        Some(Error::AppSaltMismatch)
+    );
+    assert_eq!(
+        app_record_digest(
+            &AppPath::Portable { app_id: [0; 32] },
+            &portable(&[0; 32], "My App", None)
+        )
+        .err(),
+        Some(Error::Argument)
+    );
+    // path B: a domain without its contract
+    assert_eq!(
+        app_record_digest(&b, &chain_bound("My App", false)).err(),
+        Some(Error::AppDomainRefused)
+    );
+}

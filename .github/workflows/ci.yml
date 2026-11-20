@@ -815,6 +815,9 @@ jobs:
           - cell: roots
             features: --no-default-features --features roots
             tests: --test roots
+          - cell: app-core
+            features: --features app-core,vectors
+            tests: --test app_core
     defaults:
       run:
         working-directory: clients/ua-rs

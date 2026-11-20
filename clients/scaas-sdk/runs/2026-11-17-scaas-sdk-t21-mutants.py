@@ -12,6 +12,7 @@ from mutants_lib import main
 AK = "clients/ua-rs/src/wallet/appkey.rs"
 ST = "clients/ua-rs/src/wallet/store.rs"
 CK = "clients/clientkeys/src/appcore.js"
+US = "clients/ua-rs/src/wallet/uasig.rs"
 UT = "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core "
 CT = "cd clients/clientkeys && ../../scripts/capped node --test --test-reporter=tap test/appcore.test.js"
 MUTANTS = [
@@ -101,6 +102,59 @@ MUTANTS = [
         ],
         CT,
         "seal and open rows; an aad starting with the key-wrap constant refused",
+    ),
+    (
+        "drop the purpose-list check",
+        [(US, "            if is_scaas_purpose(purpose) {", "            if false {")],
+        UT + "app_record_paths_and_refusals",
+    ),
+    (
+        "the seal purpose not refused",
+        [(US, "        || *purpose == crate::seal_purpose_tag()\n", "")],
+        UT + "app_record_paths_and_refusals",
+    ),
+    (
+        "drop the domain-name check",
+        [(US, "    if super::app_refusals::SCAAS_DOMAIN_NAMES.contains(&name) {", "    if false {")],
+        UT + "app_record_paths_and_refusals",
+    ),
+    (
+        "accept any portable field set",
+        [(US, '            if keys != ["name", "salt", "version"] {', "            if false {")],
+        UT + "app_record_paths_and_refusals",
+    ),
+    (
+        "accept any salt",
+        [
+            (
+                US,
+                "            if !salt.is_some_and(|s| s.eq_ignore_ascii_case(&eip712::to_hex(app_id))) {",
+                "            if false {",
+            )
+        ],
+        UT + "app_record_paths_and_refusals",
+    ),
+    (
+        "drop the chain-bound domain's contract check",
+        [
+            (
+                US,
+                '            if !(d.contains_key("chainId") && d.contains_key("verifyingContract")) {',
+                "            if false {",
+            )
+        ],
+        UT + "app_record_paths_and_refusals",
+    ),
+    (
+        "the generated purpose list loses a constant",
+        [
+            (
+                "clients/ua-rs/src/wallet/app_refusals.rs",
+                '    ("PURPOSE_KEM", "scaas.ua.purpose.kem.v1"),\n',
+                "",
+            )
+        ],
+        UT + "refusal_lists_match_the_contracts",
     ),
 ]
 

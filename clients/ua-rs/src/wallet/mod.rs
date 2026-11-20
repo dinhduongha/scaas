@@ -28,6 +28,8 @@
 
 mod aead;
 #[cfg(feature = "app-core")]
+mod app_refusals;
+#[cfg(feature = "app-core")]
 mod appkey;
 pub mod bounded;
 #[cfg(feature = "vectors")]
@@ -71,6 +73,8 @@ mod vault;
 mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
+#[cfg(feature = "app-core")]
+pub use app_refusals::{SCAAS_DOMAIN_NAMES, SCAAS_PURPOSES};
 #[cfg(feature = "app-core")]
 pub use appkey::{
     AppKeys, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, APP_ROOT, KEYWRAP,
@@ -118,6 +122,10 @@ pub use sign::{
 pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, ExternalKey, KeyRef, SigRole, SignRequest, Signer};
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
+#[cfg(feature = "app-core")]
+pub use uasig::{
+    app_record_digest, is_scaas_purpose, sign_app_record, verify_app_record_key, AppPath,
+};
 pub use uasig::{
     membership_sig, membership_sig_current, msig_combine, msig_sig, msig_sig_app, msig_sig_current,
     msig_slot_sig_current, msig_update_typed_data, registration_typed_data, ua_sig, ua_sig_app,
@@ -204,6 +212,12 @@ pub enum Error {
     AppHandleForeign,
     /// The arena holds its stated number of live app-core key handles (scaas-sdk spec §12.2); nothing dropped.
     AppArenaFull,
+    /// An app record under a SCaaS purpose (`UAKinds`, `APP_PURPOSE_NS`, the seal purpose; scaas-sdk spec §12.4).
+    AppPurposeRefused,
+    /// An app record whose domain is a SCaaS contract's or the registry's, or not the path's form (scaas-sdk spec §12.4).
+    AppDomainRefused,
+    /// An app portable record whose domain `salt` is not its `app_id` (scaas-sdk spec §12.4).
+    AppSaltMismatch,
     Ua(UAError),
 }
 
@@ -235,6 +249,9 @@ impl Error {
             Error::AppKeyUsage => "AppKeyUsage",
             Error::AppHandleForeign => "AppHandleForeign",
             Error::AppArenaFull => "AppArenaFull",
+            Error::AppPurposeRefused => "AppPurposeRefused",
+            Error::AppDomainRefused => "AppDomainRefused",
+            Error::AppSaltMismatch => "AppSaltMismatch",
             Error::Ua(e) => e.code(),
         }
     }

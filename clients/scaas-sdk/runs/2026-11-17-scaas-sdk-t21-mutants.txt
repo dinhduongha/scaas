@@ -10,4 +10,11 @@ no arena limit | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --lo
 a destroyed handle's slot not freed | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core scope_arena_and_lock | panicked at tests/app_core.rs:376:5:
 the KEM wrap's info without keccak256(kemPk) | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core argon2_kem_and_root_rows | panicked at tests/app_core.rs:304:9:
 clientkeys: seal accepts the key-wrap prefix | killed | 0278fcc73 dirty | ../../scripts/capped node --test --test-reporter=tap test/appcore.test.js | not ok 2 - seal and open rows; an aad starting with the key-wrap constant refused
-11 mutants, 11 killed, 0 survived, 0 not loaded, 0 other failure
+drop the purpose-list check | killed | 8b8e0088f dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core app_record_paths_and_refusals | panicked at tests/app_core.rs:597:9:
+the seal purpose not refused | killed | 8b8e0088f dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core app_record_paths_and_refusals | panicked at tests/app_core.rs:603:5:
+drop the domain-name check | killed | 8b8e0088f dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core app_record_paths_and_refusals | panicked at tests/app_core.rs:607:9:
+accept any portable field set | killed | 8b8e0088f dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core app_record_paths_and_refusals | panicked at tests/app_core.rs:620:5:
+accept any salt | killed | 8b8e0088f dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core app_record_paths_and_refusals | panicked at tests/app_core.rs:624:5:
+drop the chain-bound domain's contract check | killed | 8b8e0088f dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core app_record_paths_and_refusals | panicked at tests/app_core.rs:637:5:
+the generated purpose list loses a constant | killed | 8b8e0088f dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core refusal_lists_match_the_contracts | panicked at tests/app_core.rs:436:5:
+18 mutants, 18 killed, 0 survived, 0 not loaded, 0 other failure
