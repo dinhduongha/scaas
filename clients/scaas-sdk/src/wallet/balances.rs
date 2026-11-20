@@ -13,6 +13,7 @@ use scaas_rpc::Purpose;
 /// One token's balance.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct TokenBalance {
     pub address: String,
     pub display: String,
@@ -24,6 +25,7 @@ pub struct TokenBalance {
 /// An account's balances at one block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct Balances {
     pub block: u64,
     /// the native balance of an address or a native id (`None` for a derived UA: it holds no native coin)

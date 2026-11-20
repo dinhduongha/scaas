@@ -76,6 +76,7 @@ pub struct SeedEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum AccountRow {
     Ua {
         id: String,

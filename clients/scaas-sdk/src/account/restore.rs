@@ -15,6 +15,7 @@ use scaas_rpc::evm::{EvmPool, SimError};
 /// usual 20) past the last registered index.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct Restore {
     pub seed: String,
     pub chain: String,

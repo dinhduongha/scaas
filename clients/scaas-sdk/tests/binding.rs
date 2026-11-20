@@ -92,6 +92,109 @@ fn every_async_call_has_a_blocking_twin() {
     );
 }
 
+/// The JS binding (spec §16.4; plan T20g) exports every call `binding.rs` exports beside the list (the list itself is one, read
+/// by both): a module object's method under its name, a handle object's (`Prepared`, `PreparedOrder`, `RegistryWrite`,
+/// `SeedBackup`) as `<object>_<method>(handle)`, a free function under its name. Read from the two sources.
+#[test]
+fn wasm_exports_every_binding_call() {
+    let handle_objects = ["Prepared", "PreparedOrder", "RegistryWrite", "SeedBackup"];
+    let snake = |s: &str| {
+        let mut o = String::new();
+        for (i, c) in s.chars().enumerate() {
+            if c.is_uppercase() && i > 0 {
+                o.push('_');
+            }
+            o.push(c.to_ascii_lowercase());
+        }
+        o
+    };
+    let name_of = |rest: &str| -> String {
+        rest.chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect()
+    };
+    let binding = std::fs::read_to_string("src/binding.rs").unwrap();
+    let mut want = BTreeSet::new();
+    let (mut exported, mut obj, mut renamed): (bool, Option<String>, Option<String>) =
+        (false, None, None);
+    for line in binding.lines() {
+        let t = line.trim_start();
+        if t.starts_with("#[uniffi::export") {
+            exported = true;
+            continue;
+        }
+        if let Some(n) = t.strip_prefix("#[uniffi::method(name = \"") {
+            renamed = Some(n.split('"').next().unwrap_or("").to_string());
+            continue;
+        }
+        if !line.starts_with(' ') {
+            if let Some(rest) = t.strip_prefix("impl ") {
+                obj = exported.then(|| name_of(rest));
+            } else if let Some(rest) = t
+                .strip_prefix("pub fn ")
+                .or(t.strip_prefix("pub async fn "))
+            {
+                if exported {
+                    want.insert(name_of(rest));
+                }
+                obj = None;
+            } else if t.starts_with('}') {
+                obj = None;
+            }
+            if !t.starts_with("#[") {
+                exported = false;
+            }
+            continue;
+        }
+        if let (Some(o), Some(rest)) = (
+            &obj,
+            t.strip_prefix("pub fn ")
+                .or(t.strip_prefix("pub async fn ")),
+        ) {
+            let m = renamed.take().unwrap_or_else(|| name_of(rest));
+            if m.ends_with("_blocking") {
+                continue;
+            }
+            want.insert(match handle_objects.contains(&o.as_str()) {
+                true => format!("{}_{m}", snake(o)),
+                false => m,
+            });
+        }
+    }
+    let js = std::fs::read_to_string("src/wasm/js.rs").unwrap();
+    let have: BTreeSet<String> = js
+        .lines()
+        .filter_map(|l| {
+            let t = l.trim_start();
+            t.strip_prefix("pub fn ")
+                .or(t.strip_prefix("fn "))
+                .map(name_of)
+        })
+        .collect();
+    // sync-api only: the blocking open and the run hooks are not calls of the async surface
+    let sync_only = [
+        "open_blocking",
+        "run",
+        "run_blocking",
+        "inner",
+        "new",
+        "module",
+    ];
+    let missing: Vec<_> = want
+        .iter()
+        .filter(|n| !have.contains(*n) && !sync_only.contains(&n.as_str()))
+        .collect();
+    assert!(
+        want.len() > 40,
+        "control: binding.rs is read ({} names)",
+        want.len()
+    );
+    assert!(
+        missing.is_empty(),
+        "binding.rs exports without a JS export: {missing:?}"
+    );
+}
+
 /// The sync surface (spec §16.1 (a′)) from Rust, as a foreign caller sees it: `open_blocking` over a sync store and
 /// authenticator, the twins, the cancel token, `next_blocking`.
 #[cfg(feature = "sync-api")]

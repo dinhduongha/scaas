@@ -10,6 +10,7 @@ use std::sync::Arc;
 /// A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum Family {
     Evm,
     Soroban,
@@ -27,10 +28,13 @@ pub enum Family {
 #[derive(Clone)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct EndpointConfig {
     pub url: String,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::ClassDef"))]
     pub class: Class,
     pub label: Option<String>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::endpoint_auth"))]
     pub auth: Option<EndpointAuth>,
 }
 
@@ -48,6 +52,7 @@ impl std::fmt::Debug for EndpointConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum Finality {
     Finalized,
     Depth(u64),
@@ -56,6 +61,7 @@ pub enum Finality {
 /// A chain as the app's release pins it (spec §4).
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct ChainProfile {
     /// `scaas-testnet`, `<chain>-mainnet`, `<chain>-testnet`
     pub key: String,
@@ -65,6 +71,7 @@ pub struct ChainProfile {
     /// `0x` + 64 hex (NET-ALL-24): every SCaaS EIP-712 domain's salt, pinned on every connection
     pub chain_uid: String,
     pub rpc: Vec<EndpointConfig>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
     pub rpc_policy: Policy,
     /// scaas-node gateways; empty: no gateway path on this chain
     pub gateways: Vec<EndpointConfig>,
@@ -90,6 +97,7 @@ pub struct ChainProfile {
     /// `failover` (the default) or `strict_majority` (ARCH-POS-15; owner 2026-11-19, T16-a), each with its own credential;
     /// empty: no verdict on this chain (`VerdictRefused`)
     pub verifiers: Vec<EndpointConfig>,
+    #[cfg_attr(feature = "wasm", serde(with = "crate::wasm::PolicyDef"))]
     pub verifier_policy: Policy,
     /// the SCaaS DEXes of the chain (NET-ALL-24): an order or a cancel naming a DEX not here is refused before anything is
     /// signed (CLI-SGN-35, `DexNotListed`)
@@ -102,6 +110,7 @@ pub struct ChainProfile {
 /// CTR-DEX-30) and the position readers reviewed for it, each beside its position manager.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct ListedDex {
     /// `0x` + 40 hex
     pub address: String,
@@ -112,6 +121,7 @@ pub struct ListedDex {
 /// A reviewed position reader of a position manager (a liquidity order that receives a position names one).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct PositionReader {
     pub manager: String,
     pub reader: String,
@@ -122,6 +132,7 @@ pub struct PositionReader {
 /// is 0 (`fresh`) or above, signed by the reference signer, a native EVM key (its path makes no registry call).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct GasBase {
     pub entry: String,
     pub kind: String,
@@ -146,6 +157,7 @@ pub struct GasBase {
 /// `"base_count": 0`), so the quote adds `gas × count` with no offset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct GasPerItem {
     pub item: String,
     pub gas: u64,
@@ -155,6 +167,7 @@ pub struct GasPerItem {
 /// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct GasPerByte {
     pub input: String,
     pub gas: u64,
@@ -164,6 +177,7 @@ pub struct GasPerByte {
 /// reference signer's execution gas.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct GasVerify {
     pub signer: u16,
     pub gas: u64,
@@ -181,6 +195,7 @@ pub struct GasVerify {
 /// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct GasRows {
     pub base: Vec<GasBase>,
     pub verify: Vec<GasVerify>,
@@ -194,6 +209,7 @@ pub struct GasRows {
 /// and the SDK's reference table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct GasTable {
     /// a module's name, `reference`, or the chain key of a chain's measured rows
     pub name: String,
@@ -488,6 +504,7 @@ impl GasBase {
 /// A token of a profile's reviewed list (spec §8.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct ListedToken {
     /// `0x` + 40 hex
     pub address: String,
@@ -499,6 +516,7 @@ pub struct ListedToken {
 /// against a runaway quote, never a value assumed of a chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct Limits {
     /// decimal wei
     pub max_fee_per_gas: String,

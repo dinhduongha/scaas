@@ -9,6 +9,7 @@ use tokio::sync::broadcast;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum Event {
     SeedUnlocked {
         seed: String,
@@ -59,6 +60,7 @@ pub enum Event {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum OpState {
     /// the executed event of the operation's digest at or below the final block
     Landed { block: u64, hash: String },
@@ -82,6 +84,7 @@ impl OpState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum InFlight {
     /// signed and written, not sent yet
     Signed,

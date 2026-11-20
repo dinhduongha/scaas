@@ -21,6 +21,7 @@ pub(crate) const EXTRA_NETWORKS: [&str; 4] = ["bitcoin_p2wpkh", "bitcoin_p2tr", 
 )]
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct NativeKeyRef {
     pub seed: String,
     pub network: String,
@@ -33,6 +34,7 @@ pub struct NativeKeyRef {
 /// A native key's public parts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct NativeAddress {
     pub network: String,
     /// hex, no `0x`

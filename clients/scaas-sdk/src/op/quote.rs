@@ -18,6 +18,7 @@ const MSIG: u16 = 0x0120;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum SubmitPath {
     /// a gateway when the profile has one and the entry is one a gateway takes (door A), else a self-relay by `payer` when
     /// given, else `SubmitPathNone`
@@ -31,6 +32,7 @@ pub enum SubmitPath {
 /// A quote the user confirms (spec §13.3); `submit` takes exactly it. Amounts are decimal strings of wei.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct SubmitQuote {
     /// `Gateway` or `SelfRelay`, never `Auto`
     pub path: SubmitPath,

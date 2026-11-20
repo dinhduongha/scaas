@@ -454,6 +454,7 @@ pub(crate) async fn read(
 /// index (spec §7).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct PqzBalanceRequest {
     pub signer: KeyRef,
     pub chain: String,
@@ -465,6 +466,7 @@ pub struct PqzBalanceRequest {
 /// A decrypted PQZ balance, for the holder only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct PqzBalance {
     /// the smallest unit, decimal: what a debit at this block may spend (the account and the window `[rolled, p)`)
     pub amount: String,
@@ -573,6 +575,7 @@ impl super::Confidential {
 /// word set (R1 to R7), decrypted by its own key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct PqzBalanceAll {
     /// the sum, decimal
     pub amount: String,
@@ -617,6 +620,7 @@ impl super::Confidential {
 /// `pqz_shield` (`UAShield` on a PQZ token): `amount` of the signer's public balance into `to_ua`'s pending window.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct PqzShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -630,6 +634,7 @@ pub struct PqzShield {
 /// `pqz_wrap_shield` (`WrapShield` on a PQZ token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct PqzWrapShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -645,6 +650,7 @@ pub struct PqzWrapShield {
 /// version `key_version`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct PqzAccountOp {
     pub signer: KeyRef,
     pub chain: String,

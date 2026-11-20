@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# scaas-sdk plan T20g: the JS / TS binding's library (spec §16.4): the SDK with feature `wasm` as a cdylib for
+# wasm32-unknown-unknown, the input of the wasm-bindgen CLI (run.sh). The exports are the SDK's (`scaas_sdk::wasm`); this
+# crate only links them. Its own lockfile, as the reference library's. UNAUDITED.
+[package]
+name = "scaas-sdk-js"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../../../LICENSE"
+
+[lib]
+crate-type = ["cdylib"]
+path = "lib.rs"
+
+[dependencies]
+scaas-sdk = { path = "../..", default-features = false, features = [
+  "vault",
+  "account",
+  "wallet",
+  "zether",
+  "pqz",
+  "pqz-set-n2304-kmax4096",
+  "dex",
+  "admin",
+  "classical-roots",
+  "wasm",
+] }
+
+[workspace]
+
+# scrypt (N = 2^17) and the ML-KEM / arkworks code crawl unoptimised
+[profile.release]
+opt-level = 3

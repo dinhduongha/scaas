@@ -33,6 +33,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum KeyRef {
     Ua {
         seed: String,
@@ -64,6 +65,7 @@ pub enum KeyRef {
 /// One slot of an `msig` signature (`KeyRef::Msig`; `scaas-ua` `Slot`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum MsigSlot {
     /// the signing (or native) member at `index` signs with `key`
     Member { index: u16, key: KeyRef },
@@ -86,6 +88,7 @@ impl MsigSlot {
 
 /// A slot of an inner `msig`: its index there and its key.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct MsigLeaf {
     pub index: u16,
     pub key: KeyRef,

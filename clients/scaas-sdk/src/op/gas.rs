@@ -25,6 +25,7 @@ pub(crate) const REFERENCE_FILE: &str = include_str!("../../gas/reference.json")
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum GasFrom {
     /// a row of the chain profile, measured on that chain
     Chain,
@@ -42,6 +43,7 @@ pub enum GasFrom {
 /// total, is `App` for both; a native send's estimate `Estimate` for both.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct GasSources {
     pub base: GasFrom,
     pub verify: GasFrom,

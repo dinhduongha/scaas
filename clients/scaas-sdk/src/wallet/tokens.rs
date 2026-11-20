@@ -15,6 +15,7 @@ use std::sync::PoisonError;
 /// A token as the wallet shows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct TokenInfo {
     /// `0x` + 40 hex, lower case
     pub address: String,

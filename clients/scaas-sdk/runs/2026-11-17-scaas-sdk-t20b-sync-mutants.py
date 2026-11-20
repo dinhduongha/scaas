@@ -7,14 +7,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from mutants_lib import main
 
-B = "clients/scaas-sdk/src/binding.rs"
+L = "clients/scaas-sdk/src/binding_list.rs"
 S = "clients/scaas-sdk/src/sync_cpp.rs"
 F = "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots"
 T = "cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features " + F
 MUTANTS = [
     (
         "one twin dropped from the list",
-        [(B, "        async seeds / seeds_blocking () -> Vec<SeedInfo>;\n", "")],
+        [(L, "                async seeds / seeds_blocking () -> Vec<SeedInfo>;\n", "")],
         T + ",uniffi --test binding every_async_call_has_a_blocking_twin",
     ),
     (

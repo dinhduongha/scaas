@@ -25,6 +25,7 @@ use std::sync::Arc;
 /// right-aligned, the rest 0); words as `0x` + 64 hex.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct SubjectKeyArgs {
     pub kind: u8,
     pub x: String,
@@ -77,6 +78,7 @@ impl SubjectKeyArgs {
 /// `key_index` (decimal) is the signer's index in the account; `None`: read from the account (S3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct SmartOp {
     pub signer: KeyRef,
     pub key_index: Option<String>,
@@ -90,6 +92,7 @@ pub struct SmartOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum SmartCall {
     /// an ERC-20 `transfer(to, amount)` of `token` held by the account
     Transfer {

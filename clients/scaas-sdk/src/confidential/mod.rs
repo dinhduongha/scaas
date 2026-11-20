@@ -63,6 +63,7 @@ impl Sdk {
 /// A Zether key's public parts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct ZetherKeyInfo {
     /// the UA of kind `zether-bls12381` (0x0141), `0x` + 64 hex
     pub ua: String,
@@ -74,6 +75,7 @@ pub struct ZetherKeyInfo {
 /// A balance read (spec §9.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct ZetherBalanceRequest {
     pub seed: String,
     pub account: u32,
@@ -91,6 +93,7 @@ pub struct ZetherBalanceRequest {
 /// A decrypted balance, for the holder only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct ZetherBalance {
     /// the smallest unit, decimal
     pub amount: String,

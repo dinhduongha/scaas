@@ -30,6 +30,7 @@ use std::sync::{Arc, PoisonError};
 /// What a registration carries besides the key (spec §7): the PQZ key with its `R_REG` proof, the KEM key (version 0).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct RegisterAttrs {
     pub pqz_key: bool,
     pub kem: bool,
@@ -39,6 +40,7 @@ pub struct RegisterAttrs {
 /// native `evm` key).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct Register {
     pub key: KeyRef,
     pub chain: String,
@@ -149,6 +151,7 @@ impl RegistryWrite {
 /// A registration as the registry holds it (`registration_of`).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct RegistrationState {
     pub registered: bool,
     /// the hash commit of the KEM key (`attrs.kemPkHash`, `0x` + 64 hex; all zero: none)

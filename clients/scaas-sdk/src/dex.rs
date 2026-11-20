@@ -46,6 +46,7 @@ impl Sdk {
 /// `receive_token`, each settlement at least `min_fill` unless it closes the order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct TradeOrder {
     pub signer: KeyRef,
     pub chain: String,
@@ -75,6 +76,7 @@ pub struct TradeOrder {
 /// `UATradeOrder`, addresses for an outside token's.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct OrderTerms {
     pub from: String,
     pub receive_token: String,
@@ -94,6 +96,7 @@ pub struct OrderTerms {
 /// The cancel of one order (`CancelUAOrder` on its SCaaS sell token, `CancelDexOrder` on the DEX for an outside token's).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct CancelOrder {
     pub signer: KeyRef,
     pub chain: String,
@@ -105,6 +108,7 @@ pub struct CancelOrder {
 /// `min_minted` minted; fills whole (`min_fill` = `amount`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct WrapOrder {
     pub signer: KeyRef,
     pub chain: String,
@@ -128,6 +132,7 @@ pub struct WrapOrder {
 /// A wrap order as it was signed (`UAWrapOrder`'s named fields).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct WrapOrderTerms {
     pub from: String,
     pub wrapped_token: String,
@@ -146,6 +151,7 @@ pub struct WrapOrderTerms {
 /// The cancel of one wrap order (`CancelUAWrapOrder` on the underlying `token`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct CancelWrapOrder {
     pub signer: KeyRef,
     pub chain: String,
@@ -156,6 +162,7 @@ pub struct CancelWrapOrder {
 /// The cancel of every order of one lane below `min_nonce` (`POST /v1/dex/cancel-all`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct CancelAll {
     pub signer: KeyRef,
     pub chain: String,
@@ -170,6 +177,7 @@ pub struct CancelAll {
 /// A token and an amount of a liquidity order's plan.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct LiquidityToken {
     pub token: String,
     pub amount: String,
@@ -178,6 +186,7 @@ pub struct LiquidityToken {
 /// A liquidity order (`LiquidityOrder`, CTR-DEX-30; dex-liquidity spec §4.2), signed in its DEX's domain.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct LiquidityOrder {
     pub signer: KeyRef,
     pub chain: String,
@@ -252,6 +261,7 @@ impl PreparedOrder {
 /// else `0x` hex).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct SignedOrder {
     pub order_hash: String,
     pub order: String,

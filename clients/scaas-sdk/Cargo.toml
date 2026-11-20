@@ -51,6 +51,9 @@ frb = []
 # (src/sync_cpp.rs; C++ through uniffi-bindgen-cpp, which refuses any async item)
 uniffi = ["dep:uniffi"]
 sync-api = ["uniffi"]
+# the JS / TS binding (plan T20g, spec §16.4): wasm-bindgen exports of the same list (src/wasm.rs) for wasm32-unknown-unknown;
+# records and enums as plain JS objects through serde (a derive under this feature)
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:serde-wasm-bindgen"]
 
 [dependencies]
 # default-features = false: scaas-ua's defaults enable `pqz` with one set, so a build asking for another would carry two (§3.2)
@@ -88,6 +91,10 @@ getrandom = { version = "0.2", features = ["js"] }
 # the page's event loop (closing review P2-9): tasks by spawn_local, timers by the JS clock; both already in the tree through alloy
 wasm-bindgen-futures = "0.4"
 wasmtimer = "0.4"
+# feature `wasm` (T20g): wasm-bindgen pinned exactly (its CLI must be the same version), the JS types, serde to JS values
+wasm-bindgen = { version = "=0.2.130", optional = true }
+js-sys = { version = "0.3", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
 
 
 [dev-dependencies]

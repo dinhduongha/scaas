@@ -104,6 +104,7 @@ JOBS = {
     "scaas-sdk-python": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
     "scaas-sdk-kotlin": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
     "scaas-sdk-swift": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
+    "scaas-sdk-js": ["clients/scaas-sdk/", "clients/scaas-rpc/", "smartcontracts/vectors/keystore/"] + UARS,
     "keystore-vectors": ["clients/scaas-sdk/", "clients/clientkeys/", "smartcontracts/vectors/keystore/"] + UARS,
     # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
     # zether-prover or pqz-ffi
@@ -243,6 +244,7 @@ if __name__ == "__main__":
         "scaas-sdk-python",
         "scaas-sdk-kotlin",
         "scaas-sdk-swift",
+        "scaas-sdk-js",
         "keystore-vectors",
     }
     # plan T20: the SDK's jobs; its generator under runs/ starts the bindings' drift check, other runs/ files nothing
@@ -305,6 +307,7 @@ if __name__ == "__main__":
         "scaas-sdk-python",
         "scaas-sdk-kotlin",
         "scaas-sdk-swift",
+        "scaas-sdk-js",
         "keystore-vectors",
     }
     # the network crate: its own job and the node's (the node builds it); ua-rs (its depth scan) runs it too

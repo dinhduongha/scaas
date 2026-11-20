@@ -17,6 +17,7 @@ use std::collections::HashSet;
 /// A position in a chain's logs: a page holds items strictly older than it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct Cursor {
     pub block: u64,
     pub log_index: u64,
@@ -25,6 +26,7 @@ pub struct Cursor {
 /// One log naming the account in an indexed field.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct HistoryItem {
     pub block: u64,
     pub tx_hash: String,
@@ -40,6 +42,7 @@ pub struct HistoryItem {
 /// One of the account's operations in `sdk.state` (spec §13.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct OpItem {
     pub op: String,
     pub entry: String,
@@ -51,6 +54,7 @@ pub struct OpItem {
 /// A page of history.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub struct HistoryPage {
     pub items: Vec<HistoryItem>,
     /// on the first page (`before` none) only

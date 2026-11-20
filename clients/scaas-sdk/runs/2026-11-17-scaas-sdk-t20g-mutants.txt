@@ -1,0 +1,6 @@
+# t20g mutants at commit ab2349a71 (name | outcome | test)
+the copy call leaves the caller's array | killed | WASM_BINDGEN="$(git rev-parse --git-common-dir)/../scratchpad/tools/wasm-bindgen/bin/wasm-bindgen" bash run.sh
+the store's write drops the expected revision | killed | WASM_BINDGEN="$(git rev-parse --git-common-dir)/../scratchpad/tools/wasm-bindgen/bin/wasm-bindgen" bash run.sh
+the PRF output names another secret | killed | WASM_BINDGEN="$(git rev-parse --git-common-dir)/../scratchpad/tools/wasm-bindgen/bin/wasm-bindgen" bash run.sh
+a handle object's call without its JS export | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,uniffi --test binding wasm_exports_every_binding_call
+4 mutants, 4 killed, 0 survived, 0 not loaded

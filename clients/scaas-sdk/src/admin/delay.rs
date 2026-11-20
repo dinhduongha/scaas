@@ -21,6 +21,7 @@ const BITS: &str =
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum HolderKind {
     /// a single key (one signer)
     SingleKey,
@@ -34,6 +35,7 @@ pub enum HolderKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+#[cfg_attr(feature = "wasm", derive(serde::Serialize, serde::Deserialize))]
 pub enum DelaySentence {
     /// `atOnce`: the delay is 0, a holder's change applies at once
     AtOnce,

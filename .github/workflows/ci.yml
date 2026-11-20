@@ -98,6 +98,11 @@
 #                          --check; Swift 6.4.2 (swift.org's Ubuntu 24.04 tarball, SWIFTC); in clients/scaas-sdk/bindings/swift:
 #                          bash run.sh (the keystore and vault rows, a Swift async store and authenticator, the PRF by the copy
 #                          call, a panic as Internal, Swift errors as the SDK's errors)
+#   scaas-sdk-js:          wasm-bindgen-cli 0.2.130 (cargo install --version =0.2.130 --locked, the crate's pin); in
+#                          clients/scaas-sdk: cargo clippy --target wasm32-unknown-unknown --no-default-features --features
+#                          <the set>,wasm -- -D warnings; in clients/scaas-sdk/bindings/js: bash run.sh (the cdylib for wasm32,
+#                          wasm-bindgen for Node, node --test: the keystore and vault rows, a JS store and authenticator, the PRF
+#                          by the copy call, the caller's array zeroed, a released handle refused)
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -224,6 +229,7 @@ jobs:
       scaas_sdk_python: ${{ steps.f.outputs.scaas_sdk_python }}
       scaas_sdk_kotlin: ${{ steps.f.outputs.scaas_sdk_kotlin }}
       scaas_sdk_swift: ${{ steps.f.outputs.scaas_sdk_swift }}
+      scaas_sdk_js: ${{ steps.f.outputs.scaas_sdk_js }}
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -1389,6 +1395,35 @@ jobs:
           echo "SWIFTC=$RUNNER_TEMP/swift/usr/bin/swiftc" >> "$GITHUB_ENV"
       - name: the Swift smoke test
         working-directory: clients/scaas-sdk/bindings/swift
+        run: bash run.sh
+
+  # the JS / TS binding (plan T20g, spec §16.4): the SDK with feature `wasm` for wasm32, wasm-bindgen's glue, the Node smoke
+  scaas-sdk-js:
+    needs: changes
+    if: needs.changes.outputs.scaas_sdk_js == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            clients/scaas-sdk
+            clients/scaas-sdk/bindings/js
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26.8.1
+      - name: wasm-bindgen-cli 0.2.130
+        run: cargo install wasm-bindgen-cli --version =0.2.130 --locked
+      - name: the SDK with feature wasm for wasm32
+        working-directory: clients/scaas-sdk
+        run: cargo clippy --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,wasm -- -D warnings
+      - name: the JS smoke test
+        working-directory: clients/scaas-sdk/bindings/js
         run: bash run.sh
 
   # the keystore container's vectors (plan T2b, T2c): clientkeys writes them, the SDK reads every row
