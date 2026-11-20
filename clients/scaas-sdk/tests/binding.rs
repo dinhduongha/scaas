@@ -204,6 +204,8 @@ fn wasm_exports_every_binding_call() {
             .take_while(|c| c.is_alphanumeric() || *c == '_')
             .collect()
     };
+    // `(object, call)`: a module object's method by its object, a handle object's as the free `<object>_<call>`, a free
+    // function with no object (review B8: both sides keyed by object)
     let binding = std::fs::read_to_string("src/binding.rs").unwrap();
     let mut want = BTreeSet::new();
     let (mut exported, mut obj, mut renamed): (bool, Option<String>, Option<String>) =
@@ -226,7 +228,7 @@ fn wasm_exports_every_binding_call() {
                 .or(t.strip_prefix("pub async fn "))
             {
                 if exported {
-                    want.insert(name_of(rest));
+                    want.insert((String::new(), name_of(rest)));
                 }
                 obj = None;
             } else if t.starts_with('}') {
@@ -247,38 +249,56 @@ fn wasm_exports_every_binding_call() {
                 continue;
             }
             want.insert(match handle_objects.contains(&o.as_str()) {
-                true => format!("{}_{m}", snake(o)),
-                false => m,
+                true => (String::new(), format!("{}_{m}", snake(o))),
+                false => (o.clone(), m),
             });
         }
     }
+    // the JS side: `#[wasm_bindgen] impl X` methods, `#[wasm_bindgen] pub fn` and the `free!` rows (no object)
     let js = std::fs::read_to_string("src/wasm/js.rs").unwrap();
-    let have: BTreeSet<String> = js
-        .lines()
-        .filter_map(|l| {
-            let t = l.trim_start();
-            t.strip_prefix("pub fn ")
-                .or(t.strip_prefix("fn "))
-                .map(name_of)
-        })
-        .collect();
-    // sync-api only: the blocking open and the run hooks are not calls of the async surface
-    let sync_only = [
-        "open_blocking",
-        "run",
-        "run_blocking",
-        "inner",
-        "new",
-        "module",
-    ];
+    let mut have = BTreeSet::new();
+    let (mut wb, mut in_free, mut jobj): (bool, bool, Option<String>) = (false, false, None);
+    for line in js.lines() {
+        let t = line.trim_start();
+        if !line.starts_with(' ') {
+            if t == "free! {" {
+                in_free = true;
+            } else if t.starts_with('}') {
+                (in_free, jobj) = (false, None);
+            } else if let Some(rest) = t.strip_prefix("impl ") {
+                jobj = wb.then(|| name_of(rest));
+            } else if let Some(rest) = t.strip_prefix("pub fn ") {
+                if wb {
+                    have.insert((String::new(), name_of(rest)));
+                }
+            }
+            if t.starts_with("#[wasm_bindgen") {
+                wb = true;
+            } else if !t.starts_with("#[") && !t.starts_with("///") {
+                wb = false;
+            }
+            continue;
+        }
+        if let (true, Some(rest)) = (in_free, t.strip_prefix("fn ")) {
+            have.insert((String::new(), name_of(rest)));
+        } else if let (Some(o), Some(rest)) = (&jobj, t.strip_prefix("pub fn ")) {
+            have.insert((o.clone(), name_of(rest)));
+        }
+    }
+    // sync-api only: the blocking open
     let missing: Vec<_> = want
         .iter()
-        .filter(|n| !have.contains(*n) && !sync_only.contains(&n.as_str()))
+        .filter(|(o, n)| !have.contains(&(o.clone(), n.clone())) && n != "open_blocking")
         .collect();
     assert!(
         want.len() > 40,
         "control: binding.rs is read ({} names)",
         want.len()
+    );
+    assert!(
+        have.len() > 40,
+        "control: js.rs is read ({} names)",
+        have.len()
     );
     assert!(
         missing.is_empty(),
@@ -313,6 +333,8 @@ mod sync {
     struct Store {
         items: Mutex<HashMap<String, Vec<u8>>>,
         throw: AtomicBool,
+        locks: std::sync::atomic::AtomicU64,
+        unlocks: std::sync::atomic::AtomicU64,
     }
 
     impl SyncStore for Store {
@@ -342,11 +364,14 @@ mod sync {
             self.items.lock().unwrap().remove(&name);
             Ok(())
         }
-        // one caller at a time in these tests: no lock to hold
+        // one caller at a time in these tests: no lock to hold, the calls counted
         fn lock(&self, _: String) -> Result<u64, StoreError> {
+            self.locks.fetch_add(1, Ordering::SeqCst);
             Ok(1)
         }
-        fn unlock(&self, _: u64) {}
+        fn unlock(&self, _: u64) {
+            self.unlocks.fetch_add(1, Ordering::SeqCst);
+        }
     }
 
     /// An HMAC PRF (as tests/passkey.rs), its output written by the copy call into the secret whose id it is given.
@@ -445,26 +470,31 @@ mod sync {
     fn cancel_token_cancels() {
         let s = open(Arc::new(Store::default()));
         let (token, done) = (CancelToken::new(), Arc::new(AtomicBool::new(false)));
+        // the call runs until released, so its return can only be the cancel's (no wall-clock bound; review B15)
+        let (started_tx, started_rx) = std::sync::mpsc::channel::<()>();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel::<()>();
         let t = token.clone();
         let canceller = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(100));
+            started_rx.recv().unwrap();
             t.cancel();
         });
         let d = done.clone();
-        let start = Instant::now();
         let r = s.run_blocking(Some(token), async move {
-            tokio::time::sleep(Duration::from_millis(1500)).await;
+            started_tx.send(()).unwrap();
+            let _ = release_rx.await;
             d.store(true, Ordering::SeqCst);
             Ok(())
         });
         canceller.join().unwrap();
         assert_eq!(r.map_err(|e| e.code()), Err("Cancelled"));
         assert!(
-            start.elapsed() < Duration::from_millis(1000),
-            "returned at the cancel, not at the call's end"
+            !done.load(Ordering::SeqCst),
+            "returned at the cancel, the call still running"
         );
         // the effect of a dropped future (spec §13.4): the work goes on on the SDK's runtime
-        while !done.load(Ordering::SeqCst) && start.elapsed() < Duration::from_secs(10) {
+        release_tx.send(()).unwrap();
+        let start = Instant::now();
+        while !done.load(Ordering::SeqCst) && start.elapsed() < Duration::from_secs(30) {
             std::thread::sleep(Duration::from_millis(20));
         }
         assert!(
@@ -478,6 +508,29 @@ mod sync {
         assert_eq!(
             s.vault().seeds_blocking(Some(c)).map_err(|e| e.code()),
             Err("Cancelled")
+        );
+    }
+
+    /// Review B15: the store's lock is released to the app (`unlock`) when the SDK drops it.
+    #[test]
+    fn the_store_lock_is_released() {
+        let st = Arc::new(Store::default());
+        let s = open(st.clone());
+        import(&s);
+        let (locks, unlocks) = (
+            st.locks.load(Ordering::SeqCst),
+            st.unlocks.load(Ordering::SeqCst),
+        );
+        assert!(locks > 0, "control: the import locked the keystore");
+        let start = Instant::now();
+        while st.unlocks.load(Ordering::SeqCst) < locks && start.elapsed() < Duration::from_secs(10)
+        {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            st.unlocks.load(Ordering::SeqCst),
+            locks,
+            "every lock released ({unlocks} at first)"
         );
     }
 

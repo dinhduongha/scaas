@@ -2,6 +2,8 @@
 //! The sync surface (spec §16.1 (a′); plan T20b; feature `sync-api`): the runner of the `*_blocking` twins that
 //! `crate::binding`'s `surface!` declares, the cancel token, and the sync platform interfaces (run on a blocking thread).
 //! UNAUDITED.
+// review B6: no unsafe in this module, held in every build that compiles it (UniFFI's expansions carry none here)
+#![deny(unsafe_code)]
 use crate::binding::{self, BindingConfig};
 use crate::platform::{
     Assertion, AssertionRequest, AuthError, Authenticator, KeyPolicy, PasskeyCreated, SePublic,

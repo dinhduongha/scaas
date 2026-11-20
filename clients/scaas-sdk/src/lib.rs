@@ -3,8 +3,9 @@
 //! Every signature comes from `scaas-ua`, every chain read and send goes through `scaas-rpc`; the SDK holds no cryptography of
 //! its own and no transport. UNAUDITED.
 // The SDK's own code has no unsafe: held by every build without `uniffi` or `wasm`; UniFFI's generated scaffolding (feature
-// `uniffi`, spec §16.1) carries the FFI's unsafe, which a crate-level forbid would refuse; under `wasm` (spec §16.4) unsafe is
-// denied but for the one-thread `Send` items of `wasm::js`, each allowed where it stands.
+// `uniffi`, spec §16.1) carries the FFI's unsafe, which a crate-level forbid would refuse, so the two UniFFI modules
+// (`binding`, `sync_cpp`) deny it themselves; under `wasm` (spec §16.4) unsafe is denied but for the one-thread `Send` items
+// of `wasm::js`, each allowed where it stands.
 #![cfg_attr(not(any(feature = "uniffi", feature = "wasm")), forbid(unsafe_code))]
 #![cfg_attr(all(feature = "wasm", not(feature = "uniffi")), deny(unsafe_code))]
 #![deny(

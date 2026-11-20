@@ -18,6 +18,8 @@
 //! never comes back out (it lowers to the empty string). Rust-only items stay outside: `RuntimeChoice::Adopt`, the clock,
 //! `MemoryStore`, `FileStore`, `poll`, `heavy_peak`, `authenticator`, the raw native entry. UNAUDITED.
 #![allow(clippy::too_many_arguments)]
+// review B6: no unsafe in this module, held in every build that compiles it (UniFFI's expansions carry none here)
+#![deny(unsafe_code)]
 
 #[cfg(feature = "account")]
 #[allow(unused_imports)]
@@ -1092,6 +1094,13 @@ mod tests {
             .err()
             .unwrap();
         assert_eq!(code(e), Some("Argument"));
+        // the endpoint credential goes in and never comes back out: it lowers to the empty string (review B15)
+        let cred =
+            <scaas_rpc::endpoint::Secret as Lower<crate::UniFfiTag>>::lower(Secret::new("token-1"));
+        assert_eq!(
+            <String as Lift<crate::UniFfiTag>>::try_lift(cred).unwrap(),
+            ""
+        );
         // control: text that parses lifts
         let good = <String as Lower<crate::UniFfiTag>>::lower("{\"a\":1}".into());
         assert!(<Value as Lift<crate::UniFfiTag>>::try_lift(good).is_ok());
