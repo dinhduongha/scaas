@@ -188,6 +188,25 @@ export const isMemberKind = (kind, hederaNative = false) =>
   kind === 0x0002 ||
   (hederaNative && kind === 0x0003);
 
+/** Why a registration of `kind` does not belong on a registry (`registrationTargetOk`): `code` `UAVerifyOnly` (register at
+ *  `kindHome`) or `UAKindNotOnLine` (`kindHome` zero: no generation of the line enables the kind); `kindHome` lower-case 0x-hex. */
+export class TargetError extends UAError {
+  constructor(code, kind, kindHome) {
+    super(code, `kind ${kind} kindHome ${kindHome}`);
+    this.kind = kind;
+    this.kindHome = kindHome;
+  }
+}
+/** CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of `kind` is sent to
+ *  `registry` only where `kindHome` (the registry's `kindHome(kind)`, read by the caller: no RPC here) equals it. Addresses:
+ *  20 bytes or hex in any case. Returns nothing; throws `TargetError`. */
+export function registrationTargetOk(kind, registry, kindHome) {
+  const reg = hex(sized(registry, 20, "registry"));
+  const home = hex(sized(kindHome, 20, "kindHome"));
+  if (/^0x0+$/.test(home)) throw new TargetError("UAKindNotOnLine", kind, home);
+  if (home !== reg) throw new TargetError("UAVerifyOnly", kind, home);
+}
+
 export const kindTagString = (kind) => `scaas.ua.${tagged(kind).name}.v1`;
 export const TAG = (kind) => tagHash(kindTagString(kind));
 export const GROUPS = Object.freeze([
