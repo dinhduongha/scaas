@@ -1,0 +1,13 @@
+# t21 mutants (name | outcome | commit | test | first failure line)
+drop the usage check | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core seal_rows_and_usage_refusals | panicked at tests/app_core.rs:151:57:
+seal accepts an aad starting with the key-wrap constant | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core seal_rows_and_usage_refusals | panicked at tests/app_core.rs:140:56:
+drop the key-wrap constant from seal_key's AAD | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core seal_key_rows | panicked at tests/app_core.rs:202:9:
+drop the usage byte from seal_key's AAD | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core seal_key_rows | panicked at tests/app_core.rs:202:9:
+mix the usage into derive's info | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core derive_and_mac_rows | panicked at tests/app_core.rs:69:13:
+accept a foreign handle | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core scope_arena_and_lock | panicked at tests/app_core.rs:355:56:
+the public MAC on a derived key | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core derive_and_mac_rows | panicked at tests/app_core.rs:102:52:
+no arena limit | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core scope_arena_and_lock | panicked at tests/app_core.rs:381:5:
+a destroyed handle's slot not freed | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core scope_arena_and_lock | panicked at tests/app_core.rs:376:5:
+the KEM wrap's info without keccak256(kemPk) | killed | 0278fcc73 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core argon2_kem_and_root_rows | panicked at tests/app_core.rs:304:9:
+clientkeys: seal accepts the key-wrap prefix | killed | 0278fcc73 dirty | ../../scripts/capped node --test --test-reporter=tap test/appcore.test.js | not ok 2 - seal and open rows; an aad starting with the key-wrap constant refused
+11 mutants, 11 killed, 0 survived, 0 not loaded, 0 other failure
