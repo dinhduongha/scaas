@@ -1,0 +1,5 @@
+# t18b mutants at commit 01a284f17 (name | outcome | test)
+grantDelay read where noticePeriod applies | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test governance_delay every_bit_has_its_named_sentence
+a singleKey bit read as atOnce | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test governance_delay every_bit_has_its_named_sentence
+an unread delay defaults to zero | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test governance_delay a_failed_read_is_an_error
+3 mutants, 3 killed, 0 survived, 0 not loaded

@@ -29,6 +29,28 @@ pub struct Balances {
     pub tokens: Vec<TokenBalance>,
 }
 
+/// The word of an id (a `0x` 20-byte address zero-padded, CTR-UA-03, or a `0x` 32-byte UA) and, for a native id, its address
+/// (`Argument`: an id of another length).
+pub(crate) fn id_word(id: &str) -> Result<([u8; 32], Option<Address>), SdkError> {
+    let raw = unhex(&id.to_ascii_lowercase())?;
+    let word: [u8; 32] = match raw.len() {
+        20 => {
+            let mut w = [0u8; 32];
+            w.get_mut(12..)
+                .ok_or(SdkError::Internal)?
+                .copy_from_slice(&raw);
+            w
+        }
+        32 => raw.try_into().map_err(|_| SdkError::Argument)?,
+        _ => return Err(SdkError::Argument),
+    };
+    let native = match (word.get(..12), word.get(12..)) {
+        (Some(h), Some(a)) if h.iter().all(|b| *b == 0) => Some(Address::from_slice(a)),
+        _ => None,
+    };
+    Ok((word, native))
+}
+
 impl Wallet {
     /// The balances of `id` (a `0x` 20-byte address or a `0x` 32-byte UA) on `chain` at one block. `ChainUnknown`,
     /// `ProfileMismatch` (a listed token's `chainUid()`), `Argument` (an id of another length).
@@ -36,23 +58,7 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                let raw = unhex(&id.to_ascii_lowercase())?;
-                let word: [u8; 32] = match raw.len() {
-                    20 => {
-                        let mut w = [0u8; 32];
-                        w.get_mut(12..)
-                            .ok_or(SdkError::Internal)?
-                            .copy_from_slice(&raw);
-                        w
-                    }
-                    32 => raw.clone().try_into().map_err(|_| SdkError::Argument)?,
-                    _ => return Err(SdkError::Argument),
-                };
-                // a native id: an address zero-padded (CTR-UA-03)
-                let native = match (word.get(..12), word.get(12..)) {
-                    (Some(h), Some(a)) if h.iter().all(|b| *b == 0) => Some(Address::from_slice(a)),
-                    _ => None,
-                };
+                let (word, native) = id_word(&id)?;
                 let (profile, _, pool) = evm(&sdk, &chain)?;
                 let mut infos = Vec::with_capacity(profile.tokens.len());
                 for t in &profile.tokens {

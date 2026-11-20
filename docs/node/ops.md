@@ -729,7 +729,7 @@ figures are estimates to be **measured** by a load test run alone.
 | PG/MySQL store | ≈ SQLite figures **at ≤ 1 ms RTT**; ≈ 5 jobs/s at 5 ms (≈ 6 statements per transaction, serialized on the fencing row) | store backends |
 | EVM lane | ≤ 16 txs in flight (typical per-account pending-slot limit) ⇒ Gnosis ≈ 3 tx/s per lane | the mempool is the limit |
 | Generic lanes (one tx in flight) | ≈ 1 ÷ `include`: Sui ~2/s, Aptos ~1/s, Solana ~1/s, Hedera ~0.3/s, Cosmos/Soroban ~0.15/s, GRAM ~0.1/s per lane | lanes = target rate ÷ per-lane rate (≤ 8) |
-| Job API / gateway | 20 POST rps (burst 40), 10 GET rps per key; batch ≤ 50; pages ≤ 500 / 1 MiB; ≤ 4 long-polls per key / `MAX_INFLIGHT` 64, body 64 KiB | [job-api.md#errors](job-api.md#errors) |
+| Job API / gateway | 20 POST rps (burst 40), 10 GET rps per key; batch ≤ 50; pages ≤ 500 / 1 MiB; ≤ 4 long-polls per key / `MAX_INFLIGHT` 64, body 64 KiB (a job submission 1.25 MiB, [NODE-GW-08](gateway.md#NODE-GW-08)) | [job-api.md#errors](job-api.md#errors) |
 | Label caps | ≤ 16 chains, ≤ 8 lanes per chain, ≤ 32 namespaces, ≤ 64 tokens per chain, ≤ 256 watched wrapper legs | [NODE-OPS-13](#NODE-OPS-13) |
 | `/metrics` | series ≈ C·(9N + 6 + 102 + 14L + 4E + 2T) + C·N + W + ~1 500 (HTTP, admin, mesh, store) ⇒ ≈ 13 000 at the caps (C 16, N 32, L 8, E 4, T 64, W 256), ≈ 2 500 typical (C 4, N 4, L 4, E 2, T 8) | `scaas_relay_jobs` (9N per chain) dominates; scrape 15 s |
 
@@ -768,8 +768,8 @@ Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE
   2026-10-22: the cap is on regular + state gas; op 1 needs ≈ 41.7–43.4 M with ≈ 32.8 M of EIP-8037 state gas, Task 7b,
   +20 % ≈ 52 M; 16,000,000 before Amsterdam; the default 3,000,000 already rejects classical Zether transfers at 3.36 M;
   regular gas stays ≤ 2^24 and the block gas limit is read from the chain, [submit-lanes.md#amsterdam-gas](submit-lanes.md#amsterdam-gas)); never batched (`PqzToken` has no
-  `mtxBatch`). Gateway body limit 1 MiB on job submissions to the `pqz` chain profile only (a v3 transfer job is ≈ 170
-  KB as hex; the gateway's global limit stays 64 KiB). **Checked for op 7 (P6-ANON S9, 2026-10-16) — all unchanged**, against the largest
+  `mtxBatch`). A job submission's gateway body limit is 1.25 MiB on every chain
+  ([NODE-GW-08](gateway.md#NODE-GW-08); a v3 transfer job is ≈ 170 KB as hex); every other gateway route's stays 64 KiB. **Checked for op 7 (P6-ANON S9, 2026-10-16) — all unchanged**, against the largest
   call of each id within 16 M gas [estimate: measured proof sizes, precompile gas scaled from the live op 1 rows,
   `pqz-core/pqzl/params/anon/s9_limits.py`]: PQZL M = 8 + 16 inline credits 383,108 B of calldata, ≈ 14.6 M gas; PQZH M = 4
   + 10 inline 440,356 B, ≈ 15.9 M (floor-bound; 11 inline need 16.4 M, over this cap, under EIP-7825's 16,777,216). As

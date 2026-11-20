@@ -1672,19 +1672,7 @@ fn burn_header(
 ) -> Result<[Word; 20]> {
     let env = match (form, &bc.unwrap) {
         (OwnForm::Unwrap, Some((underlying, min_out))) => {
-            let w = crate::keccak256(
-                &[
-                    crate::keccak256(b"SCAAS-PQZ-UNWRAP-V1"),
-                    addr(underlying),
-                    u64_word(*min_out),
-                ]
-                .concat(),
-            );
-            if bc.binding == [0; 32] {
-                w
-            } else {
-                crate::keccak256(&[bc.binding, w].concat())
-            }
+            super::unwrap_envelope(&bc.binding, underlying, *min_out)
         }
         (OwnForm::Burn | OwnForm::Refresh, None) => bc.binding,
         _ => return Err(Error::Argument),

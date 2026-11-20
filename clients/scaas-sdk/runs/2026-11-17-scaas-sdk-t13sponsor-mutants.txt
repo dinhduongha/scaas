@@ -1,0 +1,10 @@
+# t13sponsor mutants (name | outcome | commit | test | first failure line)
+drop the UA check | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops sponsored_registration_checks
+drop the local PoP check | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops sponsored_registration_checks
+prepare the payment before the registration lands (no receiver check) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops pay_to_unregistered_derived_ua
+skip the setKemKey when kemPkHash is set | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops sponsored_registration_checks
+no split for a PQ registration | killed | 67780ad07 dirty | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib pq_registration_split | panicked at src/account/register_tests.rs:122:5:
+the kind not read | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops sponsored_registration_checks
+the UA not recomputed from the key data | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops sponsored_registration_checks
+a committed KEM key not compared | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops sponsored_registration_checks
+8 mutants, 8 killed, 0 survived, 0 not loaded, 0 other failure

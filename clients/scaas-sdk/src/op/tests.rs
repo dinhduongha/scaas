@@ -92,16 +92,22 @@ fn endpoint(url: &str) -> EndpointConfig {
 }
 
 async fn open(store: Arc<Flaky>, profile: ChainProfile, limits: Limits) -> Arc<Sdk> {
-    open_at(store, profile, limits, 1_800_000_000).await
+    open_at(store, profile, limits, 1_800_000_000, None).await
 }
 
 /// `open` on a clock fixed at `now`.
-async fn open_at(store: Arc<Flaky>, profile: ChainProfile, limits: Limits, now: u64) -> Arc<Sdk> {
+async fn open_at(
+    store: Arc<Flaky>,
+    profile: ChainProfile,
+    limits: Limits,
+    now: u64,
+    auth: Option<Arc<dyn crate::platform::Authenticator>>,
+) -> Arc<Sdk> {
     Sdk::open(SdkConfig {
         profiles: vec![profile],
         store,
-        authenticator: None,
-        rp_id: None,
+        rp_id: auth.as_ref().map(|_| RP_ID.to_string()),
+        authenticator: auth,
         runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
         limits,
         clock: Some(std::sync::Arc::new(move || now)),
@@ -118,6 +124,15 @@ async fn open_at(store: Arc<Flaky>, profile: ChainProfile, limits: Limits, now: 
 
 /// A seed on a fresh SDK over a fake chain with `gateways` gateways (each a server of the same fake).
 async fn setup(gateways: usize, edit: impl FnOnce(&mut ChainProfile, &mut Limits)) -> T {
+    setup_with(gateways, edit, None).await
+}
+
+/// `setup` with the platform authenticator `auth` (its RP ID [`RP_ID`]).
+async fn setup_with(
+    gateways: usize,
+    edit: impl FnOnce(&mut ChainProfile, &mut Limits),
+    auth: Option<Arc<dyn crate::platform::Authenticator>>,
+) -> T {
     let chain = fake();
     let url = serve(chain.clone()).await;
     let mut gws = vec![];
@@ -144,12 +159,16 @@ async fn setup(gateways: usize, edit: impl FnOnce(&mut ChainProfile, &mut Limits
         }],
         gas: gas_rows(100_000),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     };
     let mut limits = Limits::default();
     edit(&mut profile, &mut limits);
     let store = Arc::new(Flaky::default());
-    let sdk = open(store.clone(), profile.clone(), limits).await;
+    let sdk = open_at(store.clone(), profile.clone(), limits, 1_800_000_000, auth).await;
     let words =
         Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(REPO.as_bytes().to_vec())).unwrap());
     let pass =
@@ -261,6 +280,9 @@ fn cancel(t: &T, kind: &'static str, contract: &str, lane: &str, fee: &str) -> D
         opaque: false,
         ids: false,
         relay_call: None,
+        owner: None,
+        key_index: alloy::primitives::U256::ZERO,
+        target: None,
     }
 }
 
@@ -341,6 +363,9 @@ async fn review_lists_every_named_field_with_its_source() {
         opaque: false,
         ids: false,
         relay_call: None,
+        owner: None,
+        key_index: alloy::primitives::U256::ZERO,
+        target: None,
     };
     let p = prepare(&t, d).await;
     let r = p.review();
@@ -665,6 +690,85 @@ async fn signed_gas_regular_is_held_to_the_cap() {
             sent_txs(&t, 1).await; // a gas limit above 2^24, within the block gas limit: sent
         }
     }
+}
+
+/// M8 (review 2026-11-20): the fake chain holds a transaction's regular gas to 2^24 itself (EIP-7825 under EIP-8037), an
+/// independent control of the SDK's bound: a call executing 2^24 + 1 regular gas is refused at the send although the SDK's
+/// own rows let it through; at 2^24 it is sent (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn the_fake_chain_holds_the_regular_gas_to_the_cap() {
+    for over in [false, true] {
+        let t = setup(0, |_, _| {}).await;
+        t.chain.lock().unwrap().regular_of =
+            Some(if over { |_| (1 << 24) + 1 } else { |_| 1 << 24 });
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let q = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        let op = t.sdk.op().submit(p, q).await.unwrap();
+        if over {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            assert!(
+                t.chain.lock().unwrap().sent.is_empty(),
+                "the node refused it"
+            );
+            assert!(!matches!(
+                t.sdk.op().state(op).await.unwrap(),
+                OpState::Landed { .. }
+            ));
+        } else {
+            sent_txs(&t, 1).await;
+        }
+    }
+}
+
+/// M17 (review 2026-11-20): a quote never lowers the regular bound. `signed_quote` takes the operation's own regular bound
+/// as the floor (`resend`'s recomputed figure) and reads a quote naming no regular part (0) as whole; the caps are held even
+/// when nothing grew. Each row one change from the control.
+#[tokio::test(flavor = "multi_thread")]
+async fn signed_quote_never_lowers_the_regular_bound() {
+    let t = setup(0, |_, l| l.max_gas = 1 << 26).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let mut q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    (q.gas_limit, q.regular_gas, q.gas) = (20_000_000, 1_000_000, Some(20_000_000));
+    let own = |regular: u64| {
+        Some(gas::Figure {
+            gas: 18_000_000,
+            regular,
+            from: gas::GasSources::both(gas::GasFrom::App),
+        })
+    };
+    let at = |q: SubmitQuote, own: Option<gas::Figure>| {
+        let t = &t;
+        async move {
+            code(
+                super::quote::signed_quote(&t.sdk, "local", gas::NATIVE_EVM, 100, &q, 100, own)
+                    .await,
+            )
+        }
+    };
+    // the control: both bounds within 2^24
+    assert_eq!(at(q.clone(), own(1_000_000)).await, "Ok");
+    assert_eq!(at(q.clone(), None).await, "Ok");
+    // the row's own regular bound above the cap, the caller's quote below it: refused
+    assert_eq!(at(q.clone(), own(17_000_000)).await, "GasAboveTxCap");
+    // a quote naming no regular part is whole (20 M above the cap): refused, though nothing grew
+    let mut zero = q.clone();
+    zero.regular_gas = 0;
+    assert_eq!(at(zero, None).await, "GasAboveTxCap");
+    // the caller's own regular bound above the cap, nothing grew: refused (the caps held without growth)
+    let mut high = q.clone();
+    high.regular_gas = 17_000_000;
+    assert_eq!(at(high, None).await, "GasAboveTxCap");
+    assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1300,6 +1404,7 @@ async fn a_counted_row_quotes_its_count_or_refuses() {
                         item: i.into(),
                         gas: 7_000,
                         regular: None,
+                        measured_max: None,
                     });
                 }
             }
@@ -1855,6 +1960,7 @@ async fn terminal_rows_pruned_after_retention() {
         t.profile.clone(),
         Limits::default(),
         1_800_000_000 + 90 * day - 1,
+        None,
     )
     .await;
     state::put(&soon, &state::row(&soon, &open_op).await.unwrap())
@@ -1869,6 +1975,7 @@ async fn terminal_rows_pruned_after_retention() {
         t.profile.clone(),
         Limits::default(),
         1_800_000_000 + 90 * day,
+        None,
     )
     .await;
     state::put(&late, &state::row(&late, &open_op).await.unwrap())
@@ -1880,6 +1987,7 @@ async fn terminal_rows_pruned_after_retention() {
         t.profile.clone(),
         Limits::default(),
         1_800_000_000 + 900 * day,
+        None,
     )
     .await;
     state::put(
@@ -1921,6 +2029,479 @@ async fn retry_on_a_lane_waits_for_expired() {
     assert_ne!(second, first);
     assert_eq!(t.sdk.op().state(first).await.unwrap(), OpState::Expired);
     assert_eq!(signs(&t), 2);
+}
+
+// --- plan T13: passkey and secure-element signing (owner 2026-11-19, S1, P1) ---
+
+const RP_ID: &str = "scaas.example";
+
+/// A platform device over test P-256 keys: a passkey on [`RP_ID`] (assertions with UP and UV, DER signatures) and a secure
+/// element signing in MESSAGE mode (`r ‖ s`); each failure mode switchable; every signing request counted.
+#[derive(Default)]
+struct Device {
+    wrong_key: AtomicBool,
+    no_uv: AtomicBool,
+    digest_mode: AtomicBool,
+    asked: std::sync::atomic::AtomicU32,
+}
+
+fn device_key(tag: u8) -> p256::ecdsa::SigningKey {
+    p256::ecdsa::SigningKey::from_slice(&scaas_ua::sha256(
+        &[b"scaas-sdk.t13.device".as_slice(), &[tag]].concat(),
+    ))
+    .unwrap()
+}
+
+fn xy(k: &p256::ecdsa::SigningKey) -> Vec<u8> {
+    k.verifying_key().to_sec1_point(false).as_bytes()[1..].to_vec()
+}
+
+fn der(sig: &p256::ecdsa::Signature) -> Vec<u8> {
+    let (r, s) = sig.split_bytes();
+    let int = |v: &[u8]| {
+        let v = &v[v.iter().position(|b| *b != 0).unwrap_or(31)..];
+        let pad = usize::from(v[0] >= 0x80);
+        [&[0x02, (v.len() + pad) as u8][..], &vec![0; pad], v].concat()
+    };
+    let body = [int(&r), int(&s)].concat();
+    [&[0x30, body.len() as u8][..], &body].concat()
+}
+
+fn b64url(b: &[u8]) -> String {
+    const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::new();
+    for c in b.chunks(3) {
+        let n = c
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, x)| n | u32::from(*x) << (16 - 8 * i));
+        (0..=c.len()).for_each(|i| out.push(A[(n >> (18 - 6 * i) & 63) as usize] as char));
+    }
+    out
+}
+
+impl Device {
+    /// The key that answers: the device's own (`tag`), or another one when `wrong_key` is set.
+    fn key(&self, tag: u8) -> p256::ecdsa::SigningKey {
+        self.asked.fetch_add(1, SeqCst);
+        device_key(if self.wrong_key.load(SeqCst) { 9 } else { tag })
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::platform::Authenticator for Device {
+    async fn create_passkey(
+        &self,
+        rp_id: String,
+        _: String,
+        _: Vec<Vec<u8>>,
+    ) -> Result<crate::platform::PasskeyCreated, crate::platform::AuthError> {
+        Ok(crate::platform::PasskeyCreated {
+            credential_id: vec![7; 16],
+            key_data: [
+                xy(&device_key(1)),
+                scaas_ua::sha256(rp_id.as_bytes()).to_vec(),
+            ]
+            .concat(),
+        })
+    }
+    async fn get_assertion(
+        &self,
+        req: crate::platform::AssertionRequest,
+        _: Arc<SecretBytes>,
+    ) -> Result<crate::platform::Assertion, crate::platform::AuthError> {
+        use p256::ecdsa::signature::hazmat::PrehashSigner;
+        assert_eq!(req.allow, vec![vec![7u8; 16]], "the row's credential");
+        let flags = if self.no_uv.load(SeqCst) { 0x01 } else { 0x05 };
+        let auth = [
+            &scaas_ua::sha256(req.rp_id.as_bytes())[..],
+            &[flags],
+            &1u32.to_be_bytes(),
+        ]
+        .concat();
+        let cdj = format!(
+            r#"{{"type":"webauthn.get","challenge":"{}","origin":"https://{RP_ID}"}}"#,
+            b64url(&req.challenge)
+        )
+        .into_bytes();
+        let pre = scaas_ua::sha256(&[auth.as_slice(), &scaas_ua::sha256(&cdj)].concat());
+        let sig: p256::ecdsa::Signature = self.key(1).sign_prehash(&pre).unwrap();
+        Ok(crate::platform::Assertion {
+            credential_id: vec![7; 16],
+            authenticator_data: auth,
+            client_data_json: cdj,
+            signature: der(&sig),
+            prf: false,
+        })
+    }
+    async fn platform_secret(
+        &self,
+        _: String,
+        _: Vec<u8>,
+        _: String,
+        _: Option<crate::platform::KeyPolicy>,
+        _: Arc<SecretBytes>,
+    ) -> Result<(), crate::platform::AuthError> {
+        Err(crate::platform::AuthError::Unavailable)
+    }
+    async fn p256_generate(
+        &self,
+        _: crate::platform::KeyPolicy,
+    ) -> Result<crate::platform::SePublic, crate::platform::AuthError> {
+        Ok(crate::platform::SePublic {
+            handle: "se-1".into(),
+            key_data: xy(&device_key(2)),
+        })
+    }
+    /// MESSAGE mode: ECDSA over SHA-256 of the 32 bytes given; `digest_mode`: the 32 bytes taken as the digest.
+    async fn p256_sign(
+        &self,
+        handle: String,
+        ua_msg: Vec<u8>,
+        _: String,
+    ) -> Result<Vec<u8>, crate::platform::AuthError> {
+        use p256::ecdsa::signature::hazmat::PrehashSigner;
+        use p256::ecdsa::signature::Signer as _;
+        assert_eq!(handle, "se-1");
+        let k = self.key(2);
+        let sig: p256::ecdsa::Signature = if self.digest_mode.load(SeqCst) {
+            k.sign_prehash(&ua_msg).unwrap()
+        } else {
+            k.sign(&ua_msg)
+        };
+        Ok(sig.to_bytes().to_vec())
+    }
+}
+
+/// An SDK over the fake chain with `dev` as its authenticator, a verify row for both device kinds; a passkey row (or a
+/// secure-element row, `se`), and a `UACancelNonce` its UA signs, prepared and quoted for the gateway.
+async fn device_op(dev: &Arc<Device>, se: bool) -> (T, Arc<Prepared>, SubmitQuote) {
+    let auth: Arc<dyn crate::platform::Authenticator> = dev.clone();
+    let t = setup_with(
+        1,
+        |p, _| {
+            p.gas
+                .verify
+                .extend([0x0100, 0x0101].map(|signer| crate::GasVerify {
+                    signer,
+                    gas: 0,
+                    sig_bytes: 0,
+                    margin: 0,
+                    per_item: None,
+                }));
+        },
+        Some(auth),
+    )
+    .await;
+    let acc = t.sdk.account();
+    let key = if se {
+        let policy = crate::platform::KeyPolicy {
+            biometry_current_set: true,
+            invalidated_by_enrollment: true,
+        };
+        acc.create_se_key(crate::account::CreateSeKey {
+            seed: t.seed.clone(),
+            name: "element".into(),
+            policy,
+        })
+        .await
+        .unwrap()
+    } else {
+        acc.create_passkey_key(crate::account::CreatePasskeyKey {
+            seed: t.seed.clone(),
+            name: "phone".into(),
+        })
+        .await
+        .unwrap()
+    };
+    let rows = acc.accounts(t.seed.clone()).await.unwrap();
+    let ua = rows
+        .iter()
+        .find(|r| r.shape == "key")
+        .unwrap()
+        .id_text
+        .clone();
+    let mut d = cancel(&t, "token", TOKEN, "5", "0");
+    d.signer = key;
+    d.message["from"] = json!(ua);
+    let p = prepare(&t, d).await;
+    let q = gateway_quote(&t, &p).await;
+    (t, p, q)
+}
+
+/// Plan T13 `passkey_signs_through_the_authenticator` (owner 2026-11-19, S1, P1): a passkey row signs a `UACancelNonce`
+/// through the `Authenticator` (asked once: the policy's dry run asks no device), the assertion verified before use; an
+/// assertion by another key, or with UV clear, is `AuthenticatorRefused` and nothing is sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn passkey_signs_through_the_authenticator() {
+    let dev = Arc::new(Device::default());
+    let (t, p, q) = device_op(&dev, false).await;
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(dev.asked.load(SeqCst), 1, "one assertion");
+    for wrong_key in [true, false] {
+        let dev = Arc::new(Device::default());
+        let (t, p, q) = device_op(&dev, false).await;
+        if wrong_key {
+            dev.wrong_key.store(true, SeqCst);
+        } else {
+            dev.no_uv.store(true, SeqCst);
+        }
+        assert_eq!(
+            code(t.sdk.op().submit(p, q).await),
+            "AuthenticatorRefused",
+            "another key: {wrong_key}"
+        );
+        assert!(t.chain.lock().unwrap().bodies.is_empty(), "nothing sent");
+    }
+}
+
+/// Plan T13 `se_key_message_mode` (S1): a secure-element row signs the `ua_msg` in MESSAGE mode and the signature verifies; a
+/// device answering in digest mode, or with another key, fails `scaas-ua`'s verification of the external answer:
+/// `ExternalSignature`, nothing sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn se_key_message_mode() {
+    let dev = Arc::new(Device::default());
+    let (t, p, q) = device_op(&dev, true).await;
+    t.sdk.op().submit(p, q).await.unwrap();
+    assert_eq!(dev.asked.load(SeqCst), 1);
+    for digest in [true, false] {
+        let dev = Arc::new(Device::default());
+        let (t, p, q) = device_op(&dev, true).await;
+        if digest {
+            dev.digest_mode.store(true, SeqCst);
+        } else {
+            dev.wrong_key.store(true, SeqCst);
+        }
+        assert_eq!(
+            code(t.sdk.op().submit(p, q).await),
+            "ExternalSignature",
+            "digest mode: {digest}"
+        );
+        assert!(t.chain.lock().unwrap().bodies.is_empty(), "nothing sent");
+    }
+}
+
+/// Owner 2026-11-19, T2: a stored key row registers through the SDK: a passkey row as `registerWebAuthn`, a secure-element
+/// row as `register` (`p256`), each PoP (`pop` v2 over the registration digest) answered by the `Authenticator` once and
+/// verified by `scaas-ua`'s `check_registration`; a device answering with another key is refused before anything is kept; a
+/// KEM key asked for such a row is `Argument`; a key row as the payer is `Argument` (spec §13.3: a holder with no native key
+/// has no self-relay path).
+#[tokio::test(flavor = "multi_thread")]
+async fn key_rows_register() {
+    const REGISTRY: &str = "0x5ca00000000000000000000000000000000000c3";
+    for se in [false, true] {
+        let dev = Arc::new(Device::default());
+        let auth: Arc<dyn crate::platform::Authenticator> = dev.clone();
+        let t = setup_with(0, |p, _| p.registry = Some(REGISTRY.into()), Some(auth)).await;
+        let acc = t.sdk.account();
+        let key = if se {
+            let policy = crate::platform::KeyPolicy {
+                biometry_current_set: true,
+                invalidated_by_enrollment: true,
+            };
+            acc.create_se_key(crate::account::CreateSeKey {
+                seed: t.seed.clone(),
+                name: "element".into(),
+                policy,
+            })
+            .await
+            .unwrap()
+        } else {
+            acc.create_passkey_key(crate::account::CreatePasskeyKey {
+                seed: t.seed.clone(),
+                name: "phone".into(),
+            })
+            .await
+            .unwrap()
+        };
+        let row = acc
+            .accounts(t.seed.clone())
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.shape == "key")
+            .unwrap();
+        let ua = row.id_text.clone();
+        t.chain.lock().unwrap().answers.push((
+            REGISTRY.into(),
+            format!(
+                "{}{}",
+                &fake_chain::keccak_hex(b"isRegistered(bytes32)")[..10],
+                &ua[2..]
+            ),
+            format!("0x{}", "00".repeat(32)),
+        ));
+        let payer = KeyRef::Native {
+            seed: t.seed.clone(),
+            network: "evm".into(),
+            index: 0,
+        };
+        let req = |attrs: crate::account::RegisterAttrs, payer: KeyRef| crate::account::Register {
+            key: key.clone(),
+            chain: "local".into(),
+            attrs,
+            payer,
+        };
+        let ws = acc
+            .prepare_register(req(Default::default(), payer.clone()))
+            .await
+            .unwrap();
+        assert_eq!(dev.asked.load(SeqCst), 1, "one answer for the PoP");
+        assert_eq!(ws.len(), 1);
+        assert_eq!(
+            ws[0].entry(),
+            if se { "register" } else { "registerWebAuthn" }
+        );
+        assert_eq!(ws[0].ua(), ua);
+        let pop = ws[0]
+            .review()
+            .into_iter()
+            .find(|f| f.name == "args.pop")
+            .unwrap()
+            .value;
+        let kind = row.kind.unwrap();
+        let kd = match se {
+            true => xy(&device_key(2)),
+            false => [
+                xy(&device_key(1)),
+                scaas_ua::sha256(RP_ID.as_bytes()).to_vec(),
+            ]
+            .concat(),
+        };
+        let ok = scaas_ua::ua_portable::check_registration(
+            kind,
+            &kd,
+            &Default::default(),
+            &unhex(&pop).unwrap(),
+            &[],
+            &|_| None,
+        );
+        assert_eq!(ok, Ok(()), "the PoP verifies (se: {se})");
+        let kem = crate::account::RegisterAttrs {
+            pqz_key: false,
+            kem: true,
+        };
+        assert_eq!(
+            code(acc.prepare_register(req(kem, payer.clone())).await),
+            "Argument"
+        );
+        assert_eq!(
+            code(
+                acc.prepare_register(req(Default::default(), key.clone()))
+                    .await
+            ),
+            "Argument",
+            "a key row pays nothing"
+        );
+        dev.wrong_key.store(true, SeqCst);
+        let refused = code(
+            acc.prepare_register(req(Default::default(), payer.clone()))
+                .await,
+        );
+        assert_eq!(
+            refused,
+            if se {
+                "ExternalSignature"
+            } else {
+                "AuthenticatorRefused"
+            }
+        );
+    }
+}
+
+/// Owner 2026-11-19, T3: a policy refusal never asks the device. A passkey row and a secure-element row each sign one
+/// operation's typed data under another operation's check (another lane: `PolicyRefused`) with no request to the
+/// `Authenticator`; the control, the same typed data under its own check, asks it once.
+#[tokio::test(flavor = "multi_thread")]
+async fn policy_refusal_asks_no_device() {
+    for se in [false, true] {
+        let dev = Arc::new(Device::default());
+        let (t, p, _) = device_op(&dev, se).await;
+        let mut d = cancel(&t, "token", TOKEN, "6", "0");
+        d.signer = p.signer();
+        d.message["from"] = p.t.message["from"].clone();
+        let other = prepare(&t, d).await;
+        let Key::External(row, _) = key_opened(&t.sdk, &p.signer()).await.unwrap() else {
+            panic!("a key row")
+        };
+        let refused = external::sign(&t.sdk, &row, &p.t.td, &other.t.expect).await;
+        assert_eq!(code(refused), "PolicyRefused", "se: {se}");
+        assert_eq!(dev.asked.load(SeqCst), 0, "no device asked (se: {se})");
+        assert!(
+            external::sign(&t.sdk, &row, &p.t.td, &p.t.expect)
+                .await
+                .is_ok(),
+            "the control (se: {se})"
+        );
+        assert_eq!(dev.asked.load(SeqCst), 1);
+    }
+}
+
+/// Owner 2026-11-19, T4: `create_passkey_key(seed, name)` takes the RP ID from the SDK's configuration: the row's key data
+/// ends with SHA-256 of [`RP_ID`] (the RP ID the device was asked for); an SDK configured with an `Authenticator` and no RP ID
+/// refuses `AuthenticatorRefused` and asks the device nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn passkey_rp_id_from_config() {
+    let dev = Arc::new(Device::default());
+    let auth: Arc<dyn crate::platform::Authenticator> = dev.clone();
+    let t = setup_with(0, |_, _| {}, Some(auth.clone())).await;
+    let acc = t.sdk.account();
+    acc.create_passkey_key(crate::account::CreatePasskeyKey {
+        seed: t.seed.clone(),
+        name: "phone".into(),
+    })
+    .await
+    .unwrap();
+    let row = acc
+        .accounts(t.seed.clone())
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.shape == "key")
+        .unwrap();
+    let kd = [
+        xy(&device_key(1)),
+        scaas_ua::sha256(RP_ID.as_bytes()).to_vec(),
+    ]
+    .concat();
+    assert_eq!(
+        row.id_text,
+        hex(&scaas_ua::derive_ua(0x0100, &kd, false).unwrap()),
+        "the configured RP ID"
+    );
+    let sdk = Sdk::open(SdkConfig {
+        profiles: vec![t.profile.clone()],
+        store: MemoryStore::new(),
+        rp_id: None,
+        authenticator: Some(auth),
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let sec = |s: &str| {
+        Arc::new(SecretBytes::from_zeroizing(Zeroizing::new(s.as_bytes().to_vec())).unwrap())
+    };
+    let seed = sdk
+        .vault()
+        .import_words(ImportWords {
+            label: "main".into(),
+            words: sec(REPO),
+            vault_passphrase: sec(PASS),
+        })
+        .await
+        .unwrap()
+        .id;
+    let r = sdk
+        .account()
+        .create_passkey_key(crate::account::CreatePasskeyKey {
+            seed,
+            name: "phone".into(),
+        })
+        .await;
+    assert_eq!(code(r), "AuthenticatorRefused", "no RP ID configured");
 }
 
 /// PR A review, finding 4: `mtxOperatorTransfer` debits the message's `account`, a third party; a native signer moving a
@@ -2337,7 +2918,7 @@ async fn bls_multi_stored_path_minimal() {
     let t = setup(1, |_, _| {}).await;
     let (d, _) = bls_group(&[0, 1, 2, 3], 2);
     let p = bls_prepared(&t, &d).await;
-    assert_eq!(quote::signer_kind(&p), 0x0121);
+    assert_eq!(quote::signer_kind(&t.sdk, &p).await.unwrap(), 0x0121);
     assert_eq!(bls_multi::members(&p.signer()), Some(4));
     let op = t.sdk.op();
     let mut parts = vec![];
@@ -2404,6 +2985,7 @@ async fn bls_multi_stored_path_minimal() {
                 item: "members".into(),
                 gas: 1_000,
                 regular: None,
+                measured_max: None,
             }),
         })
     })
@@ -2495,10 +3077,11 @@ async fn bls_multi_bad_partial_named() {
 }
 
 /// Spec §8.4, plan Task 17: the registration's self-relay quote is the reference row's `gas + per_item × n` (regular and
-/// state gas, no verify part), the intrinsic cost and the calldata, with the margin; it grows with n; its regular bound the
+/// state gas, no verify part), the intrinsic cost and the calldata, no margin (a fixed-cost registry row, owner 2026-11-20:
+/// approved lowering the registry-write margin); it grows with n; its regular bound the
 /// row's `regular + per_item.regular × n` the same way (EIP-8037, controller call, owner auto-run 2026-11-19): a group of 64
 /// members quotes a gas limit above 2^24, its regular bound within the cap, under a 200 M block gas limit, and is
-/// `GasAboveTxCap` under the fake's 30 M; no registry, no row: refused.
+/// `GasAboveTxCap` under a 25 M one; no registry, no row: refused.
 #[tokio::test(flavor = "multi_thread")]
 async fn bls_multi_register_quote_by_n() {
     let t = setup(0, |p, _| {
@@ -2525,30 +3108,24 @@ async fn bls_multi_register_quote_by_n() {
             .unwrap()
             .len() as u64;
         let g = row.gas + row.per_item.as_ref().unwrap().gas * u64::from(n);
-        assert_eq!(
-            q.gas_limit,
-            gas::with_margin(g + 21_000 + 64 * len),
-            "n {n}"
-        );
+        assert_eq!(q.gas_limit, g + 21_000 + 64 * len, "n {n}");
         let r =
             row.regular.unwrap() + row.per_item.as_ref().unwrap().regular.unwrap() * u64::from(n);
-        assert_eq!(
-            q.regular_gas,
-            gas::with_margin(r + 21_000 + 64 * len),
-            "regular n {n}"
-        );
+        assert_eq!(q.regular_gas, r + 21_000 + 64 * len, "regular n {n}");
         assert_eq!(q.gas_from, Some(GasSources::both(GasFrom::Reference)));
         assert!(q.gas_limit > last, "grows with n");
         last = q.gas_limit;
     }
     let (d64, _) = bls_group(&(0..64).collect::<Vec<_>>(), 32);
+    // a block of 25 M (n 64 quotes about 30 M without the margin; it was the fake's 30 M under the margin, owner 2026-11-20)
+    t.chain.lock().unwrap().block_gas_limit = 25_000_000;
     assert_eq!(
         code(
             op.quote_register_bls_multi("local".into(), d64.clone(), payer(&t))
                 .await
         ),
         "GasAboveTxCap",
-        "above the fake's 30 M block gas limit"
+        "above a 25 M block gas limit"
     );
     let big = setup(0, |p, l| {
         p.registry = Some(REGISTRY.into());

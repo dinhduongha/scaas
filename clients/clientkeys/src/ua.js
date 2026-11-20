@@ -1064,6 +1064,25 @@ export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, ke
 }
 
 /**
+ * The sponsored registration blob (scaas-sdk spec §7.1, R16): what a receiver's app passes out of band (a QR code, a message) for
+ * a sender to submit and pay for. Public data only, named fields: `{ v: 1, ua, kind, args, kem }`, `args` the registration's
+ * named arguments as `registrationArgs` gives them with `entry` first (the PoP among them: it binds no caller, CTR-UA-07), `kem`
+ * the KEM key of version 0 (`{ version: 0, kemPk }`) when `args.attrs.kemPkHash` commits to it (the hash-commit form: the sender
+ * adds `setKemKey(ua, 0, kem, UASig())`), else null.
+ */
+export function registrationBlob({ kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner } = {}) {
+  const r = registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner });
+  const ua = hex(uaOf(Number(kind), keyData));
+  return {
+    v: 1,
+    ua,
+    kind: Number(kind),
+    args: { entry: r.entry, ...r.args },
+    kem: r.kemFill ? { version: 0, kemPk: hex(bytes(kemPk)) } : null,
+  };
+}
+
+/**
  * The repair of a front-run hash commit (PRV M1, owner 2026-11-01, option (a); CTR-UA-07): both forms of a KEM key sign the
  * same record, so anyone can land the commit form of a full `register`. After `register`, or on `UAAlreadyRegistered`, the
  * client reads `registrationOf(ua).attrs.kemPkHash` and `kemKeyAt(ua, 0).kem` (`stored`) and sends what this returns:

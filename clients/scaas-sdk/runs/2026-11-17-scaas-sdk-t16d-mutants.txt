@@ -1,0 +1,5 @@
+# t16d mutants at commit dff035bc3 (name | outcome | test)
+P-T16-3: a native verifier's code not checked | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz verdict_native_verifier
+P-T16-3: any native signature accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz verdict_native_verifier
+P-T16-5: the last version left out | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test confidential_pqz pqz_balance_all_versions
+3 mutants, 3 killed, 0 survived, 0 not loaded

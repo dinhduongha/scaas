@@ -1,0 +1,4 @@
+# t13direct mutants at commit 6e672164e (name | outcome | test)
+deploy without the guardian (its word left zero) | killed | CAPPED_MEM=6G ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test e2e -- --ignored --exact guardian_recovery_via_execute
+completeRecovery of another key (kind word 1) | killed | CAPPED_MEM=6G ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test e2e -- --ignored --exact guardian_recovery_via_execute
+2 mutants, 2 killed, 0 survived, 0 not loaded

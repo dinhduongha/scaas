@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Plan T10 / T11: the scaas-node client against fake gateways on 127.0.0.1:0 (CLI-RPC-10, F8). The node's own conformance test
 //! is `scaas-node/tests/rpc_client.rs`.
-use scaas_rpc::node::{NodeClient, NodeOutcome, UaMetaTxReq, BODY_MAX};
+use scaas_rpc::node::{NodeClient, NodeOutcome, UaMetaTxReq, BODY_MAX, OP_BODY_MAX};
 use scaas_rpc::{Class, Endpoint, EndpointAuth, NodeList, Policy, RpcError, Secret};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
@@ -118,22 +118,48 @@ async fn an_op_that_is_not_an_object_is_argument() {
     assert!(c.submit_op_at(0, 1, &op()).await.is_ok(), "control");
 }
 
+/// NODE-GW-08: `/v1/op` takes a body of `OP_BODY_MAX` bytes and refuses one byte more unsent; `/v1/ua-metatx` keeps
+/// `BODY_MAX` (64 KiB). Each bound with its positive control.
 #[tokio::test]
-async fn a_body_above_64_kib_is_refused_unsent() {
+async fn each_route_refuses_a_body_above_its_cap_unsent() {
     let (g, seen) = gateway(queued()).await;
     let c = client(&[(&g, None)]);
-    let mut big = op();
-    big["pad"] = json!("x".repeat(BODY_MAX));
+    // `{"chain":1,"op":` + the op + `}`: the op's own JSON is the body less 17 bytes
+    let sized = |len: usize| {
+        let mut o = op();
+        o["pad"] = json!("");
+        let base = serde_json::to_string(&o).unwrap().len() + 17;
+        o["pad"] = json!("x".repeat(len - base));
+        o
+    };
     assert!(matches!(
-        c.submit_op_at(0, 1, &big).await,
-        Err(RpcError::BodyTooLarge { cap: 65536, .. })
+        c.submit_op_at(0, 1, &sized(OP_BODY_MAX + 1)).await,
+        Err(RpcError::BodyTooLarge {
+            cap: 1_310_720,
+            len: 1_310_721
+        })
     ));
     assert!(seen.lock().unwrap().is_empty(), "nothing sent");
-    let mut fits = op();
-    fits["pad"] = json!("x".repeat(BODY_MAX - 400));
     assert!(
-        c.submit_op_at(0, 1, &fits).await.is_ok(),
-        "control: below the cap"
+        c.submit_op_at(0, 1, &sized(OP_BODY_MAX)).await.is_ok(),
+        "control: at the cap"
+    );
+    let req = |pad: usize| UaMetaTxReq {
+        chain: 7622,
+        token: "0xaa".into(),
+        contract: None,
+        struct_: Some("transfer".into()),
+        m: json!({"from": "0x01", "to": "0x02"}),
+        auth: json!({"signature": "0x01", "pad": "x".repeat(pad)}),
+    };
+    let n = serde_json::to_vec(&req(0)).unwrap().len();
+    assert!(matches!(
+        c.submit_ua_metatx_at(0, &req(BODY_MAX + 1 - n)).await,
+        Err(RpcError::BodyTooLarge { cap: 65536, .. })
+    ));
+    assert!(
+        c.submit_ua_metatx_at(0, &req(BODY_MAX - n)).await.is_ok(),
+        "control: at the cap"
     );
 }
 
@@ -591,4 +617,166 @@ async fn a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status() {
         matches!(o, NodeOutcome::Queued { status: 200, .. }),
         "control: {o:?}"
     );
+}
+
+// ---------------------------------------------------------------- the PQZ verifier client (owner 2026-11-19, C1)
+
+fn verifiers(urls: &[&str], policy: Policy) -> scaas_rpc::node::VerifierClient {
+    let e = urls
+        .iter()
+        .map(|u| Endpoint::new(u, Class::Named, None, None).unwrap())
+        .collect();
+    scaas_rpc::node::VerifierClient::new(NodeList::new(e, policy, 5_000, 5_000, 10_000).unwrap())
+        .unwrap()
+}
+
+fn verdict(epoch: u64) -> Answer {
+    Arc::new(move |path, _| match path {
+        "/v1/pqz-verdict" => (
+            200,
+            json!({"pqzVerdict": {"pqzVerifierEpoch": epoch, "validUntil": "99"}, "pqzVerdictSig": {"signature": format!("0x{epoch:02x}")}}),
+        ),
+        "/v1/pqz-verdict/probe" => (200, json!({"serves": true, "epoch": epoch})),
+        _ => (404, json!({"error": "UNKNOWN_ROUTE"})),
+    })
+}
+
+#[tokio::test]
+async fn verifier_routes_bodies_and_failover() {
+    // the first verifier unreachable (503 BUSY), the second answers: failover takes the second, the body byte for byte
+    let (busy, seen_busy) = gateway(Arc::new(|_, _| (503, json!({"error": "BUSY"})))).await;
+    let (good, seen) = gateway(verdict(7)).await;
+    let c = verifiers(&[&busy, &good], Policy::Failover);
+    let req = json!({"token": "0x00000000000000000000000000000000000000aa", "entry": "UAPqzTransferSingle", "proof": "0x01"});
+    let v = c.verdict(&req).await.unwrap();
+    assert_eq!(v["pqzVerdict"]["pqzVerifierEpoch"], 7);
+    let first = seen.lock().unwrap()[0].clone();
+    assert_eq!(first.path, "/v1/pqz-verdict");
+    assert_eq!(first.body, serde_json::to_vec(&req).unwrap());
+    assert_eq!(seen_busy.lock().unwrap().len(), 1);
+    assert_eq!(c.probe(&req).await.unwrap()["serves"], true);
+    assert_eq!(seen.lock().unwrap()[1].path, "/v1/pqz-verdict/probe");
+    // not an object: Argument, nothing sent
+    assert_eq!(c.verdict(&json!([1])).await.unwrap_err().code(), "Argument");
+    assert_eq!(seen.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn a_verifier_refusal_is_final_under_failover() {
+    // a 4xx is the verifier's named refusal: never asked of the next one
+    let (no, _) = gateway(Arc::new(|_, _| {
+        (422, json!({"error": "PROOF_INVALID", "detail": "x"}))
+    }))
+    .await;
+    let (good, seen) = gateway(verdict(1)).await;
+    let c = verifiers(&[&no, &good], Policy::Failover);
+    let e = c.verdict(&json!({"a": 1})).await.unwrap_err();
+    assert!(
+        matches!(&e, RpcError::NodeRefused { code, .. } if code == "PROOF_INVALID"),
+        "{e:?}"
+    );
+    assert!(seen.lock().unwrap().is_empty());
+    // every one unreachable: EndpointAllFailed
+    let (down, _) = gateway(Arc::new(|_, _| (500, json!({})))).await;
+    let c = verifiers(&[&down], Policy::Failover);
+    assert_eq!(
+        c.verdict(&json!({"a": 1})).await.unwrap_err().code(),
+        "EndpointAllFailed"
+    );
+}
+
+#[tokio::test]
+async fn verifier_strict_majority_compares_the_verdict() {
+    // three verifiers of one key: two equal verdicts (their signatures differ) are a majority
+    let (a, _) = gateway(verdict(3)).await;
+    let (b, _) = gateway(Arc::new(|path, _| {
+        if path == "/v1/pqz-verdict" {
+            (200, json!({"pqzVerdict": {"pqzVerifierEpoch": 3, "validUntil": "99"}, "pqzVerdictSig": {"signature": "0xff"}}))
+        } else {
+            (200, json!({"serves": true, "epoch": 3}))
+        }
+    }))
+    .await;
+    let (c3, _) = gateway(verdict(4)).await;
+    let c = verifiers(&[&a, &b, &c3], Policy::StrictMajority);
+    assert_eq!(
+        c.verdict(&json!({"a": 1})).await.unwrap()["pqzVerdict"]["pqzVerifierEpoch"],
+        3
+    );
+    assert_eq!(c.probe(&json!({"a": 1})).await.unwrap()["epoch"], 3);
+    // F14: two verifiers whose clocks differ set another `validUntil`: still a majority; M3: the group's median answer
+    let (d, _) = gateway(Arc::new(|path, _| {
+        if path == "/v1/pqz-verdict" {
+            (200, json!({"pqzVerdict": {"pqzVerifierEpoch": 3, "validUntil": "98"}, "pqzVerdictSig": {"signature": "0xee"}}))
+        } else {
+            (200, json!({"serves": true, "epoch": 3}))
+        }
+    }))
+    .await;
+    let c = verifiers(&[&d, &a], Policy::StrictMajority);
+    let v = c.verdict(&json!({"a": 1})).await.unwrap();
+    assert_eq!(
+        v["pqzVerdict"]["validUntil"], "99",
+        "of two the later (the median of an even group is its upper)"
+    );
+    // M3: one replica whose clock is behind (a verdict already expired) does not decide: the median of three agreeing
+    let (late, _) = gateway(Arc::new(|path, _| {
+        if path == "/v1/pqz-verdict" {
+            (200, json!({"pqzVerdict": {"pqzVerifierEpoch": 3, "validUntil": "10"}, "pqzVerdictSig": {"signature": "0xdd"}}))
+        } else {
+            (200, json!({"serves": true, "epoch": 3}))
+        }
+    }))
+    .await;
+    let (b3, _) = gateway(verdict(3)).await;
+    for order in [[&late, &d, &b3], [&d, &late, &b3], [&b3, &d, &late]] {
+        let v = verifiers(&order.map(String::as_str), Policy::StrictMajority)
+            .verdict(&json!({"a": 1}))
+            .await
+            .unwrap();
+        assert_eq!(
+            v["pqzVerdict"]["validUntil"], "98",
+            "the median, whatever the order"
+        );
+        assert_eq!(v["pqzVerdictSig"]["signature"], "0xee");
+    }
+    // two of three disagree and the third refuses: no majority
+    let (no, _) = gateway(Arc::new(|_, _| (422, json!({"error": "PROOF_INVALID"})))).await;
+    let c = verifiers(&[&a, &c3, &no], Policy::StrictMajority);
+    let e = c.verdict(&json!({"a": 1})).await.unwrap_err();
+    assert!(
+        matches!(
+            e,
+            RpcError::EndpointNoMajority {
+                n: 3,
+                need: 2,
+                largest: 1,
+                ..
+            }
+        ),
+        "{e:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_verifier_redirect_is_not_followed_and_answers_are_bounded() {
+    let (r, _) = gateway(Arc::new(|_, _| (302, json!({})))).await;
+    let c = verifiers(&[&r], Policy::Failover);
+    assert_eq!(
+        c.verdict(&json!({"a": 1})).await.unwrap_err().code(),
+        "EndpointAllFailed"
+    );
+    let big = "x".repeat(scaas_rpc::node::ANSWER_MAX + 1);
+    let (g, _) = gateway(Arc::new(move |_, _| (200, json!({"pqzVerdict": big})))).await;
+    let c = verifiers(&[&g], Policy::Failover);
+    assert_eq!(
+        c.verdict(&json!({"a": 1})).await.unwrap_err().code(),
+        "EndpointAllFailed"
+    );
+    // a body above the cap: refused, nothing sent
+    let (g, seen) = gateway(verdict(1)).await;
+    let c = verifiers(&[&g], Policy::Failover);
+    let huge = json!({"proof": "0".repeat(scaas_rpc::node::VERDICT_BODY_MAX)});
+    assert_eq!(c.verdict(&huge).await.unwrap_err().code(), "BodyTooLarge");
+    assert!(seen.lock().unwrap().is_empty());
 }

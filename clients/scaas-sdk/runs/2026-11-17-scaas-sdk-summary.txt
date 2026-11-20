@@ -10,18 +10,70 @@ baseline features | 4de8a5604 | 0 | feature_tree not run (crate absent)
 # latest runs:
 ua-verify-only | 81a8cbcf2 | 0 | 84 passed, 0 failed, 0 ignored (18 binaries)
 ua-wallet-rows | 81a8cbcf2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-rpc-test | 81a8cbcf2 | 0 | 162 passed, 0 failed, 10 ignored (16 binaries)
-rpc-clippy | 81a8cbcf2 | 0 | -
+ua-c | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
+ua-c-release | 81a8cbcf2 | 0 | -
+ua-py | 81a8cbcf2 | 0 | -
+ua-go | 81a8cbcf2 | 0 | -
+ua-cs | 81a8cbcf2 | 0 | -
+ua-cxx | 81a8cbcf2 | 0 | ctest: 0 tests failed out of 43
+frb-dart | 81a8cbcf2 | 0 | dart: +46:
 rpc-wasm | 81a8cbcf2 | 0 | -
 sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
-sdk-sets | 81a8cbcf2 | 0 | 6 passed, 0 failed, 0 ignored (3 binaries)
-sdk-deny | 81a8cbcf2 | 0 | -
 # SDK round-end matrix (T0-T13b) at 81a8cbcf2: the 27 rows above, clean tree, every rc 0. The first full run at f1a93439a
 # started from `cargo clean` of scaas-sdk, its ffi, ua-rs, scaas-rpc, ua-c, ua-cxx and ua-dart-frb; it had two reds (sdk-min:
 # tests/e2e.rs without `wallet`; ua-go: the runner's library path), fixed at 81a8cbcf2, whose run reused that build.
 # Counts the runner does not parse: ua-c python 101 tests OK, ua-py 99 OK, ua-go 2 packages ok, ua-cs 61 passed.
 # Not applicable: `sync-api` (feature not built: plan T20b), bind-cpp (no bindings/cpp: T20b). wasm32: `cargo check` only
 # (sdk-wasm, rpc-wasm); no wasm32 test ran (wasm-bindgen-test is not in the offline tree).
+# T14 (history, watching, events) replaced seven rows above, run on the T14 tree before its commit. sdk-min's one red is
+# tests/config.rs open_checks_gas_tables_and_opt_ins, from the gas-table commits 64c8ed24d and 2df23400e (without `wallet` the
+# SDK holds no `reference` table, so the opt-in is refused); T14 touches no file of it. T14 mutants: 8/8 killed.
+# T15 (confidential: the reading layer, part of Zether) replaced eight rows above, run on the T15 tree before its commit.
+# sdk-min's one red is the same pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins (gas-table work on ua-rs-sign);
+# sdk-e2e is T12's pay (T15's anvil e2e is not built). bind-cpp not applicable (no bindings/cpp). T15 mutants: 9/9 killed.
+rpc-wasm | 9172eb6dd | 0 | -; tree dirty
+# Plan T13 part 1 (registration, split, records) 5721c48da, T13b (sponsored registration) 66e995ee2, the T15 e2e switch to
+# SDK registration 818595dbf: the rows above at 818595dbf. sdk-e2e 4 passed (the PQ-kind registration, the sponsored
+# registration then pay, the T12 pay, the T15 Zether e2e registering through the SDK). sdk-min's one red is the same
+# pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins (fixed on ua-rs-sign, arrives by merge); no other failure.
+# bind-cpp not applicable (no bindings/cpp). Mutants: t13 5/5 killed, t13sponsor 9/9 killed (the t13a..t13f files are an
+# earlier round's numbering).
+# This commit also formats clients/clientkeys/scripts/registration-blob-vectors.mjs (Prettier; its output unchanged, the blobs regenerate byte for byte).
+# Owner rulings R1-R4 (3d0110340): sdk-test and sdk-e2e ran as the runner's command split per test binary (sdk-test) and per
+# test (sdk-e2e), so no call outlives the session's 180 s foreground limit; the counts are their sums. sdk-min's one red is
+# the same pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins; no other failure. Mutants: t13rulings 5/5
+# killed, each by its intended assertion. ua-rs and clientkeys untouched.
+sdk-opaque | 8943e348c | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+ua-test (touched) | dfb10d2c8 | 0 | 93 passed, 0 failed, 0 ignored (6 binaries: --lib, sign_scaas, wallet_typed, wallet_sign, entries, json); tree dirty
+# T13 part 2: the PQZ key attribute 8943e348c, SmartKeyAccount and guardian recovery dfb10d2c8. sdk-test split per binary
+# group, sdk-e2e per test (the two new ones at dfb10d2c8, the four others at 3d0110340); sets at all four sets green
+# (proof_system_ids_are_the_sets_pins). ua-rs's whole suite waits for the round-end matrix (touched suites above).
+# Mutants: t13pqz 2/2, t13smart 4/4 killed, each by its intended assertion; one first-run survivor each, recorded in its
+# script (an unobservable pre-check; dead code, removed).
+# T13 part 3 (owner rulings S1-S3, P1, P2 at 6e672164e; deploy and completeRecovery ea845adad; passkey and secure-element
+# signing f525fa27f): every SDK step at f525fa27f; ua-rs changed only at 6e672164e (ua-clippy, ua-vectors there; ua-test at
+# f525fa27f, the same ua-rs tree). sdk-e2e 7/7 with the new e2e_pqz_pop_split_stored_on_anvil and the smart account tests
+# on the SDK's deploy and completeRecovery. sdk-min's one red is the same pre-existing tests/config.rs
+# open_checks_gas_tables_and_opt_ins (fixed on ua-rs-sign, arrives by merge). format.sh --check (every part but tact) clean.
+# Mutants: t13s123 4/4, t13direct 2/2, t13external 2/2 killed, each by its intended assertion. msig not built.
+format | fdd34262d | 0 | format.sh --check, every part but tact: clean
+# T13 part 4 (msig d98a4c952) and the owner's T1-T4 of 2026-11-19 (152ed27a9, 8e4d88593, 6c29ffbea, fdd34262d): every SDK
+# step at fdd34262d. sdk-e2e ran as the runner's command split in three runs by test name (each under the session's foreground
+# limit; no anvil left), 10/10 with the new e2e_msig_register_accept_transfer_update_on_anvil, e2e_register_mldsa_cached_on_anvil
+# and e2e_register_passkey_row_on_anvil. sdk-min's one red is the same pre-existing tests/config.rs
+# open_checks_gas_tables_and_opt_ins. ua-rs untouched (no ua-rs step). bind-cpp: the runner refuses it, rc 3, no directory
+# clients/scaas-sdk/bindings/cpp yet (the C++ binding is a later task), so plan T13's gate box stays open.
+# Mutants: t13msig 7/7, t13cache 3/3, t13keyrows 2/2, t13policy 1/1, t13rpid 1/1 killed (t13cache's third by the entries
+# assertion: the prepare and the landed rule share the part reader, recorded in its name; every other by its intended one).
+format | 8ff3d4ebf | 0 | format.sh --check rust py toml sh: clean
+# T16 part 3 and T13's M1-M5 (764661283 P-T16-1/-2; be0d622ee + dff035bc3 the six PQZ debits; 392323f1c P-T16-3/-5;
+# a58face1d M1-M5; 8ff3d4ebf docs only). At 764661283: ua-clippy, sdk-clippy, ua-test 555, ua-vectors 659 green. At
+# dff035bc3: sdk-test 213, sdk-sets 9, clippy, wasm, features, docs, ua-test 556, ua-vectors 660 green. The rows above at
+# a58face1d / 8ff3d4ebf (the same code). sdk-e2e 10/10 in one run (no anvil left); the PQZ debits have no anvil e2e (no PQZ
+# precompile on anvil; an OFFCHAIN token's holder key is the pqz3k scoped key). sdk-min's one red is the same pre-existing
+# tests/config.rs open_checks_gas_tables_and_opt_ins. bind-cpp: no binding directory yet. ck-test not run (clientkeys
+# untouched). Mutants: t16c 10/10, t16d 3/3, t13m 6/6 killed (t16c's "no verdict" by "the verifier asked", t13m's "combine
+# keeps the order" by UAPoP from the minimality check, its "another member digest" by ua-rs refusing the device's answer).
 ua-c | b0c917a2c | 0 | 9 passed, 0 failed, 0 ignored (2 binaries); tree dirty
 ua-c-release | b0c917a2c | 0 | -; tree dirty
 ua-py | b0c917a2c | 0 | -; tree dirty
@@ -29,21 +81,106 @@ ua-go | b0c917a2c | 0 | -; tree dirty
 ua-cs | b0c917a2c | 0 | -; tree dirty
 ua-cxx | b0c917a2c | 0 | ctest: 0 tests failed out of 43; tree dirty
 frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
-ua-test | c0b97063f | 0 | 551 passed, 0 failed, 3 ignored (55 binaries)
-ua-clippy | c0b97063f | 0 | -
-ua-vectors | c0b97063f | 0 | 656 passed, 0 failed, 6 ignored (62 binaries)
-sdk-test | cd3cc4c93 | 0 | 177 passed, 0 failed, 2 ignored (14 binaries)
-sdk-min | cd3cc4c93 | 0 | 70 passed, 0 failed, 0 ignored (8 binaries)
-sdk-clippy | cd3cc4c93 | 0 | -
-sdk-wasm | cd3cc4c93 | 0 | -
-features | cd3cc4c93 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-bind-dart | cd3cc4c93 | 0 | dart: +6:
-sdk-e2e | cd3cc4c93 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-ffi | cd3cc4c93 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 gas-gen | cd3cc4c93 | 0 | -
-ck-test | cd3cc4c93 | 0 | node: 482 pass, 0 fail, 4 skipped
-docs | cd3cc4c93 | 0 | -
 # PR A review fixes (findings 1-6) at cd3cc4c93, clean tree: the 11 rows above, every rc 0. One red first, at b4d5285fb:
 # sdk-test 84 passed, 1 failed (gas_verify_margin read a filler key "x" as "no margin"; finding 1 refuses it), fixed at
 # cd3cc4c93 (the control reads a row without `margin`, the filler asserted GasFieldUnknown). Also at cd3cc4c93: docs_check
 # paths 0; format.sh --check (every part but tact) ok; mutants gasR 21/21 killed (gasR-mutants.txt). ffi has no own tests.
+rpc-test | 9f3e640dd | 0 | 166 passed, 0 failed, 10 ignored (16 binaries)
+rpc-clippy | 9f3e640dd | 0 | -
+# The ua-rs-sign merge (6b6d9002e), the width-100 format (ba0590065), P-T16-8 / NODE-GW-08 (9f3e640dd) and the e2e
+# compile fix (96d4c5363): the rows above at those commits, every rc 0. On the merge before its commit: ua-test (whole
+# suite) and ua-clippy rc 0; ck-test 484 pass, 0 fail, 4 skipped. At 96d4c5363: scaas-node `cargo test` (6G, alone) 861
+# passed, 0 failed, 72 ignored; node clippy --all-targets -D warnings clean; sdk-e2e 10/10 (the msig e2e now signs one
+# slot apart through Op::member_sign), no anvil left. format.sh --check rust clean. Mutants t16e 6/6 killed, each by its
+# intended assertion (t16e-mutants.txt). The earlier sdk-test / sdk-clippy rc 101 at 9f3e640dd: the e2e binary did not
+# compile (E0515 in the new member_sign test), fixed at 96d4c5363.
+# T17-T19 (b7894f257 .. 01a284f17): sdk-test rc 101 at b7894f257 (op::gas attached_signature_kind: the T17 envelope rule),
+# fixed at 54667090e. "tree dirty" at ec925fe36 and 01a284f17: the runs files and a rustfmt-only change of
+# tests/governance_delay.rs, uncommitted. sdk-e2e 11/11 at ec925fe36 (e2e_dex_cancel_order_on_anvil among them), no anvil
+# left; T18b and T19 touch no e2e path. With native-networks,raw-native: cargo test --lib 110 passed at 01a284f17 (the 9 raw
+# tests), clippy --all-targets -D warnings clean. format.sh --check rust clean. Mutants t17 7/7, t18 5/5, t18b 3/3, t19 6/6
+# killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
+# T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
+bind-dart | 7f5e03caf | 0 | dart: +14:; tree dirty
+ffi | 7f5e03caf | 0 | 0 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
+sdk-wasm | 7f5e03caf | 0 | -; tree dirty
+sdk-deny | 7f5e03caf | 0 | -; tree dirty
+sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
+ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
+ua-vectors | c1a17c82f | 0 | 665 passed, 0 failed, 6 ignored (62 binaries)
+# T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
+# tree that became those two commits (the SDK, ffi, Dart and ua-rs files); ua-test ran before a clippy-only rewrite of one
+# lookup in policy.rs (ua-clippy at 1233ed00d + it), the touched ua-rs tests (wallet_uasig, sign_scaas, wallet_typed) rerun
+# after it, and ua-vectors 665 at c1a17c82f. bind-dart +14 includes the e2e smoke on a local anvil (native send to Landed);
+# no anvil left after bind-dart or sdk-e2e. sdk-deny covers clients/scaas-sdk (not the ffi crate). actionlint 1.7.12 clean,
+# ci_changes.py self-tests ok, format.sh --check rust dart sh toml yaml py clean, docs check 0 errors, paths 0,
+# test_docs_check ok. No vector file changed (the consent rows were already in typed_ops.json). Mutants t20b 8/8 killed,
+# each by its intended assertion (t20b-mutants.txt).
+ua-clippy | 6dded4e97 | 0 | -
+ck-test | 6dded4e97 | 0 | node: 484 pass, 0 fail, 4 skipped
+# PqzAuditorNative and AuditorConsent's per-domain message (b35f0515d, 6dded4e97; controller call, owner auto-run 2026-11-19):
+# the rows above at 6dded4e97 (bind-gen, docs, sdk-clippy, ua-clippy, ck-test 484). Also run on the b35f0515d tree before its
+# commit: SDK admin::tests 7/7 (red first: unwrap_err on Ok), config 13/13; ua-rs (vectors,roots) entries, sign_scaas,
+# wallet_typed, wallet_uasig, facade_zether, admin green; zether-prover typed_ops 8/8; scaas-node typed:: 41 and
+# guard/submit/abi 139 green (node clippy not run). A rustfmt-only follow-up of scaas-node/src/typed.rs and admin_tests.rs.
+# Mutants t20c 2/2 killed, each by its intended assertion. Not run this round: sdk-test whole, sdk-e2e, ua-test whole.
+# Item 3, an msig auditor's PQZ consent (controller call, owner auto-run 2026-11-19): msig_auditor_pqz_consent red first
+# (Argument), then green; admin::tests + account::msig::tests 12/12; clippy --all-targets (full features) clean; docs 0
+# errors; mutant t20c 3/3 killed (the new one by the test's unwrap). Not run: sdk-test whole, sdk-e2e, bind-gen (no public
+# item changed).
+sdk-test | 58099349c | 0 | 265 passed, 0 failed, 12 ignored (21 binaries)
+sdk-clippy | f4c422ef6 | 0 | -
+sdk-raw | f4c422ef6 | 0 | 114 passed, 0 failed, 0 ignored (1 binaries)
+features | f4c422ef6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+docs | f4c422ef6 | 0 | -
+mutants-check | f4c422ef6 | 0 | -
+bind-gen | f4c422ef6 | 0 | -
+sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
+# The two Fable reviews of T13-T20 at ecabb7d41 (2026-11-20; controller call, owner auto-run 2026-11-19; decisions CLI-SDK-30's
+# last Change line). Fixed: F1, F3 (one block), F7, F14, F16 (doc), F19, F22, F24, F26 and F30 (doc); T1, T2, T3, T5, T6,
+# T7, T8, T9, T10, T12 (gen --check against HEAD; DEX listed mutants), T13, T15 (verdict compares, msig bounds, DER parser,
+# the PQZ read's chain check), T16, T17 (msig_minimal_sets doc). PLANNED, one line each:
+# F1b  a local check of a foreign msig slot's signatures (a scaas-ua MemberSig verifier; the registry checks them today)
+# F2   registry reads of a generation-2 registry; waits for the cross-generation rule of branch multi-gen-verify
+# F3b  pqz_balance_all: an unusable key version shown beside the others (a field of the public PqzBalanceAll, with the bindings)
+# F4   the verdict asked at prepare; validUntil not rechecked at submit nor held to the Prepared's expiry
+# F5   updateMsig planned on head reads, not one read at the final block
+# F6   updateMsig landed without comparing `enabled`
+# F8   a device holding no slot cannot submit an msig operation (spec to state, or a check without a member key)
+# F9   msig_combine checks the inner slots' minimality at the top level only
+# F10  ua-rs sign_scaas: a native key's PqzAuth / PqzRollOver / Zether owner statements signed bare (refuse by purpose table)
+# F11  an unusable auditor key reported as ReceiverUnregistered (needs its own code)
+# F12  order and cancel rows never end without their event (end by validUntil / the transaction's final failure)
+# F15  failover: a verifier's bad 2xx answer ends the request (pass the check into the client)
+# F16b the endpoint credentials as Arc<SecretBytes> handles on the binding
+# F17  residual: a raw Message on a secp256k1 network is Argument from scaas-ua, not RawDigestRefused
+# F18  a registration's failed simulation read as above the gas cap (tell a revert from a gas figure)
+# F20  sign_rescue_vault, the two auditor consents and cancel_all sign without a prepared value and review
+# F21  an msig auditor's consent built on the profile's registry, not the token's ChainEnv registry (M4: a native auditor
+#      is refused by PqzAuditorNative, an msig one is not): refused on chain with no local error when they differ; read the
+#      token's registry and refuse a mismatch
+# F23  the registry-write table unbounded; a failed row write loses the write
+# F25  proveRegister on an async worker (move to Sdk::heavy)
+# F27  a creation's review shows initHash, not the configuration
+# F28  one chain's failed token check stops the whole poll; one state write per cursor
+# F29  the pay's receiver check only in a build with `account`
+# T4   one code for every verdict refusal; the validUntil == now boundary not pinned (injected clock)
+# T7b  the registration blob's depth bound has no test that can fail
+# T11  bounded-decode edge rows (depth 8 / 9, NESTED_MAX, governance reads one by one)
+# T12b completeness text match; decryption_failure control; the binding's secret-field list; the state test's temp dir
+# T14  a per-step minimum test count; no SDK test on wasm32; confidential_pqz at the other three sets
+# T15b the PQZ read's first-Y check, the Zether digest cross-check, the debit arithmetic and secret-handling mutants
+# T17b controls that accept any other error (pay_to_unregistered_derived_ua); the probabilistic decoy kill; verifier hang
+# T18  the proof-off-the-workers timing test; raw-entry refusals without a like-for-like control
+# Fable's review of the merged tree (8cbf91468, M1-M20, no P0; decisions CLI-SDK-30's last Change line). Fixed: M1, M2, M4
+# (the F21 line above), M7, M8, M14, M15, M16, M17, M19; M9, M10, M11 by the full matrix and mutant rerun below. PLANNED:
+# M3   strict_majority returns the agreeing answer that expires first; one bad replica in the group decides (F15's fix)
+# M5   F3 (one block), F7 (an imported native member), F24 and F1's ua / purpose compares: rows and mutants
+# M6   the r1120 "signer's key not the verifier's UA" mutant: equivalent only by the key-pointer check; restore it with a row
+# M12  runner holes: failure line not compared with the intended assertion; killed with no failure line; non-Rust compile errors
+# M13  test gaps: F1's declared digest only; T9's order digest is the SDK's own; listed() mutants of liquidity / wrap; F19's
+#      request count through the fake
+# M18  the regular line extrapolated past its measured counts (measure at the largest count the cap admits, or refuse above)
+# M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt

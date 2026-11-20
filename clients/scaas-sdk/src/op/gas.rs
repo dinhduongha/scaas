@@ -23,6 +23,7 @@ pub(crate) const REFERENCE_FILE: &str = include_str!("../../gas/reference.json")
 /// Where a part of a quote's gas figure came from (owner 2026-11-19), so the app and the operator see a figure not measured on
 /// the chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum GasFrom {
     /// a row of the chain profile, measured on that chain
     Chain,
@@ -77,6 +78,18 @@ pub(crate) fn roll_max() -> Option<u64> {
 /// The stated margin: the figure plus half of it.
 pub(crate) fn with_margin(g: u64) -> u64 {
     g.saturating_add(g / 2)
+}
+
+/// The kinds whose verify gas depends on the data (owner 2026-11-19, "approved, as proposed"): ed25519 (its row the forced
+/// worst case), FN-DSA-512 / -1024 (the most of 64 salts plus `margin`).
+pub(crate) const DATA_DEPENDENT: [u16; 3] = [0x0102, 0x0132, 0x0135];
+
+/// A registry write's base row `kind` (`ua-<kind>`) whose measured part holds a data-dependent verify ([`DATA_DEPENDENT`]:
+/// the registration's PoP).
+fn data_dependent_row(kind: &str) -> bool {
+    kind.strip_prefix("ua-0x")
+        .and_then(|h| u16::from_str_radix(h, 16).ok())
+        .is_some_and(|k| DATA_DEPENDENT.contains(&k))
 }
 
 /// One part's figure and source, in the lookup order: the chain's rows → the module tables opted in (profile order) → the
@@ -215,7 +228,9 @@ fn lookup_in(
     let uncounted = std::cell::Cell::new(false);
     let items = |p: &Option<GasPerItem>, reg: bool, count: &dyn Fn(&str) -> Option<u64>| {
         let Some(p) = p else { return Some(0) };
-        let n = count(&p.item).filter(|n| *n <= COUNT_MAX);
+        // M18: never above the largest measured count (the line is not extrapolated past its points)
+        let n =
+            count(&p.item).filter(|n| *n <= COUNT_MAX && p.measured_max.is_none_or(|m| *n <= m));
         if n.is_none() {
             uncounted.set(true);
         }
@@ -290,6 +305,7 @@ fn lookup_in(
 /// `None`: no row; `GasCountUnknown`: a row counting another item, or `n` above [`COUNT_MAX`] (fail closed, as [`lookup_by`]).
 /// Returns the figure, its regular part's bound (EIP-8037: the row's `regular` and its slope where it has them, else the
 /// figure) and the source.
+#[cfg(test)] // the quote reads the row through [`registry_gas`] since owner 2026-11-20
 pub(crate) fn registration_gas(
     chain: &GasRows,
     opt_in: &[String],
@@ -297,18 +313,32 @@ pub(crate) fn registration_gas(
     entry: &str,
     n: u64,
 ) -> Result<Option<(u64, u64, GasFrom)>, SdkError> {
+    base_gas(chain, opt_in, tables, entry, "account", n)
+}
+
+/// [`registration_gas`] of the base row `(entry, kind)` at a fresh lane (a registry write's, controller call, owner auto-run
+/// 2026-11-19: the registry's first write of its kind).
+pub(crate) fn base_gas(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    entry: &str,
+    kind: &str,
+    n: u64,
+) -> Result<Option<(u64, u64, GasFrom)>, SdkError> {
     let uncounted = std::cell::Cell::new(false);
     // the figure, or with `regular` its regular bound (the row's `regular` and slope where it has them)
     let find = |regular: bool| {
         part(chain, opt_in, tables, |r| {
-            let b = r
-                .base
-                .iter()
-                .find(|b| b.key() == (entry, "account", true))?;
+            let b = r.base.iter().find(|b| b.key() == (entry, kind, true))?;
             let reg = regular && b.regular.is_some();
             let per = match &b.per_item {
                 None => 0,
-                Some(p) if p.item == "members" && n <= COUNT_MAX => {
+                Some(p)
+                    if p.item == "members"
+                        && n <= COUNT_MAX
+                        && p.measured_max.is_none_or(|m| n <= m) =>
+                {
                     p.regular.filter(|_| reg).unwrap_or(p.gas).saturating_mul(n)
                 }
                 Some(_) => {
@@ -331,6 +361,69 @@ pub(crate) fn registration_gas(
     Ok(found.map(|(g, from)| (g, regular.map_or(g, |r| r.0.min(g)), from)))
 }
 
+/// The quote's figure of a registry write whose calldata is `len` bytes (controller call, owner auto-run 2026-11-19; owner
+/// 2026-11-20): the sum of its base rows `rows` (each `(entry, kind)` by [`base_gas`] at `members`) and of each signing
+/// slot's verify row (`signers`: its kind's excess over the native reference; the slot's bytes are in the calldata already,
+/// a row counting `members` not read: no figure), plus the intrinsic cost and 64 gas a calldata byte. The margin (owner
+/// 2026-11-20, approved lowering the registry-write margin): a registry write is measured fixed cost, so a row whose
+/// measured part has no data-dependent verify, and the intrinsic cost and the calldata (64 gas a byte, at or above what any
+/// transaction pays for it), are quoted as measured; the large margin ([`with_margin`]) stays on the parts whose gas depends
+/// on the data: a base row of a [`DATA_DEPENDENT`] kind and a slot's verify row of one (a counted row is quoted only up to
+/// its measured count, M18). `None` when any row is missing: the write is then quoted by the node's estimate alone, whole.
+/// The regular bound: the base rows' regular parts, a verify row whole, at most the gas; the sources the first row's and the
+/// first slot's.
+pub(crate) fn registry_gas(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    rows: &[(String, String)],
+    members: u64,
+    signers: &[u16],
+    len: usize,
+) -> Result<Option<Figure>, SdkError> {
+    // (gas, regular) of the fixed-cost parts [0] and of the data-dependent ones [1]
+    let (mut parts, mut base) = ([(0u64, 0u64); 2], None);
+    let mut add = |dependent: bool, g: u64, r: u64| {
+        let p = &mut parts[usize::from(dependent)];
+        *p = (p.0.saturating_add(g), p.1.saturating_add(r));
+    };
+    for (entry, kind) in rows {
+        let Some((x, y, from)) = base_gas(chain, opt_in, tables, entry, kind, members)? else {
+            return Ok(None);
+        };
+        add(data_dependent_row(kind), x, y);
+        base.get_or_insert(from);
+    }
+    let Some(base) = base else { return Ok(None) };
+    let mut verify = None;
+    for s in signers {
+        let uncounted = |p: &Option<GasPerItem>| p.is_none().then_some(0);
+        let Some((v, from)) = verify_part(chain, opt_in, tables, *s, false, &uncounted) else {
+            return Ok(None);
+        };
+        add(DATA_DEPENDENT.contains(s), v, v);
+        verify.get_or_insert(from);
+    }
+    let bytes = u64::try_from(len)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(PER_BYTE);
+    let total = |f: u64, d: u64| {
+        f.saturating_add(INTRINSIC)
+            .saturating_add(bytes)
+            .saturating_add(with_margin(d))
+    };
+    let [fixed, data] = parts;
+    let gas = total(fixed.0, data.0);
+    Ok(Some(Figure {
+        gas,
+        regular: total(fixed.1, data.1).min(gas),
+        from: GasSources {
+            verify: verify.unwrap_or_else(|| base.clone()),
+            base,
+        },
+    }))
+}
+
 /// [`lookup_by`] of an operation without a variable-length input, a saved record, a fee, a second signature or a count
 /// (a row with a per-item part: no figure).
 #[cfg(test)]
@@ -344,6 +437,21 @@ pub(crate) fn lookup(
     lookup_by(chain, opt_in, tables, app, key, &OpGas::PLAIN)
         .ok()
         .flatten()
+}
+
+/// The verify row of `signer` alone, in the lookup order (chain → module → reference), else the app's figure `app` (owner
+/// 2026-11-19, P1: the Zether UA's verify gas a multi-recipient proof adds; the table row wins when present).
+pub(crate) fn verify_or(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    signer: u16,
+    app: u64,
+) -> (u64, GasFrom) {
+    part(chain, opt_in, tables, |r| {
+        r.verify.iter().find(|v| v.signer == signer).map(|v| v.gas)
+    })
+    .unwrap_or((app, GasFrom::App))
 }
 
 /// A quote's gas (controller call, owner auto-run 2026-11-19, EIP-8037): `gas`, regular + state, the transaction's gas
@@ -688,6 +796,7 @@ mod tests {
             item: "members".into(),
             gas: 100,
             regular: Some(40),
+            measured_max: None,
         });
         let op = OpGas {
             count: &|i| (i == "members").then_some(5),
@@ -1129,10 +1238,8 @@ mod tests {
         }
     }
 
-    /// The kinds whose verify gas depends on the data (owner 2026-11-19, "approved, as proposed"): ed25519 (its row the forced
-    /// worst case), FN-DSA-512 / -1024 (the most of 64 salts plus `margin`). Each is checked twice: its composition at a
-    /// signature of its row's worst-case class (both bounds) and many ordinary ones (the lower bound only).
-    const DATA_DEPENDENT: [u16; 3] = [0x0102, 0x0132, 0x0135];
+    // [`DATA_DEPENDENT`]: each is checked twice, its composition at a signature of its row's worst-case class (both bounds)
+    // and many ordinary ones (the lower bound only).
 
     /// The sampled end-to-end check (spec §13.3; owner 2026-11-19, item 7, A1 and the two rulings on the check): the `token`
     /// entries `SdkGasSample.t.sol` signs end to end on `NormalToken` by the native key, P-256, ed25519 and secp256k1, both
@@ -1264,6 +1371,7 @@ mod tests {
             item: item.into(),
             gas,
             regular: None,
+            measured_max: None,
         })
     }
 
@@ -1337,6 +1445,19 @@ mod tests {
             Ok(Some(1_010 + 30_000 * COUNT_MAX)),
             "the bound itself"
         );
+        // M18: a row measured up to 8 counts: 8 quoted, 9 refused (never a line extrapolated past its points)
+        r.base[0].per_item.as_mut().unwrap().measured_max = Some(8);
+        assert_eq!(
+            by(&r, &[("legs", 8), ("members", 0)], None, None),
+            Ok(Some(1_010 + 30_000 * 8)),
+            "at the largest measured count"
+        );
+        assert_eq!(
+            by(&r, &[("legs", 9), ("members", 0)], None, None),
+            Err("GasCountUnknown"),
+            "above it"
+        );
+        r.base[0].per_item.as_mut().unwrap().measured_max = None;
         // a count unknown on the chain's row refuses, though a later table's row would answer without one (fail closed)
         let mut chain = rows(1_000, 10);
         chain.base[0].per_item = per_item("legs", 30_000);
@@ -2338,6 +2459,19 @@ mod tests {
             base: vec![],
             verify: vec![],
         };
+        // M18: the reference row was measured up to 64 members: a group of 65 is refused, never extrapolated
+        assert_eq!(bp.measured_max, Some(64));
+        assert_eq!(
+            registration_gas(
+                &empty,
+                &reference,
+                std::slice::from_ref(&t),
+                "registerBlsMulti",
+                65
+            )
+            .map_err(|e| e.code()),
+            Err("GasCountUnknown")
+        );
         for n in [2u64, 16, 32, 64] {
             let tables = std::slice::from_ref(&t);
             let (g, r, from) = registration_gas(&empty, &reference, tables, "registerBlsMulti", n)
@@ -2428,6 +2562,7 @@ mod tests {
                     item: "members".into(),
                     gas: 100,
                     regular: None,
+                    measured_max: None,
                 }),
             })
             .collect();

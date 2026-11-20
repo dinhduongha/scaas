@@ -31,12 +31,12 @@ MUTANTS = [
      U + "gas_table_extra_fields_parse"),
     # ruling 2: sig_bytes
     ("sig_bytes not added",
-     [(G, ".saturating_add(v.sig_bytes.unwrap_or(0).saturating_mul(PER_BYTE)),", ".saturating_add(0),")],
+     [(G, ".saturating_add(b.saturating_mul(PER_BYTE))", ".saturating_add(0)")],
      U + "gas_save_fee"),
-    ("sig_bytes at 16 gas a byte", [(G, "v.sig_bytes.unwrap_or(0).saturating_mul(PER_BYTE)", "v.sig_bytes.unwrap_or(0).saturating_mul(16)")],
+    ("sig_bytes at 16 gas a byte", [(G, "b.saturating_mul(PER_BYTE)", "b.saturating_mul(16)")],
      U + "gas_save_fee"),
     ("parse: sig_bytes unbounded",
-     [(C, "Some(b) => Some(b.as_u64().filter(|b| *b <= GAS_SIG_BYTES_MAX)?),", "Some(b) => Some(b.as_u64()?),")],
+     [(C, "Some(b) => b.as_u64().filter(|b| *b <= GAS_SIG_BYTES_MAX)?,", "Some(b) => b.as_u64()?,")],
      U + "gas_table_extra_fields_parse"),
     ("parse: sig_bytes dropped", [(C, 'sig_bytes: match r.get("sig_bytes") {', "sig_bytes: match None::<&serde_json::Value> {")],
      U + "gas_table_extra_fields_parse"),
@@ -52,7 +52,7 @@ MUTANTS = [
      U + "gas_table_extra_fields_parse"),
     # ruling 4: the second signature
     ("a known second signature ignored",
-     [(G, "Some(Some(k)) => verify_part(chain, opt_in, tables, k).map(|v| v.0),", "Some(Some(_)) => Some(0),")],
+     [(G, "Some(Some(k)) => verify_part(chain, opt_in, tables, k, false, &attached).map(|v| v.0),", "Some(Some(_)) => Some(0),")],
      U + "gas_second_signature"),
     ("an unknown second signature: the cheapest",
      [(G, ".try_fold(0, |m, v| v.map(|v| m.max(v))),", ".try_fold(u64::MAX, |m, v| v.map(|v| m.min(v))),")],
@@ -71,13 +71,13 @@ MUTANTS = [
     ("the quote attaches nothing", [(Q, "attached: super::gas::attached_kind(extra, message),", "attached: None,")],
      W + "payee_fee_quotes_the_attached_signature"),
     # ruling 5: mtxExecute's inner call
-    ("execute: the app figure not added", [(G, "            let inner = if execute { app? } else { 0 };", "            let inner = 0;")],
+    ("execute: the app figure not added", [(G, "let inner = if execute { app } else { Some(0) };", "let inner = Some(0);")],
      U + "gas_execute_inner_call"),
-    ("execute: the inner figure optional", [(G, "if execute { app? } else { 0 }", "if execute { app.unwrap_or(0) } else { 0 }")],
+    ("execute: the inner figure optional", [(G, "if execute { app } else { Some(0) }", "if execute { Some(app.unwrap_or(0)) } else { Some(0) }")],
      U + "gas_execute_inner_call"),
     ("execute: the app figure as a total", [(G, "        _ if execute => None,\n", "")], U + "gas_execute_inner_call"),
     # item 6: the PQ verify rows
-    ("reference: a PQ verify row away from its measurement", [(R, '"measured": 4752439', '"measured": 4752001')],
+    ("reference: a PQ verify row away from its measurement", [(R, "\"measured\": 4823423", "\"measured\": 4822985")],
      U + "reference_rows_hold_their_sources"),
 ]
 

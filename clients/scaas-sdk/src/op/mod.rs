@@ -5,6 +5,7 @@
 //! exactly that value under its `scaas-ua` check, writes the row (state `signed`) to `sdk.state`, and returns the operation's id;
 //! the send runs on as a task and reports as `Event::OpState`. An operation ends only on a chain fact. UNAUDITED.
 pub(crate) mod bls_multi;
+pub(crate) mod external;
 mod follow;
 pub(crate) mod gas;
 mod prepared;
@@ -17,7 +18,7 @@ mod tests;
 pub use crate::events::{InFlight, OpState};
 pub use bls_multi::BlsMultiPart;
 pub use gas::{GasFrom, GasSources};
-pub(crate) use prepared::{domain_name, field, Draft, ExpectFn};
+pub(crate) use prepared::{domain_name, field, flatten, Draft, ExpectFn};
 pub use prepared::{Prepared, ReviewField, Source};
 pub use quote::{SubmitPath, SubmitQuote};
 
@@ -29,9 +30,10 @@ use scaas_rpc::Purpose;
 use scaas_ua::wallet::{NativeKey, Network, UaKey};
 use std::sync::Arc;
 
-/// A key the SDK signs with, by reference (spec §5): the seed's open wallet holds it. The passkey and secure-element keys join
-/// with the tasks that sign with them (plan T13).
+/// A key the SDK signs with, by reference (spec §5): the seed's open wallet holds it, or, for [`KeyRef::Key`], the platform's
+/// authenticator (a passkey or a secure-element key, a row of the seed: owner 2026-11-19, S1).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum KeyRef {
     Ua {
         seed: String,
@@ -51,6 +53,13 @@ pub enum KeyRef {
         network: String,
         index: u32,
     },
+    /// the stored key row `id` of seed `seed` (`AccountRow::Key`: a passkey `webauthn-p256` with its credential id, a
+    /// secure-element `p256` key with its handle), signing through the `Authenticator` (`external`)
+    Key { seed: String, id: String },
+    /// the `msig` UA `ua` (`0x` + 64 hex) of the profile's registry, signing by the member slots named (CTR-UA-09, CTR-UA-38),
+    /// each slot's key one this SDK holds; a minimal set of enabled and accepted slots of its current structure (CTR-UA-07,
+    /// CTR-UA-37, CTR-UA-44). A slot's key is never an `Msig` itself (`Argument`).
+    Msig { ua: String, slots: Vec<MsigSlot> },
     /// a `bls12381-multi` (`0x0121`) group (plan Task 17): the seed's member key `ua_key(0x0121, account, index)` (EIP-2333:
     /// index 0) and the group's key data `d` (`0x` hex, spec 2026-11-19-bls12381-multi §2); the signer's id is the group's
     /// UA, its signature the members' aggregate ([`Op::submit_bls_multi`])
@@ -62,11 +71,43 @@ pub enum KeyRef {
     },
 }
 
+/// One slot of an `msig` signature (`KeyRef::Msig`; `scaas-ua` `Slot`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+pub enum MsigSlot {
+    /// the signing (or native) member at `index` signs with `key`
+    Member { index: u16, key: KeyRef },
+    /// the `msig` member at `index` signs by its own slots, one level down
+    Msig { index: u16, members: Vec<MsigLeaf> },
+    /// the slot at `index` already signed on another device: its `MemberSig` JSON (`{index, members, sig}`) as
+    /// [`Op::member_sign`] returned it, combined with the others by `scaas-ua` `msig_combine` (M1, owner 2026-11-19)
+    Signed { index: u16, member: String },
+}
+
+impl MsigSlot {
+    pub(crate) fn index(&self) -> u16 {
+        match self {
+            MsigSlot::Member { index, .. }
+            | MsigSlot::Msig { index, .. }
+            | MsigSlot::Signed { index, .. } => *index,
+        }
+    }
+}
+
+/// A slot of an inner `msig`: its index there and its key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MsigLeaf {
+    pub index: u16,
+    pub key: KeyRef,
+}
+
 /// The operations module.
+#[derive(Clone)]
 pub struct Op {
     pub(crate) sdk: Arc<Sdk>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// The operations module (spec §13).
     pub fn op(self: &Arc<Self>) -> Arc<Op> {
@@ -78,6 +119,17 @@ impl Sdk {
 pub(crate) enum Key {
     Ua(#[allow(dead_code)] Arc<crate::vault::OpenSeed>, UaKey),
     Native(#[allow(dead_code)] Arc<crate::vault::OpenSeed>, NativeKey),
+    /// the Zether UA (`0x0141`, index 0): the facade's key, signing only the digest `submit` approved (plan T15)
+    #[cfg(feature = "zether")]
+    Zether(
+        #[allow(dead_code)] Arc<crate::vault::OpenSeed>,
+        crate::confidential::ZetherSigner,
+    ),
+    /// a stored key row: its public parts, and a key that refuses every request (it signs only through `external::sign`)
+    External(
+        external::ExternalRow,
+        scaas_ua::wallet::ExternalKey<'static>,
+    ),
 }
 
 impl Key {
@@ -85,6 +137,9 @@ impl Key {
         match self {
             Key::Ua(_, k) => k,
             Key::Native(_, k) => k,
+            #[cfg(feature = "zether")]
+            Key::Zether(_, k) => k,
+            Key::External(_, k) => k,
         }
     }
 }
@@ -98,6 +153,14 @@ pub(crate) fn key(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             account,
             index,
         } => {
+            #[cfg(feature = "zether")]
+            if *kind == crate::confidential::ZETHER_KIND {
+                if *index != 0 {
+                    return Err(SdkError::Argument);
+                }
+                let (s, k) = crate::confidential::handle(sdk, seed, *account)?;
+                return Ok(Key::Zether(s, crate::confidential::ZetherSigner::new(k)));
+            }
             let s = sdk.open_seed(seed)?;
             let k = s.wallet.ua_key(*kind, *account, *index)?;
             Key::Ua(s, k)
@@ -122,6 +185,8 @@ pub(crate) fn key(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             let k = s.wallet.imported_key(n, *index)?;
             Key::Native(s, k)
         }
+        // a stored key row is read from the keystore: `key_opened`; an `msig` signs by its slots (`account::msig`)
+        KeyRef::Key { .. } | KeyRef::Msig { .. } => return Err(SdkError::Argument),
         KeyRef::BlsMulti {
             seed,
             account,
@@ -149,6 +214,38 @@ pub(crate) async fn key_opened(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
     {
         sdk.open_on_use(seed, &format!("native-import:{network}:{index}"))
             .await?;
+    }
+    if let KeyRef::Key { seed, id } = r {
+        drop(sdk.open_seed(seed)?); // a row is trusted once its seed's MAC verified (unlocked)
+        let row = sdk
+            .entry(seed)
+            .await?
+            .accounts
+            .into_iter()
+            .find_map(|a| match a {
+                crate::vault::AccountRow::Key {
+                    id: i,
+                    kind,
+                    key_data,
+                    credential_id,
+                    handle,
+                    ua,
+                    ..
+                } if i == *id => Some((kind, key_data, credential_id, handle, ua)),
+                _ => None,
+            });
+        let (kind, key_data, credential_id, handle, ua) = row.ok_or(SdkError::Argument)?;
+        let row = external::ExternalRow {
+            kind: u16::try_from(kind).map_err(|_| SdkError::Argument)?,
+            key_data: unhex(&key_data)?,
+            ua: unhex(&ua)?.try_into().map_err(|_| SdkError::Argument)?,
+            credential_id: credential_id.as_deref().map(unhex).transpose()?,
+            handle,
+        };
+        let refuse = scaas_ua::wallet::ExternalKey::new(row.key_ref(), |_| {
+            Err(scaas_ua::wallet::Error::ExternalSignature)
+        });
+        return Ok(Key::External(row, refuse));
     }
     key(sdk, r)
 }

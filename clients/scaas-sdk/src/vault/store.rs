@@ -66,6 +66,7 @@ pub struct StoreLock {
     _held: Box<dyn Send + Sync>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl StoreLock {
     pub fn new(held: Box<dyn Send + Sync>) -> Arc<StoreLock> {
         Arc::new(StoreLock { _held: held })
@@ -74,6 +75,7 @@ impl StoreLock {
 
 /// The platform's store of the SDK's items.
 #[async_trait]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub trait SecureStore: Send + Sync {
     async fn get(&self, name: String, reason: String) -> Result<Option<StoredItem>, StoreError>;
     /// Replaces (or creates) `name` only when its stored revision is `prev_rev` (`None`: the item does not exist), else
@@ -106,11 +108,13 @@ pub fn rev_of(bytes: &[u8]) -> u64 {
 /// Items in memory, under the same rev rule and an in-process lock: for tests and for an app's session-only use (nothing
 /// survives the process).
 #[derive(Default)]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub struct MemoryStore {
     items: std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,
     lock: Arc<tokio::sync::Mutex<()>>,
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl MemoryStore {
     pub fn new() -> Arc<MemoryStore> {
         Arc::new(MemoryStore::default())
@@ -204,6 +208,7 @@ mod file {
         o.open(p)
     }
 
+    #[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
     impl FileStore {
         /// The store of directory `dir` (created, mode `0700`, if missing).
         pub fn new(dir: impl Into<PathBuf>) -> Result<Arc<FileStore>, StoreError> {

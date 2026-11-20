@@ -79,7 +79,7 @@ MUTANTS = [
     ),
     (
         "a reference row away from its source",
-        [(R, '"measured": 151937,', '"measured": 151000,')],
+        [(R, "\"measured\": 152066,", "\"measured\": 151000,")],
         U + "reference_rows_hold_their_sources",
     ),
     (

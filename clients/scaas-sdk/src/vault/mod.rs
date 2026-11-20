@@ -3,10 +3,10 @@
 //! every read-modify-write under the store's lock and at the expected `rev` (`StoreConflict` after three tries), the replaced
 //! container kept as `keystore.prev`, and the anchor `keystore.head` that detects an older container put back.
 pub mod keystore;
-mod prf;
+pub mod prf;
 #[cfg(feature = "classical-roots")]
 mod roots;
-mod seeds;
+pub mod seeds;
 pub mod store;
 mod unlock;
 

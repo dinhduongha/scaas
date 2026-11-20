@@ -54,6 +54,14 @@ pub(crate) struct Draft {
     pub ids: bool,
     /// a relay fee's paid call: its job `op` and signed calldata (owner 2026-11-19, ruling F)
     pub relay_call: Option<(Value, Vec<u8>)>,
+    /// a statement the same key signs first, passed as the entry's named slot: its struct name, the slot and its message
+    /// (`ownerSig` of `UARollOverSigned`, `UASetRollOverMode`, owner 2026-11-19, C3; a PQZ debit's `pqzAuth`, plan T16)
+    pub owner: Option<(&'static str, &'static str, Value)>,
+    /// a `SmartKeyAccount` entry's `AccountSig.keyIndex`: the signing key's index in the account (owner 2026-11-19, S3)
+    pub key_index: U256,
+    /// the contract the entry is called on when it is not the domain's (`UAWrapOrder`: signed in the underlying's domain, sent
+    /// to the wrapper's `mtxWrapOrder`, job-api's Orders row; plan T17)
+    pub target: Option<[u8; 20]>,
 }
 
 /// The parts `submit` needs; never in a record a caller could rebuild.
@@ -72,6 +80,21 @@ pub(crate) struct Typed {
     pub ids: bool,
     /// a relay fee's paid call (job `op`, signed calldata)
     pub relay_call: Option<(Value, Vec<u8>)>,
+    /// the statement signed before the entry, with its check and the slot its signature goes in
+    pub owner: Option<(TypedData, Expect, &'static str)>,
+    /// the signing key's index in a `SmartKeyAccount`
+    pub key_index: U256,
+    /// the entry's contract when it is not the domain's
+    pub target: Option<[u8; 20]>,
+    /// an order row's closing fact: the contract, the event and the order hash (plan T17)
+    pub fact: Option<([u8; 20], &'static str, [u8; 32])>,
+}
+
+impl Typed {
+    /// The contract the entry is called on: the domain's, or the draft's `target`.
+    pub(crate) fn entry_contract(&self) -> [u8; 20] {
+        self.target.unwrap_or(self.contract)
+    }
 }
 
 /// A prepared operation (spec §13.1): opaque, kept in the SDK's table; it holds no secret and nothing signed.
@@ -92,6 +115,7 @@ impl std::fmt::Debug for Prepared {
     }
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Prepared {
     /// The typed digest (`scaas-ua`'s), the node's in-flight key too.
     pub fn id(&self) -> String {
@@ -248,6 +272,10 @@ pub(crate) const UNMEASURED: &[(&str, &[&str])] = &[
     ("mtxRollOverSigned", &["pqz"]),
 ];
 
+const CANCELLED_UA: &str = "UAOrderCancelled(bytes32,bytes32)";
+const CANCELLED: &str = "OrderCancelled(bytes32,address)";
+const FILLED_UA: &str = "UATradeFilled(bytes32,bytes32,uint256,uint256,uint256)";
+
 /// The EIP-712 domain's name of a domain kind (`typed_ops.json`'s `domains`).
 pub(crate) fn domain_name(kind: &str) -> Result<&'static str, SdkError> {
     Ok(match kind {
@@ -286,7 +314,7 @@ fn envelope_mut(m: &mut Value) -> Option<&mut Map<String, Value>> {
 }
 
 /// Every leaf of the signed message, by path.
-fn flatten(prefix: &str, v: &Value, out: &mut Vec<ReviewField>) {
+pub(crate) fn flatten(prefix: &str, v: &Value, out: &mut Vec<ReviewField>) {
     match v {
         Value::Object(o) => {
             for (k, x) in o {
@@ -333,13 +361,18 @@ impl Op {
     /// struct refuses.
     pub(crate) async fn prepare(sdk: &Arc<Sdk>, d: Draft) -> Result<Arc<Prepared>, SdkError> {
         let (profile, chain_id, pool) = evm(sdk, &d.chain)?;
-        drop(super::key_opened(sdk, &d.signer).await?); // a locked seed refuses before any read
+        // a locked seed refuses before any read (an `msig`'s slot keys are opened when it signs)
+        if !matches!(d.signer, KeyRef::Msig { .. }) {
+            drop(super::key_opened(sdk, &d.signer).await?);
+        }
         let uid: [u8; 32] = super::unhex(&profile.chain_uid)?
             .try_into()
             .map_err(|_| SdkError::Argument)?;
         let mut message = d.message;
         let mut lane = None;
-        if let Some(e) = envelope(&message) {
+        // an order (`UAWrapOrder`) has `from`, `batch` and `validUntil` but its nonce is an order lane's (`minNonce`, signed
+        // as given), not an envelope lane's: no lane is read or checked for it
+        if let Some(e) = envelope(&message).filter(|_| d.name != "UAWrapOrder") {
             let from = super::unhex(
                 e.get("from")
                     .and_then(Value::as_str)
@@ -356,8 +389,15 @@ impl Op {
             lane = Some((from, batch, nonce));
         }
         let (_, now) = super::head(&pool).await?;
+        // the struct's primary type: the row's name, but for `UAPqzRollOver`, signed as the PQZ domain's `UARollOver` (scaas-ua
+        // `scaas_typed_data`: the domain named picks the row)
+        let primary = if d.name == "UAPqzRollOver" {
+            "UARollOver"
+        } else {
+            d.name
+        };
         let td = scaas_typed_data(
-            d.name,
+            primary,
             Some(domain_name(d.kind)?),
             &d.contract,
             chain_id,
@@ -399,6 +439,44 @@ impl Op {
         let mut review = Vec::new();
         flatten("", &canonical, &mut review);
         review.extend(d.review);
+        let mut extra = d.extra;
+        let owner = match d.owner {
+            Some((name, slot, m)) => {
+                let otd = scaas_typed_data(
+                    name,
+                    Some(domain_name(d.kind)?),
+                    &d.contract,
+                    chain_id,
+                    &uid,
+                    &m,
+                )?;
+                let om = otd
+                    .to_value()
+                    .get("message")
+                    .cloned()
+                    .ok_or(SdkError::Internal)?;
+                flatten(slot.trim_end_matches("Sig"), &om, &mut review);
+                let ex = Expect::Op {
+                    op: name.into(),
+                    contract: d.contract,
+                    chain_id,
+                    chain_uid: uid,
+                    message: om,
+                    max_fee: "0".into(),
+                    fee_recipient: None,
+                    relayer: None,
+                    now,
+                    max_window: sdk.window(&d.chain),
+                };
+                // the quote's unsigned form carries an empty signature in the slot; `submit` puts the signed one
+                extra.as_object_mut().ok_or(SdkError::Internal)?.insert(
+                    slot.into(),
+                    serde_json::json!({"keyData": "0x", "signature": "0x", "members": []}),
+                );
+                Some((otd, ex, slot))
+            }
+            None => None,
+        };
         if !env.is_empty() {
             review.push(field("fee.due", &due, &due, Source::Derived));
         }
@@ -408,6 +486,9 @@ impl Op {
             &hex(&d.contract),
             Source::Derived,
         ));
+        if let Some(t) = d.target {
+            review.push(field("target", &hex(&t), &hex(&t), Source::Derived));
+        }
         let mut touched = d.touched;
         if matches!(d.kind, "token" | "zether" | "pqz") {
             touched.insert(0, d.contract);
@@ -429,6 +510,32 @@ impl Op {
                 .find(|r| r.name == d.name && r.kinds.contains(&d.kind))
                 .map(|r| r.entry.to_string())
                 .ok_or(SdkError::Argument)?,
+        };
+        // an order row ends on its order's event, not an executed event (the token's and the DEX's trade events, R18)
+        let order_hash = |ty: &str, m: &Value| -> Result<[u8; 32], SdkError> {
+            Ok(scaas_typed_data(
+                ty,
+                Some(domain_name(d.kind)?),
+                &d.contract,
+                chain_id,
+                &uid,
+                m,
+            )?
+            .digest()?)
+        };
+        let inner = canonical.get("order").cloned().unwrap_or_default();
+        let fact = match d.name {
+            "CancelUAOrder" => Some((
+                d.contract,
+                CANCELLED_UA,
+                order_hash("UATradeOrder", &inner)?,
+            )),
+            "CancelUAWrapOrder" => {
+                Some((d.contract, CANCELLED_UA, order_hash("UAWrapOrder", &inner)?))
+            }
+            "CancelDexOrder" => Some((d.contract, CANCELLED, order_hash("DexOrder", &inner)?)),
+            "UAWrapOrder" => Some((d.contract, FILLED_UA, td.digest()?)),
+            _ => None,
         };
         let expires_at = env
             .get("validUntil")
@@ -458,10 +565,14 @@ impl Op {
                 td,
                 expect,
                 message: canonical,
-                extra: d.extra,
+                extra,
                 lane,
                 ids: d.ids,
                 relay_call: d.relay_call,
+                owner,
+                key_index: d.key_index,
+                target: d.target,
+                fact,
             },
         });
         let mut table = sdk.prepared.lock().unwrap_or_else(PoisonError::into_inner);

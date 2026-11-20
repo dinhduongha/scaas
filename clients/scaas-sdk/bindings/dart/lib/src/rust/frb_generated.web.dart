@@ -10,7 +10,26 @@ import 'api.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
+import 'lib.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
+import 'third_party/scaas_sdk/account.dart';
+import 'third_party/scaas_sdk/account/msig.dart';
+import 'third_party/scaas_sdk/account/smart.dart';
+import 'third_party/scaas_sdk/admin.dart';
+import 'third_party/scaas_sdk/admin/delay.dart';
+import 'third_party/scaas_sdk/confidential.dart';
+import 'third_party/scaas_sdk/config.dart';
+import 'third_party/scaas_sdk/dex.dart';
+import 'third_party/scaas_sdk/error.dart';
+import 'third_party/scaas_sdk/events.dart';
+import 'third_party/scaas_sdk/op.dart';
+import 'third_party/scaas_sdk/platform.dart';
+import 'third_party/scaas_sdk/vault.dart';
+import 'third_party/scaas_sdk/vault/keystore.dart';
+import 'third_party/scaas_sdk/vault/prf.dart';
+import 'third_party/scaas_sdk/vault/seeds.dart';
+import 'third_party/scaas_sdk/vault/store.dart';
+import 'third_party/scaas_sdk/wallet.dart';
 
 abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   ScaasSdkApiImplPlatform({
@@ -21,33 +40,187 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   });
 
   CrossPlatformFinalizerArg
-  get rust_arc_decrement_strong_count_BackupPtr => wire
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup;
+  get rust_arc_decrement_strong_count_AccountPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_AdminPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin;
 
   CrossPlatformFinalizerArg
-  get rust_arc_decrement_strong_count_EventsPtr => wire
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents;
+  get rust_arc_decrement_strong_count_AllowOpaqueCallPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_ArcPreparedPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_ArcPreparedOrderPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_ArcRegistryWritePtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_ArcSecretBytesPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_ArcSeedBackupPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_ArcSubscriptionPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_ConfidentialPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_DeriveFromKeyPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_DeriveFromSignaturePtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_DexPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_EndpointAuthPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_OpPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_PqzVerdictRequestPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_PreparedPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_SdkErrorPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError;
 
   CrossPlatformFinalizerArg
   get rust_arc_decrement_strong_count_SdkHandlePtr => wire
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle;
 
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_VaultPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault;
+
   CrossPlatformFinalizerArg
-  get rust_arc_decrement_strong_count_SecretPtr => wire
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret;
+  get rust_arc_decrement_strong_count_WalletPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet;
 
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
-  Backup
-  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  Account
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
     dynamic raw,
   );
 
   @protected
-  Events
-  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  Admin
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    dynamic raw,
+  );
+
+  @protected
+  AllowOpaqueCall
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    dynamic raw,
+  );
+
+  @protected
+  ArcPrepared
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    dynamic raw,
+  );
+
+  @protected
+  ArcPreparedOrder
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    dynamic raw,
+  );
+
+  @protected
+  ArcRegistryWrite
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    dynamic raw,
+  );
+
+  @protected
+  ArcSecretBytes
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    dynamic raw,
+  );
+
+  @protected
+  ArcSeedBackup
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    dynamic raw,
+  );
+
+  @protected
+  ArcSubscription
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    dynamic raw,
+  );
+
+  @protected
+  Confidential
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    dynamic raw,
+  );
+
+  @protected
+  DeriveFromKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    dynamic raw,
+  );
+
+  @protected
+  DeriveFromSignature
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    dynamic raw,
+  );
+
+  @protected
+  Dex
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    dynamic raw,
+  );
+
+  @protected
+  EndpointAuth
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    dynamic raw,
+  );
+
+  @protected
+  Op
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    dynamic raw,
+  );
+
+  @protected
+  PqzVerdictRequest
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    dynamic raw,
+  );
+
+  @protected
+  SdkError
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     dynamic raw,
   );
 
@@ -58,20 +231,128 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  Secret
-  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  Vault
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     dynamic raw,
   );
 
   @protected
-  Backup
-  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  Wallet
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
     dynamic raw,
   );
 
   @protected
-  Events
-  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  DeriveFromKey
+  dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    dynamic raw,
+  );
+
+  @protected
+  DeriveFromSignature
+  dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    dynamic raw,
+  );
+
+  @protected
+  PqzVerdictRequest
+  dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    dynamic raw,
+  );
+
+  @protected
+  Account
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
+    dynamic raw,
+  );
+
+  @protected
+  Admin
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    dynamic raw,
+  );
+
+  @protected
+  ArcPrepared
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    dynamic raw,
+  );
+
+  @protected
+  ArcPreparedOrder
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    dynamic raw,
+  );
+
+  @protected
+  ArcRegistryWrite
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    dynamic raw,
+  );
+
+  @protected
+  ArcSecretBytes
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    dynamic raw,
+  );
+
+  @protected
+  ArcSeedBackup
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    dynamic raw,
+  );
+
+  @protected
+  ArcSubscription
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    dynamic raw,
+  );
+
+  @protected
+  Confidential
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    dynamic raw,
+  );
+
+  @protected
+  DeriveFromKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    dynamic raw,
+  );
+
+  @protected
+  DeriveFromSignature
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    dynamic raw,
+  );
+
+  @protected
+  Dex
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    dynamic raw,
+  );
+
+  @protected
+  Op
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    dynamic raw,
+  );
+
+  @protected
+  PqzVerdictRequest
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    dynamic raw,
+  );
+
+  @protected
+  Prepared
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    dynamic raw,
+  );
+
+  @protected
+  SdkError
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     dynamic raw,
   );
 
@@ -82,8 +363,14 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  Secret
-  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  Vault
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
+    dynamic raw,
+  );
+
+  @protected
+  Wallet
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
     dynamic raw,
   );
 
@@ -94,26 +381,44 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  FutureOr<StoreGetAnswer> Function(String)
-  dco_decode_DartFn_Inputs_String_Output_store_get_answer_AnyhowException(
+  FutureOr<StoreGetAnswer> Function(String, String)
+  dco_decode_DartFn_Inputs_String_String_Output_store_get_answer_AnyhowException(
     dynamic raw,
   );
 
   @protected
-  FutureOr<AuthAnswer> Function(
-    String,
-    Uint8List,
-    List<Uint8List>,
-    Uint8List?,
-    BigInt,
-  )
-  dco_decode_DartFn_Inputs_String_list_prim_u_8_strict_list_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
+  FutureOr<PasskeyAnswer> Function(String, String, List<Uint8List>)
+  dco_decode_DartFn_Inputs_String_String_list_list_prim_u_8_strict_Output_passkey_answer_AnyhowException(
     dynamic raw,
   );
 
   @protected
-  FutureOr<StoreAnswer> Function(String, BigInt?, Uint8List)
-  dco_decode_DartFn_Inputs_String_opt_box_autoadd_u_64_list_prim_u_8_strict_Output_store_answer_AnyhowException(
+  FutureOr<SignAnswer> Function(String, Uint8List, String)
+  dco_decode_DartFn_Inputs_String_list_prim_u_8_strict_String_Output_sign_answer_AnyhowException(
+    dynamic raw,
+  );
+
+  @protected
+  FutureOr<AuthError?> Function(String, Uint8List, String, KeyPolicy?, BigInt)
+  dco_decode_DartFn_Inputs_String_list_prim_u_8_strict_String_opt_box_autoadd_key_policy_u_64_Output_opt_box_autoadd_auth_error_AnyhowException(
+    dynamic raw,
+  );
+
+  @protected
+  FutureOr<StoreAnswer> Function(String, BigInt?, Uint8List, StorePolicy)
+  dco_decode_DartFn_Inputs_String_opt_box_autoadd_u_64_list_prim_u_8_strict_store_policy_Output_store_answer_AnyhowException(
+    dynamic raw,
+  );
+
+  @protected
+  FutureOr<AssertionAnswer> Function(AssertionRequest, BigInt)
+  dco_decode_DartFn_Inputs_assertion_request_u_64_Output_assertion_answer_AnyhowException(
+    dynamic raw,
+  );
+
+  @protected
+  FutureOr<SeKeyAnswer> Function(KeyPolicy)
+  dco_decode_DartFn_Inputs_key_policy_Output_se_key_answer_AnyhowException(
     dynamic raw,
   );
 
@@ -125,14 +430,110 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Object dco_decode_DartOpaque(dynamic raw);
 
   @protected
-  Backup
-  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  Account
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
     dynamic raw,
   );
 
   @protected
-  Events
-  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  Admin
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    dynamic raw,
+  );
+
+  @protected
+  AllowOpaqueCall
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    dynamic raw,
+  );
+
+  @protected
+  ArcPrepared
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    dynamic raw,
+  );
+
+  @protected
+  ArcPreparedOrder
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    dynamic raw,
+  );
+
+  @protected
+  ArcRegistryWrite
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    dynamic raw,
+  );
+
+  @protected
+  ArcSecretBytes
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    dynamic raw,
+  );
+
+  @protected
+  ArcSeedBackup
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    dynamic raw,
+  );
+
+  @protected
+  ArcSubscription
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    dynamic raw,
+  );
+
+  @protected
+  Confidential
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    dynamic raw,
+  );
+
+  @protected
+  DeriveFromKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    dynamic raw,
+  );
+
+  @protected
+  DeriveFromSignature
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    dynamic raw,
+  );
+
+  @protected
+  Dex
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    dynamic raw,
+  );
+
+  @protected
+  EndpointAuth
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    dynamic raw,
+  );
+
+  @protected
+  Op
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    dynamic raw,
+  );
+
+  @protected
+  PqzVerdictRequest
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    dynamic raw,
+  );
+
+  @protected
+  Prepared
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    dynamic raw,
+  );
+
+  @protected
+  SdkError
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     dynamic raw,
   );
 
@@ -143,79 +544,1191 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  Secret
-  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  Vault
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     dynamic raw,
   );
+
+  @protected
+  Wallet
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
+    dynamic raw,
+  );
+
+  @protected
+  Object? dco_decode_SerdeJsonValue(dynamic raw);
 
   @protected
   String dco_decode_String(dynamic raw);
 
   @protected
-  AuthAnswer dco_decode_auth_answer(dynamic raw);
+  AcceptMembership dco_decode_accept_membership(dynamic raw);
 
   @protected
-  AuthFailure dco_decode_auth_failure(dynamic raw);
+  AccountInfo dco_decode_account_info(dynamic raw);
+
+  @protected
+  AccountRow dco_decode_account_row(dynamic raw);
+
+  @protected
+  AddNative dco_decode_add_native(dynamic raw);
+
+  @protected
+  AddReserve dco_decode_add_reserve(dynamic raw);
+
+  @protected
+  AddUa dco_decode_add_ua(dynamic raw);
+
+  @protected
+  AddWatch dco_decode_add_watch(dynamic raw);
+
+  @protected
+  Assertion dco_decode_assertion(dynamic raw);
+
+  @protected
+  AssertionAnswer dco_decode_assertion_answer(dynamic raw);
+
+  @protected
+  AssertionRequest dco_decode_assertion_request(dynamic raw);
+
+  @protected
+  AttrsArgs dco_decode_attrs_args(dynamic raw);
+
+  @protected
+  AuditorConsent dco_decode_auditor_consent(dynamic raw);
+
+  @protected
+  AuthError dco_decode_auth_error(dynamic raw);
+
+  @protected
+  Balances dco_decode_balances(dynamic raw);
+
+  @protected
+  BlsMultiPart dco_decode_bls_multi_part(dynamic raw);
 
   @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
-  AuthFailure dco_decode_box_autoadd_auth_failure(dynamic raw);
+  AllowOpaqueCall
+  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    dynamic raw,
+  );
 
   @protected
-  StoreFailure dco_decode_box_autoadd_store_failure(dynamic raw);
+  ArcRegistryWrite
+  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    dynamic raw,
+  );
+
+  @protected
+  EndpointAuth
+  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    dynamic raw,
+  );
+
+  @protected
+  AcceptMembership dco_decode_box_autoadd_accept_membership(dynamic raw);
+
+  @protected
+  AddNative dco_decode_box_autoadd_add_native(dynamic raw);
+
+  @protected
+  AddReserve dco_decode_box_autoadd_add_reserve(dynamic raw);
+
+  @protected
+  AddUa dco_decode_box_autoadd_add_ua(dynamic raw);
+
+  @protected
+  AddWatch dco_decode_box_autoadd_add_watch(dynamic raw);
+
+  @protected
+  Assertion dco_decode_box_autoadd_assertion(dynamic raw);
+
+  @protected
+  AuditorConsent dco_decode_box_autoadd_auditor_consent(dynamic raw);
+
+  @protected
+  AuthError dco_decode_box_autoadd_auth_error(dynamic raw);
+
+  @protected
+  BlsMultiPart dco_decode_box_autoadd_bls_multi_part(dynamic raw);
+
+  @protected
+  Burn dco_decode_box_autoadd_burn(dynamic raw);
+
+  @protected
+  CancelAll dco_decode_box_autoadd_cancel_all(dynamic raw);
+
+  @protected
+  CancelNonce dco_decode_box_autoadd_cancel_nonce(dynamic raw);
+
+  @protected
+  CancelOrder dco_decode_box_autoadd_cancel_order(dynamic raw);
+
+  @protected
+  CancelWrapOrder dco_decode_box_autoadd_cancel_wrap_order(dynamic raw);
+
+  @protected
+  ConfirmRemoveUnbacked dco_decode_box_autoadd_confirm_remove_unbacked(
+    dynamic raw,
+  );
+
+  @protected
+  CreatePasskeyKey dco_decode_box_autoadd_create_passkey_key(dynamic raw);
+
+  @protected
+  CreateSeKey dco_decode_box_autoadd_create_se_key(dynamic raw);
+
+  @protected
+  Cursor dco_decode_box_autoadd_cursor(dynamic raw);
+
+  @protected
+  DelegateRevoke dco_decode_box_autoadd_delegate_revoke(dynamic raw);
+
+  @protected
+  DeriveChild dco_decode_box_autoadd_derive_child(dynamic raw);
+
+  @protected
+  Event dco_decode_box_autoadd_event(dynamic raw);
+
+  @protected
+  Execute dco_decode_box_autoadd_execute(dynamic raw);
+
+  @protected
+  GasPerByte dco_decode_box_autoadd_gas_per_byte(dynamic raw);
+
+  @protected
+  GasPerItem dco_decode_box_autoadd_gas_per_item(dynamic raw);
+
+  @protected
+  GasSources dco_decode_box_autoadd_gas_sources(dynamic raw);
+
+  @protected
+  Generate dco_decode_box_autoadd_generate(dynamic raw);
+
+  @protected
+  HolderKind dco_decode_box_autoadd_holder_kind(dynamic raw);
+
+  @protected
+  ImportKey dco_decode_box_autoadd_import_key(dynamic raw);
+
+  @protected
+  ImportWords dco_decode_box_autoadd_import_words(dynamic raw);
+
+  @protected
+  KemRecord dco_decode_box_autoadd_kem_record(dynamic raw);
+
+  @protected
+  KeyPolicy dco_decode_box_autoadd_key_policy(dynamic raw);
+
+  @protected
+  KeyRef dco_decode_box_autoadd_key_ref(dynamic raw);
+
+  @protected
+  Limits dco_decode_box_autoadd_limits(dynamic raw);
+
+  @protected
+  LiquidityOrder dco_decode_box_autoadd_liquidity_order(dynamic raw);
+
+  @protected
+  MsigRegister dco_decode_box_autoadd_msig_register(dynamic raw);
+
+  @protected
+  MsigStructureArgs dco_decode_box_autoadd_msig_structure_args(dynamic raw);
+
+  @protected
+  NativeKeyRef dco_decode_box_autoadd_native_key_ref(dynamic raw);
+
+  @protected
+  NativeQuote dco_decode_box_autoadd_native_quote(dynamic raw);
+
+  @protected
+  NativeSend dco_decode_box_autoadd_native_send(dynamic raw);
+
+  @protected
+  OpState dco_decode_box_autoadd_op_state(dynamic raw);
+
+  @protected
+  OwnerRelay dco_decode_box_autoadd_owner_relay(dynamic raw);
+
+  @protected
+  PasskeyCreated dco_decode_box_autoadd_passkey_created(dynamic raw);
+
+  @protected
+  Pay dco_decode_box_autoadd_pay(dynamic raw);
+
+  @protected
+  PayUnderMandate dco_decode_box_autoadd_pay_under_mandate(dynamic raw);
+
+  @protected
+  PayWithTax dco_decode_box_autoadd_pay_with_tax(dynamic raw);
+
+  @protected
+  PayeeFee dco_decode_box_autoadd_payee_fee(dynamic raw);
+
+  @protected
+  PqzAccountOp dco_decode_box_autoadd_pqz_account_op(dynamic raw);
+
+  @protected
+  PqzBalanceRequest dco_decode_box_autoadd_pqz_balance_request(dynamic raw);
+
+  @protected
+  PqzShield dco_decode_box_autoadd_pqz_shield(dynamic raw);
+
+  @protected
+  PqzTransfer dco_decode_box_autoadd_pqz_transfer(dynamic raw);
+
+  @protected
+  PqzTransferMulti dco_decode_box_autoadd_pqz_transfer_multi(dynamic raw);
+
+  @protected
+  PqzUnshield dco_decode_box_autoadd_pqz_unshield(dynamic raw);
+
+  @protected
+  PqzUnshieldUnwrap dco_decode_box_autoadd_pqz_unshield_unwrap(dynamic raw);
+
+  @protected
+  PqzWrapShield dco_decode_box_autoadd_pqz_wrap_shield(dynamic raw);
+
+  @protected
+  Register dco_decode_box_autoadd_register(dynamic raw);
+
+  @protected
+  RegisterAttrs dco_decode_box_autoadd_register_attrs(dynamic raw);
+
+  @protected
+  RegistrationBlob dco_decode_box_autoadd_registration_blob(dynamic raw);
+
+  @protected
+  RegistrationGas dco_decode_box_autoadd_registration_gas(dynamic raw);
+
+  @protected
+  RelayFee dco_decode_box_autoadd_relay_fee(dynamic raw);
+
+  @protected
+  Remove dco_decode_box_autoadd_remove(dynamic raw);
+
+  @protected
+  RescueVault dco_decode_box_autoadd_rescue_vault(dynamic raw);
+
+  @protected
+  Restore dco_decode_box_autoadd_restore(dynamic raw);
+
+  @protected
+  RevokeMandate dco_decode_box_autoadd_revoke_mandate(dynamic raw);
+
+  @protected
+  SePublic dco_decode_box_autoadd_se_public(dynamic raw);
+
+  @protected
+  SetMandate dco_decode_box_autoadd_set_mandate(dynamic raw);
+
+  @protected
+  SetPayee dco_decode_box_autoadd_set_payee(dynamic raw);
+
+  @protected
+  SmartCall dco_decode_box_autoadd_smart_call(dynamic raw);
+
+  @protected
+  SmartOp dco_decode_box_autoadd_smart_op(dynamic raw);
+
+  @protected
+  StoreError dco_decode_box_autoadd_store_error(dynamic raw);
+
+  @protected
+  SubjectKeyArgs dco_decode_box_autoadd_subject_key_args(dynamic raw);
+
+  @protected
+  SubmitPath dco_decode_box_autoadd_submit_path(dynamic raw);
+
+  @protected
+  SubmitQuote dco_decode_box_autoadd_submit_quote(dynamic raw);
+
+  @protected
+  TradeOrder dco_decode_box_autoadd_trade_order(dynamic raw);
+
+  @protected
+  Transfer dco_decode_box_autoadd_transfer(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_16(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
   BigInt dco_decode_box_autoadd_u_64(dynamic raw);
 
   @protected
+  int dco_decode_box_autoadd_u_8(dynamic raw);
+
+  @protected
+  UaAcceptAdmin dco_decode_box_autoadd_ua_accept_admin(dynamic raw);
+
+  @protected
+  UaApproveDexRelease dco_decode_box_autoadd_ua_approve_dex_release(
+    dynamic raw,
+  );
+
+  @protected
+  UaApproveRelease dco_decode_box_autoadd_ua_approve_release(dynamic raw);
+
+  @protected
+  UaApproveTokenRelease dco_decode_box_autoadd_ua_approve_token_release(
+    dynamic raw,
+  );
+
+  @protected
+  UaCancelGrant dco_decode_box_autoadd_ua_cancel_grant(dynamic raw);
+
+  @protected
+  UaCancelNonce dco_decode_box_autoadd_ua_cancel_nonce(dynamic raw);
+
+  @protected
+  UaCancelRate dco_decode_box_autoadd_ua_cancel_rate(dynamic raw);
+
+  @protected
+  UaCreateDex dco_decode_box_autoadd_ua_create_dex(dynamic raw);
+
+  @protected
+  UaCreateInstance dco_decode_box_autoadd_ua_create_instance(dynamic raw);
+
+  @protected
+  UaCreateToken dco_decode_box_autoadd_ua_create_token(dynamic raw);
+
+  @protected
+  UaDeprecateDex dco_decode_box_autoadd_ua_deprecate_dex(dynamic raw);
+
+  @protected
+  UaDeprecateRelease dco_decode_box_autoadd_ua_deprecate_release(dynamic raw);
+
+  @protected
+  UaDeprecateToken dco_decode_box_autoadd_ua_deprecate_token(dynamic raw);
+
+  @protected
+  UaDisableFeature dco_decode_box_autoadd_ua_disable_feature(dynamic raw);
+
+  @protected
+  UaDisableWrap dco_decode_box_autoadd_ua_disable_wrap(dynamic raw);
+
+  @protected
+  UaEnableFeature dco_decode_box_autoadd_ua_enable_feature(dynamic raw);
+
+  @protected
+  UaExecuteRate dco_decode_box_autoadd_ua_execute_rate(dynamic raw);
+
+  @protected
+  UaForceTransfer dco_decode_box_autoadd_ua_force_transfer(dynamic raw);
+
+  @protected
+  UaFreeze dco_decode_box_autoadd_ua_freeze(dynamic raw);
+
+  @protected
+  UaGrantRole dco_decode_box_autoadd_ua_grant_role(dynamic raw);
+
+  @protected
+  UaMint dco_decode_box_autoadd_ua_mint(dynamic raw);
+
+  @protected
+  UaMintToUA dco_decode_box_autoadd_ua_mint_to_ua(dynamic raw);
+
+  @protected
+  UaOperatorTransfer dco_decode_box_autoadd_ua_operator_transfer(dynamic raw);
+
+  @protected
+  UaPause dco_decode_box_autoadd_ua_pause(dynamic raw);
+
+  @protected
+  UaPqzCancelVerifier dco_decode_box_autoadd_ua_pqz_cancel_verifier(
+    dynamic raw,
+  );
+
+  @protected
+  UaPqzRevokeVerifier dco_decode_box_autoadd_ua_pqz_revoke_verifier(
+    dynamic raw,
+  );
+
+  @protected
+  UaPqzSetVerifier dco_decode_box_autoadd_ua_pqz_set_verifier(dynamic raw);
+
+  @protected
+  UaProposeRate dco_decode_box_autoadd_ua_propose_rate(dynamic raw);
+
+  @protected
+  UaPublishClassEnv dco_decode_box_autoadd_ua_publish_class_env(dynamic raw);
+
+  @protected
+  UaPublishDexEnv dco_decode_box_autoadd_ua_publish_dex_env(dynamic raw);
+
+  @protected
+  UaPublishTokenEnv dco_decode_box_autoadd_ua_publish_token_env(dynamic raw);
+
+  @protected
+  UaRecordOrder dco_decode_box_autoadd_ua_record_order(dynamic raw);
+
+  @protected
+  UaRenounceAdmin dco_decode_box_autoadd_ua_renounce_admin(dynamic raw);
+
+  @protected
+  UaRenounceRole dco_decode_box_autoadd_ua_renounce_role(dynamic raw);
+
+  @protected
+  UaRevokeApproval dco_decode_box_autoadd_ua_revoke_approval(dynamic raw);
+
+  @protected
+  UaRevokeOrder dco_decode_box_autoadd_ua_revoke_order(dynamic raw);
+
+  @protected
+  UaRevokeRole dco_decode_box_autoadd_ua_revoke_role(dynamic raw);
+
+  @protected
+  UaSetAllowed dco_decode_box_autoadd_ua_set_allowed(dynamic raw);
+
+  @protected
+  UaSetAuditorKey dco_decode_box_autoadd_ua_set_auditor_key(dynamic raw);
+
+  @protected
+  UaSetAuditorUA dco_decode_box_autoadd_ua_set_auditor_ua(dynamic raw);
+
+  @protected
+  UaSetChainEntries dco_decode_box_autoadd_ua_set_chain_entries(dynamic raw);
+
+  @protected
+  UaSetClassKindEnabled dco_decode_box_autoadd_ua_set_class_kind_enabled(
+    dynamic raw,
+  );
+
+  @protected
+  UaSetCompliance dco_decode_box_autoadd_ua_set_compliance(dynamic raw);
+
+  @protected
+  UaSetDenied dco_decode_box_autoadd_ua_set_denied(dynamic raw);
+
+  @protected
+  UaSetExchangeTarget dco_decode_box_autoadd_ua_set_exchange_target(
+    dynamic raw,
+  );
+
+  @protected
+  UaSetFeeSplit dco_decode_box_autoadd_ua_set_fee_split(dynamic raw);
+
+  @protected
+  UaSetGrant dco_decode_box_autoadd_ua_set_grant(dynamic raw);
+
+  @protected
+  UaSetKycProvider dco_decode_box_autoadd_ua_set_kyc_provider(dynamic raw);
+
+  @protected
+  UaSetListedOnly dco_decode_box_autoadd_ua_set_listed_only(dynamic raw);
+
+  @protected
+  UaSetMarket dco_decode_box_autoadd_ua_set_market(dynamic raw);
+
+  @protected
+  UaSetMaxSupply dco_decode_box_autoadd_ua_set_max_supply(dynamic raw);
+
+  @protected
+  UaSetMaxWrapSupply dco_decode_box_autoadd_ua_set_max_wrap_supply(dynamic raw);
+
+  @protected
+  UaSetProofStore dco_decode_box_autoadd_ua_set_proof_store(dynamic raw);
+
+  @protected
+  UaSetTaxRate dco_decode_box_autoadd_ua_set_tax_rate(dynamic raw);
+
+  @protected
+  UaSetTaxRecipient dco_decode_box_autoadd_ua_set_tax_recipient(dynamic raw);
+
+  @protected
+  UaSetTokenKindEnabled dco_decode_box_autoadd_ua_set_token_kind_enabled(
+    dynamic raw,
+  );
+
+  @protected
+  UaSetVerifierFee dco_decode_box_autoadd_ua_set_verifier_fee(dynamic raw);
+
+  @protected
+  UaSetWrapLimits dco_decode_box_autoadd_ua_set_wrap_limits(dynamic raw);
+
+  @protected
+  UaSetWrapMember dco_decode_box_autoadd_ua_set_wrap_member(dynamic raw);
+
+  @protected
+  UaTransferAdmin dco_decode_box_autoadd_ua_transfer_admin(dynamic raw);
+
+  @protected
+  UaUnfreeze dco_decode_box_autoadd_ua_unfreeze(dynamic raw);
+
+  @protected
+  UaUnpause dco_decode_box_autoadd_ua_unpause(dynamic raw);
+
+  @protected
+  Unlock dco_decode_box_autoadd_unlock(dynamic raw);
+
+  @protected
+  Unwrap dco_decode_box_autoadd_unwrap(dynamic raw);
+
+  @protected
+  UnwrapLeg dco_decode_box_autoadd_unwrap_leg(dynamic raw);
+
+  @protected
+  UnwrapToUa dco_decode_box_autoadd_unwrap_to_ua(dynamic raw);
+
+  @protected
+  UpdateMsig dco_decode_box_autoadd_update_msig(dynamic raw);
+
+  @protected
+  WebAuthnArgs dco_decode_box_autoadd_web_authn_args(dynamic raw);
+
+  @protected
+  Wrap dco_decode_box_autoadd_wrap(dynamic raw);
+
+  @protected
+  WrapLeg dco_decode_box_autoadd_wrap_leg(dynamic raw);
+
+  @protected
+  WrapOrder dco_decode_box_autoadd_wrap_order(dynamic raw);
+
+  @protected
+  WrapToUa dco_decode_box_autoadd_wrap_to_ua(dynamic raw);
+
+  @protected
+  ZetherBalanceRequest dco_decode_box_autoadd_zether_balance_request(
+    dynamic raw,
+  );
+
+  @protected
+  ZetherOwnerRollOver dco_decode_box_autoadd_zether_owner_roll_over(
+    dynamic raw,
+  );
+
+  @protected
+  ZetherOwnerSetMode dco_decode_box_autoadd_zether_owner_set_mode(dynamic raw);
+
+  @protected
+  ZetherRollOver dco_decode_box_autoadd_zether_roll_over(dynamic raw);
+
+  @protected
+  ZetherRollOverBatch dco_decode_box_autoadd_zether_roll_over_batch(
+    dynamic raw,
+  );
+
+  @protected
+  ZetherShield dco_decode_box_autoadd_zether_shield(dynamic raw);
+
+  @protected
+  ZetherTransfer dco_decode_box_autoadd_zether_transfer(dynamic raw);
+
+  @protected
+  ZetherTransferMulti dco_decode_box_autoadd_zether_transfer_multi(dynamic raw);
+
+  @protected
+  ZetherUnshield dco_decode_box_autoadd_zether_unshield(dynamic raw);
+
+  @protected
+  ZetherUnshieldUnwrap dco_decode_box_autoadd_zether_unshield_unwrap(
+    dynamic raw,
+  );
+
+  @protected
+  ZetherWrapShield dco_decode_box_autoadd_zether_wrap_shield(dynamic raw);
+
+  @protected
+  Burn dco_decode_burn(dynamic raw);
+
+  @protected
+  CancelAll dco_decode_cancel_all(dynamic raw);
+
+  @protected
+  CancelNonce dco_decode_cancel_nonce(dynamic raw);
+
+  @protected
+  CancelOrder dco_decode_cancel_order(dynamic raw);
+
+  @protected
+  CancelWrapOrder dco_decode_cancel_wrap_order(dynamic raw);
+
+  @protected
+  ChainProfile dco_decode_chain_profile(dynamic raw);
+
+  @protected
+  Class dco_decode_class(dynamic raw);
+
+  @protected
+  ConfirmRemove dco_decode_confirm_remove(dynamic raw);
+
+  @protected
+  ConfirmRemoveUnbacked dco_decode_confirm_remove_unbacked(dynamic raw);
+
+  @protected
+  Create3Preview dco_decode_create_3_preview(dynamic raw);
+
+  @protected
+  CreatePasskeyKey dco_decode_create_passkey_key(dynamic raw);
+
+  @protected
+  CreateSeKey dco_decode_create_se_key(dynamic raw);
+
+  @protected
+  Cursor dco_decode_cursor(dynamic raw);
+
+  @protected
+  DelaySentence dco_decode_delay_sentence(dynamic raw);
+
+  @protected
+  DelegateRevoke dco_decode_delegate_revoke(dynamic raw);
+
+  @protected
+  DeriveChild dco_decode_derive_child(dynamic raw);
+
+  @protected
+  EndpointConfig dco_decode_endpoint_config(dynamic raw);
+
+  @protected
+  Envelope dco_decode_envelope(dynamic raw);
+
+  @protected
+  Event dco_decode_event(dynamic raw);
+
+  @protected
+  Execute dco_decode_execute(dynamic raw);
+
+  @protected
+  ExecuteCall dco_decode_execute_call(dynamic raw);
+
+  @protected
+  Family dco_decode_family(dynamic raw);
+
+  @protected
+  Finality dco_decode_finality(dynamic raw);
+
+  @protected
+  GasBase dco_decode_gas_base(dynamic raw);
+
+  @protected
+  GasFrom dco_decode_gas_from(dynamic raw);
+
+  @protected
+  GasPerByte dco_decode_gas_per_byte(dynamic raw);
+
+  @protected
+  GasPerItem dco_decode_gas_per_item(dynamic raw);
+
+  @protected
+  GasRows dco_decode_gas_rows(dynamic raw);
+
+  @protected
+  GasSources dco_decode_gas_sources(dynamic raw);
+
+  @protected
+  GasTable dco_decode_gas_table(dynamic raw);
+
+  @protected
+  GasVerify dco_decode_gas_verify(dynamic raw);
+
+  @protected
+  Generate dco_decode_generate(dynamic raw);
+
+  @protected
+  HistoryItem dco_decode_history_item(dynamic raw);
+
+  @protected
+  HistoryPage dco_decode_history_page(dynamic raw);
+
+  @protected
+  HolderKind dco_decode_holder_kind(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  ImportKey dco_decode_import_key(dynamic raw);
+
+  @protected
+  ImportWords dco_decode_import_words(dynamic raw);
+
+  @protected
+  ImportedKey dco_decode_imported_key(dynamic raw);
+
+  @protected
+  InFlight dco_decode_in_flight(dynamic raw);
 
   @protected
   PlatformInt64 dco_decode_isize(dynamic raw);
 
   @protected
+  KemArgs dco_decode_kem_args(dynamic raw);
+
+  @protected
+  KemRecord dco_decode_kem_record(dynamic raw);
+
+  @protected
+  KeyPolicy dco_decode_key_policy(dynamic raw);
+
+  @protected
+  KeyRef dco_decode_key_ref(dynamic raw);
+
+  @protected
+  Limits dco_decode_limits(dynamic raw);
+
+  @protected
+  LiquidityOrder dco_decode_liquidity_order(dynamic raw);
+
+  @protected
+  LiquidityToken dco_decode_liquidity_token(dynamic raw);
+
+  @protected
+  List<ArcRegistryWrite>
+  dco_decode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    dynamic raw,
+  );
+
+  @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<AccountInfo> dco_decode_list_account_info(dynamic raw);
+
+  @protected
+  List<AccountRow> dco_decode_list_account_row(dynamic raw);
+
+  @protected
+  List<BlsMultiPart> dco_decode_list_bls_multi_part(dynamic raw);
+
+  @protected
+  List<ChainProfile> dco_decode_list_chain_profile(dynamic raw);
+
+  @protected
+  List<DelaySentence> dco_decode_list_delay_sentence(dynamic raw);
+
+  @protected
+  List<EndpointConfig> dco_decode_list_endpoint_config(dynamic raw);
+
+  @protected
+  List<GasBase> dco_decode_list_gas_base(dynamic raw);
+
+  @protected
+  List<GasTable> dco_decode_list_gas_table(dynamic raw);
+
+  @protected
+  List<GasVerify> dco_decode_list_gas_verify(dynamic raw);
+
+  @protected
+  List<HistoryItem> dco_decode_list_history_item(dynamic raw);
+
+  @protected
+  List<LiquidityToken> dco_decode_list_liquidity_token(dynamic raw);
 
   @protected
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<ListedDex> dco_decode_list_listed_dex(dynamic raw);
+
+  @protected
+  List<ListedToken> dco_decode_list_listed_token(dynamic raw);
+
+  @protected
+  List<MsigLeaf> dco_decode_list_msig_leaf(dynamic raw);
+
+  @protected
+  List<MsigMemberArgs> dco_decode_list_msig_member_args(dynamic raw);
+
+  @protected
+  List<MsigSlot> dco_decode_list_msig_slot(dynamic raw);
+
+  @protected
+  List<MsigSlotState> dco_decode_list_msig_slot_state(dynamic raw);
+
+  @protected
+  List<OpItem> dco_decode_list_op_item(dynamic raw);
+
+  @protected
+  List<PositionReader> dco_decode_list_position_reader(dynamic raw);
+
+  @protected
+  List<PqzBalance> dco_decode_list_pqz_balance(dynamic raw);
+
+  @protected
+  List<PqzLeg> dco_decode_list_pqz_leg(dynamic raw);
+
+  @protected
+  Uint16List dco_decode_list_prim_u_16_strict(dynamic raw);
+
+  @protected
+  Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
+
+  @protected
+  List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
-  List<SeedRow> dco_decode_list_seed_row(dynamic raw);
+  List<ReviewField> dco_decode_list_review_field(dynamic raw);
+
+  @protected
+  List<SeedInfo> dco_decode_list_seed_info(dynamic raw);
+
+  @protected
+  List<StepGas> dco_decode_list_step_gas(dynamic raw);
+
+  @protected
+  List<TokenBalance> dco_decode_list_token_balance(dynamic raw);
+
+  @protected
+  List<TokenInfo> dco_decode_list_token_info(dynamic raw);
+
+  @protected
+  List<ZetherLeg> dco_decode_list_zether_leg(dynamic raw);
+
+  @protected
+  ListedDex dco_decode_listed_dex(dynamic raw);
+
+  @protected
+  ListedToken dco_decode_listed_token(dynamic raw);
+
+  @protected
+  MemoryProtection dco_decode_memory_protection(dynamic raw);
+
+  @protected
+  MsigLeaf dco_decode_msig_leaf(dynamic raw);
+
+  @protected
+  MsigMemberArgs dco_decode_msig_member_args(dynamic raw);
+
+  @protected
+  MsigRegister dco_decode_msig_register(dynamic raw);
+
+  @protected
+  MsigSlot dco_decode_msig_slot(dynamic raw);
+
+  @protected
+  MsigSlotState dco_decode_msig_slot_state(dynamic raw);
+
+  @protected
+  MsigState dco_decode_msig_state(dynamic raw);
+
+  @protected
+  MsigStructureArgs dco_decode_msig_structure_args(dynamic raw);
+
+  @protected
+  MsigUpdatePlan dco_decode_msig_update_plan(dynamic raw);
+
+  @protected
+  NativeAddress dco_decode_native_address(dynamic raw);
+
+  @protected
+  NativeKeyRef dco_decode_native_key_ref(dynamic raw);
+
+  @protected
+  NativeQuote dco_decode_native_quote(dynamic raw);
+
+  @protected
+  NativeSend dco_decode_native_send(dynamic raw);
+
+  @protected
+  NewSeed dco_decode_new_seed(dynamic raw);
+
+  @protected
+  OpItem dco_decode_op_item(dynamic raw);
+
+  @protected
+  OpState dco_decode_op_state(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
-  AuthFailure? dco_decode_opt_box_autoadd_auth_failure(dynamic raw);
+  AllowOpaqueCall?
+  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    dynamic raw,
+  );
 
   @protected
-  StoreFailure? dco_decode_opt_box_autoadd_store_failure(dynamic raw);
+  ArcRegistryWrite?
+  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    dynamic raw,
+  );
+
+  @protected
+  EndpointAuth?
+  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    dynamic raw,
+  );
+
+  @protected
+  Assertion? dco_decode_opt_box_autoadd_assertion(dynamic raw);
+
+  @protected
+  AuthError? dco_decode_opt_box_autoadd_auth_error(dynamic raw);
+
+  @protected
+  ConfirmRemoveUnbacked? dco_decode_opt_box_autoadd_confirm_remove_unbacked(
+    dynamic raw,
+  );
+
+  @protected
+  Cursor? dco_decode_opt_box_autoadd_cursor(dynamic raw);
+
+  @protected
+  Event? dco_decode_opt_box_autoadd_event(dynamic raw);
+
+  @protected
+  GasPerByte? dco_decode_opt_box_autoadd_gas_per_byte(dynamic raw);
+
+  @protected
+  GasPerItem? dco_decode_opt_box_autoadd_gas_per_item(dynamic raw);
+
+  @protected
+  GasSources? dco_decode_opt_box_autoadd_gas_sources(dynamic raw);
+
+  @protected
+  HolderKind? dco_decode_opt_box_autoadd_holder_kind(dynamic raw);
+
+  @protected
+  KemRecord? dco_decode_opt_box_autoadd_kem_record(dynamic raw);
+
+  @protected
+  KeyPolicy? dco_decode_opt_box_autoadd_key_policy(dynamic raw);
+
+  @protected
+  KeyRef? dco_decode_opt_box_autoadd_key_ref(dynamic raw);
+
+  @protected
+  PasskeyCreated? dco_decode_opt_box_autoadd_passkey_created(dynamic raw);
+
+  @protected
+  RegistrationGas? dco_decode_opt_box_autoadd_registration_gas(dynamic raw);
+
+  @protected
+  SePublic? dco_decode_opt_box_autoadd_se_public(dynamic raw);
+
+  @protected
+  StoreError? dco_decode_opt_box_autoadd_store_error(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
   BigInt? dco_decode_opt_box_autoadd_u_64(dynamic raw);
 
   @protected
+  int? dco_decode_opt_box_autoadd_u_8(dynamic raw);
+
+  @protected
+  WebAuthnArgs? dco_decode_opt_box_autoadd_web_authn_args(dynamic raw);
+
+  @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
 
   @protected
-  SdkFailure dco_decode_sdk_failure(dynamic raw);
+  OrderTerms dco_decode_order_terms(dynamic raw);
 
   @protected
-  SeedRow dco_decode_seed_row(dynamic raw);
+  OwnerRelay dco_decode_owner_relay(dynamic raw);
+
+  @protected
+  PasskeyAnswer dco_decode_passkey_answer(dynamic raw);
+
+  @protected
+  PasskeyCreated dco_decode_passkey_created(dynamic raw);
+
+  @protected
+  Pay dco_decode_pay(dynamic raw);
+
+  @protected
+  PayBody dco_decode_pay_body(dynamic raw);
+
+  @protected
+  PayMeta dco_decode_pay_meta(dynamic raw);
+
+  @protected
+  PayUnderMandate dco_decode_pay_under_mandate(dynamic raw);
+
+  @protected
+  PayWithTax dco_decode_pay_with_tax(dynamic raw);
+
+  @protected
+  PayeeFee dco_decode_payee_fee(dynamic raw);
+
+  @protected
+  PayerAuth dco_decode_payer_auth(dynamic raw);
+
+  @protected
+  Payment dco_decode_payment(dynamic raw);
+
+  @protected
+  Policy dco_decode_policy(dynamic raw);
+
+  @protected
+  PositionReader dco_decode_position_reader(dynamic raw);
+
+  @protected
+  PqzAccountOp dco_decode_pqz_account_op(dynamic raw);
+
+  @protected
+  PqzBalance dco_decode_pqz_balance(dynamic raw);
+
+  @protected
+  PqzBalanceAll dco_decode_pqz_balance_all(dynamic raw);
+
+  @protected
+  PqzBalanceRequest dco_decode_pqz_balance_request(dynamic raw);
+
+  @protected
+  PqzLeg dco_decode_pqz_leg(dynamic raw);
+
+  @protected
+  PqzShield dco_decode_pqz_shield(dynamic raw);
+
+  @protected
+  PqzTransfer dco_decode_pqz_transfer(dynamic raw);
+
+  @protected
+  PqzTransferMulti dco_decode_pqz_transfer_multi(dynamic raw);
+
+  @protected
+  PqzUnshield dco_decode_pqz_unshield(dynamic raw);
+
+  @protected
+  PqzUnshieldUnwrap dco_decode_pqz_unshield_unwrap(dynamic raw);
+
+  @protected
+  PqzWrapShield dco_decode_pqz_wrap_shield(dynamic raw);
+
+  @protected
+  PreparedOrderView dco_decode_prepared_order_view(dynamic raw);
+
+  @protected
+  PreparedView dco_decode_prepared_view(dynamic raw);
+
+  @protected
+  Presence dco_decode_presence(dynamic raw);
+
+  @protected
+  Register dco_decode_register(dynamic raw);
+
+  @protected
+  RegisterArgs dco_decode_register_args(dynamic raw);
+
+  @protected
+  RegisterAttrs dco_decode_register_attrs(dynamic raw);
+
+  @protected
+  RegistrationBlob dco_decode_registration_blob(dynamic raw);
+
+  @protected
+  RegistrationGas dco_decode_registration_gas(dynamic raw);
+
+  @protected
+  RegistrationState dco_decode_registration_state(dynamic raw);
+
+  @protected
+  RegistryWriteView dco_decode_registry_write_view(dynamic raw);
+
+  @protected
+  RelayFee dco_decode_relay_fee(dynamic raw);
+
+  @protected
+  Remove dco_decode_remove(dynamic raw);
+
+  @protected
+  RescueOp dco_decode_rescue_op(dynamic raw);
+
+  @protected
+  RescueVault dco_decode_rescue_vault(dynamic raw);
+
+  @protected
+  Restore dco_decode_restore(dynamic raw);
+
+  @protected
+  ReviewField dco_decode_review_field(dynamic raw);
+
+  @protected
+  RevokeMandate dco_decode_revoke_mandate(dynamic raw);
+
+  @protected
+  SeKeyAnswer dco_decode_se_key_answer(dynamic raw);
+
+  @protected
+  SePublic dco_decode_se_public(dynamic raw);
+
+  @protected
+  SeedInfo dco_decode_seed_info(dynamic raw);
+
+  @protected
+  SessionSet dco_decode_session_set(dynamic raw);
+
+  @protected
+  SetMandate dco_decode_set_mandate(dynamic raw);
+
+  @protected
+  SetPayee dco_decode_set_payee(dynamic raw);
+
+  @protected
+  SignAnswer dco_decode_sign_answer(dynamic raw);
+
+  @protected
+  SignedOrder dco_decode_signed_order(dynamic raw);
+
+  @protected
+  SignedRescue dco_decode_signed_rescue(dynamic raw);
+
+  @protected
+  SmartCall dco_decode_smart_call(dynamic raw);
+
+  @protected
+  SmartOp dco_decode_smart_op(dynamic raw);
+
+  @protected
+  Source dco_decode_source(dynamic raw);
+
+  @protected
+  StepGas dco_decode_step_gas(dynamic raw);
 
   @protected
   StoreAnswer dco_decode_store_answer(dynamic raw);
 
   @protected
-  StoreFailure dco_decode_store_failure(dynamic raw);
+  StoreError dco_decode_store_error(dynamic raw);
 
   @protected
   StoreGetAnswer dco_decode_store_get_answer(dynamic raw);
+
+  @protected
+  StorePolicy dco_decode_store_policy(dynamic raw);
+
+  @protected
+  SubjectKeyArgs dco_decode_subject_key_args(dynamic raw);
+
+  @protected
+  SubmitPath dco_decode_submit_path(dynamic raw);
+
+  @protected
+  SubmitQuote dco_decode_submit_quote(dynamic raw);
+
+  @protected
+  TokenBalance dco_decode_token_balance(dynamic raw);
+
+  @protected
+  TokenInfo dco_decode_token_info(dynamic raw);
+
+  @protected
+  TradeOrder dco_decode_trade_order(dynamic raw);
+
+  @protected
+  Transfer dco_decode_transfer(dynamic raw);
+
+  @protected
+  int dco_decode_u_16(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -227,23 +1740,374 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   int dco_decode_u_8(dynamic raw);
 
   @protected
+  UaAcceptAdmin dco_decode_ua_accept_admin(dynamic raw);
+
+  @protected
+  UaApproveDexRelease dco_decode_ua_approve_dex_release(dynamic raw);
+
+  @protected
+  UaApproveRelease dco_decode_ua_approve_release(dynamic raw);
+
+  @protected
+  UaApproveTokenRelease dco_decode_ua_approve_token_release(dynamic raw);
+
+  @protected
+  UaCancelGrant dco_decode_ua_cancel_grant(dynamic raw);
+
+  @protected
+  UaCancelNonce dco_decode_ua_cancel_nonce(dynamic raw);
+
+  @protected
+  UaCancelRate dco_decode_ua_cancel_rate(dynamic raw);
+
+  @protected
+  UaCreateDex dco_decode_ua_create_dex(dynamic raw);
+
+  @protected
+  UaCreateInstance dco_decode_ua_create_instance(dynamic raw);
+
+  @protected
+  UaCreateToken dco_decode_ua_create_token(dynamic raw);
+
+  @protected
+  UaDeprecateDex dco_decode_ua_deprecate_dex(dynamic raw);
+
+  @protected
+  UaDeprecateRelease dco_decode_ua_deprecate_release(dynamic raw);
+
+  @protected
+  UaDeprecateToken dco_decode_ua_deprecate_token(dynamic raw);
+
+  @protected
+  UaDisableFeature dco_decode_ua_disable_feature(dynamic raw);
+
+  @protected
+  UaDisableWrap dco_decode_ua_disable_wrap(dynamic raw);
+
+  @protected
+  UaEnableFeature dco_decode_ua_enable_feature(dynamic raw);
+
+  @protected
+  UaExecuteRate dco_decode_ua_execute_rate(dynamic raw);
+
+  @protected
+  UaForceTransfer dco_decode_ua_force_transfer(dynamic raw);
+
+  @protected
+  UaFreeze dco_decode_ua_freeze(dynamic raw);
+
+  @protected
+  UaGrantRole dco_decode_ua_grant_role(dynamic raw);
+
+  @protected
+  UaMint dco_decode_ua_mint(dynamic raw);
+
+  @protected
+  UaMintToUA dco_decode_ua_mint_to_ua(dynamic raw);
+
+  @protected
+  UaOperatorTransfer dco_decode_ua_operator_transfer(dynamic raw);
+
+  @protected
+  UaPause dco_decode_ua_pause(dynamic raw);
+
+  @protected
+  UaPqzCancelVerifier dco_decode_ua_pqz_cancel_verifier(dynamic raw);
+
+  @protected
+  UaPqzRevokeVerifier dco_decode_ua_pqz_revoke_verifier(dynamic raw);
+
+  @protected
+  UaPqzSetVerifier dco_decode_ua_pqz_set_verifier(dynamic raw);
+
+  @protected
+  UaProposeRate dco_decode_ua_propose_rate(dynamic raw);
+
+  @protected
+  UaPublishClassEnv dco_decode_ua_publish_class_env(dynamic raw);
+
+  @protected
+  UaPublishDexEnv dco_decode_ua_publish_dex_env(dynamic raw);
+
+  @protected
+  UaPublishTokenEnv dco_decode_ua_publish_token_env(dynamic raw);
+
+  @protected
+  UaRecordOrder dco_decode_ua_record_order(dynamic raw);
+
+  @protected
+  UaRenounceAdmin dco_decode_ua_renounce_admin(dynamic raw);
+
+  @protected
+  UaRenounceRole dco_decode_ua_renounce_role(dynamic raw);
+
+  @protected
+  UaRevokeApproval dco_decode_ua_revoke_approval(dynamic raw);
+
+  @protected
+  UaRevokeOrder dco_decode_ua_revoke_order(dynamic raw);
+
+  @protected
+  UaRevokeRole dco_decode_ua_revoke_role(dynamic raw);
+
+  @protected
+  UaSetAllowed dco_decode_ua_set_allowed(dynamic raw);
+
+  @protected
+  UaSetAuditorKey dco_decode_ua_set_auditor_key(dynamic raw);
+
+  @protected
+  UaSetAuditorUA dco_decode_ua_set_auditor_ua(dynamic raw);
+
+  @protected
+  UaSetChainEntries dco_decode_ua_set_chain_entries(dynamic raw);
+
+  @protected
+  UaSetClassKindEnabled dco_decode_ua_set_class_kind_enabled(dynamic raw);
+
+  @protected
+  UaSetCompliance dco_decode_ua_set_compliance(dynamic raw);
+
+  @protected
+  UaSetDenied dco_decode_ua_set_denied(dynamic raw);
+
+  @protected
+  UaSetExchangeTarget dco_decode_ua_set_exchange_target(dynamic raw);
+
+  @protected
+  UaSetFeeSplit dco_decode_ua_set_fee_split(dynamic raw);
+
+  @protected
+  UaSetGrant dco_decode_ua_set_grant(dynamic raw);
+
+  @protected
+  UaSetKycProvider dco_decode_ua_set_kyc_provider(dynamic raw);
+
+  @protected
+  UaSetListedOnly dco_decode_ua_set_listed_only(dynamic raw);
+
+  @protected
+  UaSetMarket dco_decode_ua_set_market(dynamic raw);
+
+  @protected
+  UaSetMaxSupply dco_decode_ua_set_max_supply(dynamic raw);
+
+  @protected
+  UaSetMaxWrapSupply dco_decode_ua_set_max_wrap_supply(dynamic raw);
+
+  @protected
+  UaSetProofStore dco_decode_ua_set_proof_store(dynamic raw);
+
+  @protected
+  UaSetTaxRate dco_decode_ua_set_tax_rate(dynamic raw);
+
+  @protected
+  UaSetTaxRecipient dco_decode_ua_set_tax_recipient(dynamic raw);
+
+  @protected
+  UaSetTokenKindEnabled dco_decode_ua_set_token_kind_enabled(dynamic raw);
+
+  @protected
+  UaSetVerifierFee dco_decode_ua_set_verifier_fee(dynamic raw);
+
+  @protected
+  UaSetWrapLimits dco_decode_ua_set_wrap_limits(dynamic raw);
+
+  @protected
+  UaSetWrapMember dco_decode_ua_set_wrap_member(dynamic raw);
+
+  @protected
+  UaTransferAdmin dco_decode_ua_transfer_admin(dynamic raw);
+
+  @protected
+  UaUnfreeze dco_decode_ua_unfreeze(dynamic raw);
+
+  @protected
+  UaUnpause dco_decode_ua_unpause(dynamic raw);
+
+  @protected
   void dco_decode_unit(dynamic raw);
+
+  @protected
+  Unlock dco_decode_unlock(dynamic raw);
+
+  @protected
+  Unwrap dco_decode_unwrap(dynamic raw);
+
+  @protected
+  UnwrapLeg dco_decode_unwrap_leg(dynamic raw);
+
+  @protected
+  UnwrapToUa dco_decode_unwrap_to_ua(dynamic raw);
+
+  @protected
+  UpdateMsig dco_decode_update_msig(dynamic raw);
 
   @protected
   BigInt dco_decode_usize(dynamic raw);
 
   @protected
+  WebAuthnArgs dco_decode_web_authn_args(dynamic raw);
+
+  @protected
+  Wrap dco_decode_wrap(dynamic raw);
+
+  @protected
+  WrapLeg dco_decode_wrap_leg(dynamic raw);
+
+  @protected
+  WrapOrder dco_decode_wrap_order(dynamic raw);
+
+  @protected
+  WrapOrderTerms dco_decode_wrap_order_terms(dynamic raw);
+
+  @protected
+  WrapToUa dco_decode_wrap_to_ua(dynamic raw);
+
+  @protected
+  ZetherBalance dco_decode_zether_balance(dynamic raw);
+
+  @protected
+  ZetherBalanceRequest dco_decode_zether_balance_request(dynamic raw);
+
+  @protected
+  ZetherKeyInfo dco_decode_zether_key_info(dynamic raw);
+
+  @protected
+  ZetherLeg dco_decode_zether_leg(dynamic raw);
+
+  @protected
+  ZetherOwnerRollOver dco_decode_zether_owner_roll_over(dynamic raw);
+
+  @protected
+  ZetherOwnerSetMode dco_decode_zether_owner_set_mode(dynamic raw);
+
+  @protected
+  ZetherRollOver dco_decode_zether_roll_over(dynamic raw);
+
+  @protected
+  ZetherRollOverBatch dco_decode_zether_roll_over_batch(dynamic raw);
+
+  @protected
+  ZetherShield dco_decode_zether_shield(dynamic raw);
+
+  @protected
+  ZetherTransfer dco_decode_zether_transfer(dynamic raw);
+
+  @protected
+  ZetherTransferMulti dco_decode_zether_transfer_multi(dynamic raw);
+
+  @protected
+  ZetherUnshield dco_decode_zether_unshield(dynamic raw);
+
+  @protected
+  ZetherUnshieldUnwrap dco_decode_zether_unshield_unwrap(dynamic raw);
+
+  @protected
+  ZetherWrapShield dco_decode_zether_wrap_shield(dynamic raw);
+
+  @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
-  Backup
-  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  Account
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
     SseDeserializer deserializer,
   );
 
   @protected
-  Events
-  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  Admin
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AllowOpaqueCall
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcPrepared
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcPreparedOrder
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcRegistryWrite
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcSecretBytes
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcSeedBackup
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcSubscription
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Confidential
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DeriveFromKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DeriveFromSignature
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Dex
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  EndpointAuth
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Op
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzVerdictRequest
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SdkError
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     SseDeserializer deserializer,
   );
 
@@ -254,20 +2118,128 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  Secret
-  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  Vault
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     SseDeserializer deserializer,
   );
 
   @protected
-  Backup
-  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  Wallet
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
     SseDeserializer deserializer,
   );
 
   @protected
-  Events
-  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  DeriveFromKey
+  sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DeriveFromSignature
+  sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzVerdictRequest
+  sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Account
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Admin
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcPrepared
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcPreparedOrder
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcRegistryWrite
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcSecretBytes
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcSeedBackup
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcSubscription
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Confidential
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DeriveFromKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DeriveFromSignature
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Dex
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Op
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzVerdictRequest
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Prepared
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SdkError
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     SseDeserializer deserializer,
   );
 
@@ -278,8 +2250,14 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  Secret
-  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  Vault
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Wallet
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
     SseDeserializer deserializer,
   );
 
@@ -287,14 +2265,110 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Object sse_decode_DartOpaque(SseDeserializer deserializer);
 
   @protected
-  Backup
-  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  Account
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
     SseDeserializer deserializer,
   );
 
   @protected
-  Events
-  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  Admin
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AllowOpaqueCall
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcPrepared
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcPreparedOrder
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcRegistryWrite
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcSecretBytes
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcSeedBackup
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ArcSubscription
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Confidential
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DeriveFromKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DeriveFromSignature
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Dex
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  EndpointAuth
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Op
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzVerdictRequest
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Prepared
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SdkError
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     SseDeserializer deserializer,
   );
 
@@ -305,42 +2379,954 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  Secret
-  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  Vault
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     SseDeserializer deserializer,
   );
+
+  @protected
+  Wallet
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Object? sse_decode_SerdeJsonValue(SseDeserializer deserializer);
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
-  AuthAnswer sse_decode_auth_answer(SseDeserializer deserializer);
+  AcceptMembership sse_decode_accept_membership(SseDeserializer deserializer);
 
   @protected
-  AuthFailure sse_decode_auth_failure(SseDeserializer deserializer);
+  AccountInfo sse_decode_account_info(SseDeserializer deserializer);
+
+  @protected
+  AccountRow sse_decode_account_row(SseDeserializer deserializer);
+
+  @protected
+  AddNative sse_decode_add_native(SseDeserializer deserializer);
+
+  @protected
+  AddReserve sse_decode_add_reserve(SseDeserializer deserializer);
+
+  @protected
+  AddUa sse_decode_add_ua(SseDeserializer deserializer);
+
+  @protected
+  AddWatch sse_decode_add_watch(SseDeserializer deserializer);
+
+  @protected
+  Assertion sse_decode_assertion(SseDeserializer deserializer);
+
+  @protected
+  AssertionAnswer sse_decode_assertion_answer(SseDeserializer deserializer);
+
+  @protected
+  AssertionRequest sse_decode_assertion_request(SseDeserializer deserializer);
+
+  @protected
+  AttrsArgs sse_decode_attrs_args(SseDeserializer deserializer);
+
+  @protected
+  AuditorConsent sse_decode_auditor_consent(SseDeserializer deserializer);
+
+  @protected
+  AuthError sse_decode_auth_error(SseDeserializer deserializer);
+
+  @protected
+  Balances sse_decode_balances(SseDeserializer deserializer);
+
+  @protected
+  BlsMultiPart sse_decode_bls_multi_part(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
-  AuthFailure sse_decode_box_autoadd_auth_failure(SseDeserializer deserializer);
-
-  @protected
-  StoreFailure sse_decode_box_autoadd_store_failure(
+  AllowOpaqueCall
+  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
     SseDeserializer deserializer,
   );
+
+  @protected
+  ArcRegistryWrite
+  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  EndpointAuth
+  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AcceptMembership sse_decode_box_autoadd_accept_membership(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AddNative sse_decode_box_autoadd_add_native(SseDeserializer deserializer);
+
+  @protected
+  AddReserve sse_decode_box_autoadd_add_reserve(SseDeserializer deserializer);
+
+  @protected
+  AddUa sse_decode_box_autoadd_add_ua(SseDeserializer deserializer);
+
+  @protected
+  AddWatch sse_decode_box_autoadd_add_watch(SseDeserializer deserializer);
+
+  @protected
+  Assertion sse_decode_box_autoadd_assertion(SseDeserializer deserializer);
+
+  @protected
+  AuditorConsent sse_decode_box_autoadd_auditor_consent(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AuthError sse_decode_box_autoadd_auth_error(SseDeserializer deserializer);
+
+  @protected
+  BlsMultiPart sse_decode_box_autoadd_bls_multi_part(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Burn sse_decode_box_autoadd_burn(SseDeserializer deserializer);
+
+  @protected
+  CancelAll sse_decode_box_autoadd_cancel_all(SseDeserializer deserializer);
+
+  @protected
+  CancelNonce sse_decode_box_autoadd_cancel_nonce(SseDeserializer deserializer);
+
+  @protected
+  CancelOrder sse_decode_box_autoadd_cancel_order(SseDeserializer deserializer);
+
+  @protected
+  CancelWrapOrder sse_decode_box_autoadd_cancel_wrap_order(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ConfirmRemoveUnbacked sse_decode_box_autoadd_confirm_remove_unbacked(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CreatePasskeyKey sse_decode_box_autoadd_create_passkey_key(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CreateSeKey sse_decode_box_autoadd_create_se_key(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Cursor sse_decode_box_autoadd_cursor(SseDeserializer deserializer);
+
+  @protected
+  DelegateRevoke sse_decode_box_autoadd_delegate_revoke(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  DeriveChild sse_decode_box_autoadd_derive_child(SseDeserializer deserializer);
+
+  @protected
+  Event sse_decode_box_autoadd_event(SseDeserializer deserializer);
+
+  @protected
+  Execute sse_decode_box_autoadd_execute(SseDeserializer deserializer);
+
+  @protected
+  GasPerByte sse_decode_box_autoadd_gas_per_byte(SseDeserializer deserializer);
+
+  @protected
+  GasPerItem sse_decode_box_autoadd_gas_per_item(SseDeserializer deserializer);
+
+  @protected
+  GasSources sse_decode_box_autoadd_gas_sources(SseDeserializer deserializer);
+
+  @protected
+  Generate sse_decode_box_autoadd_generate(SseDeserializer deserializer);
+
+  @protected
+  HolderKind sse_decode_box_autoadd_holder_kind(SseDeserializer deserializer);
+
+  @protected
+  ImportKey sse_decode_box_autoadd_import_key(SseDeserializer deserializer);
+
+  @protected
+  ImportWords sse_decode_box_autoadd_import_words(SseDeserializer deserializer);
+
+  @protected
+  KemRecord sse_decode_box_autoadd_kem_record(SseDeserializer deserializer);
+
+  @protected
+  KeyPolicy sse_decode_box_autoadd_key_policy(SseDeserializer deserializer);
+
+  @protected
+  KeyRef sse_decode_box_autoadd_key_ref(SseDeserializer deserializer);
+
+  @protected
+  Limits sse_decode_box_autoadd_limits(SseDeserializer deserializer);
+
+  @protected
+  LiquidityOrder sse_decode_box_autoadd_liquidity_order(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  MsigRegister sse_decode_box_autoadd_msig_register(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  MsigStructureArgs sse_decode_box_autoadd_msig_structure_args(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  NativeKeyRef sse_decode_box_autoadd_native_key_ref(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  NativeQuote sse_decode_box_autoadd_native_quote(SseDeserializer deserializer);
+
+  @protected
+  NativeSend sse_decode_box_autoadd_native_send(SseDeserializer deserializer);
+
+  @protected
+  OpState sse_decode_box_autoadd_op_state(SseDeserializer deserializer);
+
+  @protected
+  OwnerRelay sse_decode_box_autoadd_owner_relay(SseDeserializer deserializer);
+
+  @protected
+  PasskeyCreated sse_decode_box_autoadd_passkey_created(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Pay sse_decode_box_autoadd_pay(SseDeserializer deserializer);
+
+  @protected
+  PayUnderMandate sse_decode_box_autoadd_pay_under_mandate(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PayWithTax sse_decode_box_autoadd_pay_with_tax(SseDeserializer deserializer);
+
+  @protected
+  PayeeFee sse_decode_box_autoadd_payee_fee(SseDeserializer deserializer);
+
+  @protected
+  PqzAccountOp sse_decode_box_autoadd_pqz_account_op(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzBalanceRequest sse_decode_box_autoadd_pqz_balance_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzShield sse_decode_box_autoadd_pqz_shield(SseDeserializer deserializer);
+
+  @protected
+  PqzTransfer sse_decode_box_autoadd_pqz_transfer(SseDeserializer deserializer);
+
+  @protected
+  PqzTransferMulti sse_decode_box_autoadd_pqz_transfer_multi(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzUnshield sse_decode_box_autoadd_pqz_unshield(SseDeserializer deserializer);
+
+  @protected
+  PqzUnshieldUnwrap sse_decode_box_autoadd_pqz_unshield_unwrap(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzWrapShield sse_decode_box_autoadd_pqz_wrap_shield(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Register sse_decode_box_autoadd_register(SseDeserializer deserializer);
+
+  @protected
+  RegisterAttrs sse_decode_box_autoadd_register_attrs(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RegistrationBlob sse_decode_box_autoadd_registration_blob(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RegistrationGas sse_decode_box_autoadd_registration_gas(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RelayFee sse_decode_box_autoadd_relay_fee(SseDeserializer deserializer);
+
+  @protected
+  Remove sse_decode_box_autoadd_remove(SseDeserializer deserializer);
+
+  @protected
+  RescueVault sse_decode_box_autoadd_rescue_vault(SseDeserializer deserializer);
+
+  @protected
+  Restore sse_decode_box_autoadd_restore(SseDeserializer deserializer);
+
+  @protected
+  RevokeMandate sse_decode_box_autoadd_revoke_mandate(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SePublic sse_decode_box_autoadd_se_public(SseDeserializer deserializer);
+
+  @protected
+  SetMandate sse_decode_box_autoadd_set_mandate(SseDeserializer deserializer);
+
+  @protected
+  SetPayee sse_decode_box_autoadd_set_payee(SseDeserializer deserializer);
+
+  @protected
+  SmartCall sse_decode_box_autoadd_smart_call(SseDeserializer deserializer);
+
+  @protected
+  SmartOp sse_decode_box_autoadd_smart_op(SseDeserializer deserializer);
+
+  @protected
+  StoreError sse_decode_box_autoadd_store_error(SseDeserializer deserializer);
+
+  @protected
+  SubjectKeyArgs sse_decode_box_autoadd_subject_key_args(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SubmitPath sse_decode_box_autoadd_submit_path(SseDeserializer deserializer);
+
+  @protected
+  SubmitQuote sse_decode_box_autoadd_submit_quote(SseDeserializer deserializer);
+
+  @protected
+  TradeOrder sse_decode_box_autoadd_trade_order(SseDeserializer deserializer);
+
+  @protected
+  Transfer sse_decode_box_autoadd_transfer(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
   BigInt sse_decode_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
+  int sse_decode_box_autoadd_u_8(SseDeserializer deserializer);
+
+  @protected
+  UaAcceptAdmin sse_decode_box_autoadd_ua_accept_admin(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaApproveDexRelease sse_decode_box_autoadd_ua_approve_dex_release(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaApproveRelease sse_decode_box_autoadd_ua_approve_release(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaApproveTokenRelease sse_decode_box_autoadd_ua_approve_token_release(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaCancelGrant sse_decode_box_autoadd_ua_cancel_grant(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaCancelNonce sse_decode_box_autoadd_ua_cancel_nonce(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaCancelRate sse_decode_box_autoadd_ua_cancel_rate(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaCreateDex sse_decode_box_autoadd_ua_create_dex(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaCreateInstance sse_decode_box_autoadd_ua_create_instance(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaCreateToken sse_decode_box_autoadd_ua_create_token(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaDeprecateDex sse_decode_box_autoadd_ua_deprecate_dex(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaDeprecateRelease sse_decode_box_autoadd_ua_deprecate_release(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaDeprecateToken sse_decode_box_autoadd_ua_deprecate_token(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaDisableFeature sse_decode_box_autoadd_ua_disable_feature(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaDisableWrap sse_decode_box_autoadd_ua_disable_wrap(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaEnableFeature sse_decode_box_autoadd_ua_enable_feature(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaExecuteRate sse_decode_box_autoadd_ua_execute_rate(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaForceTransfer sse_decode_box_autoadd_ua_force_transfer(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaFreeze sse_decode_box_autoadd_ua_freeze(SseDeserializer deserializer);
+
+  @protected
+  UaGrantRole sse_decode_box_autoadd_ua_grant_role(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaMint sse_decode_box_autoadd_ua_mint(SseDeserializer deserializer);
+
+  @protected
+  UaMintToUA sse_decode_box_autoadd_ua_mint_to_ua(SseDeserializer deserializer);
+
+  @protected
+  UaOperatorTransfer sse_decode_box_autoadd_ua_operator_transfer(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPause sse_decode_box_autoadd_ua_pause(SseDeserializer deserializer);
+
+  @protected
+  UaPqzCancelVerifier sse_decode_box_autoadd_ua_pqz_cancel_verifier(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPqzRevokeVerifier sse_decode_box_autoadd_ua_pqz_revoke_verifier(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPqzSetVerifier sse_decode_box_autoadd_ua_pqz_set_verifier(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaProposeRate sse_decode_box_autoadd_ua_propose_rate(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPublishClassEnv sse_decode_box_autoadd_ua_publish_class_env(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPublishDexEnv sse_decode_box_autoadd_ua_publish_dex_env(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPublishTokenEnv sse_decode_box_autoadd_ua_publish_token_env(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaRecordOrder sse_decode_box_autoadd_ua_record_order(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaRenounceAdmin sse_decode_box_autoadd_ua_renounce_admin(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaRenounceRole sse_decode_box_autoadd_ua_renounce_role(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaRevokeApproval sse_decode_box_autoadd_ua_revoke_approval(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaRevokeOrder sse_decode_box_autoadd_ua_revoke_order(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaRevokeRole sse_decode_box_autoadd_ua_revoke_role(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetAllowed sse_decode_box_autoadd_ua_set_allowed(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetAuditorKey sse_decode_box_autoadd_ua_set_auditor_key(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetAuditorUA sse_decode_box_autoadd_ua_set_auditor_ua(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetChainEntries sse_decode_box_autoadd_ua_set_chain_entries(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetClassKindEnabled sse_decode_box_autoadd_ua_set_class_kind_enabled(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetCompliance sse_decode_box_autoadd_ua_set_compliance(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetDenied sse_decode_box_autoadd_ua_set_denied(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetExchangeTarget sse_decode_box_autoadd_ua_set_exchange_target(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetFeeSplit sse_decode_box_autoadd_ua_set_fee_split(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetGrant sse_decode_box_autoadd_ua_set_grant(SseDeserializer deserializer);
+
+  @protected
+  UaSetKycProvider sse_decode_box_autoadd_ua_set_kyc_provider(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetListedOnly sse_decode_box_autoadd_ua_set_listed_only(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetMarket sse_decode_box_autoadd_ua_set_market(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetMaxSupply sse_decode_box_autoadd_ua_set_max_supply(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetMaxWrapSupply sse_decode_box_autoadd_ua_set_max_wrap_supply(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetProofStore sse_decode_box_autoadd_ua_set_proof_store(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetTaxRate sse_decode_box_autoadd_ua_set_tax_rate(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetTaxRecipient sse_decode_box_autoadd_ua_set_tax_recipient(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetTokenKindEnabled sse_decode_box_autoadd_ua_set_token_kind_enabled(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetVerifierFee sse_decode_box_autoadd_ua_set_verifier_fee(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetWrapLimits sse_decode_box_autoadd_ua_set_wrap_limits(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetWrapMember sse_decode_box_autoadd_ua_set_wrap_member(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaTransferAdmin sse_decode_box_autoadd_ua_transfer_admin(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaUnfreeze sse_decode_box_autoadd_ua_unfreeze(SseDeserializer deserializer);
+
+  @protected
+  UaUnpause sse_decode_box_autoadd_ua_unpause(SseDeserializer deserializer);
+
+  @protected
+  Unlock sse_decode_box_autoadd_unlock(SseDeserializer deserializer);
+
+  @protected
+  Unwrap sse_decode_box_autoadd_unwrap(SseDeserializer deserializer);
+
+  @protected
+  UnwrapLeg sse_decode_box_autoadd_unwrap_leg(SseDeserializer deserializer);
+
+  @protected
+  UnwrapToUa sse_decode_box_autoadd_unwrap_to_ua(SseDeserializer deserializer);
+
+  @protected
+  UpdateMsig sse_decode_box_autoadd_update_msig(SseDeserializer deserializer);
+
+  @protected
+  WebAuthnArgs sse_decode_box_autoadd_web_authn_args(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Wrap sse_decode_box_autoadd_wrap(SseDeserializer deserializer);
+
+  @protected
+  WrapLeg sse_decode_box_autoadd_wrap_leg(SseDeserializer deserializer);
+
+  @protected
+  WrapOrder sse_decode_box_autoadd_wrap_order(SseDeserializer deserializer);
+
+  @protected
+  WrapToUa sse_decode_box_autoadd_wrap_to_ua(SseDeserializer deserializer);
+
+  @protected
+  ZetherBalanceRequest sse_decode_box_autoadd_zether_balance_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherOwnerRollOver sse_decode_box_autoadd_zether_owner_roll_over(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherOwnerSetMode sse_decode_box_autoadd_zether_owner_set_mode(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherRollOver sse_decode_box_autoadd_zether_roll_over(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherRollOverBatch sse_decode_box_autoadd_zether_roll_over_batch(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherShield sse_decode_box_autoadd_zether_shield(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherTransfer sse_decode_box_autoadd_zether_transfer(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherTransferMulti sse_decode_box_autoadd_zether_transfer_multi(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherUnshield sse_decode_box_autoadd_zether_unshield(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherUnshieldUnwrap sse_decode_box_autoadd_zether_unshield_unwrap(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherWrapShield sse_decode_box_autoadd_zether_wrap_shield(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Burn sse_decode_burn(SseDeserializer deserializer);
+
+  @protected
+  CancelAll sse_decode_cancel_all(SseDeserializer deserializer);
+
+  @protected
+  CancelNonce sse_decode_cancel_nonce(SseDeserializer deserializer);
+
+  @protected
+  CancelOrder sse_decode_cancel_order(SseDeserializer deserializer);
+
+  @protected
+  CancelWrapOrder sse_decode_cancel_wrap_order(SseDeserializer deserializer);
+
+  @protected
+  ChainProfile sse_decode_chain_profile(SseDeserializer deserializer);
+
+  @protected
+  Class sse_decode_class(SseDeserializer deserializer);
+
+  @protected
+  ConfirmRemove sse_decode_confirm_remove(SseDeserializer deserializer);
+
+  @protected
+  ConfirmRemoveUnbacked sse_decode_confirm_remove_unbacked(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Create3Preview sse_decode_create_3_preview(SseDeserializer deserializer);
+
+  @protected
+  CreatePasskeyKey sse_decode_create_passkey_key(SseDeserializer deserializer);
+
+  @protected
+  CreateSeKey sse_decode_create_se_key(SseDeserializer deserializer);
+
+  @protected
+  Cursor sse_decode_cursor(SseDeserializer deserializer);
+
+  @protected
+  DelaySentence sse_decode_delay_sentence(SseDeserializer deserializer);
+
+  @protected
+  DelegateRevoke sse_decode_delegate_revoke(SseDeserializer deserializer);
+
+  @protected
+  DeriveChild sse_decode_derive_child(SseDeserializer deserializer);
+
+  @protected
+  EndpointConfig sse_decode_endpoint_config(SseDeserializer deserializer);
+
+  @protected
+  Envelope sse_decode_envelope(SseDeserializer deserializer);
+
+  @protected
+  Event sse_decode_event(SseDeserializer deserializer);
+
+  @protected
+  Execute sse_decode_execute(SseDeserializer deserializer);
+
+  @protected
+  ExecuteCall sse_decode_execute_call(SseDeserializer deserializer);
+
+  @protected
+  Family sse_decode_family(SseDeserializer deserializer);
+
+  @protected
+  Finality sse_decode_finality(SseDeserializer deserializer);
+
+  @protected
+  GasBase sse_decode_gas_base(SseDeserializer deserializer);
+
+  @protected
+  GasFrom sse_decode_gas_from(SseDeserializer deserializer);
+
+  @protected
+  GasPerByte sse_decode_gas_per_byte(SseDeserializer deserializer);
+
+  @protected
+  GasPerItem sse_decode_gas_per_item(SseDeserializer deserializer);
+
+  @protected
+  GasRows sse_decode_gas_rows(SseDeserializer deserializer);
+
+  @protected
+  GasSources sse_decode_gas_sources(SseDeserializer deserializer);
+
+  @protected
+  GasTable sse_decode_gas_table(SseDeserializer deserializer);
+
+  @protected
+  GasVerify sse_decode_gas_verify(SseDeserializer deserializer);
+
+  @protected
+  Generate sse_decode_generate(SseDeserializer deserializer);
+
+  @protected
+  HistoryItem sse_decode_history_item(SseDeserializer deserializer);
+
+  @protected
+  HistoryPage sse_decode_history_page(SseDeserializer deserializer);
+
+  @protected
+  HolderKind sse_decode_holder_kind(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  ImportKey sse_decode_import_key(SseDeserializer deserializer);
+
+  @protected
+  ImportWords sse_decode_import_words(SseDeserializer deserializer);
+
+  @protected
+  ImportedKey sse_decode_imported_key(SseDeserializer deserializer);
+
+  @protected
+  InFlight sse_decode_in_flight(SseDeserializer deserializer);
 
   @protected
   PlatformInt64 sse_decode_isize(SseDeserializer deserializer);
 
   @protected
+  KemArgs sse_decode_kem_args(SseDeserializer deserializer);
+
+  @protected
+  KemRecord sse_decode_kem_record(SseDeserializer deserializer);
+
+  @protected
+  KeyPolicy sse_decode_key_policy(SseDeserializer deserializer);
+
+  @protected
+  KeyRef sse_decode_key_ref(SseDeserializer deserializer);
+
+  @protected
+  Limits sse_decode_limits(SseDeserializer deserializer);
+
+  @protected
+  LiquidityOrder sse_decode_liquidity_order(SseDeserializer deserializer);
+
+  @protected
+  LiquidityToken sse_decode_liquidity_token(SseDeserializer deserializer);
+
+  @protected
+  List<ArcRegistryWrite>
+  sse_decode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<AccountInfo> sse_decode_list_account_info(SseDeserializer deserializer);
+
+  @protected
+  List<AccountRow> sse_decode_list_account_row(SseDeserializer deserializer);
+
+  @protected
+  List<BlsMultiPart> sse_decode_list_bls_multi_part(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ChainProfile> sse_decode_list_chain_profile(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<DelaySentence> sse_decode_list_delay_sentence(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<EndpointConfig> sse_decode_list_endpoint_config(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<GasBase> sse_decode_list_gas_base(SseDeserializer deserializer);
+
+  @protected
+  List<GasTable> sse_decode_list_gas_table(SseDeserializer deserializer);
+
+  @protected
+  List<GasVerify> sse_decode_list_gas_verify(SseDeserializer deserializer);
+
+  @protected
+  List<HistoryItem> sse_decode_list_history_item(SseDeserializer deserializer);
+
+  @protected
+  List<LiquidityToken> sse_decode_list_liquidity_token(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<Uint8List> sse_decode_list_list_prim_u_8_strict(
@@ -348,44 +3334,448 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  List<ListedDex> sse_decode_list_listed_dex(SseDeserializer deserializer);
+
+  @protected
+  List<ListedToken> sse_decode_list_listed_token(SseDeserializer deserializer);
+
+  @protected
+  List<MsigLeaf> sse_decode_list_msig_leaf(SseDeserializer deserializer);
+
+  @protected
+  List<MsigMemberArgs> sse_decode_list_msig_member_args(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<MsigSlot> sse_decode_list_msig_slot(SseDeserializer deserializer);
+
+  @protected
+  List<MsigSlotState> sse_decode_list_msig_slot_state(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<OpItem> sse_decode_list_op_item(SseDeserializer deserializer);
+
+  @protected
+  List<PositionReader> sse_decode_list_position_reader(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<PqzBalance> sse_decode_list_pqz_balance(SseDeserializer deserializer);
+
+  @protected
+  List<PqzLeg> sse_decode_list_pqz_leg(SseDeserializer deserializer);
+
+  @protected
+  Uint16List sse_decode_list_prim_u_16_strict(SseDeserializer deserializer);
+
+  @protected
+  Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
+
+  @protected
+  List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
-  List<SeedRow> sse_decode_list_seed_row(SseDeserializer deserializer);
+  List<ReviewField> sse_decode_list_review_field(SseDeserializer deserializer);
+
+  @protected
+  List<SeedInfo> sse_decode_list_seed_info(SseDeserializer deserializer);
+
+  @protected
+  List<StepGas> sse_decode_list_step_gas(SseDeserializer deserializer);
+
+  @protected
+  List<TokenBalance> sse_decode_list_token_balance(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<TokenInfo> sse_decode_list_token_info(SseDeserializer deserializer);
+
+  @protected
+  List<ZetherLeg> sse_decode_list_zether_leg(SseDeserializer deserializer);
+
+  @protected
+  ListedDex sse_decode_listed_dex(SseDeserializer deserializer);
+
+  @protected
+  ListedToken sse_decode_listed_token(SseDeserializer deserializer);
+
+  @protected
+  MemoryProtection sse_decode_memory_protection(SseDeserializer deserializer);
+
+  @protected
+  MsigLeaf sse_decode_msig_leaf(SseDeserializer deserializer);
+
+  @protected
+  MsigMemberArgs sse_decode_msig_member_args(SseDeserializer deserializer);
+
+  @protected
+  MsigRegister sse_decode_msig_register(SseDeserializer deserializer);
+
+  @protected
+  MsigSlot sse_decode_msig_slot(SseDeserializer deserializer);
+
+  @protected
+  MsigSlotState sse_decode_msig_slot_state(SseDeserializer deserializer);
+
+  @protected
+  MsigState sse_decode_msig_state(SseDeserializer deserializer);
+
+  @protected
+  MsigStructureArgs sse_decode_msig_structure_args(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  MsigUpdatePlan sse_decode_msig_update_plan(SseDeserializer deserializer);
+
+  @protected
+  NativeAddress sse_decode_native_address(SseDeserializer deserializer);
+
+  @protected
+  NativeKeyRef sse_decode_native_key_ref(SseDeserializer deserializer);
+
+  @protected
+  NativeQuote sse_decode_native_quote(SseDeserializer deserializer);
+
+  @protected
+  NativeSend sse_decode_native_send(SseDeserializer deserializer);
+
+  @protected
+  NewSeed sse_decode_new_seed(SseDeserializer deserializer);
+
+  @protected
+  OpItem sse_decode_op_item(SseDeserializer deserializer);
+
+  @protected
+  OpState sse_decode_op_state(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
-  AuthFailure? sse_decode_opt_box_autoadd_auth_failure(
+  AllowOpaqueCall?
+  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
     SseDeserializer deserializer,
   );
 
   @protected
-  StoreFailure? sse_decode_opt_box_autoadd_store_failure(
+  ArcRegistryWrite?
+  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
     SseDeserializer deserializer,
   );
+
+  @protected
+  EndpointAuth?
+  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Assertion? sse_decode_opt_box_autoadd_assertion(SseDeserializer deserializer);
+
+  @protected
+  AuthError? sse_decode_opt_box_autoadd_auth_error(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ConfirmRemoveUnbacked? sse_decode_opt_box_autoadd_confirm_remove_unbacked(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Cursor? sse_decode_opt_box_autoadd_cursor(SseDeserializer deserializer);
+
+  @protected
+  Event? sse_decode_opt_box_autoadd_event(SseDeserializer deserializer);
+
+  @protected
+  GasPerByte? sse_decode_opt_box_autoadd_gas_per_byte(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  GasPerItem? sse_decode_opt_box_autoadd_gas_per_item(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  GasSources? sse_decode_opt_box_autoadd_gas_sources(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  HolderKind? sse_decode_opt_box_autoadd_holder_kind(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  KemRecord? sse_decode_opt_box_autoadd_kem_record(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  KeyPolicy? sse_decode_opt_box_autoadd_key_policy(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  KeyRef? sse_decode_opt_box_autoadd_key_ref(SseDeserializer deserializer);
+
+  @protected
+  PasskeyCreated? sse_decode_opt_box_autoadd_passkey_created(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RegistrationGas? sse_decode_opt_box_autoadd_registration_gas(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SePublic? sse_decode_opt_box_autoadd_se_public(SseDeserializer deserializer);
+
+  @protected
+  StoreError? sse_decode_opt_box_autoadd_store_error(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
   BigInt? sse_decode_opt_box_autoadd_u_64(SseDeserializer deserializer);
 
   @protected
+  int? sse_decode_opt_box_autoadd_u_8(SseDeserializer deserializer);
+
+  @protected
+  WebAuthnArgs? sse_decode_opt_box_autoadd_web_authn_args(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
-  SdkFailure sse_decode_sdk_failure(SseDeserializer deserializer);
+  OrderTerms sse_decode_order_terms(SseDeserializer deserializer);
 
   @protected
-  SeedRow sse_decode_seed_row(SseDeserializer deserializer);
+  OwnerRelay sse_decode_owner_relay(SseDeserializer deserializer);
+
+  @protected
+  PasskeyAnswer sse_decode_passkey_answer(SseDeserializer deserializer);
+
+  @protected
+  PasskeyCreated sse_decode_passkey_created(SseDeserializer deserializer);
+
+  @protected
+  Pay sse_decode_pay(SseDeserializer deserializer);
+
+  @protected
+  PayBody sse_decode_pay_body(SseDeserializer deserializer);
+
+  @protected
+  PayMeta sse_decode_pay_meta(SseDeserializer deserializer);
+
+  @protected
+  PayUnderMandate sse_decode_pay_under_mandate(SseDeserializer deserializer);
+
+  @protected
+  PayWithTax sse_decode_pay_with_tax(SseDeserializer deserializer);
+
+  @protected
+  PayeeFee sse_decode_payee_fee(SseDeserializer deserializer);
+
+  @protected
+  PayerAuth sse_decode_payer_auth(SseDeserializer deserializer);
+
+  @protected
+  Payment sse_decode_payment(SseDeserializer deserializer);
+
+  @protected
+  Policy sse_decode_policy(SseDeserializer deserializer);
+
+  @protected
+  PositionReader sse_decode_position_reader(SseDeserializer deserializer);
+
+  @protected
+  PqzAccountOp sse_decode_pqz_account_op(SseDeserializer deserializer);
+
+  @protected
+  PqzBalance sse_decode_pqz_balance(SseDeserializer deserializer);
+
+  @protected
+  PqzBalanceAll sse_decode_pqz_balance_all(SseDeserializer deserializer);
+
+  @protected
+  PqzBalanceRequest sse_decode_pqz_balance_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzLeg sse_decode_pqz_leg(SseDeserializer deserializer);
+
+  @protected
+  PqzShield sse_decode_pqz_shield(SseDeserializer deserializer);
+
+  @protected
+  PqzTransfer sse_decode_pqz_transfer(SseDeserializer deserializer);
+
+  @protected
+  PqzTransferMulti sse_decode_pqz_transfer_multi(SseDeserializer deserializer);
+
+  @protected
+  PqzUnshield sse_decode_pqz_unshield(SseDeserializer deserializer);
+
+  @protected
+  PqzUnshieldUnwrap sse_decode_pqz_unshield_unwrap(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PqzWrapShield sse_decode_pqz_wrap_shield(SseDeserializer deserializer);
+
+  @protected
+  PreparedOrderView sse_decode_prepared_order_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PreparedView sse_decode_prepared_view(SseDeserializer deserializer);
+
+  @protected
+  Presence sse_decode_presence(SseDeserializer deserializer);
+
+  @protected
+  Register sse_decode_register(SseDeserializer deserializer);
+
+  @protected
+  RegisterArgs sse_decode_register_args(SseDeserializer deserializer);
+
+  @protected
+  RegisterAttrs sse_decode_register_attrs(SseDeserializer deserializer);
+
+  @protected
+  RegistrationBlob sse_decode_registration_blob(SseDeserializer deserializer);
+
+  @protected
+  RegistrationGas sse_decode_registration_gas(SseDeserializer deserializer);
+
+  @protected
+  RegistrationState sse_decode_registration_state(SseDeserializer deserializer);
+
+  @protected
+  RegistryWriteView sse_decode_registry_write_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RelayFee sse_decode_relay_fee(SseDeserializer deserializer);
+
+  @protected
+  Remove sse_decode_remove(SseDeserializer deserializer);
+
+  @protected
+  RescueOp sse_decode_rescue_op(SseDeserializer deserializer);
+
+  @protected
+  RescueVault sse_decode_rescue_vault(SseDeserializer deserializer);
+
+  @protected
+  Restore sse_decode_restore(SseDeserializer deserializer);
+
+  @protected
+  ReviewField sse_decode_review_field(SseDeserializer deserializer);
+
+  @protected
+  RevokeMandate sse_decode_revoke_mandate(SseDeserializer deserializer);
+
+  @protected
+  SeKeyAnswer sse_decode_se_key_answer(SseDeserializer deserializer);
+
+  @protected
+  SePublic sse_decode_se_public(SseDeserializer deserializer);
+
+  @protected
+  SeedInfo sse_decode_seed_info(SseDeserializer deserializer);
+
+  @protected
+  SessionSet sse_decode_session_set(SseDeserializer deserializer);
+
+  @protected
+  SetMandate sse_decode_set_mandate(SseDeserializer deserializer);
+
+  @protected
+  SetPayee sse_decode_set_payee(SseDeserializer deserializer);
+
+  @protected
+  SignAnswer sse_decode_sign_answer(SseDeserializer deserializer);
+
+  @protected
+  SignedOrder sse_decode_signed_order(SseDeserializer deserializer);
+
+  @protected
+  SignedRescue sse_decode_signed_rescue(SseDeserializer deserializer);
+
+  @protected
+  SmartCall sse_decode_smart_call(SseDeserializer deserializer);
+
+  @protected
+  SmartOp sse_decode_smart_op(SseDeserializer deserializer);
+
+  @protected
+  Source sse_decode_source(SseDeserializer deserializer);
+
+  @protected
+  StepGas sse_decode_step_gas(SseDeserializer deserializer);
 
   @protected
   StoreAnswer sse_decode_store_answer(SseDeserializer deserializer);
 
   @protected
-  StoreFailure sse_decode_store_failure(SseDeserializer deserializer);
+  StoreError sse_decode_store_error(SseDeserializer deserializer);
 
   @protected
   StoreGetAnswer sse_decode_store_get_answer(SseDeserializer deserializer);
+
+  @protected
+  StorePolicy sse_decode_store_policy(SseDeserializer deserializer);
+
+  @protected
+  SubjectKeyArgs sse_decode_subject_key_args(SseDeserializer deserializer);
+
+  @protected
+  SubmitPath sse_decode_submit_path(SseDeserializer deserializer);
+
+  @protected
+  SubmitQuote sse_decode_submit_quote(SseDeserializer deserializer);
+
+  @protected
+  TokenBalance sse_decode_token_balance(SseDeserializer deserializer);
+
+  @protected
+  TokenInfo sse_decode_token_info(SseDeserializer deserializer);
+
+  @protected
+  TradeOrder sse_decode_trade_order(SseDeserializer deserializer);
+
+  @protected
+  Transfer sse_decode_transfer(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -397,10 +3787,311 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   int sse_decode_u_8(SseDeserializer deserializer);
 
   @protected
+  UaAcceptAdmin sse_decode_ua_accept_admin(SseDeserializer deserializer);
+
+  @protected
+  UaApproveDexRelease sse_decode_ua_approve_dex_release(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaApproveRelease sse_decode_ua_approve_release(SseDeserializer deserializer);
+
+  @protected
+  UaApproveTokenRelease sse_decode_ua_approve_token_release(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaCancelGrant sse_decode_ua_cancel_grant(SseDeserializer deserializer);
+
+  @protected
+  UaCancelNonce sse_decode_ua_cancel_nonce(SseDeserializer deserializer);
+
+  @protected
+  UaCancelRate sse_decode_ua_cancel_rate(SseDeserializer deserializer);
+
+  @protected
+  UaCreateDex sse_decode_ua_create_dex(SseDeserializer deserializer);
+
+  @protected
+  UaCreateInstance sse_decode_ua_create_instance(SseDeserializer deserializer);
+
+  @protected
+  UaCreateToken sse_decode_ua_create_token(SseDeserializer deserializer);
+
+  @protected
+  UaDeprecateDex sse_decode_ua_deprecate_dex(SseDeserializer deserializer);
+
+  @protected
+  UaDeprecateRelease sse_decode_ua_deprecate_release(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaDeprecateToken sse_decode_ua_deprecate_token(SseDeserializer deserializer);
+
+  @protected
+  UaDisableFeature sse_decode_ua_disable_feature(SseDeserializer deserializer);
+
+  @protected
+  UaDisableWrap sse_decode_ua_disable_wrap(SseDeserializer deserializer);
+
+  @protected
+  UaEnableFeature sse_decode_ua_enable_feature(SseDeserializer deserializer);
+
+  @protected
+  UaExecuteRate sse_decode_ua_execute_rate(SseDeserializer deserializer);
+
+  @protected
+  UaForceTransfer sse_decode_ua_force_transfer(SseDeserializer deserializer);
+
+  @protected
+  UaFreeze sse_decode_ua_freeze(SseDeserializer deserializer);
+
+  @protected
+  UaGrantRole sse_decode_ua_grant_role(SseDeserializer deserializer);
+
+  @protected
+  UaMint sse_decode_ua_mint(SseDeserializer deserializer);
+
+  @protected
+  UaMintToUA sse_decode_ua_mint_to_ua(SseDeserializer deserializer);
+
+  @protected
+  UaOperatorTransfer sse_decode_ua_operator_transfer(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPause sse_decode_ua_pause(SseDeserializer deserializer);
+
+  @protected
+  UaPqzCancelVerifier sse_decode_ua_pqz_cancel_verifier(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPqzRevokeVerifier sse_decode_ua_pqz_revoke_verifier(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPqzSetVerifier sse_decode_ua_pqz_set_verifier(SseDeserializer deserializer);
+
+  @protected
+  UaProposeRate sse_decode_ua_propose_rate(SseDeserializer deserializer);
+
+  @protected
+  UaPublishClassEnv sse_decode_ua_publish_class_env(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPublishDexEnv sse_decode_ua_publish_dex_env(SseDeserializer deserializer);
+
+  @protected
+  UaPublishTokenEnv sse_decode_ua_publish_token_env(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaRecordOrder sse_decode_ua_record_order(SseDeserializer deserializer);
+
+  @protected
+  UaRenounceAdmin sse_decode_ua_renounce_admin(SseDeserializer deserializer);
+
+  @protected
+  UaRenounceRole sse_decode_ua_renounce_role(SseDeserializer deserializer);
+
+  @protected
+  UaRevokeApproval sse_decode_ua_revoke_approval(SseDeserializer deserializer);
+
+  @protected
+  UaRevokeOrder sse_decode_ua_revoke_order(SseDeserializer deserializer);
+
+  @protected
+  UaRevokeRole sse_decode_ua_revoke_role(SseDeserializer deserializer);
+
+  @protected
+  UaSetAllowed sse_decode_ua_set_allowed(SseDeserializer deserializer);
+
+  @protected
+  UaSetAuditorKey sse_decode_ua_set_auditor_key(SseDeserializer deserializer);
+
+  @protected
+  UaSetAuditorUA sse_decode_ua_set_auditor_ua(SseDeserializer deserializer);
+
+  @protected
+  UaSetChainEntries sse_decode_ua_set_chain_entries(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetClassKindEnabled sse_decode_ua_set_class_kind_enabled(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetCompliance sse_decode_ua_set_compliance(SseDeserializer deserializer);
+
+  @protected
+  UaSetDenied sse_decode_ua_set_denied(SseDeserializer deserializer);
+
+  @protected
+  UaSetExchangeTarget sse_decode_ua_set_exchange_target(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetFeeSplit sse_decode_ua_set_fee_split(SseDeserializer deserializer);
+
+  @protected
+  UaSetGrant sse_decode_ua_set_grant(SseDeserializer deserializer);
+
+  @protected
+  UaSetKycProvider sse_decode_ua_set_kyc_provider(SseDeserializer deserializer);
+
+  @protected
+  UaSetListedOnly sse_decode_ua_set_listed_only(SseDeserializer deserializer);
+
+  @protected
+  UaSetMarket sse_decode_ua_set_market(SseDeserializer deserializer);
+
+  @protected
+  UaSetMaxSupply sse_decode_ua_set_max_supply(SseDeserializer deserializer);
+
+  @protected
+  UaSetMaxWrapSupply sse_decode_ua_set_max_wrap_supply(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetProofStore sse_decode_ua_set_proof_store(SseDeserializer deserializer);
+
+  @protected
+  UaSetTaxRate sse_decode_ua_set_tax_rate(SseDeserializer deserializer);
+
+  @protected
+  UaSetTaxRecipient sse_decode_ua_set_tax_recipient(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetTokenKindEnabled sse_decode_ua_set_token_kind_enabled(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSetVerifierFee sse_decode_ua_set_verifier_fee(SseDeserializer deserializer);
+
+  @protected
+  UaSetWrapLimits sse_decode_ua_set_wrap_limits(SseDeserializer deserializer);
+
+  @protected
+  UaSetWrapMember sse_decode_ua_set_wrap_member(SseDeserializer deserializer);
+
+  @protected
+  UaTransferAdmin sse_decode_ua_transfer_admin(SseDeserializer deserializer);
+
+  @protected
+  UaUnfreeze sse_decode_ua_unfreeze(SseDeserializer deserializer);
+
+  @protected
+  UaUnpause sse_decode_ua_unpause(SseDeserializer deserializer);
+
+  @protected
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
+  Unlock sse_decode_unlock(SseDeserializer deserializer);
+
+  @protected
+  Unwrap sse_decode_unwrap(SseDeserializer deserializer);
+
+  @protected
+  UnwrapLeg sse_decode_unwrap_leg(SseDeserializer deserializer);
+
+  @protected
+  UnwrapToUa sse_decode_unwrap_to_ua(SseDeserializer deserializer);
+
+  @protected
+  UpdateMsig sse_decode_update_msig(SseDeserializer deserializer);
+
+  @protected
   BigInt sse_decode_usize(SseDeserializer deserializer);
+
+  @protected
+  WebAuthnArgs sse_decode_web_authn_args(SseDeserializer deserializer);
+
+  @protected
+  Wrap sse_decode_wrap(SseDeserializer deserializer);
+
+  @protected
+  WrapLeg sse_decode_wrap_leg(SseDeserializer deserializer);
+
+  @protected
+  WrapOrder sse_decode_wrap_order(SseDeserializer deserializer);
+
+  @protected
+  WrapOrderTerms sse_decode_wrap_order_terms(SseDeserializer deserializer);
+
+  @protected
+  WrapToUa sse_decode_wrap_to_ua(SseDeserializer deserializer);
+
+  @protected
+  ZetherBalance sse_decode_zether_balance(SseDeserializer deserializer);
+
+  @protected
+  ZetherBalanceRequest sse_decode_zether_balance_request(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherKeyInfo sse_decode_zether_key_info(SseDeserializer deserializer);
+
+  @protected
+  ZetherLeg sse_decode_zether_leg(SseDeserializer deserializer);
+
+  @protected
+  ZetherOwnerRollOver sse_decode_zether_owner_roll_over(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherOwnerSetMode sse_decode_zether_owner_set_mode(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherRollOver sse_decode_zether_roll_over(SseDeserializer deserializer);
+
+  @protected
+  ZetherRollOverBatch sse_decode_zether_roll_over_batch(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherShield sse_decode_zether_shield(SseDeserializer deserializer);
+
+  @protected
+  ZetherTransfer sse_decode_zether_transfer(SseDeserializer deserializer);
+
+  @protected
+  ZetherTransferMulti sse_decode_zether_transfer_multi(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherUnshield sse_decode_zether_unshield(SseDeserializer deserializer);
+
+  @protected
+  ZetherUnshieldUnwrap sse_decode_zether_unshield_unwrap(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ZetherWrapShield sse_decode_zether_wrap_shield(SseDeserializer deserializer);
 
   @protected
   void sse_encode_AnyhowException(
@@ -410,15 +4101,120 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void
-  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
-    Backup self,
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
+    Account self,
     SseSerializer serializer,
   );
 
   @protected
   void
-  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
-    Events self,
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    Admin self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    AllowOpaqueCall self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    ArcPrepared self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    ArcPreparedOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    ArcRegistryWrite self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    ArcSecretBytes self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    ArcSeedBackup self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    ArcSubscription self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    Confidential self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    DeriveFromKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    DeriveFromSignature self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    Dex self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    EndpointAuth self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    Op self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    PqzVerdictRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
+    SdkError self,
     SseSerializer serializer,
   );
 
@@ -431,22 +4227,148 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void
-  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
-    Secret self,
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
+    Vault self,
     SseSerializer serializer,
   );
 
   @protected
   void
-  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
-    Backup self,
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
+    Wallet self,
     SseSerializer serializer,
   );
 
   @protected
   void
-  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
-    Events self,
+  sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    DeriveFromKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    DeriveFromSignature self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    PqzVerdictRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
+    Account self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    Admin self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    ArcPrepared self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    ArcPreparedOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    ArcRegistryWrite self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    ArcSecretBytes self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    ArcSeedBackup self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    ArcSubscription self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    Confidential self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    DeriveFromKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    DeriveFromSignature self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    Dex self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    Op self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    PqzVerdictRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    Prepared self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
+    SdkError self,
     SseSerializer serializer,
   );
 
@@ -459,8 +4381,15 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void
-  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
-    Secret self,
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
+    Vault self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
+    Wallet self,
     SseSerializer serializer,
   );
 
@@ -471,29 +4400,52 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  void sse_encode_DartFn_Inputs_String_Output_store_get_answer_AnyhowException(
-    FutureOr<StoreGetAnswer> Function(String) self,
+  void
+  sse_encode_DartFn_Inputs_String_String_Output_store_get_answer_AnyhowException(
+    FutureOr<StoreGetAnswer> Function(String, String) self,
     SseSerializer serializer,
   );
 
   @protected
   void
-  sse_encode_DartFn_Inputs_String_list_prim_u_8_strict_list_list_prim_u_8_strict_opt_list_prim_u_8_strict_u_64_Output_auth_answer_AnyhowException(
-    FutureOr<AuthAnswer> Function(
-      String,
-      Uint8List,
-      List<Uint8List>,
-      Uint8List?,
-      BigInt,
-    )
+  sse_encode_DartFn_Inputs_String_String_list_list_prim_u_8_strict_Output_passkey_answer_AnyhowException(
+    FutureOr<PasskeyAnswer> Function(String, String, List<Uint8List>) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_DartFn_Inputs_String_list_prim_u_8_strict_String_Output_sign_answer_AnyhowException(
+    FutureOr<SignAnswer> Function(String, Uint8List, String) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_DartFn_Inputs_String_list_prim_u_8_strict_String_opt_box_autoadd_key_policy_u_64_Output_opt_box_autoadd_auth_error_AnyhowException(
+    FutureOr<AuthError?> Function(String, Uint8List, String, KeyPolicy?, BigInt)
     self,
     SseSerializer serializer,
   );
 
   @protected
   void
-  sse_encode_DartFn_Inputs_String_opt_box_autoadd_u_64_list_prim_u_8_strict_Output_store_answer_AnyhowException(
-    FutureOr<StoreAnswer> Function(String, BigInt?, Uint8List) self,
+  sse_encode_DartFn_Inputs_String_opt_box_autoadd_u_64_list_prim_u_8_strict_store_policy_Output_store_answer_AnyhowException(
+    FutureOr<StoreAnswer> Function(String, BigInt?, Uint8List, StorePolicy)
+    self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_DartFn_Inputs_assertion_request_u_64_Output_assertion_answer_AnyhowException(
+    FutureOr<AssertionAnswer> Function(AssertionRequest, BigInt) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_DartFn_Inputs_key_policy_Output_se_key_answer_AnyhowException(
+    FutureOr<SeKeyAnswer> Function(KeyPolicy) self,
     SseSerializer serializer,
   );
 
@@ -508,15 +4460,127 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void
-  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
-    Backup self,
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
+    Account self,
     SseSerializer serializer,
   );
 
   @protected
   void
-  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
-    Events self,
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    Admin self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    AllowOpaqueCall self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    ArcPrepared self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    ArcPreparedOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    ArcRegistryWrite self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    ArcSecretBytes self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    ArcSeedBackup self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    ArcSubscription self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    Confidential self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    DeriveFromKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    DeriveFromSignature self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    Dex self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    EndpointAuth self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    Op self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    PqzVerdictRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    Prepared self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
+    SdkError self,
     SseSerializer serializer,
   );
 
@@ -529,46 +4593,1236 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void
-  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
-    Secret self,
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
+    Vault self,
     SseSerializer serializer,
   );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
+    Wallet self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_SerdeJsonValue(Object? self, SseSerializer serializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
-  void sse_encode_auth_answer(AuthAnswer self, SseSerializer serializer);
+  void sse_encode_accept_membership(
+    AcceptMembership self,
+    SseSerializer serializer,
+  );
 
   @protected
-  void sse_encode_auth_failure(AuthFailure self, SseSerializer serializer);
+  void sse_encode_account_info(AccountInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_account_row(AccountRow self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_add_native(AddNative self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_add_reserve(AddReserve self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_add_ua(AddUa self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_add_watch(AddWatch self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_assertion(Assertion self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_assertion_answer(
+    AssertionAnswer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_assertion_request(
+    AssertionRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_attrs_args(AttrsArgs self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_auditor_consent(
+    AuditorConsent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_auth_error(AuthError self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_balances(Balances self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bls_multi_part(BlsMultiPart self, SseSerializer serializer);
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_auth_failure(
-    AuthFailure self,
+  void
+  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    AllowOpaqueCall self,
     SseSerializer serializer,
   );
 
   @protected
-  void sse_encode_box_autoadd_store_failure(
-    StoreFailure self,
+  void
+  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    ArcRegistryWrite self,
     SseSerializer serializer,
   );
+
+  @protected
+  void
+  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    EndpointAuth self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_accept_membership(
+    AcceptMembership self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_add_native(
+    AddNative self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_add_reserve(
+    AddReserve self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_add_ua(AddUa self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_add_watch(
+    AddWatch self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_assertion(
+    Assertion self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_auditor_consent(
+    AuditorConsent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_auth_error(
+    AuthError self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_bls_multi_part(
+    BlsMultiPart self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_burn(Burn self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_cancel_all(
+    CancelAll self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_cancel_nonce(
+    CancelNonce self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_cancel_order(
+    CancelOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_cancel_wrap_order(
+    CancelWrapOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_confirm_remove_unbacked(
+    ConfirmRemoveUnbacked self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_create_passkey_key(
+    CreatePasskeyKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_create_se_key(
+    CreateSeKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_cursor(Cursor self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_delegate_revoke(
+    DelegateRevoke self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_derive_child(
+    DeriveChild self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_event(Event self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_execute(Execute self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_gas_per_byte(
+    GasPerByte self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_gas_per_item(
+    GasPerItem self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_gas_sources(
+    GasSources self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_generate(Generate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_holder_kind(
+    HolderKind self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_import_key(
+    ImportKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_import_words(
+    ImportWords self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_kem_record(
+    KemRecord self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_key_policy(
+    KeyPolicy self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_key_ref(KeyRef self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_limits(Limits self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_liquidity_order(
+    LiquidityOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_msig_register(
+    MsigRegister self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_msig_structure_args(
+    MsigStructureArgs self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_native_key_ref(
+    NativeKeyRef self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_native_quote(
+    NativeQuote self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_native_send(
+    NativeSend self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_op_state(OpState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_owner_relay(
+    OwnerRelay self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_passkey_created(
+    PasskeyCreated self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pay(Pay self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_pay_under_mandate(
+    PayUnderMandate self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pay_with_tax(
+    PayWithTax self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_payee_fee(
+    PayeeFee self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pqz_account_op(
+    PqzAccountOp self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pqz_balance_request(
+    PqzBalanceRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pqz_shield(
+    PqzShield self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pqz_transfer(
+    PqzTransfer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pqz_transfer_multi(
+    PqzTransferMulti self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pqz_unshield(
+    PqzUnshield self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pqz_unshield_unwrap(
+    PqzUnshieldUnwrap self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_pqz_wrap_shield(
+    PqzWrapShield self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_register(Register self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_register_attrs(
+    RegisterAttrs self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_registration_blob(
+    RegistrationBlob self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_registration_gas(
+    RegistrationGas self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_relay_fee(
+    RelayFee self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_remove(Remove self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_rescue_vault(
+    RescueVault self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_restore(Restore self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_revoke_mandate(
+    RevokeMandate self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_se_public(
+    SePublic self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_set_mandate(
+    SetMandate self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_set_payee(
+    SetPayee self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_smart_call(
+    SmartCall self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_smart_op(SmartOp self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_store_error(
+    StoreError self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_subject_key_args(
+    SubjectKeyArgs self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_submit_path(
+    SubmitPath self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_submit_quote(
+    SubmitQuote self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_trade_order(
+    TradeOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_transfer(Transfer self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_u_64(BigInt self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_u_8(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_ua_accept_admin(
+    UaAcceptAdmin self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_approve_dex_release(
+    UaApproveDexRelease self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_approve_release(
+    UaApproveRelease self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_approve_token_release(
+    UaApproveTokenRelease self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_cancel_grant(
+    UaCancelGrant self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_cancel_nonce(
+    UaCancelNonce self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_cancel_rate(
+    UaCancelRate self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_create_dex(
+    UaCreateDex self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_create_instance(
+    UaCreateInstance self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_create_token(
+    UaCreateToken self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_deprecate_dex(
+    UaDeprecateDex self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_deprecate_release(
+    UaDeprecateRelease self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_deprecate_token(
+    UaDeprecateToken self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_disable_feature(
+    UaDisableFeature self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_disable_wrap(
+    UaDisableWrap self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_enable_feature(
+    UaEnableFeature self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_execute_rate(
+    UaExecuteRate self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_force_transfer(
+    UaForceTransfer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_freeze(
+    UaFreeze self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_grant_role(
+    UaGrantRole self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_mint(UaMint self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_ua_mint_to_ua(
+    UaMintToUA self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_operator_transfer(
+    UaOperatorTransfer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_pause(UaPause self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_ua_pqz_cancel_verifier(
+    UaPqzCancelVerifier self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_pqz_revoke_verifier(
+    UaPqzRevokeVerifier self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_pqz_set_verifier(
+    UaPqzSetVerifier self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_propose_rate(
+    UaProposeRate self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_publish_class_env(
+    UaPublishClassEnv self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_publish_dex_env(
+    UaPublishDexEnv self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_publish_token_env(
+    UaPublishTokenEnv self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_record_order(
+    UaRecordOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_renounce_admin(
+    UaRenounceAdmin self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_renounce_role(
+    UaRenounceRole self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_revoke_approval(
+    UaRevokeApproval self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_revoke_order(
+    UaRevokeOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_revoke_role(
+    UaRevokeRole self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_allowed(
+    UaSetAllowed self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_auditor_key(
+    UaSetAuditorKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_auditor_ua(
+    UaSetAuditorUA self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_chain_entries(
+    UaSetChainEntries self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_class_kind_enabled(
+    UaSetClassKindEnabled self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_compliance(
+    UaSetCompliance self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_denied(
+    UaSetDenied self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_exchange_target(
+    UaSetExchangeTarget self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_fee_split(
+    UaSetFeeSplit self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_grant(
+    UaSetGrant self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_kyc_provider(
+    UaSetKycProvider self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_listed_only(
+    UaSetListedOnly self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_market(
+    UaSetMarket self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_max_supply(
+    UaSetMaxSupply self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_max_wrap_supply(
+    UaSetMaxWrapSupply self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_proof_store(
+    UaSetProofStore self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_tax_rate(
+    UaSetTaxRate self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_tax_recipient(
+    UaSetTaxRecipient self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_token_kind_enabled(
+    UaSetTokenKindEnabled self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_verifier_fee(
+    UaSetVerifierFee self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_wrap_limits(
+    UaSetWrapLimits self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_set_wrap_member(
+    UaSetWrapMember self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_transfer_admin(
+    UaTransferAdmin self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_unfreeze(
+    UaUnfreeze self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_unpause(
+    UaUnpause self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_unlock(Unlock self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_unwrap(Unwrap self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_unwrap_leg(
+    UnwrapLeg self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_unwrap_to_ua(
+    UnwrapToUa self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_update_msig(
+    UpdateMsig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_web_authn_args(
+    WebAuthnArgs self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_wrap(Wrap self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_wrap_leg(WrapLeg self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_wrap_order(
+    WrapOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_wrap_to_ua(
+    WrapToUa self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_balance_request(
+    ZetherBalanceRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_owner_roll_over(
+    ZetherOwnerRollOver self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_owner_set_mode(
+    ZetherOwnerSetMode self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_roll_over(
+    ZetherRollOver self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_roll_over_batch(
+    ZetherRollOverBatch self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_shield(
+    ZetherShield self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_transfer(
+    ZetherTransfer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_transfer_multi(
+    ZetherTransferMulti self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_unshield(
+    ZetherUnshield self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_unshield_unwrap(
+    ZetherUnshieldUnwrap self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_zether_wrap_shield(
+    ZetherWrapShield self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_burn(Burn self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_cancel_all(CancelAll self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_cancel_nonce(CancelNonce self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_cancel_order(CancelOrder self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_cancel_wrap_order(
+    CancelWrapOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_chain_profile(ChainProfile self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_class(Class self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_confirm_remove(ConfirmRemove self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_confirm_remove_unbacked(
+    ConfirmRemoveUnbacked self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_create_3_preview(
+    Create3Preview self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_create_passkey_key(
+    CreatePasskeyKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_create_se_key(CreateSeKey self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_cursor(Cursor self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_delay_sentence(DelaySentence self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_delegate_revoke(
+    DelegateRevoke self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_derive_child(DeriveChild self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_endpoint_config(
+    EndpointConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_envelope(Envelope self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_event(Event self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_execute(Execute self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_execute_call(ExecuteCall self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_family(Family self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_finality(Finality self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_gas_base(GasBase self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_gas_from(GasFrom self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_gas_per_byte(GasPerByte self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_gas_per_item(GasPerItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_gas_rows(GasRows self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_gas_sources(GasSources self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_gas_table(GasTable self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_gas_verify(GasVerify self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_generate(Generate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_history_item(HistoryItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_history_page(HistoryPage self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_holder_kind(HolderKind self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_import_key(ImportKey self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_import_words(ImportWords self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_imported_key(ImportedKey self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_in_flight(InFlight self, SseSerializer serializer);
 
   @protected
   void sse_encode_isize(PlatformInt64 self, SseSerializer serializer);
 
   @protected
+  void sse_encode_kem_args(KemArgs self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_kem_record(KemRecord self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_key_policy(KeyPolicy self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_key_ref(KeyRef self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_limits(Limits self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_liquidity_order(
+    LiquidityOrder self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_liquidity_token(
+    LiquidityToken self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    List<ArcRegistryWrite> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_account_info(
+    List<AccountInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_account_row(
+    List<AccountRow> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_bls_multi_part(
+    List<BlsMultiPart> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_chain_profile(
+    List<ChainProfile> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_delay_sentence(
+    List<DelaySentence> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_endpoint_config(
+    List<EndpointConfig> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_gas_base(List<GasBase> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_gas_table(List<GasTable> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_gas_verify(
+    List<GasVerify> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_history_item(
+    List<HistoryItem> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_liquidity_token(
+    List<LiquidityToken> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_list_prim_u_8_strict(
@@ -577,31 +5831,304 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  void sse_encode_list_listed_dex(
+    List<ListedDex> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_listed_token(
+    List<ListedToken> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_msig_leaf(List<MsigLeaf> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_msig_member_args(
+    List<MsigMemberArgs> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_msig_slot(List<MsigSlot> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_msig_slot_state(
+    List<MsigSlotState> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_op_item(List<OpItem> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_position_reader(
+    List<PositionReader> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_pqz_balance(
+    List<PqzBalance> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_pqz_leg(List<PqzLeg> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_prim_u_16_strict(
+    Uint16List self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_u_32_strict(
+    Uint32List self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
   );
 
   @protected
-  void sse_encode_list_seed_row(List<SeedRow> self, SseSerializer serializer);
+  void sse_encode_list_review_field(
+    List<ReviewField> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_seed_info(List<SeedInfo> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_step_gas(List<StepGas> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_token_balance(
+    List<TokenBalance> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_token_info(
+    List<TokenInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_zether_leg(
+    List<ZetherLeg> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_listed_dex(ListedDex self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_listed_token(ListedToken self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_memory_protection(
+    MemoryProtection self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_msig_leaf(MsigLeaf self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_msig_member_args(
+    MsigMemberArgs self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_msig_register(MsigRegister self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_msig_slot(MsigSlot self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_msig_slot_state(MsigSlotState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_msig_state(MsigState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_msig_structure_args(
+    MsigStructureArgs self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_msig_update_plan(
+    MsigUpdatePlan self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_native_address(NativeAddress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_native_key_ref(NativeKeyRef self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_native_quote(NativeQuote self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_native_send(NativeSend self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_new_seed(NewSeed self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_op_item(OpItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_op_state(OpState self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_auth_failure(
-    AuthFailure? self,
+  void
+  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    AllowOpaqueCall? self,
     SseSerializer serializer,
   );
 
   @protected
-  void sse_encode_opt_box_autoadd_store_failure(
-    StoreFailure? self,
+  void
+  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    ArcRegistryWrite? self,
     SseSerializer serializer,
   );
+
+  @protected
+  void
+  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    EndpointAuth? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_assertion(
+    Assertion? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_auth_error(
+    AuthError? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_confirm_remove_unbacked(
+    ConfirmRemoveUnbacked? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_cursor(
+    Cursor? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_event(Event? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_gas_per_byte(
+    GasPerByte? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_gas_per_item(
+    GasPerItem? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_gas_sources(
+    GasSources? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_holder_kind(
+    HolderKind? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_kem_record(
+    KemRecord? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_key_policy(
+    KeyPolicy? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_key_ref(
+    KeyRef? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_passkey_created(
+    PasskeyCreated? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_registration_gas(
+    RegistrationGas? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_se_public(
+    SePublic? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_store_error(
+    StoreError? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_u_64(BigInt? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_8(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_web_authn_args(
+    WebAuthnArgs? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_list_prim_u_8_strict(
@@ -610,22 +6137,244 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
-  void sse_encode_sdk_failure(SdkFailure self, SseSerializer serializer);
+  void sse_encode_order_terms(OrderTerms self, SseSerializer serializer);
 
   @protected
-  void sse_encode_seed_row(SeedRow self, SseSerializer serializer);
+  void sse_encode_owner_relay(OwnerRelay self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_passkey_answer(PasskeyAnswer self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_passkey_created(
+    PasskeyCreated self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pay(Pay self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pay_body(PayBody self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pay_meta(PayMeta self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pay_under_mandate(
+    PayUnderMandate self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pay_with_tax(PayWithTax self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_payee_fee(PayeeFee self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_payer_auth(PayerAuth self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_payment(Payment self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_policy(Policy self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_position_reader(
+    PositionReader self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pqz_account_op(PqzAccountOp self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pqz_balance(PqzBalance self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pqz_balance_all(PqzBalanceAll self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pqz_balance_request(
+    PqzBalanceRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pqz_leg(PqzLeg self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pqz_shield(PqzShield self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pqz_transfer(PqzTransfer self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pqz_transfer_multi(
+    PqzTransferMulti self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pqz_unshield(PqzUnshield self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pqz_unshield_unwrap(
+    PqzUnshieldUnwrap self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pqz_wrap_shield(PqzWrapShield self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_prepared_order_view(
+    PreparedOrderView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_prepared_view(PreparedView self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_presence(Presence self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_register(Register self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_register_args(RegisterArgs self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_register_attrs(RegisterAttrs self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_registration_blob(
+    RegistrationBlob self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_registration_gas(
+    RegistrationGas self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_registration_state(
+    RegistrationState self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_registry_write_view(
+    RegistryWriteView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_relay_fee(RelayFee self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_remove(Remove self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rescue_op(RescueOp self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_rescue_vault(RescueVault self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_restore(Restore self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_review_field(ReviewField self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_revoke_mandate(RevokeMandate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_se_key_answer(SeKeyAnswer self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_se_public(SePublic self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_seed_info(SeedInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_session_set(SessionSet self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_set_mandate(SetMandate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_set_payee(SetPayee self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_sign_answer(SignAnswer self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_signed_order(SignedOrder self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_signed_rescue(SignedRescue self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_smart_call(SmartCall self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_smart_op(SmartOp self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_source(Source self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_step_gas(StepGas self, SseSerializer serializer);
 
   @protected
   void sse_encode_store_answer(StoreAnswer self, SseSerializer serializer);
 
   @protected
-  void sse_encode_store_failure(StoreFailure self, SseSerializer serializer);
+  void sse_encode_store_error(StoreError self, SseSerializer serializer);
 
   @protected
   void sse_encode_store_get_answer(
     StoreGetAnswer self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_store_policy(StorePolicy self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_subject_key_args(
+    SubjectKeyArgs self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_submit_path(SubmitPath self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_submit_quote(SubmitQuote self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_token_balance(TokenBalance self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_token_info(TokenInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_trade_order(TradeOrder self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_transfer(Transfer self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);
@@ -637,10 +6386,418 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_u_8(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_ua_accept_admin(UaAcceptAdmin self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_approve_dex_release(
+    UaApproveDexRelease self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_approve_release(
+    UaApproveRelease self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_approve_token_release(
+    UaApproveTokenRelease self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_cancel_grant(UaCancelGrant self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_cancel_nonce(UaCancelNonce self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_cancel_rate(UaCancelRate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_create_dex(UaCreateDex self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_create_instance(
+    UaCreateInstance self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_create_token(UaCreateToken self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_deprecate_dex(
+    UaDeprecateDex self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_deprecate_release(
+    UaDeprecateRelease self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_deprecate_token(
+    UaDeprecateToken self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_disable_feature(
+    UaDisableFeature self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_disable_wrap(UaDisableWrap self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_enable_feature(
+    UaEnableFeature self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_execute_rate(UaExecuteRate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_force_transfer(
+    UaForceTransfer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_freeze(UaFreeze self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_grant_role(UaGrantRole self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_mint(UaMint self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_mint_to_ua(UaMintToUA self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_operator_transfer(
+    UaOperatorTransfer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_pause(UaPause self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_pqz_cancel_verifier(
+    UaPqzCancelVerifier self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_pqz_revoke_verifier(
+    UaPqzRevokeVerifier self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_pqz_set_verifier(
+    UaPqzSetVerifier self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_propose_rate(UaProposeRate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_publish_class_env(
+    UaPublishClassEnv self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_publish_dex_env(
+    UaPublishDexEnv self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_publish_token_env(
+    UaPublishTokenEnv self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_record_order(UaRecordOrder self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_renounce_admin(
+    UaRenounceAdmin self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_renounce_role(
+    UaRenounceRole self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_revoke_approval(
+    UaRevokeApproval self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_revoke_order(UaRevokeOrder self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_revoke_role(UaRevokeRole self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_set_allowed(UaSetAllowed self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_set_auditor_key(
+    UaSetAuditorKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_auditor_ua(
+    UaSetAuditorUA self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_chain_entries(
+    UaSetChainEntries self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_class_kind_enabled(
+    UaSetClassKindEnabled self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_compliance(
+    UaSetCompliance self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_denied(UaSetDenied self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_set_exchange_target(
+    UaSetExchangeTarget self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_fee_split(
+    UaSetFeeSplit self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_grant(UaSetGrant self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_set_kyc_provider(
+    UaSetKycProvider self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_listed_only(
+    UaSetListedOnly self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_market(UaSetMarket self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_set_max_supply(
+    UaSetMaxSupply self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_max_wrap_supply(
+    UaSetMaxWrapSupply self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_proof_store(
+    UaSetProofStore self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_tax_rate(UaSetTaxRate self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_set_tax_recipient(
+    UaSetTaxRecipient self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_token_kind_enabled(
+    UaSetTokenKindEnabled self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_verifier_fee(
+    UaSetVerifierFee self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_wrap_limits(
+    UaSetWrapLimits self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_set_wrap_member(
+    UaSetWrapMember self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_transfer_admin(
+    UaTransferAdmin self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_unfreeze(UaUnfreeze self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_unpause(UaUnpause self, SseSerializer serializer);
+
+  @protected
   void sse_encode_unit(void self, SseSerializer serializer);
 
   @protected
+  void sse_encode_unlock(Unlock self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_unwrap(Unwrap self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_unwrap_leg(UnwrapLeg self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_unwrap_to_ua(UnwrapToUa self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_update_msig(UpdateMsig self, SseSerializer serializer);
+
+  @protected
   void sse_encode_usize(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_web_authn_args(WebAuthnArgs self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wrap(Wrap self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wrap_leg(WrapLeg self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wrap_order(WrapOrder self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_wrap_order_terms(
+    WrapOrderTerms self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_wrap_to_ua(WrapToUa self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_zether_balance(ZetherBalance self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_zether_balance_request(
+    ZetherBalanceRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zether_key_info(ZetherKeyInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_zether_leg(ZetherLeg self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_zether_owner_roll_over(
+    ZetherOwnerRollOver self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zether_owner_set_mode(
+    ZetherOwnerSetMode self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zether_roll_over(
+    ZetherRollOver self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zether_roll_over_batch(
+    ZetherRollOverBatch self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zether_shield(ZetherShield self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_zether_transfer(
+    ZetherTransfer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zether_transfer_multi(
+    ZetherTransferMulti self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zether_unshield(
+    ZetherUnshield self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zether_unshield_unwrap(
+    ZetherUnshieldUnwrap self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_zether_wrap_shield(
+    ZetherWrapShield self,
+    SseSerializer serializer,
+  );
 }
 
 // Section: wire_class
@@ -649,34 +6806,290 @@ class ScaasSdkWire implements BaseWire {
   ScaasSdkWire.fromExternalLibrary(ExternalLibrary lib);
 
   void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
     int ptr,
   ) => wasmModule
-      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
         ptr,
       );
 
   void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
     int ptr,
   ) => wasmModule
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
         ptr,
       );
 
   void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
     int ptr,
   ) => wasmModule
-      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
         ptr,
       );
 
   void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
     int ptr,
   ) => wasmModule
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
         ptr,
       );
 
@@ -697,18 +7110,34 @@ class ScaasSdkWire implements BaseWire {
       );
 
   void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     int ptr,
   ) => wasmModule
-      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
         ptr,
       );
 
   void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     int ptr,
   ) => wasmModule
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
         ptr,
       );
 }
@@ -720,22 +7149,182 @@ external ScaasSdkWasmModule get wasmModule;
 @anonymous
 extension type ScaasSdkWasmModule._(JSObject _) implements JSObject {
   external void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
     int ptr,
   );
 
   external void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBackup(
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAccount(
     int ptr,
   );
 
   external void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
     int ptr,
   );
 
   external void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEvents(
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAdmin(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAllowOpaqueCall(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPreparedOrder(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcRegistryWrite(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSecretBytes(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSeedBackup(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcSubscription(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConfidential(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromKey(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDeriveFromSignature(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDex(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerEndpointAuth(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPrepared(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError(
     int ptr,
   );
 
@@ -750,12 +7339,22 @@ extension type ScaasSdkWasmModule._(JSObject _) implements JSObject {
   );
 
   external void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     int ptr,
   );
 
   external void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecret(
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerWallet(
     int ptr,
   );
 }

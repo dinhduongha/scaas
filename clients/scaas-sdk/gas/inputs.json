@@ -314,6 +314,21 @@
       "test/gas/SdkGasVerify.t.sol",
       "SdkGasVerifyTest",
       "test_sdkGas_registerBlsMulti"
+    ],
+    [
+      "test/gas/SdkGasRegistry.t.sol",
+      "SdkGasRegistryTest",
+      "test_sdkGas_registerKinds"
+    ],
+    [
+      "test/gas/SdkGasRegistry.t.sol",
+      "SdkGasRegistryTest",
+      "test_sdkGas_registerAttrs"
+    ],
+    [
+      "test/gas/SdkGasRegistry.t.sol",
+      "SdkGasRegistryTest",
+      "test_sdkGas_msig"
     ]
   ],
   "base": [
@@ -505,6 +520,88 @@
       "entries": [
         "registerBlsMulti"
       ]
+    },
+    {
+      "kinds": [
+        "ua-0x0101",
+        "ua-0x0102",
+        "ua-0x0103",
+        "ua-0x0104",
+        "ua-0x0105",
+        "ua-0x0106",
+        "ua-0x0107",
+        "ua-0x0108",
+        "ua-0x0130",
+        "ua-0x0131",
+        "ua-0x0132",
+        "ua-0x0133",
+        "ua-0x0134",
+        "ua-0x0135",
+        "ua-0x0141"
+      ],
+      "entries": [
+        "register"
+      ],
+      "fresh_only": true
+    },
+    {
+      "kinds": [
+        "ua-0x0100"
+      ],
+      "entries": [
+        "registerWebAuthn"
+      ],
+      "fresh_only": true
+    },
+    {
+      "kinds": [
+        "ua-0x0130",
+        "ua-0x0131"
+      ],
+      "entries": [
+        "cacheExpandedKey"
+      ],
+      "fresh_only": true
+    },
+    {
+      "kinds": [
+        "kem"
+      ],
+      "entries": [
+        "register",
+        "setKemKey"
+      ],
+      "fresh_only": true
+    },
+    {
+      "kinds": [
+        "pqz-key",
+        "pqz-pop"
+      ],
+      "entries": [
+        "register"
+      ],
+      "fresh_only": true
+    },
+    {
+      "kinds": [
+        "pqz"
+      ],
+      "entries": [
+        "storePqzPop"
+      ],
+      "fresh_only": true
+    },
+    {
+      "kinds": [
+        "msig"
+      ],
+      "entries": [
+        "registerMsig",
+        "acceptMembership",
+        "updateMsig"
+      ],
+      "fresh_only": true
     }
   ],
   "ua_signer": 264,
@@ -518,7 +615,15 @@
       "mtxWrapLeg",
       "mtxAddReserve",
       "mtxWrapToUA",
-      "mtxWrapShield"
+      "mtxWrapShield",
+      "register",
+      "registerWebAuthn",
+      "cacheExpandedKey",
+      "setKemKey",
+      "storePqzPop",
+      "registerMsig",
+      "acceptMembership",
+      "updateMsig"
     ]
   },
   "margin": {
@@ -569,7 +674,10 @@
     "Verify rows: the copy-cost forwarder's check (the token's own MtxPipelineLib._authorize) of the kind's vector signature (smartcontracts/vectors/ua/signatures.json; the PQ kinds pq_signatures.json, keyData empty as for a stored kind) on the real verifiers at the gen-1 caps, P-256 on the 0x100 precompile, ML-DSA on GasBurner stand-ins for its precompiles (stand_in), SLH-DSA-128s and FN-DSA-512 / -1024 pure Solidity, minus the native key's check, both metered inside one meter contract. sig_bytes (owner 2026-11-19, ruling 2): the signer's UASig in the call's calldata less an empty one (keyData and signature, ABI-padded); the SDK adds 64 gas a byte of it to the calldata of the operation built with an empty signature. Worst cases (owner 2026-11-19, A5 and the sampled check's ruling 2): WebAuthn (Q2) at ua-rs's cap on an assertion (authenticatorData and clientDataJSON 1,024 bytes together) in its worst case there, the longest origin the cap leaves (WebAuthnClientData.parse scans it byte by byte; the cap vector's shape, a 21-byte origin and a filler member, is 182,593 below it), sig_bytes that assertion's; SLH-DSA-128s and ed25519 at their forced worst case (SLH-DSA: every hypertree layer's WOTS+ message 0; ed25519: every 4-bit window of S and of k nonzero, the worst of eight keys), the forced run less the vector's added to the delta; FN-DSA-512 / -1024 (rejection sampling, no bound) the most expensive of 64 salts, plus margin (64 further salts stay inside it). 0x0141 (the Zether UA kind): the vector's signature, key data empty (a stored kind). ua_extra (A1, G2): the worst per-variant difference of the derived reference signer (secp256k1, ua_signer) and the native one on a fresh lane, less that kind's verify delta; absent where not positive; measured on every variant a derived signer can sign, on the fixtures' deploy-configured registries (the regulated kinds 8-13, Zether, PQZ, the router, the orders); none on an entry only a native address signs (ua_native: the wrap-in entries, mtxWrapShield, the account and dex kinds). A variant without its own derived run is listed in its row's ua_extra.unmeasured and takes the largest measured on another variant; a row with none takes the largest measured for the same entry and lane state on another kind (from_kind); the generator fills both (G2). mtxPayWithPayeeFee (Q1): a derived payer and a derived payee both debited, ua_extra.second_party the second derived party over the first less its verify delta (measured -4,852: the payee's derived debit adds nothing beyond its verify row, so the one ua_extra covers both).",
     "Counted rows (owner 2026-11-19, I1 part 2, K2; P3: measured at the entry's bound where feasible; P4 \"approved\"): measured at several counts; on one rising sequence whose chord from the first to the last measured point is at or above every point, per_item is the chord's whole-gas rise a count (rounded up) and the row's figure the chord's line at a count of 0; otherwise per_item is the worst whole-gas rise a count between two measured points and the figure the largest measured gas less per_item times its count; either way intercept + per_item × count is at least the measured gas at every measured count.",
     "PQZ single debits (owner 2026-11-19, I2; stand_in): mtxConfidentialTransferSingle, …SingleCompact, mtxUnshield and mtxUnshieldUnwrap from alice's TRIVIAL entry with stand-ins for what the fixture mocks (each row's stand_in names them); their state gas (the ciphertexts kept in state, about 222 new slots) is most of the figure.",
-    "bls12381-multi (0x0121; spec 2026-11-19-bls12381-multi §8.4, plan Task 16): `members` is the group's n, read from its key data. The registerBlsMulti row (kind account, variant registry) is the registration's execution gas with its EIP-8037 state gas, a group of unit weights at t = n / 2 with its full PoP, sent by the relayer (no signer: the PoP authorizes it, so no verify part and no ua_extra); fresh is the registry's first 0x0121 registration (the kind's list count slot new; the SDK quotes it), used one after another group's. The verify row (signer 289) is the hot path's check (verify; a minimal set is accepted there too) at the worst k of the two sides of the pinned apk(S) boundary, k = floor((n + 1) / 2) and k + 1. Both lines from the n = 2 and n = 64 points (owner 2026-11-19, plan Task 16, \"approved\": per_item = ceil((g(64) - g(2)) / 62), gas = g(2) - 2 per_item, checked at or above n = 2, 16, 32, 64); where a point lies above that line (the verify row at n = 16, by 304 gas) the row's gas is the largest g(n) - per_item n, the slope kept (controller call, owner auto-run 2026-11-19), the line within 1,000 gas of the n = 64 point."
+    "bls12381-multi (0x0121; spec 2026-11-19-bls12381-multi §8.4, plan Task 16): `members` is the group's n, read from its key data. The registerBlsMulti row (kind account, variant registry) is the registration's execution gas with its EIP-8037 state gas, a group of unit weights at t = n / 2 with its full PoP, sent by the relayer (no signer: the PoP authorizes it, so no verify part and no ua_extra); fresh is the registry's first 0x0121 registration (the kind's list count slot new; the SDK quotes it), used one after another group's. The verify row (signer 289) is the hot path's check (verify; a minimal set is accepted there too) at the worst k of the two sides of the pinned apk(S) boundary, k = floor((n + 1) / 2) and k + 1. Both lines from the n = 2 and n = 64 points (owner 2026-11-19, plan Task 16, \"approved\": per_item = ceil((g(64) - g(2)) / 62), gas = g(2) - 2 per_item, checked at or above n = 2, 16, 32, 64); where a point lies above that line (the verify row at n = 16, by 304 gas) the row's gas is the largest g(n) - per_item n, the slope kept (controller call, owner auto-run 2026-11-19), the line within 1,000 gas of the n = 64 point.",
+    "Registry writes (controller call, owner auto-run 2026-11-19; test/gas/SdkGasRegistry.t.sol): real calls on the registry as a deploy configures it (G4), measured inside the transaction by the meter (a large registration sits on EIP-7976's calldata floor, which the SDK prices at 64 gas a byte itself), fresh rows only: the registry's first write of its kind, the lane the SDK quotes (a fresh_only group). A kind's register row (ua-<kind>; registerWebAuthn for 0x0100) is its registration with no attribute on its vector PoP plus the forced worst case the verify rows measured over the vector (ed25519, SLH-DSA-128s worst_extra; FN-DSA varied_extra; WebAuthn at ua-rs's 1,024-byte assertion cap); ML-DSA-44 / -65 on the registry's expanded-key cache (the deploy's path; their cacheExpandedKey rows the worst part), ML-DSA-87 on its precompile stand-in.",
+    "A registration's attributes are additions quoted on top of its kind's row: kem register (the full KEM key or its hash commit, the worse), pqz-key register (the PQZ key with its proof hash, the proof later: a split's first step), pqz-pop register (the key with its R_REG proof), each the registration with it less the same ML-DSA-87 registration without it; kem setKemKey the fill of a commit, pqz storePqzPop a split's second step. The PQZ rows are the committed set's: another set's key and proof lengths differ.",
+    "msig rows (registerMsig, acceptMembership, updateMsig): counted by members (2, 4, 8, 16 EOA members, weight 1, threshold all; the update signed by every member, so a member's slope holds one native signature check); the SDK adds each signing slot's verify row (its kind's excess over the native reference; an msig PoP slot's own native check within the margin). A larger count is refused (measured_max), a slot of a kind without a verify row leaves the write to the node's estimate."
   ],
   "save": [
     "mtxPay",
@@ -597,12 +705,18 @@
     "gov_router:mtxPublishClassEnv": "env_items",
     "dex:mtxCancelOrders": "orders",
     "account:registerBlsMulti": "members",
-    "289": "members"
+    "289": "members",
+    "msig:registerMsig": "members",
+    "msig:acceptMembership": "members",
+    "msig:updateMsig": "members"
   },
   "base_stand_in": {
     "pqz:mtxConfidentialTransferSingle": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: TRANSFER 3,302,000 + 3 a word of its 139,977-byte input = 3,315,125, the worse of TRANSFER and TRANSFER0) and the holder's ML-DSA-65 authorization a GasBurner at 100,006 (PqzStateGas._precompiles), each less 2,900 (a cold stand-in against a warm precompile); the proof a filler of the row's 46,660 bytes",
     "pqz:mtxConfidentialTransferSingleCompact": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: TRANSFER 3,302,000 + 3 a word of its 139,977-byte input = 3,315,125, the worse of TRANSFER and TRANSFER0) and the holder's ML-DSA-65 authorization a GasBurner at 100,006 (PqzStateGas._precompiles), each less 2,900 (a cold stand-in against a warm precompile); the proof a filler of the row's 46,660 bytes",
     "pqz:mtxUnshield": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: BURN 3,335,000 + 3 a word of its 102,011-byte input = 3,344,564) and the holder's ML-DSA-65 authorization a GasBurner at 100,006 (PqzStateGas._precompiles), each less 2,900 (a cold stand-in against a warm precompile); the proof a filler of the row's 45,814 bytes",
-    "pqz:mtxUnshieldUnwrap": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: BURN 3,335,000 + 3 a word of its 102,011-byte input = 3,344,564) and the holder's ML-DSA-65 authorization a GasBurner at 100,006 (PqzStateGas._precompiles), each less 2,900 (a cold stand-in against a warm precompile); the proof a filler of the row's 45,814 bytes"
+    "pqz:mtxUnshieldUnwrap": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: BURN 3,335,000 + 3 a word of its 102,011-byte input = 3,344,564) and the holder's ML-DSA-65 authorization a GasBurner at 100,006 (PqzStateGas._precompiles), each less 2,900 (a cold stand-in against a warm precompile); the proof a filler of the row's 45,814 bytes",
+    "ua-0x0134:register": "ML-DSA-87's PoP on a GasBurner standing in for its precompile (0x...5caa0014) at the calibrated 135,000 + 6 a message word, less 2,900 (CTR-UA-39: the kind is enabled only where a precompile verifies it)",
+    "pqz-pop:register": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: REGISTER 2,093,000 + 3 a word of its 48,912-byte input = 2,097,587) less 2,900 (a cold stand-in against a warm precompile), behind the registry's PqzKeyVerifier (slot 0x0142); the key and proof the set's self-test R_REG vector (30,379 bytes); the addition measured on ML-DSA-87, its PoP on its stand-in (cancels in the difference)",
+    "pqz:storePqzPop": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: REGISTER 2,093,000 + 3 a word of its 48,912-byte input = 2,097,587) less 2,900 (a cold stand-in against a warm precompile), behind the registry's PqzKeyVerifier (slot 0x0142); the key and proof the set's self-test R_REG vector (30,379 bytes)"
   }
 }

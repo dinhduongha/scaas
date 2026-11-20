@@ -68,8 +68,8 @@ use pqz_ffi::stmt::{
     built_legs, check_pk, coeffs_ok, legs_per_group, u64_word, Debit, Disclose, Form, Multi,
     Register, Stmt, Word, DELTA, DISC_WORDS, DW_AMOUNT, H_AMOUNT, H_BENEFICIARY, H_CHAIN_ID,
     H_CHAIN_UID, H_ENVELOPE, H_FEE, H_FROM, H_MEMO_HASH, H_P, H_PLAIN_USED, H_RECIPIENT,
-    H_RECIPIENTS_HASH, H_REGISTRY, H_SALT, H_SEND_COUNTER, H_TO, H_TOKEN, H_VALID_UNTIL, K_MAX,
-    PQZH_ID, PQZL_ID, Q,
+    H_RECIPIENTS_HASH, H_REGISTRY, H_SALT, H_SEND_COUNTER, H_TO, H_TOKEN, H_VALID_UNTIL, PQZH_ID,
+    PQZL_ID, Q,
 };
 use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
@@ -157,6 +157,10 @@ impl PqzSet {
         })
     }
 }
+
+/// This build's set's `K_MAX` (the credits an account holds between refreshes, `pqz-core/params/sets/<set>`; P-T16-2), the
+/// opening tokens' `proofSystemId` (CTR-PQZ-38) and a ciphertext part `v`'s length (a statement's offsets).
+pub use pqz_ffi::stmt::{K_MAX, PQZL_SPLIT_ID, V_BYTES};
 
 /// This build's parameter set.
 pub fn pqz_set() -> PqzSet {
@@ -362,6 +366,15 @@ pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("auditorEpoch", 0, 0, 26, 4),
     ("auditorUAs[E]", 25, 0, 0, 32),
     ("entryAuditorEpoch[V]", 26, 0, 0, 4),
+    // scaas-sdk T16 (owner 2026-11-19, T16-b): `proofStore` (NONE 0 / LOG 1) read as a storage word, never by `eth_call`; the
+    // verifier UA and its epoch a verdict is checked against (spec §9.3)
+    ("proofStore", 0, 0, 23, 1),
+    ("pqzVerifierUA", 13, 0, 0, 32),
+    ("pqzVerifierEpoch", 15, 0, 0, 4),
+    // scaas-sdk T16 part 3: the token's key class (CTR-PQZ-37: `OFFCHAIN` with `pqzOwnKey` the token's scope, else scope 0) and
+    // the sealed opening, read by the debits' key reads
+    ("pqzOwnKey", 0, 0, 24, 1),
+    ("pqzOpening", 0, 0, 25, 1),
 ];
 
 /// The ERC-7201 root of `scaas.pqz` (`keccak256(abi.encode(uint256(keccak256("scaas.pqz")) - 1)) & ~0xff`).
@@ -778,6 +791,52 @@ pub fn bind_mode(binding: &Word, mode: Mode, verification: Verification) -> Word
             .concat(),
         ),
     }
+}
+
+/// An unwrap's envelope word (`WrappedPqzToken._envUnwrap`): `unwrapBinding = keccak256(abi.encode(TAG_UNWRAP, underlying,
+/// minOut))`, relayed (`binding` ≠ 0) `keccak256(abi.encode(binding, unwrapBinding))`. The one copy (the proof path's NONE
+/// header reads it too).
+pub fn unwrap_envelope(binding: &Word, underlying: &[u8; 20], min_out: u64) -> Word {
+    let w = crate::keccak256(
+        &[
+            crate::keccak256(b"SCAAS-PQZ-UNWRAP-V1"),
+            addr(underlying),
+            u64_word(min_out),
+        ]
+        .concat(),
+    );
+    if *binding == [0; 32] {
+        w
+    } else {
+        crate::keccak256(&[*binding, w].concat())
+    }
+}
+
+/// The typed `PqzAuth` message of a debit statement (`PqzCore.authDigest`; plan T16): `op` and the 20 header words by name,
+/// `bodyHash = keccak256(stmt[640..])`; signed by the holder under `zether-auth` in the token's domain (the header's chainId,
+/// token, chainUid). `Argument`: a statement shorter than its header or an `op` other than 1, 2, 7.
+pub fn pqz_auth_message(op: u8, stmt: &[u8]) -> Result<Value> {
+    if !matches!(op, 1 | 2 | 7) {
+        return Err(Error::Argument);
+    }
+    if stmt.len() < 640 {
+        return Err(Error::Argument);
+    }
+    let (head, body) = stmt.split_at(640);
+    let words: Vec<Word> = head
+        .chunks_exact(32)
+        .map(|c| c.try_into().map_err(|_| Error::Argument))
+        .collect::<Result<_>>()?;
+    let w = |i: usize| -> Word { words.get(i).copied().unwrap_or_default() };
+    let n = |i: usize| crate::wallet::u256_to_dec(&w(i));
+    let a = |i: usize| to_hex(w(i).get(12..).unwrap_or_default());
+    let x = |i: usize| to_hex(&w(i));
+    Ok(
+        json!({"op": op, "opTag": x(0), "psid": x(1), "chainId": n(2), "token": a(3), "registry": a(4), "from": x(5),
+        "to": x(6), "beneficiary": x(7), "fee": n(8), "amount": n(9), "recipient": x(10), "sendCounter": n(11), "p": n(12),
+        "validUntilBlock": n(13), "auditorOn": w(14).iter().any(|b| *b != 0), "shieldIn": n(15), "chainUid": x(16),
+        "binding": x(17), "salt": n(18), "memoHash": x(19), "bodyHash": to_hex(&crate::keccak256(body))}),
+    )
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------

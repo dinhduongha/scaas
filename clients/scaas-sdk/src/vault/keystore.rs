@@ -48,6 +48,7 @@ std::thread_local! {
 
 /// The keystore: its revision and its seeds in display order.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub struct Keystore {
     pub rev: u64,
     pub seeds: Vec<SeedEntry>,
@@ -55,6 +56,7 @@ pub struct Keystore {
 
 /// One seed entry (public fields and vault ciphertexts only).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub struct SeedEntry {
     pub id: String,
     pub label: String,
@@ -72,6 +74,7 @@ pub struct SeedEntry {
 
 /// An account row, by shape (spec §6.1), each with its fields in the written order.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum AccountRow {
     Ua {
         id: String,
@@ -331,6 +334,7 @@ fn seed(v: &Value) -> Result<SeedEntry, SdkError> {
     })
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Keystore {
     /// The container of `bytes`, every rule of clientkeys `parse` checked, and only its canonical text accepted.
     pub fn parse(bytes: &[u8]) -> Result<Keystore, SdkError> {

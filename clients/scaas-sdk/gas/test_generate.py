@@ -16,7 +16,7 @@ import generate
 V = "verify_0x0108_delta"
 
 
-def table(m, kinds=("token", "zether"), entries=("mtxPay",), native=None, per_item=None, full=False):
+def table(m, kinds=("token", "zether"), entries=("mtxPay",), native=None, per_item=None, full=False, fresh_only=False):
     inputs = {
         "per_item": per_item or {},
         "measurements": "m.json",
@@ -30,7 +30,7 @@ def table(m, kinds=("token", "zether"), entries=("mtxPay",), native=None, per_it
         "verify": [],
         "margin": {},
         "stand_in": {},
-        "base": [{"kinds": list(kinds), "entries": list(entries)}],
+        "base": [{"kinds": list(kinds), "entries": list(entries), **({"fresh_only": True} if fresh_only else {})}],
     }
     m = dict(m, verify_native_sig_bytes=96)
     m.setdefault(V, 1_000)
@@ -151,9 +151,23 @@ def main():
     assert r["per_item"]["regular"] == 132, r
     assert r["regular"]["measured"] == max(v - 132 * n for n, v in pts.items()), r  # 400 - 264 = 136
     assert t[("account", "reg", False)]["regular"]["measured"] == 86, "the used lane's points"
+    # M18: the largest measured count beside the line; none without counted points
+    assert r["per_item"]["measured_max"] == 64, r
     c2 = {k: v for k, v in c.items() if "_n" not in k}
     r = table(c2, kinds=("account",), entries=("reg",), per_item={"account:reg": "members"})[("account", "reg", True)]
     assert "regular" not in r and "regular" not in r["per_item"], "no points: none"
+    assert "measured_max" not in r["per_item"], "no counted points: no bound"
+    # a fresh-only group (the registry writes): its fresh rows alone, no used lane asked for; the control refuses it
+    f = {"kem_register_fresh_full": 2_000, "kem_register_fresh_full_regular": 50}
+    nat = {"kinds": [], "entries": ["register"]}
+    assert not refused(lambda: table(f, kinds=("kem",), entries=("register",), native=nat, fresh_only=True)), (
+        "no used lane"
+    )
+    t = table(f, kinds=("kem",), entries=("register",), native=nat, fresh_only=True)
+    assert list(t) == [("kem", "register", True)] and t[("kem", "register", True)]["regular"]["gas"] == 1_000, t
+    assert refused(
+        lambda: table(f, kinds=("kem",), entries=("register",), native={"kinds": [], "entries": ["register"]})
+    )
     print("[test_generate] ok")
 
 

@@ -128,6 +128,11 @@ pub(crate) fn sign(
     parts: &[BlsMultiPart],
     surplus: bool,
 ) -> Result<scaas_ua::wallet::entries::Built, SdkError> {
+    // an owner statement (`ownerSig`, `pqzAuth`) is signed by one key before the entry: a group has no such path (M15,
+    // review 2026-11-20; as `sign_msig`)
+    if p.t.owner.is_some() {
+        return Err(SdkError::Argument);
+    }
     let d = key_data(&p.signer())?;
     let ua_msg = scaas_ua::wallet::scaas_bls_multi_message(&p.t.td)?;
     let parts = parts
@@ -145,7 +150,7 @@ pub(crate) fn sign(
     if sig.get("members").is_none() {
         return Err(SdkError::Argument); // a group signs only an entry that takes a `UASig`
     }
-    let mut b = super::submit::build(p, &sig)?;
+    let mut b = super::submit::build(p, &sig, &p.t.extra)?;
     let named = json!({"signature": hex(&agg.signature), "signers": agg.signers});
     if let Some(op) = b.op.as_mut() {
         if name_sig(op, &abi, &named) == 0 {
@@ -279,9 +284,10 @@ impl Op {
     }
 
     /// The self-relay quote of `registerBlsMulti` of the group `key_data` (`0x` hex) on `chain` by `payer` (spec §8.4): the
-    /// registration's base row `gas + per_item × n` ([`super::gas::registration_gas`]: regular and state gas, no verify part;
+    /// registration's base row `gas + per_item × n` ([`super::gas::registry_gas`]: regular and state gas, no verify part;
     /// its regular bound held to the per-transaction cap, EIP-8037)
-    /// with the intrinsic cost and the calldata, the margin: the cost by n before the members' parts exist. The row is gas
+    /// with the intrinsic cost and the calldata, quoted as [`super::gas::registry_gas`] quotes a registry write (a fixed-cost
+    /// row: no margin, owner 2026-11-20): the cost by n before the members' parts exist. The row is gas
     /// used; the PoP check's gas pre-check asks the verifier's whole `POP_GAS` up front, so a small group's transaction needs
     /// more gas than it uses: [`Op::register_bls_multi`] raises the limit to the simulation's. `GasUnquoted` without a row, `Argument` for invalid key data or
     /// a profile without a registry; then as [`Op::quote`]'s self-relay.
@@ -306,16 +312,15 @@ impl Op {
                     .iter()
                     .find(|c| c.profile.key == chain)
                     .ok_or(SdkError::ChainUnknown)?;
-                let figure = super::gas::registration_gas(
+                let figure = super::gas::registry_gas(
                     &c.profile.gas,
                     &c.profile.gas_opt_in,
                     &sdk.gas_tables,
-                    "registerBlsMulti",
+                    &[("registerBlsMulti".into(), "account".into())],
                     n as u64,
+                    &[],
+                    cd.len(),
                 )?
-                .map(|(g, r, from)| {
-                    super::gas::with_calldata(g, r, cd.len(), super::gas::GasSources::both(from))
-                })
                 .ok_or(SdkError::GasUnquoted)?;
                 self_relay(
                     &sdk,

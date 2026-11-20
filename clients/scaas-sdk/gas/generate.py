@@ -30,7 +30,8 @@ the item counted, one of ITEMS) gets `item` and `per_item` {gas, base_count 0, s
 count of 0 (the line's intercept, fitted by the forge harness); where the harness pinned the line's excess at the largest
 count (`<kind>_<entry>_overshoot_<variant>`: owner rulings P1, P2; proposal P4) an assumption states the worst. A base row's
 `regular` (EIP-8037, controller call, owner auto-run 2026-11-19) and a counted row's `per_item.regular` come from the
-measurement's `_regular` split (`regular`). Prints its run time.
+measurement's `_regular` split (`regular`). A base group `fresh_only` (the registry writes: the registry's first write of
+its kind, the lane the SDK quotes) gets its `fresh` rows only. Prints its run time.
 """
 
 import argparse
@@ -188,6 +189,14 @@ def regular(m, src, kind, entry, lane, keys, counted):
     return {"gas": ceil1000(x), "measured": x, "source": f"{src}#{','.join(used)}"}, s
 
 
+def measured_max(m, kind, entry, lane):
+    """M18 (merged-tree review, 2026-11-20): the largest count `N` a counted row's own lane was measured at
+    (`<kind>_<entry>_n<N>_<lane>_<variant>`); a quote above it is refused, the line never extrapolated past its points."""
+    pat = re.compile(rf"^{re.escape(kind)}_{re.escape(entry)}_n(\d+)_{lane}_")
+    ns = [int(hit[1]) for k in m if (hit := pat.match(k))]
+    return max(ns) if ns else None
+
+
 def overshoots(m, base):
     """The counted rows whose line the harness let sit above the largest count (owner 2026-11-19, P1, P2; proposal P4):
     one assumption each, its worst excess over the variants and signers."""
@@ -210,7 +219,8 @@ def table(inputs, m):
     for group in inputs["base"]:
         for kind in group["kinds"]:
             for entry in group["entries"]:
-                for fresh in (True, False):
+                # a group `fresh_only` (the registry writes, controller call 2026-11-19): only the lane the SDK quotes
+                for fresh in (True,) if group.get("fresh_only") else (True, False):
                     keys = variants(m, f"{kind}_{entry}_{'fresh' if fresh else 'used'}_")
                     if not keys:
                         raise SystemExit(f"no measurement for {kind} {entry} {'fresh' if fresh else 'used'}")
@@ -247,6 +257,8 @@ def table(inputs, m):
                         row["regular"] = reg
                         if slope is not None:
                             row["per_item"]["regular"] = slope
+                    if "per_item" in row and (top := measured_max(m, kind, entry, lane)) is not None:
+                        row["per_item"]["measured_max"] = top
                     if f"{kind}:{entry}" in inputs.get("base_stand_in", {}):  # I2: a stand-in priced the row
                         row["stand_in"] = inputs["base_stand_in"][f"{kind}:{entry}"]
                     base.append(row)

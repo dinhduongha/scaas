@@ -1,0 +1,8 @@
+# t19 mutants at commit 01a284f17 (name | outcome | test)
+an EVM key on the raw path | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,native-networks,raw-native --lib wallet::raw::tests::raw_refuses_evm_keys
+the SDK's OCMS refusal dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,native-networks,raw-native --lib wallet::raw::tests::raw_refuses_offchain_envelopes_in_the_sdk
+a 0x05 first-byte refusal back | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,native-networks,raw-native --lib wallet::raw::tests::raw_signs_leading_0x05
+a Sui key routed to sign_digest | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,native-networks,raw-native --lib wallet::raw::tests::raw_envelope_families
+a GRAM key accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,native-networks,raw-native --lib wallet::raw::tests::raw_refuses_gram
+the raw call in the default surface | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --doc
+6 mutants, 6 killed, 0 survived, 0 not loaded

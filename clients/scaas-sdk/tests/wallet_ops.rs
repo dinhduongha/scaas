@@ -58,6 +58,8 @@ const KINDS: [(&str, &str); 4] = [
     ("wallet", "SCaaS MandateWallet"),
 ];
 
+const REGISTRY: &str = "0x5ca00000000000000000000000000000000004e6";
+
 struct T {
     sdk: Arc<Sdk>,
     chain: Fake,
@@ -84,6 +86,10 @@ async fn setup(gateways: usize) -> T {
         }
         c.gw_info["chains"][0]["chain_uid"] = json!(salt);
         c.genesis = salt.clone();
+        // the registry holds every receiver here (a pay to a derived UA needs a registry: owner 2026-11-19, R3)
+        let sel = fake_chain::keccak_hex(b"isRegistered(bytes32)")[..10].to_string();
+        c.answers
+            .push((REGISTRY.into(), sel, format!("0x{}1", "0".repeat(63))));
     }
     let url = serve(chain.clone()).await;
     let mut gws = vec![];
@@ -98,7 +104,7 @@ async fn setup(gateways: usize) -> T {
         rpc: vec![endpoint(&url)],
         rpc_policy: scaas_rpc::Policy::Failover,
         gateways: gws,
-        registry: None,
+        registry: Some(REGISTRY.into()),
         factory: None,
         router: None,
         finality: Finality::Finalized,
@@ -110,7 +116,11 @@ async fn setup(gateways: usize) -> T {
         }],
         gas: gas_rows(),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
     };
     let store = MemoryStore::new();
     let sdk = Sdk::open(SdkConfig {
@@ -1303,4 +1313,176 @@ async fn percent_fee_is_reviewed_as_its_amount() {
         q.fee_to_relayer, "675",
         "the quote's fee is the amount, not the rate 5000"
     );
+}
+
+/// Plan T13 `execute_decoded_only` on a `SmartKeyAccount` (as T12's on a mandate wallet): an undecoded call is
+/// `OpaqueCallRefused`; a decoded `transfer` or a guardian's `initiateRecovery(key)` is reviewed field by field and signed
+/// under `Expect::Execute` (`scaas-ua` rebuilds the call's bytes); with `opaque-calls` and the marker, flagged; another
+/// contract's domain is `Argument`.
+#[tokio::test(flavor = "multi_thread")]
+async fn smart_execute_decoded_only() {
+    use scaas_sdk::account::{SmartCall, SmartOp, SubjectKeyArgs};
+    let t = setup(0).await;
+    let v = load("smartcontracts/vectors/typed/typed_ops.json");
+    let d = &v["ops"]["Execute"]["domains"]["account"]["domain"];
+    let account = d["verifyingContract"]
+        .as_str()
+        .unwrap()
+        .to_ascii_lowercase();
+    {
+        let mut c = t.chain.lock().unwrap();
+        let salt = c.genesis.clone();
+        c.domains
+            .insert(account.clone(), ("SCaaS SmartKeyAccount".into(), salt));
+    }
+    let token = "0x5ca00000000000000000000000000000000000a1";
+    let op = |account: &str| SmartOp {
+        signer: t.signer.clone(),
+        key_index: Some("0".into()),
+        chain: "local".into(),
+        account: account.into(),
+        batch: "3".into(),
+        envelope: Envelope {
+            valid_until: 1_800_000_300,
+            mode: 0,
+            relayer: None,
+            fee: "0".into(),
+            fee_recipient: None,
+        },
+    };
+    let opaque = |allow| SmartCall::Opaque {
+        target: token.into(),
+        value: "0".into(),
+        data: "0xdeadbeef00".into(),
+        allow,
+    };
+    let acc = t.sdk.account();
+    assert_eq!(
+        code(acc.prepare_smart_execute(op(&account), opaque(None)).await),
+        "OpaqueCallRefused",
+        "an undecoded call"
+    );
+    let transfer = SmartCall::Transfer {
+        token: token.into(),
+        to: "0x00000000000000000000000000000000000000aa".into(),
+        amount: "77".into(),
+    };
+    assert_eq!(
+        code(acc.prepare_smart_execute(op(token), transfer.clone()).await),
+        "Argument",
+        "a token's domain is not an account's"
+    );
+    let p = acc
+        .prepare_smart_execute(op(&account), transfer)
+        .await
+        .unwrap();
+    assert_eq!(p.entry(), "mtxExecute");
+    assert!(!p.opaque());
+    let r = p.review();
+    assert_eq!(
+        r.iter().find(|f| f.name == "call.amount").unwrap().value,
+        "77"
+    );
+    assert_eq!(
+        r.iter().find(|f| f.name == "from").unwrap().value,
+        account,
+        "from: the account itself"
+    );
+    // a guardian's recovery of another account, decoded
+    let new_key = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000bb").unwrap();
+    let guarded = "0x00000000000000000000000000000000000000cc";
+    let p = acc
+        .prepare_initiate_recovery(op(&account), guarded.into(), new_key.clone())
+        .await
+        .unwrap();
+    let r = p.review();
+    for (n, want) in [
+        ("call", "initiateRecovery"),
+        ("call.account", guarded),
+        ("call.key.x", new_key.x.as_str()),
+        ("target", guarded),
+    ] {
+        assert_eq!(r.iter().find(|f| f.name == n).unwrap().value, want, "{n}");
+    }
+    // `mtxExecute`: the app's figure is the inner call's (owner 2026-11-19, ruling 5)
+    let q = t
+        .sdk
+        .op()
+        .quote_with_gas(
+            p.clone(),
+            SubmitPath::SelfRelay {
+                payer: t.payer.clone(),
+            },
+            50_000,
+        )
+        .await
+        .unwrap();
+    t.sdk.op().submit(p, q).await.unwrap();
+    // the key index read from the account (owner 2026-11-19, S3, P2): slot 0 another key, slot 1 removed (zero), slot 2 the
+    // signer's; the entry is signed as `keyIndex` 2. With two slots the signer is in none: `SignerNotAccountKey`.
+    let sel = |s: &str| fake_chain::keccak_hex(s.as_bytes())[..10].to_string();
+    let words = |k: &SubjectKeyArgs| {
+        let w = [&k.x, &k.y, &k.rp_id_hash, &k.origin_hash]
+            .map(|x| x[2..].to_string())
+            .concat();
+        format!("0x{:064x}{w}", k.kind)
+    };
+    let me = SubjectKeyArgs::secp256k1(v["key"]["address"].as_str().unwrap()).unwrap();
+    let other = SubjectKeyArgs::secp256k1("0x00000000000000000000000000000000000000dd").unwrap();
+    let slots = |next: u64| {
+        let at = |i: u64| format!("{}{i:064x}", sel("keyAt(uint256)"));
+        let mut c = t.chain.lock().unwrap();
+        c.answers.retain(|(to, _, _)| *to != account);
+        for (d, out) in [
+            (sel("nextKeyIndex()"), format!("0x{next:064x}")),
+            (at(0), words(&other)),
+            (at(1), format!("0x{}", "0".repeat(320))),
+            (at(2), words(&me)),
+        ] {
+            c.answers.push((account.clone(), d, out));
+        }
+    };
+    let read = |account: &str| SmartOp {
+        key_index: None,
+        ..op(account)
+    };
+    let transfer = SmartCall::Transfer {
+        token: token.into(),
+        to: "0x00000000000000000000000000000000000000aa".into(),
+        amount: "78".into(),
+    };
+    slots(2);
+    assert_eq!(
+        code(
+            acc.prepare_smart_execute(read(&account), transfer.clone())
+                .await
+        ),
+        "SignerNotAccountKey",
+        "no slot holds the signer"
+    );
+    slots(3);
+    let p = acc
+        .prepare_smart_execute(read(&account), transfer)
+        .await
+        .unwrap();
+    let payer = SubmitPath::SelfRelay {
+        payer: t.payer.clone(),
+    };
+    let q = t
+        .sdk
+        .op()
+        .quote_with_gas(p.clone(), payer, 50_000)
+        .await
+        .unwrap();
+    t.sdk.op().submit(p, q).await.unwrap();
+    let sig_head = format!("{:064x}{:064x}{:064x}", 2, 0x60, 0x80);
+    assert!(carried_soon(&t, &sig_head).await, "AccountSig keyIndex 2");
+    #[cfg(feature = "opaque-calls")]
+    {
+        let p = acc
+            .prepare_smart_execute(op(&account), opaque(Some(AllowOpaqueCall::new())))
+            .await
+            .unwrap();
+        assert!(p.opaque(), "under the marker: flagged");
+    }
 }

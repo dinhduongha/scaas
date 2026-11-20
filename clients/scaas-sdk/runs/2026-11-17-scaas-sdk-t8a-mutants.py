@@ -16,7 +16,7 @@ MUTANTS = [
     ("an unbound fee recipient sent as given", [(M, "if mode & 2 == 0 {", "if mode & 2 == 1 {")], UA + "entries_token"),
     ("a dynamic offset past the heads only", [(M, "head.extend(word(head_len + tail.len()));", "head.extend(word(tail.len()));")], UA + "entries_token"),
     ("relayRef without the chain id", [(M, "    b.extend(word(chain_id as usize));\n", "")], UA + "entries_token"),
-    ("a relay fee's call on another target", [(M, 'if target.as_str() != Some(field(&inner, "token").as_str()) || hash', "if hash")], UA + "entries_token"),
+    ("a relay fee's call on another target", [(M, "if target.as_str() != Some(field(&inner, \"token\").as_str())\n        || hash", "if hash")], UA + "entries_token"),
 ]
 
 if __name__ == "__main__":

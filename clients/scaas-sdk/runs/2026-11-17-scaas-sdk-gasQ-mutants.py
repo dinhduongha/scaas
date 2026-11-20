@@ -46,12 +46,12 @@ MUTANTS = [
     ("Q3 clientkeys: the cap off by one",
      [(K, "  if (f[0].length + f[1].length > WEBAUTHN_MAX_ASSERTION)\n", "  if (f[0].length + f[1].length >= WEBAUTHN_MAX_ASSERTION)\n")], CK3),
     # Q4, clientkeys
-    ("Q4: encodeAssertion uncapped", [(WJ, "  assertionCapped(authenticatorData, clientDataJSON);\n  const { r, s }", "  const { r, s }")], CK4),
-    ("Q4: passkeyAssertion uncapped", [(MO, "  assertionCapped(a.authenticatorData, a.clientDataJSON);\n", "")], CK4),
+    ("Q4: encodeAssertion uncapped", [(WJ, "  const [a, c] = assertionCapped(authenticatorData, clientDataJSON);\n  const { r, s }", "  const [a, c] = [bytesOf(authenticatorData), bytesOf(clientDataJSON)];\n  const { r, s }")], CK4),
+    ("Q4: passkeyAssertion uncapped", [(MO, "= assertionCapped(a.authenticatorData, a.clientDataJSON);", "= [a.authenticatorData, a.clientDataJSON];")], CK4),
     ("Q4: the cap off by one",
-     [(WJ, "  if (authenticatorData.length + clientDataJSON.length > WEBAUTHN_MAX_ASSERTION) {",
-       "  if (authenticatorData.length + clientDataJSON.length >= WEBAUTHN_MAX_ASSERTION) {")], CK4),
-    ("Q4: refused without its code", [(WJ, '    e.code = "WebAuthnTooLong";\n', "")], CK4),
+     [(WJ, "  if (a.length + c.length > WEBAUTHN_MAX_ASSERTION)",
+       "  if (a.length + c.length >= WEBAUTHN_MAX_ASSERTION)")], CK4),
+    ("Q4: refused without its code", [(WJ, "throw coded(\"WebAuthnTooLong\", `authenticatorData", "throw new Error(`authenticatorData")], CK4),
     # Q5
     ("Q5: resend not recomputed",
      [(S, "                        let quote = signed_quote(\n                            &sdk,\n                            &row.chain,",

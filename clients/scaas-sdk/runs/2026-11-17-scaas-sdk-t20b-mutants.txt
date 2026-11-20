@@ -1,0 +1,10 @@
+# t20b mutants at commit c1a17c82f (name | outcome | test)
+a stale generated file (an SDK doc line) | killed | bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check; rc=$?; git checkout -- clients/scaas-sdk/bindings/dart/lib/src/rust clients/scaas-sdk/ffi/src/frb_generated.rs; exit $rc
+a binding without its load check | killed | bash ./run.sh
+the SDK signs a native auditor's consent as a UA key (the bare digest) | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib admin::tests
+the Zether consent over another epoch | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --lib admin::tests
+ua-rs: the native consent under metatx | killed | ../../scripts/capped cargo test --locked --offline -j2 --test wallet_uasig native_auditor_consent_signs_the_registry_form
+ua-rs: the native consent of another auditor accepted | killed | ../../scripts/capped cargo test --locked --offline -j2 --test wallet_uasig native_auditor_consent_signs_the_registry_form
+ua-rs: sign_scaas signs a native consent bare | killed | ../../scripts/capped cargo test --locked --offline -j2 --test wallet_uasig native_auditor_consent_signs_the_registry_form
+ua-rs: the native consent without its check | killed | ../../scripts/capped cargo test --locked --offline -j2 --test wallet_uasig native_auditor_consent_signs_the_registry_form
+8 mutants, 8 killed, 0 survived, 0 not loaded

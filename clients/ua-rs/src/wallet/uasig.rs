@@ -49,7 +49,7 @@ fn stored(kind: u16) -> bool {
 }
 
 /// The native id (`evm-eoa`, CTR-UA-03) of an EVM key: its address left-padded to 32 bytes; any other key `None`.
-fn native_id(r: &KeyRef) -> Option<[u8; 32]> {
+pub(super) fn native_id(r: &KeyRef) -> Option<[u8; 32]> {
     let KeyRef::Native {
         network: Network::Evm,
         public_key,
@@ -245,6 +245,39 @@ pub fn msig_update_typed_data(u: &MsigUpdate) -> Result<TypedData> {
     Ok(td)
 }
 
+/// The typed `UARegistration{record, pqzPopHash}` of a registration without a KEM record (the portable domain; M1, owner
+/// 2026-11-19): the `record` a native `msig` member signs for a `registerMsig` PoP under `pop` v2 ([`msig_slot_sig_current`]),
+/// whose digest is `ua_portable::registration_digest` with the zero KEM record. An `msig` never holds a KEM key (CTR-UA-32).
+pub fn registration_typed_data(
+    ua: &[u8; 32],
+    kind: u16,
+    pqz_key_hash: &[u8; 32],
+    pqz_pop_hash: &[u8; 32],
+) -> Result<TypedData> {
+    use serde_json::json;
+    let f = |n: &str, t: &str| json!({"name": n, "type": t});
+    let z = eip712::to_hex(&[0u8; 32]);
+    let td = TypedData::from_value(json!({
+        "types": {
+            "UARegistration": [f("record", "UAPortableRecord"), f("pqzPopHash", "bytes32")],
+            "UAPortableRecord": [f("ua", "bytes32"), f("kind", "uint16"), f("pqzKeyHash", "bytes32"), f("kem", "UAKemRecord")],
+            "UAKemRecord": [f("ua", "bytes32"), f("version", "uint64"), f("scheme", "uint8"), f("kemPkHash", "bytes32")],
+        },
+        "primaryType": "UARegistration",
+        "domain": {"name": crate::ua_portable::PORTABLE_DOMAIN_NAME, "version": crate::ua_portable::PORTABLE_DOMAIN_VERSION},
+        "message": {"record": {"ua": eip712::to_hex(ua), "kind": kind, "pqzKeyHash": eip712::to_hex(pqz_key_hash),
+            "kem": {"ua": eip712::to_hex(ua), "version": 0, "scheme": 0, "kemPkHash": z}},
+            "pqzPopHash": eip712::to_hex(pqz_pop_hash)},
+    }))?;
+    let kem = crate::ua_portable::kem_record_hash(ua, 0, &[])?;
+    if td.digest()?
+        != crate::ua_portable::registration_digest(ua, kind, pqz_key_hash, &kem, pqz_pop_hash)
+    {
+        return Err(Error::Argument);
+    }
+    Ok(td)
+}
+
 /// [`msig_sig`] past its purpose check: the sealed container's sender (`seal`, MD-10: the off-chain seal purpose, no native member)
 /// calls it directly.
 pub(super) fn msig_members(
@@ -287,6 +320,25 @@ fn native_signs_record(purpose: &[u8; 32]) -> Result<bool> {
         || *purpose == purpose_tag("msig-update")?)
 }
 
+/// What a native member signs in `purpose` over `digest`: the portable `record` itself (its digest `digest`), else `UAAuth`
+/// under `domain`.
+fn native_of<'a>(
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    domain: Option<&'a Domain>,
+    record: Option<&'a TypedData>,
+) -> Result<Native<'a>> {
+    if native_signs_record(purpose)? {
+        let r = record.ok_or(Error::Argument)?;
+        if r.domain_separator()? != PORTABLE_DOMAIN_SEPARATOR || r.digest()? != *digest {
+            return Err(Error::Argument);
+        }
+        Ok(Native::Record(r))
+    } else {
+        Ok(Native::Auth(domain.ok_or(Error::Argument)?))
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn msig_members_current(
     first: &[u8],
@@ -299,15 +351,61 @@ fn msig_members_current(
     slots: &[Slot],
 ) -> Result<UASig> {
     msig_build(first, current, inner, purpose, digest, slots, || {
-        if native_signs_record(purpose)? {
-            let r = record.ok_or(Error::Argument)?;
-            if r.domain_separator()? != PORTABLE_DOMAIN_SEPARATOR || r.digest()? != *digest {
-                return Err(Error::Argument);
-            }
-            Ok(Native::Record(r))
-        } else {
-            Ok(Native::Auth(domain.ok_or(Error::Argument)?))
-        }
+        native_of(purpose, digest, domain, record)
+    })
+}
+
+/// One slot's `MemberSig` of the `msig` whose first structure is `first` over `uaMessage(msig, purpose, digest)` (M1, owner
+/// 2026-11-19: members on different devices): as [`msig_sig_current`] for that slot alone, the set's minimality left to
+/// [`msig_combine`]. A disabled slot (at either level) is `Argument`; an `msig` slot's own leaves must be minimal (`UAPoP`).
+#[allow(clippy::too_many_arguments)]
+pub fn msig_slot_sig_current(
+    first: &[u8],
+    current: &Current,
+    inner: &Inner,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    domain: Option<&Domain>,
+    record: Option<&TypedData>,
+    slot: &Slot,
+) -> Result<MemberSig> {
+    check_purpose(purpose)?;
+    let ua = derive_ua(MSIG, first, false)?;
+    let (key_data, enabled) = now(&ua, first, current);
+    if !on(&enabled, slot.index()) {
+        return Err(Error::Argument);
+    }
+    let structure = MsigStructure::from_key_data(&key_data)?;
+    let p = plan(&structure, slot, inner, current)?;
+    let native = if p.has_native() {
+        native_of(purpose, digest, domain, record)?
+    } else {
+        Native::None
+    };
+    sign(&p, &ua, &ua_message(MSIG, purpose, digest)?, &native)
+}
+
+/// The `msig`'s `UASig` from its slots' `MemberSig`s, signed apart ([`msig_slot_sig_current`]), in any order: put in index
+/// order; a repeated or disabled slot is `Argument`, a set not minimal for the current structure `UAPoP` (CTR-UA-07). The
+/// signatures are the registry's to check.
+pub fn msig_combine(first: &[u8], current: &Current, members: &[MemberSig]) -> Result<UASig> {
+    let ua = derive_ua(MSIG, first, false)?;
+    let (key_data, enabled) = now(&ua, first, current);
+    let mut members = members.to_vec();
+    members.sort_by_key(|m| m.index);
+    let indexes: Vec<u16> = members.iter().map(|m| m.index).collect();
+    if indexes.windows(2).any(|w| w.first() == w.get(1))
+        || !indexes.iter().all(|i| on(&enabled, *i))
+    {
+        return Err(Error::Argument);
+    }
+    if !msig_slots_minimal(&key_data, &indexes)? {
+        return Err(Error::Ua(UAError::Pop));
+    }
+    Ok(UASig {
+        key_data: vec![],
+        signature: vec![],
+        members,
     })
 }
 

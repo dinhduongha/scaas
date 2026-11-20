@@ -69,6 +69,8 @@ mod vault;
 mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
+#[cfg(feature = "pqz")]
+pub(crate) use eip712::u256_to_dec; // the PQZ facade's
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub(crate) use eip712::{from_hex, to_hex};
 pub use eip712::{
@@ -86,8 +88,9 @@ pub use manifest::{
 pub use pairing::NonceSlotProbe;
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{
-    fee_due, scaas_bls_multi_message, sign_scaas, sign_scaas_bls_multi, sign_typed_by,
-    AllowAnyTypedData, AllowRow, DecodedCall, Expect, Invalidate, SubjectKey,
+    fee_due, scaas_bls_multi_message, scaas_purpose, sign_auditor_consent_native, sign_scaas,
+    sign_scaas_bls_multi, sign_typed_by, AllowAnyTypedData, AllowRow, DecodedCall, Expect,
+    Invalidate, SubjectKey,
 };
 #[cfg(feature = "pqz")]
 pub(crate) use seal::now;
@@ -107,11 +110,12 @@ pub use sign::{
 };
 #[cfg(feature = "vectors")]
 pub use signer::TestExternalKey;
-pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
+pub use signer::{AllowRawDigest, ExternalKey, KeyRef, SigRole, SignRequest, Signer};
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
 pub use uasig::{
-    membership_sig, membership_sig_current, msig_sig, msig_sig_app, msig_sig_current,
-    msig_update_typed_data, ua_sig, ua_sig_app, Slot, UaSigRequest,
+    membership_sig, membership_sig_current, msig_combine, msig_sig, msig_sig_app, msig_sig_current,
+    msig_slot_sig_current, msig_update_typed_data, registration_typed_data, ua_sig, ua_sig_app,
+    Slot, UaSigRequest,
 };
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 #[cfg(feature = "vectors")]

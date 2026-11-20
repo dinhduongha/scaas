@@ -1,0 +1,6 @@
+# t13smart mutants at commit dfb10d2c8 (name | outcome | test)
+accept an undecoded Execute on SmartKeyAccount | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops smart_execute_decoded_only
+from the zero address, not the account | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops smart_execute_decoded_only
+ua-rs: an account's Execute checked as a mandate wallet's | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas account_execute_signs_only_the_decoded_recovery
+ua-rs: initiateRecovery under another selector | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas account_execute_signs_only_the_decoded_recovery
+4 mutants, 4 killed, 0 survived, 0 not loaded

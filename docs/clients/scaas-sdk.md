@@ -4,9 +4,9 @@
 service) reaches every SCaaS feature: seeds and keys, Universal Accounts, tokens and payments, Zether and PQZ, the DEX, governance,
 and the generic surface that app cores above it use (`pqchat-core`, `pqvault-core`, a third party's). Every signature comes from `ua-rs` ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)), every chain read and send goes through
 `scaas-rpc` ([CLI-RPC-01](scaas-rpc.md#CLI-RPC-01)), and the bindings are generated from its one API. Status: **SPECIFIED**, partly
-built: `vault`, `account` (rows, restore, marks), `wallet` (tokens, balances, native sends, the token and mandate-wallet operations)
+built: `vault`, `account` (rows, restore, marks, registration), `wallet` (tokens, balances, native sends, the token and mandate-wallet operations)
 and the operations core in `clients/scaas-sdk` on branch `sdk-code` (plan tasks T0–T12 and the T13 fix round of the closing review);
-the Dart binding is still the plan's T3 spike, so no binding is BUILT (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed
+the Dart binding (`flutter_rust_bridge`, the whole public surface generated, plan T20) is BUILT, the other bindings are not (spec `docs/superpowers/specs/2026-11-17-scaas-sdk.md`, reviewed
 by Fable on 2026-11-17 with every finding applied; plan `docs/superpowers/plans/2026-11-17-scaas-sdk.md`). UNAUDITED.
 
 **Contents**
@@ -109,7 +109,8 @@ no public key of the unlock credential exists, so user verification is enforced 
 without it) and by the AEAD (a wrong output is `VaultOpen`); an answer without an output is `AuthenticatorRefused` and the passphrase
 remains. Signing keys' assertions are checked in full by `ua-rs` ([CLI-UAL-16](ua-libraries.md#CLI-UAL-16)); the app's `Authenticator`
 and `SecureStore` are never trusted for policy. The passkey RP ID is the deployment's, never a SCaaS constant
-([CLI-APP-14](app.md#CLI-APP-14)). Every change of a sealed record after unlock (the manifest, a backup generation) is re-sealed by
+([CLI-APP-14](app.md#CLI-APP-14)): `SdkConfig.rp_id`, which `create_passkey_key(seed, name)` and every passkey signing read, never a
+parameter (owner 2026-11-19, T4; none configured: `AuthenticatorRefused`). Every change of a sealed record after unlock (the manifest, a backup generation) is re-sealed by
 `ua-rs` under the vault's same data key, both envelopes kept, so a passkey session persists its changes; a new vault (an imported
 key) takes the vault passphrase and, with a passkey set, its PRF output. A biometric is a platform gate; nothing is derived from it. A
 passphrase change keeps the data key and removing the passkey unlock revokes nothing from an earlier copy of the container: the UI
@@ -131,7 +132,13 @@ classical key is a leaf of a seed, tagged with its network, never exported. Ever
 key, KEM key, Zether key) uses that wallet's own account index, so no two wallets share one. An EVM account whose code is an EIP-7702
 designator carries a delegation mark and a warning; the SDK builds no type-4 transaction, so it cannot offer to clear the delegation
 ([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40) rule 3's offer: a recorded exception). A derived UA has no recovery
-([CTR-ACC-09](../contracts/accounts.md#CTR-ACC-09)); guardian recovery is `SmartKeyAccount`'s ([CTR-ACC-03](../contracts/accounts.md#CTR-ACC-03)). **Sponsored registration** (owner 2026-11-17, "OK, all four points as proposed"): a payment to an unregistered derived UA is `ReceiverUnregistered`; the receiver's app makes its portable registration blob (the `register` arguments with the PoP, which binds no caller, and the KEM record when set), the sender's app checks it (the UA equals the intended receiver and its key data, the kind is enabled on the chain, the PoP verifies locally, the KEM record is present and verifies when `kemPkHash` is set) before anything is sent, submits it paying the gas, adds the KEM key by `setKemKey`, and pays only after the registration lands.
+([CTR-ACC-09](../contracts/accounts.md#CTR-ACC-09)); guardian recovery is `SmartKeyAccount`'s ([CTR-ACC-03](../contracts/accounts.md#CTR-ACC-03)). Registration of a seed's UA key is BUILT (plan T13, `clients/scaas-sdk/src/account/register.rs`, `tests/account_ops.rs`, the `sdk-e2e` PQ registration): the arguments and the PoP by `ua-rs` (`registration_args`, `pop` v2), the calldata by `ua-rs` `registry_call` (the node's registry rows, both ways), each registry write an opaque value quoted and self-relayed by the user's payer, landed by its record (`isRegistered`, `pqzPopOf(…)` non-empty: the proof stored, proven or not (owner 2026-11-19, S2), `kemKeyAt`), a registration carrying its PQZ key's proof in one transaction or two (owner 2026-11-20; BUILT, `account::register::tests` `pq_registration_*`): quoted in one transaction first, in two steps (without `pqzPop`, then `storePqzPop`) when its whole gas is above half the chain's block gas limit or its regular gas above `tx_gas_cap`, each step quoted on its own and held to the same, else `GasAboveTxCap` / `GasAboveBlockShare`, nothing sent; `RegistryWrite::registration_gas` states the transactions, each step's gas and the total; the split keeps its `pqzPop` in `sdk.state` until `storePqzPop` lands, and a later prepare gives the second part only with the proof whose hash the registration committed, else `RegistrationPopInvalid` (merged-tree review M1); each registry write's gas from the gas table's rows where it has them (controller call, owner auto-run 2026-11-19; spec §13.3 "Registry writes": the regular bound the rows', the gas limit max(the estimate, the rows'); a form without a row the estimate, whole), the KEM commit's fill and repair, an ML-DSA key's expanded-key cache first where the registry caches it (owner 2026-11-19, T1: `cacheExpandedKey(kind, pk, 0)` simulated tells the cache path; each part `expandedKeyOf(ua)` shows missing its own write, landed by its pointer; `tests/account_ops.rs` `mldsa_cache_then_register`, the `sdk-e2e` `e2e_register_mldsa_cached_on_anvil`), the PQZ key attribute (feature `pqz`: the wallet's PQZ key of the same account and index, its `R_REG` proof by `ua-rs` `proveRegister` under the build set's PQZL `proofSystemId`, the PoP over both; without `pqz` `FeatureMissing`); `SmartKeyAccount` and guardian recovery are BUILT (plan T13 part 2; `clients/scaas-sdk/src/account/smart.rs`, `tests/wallet_ops.rs` `smart_execute_decoded_only`, the `sdk-e2e` `smart_account_add_key_self_relay` and `guardian_recovery_via_execute`): the counterfactual address by `ua-rs` (`smart_account_address`), one prepare per entry (`AddKey`, `RemoveKey`, `RotateKey`, `SetGuardian`, `CancelRecovery`, `CancelNonce`, `Execute`), `from` the account, signed as `AccountSig{keyIndex, …}` with the signing key's index given by the caller or read from the account (`nextKeyIndex()`, `keyAt(i)`), a signer the account does not hold `SignerNotAccountKey` (owner 2026-11-19, S3, P2); `Execute` with a decoded call only (`transfer`, `initiateRecovery`), signed under `ua-rs` `Expect::Execute`; the guardian's `initiateRecovery` is its own account's `Execute` (`prepare_initiate_recovery`); `completeRecovery` (anyone, after two days; `prepare_complete_recovery`) and the deploy (`factory.deploy`; `prepare_smart_deploy`) are native sends of the caller's EVM key (spec §8.5), quoted for review and sent by `submit_native_send` (the `sdk-e2e` tests above deploy and recover through them). Passkey and secure-element keys are BUILT (owner 2026-11-19, S1, P1; `clients/scaas-sdk/src/op/external.rs`, `src/op/tests.rs` `passkey_signs_through_the_authenticator`, `se_key_message_mode`): `create_passkey_key` and `create_se_key` store a key row (`AccountRow::Key`) beside the seed and return `KeyRef::Key{seed, id}`; an operation it signs first runs `ua-rs` `sign_scaas` through an `ExternalKey` that only refuses (the policy check passes before the user is asked; a refusal asks no device, owner 2026-11-19, T3: `src/op/tests.rs` `policy_refusal_asks_no_device`), then the SDK computes the passkey's challenge (`webauthn_challenge`) or the secure element's `ua_msg` (`ua_message`, MESSAGE mode) from `scaas_purpose(td)` and the digest, asks the `Authenticator`, and signs through an `ExternalKey` whose answer `ua-rs` verifies (`ExternalSignature` otherwise); a passkey's assertion is built and verified by `webauthn_assertion` first (`AuthenticatorRefused` for another key or UV clear). Such a row registers through `prepare_register` (owner 2026-11-19, T2): a passkey as `registerWebAuthn`, a secure element as `register` (`p256`), the PoP answered by the `Authenticator` and verified by `ua-rs` (`src/op/tests.rs` `key_rows_register`, the `sdk-e2e` `e2e_register_passkey_row_on_anvil`); it holds no KEM or PQZ key and never pays (a payer is a native key, spec §13.3). `msig` is BUILT (plan T13 part 4; `clients/scaas-sdk/src/account/msig.rs`, its tests `msig_minimal_sets` (`ua/nested.json`), `update_msig_current` (`ua/portable.json` `msigUpdates`, `msigUpdated`) and `msig_writes_landed_by_record`, the `sdk-e2e` `e2e_msig_register_accept_transfer_update_on_anvil`): `msig_structure` (members sorted by id, threshold and weights checked) and `MsigStructureArgs::ua`; `msig_state` reads the first structure (`registrationOf`), the current one (`msigOf`), `msigStateOf` and each accepted slot's `memberSigHashOf`, and shows listed, enabled and accepted apart and whether the accepted weight reaches the threshold ([CTR-UA-37](../contracts/accounts.md#CTR-UA-37)); `prepare_msig_register` (`registerMsig`, the `pop` by the named slots or empty, landed by `isRegistered`), `prepare_accept_membership` (landed by the slot's bit in `msigStateOf(ua).accepted`; nothing when set) and `prepare_update_msig` (`ua-rs` `plan_msig_update`, signed by slots of the stored structure, landed when `msigStateOf(ua).version` reaches the update's, [CTR-UA-44](../contracts/accounts.md#CTR-UA-44)) are `RegistryWrite`s; an operation signs as an `msig` through `KeyRef::Msig{ua, slots}`: the entry's check first, then every record read ahead (the `msig`'s and its `msig` members' first and current structures and bits), then `ua-rs` `msig_sig_current` (a set not minimal at either level `UAPoP`, a disabled slot refused); a slot or inner leaf not enabled and accepted on the registry is refused before anything is signed (`MsigSlotInactive`). The owner's M1–M5 of 2026-11-19 are BUILT (`ua-rs` `msig_slot_sig_current`, `msig_combine`, `registration_typed_data`; SDK `Op::member_sign`, `MsigSlot::Signed`, `msig_members_apart`): one slot signed on its own device and combined on the submitting one, a native member's `pop` slot at registration over the registration's typed data, an update landed only with its own structure, `holds_pqz_key` read, and a passkey or secure-element row as a slot through the external flow. A slot signed on another device names the operation it signed (`ua`, `purpose`, `digest`), and the submitting device combines
+it only over its own preparation (`PreparedStale` otherwise; review 2026-11-20, F1). Not built: a native member on a gen-2
+registry, collecting a `registerMsig` PoP slot from another device, and the local check of a slot's signatures (the registry
+checks them; PLANNED). PLANNED (review 2026-11-20, F26): SDK calls for the registry entries `setPqzKey` (a new PQZ key version),
+`setPqzScopedKey`, `storePqzScopedPop`, `registerMuSig2` and `registerFrost`; their rows exist in `ua-rs`
+(`wallet/entries/registry.rs`). PLANNED (F2): registry records read from a generation-2 registry, which answers a UA
+registered in its predecessor from there; it waits for the cross-generation rule of branch `multi-gen-verify`. **Sponsored registration** (owner 2026-11-17, "OK, all four points as proposed"): a payment to an unregistered derived UA is `ReceiverUnregistered`; the receiver's app makes its portable registration blob (the `register` arguments with the PoP, which binds no caller, and the KEM record when set), the sender's app checks it (the UA equals the intended receiver and its key data, the kind is enabled on the chain, the PoP verifies locally, the KEM record is present and verifies when `kemPkHash` is set) before anything is sent, submits it paying the gas, adds the KEM key by `setKemKey`, and pays only after the registration lands. BUILT (plan T13b; `clients/scaas-sdk/src/account/sponsor.rs`, clientkeys `registrationBlob` and `smartcontracts/vectors/ua/registration_blobs.json`, `tests/account_ops.rs`, the `sdk-e2e` sponsored registration then pay): `registration_blob` and `prepare_submit_registration` for the single-key entries (`register`, `registerWebAuthn`); a blob is the typed `RegistrationBlob` (`from_json` / `to_json`, the named-field JSON text), at most 768 KiB, the largest registration any parameter set allows with headroom (spec §7.1 gives the derivation), depth 4, so a registration carrying a PQZ key's proof fits one and is split by the sender as §7's; `prepare_submit_registration` takes the payer and returns `RegistryWrite` values; `wallet`'s `prepare_pay` answers `ReceiverUnregistered` for a derived UA the profile's registry does not hold, and for any derived UA on a profile naming no registry (fail closed); a registry write whose payer transaction fails to sign stays submittable (owner 2026-11-19, the four rulings recorded under CLI-SDK-30 in decisions.md).
 
 ## 5. Operations
 
@@ -170,7 +177,8 @@ and the SDK never converts a token fee to or from gas. `submit` signs once, writ
 `submit` a quote shows the payer, the gas limit, the maximum fee per gas and the maximum cost; the user confirms it; above the profile's
 caps it is `FeeAboveCap`, and the caps come from the SDK's configuration, never from the answering endpoint. A gas limit above the
 chain's per-transaction cap (its regular part: EIP-8037; the quote's `regular_gas`, from the rows' `regular` figures, else the
-whole) or the block limit is `GasAboveTxCap` (a PQ registration is split as the node splits it); a payer that is an
+whole) or the block limit is `GasAboveTxCap` (a registration carrying its PQZ key's proof goes in two steps when one does not fit, each
+step also held to half the block gas limit, `GasAboveBlockShare`; owner 2026-11-20); a payer that is an
 EIP-7702 designator is `PayerDelegated`; the payer's address is linked on chain to the subject, and a holder without a native key has no
 self-relay path. The job API is server-side only, never in an end-user build ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)). With no
 gateway for the entry and no payer: `SubmitPathNone`. **Write ahead:** sign, write the operation with its signed body (public data) to
@@ -185,7 +193,7 @@ another device prepares the same request, the same named fields and `validUntil`
 checks each partial on receipt and names a bad one (`bls_multi_part_ok`), then `submit_bls_multi(prepared, quote, parts,
 surplus)` aggregates (invalid partials dropped, a minimal set unless `surplus`; below the threshold `BlsMultiBelowThreshold`,
 nothing written) and submits as `submit` does, the job's `UASig` by name `{signature, signers}` ([job-api](../node/job-api.md#bls-multi-sig-shape)).
-Plain `submit` refuses a group signer. The quote reads the group's n as the `members` count of signer 289's verify row (`gas +
+Plain `submit` refuses a group signer, and so do the calls that sign with one key: a DEX order, `cancel_all`, an auditor's consent and an `msig` slot refuse a group at prepare (`Argument`; merged-tree review M16, 2026-11-20); an aggregate never carries an owner statement (`ownerSig`, `pqzAuth`: `Argument`, M15). PLANNED: a group as an order's signer, as an auditor and as an `msig` slot. The quote reads the group's n as the `members` count of signer 289's verify row (`gas +
 per_item × n`). Registration: every member's PoP part (`bls_multi_pop_part`, checked by `bls_multi_pop_part_ok`); the cost by n
 before the parts exist (`quote_register_bls_multi`: the reference table's `registerBlsMulti` row, `gas + per_item × n`,
 regular and state gas, no verify part); `register_bls_multi` aggregates the PoP (`RegistrationPopInvalid` for a bad or missing
@@ -194,8 +202,15 @@ pre-check asks the verifier's whole `POP_GAS` up front), and self-relays (no ope
 attached signature of unknown kind counts a group's `members` at the cap 64. Rules: [CTR-UA-50](../contracts/accounts.md#CTR-UA-50),
 [CTR-UA-52](../contracts/accounts.md#CTR-UA-52), [CTR-UA-56](../contracts/accounts.md#CTR-UA-56). The per-transaction cap holds the
 registration's regular gas only (EIP-8037; the row's `regular` and `per_item.regular`, controller call, owner auto-run
-2026-11-19): a group of 64 members quotes a gas limit above 2^24 (about 45 M with the margin, regular about 14 M), so it needs
-a block gas limit above that and an app `Limits::max_gas` above its default 2^24.
+2026-11-19): a group of 64 members quotes a gas limit above 2^24 (about 30 M, regular about 9.5 M: a registry write's fixed-cost
+row takes no margin, owner 2026-11-20; it was about 45 M with the margin), so it needs
+a block gas limit above that and an app `Limits::max_gas` above its default 2^24. Measured (merged-tree review M20,
+2026-11-20, `clients/scaas-sdk/runs/2026-11-20-m20-nethermind-summary.txt`, before the margin was lowered): on a local Nethermind copy with Amsterdam
+(EIP-8037, EIP-7825 enforced) the SDK's 64-member registration, quoted 44,983,452 gas with a regular bound of 14,240,076,
+was included (`gasUsed` 28,600,373), and a call whose regular gas has no bound stopped at exactly 2^24 under a 30 M gas
+limit; a PQZ debit (`mtxConfidentialTransferSingle`, quoted 46,445,076 with a regular bound of
+13,733,076) was included (`gasUsed` 27,049,355) after two ML-DSA-65 + PQZ-key registrations sent in two steps each (the
+one-transaction form quoted above half the block and above 2^24 regular).
 
 <a id="CLI-SDK-18"></a>**CLI-SDK-18** — **An operation ends only on a chain fact** (follows [CLI-RPC-09](scaas-rpc.md#CLI-RPC-09);
 SPECIFIED). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,
@@ -222,6 +237,37 @@ mode gets its inline verdict ([CTR-PQZ-29](../contracts/pq-zero-knowledge.md#CTR
 through `scaas-rpc`'s verifier client, checked before it is attached; refused or unreachable is `VerdictRefused` and nothing is sent. A
 PQZ token of another parameter set than the build's is `PqzSetMismatch`. The SDK builds no operation that drops a ciphertext from
 contract state.
+The Zether reading layer and part of the Zether operations are BUILT (plan T15; `clients/scaas-sdk/src/confidential/`,
+`tests/confidential.rs`; UNAUDITED): one read at the profile's final block through `Purpose::FeedsDecryption` fetches a fixed set of
+storage words and code (the factory's `_rec[token]`, the token's clone code and `ChainEnv`, `psid`, modes, auditor key, the account's
+six slots and every point's four data words, each named UA's registry record and key pointer code) and checks it only after the pool
+returned; `zether_balance` decrypts it in the facade; every Zether entry of spec §9.1 is a prepared operation, the Zether UA signing
+through `sign_scaas`: the multi-recipient transfers draw their decoys uniformly from the registry's `0x0141` list read as a second
+fixed word set (CTR-UA-29: the list's length, then a uniform sample of decoys + excluded entries at indexes drawn before the
+read, the whole list when it holds at most twice that; no upper bound on the list, review 2026-11-20 F19) and shuffle every leg; the owner statements sign under `zether-owner`, their relayed forms carrying that
+signature as `ownerSig` (owner 2026-11-19, C3). A failed check is a named error (`TokenUncatalogued`, `LegKeyMismatch`, C4; `ReceiverUnregistered` for a recipient with no
+registry record, P2). The Zether UA's verify gas of a multi-recipient proof is the gas table's `0x0141` verify row, else the
+request's `ua_signer_gas` (P1). The
+watch loop reads a watched Zether UA's words on its fixed schedule, nothing decrypted. The anvil e2e (shield → roll-over →
+transfer → balances, the token made through the factory, the Zether UAs registered first) is BUILT (gate `sdk-e2e`).
+The PQZ reading layer, the balance, the verdicts and the PQZ rows without a proof are BUILT (plan T16 parts 1 and 2;
+`clients/scaas-sdk/src/confidential/{pqz.rs,verdict.rs}`, `tests/confidential_pqz.rs`; UNAUDITED): the factory record, the clone's
+code and `psid` first, a token of another set `PqzSetMismatch` with no account word read; then the account's slots, `sendCounter`,
+`pqzKey` / `pqzVersions`, `accWords` or `accBlob`, the window and the blobs, `proofStore` a storage word (owner 2026-11-19, T16-b);
+the registry's proven key the handle's. A verdict comes from `ChainProfile.verifiers` under its own policy (T16-a), its signer checked
+against the verifier UA's registry record read at the same final block (T16-c). The six PQZ debits are BUILT (plan T16 part 3,
+`src/confidential/pqz_debit.rs`, UNAUDITED; spec §9.2): the recipients' and the auditor's keys as a second fixed word set, the
+envelope binding folded by the form, the facade's proof off the async workers, `PqzAuth` signed by the holder under `zether-auth`
+and attached, relayed by a gateway (its job submission cap, NODE-GW-08) or self-relayed. The verdict path of an `OFFCHAIN`
+debit (asked, checked, attached) is SPECIFIED for a real holder: its tests run on a fake chain state whose scoped record holds
+the facade's registry key, and no real `OFFCHAIN` holder reaches it before P-T16-7 below (review 2026-11-20, F30). Under
+`strict_majority` verifiers agree on the verdict apart from `validUntil` (each sets it from its own clock), and of the agreeing answers
+the one with the median `validUntil` is taken, so no one replica decides (F14, M3). `pqz_balance_all` reads every key version at one final block (F3). An opening token
+is `PqzOpeningUnsupported`. A native-id verifier is checked (P-T16-3, `verdict_native_verifier`); `pqz_balance_all` sums the key
+versions (P-T16-5, `pqz_balance_all_versions`). PLANNED (P-T16-7): an `OFFCHAIN` holder's
+debits, once `ua-rs`'s `PqzKeyHandle` can prove a debit with its scoped secret (today it opens one and proves its own
+registration only; until then such a holder is `LegKeyMismatch`), and `PqzRollOver` with the opening-token support it belongs to.
+The PQZ e2e waits for a local Nethermind runner with the precompile (the SDK round-end matrix).
 
 ## 7. App cores above the SDK
 
@@ -274,6 +320,11 @@ abandoned hidden-set operations, operation states, balances, history items, drop
 queue; a slow subscriber gets `Lagged` with the count missed and re-reads state, and the SDK never waits for it. Watching is bounded per
 poll. No event callback crosses a binding: the only interfaces an app implements are `SecureStore` and `Authenticator`, whose errors
 include an unexpected-callback case, so a host exception never panics the SDK. A change of the SDK's state by another process is the event `StateChanged` (found by a cheap read of the state's revision on each poll, or at once where the store reports changes) (owner 2026-11-17, "OK, all four points as proposed").
+History and watching are BUILT (plan T14; `clients/scaas-sdk/src/wallet/history.rs`, `src/watch.rs`, `tests/history.rs`): history
+pages backwards from the profile's final block, one log window per request with both bounds, newest first, the account's operations
+on the first page; `watch` takes only an account a keystore row names (a hidden set's account is never written, so no event or
+cursor names it), reads at most `max_watch` (account, chain, token) triples per poll in turn, and keeps each triple's cursor in the
+SDK's state; `StateChanged` and `state_rev` are built as stated.
 
 <a id="CLI-SDK-13"></a>**CLI-SDK-13** — **Errors are named, stable codes; the layers below keep their names** (SPECIFIED). An error
 answers `code()`, the variant's name, appended and never reused. `ua-rs`'s and `scaas-rpc`'s codes pass through by their own names (a
@@ -287,13 +338,15 @@ by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `Key
 `AuthenticatorRefused`, `ProfileMismatch`, `FeatureMissing`, `PreparedStale`, `PreparedUnknown`, `OpaqueCallRefused`, `FeeAboveCap`,
 `GasAboveTxCap`, `GasUnquoted`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
 `AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`,
-`ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`. A
+`ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`,
+`GasAboveBlockShare`. A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.
 
 ## 9. Bindings
 
 <a id="CLI-SDK-12"></a>**CLI-SDK-12** — **Bindings are generated from the SDK's one API; an app links one Rust library** (owner
-2026-11-11; generators and the C point controller calls; SPECIFIED). The public Rust API is the binding surface: module objects
+2026-11-11; generators and the C point controller calls; SPECIFIED; the Dart binding BUILT: `clients/scaas-sdk/bindings/dart`, generated
+by `clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh` with its drift check, plan T20, decisions CLI-SDK-30). The public Rust API is the binding surface: module objects
 shared by reference, owned strings, byte vectors, integers, records and enums, string ids, no fixed-size arrays, lifetimes or generics,
 secrets only as `SecretBytes`, every async call on the SDK's runtime. Generators: `flutter_rust_bridge` 2 for Dart and Flutter (the
 two platform interfaces as one generated record of async closures); official UniFFI for Python, Kotlin and Swift over the async API;

@@ -10,27 +10,57 @@
     clippy::indexing_slicing
 )]
 
+/// An attribute for `flutter_rust_bridge_codegen`'s scan of this crate (spec §16.1; plan T20), written as the doc line its `frb`
+/// macro encodes (`frb_encoded(<hex of "#[frb(...)]">)`), so the SDK needs no FRB dependency: active only under the codegen's
+/// `--cfg frb_expand`, no effect on a build. Use: `#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]`.
+#[allow(unused_macros)]
+macro_rules! frb_hint {
+    // #[frb(ignore)]: a Rust-only item, or one the FRB surface (clients/scaas-sdk/ffi/src/api) wraps
+    (ignore) => {
+        "frb_encoded(235b6672622869676e6f7265295d)"
+    };
+    // #[frb(non_opaque)]: a record or enum translated field by field (FRB makes a foreign crate's data enum opaque by default)
+    (non_opaque) => {
+        "frb_encoded(235b667262286e6f6e5f6f7061717565295d)"
+    };
+    // #[frb(opaque)]: a record holding a JSON value, built and read through the FRB surface's helpers
+    (opaque) => {
+        "frb_encoded(235b667262286f7061717565295d)"
+    };
+}
+
 #[cfg(not(feature = "vault"))]
 compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 
 #[cfg(feature = "account")]
 pub mod account;
+#[cfg(feature = "admin")]
+pub mod admin;
+#[cfg(any(feature = "zether", feature = "pqz"))]
+pub mod confidential;
 pub mod config;
+#[cfg(feature = "dex")]
+pub mod dex;
 pub mod error;
 pub mod events;
 #[cfg(feature = "frb")]
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub mod frb;
 #[cfg(feature = "wallet")]
 pub mod op;
 pub mod platform;
+pub mod surface;
 pub(crate) mod text;
 pub mod vault;
 #[cfg(feature = "wallet")]
 pub mod wallet;
+#[cfg(feature = "wallet")]
+mod watch;
 
 pub use config::{
     ChainProfile, Clock, EndpointConfig, Family, Finality, GasBase, GasPerByte, GasPerItem,
-    GasRows, GasTable, GasVerify, Limits, ListedToken, RuntimeChoice, SdkConfig,
+    GasRows, GasTable, GasVerify, Limits, ListedDex, ListedToken, PositionReader, RuntimeChoice,
+    SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
@@ -51,6 +81,7 @@ pub mod bits {
     pub const VAULT: u64 = 1 << 0;
     pub const ACCOUNT: u64 = 1 << 1;
     pub const WALLET: u64 = 1 << 2;
+    pub const NATIVE_NETWORKS: u64 = 1 << 3;
     pub const ZETHER: u64 = 1 << 4;
     pub const PQZ: u64 = 1 << 5;
     pub const PQZ_SET_N2048_KMAX1024: u64 = 1 << 6;
@@ -69,17 +100,20 @@ pub mod bits {
     pub const COSMOS: u64 = 1 << 20;
     pub const TON: u64 = 1 << 21;
     pub const FILE_STORE: u64 = 1 << 22;
+    pub const RAW_NATIVE: u64 = 1 << 23;
     pub const CLASSICAL_ROOTS: u64 = 1 << 24;
     pub const OPAQUE_CALLS: u64 = 1 << 25;
 }
 
 /// The bits of this build's features.
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 pub fn features() -> u64 {
     use bits::*;
     let on = [
         (cfg!(feature = "vault"), VAULT),
         (cfg!(feature = "account"), ACCOUNT),
         (cfg!(feature = "wallet"), WALLET),
+        (cfg!(feature = "native-networks"), NATIVE_NETWORKS),
         (cfg!(feature = "zether"), ZETHER),
         (cfg!(feature = "pqz"), PQZ),
         (
@@ -110,6 +144,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "cosmos"), COSMOS),
         (cfg!(feature = "ton"), TON),
         (cfg!(feature = "file-store"), FILE_STORE),
+        (cfg!(feature = "raw-native"), RAW_NATIVE),
         (cfg!(feature = "classical-roots"), CLASSICAL_ROOTS),
         (cfg!(feature = "opaque-calls"), OPAQUE_CALLS),
     ];
@@ -127,6 +162,9 @@ pub(crate) struct Chain {
     pub(crate) pool: Option<Arc<scaas_rpc::evm::EvmPool>>,
     #[allow(dead_code)] // the gateways of a profile without the `wallet` feature
     pub(crate) gateways: Option<NodeList>,
+    /// the profile's PQZ verifiers (spec §9.3; owner 2026-11-19, T16-a)
+    #[cfg(feature = "pqz")]
+    pub(crate) verifiers: Option<scaas_rpc::node::VerifierClient>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -175,6 +213,9 @@ pub struct Sdk {
     /// the operations prepared in this session, by id (spec §13.1: a `Prepared` not here is `PreparedUnknown`)
     #[cfg(feature = "wallet")]
     pub(crate) prepared: Mutex<HashMap<String, Arc<op::Prepared>>>,
+    /// the registry writes prepared in this session, by id (spec §7: one not here is `PreparedUnknown`)
+    #[cfg(all(feature = "account", feature = "wallet"))]
+    pub(crate) registry_writes: Mutex<HashMap<String, Arc<account::RegistryWrite>>>,
     /// tokens read in this session, by (chain, address) (spec §8.2: metadata read once per session)
     #[cfg(feature = "wallet")]
     pub(crate) tokens: Mutex<HashMap<(String, String), wallet::TokenInfo>>,
@@ -182,6 +223,12 @@ pub struct Sdk {
     /// floor above the endpoints' pending nonce (spec §8.5; under `strict_majority` the agreed nonce is the committed one)
     #[cfg(feature = "wallet")]
     pub(crate) sent_nonces: Mutex<HashMap<(String, String), u64>>,
+    /// the watched pairs and the polls' last reads (spec §14)
+    #[cfg(feature = "wallet")]
+    pub(crate) watching: Mutex<watch::Watching>,
+    /// `sdk.state`'s `rev` last seen by a poll or written by this SDK (R17)
+    #[cfg(feature = "wallet")]
+    pub(crate) state_seen: std::sync::atomic::AtomicU64,
     /// the tests' count of SCaaS signatures made (`op::submit::sign`)
     #[cfg(all(test, feature = "wallet"))]
     pub(crate) signs: std::sync::atomic::AtomicU32,
@@ -203,6 +250,7 @@ fn gas_tables(modules: Vec<GasTable>) -> Result<Vec<GasTable>, SdkError> {
     Ok(out)
 }
 
+#[cfg_attr(frb_expand, doc = frb_hint!(ignore))]
 impl Sdk {
     /// Checks the configuration and builds the endpoint lists; no network I/O. Refuses: a profile without a `0x` + 64 hex
     /// `chain_uid` and two profiles with one `key` (`Argument`); an empty RPC list (`EndpointListEmpty`); `strict_majority` with
@@ -218,6 +266,22 @@ impl Sdk {
                 return Err(SdkError::Argument);
             }
             if !keys.insert(p.key.clone()) {
+                return Err(SdkError::Argument);
+            }
+            // the DEX list and the wrapper list hold addresses (CLI-SGN-35)
+            let readers = p.dexes.iter().flat_map(|d| {
+                d.position_readers
+                    .iter()
+                    .flat_map(|r| [&r.manager, &r.reader])
+            });
+            if !p
+                .dexes
+                .iter()
+                .map(|d| &d.address)
+                .chain(&p.wrappers)
+                .chain(readers)
+                .all(|a| config::is_address_hex(a))
+            {
                 return Err(SdkError::Argument);
             }
             // an opt-in names a table the SDK holds, once
@@ -249,11 +313,23 @@ impl Sdk {
             };
             #[cfg(not(any(feature = "account", feature = "wallet")))]
             drop(rpc);
+            // T16-a: the PQZ verifiers, a list with its own policy (ARCH-POS-15)
+            #[cfg(feature = "pqz")]
+            let verifiers = if p.verifiers.is_empty() {
+                None
+            } else {
+                Some(scaas_rpc::node::VerifierClient::new(list(
+                    &p.verifiers,
+                    p.verifier_policy,
+                )?)?)
+            };
             chains.push(Chain {
                 profile: p,
                 #[cfg(any(feature = "account", feature = "wallet"))]
                 pool,
                 gateways,
+                #[cfg(feature = "pqz")]
+                verifiers,
             });
         }
         let rt = runtime(config.runtime)?;
@@ -282,10 +358,16 @@ impl Sdk {
             store: config.store,
             #[cfg(feature = "wallet")]
             prepared: Mutex::new(HashMap::new()),
+            #[cfg(all(feature = "account", feature = "wallet"))]
+            registry_writes: Mutex::new(HashMap::new()),
             #[cfg(feature = "wallet")]
             tokens: Mutex::new(HashMap::new()),
             #[cfg(feature = "wallet")]
             sent_nonces: Mutex::new(HashMap::new()),
+            #[cfg(feature = "wallet")]
+            watching: Mutex::default(),
+            #[cfg(feature = "wallet")]
+            state_seen: std::sync::atomic::AtomicU64::new(watch::REV_UNSEEN),
             #[cfg(all(test, feature = "wallet"))]
             signs: std::sync::atomic::AtomicU32::new(0),
         }))
@@ -399,6 +481,20 @@ impl Sdk {
             .find(|c| c.profile.key == chain)
             .and_then(|c| c.profile.max_valid_secs)
             .unwrap_or(self.limits.max_valid_secs)
+    }
+
+    /// The verifier client of chain `chain`'s PQZ verifiers (`ChainUnknown`; `VerdictRefused`: the profile lists none).
+    #[cfg(feature = "pqz")]
+    pub(crate) fn verifiers(
+        &self,
+        chain: &str,
+    ) -> Result<scaas_rpc::node::VerifierClient, SdkError> {
+        let c = self
+            .chains
+            .iter()
+            .find(|c| c.profile.key == chain)
+            .ok_or(SdkError::ChainUnknown)?;
+        c.verifiers.clone().ok_or(SdkError::VerdictRefused)
     }
 
     /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).

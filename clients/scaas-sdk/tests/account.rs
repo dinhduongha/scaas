@@ -62,7 +62,11 @@ fn profile(urls: &[String]) -> ChainProfile {
         tx_gas_cap: None,
         gas: Default::default(),
         max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
         gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
         tokens: vec![],
     }
 }

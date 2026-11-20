@@ -3,11 +3,26 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import 'dart:convert';
 import 'frb_generated.dart';
+import 'lib.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'third_party/scaas_sdk/account.dart';
+import 'third_party/scaas_sdk/account/smart.dart';
+import 'third_party/scaas_sdk/admin.dart';
+import 'third_party/scaas_sdk/confidential.dart';
+import 'third_party/scaas_sdk/config.dart';
+import 'third_party/scaas_sdk/dex.dart';
+import 'third_party/scaas_sdk/error.dart';
+import 'third_party/scaas_sdk/events.dart';
+import 'third_party/scaas_sdk/op.dart';
+import 'third_party/scaas_sdk/platform.dart';
+import 'third_party/scaas_sdk/vault/prf.dart';
+import 'third_party/scaas_sdk/vault/seeds.dart';
+import 'third_party/scaas_sdk/vault/store.dart';
+import 'third_party/scaas_sdk/wallet.dart';
 
-// These functions are ignored because they are not marked as `pub`: `auth_error`, `done`, `store_error`, `unavailable`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`, `from`
+// These functions are ignored because they are not marked as `pub`: `answer`, `done`
 
 /// The binding surface's version this library was built with (spec §16.3).
 int apiVersion() => ScaasSdk.instance.api.crateApiApiVersion();
@@ -15,184 +30,421 @@ int apiVersion() => ScaasSdk.instance.api.crateApiApiVersion();
 /// This library's feature bits (spec §3.3).
 BigInt features() => ScaasSdk.instance.api.crateApiFeatures();
 
-/// A new secret of `len` zero bytes (16 MiB at most).
-Secret secretNew({required int len}) =>
+/// An error's stable code (spec §15).
+String errorCode({required SdkError e}) =>
+    ScaasSdk.instance.api.crateApiErrorCode(e: e);
+
+/// A new secret of `len` zero bytes (16 MiB at most); its bytes move only through the C copy calls by [`secret_id`].
+ArcSecretBytes secretNew({required int len}) =>
     ScaasSdk.instance.api.crateApiSecretNew(len: len);
 
-/// Opens the SDK over a Dart store and a Dart authenticator (each a record of async closures) on its own runtime.
+/// A secret's id for the C copy calls.
+BigInt secretId({required ArcSecretBytes s}) =>
+    ScaasSdk.instance.api.crateApiSecretId(s: s);
+
+/// A secret's length in bytes.
+int secretLen({required ArcSecretBytes s}) =>
+    ScaasSdk.instance.api.crateApiSecretLen(s: s);
+
+/// An endpoint credential: `Authorization: Bearer`.
+EndpointAuth endpointAuthBearer({required String token}) =>
+    ScaasSdk.instance.api.crateApiEndpointAuthBearer(token: token);
+
+/// An endpoint credential: a gateway's HMAC secret (NODE-GW-02).
+EndpointAuth endpointAuthHmac({required String secret}) =>
+    ScaasSdk.instance.api.crateApiEndpointAuthHmac(secret: secret);
+
+/// An endpoint credential: a provider's API key header.
+EndpointAuth endpointAuthHeader({
+  required String name,
+  required String value,
+}) =>
+    ScaasSdk.instance.api.crateApiEndpointAuthHeader(name: name, value: value);
+
+/// A JSON value from its text (`Argument` when it does not parse): the SDK's records that hold one (`PqzVerdictRequest::op`).
+Object? jsonParse({required String text}) =>
+    ScaasSdk.instance.api.crateApiJsonParse(text: text);
+
+/// A JSON value's text (a verdict, `Confidential::request_verdict`).
+String jsonText({required Object? v}) =>
+    ScaasSdk.instance.api.crateApiJsonText(v: v);
+
+/// A verdict request (spec §9.3), its `op` a JSON value of [`json_parse`].
+PqzVerdictRequest pqzVerdictRequest({
+  required String chain,
+  required String token,
+  required Object? op,
+  required String statement,
+  required String proof,
+}) => ScaasSdk.instance.api.crateApiPqzVerdictRequest(
+  chain: chain,
+  token: token,
+  op: op,
+  statement: statement,
+  proof: proof,
+);
+
+/// The default limits (spec §4).
+Limits limitsDefault() => ScaasSdk.instance.api.crateApiLimitsDefault();
+
+/// Opens the SDK (spec §4) over the Dart side's store (spec §6.9) and authenticator (spec §6.10), each a record of async
+/// closures that answer every failure as a value, on the SDK's own runtime. `rp_id` is the deployment's passkey RP ID.
 Future<SdkHandle> sdkOpen({
-  required FutureOr<StoreGetAnswer> Function(String) storeGet,
-  required FutureOr<StoreAnswer> Function(String, BigInt?, Uint8List)
+  required List<ChainProfile> profiles,
+  String? rpId,
+  required Limits limits,
+  required List<GasTable> gasTables,
+  required FutureOr<StoreGetAnswer> Function(String, String) storeGet,
+  required FutureOr<StoreAnswer> Function(
+    String,
+    BigInt?,
+    Uint8List,
+    StorePolicy,
+  )
   storePutIf,
   required FutureOr<StoreAnswer> Function(String) storeDelete,
   required FutureOr<StoreAnswer> Function(String) storeLock,
   required FutureOr<void> Function(BigInt) storeUnlock,
-  required FutureOr<AuthAnswer> Function(
+  required FutureOr<PasskeyAnswer> Function(String, String, List<Uint8List>)
+  authCreatePasskey,
+  required FutureOr<AssertionAnswer> Function(AssertionRequest, BigInt)
+  authGetAssertion,
+  required FutureOr<AuthError?> Function(
     String,
     Uint8List,
-    List<Uint8List>,
-    Uint8List?,
+    String,
+    KeyPolicy?,
     BigInt,
   )
-  authGetAssertion,
+  authPlatformSecret,
+  required FutureOr<SeKeyAnswer> Function(KeyPolicy) authP256Generate,
+  required FutureOr<SignAnswer> Function(String, Uint8List, String)
+  authP256Sign,
 }) => ScaasSdk.instance.api.crateApiSdkOpen(
+  profiles: profiles,
+  rpId: rpId,
+  limits: limits,
+  gasTables: gasTables,
   storeGet: storeGet,
   storePutIf: storePutIf,
   storeDelete: storeDelete,
   storeLock: storeLock,
   storeUnlock: storeUnlock,
+  authCreatePasskey: authCreatePasskey,
   authGetAssertion: authGetAssertion,
+  authPlatformSecret: authPlatformSecret,
+  authP256Generate: authP256Generate,
+  authP256Sign: authP256Sign,
 );
 
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Backup>>
-abstract class Backup implements RustOpaqueInterface {
-  /// The words, once, as a secret.
-  Secret reveal();
-}
+/// The next event, or `None` within `timeout_ms` (spec §14).
+Future<Event?> eventsNext({
+  required ArcSubscription events,
+  required BigInt timeoutMs,
+}) => ScaasSdk.instance.api.crateApiEventsNext(
+  events: events,
+  timeoutMs: timeoutMs,
+);
 
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Events>>
-abstract class Events implements RustOpaqueInterface {
-  /// The next event's name, or `None` within `timeout_ms`.
-  Future<String?> next({required BigInt timeoutMs});
-}
+PreparedView preparedView({required ArcPrepared p}) =>
+    ScaasSdk.instance.api.crateApiPreparedView(p: p);
+
+PreparedOrderView preparedOrderView({required ArcPreparedOrder p}) =>
+    ScaasSdk.instance.api.crateApiPreparedOrderView(p: p);
+
+RegistryWriteView registryWriteView({required ArcRegistryWrite w}) =>
+    ScaasSdk.instance.api.crateApiRegistryWriteView(w: w);
+
+/// The words of a seed made here, once, as a secret (CLI-SGN-11).
+ArcSecretBytes backupReveal({required ArcSeedBackup b}) =>
+    ScaasSdk.instance.api.crateApiBackupReveal(b: b);
+
+/// The three word positions the user is asked for.
+Uint32List backupChallenge({required ArcSeedBackup b}) =>
+    ScaasSdk.instance.api.crateApiBackupChallenge(b: b);
+
+/// The user's three words (a secret) against the challenge.
+bool backupVerify({
+  required ArcSeedBackup b,
+  required ArcSecretBytes answers,
+}) => ScaasSdk.instance.api.crateApiBackupVerify(b: b, answers: answers);
+
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Arc < Subscription >>>
+abstract class ArcSubscription implements RustOpaqueInterface {}
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SdkHandle>>
 abstract class SdkHandle implements RustOpaqueInterface {
-  /// `vault.generate`: the passphrase as a secret; the backup's one reveal back.
-  Future<Backup> generate({
-    required String label,
-    required Secret vaultPassphrase,
+  /// The account module (spec §7).
+  Account account();
+
+  /// The admin module (spec §11).
+  Admin admin();
+
+  /// The confidential module (spec §9).
+  Confidential confidential();
+
+  /// The DEX module (spec §10).
+  Dex dex();
+
+  /// The limits in force.
+  Limits limits();
+
+  /// The operations module (spec §13).
+  Op op();
+
+  /// `sdk.state`'s `rev` now (R17).
+  Future<BigInt> stateRev();
+
+  /// A subscription to the SDK's events (spec §14).
+  ArcSubscription subscribe();
+
+  /// The seed module (spec §6).
+  Vault vault();
+
+  /// The wallet module (spec §8).
+  Wallet wallet();
+
+  /// Watches `account` on `chains` (spec §14).
+  Future<void> watch({required String account, required List<String> chains});
+}
+
+/// An authenticator's answer to `get_assertion`: `error`, else the assertion (its `prf`: the output was written).
+class AssertionAnswer {
+  final Assertion? assertion;
+  final AuthError? error;
+
+  const AssertionAnswer({this.assertion, this.error});
+
+  @override
+  int get hashCode => assertion.hashCode ^ error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AssertionAnswer &&
+          runtimeType == other.runtimeType &&
+          assertion == other.assertion &&
+          error == other.error;
+}
+
+enum Class { named, default_, discovered }
+
+class MemoryProtection {
+  final BigInt chunks;
+  final BigInt locked;
+  final BigInt noDump;
+
+  const MemoryProtection({
+    required this.chunks,
+    required this.locked,
+    required this.noDump,
   });
 
-  /// `vault.seeds()`.
-  Future<List<SeedRow>> seeds();
+  @override
+  int get hashCode => chunks.hashCode ^ locked.hashCode ^ noDump.hashCode;
 
-  /// A subscription to the SDK's events.
-  Events subscribe();
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MemoryProtection &&
+          runtimeType == other.runtimeType &&
+          chunks == other.chunks &&
+          locked == other.locked &&
+          noDump == other.noDump;
 }
 
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Secret>>
-abstract class Secret implements RustOpaqueInterface {
-  BigInt id();
+/// An authenticator's answer to `create_passkey`.
+class PasskeyAnswer {
+  final PasskeyCreated? created;
+  final AuthError? error;
 
-  int size();
+  const PasskeyAnswer({this.created, this.error});
+
+  @override
+  int get hashCode => created.hashCode ^ error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PasskeyAnswer &&
+          runtimeType == other.runtimeType &&
+          created == other.created &&
+          error == other.error;
 }
 
-/// An authenticator's answer to `get_assertion`: `error`, else the assertion (`prf`: the output was written).
-class AuthAnswer {
-  final Uint8List credentialId;
-  final Uint8List authenticatorData;
-  final Uint8List clientDataJson;
-  final Uint8List signature;
-  final bool prf;
-  final AuthFailure? error;
+enum Policy { failover, strictMajority }
 
-  const AuthAnswer({
-    required this.credentialId,
-    required this.authenticatorData,
-    required this.clientDataJson,
-    required this.signature,
-    required this.prf,
-    this.error,
+/// A prepared order as the user reviews it (spec §10).
+class PreparedOrderView {
+  final String id;
+  final String chain;
+  final List<ReviewField> review;
+  final KeyRef signer;
+
+  const PreparedOrderView({
+    required this.id,
+    required this.chain,
+    required this.review,
+    required this.signer,
   });
 
   @override
   int get hashCode =>
-      credentialId.hashCode ^
-      authenticatorData.hashCode ^
-      clientDataJson.hashCode ^
-      signature.hashCode ^
-      prf.hashCode ^
-      error.hashCode;
+      id.hashCode ^ chain.hashCode ^ review.hashCode ^ signer.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is AuthAnswer &&
+      other is PreparedOrderView &&
           runtimeType == other.runtimeType &&
-          credentialId == other.credentialId &&
-          authenticatorData == other.authenticatorData &&
-          clientDataJson == other.clientDataJson &&
-          signature == other.signature &&
-          prf == other.prf &&
-          error == other.error;
+          id == other.id &&
+          chain == other.chain &&
+          review == other.review &&
+          signer == other.signer;
 }
 
-enum AuthFailure { refused, cancelled, unavailable, unexpected }
-
-/// An SDK error: its stable code only.
-class SdkFailure implements FrbException {
-  final String code;
-
-  const SdkFailure({required this.code});
-
-  @override
-  int get hashCode => code.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is SdkFailure &&
-          runtimeType == other.runtimeType &&
-          code == other.code;
-}
-
-/// A seed as listed (spec §6.4).
-class SeedRow {
+/// A prepared operation as the user reviews it (spec §13.1).
+class PreparedView {
   final String id;
-  final String label;
-  final int words;
-  final String origin;
-  final String class_;
-  final List<String> warnings;
-  final String backup;
-  final bool unlocked;
-  final bool verified;
+  final String chain;
 
-  const SeedRow({
+  /// the contract function: `mtxPay`, `mtxCancelNonce`, …
+  final String entry;
+  final List<ReviewField> review;
+
+  /// an undecoded call under `AllowOpaqueCall` (§13.2)
+  final bool opaque;
+  final KeyRef signer;
+
+  /// the operation's `validUntil` (`u64::MAX`: none)
+  final BigInt expiresAt;
+
+  const PreparedView({
     required this.id,
-    required this.label,
-    required this.words,
-    required this.origin,
-    required this.class_,
-    required this.warnings,
-    required this.backup,
-    required this.unlocked,
-    required this.verified,
+    required this.chain,
+    required this.entry,
+    required this.review,
+    required this.opaque,
+    required this.signer,
+    required this.expiresAt,
   });
 
   @override
   int get hashCode =>
       id.hashCode ^
-      label.hashCode ^
-      words.hashCode ^
-      origin.hashCode ^
-      class_.hashCode ^
-      warnings.hashCode ^
-      backup.hashCode ^
-      unlocked.hashCode ^
-      verified.hashCode;
+      chain.hashCode ^
+      entry.hashCode ^
+      review.hashCode ^
+      opaque.hashCode ^
+      signer.hashCode ^
+      expiresAt.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is SeedRow &&
+      other is PreparedView &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          label == other.label &&
-          words == other.words &&
-          origin == other.origin &&
-          class_ == other.class_ &&
-          warnings == other.warnings &&
-          backup == other.backup &&
-          unlocked == other.unlocked &&
-          verified == other.verified;
+          chain == other.chain &&
+          entry == other.entry &&
+          review == other.review &&
+          opaque == other.opaque &&
+          signer == other.signer &&
+          expiresAt == other.expiresAt;
+}
+
+/// A registry write as the user reviews it (spec §7).
+class RegistryWriteView {
+  final String id;
+  final String chain;
+  final String entry;
+  final String ua;
+  final List<ReviewField> review;
+  final String calldata;
+  final KeyRef payer;
+
+  /// a registration carrying its PQZ key's proof: one transaction or two, each step's gas and the total (owner 2026-11-20)
+  final RegistrationGas? registrationGas;
+
+  const RegistryWriteView({
+    required this.id,
+    required this.chain,
+    required this.entry,
+    required this.ua,
+    required this.review,
+    required this.calldata,
+    required this.payer,
+    this.registrationGas,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      chain.hashCode ^
+      entry.hashCode ^
+      ua.hashCode ^
+      review.hashCode ^
+      calldata.hashCode ^
+      payer.hashCode ^
+      registrationGas.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RegistryWriteView &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          chain == other.chain &&
+          entry == other.entry &&
+          ua == other.ua &&
+          review == other.review &&
+          calldata == other.calldata &&
+          payer == other.payer &&
+          registrationGas == other.registrationGas;
+}
+
+/// An authenticator's answer to `p256_generate`.
+class SeKeyAnswer {
+  final SePublic? public;
+  final AuthError? error;
+
+  const SeKeyAnswer({this.public, this.error});
+
+  @override
+  int get hashCode => public.hashCode ^ error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SeKeyAnswer &&
+          runtimeType == other.runtimeType &&
+          public == other.public &&
+          error == other.error;
+}
+
+/// An authenticator's answer to `p256_sign`: `error`, else the signature.
+class SignAnswer {
+  final Uint8List signature;
+  final AuthError? error;
+
+  const SignAnswer({required this.signature, this.error});
+
+  @override
+  int get hashCode => signature.hashCode ^ error.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SignAnswer &&
+          runtimeType == other.runtimeType &&
+          signature == other.signature &&
+          error == other.error;
 }
 
 /// A store's answer to `put_if`, `delete`, `lock` (`token` the lock's).
 class StoreAnswer {
   final BigInt token;
-  final StoreFailure? error;
+  final StoreError? error;
 
   const StoreAnswer({required this.token, this.error});
 
@@ -208,16 +460,12 @@ class StoreAnswer {
           error == other.error;
 }
 
-/// A store's failure as the Dart side answers it.
-enum StoreFailure { conflict, io, unavailable, unexpected }
-
-/// A store's answer to `get`: `error`, else the item when `found` (plain records: no data-carrying enum, so the generated Dart
-/// needs no code generator of its own).
+/// A store's answer to `get`: `error`, else the item when `found` (`rev` its revision).
 class StoreGetAnswer {
   final bool found;
   final Uint8List bytes;
   final BigInt rev;
-  final StoreFailure? error;
+  final StoreError? error;
 
   const StoreGetAnswer({
     required this.found,

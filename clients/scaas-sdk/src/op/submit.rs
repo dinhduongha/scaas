@@ -55,22 +55,22 @@ pub(crate) fn sig_json(p: &Prepared, key_data: &[u8], signature: &[u8]) -> Resul
     } else if ua {
         json!({"keyData": hex(key_data), "signature": hex(signature), "members": []})
     } else if p.t.kind == "account" {
-        json!({"keyIndex": "0", "proof": [], "signature": hex(signature)})
+        json!({"keyIndex": p.t.key_index.to_string(), "proof": [], "signature": hex(signature)})
     } else {
         json!(hex(signature))
     })
 }
 
-pub(crate) fn build(p: &Prepared, sig: &Value) -> Result<Built, SdkError> {
+pub(crate) fn build(p: &Prepared, sig: &Value, extra: &Value) -> Result<Built, SdkError> {
     if p.t.ids {
         return Ok(transfer_on_ids(p.t.kind, &p.t.contract, &p.t.message, sig)?);
     }
     let mut b = entry(
         p.t.name,
         p.t.kind,
-        &p.t.contract,
+        &p.t.entry_contract(),
         &p.t.message,
-        &p.t.extra,
+        extra,
         sig,
     )?;
     // a relay fee's job carries the call it pays for (job-api's relay-fee job; owner 2026-11-19, ruling F)
@@ -87,22 +87,91 @@ pub(crate) fn build(p: &Prepared, sig: &Value) -> Result<Built, SdkError> {
 
 /// The entry of `p` with an empty signature: the unsigned form a quote estimates (owner 2026-11-18, ruling 1).
 pub(crate) fn unsigned(p: &Prepared) -> Result<Built, SdkError> {
-    build(p, &sig_json(p, &[], &[])?)
+    build(p, &sig_json(p, &[], &[])?, &p.t.extra)
 }
 
-/// The signature of `p` under its check, and the entry built with it (calldata and job op from one parse).
-pub(crate) fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
+/// The signature of `p` under its check, and the entry built with it (calldata and job op from one parse). A stored key row
+/// (a passkey, a secure-element key) signs through the platform's authenticator (`external`).
+pub(crate) async fn sign(sdk: &Sdk, p: &Prepared) -> Result<Built, SdkError> {
+    if let super::KeyRef::Msig { ua, slots } = p.signer() {
+        return sign_msig(sdk, p, &ua, &slots).await;
+    }
     if let super::KeyRef::BlsMulti { .. } = p.signer() {
         return Err(SdkError::Argument); // a group signs by its members' aggregate: `Op::submit_bls_multi`
     }
-    let k = key(sdk, &p.signer())?;
+    let k = super::key_opened(sdk, &p.signer()).await?;
     #[cfg(test)]
     sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-    let s = sign_scaas(k.signer(), &p.t.td, p.t.expect.clone())?;
+    // the statement of the named slot first (`ownerSig`, owner 2026-11-19 C3; a PQZ debit's `pqzAuth`), then the entry: each
+    // digest approved, then signed under its check
+    let mut extra = p.t.extra.clone();
+    if let Some((td, ex, slot)) = &p.t.owner {
+        let o = sign_one(sdk, &k, td, ex).await?;
+        extra.as_object_mut().ok_or(SdkError::Internal)?.insert(
+            (*slot).into(),
+            json!({"keyData": hex(&o.key_data), "signature": hex(&o.signature), "members": []}),
+        );
+    }
+    let s = sign_one(sdk, &k, &p.t.td, &p.t.expect).await?;
+    build(p, &sig_json(p, &s.key_data, &s.signature)?, &extra)
+}
+
+/// An `msig` signer (`KeyRef::Msig`): its `UASig{"", "", members}` by `account::msig` under the entry's check, for a `UA*` entry
+/// only (an `msig` has no native or account form, no owner statement).
+#[cfg(feature = "account")]
+async fn sign_msig(
+    sdk: &Sdk,
+    p: &Prepared,
+    ua: &str,
+    slots: &[super::MsigSlot],
+) -> Result<Built, SdkError> {
+    let plan = entry_rows()
+        .into_iter()
+        .find(|r| r.name == p.t.name && r.kinds.contains(&p.t.kind))
+        .map(|r| r.plan)
+        .ok_or(SdkError::Argument)?;
+    let ua_form =
+        plan.contains("@ua") || p.t.name.starts_with("UA") || p.t.name.starts_with("CancelUA");
+    if !ua_form || plan.contains("@bytes") || p.t.owner.is_some() {
+        return Err(SdkError::Argument);
+    }
+    #[cfg(test)]
+    sdk.signs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let s =
+        crate::account::msig::sign_typed(sdk, &p.chain(), ua, slots, &p.t.td, &p.t.expect).await?;
+    let sig: Value =
+        serde_json::from_str(&scaas_ua::json::uasig_json(&s)).map_err(|_| SdkError::Internal)?;
+    build(p, &sig, &p.t.extra)
+}
+
+#[cfg(not(feature = "account"))]
+async fn sign_msig(
+    _: &Sdk,
+    _: &Prepared,
+    _: &str,
+    _: &[super::MsigSlot],
+) -> Result<Built, SdkError> {
+    Err(SdkError::FeatureMissing)
+}
+
+pub(crate) async fn sign_one(
+    sdk: &Sdk,
+    k: &super::Key,
+    td: &scaas_ua::wallet::TypedData,
+    ex: &scaas_ua::wallet::Expect,
+) -> Result<scaas_ua::ua_portable::UASig, SdkError> {
+    #[cfg(feature = "zether")]
+    if let super::Key::Zether(_, z) = k {
+        z.approve(td.digest()?);
+    }
+    let s = match k {
+        super::Key::External(row, _) => super::external::sign(sdk, row, td, ex).await?,
+        _ => sign_scaas(k.signer(), td, ex.clone())?,
+    };
     if !s.members.is_empty() {
         return Err(SdkError::Argument);
     }
-    build(p, &sig_json(p, &s.key_data, &s.signature)?)
+    Ok(s)
 }
 
 /// An EIP-1559 transaction of `quote` from its payer to `to` with `data`, signed by `scaas-ua`: the raw bytes and the id.
@@ -317,7 +386,7 @@ impl Op {
                 }
                 take(&sdk, &prepared)?;
                 let signed = match &how {
-                    Signing::Key => sign(&sdk, &prepared),
+                    Signing::Key => sign(&sdk, &prepared).await,
                     Signing::BlsMulti(parts, surplus) => {
                         super::bls_multi::sign(&prepared, parts, *surplus)
                     }
@@ -337,13 +406,15 @@ impl Op {
                 };
                 // G3: a self-relay's gas recomputed from the signed calldata, before anything is written or sent; the signer's
                 // kind and the unsigned calldata's length kept on the row for a later self-relay `resend` (Q5)
-                let (signer, unsigned_len) = match unsigned(&prepared) {
-                    Ok(u) => (signer_kind(&prepared), u.calldata.len()),
-                    Err(e) => {
-                        put_back(&sdk, &prepared);
-                        return Err(e);
-                    }
-                };
+                let kind = signer_kind(&sdk, &prepared).await;
+                let (signer, unsigned_len) =
+                    match unsigned(&prepared).and_then(|u| Ok((kind?, u.calldata.len()))) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            put_back(&sdk, &prepared);
+                            return Err(e);
+                        }
+                    };
                 let quote = match &quote.path {
                     SubmitPath::SelfRelay { .. } => {
                         match signed_quote(
@@ -372,7 +443,7 @@ impl Op {
                             &sdk,
                             chain_id,
                             &quote,
-                            prepared.t.contract,
+                            prepared.t.entry_contract(),
                             U256::ZERO,
                             built.calldata.clone(),
                         )?;
@@ -396,7 +467,7 @@ impl Op {
                     entry: prepared.entry(),
                     name: prepared.t.name.into(),
                     kind: prepared.t.kind.into(),
-                    contract: hex(&prepared.t.contract),
+                    contract: hex(&prepared.t.entry_contract()),
                     from,
                     batch,
                     nonce,
@@ -412,6 +483,11 @@ impl Op {
                     unsigned_len: Some(unsigned_len as u64),
                     members: super::bls_multi::members(&prepared.signer()),
                     ended_at: None,
+                    fact: prepared
+                        .t
+                        .fact
+                        .as_ref()
+                        .map(|(c, e, h)| (hex(c), (*e).to_string(), hex(h))),
                     message: prepared.t.message.clone(),
                     extra: prepared.t.extra.clone(),
                     path: if payer.is_some() { "self" } else { "gateway" }.into(),

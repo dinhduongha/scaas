@@ -30,7 +30,19 @@ gateway body, job payloads, every family adapter's decoder — BCS/XDR/protobuf/
 (dev-dependency): no panic, every error is an `Err`. The job API extends the `hmac` mode with per-namespace key ids
 ([NODE-JOB-05](job-api.md#NODE-JOB-05)).
 
-Limits: body 64 KiB (1 MiB on the PQZ chain profile only; `POST /v1/ua/register` 160 KiB: a PQZL holder registration with its proof and KEM key is ≈ 51–67 KB binary (largest: a PQ `msig` at `n2816-kmax65536`, 66.8 KB), ≈ 103–134 KB as hex, and PQZH proofs of ≈ 187 KB register directly, not through the gateway); a global concurrency limit (`tower`
+<a id="NODE-GW-08"></a>**NODE-GW-08** — **A job submission's body cap fits the largest PQZ debit, on every chain** (BUILT, branch
+`sdk-complete`; controller call, owner auto-run 2026-11-19, P-T16-8). `POST /v1/op` takes a body of at most **1,310,720 B
+(1.25 MiB)**, `OP_BODY_MAX` in `gateway.rs` and the same figure in scaas-rpc's `node::OP_BODY_MAX`; one byte more is refused
+unread (`413`; scaas-rpc refuses it before sending, `BodyTooLarge`). The figure: a debit's proof and ciphertexts are at most
+pqz-stmt's `MAX_INPUT`, 524,288 B at every set (5 + statement + proof; PQZH's `MAX_PROOF_PQZH` 327,680 B is inside it), so
+1,048,576 hex characters; with the largest single-key `auth` and `pqzAuth` (7,872 B each, 31,488 hex) and the named fields the
+body stays under 1,088,000 B, and the cap leaves ≈ 20 % above that. The decode stays bounded by this length and by serde_json's
+nesting limit (128) for the depth. Every other gateway route keeps 64 KiB; the HMAC check reads each route's body up to its own cap.
+Tests: `scaas-node` `op_body_cap_is_the_job_submission_cap`, `hmac_reads_each_route_up_to_its_cap`; scaas-rpc
+`each_route_refuses_a_body_above_its_cap_unsent`. Before it, a PQZ debit was self-relay only, a breach of "every state-changing
+`mtx*` is relayable".
+
+Limits: body 64 KiB (a job submission's per [NODE-GW-08](#NODE-GW-08); `POST /v1/ua/register` 160 KiB: a PQZL holder registration with its proof and KEM key is ≈ 51–67 KB binary (largest: a PQ `msig` at `n2816-kmax65536`, 66.8 KB), ≈ 103–134 KB as hex, and PQZH proofs of ≈ 187 KB register directly, not through the gateway); a global concurrency limit (`tower`
 `ConcurrencyLimitLayer`, default 32) because every request costs a simulation; a per-IP rate limit at the reverse
 proxy in front of an open gateway ([runbooks.md#production-gates](runbooks.md#production-gates)).
 

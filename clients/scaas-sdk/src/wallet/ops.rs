@@ -61,6 +61,7 @@ pub struct PayMeta {
 
 /// The `PayMeta` body by schema (pay-meta-tax spec §7.1), named.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum PayBody {
     None,
     Note {
@@ -199,6 +200,7 @@ impl AllowOpaqueCall {
 
 /// A mandate wallet's call (spec §13.2): decoded, or opaque under the marker.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum ExecuteCall {
     /// an ERC-20 `transfer(to, amount)` of `token` held by the wallet
     Transfer {
@@ -230,7 +232,7 @@ pub struct Execute {
 
 /// The domain kind of `contract` by its `eip712Domain()` (ERC-5267), one of `name`'s rows' kinds: `ProfileMismatch` when its
 /// chain id, address or salt is not the profile's; `Argument` for another struct's domain.
-async fn kind_of(
+pub(crate) async fn kind_of(
     sdk: &Sdk,
     chain: &str,
     name: &str,
@@ -264,12 +266,24 @@ async fn kind_of(
 
 /// The signer's id as `name`'s `from` takes it: a UA key's UA (`bytes32`), a group's UA; an EVM key's address, zero-padded for
 /// `bytes32`.
-async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkError> {
+pub(crate) async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkError> {
     let ty = entry_rows()
         .into_iter()
         .find(|r| r.name == name)
         .and_then(|r| r.fields.split_once(" from").map(|(t, _)| t.to_string()))
         .ok_or(SdkError::Argument)?;
+    id_of(sdk, signer, &ty).await
+}
+
+/// The signer's id as a field of type `ty` takes it (`bytes32` or `address`).
+pub(crate) async fn id_of(sdk: &Sdk, signer: &KeyRef, ty: &str) -> Result<String, SdkError> {
+    // an `msig` signs as its own UA (its slots sign at submit: `account::msig`)
+    if let KeyRef::Msig { ua, .. } = signer {
+        return match ty {
+            "bytes32" => Ok(hex(&id32(ua)?)),
+            _ => Err(SdkError::Argument),
+        };
+    }
     // a `bls12381-multi` group (plan Task 17): its UA, a `bytes32` only
     if let KeyRef::BlsMulti { .. } = signer {
         if ty != "bytes32" {
@@ -278,8 +292,11 @@ async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkEr
         drop(key_opened(sdk, signer).await?); // a locked seed refuses here too
         return Ok(hex(&crate::op::bls_multi::ua(signer)?));
     }
-    Ok(match (key_opened(sdk, signer).await?, ty.as_str()) {
+    Ok(match (key_opened(sdk, signer).await?, ty) {
         (Key::Ua(_, k), "bytes32") => hex(&k.ua().ok_or(SdkError::Argument)?),
+        #[cfg(feature = "zether")]
+        (Key::Zether(_, k), "bytes32") => hex(&k.ua()),
+        (Key::External(row, _), "bytes32") => hex(&row.ua),
         (Key::Native(_, k), t) => {
             let a = addr20(&k.address().ok_or(SdkError::Argument)?.to_ascii_lowercase())?;
             if t == "address" {
@@ -296,7 +313,7 @@ fn pad(a: &[u8; 20]) -> String {
     format!("0x{}{}", "00".repeat(12), &hex(a)[2..])
 }
 
-fn id32(s: &str) -> Result<[u8; 32], SdkError> {
+pub(crate) fn id32(s: &str) -> Result<[u8; 32], SdkError> {
     unhex(&s.to_ascii_lowercase())?
         .try_into()
         .map_err(|_| SdkError::Argument)
@@ -307,7 +324,7 @@ fn address(o: &Option<String>) -> String {
 }
 
 /// The envelope's fields into `m` (the nonce left to the lane's read).
-fn put_envelope(m: &mut Map<String, Value>, batch: &str, e: &Envelope) {
+pub(crate) fn put_envelope(m: &mut Map<String, Value>, batch: &str, e: &Envelope) {
     m.insert("batch".into(), json!(batch));
     m.insert("validUntil".into(), json!(e.valid_until.to_string()));
     m.insert("mode".into(), json!(e.mode));
@@ -408,10 +425,10 @@ fn meta(
 }
 
 /// `(fee_recipient, relayer)`.
-type Bound = (Option<[u8; 20]>, Option<[u8; 20]>);
+pub(crate) type Bound = (Option<[u8; 20]>, Option<[u8; 20]>);
 
 /// The fee recipient and relayer a check names: those the mode binds.
-fn bound(m: &Map<String, Value>) -> Result<Bound, SdkError> {
+pub(crate) fn bound(m: &Map<String, Value>) -> Result<Bound, SdkError> {
     let mode = m.get("mode").map(dec).transpose()?.unwrap_or_default();
     let a = |k: &str| -> Result<Option<[u8; 20]>, SdkError> {
         m.get(k)
@@ -431,12 +448,12 @@ fn bound(m: &Map<String, Value>) -> Result<Bound, SdkError> {
 }
 
 /// The chain's id and `chain_uid` bytes.
-fn ids(sdk: &Sdk, chain: &str) -> Result<(u64, [u8; 32]), SdkError> {
+pub(crate) fn ids(sdk: &Sdk, chain: &str) -> Result<(u64, [u8; 32]), SdkError> {
     let (p, id, _) = evm(sdk, chain)?;
     Ok((id, id32(&p.chain_uid)?))
 }
 
-fn draft(
+pub(crate) fn draft(
     chain: String,
     name: &'static str,
     kind: &'static str,
@@ -458,6 +475,9 @@ fn draft(
         opaque: false,
         ids: false,
         relay_call: None,
+        owner: None,
+        key_index: U256::ZERO,
+        target: None,
     }
 }
 
@@ -465,7 +485,7 @@ impl Wallet {
     /// A plain row: `from`, the struct's fields, the envelope; checked under `Expect::Op`; the fields `token` and `underlying`
     /// listed as tokens touched.
     #[allow(clippy::too_many_arguments)]
-    async fn plain(
+    pub(crate) async fn plain(
         &self,
         name: &'static str,
         signer: KeyRef,
@@ -480,6 +500,10 @@ impl Wallet {
             .spawn(async move {
                 let contract = addr20(&contract.to_ascii_lowercase())?;
                 let kind = kind_of(&sdk, &chain, name, contract).await?;
+                // the router's rows are `admin`'s (its `UACancelNonce` too): one entry point per pair
+                if kind == "gov_router" {
+                    return Err(SdkError::Argument);
+                }
                 let mut m = Map::new();
                 m.insert("from".into(), json!(from_of(&sdk, &signer, name).await?));
                 m.extend(fields.clone());
@@ -687,6 +711,9 @@ impl Wallet {
         self.sdk
             .spawn(async move {
                 let token = addr20(&req.token.to_ascii_lowercase())?;
+                // a derived UA the registry does not hold: refused before anything is prepared (spec §7.1, R16)
+                #[cfg(feature = "account")]
+                crate::account::receiver_registered(&sdk, &req.chain, &id32(&req.to)?).await?;
                 let kind = kind_of(&sdk, &req.chain, "UAMetaTransfer", token).await?;
                 let from = from_of(&sdk, &req.signer, "UAMetaTransfer").await?;
                 let (mj, entry_ref, ua, review) = meta(

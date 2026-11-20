@@ -43,12 +43,12 @@ MUTANTS = [
      [("clients/scaas-sdk/src/wallet/native_evm.rs", "if !signs_with_key || format!", "if format!")],
      C + "--test wallet native_send_signs_with_the_reviewed_key_only"),
     ("P3: a discovered first endpoint is decisive",
-     [(f"{OP}/follow.rs", "strict || (a.members == [0] && pool.pool().class(0) != Class::Discovered);", "strict || a.members == [0];")],
+     [(f"{OP}/follow.rs", "let decisive =\n                        strict || (a.members == [0] && pool.pool().class(0) != Class::Discovered);", "let decisive =\n                        strict || a.members == [0];")],
      L + "a_non_decisive_read_is_never_terminal"),
     ("P3: resend ignores a bound relayer", [(f"{OP}/submit.rs", "                        if row.relayer_bound {", "                        if false {")],
      L + "resend_with_a_bound_relayer_is_refused"),
     ("P2-10: a spike call exported again",
-     [("clients/scaas-sdk/ffi/src/api/mod.rs", "impl Backup {", "pub fn spike_any() {}\n\nimpl Backup {")],
+     [("clients/scaas-sdk/ffi/src/api/mod.rs", "pub fn api_version() -> u32 {", "pub fn spike_any() {}\n\npub fn api_version() -> u32 {")],
      "cd clients/scaas-sdk/bindings/dart && ../../../../scripts/capped dart test --reporter expanded --no-color --name 'no spike call'"),
 ]
 

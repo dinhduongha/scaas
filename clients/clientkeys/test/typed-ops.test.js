@@ -41,6 +41,8 @@ const domainOf = (r, d) => ({
   chainUid: d.domain.salt,
 });
 const rows = () => Object.entries(V.ops);
+// a domain's own message (`AuditorConsent` names its token), else the op's
+const msgOf = (r, d) => d.message ?? r.message;
 // group 3g: a per-kind row (`UAPqzRollOver`) names its primary type and its builders
 const prim = (name) => TYPED_OPS[name].primary;
 const bld = (name) => TYPED_OPS[name].builder;
@@ -291,10 +293,10 @@ test("hashTypedData(td) == row.digest; the builder rebuilds the wallet's JSON; t
   for (const [name, r] of rows()) {
     assert.ok(domains(r).length > 0, name);
     for (const [kind, d] of domains(r)) {
-      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
-      assert.deepEqual(td.message, r.message, `${name} ${kind}`);
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: msgOf(r, d) });
+      assert.deepEqual(td.message, msgOf(r, d), `${name} ${kind}`);
       assert.equal(hex(hashTypedData(td)), d.digest, `${name} ${kind}`);
-      assert.equal(hex(hashStruct(td.types, prim(name), td.message)), r.structHash, `${name} ${kind}`);
+      assert.equal(hex(hashStruct(td.types, prim(name), td.message)), d.structHash ?? r.structHash, `${name} ${kind}`);
       assert.equal(hex(hashStruct(td.types, "EIP712Domain", td.domain)), d.domainSeparator, `${name} ${kind}`);
       const digest = hashTypedData(td);
       const sig = fromHex(d.signature);
@@ -731,11 +733,11 @@ test("checkOp refuses every changed field; the server supplies only the envelope
     if (name.endsWith("WrapOrder") && !name.startsWith("Cancel")) continue; // checkWrapOrder, below
     for (const [kind, d] of domains(r)) {
       const at = { contract: d.domain.verifyingContract, chainId: d.domain.chainId, chainUid: d.domain.salt };
-      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: msgOf(r, d) });
       const want = {
         op: name,
         ...at,
-        message: r.message,
+        message: msgOf(r, d),
         maxFee: 2n ** 255n,
         now: NOW,
         maxWindow: 86400 * 365,
@@ -788,11 +790,11 @@ test("checkOp: a row whose struct name is not its row name still refuses an omit
   for (const [name, r] of named) {
     for (const [kind, d] of domains(r)) {
       const at = { contract: d.domain.verifyingContract, chainId: d.domain.chainId, chainUid: d.domain.salt };
-      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: msgOf(r, d) });
       const want = {
         op: name,
         ...at,
-        message: r.message,
+        message: msgOf(r, d),
         maxFee: 2n ** 255n,
         now: NOW,
         maxWindow: 86400 * 365,

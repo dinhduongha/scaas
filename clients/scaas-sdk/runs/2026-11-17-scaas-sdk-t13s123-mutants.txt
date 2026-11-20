@@ -1,0 +1,6 @@
+# t13s123 mutants at commit 1aa1c508a (name | outcome | test)
+S2: storePqzPop landed when proven (pqzKeyAt.proven), not when stored | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test account_ops store_pqz_pop_landed_when_stored
+S3: keyIndex fixed to 0 | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops smart_execute_decoded_only
+P2: a signer in no slot is Argument | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops smart_execute_decoded_only
+P1 ua-rs: sign_scaas under metatx, not scaas_purpose's tag | killed | ../../scripts/capped cargo test --locked --offline -j2 --test sign_scaas external_key_dry_run_then_answer
+4 mutants, 4 killed, 0 survived, 0 not loaded
