@@ -363,6 +363,9 @@ class RegistryWriteView {
   final String calldata;
   final KeyRef payer;
 
+  /// a registration carrying its PQZ key's proof: one transaction or two, each step's gas and the total (owner 2026-11-20)
+  final RegistrationGas? registrationGas;
+
   const RegistryWriteView({
     required this.id,
     required this.chain,
@@ -371,6 +374,7 @@ class RegistryWriteView {
     required this.review,
     required this.calldata,
     required this.payer,
+    this.registrationGas,
   });
 
   @override
@@ -381,7 +385,8 @@ class RegistryWriteView {
       ua.hashCode ^
       review.hashCode ^
       calldata.hashCode ^
-      payer.hashCode;
+      payer.hashCode ^
+      registrationGas.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -394,7 +399,8 @@ class RegistryWriteView {
           ua == other.ua &&
           review == other.review &&
           calldata == other.calldata &&
-          payer == other.payer;
+          payer == other.payer &&
+          registrationGas == other.registrationGas;
 }
 
 /// An authenticator's answer to `p256_generate`.

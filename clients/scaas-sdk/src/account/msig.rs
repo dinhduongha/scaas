@@ -17,7 +17,9 @@
 //! secure-element row signs a slot through the external flow (M5): a dry run that only refuses, then the device asked for
 //! `uaMessage(kind, member, memberDigest(msig, uaMessage(msig, purpose, digest)))`, then `scaas-ua` verifies its answer.
 //! UNAUDITED.
-use super::register::{keep, registry_of, writes, Landed, RegistryWrite};
+use super::register::{
+    keep_with, registry_of, slot_signer, writes, GasShape, Landed, RegistryWrite,
+};
 use super::Account;
 use crate::op::{evm, hex, key_opened, sim, unhex, Key, KeyRef, MsigSlot};
 use crate::{Sdk, SdkError};
@@ -894,7 +896,18 @@ impl Account {
                 }
                 // the slot itself accepts now; an inner `msig`'s leaves must count there
                 let slots = [req.slot.clone()];
-                leaves_active(&views, &structure(&v.current)?, &slots)?;
+                let cur = structure(&v.current)?;
+                leaves_active(&views, &cur, &slots)?;
+                // its gas rows (controller call, owner auto-run 2026-11-19): by the current structure's members, the slot's
+                // verify row
+                let shape = GasShape {
+                    rows: vec![("acceptMembership".into(), "msig".into())],
+                    members: cur.members.len() as u64,
+                    signers: vec![cur
+                        .members
+                        .get(usize::from(index))
+                        .map_or(u16::MAX, |m| slot_signer(m.kind))],
+                };
                 let keys = open(&sdk, &slots).await?;
                 let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));
                 let inner = |id: [u8; 32]| views.get(&id).map(|v| v.first.clone());
@@ -911,7 +924,7 @@ impl Account {
                 })?;
                 let args =
                     json!({"ua": hex(&ua), "memberSig": ms.get(0).ok_or(SdkError::Internal)?});
-                Ok(Some(keep(
+                Ok(Some(keep_with(
                     &sdk,
                     &req.chain,
                     "acceptMembership",
@@ -919,6 +932,8 @@ impl Account {
                     &args,
                     &req.payer,
                     Landed::Accepted(index),
+                    shape,
+                    None,
                 )?))
             })
             .await
@@ -999,7 +1014,21 @@ impl Account {
                 let args = out.get("args").ok_or(SdkError::Internal)?;
                 // M3: landed when the registry's version reached it and its current structure is this update's
                 let hash = scaas_ua::keccak256(&u.structure.key_data());
-                let write = keep(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, Landed::MsigUpdate(u.version, hash))?;
+                // its gas rows (controller call, owner auto-run 2026-11-19): by the new structure's members, each signing slot of
+                // the stored one by its verify row
+                let shape = GasShape {
+                    rows: vec![("updateMsig".into(), "msig".into())],
+                    members: u.structure.members.len() as u64,
+                    signers: sig
+                        .members
+                        .iter()
+                        .map(|m| {
+                            state.current.members.get(usize::from(m.index)).map_or(u16::MAX, |x| slot_signer(x.kind))
+                        })
+                        .collect(),
+                };
+                let landed = Landed::MsigUpdate(u.version, hash);
+                let write = keep_with(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, landed, shape, None)?;
                 Ok(MsigUpdatePlan {
                     write,
                     warnings: warnings.iter().map(|w| format!("{w:?}")).collect(),

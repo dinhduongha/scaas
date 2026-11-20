@@ -16898,6 +16898,12 @@ const _: fn() = || {
         let _: Option<scaas_sdk::account::KemRecord> = RegistrationBlob.kem;
     }
     {
+        let RegistrationGas = None::<scaas_sdk::account::RegistrationGas>.unwrap();
+        let _: u32 = RegistrationGas.transactions;
+        let _: Vec<scaas_sdk::account::StepGas> = RegistrationGas.steps;
+        let _: Option<u64> = RegistrationGas.total_gas;
+    }
+    {
         let RegistrationState = None::<scaas_sdk::account::RegistrationState>.unwrap();
         let _: bool = RegistrationState.registered;
         let _: String = RegistrationState.kem_pk_hash;
@@ -17050,6 +17056,12 @@ const _: fn() = || {
         let _: String = SmartOp.account;
         let _: String = SmartOp.batch;
         let _: scaas_sdk::wallet::Envelope = SmartOp.envelope;
+    }
+    {
+        let StepGas = None::<scaas_sdk::account::StepGas>.unwrap();
+        let _: String = StepGas.entry;
+        let _: Option<u64> = StepGas.gas;
+        let _: Option<u64> = StepGas.regular_gas;
     }
     {
         let StorePolicy = None::<scaas_sdk::vault::store::StorePolicy>.unwrap();
@@ -20638,6 +20650,18 @@ impl SseDecode for Vec<scaas_sdk::vault::seeds::SeedInfo> {
     }
 }
 
+impl SseDecode for Vec<scaas_sdk::account::StepGas> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<scaas_sdk::account::StepGas>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<scaas_sdk::wallet::TokenBalance> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -21201,6 +21225,19 @@ impl SseDecode for Option<scaas_sdk::platform::PasskeyCreated> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<scaas_sdk::platform::PasskeyCreated>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<scaas_sdk::account::RegistrationGas> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<scaas_sdk::account::RegistrationGas>::sse_decode(
                 deserializer,
             ));
         } else {
@@ -21937,6 +21974,20 @@ impl SseDecode for scaas_sdk::account::RegistrationBlob {
     }
 }
 
+impl SseDecode for scaas_sdk::account::RegistrationGas {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_transactions = <u32>::sse_decode(deserializer);
+        let mut var_steps = <Vec<scaas_sdk::account::StepGas>>::sse_decode(deserializer);
+        let mut var_totalGas = <Option<u64>>::sse_decode(deserializer);
+        return scaas_sdk::account::RegistrationGas {
+            transactions: var_transactions,
+            steps: var_steps,
+            total_gas: var_totalGas,
+        };
+    }
+}
+
 impl SseDecode for scaas_sdk::account::RegistrationState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -21965,6 +22016,8 @@ impl SseDecode for crate::api::RegistryWriteView {
         let mut var_review = <Vec<scaas_sdk::op::ReviewField>>::sse_decode(deserializer);
         let mut var_calldata = <String>::sse_decode(deserializer);
         let mut var_payer = <scaas_sdk::op::KeyRef>::sse_decode(deserializer);
+        let mut var_registrationGas =
+            <Option<scaas_sdk::account::RegistrationGas>>::sse_decode(deserializer);
         return crate::api::RegistryWriteView {
             id: var_id,
             chain: var_chain,
@@ -21973,6 +22026,7 @@ impl SseDecode for crate::api::RegistryWriteView {
             review: var_review,
             calldata: var_calldata,
             payer: var_payer,
+            registration_gas: var_registrationGas,
         };
     }
 }
@@ -22336,6 +22390,20 @@ impl SseDecode for scaas_sdk::op::Source {
             1 => scaas_sdk::op::Source::Request,
             2 => scaas_sdk::op::Source::Derived,
             _ => unreachable!("Invalid variant for Source: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for scaas_sdk::account::StepGas {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_entry = <String>::sse_decode(deserializer);
+        let mut var_gas = <Option<u64>>::sse_decode(deserializer);
+        let mut var_regularGas = <Option<u64>>::sse_decode(deserializer);
+        return scaas_sdk::account::StepGas {
+            entry: var_entry,
+            gas: var_gas,
+            regular_gas: var_regularGas,
         };
     }
 }
@@ -29156,6 +29224,28 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::account::Registrati
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::account::RegistrationGas> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.transactions.into_into_dart().into_dart(),
+            self.0.steps.into_into_dart().into_dart(),
+            self.0.total_gas.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<scaas_sdk::account::RegistrationGas>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::account::RegistrationGas>>
+    for scaas_sdk::account::RegistrationGas
+{
+    fn into_into_dart(self) -> FrbWrapper<scaas_sdk::account::RegistrationGas> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::account::RegistrationState> {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -29190,6 +29280,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::RegistryWriteView {
             self.review.into_into_dart().into_dart(),
             self.calldata.into_into_dart().into_dart(),
             self.payer.into_into_dart().into_dart(),
+            self.registration_gas.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -29668,6 +29759,28 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::op::Source>>
     for scaas_sdk::op::Source
 {
     fn into_into_dart(self) -> FrbWrapper<scaas_sdk::op::Source> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::account::StepGas> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.0.entry.into_into_dart().into_dart(),
+            self.0.gas.into_into_dart().into_dart(),
+            self.0.regular_gas.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<scaas_sdk::account::StepGas>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::account::StepGas>>
+    for scaas_sdk::account::StepGas
+{
+    fn into_into_dart(self) -> FrbWrapper<scaas_sdk::account::StepGas> {
         self.into()
     }
 }
@@ -33954,6 +34067,16 @@ impl SseEncode for Vec<scaas_sdk::vault::seeds::SeedInfo> {
     }
 }
 
+impl SseEncode for Vec<scaas_sdk::account::StepGas> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <scaas_sdk::account::StepGas>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<scaas_sdk::wallet::TokenBalance> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -34370,6 +34493,16 @@ impl SseEncode for Option<scaas_sdk::platform::PasskeyCreated> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <scaas_sdk::platform::PasskeyCreated>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<scaas_sdk::account::RegistrationGas> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <scaas_sdk::account::RegistrationGas>::sse_encode(value, serializer);
         }
     }
 }
@@ -34869,6 +35002,15 @@ impl SseEncode for scaas_sdk::account::RegistrationBlob {
     }
 }
 
+impl SseEncode for scaas_sdk::account::RegistrationGas {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.transactions, serializer);
+        <Vec<scaas_sdk::account::StepGas>>::sse_encode(self.steps, serializer);
+        <Option<u64>>::sse_encode(self.total_gas, serializer);
+    }
+}
+
 impl SseEncode for scaas_sdk::account::RegistrationState {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -34890,6 +35032,10 @@ impl SseEncode for crate::api::RegistryWriteView {
         <Vec<scaas_sdk::op::ReviewField>>::sse_encode(self.review, serializer);
         <String>::sse_encode(self.calldata, serializer);
         <scaas_sdk::op::KeyRef>::sse_encode(self.payer, serializer);
+        <Option<scaas_sdk::account::RegistrationGas>>::sse_encode(
+            self.registration_gas,
+            serializer,
+        );
     }
 }
 
@@ -35137,6 +35283,15 @@ impl SseEncode for scaas_sdk::op::Source {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for scaas_sdk::account::StepGas {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.entry, serializer);
+        <Option<u64>>::sse_encode(self.gas, serializer);
+        <Option<u64>>::sse_encode(self.regular_gas, serializer);
     }
 }
 

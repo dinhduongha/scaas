@@ -183,9 +183,12 @@ abstract class Account implements RustOpaqueInterface {
   /// registry and chain; landed when the registry's version reaches it.
   Future<MsigUpdatePlan> prepareUpdateMsig({required UpdateMsig req});
 
-  /// The quote of `write` by its payer (spec §13.3): the estimate of its calldata, the chain's and the SDK's caps, the
-  /// payer's nonce. Quote a later part only after the one before it landed (its estimate reverts before).
-  /// `PreparedUnknown`, `GasAboveTxCap`, `FeeAboveCap`.
+  /// The quote of `write` by its payer (spec §13.3): its gas (controller call, owner auto-run 2026-11-19: where the gas table
+  /// has the write's rows, the regular bound the table's and the gas limit max(the estimate of its calldata, the table's);
+  /// else the estimate, whole), the chain's and the SDK's caps (a registration step also half the block gas limit, owner
+  /// 2026-11-20), the payer's nonce. Quote a later step only after the one before it landed (its estimate reverts before).
+  /// `PreparedUnknown`, `GasAboveTxCap`, `GasAboveBlockShare`, `GasCountUnknown` (an `msig` above the counts measured),
+  /// `FeeAboveCap`.
   Future<SubmitQuote> quoteRegistryWrite({required ArcRegistryWrite write});
 
   /// The receiver's blob (spec §7.1): the registration of `key` (a seed's UA key) as `prepare_register` builds it, named,
@@ -634,6 +637,39 @@ class RegistrationBlob {
           kem == other.kem;
 }
 
+/// A registration carrying its PQZ key's proof as the SDK quoted it at prepare (owner 2026-11-20): one transaction, or two
+/// (`register` without the proof, then `storePqzPop`, F22's restart-safe flow) when the one transaction's gas is above half
+/// the chain's block gas limit or its regular gas above the per-transaction cap; each step's gas and the total.
+class RegistrationGas {
+  /// 1 or 2
+  final int transactions;
+
+  /// the steps prepared, in the order they land (after a restart between the two, the second alone)
+  final List<StepGas> steps;
+
+  /// the steps' gas added; `None` when a step's is not known
+  final BigInt? totalGas;
+
+  const RegistrationGas({
+    required this.transactions,
+    required this.steps,
+    this.totalGas,
+  });
+
+  @override
+  int get hashCode =>
+      transactions.hashCode ^ steps.hashCode ^ totalGas.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RegistrationGas &&
+          runtimeType == other.runtimeType &&
+          transactions == other.transactions &&
+          steps == other.steps &&
+          totalGas == other.totalGas;
+}
+
 /// A registration as the registry holds it (`registration_of`).
 class RegistrationState {
   final bool registered;
@@ -716,6 +752,34 @@ class Restore {
           kinds == other.kinds &&
           account == other.account &&
           gap == other.gap;
+}
+
+/// One step of a registration carrying its PQZ key's proof as quoted at prepare (owner 2026-11-20).
+class StepGas {
+  /// `register` (or `registerWebAuthn`, `registerMsig`), with or without the proof, or `storePqzPop`
+  final String entry;
+
+  /// the step's gas limit: max(the node's estimate, the gas table's figure), the table's with the intrinsic cost, the
+  /// calldata and the margin; `None` where neither is known yet (a later step is not estimated before the one before it
+  /// landed)
+  final BigInt? gas;
+
+  /// the bound of its regular part (EIP-8037): the table's; the estimate, whole, where the table has no row
+  final BigInt? regularGas;
+
+  const StepGas({required this.entry, this.gas, this.regularGas});
+
+  @override
+  int get hashCode => entry.hashCode ^ gas.hashCode ^ regularGas.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StepGas &&
+          runtimeType == other.runtimeType &&
+          entry == other.entry &&
+          gas == other.gas &&
+          regularGas == other.regularGas;
 }
 
 /// A `registerWebAuthn` key, named.
