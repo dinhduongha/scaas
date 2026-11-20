@@ -447,6 +447,17 @@ async fn update_msig_current() {
     let updated = b(&p["msigUpdated"]["current"]);
     let want = Landed::MsigUpdate(1, scaas_ua::keccak256(&updated));
     assert_eq!((wr.entry(), wr.landed), ("updateMsig".to_string(), want));
+    // its gas rows (controller call, owner auto-run 2026-11-19): the new structure's four slots, the two signing slots of the
+    // stored one each by its kind
+    assert_eq!(
+        (wr.shape.rows.clone(), wr.shape.members),
+        (vec![("updateMsig".to_string(), "msig".to_string())], 4)
+    );
+    assert!(
+        wr.shape.signers.len() == 2 && !wr.shape.signers.contains(&u16::MAX),
+        "{:?}",
+        wr.shape
+    );
     assert!(
         plan.warnings
             .iter()
@@ -670,6 +681,11 @@ async fn msig_writes_landed_by_record() {
     assert_eq!(
         (a.entry(), a.landed),
         ("acceptMembership".to_string(), Landed::Accepted(i2))
+    );
+    // its gas rows: the structure's members, the accepting slot's verify row by its kind
+    assert_eq!(
+        (a.shape.members, a.shape.signers.clone()),
+        (st.slots.len() as u64, vec![FNDSA512])
     );
     // the one `MemberSig` tuple (argument 1) read as a list of one
     let one = tail(&a.calldata, 1, None);

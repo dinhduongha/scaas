@@ -485,6 +485,17 @@ async fn pq_registration_two_steps_above_half_the_block() {
         (q.gas_limit, q.regular_gas),
         (fig(26_000_000, l1).max(40_000_000), fig(1_310_000, l1))
     );
+    // at its quote a step is held to half the block again: the chain's limit lowered to 70 M (41.5 M > 35 M)
+    t.chain.lock().unwrap().block_gas_limit = 70_000_000;
+    assert_eq!(
+        t.sdk
+            .account()
+            .quote_registry_write(ws[0].clone())
+            .await
+            .unwrap_err()
+            .code(),
+        "GasAboveBlockShare"
+    );
 }
 
 /// (c) A step that alone does not fit: the first above half the block (70 M: 41.5 M > 35 M) is `GasAboveBlockShare`; the
@@ -581,6 +592,17 @@ async fn pq_registration_resumes_the_second_step() {
         (Some(q.gas_limit), Some(q.regular_gas)),
         (s2.gas, s2.regular_gas)
     );
+    // the resumed step held as at the split: its regular gas above the cap (a row of 12 M) refused, nothing kept
+    let big = reg_setup(PQ, 150_000_000, reg_rows(300_000, 12_000_000)).await;
+    big.chain.lock().unwrap().answers = t.chain.lock().unwrap().answers.clone();
+    assert_eq!(
+        writes(&big.sdk, "local", &big.payer, big.ua, &big.args, None)
+            .await
+            .unwrap_err()
+            .code(),
+        "GasAboveTxCap"
+    );
+    assert!(big.sdk.registry_writes.lock().unwrap().is_empty());
 }
 
 /// (e) A registration whose regular gas (the table's) is above the cap is refused at its quote, `GasAboveTxCap`, although the
@@ -689,6 +711,12 @@ fn reference_rows_cover_every_registry_write() {
     assert!(
         fig(&[("register", "ua-0x0110")], 0, &[]).unwrap().is_none(),
         "musig2: no row"
+    );
+    assert!(
+        fig(&[("register", "ua-0x0101"), ("register", "nope")], 0, &[])
+            .unwrap()
+            .is_none(),
+        "one row missing: no figure"
     );
 }
 
