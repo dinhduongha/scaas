@@ -84,6 +84,8 @@ const NESTED: &[(&str, &str)] = &[
     ("MuSig2Key", "bytes aggKey,bytes[] memberKeys"),
     ("FrostMember", "bytes[] commitments,bytes r,bytes32 z"),
     ("FrostKey", "bytes groupKey,uint16 threshold,FrostMember[] members"),
+    ("BlsMultiMember", "bytes key,uint16 weight"),
+    ("BlsMultiKey", "bytes aggKey,uint16 threshold,BlsMultiMember[] members"),
     ("GrantTerms", "uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope"),
     ("WrapLimit", "uint24 perUser,uint64 tokenWide,uint32 period"),
     ("WrapLegLimits", "address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong"),

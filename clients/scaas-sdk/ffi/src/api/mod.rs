@@ -19,7 +19,7 @@
 //! `heavy_peak`, `authenticator`) are marked `#[frb(ignore)]` in the SDK (`frb_hint!`).
 use flutter_rust_bridge::{frb, DartFnFuture};
 pub use scaas_rpc::{Class, EndpointAuth, Policy};
-pub use scaas_sdk::account::{Account, RegistryWrite};
+pub use scaas_sdk::account::{Account, RegistrationGas, RegistryWrite};
 pub use scaas_sdk::admin::Admin;
 pub use scaas_sdk::confidential::Confidential;
 pub use scaas_sdk::dex::{Dex, PreparedOrder};
@@ -432,6 +432,8 @@ pub struct RegistryWriteView {
     pub review: Vec<ReviewField>,
     pub calldata: String,
     pub payer: KeyRef,
+    /// a registration carrying its PQZ key's proof: one transaction or two, each step's gas and the total (owner 2026-11-20)
+    pub registration_gas: Option<RegistrationGas>,
 }
 
 #[frb(sync)]
@@ -444,6 +446,7 @@ pub fn registry_write_view(w: &Arc<RegistryWrite>) -> RegistryWriteView {
         review: w.review(),
         calldata: w.calldata(),
         payer: w.payer(),
+        registration_gas: w.registration_gas(),
     }
 }
 

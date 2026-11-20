@@ -30,7 +30,8 @@ the item counted, one of ITEMS) gets `item` and `per_item` {gas, base_count 0, s
 count of 0 (the line's intercept, fitted by the forge harness); where the harness pinned the line's excess at the largest
 count (`<kind>_<entry>_overshoot_<variant>`: owner rulings P1, P2; proposal P4) an assumption states the worst. A base row's
 `regular` (EIP-8037, controller call, owner auto-run 2026-11-19) and a counted row's `per_item.regular` come from the
-measurement's `_regular` split (`regular`). Prints its run time.
+measurement's `_regular` split (`regular`). A base group `fresh_only` (the registry writes: the registry's first write of
+its kind, the lane the SDK quotes) gets its `fresh` rows only. Prints its run time.
 """
 
 import argparse
@@ -257,7 +258,8 @@ def table(inputs, m):
     for group in inputs["base"]:
         for kind in group["kinds"]:
             for entry in group["entries"]:
-                for fresh in (True, False):
+                # a group `fresh_only` (the registry writes, controller call 2026-11-19): only the lane the SDK quotes
+                for fresh in (True,) if group.get("fresh_only") else (True, False):
                     keys = variants(m, f"{kind}_{entry}_{'fresh' if fresh else 'used'}_")
                     if not keys:
                         raise SystemExit(f"no measurement for {kind} {entry} {'fresh' if fresh else 'used'}")

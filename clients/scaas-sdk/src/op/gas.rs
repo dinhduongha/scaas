@@ -339,14 +339,24 @@ pub(crate) fn registration_gas(
     entry: &str,
     n: u64,
 ) -> Result<Option<(u64, u64, GasFrom)>, SdkError> {
+    base_gas(chain, opt_in, tables, entry, "account", n)
+}
+
+/// [`registration_gas`] of the base row `(entry, kind)` at a fresh lane (a registry write's, controller call, owner auto-run
+/// 2026-11-19: the registry's first write of its kind).
+pub(crate) fn base_gas(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    entry: &str,
+    kind: &str,
+    n: u64,
+) -> Result<Option<(u64, u64, GasFrom)>, SdkError> {
     let uncounted = std::cell::Cell::new(false);
     // the figure, or with `regular` its regular bound (the row's `regular` and slope where it has them)
     let find = |regular: bool| {
         part(chain, opt_in, tables, |r| {
-            let b = r
-                .base
-                .iter()
-                .find(|b| b.key() == (entry, "account", true))?;
+            let b = r.base.iter().find(|b| b.key() == (entry, kind, true))?;
             let reg = regular && b.regular.is_some();
             let per = match &b.per_item {
                 None => 0,
@@ -375,6 +385,48 @@ pub(crate) fn registration_gas(
         return Err(SdkError::GasCountUnknown);
     }
     Ok(found.map(|(g, from)| (g, regular.map_or(g, |r| r.0.min(g)), from)))
+}
+
+/// The execution gas of a registry write (controller call, owner auto-run 2026-11-19; owner 2026-11-20): the sum of its base
+/// rows `rows` (each `(entry, kind)` by [`base_gas`] at `members`) and of each signing slot's verify row (`signers`: its
+/// kind's excess over the native reference; the slot's bytes are in the calldata already, a row counting `members` not read:
+/// no figure). `None` when any is missing: the write is then quoted by the node's estimate alone, whole. Returns the figure,
+/// its regular bound (the base rows' regular parts, a verify row whole) and the sources (the first row's, the first slot's).
+pub(crate) fn registry_gas(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    rows: &[(String, String)],
+    members: u64,
+    signers: &[u16],
+) -> Result<Option<(u64, u64, GasSources)>, SdkError> {
+    let (mut g, mut r, mut base) = (0u64, 0u64, None);
+    for (entry, kind) in rows {
+        let Some((x, y, from)) = base_gas(chain, opt_in, tables, entry, kind, members)? else {
+            return Ok(None);
+        };
+        (g, r) = (g.saturating_add(x), r.saturating_add(y));
+        base.get_or_insert(from);
+    }
+    let Some(base) = base else { return Ok(None) };
+    let mut verify = None;
+    for s in signers {
+        let uncounted = |p: &Option<GasPerItem>| p.is_none().then_some(0);
+        let Some((v, from)) = verify_part(chain, opt_in, tables, *s, None, false, &uncounted)
+        else {
+            return Ok(None);
+        };
+        (g, r) = (g.saturating_add(v), r.saturating_add(v));
+        verify.get_or_insert(from);
+    }
+    Ok(Some((
+        g,
+        r,
+        GasSources {
+            verify: verify.unwrap_or_else(|| base.clone()),
+            base,
+        },
+    )))
 }
 
 /// [`lookup_by`] of an operation without a variable-length input, a saved record, a fee, a second signature or a count

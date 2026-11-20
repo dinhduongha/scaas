@@ -769,7 +769,7 @@ Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE
   +20 % ≈ 52 M; 16,000,000 before Amsterdam; the default 3,000,000 already rejects classical Zether transfers at 3.36 M;
   regular gas stays ≤ 2^24 and the block gas limit is read from the chain, [submit-lanes.md#amsterdam-gas](submit-lanes.md#amsterdam-gas)); never batched (`PqzToken` has no
   `mtxBatch`). A job submission's gateway body limit is 1.25 MiB on every chain
-  ([NODE-GW-08](gateway.md#NODE-GW-08)); every other gateway route's stays 64 KiB. **Checked for op 7 (P6-ANON S9, 2026-10-16) — all unchanged**, against the largest
+  ([NODE-GW-08](gateway.md#NODE-GW-08); a v3 transfer job is ≈ 170 KB as hex); every other gateway route's stays 64 KiB. **Checked for op 7 (P6-ANON S9, 2026-10-16) — all unchanged**, against the largest
   call of each id within 16 M gas [estimate: measured proof sizes, precompile gas scaled from the live op 1 rows,
   `pqz-core/pqzl/params/anon/s9_limits.py`]: PQZL M = 8 + 16 inline credits 383,108 B of calldata, ≈ 14.6 M gas; PQZH M = 4
   + 10 inline 440,356 B, ≈ 15.9 M (floor-bound; 11 inline need 16.4 M, over this cap, under EIP-7825's 16,777,216). As

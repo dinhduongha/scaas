@@ -802,6 +802,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   RegistrationBlob dco_decode_box_autoadd_registration_blob(dynamic raw);
 
   @protected
+  RegistrationGas dco_decode_box_autoadd_registration_gas(dynamic raw);
+
+  @protected
   RelayFee dco_decode_box_autoadd_relay_fee(dynamic raw);
 
   @protected
@@ -1379,6 +1382,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   List<SeedInfo> dco_decode_list_seed_info(dynamic raw);
 
   @protected
+  List<StepGas> dco_decode_list_step_gas(dynamic raw);
+
+  @protected
   List<TokenBalance> dco_decode_list_token_balance(dynamic raw);
 
   @protected
@@ -1504,6 +1510,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   PasskeyCreated? dco_decode_opt_box_autoadd_passkey_created(dynamic raw);
 
   @protected
+  RegistrationGas? dco_decode_opt_box_autoadd_registration_gas(dynamic raw);
+
+  @protected
   SePublic? dco_decode_opt_box_autoadd_se_public(dynamic raw);
 
   @protected
@@ -1624,6 +1633,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   RegistrationBlob dco_decode_registration_blob(dynamic raw);
 
   @protected
+  RegistrationGas dco_decode_registration_gas(dynamic raw);
+
+  @protected
   RegistrationState dco_decode_registration_state(dynamic raw);
 
   @protected
@@ -1685,6 +1697,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   Source dco_decode_source(dynamic raw);
+
+  @protected
+  StepGas dco_decode_step_gas(dynamic raw);
 
   @protected
   StoreAnswer dco_decode_store_answer(dynamic raw);
@@ -2671,6 +2686,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  RegistrationGas sse_decode_box_autoadd_registration_gas(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RelayFee sse_decode_box_autoadd_relay_fee(SseDeserializer deserializer);
 
   @protected
@@ -3384,6 +3404,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   List<SeedInfo> sse_decode_list_seed_info(SseDeserializer deserializer);
 
   @protected
+  List<StepGas> sse_decode_list_step_gas(SseDeserializer deserializer);
+
+  @protected
   List<TokenBalance> sse_decode_list_token_balance(
     SseDeserializer deserializer,
   );
@@ -3529,6 +3552,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  RegistrationGas? sse_decode_opt_box_autoadd_registration_gas(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   SePublic? sse_decode_opt_box_autoadd_se_public(SseDeserializer deserializer);
 
   @protected
@@ -3659,6 +3687,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   RegistrationBlob sse_decode_registration_blob(SseDeserializer deserializer);
 
   @protected
+  RegistrationGas sse_decode_registration_gas(SseDeserializer deserializer);
+
+  @protected
   RegistrationState sse_decode_registration_state(SseDeserializer deserializer);
 
   @protected
@@ -3722,6 +3753,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   Source sse_decode_source(SseDeserializer deserializer);
+
+  @protected
+  StepGas sse_decode_step_gas(SseDeserializer deserializer);
 
   @protected
   StoreAnswer sse_decode_store_answer(SseDeserializer deserializer);
@@ -4987,6 +5021,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_registration_gas(
+    RegistrationGas self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_relay_fee(
     RelayFee self,
     SseSerializer serializer,
@@ -5894,6 +5934,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_list_seed_info(List<SeedInfo> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_step_gas(List<StepGas> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_token_balance(
     List<TokenBalance> self,
     SseSerializer serializer,
@@ -6077,6 +6120,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_registration_gas(
+    RegistrationGas? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_se_public(
     SePublic? self,
     SseSerializer serializer,
@@ -6233,6 +6282,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  void sse_encode_registration_gas(
+    RegistrationGas self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_registration_state(
     RegistrationState self,
     SseSerializer serializer,
@@ -6300,6 +6355,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_source(Source self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_step_gas(StepGas self, SseSerializer serializer);
 
   @protected
   void sse_encode_store_answer(StoreAnswer self, SseSerializer serializer);

@@ -1944,8 +1944,14 @@ fn pqz_auth_message_rows() {
         ("statement_burn", 2),
         ("statement_transfer_multi", 7),
     ] {
+        // n2048-kmax1024's vectors sit at the directory's root, every other set's in its own directory
+        let dir = if set == "n2048-kmax1024" {
+            String::new()
+        } else {
+            format!("{set}/")
+        };
         let p = format!(
-            "{}/../../smartcontracts/vectors/pqz/{set}/{file}.json",
+            "{}/../../smartcontracts/vectors/pqz/{dir}{file}.json",
             env!("CARGO_MANIFEST_DIR")
         );
         let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
