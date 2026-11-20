@@ -2128,7 +2128,9 @@ the kind word and checked by the constructor** (owner rulings of spec §0.2 – 
 - **Which kinds.** A single-key kind of the kind table that a predecessor enables: the signing kinds, PQ `0x0130`–`0x0135`, the
   group kinds `0x0110`–`0x0113`, `zether-bls12381` `0x0141`. A kind is **eligible** only with its edge-class list and vectors
   ([CTR-UA-62](#CTR-UA-62)); this build has them for ML-DSA (`0x0130`, `0x0131`, `0x0134`) only, which the deploy enforces (the
-  constructor takes any single-key kind). Never `msig` `0x0120` (a structure: re-enabled in full in every generation; a
+  constructor takes any single-key kind: it is not the eligibility gate, so a registry deployed outside `DeployBase` may carry
+  another kind verify-only with any contract that answers the verifier getters; a release binds only a registry governance names
+  in its env, [CTR-UA-67](#CTR-UA-67)). Never `msig` `0x0120` (a structure: re-enabled in full in every generation; a
   predecessor's `msig` is forwarded whole, [CTR-UA-60](#CTR-UA-60)), never `pqz-mlwe` `0x0142` ([CTR-UA-71](#CTR-UA-71)), never
   `bls12381-multi` `0x0121` in this build.
 - **Declaration.** `KindConfig{uint16 kind; address verifier; uint64 cap; bool verifyOnly; uint8 keyForm}`, one immutable word
@@ -2284,8 +2286,9 @@ broadcast** (owner rulings of spec §0.2 – §0.4: W5, X1, P18, M9, P15, P16 an
 [evm.md](../networks/evm.md#registry-line-deploy)). A later generation deployed after a qualifying precompile exists carries the
 kind verify-only in the same deploy (no sibling verify-only generation). Before anything is sent the deploy refuses
 `GEN_NOT_LATEST` (the predecessor is not the book's latest; overridable only with the owner's confirmation and reason in the book),
-`GEN_DEPTH`, `GEN_WALK_MISMATCH <g>` (every address, code hash, generation and library code hash from the predecessor to
-generation 1 compared with the book), `GEN_TX_CAP_UNKNOWN` / `GEN_TX_CAP_MISMATCH` (the cap probe, [CTR-UA-58](#CTR-UA-58)),
+`GEN_DEPTH`, `GEN_WALK_MISMATCH <g>` (every address, code hash and generation from the predecessor to generation 1 compared
+with the book, and the predecessor's libraries' code hashes where the book records them: a registry's code hash covers the
+addresses of the libraries it links, and library code cannot change), `GEN_TX_CAP_UNKNOWN` / `GEN_TX_CAP_MISMATCH` (the cap probe, [CTR-UA-58](#CTR-UA-58)),
 `GEN_PQZ_OMITTED` (`0x0142` is carried, with the home's verifier and cap, wherever a predecessor enables it; overridable only by
 the owner, recorded), `GEN_KEY_FORM_IMPOSSIBLE`, `GEN_VERIFY_ONLY_NO_PRECOMPILE`, `GEN_PQZ_DEBIT_BOUND` (per verify-only kind) and
 the 75 % rule; the deploy's **differential probe** (by `eth_call` through the chain's node list under strict majority,
@@ -2389,7 +2392,9 @@ generations; BUILT on EVM, `a40d8acc0`).
   holder. The copy of a version (`_pqzRecord`), `_pqzNext` and the KEM hash read the holder, never `predecessor`. A scope's holder
   list is the line's, oldest first. The `0x0142` list of a generation is **its own** (`uaCount` / `uaAt` / `uaPage` / `uaIndex`
   never concatenate); the SDK concatenates the lists of every enabling generation on the token registry's walk for the decoy draw,
-  drawing by distinct key hash (owner P19). `PqzStateLib._auditorChecks` asks `kindHome(0x0142) != 0` (line-wide).
+  drawing by distinct key hash (owner P19). A generation that does not enable `0x0142` (one built under the `GEN_PQZ_OMITTED`
+  override) forwards these reads to its predecessor, so a reader that concatenates or counts per generation asks
+  `kindEnabled(0x0142)` first and skips a generation that answers `false` (the round's review, P3-8). `PqzStateLib._auditorChecks` asks `kindHome(0x0142) != 0` (line-wide).
 - **Residual (owner P8).** An older home cannot see a newer one, so two UAs of the line may each hold the same `pqz-mlwe` key
   proven (newer home first, older second); only the holder of the secret key can cause it (`R_REG` binds the UA, if it is a proof
   of knowledge: UNAUDITED); no code under `src/pqz/` reads `keyOwner` (checked on this tree), so no `PqzCore` property relies on

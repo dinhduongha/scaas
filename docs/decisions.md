@@ -5235,6 +5235,26 @@ all as proposed"** (2026-11-19).
 
 Controller calls (owner auto-run 2026-11-19, not owner rulings): `verifierOf` reads the local word in `UARegistry` (smaller than a library stub); the constructor takes any single-key kind verify-only and the ML-DSA-only eligibility of this build is the deploy's (`53d4ad79d`); every dispatch-only gas pin the contract tasks moved is re-pinned once in the gas task, old → new.
 
+**Review (Fable, 2026-11-20, at `0d9a64022`; controller calls, owner auto-run 2026-11-19).** P0 0, P1 0, P2 5 (all fixed:
+`6546768be` an inner `msig` held elsewhere bounded on its holder's path; `4984efa8c` the verify-only verifier bound to its rows
+(`GEN_VERIFY_ONLY_UNBOUND`), the differential's ok required (`GEN_DIFFERENTIAL_MISSING`), its cap over 2 x `CALL_GAS`
+(`GEN_VERIFY_ONLY_CAP`), no sibling over an older book (`GEN_NOT_LATEST`); `ed2537302` the node's `registerMsig` without a line
+target). P3 fixed: P3-5 `lineReaches` in the frozen list (`001f11c08`), P3-6 the tx-cap probe's error classes (`869ee608c`), P3-7,
+P3-8, P3-9, P3-10 docs. P3 deferred, each with its reason:
+- P3-1 (the fallback's nested 63/64 holds not counted in the hard and debit bounds, ≈ 3–5 % of the holder's cap): the fix moves
+  every hard-bound and debit boundary row and pin, and it is only justified by an at-the-bound fallback run through a consumer
+  with exactly `txGasCap`, a harness that does not exist yet; worked by hand, no admitted structure fails; that measured test
+  comes first, before the freeze.
+- P3-2 (M1's mutant equivalent): no entry reaches `_single` with a verify-only word for a record held elsewhere (every entry
+  appends `_cfg(0)` = 0 for it), so `uint160(cfg) == 0` and `!_registrable(cfg)` agree on every reachable input; the guard
+  stays as defence in depth, and a harness feeding `_single` an unreachable word would test the harness, not the registry.
+- P3-3 (three walks per verify-only member): gas only and already inside the measured `LINE_HOP_GAS`; removing two walks
+  changes the registry-to-library call shape and every pin this round measured, and `UARegistry` has 120 B of room.
+- P3-4 (scoped PQZ views without the holder fallback): no line this build can deploy reaches the case (a later generation
+  carries `0x0142` only where a predecessor enables it, and ordinary new kinds are not built in the later-generation mode),
+  and nothing is lost (the holder sets a new scoped key); the holder fallback and its §11.2 (d) test go with the next
+  registry round.
+
 ### CTR-UA-59 — Every signature-authenticated write is authenticated by the generation that holds the signer's record
 - old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-59 · superseded-by: —
 

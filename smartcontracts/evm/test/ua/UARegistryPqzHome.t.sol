@@ -238,6 +238,8 @@ contract UARegistryPqzHomeTest is UARegistryBase {
 
     /// §7 (e): a gen-1 single key whose kind gen 2 carries verify-only with an accept-all verifier, gen 2 its PQZ home: a
     /// `setPqzKey` with a bad signature stays refused (its holder checks it), the good one passes.
+    /// (Task 21 review P3-2: the mutant `uint160(cfg) == 0` for `!_registrable(cfg)` in `_single` is equivalent here: every entry
+    /// appends `_cfg(0)` = 0 for a record held elsewhere, so both tests agree on every reachable input; the guard stays.)
     function test_m1_pqzHome_singleKey_setPqzKey() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = _k(FN, address(mock), 400_000);
