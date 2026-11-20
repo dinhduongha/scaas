@@ -11,15 +11,19 @@ use alloy::primitives::{Address, U256};
 use alloy::rpc::types::TransactionRequest;
 use alloy::sol_types::SolCall;
 
-alloy::sol! {
-    function holderOf(bytes32 ua) external view returns (address holder, uint16 kind, address pqzHome);
-    function kindHome(uint16 kind) external view returns (address);
-    function kindEnabled(uint16 kind) external view returns (bool);
-    function predecessor() external view returns (address);
-    function uaCount(uint16 kind) external view returns (uint256);
-    function uaPage(uint16 kind, uint256 start, uint256 n) external view returns (bytes32[]);
-    function pqzKeyOf(bytes32 ua) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+/// The registry views the line reads (a private module: the generated call types stay out of the bindings' surface).
+mod abi {
+    alloy::sol! {
+        function holderOf(bytes32 ua) external view returns (address holder, uint16 kind, address pqzHome);
+        function kindHome(uint16 kind) external view returns (address);
+        function kindEnabled(uint16 kind) external view returns (bool);
+        function predecessor() external view returns (address);
+        function uaCount(uint16 kind) external view returns (uint256);
+        function uaPage(uint16 kind, uint256 start, uint256 n) external view returns (bytes32[]);
+        function pqzKeyOf(bytes32 ua) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+    }
 }
+use abi::*;
 
 /// The PQZ key kind, whose per-generation list is the decoy set (CTR-UA-29, §11.2).
 pub(crate) const PQZ_MLWE: u16 = 0x0142;
@@ -43,13 +47,13 @@ pub struct UaLine {
 
 impl UaLine {
     /// The target of a key write of the UA: its holder (§12).
-    pub fn key_target(&self) -> &str {
-        &self.holder
+    pub fn key_target(&self) -> String {
+        self.holder.clone()
     }
 
     /// The target of a PQZ write of the UA: its PQZ home (§12); `PqzHomeNone` where the walk has none.
-    pub fn pqz_target(&self) -> Result<&str, SdkError> {
-        self.pqz_home.as_deref().ok_or(SdkError::PqzHomeNone)
+    pub fn pqz_target(&self) -> Result<String, SdkError> {
+        self.pqz_home.clone().ok_or(SdkError::PqzHomeNone)
     }
 }
 
@@ -112,6 +116,43 @@ pub(crate) async fn register_target(
         h if h == Address::ZERO => Err(SdkError::RegistrationKindDisabled),
         h if h == registry => Ok(h),
         _ => Err(SdkError::RegistrationVerifyOnly),
+    }
+}
+
+/// Where a registry write goes on the bound `registry`'s line (§12, CTR-UA-65; the round's merge review A3): a registration
+/// (and a cache part) of a kind to `kindHome(kind)` ([`register_target`]: refused where that is another generation),
+/// `registerMsig` to the bound registry (every generation registers an `msig`), a key write (`setKemKey`,
+/// `acceptMembership`, `updateMsig`) to the UA's holder, a PQZ write (`storePqzPop`, `setPqzKey`, the scoped ones) to its PQZ
+/// home. A UA not registered yet (the second part of a registration, the KEM fill of one) and a registry without `holderOf`
+/// (an answer that does not decode, a revert) go to the bound registry, as before the line.
+pub(crate) async fn write_target(
+    pool: &scaas_rpc::evm::EvmPool,
+    registry: Address,
+    entry: &str,
+    ua: [u8; 32],
+    kind: Option<u16>,
+) -> Result<Address, SdkError> {
+    let line = || async {
+        match view(pool, registry, holderOfCall { ua: ua.into() }).await {
+            Ok(r) if r.holder != Address::ZERO => Ok(Some((r.holder, r.pqzHome))),
+            Ok(_)
+            | Err(SdkError::AbiMismatch)
+            | Err(SdkError::Rpc(scaas_rpc::RpcError::Revert { .. })) => Ok(None),
+            Err(e) => Err(e),
+        }
+    };
+    match entry {
+        "register" | "registerWebAuthn" | "registerMuSig2" | "registerFrost"
+        | "registerBlsMulti" | "cacheExpandedKey" => {
+            register_target(pool, registry, kind.ok_or(SdkError::Argument)?).await
+        }
+        "setKemKey" | "acceptMembership" | "updateMsig" => {
+            Ok(line().await?.map_or(registry, |(h, _)| h))
+        }
+        "storePqzPop" | "setPqzKey" | "setPqzScopedKey" | "storePqzScopedPop" => Ok(line()
+            .await?
+            .map_or(registry, |(h, p)| if p == Address::ZERO { h } else { p })),
+        _ => Ok(registry),
     }
 }
 

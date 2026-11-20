@@ -737,7 +737,7 @@ async fn key_write_target_is_holder() {
     let s = open(MemoryStore::new(), &[serve(f).await]).await;
     let a = s.account();
     let line = a.ua_line("local-testnet".into(), ua).await.unwrap();
-    assert_eq!((line.key_target(), line.kind), (REGISTRY, 0x0101));
+    assert_eq!((line.key_target().as_str(), line.kind), (REGISTRY, 0x0101));
     assert_eq!(
         code(a.ua_line("local-testnet".into(), none).await),
         "UaUnregistered"
@@ -765,7 +765,10 @@ async fn pqz_write_target_is_home() {
     let a = s.account();
     let line = a.ua_line("local-testnet".into(), ua).await.unwrap();
     assert_eq!(
-        (line.key_target(), line.pqz_target().unwrap()),
+        (
+            line.key_target().as_str(),
+            line.pqz_target().unwrap().as_str()
+        ),
         (GEN1, gen2)
     );
     let line = a.ua_line("local-testnet".into(), homeless).await.unwrap();

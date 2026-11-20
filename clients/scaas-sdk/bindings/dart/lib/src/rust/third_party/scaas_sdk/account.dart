@@ -8,6 +8,7 @@ import '../../lib.dart';
 import 'account/msig.dart';
 import 'account/smart.dart';
 import 'error.dart';
+import 'line.dart';
 import 'op.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'platform.dart';
@@ -61,6 +62,11 @@ abstract class Account implements RustOpaqueInterface {
   /// The account index a new wallet of seed `seed` takes: one past the highest a UA row uses (0 for none). One index per
   /// wallet, for every attribute it registers (CLI-SDK-07).
   Future<int> nextAccount({required String seed});
+
+  /// The PQZ decoy candidates of chain `chain`'s token registry (the profile's; owner P19): the `0x0142` lists of every
+  /// enabling generation on its walk, concatenated, distinct by key hash ([`crate::line`]). The draw itself is `scaas-ua`'s
+  /// `pickDecoys` over these.
+  Future<List<String>> pqzDecoyCandidates({required String chain});
 
   /// `acceptMembership(ua, memberSig)` of `req.slot` (CTR-UA-37), signed over typed `UAMembership{ua, member}` by
   /// `scaas-ua` (`membership_sig_current`, the current structure: an appended slot accepts too); landed when the slot's
@@ -188,6 +194,11 @@ abstract class Account implements RustOpaqueInterface {
   /// `PreparedUnknown`, `GasAboveTxCap`, `FeeAboveCap`.
   Future<SubmitQuote> quoteRegistryWrite({required ArcRegistryWrite write});
 
+  /// The registry a registration of `kind` on chain `chain` goes to (§12): `kindHome(kind)` of the profile's registry,
+  /// which must be that registry; `RegistrationVerifyOnly` where it carries the kind verify-only (the home is another
+  /// generation), `RegistrationKindDisabled` where no generation registers it.
+  Future<String> registerTarget({required String chain, required int kind});
+
   /// The receiver's blob (spec §7.1): the registration of `key` (a seed's UA key) as `prepare_register` builds it, named,
   /// with no secret. `WalletLocked`; `Argument` and `FeatureMissing` as `prepare_register`.
   Future<RegistrationBlob> registrationBlob({
@@ -217,6 +228,12 @@ abstract class Account implements RustOpaqueInterface {
     required ArcRegistryWrite write,
     required SubmitQuote quote,
   });
+
+  /// Where UA `ua` (`0x` + 64 hex) lives on chain `chain`'s line: one `holderOf(ua)` on the profile's registry (§11.1); the
+  /// record is read at [`UaLine::holder`], a key write goes there ([`UaLine::key_target`]), the PQZ attachment is read and
+  /// written at its home ([`UaLine::pqz_target`]). `UaUnregistered` where no generation holds it; `Argument` without a
+  /// registry or for a malformed id.
+  Future<UaLine> uaLine({required String chain, required String ua});
 }
 
 /// One account row as the app shows it.

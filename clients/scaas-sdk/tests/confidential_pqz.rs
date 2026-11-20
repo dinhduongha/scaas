@@ -1692,7 +1692,8 @@ async fn verdict_native_verifier() {
     id[12..].copy_from_slice(&addr);
     put(&c, TOKEN, &add(&root(), 13), &id);
     let m = verdict_of(&psid);
-    for g in [1, 2] {
+    // every generation of the line, 1 to 16 (the round's merge review A2: was 1 and 2 only)
+    for g in [1, 2, 3, 16] {
         c.lock().unwrap().verdict = Some((200, native_answer(&m, 3, g)));
         let v = s.confidential().request_verdict(vreq()).await.unwrap();
         assert_eq!(
@@ -1704,6 +1705,13 @@ async fn verdict_native_verifier() {
             "gen {g}"
         );
     }
+    // above the line's depth (generation 17): refused
+    c.lock().unwrap().verdict = Some((200, native_answer(&m, 3, 17)));
+    assert_eq!(
+        code(s.confidential().request_verdict(vreq()).await),
+        "VerdictRefused",
+        "gen 17"
+    );
     // another EOA's signature; key data beside it; the address holding code (ERC-1271, not checked off chain): refused
     c.lock().unwrap().verdict = Some((200, native_answer(&m, 4, 1)));
     assert_eq!(
@@ -1806,6 +1814,24 @@ async fn pqz_holder_in_predecessor_read_at_home() {
         .unwrap();
     assert_eq!(b.amount, r["value"].to_string(), "read at the home");
     only_line_calls(&c);
+    // the home another generation than the holder (merge review A4): read at the home, never at the holder
+    const G2: &str = "0x5ca00000000000000000000000000000000000e2";
+    put(&c, G2, &rec, &w(&r["request"]["keyRecord"]));
+    put(&c, G2, &ver, &w(&r["request"]["keyVersions"]));
+    put(&c, G1, &rec, &[0; 32]);
+    put(&c, G1, &ver, &[0; 32]);
+    c.lock().unwrap().answers.clear();
+    holder_answer(&c, &ua, G1, 0x0131, G2);
+    let b = s
+        .confidential()
+        .pqz_balance(req(&seed, 1, v))
+        .await
+        .unwrap();
+    assert_eq!(
+        b.amount,
+        r["value"].to_string(),
+        "read at the home, not the holder"
+    );
     let words = include_str!("../src/confidential/words.rs");
     assert_eq!(
         words.matches("call_at(").count(),
@@ -1849,4 +1875,32 @@ async fn verdict_verifier_in_predecessor_read_at_holder() {
     let v = s.confidential().request_verdict(vreq()).await.unwrap();
     assert_eq!(v["pqzVerdict"]["pqzVerifierEpoch"], EPOCH);
     only_line_calls(&c);
+}
+
+/// The round's merge review A4 (CTR-UA-70): a debit's recipient whose key records a predecessor holds is read at its PQZ home
+/// (`holderOf` of the recipient on the bound registry); control: with no answer the bound registry alone is read, and the
+/// recipient's key is missing there: refused before anything is signed.
+#[tokio::test(flavor = "multi_thread")]
+async fn pqz_recipient_in_predecessor_read_at_home() {
+    const G1: &str = "0x5ca00000000000000000000000000000000000e1";
+    let (s, seed, c, a, _b, _store) = debit_setup(false).await;
+    let r = row("A v1");
+    let v = r["request"]["keyVersion"].as_u64().unwrap();
+    let (rec, ver) = (map(&be(v), &map(&a, &be(2))), map(&a, &be(17)));
+    put(&c, G1, &rec, &w(&r["request"]["keyRecord"]));
+    put(&c, G1, &ver, &w(&r["request"]["keyVersions"]));
+    put(&c, REGISTRY, &rec, &[0; 32]);
+    put(&c, REGISTRY, &ver, &[0; 32]);
+    assert!(
+        s.confidential()
+            .prepare_pqz_transfer(transfer(&seed, &a, "100"))
+            .await
+            .is_err(),
+        "control: the bound registry alone has no key of the recipient"
+    );
+    holder_answer(&c, &a, G1, KIND, G1);
+    s.confidential()
+        .prepare_pqz_transfer(transfer(&seed, &a, "100"))
+        .await
+        .unwrap();
 }

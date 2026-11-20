@@ -102,6 +102,8 @@ pub struct RegistryWrite {
     payer: KeyRef,
     pub(crate) calldata: Vec<u8>,
     pub(crate) landed: Landed,
+    /// the generation the write goes to on the bound registry's line (`line::write_target`)
+    pub(crate) to: Address,
 }
 
 impl std::fmt::Debug for RegistryWrite {
@@ -385,8 +387,20 @@ fn flatten(prefix: &str, v: &Value, out: &mut Vec<ReviewField>) {
     }
 }
 
-/// One write kept in the table.
-pub(crate) fn keep(
+/// The kind a registration's (or cache part's) named arguments carry: `kind`, else the entry's own.
+fn write_kind(entry: &str, args: &Value) -> Option<u16> {
+    match entry {
+        "registerWebAuthn" => Some(0x0100),
+        "registerBlsMulti" => Some(0x0121),
+        _ => args
+            .get("kind")
+            .and_then(Value::as_u64)
+            .and_then(|k| u16::try_from(k).ok()),
+    }
+}
+
+/// One write kept in the table, its target the generation of the bound registry's line it belongs to (`line::write_target`).
+pub(crate) async fn keep(
     sdk: &Sdk,
     chain: &str,
     entry: &str,
@@ -395,7 +409,9 @@ pub(crate) fn keep(
     payer: &KeyRef,
     landed: Landed,
 ) -> Result<Arc<RegistryWrite>, SdkError> {
-    let registry = registry_of(sdk, chain)?;
+    let (bound, pool) = crate::line::bound(sdk, chain)?;
+    let registry =
+        crate::line::write_target(&pool, bound, entry, ua, write_kind(entry, args)).await?;
     let calldata = registry_call(entry, args)?;
     let mut review = vec![
         field("entry", entry, entry, Source::Derived),
@@ -417,6 +433,7 @@ pub(crate) fn keep(
         payer: payer.clone(),
         calldata,
         landed,
+        to: registry,
     });
     sdk.registry_writes
         .lock()
@@ -474,15 +491,18 @@ pub(crate) async fn writes(
                 for p in 0..parts {
                     if !read_record(&pool, registry, Landed::Cached(p), &ua).await? {
                         let a = json!({"kind": kind, "pk": hex(&pk), "part": p});
-                        out.push(keep(
-                            sdk,
-                            chain,
-                            "cacheExpandedKey",
-                            ua,
-                            &a,
-                            payer,
-                            Landed::Cached(p),
-                        )?);
+                        out.push(
+                            keep(
+                                sdk,
+                                chain,
+                                "cacheExpandedKey",
+                                ua,
+                                &a,
+                                payer,
+                                Landed::Cached(p),
+                            )
+                            .await?,
+                        );
                         cache_pending = true;
                     }
                 }
@@ -508,37 +528,24 @@ pub(crate) async fn writes(
             {
                 return Err(SdkError::GasAboveTxCap);
             }
-            out.push(keep(
-                sdk,
-                chain,
-                &entry,
-                ua,
-                &first,
-                payer,
-                Landed::Registered,
-            )?);
+            out.push(keep(sdk, chain, &entry, ua, &first, payer, Landed::Registered).await?);
             let store = json!({"ua": hex(&ua), "version": 0, "pqzPop": pqz_pop});
-            out.push(keep(
-                sdk,
-                chain,
-                "storePqzPop",
-                ua,
-                &store,
-                payer,
-                Landed::PqzPop(0),
-            )?);
+            out.push(
+                keep(
+                    sdk,
+                    chain,
+                    "storePqzPop",
+                    ua,
+                    &store,
+                    payer,
+                    Landed::PqzPop(0),
+                )
+                .await?,
+            );
             // the second part's proof outlives this process (M1)
             crate::op::state::keep_pop(sdk, &hex(&ua), Some(pqz_pop)).await?;
         } else {
-            out.push(keep(
-                sdk,
-                chain,
-                &entry,
-                ua,
-                args,
-                payer,
-                Landed::Registered,
-            )?);
+            out.push(keep(sdk, chain, &entry, ua, args, payer, Landed::Registered).await?);
         }
     }
     // F22, M1 (reviews 2026-11-20): a split whose first part landed and whose `storePqzPop` did not (the app closed between
@@ -559,29 +566,24 @@ pub(crate) async fn writes(
                 .find(|p| unhex(p).is_ok_and(|b| scaas_ua::keccak256(&b) == want))
                 .ok_or(SdkError::RegistrationPopInvalid)?;
             let store = json!({"ua": uah, "version": 0, "pqzPop": pop});
-            out.push(keep(
-                sdk,
-                chain,
-                "storePqzPop",
-                ua,
-                &store,
-                payer,
-                Landed::PqzPop(0),
-            )?);
+            out.push(
+                keep(
+                    sdk,
+                    chain,
+                    "storePqzPop",
+                    ua,
+                    &store,
+                    payer,
+                    Landed::PqzPop(0),
+                )
+                .await?,
+            );
         }
     }
     if let Some(fill) = kem_fill {
         let filled = registered && read_record(&pool, registry, Landed::Kem(0), &ua).await?;
         if !filled {
-            out.push(keep(
-                sdk,
-                chain,
-                "setKemKey",
-                ua,
-                fill,
-                payer,
-                Landed::Kem(0),
-            )?);
+            out.push(keep(sdk, chain, "setKemKey", ua, fill, payer, Landed::Kem(0)).await?);
         }
     }
     Ok(out)
@@ -831,7 +833,7 @@ impl Account {
         self.sdk
             .spawn(async move {
                 known(&sdk, &write)?;
-                let registry = registry_of(&sdk, &write.chain)?;
+                let registry = write.to;
                 self_relay(
                     &sdk,
                     &write.chain,
@@ -871,7 +873,7 @@ impl Account {
                     return Err(SdkError::Argument);
                 }
                 let (profile, chain_id, pool) = evm(&sdk, &write.chain)?;
-                let registry = registry_of(&sdk, &write.chain)?;
+                let registry = write.to;
                 let from_block = crate::op::final_number(&pool, &profile).await?;
                 // one submit of a write: taken out of the table before it is signed, put back when the signing fails (owner
                 // 2026-11-19, R4: as `Op::submit`)
@@ -1008,7 +1010,7 @@ impl Account {
                     "kem": {"scheme": fix.kem.scheme, "mlkemEk": hex(&fix.kem.mlkem_ek), "x25519": hex(&fix.kem.x25519)},
                     "sig": {"keyData": "0x", "signature": "0x", "members": []},
                 });
-                Ok(Some(keep(&sdk, &chain, "setKemKey", ua, &args, &payer, Landed::Kem(0))?))
+                Ok(Some(keep(&sdk, &chain, "setKemKey", ua, &args, &payer, Landed::Kem(0)).await?))
             })
             .await
     }

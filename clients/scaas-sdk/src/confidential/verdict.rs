@@ -12,7 +12,7 @@
 //! (`UARegistry._native`): its code read at the same block must be empty (an account with code answers ERC-1271 by a call, not
 //! checked here) and the low-s ECDSA signature must recover the verifier's address under the token's registry's domain
 //! (P-T16-3). The registry's generation is an immutable of its code, not a storage word: the signature is accepted under the
-//! generation-1 or the generation-2 domain of that registry; the token's own check decides on chain. An `msig` verifier stays
+//! domain of any generation 1 to 16 of that registry (the line's `MAX_GENERATION`); the token's own check decides on chain. An `msig` verifier stays
 //! `VerdictRefused` (fail closed). UNAUDITED.
 use super::words::{
     add, be, class_kind, held_at, map_slot, rec_slot, word, CLASS_TOKEN, PURPOSE, W,
@@ -242,9 +242,11 @@ fn checked(
         let addr: [u8; 20] = x.verifier.get(12..)?.try_into().ok()?;
         let refused = !key_data.is_empty()
             || !x.native_code.is_empty()
-            || ![1, 2].iter().any(|g| {
+            // the bound registry's generation is an immutable of its code: any of the line's 1..=16 (MAX_GENERATION; the
+            // round's merge review A2), the token's own check deciding on chain
+            || !(1..=16u32).any(|g| {
                 let d = scaas_ua::Domain {
-                    generation: *g,
+                    generation: g,
                     chain_id,
                     registry: x.registry,
                     chain_uid: *uid,

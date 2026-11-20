@@ -1458,3 +1458,69 @@ async fn zether_holder_in_predecessor_read_at_holder() {
     );
     only_line_calls(&c);
 }
+
+/// The round's merge review A4 (CTR-UA-29, CTR-UA-70): the `0x0141` decoy list is read in the kind's home generation
+/// (`kindHome(0x0141)` on the bound registry), not the bound registry's storage; control: a bound registry that is its own home
+/// (the fake's default) is read itself.
+#[tokio::test(flavor = "multi_thread")]
+async fn zether_decoy_list_at_kind_home() {
+    use scaas_sdk::confidential::{ZetherLeg, ZetherTransferMulti};
+    const G1: &str = "0x5ca00000000000000000000000000000000000e1";
+    let (s, seed, c, k, k2) = pairs_setup().await;
+    list(&c, &[&k, &k2]);
+    let t = || ZetherTransferMulti {
+        seed: seed.clone(),
+        account: 0,
+        chain: "local".into(),
+        token: TOKEN.into(),
+        batch: "0".into(),
+        recipients: vec![ZetherLeg {
+            to_ua: k2.ua.clone(),
+            amount: "3".into(),
+        }],
+        decoys: 2,
+        decoy_fee: "0".into(),
+        ua_signer_gas: 0,
+        valid_until_block: 1000,
+        envelope: env(),
+        table_bits: Some(18),
+        bound_bits: Some(18),
+    };
+    let count = map(&be(0x0141), &be(4));
+    let reads_at = |c: &Fake, who: &str| {
+        log(c)
+            .iter()
+            .filter(|r| r["method"] == "eth_getStorageAt")
+            .filter(|r| {
+                r["params"][0]
+                    .as_str()
+                    .unwrap_or_default()
+                    .eq_ignore_ascii_case(who)
+            })
+            .filter(|r| {
+                r["params"][1]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim_start_matches("0x")
+                    .trim_start_matches('0')
+                    == hx(&count)[2..].trim_start_matches('0')
+            })
+            .count()
+    };
+    c.lock().unwrap().requests.clear();
+    let _ = s.confidential().prepare_zether_transfer_multi(t()).await;
+    assert!(
+        reads_at(&c, REGISTRY) > 0 && reads_at(&c, G1) == 0,
+        "control: the bound registry its own home"
+    );
+    c.lock()
+        .unwrap()
+        .kind_home
+        .insert(REGISTRY.into(), G1.into());
+    c.lock().unwrap().requests.clear();
+    let _ = s.confidential().prepare_zether_transfer_multi(t()).await;
+    assert!(
+        reads_at(&c, G1) > 0 && reads_at(&c, REGISTRY) == 0,
+        "the list's length read at the kind's home"
+    );
+}

@@ -911,15 +911,18 @@ impl Account {
                 })?;
                 let args =
                     json!({"ua": hex(&ua), "memberSig": ms.get(0).ok_or(SdkError::Internal)?});
-                Ok(Some(keep(
-                    &sdk,
-                    &req.chain,
-                    "acceptMembership",
-                    ua,
-                    &args,
-                    &req.payer,
-                    Landed::Accepted(index),
-                )?))
+                Ok(Some(
+                    keep(
+                        &sdk,
+                        &req.chain,
+                        "acceptMembership",
+                        ua,
+                        &args,
+                        &req.payer,
+                        Landed::Accepted(index),
+                    )
+                    .await?,
+                ))
             })
             .await
     }
@@ -999,7 +1002,7 @@ impl Account {
                 let args = out.get("args").ok_or(SdkError::Internal)?;
                 // M3: landed when the registry's version reached it and its current structure is this update's
                 let hash = scaas_ua::keccak256(&u.structure.key_data());
-                let write = keep(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, Landed::MsigUpdate(u.version, hash))?;
+                let write = keep(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, Landed::MsigUpdate(u.version, hash)).await?;
                 Ok(MsigUpdatePlan {
                     write,
                     warnings: warnings.iter().map(|w| format!("{w:?}")).collect(),

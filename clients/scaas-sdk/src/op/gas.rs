@@ -402,7 +402,17 @@ pub(crate) fn verify_or(
     app: u64,
 ) -> (u64, GasFrom) {
     part(chain, opt_in, tables, |r| {
-        r.verify.iter().find(|v| v.signer == signer).map(|v| v.gas)
+        // the holder's own row (no line columns), as the quote's fallback (the round's merge review A6)
+        r.verify
+            .iter()
+            .find(|v| {
+                v.signer == signer
+                    && v.line.registry.is_none()
+                    && v.line.path.is_none()
+                    && v.line.depth == 0
+                    && !v.line.write
+            })
+            .map(|v| v.gas)
     })
     .unwrap_or((app, GasFrom::App))
 }
