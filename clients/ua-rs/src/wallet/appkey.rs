@@ -440,7 +440,7 @@ impl AppKeys {
     }
 
     /// The app's per-account storage root: HKDF-SHA-256(ikm = the wallet's BIP-39 seed, salt empty, info = [`APP_ROOT`] ‖
-    /// `app_id` ‖ `ua`, 32), a `Derive` handle.
+    /// `app_id` ‖ `ua`, 32), a `Derive` handle (owner 2026-11-20, confirmed).
     pub fn app_root_key(&self, app_id: &[u8; 32], ua: &[u8; 32]) -> Result<KeyHandle> {
         let info = [APP_ROOT, app_id, ua].concat();
         let k = self

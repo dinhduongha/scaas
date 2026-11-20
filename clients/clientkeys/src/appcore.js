@@ -4,7 +4,7 @@
 // byte (review K4), except `sealKey`'s key-wrap AAD, the SDK's own format: `"scaas/ua/v1/keywrap" ‖ u8(usage) ‖ aad`. The KEM
 // wrap's KDF info is `label ‖ aad ‖ u8(scheme) ‖ keccak256(kemPk)`, the wrapped key sealed by AES-256-GCM, nonce 0^96, AAD
 // `aad` (UA-7 §6.2, the pqvault spec §6.2). The app root key: HKDF-SHA-256(ikm = the seed set's BIP-39 seed, salt empty,
-// info = "scaas/app/v1/root" ‖ appId ‖ ua, 32 B) (controller call, owner auto-run 2026-11-19). The byte formats of
+// info = "scaas/app/v1/root" ‖ appId ‖ ua, 32 B) (owner 2026-11-20, confirmed). The byte formats of
 // smartcontracts/vectors/appcore/. UNAUDITED.
 import { x25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";

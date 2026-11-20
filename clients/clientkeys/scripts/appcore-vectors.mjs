@@ -184,7 +184,7 @@ const out = {
     "the UA KEM's encaps to kemPk (m, x25519Secret fixed here), kek = HKDF(ss, salt empty, info = label ‖ aad ‖ 0x01 ‖ " +
     "keccak256(kemPk), 32), sealedKey = AES-256-GCM(kek, 0^96, key, aad); the receiver's KEM key is kemKey(rnd(kem/mlkem, 64), " +
     'rnd(kem/x25519)). appRoot: HKDF-SHA-256(ikm = the BIP-39 seed, salt empty, info = "scaas/app/v1/root" ‖ appId ‖ ua, 32) ' +
-    "(controller call, owner auto-run 2026-11-19). UNAUDITED.",
+    "(owner 2026-11-20, confirmed). UNAUDITED.",
   keywrap: h(ac.KEYWRAP),
   usage: ac.USAGE,
   receiver: { kemPk: h(recv.kemPk), dk: h(recv.dk), x25519Secret: h(rnd("kem/x25519")) },
