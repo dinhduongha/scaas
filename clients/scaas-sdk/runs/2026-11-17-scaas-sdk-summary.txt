@@ -131,5 +131,6 @@ sdk-deny | b5b5ec89c | 0 | -
 sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (--features <the set>,sync-api)
 bind-cs | dad0a2f3d | 0 | dotnet: 3 passed, 0 failed
 bind-python | bf66d9973 | 0 | unittest: 3 ran, OK
-bind-gen | bf66d9973 | 0 | -
 bind-kotlin | 3013f346c | 0 | kotlin: PASS (0 failures)
+bind-swift | 50dd00cba | 0 | swift: PASS (0 failures)
+bind-gen | 50dd00cba | 0 | -
