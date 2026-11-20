@@ -12,4 +12,24 @@ register_bls_multi n = 64 (threshold 33), SDK self-relay, Limits::max_gas 2^27 |
   receipt gasUsed | 28,600,373 (regular + state; the node reports no split in the receipt)
 negative control: initcode looping for ever (0x5b600056) | eth_estimateGas refused ("gas required exceeds allowance")
   sent with a gas limit of 30,000,000 | included, status 0, gasUsed 16,777,216 = 2^24: the node stopped the regular gas at the cap
-# The PQZ-debit half (mtxConfidentialTransferSingle by SDK self-relay on the copy): see the summary's M20 line.
+# PQZ-debit part: the SDK source of commit d4b036573 (registry writes from the gas table, the owner's two-step registration
+# ruling), with the test e2e_pqz_debit_on_a_node and the runner of the commit that adds this part; a fresh copy as above
+# (chain 31990, 200 M block gas limit). A NORMAL_PQZ token created by the factory (calldata from
+# smartcontracts/evm/script/SdkM20PqzToken.s.sol, sent by cast: forge has no PQZ precompile to simulate it), 1e12 minted to
+# the payer. Every write below is an SDK self-relay on the capped profile (tx_gas_cap 2^24); gasUsed is the payer's receipt.
+step | quote gas_limit | quote regular_gas | receipt gasUsed | status
+register UA 1 (ML-DSA-65 + PQZ key): form two transactions (register, storePqzPop) | | | |
+  register | 68,633,460 | 11,765,460 | 38,807,855 | 1
+  storePqzPop | 78,124,572 | 7,245,072 | 50,603,833 | 1
+register UA 2: form two transactions | | | |
+  register | 68,633,460 | 11,765,460 | 38,710,175 | 1
+  storePqzPop | 78,124,572 | 7,245,072 | 50,508,769 | 1
+shield | 771,324 | 330,324 | 656,790 | 1
+prepare_acc UA 1 | 35,529,168 | 4,537,668 | 23,482,097 | 1
+prepare_acc UA 2 | 35,382,168 | 4,537,668 | 23,176,369 | 1
+mtxConfidentialTransferSingle (the PQZ debit) | 46,445,076 | 13,733,076 | 27,049,355 | 1
+# Why two transactions: the one-transaction form quoted from the table rows came to about 146.8 M whole (above 50 % of the
+# 200 M block) and about 19.0 M regular (above 2^24), both with the rows' 1.5 margin; each step fits both bounds. The two
+# steps used about 89.4 M together, which matches the earlier one-transaction run (uncapped profile, before the table quote:
+# about 90.0 M quoted by the node's estimate, included). The quotes stand 1.54 to 1.77 above the receipts; lowering the
+# registry-write margin (owner 2026-11-20) is the next step.

@@ -207,7 +207,9 @@ a block gas limit above that and an app `Limits::max_gas` above its default 2^24
 2026-11-20, `clients/scaas-sdk/runs/2026-11-20-m20-nethermind-summary.txt`): on a local Nethermind copy with Amsterdam
 (EIP-8037, EIP-7825 enforced) the SDK's 64-member registration, quoted 44,983,452 gas with a regular bound of 14,240,076,
 was included (`gasUsed` 28,600,373), and a call whose regular gas has no bound stopped at exactly 2^24 under a 30 M gas
-limit.
+limit; a PQZ debit (`mtxConfidentialTransferSingle`, quoted 46,445,076 with a regular bound of
+13,733,076) was included (`gasUsed` 27,049,355) after two ML-DSA-65 + PQZ-key registrations sent in two steps each (the
+one-transaction form quoted above half the block and above 2^24 regular).
 
 <a id="CLI-SDK-18"></a>**CLI-SDK-18** — **An operation ends only on a chain fact** (follows [CLI-RPC-09](scaas-rpc.md#CLI-RPC-09);
 SPECIFIED). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,
