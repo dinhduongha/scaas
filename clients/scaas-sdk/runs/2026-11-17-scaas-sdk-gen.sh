@@ -13,6 +13,7 @@
 #   cs    the C# binding (uniffi-bindgen-cs v0.11.1+v0.31.0, its renames in bindings/cs/uniffi.toml) over the reference library
 #         with the async API (`uniffi`): bindings/cs/generated/
 #   python  the Python binding (official UniFFI's uniffi-bindgen 0.31.0) over the same library: bindings/python/generated/
+#   kotlin  the Kotlin binding (the same generator, ktlint not run) over the same library: bindings/kotlin/generated/
 # A UniFFI generator is the pin when `cargo install` recorded that version in the root it runs from (locally
 # `cargo install --locked --root <main checkout>/scratchpad/tools/uniffi`, on PATH). Each part's old output is removed first,
 # so a file the surface no longer produces cannot stay behind. The codegen runs through scripts/capped, in the foreground (on
@@ -20,7 +21,7 @@
 set -euo pipefail
 W=$(git rev-parse --show-toplevel)
 D="$W/clients/scaas-sdk"
-PARTS=",${SCAAS_GEN:-dart,cpp,cs,python},"
+PARTS=",${SCAAS_GEN:-dart,cpp,cs,python,kotlin},"
 GEN=()
 cap=("$W/scripts/capped")
 [ -n "${CI:-}" ] && cap=()
@@ -85,6 +86,16 @@ if [[ $PARTS == *,python,* ]]; then
     (cd "$D/ffi" && uniffi-bindgen generate --library "$(lib uniffi)" --language python \
         --out-dir "$D/bindings/python/generated" >/dev/null)
     echo "[gen] ok: Python"
+fi
+if [[ $PARTS == *,kotlin,* ]]; then
+    GEN+=(bindings/kotlin/generated)
+    echo "[gen] start: Kotlin (uniffi)"
+    pin uniffi-bindgen "0.31.0" uniffi
+    bash "$D/bindings/lib.sh" uniffi >/dev/null
+    rm -rf "$D/bindings/kotlin/generated"
+    (cd "$D/ffi" && uniffi-bindgen generate --library "$(lib uniffi)" --language kotlin --no-format \
+        --out-dir "$D/bindings/kotlin/generated" >/dev/null)
+    echo "[gen] ok: Kotlin"
 fi
 [ ${#GEN[@]} -gt 0 ] || { echo "[gen] FAIL no part in SCAAS_GEN=${SCAAS_GEN:-}" >&2 && exit 2; }
 if [ "${1:-}" = --check ]; then

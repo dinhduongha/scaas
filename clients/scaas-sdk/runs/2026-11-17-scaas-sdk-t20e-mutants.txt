@@ -1,0 +1,4 @@
+# t20e mutants at commit f1b71d932 (name | outcome | test)
+the PRF output names another secret | killed | KOTLINC="$(git rev-parse --git-common-dir)/../scratchpad/tools/kotlin-2.4.21/kotlinc/bin/kotlinc" bash run.sh
+the store's write drops the expected revision | killed | KOTLINC="$(git rev-parse --git-common-dir)/../scratchpad/tools/kotlin-2.4.21/kotlinc/bin/kotlinc" bash run.sh
+2 mutants, 2 killed, 0 survived, 0 not loaded
