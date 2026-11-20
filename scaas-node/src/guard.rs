@@ -632,7 +632,9 @@ pub fn line_target(data: &[u8]) -> Option<LineTarget> {
         setPqzKeyCall::SELECTOR => PqzHome(setPqzKeyCall::abi_decode(data).ok()?.ua),
         setPqzScopedKeyCall::SELECTOR => PqzHome(setPqzScopedKeyCall::abi_decode(data).ok()?.ua),
         storePqzPopCall::SELECTOR => PqzHome(storePqzPopCall::abi_decode(data).ok()?.ua),
-        storePqzScopedPopCall::SELECTOR => PqzHome(storePqzScopedPopCall::abi_decode(data).ok()?.ua),
+        storePqzScopedPopCall::SELECTOR => {
+            PqzHome(storePqzScopedPopCall::abi_decode(data).ok()?.ua)
+        }
         _ => return None,
     })
 }
@@ -1860,9 +1862,17 @@ impl Guard {
     /// a key write held in the holding generation to `holderOf(ua)`, a PQZ write to the record's PQZ home, else
     /// `UA_WRONG_GENERATION`; each names its target. An id no generation holds, a kind no generation registers, a read the
     /// registry refuses: the simulation's (the contract stays the guard). One generation: nothing to choose.
-    async fn check_generation(&self, chain: &Chain, row: &typed::Row, w: &Work) -> Result<(), Refusal> {
+    async fn check_generation(
+        &self,
+        chain: &Chain,
+        row: &typed::Row,
+        w: &Work,
+    ) -> Result<(), Refusal> {
         use crate::abi::IUARegistry as R;
-        let (Some(newest), true) = (self.ua_registries.last().copied(), self.ua_registries.len() > 1) else {
+        let (Some(newest), true) = (
+            self.ua_registries.last().copied(),
+            self.ua_registries.len() > 1,
+        ) else {
             return Ok(());
         };
         let Some(target) = line_target(&w.data) else {
@@ -2137,7 +2147,12 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
 /// §5 N13): a registry-checked job (a derived subject, whose check runs in the registry) takes its simulated limit up to the
 /// chain registry's `txGasCap()` (never below the estimate itself), never a verify budget: a check that passes only on the
 /// fallback path is sent with the gas the simulation found.
-pub async fn gas_capped(chain: &Chain, w: &Work, max: u64, tx_cap: Option<u64>) -> Result<u64, SimError> {
+pub async fn gas_capped(
+    chain: &Chain,
+    w: &Work,
+    max: u64,
+    tx_cap: Option<u64>,
+) -> Result<u64, SimError> {
     let block = chain
         .block_gas()
         .await
@@ -6030,14 +6045,24 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 let f = f.clone();
                 async move {
                     if let Some(b) = block0_of(&r, uid, 31337) {
-                        return axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": r["id"], "result": b}));
+                        return axum::Json(
+                            serde_json::json!({"jsonrpc": "2.0", "id": r["id"], "result": b}),
+                        );
                     }
                     let p = &r["params"][0];
                     let input = alloy::hex::decode(
-                        p["input"].as_str().or(p["data"].as_str()).unwrap_or("0x").trim_start_matches("0x"),
+                        p["input"]
+                            .as_str()
+                            .or(p["data"].as_str())
+                            .unwrap_or("0x")
+                            .trim_start_matches("0x"),
                     )
                     .unwrap_or_default();
-                    let to: Address = p["to"].as_str().unwrap_or_default().parse().unwrap_or_default();
+                    let to: Address = p["to"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .parse()
+                        .unwrap_or_default();
                     let mut f = f.lock().unwrap();
                     let out: Vec<u8> = match input.get(..4) {
                         Some(s) if s == R::kindHomeCall::SELECTOR => {
@@ -6055,11 +6080,15 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                         _ => uid.abi_encode(),
                     };
                     let result = match r["method"].as_str() {
-                        Some("eth_call") => serde_json::json!(format!("0x{}", alloy::hex::encode(out))),
+                        Some("eth_call") => {
+                            serde_json::json!(format!("0x{}", alloy::hex::encode(out)))
+                        }
                         Some("eth_getCode") => serde_json::json!("0x"),
                         _ => serde_json::Value::Null,
                     };
-                    axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": r["id"], "result": result}))
+                    axum::Json(
+                        serde_json::json!({"jsonrpc": "2.0", "id": r["id"], "result": result}),
+                    )
                 }
             }),
         );
@@ -6113,15 +6142,26 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             ua_registries: line,
             ..line_rpc(B256::repeat_byte(0x24), f.clone()).await
         };
-        (Guard::new(&cfg, Default::default()).unwrap(), Chain::with_signer(&cfg, signer()).unwrap())
+        (
+            Guard::new(&cfg, Default::default()).unwrap(),
+            Chain::with_signer(&cfg, signer()).unwrap(),
+        )
     }
 
     fn sig() -> crate::abi::UASig {
-        crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::from(vec![7; 65]), members: vec![] }
+        crate::abi::UASig {
+            keyData: Bytes::new(),
+            signature: Bytes::from(vec![7; 65]),
+            members: vec![],
+        }
     }
 
     fn kem() -> crate::abi::IUARegistry::KemKey {
-        crate::abi::IUARegistry::KemKey { scheme: 0, mlkemEk: Bytes::new(), x25519: B256::ZERO }
+        crate::abi::IUARegistry::KemKey {
+            scheme: 0,
+            mlkemEk: Bytes::new(),
+            x25519: B256::ZERO,
+        }
     }
 
     /// CTR-UA-65: a `register` (and `cacheExpandedKey`) of a kind sent to a generation where it is not registrable is refused
@@ -6131,9 +6171,17 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     #[allow(non_snake_case)]
     async fn guard_register_verifyOnly_UA_VERIFY_ONLY() {
         use crate::abi::IUARegistry as R;
-        let f = Arc::new(Mutex::new(LineFake { home: G1, ..Default::default() }));
+        let f = Arc::new(Mutex::new(LineFake {
+            home: G1,
+            ..Default::default()
+        }));
         let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
-        let attrs = R::UAAttrs { pqzKey: Bytes::new(), pqzPopHash: B256::ZERO, kem: kem(), kemPkHash: B256::ZERO };
+        let attrs = R::UAAttrs {
+            pqzKey: Bytes::new(),
+            pqzPopHash: B256::ZERO,
+            kem: kem(),
+            kemPkHash: B256::ZERO,
+        };
         let register = R::registerCall {
             kind: 0x0131,
             keyData: Bytes::from(vec![1; 1952]),
@@ -6142,9 +6190,18 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             pqzPop: Bytes::new(),
         }
         .abi_encode();
-        let cache = R::cacheExpandedKeyCall { kind: 0x0131, pk: Bytes::from(vec![1; 1952]), part: alloy::primitives::U256::ZERO }.abi_encode();
+        let cache = R::cacheExpandedKeyCall {
+            kind: 0x0131,
+            pk: Bytes::from(vec![1; 1952]),
+            part: alloy::primitives::U256::ZERO,
+        }
+        .abi_encode();
         for data in [register.clone(), cache] {
-            assert_eq!(g.check(&chain, &reg_work(G1, data.clone())).await, Ok(()), "control: on kindHome");
+            assert_eq!(
+                g.check(&chain, &reg_work(G1, data.clone())).await,
+                Ok(()),
+                "control: on kindHome"
+            );
             for to in [G2, G3] {
                 let e = g.check(&chain, &reg_work(to, data.clone())).await;
                 assert!(
@@ -6154,12 +6211,23 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 );
             }
         }
-        assert!(f.lock().unwrap().asked.iter().all(|a| *a == G3), "read through the newest generation");
+        assert!(
+            f.lock().unwrap().asked.iter().all(|a| *a == G3),
+            "read through the newest generation"
+        );
         f.lock().unwrap().home = Address::ZERO;
-        assert_eq!(g.check(&chain, &reg_work(G2, register.clone())).await, Ok(()), "no home: the simulation's");
+        assert_eq!(
+            g.check(&chain, &reg_work(G2, register.clone())).await,
+            Ok(()),
+            "no home: the simulation's"
+        );
         f.lock().unwrap().home = G1;
         let (one, chain) = line_guard(&f, vec![G2]).await;
-        assert_eq!(one.check(&chain, &reg_work(G2, register)).await, Ok(()), "one generation");
+        assert_eq!(
+            one.check(&chain, &reg_work(G2, register)).await,
+            Ok(()),
+            "one generation"
+        );
     }
 
     /// CTR-UA-65: a key write held in the holding generation (`setKemKey`, `acceptMembership`, `updateMsig`) sent to a generation
@@ -6169,20 +6237,37 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     #[allow(non_snake_case)]
     async fn guard_keyWrite_wrongGeneration() {
         use crate::abi::IUARegistry as R;
-        let f = Arc::new(Mutex::new(LineFake { holder: G1, pqz_home: G2, ..Default::default() }));
+        let f = Arc::new(Mutex::new(LineFake {
+            holder: G1,
+            pqz_home: G2,
+            ..Default::default()
+        }));
         let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
         let ua = B256::repeat_byte(0x11);
         let writes = [
-            R::setKemKeyCall { ua, version: 1, kem: kem(), sig: sig() }.abi_encode(),
+            R::setKemKeyCall {
+                ua,
+                version: 1,
+                kem: kem(),
+                sig: sig(),
+            }
+            .abi_encode(),
             R::acceptMembershipCall {
                 ua,
-                memberSig: crate::abi::MemberSig { index: 0, members: vec![], sig: Bytes::new() },
+                memberSig: crate::abi::MemberSig {
+                    index: 0,
+                    members: vec![],
+                    sig: Bytes::new(),
+                },
             }
             .abi_encode(),
             R::updateMsigCall {
                 ua,
                 version: 2,
-                structure: R::MsigStructure { threshold: 1, members: vec![] },
+                structure: R::MsigStructure {
+                    threshold: 1,
+                    members: vec![],
+                },
                 enabled: alloy::primitives::U256::from(1),
                 validUntilBlock: 9,
                 sigs: vec![],
@@ -6191,7 +6276,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .abi_encode(),
         ];
         for data in writes {
-            assert_eq!(g.check(&chain, &reg_work(G1, data.clone())).await, Ok(()), "control: on the holder");
+            assert_eq!(
+                g.check(&chain, &reg_work(G1, data.clone())).await,
+                Ok(()),
+                "control: on the holder"
+            );
             for to in [G2, G3] {
                 let e = g.check(&chain, &reg_work(to, data.clone())).await;
                 assert!(
@@ -6202,8 +6291,18 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             }
         }
         f.lock().unwrap().holder = Address::ZERO;
-        let w = R::setKemKeyCall { ua, version: 1, kem: kem(), sig: sig() }.abi_encode();
-        assert_eq!(g.check(&chain, &reg_work(G3, w)).await, Ok(()), "unregistered: the simulation's");
+        let w = R::setKemKeyCall {
+            ua,
+            version: 1,
+            kem: kem(),
+            sig: sig(),
+        }
+        .abi_encode();
+        assert_eq!(
+            g.check(&chain, &reg_work(G3, w)).await,
+            Ok(()),
+            "unregistered: the simulation's"
+        );
     }
 
     /// CTR-UA-65, spec §11.2: a PQZ write (`setPqzKey`, `setPqzScopedKey`, `storePqzPop`, `storePqzScopedPop`) sent elsewhere than
@@ -6212,13 +6311,29 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     #[allow(non_snake_case)]
     async fn guard_pqzWrite_wrongHome() {
         use crate::abi::IUARegistry as R;
-        let f = Arc::new(Mutex::new(LineFake { holder: G1, pqz_home: G2, ..Default::default() }));
+        let f = Arc::new(Mutex::new(LineFake {
+            holder: G1,
+            pqz_home: G2,
+            ..Default::default()
+        }));
         let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
         let ua = B256::repeat_byte(0x11);
         let scope = Address::repeat_byte(0x5c);
         let writes = [
-            R::setPqzKeyCall { ua, version: 1, pqzKey: Bytes::new(), pqzPopHash: B256::ZERO, sig: sig() }.abi_encode(),
-            R::storePqzPopCall { ua, version: 1, pqzPop: Bytes::from(vec![3; 64]) }.abi_encode(),
+            R::setPqzKeyCall {
+                ua,
+                version: 1,
+                pqzKey: Bytes::new(),
+                pqzPopHash: B256::ZERO,
+                sig: sig(),
+            }
+            .abi_encode(),
+            R::storePqzPopCall {
+                ua,
+                version: 1,
+                pqzPop: Bytes::from(vec![3; 64]),
+            }
+            .abi_encode(),
             R::setPqzScopedKeyCall {
                 ua,
                 scope,
@@ -6230,10 +6345,20 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 sig: sig(),
             }
             .abi_encode(),
-            R::storePqzScopedPopCall { ua, scope, version: 1, pqzPop: Bytes::from(vec![3; 64]) }.abi_encode(),
+            R::storePqzScopedPopCall {
+                ua,
+                scope,
+                version: 1,
+                pqzPop: Bytes::from(vec![3; 64]),
+            }
+            .abi_encode(),
         ];
         for data in writes {
-            assert_eq!(g.check(&chain, &reg_work(G2, data.clone())).await, Ok(()), "control: on the PQZ home");
+            assert_eq!(
+                g.check(&chain, &reg_work(G2, data.clone())).await,
+                Ok(()),
+                "control: on the PQZ home"
+            );
             for to in [G1, G3] {
                 let e = g.check(&chain, &reg_work(to, data.clone())).await;
                 assert!(
@@ -6254,9 +6379,16 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
         for to in [G1, G2, G3, Address::repeat_byte(0x64)] {
             let facts = g.facts(&chain, to, Rule::UaRegistry).await.unwrap();
-            assert_eq!(allowed(Rule::UaRegistry, &facts), to != Address::repeat_byte(0x64), "{to:#x}");
+            assert_eq!(
+                allowed(Rule::UaRegistry, &facts),
+                to != Address::repeat_byte(0x64),
+                "{to:#x}"
+            );
             for other in [Rule::Dex, Rule::AccountFactory, Rule::GovRouter] {
-                assert!(!allowed(other, &facts) || to == Address::repeat_byte(0x64), "{other:?} on {to:#x}");
+                assert!(
+                    !allowed(other, &facts) || to == Address::repeat_byte(0x64),
+                    "{other:?} on {to:#x}"
+                );
             }
         }
         let reg: Vec<&typed::Row> = typed::rows()
@@ -6266,7 +6398,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         assert_eq!(reg.len(), 14, "the registry rows");
         for r in reg {
             let data = [&r.sent[..], &[0u8; 4096][..]].concat();
-            assert!(line_target(&data).is_some(), "{} has no line target", r.entry);
+            assert!(
+                line_target(&data).is_some(),
+                "{} has no line target",
+                r.entry
+            );
         }
     }
 }

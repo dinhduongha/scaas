@@ -1035,7 +1035,14 @@ impl Submitter {
             }
             return;
         }
-        let gas = match guard::gas_capped(&self.chain, &w, self.cfg.max_gas_per_tx, self.cfg.ua_tx_gas_cap).await {
+        let gas = match guard::gas_capped(
+            &self.chain,
+            &w,
+            self.cfg.max_gas_per_tx,
+            self.cfg.ua_tx_gas_cap,
+        )
+        .await
+        {
             Ok(g) => g,
             // NODE-JOB-29: an ML-DSA registration on a registry without the precompile needs its cache parts first
             Err(SimError::Revert(reason)) if reason.starts_with("UAKeyNotCached") => {
@@ -1045,7 +1052,13 @@ impl Submitter {
                 // NODE-JOB-29 (CTR-UA-65): through a later generation, the parts belong in the holding generation; the job waits
                 let at = self.cache_holder(&reason).await;
                 return self
-                    .requeue(&w, format!("{}: {reason}; the parts belong in {at} (cacheExpandedKey there)", guard::UA_KEY_NOT_CACHED))
+                    .requeue(
+                        &w,
+                        format!(
+                            "{}: {reason}; the parts belong in {at} (cacheExpandedKey there)",
+                            guard::UA_KEY_NOT_CACHED
+                        ),
+                    )
                     .await;
             }
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
@@ -1185,7 +1198,13 @@ impl Submitter {
                 // CTR-UA-65: the holding generation refuses the cache (its verifier has a precompile): never completes
                 Err(SimError::Revert(r)) if r.starts_with("UAKeyCache") => {
                     return self
-                        .fail(&w, format!("{}: part {part} refused: {r}; {reason}", guard::UA_KEY_NOT_CACHEABLE))
+                        .fail(
+                            &w,
+                            format!(
+                                "{}: part {part} refused: {r}; {reason}",
+                                guard::UA_KEY_NOT_CACHEABLE
+                            ),
+                        )
                         .await;
                 }
                 Err(SimError::Revert(r)) if guard::lane_cap(&r) => {
@@ -1928,7 +1947,10 @@ impl Submitter {
                 // Review Focus 5 (CTR-UA-68, N13): a registry-checked job whose check starved at the gas it was sent with
                 // (`UAVerifyGas` replayed at that limit): its nonce is unspent and a resend with a fresh estimate may land, so it
                 // waits, never `reverted`; unread, it may land too
-                let registry_checked = w.meta.as_ref().is_some_and(|m| crate::metatx::native(&m.from).is_none());
+                let registry_checked = w
+                    .meta
+                    .as_ref()
+                    .is_some_and(|m| crate::metatx::native(&m.from).is_none());
                 if let (true, Some(g)) = (registry_checked, sent_gas) {
                     let why = match self.chain.call_with_gas(w.to, w.data.clone(), g).await {
                         Err(SimError::Revert(r)) if r.starts_with("UAVerifyGas") => Some(r),
@@ -1937,7 +1959,13 @@ impl Submitter {
                     };
                     if let Some(r) = why {
                         return self
-                            .requeue(&w, format!("{}: the receipt reverted at gas {g}; {r}", guard::UA_VERIFY_GAS))
+                            .requeue(
+                                &w,
+                                format!(
+                                    "{}: the receipt reverted at gas {g}; {r}",
+                                    guard::UA_VERIFY_GAS
+                                ),
+                            )
                             .await;
                     }
                 }
@@ -9502,7 +9530,11 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         const CAP: u64 = 1 << 24;
         let run = |estimate: u64, cap: Option<u64>| async move {
             let (r, rpc) = outcomes(
-                Evm { mtx_nonce: Some(0), estimate: Some(estimate), ..Default::default() },
+                Evm {
+                    mtx_nonce: Some(0),
+                    estimate: Some(estimate),
+                    ..Default::default()
+                },
                 vec![ua_job(7, &ua_meta(7))],
                 move |c| {
                     (c.max_gas_per_tx, c.ua_tx_gas_cap) = (64_000_000, cap);
@@ -9516,29 +9548,50 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         // the fallback: 6.5 M, far above a verify budget (0.25 M on the consumer path of `mldsa65`)
         assert_eq!(run(6_500_000, Some(CAP)).await, 7_800_000);
         assert_eq!(run(15_000_000, Some(CAP)).await, CAP, "up to txGasCap");
-        assert_eq!(run(15_000_000, None).await, 18_000_000, "control: no line read");
-        assert_eq!(run(17_000_000, Some(CAP)).await, 17_000_000, "never below the estimate");
+        assert_eq!(
+            run(15_000_000, None).await,
+            18_000_000,
+            "control: no line read"
+        );
+        assert_eq!(
+            run(17_000_000, Some(CAP)).await,
+            17_000_000,
+            "never below the estimate"
+        );
         // a starved check in the simulation: queued by name, nothing sent
         let (r, rpc) = outcomes(
-            Evm { mtx_nonce: Some(0), sim: Some("verify_gas"), ..Default::default() },
+            Evm {
+                mtx_nonce: Some(0),
+                sim: Some("verify_gas"),
+                ..Default::default()
+            },
             vec![ua_job(7, &ua_meta(7))],
             |c| c.ua_tx_gas_cap = Some(CAP),
         )
         .await;
-        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("UA_VERIFY_GAS: UAVerifyGas"), "{r:?}");
+        assert!(
+            r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("UA_VERIFY_GAS: UAVerifyGas"),
+            "{r:?}"
+        );
         assert!(rpc.lock().unwrap().sent.is_empty());
         // the receipt reverted: replayed at the sent gas, `UAVerifyGas` waits; another revert is `reverted`
         for (sim, want) in [("verify_gas", "queued"), ("revert", "reverted")] {
-            let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+            let (url, rpc) = fake_evm(Evm {
+                mtx_nonce: Some(0),
+                ..Default::default()
+            })
+            .await;
             let (external_pull, o) = fake_external_pull(Fake {
                 jobs: vec![ua_job(7, &ua_meta(7))],
                 tokens: toks(),
                 ..Default::default()
             })
             .await;
-            let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| c.ua_tx_gas_cap = Some(CAP))
-                .await
-                .unwrap();
+            let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
+                c.ua_tx_gas_cap = Some(CAP)
+            })
+            .await
+            .unwrap();
             s.poll_outbox().await;
             assert_eq!(states(&o), ["signed", "broadcast"]);
             let h = rpc.lock().unwrap().sent[0].0;
@@ -9549,7 +9602,9 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             assert_eq!(r["chain_state"].as_str(), Some(want), "{sim}: {r}");
             assert_eq!(
                 want == "queued",
-                r["error"].as_str().is_some_and(|e| e.starts_with("UA_VERIFY_GAS: the receipt reverted at gas")),
+                r["error"]
+                    .as_str()
+                    .is_some_and(|e| e.starts_with("UA_VERIFY_GAS: the receipt reverted at gas")),
                 "{sim}: {r}"
             );
         }
@@ -9563,17 +9618,33 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     async fn nodejob29_target_holder() {
         let (g1, g2) = (Address::repeat_byte(0x61), Address::repeat_byte(0x62));
         for (holder, named) in [
-            (Some(g1), format!("the parts belong in {g1:#x}, the generation that holds {:#x}", B256::repeat_byte(0xab))),
-            (None, "the parts belong in the holding generation".to_string()),
+            (
+                Some(g1),
+                format!(
+                    "the parts belong in {g1:#x}, the generation that holds {:#x}",
+                    B256::repeat_byte(0xab)
+                ),
+            ),
+            (
+                None,
+                "the parts belong in the holding generation".to_string(),
+            ),
         ] {
             let (r, rpc) = outcomes(
-                Evm { mtx_nonce: Some(0), sim: Some("not_cached"), holder, ..Default::default() },
+                Evm {
+                    mtx_nonce: Some(0),
+                    sim: Some("not_cached"),
+                    holder,
+                    ..Default::default()
+                },
                 vec![ua_job(7, &ua_meta(7))],
                 move |c| c.ua_registries = vec![g1, g2],
             )
             .await;
             assert!(
-                r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("UA_KEY_NOT_CACHED: UAKeyNotCached")
+                r.len() == 1
+                    && r[0].0 == "queued"
+                    && r[0].1.starts_with("UA_KEY_NOT_CACHED: UAKeyNotCached")
                     && r[0].1.contains(&named),
                 "{r:?}"
             );
@@ -9596,7 +9667,11 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         )
         .await;
         assert!(
-            r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("UA_KEY_NOT_CACHEABLE: part 0 refused: UAKeyCache"),
+            r.len() == 1
+                && r[0].0 == "dead"
+                && r[0]
+                    .1
+                    .starts_with("UA_KEY_NOT_CACHEABLE: part 0 refused: UAKeyCache"),
             "{r:?}"
         );
         assert!(rpc.lock().unwrap().sent.is_empty());

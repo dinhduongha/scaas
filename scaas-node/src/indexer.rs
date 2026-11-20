@@ -227,7 +227,9 @@ pub fn flag_duplicate_pqz(state: &mut PqzOwners, rows: &mut Vec<Value>) {
             _ => continue,
         };
         if !r["pqz_key_hash"].is_null() {
-            state.keys.insert((s(&r["ua"]), version), s(&r["pqz_key_hash"]));
+            state
+                .keys
+                .insert((s(&r["ua"]), version), s(&r["pqz_key_hash"]));
         }
     }
     for r in rows.iter_mut() {
@@ -265,7 +267,10 @@ fn pqz_key_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         let e = e.inner.data;
         (v["event"], v["ua"], v["kind"]) = (json!("UARegistered"), h(e.ua), json!(e.kind));
         // version 0 of the PQZ key (`keyHashOf(0x0142, pqzKey)`), for the duplicate flag
-        if let (false, Ok(Some(k))) = (e.attrs.pqzKey.is_empty(), scaas_ua::key_hash_of(0x0142, &e.attrs.pqzKey)) {
+        if let (false, Ok(Some(k))) = (
+            e.attrs.pqzKey.is_empty(),
+            scaas_ua::key_hash_of(0x0142, &e.attrs.pqzKey),
+        ) {
             v["pqz_key_hash"] = h(B256::from(k));
         }
     } else if topic0 == R::UAPqzKeyAdded::SIGNATURE_HASH {
@@ -1053,7 +1058,16 @@ pub async fn run(
     let mut drift_due = std::time::Instant::now();
     let (mut health, mut owners) = (PqzHealth::default(), PqzOwners::default());
     loop {
-        match step_health(&chain, &external_pull, router, &line, &mut health, &mut owners).await {
+        match step_health(
+            &chain,
+            &external_pull,
+            router,
+            &line,
+            &mut health,
+            &mut owners,
+        )
+        .await
+        {
             Ok(true) => continue, // còn tồn đọng: đi tiếp ngay
             Ok(false) => {}
             Err(e) => warn!(chain = chain.number, "indexer: {e:#}"),
@@ -2774,12 +2788,21 @@ mod tests {
 
     /// `UARegistered` of `ua` with a PQZ key `pqz_key` (empty: none).
     fn registered(ua: B256, pqz_key: &[u8]) -> LogData {
-        let kem = IUARegistry::KemKey { scheme: 0, mlkemEk: Default::default(), x25519: B256::ZERO };
+        let kem = IUARegistry::KemKey {
+            scheme: 0,
+            mlkemEk: Default::default(),
+            x25519: B256::ZERO,
+        };
         IUARegistry::UARegistered {
             ua,
             kind: 0x0131,
             keyData: vec![1u8; 1952].into(),
-            attrs: IUARegistry::UAAttrs { pqzKey: pqz_key.to_vec().into(), pqzPopHash: B256::ZERO, kem, kemPkHash: B256::ZERO },
+            attrs: IUARegistry::UAAttrs {
+                pqzKey: pqz_key.to_vec().into(),
+                pqzPopHash: B256::ZERO,
+                kem,
+                kemPkHash: B256::ZERO,
+            },
             popHash: B256::ZERO,
             pqzPop: Default::default(),
             checkedPop: 1,
@@ -2801,7 +2824,10 @@ mod tests {
             Address::repeat_byte(0x64),
             Address::repeat_byte(0x70),
         );
-        let line = Line { all: vec![g1, g2, g3], pqz: vec![g1, g3] };
+        let line = Line {
+            all: vec![g1, g2, g3],
+            pqz: vec![g1, g3],
+        };
         let f = pay_filter_with(0, 9, &mut vec![tok], None, &line.all);
         for a in [g1, g2, g3, tok] {
             assert!(f.address.iter().any(|x| *x == a), "{a:#x} read");
@@ -2809,8 +2835,14 @@ mod tests {
         for t in PQZ_KEY_TOPICS {
             assert!(f.topics[0].iter().any(|x| *x == t), "{t:#x}");
         }
-        assert!(f.topics[0].iter().any(|x| *x == IUARegistry::UARegistered::SIGNATURE_HASH));
-        let (ua1, ua2, ua3) = (B256::repeat_byte(1), B256::repeat_byte(2), B256::repeat_byte(3));
+        assert!(f.topics[0]
+            .iter()
+            .any(|x| *x == IUARegistry::UARegistered::SIGNATURE_HASH));
+        let (ua1, ua2, ua3) = (
+            B256::repeat_byte(1),
+            B256::repeat_byte(2),
+            B256::repeat_byte(3),
+        );
         let added = |ua: B256| {
             IUARegistry::UAPqzKeyAdded {
                 ua,
@@ -2822,7 +2854,13 @@ mod tests {
             }
             .encode_log_data()
         };
-        let credited = IPqzToken::Credited { ua: ua1, index: 1, keyVersion: 0, entryRef: B256::ZERO }.encode_log_data();
+        let credited = IPqzToken::Credited {
+            ua: ua1,
+            index: 1,
+            keyVersion: 0,
+            entryRef: B256::ZERO,
+        }
+        .encode_log_data();
         let logs = [
             log_at(g1, 1, 0, registered(ua1, &[])),
             log_at(g2, 2, 0, registered(ua2, &[])),
@@ -2837,7 +2875,12 @@ mod tests {
         let rows = pqz_key_origin(pay_events(&logs, None), &line);
         let got: Vec<(String, String)> = rows
             .iter()
-            .map(|r| (r["event"].as_str().unwrap().into(), r["contract"].as_str().unwrap().into()))
+            .map(|r| {
+                (
+                    r["event"].as_str().unwrap().into(),
+                    r["contract"].as_str().unwrap().into(),
+                )
+            })
             .collect();
         let n = |e: &str, a: Address| (e.to_string(), format!("{a:#x}"));
         assert_eq!(
@@ -2860,12 +2903,21 @@ mod tests {
     #[test]
     fn indexer_duplicate_pqz_hash_flag() {
         let (g1, g3) = (Address::repeat_byte(0x61), Address::repeat_byte(0x63));
-        let line = Line { all: vec![g1, Address::repeat_byte(0x62), g3], pqz: vec![g1, g3] };
+        let line = Line {
+            all: vec![g1, Address::repeat_byte(0x62), g3],
+            pqz: vec![g1, g3],
+        };
         let key = vec![0x42u8; 64];
         let hash = B256::from(scaas_ua::key_hash_of(0x0142, &key).unwrap().unwrap());
         let (ua_new, ua_old) = (B256::repeat_byte(0x0a), B256::repeat_byte(0x0b));
         let stored = |ua: B256, version: u64, checked: u8| {
-            IUARegistry::UAPqzPopStored { ua, version, checkedPqzPop: checked, pqzPop: Default::default() }.encode_log_data()
+            IUARegistry::UAPqzPopStored {
+                ua,
+                version,
+                checkedPqzPop: checked,
+                pqzPop: Default::default(),
+            }
+            .encode_log_data()
         };
         let rows = |logs: &[Log]| pqz_key_origin(pay_events(logs, None), &line);
         let mut owners = PqzOwners::default();
@@ -2890,9 +2942,16 @@ mod tests {
             log_at(g3, 4, 0, stored(ua_new, 1, 1)),
         ]);
         flag_duplicate_pqz(&mut owners, &mut r1);
-        assert!(r1.iter().all(|r| r["alert"].is_null() && r["event"] != "UARegistered"), "one owner: {r1:?}");
+        assert!(
+            r1.iter()
+                .all(|r| r["alert"].is_null() && r["event"] != "UARegistered"),
+            "one owner: {r1:?}"
+        );
         // range 2: the older home (gen 1) proves the same hash for `ua_old` in its `register` (the proof, then `UARegistered`)
-        let mut r2 = rows(&[log_at(g1, 5, 0, stored(ua_old, 0, 1)), log_at(g1, 5, 1, registered(ua_old, &key))]);
+        let mut r2 = rows(&[
+            log_at(g1, 5, 0, stored(ua_old, 0, 1)),
+            log_at(g1, 5, 1, registered(ua_old, &key)),
+        ]);
         flag_duplicate_pqz(&mut owners, &mut r2);
         assert_eq!(r2.len(), 1, "UARegistered dropped: {r2:?}");
         assert_eq!(r2[0]["alert"], json!(true), "{r2:?}");

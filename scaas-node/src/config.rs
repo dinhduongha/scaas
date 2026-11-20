@@ -768,7 +768,8 @@ impl Config {
             }
             c.relay_params().with_context(|| format!("chain {key}"))?;
             c.check_services().with_context(|| format!("chain {key}"))?;
-            c.check_ua_registries().with_context(|| format!("chain {key}"))?;
+            c.check_ua_registries()
+                .with_context(|| format!("chain {key}"))?;
             if !(1..=100).contains(&c.breaker.call_budget_pct) {
                 bail!("chain {key}: breaker.call_budget_pct is a share of the budget, 1 to 100");
             }
@@ -1248,7 +1249,10 @@ impl ChainCfg {
                 (CTR-UA-65; config shape change)");
         }
         if !self.ua_registries.is_empty() && self.uses_adapter() {
-            bail!("ua_registries is the EVM lane's, not family {}'s (CTR-UA-65)", self.family);
+            bail!(
+                "ua_registries is the EVM lane's, not family {}'s (CTR-UA-65)",
+                self.family
+            );
         }
         if self.ua_registries.len() > MAX_GENERATION as usize {
             bail!(
@@ -1334,7 +1338,10 @@ pub struct UaGen {
 /// comes from the links (`predecessor()`), never from the config.
 pub fn order_ua_line(chain_uid: B256, gens: &[UaGen]) -> Result<Vec<UaGen>> {
     if gens.len() > MAX_GENERATION as usize {
-        bail!("{UA_LINE_DEPTH}: {} entries, above MAX_GENERATION {MAX_GENERATION}", gens.len());
+        bail!(
+            "{UA_LINE_DEPTH}: {} entries, above MAX_GENERATION {MAX_GENERATION}",
+            gens.len()
+        );
     }
     for g in gens {
         let r = g.registry;
@@ -1342,7 +1349,10 @@ pub fn order_ua_line(chain_uid: B256, gens: &[UaGen]) -> Result<Vec<UaGen>> {
             bail!("{UA_LINE_CHAIN_UID}: {r:#x} answers chainUid() {:#x}, this chain's is {chain_uid:#x}", g.chain_uid);
         }
         if !(1..=MAX_GENERATION).contains(&g.generation) {
-            bail!("{UA_LINE_DEPTH}: {r:#x} answers generation() {}, outside 1 … {MAX_GENERATION}", g.generation);
+            bail!(
+                "{UA_LINE_DEPTH}: {r:#x} answers generation() {}, outside 1 … {MAX_GENERATION}",
+                g.generation
+            );
         }
         if (g.generation == 1) != (g.predecessor == Address::ZERO) {
             bail!("{UA_LINE_ROOT}: {r:#x} is generation {} with predecessor {:#x}: generation 1, and only it, has none",
@@ -1354,17 +1364,33 @@ pub fn order_ua_line(chain_uid: B256, gens: &[UaGen]) -> Result<Vec<UaGen>> {
         return Ok(roots);
     }
     if roots.len() != 1 {
-        bail!("{UA_LINE_ROOT}: {} entries of generation 1, exactly one is", roots.len());
+        bail!(
+            "{UA_LINE_ROOT}: {} entries of generation 1, exactly one is",
+            roots.len()
+        );
     }
     let mut line = roots;
     while let Some(last) = line.last().copied() {
-        let next: Vec<UaGen> = gens.iter().filter(|g| g.predecessor == last.registry).copied().collect();
+        let next: Vec<UaGen> = gens
+            .iter()
+            .filter(|g| g.predecessor == last.registry)
+            .copied()
+            .collect();
         match next[..] {
             [] => break,
             [n] if n.generation == last.generation + 1 => line.push(n),
-            [n] => bail!("{UA_LINE_GAP}: {:#x} is generation {} over {:#x} of generation {}", n.registry, n.generation,
-                last.registry, last.generation),
-            _ => bail!("{UA_LINE_FORK}: {} entries name {:#x} as predecessor", next.len(), last.registry),
+            [n] => bail!(
+                "{UA_LINE_GAP}: {:#x} is generation {} over {:#x} of generation {}",
+                n.registry,
+                n.generation,
+                last.registry,
+                last.generation
+            ),
+            _ => bail!(
+                "{UA_LINE_FORK}: {} entries name {:#x} as predecessor",
+                next.len(),
+                last.registry
+            ),
         }
     }
     if let Some(g) = gens.iter().find(|g| !line.contains(g)) {
@@ -1384,17 +1410,31 @@ pub async fn read_ua_line(chain: &crate::chain::Chain, regs: &[Address]) -> Resu
     let uid = chain.uid().await?;
     let mut gens = Vec::with_capacity(regs.len());
     for &r in regs {
-        let e = |what: &'static str| move |e: crate::chain::SimError| anyhow::anyhow!("ua_registries {r:#x}: {what}: {e}");
+        let e = |what: &'static str| {
+            move |e: crate::chain::SimError| anyhow::anyhow!("ua_registries {r:#x}: {what}: {e}")
+        };
         gens.push(UaGen {
             registry: r,
-            chain_uid: chain.call_view(r, R::chainUidCall {}).await.map_err(e("chainUid()"))?,
-            generation: chain.call_view(r, R::generationCall {}).await.map_err(e("generation()"))?,
-            predecessor: chain.call_view(r, R::predecessorCall {}).await.map_err(e("predecessor()"))?,
+            chain_uid: chain
+                .call_view(r, R::chainUidCall {})
+                .await
+                .map_err(e("chainUid()"))?,
+            generation: chain
+                .call_view(r, R::generationCall {})
+                .await
+                .map_err(e("generation()"))?,
+            predecessor: chain
+                .call_view(r, R::predecessorCall {})
+                .await
+                .map_err(e("predecessor()"))?,
             pqz: chain
                 .call_view(r, R::kindEnabledCall { kind: 0x0142 })
                 .await
                 .map_err(e("kindEnabled(0x0142)"))?,
-            tx_gas_cap: chain.call_view(r, R::txGasCapCall {}).await.map_err(e("txGasCap()"))?,
+            tx_gas_cap: chain
+                .call_view(r, R::txGasCapCall {})
+                .await
+                .map_err(e("txGasCap()"))?,
         });
     }
     order_ua_line(uid, &gens)
@@ -2149,7 +2189,11 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
                 registry: Address::repeat_byte(i),
                 chain_uid: uid,
                 generation: i,
-                predecessor: if i == 1 { Address::ZERO } else { Address::repeat_byte(i - 1) },
+                predecessor: if i == 1 {
+                    Address::ZERO
+                } else {
+                    Address::repeat_byte(i - 1)
+                },
                 pqz: i == 1,
                 tx_gas_cap: 1 << 24,
             })
@@ -2173,7 +2217,10 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         g[1].chain_uid = B256::repeat_byte(0x25);
         refused(&g, UA_LINE_CHAIN_UID);
         let mut g = ok.clone();
-        g.push(UaGen { registry: Address::repeat_byte(9), ..ok[0] });
+        g.push(UaGen {
+            registry: Address::repeat_byte(9),
+            ..ok[0]
+        });
         refused(&g, UA_LINE_ROOT);
         let mut g = ok.clone();
         g[0].predecessor = Address::repeat_byte(9);
@@ -2189,21 +2236,45 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         let mut g = ok.clone();
         g[2].generation = 17;
         refused(&g, UA_LINE_DEPTH);
-        assert_eq!(order_ua_line(uid, &line(16, uid)).unwrap().len(), 16, "16 generations fit");
+        assert_eq!(
+            order_ua_line(uid, &line(16, uid)).unwrap().len(),
+            16,
+            "16 generations fit"
+        );
         // at load: the old key by name, 17 entries, one entry twice
         let load = |extra: &str| -> Result<Config> {
             let c: Config = toml::from_str(&format!("{OK}{extra}\n"))?;
             c.validate().map(|_| c)
         };
         let one = format!("{:#x}", Address::repeat_byte(1));
-        let e = format!("{:#}", load(&format!("ua_registry = \"{one}\"")).unwrap_err());
-        assert!(e.contains("ua_registry is replaced by ua_registries"), "{e}");
-        let list = |n: u8| (1..=n).map(|i| format!("\"{:#x}\"", Address::repeat_byte(i))).collect::<Vec<_>>().join(", ");
+        let e = format!(
+            "{:#}",
+            load(&format!("ua_registry = \"{one}\"")).unwrap_err()
+        );
+        assert!(
+            e.contains("ua_registry is replaced by ua_registries"),
+            "{e}"
+        );
+        let list = |n: u8| {
+            (1..=n)
+                .map(|i| format!("\"{:#x}\"", Address::repeat_byte(i)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
         let c = load(&format!("ua_registries = [{}]", list(2))).unwrap();
-        assert_eq!(c.chains[0].ua_registries, [Address::repeat_byte(1), Address::repeat_byte(2)]);
-        let e = format!("{:#}", load(&format!("ua_registries = [{}]", list(17))).unwrap_err());
+        assert_eq!(
+            c.chains[0].ua_registries,
+            [Address::repeat_byte(1), Address::repeat_byte(2)]
+        );
+        let e = format!(
+            "{:#}",
+            load(&format!("ua_registries = [{}]", list(17))).unwrap_err()
+        );
         assert!(e.contains(UA_LINE_DEPTH), "{e}");
-        let e = format!("{:#}", load(&format!("ua_registries = [\"{one}\", \"{one}\"]")).unwrap_err());
+        let e = format!(
+            "{:#}",
+            load(&format!("ua_registries = [\"{one}\", \"{one}\"]")).unwrap_err()
+        );
         assert!(e.contains(UA_LINE_FORK), "{e}");
     }
 
