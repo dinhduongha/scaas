@@ -1,0 +1,10 @@
+killed   | M1 G2ADD before the G2MSM checks | smartcontracts/evm/src/ua/UAKinds.sol | rc=1 | expect test_blsMulti_invalidKeyFailsBeforeG2Add | 1 failed: test_blsMulti_invalidKeyFailsBeforeG2Add
+SURVIVED | M2 uncapped G2ADD | smartcontracts/evm/src/ua/UAKinds.sol | rc=0 | expect EQUIVALENT | 0 failed:
+killed   | M3 uint16 weight sum | smartcontracts/evm/src/ua/UAKinds.sol | rc=1 | expect test_blsMulti_weightSumWide | 3 failed: test_blsMulti_kinds_json_rows, test_blsMulti_weightSumWide, test_validRows
+killed   | M4 order check <= instead of < | smartcontracts/evm/src/ua/UAKinds.sol | rc=1 | expect test_blsMulti_kinds_json_rows | 2 failed: test_blsMulti_kinds_json_rows, test_invalidRows
+killed   | M5 no identity check on a key | smartcontracts/evm/src/ua/UAKinds.sol | rc=1 | expect test_blsMulti_kinds_json_rows | 2 failed: test_blsMulti_kinds_json_rows, test_invalidRows
+killed   | M6 no identity check on apk | smartcontracts/evm/src/ua/UAKinds.sol | rc=1 | expect test_blsMulti_kinds_json_rows | 2 failed: test_blsMulti_kinds_json_rows, test_invalidRows
+6 mutants, 5 killed, 1 survived (equivalent), 0 not loaded
+M2 equivalent: the G2ADD calls run only after every key passed its capped G2MSM check (canonical, on the curve, in G2), so no G2ADD input can make the precompile fail and burn its gas; the cap bounds nothing reachable. Kept as F14's defence in depth.
+M1 found a defect before it was committed: `_add` read `and(staticcall(…), eq(returndatasize(), 256))`, and Yul evaluates arguments right to left, so the size was the previous call's; it passed only because a G2MSM (256 bytes back) always ran first. Fixed (call bound first, then the size); the same class searched in every .sol outside legacy/: no other site.
+Runs one mutant per forge run (python3 -I t5-mutants.py <i> <i>) from the worktree root.

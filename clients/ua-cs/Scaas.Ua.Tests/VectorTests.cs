@@ -928,6 +928,45 @@ public class VectorTests
         }
     }
 
+    /// <summary>bls12381-multi (0x0121, spec 2026-11-19-bls12381-multi §2): kinds.json's ten valid rows (d, s, the stored ua ‖ s, keyOf,
+    /// the typed key; Review Focus 1), portable.json blsMultiRegistrations (registerBlsMulti's named args, PoP message, calldata length).
+    /// This library verifies no BLS signature, so groups.json's signature rows are not its.</summary>
+    [Fact]
+    public void BlsMultiRows()
+    {
+        Assert.True(UA.HasSurplusForm(0x0121));
+        Assert.False(UA.HasSurplusForm(0x0106) || UA.HasSurplusForm(0x0120));
+        var n = 0;
+        foreach (var r in Load("kinds.json").GetProperty("valid").EnumerateArray().Where(r => Kind(r) == 0x0121))
+        {
+            var d = B(r.GetProperty("keyData"));
+            UA.ValidateKeyData(0x0121, d);
+            var s = UA.BlsMultiCompress(d);
+            Assert.Equal(r.GetProperty("compressed").GetString(), Hx(s));
+            Assert.Equal(d, UA.BlsMultiExpand(s));
+            Assert.Equal(r.GetProperty("stored").GetString(), Hx([.. UA.UAOf(0x0121, d), .. s]));
+            Assert.Equal(r.GetProperty("keyOf").GetString(), Hx(d[..256]));
+            var k = (UA.BlsMultiKey)UA.TypedKey(0x0121, d)!;
+            byte[] packed = [.. k.AggKey, (byte)(k.Threshold >> 8), (byte)k.Threshold, 0, (byte)k.Members.Length,
+                .. k.Members.SelectMany(m => m.Key.Concat(new[] { (byte)(m.Weight >> 8), (byte)m.Weight }))];
+            Assert.Equal(d, packed);
+            n++;
+        }
+        Assert.Equal(10, n);
+        foreach (var r in Load("portable.json").GetProperty("blsMultiRegistrations").EnumerateArray())
+        {
+            var d = B(r.GetProperty("keyData"));
+            var ua = UA.UAOf(0x0121, d);
+            Assert.Equal(r.GetProperty("ua").GetString(), Hx(ua));
+            Assert.Equal(r.GetProperty("popMessage").GetString(), Hx(UA.HolderPopMessage(0x0121, ua, d).Message));
+            var (args, fill) = UA.RegistrationArgs(0x0121, d, pop: B(r.GetProperty("pop")));
+            Assert.Null(fill);
+            SameJson(args, r.GetProperty("args"));
+            var m = ((UA.BlsMultiKey)args.Key!).Members.Length;
+            Assert.Equal(4 + 128 + 96 + 288 + 32 + 384 * m + 288 + 160 + 32, args.CalldataLength()); // empty attrs, a 128-byte pop
+        }
+    }
+
     static void SameJson(object args, JsonElement want) =>
         Assert.True(JsonNode.DeepEquals(JsonNode.Parse(UA.RegistryJson(args)), JsonNode.Parse(want.GetRawText())), string.Concat(want.GetRawText().Take(64)));
 

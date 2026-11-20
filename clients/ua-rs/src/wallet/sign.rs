@@ -237,6 +237,46 @@ impl UaKey {
         self.sign_ua_msg(&app_request(self.kind, app_id, digest)?, None)
     }
 
+    /// A `bls12381-multi` member key (kind `0x0121`): its partial over `memberDigest(ua, ua_msg)` for the group `key_data`
+    /// (`d`), `ua` derived from it (spec 2026-11-19-bls12381-multi §5.4, N5); `Argument` unless `d` lists this key.
+    pub fn sign_bls_multi(&self, key_data: &[u8], ua_msg: &[u8; 32]) -> Result<Vec<u8>> {
+        self.sign_request(&bls_multi_request(
+            key_data,
+            *ua_msg,
+            SigRole::Authorization,
+        ))
+    }
+
+    /// A `bls12381-multi` member key's PoP part for the group `key_data` (`d`): `popMsg` derived from `d` (spec §4, N5).
+    pub fn sign_bls_multi_pop(&self, key_data: &[u8]) -> Result<Vec<u8>> {
+        let pop_msg = crate::bls_multi::pop_message(key_data).map_err(|_| Error::Argument)?;
+        self.sign_request(&bls_multi_request(key_data, pop_msg, SigRole::Pop))
+    }
+
+    fn sign_bls_multi_req(&self, req: &SignRequest) -> Result<Vec<u8>> {
+        let SignRequest::BlsMultiMember {
+            key_data,
+            message,
+            role,
+        } = req
+        else {
+            return Err(Error::Argument);
+        };
+        if self.kind != crate::bls_multi::KIND {
+            return Err(Error::Argument);
+        }
+        let part = self.secret.with(|s| {
+            let sk: zeroize::Zeroizing<[u8; 32]> =
+                zeroize::Zeroizing::new(s.try_into().map_err(|_| Error::Argument)?);
+            match role {
+                SigRole::Pop => crate::bls_multi::member_pop(&sk, key_data),
+                SigRole::Authorization => crate::bls_multi::member_sign(&sk, key_data, message),
+            }
+            .map_err(|_| Error::Argument)
+        })??;
+        Ok(part.to_vec())
+    }
+
     /// As an `msig` member: the signature of `uaMessage(kind, member, memberDigest(structure_ua, structure_ua_msg))`.
     pub fn sign_member(
         &self,
@@ -255,7 +295,19 @@ impl Signer for UaKey {
         }
     }
     fn sign_request(&self, req: &SignRequest) -> Result<Vec<u8>> {
+        if matches!(req, SignRequest::BlsMultiMember { .. }) {
+            return self.sign_bls_multi_req(req);
+        }
         self.sign_ua_msg(req, None)
+    }
+}
+
+/// The request of a `bls12381-multi` member part (built here only).
+fn bls_multi_request(key_data: &[u8], message: [u8; 32], role: SigRole) -> SignRequest {
+    SignRequest::BlsMultiMember {
+        key_data: key_data.to_vec(),
+        message,
+        role,
     }
 }
 

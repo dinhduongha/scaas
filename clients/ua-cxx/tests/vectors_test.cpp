@@ -992,6 +992,37 @@ static json recordSig(const json &r) {
     return {{"signature", r["sig"]}};
 }
 
+// bls-multi T15 (0x0121): groups.json blsMulti groups and its wallet group, kinds.json's builder row (key data accepted, id,
+// popMsg), portable.json blsMultiRegistrations (digests, popMsg, registerBlsMulti's named arguments)
+static void bls_multi() {
+    json g = load("groups.json")["blsMulti"], k = load("kinds.json"), p = load("portable.json");
+    json rows = g["groups"];
+    rows.push_back(g["wallet"]);
+    rows.push_back(k["blsMultiBuilder"]);
+    CHECK(rows.size() == 13, "rows");
+    for (auto &r : rows) {
+        Bytes d = bytes(r["keyData"]);
+        CHECK(code_of([&] { validateKeyData(0x0121, d, false); }).empty(), r["ua"].get<std::string>());
+        CHECK(hx(uaOf(0x0121, d)) == r["ua"].get<std::string>(), r["ua"].get<std::string>());
+        if (r.contains("popMessage"))
+            CHECK(hx(holderPopMessage(0x0121, bytes(r["ua"]), d).message) == r["popMessage"].get<std::string>(),
+                  r["ua"].get<std::string>());
+    }
+    CHECK(p["blsMultiRegistrations"].size() == 2, "registrations");
+    for (auto &r : p["blsMultiRegistrations"]) {
+        std::string name = r["name"];
+        CHECK(hx(uaOf(0x0121, bytes(r["keyData"]))) == r["ua"].get<std::string>(), name);
+        auto h = registerRow(r);
+        CHECK(hx(h.portableRecordDigest) == r["portableRecordDigest"].get<std::string>(), name);
+        CHECK(hx(h.registrationDigest) == r["registrationDigest"].get<std::string>(), name);
+        CHECK(hx(h.message) == r["popMessage"].get<std::string>(), name);
+        json i = regInput(r);
+        i["kemCommit"] = false;
+        json a = regArgs(i);
+        CHECK(a["args"] == r["args"] && a["args"]["entry"] == "registerBlsMulti", name);
+    }
+}
+
 static void set_key_args() {
     json p = load("portable.json");
     CHECK(p["kemRecords"].size() == 12, "kemRecords"); // + v1-v3 of mldsa87, fndsa1024; no msig (CTR-UA-32)
@@ -1136,7 +1167,8 @@ int main(int argc, char **argv) {
                                             {"pay_rows", pay_rows},
                                             {"member_sig_hashes", member_sig_hashes},
                                             {"governance_bits_rows", governance_bits_rows},
-                                            {"id_display_rows", id_display_rows}};
+                                            {"id_display_rows", id_display_rows},
+                                            {"bls_multi", bls_multi}};
     if (argc != 2 || !tests.count(argv[1])) {
         std::fprintf(stderr, "usage: vectors_test <name>\n");
         return 2;

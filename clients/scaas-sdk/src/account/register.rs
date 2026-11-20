@@ -876,6 +876,7 @@ impl Account {
                     tx_nonce: Some(quote.tx_nonce),
                     path: "self".into(),
                     payer: Some(format!("{:#x}", payer_address(&sdk, &write.payer)?)),
+                    members: None,
                     from_block,
                     state: "signed".into(),
                     detail: "Signed".into(),

@@ -1814,7 +1814,7 @@ test("verifyRegistration refuses every kinds.json invalid key by its error; vali
   for (const r of K.invalid) refuses(go(r), r.error, JSON.stringify(r).slice(0, 120));
   for (const r of K.valid.filter((x) => x.kind !== 0x0120 && !(x.kind >= 0x0110 && x.kind <= 0x0113)))
     refuses(go(r), "UAPoP", r.keyData.slice(0, 40));
-  assert.equal(K.invalid.length, 207);
+  assert.equal(K.invalid.length, 225); // bls-multi T4: 207 + the 18 0x0121 refusal rows
 });
 
 test("the group kinds have no verifier here: refused, never accepted (C14; ua-rs checks them)", () => {
@@ -1827,4 +1827,37 @@ test("the group kinds have no verifier here: refused, never accepted (C14; ua-rs
       "UANotVerifiable",
       g.name,
     );
+});
+
+// bls-multi T4 (spec 2026-11-19-bls12381-multi §2, §4, §6): the blsMultiRegistrations rows: the pop (the members' aggregate over
+// m_i = keccak256(popMsg ‖ pk_i)) accepted and refused a byte off, registerBlsMulti (typed) and register(0x0121, …) (packed) the
+// same key data and record, the stored form p = ua ‖ s, a KEM key refused.
+test("bls_multi: blsMultiRegistrations", async () => {
+  const bm = await import("../src/bls-multi.js");
+  assert.equal(P.blsMultiRegistrations.length, 2);
+  for (const r of P.blsMultiRegistrations) {
+    assert.equal(hex(bm.popMessage(r.keyData)), r.popMessage, r.name);
+    verifyRegistration({ ...r, attrs: { pqzKey: "0x", pqzPopHash: hex(new Uint8Array(32)), kemPk: "0x" } }, () => null);
+    const bad = `${r.pop.slice(0, 100)}${r.pop[100] === "0" ? "1" : "0"}${r.pop.slice(101)}`;
+    assert.throws(
+      () =>
+        verifyRegistration(
+          { ...r, pop: bad, attrs: { pqzKey: "0x", pqzPopHash: hex(new Uint8Array(32)), kemPk: "0x" } },
+          () => null,
+        ),
+      (e) => e.code === "UAPoP",
+      r.name,
+    );
+    const full = ua.registrationArgs({ kind: 0x0121, keyData: r.keyData, pop: r.pop, kemCommit: false });
+    assert.deepEqual({ entry: full.entry, ...full.args }, r.args, r.name);
+    assert.deepEqual(
+      [r.packed.entry, r.packed.kind, r.packed.keyData, r.packed.pop],
+      ["register", 0x0121, r.keyData, r.pop],
+    );
+    assert.equal(hex(bm.storedBlsMulti(r.keyData)), r.stored, r.name);
+    assert.throws(
+      () => ua.registrationArgs({ kind: 0x0121, keyData: r.keyData, pop: r.pop, kemPk: new Uint8Array(8).fill(1) }),
+      (e) => e.code === "UAKemHolder",
+    );
+  }
 });

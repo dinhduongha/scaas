@@ -981,6 +981,64 @@ class TypedRegistryArgs(unittest.TestCase):
         self.assertEqual(ua.registration_args(0x0101, b(K["valid"][1]["keyData"]))[0]["entry"], "register")
 
 
+class BlsMulti(unittest.TestCase):
+    """bls12381-multi (0x0121, spec 2026-11-19-bls12381-multi §2): kinds.json's rows (``d``, ``s``, the stored ``ua ‖ s``,
+    ``keyOf``), the typed key, portable.json ``blsMultiRegistrations`` (``registerBlsMulti`` named args, the PoP message).
+    This library verifies no BLS signature (no ``0x0106`` verify), so groups.json's signature rows are not its."""
+
+    def test_kind_row(self):
+        self.assertTrue(ua.has_surplus_form(0x0121))
+        self.assertEqual([r["kind"] for r in K["kinds"] if r["surplusForm"]], [0x0121])
+        self.assertEqual([k for k in ua._BY if ua.has_surplus_form(k)], [0x0121])
+        self.assertIsNone(ua.key_hash_of(0x0121, b(next(v for v in K["valid"] if v["kind"] == 0x0121)["keyData"])))
+
+    def test_key_data_rows(self):
+        valid = [v for v in K["valid"] if v["kind"] == 0x0121]
+        self.assertEqual(len(valid), 10)
+        for v in valid:
+            d = b(v["keyData"])
+            s = ua.bls_multi_compress(d)
+            self.assertEqual(hx(s), v["compressed"], v["name"])
+            self.assertEqual(ua.bls_multi_expand(s), d, v["name"])
+            self.assertEqual(hx(ua.ua_of(0x0121, d) + s), v["stored"], v["name"])
+            self.assertEqual(hx(d[:256]), v["keyOf"], v["name"])
+            k = ua.typed_key(0x0121, d)
+            packed = (
+                b(k["aggKey"])
+                + k["threshold"].to_bytes(2, "big")
+                + len(k["members"]).to_bytes(2, "big")
+                + b"".join(b(m["key"]) + m["weight"].to_bytes(2, "big") for m in k["members"])
+            )
+            self.assertEqual(packed, d, v["name"])
+        wide = next(
+            v for v in valid if v["label"].startswith("weights {65535")
+        )  # Review Focus 1: the sum exceeds 16 bits
+        ua.validate_key_data(0x0121, b(wide["keyData"]))
+        self.assertEqual(len([r for r in K["invalid"] if r["kind"] == 0x0121]), 18)
+        with self.assertRaises(ua.UAError):
+            ua.bls_multi_compress(b"\x01" + b(valid[0]["keyData"])[1:])  # a non-zero top limb byte
+
+    def test_registrations(self):
+        rows = P["blsMultiRegistrations"]
+        self.assertEqual(len(rows), 2)
+        for r in rows:
+            d = b(r["keyData"])
+            u = ua.ua_of(0x0121, d)
+            self.assertEqual(hx(u), r["ua"], r["name"])
+            args, fill = ua.registration_args(0x0121, d, pop=b(r["pop"]))
+            self.assertIsNone(fill)
+            self.assertEqual(args, r["args"], r["name"])
+            n = len(args["key"]["members"])
+            self.assertEqual(
+                ua.registry_calldata_length("registerBlsMulti", args),
+                4 + 128 + 96 + 288 + 32 + 384 * n + 288 + 160 + 32,
+                r["name"],
+            )  # empty attrs 288, a 128-byte pop 160, no pqzPop 32
+            h = ua.holder_pop_message(0x0121, u, d)
+            self.assertEqual(hx(h.message), r["popMessage"], r["name"])
+            self.assertEqual(hx(h.registration_digest), r["registrationDigest"], r["name"])
+
+
 class GovernanceBits(unittest.TestCase):
     def test_governance_bits_rows(self):
         """governance T14: every row of governance_bits.json against GOVERNANCE_BITS, both ways, each with its sentences."""

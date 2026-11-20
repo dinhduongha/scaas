@@ -1,0 +1,10 @@
+bls-multi re-pin after Task 8 (the deferred pins, the split's, Task 5's) | step | rc | counts
+UARegistryUaPortable test_T_GAS (GAS_REPIN=1, n2304-kmax4096) | 0 | 34 rows; 22 rose and re-pinned (every register +7,8xx to +15,379: the nested PoP call; popOf +69..+94; setKemKey fndsa512 +100; registrationOf gen 2 +289, gen 1 +154)
+at-set n2048-kmax1024, n2560-kmax16384, n2816-kmax65536 (GAS_REPIN=1) | 0 | 34 rows each; 15 set-named rows rose and re-pinned; the shared rows equal the default set's
+UARegistryUaPortable test_T_GAS (check, default set) | 0 | 3 passed
+UARegistryCoreLibMsig test_gasHotPath | 0 | 0x0100-0x0108 +68 (Task 5's slot arm), 0x0121 rows added (20,297; state 2,047,140), registerMsig 145,524 -> 153,387 (the nested PoP call); suite 6 passed
+GovDeploy test_wrappedReleaseIsGated, test_routerAndRelayFeeRouterNewAddresses | 0 | WrappedToken 19,947 -> 19,963 B, router 0x7dABB8aA… -> 0x49Df7BEb… (Task 5's UAKinds); 2 passed
+sdk_gas.json (generate.py --measure, 18 runs) | 0 | 228 of 1,681 keys moved: +16 (2), +34 (84), +85 (12), +87 (4), +119 (4), +156 (120), +190 (2); reference.json 3 rows cross 1,000 (token mtxWrapToUA 794,000 -> 795,000, pqz mtxUnwrapToUA 397,000 -> 398,000, verify 0x0105 49,000 -> 50,000); generate.py --check ok
+scaas-sdk cargo test --lib gas | 0 | 23 passed
+note | - | `register msig-pq` rows (every set) measure 100,352 regular and 2,732,580 state below their pins (1,786 code bytes fewer); not re-pinned (pins are upper bounds and only risen rows move here); cause not investigated
+UARegistryUaPortable test_T_GAS (check, at-set others) | 0 | 3 passed at each of n2048-kmax1024, n2560-kmax16384, n2816-kmax65536

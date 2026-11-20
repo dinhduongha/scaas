@@ -1,0 +1,7 @@
+killed   | M1 uint16 weight sum | clients/ua-go/keydata.go | rc=1 | expect TestBlsMulti | 2 failed: TestBlsMulti, TestValidRows
+killed   | M2 order check <= instead of < | clients/ua-go/keydata.go | rc=1 | expect TestInvalidRows | 1 failed: TestInvalidRows
+killed   | M3 no identity check on apk | clients/ua-go/keydata.go | rc=1 | expect TestInvalidRows | 1 failed: TestInvalidRows
+killed   | M4 a w_i <= t bound added | clients/ua-go/keydata.go | rc=1 | expect TestValidRows | 2 failed: TestBlsMulti, TestValidRows
+killed   | M5 n up to 65 | clients/ua-go/keydata.go | rc=1 | expect TestInvalidRows | 1 failed: TestInvalidRows
+killed   | M6 no key check per member | clients/ua-go/keydata.go | rc=1 | expect TestInvalidRows | 1 failed: TestInvalidRows
+6 mutants, 6 killed, 0 survived, 0 not loaded

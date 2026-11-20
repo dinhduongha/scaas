@@ -69,6 +69,7 @@ alloy = { version = "~1.6", default-features = false, features = [
   "rpc-types",
   "network",
   "providers",
+  "sol-types",
 ], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

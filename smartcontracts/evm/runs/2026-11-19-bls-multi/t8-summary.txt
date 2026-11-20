@@ -1,0 +1,6 @@
+bls-multi Task 8 (0x0121 stored-path dispatch, a direct verifyMinimal for msig members, N1) | step | rc | counts
+size gate | 0 | 0 errors; UARegistryCoreLib 15,737 -> 16,226 (+489; spec +0.45-0.65 KB), UARegistry 33,293 -> 33,335 (+42; spec +40-60 B), Aux 35,417 and Reg 30,157 unchanged
+forge test/ua/UARegistryBlsMulti.t.sol | 0 | 21 passed (7b's fail-closed test replaced by the dispatch rows and N1's)
+forge test/ua (every suite but UARegistryUaPortable) | 1 | 712 passed, 2 failed: CoreLibMsig test_nestedOffsetReadsAWordAsItsOwnArgument (the appended block is 128 B now: aimed past it at +128, fixed, 1 passed), test_gasHotPath (red before, unchanged; re-pinned next)
+gas: acceptMembership of a 0x0121 member (n 3, k 2) | 0 | 252,073 by the old requireAuthorized hop -> 247,550 direct (-4,523; spec 3-5 k less)
+mutants t8-mutants.py | 0 | 7, 7 killed by the intended test

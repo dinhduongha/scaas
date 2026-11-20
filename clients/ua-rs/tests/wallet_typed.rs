@@ -1982,7 +1982,14 @@ fn auditor_consent_rows() {
         let m = scaas_ua::ua_message(k, &purpose, &b32(&x["digest"])).unwrap();
         assert_eq!(m, b32(&x["uaMessage"]), "{kind}");
         assert!(
-            scaas_ua::verify::verify(k, &bytes(&x["keyData"]), &m, &bytes(&x["signature"]), false),
+            scaas_ua::verify::verify(
+                k,
+                &bytes(&x["keyData"]),
+                &m,
+                &bytes(&x["signature"]),
+                false,
+                false
+            ),
             "{kind}: derived signer"
         );
         let mut bad = m;
@@ -1993,6 +2000,7 @@ fn auditor_consent_rows() {
                 &bytes(&x["keyData"]),
                 &bad,
                 &bytes(&x["signature"]),
+                false,
                 false
             ),
             "{kind}: control"
@@ -2049,6 +2057,7 @@ fn auditor_consent_rows() {
                         &bytes(&x["keyData"]),
                         &mm,
                         &bytes(&s["sig"]),
+                        false,
                         false
                     ),
                     "{kind}: secp256k1 member"
@@ -2061,6 +2070,7 @@ fn auditor_consent_rows() {
                         &bytes(&x["keyData"]),
                         &bad,
                         &bytes(&s["sig"]),
+                        false,
                         false
                     ),
                     "{kind}: control"

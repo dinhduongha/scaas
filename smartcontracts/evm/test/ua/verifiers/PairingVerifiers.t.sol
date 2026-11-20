@@ -280,11 +280,11 @@ contract PairingVerifiersTest is Test {
         Row memory r = rows[1];
         bytes memory offSubgroupR = bytes.concat(_offSubgroupBlsG1(), _tail(r.metaSig, 32));
         vm.expectRevert(G1Bls12381.BadPoint.selector);
-        verifier[r.kind].check{gas: 100_000}(r.keyData, r.metaMsg, offSubgroupR, false);
+        verifier[r.kind].check{gas: 100_000}(r.keyData, r.metaMsg, offSubgroupR, UASafeVerifier.Mode.Verify);
         assertFalse(verifier[r.kind].verify(r.keyData, r.metaMsg, offSubgroupR));
         Row memory b = rows[0];
         bytes memory offCurveR = bytes.concat(bytes32(uint256(1)), bytes32(uint256(3)), _tail(b.metaSig, 32));
-        assertFalse(verifier[b.kind].check(b.keyData, b.metaMsg, offCurveR, false));
+        assertFalse(verifier[b.kind].check(b.keyData, b.metaMsg, offCurveR, UASafeVerifier.Mode.Verify));
     }
 
     /// Starved calls never pass: below `CHECK_GAS` + 1/64 they revert `UAVerifyGas`; with enough gas they pass.
@@ -375,7 +375,7 @@ contract PairingVerifiersTest is Test {
             uint256 worst = _max(_max(_max(gv, gp), _max(gm, gw)), gb);
             console.log("  worst                       ", worst);
             uint256 gc = gasleft();
-            v.check(r.keyData, r.memberMsg, r.memberSig, false);
+            v.check(r.keyData, r.memberMsg, r.memberSig, UASafeVerifier.Mode.Verify);
             console.log("  wrapper overhead (try + self-call)", gm - (gc - gasleft()));
             if (caps[i] != 0) assertLe(worst, caps[i], "over the 1.15 cap");
         }

@@ -716,6 +716,30 @@ TestCase {
         }
     }
 
+    // bls-multi T15 (0x0121): groups.json blsMulti groups and its wallet group, kinds.json's builder row (key data accepted, id,
+    // popMsg), portable.json blsMultiRegistrations (digests, popMsg, registerBlsMulti's named arguments)
+    function test_bls_multi() {
+        const g = vectors.load("groups.json").blsMulti, pp = vectors.load("portable.json")
+        const rows = g.groups.concat([g.wallet, k.blsMultiBuilder])
+        compare(rows.length, 13)
+        for (const r of rows) {
+            compare(UaKinds.validateKeyData(0x0121, r.keyData, false), true, r.ua)
+            compare(UaKinds.uaOf(0x0121, r.keyData), r.ua)
+            if (r.popMessage !== undefined)
+                compare(JSON.parse(UaKinds.holderPopMessage(0x0121, r.ua, r.keyData, "0x", "0x", "0x")).message, r.popMessage, r.ua)
+        }
+        compare(pp.blsMultiRegistrations.length, 2)
+        for (const r of pp.blsMultiRegistrations) {
+            compare(UaKinds.uaOf(0x0121, r.keyData), r.ua, r.name)
+            const h = JSON.parse(UaKinds.holderPopMessage(r.kind, r.ua, r.keyData, r.attrs.pqzKey, r.pqzPop, r.attrs.kemPk))
+            compare([h.portableRecordDigest, h.registrationDigest, h.message],
+                    [r.portableRecordDigest, r.registrationDigest, r.popMessage], r.name)
+            const a = regArgs(Object.assign(regInput(r), { kemCommit: false }))
+            compare(a.args, r.args, r.name)
+            compare(a.args.entry, "registerBlsMulti", r.name)
+        }
+    }
+
     function test_registration_args() {
         const pp = vectors.load("portable.json")
         let commits = 0

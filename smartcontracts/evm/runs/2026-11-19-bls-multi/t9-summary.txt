@@ -1,0 +1,12 @@
+bls-multi Task 9 (0x0121 gas rows, the cap gate, CHECK_GAS / POP_GAS / CAP_BLS12381_MULTI) | step | rc | counts
+forge --isolate test/ua/{UAGas,UARegistryGroups}.t.sol | 0 | 29 passed (UAGasBlsMultiTest 7)
+registerBlsMulti regular | state (n 2, 16, 32, 64) | 0 | 476,726 | 2,096,100; 2,139,607 | 6,251,580; 4,066,303 | 11,000,700; 8,003,477 | 20,498,940
+cap gate (owner ruling Q4: regular at n 64 <= 12,582,912) | 0 | 8,003,477 (63.6 % of 2^24): the cap stays 64
+state = 1,530 x (code bytes + 120 x new accounts) + 97,920 x new slots (n 16) | 0 | 6,251,580 = 1,530 x (3,590 + 240) + 97,920 x 4; the plan's formula has no account term (183,600 a new account, measured)
+verify inside check (n, k) verify | minimal | 0 | (2,2) 164,205 | 164,291; (16,8) 183,855 | 183,941; (64,1) 185,318 | 185,404; (64,32) 251,689 | 251,775; (64,33) 252,478 | 252,564; (64,64) 221,848 | 221,934
+CHECK_GAS 300,000 | 0 | worst 252,564: kept, +47,436 (18.8 %)
+pop inside check (n 2, 16, 64) | 0 | 244,152; 1,418,542; 5,578,617
+POP_GAS 6,700,000 | 0 | worst 5,578,617: kept, +1,121,383 (20.1 %); with the hold 6,811,349 <= 12 M budget
+least verifyCap n 64 k 33 (hot | stored) | 0 | 310,778 | 310,823; CAP_BLS12381_MULTI 330,000 kept, +19,177 (6.2 %)
+N4 msig 16 x 0x0121 n 64 (t 33..48) at verifyBudget 7,123,500 (member cap 400,000) | 0 | registers at the bound, one gas less UAKeyData(msig); least frame gas requireAuthorized 4,758,868, requirePortableApp 4,817,584; MSIG_MEMBER_GAS unchanged
+mutants t9-mutants.py | 0 | 4, 4 killed by the intended test

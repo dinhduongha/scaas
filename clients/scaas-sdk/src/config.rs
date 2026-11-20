@@ -131,6 +131,10 @@ pub struct GasBase {
     pub ua_extra: Option<u64>,
     /// the part that grows with a count the operation names (owner 2026-11-19, I1); `None`: no count, nothing added
     pub per_item: Option<GasPerItem>,
+    /// the row's regular gas, its figure's part EIP-7825's per-transaction cap holds under EIP-8037 (controller call, owner
+    /// auto-run 2026-11-19; at a count of 0 on a counted row, whose `per_item` then carries its slope); `None`: the whole
+    /// figure is held to the cap
+    pub regular: Option<u64>,
 }
 
 /// A row's per-item part (owner 2026-11-19, I1), on a base or a verify row: `gas` (whole gas, the measured slope rounded
@@ -141,6 +145,8 @@ pub struct GasBase {
 pub struct GasPerItem {
     pub item: String,
     pub gas: u64,
+    /// the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
+    pub regular: Option<u64>,
 }
 
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
@@ -178,8 +184,8 @@ pub struct GasRows {
 /// A gas table file (spec §13.3, the gas table format): `{format: "scaas.gas-table", v: 2, name, family, assumptions, base,
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 /// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
-/// per_item?: {gas, base_count, source}, stand_in?}`, each verify row `{signer, gas, measured, source, sig_bytes, margin?,
-/// item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
+/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GasTable {
@@ -246,6 +252,7 @@ const GAS_BASE_KEYS: &[&str] = &[
     "item",
     "per_item",
     "stand_in",
+    "regular",
 ];
 const GAS_VERIFY_KEYS: &[&str] = &[
     "signer",
@@ -261,7 +268,7 @@ const GAS_VERIFY_KEYS: &[&str] = &[
 /// A row's parts, each with its keys (`second_party` is a part of `ua_extra`).
 const GAS_PART_KEYS: &[(&str, &[&str])] = &[
     ("per_byte", &["input", "gas", "source"]),
-    ("per_item", &["gas", "base_count", "source"]),
+    ("per_item", &["gas", "base_count", "source", "regular"]),
     ("save", &["gas", "measured", "source"]),
     ("fee_extra", &["gas", "measured", "source"]),
     (
@@ -276,6 +283,7 @@ const GAS_PART_KEYS: &[(&str, &[&str])] = &[
         ],
     ),
     ("second_party", &["measured", "source"]),
+    ("regular", &["gas", "measured", "source"]),
 ];
 
 /// An object with a key outside `keys`, or a part (of [`GAS_PART_KEYS`]) with one outside its own.
@@ -305,7 +313,9 @@ impl GasTable {
     /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536,
     /// its optional `margin` 1–100,000; a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
     /// I1), `item` one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`, `env_items`, `orders`), `per_item` `{gas,
-    /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); no key twice.
+    /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); a base row's
+    /// optional `regular` (EIP-8037, the part EIP-7825's cap holds) held like a row's figure, positive, and on a counted row
+    /// together with its `per_item`'s `regular` (0–2^24), never on a verify row; no key twice.
     /// By name when the file is otherwise sound (the first such fault): `GasSigBytesMissing` when a verify row has no
     /// `sig_bytes` (owner 2026-11-19, A4), `GasItemUnpaired` when a row has `per_item` without `item` or the reverse,
     /// `GasItemUnknown` when an `item` is not one of `GAS_ITEMS`, `GasFieldUnknown` when a key is outside the format (at the top,
@@ -392,7 +402,19 @@ impl GasTable {
                     }
                 },
                 per_item: per_item(r, &mut named)?,
+                regular: match r.get("regular") {
+                    None => None,
+                    Some(x) => Some(figure(x).filter(|g| *g > 0)?),
+                },
             };
+            // a counted row's regular figure and its slope come together (EIP-8037)
+            if row
+                .per_item
+                .as_ref()
+                .is_some_and(|p| p.regular.is_some() != row.regular.is_some())
+            {
+                return None;
+            }
             if rows.base.iter().any(|o| o.key() == row.key()) {
                 return None;
             }
@@ -415,6 +437,10 @@ impl GasTable {
                 },
                 per_item: per_item(r, &mut named)?,
             };
+            // no regular part on a verify row: its gas is regular whole
+            if row.per_item.as_ref().is_some_and(|p| p.regular.is_some()) {
+                return None;
+            }
             if rows.verify.iter().any(|o| o.signer == row.signer) {
                 return None;
             }
@@ -451,9 +477,14 @@ fn per_item(
         named.get_or_insert(crate::SdkError::GasItemUnknown);
         return Some(None);
     }
+    let regular = match p.get("regular") {
+        None => None,
+        Some(x) => Some(x.as_u64().filter(|g| *g <= GAS_PER_ITEM_MAX)?),
+    };
     Some(Some(GasPerItem {
         item: item.to_string(),
         gas,
+        regular,
     }))
 }
 

@@ -286,7 +286,7 @@ JSON; the struct names are the vector file's keys.
 | `envelope` | `from` + `batch`, `nonce`, `validUntil`, `mode`, `relayer`, `fee`, `feeRecipient`, on every entry whose struct ends with them (`UAEnvelope`, `from` an id; `Envelope`, `from` an address, on the address entries); exactly these keys |
 | `args` | The struct's other fields under their struct names, plus what the entry takes unsigned; exactly these keys, nested structs as objects, arrays as arrays. An entry with no envelope has its whole struct here |
 | `signature` | Hex, an address entry that takes `bytes` (the wraps, `SmartKeyAccount`'s `mtxCancelNonce`, the DEX's outside-leg cancel and invalidation) |
-| `auth` | The object: `UASig` `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}` on a merged entry and the Zether owner statements ([below](#member-sig-shape)), `AccountSig` `{keyIndex, proof, signature}` on the account's own entries |
+| `auth` | The object: `UASig` `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}` on a merged entry and the Zether owner statements ([below](#member-sig-shape)), `AccountSig` `{keyIndex, proof, signature}` on the account's own entries; a `bls12381-multi` group's `UASig` `{signature, signers}` ([below](#bls-multi-sig-shape)) |
 | `validUntil` | Job deadline, decimal string: required when nothing else gives one (an owner rollover, `mtxCancelOrders`, a plain entry without its own). It narrows a deadline the chain enforces, never extends it: the job's deadline is the minimum. A cancel has none, so there it stands alone (else the order's) |
 
 <a id="member-sig-shape"></a>**A slot of `MemberSig` (operators: the job shape changed, EVM, branch `msig-nested`, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)).** An `msig` slot in EVM job JSON, `pop`, `sig`, `auth`, `pqzAuth`, `ownerSig`, `memberSig`, is
@@ -294,6 +294,19 @@ JSON; the struct names are the vector file's keys.
 A job in the old shape is refused `BAD_PAYLOAD: …keyData: unknown field`. Every selector holding `MemberSig` moved with it, so a client on the old ABI must update with the node. The decode is bounded by the type: two levels, no field `members` on an inner slot; and by
 16 slots at each level, `BAD_PAYLOAD: …: more than 16 slots`, checked before an element is read. The node builds the calldata from these fields, so overlapping offsets, which make the registry copy far more than the calldata holds before its first index check, cannot leave
 it from a named job. Soroban jobs keep `{index, key_data, sig}` until that family's round.
+
+<a id="bls-multi-sig-shape"></a>**A `bls12381-multi` (`0x0121`) `UASig` (operators: a new job shape, BUILT `d02f07d32`;
+[CTR-UA-50](../contracts/accounts.md#CTR-UA-50)).** Wherever a job carries a `UASig` (`auth`, `sig`, `payerSig`, …), a group's is
+`{"signature": "0x" + σ (128 bytes, G1, EIP-2537), "signers": [i, …]}`, nothing else: the node checks `signers` first (1 to 64 JSON
+integers, strictly increasing, each `< 64`; `< n` is the chain's check), then `signature`, and builds `UASig{keyData: "", signature:
+σ ‖ uint256(bitmap), members: []}` itself. The packed 160 bytes beside `signers` are `HEX_ARGS_REFUSED`; another length, a missing
+or unknown field, an unsorted, duplicate, empty or too long list, or an index ≥ 64 is `BAD_PAYLOAD` naming the path; each before
+any send. A `UASig` without `signers` is every other kind's, unchanged (the node cannot tell a group's id without a chain
+read; a packed 160-byte object there reaches the chain, which verifies it). A group as an `msig` member names its slot the
+same way: `MemberSig` `{index, members, sig: σ, signers}`, `InnerSig` `{index, sig: σ, signers}`, the node packing `sig`
+(Fable build review B2). The registry row `registerBlsMulti` takes the group by name:
+`key: {aggKey, threshold, members: [{key, weight}]}` (at most 64 members), `attrs`, `pop`, `pqzPop`. Soroban refuses `0x0121` until
+the `ua-soroban` round (`UAKindUnknown`, nothing sent).
 
 Values: `uint` as canonical decimal strings (`uint8`, `uint16`, `uint32` may be JSON numbers), addresses `0x` + 20 bytes, `bytes32` /
 `bytes16` `0x` + exact length, `bytes` `0x`-hex, `bool` as JSON, `int8` (a `PqChat` vote) a JSON number. Anything else is `BAD_PAYLOAD` naming the path. An unbound `relayer` /

@@ -2616,6 +2616,7 @@ fn chain_kind(kind: u16) -> bool {
 
 /// One registry write of a `call` job, in `scaas_ua`'s types: the XDR and the off-chain check read the same values. `Accept` is the
 /// `ua_metatx` on the registry, here for its off-chain check alone: its XDR comes from `UA_FNS`, as every `ua_metatx`.
+#[allow(clippy::large_enum_variant)] // one per job, short-lived; `RegisterArgs` holds `BlsMultiKey`'s 256-byte apk inline (ua-rs)
 enum UaPortableWrite {
     Register(RegisterArgs),
     SetKem(SetKemKeyArgs),
@@ -3233,6 +3234,11 @@ fn sc_frost(k: &FrostKey) -> Result<ScVal> {
 /// The write's function and arguments as the registry declares them.
 fn ua_portable_args(w: &UaPortableWrite, relayer: ScVal) -> Result<(&'static str, Vec<ScVal>)> {
     Ok(match w {
+        // owner ruling 2026-11-19 (bls-multi plan choice 7): the Soroban registry's 0x0121 arm is the `ua-soroban` round's; until
+        // then the registry refuses it as a kind it does not know, and the node sends nothing (fail closed)
+        UaPortableWrite::Register(RegisterArgs::RegisterBlsMulti { .. }) => {
+            bail!("UAKindUnknown: bls12381-multi (0x0121) is no Soroban kind until the ua-soroban round")
+        }
         UaPortableWrite::Register(RegisterArgs::Register {
             kind,
             key_data,
@@ -3478,6 +3484,8 @@ fn ua_portable_check(
                 RegisterArgs::RegisterMsig { pop, pqz_pop, .. } => {
                     (ua_portable::encode_member_sigs(pop), pqz_pop)
                 }
+                // no Soroban 0x0121 until the ua-soroban round (owner ruling 2026-11-19): a kind the registry does not know
+                RegisterArgs::RegisterBlsMulti { .. } => return Err(UAError::KindUnknown(0x0121)),
                 RegisterArgs::Register { pop, pqz_pop, .. }
                 | RegisterArgs::RegisterWebAuthn { pop, pqz_pop, .. }
                 | RegisterArgs::RegisterMuSig2 { pop, pqz_pop, .. }
@@ -3524,6 +3532,7 @@ fn register_kind(a: &RegisterArgs) -> u16 {
         | RegisterArgs::RegisterFrost { kind, .. } => *kind,
         RegisterArgs::RegisterMsig { .. } => MSIG,
         RegisterArgs::RegisterWebAuthn { .. } => 0x0100,
+        RegisterArgs::RegisterBlsMulti { .. } => 0x0121,
     }
 }
 

@@ -20,7 +20,7 @@ MUTANTS = [
                                               "    let Ok(answer) = client.verdict(&req).await else {\n        return Ok(json!({}));\n    };")],
      T + "verdict_unreachable_sends_nothing"),
     # each check
-    ("the signature not verified", [(V, "if !scaas_ua::verify::verify(kind, &key_data, &msg, &sig, false) {", "if false {")],
+    ("the signature not verified", [(V, "if !scaas_ua::verify::verify(kind, &key_data, &msg, &sig, false, false) {", "if false {")],
      T + "verdict_checked_before_attach"),
     ("the signer's key not the registry's (T16-c)", [(V, "if kind == 0 || x.key_code.split_first() != Some((&0, key_data.as_slice())) {", "if false {")],
      T + "verdict_checked_before_attach"),

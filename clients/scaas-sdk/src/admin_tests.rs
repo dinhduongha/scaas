@@ -378,7 +378,7 @@ async fn pqz_auditor_consent_of_a_derived_ua() {
     let verifies = |purpose: &str, digest: &[u8; 32]| {
         let msg =
             scaas_ua::ua_message(0x0101, &scaas_ua::purpose_tag(purpose).unwrap(), digest).unwrap();
-        scaas_ua::verify::verify(0x0101, &kd, &msg, &sig, false)
+        scaas_ua::verify::verify(0x0101, &kd, &msg, &sig, false, false)
     };
     assert!(verifies("auditor-consent", &digest_of(&t20)));
     // the controls of the check itself: another purpose, another token's consent

@@ -87,6 +87,7 @@ contract Misc is OnchainBase {
         _book(address(reg), "UARegistry");
         _book(_dep("ua_registry_core_lib"), "UARegistryCoreLib");
         _book(_dep("ua_registry_aux_lib"), "UARegistryAuxLib");
+        _book(_dep("ua_registry_reg_lib"), "UARegistryRegLib");
         _book(address(f5), "OpenFactory");
         _book(_dep("compliance_registry"), "ComplianceRegistry");
         _registry();

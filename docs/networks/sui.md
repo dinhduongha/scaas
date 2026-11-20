@@ -506,3 +506,8 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   owner ruling 2026-10-28: `deploy.sh sui` destroys the `UpgradeCap` in the same run), so nobody can change token or
   router after the deploy.
 - Commits: T13 `8a033b0e`, fix 1 `3c70e5ba`.
+
+<a id="bls12381-multi"></a>**`bls12381-multi` (`0x0121`) — PLANNED** in the `ua-sui` round: the family must support it
+([ARCH-POS-18](../decisions.md#ARCH-POS-18), [CTR-UA-54](../contracts/accounts.md#CTR-UA-54)): its BLS12-381 host functions where
+present, else software, with the same checks (subgroup, infinity, the minimal form on stored paths) and the 64-member cap; the
+round measures its path and brings infeasibility to the owner with numbers.

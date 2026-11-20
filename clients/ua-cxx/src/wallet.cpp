@@ -236,6 +236,12 @@ Bytes Key::signUa(const Bytes &purposeTag, const Bytes &digest) const {
 Bytes Key::signMember(const Bytes &structureUa, const Bytes &structureUaMsg) const {
     return call([&] { return bytes(ffi::sign_member(ffi(), sl(structureUa), sl(structureUaMsg))); });
 }
+Bytes Key::signBlsMulti(const Bytes &keyData, const Bytes &uaMsg) const {
+    return call([&] { return bytes(ffi::sign_bls_multi(ffi(), sl(keyData), sl(uaMsg))); });
+}
+Bytes Key::signBlsMultiPop(const Bytes &keyData) const {
+    return call([&] { return bytes(ffi::sign_bls_multi_pop(ffi(), sl(keyData))); });
+}
 Bytes Key::signTyped(const std::string &typedDataJson, const std::string &expectJson) const {
     return call([&] { return bytes(ffi::sign_typed(ffi(), str(typedDataJson), str(expectJson))); });
 }

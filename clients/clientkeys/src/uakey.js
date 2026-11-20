@@ -29,6 +29,7 @@ import {
   P256_N,
 } from "./ua-verify.js";
 import { kemPrk, kemKeyFromPrk, isKemHolder } from "./kem.js";
+import { memberSign, memberPop } from "./bls-multi.js";
 import { WEBAUTHN_MAX_ASSERTION, bytesOf } from "./webauthn.js";
 
 const fail = (code, reason) => {
@@ -49,7 +50,8 @@ const TREE = {
 };
 const BN = { curve: "bn254", r: bn254.fields.Fr.ORDER, salt: "SCAAS-UA-BN254-v1", root: 254 };
 const BLS = { curve: "bls12381", r: bls12_381.fields.Fr.ORDER, salt: "BLS-SIG-KEYGEN-SALT-", root: 12381 };
-const EIP2333 = { 0x0104: BN, 0x0107: BN, 0x0112: BN, 0x0105: BLS, 0x0106: BLS };
+// 0x0121: a bls12381-multi member key, 0x0106-format, on its own path m/12381/0/<account>/0x0121 (CTR-UA-10 layer 1)
+const EIP2333 = { 0x0104: BN, 0x0107: BN, 0x0112: BN, 0x0105: BLS, 0x0106: BLS, 0x0121: BLS };
 const NOT_DERIVED = {
   0x0100: "a webauthn-p256 key is a platform credential",
   0x0111: "FROST shares come from the DKG, not the seed",
@@ -87,10 +89,11 @@ const PUBLIC = {
   0x0104: (s) => bnG1(bn254.G1.Point.BASE.multiply(s)),
   0x0105: (s) => blsG1(bls12_381.G1.Point.BASE.multiply(s)),
   0x0106: (s) => blsG2(bls12_381.G2.Point.BASE.multiply(s)),
+  0x0121: (s) => blsG2(bls12_381.G2.Point.BASE.multiply(s)), // a bls12381-multi member: its 0x0106-format key
   0x0107: (s) => bnG2(bn254.G2.Point.BASE.multiply(s)),
   0x0112: (s) => bnG1(bn254.G1.Point.BASE.multiply(s)), // a musig2-bn254 participant
 };
-const PARTICIPANT = new Set([0x0110, 0x0112]);
+const PARTICIPANT = new Set([0x0110, 0x0112, 0x0121]);
 
 const range = (v, what) => {
   if (!Number.isInteger(v) || v < 0 || v >= HARD) fail("Argument", `${what} must be an integer in [0, 2^31)`);
@@ -157,6 +160,8 @@ const osRandom = Object.freeze({
 
 /** The scheme's signature over `ua_msg` (spec §3 table). */
 function signMsg(kind, secret, keyData, msg, role, rand) {
+  if (kind === 0x0121)
+    fail("Argument", "a bls12381-multi member signs its parts (signBlsMulti, signBlsMultiPop), not signUA");
   if (PARTICIPANT.has(kind)) fail("Argument", "a MuSig2 participant signs through its session, not signUA");
   switch (kind) {
     case 0x0101:
@@ -258,6 +263,12 @@ function uaKey(k, secret, keyData, { account, index, derivation, path }, kemPrkO
     /** As an `msig` member: `uaMessage(kind, member, memberDigest(structureUa, structureUaMsg))`, role authorization. */
     signMember: (structureUa, structureUaMsg) =>
       sign(ua.uaMessage(k, MEMBER, ua.memberDigest(structureUa, structureUaMsg)), "authorization", osRandom),
+    /** A bls12381-multi member (0x0121): its partial over memberDigest(ua, uaMsg) for the group key data d, ua derived from d. */
+    signBlsMulti: (keyData, uaMsg) =>
+      k === 0x0121 ? memberSign(secret, keyData, uaMsg) : fail("Argument", "not a bls12381-multi member key"),
+    /** A bls12381-multi member (0x0121): its PoP part for the group key data d, popMsg derived from d (N5). */
+    signBlsMultiPop: (keyData) =>
+      k === 0x0121 ? memberPop(secret, keyData) : fail("Argument", "not a bls12381-multi member key"),
     /** The UA KEM key of `version` (spec §6.1): from this key's own seed, KEM holders only (`KemHolder`). */
     kemKey: (version) =>
       prk ? kemKeyFromPrk(prk, id, version) : fail("KemHolder", `${ua.kindInfo(k).name} holds no KEM key`),

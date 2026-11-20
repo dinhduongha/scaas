@@ -209,6 +209,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
                     fee_extra: None,
                     ua_extra: None,
                     per_item: None,
+                    regular: None,
                 });
             }
         }
@@ -598,8 +599,97 @@ async fn gas_above_tx_cap() {
     let path = SubmitPath::SelfRelay { payer: payer(&t) };
     let q = t.sdk.op().quote(p.clone(), path).await.unwrap(); // control: at the cap
     assert_eq!(q.gas_limit, 1 << 24);
-    // the fake refuses a transaction above its cap, as the chain does: the quote stopped it before
     assert!(t.chain.lock().unwrap().sent.is_empty());
+}
+
+/// EIP-8037 (controller call, owner auto-run 2026-11-19): the per-transaction cap (EIP-7825) holds a quote's regular bound, not
+/// its gas limit. Rows of 15,000,000 gas, `regular` set: the regular bound at the cap quotes a gas limit above 2^24 (regular +
+/// state, within the block limit); one more regular gas is `GasAboveTxCap`; the block gas limit still holds the whole limit.
+#[tokio::test(flavor = "multi_thread")]
+async fn tx_cap_holds_the_regular_part() {
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+    // with the intrinsic cost, the calldata and the margin: 11_184_811 → 2^24
+    let at = 11_184_811 - 21_000 - 64 * len;
+    let split = |regular: u64| {
+        move |p: &mut ChainProfile, l: &mut Limits| {
+            p.gas = gas_rows(15_000_000);
+            for b in &mut p.gas.base {
+                b.regular = Some(regular);
+            }
+            l.max_gas = 1 << 26;
+        }
+    };
+    let t = setup(0, split(at)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    let q = t.sdk.op().quote(p.clone(), path.clone()).await.unwrap();
+    assert_eq!(q.regular_gas, 1 << 24, "the regular bound at the cap");
+    assert_eq!(
+        q.gas_limit,
+        gas::with_margin(15_000_000 + 21_000 + 64 * len)
+    );
+    assert!(q.gas_limit > 1 << 24, "a gas limit above the cap");
+    // the block gas limit holds the whole gas limit
+    t.chain.lock().unwrap().block_gas_limit = q.gas_limit - 1;
+    assert_eq!(
+        code(t.sdk.op().quote(p, path).await),
+        "GasAboveTxCap",
+        "above the block gas limit"
+    );
+    let t = setup(0, split(at + 1)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    assert_eq!(
+        code(t.sdk.op().quote(p, path).await),
+        "GasAboveTxCap",
+        "the regular bound one above the cap"
+    );
+}
+
+/// EIP-8037: `submit`'s re-quote after signing (G3) adds the signature's growth to the regular bound (calldata is regular gas)
+/// and holds it to the cap: a quote whose regular bound sits within the growth of the cap is `GasAboveTxCap` once signed,
+/// nothing sent; one gas lower, sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn signed_gas_regular_is_held_to_the_cap() {
+    // the tests' UA (0x0101) signs 128 bytes beyond the empty `UASig`, the rows count none
+    let more = gas::with_margin(64 * 128);
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+    for over in [true, false] {
+        // a regular row whose quote is 2^24 - more (+ 1 when over): with_margin(x) = x + x / 2, x = 2·y / 3 at an even y
+        let target = (1u64 << 24) - more + u64::from(over);
+        let x = (0..3)
+            .map(|d| target * 2 / 3 - 1 + d)
+            .find(|x| gas::with_margin(*x) >= target)
+            .unwrap();
+        let t = setup(0, |p, l| {
+            p.gas = gas_rows(15_000_000);
+            for b in &mut p.gas.base {
+                b.regular = Some(x - 21_000 - 64 * len);
+            }
+            l.max_gas = 1 << 26;
+        })
+        .await;
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let q = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        assert_eq!(q.regular_gas + more > 1 << 24, over, "{}", q.regular_gas);
+        let got = t.sdk.op().submit(p.clone(), q).await;
+        if over {
+            assert_eq!(code(got), "GasAboveTxCap");
+            assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
+        } else {
+            got.unwrap();
+            sent_txs(&t, 1).await; // a gas limit above 2^24, within the block gas limit: sent
+        }
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1234,6 +1324,7 @@ async fn a_counted_row_quotes_its_count_or_refuses() {
                     b.per_item = item.map(|i| crate::GasPerItem {
                         item: i.into(),
                         gas: 7_000,
+                        regular: None,
                     });
                 }
             }
@@ -1556,6 +1647,7 @@ async fn hand_built_gateway_quote_is_checked() {
         path: SubmitPath::Gateway,
         payer: None,
         gas_limit: 0,
+        regular_gas: 0,
         gas: None,
         gas_from: None,
         max_fee_per_gas: "0".into(),
@@ -2616,5 +2708,511 @@ async fn resend_as_self_relay_recomputes_the_signed_gas() {
             );
             assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
         }
+    }
+}
+
+// --- bls12381-multi (0x0121), plan Task 17 (spec 2026-11-19-bls12381-multi §5.4, §8.4) ---
+
+const REGISTRY: &str = "0x5ca00000000000000000000000000000000000c3";
+
+/// A group of the seed's member keys `ua_key(0x0121, a, 0)` for the accounts `accounts`, unit weights, threshold `t`: its key
+/// data (`0x` hex) and each account's index in it.
+fn bls_group(accounts: &[u32], t: u16) -> (String, Vec<u8>) {
+    let w = Wallet::from_mnemonic(REPO, "").unwrap();
+    let keys: Vec<[u8; 256]> = accounts
+        .iter()
+        .map(|a| {
+            w.ua_key(0x0121, *a, 0)
+                .unwrap()
+                .key_data()
+                .try_into()
+                .unwrap()
+        })
+        .collect();
+    let (d, map) = scaas_ua::bls_multi::build_key_data_unweighted(&keys, t).unwrap();
+    (hex(&d), map.iter().map(|i| *i as u8).collect())
+}
+
+fn bls_member(t: &T, key_data: &str, account: u32) -> KeyRef {
+    KeyRef::BlsMulti {
+        seed: t.seed.clone(),
+        account,
+        index: 0,
+        key_data: key_data.into(),
+    }
+}
+
+/// A `UACancelNonce` from the group's UA, signed by the group (member 0 coordinating).
+async fn bls_prepared(t: &T, key_data: &str) -> Arc<Prepared> {
+    let mut d = cancel(t, "token", TOKEN, "5", "0");
+    d.signer = bls_member(t, key_data, 0);
+    d.message["from"] = json!(hex(&bls_multi::ua(&d.signer).unwrap()));
+    prepare(t, d).await
+}
+
+/// The named `UASig` objects of a job body (`signers` beside `signature`).
+fn named_sigs(v: &Value, out: &mut Vec<Value>) {
+    match v {
+        Value::Object(o) if o.contains_key("signers") => out.push(v.clone()),
+        Value::Object(o) => o.values().for_each(|x| named_sigs(x, out)),
+        Value::Array(a) => a.iter().for_each(|x| named_sigs(x, out)),
+        _ => {}
+    }
+}
+
+/// Plan Task 17: each member signs its partial of the prepared group operation (its `from` the group's UA); the coordinator
+/// aggregates and submits; the gateway's job carries the `UASig` by name, `{signature: σ (128 B), signers}`, never the
+/// 160-byte object, and that aggregate verifies on the operation's `ua_msg`. A key the group does not list, or a member of
+/// another group, signs nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn bls_multi_sign_collect_aggregate_submit() {
+    let t = setup(1, |_, _| {}).await;
+    let (d, _) = bls_group(&[0, 1, 2], 2);
+    let p = bls_prepared(&t, &d).await;
+    let op = t.sdk.op();
+    let mut parts = vec![];
+    for a in [0, 1, 2] {
+        let part = op
+            .bls_multi_part(p.clone(), bls_member(&t, &d, a))
+            .await
+            .unwrap();
+        assert!(op.bls_multi_part_ok(&p, &part), "member {a}'s partial");
+        parts.push(part);
+    }
+    assert_eq!(
+        code(op.bls_multi_part(p.clone(), bls_member(&t, &d, 5)).await),
+        "Argument",
+        "a key the group does not list"
+    );
+    let (d2, _) = bls_group(&[0, 3], 2);
+    assert_eq!(
+        code(op.bls_multi_part(p.clone(), bls_member(&t, &d2, 0)).await),
+        "Argument",
+        "a member key of another group"
+    );
+    let q = gateway_quote(&t, &p).await;
+    let id = op
+        .submit_bls_multi(p.clone(), q, parts, false)
+        .await
+        .unwrap();
+    // the row keeps the group's n for a later self-relay `resend`'s own figure (members)
+    assert_eq!(state::row(&t.sdk, &id).await.unwrap().members, Some(3));
+    let body = bodies(&t, 1).await.remove(0);
+    let ua_msg = scaas_ua::wallet::scaas_bls_multi_message(&p.t.td).unwrap();
+    let mut named = vec![];
+    named_sigs(&serde_json::from_str(&body).unwrap(), &mut named);
+    assert_eq!(named.len(), 1, "{body}");
+    let s = &named[0];
+    assert_eq!(
+        s.as_object().unwrap().len(),
+        2,
+        "signature and signers only"
+    );
+    let sigma = unhex(s["signature"].as_str().unwrap()).unwrap();
+    assert_eq!(sigma.len(), 128);
+    let signers: Vec<u8> = s["signers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i.as_u64().unwrap() as u8)
+        .collect();
+    assert_eq!(signers.len(), 2, "a minimal set: t = 2 of three");
+    let abi = scaas_ua::bls_multi::BlsMultiSig {
+        signature: sigma.clone().try_into().unwrap(),
+        signers,
+        dropped: vec![],
+    }
+    .to_abi();
+    assert!(!body.contains(&hex(&abi)[2..]), "never the 160-byte object");
+    let d = unhex(&d).unwrap();
+    assert!(scaas_ua::verify::verify(
+        0x0121, &d, &ua_msg, &abi, false, true
+    ));
+}
+
+/// N6, the stored paths (spec §5.3): the aggregate is minimal by default, every signer necessary (it verifies in the minimal
+/// form); surplus only when asked (it verifies on the hot path only). The signer kind is 0x0121 and its quote counts the
+/// group's n.
+#[tokio::test(flavor = "multi_thread")]
+async fn bls_multi_stored_path_minimal() {
+    let t = setup(1, |_, _| {}).await;
+    let (d, _) = bls_group(&[0, 1, 2, 3], 2);
+    let p = bls_prepared(&t, &d).await;
+    assert_eq!(quote::signer_kind(&t.sdk, &p).await.unwrap(), 0x0121);
+    assert_eq!(bls_multi::members(&p.signer()), Some(4));
+    let op = t.sdk.op();
+    let mut parts = vec![];
+    for a in 0..4 {
+        parts.push(
+            op.bls_multi_part(p.clone(), bls_member(&t, &d, a))
+                .await
+                .unwrap(),
+        );
+    }
+    let ua_msg = scaas_ua::wallet::scaas_bls_multi_message(&p.t.td).unwrap();
+    let kd = unhex(&d).unwrap();
+    let sig_of = |surplus: bool| {
+        let b = bls_multi::sign(&p, &parts, surplus).unwrap();
+        let mut named = vec![];
+        named_sigs(b.op.as_ref().unwrap(), &mut named);
+        let s = &named[0];
+        let sig = scaas_ua::bls_multi::BlsMultiSig {
+            signature: unhex(s["signature"].as_str().unwrap())
+                .unwrap()
+                .try_into()
+                .unwrap(),
+            signers: s["signers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|i| i.as_u64().unwrap() as u8)
+                .collect(),
+            dropped: vec![],
+        };
+        assert!(
+            b.calldata.windows(160).any(|w| w == sig.to_abi()),
+            "the calldata carries σ ‖ bitmap"
+        );
+        sig
+    };
+    let min = sig_of(false);
+    assert_eq!(min.signers.len(), 2);
+    assert!(
+        scaas_ua::verify::verify(0x0121, &kd, &ua_msg, &min.to_abi(), false, true),
+        "minimal"
+    );
+    let all = sig_of(true);
+    assert_eq!(all.signers, vec![0, 1, 2, 3]);
+    assert!(
+        scaas_ua::verify::verify(0x0121, &kd, &ua_msg, &all.to_abi(), false, false),
+        "hot path"
+    );
+    assert!(
+        !scaas_ua::verify::verify(0x0121, &kd, &ua_msg, &all.to_abi(), false, true),
+        "a surplus set is not the stored form"
+    );
+    // plain `submit` never signs for a group
+    let q = gateway_quote(&t, &p).await;
+    assert_eq!(code(op.submit(p.clone(), q).await), "Argument");
+    // the quote counts the group's n: signer 289's verify row `gas + per_item × 4`
+    let t = setup(0, |p, _| {
+        p.gas.verify.push(crate::GasVerify {
+            signer: 0x0121,
+            gas: 0,
+            sig_bytes: 0,
+            margin: 0,
+            per_item: Some(crate::GasPerItem {
+                item: "members".into(),
+                gas: 1_000,
+                regular: None,
+            }),
+        })
+    })
+    .await;
+    let p = bls_prepared(&t, &d).await;
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+    let q = t
+        .sdk
+        .op()
+        .quote(p, SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    assert_eq!(
+        q.gas_limit,
+        gas::with_margin(100_000 + 1_000 * 4 + 21_000 + 64 * len)
+    );
+}
+
+/// Spec §5.4: a bad partial is named by the coordinator's check and dropped from the aggregate while t of weight remain; below
+/// t `BlsMultiBelowThreshold`, nothing sent and the prepared operation kept. A partial over another operation is bad.
+#[tokio::test(flavor = "multi_thread")]
+async fn bls_multi_bad_partial_named() {
+    let t = setup(1, |_, _| {}).await;
+    let (d, _) = bls_group(&[0, 1, 2], 2);
+    let p = bls_prepared(&t, &d).await;
+    let op = t.sdk.op();
+    let good: Vec<_> = {
+        let mut v = vec![];
+        for a in 0..3 {
+            v.push(
+                op.bls_multi_part(p.clone(), bls_member(&t, &d, a))
+                    .await
+                    .unwrap(),
+            );
+        }
+        v
+    };
+    // member 1's partial over another operation (another lane)
+    let mut other = cancel(&t, "token", TOKEN, "6", "0");
+    other.signer = bls_member(&t, &d, 0);
+    other.message["from"] = json!(hex(&bls_multi::ua(&other.signer).unwrap()));
+    let p2 = prepare(&t, other).await;
+    let bad = op.bls_multi_part(p2, bls_member(&t, &d, 1)).await.unwrap();
+    assert_eq!(bad.index, good[1].index);
+    assert!(
+        !op.bls_multi_part_ok(&p, &bad),
+        "named: member {}",
+        bad.index
+    );
+    let mut flipped = good[2].clone();
+    let x = if &flipped.signature[200..202] == "00" {
+        "01"
+    } else {
+        "00"
+    };
+    flipped.signature.replace_range(200..202, x); // a byte of σ_2's x coordinate
+    assert!(!op.bls_multi_part_ok(&p, &flipped));
+    // dropped while t remain: the signers are the two good ones
+    let b = bls_multi::sign(&p, &[good[0].clone(), bad.clone(), good[2].clone()], false).unwrap();
+    let mut named = vec![];
+    named_sigs(b.op.as_ref().unwrap(), &mut named);
+    let mut want = vec![good[0].index, good[2].index];
+    want.sort_unstable();
+    assert_eq!(named[0]["signers"], json!(want));
+    // below t: refused, nothing sent, the prepared operation kept
+    let q = gateway_quote(&t, &p).await;
+    assert_eq!(
+        code(
+            op.submit_bls_multi(p.clone(), q.clone(), vec![good[0].clone(), bad], false)
+                .await
+        ),
+        "BlsMultiBelowThreshold"
+    );
+    assert!(t.chain.lock().unwrap().bodies.is_empty(), "nothing sent");
+    assert_eq!(
+        code(
+            op.submit_bls_multi(
+                p.clone(),
+                q.clone(),
+                vec![good[0].clone(), good[0].clone()],
+                false
+            )
+            .await
+        ),
+        "Argument",
+        "an index twice"
+    );
+    op.submit_bls_multi(p, q, good, false).await.unwrap();
+}
+
+/// Spec §8.4, plan Task 17: the registration's self-relay quote is the reference row's `gas + per_item × n` (regular and
+/// state gas, no verify part), the intrinsic cost and the calldata, with the margin; it grows with n; its regular bound the
+/// row's `regular + per_item.regular × n` the same way (EIP-8037, controller call, owner auto-run 2026-11-19): a group of 64
+/// members quotes a gas limit above 2^24, its regular bound within the cap, under a 200 M block gas limit, and is
+/// `GasAboveTxCap` under the fake's 30 M; no registry, no row: refused.
+#[tokio::test(flavor = "multi_thread")]
+async fn bls_multi_register_quote_by_n() {
+    let t = setup(0, |p, _| {
+        p.registry = Some(REGISTRY.into());
+        p.gas_opt_in = vec![gas::REFERENCE.into()];
+    })
+    .await;
+    let op = t.sdk.op();
+    let reference = crate::GasTable::parse(gas::REFERENCE_FILE).unwrap();
+    let row = reference
+        .rows
+        .base
+        .iter()
+        .find(|b| b.key() == ("registerBlsMulti", "account", true))
+        .unwrap();
+    let mut last = 0;
+    for n in [2u32, 3, 5] {
+        let (d, _) = bls_group(&(0..n).collect::<Vec<_>>(), 2);
+        let q = op
+            .quote_register_bls_multi("local".into(), d.clone(), payer(&t))
+            .await
+            .unwrap();
+        let len = bls_multi::register_calldata(&unhex(&d).unwrap(), &[0; 128])
+            .unwrap()
+            .len() as u64;
+        let g = row.gas + row.per_item.as_ref().unwrap().gas * u64::from(n);
+        assert_eq!(
+            q.gas_limit,
+            gas::with_margin(g + 21_000 + 64 * len),
+            "n {n}"
+        );
+        let r =
+            row.regular.unwrap() + row.per_item.as_ref().unwrap().regular.unwrap() * u64::from(n);
+        assert_eq!(
+            q.regular_gas,
+            gas::with_margin(r + 21_000 + 64 * len),
+            "regular n {n}"
+        );
+        assert_eq!(q.gas_from, Some(GasSources::both(GasFrom::Reference)));
+        assert!(q.gas_limit > last, "grows with n");
+        last = q.gas_limit;
+    }
+    let (d64, _) = bls_group(&(0..64).collect::<Vec<_>>(), 32);
+    assert_eq!(
+        code(
+            op.quote_register_bls_multi("local".into(), d64.clone(), payer(&t))
+                .await
+        ),
+        "GasAboveTxCap",
+        "above the fake's 30 M block gas limit"
+    );
+    let big = setup(0, |p, l| {
+        p.registry = Some(REGISTRY.into());
+        p.gas_opt_in = vec![gas::REFERENCE.into()];
+        l.max_gas = 1 << 26;
+    })
+    .await;
+    big.chain.lock().unwrap().block_gas_limit = 200_000_000;
+    let q = big
+        .sdk
+        .op()
+        .quote_register_bls_multi("local".into(), d64.clone(), payer(&big))
+        .await
+        .unwrap();
+    assert!(q.gas_limit > 1 << 24, "n 64: {}", q.gas_limit);
+    assert!(q.regular_gas <= 1 << 24, "n 64 regular: {}", q.regular_gas);
+    // and sent: `register_bls_multi` holds the regular bound to the cap, the gas limit to the block's
+    let parts: Vec<_> = (0..64)
+        .map(|a| {
+            big.sdk
+                .op()
+                .bls_multi_pop_part(bls_member(&big, &d64, a))
+                .unwrap()
+        })
+        .collect();
+    big.sdk
+        .op()
+        .register_bls_multi("local".into(), d64, parts, q)
+        .await
+        .unwrap();
+    sent_txs(&big, 1).await;
+    let (d, _) = bls_group(&[0, 1], 2);
+    let none = setup(0, |p, _| p.gas_opt_in = vec![gas::REFERENCE.into()]).await;
+    assert_eq!(
+        code(
+            none.sdk
+                .op()
+                .quote_register_bls_multi("local".into(), d.clone(), payer(&none))
+                .await
+        ),
+        "Argument",
+        "no registry"
+    );
+    let unrowed = setup(0, |p, _| p.registry = Some(REGISTRY.into())).await;
+    assert_eq!(
+        code(
+            unrowed
+                .sdk
+                .op()
+                .quote_register_bls_multi("local".into(), d, payer(&unrowed))
+                .await
+        ),
+        "GasUnquoted",
+        "no row"
+    );
+}
+
+/// Spec §4, plan Task 17: every member's PoP part (each checked), aggregated into the registration's `pop`, sent as
+/// `registerBlsMulti` by the payer; a missing or bad part is `RegistrationPopInvalid`, nothing sent; the calldata decodes to
+/// the vectors' named arguments (portable.json `blsMultiRegistrations`).
+#[tokio::test(flavor = "multi_thread")]
+async fn bls_multi_register_sends_the_pop() {
+    use alloy::sol_types::SolCall;
+    let t = setup(0, |p, _| {
+        p.registry = Some(REGISTRY.into());
+        p.gas_opt_in = vec![gas::REFERENCE.into()];
+    })
+    .await;
+    let op = t.sdk.op();
+    let (d, _) = bls_group(&[0, 1, 2], 2);
+    let parts: Vec<_> = (0..3)
+        .map(|a| op.bls_multi_pop_part(bls_member(&t, &d, a)).unwrap())
+        .collect();
+    assert!(parts.iter().all(|p| op.bls_multi_pop_part_ok(&d, p)));
+    let (d2, _) = bls_group(&[0, 1, 3], 2);
+    let foreign = op.bls_multi_pop_part(bls_member(&t, &d2, 1)).unwrap();
+    assert!(
+        !op.bls_multi_pop_part_ok(&d, &foreign),
+        "a part for another group"
+    );
+    let q = op
+        .quote_register_bls_multi("local".into(), d.clone(), payer(&t))
+        .await
+        .unwrap();
+    assert_eq!(
+        code(
+            op.register_bls_multi("local".into(), d.clone(), parts[..2].to_vec(), q.clone())
+                .await
+        ),
+        "RegistrationPopInvalid",
+        "a member missing"
+    );
+    let mut swapped = parts.clone();
+    swapped[1].signature = foreign.signature.clone();
+    assert_eq!(
+        code(
+            op.register_bls_multi("local".into(), d.clone(), swapped, q.clone())
+                .await
+        ),
+        "RegistrationPopInvalid",
+        "a bad part"
+    );
+    assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
+    // the simulation needs more than the quote (G3's rule): its gas with the margin, here above `Limits::max_gas`
+    let quoted = t.chain.lock().unwrap().gas;
+    t.chain.lock().unwrap().gas = 1 << 24;
+    assert_eq!(
+        code(
+            op.register_bls_multi("local".into(), d.clone(), parts.clone(), q.clone())
+                .await
+        ),
+        "SignedGasAboveCap"
+    );
+    t.chain.lock().unwrap().gas = quoted;
+    op.register_bls_multi("local".into(), d.clone(), parts.clone(), q)
+        .await
+        .unwrap();
+    let raw = sent_txs(&t, 1).await.remove(0);
+    let kd = unhex(&d).unwrap();
+    let pop = scaas_ua::bls_multi::aggregate_pop(
+        &kd,
+        &parts
+            .iter()
+            .map(|p| (p.index, unhex(&p.signature).unwrap().try_into().unwrap()))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+    let cd = bls_multi::register_calldata(&kd, &pop).unwrap();
+    assert!(
+        raw.contains(&hex(&cd)[2..]),
+        "the registration's calldata sent"
+    );
+    // the vectors' rows: the calldata of their key data and pop decodes to their named arguments
+    let v: Value = serde_json::from_str(
+        &std::fs::read_to_string(format!(
+            "{}/../../smartcontracts/vectors/ua/portable.json",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    for r in v["blsMultiRegistrations"].as_array().unwrap() {
+        let h = |x: &Value| unhex(x.as_str().unwrap()).unwrap();
+        let cd = bls_multi::register_calldata(&h(&r["keyData"]), &h(&r["pop"])).unwrap();
+        let c = bls_multi::registerBlsMultiCall::abi_decode(&cd).unwrap();
+        let a = &r["args"];
+        assert_eq!(
+            c.key.aggKey.to_vec(),
+            h(&a["key"]["aggKey"]),
+            "{}",
+            r["name"]
+        );
+        assert_eq!(
+            u64::from(c.key.threshold),
+            a["key"]["threshold"].as_u64().unwrap()
+        );
+        let m = a["key"]["members"].as_array().unwrap();
+        assert_eq!(c.key.members.len(), m.len());
+        for (x, y) in c.key.members.iter().zip(m) {
+            assert_eq!(x.key.to_vec(), h(&y["key"]));
+            assert_eq!(u64::from(x.weight), y["weight"].as_u64().unwrap());
+        }
+        assert_eq!(c.pop.to_vec(), h(&a["pop"]));
+        assert!(c.pqzPop.is_empty() && c.attrs.pqzKey.is_empty() && c.attrs.kem.mlkemEk.is_empty());
     }
 }

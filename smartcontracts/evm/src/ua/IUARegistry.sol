@@ -95,6 +95,20 @@ interface IUARegistry is IERC5267 {
         FrostMember[] members;
     }
 
+    /// One `bls12381-multi` member (spec 2026-11-19-bls12381-multi §2): its G2 key (256 B, EIP-2537) and weight (≥ 1).
+    struct BlsMultiMember {
+        bytes key;
+        uint16 weight;
+    }
+
+    /// A `bls12381-multi` key (0x0121): `aggKey` = apk (256 B, EIP-2537), `threshold`, the members strictly increasing by key;
+    /// assembled `aggKey ‖ u16 threshold ‖ u16 n ‖ n × (key ‖ u16 weight)`.
+    struct BlsMultiKey {
+        bytes aggKey;
+        uint16 threshold;
+        BlsMultiMember[] members;
+    }
+
     /// A KEM public key (TS-D11): scheme 1 = ML-KEM-1024 `mlkemEk` (1,568 B) + X25519 `x25519`. The registry assembles
     /// `kemPk = scheme ‖ mlkemEk ‖ x25519` (1,601 B) for storage and `kemPkHash = keccak256(kemPk)`. All zero / empty =
     /// no key.
@@ -336,6 +350,14 @@ interface IUARegistry is IERC5267 {
         bytes calldata pop,
         bytes calldata pqzPop
     ) external returns (bytes32 ua);
+    /// `register` for `bls12381-multi` (0x0121) from its typed key (spec 2026-11-19-bls12381-multi §2; a point of the wrong length
+    /// `UAKeyData(0x0121)`; `register` takes the packed form too, same id). `pop`: the members' aggregate proof of possession (§4).
+    function registerBlsMulti(
+        BlsMultiKey calldata key,
+        UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) external returns (bytes32 ua);
     /// `register` for `kind` `frost-secp256k1` (0x0111) or `frost-bn254` (0x0113) from its typed key (TS-D13; another
     /// kind, a point of the wrong length or a member without `threshold` commitments, `UAKeyData(kind)`; `register` takes
     /// the packed form too, same id).
@@ -542,6 +564,9 @@ interface IUARegistry is IERC5267 {
     function webAuthnKeyOf(bytes32 ua) external view returns (WebAuthnKey memory);
     function muSig2KeyOf(bytes32 ua) external view returns (MuSig2Key memory);
     function frostKeyOf(bytes32 ua) external view returns (FrostKey memory);
+    /// The typed key of a `bls12381-multi` UA (its key data `d`, from the stored form); empty for any other id (gen 2 forwards
+    /// gen-1 records).
+    function blsMultiKeyOf(bytes32 ua) external view returns (BlsMultiKey memory);
     /// The stored `pop` (CTR-UA-33): the `pop` bytes of a single key; of an `msig`, the 32 bytes of `keccak256(abi.encode(MemberSig[]))`
     /// (owner 2026-11-03; its slots are in `UAMemberSig`), "" for an empty `pop`. A reader tells which by the record's kind. "" for an id not
     /// registered (gen 2 forwards gen-1 records).
@@ -576,8 +601,8 @@ interface IUARegistry is IERC5267 {
     function kindOf(bytes32 ua) external view returns (uint16); // 0 = not registered (native ids too)
     function isRegistered(bytes32 ua) external view returns (bool);
     function keyOwner(bytes32 keyHash) external view returns (bytes32);
-    /// The stored key of a stored kind (MuSig2 `Q`, FROST `Y`, Zether `Y`: zether.md CTR-ZTH-50; PQ `pk`), empty
-    /// otherwise.
+    /// The stored key of a stored kind (MuSig2 `Q`, FROST `Y`, Zether `Y`: zether.md CTR-ZTH-50; PQ `pk`; `bls12381-multi`: its
+    /// aggregate key `apk`, 256 B EIP-2537, never the stored `ua ‖ s`), empty otherwise.
     function keyOf(bytes32 ua) external view returns (bytes memory);
 
     /// The per-kind list of registered UAs (owner 2026-10-17: decoy selection for PQZ and classical Zether, which

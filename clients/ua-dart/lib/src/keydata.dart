@@ -262,6 +262,74 @@ void _msig(Uint8List d, bool hederaNative) {
   _need(threshold >= 1 && threshold <= total, 'threshold');
 }
 
+/// bls12381-multi (spec 2026-11-19-bls12381-multi §2), in its order: length, n (2..64), weights (>= 1, summed unbounded), t
+/// (1 <= t <= the sum); every member key a valid G2 key, strictly increasing; apk byte-equal to their sum and not the identity.
+void _blsMulti(Uint8List d) {
+  final n = _u16(d, 258);
+  _need(n >= 2 && n <= 64, 'n');
+  _need(d.length == 260 + 258 * n, 'length');
+  var total = 0;
+  for (var i = 0; i < n; i++) {
+    final w = _u16(d, 516 + 258 * i);
+    _need(w >= 1, 'weight');
+    total += w;
+  }
+  final t = _u16(d, 256);
+  _need(t >= 1 && t <= total, 'threshold');
+  _Pt? acc;
+  for (var i = 0; i < n; i++) {
+    final o = 260 + 258 * i;
+    final k = Uint8List.sublistView(d, o, o + 256);
+    _blsG2(k);
+    if (i > 0) _need(_cmp(d, o - 258, o, 256) < 0, 'order');
+    acc = _addPt(acc, _Pt(_F2(_be(k, 16, 64), _be(k, 80, 128)), _F2(_be(k, 144, 192), _be(k, 208, 256))), _blsP);
+  }
+  _need(acc != null, 'identity');
+  final c = [acc!.x.a0, acc.x.a1, acc.y.a0, acc.y.a1];
+  for (var j = 0; j < 4; j++) {
+    final v = (c[j] % _blsP).toRadixString(16).padLeft(128, '0');
+    for (var b = 0; b < 64; b++) {
+      _need(d[64 * j + b] == int.parse(v.substring(2 * b, 2 * b + 2), radix: 16), 'apk');
+    }
+  }
+}
+
+/// bls12381-multi `d -> s` (spec §2): each 64-byte limb without its 16 zero bytes.
+Uint8List blsMultiCompress(Object? keyData) {
+  final d = keyBytes(keyData);
+  final n = _u16(d, 258);
+  _need(d.length == 260 + 258 * n, 'length');
+  final o = <int>[];
+  for (var i = 0; i <= n; i++) {
+    final at = i == 0 ? 0 : 260 + 258 * (i - 1), tail = i == 0 ? 4 : 2;
+    for (var j = 0; j < 4; j++) {
+      for (var b = 0; b < 16; b++) {
+        _need(d[at + 64 * j + b] == 0, 'padding');
+      }
+      o.addAll(d.sublist(at + 64 * j + 16, at + 64 * j + 64));
+    }
+    o.addAll(d.sublist(at + 256, at + 256 + tail));
+  }
+  return Uint8List.fromList(o);
+}
+
+/// bls12381-multi `s -> d`: a 16-byte zero prefix per 48-byte limb.
+Uint8List blsMultiExpand(Object? stored) {
+  final s = keyBytes(stored);
+  final n = _u16(s, 194);
+  _need(s.length == 196 + 194 * n, 'length');
+  final o = <int>[];
+  for (var i = 0; i <= n; i++) {
+    final at = i == 0 ? 0 : 196 + 194 * (i - 1), tail = i == 0 ? 4 : 2;
+    for (var j = 0; j < 4; j++) {
+      o.addAll(Uint8List(16));
+      o.addAll(s.sublist(at + 48 * j, at + 48 * j + 48));
+    }
+    o.addAll(s.sublist(at + 192, at + 192 + tail));
+  }
+  return Uint8List.fromList(o);
+}
+
 /// head ‖ n × 14-bit h_i, each < q: 0x09, n = 512 (fndsa512); 0x0A, n = 1,024 (fndsa1024).
 void _fndsa(Uint8List d, int head, int n) {
   _need(d[0] == head, 'header');
@@ -312,6 +380,8 @@ void validateKeyData(int kind, Object? keyData, {bool hederaNative = false}) {
       _frost(d, _bnG1, 64, _bnR);
     case 0x0120:
       _msig(d, hederaNative);
+    case 0x0121:
+      _blsMulti(d);
     case 0x0132:
       _fndsa(d, 0x09, 512);
     case 0x0135:

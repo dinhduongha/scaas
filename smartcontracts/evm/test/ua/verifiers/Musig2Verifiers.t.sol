@@ -8,6 +8,7 @@ import {
     KEYAGG_COEF_TAG
 } from "../../../src/ua/verifiers/Musig2Secp256k1Verifier.sol";
 import {Musig2Bn254Verifier} from "../../../src/ua/verifiers/Musig2Bn254Verifier.sol";
+import {UASafeVerifier} from "../../../src/ua/verifiers/PairingVerifiers.sol";
 import {Bip340} from "../../../src/ua/verifiers/Bip340.sol";
 import {G1Bn254} from "../../../src/zether/ZetherCurves.sol";
 import {GroupFixtures} from "../GroupFixtures.sol";
@@ -244,7 +245,7 @@ contract Musig2VerifiersTest is GroupFixtures {
     function test_bnPopGas() public {
         Group memory g = _group(MB, 16, 16);
         (bool ok, uint256 used) =
-            _metered(address(bn), abi.encodeCall(bn.check, (g.keyData, g.popMessage, g.pop, true)));
+            _metered(address(bn), abi.encodeCall(bn.check, (g.keyData, g.popMessage, g.pop, UASafeVerifier.Mode.Pop)));
         assertTrue(ok);
         emit log_named_uint("musig2-bn254 check(pop) n=16", used);
         assertLt(used, bn.POP_GAS());

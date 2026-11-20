@@ -59,6 +59,9 @@ pub(crate) struct Row {
     pub signer_kind: Option<u16>,
     #[serde(default)]
     pub unsigned_len: Option<u64>,
+    /// a `bls12381-multi` group signer's member count (bls-multi plan Task 17): the `members` count its `resend` quotes with
+    #[serde(default)]
+    pub members: Option<u64>,
     /// when the row became terminal, on the SDK's clock (unix seconds): kept `Limits::state_retention_secs` after it
     #[serde(default)]
     pub ended_at: Option<u64>,

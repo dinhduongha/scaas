@@ -42,7 +42,7 @@ if(BUILD_TESTING)
   target_compile_definitions(vectors_test PRIVATE SCAAS_UA_VECTORS_DIR="${SCAAS_UA_VECTORS_DIR}")
   foreach(t table_groups_purposes_constants valid_rows invalid_rows natives_native_space_canonical_ids messages structures portable kem_record pqz_key_record
                  portable_purposes holder_refusals registration_args nested_rows nested_inner set_key_args membership_rows msig_update_rows member_sig_hashes
-                 governance_bits_rows id_display_rows pay_rows)
+                 governance_bits_rows id_display_rows pay_rows bls_multi)
     add_test(NAME ${t} COMMAND vectors_test ${t})
   endforeach()
   # ua-rs-sign T13a: the wallet surface (keys, sign, kem, seal, vault, rs_vault, rs_signatures, zether.json; the facades)
@@ -52,7 +52,7 @@ if(BUILD_TESTING)
   foreach(t load_refuses_wrong_abi_or_features secret_buffer_wiped_after_call handle_freed_once keys_json sign_json rs_signatures_json
                  kem_json seal_json backup_link_restore vault_json rs_vault_json custody seed_backup_sequence
                  error_strings_never_contain_an_input aead_hkdf_hmac zether_facade pqz_facade zether_words pqz_words pqz_key_versions
-                 imported_ua_key native_json)
+                 imported_ua_key native_json bls_multi_json)
     add_test(NAME wallet_${t} COMMAND wallet_test ${t})
   endforeach()
 endif()

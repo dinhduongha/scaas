@@ -98,10 +98,35 @@ type FrostKey struct {
 	Members   []FrostMember `json:"members"`
 }
 
+// BlsMultiMember is one member of a BlsMultiKey: its G2 key (256 B, EIP-2537) and weight.
+type BlsMultiMember struct {
+	Key    Hex    `json:"key"`
+	Weight uint16 `json:"weight"`
+}
+
+// BlsMultiKey is the typed key of 0x0121 (spec 2026-11-19-bls12381-multi §2): apk, threshold, the members sorted by key.
+type BlsMultiKey struct {
+	AggKey    Hex              `json:"aggKey"`
+	Threshold uint16           `json:"threshold"`
+	Members   []BlsMultiMember `json:"members"`
+}
+
 // TypedKey is the typed key of packed key data (R1b, TS-D13): *WebAuthnKey, *MuSig2Key or *FrostKey (points of 33 B on secp256k1,
 // 64 B on bn254); nil for any other kind. The registry assembles the same bytes (same id).
 func TypedKey(kind uint16, keyData []byte) (any, error) {
 	d := keyData
+	if kind == 0x0121 {
+		n, err := u16At(d, 258)
+		if err != nil || len(d) != 260+258*n {
+			return nil, keyDataErr("length")
+		}
+		k := &BlsMultiKey{AggKey: d[:256], Threshold: uint16(d[256])<<8 | uint16(d[257]), Members: []BlsMultiMember{}}
+		for i := 0; i < n; i++ {
+			o := 260 + 258*i
+			k.Members = append(k.Members, BlsMultiMember{d[o : o+256], uint16(d[o+256])<<8 | uint16(d[o+257])})
+		}
+		return k, nil
+	}
 	if kind == 0x0100 {
 		if len(d) != 96 {
 			return nil, keyDataErr("length")
@@ -339,6 +364,12 @@ func (a *RegisterArgs) CalldataLength() int {
 	switch k := a.Key.(type) {
 	case *WebAuthnKey:
 		return 4 + 192 + rest
+	case *BlsMultiKey: // heads 128; key 96 + aggKey + members (offset, key, weight, key bytes)
+		n := 4 + 128 + 96 + tailLen(k.AggKey) + 32 + rest
+		for _, m := range k.Members {
+			n += 32 + 64 + tailLen(m.Key)
+		}
+		return n
 	case *MuSig2Key:
 		return 4 + 160 + 64 + tailLen(k.AggKey) + bytesArrLen(k.MemberKeys) + rest
 	case *FrostKey:
@@ -395,6 +426,8 @@ func RegistrationArgs(in RegistrationInput) (*RegisterArgs, *SetKemKeyArgs, erro
 		a.Entry, a.Pop = "registerMsig", NewUASig(nil, nil, in.Members).Members
 	case 0x0100:
 		a.Entry = "registerWebAuthn"
+	case 0x0121:
+		a.Entry = "registerBlsMulti"
 	case 0x0110, 0x0112:
 		a.Entry, a.Kind = "registerMuSig2", in.Kind
 	case 0x0111, 0x0113:

@@ -692,6 +692,7 @@ async fn pairs_setup_verify(
                     fee_extra: None,
                     ua_extra: None,
                     per_item: None,
+                    regular: None,
                 })
             })
             .collect(),
@@ -738,7 +739,7 @@ async fn signed_by_zether(c: &Fake, n: usize, id: &str, k: &ZetherKeyInfo) -> Va
     let d: W = unhex(id).try_into().unwrap();
     let m = scaas_ua::ua_message(0x0141, &scaas_ua::purpose_tag("metatx").unwrap(), &d).unwrap();
     assert!(
-        scaas_ua::verify::verify(0x0141, &unhex(&k.y), &m, &unhex(sig), false),
+        scaas_ua::verify::verify(0x0141, &unhex(&k.y), &m, &unhex(sig), false, false),
         "the Zether UA's signature"
     );
     body
@@ -1018,7 +1019,7 @@ fn zether_sig_ok(k: &ZetherKeyInfo, purpose: &str, digest: &str, sig: &Value) ->
     let s = sig["signature"]
         .as_str()
         .unwrap_or_else(|| panic!("no UASig in {sig}"));
-    scaas_ua::verify::verify(0x0141, &unhex(&k.y), &m, &unhex(s), false)
+    scaas_ua::verify::verify(0x0141, &unhex(&k.y), &m, &unhex(s), false, false)
 }
 
 fn rev(p: &scaas_sdk::op::Prepared, n: &str) -> Option<(String, scaas_sdk::op::Source)> {

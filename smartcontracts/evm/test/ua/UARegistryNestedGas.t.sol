@@ -5,7 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
@@ -33,8 +33,8 @@ contract FrameProbe {
 /// `bound - 1` refused, `bound` accepted, `bound` gas authorizes, one gas under the least frame gas is a starvation, never a verdict.
 /// ML-DSA rows take the path of a key read from the record (the precompile path); the cached path reads 2 slots instead of 1,952 B.
 contract UARegistryNestedGasTest is UARegistryBase {
-    uint256 internal constant MEMBER = UARegistryCoreLib.MSIG_MEMBER_GAS;
-    uint256 internal constant ACCEPTED = UARegistryCoreLib.MSIG_ACCEPTED_GAS;
+    uint256 internal constant MEMBER = UARegistryRegLib.MSIG_MEMBER_GAS;
+    uint256 internal constant ACCEPTED = UARegistryRegLib.MSIG_ACCEPTED_GAS;
     uint256 internal constant SMART = 400_000;
 
     struct Case {

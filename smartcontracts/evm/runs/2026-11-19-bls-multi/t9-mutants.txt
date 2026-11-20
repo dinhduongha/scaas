@@ -1,0 +1,5 @@
+killed   | M1 CHECK_GAS below the measured worst verify | expect test_T_GAS_blsMultiVerify 
+killed   | M2 POP_GAS below the measured worst PoP | expect test_T_GAS_blsMultiPop 
+killed   | M3 POP_GAS whose hold exceeds the budget | expect test_T_GAS_blsMultiCapsWithinBudget 
+killed   | M4 CHECK_GAS above what the deploy cap holds | expect test_T_GAS_blsMultiLeastCap 
+4 mutants, 4 killed, 0 survived, 0 not loaded

@@ -1,0 +1,7 @@
+killed   | M1 keyHash on apk put back | smartcontracts/evm/src/ua/UARegistryCoreLib.sol | rc=1 | expect test_twoThresholdsSameSet_bothRegister | 2 failed: test_frontRun_identicalRecordOrRevert, test_twoThresholdsSameSet_bothRegister
+killed   | M2 d stored instead of s | smartcontracts/evm/src/ua/UARegistryCoreLib.sol | rc=1 | expect test_storedBytesPerMember | 7 failed: test_authorize_threeOfThree_onHotPath, test_keyOf_returnsApk, test_register_typedEqualsPacked, test_registrationOf_returnsD, test_requireAuthorized_keyDataDOrP_refused, test_storedBytesPerMember, test_storedUaIsId
+killed   | M3 ua omitted from p | smartcontracts/evm/src/ua/UARegistryCoreLib.sol | rc=1 | expect test_storedUaIsId | 6 failed: test_authorize_threeOfThree_onHotPath, test_keyOf_returnsApk, test_register_typedEqualsPacked, test_registrationOf_returnsD, test_requireAuthorized_keyDataDOrP_refused, test_storedUaIsId
+killed   | M4 vkLength(0x0121) = 0 | smartcontracts/evm/src/ua/UAStore.sol | rc=1 | expect test_requireAuthorized_keyDataDOrP_refused | 2 failed: test_authorize_threeOfThree_onHotPath, test_requireAuthorized_keyDataDOrP_refused
+killed   | M5 keyOf returning p | smartcontracts/evm/src/ua/UARegistry.sol | rc=1 | expect test_keyOf_returnsApk | 1 failed: test_keyOf_returnsApk
+5 mutants, 5 killed, 0 survived, 0 not loaded
+Runs one mutant per forge run (python3 -I t7-mutants.py <i> <i>) from the worktree root.

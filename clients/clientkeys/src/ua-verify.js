@@ -12,6 +12,7 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import { schnorrVerify as zetherVerify } from "./zether.js";
 import { PQ_KINDS, pqMessage } from "./pq.js";
 import * as ua from "./ua.js";
+import { blsMultiOk } from "./bls-multi.js";
 import { PURPOSE_PQZ_SCOPED_KEY, pqzScopedKeyRecordDigest } from "./pqzopen.js";
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode, word } from "./bytes.js";
 export const int = (b) => BigInt(hex(b));
@@ -179,10 +180,13 @@ export const VERIFY = {
   0x0141: (kd, msg, sig) => zetherVerify("bls12381", kd, msg, sig),
   // secp256k1 (ECDSA): r‖s‖v over ua_msg recovering address(keccak256(x ‖ y)), as the native EOA rule
   0x0108: (kd, msg, sig) => kd.length === 64 && nativeOk(hex(keccak_256(kd).subarray(12)), msg, hex(sig)),
+  // bls12381-multi (spec 2026-11-19): key data d; `pop` the registration PoP, else `minimal` picks verifyMinimal over verify
+  0x0121: (kd, msg, sig, pop, minimal) => blsMultiOk(kd, msg, sig, minimal, pop),
 };
-/** `verify` / `verifyPop` (pop only matters for the BLS kinds); any throw is a refusal. */
-export const verify = (kind, kd, msg, sig, pop = false) =>
-  attempt(() => VERIFY[kind](B(kd), B(msg), B(sig), pop) === true);
+/** `verify` / `verifyPop` (pop only matters for the BLS kinds); `minimal` (0x0121 only): the stored paths' verifyMinimal (spec
+ *  2026-11-19-bls12381-multi §5.3). Any throw is a refusal. */
+export const verify = (kind, kd, msg, sig, pop = false, minimal = false) =>
+  attempt(() => VERIFY[kind](B(kd), B(msg), B(sig), pop, minimal) === true);
 
 export const SECP_N = secp256k1.Point.Fn.ORDER;
 /** Native EOA: low-s ECDSA r‖s‖v over UAAuth(ua, purpose, digest) under the registry domain. */
@@ -268,9 +272,9 @@ export const decodeMemberSigs = (blob) =>
 
 const pqName = (kind) => Object.keys(PQ_KINDS).find((n) => PQ_KINDS[n].kind === kind);
 /** A derived kind's signature over a 32-byte ua_msg: `VERIFY` (`pop` = the BLS PoP domain) or noble (PQ); any throw is a refusal. */
-export function kindVerify(kind, keyData, msg, sig, pop) {
+export function kindVerify(kind, keyData, msg, sig, pop, minimal = false) {
   const n = pqName(kind);
-  if (!n) return verify(kind, hex(toBytes(keyData)), hex(toBytes(msg)), hex(toBytes(sig)), pop);
+  if (!n) return verify(kind, hex(toBytes(keyData)), hex(toBytes(msg)), hex(toBytes(sig)), pop, minimal);
   const m = toBytes(msg);
   return attempt(
     () => PQ_KINDS[n].alg.verify(toBytes(sig), PQ_KINDS[n].pq ? pqMessage(n, m) : m, toBytes(keyData)) === true,
@@ -340,6 +344,11 @@ const verdict = (ok, a, code, reason) => {
 function signatureOk(kind, d, id, purpose, digest, sig, members, a, eligible = d) {
   const message = ua.uaMessage(kind, purpose, digest);
   if (isGroup(kind)) refuse("UANotVerifiable", `kind 0x${kind.toString(16)}`);
+  if (ua.hasSurplusForm(kind)) {
+    // spec 2026-11-19-bls12381-multi §5.3: `pop` v2 → verifyPop(d), every other purpose → verifyMinimal
+    const pop = eq(toBytes(purpose), toBytes(ua.POP_V2_TAG));
+    return kindVerify(kind, d, message, sig, pop, !pop);
+  }
   if (kind !== 0x0120) return kindVerify(kind, d, message, sig, true);
   const keys = memberKeys(d, members);
   if (!ua.msigPqzEligible(eligible, innerOf(members))) return toBytes(sig).length === 0;
@@ -386,13 +395,14 @@ function slotOk(m, key, digest, md, s, members, a) {
         slotOk(leaves[x.index], keys[x.index], digest, inner, x, members, a),
     );
   }
-  return list.length === 0 && leafOk(m, key, md, s.sig, digest);
+  return list.length === 0 && leafOk(m, key, md, s.sig, digest, true);
 }
-/** A leaf: `evm-eoa` by ECDSA over `native`, a derived member under `member` over `md`; throws for a native member nothing here can check. */
-function leafOk(m, key, md, sig, native) {
+/** A leaf: `evm-eoa` by ECDSA over `native`, a derived member under `member` over `md`; throws for a native member nothing here can
+ *  check. `minimal`: a stored path (`slotOk`), where a surplus-form member (0x0121) takes its minimal form; `authOk` passes false. */
+function leafOk(m, key, md, sig, native, minimal) {
   if (m.kind === 0x0001) return nativeOk(`0x${m.id.slice(26)}`, native, hex(sig));
   if (ua.isNativeKind(m.kind) || isGroup(m.kind)) refuse("UANotVerifiable", `member ${m.id}`);
-  return kindVerify(m.kind, key, ua.uaMessage(m.kind, ua.purposeTag("member"), md), sig, false);
+  return kindVerify(m.kind, key, ua.uaMessage(m.kind, ua.purposeTag("member"), md), sig, false, minimal);
 }
 /** A registration row `{ kind, keyData, attrs, pop, pqzPop }` as `register` checks it, on bytes and the accepted bits (ua-rs `check_registration`):
  *  the id from canonical key data, the attributes, the `pop`; the PQZ proof is not checked. Throws `UAError`; returns nothing.
@@ -557,7 +567,14 @@ function authOk(id, d, md, slots, members, domain, a) {
             a,
           )
         : list.length === 0 &&
-          leafOk(m, keys[s.index], md, s.sig, ua.uaAuthDigest(domain, fromHex(m.id), ua.purposeTag("member"), md));
+          leafOk(
+            m,
+            keys[s.index],
+            md,
+            s.sig,
+            ua.uaAuthDigest(domain, fromHex(m.id), ua.purposeTag("member"), md),
+            false,
+          );
     if (!ok) return false;
     acc += m.weight;
   }

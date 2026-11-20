@@ -1,0 +1,7 @@
+killed   | M1 uint16 weight sum | clients/ua-py/scaas_ua/__init__.py | rc=1 | expect test_key_data_rows | 2 failed: test_key_data_rows, test_valid_rows
+killed   | M2 order check <= instead of < | clients/ua-py/scaas_ua/__init__.py | rc=1 | expect test_invalid_rows | 1 failed: test_invalid_rows
+killed   | M3 no identity check on apk | clients/ua-py/scaas_ua/__init__.py | rc=1 | expect test_invalid_rows | 1 failed: test_invalid_rows
+killed   | M4 a w_i <= t bound added | clients/ua-py/scaas_ua/__init__.py | rc=1 | expect test_valid_rows | 1 failed: test_valid_rows
+killed   | M5 n up to 65 | clients/ua-py/scaas_ua/__init__.py | rc=1 | expect test_invalid_rows | 1 failed: test_invalid_rows
+killed   | M6 no key check per member | clients/ua-py/scaas_ua/__init__.py | rc=1 | expect test_invalid_rows | 1 failed: test_invalid_rows
+6 mutants, 6 killed, 0 survived, 0 not loaded

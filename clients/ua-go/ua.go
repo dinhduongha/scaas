@@ -70,6 +70,7 @@ var Kinds = []Kind{
 	{0x0108, "secp256k1", false, []int{64}, "secp256k1"},   // 2026-10-17, appended as in kinds.json
 	{0x0134, "mldsa87", false, []int{2592}, "mldsa87"},     // CTR-UA-39, 2026-11-04, appended as in kinds.json
 	{0x0135, "fndsa1024", false, []int{1793}, "fndsa1024"}, // CTR-UA-40, 2026-11-04, appended as in kinds.json
+	{0x0121, "bls12381-multi", false, nil, ""},             // spec 2026-11-19-bls12381-multi, appended as in kinds.json; no keyHash
 }
 
 // Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
@@ -164,9 +165,14 @@ func singleSigning(k uint16) bool {
 	return (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0135)
 }
 
-func IsNative(kind uint16) bool  { k, err := KindInfo(kind); return err == nil && k.Native }
-func IsZether(kind uint16) bool  { return kind == 0x0141 }
-func IsSigning(kind uint16) bool { return kind == 0x0120 || kind == 0x0141 || singleSigning(kind) }
+func IsNative(kind uint16) bool { k, err := KindInfo(kind); return err == nil && k.Native }
+func IsZether(kind uint16) bool { return kind == 0x0141 }
+func IsSigning(kind uint16) bool {
+	return kind == 0x0120 || kind == 0x0121 || kind == 0x0141 || singleSigning(kind)
+}
+
+// HasSurplusForm: the kinds whose signatures have a surplus form (spec 2026-11-19-bls12381-multi §5.3): bls12381-multi only.
+func HasSurplusForm(kind uint16) bool { return kind == 0x0121 }
 
 // IsPqzHolder: kinds that may hold a PQZ key attribute, mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-39 / -40; an msig per
 // MsigPqzEligible).
@@ -176,7 +182,8 @@ func IsPqzHolder(kind uint16) bool {
 
 // IsMember: an msig too, one level down; a record that holds one is refused as a member by the registry.
 func IsMember(kind uint16, hederaNative bool) bool {
-	return singleSigning(kind) || kind == 0x0120 || kind == 0x0001 || kind == 0x0002 || (hederaNative && kind == 0x0003)
+	return singleSigning(kind) || kind == 0x0120 || kind == 0x0121 || kind == 0x0001 || kind == 0x0002 ||
+		(hederaNative && kind == 0x0003)
 }
 
 func KindTagString(kind uint16) (string, error) {

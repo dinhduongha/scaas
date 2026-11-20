@@ -855,6 +855,7 @@ async fn pqz_plain_pairs() {
                     fee_extra: None,
                     ua_extra: None,
                     per_item: None,
+                    regular: None,
                 })
             })
             .collect(),
@@ -1015,6 +1016,7 @@ async fn debit_setup(offchain: bool) -> (Arc<Sdk>, String, Fake, W, W, Arc<Memor
                     fee_extra: None,
                     ua_extra: None,
                     per_item: None,
+                    regular: None,
                 })
             })
             .collect(),
@@ -1149,7 +1151,7 @@ fn pqz_auth_ok(op: &Value, digest: &W) {
     let sig = unhex(a["signature"].as_str().unwrap());
     let ok = |p: &str| {
         let m = scaas_ua::ua_message(KIND, &scaas_ua::purpose_tag(p).unwrap(), digest).unwrap();
-        scaas_ua::verify::verify(KIND, &kd, &m, &sig, false)
+        scaas_ua::verify::verify(KIND, &kd, &m, &sig, false, false)
     };
     assert!(ok("zether-auth"), "pqzAuth under zether-auth: {a}");
     assert!(!ok("metatx"), "never metatx");
