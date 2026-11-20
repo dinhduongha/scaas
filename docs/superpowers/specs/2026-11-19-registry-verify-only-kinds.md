@@ -7,10 +7,10 @@ parameter, M2, M9), amended the same day with the owner's rulings on revision 4'
 library that holds the generation walk (§0.4, Y1). Revision 3 applied the fix-check of revision 2 (N1 – N16, rulings §0.3); revision 2 the Fable review of
 revision 1 (F1 – F17, rulings §0.2). Build plan:
 [plans/2026-11-19-registry-verify-only-kinds.md](../plans/2026-11-19-registry-verify-only-kinds.md). Status:
-**BUILT (EVM contracts, deploy, node)** on branch `multi-gen-verify`: contracts `d2f6b6c32`, `9ebf6931c`, `2bbe3380d`,
+**BUILT (EVM contracts, deploy, node, scaas-sdk, clients' target check)** on branch `multi-gen-verify`: contracts `d2f6b6c32`, `9ebf6931c`, `2bbe3380d`,
 `0a78d4d64`, `cc82e3ecc`, `4f643c791`, `72ced51f3`, `0812a0467`, `a40d8acc0`, `de05b0789`, `6c558f1dd`, `773ae4988`,
-`098c30feb`; deploy `53d4ad79d`, `78ce41390`; gas rows `0cda19be5` and node `d019be659` (local work in progress, to be squashed
-into their task commits); **SPECIFIED** for scaas-sdk and the clients (Tasks 17, 18, being built); the other families
+`098c30feb`; deploy `53d4ad79d`, `78ce41390`; gas rows `9cb373c30`; node `d019be659`, `e6268a472`; scaas-sdk `535bf1dcb`;
+clients `ff732ade0`, `9cac74ea0`, `afbc160f2` (the ua-rs bindings' export **PLANNED**); the other families
 **PLANNED** (§12, CTR-UA-66). Everything cryptographic stays **UNAUDITED**. Scope: **EVM** (the contracts, the factory, the
 deploy, the node, the SDK and clients); the other families take the principle in their own rounds.
 

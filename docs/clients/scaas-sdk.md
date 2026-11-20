@@ -287,7 +287,10 @@ by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `Key
 `AuthenticatorRefused`, `ProfileMismatch`, `FeatureMissing`, `PreparedStale`, `PreparedUnknown`, `OpaqueCallRefused`, `FeeAboveCap`,
 `GasAboveTxCap`, `GasUnquoted`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
 `AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`,
-`ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`. A
+`ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`,
+`RegistrationVerifyOnly` (the kind's home, `kindHome(kind)`, is another generation of the line), `UaUnregistered` (no generation of
+the bound registry's line holds the UA), `PqzHomeNone` (no PQZ home on the walk) ([CTR-UA-65](../contracts/accounts.md#CTR-UA-65),
+[off-chain readers](../contracts/accounts.md#off-chain-readers)). A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.
 
 ## 9. Bindings

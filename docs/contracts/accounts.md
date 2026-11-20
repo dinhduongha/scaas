@@ -2096,7 +2096,7 @@ Other families:
 On every family, records, account owners and subject accounts store an explicit **`owner_kind`** next to the id and
 dispatch verification by that kind; id shape (`>> 160`) is an EVM/Cosmos-20-byte rule only.
 
-#### <a id="registry-line"></a>1.8.1 The registry line and verify-only kinds — BUILT (EVM: contracts, deploy, node); SPECIFIED (scaas-sdk, clients); PLANNED (other families)
+#### <a id="registry-line"></a>1.8.1 The registry line and verify-only kinds — BUILT (EVM: contracts, deploy, node, scaas-sdk targets and verify rows, clients' target check); PLANNED (the ua-rs bindings' export, other families)
 
 The design record is the spec [2026-11-19-registry-verify-only-kinds.md](../superpowers/specs/2026-11-19-registry-verify-only-kinds.md)
 (revision 4; the owner's rulings verbatim in its §0 and in [decisions.md](../decisions.md), entry CTR-UA-58, which also lists
@@ -2104,7 +2104,8 @@ the rulings behind each rule below); the rules below are normative. Built on bra
 `9ebf6931c` (kind flags, the line), `2bbe3380d` (the walk, readers, probes), `0a78d4d64` (writes), `cc82e3ecc` (consumer path),
 `4f643c791` (fallback), `72ced51f3` and `0812a0467` (bounds), `a40d8acc0` (PQZ home), `de05b0789` (ML-DSA verify-only verifiers),
 `6c558f1dd` (equivalence), `773ae4988` (frozen interface), `098c30feb` (factory); deploy `53d4ad79d`, `78ce41390`; gas rows
-`0cda19be5` and node `d019be659` (both local work in progress, to be squashed into their task commits). Everything
+`9cb373c30` (WIPs `0cda19be5`, `80a0a033f`, `66d7f61ac`); node `d019be659`, `e6268a472`; scaas-sdk `535bf1dcb`; clients
+`ff732ade0`, `9cac74ea0`, `afbc160f2` (local commits, not squashed: other tasks' commits sit on top of them). Everything
 cryptographic is **UNAUDITED**.
 
 ```mermaid
@@ -2205,7 +2206,7 @@ where the kind is verify-only here, else the holder directly; an `msig` fits `ve
   `holderOf`). The entry and the DST are the holder's for that path (`verify`, `verifyPop` on the portable path, `verifyCached`).
   A failed read of the line is `UAVerifyGas`, never a verdict.
 - **Consumer bound, `verifyBudget`** (registration step 4, `_slotCap`). A member held elsewhere counts its walk, `LINE_HOP_GAS`
-  per generation passed (13,100: one further generation measured 12,410 cold on the consumer path, `0cda19be5`); a member whose
+  per generation passed (13,100: one further generation measured 12,410 cold on the consumer path, `9cb373c30`); a member whose
   kind is verify-only here counts this generation's cap plus `VO_READ_GAS` (60,000: the reads of its record at the holder and the
   library entry); a member of a kind not carried here counts the holder's `verifyCap` plus one hand-off (`cap / 63 + GAS_MARGIN`),
   never the predecessor's cap.
@@ -2322,7 +2323,8 @@ keeps its rule.
 
 <a id="CTR-UA-70"></a>**CTR-UA-70** — **The registry line: up to 16 generations, one walk `holderOf`, every lookup read where
 the record is held** (owner rulings of spec §0.2 – §0.4: N generations, the depth cap 16, P5, P12, X1, Y1, P14; BUILT on EVM, `9ebf6931c`, `2bbe3380d`; the off-chain
-readers SPECIFIED for scaas-sdk and clients).
+readers: BUILT in scaas-sdk's write targets, `535bf1dcb`; its PQZ, verdict and Zether reading layers PLANNED (they land with
+the SDK's reading layers, then follow this rule)).
 
 - **The line.** Generation 1 has `predecessor = 0`; a later registry takes the chain's latest generation `n` as predecessor and is
   generation `n + 1` (two generations: generation 2 takes `predecessor = gen1`); one registry code serves every generation; its EIP-712 version is the generation's decimal number.
@@ -2340,7 +2342,7 @@ readers SPECIFIED for scaas-sdk and clients).
   [CTR-UA-71](#CTR-UA-71). `keyOwner` walks back (local first). A kind's list lives in its home; `msig` has one list per
   generation; `0x0142` one per enabling generation ([CTR-UA-29](#CTR-UA-29)).
 - <a id="off-chain-readers"></a>**Off-chain readers** (the SDK's PQZ, verdict and Zether reading layers, indexers, wallets;
-  SPECIFIED for scaas-sdk and clients). A record of `ua` is read **where it is held**: call `holderOf(ua)` once on the registry the
+  BUILT in scaas-sdk's write targets `535bf1dcb`; its reading layers PLANNED). A record of `ua` is read **where it is held**: call `holderOf(ua)` once on the registry the
   token binds (one walk; a native-space id answers `(0, 0, 0)` without a walk), then read the record (keys, registration, KEM,
   `popOf`, `msig` state) at `holder`, and the PQZ attachment at `pqzHomeOf(ua)`, the walk's third word (at `holder` where it is 0:
   no generation on that walk enables `0x0142`, so an unproven key stays with the record). A reader that reads storage does the walk
@@ -2353,7 +2355,7 @@ readers SPECIFIED for scaas-sdk and clients).
 - **Single-key registrations walk nothing.** A single-key kind registrable here has its kind and group only in this generation
   (the constructor's rule), so `UAAlreadyRegistered` and the group's `UAKeyInUse` read this generation only; `msig` and the PQZ
   key keep the walk.
-- **Gas** (measured, `2bbe3380d`, `0cda19be5`). One further generation costs ≈ 12.4 k cold on the consumer path (`LINE_HOP_GAS`
+- **Gas** (measured, `2bbe3380d`, `9cb373c30`). One further generation costs ≈ 12.4 k cold on the consumer path (`LINE_HOP_GAS`
   13,100 in the bounds); a miss at depth 4 is one `holderOf` call per generation, 37,016 gas; a thin view costs ≈ 4.7 k over a
   local read (`holderOf` 12,750 against `kindOf` 8,062 warm; the spec's "a few hundred gas" was low). The SDK gas table carries
   the extra per registry and depth ([CTR-UA-65](#CTR-UA-65)).
@@ -2407,8 +2409,8 @@ governance-published env ([CTR-UA-67](#CTR-UA-67)); the only recovery from a fau
 it, losing the records of the faulty generation and every later one.
 
 <a id="CTR-UA-65"></a>**CTR-UA-65** — **The node, indexers, the SDK and clients address the line, not one registry** (owner rulings
-of spec §0.2 – §0.4, W2 and P19 among them; node BUILT, `d019be659`, [job-api.md](../node/job-api.md#NODE-JOB-19), [ops.md](../node/ops.md); scaas-sdk
-and clients SPECIFIED).
+of spec §0.2 – §0.4, W2 and P19 among them; node BUILT, `d019be659`, `e6268a472`, [job-api.md](../node/job-api.md#NODE-JOB-19), [ops.md](../node/ops.md); scaas-sdk BUILT,
+`535bf1dcb`; clients' target check BUILT, `ff732ade0`, `9cac74ea0`, `afbc160f2` (the ua-rs bindings' export PLANNED)).
 
 - **Node.** `ua_registries = [...]` (every generation, any order) replaces `ua_registry` (refused by name at load); validated on
   chain at start (`chainUid()`, one generation 1 with predecessor 0, consecutive generations, one line, at most 16; refusals

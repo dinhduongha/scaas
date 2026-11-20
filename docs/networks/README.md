@@ -531,7 +531,7 @@ nothing deployed is upgraded. Each family round answers how, beside the checklis
 
 | Family | Where the principle lands | Status |
 |---|---|---|
-| EVM (Hedera included) | a later `UARegistry` generation carries the kind verify-only, the line walked by `holderOf` | BUILT (EVM contracts, deploy, node); scaas-sdk and clients SPECIFIED |
+| EVM (Hedera included) | a later `UARegistry` generation carries the kind verify-only, the line walked by `holderOf` | BUILT (EVM contracts, deploy, node, scaas-sdk, clients' target check) |
 | Soroban | no generations: a new kind is a new registry with new tokens ([NET-SOR-17](soroban.md#NET-SOR-17)); a later registry deployment that reads an earlier one's records | PLANNED, `ua-soroban` round |
 | Solana, Move (Aptos, Sui), TON, Cosmos | the family's registry design, in its round | PLANNED, each `ua-<family>` round |
 | NEAR | no registry: the records live per token, so the principle applies to a later token release reading an earlier one's records | PLANNED, `ua-near` round |
