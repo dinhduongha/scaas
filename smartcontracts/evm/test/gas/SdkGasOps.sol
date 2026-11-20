@@ -79,6 +79,12 @@ abstract contract SdkGasRows is SdkGasDeploy {
         assertEq(ISdkGasNonce(c).mtxNonce(from, lane), n, "the lane's nonce slot");
     }
 
+    /// Whether this build's figures are the pin table's (`SDK_GAS`): true here; a suite whose figures depend on a build
+    /// parameter the table is measured at one value of (the PQZ set) answers false at the others.
+    function _sgPinned() internal view virtual returns (bool) {
+        return true;
+    }
+
     function _pin(string memory key, uint256 v) internal {
         this.sgPin(key, v);
     }
@@ -86,6 +92,11 @@ abstract contract SdkGasRows is SdkGasDeploy {
     /// `_pin`'s body in a call frame of its own, so the pin file it reads is freed on return (a test pins hundreds of keys,
     /// and a file read in the test's own frame grows its memory past the gas limit).
     function sgPin(string calldata key, uint256 v) external {
+        // a figure of another build than the table's (`_sgPinned`): the operation ran, nothing compared or written
+        if (!_sgPinned()) {
+            require(!vm.envOr("SDK_GAS_WRITE", false), "SDK_GAS_WRITE at another build than the table's");
+            return;
+        }
         if (vm.envOr("SDK_GAS_WRITE", false)) {
             string memory out = vm.envOr("SDK_GAS_OUT", SDK_GAS);
             if (vm.exists(out)) vm.serializeJson("sdkgas", vm.readFile(out));
@@ -230,7 +241,8 @@ abstract contract SdkGasRows is SdkGasDeploy {
             _both(kind, entry, variant, c, from, build);
         }
         (sgCount, sgPoint, sgCountTag) = (0, 0, "");
-        _sgLine(kind, entry, variant, counts, tags);
+        // the line is fitted to the table's figures (`sgRead`): none at another build than the table's
+        if (_sgPinned()) _sgLine(kind, entry, variant, counts, tags);
     }
 
     /// `key` as measured: the pin file's value (written by this run under `SDK_GAS_WRITE`, else asserted equal to it), in a
