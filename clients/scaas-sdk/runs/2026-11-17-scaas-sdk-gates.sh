@@ -25,7 +25,7 @@ for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do
 done
 SETS_CMD+="true"
 # every mutant script loads (its `old` texts occur once); the stale records are printed, not failed (plan Global constraints)
-MCHECK='bad=0; for f in clients/scaas-sdk/runs/*-mutants.py; do python3 "$f" check || bad=1; done; exit $bad'
+MCHECK='python3 -I clients/scaas-sdk/runs/test_mutants_lib.py || exit 1; bad=0; for f in clients/scaas-sdk/runs/*-mutants.py; do python3 "$f" check || bad=1; done; exit $bad'
 
 # step | directory | command (run with bash -c from the directory)
 STEPS=(

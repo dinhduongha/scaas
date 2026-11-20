@@ -8,11 +8,13 @@ is older than the last commit touching a file the row's mutant edits, or the row
 `run [name…]` first refuses (rc 2, nothing written) when a selected mutant does not load. It then runs each distinct test
 command once on the unmutated tree and requires rc 0 (the green baseline; a red baseline is rc 2, nothing written). Then it
 applies one mutant at a time, runs its test command from the worktree root (the command goes through scripts/capped,
-foreground), restores the files byte for byte, and records the outcome in the task's `-mutants.txt`: `killed` (the test failed),
-`survived` (it passed), `not loaded` (the mutant does not compile). Each row is
+foreground), restores the files byte for byte, and records the outcome in the task's `-mutants.txt`: `killed` (the intended
+test failed: the mutant's optional fourth element `expect`, else the test its command names; a failure line is required),
+`survived` (it passed), `not loaded` (the mutant does not compile, in any toolchain), `other failure` (red, but not by the
+intended assertion: no kill; merged-tree review M12). Each row is
 `name | outcome | commit[ dirty] | test | first failure line`, `dirty` when tracked files other than the runs records differed
 from HEAD. A run of named mutants keeps the record's other rows (each with its own commit). Last line:
-`N mutants, K killed, S survived, L not loaded`. Full output in a git-ignored `.log` beside it."""
+`N mutants, K killed, S survived, L not loaded, O other failure`. Full output in a git-ignored `.log` beside it."""
 import hashlib
 import os
 import re
@@ -34,7 +36,8 @@ def git(*args):
 
 def check(mutants):
     bad = []
-    for name, edits, _ in mutants:
+    for m in mutants:
+        name, edits = m[0], m[1]
         for f, old, _new in edits:
             n = (ROOT / f).read_text().count(old)
             if n != 1:
@@ -46,7 +49,7 @@ def stale(task, mutants):
     out = Path(__file__).with_name(f"2026-11-17-scaas-sdk-{task}-mutants.txt")
     if not out.exists():
         return [f"{task}: no record"]
-    files = {name: sorted({f for f, _, _ in edits}) for name, edits, _ in mutants}
+    files = {m[0]: sorted({f for f, _, _ in m[1]}) for m in mutants}
     rows = {}
     for line in out.read_text().splitlines()[1:-1]:
         cols = line.split(" | ")
@@ -66,6 +69,35 @@ def stale(task, mutants):
                 res.append(f"{name}: {f} changed since {sha}")
                 break
     return res
+
+
+# a compile error of any toolchain: the mutant does not load (never a kill)
+COMPILE_ERRORS = ("error[E", "could not compile", "Compiler run failed", "Compilation failed", "SyntaxError:",
+                  "TypeError: Cannot", "ReferenceError:", "Error: Cannot find module", "Error compiling", "compilation error")
+
+
+def intended(cmd, expect=None):
+    """The assertion a mutant must fail (M12): the mutant's own `expect` text, else the test its command names (its last
+    word, quotes and a trailing `$` dropped); `None` when the command names no single test (a whole binary after
+    `--test`, a script), where any failing test counts."""
+    if expect:
+        return expect
+    words = cmd.split()
+    last = words[-1].strip("'\"").rstrip("$") if words else ""
+    if (len(words) >= 2 and words[-2] == "--test") or not re.search(r"[A-Za-z]", last) \
+            or last.startswith("-") or last.endswith((".sh", ".py", ".js", ".mjs")):
+        return None
+    return last
+
+
+def killed_by(text, want):
+    """Whether `text` shows a failing test, `want`'s when it is named: a Rust `test … FAILED` / `panicked`, a forge
+    `[FAIL…]`, a node `not ok`, a Python `FAIL:` / `AssertionError` line."""
+    fails = [ln for ln in text.splitlines()
+             if re.search(r"\.\.\. FAILED|^\[FAIL|panicked at|^not ok|^FAIL:|AssertionError|^failures:|---- .* stdout ----", ln)]
+    if not fails:
+        return False
+    return want is None or any(want in ln for ln in fails)
 
 
 def failure_line(text):
@@ -96,7 +128,7 @@ def run(task, mutants, only=None):
     at = sha + (" dirty" if dirty else "")
     with log.open("a" if only else "w") as lg:
         lg.write(f"# {task} mutants at commit {at}\n")
-        cmds = list(dict.fromkeys(cmd for _, _, cmd in sel))
+        cmds = list(dict.fromkeys(m[2] for m in sel))
         for k, cmd in enumerate(cmds, 1):
             print(f"[mutants] {task} baseline {k}/{len(cmds)}: running", flush=True)
             p = subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True, text=True)
@@ -109,8 +141,10 @@ def run(task, mutants, only=None):
         if only and out.exists():
             for line in out.read_text().splitlines()[1:-1]:
                 kept[line.split(" | ")[0]] = line
-        rows, counts = [], {"killed": 0, "survived": 0, "not loaded": 0}
-        for k, (name, edits, cmd) in enumerate(mutants, 1):
+        rows, counts = [], {"killed": 0, "survived": 0, "not loaded": 0, "other failure": 0}
+        for k, m in enumerate(mutants, 1):
+            name, edits, cmd = m[:3]
+            expect = m[3] if len(m) > 3 else None
             if only and name not in only:
                 if name in kept:
                     rows.append(kept[name])
@@ -127,13 +161,16 @@ def run(task, mutants, only=None):
                 p = subprocess.run(cmd, shell=True, cwd=ROOT, capture_output=True, text=True)
                 text = p.stdout + p.stderr
                 lg.write(f"\n## {name}\n$ {cmd}\nrc={p.returncode}\n{text[-6000:]}\n")
+                by = failure_line(text)
                 if p.returncode == 0:
-                    outcome = "survived"
-                elif "error[E" in text or "could not compile" in text:
+                    outcome, by = "survived", "-"
+                elif any(e in text for e in COMPILE_ERRORS):
                     outcome = "not loaded"
-                else:
+                elif by != "-" and killed_by(text, intended(cmd, expect)):
                     outcome = "killed"
-                    by = failure_line(text)
+                else:
+                    # red, but not by the assertion the mutant names (or no failure line at all): no kill (M12)
+                    outcome = "other failure"
             finally:
                 for f, b in files.items():
                     (ROOT / f).write_bytes(b)
@@ -143,7 +180,8 @@ def run(task, mutants, only=None):
             rows.append(f"{name} | {outcome} | {at} | {cmd.split('&&')[-1].strip()} | {by}")
             print(f"[mutants] {task} {name}: {outcome}", flush=True)
     total = sum(counts.values())
-    summary = f"{total} mutants, {counts['killed']} killed, {counts['survived']} survived, {counts['not loaded']} not loaded"
+    summary = (f"{total} mutants, {counts['killed']} killed, {counts['survived']} survived, {counts['not loaded']} not loaded, "
+               f"{counts['other failure']} other failure")
     out.write_text(f"# {task} mutants (name | outcome | commit | test | first failure line)\n" + "\n".join(rows)
                    + f"\n{summary}\n")
     print(summary)
