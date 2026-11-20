@@ -427,7 +427,7 @@ fn structure(kd: &[u8]) -> Result<MsigStructure, SdkError> {
 }
 
 /// The registry's domain for a native member's `UAAuth` (gen 1 only: `predecessor() == 0`).
-async fn domain(
+pub(crate) async fn domain(
     sdk: &Sdk,
     chain: &str,
     pool: &EvmPool,

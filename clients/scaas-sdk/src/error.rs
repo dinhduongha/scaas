@@ -137,7 +137,17 @@ own_codes! {
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).
-pub const SHARED_CODES: &[&str] = &["Argument", "VaultVersion"];
+pub const SHARED_CODES: &[&str] = &[
+    "Argument",
+    "VaultVersion",
+    // the app-core refusals (spec §12, T21): `scaas-ua` raises them for its checks, the SDK for the profile's
+    "AppDomainRefused",
+    "AppPurposeRefused",
+    "AppSaltMismatch",
+    "AppHandleForeign",
+    "AppKeyUsage",
+    "AppArenaFull",
+];
 
 impl std::fmt::Display for SdkError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

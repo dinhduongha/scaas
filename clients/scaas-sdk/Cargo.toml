@@ -10,7 +10,7 @@ description = "SCaaS SDK: the one API apps call (CLI-SDK-01). Signs only through
 
 # docs/clients/scaas-sdk.md (CLI-SDK-*), spec docs/superpowers/specs/2026-11-17-scaas-sdk.md §3.2, §3.3. Each feature's bit is
 # the table's (`Sdk::features`, src/lib.rs): appended only, never reused (bit 12, the withdrawn `chat`, stays unused).
-# Not defined yet, by the plan: `app-core` (26) and `pqchat-records` (27) in T21.
+# Not defined yet, by the plan: `pqchat-records` (27) in T21.
 [features]
 default = ["vault", "account", "wallet", "file-store", "mlock"]
 vault = ["scaas-ua/wallet"]
@@ -40,6 +40,8 @@ file-store = ["vault"]
 # roots (c) and (d) (spec §6.6; T6): scaas-ua's Argon2id roots
 classical-roots = ["vault", "scaas-ua/roots"]
 opaque-calls = []
+# T21 (spec §12; bit 26): the app-core surface for app cores above the SDK
+app-core = ["account", "wallet", "scaas-ua/app-core"]
 # T19: Bitcoin (P2WPKH, P2TR), NEAR and Polkadot native keys (spec §8.5); the raw native entry for an app's own encoder of a
 # non-EVM chain (spec §8.6), off by default and never in the default generated surface
 native-networks = ["wallet"]
@@ -106,6 +108,10 @@ required-features = ["classical-roots"]
 [[test]]
 name = "account"
 required-features = ["account"]
+
+[[test]]
+name = "app_core"
+required-features = ["app-core"]
 
 [[test]]
 name = "account_ops"

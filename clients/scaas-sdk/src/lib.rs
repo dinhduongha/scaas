@@ -36,6 +36,8 @@ compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 pub mod account;
 #[cfg(feature = "admin")]
 pub mod admin;
+#[cfg(feature = "app-core")]
+pub mod app_core;
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod confidential;
 pub mod config;
@@ -103,6 +105,7 @@ pub mod bits {
     pub const RAW_NATIVE: u64 = 1 << 23;
     pub const CLASSICAL_ROOTS: u64 = 1 << 24;
     pub const OPAQUE_CALLS: u64 = 1 << 25;
+    pub const APP_CORE: u64 = 1 << 26;
 }
 
 /// The bits of this build's features.
@@ -147,6 +150,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "raw-native"), RAW_NATIVE),
         (cfg!(feature = "classical-roots"), CLASSICAL_ROOTS),
         (cfg!(feature = "opaque-calls"), OPAQUE_CALLS),
+        (cfg!(feature = "app-core"), APP_CORE),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)

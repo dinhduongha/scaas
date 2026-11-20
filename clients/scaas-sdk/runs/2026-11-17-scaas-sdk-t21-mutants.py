@@ -13,6 +13,9 @@ AK = "clients/ua-rs/src/wallet/appkey.rs"
 ST = "clients/ua-rs/src/wallet/store.rs"
 CK = "clients/clientkeys/src/appcore.js"
 US = "clients/ua-rs/src/wallet/uasig.rs"
+AC = "clients/scaas-sdk/src/app_core.rs"
+F = "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core"
+ST_ = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features {F} --test app_core "
 UT = "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core "
 CT = "cd clients/clientkeys && ../../scripts/capped node --test --test-reporter=tap test/appcore.test.js"
 MUTANTS = [
@@ -155,6 +158,42 @@ MUTANTS = [
             )
         ],
         UT + "refusal_lists_match_the_contracts",
+    ),
+    (
+        "sdk: accept any label",
+        [(AC, "        ok.then_some(()).ok_or(SdkError::AppLabelRefused)", "        Ok(())")],
+        ST_ + "labels_scope_and_handles",
+    ),
+    (
+        "sdk: allow an overlapping prefix",
+        [(AC, "        if own || other {", "        if false {")],
+        ST_ + "labels_scope_and_handles",
+    ),
+    (
+        "sdk: accept a foreign handle",
+        [(AC, "        (k.core == self.id)", "        (k.core == k.core)")],
+        ST_ + "labels_scope_and_handles",
+    ),
+    (
+        "sdk: a chain step may rebuild a labelled key",
+        [
+            (
+                AC,
+                "            .any(|p| data.starts_with(p.as_bytes()))",
+                "            .any(|p| p.is_empty() && data.starts_with(p.as_bytes()))",
+            )
+        ],
+        ST_ + "labels_scope_and_handles",
+    ),
+    (
+        "sdk: drop the chainId check",
+        [(AC, "        if id.as_deref() != Some(&chain_id.to_string()) {", "        if false {")],
+        ST_ + "app_records_both_paths",
+    ),
+    (
+        "sdk: drop the verifyingContract check",
+        [(AC, "        if listed {", "        if false {")],
+        ST_ + "app_records_both_paths",
     ),
 ]
 
