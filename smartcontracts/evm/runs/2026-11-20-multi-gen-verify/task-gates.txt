@@ -71,3 +71,10 @@ t14 UADeploy + GovDeploy + ZetherDeploy + ReleaseList + LinkClosure | task 14 | 
 t14 python | task 14 | 0 | test_pq_verifiers 7/7 (draft_not_probed_by_default, draft_probed_under_flag_and_book: the edge rows' pq_msg equals the KAT probe's)
 t14 mutants | task 14 | 0 | 2 of 2 killed (task14-mutants.txt); a crash at 08:16 left draft-first-again in DeployBase.sol: found by grep, restored, the run repeated
 t14 size gate | task 14 | 0 | no src change
+t15 UAVerifyOnlyGas | task 15 | 0 | 3 passed (red before LINE_HOP_GAS 10,000 -> 13,100: one further generation measured 12,410)
+t15 test/ua (all but UaPortable, after the bls-multi merge) | task 15 | 0 | 63 suites, 852 passed
+t15 UaPortable | task 15 | 0 | GAS_REPIN run 85 + 3 (8 rows over their pins, raised; the other sets by the same delta); the three gas tests green on the new pins
+t15 test/gas | task 15 | 0 | 25 suites, 62 passed after gas/generate.py --measure (1,667 sdk_gas.json keys moved, task15-sdk-gas-pins.txt)
+t15 scaas-sdk | task 15 | 0 | cargo test --locked: lib 100, the integration binaries green (reference.json regenerated); generate.py --check ok
+t15 mutants | task 15 | 0 | 1 of 1 killed (task15-mutants.txt)
+t15 size gate | task 15 | 0 | 0 errors after the merge; no baseline move
