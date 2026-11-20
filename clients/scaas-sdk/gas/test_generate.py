@@ -159,7 +159,11 @@ def main():
     assert "measured_max" not in r["per_item"], "no counted points: no bound"
     # a fresh-only group (the registry writes): its fresh rows alone, no used lane asked for; the control refuses it
     f = {"kem_register_fresh_full": 2_000, "kem_register_fresh_full_regular": 50}
-    t = table(f, kinds=("kem",), entries=("register",), native={"kinds": [], "entries": ["register"]}, fresh_only=True)
+    nat = {"kinds": [], "entries": ["register"]}
+    assert not refused(lambda: table(f, kinds=("kem",), entries=("register",), native=nat, fresh_only=True)), (
+        "no used lane"
+    )
+    t = table(f, kinds=("kem",), entries=("register",), native=nat, fresh_only=True)
     assert list(t) == [("kem", "register", True)] and t[("kem", "register", True)]["regular"]["gas"] == 1_000, t
     assert refused(
         lambda: table(f, kinds=("kem",), entries=("register",), native={"kinds": [], "entries": ["register"]})
