@@ -2452,3 +2452,200 @@ fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> (String, Option<u64>) {
         other => (format!("state {other:?}"), None),
     }
 }
+
+/// Plan T21's two path controls (spec §12.2, §18 "App cores"): an app record signed through the SDK is accepted by the deployed
+/// registry itself, path A by `requirePortableApp` (a registered `secp256k1` UA), path B by `requireAuthorized` (the same UA,
+/// and the seed's native EVM key over `UAAuth`), and `verify_app_record` agrees; the control's twin (one signature byte
+/// changed) is refused by the registry.
+#[cfg(feature = "app-core")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
+async fn e2e_app_records_on_anvil() {
+    use scaas_sdk::app_core::{AppCore, AppDesc, AppPath, AppUaSig};
+    const SECP: u16 = 0x0108;
+    const APP_ID: &str = "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a";
+    let (_anvil, rpc) = anvil().await;
+    let rpc = rpc.as_str();
+    let port = rpc.rsplit(':').next().unwrap();
+    funded_holder(rpc);
+    let dep = deploy(rpc, &format!("local-31337-{port}-testnet"), &[]);
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let (sdk, seed) = sdk_on(registry_profile(rpc, &registry, Some(1 << 24))).await;
+    let ua = register_with_sdk(&sdk, &seed, SECP, 0, false).await;
+    let core = AppCore::new(
+        sdk.clone(),
+        AppDesc {
+            app_id: Some(APP_ID.into()),
+            name: "E2E App".into(),
+            class: None,
+            labels: vec!["scaas/e2e-app/v1/".into()],
+        },
+    )
+    .unwrap();
+    let record = |domain: serde_json::Value| {
+        let mut fields = vec![
+            serde_json::json!({"name": "name", "type": "string"}),
+            serde_json::json!({"name": "version", "type": "string"}),
+        ];
+        for (k, t) in [
+            ("chainId", "uint256"),
+            ("verifyingContract", "address"),
+            ("salt", "bytes32"),
+        ] {
+            if domain.get(k).is_some() {
+                fields.push(serde_json::json!({"name": k, "type": t}));
+            }
+        }
+        serde_json::json!({
+            "types": {"EIP712Domain": fields, "Note": [{"name": "id", "type": "bytes32"}, {"name": "body", "type": "string"}]},
+            "primaryType": "Note",
+            "domain": domain,
+            "message": {"id": format!("0x{}", "11".repeat(32)), "body": "hello"},
+        })
+        .to_string()
+    };
+    let hx = |b: &[u8]| {
+        format!(
+            "0x{}",
+            b.iter().map(|x| format!("{x:02x}")).collect::<String>()
+        )
+    };
+    let ok = |args: &[&str]| {
+        let out = Command::new("cast")
+            .args(["call", "--rpc-url", rpc, &registry])
+            .args(args)
+            .output()
+            .expect("cast in PATH");
+        out.status.success()
+    };
+    let flipped = |s: &[u8]| {
+        let mut s = s.to_vec();
+        s[7] ^= 1;
+        s
+    };
+    let key = KeyRef::Ua {
+        seed: seed.clone(),
+        kind: SECP,
+        account: 0,
+        index: 0,
+    };
+    let uasig = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
+
+    // path A: requirePortableApp(ua, appId, typedDigest, UASig{"", sig, []})
+    let pa = record(serde_json::json!({"name": "E2E App", "version": "1", "salt": APP_ID}));
+    let sa = core
+        .sign_app_record(key.clone(), AppPath::Portable, pa.clone())
+        .await
+        .unwrap();
+    let call_a = |sig: &[u8]| {
+        ok(&[
+            &format!("requirePortableApp(bytes32,bytes32,bytes32,{uasig})"),
+            &ua,
+            APP_ID,
+            &sa.digest,
+            &format!("({},{},[])", hx(&sa.key_data), hx(sig)),
+        ])
+    };
+    assert!(
+        call_a(&sa.signature),
+        "requirePortableApp accepts the SDK's record"
+    );
+    assert!(
+        !call_a(&flipped(&sa.signature)),
+        "the twin: one byte changed"
+    );
+    let v = |p: AppPath, t: String, u: String, key_data: Vec<u8>, signature: Vec<u8>| {
+        let core = core.clone();
+        async move {
+            core.verify_app_record(
+                "anvil".into(),
+                u,
+                p,
+                t,
+                AppUaSig {
+                    key_data,
+                    signature,
+                    members: vec![],
+                },
+            )
+            .await
+            .unwrap()
+        }
+    };
+    assert!(
+        v(
+            AppPath::Portable,
+            pa.clone(),
+            ua.clone(),
+            vec![],
+            sa.signature.clone()
+        )
+        .await
+    );
+
+    // path B: requireAuthorized(ua, appPurpose(appId), typedDigest, UASig{keyData, sig, []}), by the UA and by the native key
+    let cb = record(
+        serde_json::json!({"name": "E2E App", "version": "1", "chainId": "31337",
+        "verifyingContract": "0x00000000000000000000000000000000000000aa"}),
+    );
+    let b = || AppPath::ChainBound {
+        chain: "anvil".into(),
+        purpose: None,
+    };
+    let app_id: [u8; 32] = alloy::hex::decode(&APP_ID[2..])
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let purpose = hx(&scaas_ua::ua_portable::app_purpose(&app_id).unwrap());
+    let sb = core.sign_app_record(key, b(), cb.clone()).await.unwrap();
+    let call_b = |who: &str, key_data: &[u8], sig: &[u8], digest: &str| {
+        ok(&[
+            &format!("requireAuthorized(bytes32,bytes32,bytes32,{uasig})"),
+            who,
+            &purpose,
+            digest,
+            &format!("({},{},[])", hx(key_data), hx(sig)),
+        ])
+    };
+    assert!(
+        call_b(&ua, &sb.key_data, &sb.signature, &sb.digest),
+        "requireAuthorized accepts the UA's record"
+    );
+    assert!(
+        !call_b(&ua, &sb.key_data, &flipped(&sb.signature), &sb.digest),
+        "the twin"
+    );
+    assert!(
+        v(
+            b(),
+            cb.clone(),
+            ua.clone(),
+            sb.key_data.clone(),
+            sb.signature.clone()
+        )
+        .await
+    );
+    let native = KeyRef::Native {
+        seed: seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let sn = core.sign_app_record(native, b(), cb.clone()).await.unwrap();
+    let holder = Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .native_key(Network::Evm, 0, None)
+        .unwrap()
+        .address()
+        .unwrap()
+        .to_ascii_lowercase();
+    let nid = format!("0x{:0>64}", holder.trim_start_matches("0x"));
+    assert!(
+        call_b(&nid, &[], &sn.signature, &sn.digest),
+        "requireAuthorized accepts the native key's record"
+    );
+    assert!(
+        !call_b(&nid, &[], &flipped(&sn.signature), &sn.digest),
+        "the twin"
+    );
+    assert!(v(b(), cb, nid, vec![], sn.signature.clone()).await);
+}

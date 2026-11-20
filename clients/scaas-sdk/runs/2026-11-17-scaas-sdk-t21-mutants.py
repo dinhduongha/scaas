@@ -14,7 +14,9 @@ ST = "clients/ua-rs/src/wallet/store.rs"
 CK = "clients/clientkeys/src/appcore.js"
 US = "clients/ua-rs/src/wallet/uasig.rs"
 AC = "clients/scaas-sdk/src/app_core.rs"
-F = "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core"
+UP = "clients/ua-rs/src/ua_portable.rs"
+PR = "clients/scaas-sdk/src/pqchat_records.rs"
+F = "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records"
 ST_ = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features {F} --test app_core "
 UT = "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core "
 CT = "cd clients/clientkeys && ../../scripts/capped node --test --test-reporter=tap test/appcore.test.js"
@@ -194,6 +196,86 @@ MUTANTS = [
         "sdk: drop the verifyingContract check",
         [(AC, "        if listed {", "        if false {")],
         ST_ + "app_records_both_paths",
+    ),
+    (
+        "sdk: kem_wrap reads as a plain read",
+        [
+            (
+                AC,
+                "                Purpose::FeedsDecryption,\n                |at| async move {\n                    call_at(pool,",
+                "                Purpose::Plain,\n                |at| async move {\n                    call_at(pool,",
+            )
+        ],
+        ST_ + "kem_wrap_to_a_ua_reads_its_key_at_the_final_block",
+    ),
+    (
+        "sdk: kem_wrap accepts any scheme",
+        [(AC, "    if scheme != 1 {", "    if false {")],
+        ST_ + "kem_wrap_to_a_ua_reads_its_key_at_the_final_block",
+    ),
+    (
+        "sdk: drop the factory-class check",
+        [(AC, "        if class != 0 && Some(class) != self.class.map(usize::from) {", "        if false {")],
+        ST_ + "factory_instance_of_another_class_refused",
+    ),
+    (
+        "sdk: prepare_app_call without the contract check",
+        [
+            (
+                AC,
+                "        self.refuse_contract(&profile, &pool, &contract).await?;",
+                "        let _ = (&profile, &pool);",
+            )
+        ],
+        ST_ + "prepare_app_call_builds_named_calldata",
+    ),
+    (
+        "sdk: verify reads no domain",
+        [(AC, "        let domain = if needs_domain {", "        let domain = if false {")],
+        ST_ + "verify_app_record_reads_the_registry",
+    ),
+    (
+        "sdk: verify ignores the enabled bits",
+        [
+            (
+                AC,
+                "                *b = enabled.get(i).copied().unwrap_or(0) & accepted.get(i).copied().unwrap_or(0);",
+                "                *b = accepted.get(i).copied().unwrap_or(0);",
+            )
+        ],
+        ST_ + "verify_app_record_reads_the_registry",
+    ),
+    (
+        "ua-rs: a portable msig signature need not be minimal",
+        [
+            (
+                UP,
+                "    pop: bool,\n    cx: &Cx,\n    bits: &Bits,\n) -> Result<bool> {\n    if !msig_slots_minimal(d, &slots.iter().map(|s| s.index).collect::<Vec<_>>())? {",
+                "    pop: bool,\n    cx: &Cx,\n    bits: &Bits,\n) -> Result<bool> {\n    if false {",
+            )
+        ],
+        UT + "verify_app_record_signers",
+    ),
+    (
+        "ua-rs: a portable msig slot need not be accepted",
+        [(UP, "        if !(pop || bits.record(ua, s.index))", "        if !(pop || true)")],
+        UT + "verify_app_record_signers",
+    ),
+    (
+        "ua-rs: a single key's key data not checked against the id",
+        [
+            (
+                US,
+                "    if derive_ua(kind, &key, false).ok() != Some(*ua) || !sig.members.is_empty() {",
+                "    if !sig.members.is_empty() {",
+            )
+        ],
+        UT + "verify_app_record_signers",
+    ),
+    (
+        "sdk: an entry taking wrapHashes from the caller",
+        [(PR, "            Ok(hex(&pqchat::wrap_hash(v)?))", "            Ok(w.member.clone())")],
+        ST_.replace("--test app_core", "--test pqchat_records") + "entries_reproduce_the_vectors",
     ),
 ]
 

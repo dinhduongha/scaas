@@ -8,14 +8,21 @@
 //! namespace). The only bytes that leave are the plaintexts the app core asks to decrypt ([`AppCore::open`], a
 //! `SecretBytes`). UNAUDITED.
 use crate::error::SdkError;
-use crate::op::KeyRef;
+use crate::op::{addr20, final_block, sim, KeyRef};
 use crate::op::{ReviewField, Source};
 use crate::Sdk;
+use alloy::network::TransactionBuilder;
+use alloy::primitives::{Address, Bytes};
+use alloy::rpc::types::TransactionRequest;
+use scaas_rpc::evm::EvmPool;
+use scaas_rpc::pool::{ReadAt, ReadError};
+use scaas_rpc::Purpose;
+use scaas_ua::ua_portable::{InnerSig, MemberSig, UASig};
 use scaas_ua::wallet::{
-    AppKeys, AppPath as UaPath, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce, SecretBytes,
-    Signer, TypedData,
+    AppKeys, AppPath as UaPath, AppRecordState, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce,
+    SecretBytes, Signer, TypedData,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -125,9 +132,264 @@ pub struct AppSigned {
     pub review: Vec<ReviewField>,
 }
 
+/// A `UASig` as an app record carries it (TS-D12): a single key `key_data` (empty for a stored kind and on path A) and
+/// `signature`; an `msig` `members` only.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AppUaSig {
+    pub key_data: Vec<u8>,
+    pub signature: Vec<u8>,
+    pub members: Vec<AppMemberSig>,
+}
+
+/// One `msig` slot's signature: a signing member `sig`, an `msig` member its leaves' `members`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AppMemberSig {
+    pub index: u16,
+    pub members: Vec<AppInnerSig>,
+    pub sig: Vec<u8>,
+}
+
+/// One leaf of an `msig` member's slot.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AppInnerSig {
+    pub index: u16,
+    pub sig: Vec<u8>,
+}
+
+impl From<&AppUaSig> for UASig {
+    fn from(s: &AppUaSig) -> UASig {
+        UASig {
+            key_data: s.key_data.clone(),
+            signature: s.signature.clone(),
+            members: s
+                .members
+                .iter()
+                .map(|m| MemberSig {
+                    index: m.index,
+                    members: m
+                        .members
+                        .iter()
+                        .map(|x| InnerSig {
+                            index: x.index,
+                            sig: x.sig.clone(),
+                        })
+                        .collect(),
+                    sig: m.sig.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// A call of an app's own contract as the user reviews it ([`AppCore::prepare_app_call`]): the entry, the contract and every
+/// named argument, and the payer's transaction (`Wallet::submit_native_send` sends exactly it).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppCall {
+    pub review: Vec<ReviewField>,
+    pub quote: crate::wallet::NativeQuote,
+}
+
+/// One registry record as [`AppCore::verify_app_record`] reads it: `(kind, keyData)` of `registrationOf`, an `msig`'s current
+/// structure with its `enabled` word (`None`: never updated) and its accepted-and-enabled bits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Rec {
+    kind: u16,
+    key_data: Vec<u8>,
+    current: Option<(Vec<u8>, [u8; 32])>,
+    active: [u8; 32],
+}
+
+/// The records [`AppCore::verify_app_record`] reads at most: a UA, its members and their members (two levels).
+// ponytail: a fixed cap of records per verification; past it the rest is unread and the verdict false (fail closed)
+const RECORDS_MAX: usize = 512;
+/// A registered key's data read from `registrationOf`, at most (an `msig` of 256 slots is 9,220 bytes).
+const KEY_DATA_MAX: u64 = 1 << 16;
+const MSIG: u16 = 0x0120;
+const KEM_EK: usize = 1568;
+
+fn word(out: &[u8], at: usize) -> Option<[u8; 32]> {
+    out.get(at..at.checked_add(32)?)?.try_into().ok()
+}
+
+/// A word that is a number at most `max`.
+fn small(out: &[u8], at: usize, max: u64) -> Option<usize> {
+    let w = word(out, at)?;
+    let (hi, lo) = w.split_at(24);
+    let n = u64::from_be_bytes(lo.try_into().ok()?);
+    (hi.iter().all(|b| *b == 0) && n <= max)
+        .then(|| usize::try_from(n).ok())
+        .flatten()
+}
+
+/// `bytes` at the head offset `head` of the tuple at `base`, at most `max` bytes.
+fn dyn_bytes(out: &[u8], base: usize, head: usize, max: u64) -> Option<Vec<u8>> {
+    let o = base.checked_add(small(out, head, 1 << 24)?)?;
+    let n = small(out, o, max)?;
+    out.get(o + 32..o + 32 + n).map(<[u8]>::to_vec)
+}
+
+/// `kemKeyAt(ua, v)`'s `(KemKey(uint8 scheme, bytes mlkemEk, bytes32 x25519) kem, bytes sig)` as the KEM key
+/// `scheme ‖ mlkemEk ‖ x25519`: scheme 1 only (`KemCheck` otherwise, none at that version included), an `mlkemEk` of exactly
+/// 1,568 bytes (`KemCheck`), a malformed answer `Argument`.
+fn kem_pk_of(out: &[u8]) -> Result<Vec<u8>, SdkError> {
+    let base = small(out, 0, 1 << 16).ok_or(SdkError::Argument)?;
+    let scheme = small(out, base, 255).ok_or(SdkError::Argument)?;
+    if scheme != 1 {
+        return Err(SdkError::Ua(scaas_ua::wallet::Error::KemCheck));
+    }
+    let ek = dyn_bytes(out, base, base + 32, 1 << 16).ok_or(SdkError::Argument)?;
+    let x = word(out, base + 64).ok_or(SdkError::Argument)?;
+    if ek.len() != KEM_EK {
+        return Err(SdkError::Ua(scaas_ua::wallet::Error::KemCheck));
+    }
+    Ok([&[1u8][..], &ek, &x].concat())
+}
+
+fn sel(sig: &str) -> Vec<u8> {
+    scaas_ua::keccak256(sig.as_bytes())
+        .get(..4)
+        .unwrap_or_default()
+        .to_vec()
+}
+
+/// `eth_call` of `sig(args…)` on `to` at the read's block.
+async fn call_at(
+    pool: &EvmPool,
+    at: &ReadAt<alloy::primitives::B256>,
+    to: Address,
+    sig: &str,
+    args: &[[u8; 32]],
+) -> Result<Vec<u8>, ReadError> {
+    let d = [sel(sig), args.concat()].concat();
+    pool.call_at(at, to, Bytes::from(d))
+        .await
+        .map(|b| b.to_vec())
+}
+
+fn bit(w: &[u8; 32], i: u16) -> bool {
+    let i = usize::from(i);
+    i < 256 && w.get(31 - i / 8).is_some_and(|b| b >> (i % 8) & 1 == 1)
+}
+
+/// The records of `ua`, its members and theirs (two levels, at most [`RECORDS_MAX`]) at the read's block: an unregistered
+/// id has none, a malformed answer is unread (the verdict false, never another endpoint's answer: R7 of spec §9.4).
+async fn records(
+    pool: &EvmPool,
+    at: &ReadAt<alloy::primitives::B256>,
+    registry: Address,
+    ua: [u8; 32],
+) -> Result<BTreeMap<[u8; 32], Rec>, ReadError> {
+    let mut out = BTreeMap::new();
+    let mut todo = vec![(ua, 0u8)];
+    while let Some((id, depth)) = todo.pop() {
+        if out.len() >= RECORDS_MAX || out.contains_key(&id) || scaas_ua::in_native_space(&id) {
+            continue;
+        }
+        let r = call_at(pool, at, registry, "registrationOf(bytes32)", &[id]).await?;
+        let Some(kind) = small(&r, 0, u64::from(u16::MAX)).and_then(|k| u16::try_from(k).ok())
+        else {
+            continue;
+        };
+        let Some(key_data) = dyn_bytes(&r, 0, 32, KEY_DATA_MAX) else {
+            continue;
+        };
+        if kind == 0 {
+            continue;
+        }
+        let mut rec = Rec {
+            kind,
+            key_data,
+            current: None,
+            active: [0; 32],
+        };
+        if kind == MSIG {
+            let st = call_at(pool, at, registry, "msigStateOf(bytes32)", &[id]).await?;
+            let (Some(version), Some(enabled), Some(accepted)) =
+                (small(&st, 0, u64::MAX), word(&st, 32), word(&st, 64))
+            else {
+                continue;
+            };
+            let structure = if version != 0 {
+                let c = call_at(pool, at, registry, "msigOf(bytes32)", &[id]).await?;
+                let Some(c) = crate::account::msig::decode_structure(&c) else {
+                    continue;
+                };
+                rec.current = Some((c.clone(), enabled));
+                c
+            } else {
+                rec.key_data.clone()
+            };
+            for (i, b) in rec.active.iter_mut().enumerate() {
+                *b = enabled.get(i).copied().unwrap_or(0) & accepted.get(i).copied().unwrap_or(0);
+            }
+            if depth < 2 {
+                if let Ok(m) = scaas_ua::ua_portable::MsigStructure::from_key_data(&structure) {
+                    todo.extend(m.members.iter().map(|x| (x.id, depth + 1)));
+                }
+            }
+        }
+        out.insert(id, rec);
+    }
+    Ok(out)
+}
+
+/// A named argument of an app entry as an ABI value of the parameter `(ty, components)`: a tuple from an object of exactly its
+/// component names, an array from an array, every other type from its string form (a number or a bool as JSON gives it).
+fn abi_value(
+    ty: &str,
+    comps: &[alloy::json_abi::Param],
+    v: &serde_json::Value,
+    depth: u8,
+) -> Result<alloy::dyn_abi::DynSolValue, SdkError> {
+    use alloy::dyn_abi::{DynSolType, DynSolValue};
+    use serde_json::Value;
+    if depth > 16 {
+        return Err(SdkError::Argument);
+    }
+    if let Some(inner) = ty.strip_suffix(']') {
+        let (elem, n) = inner.rsplit_once('[').ok_or(SdkError::Argument)?;
+        let a = v.as_array().ok_or(SdkError::Argument)?;
+        if a.len() > 4096 || (!n.is_empty() && n.parse::<usize>().ok() != Some(a.len())) {
+            return Err(SdkError::Argument);
+        }
+        let items = a
+            .iter()
+            .map(|x| abi_value(elem, comps, x, depth + 1))
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(if n.is_empty() {
+            DynSolValue::Array(items)
+        } else {
+            DynSolValue::FixedArray(items)
+        });
+    }
+    if ty == "tuple" {
+        let o = v.as_object().ok_or(SdkError::Argument)?;
+        if o.len() != comps.len() {
+            return Err(SdkError::Argument);
+        }
+        let items = comps
+            .iter()
+            .map(|c| {
+                let x = o.get(&c.name).ok_or(SdkError::Argument)?;
+                abi_value(&c.ty, &c.components, x, depth + 1)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(DynSolValue::Tuple(items));
+    }
+    let s = match v {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        _ => return Err(SdkError::Argument),
+    };
+    DynSolType::parse(ty)
+        .and_then(|t| t.coerce_str(&s))
+        .map_err(|_| SdkError::Argument)
+}
+
 /// One app core's scope (spec §12.2).
 pub struct AppCore {
-    sdk: Arc<Sdk>,
+    pub(crate) sdk: Arc<Sdk>,
     id: u64,
     app_id: Option<[u8; 32]>,
     class: Option<u16>,
@@ -625,22 +887,8 @@ impl AppCore {
         let vc = d
             .get("verifyingContract")
             .and_then(|c| c.as_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-        let listed = [
-            profile.registry.clone(),
-            profile.factory.clone(),
-            profile.router.clone(),
-        ]
-        .into_iter()
-        .flatten()
-        .chain(profile.tokens.iter().map(|t| t.address.clone()))
-        .chain(profile.dexes.iter().map(|x| x.address.clone()))
-        .any(|a| a.eq_ignore_ascii_case(&vc));
-        if listed {
-            return Err(refused);
-        }
-        let _ = self.class; // a factory instance of another class: PLANNED with the factory listing read (part 4b)
+            .unwrap_or_default();
+        self.refuse_contract(&profile, &pool, vc).await?;
         let registry = match account {
             KeyRef::Native { .. } => {
                 let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
@@ -650,6 +898,209 @@ impl AppCore {
             _ => None,
         };
         Ok((UaPath::ChainBound { purpose }, registry))
+    }
+
+    /// `AppDomainRefused` for a contract an app record or call may not name (spec §12.4): the profile's registry, factory or
+    /// router, a listed token or DEX, or a contract the profile's factory made of a class other than `AppDesc.class` (its
+    /// `infoOf` record, a plain read; any class when the scope declares none). `Argument` for a malformed address.
+    async fn refuse_contract(
+        &self,
+        profile: &crate::ChainProfile,
+        pool: &EvmPool,
+        contract: &str,
+    ) -> Result<(), SdkError> {
+        let refused = SdkError::Ua(scaas_ua::wallet::Error::AppDomainRefused);
+        let c = addr20(&contract.to_ascii_lowercase())?;
+        let listed = [
+            profile.registry.clone(),
+            profile.factory.clone(),
+            profile.router.clone(),
+        ]
+        .into_iter()
+        .flatten()
+        .chain(profile.tokens.iter().map(|t| t.address.clone()))
+        .chain(profile.dexes.iter().map(|x| x.address.clone()))
+        .any(|a| a.eq_ignore_ascii_case(contract));
+        if listed {
+            return Err(refused);
+        }
+        let Some(f) = profile.factory.as_deref() else {
+            return Ok(());
+        };
+        let f = Address::from(addr20(&f.to_ascii_lowercase())?);
+        let mut arg = [0u8; 32];
+        arg[12..].copy_from_slice(&c);
+        let tx = TransactionRequest::default()
+            .with_to(f)
+            .with_input(Bytes::from([sel("infoOf(address)"), arg.to_vec()].concat()));
+        let out = pool.call_tx(tx).await.map_err(sim)?;
+        // `Created(address addr, bytes32 creatorId, uint16 contractClass, …)`: a static tuple, the class in word 2
+        let class = small(&out, 64, u64::from(u16::MAX)).ok_or(SdkError::Argument)?;
+        if class != 0 && Some(class) != self.class.map(usize::from) {
+            return Err(refused);
+        }
+        Ok(())
+    }
+
+    /// `key` wrapped to `recipient`'s KEM key at `kem_version` (spec §12.2, review K5): `kemKeyAt(recipient, kem_version)` read
+    /// from the profile's registry at the profile's final block as a read that feeds a decryption (`Purpose::FeedsDecryption`,
+    /// ARCH-POS-15: a discovered node only under the majority option with at least three nodes), bounded; scheme 1 only
+    /// (`KemCheck`); the KDF info's scheme byte and `keccak256(kemPk)` built below the SDK from that key, never the caller's.
+    pub async fn kem_wrap(
+        self: &Arc<Self>,
+        chain: String,
+        recipient: String,
+        kem_version: u64,
+        key: Arc<AppKey>,
+        label: Vec<u8>,
+        aad: Vec<u8>,
+    ) -> Result<AppWrap, SdkError> {
+        self.label(&label)?;
+        let ua = hex32(&recipient)?;
+        let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
+        let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
+        let registry = Address::from(addr20(&r.to_ascii_lowercase())?);
+        let mut v = [0u8; 32];
+        v[24..].copy_from_slice(&kem_version.to_be_bytes());
+        let pool = &pool;
+        let out = pool
+            .read_at_block(
+                final_block(&profile),
+                Purpose::FeedsDecryption,
+                |at| async move {
+                    call_at(pool, &at, registry, "kemKeyAt(bytes32,uint64)", &[ua, v]).await
+                },
+            )
+            .await?
+            .value;
+        let kem_pk = kem_pk_of(&out)?;
+        self.kem_wrap_to_key(kem_pk, key, label, aad)
+    }
+
+    /// Whether `sig` is `ua`'s signature of the app record `typed_json` on `path`, as the profile's registry on `chain` judges
+    /// it (spec §12.2, review r2 R7; `scaas-ua` `verify_app_record`): every kind, an `msig` down to its members (two levels),
+    /// each key checked against its id; a native signer's `UAAuth` in the registry generation's domain. The records are read
+    /// at the profile's final block as a read that feeds a decryption. A path-B `chain` other than `chain`: `Argument`. Not
+    /// checked here (false): a native id with code (ERC-1271), a native kind other than `evm-eoa`, a record held by an
+    /// earlier registry generation.
+    pub async fn verify_app_record(
+        self: &Arc<Self>,
+        chain: String,
+        ua: String,
+        path: AppPath,
+        typed_json: String,
+        sig: AppUaSig,
+    ) -> Result<bool, SdkError> {
+        let id = hex32(&ua)?;
+        let typed = TypedData::from_json(typed_json.as_bytes()).map_err(SdkError::Ua)?;
+        let p = match &path {
+            AppPath::Portable => UaPath::Portable {
+                app_id: self.app_id.ok_or(SdkError::Argument)?,
+            },
+            AppPath::ChainBound { chain: c, purpose } => {
+                if *c != chain {
+                    return Err(SdkError::Argument);
+                }
+                UaPath::ChainBound {
+                    purpose: match purpose {
+                        Some(p) => hex32(p)?,
+                        None => scaas_ua::ua_portable::app_purpose(
+                            &self.app_id.ok_or(SdkError::Argument)?,
+                        )
+                        .map_err(|e| SdkError::Ua(e.into()))?,
+                    },
+                }
+            }
+        };
+        let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
+        let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
+        let registry = Address::from(addr20(&r.to_ascii_lowercase())?);
+        let poolr = &pool;
+        let recs = pool
+            .read_at_block(
+                final_block(&profile),
+                Purpose::FeedsDecryption,
+                |at| async move { records(poolr, &at, registry, id).await },
+            )
+            .await?
+            .value;
+        let needs_domain = matches!(p, UaPath::ChainBound { .. })
+            && (scaas_ua::in_native_space(&id) || recs.get(&id).is_some_and(|r| r.kind == MSIG));
+        let domain = if needs_domain {
+            Some(crate::account::msig::domain(&self.sdk, &chain, &pool, registry).await?)
+        } else {
+            None
+        };
+        let members = |x: [u8; 32]| recs.get(&x).map(|r| (r.kind, r.key_data.clone()));
+        let current = |x: [u8; 32]| recs.get(&x).and_then(|r| r.current.clone());
+        let accepted = |x: [u8; 32], i: u16| recs.get(&x).is_some_and(|r| bit(&r.active, i));
+        Ok(scaas_ua::wallet::verify_app_record(
+            &id,
+            &p,
+            &typed,
+            &UASig::from(&sig),
+            &AppRecordState {
+                members: &members,
+                current: &current,
+                accepted: &accepted,
+                domain: domain.as_ref(),
+            },
+        ))
+    }
+
+    /// A call of the app's own contract `contract` on `chain` (spec §12.2, §13): `entry` the function's JSON ABI item as solc
+    /// writes it (its parameters and every tuple component named), `args` a JSON object of exactly those names (a signed record
+    /// as its `UASig` fields `keyData`, `signature`, `members`; a tuple as an object of its components' names), paid by `payer` (a native EVM key; fee 0 allowed by the contract: anyone
+    /// submits a signed record), quoted and reviewed (the entry, the contract, each argument). `AppDomainRefused` for a
+    /// contract an app may not call (`refuse_contract`: a SCaaS contract of the profile, a factory instance of another
+    /// class); `Argument` for an entry that does not parse or arguments that are not its names and types.
+    pub async fn prepare_app_call(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+        payer: KeyRef,
+    ) -> Result<AppCall, SdkError> {
+        use alloy::dyn_abi::JsonAbiExt;
+        if entry.len() > 64 * 1024 || args.len() > 128 * 1024 {
+            return Err(SdkError::Argument);
+        }
+        let f: alloy::json_abi::Function =
+            serde_json::from_str(&entry).map_err(|_| SdkError::Argument)?;
+        let a: serde_json::Value = serde_json::from_str(&args).map_err(|_| SdkError::Argument)?;
+        let o = a.as_object().ok_or(SdkError::Argument)?;
+        if o.len() != f.inputs.len() || f.inputs.iter().any(|p| p.name.is_empty()) {
+            return Err(SdkError::Argument);
+        }
+        let mut review = vec![
+            field("contract", contract.to_ascii_lowercase(), Source::Derived),
+            field("entry", f.signature(), Source::Derived),
+        ];
+        let mut values = vec![];
+        for p in &f.inputs {
+            let v = o.get(&p.name).ok_or(SdkError::Argument)?;
+            values.push(abi_value(&p.ty, &p.components, v, 0)?);
+            flatten(&format!("args.{}", p.name), v, &mut review);
+        }
+        let data = f
+            .abi_encode_input(&values)
+            .map_err(|_| SdkError::Argument)?;
+        let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
+        self.refuse_contract(&profile, &pool, &contract).await?;
+        let quote = self
+            .sdk
+            .wallet()
+            .prepare_native_send(crate::wallet::NativeSend {
+                key: payer,
+                chain,
+                to: contract,
+                value: "0".into(),
+                data: Some(hex(&data)),
+                tx_type: None,
+            })
+            .await?;
+        Ok(AppCall { review, quote })
     }
 
     /// Whether `ua`'s single key (`kind`, `key_data`, read by the caller from the UA's record) signs `typed_json` on `path`.
@@ -683,7 +1134,7 @@ impl AppCore {
     }
 }
 
-fn field(name: &str, value: String, source: Source) -> ReviewField {
+pub(crate) fn field(name: &str, value: String, source: Source) -> ReviewField {
     ReviewField {
         name: name.to_string(),
         display: value.clone(),
@@ -692,7 +1143,7 @@ fn field(name: &str, value: String, source: Source) -> ReviewField {
     }
 }
 
-fn flatten(prefix: &str, v: &serde_json::Value, out: &mut Vec<ReviewField>) {
+pub(crate) fn flatten(prefix: &str, v: &serde_json::Value, out: &mut Vec<ReviewField>) {
     match v {
         serde_json::Value::Object(o) => {
             for (k, x) in o {

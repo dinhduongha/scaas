@@ -51,6 +51,8 @@ pub mod frb;
 #[cfg(feature = "wallet")]
 pub mod op;
 pub mod platform;
+#[cfg(feature = "pqchat-records")]
+pub mod pqchat_records;
 pub mod surface;
 pub(crate) mod text;
 pub mod vault;
@@ -106,6 +108,7 @@ pub mod bits {
     pub const CLASSICAL_ROOTS: u64 = 1 << 24;
     pub const OPAQUE_CALLS: u64 = 1 << 25;
     pub const APP_CORE: u64 = 1 << 26;
+    pub const PQCHAT_RECORDS: u64 = 1 << 27;
 }
 
 /// The bits of this build's features.
@@ -151,6 +154,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "classical-roots"), CLASSICAL_ROOTS),
         (cfg!(feature = "opaque-calls"), OPAQUE_CALLS),
         (cfg!(feature = "app-core"), APP_CORE),
+        (cfg!(feature = "pqchat-records"), PQCHAT_RECORDS),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)

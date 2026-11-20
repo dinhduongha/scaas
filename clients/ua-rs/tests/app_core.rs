@@ -639,3 +639,516 @@ fn app_record_paths_and_refusals() {
         Some(Error::AppDomainRefused)
     );
 }
+
+// --- verify_app_record (scaas-sdk spec §12.2, review r2 R7): derived, native and nested `msig` signers, as the registry judges ---
+
+use scaas_ua::ua_portable::{check_authorization_current, InnerSig, MemberSig, UASig};
+use scaas_ua::wallet::{msig_sig_app, ua_sig, verify_app_record, AppRecordState, Network, Slot};
+use std::collections::HashMap;
+
+const MSIG: u16 = 0x0120;
+
+fn dom(generation: u32) -> scaas_ua::Domain {
+    scaas_ua::Domain {
+        generation,
+        chain_id: 31337,
+        registry: [0x5c; 20],
+        chain_uid: [0x60; 32],
+    }
+}
+
+fn id_of(k: &dyn Signer) -> ([u8; 32], u16, Vec<u8>) {
+    let KeyRef::Ua { kind, key_data } = k.key_ref() else {
+        panic!()
+    };
+    (
+        scaas_ua::derive_ua(kind, &key_data, false).unwrap(),
+        kind,
+        key_data,
+    )
+}
+
+fn native_id(w: &Wallet) -> [u8; 32] {
+    let a = w
+        .native_key(Network::Evm, 0, None)
+        .unwrap()
+        .address()
+        .unwrap();
+    let mut id = [0u8; 32];
+    id[12..].copy_from_slice(&unhex(&Value::String(a)));
+    id
+}
+
+/// The registry's state of a few records: `(kind, keyData)` by id, every slot of every `msig` accepted unless `refused`.
+struct St {
+    recs: HashMap<[u8; 32], (u16, Vec<u8>)>,
+    refused: Option<([u8; 32], u16)>,
+}
+impl St {
+    fn check(
+        &self,
+        ua: &[u8; 32],
+        path: &AppPath,
+        td: &TypedData,
+        sig: &UASig,
+        d: Option<&scaas_ua::Domain>,
+    ) -> bool {
+        let members = |id: [u8; 32]| self.recs.get(&id).cloned();
+        let accepted = |id: [u8; 32], i: u16| self.refused != Some((id, i));
+        verify_app_record(
+            ua,
+            path,
+            td,
+            sig,
+            &AppRecordState {
+                members: &members,
+                current: &|_| None,
+                accepted: &accepted,
+                domain: d,
+            },
+        )
+    }
+}
+
+fn by_index(mut v: Vec<(u16, Slot<'_>)>) -> Vec<Slot<'_>> {
+    v.sort_by_key(|x| x.0);
+    v.into_iter().map(|x| x.1).collect()
+}
+
+fn slot(index: u16, sig: Vec<u8>) -> MemberSig {
+    MemberSig {
+        index,
+        members: vec![],
+        sig,
+    }
+}
+
+/// The existing `msig` vectors (signatures.json `msig.sets`, purpose `metatx`, context A gen 1) through `scaas-ua`'s
+/// `requireAuthorized` check, the one `verify_app_record` runs on path B: every set's verdict.
+#[test]
+fn msig_vector_sets_through_the_authorization_check() {
+    let f = format!(
+        "{}/../../smartcontracts/vectors/ua/signatures.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(f).unwrap()).unwrap();
+    let m = &v["msig"];
+    let c = &v["contexts"][m["context"].as_str().unwrap()];
+    let d = scaas_ua::Domain {
+        generation: m["generation"].as_u64().unwrap() as u32,
+        chain_id: c["chainId"].as_u64().unwrap(),
+        registry: unhex(&c["registry"]).try_into().unwrap(),
+        chain_uid: a32(&c["chainUid"]),
+    };
+    let derived: HashMap<[u8; 32], (u16, Vec<u8>)> = v["derived"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                a32(&r["ua"]),
+                (r["kind"].as_u64().unwrap() as u16, unhex(&r["keyData"])),
+            )
+        })
+        .collect();
+    let members = |id: [u8; 32]| derived.get(&id).cloned();
+    let (kd, ua) = (unhex(&m["keyData"]), a32(&m["ua"]));
+    let sets = m["sets"].as_array().unwrap();
+    assert_eq!(sets.len(), 10);
+    for s in sets {
+        let slots: Vec<MemberSig> = s["uaSig"]["members"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| MemberSig {
+                index: x["index"].as_u64().unwrap() as u16,
+                members: x["members"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|y| InnerSig {
+                        index: y["index"].as_u64().unwrap() as u16,
+                        sig: unhex(&y["sig"]),
+                    })
+                    .collect(),
+                sig: unhex(&x["sig"]),
+            })
+            .collect();
+        let got = check_authorization_current(
+            &kd,
+            &ua,
+            &scaas_ua::purpose_tag(s["purpose"].as_str().unwrap()).unwrap(),
+            &a32(&s["digest"]),
+            &slots,
+            &d,
+            &members,
+            &|_| None,
+            Some(&|_, _| true),
+        );
+        assert_eq!(got.is_ok(), s["valid"].as_bool().unwrap(), "{}", s["name"]);
+    }
+}
+
+/// A positive control per signer kind and path, then one change at a time: a derived key (both paths), a native key (path B
+/// only), an `msig` of a derived, a native and a nested `msig` member (path A by `msig_sig_app`, path B member by member).
+#[test]
+fn verify_app_record_signers() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let k1 = w.ua_key(0x0108, 0, 0).unwrap();
+    let k2 = w.ua_key(0x0102, 0, 0).unwrap();
+    let k3 = w.ua_key(0x0103, 0, 0).unwrap();
+    let nat = w.native_key(Network::Evm, 0, None).unwrap();
+    let (id1, kind1, kd1) = id_of(&k1);
+    let (id2, kind2, kd2) = id_of(&k2);
+    let (id3, kind3, kd3) = id_of(&k3);
+    let nid = native_id(&w);
+    let purpose = scaas_ua::keccak256(b"an app's own purpose");
+    let (a, b) = (
+        AppPath::Portable { app_id: APP },
+        AppPath::ChainBound { purpose },
+    );
+    let (pa, cb) = (portable(&APP, "My App", None), chain_bound("My App", true));
+    let d1 = dom(1);
+    // inner msig I = {k2, k3}, threshold 2; outer U = {k1 (1), native (1), I (1)}, threshold 2
+    // members in id order (CTR-UA-09)
+    let sorted = |mut m: Vec<(u16, [u8; 32], u16)>| {
+        m.sort_by_key(|x| x.1);
+        m
+    };
+    let im = sorted(vec![(kind2, id2, 1), (kind3, id3, 1)]);
+    let inner_kd = scaas_ua::encode_msig(2, &im);
+    let inner = scaas_ua::derive_ua(MSIG, &inner_kd, false).unwrap();
+    let om = sorted(vec![(kind1, id1, 1), (1, nid, 1), (MSIG, inner, 1)]);
+    let kd = scaas_ua::encode_msig(2, &om);
+    let at =
+        |m: &[(u16, [u8; 32], u16)], id: [u8; 32]| m.iter().position(|x| x.1 == id).unwrap() as u16;
+    let (i1, i_n, i_i) = (at(&om, id1), at(&om, nid), at(&om, inner));
+    let (j2, j3) = (at(&im, id2), at(&im, id3));
+    let ua = scaas_ua::derive_ua(MSIG, &kd, false).unwrap();
+    let st = St {
+        recs: HashMap::from([
+            (id1, (kind1, kd1.clone())),
+            (id2, (kind2, kd2.clone())),
+            (id3, (kind3, kd3)),
+            (inner, (MSIG, inner_kd.clone())),
+            (ua, (MSIG, kd.clone())),
+        ]),
+        refused: None,
+    };
+
+    // a derived key, both paths: path A without key data, path B with it
+    let sa = sign_app_record(&k1, None, &a, &pa).unwrap();
+    assert!(st.check(&id1, &a, &pa, &sa, None));
+    let sb = sign_app_record(&k1, None, &b, &cb).unwrap();
+    assert!(!sb.key_data.is_empty());
+    assert!(st.check(&id1, &b, &cb, &sb, None));
+    // another key of the kind signs with its own key data: refused for id1 (the key data hashes to another id)
+    let k1b = w.ua_key(0x0108, 0, 1).unwrap();
+    let sb2 = sign_app_record(&k1b, None, &b, &cb).unwrap();
+    assert!(
+        !st.check(&id1, &b, &cb, &sb2, None),
+        "key data of another id"
+    );
+    assert!(
+        !st.check(
+            &id1,
+            &b,
+            &cb,
+            &UASig {
+                key_data: vec![],
+                ..sb.clone()
+            },
+            None
+        ),
+        "no key data"
+    );
+    assert!(
+        !st.check(
+            &id1,
+            &a,
+            &pa,
+            &UASig {
+                key_data: kd1.clone(),
+                ..sa.clone()
+            },
+            None
+        ),
+        "path A carries no key data"
+    );
+    assert!(
+        !st.check(&id1, &a, &pa, &sb, None),
+        "a path-B signature on path A"
+    );
+    assert!(!st.check(&id2, &a, &pa, &sa, None), "another UA");
+    let unknown = St {
+        recs: HashMap::new(),
+        refused: None,
+    };
+    assert!(
+        !unknown.check(&id1, &a, &pa, &sa, None),
+        "an unregistered UA"
+    );
+
+    // a native key, path B over UAAuth in the registry's domain
+    let sn = sign_app_record(&nat, Some(&d1), &b, &cb).unwrap();
+    assert!(st.check(&nid, &b, &cb, &sn, Some(&d1)));
+    assert!(
+        !st.check(&nid, &b, &cb, &sn, Some(&dom(2))),
+        "another registry generation"
+    );
+    assert!(!st.check(&nid, &b, &cb, &sn, None), "no domain read");
+    assert!(
+        !st.check(&nid, &a, &pa, &sn, Some(&d1)),
+        "a native id has no portable record"
+    );
+    assert!(
+        !st.check(
+            &nid,
+            &AppPath::ChainBound { purpose: [9; 32] },
+            &cb,
+            &sn,
+            Some(&d1)
+        ),
+        "another purpose"
+    );
+
+    // the msig, path A: k1 and the nested msig (its k2, k3), minimal
+    let inner_of = |id: [u8; 32]| (id == inner).then(|| inner_kd.clone());
+    let mut leaves = vec![(j2, &k2 as &dyn Signer), (j3, &k3 as &dyn Signer)];
+    leaves.sort_by_key(|x| x.0);
+    let slots = by_index(vec![
+        (
+            i1,
+            Slot::Member {
+                index: i1,
+                key: &k1,
+            },
+        ),
+        (
+            i_i,
+            Slot::Msig {
+                index: i_i,
+                members: leaves,
+            },
+        ),
+    ]);
+    let ma = msig_sig_app(&kd, &|_| None, &inner_of, &APP, &pa, &slots).unwrap();
+    assert!(st.check(&ua, &a, &pa, &ma, None));
+    let refused = |id, i| St {
+        recs: st.recs.clone(),
+        refused: Some((id, i)),
+    };
+    assert!(
+        !refused(ua, i1).check(&ua, &a, &pa, &ma, None),
+        "an outer slot not accepted"
+    );
+    assert!(
+        !refused(inner, j3).check(&ua, &a, &pa, &ma, None),
+        "an inner slot not accepted"
+    );
+    let mut short = ma.clone();
+    short
+        .members
+        .iter_mut()
+        .find(|m| m.index == i_i)
+        .unwrap()
+        .members
+        .pop();
+    assert!(
+        !st.check(&ua, &a, &pa, &short, None),
+        "the inner msig below its threshold"
+    );
+    let mut one = ma.clone();
+    one.members.pop();
+    assert!(!st.check(&ua, &a, &pa, &one, None), "below the threshold");
+    // path A: a native member signs the record's typed digest itself
+    let two = by_index(vec![
+        (
+            i1,
+            Slot::Member {
+                index: i1,
+                key: &k1,
+            },
+        ),
+        (
+            i_n,
+            Slot::Member {
+                index: i_n,
+                key: &nat,
+            },
+        ),
+    ]);
+    let na = msig_sig_app(&kd, &|_| None, &inner_of, &APP, &pa, &two).unwrap();
+    assert!(st.check(&ua, &a, &pa, &na, None));
+    // three slots where two reach the threshold: not minimal
+    let mut extra = na.clone();
+    extra
+        .members
+        .push(ma.members.iter().find(|m| m.index == i_i).unwrap().clone());
+    extra.members.sort_by_key(|m| m.index);
+    assert!(!st.check(&ua, &a, &pa, &extra, None), "not minimal");
+
+    // the msig, path B: md = memberDigest(ua, uaMessage(msig, purpose, digest)); k1 under `member`, the native one over UAAuth
+    let digest = cb.digest().unwrap();
+    let md = scaas_ua::member_digest(&ua, &scaas_ua::ua_message(MSIG, &purpose, &digest).unwrap());
+    let member = scaas_ua::purpose_tag("member").unwrap();
+    let s0 = ua_sig(&k1, None, &member, &md).unwrap().signature;
+    let s1 = ua_sig(&nat, Some(&d1), &member, &md).unwrap().signature;
+    let mut both = vec![slot(i1, s0.clone()), slot(i_n, s1)];
+    both.sort_by_key(|m| m.index);
+    let mb = UASig {
+        key_data: vec![],
+        signature: vec![],
+        members: both,
+    };
+    assert!(st.check(&ua, &b, &cb, &mb, Some(&d1)));
+    assert!(
+        !st.check(&ua, &b, &cb, &mb, Some(&dom(2))),
+        "the native member in another domain"
+    );
+    assert!(
+        !refused(ua, i_n).check(&ua, &b, &cb, &mb, Some(&d1)),
+        "a slot not accepted"
+    );
+    let lone = UASig {
+        members: vec![slot(i1, s0)],
+        ..mb.clone()
+    };
+    assert!(
+        !st.check(&ua, &b, &cb, &lone, Some(&d1)),
+        "below the threshold"
+    );
+    assert!(
+        !st.check(&ua, &a, &pa, &mb, Some(&d1)),
+        "a path-B msig signature on path A"
+    );
+}
+
+// --- PqChat's signed records (scaas-sdk spec §12.5): smartcontracts/vectors/pqchat/ through scaas-ua's builder ---
+
+use scaas_ua::wallet::pqchat;
+
+fn pq(f: &str) -> Value {
+    let p = format!(
+        "{}/../../smartcontracts/vectors/pqchat/{f}.json",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+}
+
+/// Every signed record row: its struct hash, typed digest and `uaMessage` digest; the vector's signature verifies over it under
+/// its signer's key; each session's and epoch's `wrapHashes` are the struct hashes of keys.json's wraps.
+#[test]
+fn pqchat_records_reproduce_the_vectors() {
+    let (rec, top, keys) = (pq("records"), pq("topics"), pq("keys"));
+    let signers: HashMap<String, Value> = rec["signers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| (s["name"].as_str().unwrap().to_string(), s.clone()))
+        .collect();
+    let rows = [
+        (&rec, "session", "PqChatSession"),
+        (&rec, "epoch", "PqChatEpoch"),
+        (&rec, "leave", "PqChatLeave"),
+        (&rec, "remove", "PqChatRemove"),
+        (&rec, "message", "PqChatMessage"),
+        (&top, "topic", "PqTopic"),
+        (&top, "update", "PqTopicUpdate"),
+        (&top, "writer", "PqTopicWriter"),
+        (&top, "post", "PqTopicEntry"),
+        (&top, "reply", "PqTopicEntry"),
+        (&top, "edit", "PqTopicEdit"),
+        (&top, "vote", "PqTopicVote"),
+    ];
+    assert_eq!(pqchat::RECORDS.len(), 11);
+    assert_eq!(a32(&rec["purpose"]["hash"]), pqchat::purpose());
+    for (v, row, name) in rows {
+        let r = &v[row];
+        let td = pqchat::typed(name, r["record"].clone()).unwrap();
+        assert_eq!(td.struct_hash().unwrap(), a32(&r["hashStruct"]), "{row}");
+        assert_eq!(td.digest().unwrap(), a32(&r["typed"]), "{row}");
+        let kind = r["uaMessage"]["kind"].as_u64().unwrap() as u16;
+        let m = scaas_ua::ua_message(kind, &pqchat::purpose(), &td.digest().unwrap()).unwrap();
+        assert_eq!(m, a32(&r["uaMessage"]["digest"]), "{row}");
+        if let Some(sig) = r.get("uaSig") {
+            let pk = unhex(&signers[r["signer"].as_str().unwrap()]["publicKey"]);
+            assert!(
+                scaas_ua::verify::verify(kind, &pk, &m, &unhex(&sig["signature"]), true, false),
+                "{row}"
+            );
+        }
+    }
+    for (row, prefix) in [("session", "session/"), ("epoch", "epoch-1/")] {
+        let want: Vec<[u8; 32]> = keys["wraps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|w| w["name"].as_str().unwrap().starts_with(prefix))
+            .map(|w| pqchat::wrap_hash(w["wrap"].clone()).unwrap())
+            .collect();
+        let got: Vec<[u8; 32]> = rec[row]["record"]["wrapHashes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(a32)
+            .collect();
+        assert_eq!(got, want, "{row}");
+    }
+    // the ids: a session's by its creator and nonce, a topic's by its admin and nonce
+    let s = &rec["session"]["record"];
+    let w64 = |n: u64| {
+        let mut w = [0u8; 32];
+        w[24..].copy_from_slice(&n.to_be_bytes());
+        w
+    };
+    assert_eq!(
+        pqchat::id(
+            "session",
+            &[a32(&s["creator"]), w64(s["nonce"].as_u64().unwrap())]
+        ),
+        a32(&rec["session"]["id"])
+    );
+    let t = &top["topic"]["record"];
+    assert_eq!(
+        pqchat::id(
+            "topic",
+            &[a32(&t["admin"]), w64(t["nonce"].as_u64().unwrap())]
+        ),
+        a32(&top["topic"]["id"])
+    );
+}
+
+/// A UA key signs a record (a control verifying under its key), and nothing but a record of `DS_C`.
+#[test]
+fn pqchat_sign_records_only() {
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let k = w.ua_key(0x0131, 0, 0).unwrap();
+    let (_, kind, kd) = id_of(&k);
+    let r = pq("records");
+    let td = pqchat::typed("PqChatLeave", r["leave"]["record"].clone()).unwrap();
+    let s = pqchat::sign(&k, &td).unwrap();
+    assert!(s.key_data.is_empty() && s.members.is_empty());
+    let m = scaas_ua::ua_message(kind, &pqchat::purpose(), &td.digest().unwrap()).unwrap();
+    assert!(scaas_ua::verify::verify(
+        kind,
+        &kd,
+        &m,
+        &s.signature,
+        true,
+        false
+    ));
+    let wrap = pqchat::typed("Wrap", pq("keys")["wraps"][0]["wrap"].clone()).unwrap();
+    assert_eq!(
+        pqchat::sign(&k, &wrap).err(),
+        Some(Error::Argument),
+        "a nested struct"
+    );
+    let nat = w.native_key(Network::Evm, 0, None).unwrap();
+    assert_eq!(
+        pqchat::sign(&nat, &td).err(),
+        Some(Error::Argument),
+        "a native key"
+    );
+    assert!(pqchat::typed("Nope", Value::Null).is_err());
+}

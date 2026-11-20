@@ -48,6 +48,8 @@ pub mod pairing;
 #[cfg(not(feature = "vectors"))]
 mod pairing;
 mod policy;
+#[cfg(feature = "app-core")]
+pub mod pqchat;
 #[cfg(feature = "vectors")]
 pub mod pqsign;
 #[cfg(not(feature = "vectors"))]
@@ -124,7 +126,8 @@ pub use signer::{AllowRawDigest, ExternalKey, KeyRef, SigRole, SignRequest, Sign
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
 #[cfg(feature = "app-core")]
 pub use uasig::{
-    app_record_digest, is_scaas_purpose, sign_app_record, verify_app_record_key, AppPath,
+    app_record_digest, is_scaas_purpose, sign_app_record, verify_app_record, verify_app_record_key,
+    AppPath, AppRecordState,
 };
 pub use uasig::{
     membership_sig, membership_sig_current, msig_combine, msig_sig, msig_sig_app, msig_sig_current,
