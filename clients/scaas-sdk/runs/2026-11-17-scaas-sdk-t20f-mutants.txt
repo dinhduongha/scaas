@@ -1,0 +1,4 @@
+# t20f mutants at commit c74a55c3d (name | outcome | test)
+the PRF output names another secret | killed | SWIFTC="$(git rev-parse --git-common-dir)/../scratchpad/tools/swift-6.4.2/usr/bin/swiftc" bash run.sh
+the store's write drops the expected revision | killed | SWIFTC="$(git rev-parse --git-common-dir)/../scratchpad/tools/swift-6.4.2/usr/bin/swiftc" bash run.sh
+2 mutants, 2 killed, 0 survived, 0 not loaded

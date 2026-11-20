@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # The keystore and vault rows of smartcontracts/vectors/keystore/keystore.json as tab-separated lines, for the UniFFI bindings'
-# smoke tests in languages without a JSON parser of their own (C++, Java, Kotlin; plan T20b-T20h). Text fields are hex (UTF-8):
+# smoke tests in languages without a JSON parser of their own (C++, Java, Kotlin) or whose parser alters a row (Swift: Foundation
+# on Linux drops a string's leading U+FEFF); plan T20b-T20h. Text fields are hex (UTF-8):
 #   pass     <passphrase>
 #   valid    <row id> <container text> <seed count>      then one `seed` line per seed, in order:
 #   seed     <id> <label> <words> <backup> <account ids, comma-separated, possibly empty>

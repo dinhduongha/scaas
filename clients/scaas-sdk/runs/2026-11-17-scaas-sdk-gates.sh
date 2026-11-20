@@ -48,6 +48,7 @@ STEPS=(
     "bind-cs|clients/scaas-sdk/bindings/cs|bash ../lib.sh uniffi && $cap dotnet test; rc=\$?; dotnet build-server shutdown >/dev/null 2>&1; exit \$rc"
     "bind-python|clients/scaas-sdk/bindings/python|bash ../lib.sh uniffi && $cap python3 -I test_smoke.py"
     "bind-kotlin|clients/scaas-sdk/bindings/kotlin|KOTLINC=\${KOTLINC:-$TOOLS/kotlin-2.4.21/kotlinc/bin/kotlinc} bash run.sh"
+    "bind-swift|clients/scaas-sdk/bindings/swift|SWIFTC=\${SWIFTC:-$TOOLS/swift-6.4.2/usr/bin/swiftc} bash run.sh"
     "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
     "sdk-opaque|clients/scaas-sdk|$cap cargo test $C --features $F,opaque-calls --test wallet_ops"
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"
