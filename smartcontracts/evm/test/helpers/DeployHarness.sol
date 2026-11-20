@@ -25,12 +25,28 @@ contract DeployHarness is DeployBase {
         txGasCap = 1 << 24; // `TX_GAS_CAP` (owner X1): a test chain under EIP-7825 (`setTxGasCap` for another)
     }
 
+    bool internal newerBook;
+
+    /// Stands in for an existing book of the next generation (`deployments/<key>-ua-gen<n + 1>.json`; no files in a test).
+    function setNewerBook(bool on) external {
+        newerBook = on;
+    }
+
+    function _newerGenBook(uint256) internal view override returns (bool) {
+        return newerBook;
+    }
+
     bool internal draftFlag;
     bool internal draftOwner;
 
     /// Stands in for the chain row's `probe_draft_precompiles` and the book's `probe_draft_precompiles_owner` (CTR-UA-69).
     function setDraft(bool flag, bool owner) external {
         (draftFlag, draftOwner) = (flag, owner);
+    }
+
+    /// `_voInit`: the init code `pq_verifiers.py verify-only` builds (Task 21 review P2-3).
+    function voInit(uint16 kind, uint8 form, uint256 callGas) external view returns (bytes memory) {
+        return _voInit(kind, form, callGas);
     }
 
     function mldsaCandidates(uint256 i) external view returns (address[] memory) {

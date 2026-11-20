@@ -242,6 +242,8 @@ def main(rpc):
 # ML-DSA-65 / -87). Any verdict that differs from the other or from the row's `valid` stops before broadcast, with the rows.
 #   python3 -I script/pq_verifiers.py differential <rpc>[,<rpc>…] <kind> <home verifier> <verify-only verifier> <parts>
 # (<parts>: the home's `expandedKeyParts()`, 0 on a precompile). UNAUDITED tooling.
+#   python3 -I script/pq_verifiers.py verify-only <rpc>[,<rpc>…] <kind> <keyForm> <callGas> <cap> <home verifier> <parts>
+# builds the verify-only verifier (CREATE2 of DeployBase._voInit's init code), runs the differential, prints the book entry.
 SEL_VERIFY, SEL_PART, SEL_EXPANDED = "024ad318", "b733b5e4", "6e2fe976"
 
 
@@ -324,7 +326,62 @@ def rpc_call(url):
     return call
 
 
-if __name__ == "__main__" and sys.argv[1:2] == ["differential"]:
+def vo_args(k, name, i, form, call_gas, draft):
+    """The constructor arguments of `MldsaVerifyOnly<x>` as `DeployBase._voInit` builds them (Task 21 review P2-3): this chain's
+    candidates, pq_kat.json's EIP-8355 valid row, the flipped row then every mutation row, the key form, `CALL_GAS`."""
+    valid = bytes.fromhex(k["eip8355_probe_valid"][2:])
+    rows = [bytes.fromhex(k["eip8355_probe_invalid"][2:])] + edge_rows(k, name)
+    cands = [int(c, 16) for c in candidates(i, draft)]
+    return E.encs([("a", "w"), "b", ("a", "b"), "w", "w"], [cands, valid, rows, form, call_gas]), valid + b"".join(rows)
+
+
+def verify_only(urls, kind, form, call_gas, cap, home, parts):
+    """Builds the verify-only verifier of `kind` on the chain (CREATE2, DEPLOY_SALT), runs the differential probe against the
+    home verifier through the node list, and prints the book's `gen_verify_only` entry with `differential` "ok <verifier>"
+    only when every row agrees (spec §9, F4, R5); a verifier whose probe found no precompile is refused by name."""
+    i = {0x0130: 0, 0x0131: 1, 0x0134: 2}[kind]
+    name = MLDSA[i][1]
+    E.RPC = urls[0]
+    chain = int(E.rpc("eth_chainId"), 16)
+    E.CTX[:] = [chain, bytes.fromhex(E.rpc("eth_getBlockByNumber", ["0x0", False])["hash"][2:])]
+    sys.path.insert(0, HERE)
+    import deploybook
+
+    uid = "0x" + E.CTX[1].hex()
+    row = next((r for r in deploybook.rows() if r["chainId"] == chain and r["chainUid"].lower() == uid), None)
+    bp = os.path.join(deploybook.EVM, "deployments", f"{row['key']}.json") if row else None
+    draft = draft_allowed(row, json.load(open(bp)) if bp and os.path.exists(bp) else None)
+    k = json.load(open(os.path.join(E.EVM, "../vectors/ua/pq_kat.json")))["kinds"][name]
+    args, rows = vo_args(k, name, i, form, call_gas, draft)
+    D = E.Deployer(E.Sender(int(os.environ["PRIVATE_KEY"], 16)))
+    contract = "MldsaVerifyOnly" + name[5:]
+    v = D.deploy2(contract, args, f"{name}_verify_only", src="MlDsaVerifyOnly")
+    pc = "0x" + E.words(E.call(v, E.cd("PRECOMPILE()", [])))[0][12:].hex()
+    if int(pc, 16) == 0:
+        raise SystemExit(f"[deploy] pq-verifiers FAIL GEN_VERIFY_ONLY_NO_PRECOMPILE {kind:#06x}: {v} found no precompile")
+    differential([rpc_call(u) for u in urls], home, v, parts, kat_rows(name))
+    entry = {
+        "kind": kind,
+        "verifier": v,
+        "cap": cap,
+        "keyForm": form,
+        "callGas": call_gas,
+        "precompile": pc,
+        "probe_rows_hash": "0x" + E.keccak256(rows).hex(),
+        "differential": f"ok {v}",
+    }
+    print(json.dumps(entry))
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["verify-only"]:
+    #   pq_verifiers.py verify-only <rpc>[,<rpc>…] <kind> <keyForm> <callGas> <cap> <home verifier> <parts>
+    a = sys.argv[2:]
+    try:
+        verify_only(a[0].split(","), int(a[1], 0), int(a[2]), int(a[3]), int(a[4]), a[5], int(a[6]))
+    except DiffError as e:
+        say(f"FAIL {e}")
+        sys.exit(1)
+elif __name__ == "__main__" and sys.argv[1:2] == ["differential"]:
     urls, kind, home, vo, parts = sys.argv[2].split(","), int(sys.argv[3], 0), sys.argv[4], sys.argv[5], int(sys.argv[6])
     name = {0x0130: "mldsa44", 0x0131: "mldsa65", 0x0134: "mldsa87"}[kind]
     try:

@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {MldsaKit} from "../helpers/MldsaKit.sol";
 import {PcStandIn} from "./MlDsaVerifyOnly.t.sol";
-import {MldsaVerifyOnly44, MldsaVerifyOnly65, MldsaVerifyOnly87} from "../../src/ua/MlDsaVerifyOnly.sol";
+import {MldsaVerifyOnly65} from "../../src/ua/MlDsaVerifyOnly.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
 import {UAPrecompileProbe} from "../../script/UAPrecompileProbe.sol";
 import {Bls12381} from "../../src/common/Bls12381.sol";
@@ -580,24 +580,47 @@ contract UADeployTest is Test {
         assertTrue(vm.contains(string(ret), name), name);
     }
 
-    /// A verify-only ML-DSA verifier of `kind` (key form `form`) whose probe finds the stand-in precompile (`working`), or none.
-    function _vo(uint16 kind, uint8 form, bool working) internal returns (address) {
-        PcStandIn p = new PcStandIn();
-        bytes[] memory rows = new bytes[](1);
-        rows[0] = "flipped";
-        p.set(keccak256("valid"), rows, 0, 0);
-        address[] memory c = new address[](1);
-        c[0] = working ? address(p) : address(0x5CAa0099);
-        if (kind == UAKinds.MLDSA44) return address(new MldsaVerifyOnly44(c, "valid", rows, form, 100_000));
-        if (kind == UAKinds.MLDSA65) return address(new MldsaVerifyOnly65(c, "valid", rows, form, 100_000));
-        return address(new MldsaVerifyOnly87(c, "valid", rows, form, 100_000));
+    address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+    uint256 internal constant VO_CALL_GAS = 50_000;
+
+    /// A verify-only ML-DSA verifier of `kind` (key form `form`) as `pq_verifiers.py verify-only` builds it (Task 21 review P2-3):
+    /// CREATE2 with the deploy salt of `_voInit` (this chain's candidates, pq_kat.json's valid row, the flipped row and every
+    /// mutation row); its probe finds a stand-in at the chain's own address (`working`: valid row 1, every other input 0), or none.
+    function _vo(DeployHarness h, uint16 kind, uint8 form, bool working) internal returns (address v) {
+        if (working) _ownStandIn(kind);
+        v = _create2(h.voInit(kind, form, VO_CALL_GAS));
     }
 
-    /// The book's `gen_verify_only` list of one entry.
+    function _ownStandIn(uint16 kind) internal {
+        uint256 i = kind == UAKinds.MLDSA44 ? 0 : kind == UAKinds.MLDSA65 ? 1 : 2;
+        address pc = address(uint160(0x5caa0012 + i));
+        string memory k = string.concat(".kinds.mldsa", ["44", "65", "87"][i], ".eip8355_probe_valid");
+        vm.etch(pc, address(new PcStandIn()).code);
+        PcStandIn(pc).set(keccak256(vm.parseJsonBytes(vm.readFile("../vectors/ua/pq_kat.json"), k)), new bytes[](0), 0, 0);
+    }
+
+    function _create2(bytes memory init) internal returns (address v) {
+        bytes32 s = keccak256("scaas.deploy.v1");
+        v = vm.computeCreate2Address(s, keccak256(init), CREATE2_DEPLOYER);
+        if (v.code.length == 0) {
+            (bool ok,) = CREATE2_DEPLOYER.call(bytes.concat(s, init));
+            require(ok && v.code.length != 0, "CREATE2");
+        }
+    }
+
+    /// The book's `gen_verify_only` list of one entry, with the differential probe's `ok` for its verifier.
     function _voEntry(uint16 kind, address v, uint64 cap, uint8 form) internal pure returns (string memory) {
+        return _voEntry(kind, v, cap, form, string.concat("ok ", vm.toString(v)));
+    }
+
+    function _voEntry(uint16 kind, address v, uint64 cap, uint8 form, string memory diff)
+        internal
+        pure
+        returns (string memory)
+    {
         return string.concat(
             ',"gen_verify_only":[{"kind":', vm.toString(kind), ',"verifier":"', vm.toString(v), '","cap":',
-            vm.toString(cap), ',"keyForm":', vm.toString(form), "}]"
+            vm.toString(cap), ',"keyForm":', vm.toString(form), ',"differential":"', diff, '"}]'
         );
     }
 
@@ -610,7 +633,7 @@ contract UADeployTest is Test {
     function test_deploy_gen2_overGen1_fromBook() public {
         vm.chainId(31337);
         DeployHarness h = new DeployHarness();
-        address v = _vo(UAKinds.MLDSA65, 0, true);
+        address v = _vo(h, UAKinds.MLDSA65, 0, true);
         (bool ok, bytes memory ret) = _gen(h, _book(h, _voEntry(UAKinds.MLDSA65, v, 250_000, 0)));
         assertTrue(ok, "deployGen");
         (address r, string memory json) = abi.decode(ret, (address, string));
@@ -678,11 +701,11 @@ contract UADeployTest is Test {
         h.setMldsa(true, address(0), MldsaKit.onChain(1, 0x000000000000000000000000000000005CAa0013, keccak256("scaas.deploy.v1")));
         h.forceMl(false, true);
         string memory b = _book(h, "");
-        (bool ok,) = _gen(h, _add(b, _voEntry(UAKinds.MLDSA65, _vo(UAKinds.MLDSA65, 0, true), 250_000, 0)));
+        (bool ok,) = _gen(h, _add(b, _voEntry(UAKinds.MLDSA65, _vo(h, UAKinds.MLDSA65, 0, true), 250_000, 0)));
         assertTrue(ok, "positive control: key form 0");
         _named(
             h,
-            _add(b, _voEntry(UAKinds.MLDSA65, _vo(UAKinds.MLDSA65, 1, true), 250_000, 1)),
+            _add(b, _voEntry(UAKinds.MLDSA65, _vo(h, UAKinds.MLDSA65, 1, true), 250_000, 1)),
             "GEN_KEY_FORM_IMPOSSIBLE"
         );
     }
@@ -690,7 +713,7 @@ contract UADeployTest is Test {
     function test_deploy_verifyOnlyNoPrecompile_named() public {
         DeployHarness h = new DeployHarness();
         _named(
-            h, _book(h, _voEntry(UAKinds.MLDSA65, _vo(UAKinds.MLDSA65, 0, false), 250_000, 0)), "GEN_VERIFY_ONLY_NO_PRECOMPILE"
+            h, _book(h, _voEntry(UAKinds.MLDSA65, _vo(h, UAKinds.MLDSA65, 0, false), 250_000, 0)), "GEN_VERIFY_ONLY_NO_PRECOMPILE"
         );
     }
 
@@ -699,7 +722,7 @@ contract UADeployTest is Test {
     function test_deploy_debitBound_named() public {
         DeployHarness h = _pqzHarness();
         string memory b = _book(h, "");
-        address v = _vo(UAKinds.MLDSA87, 0, true);
+        address v = _vo(h, UAKinds.MLDSA87, 0, true);
         (bool ok,) = _gen(h, _add(b, _voEntry(UAKinds.MLDSA87, v, 150_000, 0)));
         assertTrue(ok, "positive control: a precompile-sized cap");
         _named(h, _add(b, _voEntry(UAKinds.MLDSA87, v, 4_000_000, 0)), "GEN_PQZ_DEBIT_BOUND");
@@ -771,5 +794,59 @@ contract UADeployTest is Test {
             _draft65(r);
             assertEq(h.mldsaPrecompileOf(1), address(0), string.concat("lax on mutation row ", vm.toString(r)));
         }
+    }
+
+    // ----- Task 21 review P2-3, P2-4: the verify-only verifier bound to its rows and the differential probe, its cap to CALL_GAS -----
+
+    /// A verifier built over the flipped row only (no edge rows) is not this build's CREATE2: GEN_VERIFY_ONLY_UNBOUND; the bound
+    /// one passes (positive control).
+    function test_deploy_voUnbound_named() public {
+        DeployHarness h = new DeployHarness();
+        string memory b = _book(h, "");
+        address good = _vo(h, UAKinds.MLDSA65, 0, true);
+        (bool ok,) = _gen(h, _add(b, _voEntry(UAKinds.MLDSA65, good, 250_000, 0)));
+        assertTrue(ok, "positive control: the bound verifier");
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        bytes[] memory rows = new bytes[](1);
+        rows[0] = vm.parseJsonBytes(kat, ".kinds.mldsa65.eip8355_probe_invalid");
+        address[] memory c = new address[](1);
+        c[0] = address(0x5CAa0013);
+        address bad = _create2(
+            abi.encodePacked(
+                type(MldsaVerifyOnly65).creationCode,
+                abi.encode(c, vm.parseJsonBytes(kat, ".kinds.mldsa65.eip8355_probe_valid"), rows, uint8(0), VO_CALL_GAS)
+            )
+        );
+        _named(h, _add(b, _voEntry(UAKinds.MLDSA65, bad, 250_000, 0)), "GEN_VERIFY_ONLY_UNBOUND");
+    }
+
+    /// No differential probe ok for the verifier (absent, or another verifier's): GEN_DIFFERENTIAL_MISSING.
+    function test_deploy_voDifferentialMissing_named() public {
+        DeployHarness h = new DeployHarness();
+        string memory b = _book(h, "");
+        address v = _vo(h, UAKinds.MLDSA65, 0, true);
+        _named(h, _add(b, _voEntry(UAKinds.MLDSA65, v, 250_000, 0, "")), "GEN_DIFFERENTIAL_MISSING");
+        _named(h, _add(b, _voEntry(UAKinds.MLDSA65, v, 250_000, 0, "ok 0x0000000000000000000000000000000000000001")), "GEN_DIFFERENTIAL_MISSING");
+    }
+
+    /// A cap below 2 x CALL_GAS + the verifier's own work (140,000 at CALL_GAS 50,000): GEN_VERIFY_ONLY_CAP; at it, deployed.
+    function test_deploy_voCapBelowCallGas_named() public {
+        DeployHarness h = new DeployHarness();
+        string memory b = _book(h, "");
+        address v = _vo(h, UAKinds.MLDSA65, 0, true);
+        _named(h, _add(b, _voEntry(UAKinds.MLDSA65, v, 139_999, 0)), "GEN_VERIFY_ONLY_CAP");
+        (bool ok,) = _gen(h, _add(b, _voEntry(UAKinds.MLDSA65, v, 140_000, 0)));
+        assertTrue(ok, "at 2 x CALL_GAS + 40,000");
+    }
+
+    /// Task 21 review P2-2: the book of the next generation exists (the line moved past this predecessor): GEN_NOT_LATEST without
+    /// any hand-written field; with the owner's override recorded, deployed.
+    function test_deploy_newerGenBook_GEN_NOT_LATEST() public {
+        DeployHarness h = new DeployHarness();
+        string memory b = _book(h, "");
+        h.setNewerBook(true);
+        _named(h, b, "GEN_NOT_LATEST");
+        (bool ok,) = _gen(h, _add(b, ',"owner_override_GEN_NOT_LATEST":"owner: reason"'));
+        assertTrue(ok, "the owner's override");
     }
 }

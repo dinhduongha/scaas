@@ -78,3 +78,6 @@ t15 test/gas | task 15 | 0 | 25 suites, 62 passed after gas/generate.py --measur
 t15 scaas-sdk | task 15 | 0 | cargo test --locked: lib 100, the integration binaries green (reference.json regenerated); generate.py --check ok
 t15 mutants | task 15 | 0 | 1 of 1 killed (task15-mutants.txt)
 t15 size gate | task 15 | 0 | 0 errors after the merge; no baseline move
+t21 review | task 21 | 0 | Fable (read-only) at 0d9a64022: P0 0, P1 0, P2 5, P3 10 (scratchpad report, private); P8: no PqzCore property relies on one PQZ key per UA
+t21 P2-1 | task 21 | 0 | 6546768be: UARegistryVerifyOnly, HardBound, Line, Nested, NestedGas, MsigUpdate 149 passed; mutant killed
+t21 P2-2 / P2-3 / P2-4 | task 21 | 0 | UADeploy 41 passed (4 new rows); test_pq_verifiers 8/8; 4 of 4 mutants killed

@@ -57,7 +57,7 @@ import {FrostSecp256k1Verifier} from "../src/ua/verifiers/FrostSecp256k1Verifier
 import {Musig2Bn254Verifier} from "../src/ua/verifiers/Musig2Bn254Verifier.sol";
 import {FrostBn254Verifier} from "../src/ua/verifiers/FrostBn254Verifier.sol";
 import {MldsaVerifier} from "../src/ua/MlDsa.sol";
-import {MldsaVerifyOnly} from "../src/ua/MlDsaVerifyOnly.sol";
+import {MldsaVerifyOnly, MldsaVerifyOnly44, MldsaVerifyOnly65, MldsaVerifyOnly87} from "../src/ua/MlDsaVerifyOnly.sol";
 import {FndsaVerifier} from "../src/ua/FnDsa.sol";
 import {SlhdsaVerifier} from "../src/ua/SlhDsa.sol";
 import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
@@ -1400,6 +1400,12 @@ abstract contract DeployBase is DeployBook {
         UARegistry pred = UARegistry(vm.parseJsonAddress(book, ".ua_registry"));
         address latest =
             vm.keyExistsJson(book, ".ua_registry_latest") ? vm.parseJsonAddress(book, ".ua_registry_latest") : address(pred);
+        // Task 21 review P2-2: a book of the next generation already written (`<key>-ua-gen<n + 1>.json`) means the line has
+        // moved past this predecessor: a deploy over it would be a sibling
+        require(
+            !_newerGenBook(_bookUint(book, ".ua_registry_generation", 1) + 1) || _ownerOverride(book, "GEN_NOT_LATEST"),
+            "GEN_NOT_LATEST: a book of the next generation exists, the predecessor is not the line's latest"
+        );
         require(
             latest == address(pred) || _ownerOverride(book, "GEN_NOT_LATEST"),
             string.concat(
@@ -1447,6 +1453,11 @@ abstract contract DeployBase is DeployBook {
     }
 
     uint256 internal constant MAX_GEN = 16; // `UARegistry.MAX_GENERATION`
+
+    /// @notice Whether this chain's book of generation `g` exists (`deployments/<key>-ua-gen<g>.json`, `DeployUAGen.s.sol`).
+    function _newerGenBook(uint256 g) internal view virtual returns (bool) {
+        return vm.exists(_bookPath(uid, string.concat("-ua-gen", vm.toString(g), ".json")));
+    }
 
     /// @notice W5: the walk from `p` (generation `n`) to generation 1 against the book, else `GEN_WALK_MISMATCH <g>`.
     function _walkCheck(string memory book, address p, uint256 n) internal view {
@@ -1516,6 +1527,14 @@ abstract contract DeployBase is DeployBook {
                 true,
                 uint8(vm.parseJsonUint(book, string.concat(e, ".keyForm")))
             );
+            // P2-3 (spec §9, F4, R5): the differential probe ran for this verifier and found no difference
+            // (`script/pq_verifiers.py differential ... --book-out`, its `differential` field "ok" and the verifier's address)
+            require(
+                vm.keyExistsJson(book, string.concat(e, ".differential"))
+                    && keccak256(bytes(vm.parseJsonString(book, string.concat(e, ".differential"))))
+                        == keccak256(bytes(string.concat("ok ", vm.toString(c.verifier)))),
+                string.concat("GEN_DIFFERENTIAL_MISSING ", vm.toString(abi.encodePacked(c.kind)), ": no differential probe ok for ", vm.toString(c.verifier))
+            );
             _voKind(pred, c, g, budget, ph != address(0));
             k[n++] = c;
             string memory o = vm.toString(abi.encodePacked(c.kind));
@@ -1559,6 +1578,32 @@ abstract contract DeployBase is DeployBook {
             MldsaVerifier(c.verifier).KIND() == c.kind && MldsaVerifyOnly(c.verifier).KEY_FORM() == c.keyForm,
             string.concat("gen registry: the verify-only verifier of ", kh, " has another kind or key form")
         );
+        uint256 callGas = MldsaVerifyOnly(c.verifier).CALL_GAS();
+        // Task 21 review P2-3: the verifier is this build's CREATE2 of its kind over this chain's candidates, pq_kat.json's valid
+        // row and every edge row (the flipped row, each mutation row): what the chain's precompile was probed on is bound
+        require(
+            c.verifier == _voCreate2(c.kind, c.keyForm, callGas),
+            string.concat(
+                "GEN_VERIFY_ONLY_UNBOUND ",
+                kh,
+                ": not this build's CREATE2 of MldsaVerifyOnly over the candidates and pq_kat.json's rows (DEPLOY_SALT)"
+            )
+        );
+        // P2-4: the cap covers the precompile call and the alive-check at CALL_GAS each and the verifier's own work, so a
+        // precompile that burns its gas cannot starve the alive-check into a caller-forced fallback (M7)
+        require(
+            c.cap >= 2 * callGas + VO_VERIFIER_OVERHEAD,
+            string.concat(
+                "GEN_VERIFY_ONLY_CAP ",
+                kh,
+                ": cap ",
+                vm.toString(uint256(c.cap)),
+                " below 2 x CALL_GAS ",
+                vm.toString(callGas),
+                " + ",
+                vm.toString(VO_VERIFIER_OVERHEAD)
+            )
+        );
         require(_pqKindFits(c.cap, budget), string.concat("gen registry: the cap of ", kh, " is over 75 % of the budget"));
         if (!pqzLine) return;
         uint256 hc = UARegistry(home).verifyCap(c.kind);
@@ -1575,6 +1620,32 @@ abstract contract DeployBase is DeployBook {
                 vm.toString(uint256(txGasCap))
             )
         );
+    }
+
+    /// @notice The verify-only verifier's own work beside its two limited calls (lengths, the message hash, the valid row read back,
+    ///         the encoding), `test/ua/MlDsaVerifyOnly.t.sol` `OVERHEAD` (its worst input measured 134,921 within 2 x 100,000 + this).
+    uint256 internal constant VO_VERIFIER_OVERHEAD = 40_000;
+
+    /// @notice The init code of `MldsaVerifyOnly<x>` for `kind` (key form `form`, precompile limit `callGas`) as `pq_verifiers.py
+    ///         verify-only` builds it: this chain's candidates (`_mldsaCandidates`), pq_kat.json's EIP-8355 valid row, the flipped
+    ///         row then every mutation row (`_mldsaEdgeRows`).
+    function _voInit(uint16 kind, uint8 form, uint256 callGas) internal view returns (bytes memory) {
+        uint256 i = kind == UAKinds.MLDSA44 ? 0 : kind == UAKinds.MLDSA65 ? 1 : 2;
+        (bytes memory valid, bytes memory flipped) = _mldsaProbe(i);
+        bytes[] memory edge = _mldsaEdgeRows(i);
+        bytes[] memory rows = new bytes[](edge.length + 1);
+        rows[0] = flipped;
+        for (uint256 r; r < edge.length; ++r) {
+            rows[r + 1] = edge[r];
+        }
+        bytes memory code = i == 0
+            ? type(MldsaVerifyOnly44).creationCode
+            : i == 1 ? type(MldsaVerifyOnly65).creationCode : type(MldsaVerifyOnly87).creationCode;
+        return abi.encodePacked(code, abi.encode(_mldsaCandidates(i), valid, rows, form, callGas));
+    }
+
+    function _voCreate2(uint16 kind, uint8 form, uint256 callGas) internal view returns (address) {
+        return vm.computeCreate2Address(salt, keccak256(_voInit(kind, form, callGas)), CREATE2_FACTORY);
     }
 
     /// @notice A verifier's `PRECOMPILE()`, 0 when it has none or does not answer one word.
