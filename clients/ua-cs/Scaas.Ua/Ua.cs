@@ -148,7 +148,7 @@ public static partial class UA
     public static bool IsMember(ushort kind, bool hederaNative = false) =>
         SingleSigning(kind) || kind is 0x0120 or 0x0121 or 0x0001 or 0x0002 || (hederaNative && kind == 0x0003);
 
-    /// <summary>CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of <paramref name="kind"/>
+    /// <summary>CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of <paramref name="kind"/>
     /// is sent to <paramref name="registry"/> only where <paramref name="kindHome"/> (the registry's <c>kindHome(kind)</c>, read by the
     /// caller: no RPC here) equals it. Both 20 bytes. Throws <see cref="TargetException"/>.</summary>
     public static void RegistrationTargetOk(ushort kind, byte[] registry, byte[] kindHome)

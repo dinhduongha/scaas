@@ -1269,7 +1269,7 @@ void main() {
     }
   });
 
-  // CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
+  // CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
   group('registration target', () {
     final gen1 = '0x${'aB' * 20}', gen2 = Uint8List.fromList(List.filled(20, 0x22)), zero = Uint8List(20);
     final gen1Bytes = Uint8List.fromList(List.filled(20, 0xab));

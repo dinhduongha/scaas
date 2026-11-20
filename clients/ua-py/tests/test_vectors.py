@@ -1050,7 +1050,7 @@ class GovernanceBits(unittest.TestCase):
 
 
 class RegistrationTarget(unittest.TestCase):
-    """CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry."""
+    """CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry."""
 
     GEN1, GEN2, ZERO = bytes([0x11] * 20), bytes([0x22] * 20), bytes(20)
 

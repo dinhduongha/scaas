@@ -76,7 +76,7 @@ class TargetError extends UAError {
     : super(code, 'kind 0x${kind.toRadixString(16).padLeft(4, '0')} kindHome 0x${_hex(kindHome)}');
 }
 
-/// CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of [kind] is sent to
+/// CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of [kind] is sent to
 /// [registry] only where [kindHome] (the registry's `kindHome(kind)`, read by the caller: no RPC here) equals it. Addresses:
 /// Uint8List or hex String in any case, 20 bytes. Throws [TargetError].
 void registrationTargetOk(int kind, Object? registry, Object? kindHome) {

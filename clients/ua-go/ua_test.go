@@ -1610,7 +1610,7 @@ func TestBlsMulti(t *testing.T) {
 	}
 }
 
-// CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
+// CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
 var gen1, gen2 = [20]byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, [20]byte{0x22}
 
 func TestTargetEqualOk(t *testing.T) {

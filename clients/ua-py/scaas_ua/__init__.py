@@ -236,7 +236,7 @@ class TargetError(UAError):
 
 
 def registration_target_ok(kind, registry, kind_home):
-    """CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of ``kind`` is sent to
+    """CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of ``kind`` is sent to
     ``registry`` only where ``kind_home`` (the registry's ``kindHome(kind)``, read by the caller: no RPC here) equals it. Both 20
     bytes. Returns None; raises ``TargetError``."""
     registry, kind_home = _sized(registry, 20, "registry"), _sized(kind_home, 20, "kindHome")

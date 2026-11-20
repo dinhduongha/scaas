@@ -1088,7 +1088,7 @@ public class VectorTests
         }
     }
 
-    // CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
+    // CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
     static readonly byte[] Gen1 = Enumerable.Repeat((byte)0x11, 20).ToArray(), Gen2 = Enumerable.Repeat((byte)0x22, 20).ToArray();
 
     [Fact]

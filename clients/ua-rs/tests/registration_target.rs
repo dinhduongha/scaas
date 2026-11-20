@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-//! CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of `kind` goes only to the
+//! CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of `kind` goes only to the
 //! registry where `kindHome(kind)` is that registry; the caller passes the `kindHome` it read (no RPC here, owner C6).
 use scaas_ua::{registration_target_ok, TargetError};
 

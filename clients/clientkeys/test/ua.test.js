@@ -300,7 +300,7 @@ test("bls_multi: kinds.json 0x0121 rows", async () => {
   assert.ok(K.kinds.filter((k) => k.surplusForm).length === 1);
 });
 
-// CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
+// CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
 const GEN1 = "0x" + "aB".repeat(20);
 const GEN2 = "0x" + "22".repeat(20);
 test("target_equal_ok", () => {

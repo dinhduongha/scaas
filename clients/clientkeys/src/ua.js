@@ -197,7 +197,7 @@ export class TargetError extends UAError {
     this.kindHome = kindHome;
   }
 }
-/** CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of `kind` is sent to
+/** CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of `kind` is sent to
  *  `registry` only where `kindHome` (the registry's `kindHome(kind)`, read by the caller: no RPC here) equals it. Addresses:
  *  20 bytes or hex in any case. Returns nothing; throws `TargetError`. */
 export function registrationTargetOk(kind, registry, kindHome) {

@@ -425,7 +425,7 @@ pub fn is_member(kind: u16, hedera_native: bool) -> bool {
         || (hedera_native && kind == 0x0003)
 }
 
-/// Why a registration of `kind` does not belong on a registry ([`registration_target_ok`]; CTR-UA-65, placeholder).
+/// Why a registration of `kind` does not belong on a registry ([`registration_target_ok`]; CTR-UA-65).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetError {
     /// `UAVerifyOnly`: this registry carries `kind` verify-only; the registration belongs at `kind_home`, the registry of the line
@@ -458,7 +458,7 @@ impl core::fmt::Display for TargetError {
 
 impl std::error::Error for TargetError {}
 
-/// CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of `kind` is sent to
+/// CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of `kind` is sent to
 /// `registry` only where `kind_home == registry`, `kind_home` the `kindHome(kind)` the caller read from `registry` on chain (no RPC
 /// here, owner C6). A different non-zero home is [`TargetError::VerifyOnly`], a zero home [`TargetError::KindNotOnLine`].
 pub fn registration_target_ok(

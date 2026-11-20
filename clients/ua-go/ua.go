@@ -198,7 +198,7 @@ func (e *TargetError) Error() string {
 	return fmt.Sprintf("%s: kind 0x%04x kindHome 0x%x", e.Code, e.Kind, e.KindHome)
 }
 
-// RegistrationTargetOk is CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of
+// RegistrationTargetOk is CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of
 // kind is sent to registry only where kindHome (the registry's kindHome(kind), read by the caller: no RPC here) equals it.
 func RegistrationTargetOk(kind uint16, registry, kindHome [20]byte) error {
 	if kindHome == ([20]byte{}) {
