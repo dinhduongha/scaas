@@ -2,8 +2,9 @@
 //! A fake EVM chain and scaas-node gateway on 127.0.0.1:0 (plan T10; local only), shared by the operation tests: chain 31337,
 //! block 0 hash `0x60…`, block `n`'s hash `0x…7000+n`, one timestamp for every block. It answers the reads `scaas-rpc` makes,
 //! keeps a lane nonce per contract, logs, receipts and code by address, records every raw transaction and every gateway body,
-//! and **enforces a per-transaction gas cap**: a transaction whose gas limit is above `tx_cap` is refused at the send, as a
-//! chain enforcing EIP-7825 does (its estimate still answers what the call needs).
+//! and **enforces EIP-8037's inclusion rule**: a transaction whose gas limit (regular + state) is above the block gas limit is
+//! refused at the send (its estimate still answers what the call needs). EIP-7825's 2^24 holds the regular gas only, which the
+//! fake does not execute: the SDK's own check holds it.
 #![allow(
     dead_code,
     clippy::unwrap_used,
@@ -32,7 +33,6 @@ pub struct Chain {
     pub timestamp: u64,
     pub gas: u64,
     pub block_gas_limit: u64,
-    pub tx_cap: u64,
     /// the priority fee and base fee of `eth_feeHistory`
     pub prio: u64,
     pub base_fee: u64,
@@ -81,7 +81,6 @@ impl Default for Chain {
             timestamp: 1_800_000_000,
             gas: 100_000,
             block_gas_limit: 30_000_000,
-            tx_cap: 1 << 24,
             prio: 1,
             base_fee: 7,
             nonces: HashMap::new(),
@@ -349,8 +348,8 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
             let hex_raw = p[0].as_str().unwrap_or_default().to_string();
             let raw = alloy::hex::decode(hex_raw.trim_start_matches("0x")).unwrap();
             // type 2: [chainId, nonce, maxPrio, maxFee, gasLimit, …]
-            if raw.first() == Some(&2) && rlp_uint_at(&raw[1..], 4) > c.tx_cap {
-                return err("transaction gas limit too high (cap)");
+            if raw.first() == Some(&2) && rlp_uint_at(&raw[1..], 4) > c.block_gas_limit {
+                return err("transaction gas limit exceeds the block gas limit");
             }
             c.sent.push(hex_raw);
             ok(json!(keccak_hex(&raw)))

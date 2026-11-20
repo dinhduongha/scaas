@@ -28,8 +28,9 @@ list (a base row's: `base_stand_in`, keyed `<kind>:<entry>`, owner 2026-11-19, I
 the item counted, one of ITEMS) gets `item` and `per_item` {gas, base_count 0, source}: its gas the worst whole-gas slope
 `<kind>_<entry>_per_item_<variant>` (a verify row: `verify_<kind>_per_item`), and its figure keys then hold the gas at a
 count of 0 (the line's intercept, fitted by the forge harness); where the harness pinned the line's excess at the largest
-count (`<kind>_<entry>_overshoot_<variant>`: owner rulings P1, P2; proposal P4) an assumption states the worst. Prints its
-run time.
+count (`<kind>_<entry>_overshoot_<variant>`: owner rulings P1, P2; proposal P4) an assumption states the worst. A base row's
+`regular` (EIP-8037, controller call, owner auto-run 2026-11-19) and a counted row's `per_item.regular` come from the
+measurement's `_regular` split (`regular`). Prints its run time.
 """
 
 import argparse
@@ -153,6 +154,40 @@ def per_item(inputs, m, src, name, prefix):
     }
 
 
+def regular(m, src, kind, entry, lane, keys, counted):
+    """EIP-8037 (controller call, owner auto-run 2026-11-19): the row's regular gas, the part EIP-7825's 2^24 caps (the
+    transaction's gas limit covers regular + state and is held to the block gas limit). An uncounted row: the worst
+    `<key>_regular` of its variant keys `keys`, rounded up; None when a variant lacks the split. A counted row: the line over
+    the points `<kind>_<entry>_n<N>_<lane>_<variant>_regular` (a count-0 key's own `_regular` the point N = 0): its slope the
+    steepest between two neighbouring points of any variant and lane (the derived runs `_ua_` included), its figure the largest
+    point of the row's lane less slope × N (at least 1); (None, None) without two points of one variant. Returns the row's
+    `regular` part and the slope (`per_item.regular`)."""
+    if not counted:
+        if any(f"{k}_regular" not in m for k in keys):
+            return None, None
+        x = max(m[f"{k}_regular"] for k in keys)
+        return {"gas": ceil1000(x), "measured": x, "source": f"{src}#{','.join(f'{k}_regular' for k in keys)}"}, None
+    pat = re.compile(rf"^{re.escape(kind)}_{re.escape(entry)}_n(\d+)_(fresh|used|ua)_(.+)_regular$")
+    series = {}
+    for k in m:
+        hit = pat.match(k)
+        if hit:
+            series.setdefault((hit[2], hit[3]), {})[int(hit[1])] = k
+    for k in keys:  # a count-0 measurement with its split
+        if f"{k}_regular" in m:
+            series.setdefault((lane, k.split(f"_{lane}_", 1)[1]), {})[0] = f"{k}_regular"
+    slopes = [
+        -(-(m[pts[b]] - m[pts[a]]) // (b - a)) for pts in series.values() for a, b in zip(sorted(pts), sorted(pts)[1:])
+    ]
+    own = [(n, k) for (ln, _), pts in series.items() if ln == lane for n, k in pts.items()]
+    if not slopes or not own:
+        return None, None
+    s = max(max(slopes), 0)
+    x = max(1, max(m[k] - s * n for n, k in own))
+    used = sorted(k for pts in series.values() for k in pts.values())
+    return {"gas": ceil1000(x), "measured": x, "source": f"{src}#{','.join(used)}"}, s
+
+
 def overshoots(m, base):
     """The counted rows whose line the harness let sit above the largest count (owner 2026-11-19, P1, P2; proposal P4):
     one assumption each, its worst excess over the variants and signers."""
@@ -206,6 +241,12 @@ def table(inputs, m):
                         row["fee_extra"] = fee
                     ua_row(inputs, m, src, row, pending)
                     row.update(per_item(inputs, m, src, f"{kind}:{entry}", f"{kind}_{entry}_per_item_"))
+                    lane = "fresh" if fresh else "used"
+                    reg, slope = regular(m, src, kind, entry, lane, keys, "per_item" in row)
+                    if reg is not None:  # EIP-8037: the part EIP-7825's cap holds
+                        row["regular"] = reg
+                        if slope is not None:
+                            row["per_item"]["regular"] = slope
                     if f"{kind}:{entry}" in inputs.get("base_stand_in", {}):  # I2: a stand-in priced the row
                         row["stand_in"] = inputs["base_stand_in"][f"{kind}:{entry}"]
                     base.append(row)

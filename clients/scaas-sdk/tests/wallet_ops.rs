@@ -556,6 +556,7 @@ fn gas_rows() -> GasRows {
                 fee_extra: (entry == "mtxPay").then_some(2_000), // ruling 3
                 ua_extra: None,
                 per_item: None,
+                regular: None,
             })
         })
         .collect();

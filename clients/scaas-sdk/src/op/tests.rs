@@ -190,6 +190,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
                     fee_extra: None,
                     ua_extra: None,
                     per_item: None,
+                    regular: None,
                 });
             }
         }
@@ -573,8 +574,97 @@ async fn gas_above_tx_cap() {
     let path = SubmitPath::SelfRelay { payer: payer(&t) };
     let q = t.sdk.op().quote(p.clone(), path).await.unwrap(); // control: at the cap
     assert_eq!(q.gas_limit, 1 << 24);
-    // the fake refuses a transaction above its cap, as the chain does: the quote stopped it before
     assert!(t.chain.lock().unwrap().sent.is_empty());
+}
+
+/// EIP-8037 (controller call, owner auto-run 2026-11-19): the per-transaction cap (EIP-7825) holds a quote's regular bound, not
+/// its gas limit. Rows of 15,000,000 gas, `regular` set: the regular bound at the cap quotes a gas limit above 2^24 (regular +
+/// state, within the block limit); one more regular gas is `GasAboveTxCap`; the block gas limit still holds the whole limit.
+#[tokio::test(flavor = "multi_thread")]
+async fn tx_cap_holds_the_regular_part() {
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+    // with the intrinsic cost, the calldata and the margin: 11_184_811 → 2^24
+    let at = 11_184_811 - 21_000 - 64 * len;
+    let split = |regular: u64| {
+        move |p: &mut ChainProfile, l: &mut Limits| {
+            p.gas = gas_rows(15_000_000);
+            for b in &mut p.gas.base {
+                b.regular = Some(regular);
+            }
+            l.max_gas = 1 << 26;
+        }
+    };
+    let t = setup(0, split(at)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    let q = t.sdk.op().quote(p.clone(), path.clone()).await.unwrap();
+    assert_eq!(q.regular_gas, 1 << 24, "the regular bound at the cap");
+    assert_eq!(
+        q.gas_limit,
+        gas::with_margin(15_000_000 + 21_000 + 64 * len)
+    );
+    assert!(q.gas_limit > 1 << 24, "a gas limit above the cap");
+    // the block gas limit holds the whole gas limit
+    t.chain.lock().unwrap().block_gas_limit = q.gas_limit - 1;
+    assert_eq!(
+        code(t.sdk.op().quote(p, path).await),
+        "GasAboveTxCap",
+        "above the block gas limit"
+    );
+    let t = setup(0, split(at + 1)).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let path = SubmitPath::SelfRelay { payer: payer(&t) };
+    assert_eq!(
+        code(t.sdk.op().quote(p, path).await),
+        "GasAboveTxCap",
+        "the regular bound one above the cap"
+    );
+}
+
+/// EIP-8037: `submit`'s re-quote after signing (G3) adds the signature's growth to the regular bound (calldata is regular gas)
+/// and holds it to the cap: a quote whose regular bound sits within the growth of the cap is `GasAboveTxCap` once signed,
+/// nothing sent; one gas lower, sent.
+#[tokio::test(flavor = "multi_thread")]
+async fn signed_gas_regular_is_held_to_the_cap() {
+    // the tests' UA (0x0101) signs 128 bytes beyond the empty `UASig`, the rows count none
+    let more = gas::with_margin(64 * 128);
+    let t = setup(0, |_, _| {}).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let len = submit::unsigned(&p).unwrap().calldata.len() as u64;
+    for over in [true, false] {
+        // a regular row whose quote is 2^24 - more (+ 1 when over): with_margin(x) = x + x / 2, x = 2·y / 3 at an even y
+        let target = (1u64 << 24) - more + u64::from(over);
+        let x = (0..3)
+            .map(|d| target * 2 / 3 - 1 + d)
+            .find(|x| gas::with_margin(*x) >= target)
+            .unwrap();
+        let t = setup(0, |p, l| {
+            p.gas = gas_rows(15_000_000);
+            for b in &mut p.gas.base {
+                b.regular = Some(x - 21_000 - 64 * len);
+            }
+            l.max_gas = 1 << 26;
+        })
+        .await;
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let q = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        assert_eq!(q.regular_gas + more > 1 << 24, over, "{}", q.regular_gas);
+        let got = t.sdk.op().submit(p.clone(), q).await;
+        if over {
+            assert_eq!(code(got), "GasAboveTxCap");
+            assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
+        } else {
+            got.unwrap();
+            sent_txs(&t, 1).await; // a gas limit above 2^24, within the block gas limit: sent
+        }
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1209,6 +1299,7 @@ async fn a_counted_row_quotes_its_count_or_refuses() {
                     b.per_item = item.map(|i| crate::GasPerItem {
                         item: i.into(),
                         gas: 7_000,
+                        regular: None,
                     });
                 }
             }
@@ -1531,6 +1622,7 @@ async fn hand_built_gateway_quote_is_checked() {
         path: SubmitPath::Gateway,
         payer: None,
         gas_limit: 0,
+        regular_gas: 0,
         gas: None,
         gas_from: None,
         max_fee_per_gas: "0".into(),
@@ -2311,6 +2403,7 @@ async fn bls_multi_stored_path_minimal() {
             per_item: Some(crate::GasPerItem {
                 item: "members".into(),
                 gas: 1_000,
+                regular: None,
             }),
         })
     })
@@ -2402,8 +2495,10 @@ async fn bls_multi_bad_partial_named() {
 }
 
 /// Spec §8.4, plan Task 17: the registration's self-relay quote is the reference row's `gas + per_item × n` (regular and
-/// state gas, no verify part), the intrinsic cost and the calldata, with the margin; it grows with n; a group of 64 members is
-/// above a 2^24 per-transaction cap (the quote counts the state gas); no registry, no row: refused.
+/// state gas, no verify part), the intrinsic cost and the calldata, with the margin; it grows with n; its regular bound the
+/// row's `regular + per_item.regular × n` the same way (EIP-8037, controller call, owner auto-run 2026-11-19): a group of 64
+/// members quotes a gas limit above 2^24, its regular bound within the cap, under a 200 M block gas limit, and is
+/// `GasAboveTxCap` under the fake's 30 M; no registry, no row: refused.
 #[tokio::test(flavor = "multi_thread")]
 async fn bls_multi_register_quote_by_n() {
     let t = setup(0, |p, _| {
@@ -2435,6 +2530,13 @@ async fn bls_multi_register_quote_by_n() {
             gas::with_margin(g + 21_000 + 64 * len),
             "n {n}"
         );
+        let r =
+            row.regular.unwrap() + row.per_item.as_ref().unwrap().regular.unwrap() * u64::from(n);
+        assert_eq!(
+            q.regular_gas,
+            gas::with_margin(r + 21_000 + 64 * len),
+            "regular n {n}"
+        );
         assert_eq!(q.gas_from, Some(GasSources::both(GasFrom::Reference)));
         assert!(q.gas_limit > last, "grows with n");
         last = q.gas_limit;
@@ -2442,11 +2544,42 @@ async fn bls_multi_register_quote_by_n() {
     let (d64, _) = bls_group(&(0..64).collect::<Vec<_>>(), 32);
     assert_eq!(
         code(
-            op.quote_register_bls_multi("local".into(), d64, payer(&t))
+            op.quote_register_bls_multi("local".into(), d64.clone(), payer(&t))
                 .await
         ),
-        "GasAboveTxCap"
+        "GasAboveTxCap",
+        "above the fake's 30 M block gas limit"
     );
+    let big = setup(0, |p, l| {
+        p.registry = Some(REGISTRY.into());
+        p.gas_opt_in = vec![gas::REFERENCE.into()];
+        l.max_gas = 1 << 26;
+    })
+    .await;
+    big.chain.lock().unwrap().block_gas_limit = 200_000_000;
+    let q = big
+        .sdk
+        .op()
+        .quote_register_bls_multi("local".into(), d64.clone(), payer(&big))
+        .await
+        .unwrap();
+    assert!(q.gas_limit > 1 << 24, "n 64: {}", q.gas_limit);
+    assert!(q.regular_gas <= 1 << 24, "n 64 regular: {}", q.regular_gas);
+    // and sent: `register_bls_multi` holds the regular bound to the cap, the gas limit to the block's
+    let parts: Vec<_> = (0..64)
+        .map(|a| {
+            big.sdk
+                .op()
+                .bls_multi_pop_part(bls_member(&big, &d64, a))
+                .unwrap()
+        })
+        .collect();
+    big.sdk
+        .op()
+        .register_bls_multi("local".into(), d64, parts, q)
+        .await
+        .unwrap();
+    sent_txs(&big, 1).await;
     let (d, _) = bls_group(&[0, 1], 2);
     let none = setup(0, |p, _| p.gas_opt_in = vec![gas::REFERENCE.into()]).await;
     assert_eq!(

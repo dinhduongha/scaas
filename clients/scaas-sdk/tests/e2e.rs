@@ -187,6 +187,7 @@ async fn e2e_pay_on_anvil() {
                 fee_extra: None,
                 ua_extra: None,
                 per_item: None,
+                regular: None,
             }],
             verify: vec![GasVerify {
                 signer: 0,
