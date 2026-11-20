@@ -93,13 +93,13 @@ contract PqChatGasTest is PqTopicsBase {
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         bytes32 e1 = chat.rekey(e, ew, sig);
-        _row("rekey 2 members, plain, first epoch list entry", 366_797, 7_740_270);
+        _row("rekey 2 members, plain, first epoch list entry", 367_359, 7_740_270);
 
         (e, ew) = _epoch(sid, ids[0], 1, 2, e1, s.admins, s.members);
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         bytes32 e2 = chat.rekey(e, ew, sig);
-        _row("rekey 2 members, plain, next epoch list entry", 366_678, 7_642_350);
+        _row("rekey 2 members, plain, next epoch list entry", 367_240, 7_642_350);
 
         IPqChat.PqChatMessage memory m = _msg(sid, e2, ids[1], 0, 1040); // a 1,024-B bucket + the GCM-SIV tag
         sig = _sig(m.sender, h.message(m));
@@ -179,7 +179,7 @@ contract PqChatGasTest is PqTopicsBase {
         sig = _sig(s.creator, h.session(s));
         vm.prank(STRANGER);
         sid = chat.createSession(s, _slice(w, 0, 10), sig);
-        _row("createSession 20 members, first 10 wraps", 1_518_726, 34_129_710);
+        _row("createSession 20 members, first 10 wraps", 1_519_320, 34_129_710);
         vm.prank(STRANGER);
         chat.addWraps(sid, 10, _slice(w, 10, 20));
         _row("addWraps 10 wraps, completing 20 members", 1_231_768, 26_990_730);
@@ -201,7 +201,7 @@ contract PqChatGasTest is PqTopicsBase {
         sig = _sig(e.author, h.epoch(e));
         vm.prank(STRANGER);
         chat.rekey(e, ew, sig);
-        _row("rekey dropping the removed member, 2 left", 381_828, 7_642_350);
+        _row("rekey dropping the removed member, 2 left", 382_412, 7_642_350);
     }
 
     // ----- topics (topics spec §6) -----

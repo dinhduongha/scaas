@@ -66,6 +66,7 @@ const DERIVED = [
   [0x0108, "secp256k1", [64], "secp256k1"], // 2026-10-17, appended (rows keep their positions)
   [0x0134, "mldsa87", [2592], "mldsa87"], // CTR-UA-39, 2026-11-04, appended
   [0x0135, "fndsa1024", [1793], "fndsa1024"], // CTR-UA-40, 2026-11-04, appended
+  [0x0121, "bls12381-multi", [], null], // CTR-UA-47, 2026-11-19, appended; no keyHash (a structure, Q5)
 ];
 // [number, name, native id lengths]
 const NATIVE = [
@@ -108,7 +109,10 @@ const singleSigning = (k) =>
   (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0135);
 export const isNativeKind = (kind) => BY_NUMBER.get(kind)?.native === true;
 export const isZetherKind = (kind) => kind === 0x0141;
-export const isSigningKind = (kind) => kind === 0x0120 || kind === 0x0141 || singleSigning(kind);
+export const isSigningKind = (kind) => kind === 0x0120 || kind === 0x0121 || kind === 0x0141 || singleSigning(kind);
+/** Kinds whose signatures have a surplus form (spec 2026-11-19-bls12381-multi §5.3): the stored paths take the minimal form. A
+ *  closed set: `bls12381-multi` (0x0121) only. */
+export const hasSurplusForm = (kind) => kind === 0x0121;
 /** Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-39 / -40; an `msig` per
  *  `msigPqzEligible`): 0x0130–0x0135 without slhdsa128s. */
 export const isPqzHolder = (kind) => kind >= 0x0130 && kind <= 0x0135 && kind !== 0x0133;
@@ -177,7 +181,12 @@ export function msigSigMinimal(keyData, slots, inner) {
 }
 /** An `msig` member too, one level down (owner 2026-11-02): a record that holds one is refused as a member by the registry. */
 export const isMemberKind = (kind, hederaNative = false) =>
-  singleSigning(kind) || kind === 0x0120 || kind === 0x0001 || kind === 0x0002 || (hederaNative && kind === 0x0003);
+  singleSigning(kind) ||
+  kind === 0x0120 ||
+  kind === 0x0121 ||
+  kind === 0x0001 ||
+  kind === 0x0002 ||
+  (hederaNative && kind === 0x0003);
 
 export const kindTagString = (kind) => `scaas.ua.${tagged(kind).name}.v1`;
 export const TAG = (kind) => tagHash(kindTagString(kind));
@@ -909,6 +918,18 @@ export function typedKey(kind, keyData) {
     need(d.length === 96, "length");
     return { x: at(0, 32), y: at(32, 32), rpIdHash: at(64, 32) };
   }
+  if (k === 0x0121) {
+    // bls12381-multi: { aggKey, threshold, members: [{ key, weight }] } (spec 2026-11-19 §2)
+    need(d.length >= 260 && d.length === 260 + 258 * u16(d, 258), "length");
+    return {
+      aggKey: at(0, 256),
+      threshold: u16(d, 256),
+      members: Array.from({ length: u16(d, 258) }, (_, i) => ({
+        key: at(260 + 258 * i, 256),
+        weight: u16(d, 260 + 258 * i + 256),
+      })),
+    };
+  }
   const s = k === 0x0110 || k === 0x0111 ? 33 : k === 0x0112 || k === 0x0113 ? 64 : 0;
   if (s === 0) return null;
   if (k === 0x0110 || k === 0x0112) {
@@ -938,6 +959,7 @@ const TYPED_ENTRY = {
   0x0112: "registerMuSig2",
   0x0111: "registerFrost",
   0x0113: "registerFrost",
+  0x0121: "registerBlsMulti",
 };
 const innerSigJson = ({ index, sig }) => ({ index: Number(index), sig: hex(bytes(sig)) });
 const memberSigJson = ({ index, members = [], sig }) => ({
@@ -978,6 +1000,8 @@ export function registryCalldataLength(entry, a) {
   if (entry === "registerWebAuthn") return 4 + 192 + rest();
   if (entry === "registerMuSig2") return 4 + 160 + muSig2Len(a.key) + rest();
   if (entry === "registerFrost") return 4 + 160 + frostLen(a.key) + rest();
+  // registerBlsMulti(key, attrs, pop, pqzPop): heads 128; key (aggKey, threshold, members) 96 + aggKey + members (offset, key, weight, key bytes)
+  if (entry === "registerBlsMulti") return 4 + 128 + 96 + 288 + 32 + 384 * a.key.members.length + rest();
   if (entry === "registerMsig") {
     return (
       4 +
@@ -1026,7 +1050,7 @@ export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, ke
   const common = { attrs, pqzPop: hex(orEmpty(pqzPop)) };
   const args = msig
     ? { structure: msigStructure(keyData), ...common, pop: (pop ?? []).map(memberSigJson) }
-    : entry === "registerWebAuthn"
+    : entry === "registerWebAuthn" || entry === "registerBlsMulti"
       ? { key: typedKey(k, keyData), ...common, pop: hex(orEmpty(pop)) }
       : entry !== "register"
         ? { kind: k, key: typedKey(k, keyData), ...common, pop: hex(orEmpty(pop)) }
@@ -1262,6 +1286,40 @@ function msig(d, hederaNative) {
   need(threshold >= 1 && threshold <= total, "threshold");
 }
 
+/** `bls12381-multi` (spec 2026-11-19 §2): `apk (256) ‖ u16 t ‖ u16 n ‖ n × (pk_i (256) ‖ u16 w_i)`, 2 ≤ n ≤ 64, every w_i ≥ 1,
+ *  1 ≤ t ≤ Σ w_i (no other weight bound, R2-Q3), every pk_i a valid G2 key (canonical, on the curve, in the subgroup, not the identity)
+ *  and strictly increasing, apk byte-equal to Σ pk_i and not the identity. Order: length, n, weights and t, then the keys, then the sum. */
+function blsMulti(d) {
+  need(d.length >= 260, "length");
+  const n = u16(d, 258);
+  need(n >= 2 && n <= 64, "n");
+  need(d.length === 260 + 258 * n, "length");
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const w = u16(d, 260 + 258 * i + 256);
+    need(w >= 1, "weight");
+    total += w;
+  }
+  const t = u16(d, 256);
+  need(t >= 1 && t <= total, "threshold");
+  let sum = bls12_381.G2.Point.ZERO;
+  for (let i = 0; i < n; i++) {
+    const o = 260 + 258 * i;
+    const key = d.subarray(o, o + 256);
+    blsG2(key);
+    if (i > 0) need(less(d.subarray(o - 258, o - 2), key), "order");
+    const [x0, x1, y0, y1] = [0, 1, 2, 3].map((j) => be(key.subarray(64 * j + 16, 64 * j + 64)));
+    sum = sum.add(bls12_381.G2.Point.fromAffine({ x: { c0: x0, c1: x1 }, y: { c0: y0, c1: y1 } }));
+  }
+  need(!sum.is0(), "identity");
+  const { x, y } = sum.toAffine();
+  const enc = concatBytes(...[x.c0, x.c1, y.c0, y.c1].map((v) => fromHex(v.toString(16).padStart(128, "0"))));
+  need(
+    enc.every((b, i) => b === d[i]),
+    "apk",
+  );
+}
+
 /** `head ‖ n × 14-bit h_i`, big-endian bit packing, each h_i < q = 12289: 0x09, n = 512 (fndsa512); 0x0A, n = 1,024 (fndsa1024). */
 function fndsa(d, head, n) {
   need(d[0] === head, "header");
@@ -1310,6 +1368,8 @@ export function validateKeyData(kind, keyData, { hederaNative = false } = {}) {
       return frost(d, bnG1, 64, BN_R);
     case 0x0120:
       return msig(d, hederaNative);
+    case 0x0121:
+      return blsMulti(d);
     case 0x0132:
       return fndsa(d, 0x09, 512);
     case 0x0135:

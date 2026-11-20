@@ -78,11 +78,11 @@ fn groups_register_and_sign() {
             "{name}"
         );
         assert!(
-            verify(kind, &kd, &m, &bytes(&g["pop"]["blob"]), true),
+            verify(kind, &kd, &m, &bytes(&g["pop"]["blob"]), true, false),
             "{name}: verifyPop"
         );
         assert!(
-            verify(kind, &vk, &m, &bytes(&g["pop"]["sig"]), false),
+            verify(kind, &vk, &m, &bytes(&g["pop"]["sig"]), false, false),
             "{name}: the PoP signature against vk"
         );
         for s in arr(&g["sigs"]) {
@@ -94,7 +94,7 @@ fn groups_register_and_sign() {
             .unwrap();
             assert_eq!(mm, b32(&s["message"]));
             assert!(
-                verify(kind, &vk, &mm, &bytes(&s["sig"]), false),
+                verify(kind, &vk, &mm, &bytes(&s["sig"]), false, false),
                 "{name} {}",
                 s["purpose"]
             );
@@ -120,6 +120,7 @@ fn group_negatives_refused() {
                         &bytes(&x["vk"]),
                         &b32(&x["message"]),
                         &bytes(&x["sig"]),
+                        false,
                         false
                     ),
                     "{name}"
@@ -137,14 +138,21 @@ fn group_negatives_refused() {
                 };
                 let blob = bytes(&x["pop"]);
                 assert_eq!(
-                    verify(kind, &kd[..w], &m, &blob[..sl.min(blob.len())], false),
+                    verify(
+                        kind,
+                        &kd[..w],
+                        &m,
+                        &blob[..sl.min(blob.len())],
+                        false,
+                        false
+                    ),
                     x["sigValid"].as_bool().unwrap(),
                     "{name}: sigValid"
                 );
                 match x["error"].as_str().unwrap() {
                     "UAKeyData" => assert!(!valid, "{name}: key data must be refused"),
                     "UAPoP" => assert!(
-                        valid && !verify(kind, &kd, &m, &bytes(&x["pop"]), true),
+                        valid && !verify(kind, &kd, &m, &bytes(&x["pop"]), true, false),
                         "{name}: verifyPop must refuse"
                     ),
                     e => panic!("{name}: {e}"),
@@ -217,4 +225,141 @@ fn t_frost_rows() {
         };
         assert_eq!(ok, r["valid"].as_bool().unwrap(), "{}", r["name"]);
     }
+}
+
+/// bls-multi T4: groups.json `blsMulti` (written by tests/groups.rs): the `H_G1` KATs under both DSTs, every group's id, stored form,
+/// `popMsg` and pop, every PoP row (`verifyPop`) and signature row (`verify` and `verifyMinimal`) as written.
+#[test]
+fn bls_multi_rows_verify() {
+    use scaas_ua::bls_multi as bm;
+    let v = load();
+    let s = &v["blsMulti"];
+    assert_eq!(
+        s["dsts"]["sig"].as_str().unwrap().as_bytes(),
+        &bm::DST_MULTI_SIG[..]
+    );
+    assert_eq!(
+        s["dsts"]["pop"].as_str().unwrap().as_bytes(),
+        &bm::DST_MULTI_POP[..]
+    );
+    for r in arr(&s["hashToG1"]) {
+        let dst = if r["dst"] == "sig" {
+            &bm::DST_MULTI_SIG[..]
+        } else {
+            &bm::DST_MULTI_POP[..]
+        };
+        assert_eq!(
+            &bm::g1_encode(&scaas_ua::verify::hash_to_g1_bls12381(
+                &bytes(&r["msg"]),
+                dst
+            ))[..],
+            &bytes(&r["point"])[..]
+        );
+    }
+    for g in arr(&s["groups"]) {
+        let d = bytes(&g["keyData"]);
+        let name = g["name"].as_str().unwrap();
+        assert_eq!(
+            derive_ua(0x0121, &d, false).unwrap(),
+            b32(&g["ua"]),
+            "{name}"
+        );
+        assert_eq!(bm::stored(&d).unwrap(), bytes(&g["stored"]), "{name}");
+        assert_eq!(
+            bm::pop_message(&d).unwrap(),
+            b32(&g["popMessage"]),
+            "{name}"
+        );
+        assert!(
+            verify(
+                0x0121,
+                &d,
+                &b32(&g["popMessage"]),
+                &bytes(&g["pop"]),
+                true,
+                false
+            ),
+            "{name}"
+        );
+    }
+    let (mut pops, mut sigs) = (0, 0);
+    for r in arr(&s["pop"]) {
+        let d = bytes(&r["keyData"]);
+        assert_eq!(
+            bm::pop_message(&d).unwrap(),
+            b32(&r["popMessage"]),
+            "{}",
+            r["name"]
+        );
+        let ok = verify(
+            0x0121,
+            &d,
+            &b32(&r["popMessage"]),
+            &bytes(&r["pop"]),
+            true,
+            false,
+        );
+        assert_eq!(ok, r["valid"].as_bool().unwrap(), "{}", r["name"]);
+        pops += 1;
+    }
+    for r in arr(&s["signatures"]) {
+        let (d, m, sig) = (
+            bytes(&r["keyData"]),
+            b32(&r["uaMsg"]),
+            bytes(&r["signature"]),
+        );
+        assert_eq!(
+            bm::stored(&d).unwrap(),
+            bytes(&r["stored"]),
+            "{}",
+            r["name"]
+        );
+        assert_eq!(
+            verify(0x0121, &d, &m, &sig, false, false),
+            r["verify"].as_bool().unwrap(),
+            "{}",
+            r["name"]
+        );
+        assert_eq!(
+            verify(0x0121, &d, &m, &sig, false, true),
+            r["minimal"].as_bool().unwrap(),
+            "{}",
+            r["name"]
+        );
+        sigs += 1;
+    }
+    assert_eq!((pops, sigs), (11, 30));
+    // T15: the wallet members' parts aggregate to the row's signature and pop, which verify (the bindings reproduce the parts)
+    let w = &s["wallet"];
+    let (d, m) = (bytes(&w["keyData"]), b32(&w["uaMsg"]));
+    let parts = |f: &str| -> Vec<(u8, [u8; 128])> {
+        arr(&w["members"])
+            .iter()
+            .map(|x| {
+                (
+                    x["keyDataIndex"].as_u64().unwrap() as u8,
+                    bytes(&x[f]).try_into().unwrap(),
+                )
+            })
+            .collect()
+    };
+    let agg = bm::aggregate(&d, &m, &parts("partial"), false).unwrap();
+    assert_eq!(&agg.signature[..], &bytes(&w["signature"])[..]);
+    let signers: Vec<u8> = arr(&w["signers"])
+        .iter()
+        .map(|i| i.as_u64().unwrap() as u8)
+        .collect();
+    assert_eq!(agg.signers, signers);
+    assert!(verify(0x0121, &d, &m, &agg.to_abi(), false, true));
+    let pop = bm::aggregate_pop(&d, &parts("popPart")).unwrap();
+    assert_eq!(&pop[..], &bytes(&w["pop"])[..]);
+    assert!(verify(
+        0x0121,
+        &d,
+        &b32(&w["popMessage"]),
+        &pop,
+        true,
+        false
+    ));
+    assert_eq!(derive_ua(0x0121, &d, false).unwrap(), b32(&w["ua"]));
 }

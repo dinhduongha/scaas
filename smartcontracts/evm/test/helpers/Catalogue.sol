@@ -22,6 +22,7 @@ import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {deployKindModules, deployDexModules, kindModuleNames, kindImplArgs} from "../../script/KindModules.sol";
@@ -120,12 +121,13 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
     if (pwr) l[n] = address(PqzWrappedLib);
 }
 
-/// @notice The link closure of `UARegistry` (typed-signing R2; T66b 3.1b: two libraries by domain, in the order of its
-///         `linkReferences`, by source path). No release env pins it: the registry has no factory, its init code embeds the
+/// @notice The link closure of `UARegistry` (typed-signing R2; T66b 3.1b: two libraries by domain; owner 2026-11-19: three,
+///         `UARegistryRegLib` split from the core; in the order of its `linkReferences`, by source path, each library's own
+///         first). No release env pins it: the registry has no factory, its init code embeds the
 ///         addresses. Checked against `linkReferences` by `LinkClosure.t.sol`.
 function registryClosureLibs() pure returns (address[] memory l) {
-    l = new address[](2);
-    (l[0], l[1]) = (address(UARegistryAuxLib), address(UARegistryCoreLib));
+    l = new address[](3);
+    (l[0], l[1], l[2]) = (address(UARegistryAuxLib), address(UARegistryCoreLib), address(UARegistryRegLib));
 }
 
 /// @notice `e` with `kind`'s link closure pinned (libraries and their code hashes).

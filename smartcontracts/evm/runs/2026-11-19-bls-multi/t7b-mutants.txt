@@ -1,0 +1,2 @@
+killed   | M1 verifyPop kept for portable and app purposes | smartcontracts/evm/src/ua/UARegistryCoreLib.sol | rc=1 | expect test_portablePurposes_failClosed | 1 failed: test_portablePurposes_failClosed
+1 mutants, 1 killed, 0 survived, 0 not loaded

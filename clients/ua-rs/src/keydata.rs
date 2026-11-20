@@ -226,6 +226,7 @@ pub fn validate_key_data(kind: u16, d: &[u8], hedera_native: bool) -> Result<()>
         0x0112 => musig2(d, bn_g1, 64),
         0x0113 => frost(d, bn_g1, 64, &BN_R),
         0x0120 => msig(d, hedera_native),
+        0x0121 => crate::bls_multi::parse(d).map(|_| ()),
         0x0132 => fndsa(d, 0x09, 512),
         0x0135 => fndsa(d, 0x0a, 1024),
         _ => Ok(()), // mldsa44/65/87, slhdsa128s: the length is the whole check

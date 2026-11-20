@@ -147,8 +147,14 @@ fn neg_register(
 ) -> Value {
     let (ua, pd, m) = pop_of(kind, kd, a);
     let (w, sl) = sig_layout(kind);
-    let sig_valid =
-        scaas_ua::verify::verify(kind, &kd[..w], &m, &blob[..sl.min(blob.len())], false);
+    let sig_valid = scaas_ua::verify::verify(
+        kind,
+        &kd[..w],
+        &m,
+        &blob[..sl.min(blob.len())],
+        false,
+        false,
+    );
     json!({ "name": name, "entry": "register", "error": error, "keyData": hx(kd), "ua": hx(&ua), "popDigest": hx(&pd),
             "message": hx(&m), "pop": hx(blob), "sigValid": sig_valid, "comment": comment })
 }
@@ -1290,6 +1296,487 @@ fn msig_group_members() {
     assert_eq!((ok, no), (1, 5));
 }
 
+// ---------- bls12381-multi (0x0121, spec 2026-11-19-bls12381-multi §3–§5) ----------
+
+/// The `blsMulti` section: the two DSTs and `H_G1` KATs under both, groups (key data, ua, the EVM stored form, popMsg, the members'
+/// pop), PoP rows (§4: positives, a missing member, the shared-message rogue, split rogue (i), two rogues (ii), another threshold,
+/// the identity, parts under DST_MULTI_SIG) and signature rows (§5.2–§5.4: verify vs minimal, the add / subtract boundary, weights,
+/// Review Focus 1 and 3, N3's cancelling pair, F12's documented row, cross group, DST separation, the minimal-default aggregate).
+/// Secrets are tagged hashes of their label. Read by tests/groups_verify.rs and clientkeys test/ua-groups.test.js.
+fn bls_multi_section() -> Value {
+    use ark_bls12_381::{Fr, G1Projective, G2Affine, G2Projective};
+    use ark_ec::{AffineRepr, CurveGroup};
+    use ark_ff::PrimeField;
+    use scaas_ua::bls_multi as bm;
+    use scaas_ua::verify::hash_to_g1_bls12381;
+    const K: u16 = 0x0121;
+    let sk = |l: &str| {
+        Fr::from_be_bytes_mod_order(&keccak256(
+            format!("scaas groups bls12381-multi {l}").as_bytes(),
+        ))
+    };
+    let pk = |s: &Fr| (G2Affine::generator() * s).into_affine();
+    // (d, member secrets in key-data order)
+    let group = |pts: &[(G2Affine, Fr, u16)], t: u16| -> (Vec<u8>, Vec<(Fr, u16)>) {
+        let mut m: Vec<([u8; 256], Fr, u16)> = pts
+            .iter()
+            .map(|(p, s, w)| (bm::g2_encode(p), *s, *w))
+            .collect();
+        m.sort_by_key(|x| x.0);
+        let apk: G2Projective = pts.iter().map(|x| x.0.into_group()).sum();
+        let mut d = bm::g2_encode(&apk.into_affine()).to_vec();
+        d.extend_from_slice(&t.to_be_bytes());
+        d.extend_from_slice(&(m.len() as u16).to_be_bytes());
+        for (k, _, w) in &m {
+            d.extend_from_slice(k);
+            d.extend_from_slice(&w.to_be_bytes());
+        }
+        (d, m.iter().map(|x| (x.1, x.2)).collect())
+    };
+    let named = |l: &str, weights: &[u16], t: u16| {
+        let pts: Vec<_> = weights
+            .iter()
+            .enumerate()
+            .map(|(i, w)| {
+                let s = sk(&format!("{l} {i}"));
+                (pk(&s), s, *w)
+            })
+            .collect();
+        group(&pts, t)
+    };
+    let enc1 = |p: G1Projective| bm::g1_encode(&p.into_affine());
+    let h_pop = |d: &[u8], i: usize| {
+        let k: [u8; 256] = d[260 + 258 * i..516 + 258 * i].try_into().unwrap();
+        hash_to_g1_bls12381(
+            &bm::pop_member_message(&bm::pop_message(d).unwrap(), &k),
+            bm::DST_MULTI_POP,
+        )
+        .into_group()
+    };
+    let pop_of = |d: &[u8], s: &[(Fr, u16)], members: &[usize]| {
+        enc1(members.iter().map(|i| h_pop(d, *i) * s[*i].0).sum())
+    };
+    let msg = keccak256(b"scaas groups bls12381-multi ua_msg");
+    let sign = |d: &[u8], s: &[(Fr, u16)], set: &[u8], dst: &[u8]| -> Vec<u8> {
+        let h =
+            hash_to_g1_bls12381(&keccak256(&[&bm::ua_of(d)[..], &msg].concat()), dst).into_group();
+        [
+            &enc1(set.iter().map(|i| h * s[*i as usize].0).sum())[..],
+            &bm::indices_bitmap(set),
+        ]
+        .concat()
+    };
+    let ones = |n: usize| vec![1u16; n];
+    let range = |n: u8| (0..n).collect::<Vec<u8>>();
+
+    type Group = (String, Vec<u8>, Vec<(Fr, u16)>); // name, d, member secrets and weights in key-data order
+    let mut groups: Vec<Group> = vec![];
+    for (l, w, t) in [
+        ("n2t2", ones(2), 2u16),
+        ("n5t3", ones(5), 3),
+        ("n16t8", ones(16), 8),
+        ("n32t16", ones(32), 16),
+        ("n64t1", ones(64), 1),
+        ("w311t3", vec![3, 1, 1], 3),
+        ("w65535", vec![65535, 65535], 65535),
+    ] {
+        let (d, s) = named(l, &w, t);
+        groups.push((l.into(), d, s));
+    }
+    // N3: pk, −pk, pk_c … pk_f (n = 6, t = 4); F12: pk, −pk, pk_c (t = 3)
+    let a = sk("cancel");
+    let cancel = |extra: &[&str], t: u16| {
+        let mut pts = vec![(pk(&a), a, 1u16), (pk(&-a), -a, 1)];
+        for l in extra {
+            let s = sk(l);
+            pts.push((pk(&s), s, 1));
+        }
+        group(&pts, t)
+    };
+    let (d, s) = cancel(&["c", "d", "e", "f"], 4);
+    groups.push(("n3-cancelling-n6t4".into(), d, s));
+    let (d, s) = cancel(&["c"], 3);
+    groups.push(("f12-cancelling-n3t3".into(), d, s));
+    let (ga, gb, gc) = (sk("cross A"), sk("cross B"), sk("cross C"));
+    let (d, s) = group(&[(pk(&ga), ga, 1), (pk(&gb), gb, 1)], 2);
+    groups.push(("cross-G1-ABt2".into(), d, s));
+    let (d, s) = group(&[(pk(&ga), ga, 1), (pk(&gb), gb, 1), (pk(&gc), gc, 1)], 2);
+    groups.push(("cross-G2-ABCt2".into(), d, s));
+    let g = |name: &str| {
+        groups
+            .iter()
+            .find(|x| x.0 == name)
+            .map(|x| (x.1.clone(), x.2.clone()))
+            .unwrap()
+    };
+
+    let group_rows: Vec<Value> = groups
+        .iter()
+        .map(|(name, d, s)| {
+            let all: Vec<usize> = (0..s.len()).collect();
+            json!({ "name": name, "n": s.len(), "threshold": u16::from_be_bytes([d[256], d[257]]), "keyData": hx(d),
+                    "ua": hx(&bm::ua_of(d)), "stored": hx(&bm::stored(d).unwrap()), "popMessage": hx(&bm::pop_message(d).unwrap()),
+                    "pop": hx(&pop_of(d, s, &all)) })
+        })
+        .collect();
+
+    // PoP rows
+    let mut pops = vec![];
+    let pop_row = |name: &str, d: &[u8], pop: &[u8], valid: bool, comment: &str| {
+        json!({ "name": name, "keyData": hx(d), "popMessage": hx(&bm::pop_message(d).unwrap()), "pop": hx(pop), "valid": valid,
+                "comment": comment })
+    };
+    for l in ["n2t2", "n16t8", "n32t16", "n64t1"] {
+        let (d, s) = g(l);
+        pops.push(pop_row(
+            &format!("positive {l}"),
+            &d,
+            &pop_of(&d, &s, &(0..s.len()).collect::<Vec<_>>()),
+            true,
+            "all n parts",
+        ));
+    }
+    {
+        let (d, s) = g("n5t3");
+        pops.push(pop_row(
+            "missing member",
+            &d,
+            &pop_of(&d, &s, &[0, 1, 2, 3]),
+            false,
+            "member 4's part left out",
+        ));
+        let (d2, _) = named("n5t3", &ones(5), 2);
+        pops.push(pop_row(
+            "another threshold",
+            &d2,
+            &pop_of(&d, &s, &[0, 1, 2, 3, 4]),
+            false,
+            "the pop of the same keys at t = 3 presented for t = 2 (the UA differs)",
+        ));
+        let under_sig = enc1(
+            (0..5)
+                .map(|i| {
+                    let k: [u8; 256] = d[260 + 258 * i..516 + 258 * i].try_into().unwrap();
+                    hash_to_g1_bls12381(
+                        &bm::pop_member_message(&bm::pop_message(&d).unwrap(), &k),
+                        bm::DST_MULTI_SIG,
+                    )
+                    .into_group()
+                        * s[i].0
+                })
+                .sum(),
+        );
+        pops.push(pop_row(
+            "parts under DST_MULTI_SIG",
+            &d,
+            &under_sig,
+            false,
+            "pi_i over m_i under the signing DST",
+        ));
+        pops.push(pop_row("identity", &d, &[0u8; 128], false, "pop = O"));
+    }
+    {
+        let (h, x) = (sk("rogue honest"), sk("rogue x"));
+        let rogue = (G2Affine::generator() * x - pk(&h)).into_affine();
+        let (d, _) = group(&[(pk(&h), h, 1), (rogue, Fr::from(0u64), 1)], 1);
+        let shared = hash_to_g1_bls12381(&bm::pop_message(&d).unwrap(), bm::DST_MULTI_POP) * x;
+        pops.push(pop_row("rogue key, shared message", &d, &enc1(shared), false,
+            "pk_M = x·g2 − pk_H, pop = x·H(popMsg): passes a shared-message check, fails the per-member one"));
+        let p = (G2Affine::generator() * sk("split P")).into_affine(); // its log unused: an unknown-log point for the attacker
+        let q = (G2Affine::generator() * x - p).into_affine();
+        let (d, _) = group(&[(p, Fr::from(0u64), 1), (q, Fr::from(0u64), 1)], 1);
+        pops.push(pop_row(
+            "split rogue (i)",
+            &d,
+            &enc1((h_pop(&d, 0) + h_pop(&d, 1)) * x),
+            false,
+            "pk_1 = P, pk_2 = x·g2 − P; the attacker's x·(H_1 + H_2)",
+        ));
+        let y = sk("rogue y");
+        let m1 = (G2Affine::generator() * x - pk(&h)).into_affine();
+        let m2 = (G2Affine::generator() * y + pk(&h)).into_affine();
+        let (d, s) = group(&[(pk(&h), h, 1), (m1, x, 1), (m2, y, 1)], 1);
+        let (i1, i2) = (
+            (0..3).find(|i| s[*i].0 == x).unwrap(),
+            (0..3).find(|i| s[*i].0 == y).unwrap(),
+        );
+        pops.push(pop_row(
+            "two rogues (ii)",
+            &d,
+            &enc1(h_pop(&d, i1) * x + h_pop(&d, i2) * y),
+            false,
+            "pk_M1 = x·g2 − pk_H, pk_M2 = y·g2 + pk_H; the attacker's x·H_M1 + y·H_M2",
+        ));
+    }
+
+    // signature rows
+    let mut sigs = vec![];
+    let sig_row = |name: &str, d: &[u8], sig: &[u8], verify: bool, minimal: bool| {
+        json!({ "name": name, "keyData": hx(d), "stored": hx(&bm::stored(d).unwrap()), "uaMsg": hx(&msg), "signature": hx(sig),
+                "verify": verify, "minimal": minimal })
+    };
+    let sdst = &bm::DST_MULTI_SIG[..];
+    {
+        let (d, s) = g("n5t3");
+        sigs.push(sig_row(
+            "n5t3 k = t",
+            &d,
+            &sign(&d, &s, &[0, 2, 4], sdst),
+            true,
+            true,
+        ));
+        sigs.push(sig_row(
+            "n5t3 k = 4 (subtract path)",
+            &d,
+            &sign(&d, &s, &[0, 1, 2, 3], sdst),
+            true,
+            false,
+        ));
+        sigs.push(sig_row(
+            "n5t3 k = n",
+            &d,
+            &sign(&d, &s, &range(5), sdst),
+            true,
+            false,
+        ));
+        sigs.push(sig_row(
+            "n5t3 weight t − 1",
+            &d,
+            &sign(&d, &s, &[0, 2], sdst),
+            false,
+            false,
+        ));
+        let base = sign(&d, &s, &[0, 2, 4], sdst);
+        let mut x = base.clone();
+        x[128..].fill(0);
+        sigs.push(sig_row("signers 0", &d, &x, false, false));
+        let mut x = base.clone();
+        x[159] |= 1 << 5;
+        sigs.push(sig_row("a bit at n", &d, &x, false, false));
+        let mut x = base.clone();
+        x[..128].fill(0);
+        sigs.push(sig_row("sigma at infinity", &d, &x, false, false));
+        sigs.push(sig_row("159 bytes", &d, &base[..159], false, false));
+        sigs.push(sig_row(
+            "161 bytes",
+            &d,
+            &[&base[..], &[0]].concat(),
+            false,
+            false,
+        ));
+        let mut x = base.clone();
+        x[159] |= 1 << 1;
+        sigs.push(sig_row("one bit added", &d, &x, false, false));
+        let mut x = base.clone();
+        x[159] &= !1;
+        sigs.push(sig_row("one bit cleared", &d, &x, false, false));
+        sigs.push(sig_row(
+            "under DST_MULTI_POP",
+            &d,
+            &sign(&d, &s, &[0, 2, 4], &bm::DST_MULTI_POP[..]),
+            false,
+            false,
+        ));
+        let parts: Vec<(u8, [u8; 128])> = (0..5u8)
+            .map(|i| (i, sign(&d, &s, &[i], sdst)[..128].try_into().unwrap()))
+            .collect();
+        let agg = bm::aggregate(&d, &msg, &parts, false).unwrap();
+        sigs.push(sig_row(
+            "aggregate of all 5, minimal by default",
+            &d,
+            &agg.to_abi(),
+            true,
+            true,
+        ));
+    }
+    // the verify path at (n, k) = (2, 2), (16, 8), (16, 9), (64, 1), (64, 32) (add), (64, 33) (subtract), (64, 64): the gas rows and
+    // Review Focus 3
+    for (l, ks) in [
+        ("n2t2", vec![2u8]),
+        ("n16t8", vec![8, 9]),
+        ("n64t1", vec![1, 32, 33, 64]),
+    ] {
+        let (d, s) = g(l);
+        let t = u16::from_be_bytes([d[256], d[257]]) as u8;
+        for k in ks {
+            sigs.push(sig_row(
+                &format!("{l} k = {k}"),
+                &d,
+                &sign(&d, &s, &range(k), sdst),
+                true,
+                k == t,
+            ));
+        }
+    }
+
+    {
+        let (d, s) = g("w311t3");
+        let heavy = (0..3u8).find(|i| s[*i as usize].1 == 3).unwrap();
+        let light: Vec<u8> = (0..3u8).filter(|i| *i != heavy).collect();
+        let mut two = vec![heavy, light[0]];
+        two.sort();
+        sigs.push(sig_row(
+            "w311t3 the weight-3 member alone",
+            &d,
+            &sign(&d, &s, &[heavy], sdst),
+            true,
+            true,
+        ));
+        sigs.push(sig_row(
+            "w311t3 the weight-3 member's 0x0106 signature over the member message",
+            &d,
+            &sign(&d, &s, &[heavy], scaas_ua::verify::BLS12381_DST_SIG),
+            false,
+            false,
+        ));
+        sigs.push(sig_row(
+            "w311t3 the two weight-1 members",
+            &d,
+            &sign(&d, &s, &light, sdst),
+            false,
+            false,
+        ));
+        sigs.push(sig_row(
+            "w311t3 weight 3 and 1: 4 − 1 ≥ 3",
+            &d,
+            &sign(&d, &s, &two, sdst),
+            true,
+            false,
+        ));
+        let (d, s) = g("w65535");
+        sigs.push(sig_row(
+            "w65535 one member (Review Focus 1)",
+            &d,
+            &sign(&d, &s, &[1], sdst),
+            true,
+            true,
+        ));
+        sigs.push(sig_row(
+            "w65535 both (Review Focus 1)",
+            &d,
+            &sign(&d, &s, &[0, 1], sdst),
+            true,
+            false,
+        ));
+    }
+    {
+        let (d, s) = g("n3-cancelling-n6t4");
+        let set: Vec<u8> = (0..6u8)
+            .filter(|i| s[*i as usize].0 != a && s[*i as usize].0 != -a)
+            .collect();
+        sigs.push(sig_row(
+            "N3 non-signers sum to O (subtract path)",
+            &d,
+            &sign(&d, &s, &set, sdst),
+            true,
+            true,
+        ));
+        let (d, s) = g("f12-cancelling-n3t3");
+        let c = (0..3u8)
+            .find(|i| s[*i as usize].0 != a && s[*i as usize].0 != -a)
+            .unwrap();
+        let mut x = sign(&d, &s, &[c], sdst);
+        x[128..].copy_from_slice(&bm::indices_bitmap(&[0, 1, 2]));
+        sigs.push(sig_row(
+            "F12 documented: all bits, signed by pk_c alone",
+            &d,
+            &x,
+            true,
+            true, // n = t = 3: every signer necessary
+        ));
+    }
+    {
+        let (d1, s1) = g("cross-G1-ABt2");
+        let (d2, s2) = g("cross-G2-ABCt2");
+        let ab: Vec<u8> = (0..3u8).filter(|i| s2[*i as usize].0 != gc).collect();
+        let mut x = sign(&d1, &s1, &[0, 1], sdst);
+        x[128..].copy_from_slice(&bm::indices_bitmap(&ab));
+        sigs.push(sig_row(
+            "cross group: G1's aggregate for G2",
+            &d2,
+            &x,
+            false,
+            false,
+        ));
+        sigs.push(sig_row(
+            "cross group: G1's own",
+            &d1,
+            &sign(&d1, &s1, &[0, 1], sdst),
+            true,
+            true,
+        ));
+    }
+    let kats: Vec<Value> = [("sig", &bm::DST_MULTI_SIG[..]), ("pop", &bm::DST_MULTI_POP[..])]
+        .iter()
+        .flat_map(|(n, dst)| {
+            [b"".to_vec(), b"abc".to_vec(), msg.to_vec()].into_iter().map(move |m| {
+                json!({ "dst": n, "msg": hx(&m), "point": hx(&bm::g1_encode(&hash_to_g1_bls12381(&m, dst))) })
+            })
+        })
+        .collect();
+    json!({
+        "kind": K,
+        "dsts": { "sig": String::from_utf8(bm::DST_MULTI_SIG.to_vec()).unwrap(), "pop": String::from_utf8(bm::DST_MULTI_POP.to_vec()).unwrap() },
+        "uaMsg": hx(&msg),
+        "hashToG1": kats,
+        "groups": group_rows,
+        "pop": pops,
+        "signatures": sigs,
+        "wallet": bls_multi_wallet(&msg),
+    })
+}
+
+/// `blsMulti.wallet` (bls-multi T15): the `0x0121` member keys of keys.json's `bip39_test` mnemonic at accounts 0, 1, 2 (index 0),
+/// weights 2, 1, 1, t = 2, in account order; each member's partial over `uaMsg` and its PoP part, the minimal aggregate and the
+/// PoP. A binding derives the keys through its wallet and reproduces every part byte for byte (BLS signing is deterministic).
+fn bls_multi_wallet(msg: &[u8; 32]) -> Value {
+    use scaas_ua::bls_multi as bm;
+    use scaas_ua::wallet::{UaKey, Wallet};
+    let k = read_json("../../smartcontracts/vectors/ua/keys.json");
+    let m = k["mnemonics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == "bip39_test")
+        .unwrap();
+    let w = Wallet::from_mnemonic(
+        m["words"].as_str().unwrap(),
+        m["passphrase"].as_str().unwrap(),
+    )
+    .unwrap();
+    let (accounts, weights) = ([0u32, 1, 2], [2u16, 1, 1]);
+    let keys: Vec<UaKey> = accounts
+        .iter()
+        .map(|a| w.ua_key(bm::KIND, *a, 0).unwrap())
+        .collect();
+    let members: Vec<([u8; 256], u16)> = keys
+        .iter()
+        .zip(weights)
+        .map(|(k, w)| (k.key_data().try_into().unwrap(), w))
+        .collect();
+    let (d, map) = bm::build_key_data(&members, 2).unwrap();
+    let part = |f: &dyn Fn(&UaKey) -> Vec<u8>| -> Vec<(u8, [u8; 128])> {
+        keys.iter()
+            .zip(&map)
+            .map(|(k, i)| (*i as u8, f(k).try_into().unwrap()))
+            .collect()
+    };
+    let partials = part(&|k| k.sign_bls_multi(&d, msg).unwrap());
+    let pop_parts = part(&|k| k.sign_bls_multi_pop(&d).unwrap());
+    let agg = bm::aggregate(&d, msg, &partials, false).unwrap();
+    let rows: Vec<Value> = (0..3)
+        .map(|i| {
+            json!({ "account": accounts[i], "weight": weights[i], "key": hx(&members[i].0), "keyDataIndex": map[i],
+                    "partial": hx(&partials[i].1), "popPart": hx(&pop_parts[i].1) })
+        })
+        .collect();
+    json!({
+        "mnemonic": "bip39_test", "kind": bm::KIND, "index": 0, "threshold": 2, "members": rows,
+        "keyData": hx(&d), "ua": hx(&bm::ua_of(&d)), "uaMsg": hx(msg), "popMessage": hx(&bm::pop_message(&d).unwrap()),
+        "signature": hx(&agg.signature), "signers": agg.signers, "pop": hx(&bm::aggregate_pop(&d, &pop_parts).unwrap()),
+    })
+}
+
 // ---------- the file ----------
 
 fn generate() -> String {
@@ -1367,6 +1854,7 @@ fn generate() -> String {
         "zfDkg": zf_dkg_section(),
         "tFrost": tf,
         "msigMembers": msig_members_section(&env),
+        "blsMulti": bls_multi_section(),
     });
     serde_json::to_string_pretty(&v).unwrap() + "\n"
 }

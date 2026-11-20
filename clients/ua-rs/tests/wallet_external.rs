@@ -117,7 +117,8 @@ fn sign_json_rows_through_an_external_key_equal_the_internal_ones() {
                 &key.key_data(),
                 &ua_msg,
                 &got.signature,
-                role == SigRole::Pop
+                role == SigRole::Pop,
+                false
             ),
             "{}",
             r["name"]
@@ -278,7 +279,7 @@ fn an_external_assertion_above_the_cap_is_refused() {
     .concat();
     let (kd, challenge) = (bytes(&r["keyData"]), b32(&r["expectedChallenge"]));
     assert!(
-        verify(0x0100, &kd, &challenge, &blob, false),
+        verify(0x0100, &kd, &challenge, &blob, false, false),
         "valid on the chains"
     );
     let x = TestExternalKey::new(

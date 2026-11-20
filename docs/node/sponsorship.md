@@ -38,7 +38,10 @@ only job data (no RPC at accept). Doors: client namespaces (no fee floor: the po
 `~mesh` (the mesh policy `min_fee` floor, [mesh.md#acceptance](mesh.md#acceptance), is waived for matching jobs; the
 door-A defaults per profile are in [NODE-GW-01](gateway.md#NODE-GW-01)). Policies are data; nothing on chain depends
 on them. One mechanism serves inbound subsidies ("to wallet W, value ≥ X ⇒ fee 0, gas to account Y") and tenant cost
-control.
+control. The gas a policy books and caps is the transaction's whole charged gas, regular **plus** EIP-8037 state gas,
+as its receipt charges it (`gas_used × effective_gas_price`, BUILT); a policy that budgets by gas units counts the same sum, so a
+state-heavy job (a 64-member `registerBlsMulti` ≈ 28 M, [CTR-UA-52](../contracts/accounts.md#CTR-UA-52)) is priced in full, never
+by its regular part (SPECIFIED for the state part: no test yet books a job with state gas).
 
 **Client namespaces: `unsponsored` means "booked to the namespace".** (A review finding said the node "silently spends
 lane gas" on unmatched jobs: that is the namespace's default; what was missing was the statement and the mark.) The node pays gas for every client job and books

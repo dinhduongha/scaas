@@ -57,6 +57,7 @@ public static partial class UA
         new(0x0108, "secp256k1", false, [64], "secp256k1"), // 2026-10-17, appended as in kinds.json
         new(0x0134, "mldsa87", false, [2592], "mldsa87"), // CTR-UA-39, 2026-11-04, appended as in kinds.json
         new(0x0135, "fndsa1024", false, [1793], "fndsa1024"), // CTR-UA-40, 2026-11-04, appended as in kinds.json
+        new(0x0121, "bls12381-multi", false, [], null), // spec 2026-11-19-bls12381-multi, appended as in kinds.json; no keyHash
     ];
 
     /// <summary>Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.</summary>
@@ -125,14 +126,17 @@ public static partial class UA
     static bool SingleSigning(ushort k) => k is (>= 0x0100 and <= 0x0108) or (>= 0x0110 and <= 0x0113) or (>= 0x0130 and <= 0x0135);
     public static bool IsNative(ushort kind) => Array.Exists(Kinds, k => k.Number == kind && k.Native);
     public static bool IsZether(ushort kind) => kind == 0x0141;
-    public static bool IsSigning(ushort kind) => kind == 0x0120 || kind == 0x0141 || SingleSigning(kind);
+    public static bool IsSigning(ushort kind) => kind is 0x0120 or 0x0121 or 0x0141 || SingleSigning(kind);
+
+    /// <summary>The kinds whose signatures have a surplus form (spec 2026-11-19-bls12381-multi §5.3): bls12381-multi only.</summary>
+    public static bool HasSurplusForm(ushort kind) => kind == 0x0121;
 
     /// <summary>Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-39 / -40; an msig per
     /// <see cref="MsigPqzEligible"/>).</summary>
     public static bool IsPqzHolder(ushort kind) => kind is (>= 0x0130 and <= 0x0132) or 0x0134 or 0x0135;
     /// <summary>An msig too, one level down: a record that holds one is refused as a member by the registry.</summary>
     public static bool IsMember(ushort kind, bool hederaNative = false) =>
-        SingleSigning(kind) || kind is 0x0120 or 0x0001 or 0x0002 || (hederaNative && kind == 0x0003);
+        SingleSigning(kind) || kind is 0x0120 or 0x0121 or 0x0001 or 0x0002 || (hederaNative && kind == 0x0003);
 
     public static string KindTagString(ushort kind) => $"scaas.ua.{Tagged(kind).Name}.v1";
     public static byte[] Tag(ushort kind) => Keccak256(Utf8(KindTagString(kind)));

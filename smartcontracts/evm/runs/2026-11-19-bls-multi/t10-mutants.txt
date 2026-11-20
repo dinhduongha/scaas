@@ -1,0 +1,7 @@
+killed   | M1 signers not strictly increasing (duplicates pass) | scaas-node/src/typed.rs | rc=101 | expect bls_multi_signers_refusals | 1 failed: typed::tests::bls_multi_signers_refusals
+killed   | M2 no index bound below 64 | scaas-node/src/typed.rs | rc=101 | expect bls_multi_signers_refusals | 1 failed: typed::tests::bls_multi_signers_refusals
+killed   | M3 no 64-entry bound on signers | scaas-node/src/typed.rs | rc=101 | expect bls_multi_signers_refusals | 1 failed: typed::tests::bls_multi_signers_refusals
+killed   | M4 the packed 160 bytes taken as a length error | scaas-node/src/typed.rs | rc=101 | expect bls_multi_hex_blob_refused | 1 failed: typed::tests::bls_multi_hex_blob_refused
+killed   | M5 other UASig fields allowed beside signers | scaas-node/src/typed.rs | rc=101 | expect bls_multi_hex_blob_refused | 1 failed: typed::tests::bls_multi_hex_blob_refused
+killed   | M6 no 64-member bound on BlsMultiMember[] | scaas-node/src/typed.rs | rc=101 | expect typed_register_bls_multi_row | 1 failed: typed::tests::typed_register_bls_multi_row
+6 mutants, 6 killed, 0 survived, 0 not loaded

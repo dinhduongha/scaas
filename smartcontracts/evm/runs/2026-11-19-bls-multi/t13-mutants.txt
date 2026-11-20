@@ -1,0 +1,5 @@
+killed   | M1 uint16 weight sum | clients/ua-cs/Scaas.Ua/KeyData.cs | rc=1 | expect BlsMultiRows | 2 failed: Scaas.Ua.Tests.VectorTests.BlsMultiRows, Scaas.Ua.Tests.VectorTests.ValidRows
+killed   | M2 order check <= instead of < | clients/ua-cs/Scaas.Ua/KeyData.cs | rc=1 | expect InvalidRows | 1 failed: Scaas.Ua.Tests.VectorTests.InvalidRows
+killed   | M3 no identity check on apk | clients/ua-cs/Scaas.Ua/KeyData.cs | rc=1 | expect InvalidRows | 1 failed: Scaas.Ua.Tests.VectorTests.InvalidRows
+killed   | M4 no key check per member | clients/ua-cs/Scaas.Ua/KeyData.cs | rc=1 | expect InvalidRows | 1 failed: Scaas.Ua.Tests.VectorTests.InvalidRows
+4 mutants, 4 killed, 0 survived, 0 not loaded

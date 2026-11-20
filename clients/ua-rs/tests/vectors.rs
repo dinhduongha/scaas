@@ -361,3 +361,64 @@ fn id_display_rows() {
         }
     }
 }
+
+/// bls-multi T4: the `0x0121` rows of kinds.json (clientkeys ua-vectors.mjs): `d`, `s`, `p = ua ‖ s`, `keyOf` (= `apk`), the
+/// 12,644-byte pair (d at n = 48, p at n = 64), and the builder row (Review Focus 2).
+#[test]
+fn kinds_0x0121() {
+    use scaas_ua::bls_multi as bm;
+    let k = load("kinds.json");
+    let rows: Vec<&Value> = arr(&k, "valid")
+        .iter()
+        .filter(|r| kind(&r["kind"]) == 0x0121)
+        .collect();
+    assert_eq!(rows.len(), 10);
+    for r in &rows {
+        let d = bytes(&r["keyData"]);
+        assert_eq!(derive_ua(0x0121, &d, false).unwrap(), b32(&r["ua"]));
+        assert!(r["keyHash"].is_null(), "no keyHash");
+        assert_eq!(hx(&bm::compress(&d).unwrap()), r["compressed"]);
+        assert_eq!(bm::expand(&bytes(&r["compressed"])).unwrap(), d);
+        assert_eq!(hx(&bm::stored(&d).unwrap()), r["stored"]);
+        assert_eq!(hx(&d[..256]), r["keyOf"]);
+        let kd = bm::parse(&d).unwrap();
+        assert_eq!(
+            (kd.members.len() as u64, u64::from(kd.threshold)),
+            (r["n"].as_u64().unwrap(), r["threshold"].as_u64().unwrap())
+        );
+    }
+    let pair = |p: &str| {
+        rows.iter()
+            .find(|r| r["label"].as_str().unwrap().starts_with(p))
+            .unwrap()
+    };
+    assert_eq!(bytes(&pair("n48")["keyData"]).len(), 12_644);
+    assert_eq!(bytes(&pair("n64 t1")["stored"]).len(), 12_644);
+    assert!(
+        arr(&k, "invalid")
+            .iter()
+            .filter(|r| kind(&r["kind"]) == 0x0121)
+            .count()
+            >= 18
+    );
+    let b = &k["blsMultiBuilder"];
+    let members: Vec<([u8; 256], u16)> = arr(b, "members")
+        .iter()
+        .map(|m| {
+            (
+                bytes(&m["key"]).try_into().unwrap(),
+                m["weight"].as_u64().unwrap() as u16,
+            )
+        })
+        .collect();
+    let (d, map) = bm::build_key_data(&members, b["threshold"].as_u64().unwrap() as u16).unwrap();
+    assert_eq!(hx(&d), b["keyData"]);
+    assert_eq!(hx(&bm::ua_of(&d)), b["ua"]);
+    assert_eq!(
+        map,
+        arr(b, "indexMap")
+            .iter()
+            .map(|x| x.as_u64().unwrap() as usize)
+            .collect::<Vec<_>>()
+    );
+}

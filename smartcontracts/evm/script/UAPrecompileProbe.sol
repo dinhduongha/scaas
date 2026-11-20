@@ -13,11 +13,12 @@ import {G1Bn254, G1Bls12381} from "../src/zether/ZetherCurves.sol";
 ///         its local EVM) and a test reads `address(new UAPrecompileProbe()).code`. Every call is capped: success under
 ///         the cap proves the price fits; a failing precompile burns only the cap; an absent precompile (an empty
 ///         account: success, no data) fails the returndata comparison.
-///         - `bls12381` (EIP-2537; kinds 0x0105, 0x0106, 0x0141): G1MSM / G2MSM with k = 1 return the point under the
+///         - `bls12381` (EIP-2537; kinds 0x0105, 0x0106, 0x0121, 0x0141): G1MSM / G2MSM with k = 1 return the point under the
 ///           registry's key-check caps (`UAKinds.G1MSM_GAS` / `G2MSM_GAS`) and refuse kinds.json's points outside the
 ///           subgroup; a k = 2 PAIRING_CHECK returns 1 within its EIP-2537 price (102,900), the price the verifier caps
 ///           were measured at; G1ADD (0x0b, g1 + O = g1, 375) and MAP_FP_TO_G1 (0x10, 128 bytes for 0, 5,500), which
-///           `bls12381-minsig` uses besides MSM / pairing, answer within their EIP-2537 prices.
+///           `bls12381-minsig` uses besides MSM / pairing, and G2ADD (0x0d, g2 + O = g2, 600), which `bls12381-multi` uses,
+///           answer within their EIP-2537 prices.
 ///         - `bn254G2` (0x08; kind 0x0107): the registry's G2 check (the G1 generator and the key, `UAKinds.PAIRING_GAS`)
 ///           answers 32 bytes for the G2 generator and refuses kinds.json's G2 point outside the subgroup; a k = 2
 ///           pairing returns 1 within its EIP-1108 price (113,000).
@@ -62,6 +63,7 @@ contract UAPrecompileProbe {
             && _returns(
             address(0x0f), bytes.concat(g1, g2, G1Bls12381.neg(g1), g2), BLS_PAIRING_2_GAS, abi.encode(uint256(1))
         ) && _returns(address(0x0b), bytes.concat(g1, new bytes(128)), 375, g1) // G1ADD: g1 + O = g1 (EIP-2537 price)
+            && _returns(address(0x0d), bytes.concat(g2, new bytes(256)), 600, g2) // G2ADD: g2 + O = g2 (EIP-2537 price; 0x0121)
             && _answers(address(0x10), new bytes(64), 5_500, 128); // MAP_FP_TO_G1(0) (EIP-2537 price)
     }
 

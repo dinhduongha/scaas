@@ -23,6 +23,7 @@ S = json.loads((VEC / "structures.json").read_text())
 PV = json.loads((VEC / "portable.json").read_text())
 NV = json.loads((VEC / "nested.json").read_text())
 D = json.loads((VEC / "id_display.json").read_text())
+GR = json.loads((VEC / "groups.json").read_text())
 
 OK, ERR_KEY_DATA, ERR_ARGUMENT, ERR_BUFFER = 0, 1, 8, 9
 KEM_PK = 1601  # scheme byte + key
@@ -969,6 +970,31 @@ class Vectors(unittest.TestCase):
             self.assertEqual(code_of(lambda: text(L.registration_args, bad)), code, bad)
         self.assertEqual(code_of(lambda: text(L.registration_args, None)), "UAArgument")
 
+    def test_bls_multi(self):
+        """bls-multi T15 (0x0121): groups.json blsMulti groups and its wallet group, kinds.json's builder row (key data accepted,
+        id, popMsg), portable.json blsMultiRegistrations (digests, popMsg, registerBlsMulti's named arguments)."""
+        s = GR["blsMulti"]
+        rows = s["groups"] + [s["wallet"], K["blsMultiBuilder"]]
+        self.assertEqual(len(rows), 13)
+        for g in rows:
+            d = b(g["keyData"])
+            ok(kd(L.validate_key_data, 0x0121, d, False))
+            self.assertEqual(hx(out32(lambda o: kd(L.ua_of, 0x0121, d, o))), g["ua"])
+            if "popMessage" in g:
+                self.assertEqual(hx(bytes(holder(0x0121, b(g["ua"]), d).message)), g["popMessage"])
+        regs = PV["blsMultiRegistrations"]
+        self.assertEqual(len(regs), 2)
+        for r in regs:
+            with self.subTest(r["name"]):
+                self.assertEqual(hx(out32(lambda o: kd(L.ua_of, 0x0121, b(r["keyData"]), o))), r["ua"])
+                h = register(r)
+                self.assertEqual(hx(bytes(h.portable_record_digest)), r["portableRecordDigest"])
+                self.assertEqual(hx(bytes(h.registration_digest)), r["registrationDigest"])
+                self.assertEqual(hx(bytes(h.message)), r["popMessage"])
+                a = reg_args(reg_input(r, kemCommit=False))
+                self.assertEqual(a["args"], r["args"])
+                self.assertEqual(a["args"]["entry"], "registerBlsMulti")
+
     def test_set_key_args(self):
         self.assertEqual(
             len(PV["kemRecords"]), 12
@@ -1455,6 +1481,8 @@ for name, res, args in [
     ("key_data", st, [P, P, P]),
     ("sign_ua", st, [P, u8, u8, P, P]),
     ("sign_member", st, [P, u8, u8, P, P]),
+    ("sign_bls_multi", st, [P, u8, sz, u8, P, P]),
+    ("sign_bls_multi_pop", st, [P, u8, sz, P, P]),
     ("sign_typed", st, [P, u8, u8, P, P]),
     ("sign_typed_any", st, [P, u8, P, P]),
     ("sign_transaction", st, [P, u8, P, P]),
@@ -1671,6 +1699,44 @@ class WalletAbi(WalletCase):
         }.items():
             with self.subTest(label):
                 self.assertEqual(status, ERR_ARGUMENT)
+
+
+class WalletBlsMulti(WalletCase):
+    """bls-multi T15: a 0x0121 member key's partial and PoP part (groups.json blsMulti.wallet) byte for byte, and the refusals."""
+
+    W = GR["blsMulti"]["wallet"]
+
+    def test_parts_match_vectors(self):
+        w = self.W
+        d, m = b(w["keyData"]), b(w["uaMsg"])
+        self.assertEqual(len(w["members"]), 3)
+        for r in w["members"]:
+            with self.subTest(account=r["account"]):
+                k = self.key(w["mnemonic"], w["kind"], r["account"], w["index"])
+                self.assertEqual(hx(var(L.key_data, k)), r["key"])
+                self.assertEqual(hx(var(L.sign_bls_multi, k, d, len(d), m)), r["partial"])
+                self.assertEqual(hx(var(L.sign_bls_multi_pop, k, d, len(d))), r["popPart"])
+
+    def test_refusals(self):
+        w = self.W
+        d, m = b(w["keyData"]), b(w["uaMsg"])
+        member = self.key(w["mnemonic"], 0x0121)
+        for label, k, kd_ in (
+            ("a key the group does not list", self.key(w["mnemonic"], 0x0121, 3), d),
+            ("a 0x0106 key", self.key(w["mnemonic"], 0x0106), d),
+            ("a native key", self.native(w["mnemonic"]), d),
+            ("key data one byte short", member, d[:-1]),
+            ("no key data", member, b""),
+        ):
+            with self.subTest(label):
+                self.assertEqual(sig_of(L.sign_bls_multi, k, kd_, len(kd_), m)[0], "UAArgument")
+                self.assertEqual(sig_of(L.sign_bls_multi_pop, k, kd_, len(kd_))[0], "UAArgument")
+        self.assertEqual(sig_of(L.sign_bls_multi, None, d, len(d), m)[0], "UAArgument")
+        self.assertEqual(sig_of(L.sign_bls_multi, member, d, len(d), None)[0], "UAArgument")
+        self.assertEqual(sig_of(L.sign_ua, member, out32(L.purpose_tag, b"metatx"), bytes(32))[0], "UAArgument")
+        o, n = C.create_string_buffer(127), sz(127)
+        self.assertEqual(name_of(L.sign_bls_multi_pop(member, d, len(d), o, C.byref(n))), "UABuffer")
+        self.assertEqual(n.value, 128)
 
 
 class WalletKeys(WalletCase):

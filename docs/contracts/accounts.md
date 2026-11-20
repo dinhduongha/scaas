@@ -260,7 +260,8 @@ signatures the registry stores and copies byte for byte (`pop` v2, `kem`, `pqz-k
 `T` and keeping the smallest slot weight `w_min` (accept iff `T ≥ N` and `T − w_min < N`), every slot counting its member's weight,
 native members included. Failure is `UAPoP` in `register` and `UAUnauthorized` in `setKemKey` / `setPqzKey`; no new error, no ABI change.
 A transaction authorisation (`requireAuthorized`, `UARegistry._msig`) is not stored and keeps its rule (a slot after the threshold
-fails). A front-runner that drops a slot from a valid `pop` gets a refusal.
+fails). A front-runner that drops a slot from a valid `pop` gets a refusal. A `bls12381-multi` (`0x0121`) signature takes the same rule inside the kind on those paths (every signer necessary, through
+`verifyMinimal`), the verify path keeping surplus weight ([CTR-UA-50](#CTR-UA-50)).
 
 The PQZ key and the KEM record are the fields not implied by `keyData`; the signer's PoP covers their hashes, so a
 front-runner can neither strip them (the PoP over the real hashes fails over the zero record) nor swap them (another key changes the
@@ -301,6 +302,7 @@ kinds stay and are made checkable):
 | `msig` (independent signatures, weighted threshold) | **per-member registration**: every member is a native id or a registered single-key UA (each with its own PoP), kinds ∈ MEMBER | no key aggregation happens, so there is no rogue key; members' keys are still proven once |
 | `musig2-secp256k1`, `musig2-bn254` | **BIP-327 KeyAgg recomputed on chain** from the registered member list **plus** one aggregate PoP by the result | the coefficients defeat rogue keys; MuSig2 is n-of-n, so a valid PoP by `KeyAgg(list)` proves every listed key took part |
 | `frost-secp256k1`, `frost-bn254` | **group key = Σ of the DKG constant-term commitments, each with its PoK, checked on chain** **plus** one group PoP | RFC 9591 leaves DKG out; the FROST paper's KeyGen round-1 PoK is the standard defence; the chain checks it instead of trusting it |
+| `bls12381-multi` | **every member's PoP over distinct per-member messages** bound to the group's registration digest, under `DST_MULTI_POP`, n + 1 pairings on chain ([CTR-UA-49](#CTR-UA-49)) | all n prove possession, so every subset's aggregate key is safe; argued in the algebraic group model, an external-audit item (UNAUDITED) |
 | threshold ECDSA (MPC providers) | not a kind: the output is an ordinary ECDSA signature by an address ⇒ **native EOA** | the chain cannot tell, and need not |
 
 Each defence is the one native to the scheme, and the registry checks it rather than trusting a hash of it. Group
@@ -311,8 +313,9 @@ invisible to the chain.
 <a id="structures"></a>
 <a id="CTR-UA-09"></a>**CTR-UA-09** — **Structures commit to their members; verification goes two levels.** `msig` key data lists
 members by `(kind, id, weight)`, strictly sorted by id. A member may be an `msig`, beside signing members, and verification goes two levels only: an
-`msig` that holds an `msig` member cannot itself be a member ([CTR-UA-38](#CTR-UA-38), owner 2026-11-02). (A `bls12381-multi` kind
-was cut — no consumer, and `msig` over `bls12381-minsig` covers it; number `0x0121` stays reserved.) The call takes the
+`msig` that holds an `msig` member cannot itself be a member ([CTR-UA-38](#CTR-UA-38), owner 2026-11-02). A `bls12381-multi` group
+(`0x0121`) is a structure too: its member keys are in its own key data, and it adds no level ([§1.6.2](#bls12381-multi),
+owner 2026-11-19). The call takes the
 structure typed (`registerMsig`, [CTR-UA-36](#CTR-UA-36)); the registry assembles these bytes, so the id is the packed form's. Bounded gas (§1.8 step 4), no
 cycles: an id hashes the key data that holds its members' ids, and a member is registered first. `SmartKeyAccount` or Safe (native 1271) as a member is another way to
 two-level governance. A stored signature of an
@@ -764,7 +767,7 @@ namespace, so `schnorr-bn254`, `frost-bn254` and `musig2-bn254` can never regist
 `webauthn-p256` and `p256` the same key. For MuSig2/FROST the keyHash is over the **group key**; participant keys are
 not claimed (a participant key may sit in several groups; layer 1 gives it its own path). Key data must be the **unique
 canonical encoding** of its key, so one key has exactly one id and one keyHash. A kind-tagged keyHash would let the same
-key register under two kinds. Structures have no keyHash (members do).
+key register under two kinds. Structures have no keyHash (members do), `bls12381-multi` included ([CTR-UA-47](#CTR-UA-47)).
 
 <a id="tagged-message"></a>
 <a id="CTR-UA-12"></a>**CTR-UA-12** — **Tagged message:** every derived-UA signature is over
@@ -777,7 +780,8 @@ id: `msig` members) sign the EIP-712 struct `UAAuth(bytes32 ua, bytes32 purpose,
 digest)` under the registry's domain, never a raw hash — except for the three portable purposes (`pop` v2, `kem`, `pqz-key`, the acceptance of [CTR-UA-37](#CTR-UA-37);
 [CTR-UA-07](#CTR-UA-07)), where a code-less or EIP-7702-designator native `msig` member signs the record's typed digest
 (chain-free) by its own key and a contract member answers ERC-1271 by the [CTR-UA-24](#CTR-UA-24) rule over the same digest; native kinds on token-local paths keep their wallet-native
-signing (EIP-712 / family envelope) untouched. Cross-kind and cross-purpose replay die at the hash; native wallets
+signing (EIP-712 / family envelope) untouched. The one exception: a `bls12381-multi` member signs
+`memberDigest(ua, ua_msg)` under the kind's own DST ([CTR-UA-48](#CTR-UA-48)). Cross-kind and cross-purpose replay die at the hash; native wallets
 display what they sign, and no raw-hash (`eth_sign`) signature is ever asked of an EOA. Cost: one extra keccak (~60 gas).
 
 ### <a id="kinds"></a>1.6 Kinds
@@ -841,7 +845,7 @@ Derived kinds (registered; `d` = key data):
 | `0x0112` | `musig2-bn254` | `Q (64) ‖ u16 n ‖ n × P_i (64)`, `P_i` strictly increasing, 2 ≤ n ≤ 16 | `bn254-g1` | KeyAgg (bn254 port) **and** one scaas Schnorr by `Q` | as 0x0104, `Q` from `keyPtr` | EVM |
 | `0x0113` | `frost-bn254` | `Y (64) ‖ u16 t ‖ u16 n ‖ n × (t × C_ik (64) ‖ R_i (64) ‖ μ_i (32))`, 2 ≤ t ≤ n ≤ 16 | `bn254-g1` | DKG PoKs and `Y = Σ C_i0` **and** one FROST(bn254, keccak256) sig by `Y` | as 0x0104 (its H2 is the scaas Schnorr challenge), `Y` from `keyPtr` | EVM |
 | `0x0120` | `msig` | `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)`, ids strictly increasing | — | none of its own; every member registered or native, kind ∈ MEMBER; a member signs with an empty `keyData` (CTR-UA-33) | inside the registry (members via their own kinds) | EVM → all |
-| `0x0121` | *reserved* (was `bls12381-multi`, cut) | — | — | — | — | — |
+| `0x0121` | `bls12381-multi` | `apk (256) ‖ u16 t ‖ u16 n ‖ n × (pk_i (256) ‖ u16 w_i)`, `pk_i` strictly increasing, 2 ≤ n ≤ 64, `w_i ≥ 1`, `1 ≤ t ≤ Σ w_i` ([CTR-UA-47](#CTR-UA-47)) | — (a structure) | every member's PoP, n + 1 pairings ([CTR-UA-49](#CTR-UA-49)) | `BlsMultiBls12381Verifier` on EIP-2537: `verify` / `verifyMinimal` on the stored `ua ‖ s`, one PAIRING_CHECK ([CTR-UA-50](#CTR-UA-50)) | EVM chains where the EIP-2537 probe passes; disabled on Hedera; Soroban refuses it until `ua-soroban` ([CTR-UA-54](#CTR-UA-54)) |
 | `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`pq_msg`, empty ctx) ([CTR-UA-23](#CTR-UA-23)) | `MldsaVerifier` (BUILT, P6a): an EIP-8355 precompile where probed, else pure Solidity on the registry's cached EIP-8051 expanded key (P6c), which `register` needs complete first (`UAKeyNotCached`, owner 2026-11-15); `pk` from `keyPtr` | every EVM chain where the measured cap fits (the budget rule; unaudited label, no audit gate, owner ruling 2026-10-31) |
 | `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | as 0x0130; SCaaS testnet: its `MLDSA65` precompile `0x000000000000000000000000000000005caa0013` (32-bit form, plan 5h Task 8d; live since image `2.2.0-pqz4`, 2026-10-25; the earlier images served `0x5caa500000000000000000000000000000000013`) in the EIP-8355 layout ([CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10); P6f; registry in P6g) | as 0x0130 |
 | `0x0132` | `fndsa512` | `pk` (897: `0x09 ‖ h`) | `fndsa512` | Falcon-512 (specification v1.2, NIST third-round; EIP-8052 SHAKE256 hash-to-point) over `ua_msg`, padded sig 666 B | `FndsaVerifier` (BUILT, P6a), pure Solidity (EIP-8052 has no addresses); `pk` from `keyPtr` | every EVM chain; deployed as 0x0130 |
@@ -895,8 +899,9 @@ still need a new UA.
 | Set | Members | Enforced at |
 |---|---|---|
 | ZETHER | `0x0141` | the confidential account of the Zether tokens (`kindOf` in `ZetherLib`); also in SIGNING |
-| SIGNING | every derived kind: single-key `0x0100`–`0x0108`, `0x0110`–`0x0113`, `0x0130`–`0x0135`, `0x0141`, and the structure `0x0120` | `requireAuthorized` (native or SIGNING); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`) |
-| MEMBER | SIGNING single-key kinds except `0x0141` (a hot Zether key stays out of `msig`s), plus `msig`, one level down ([CTR-UA-38](#CTR-UA-38)), plus the native kinds the chain profile can verify, all with `id >> 160 == 0` — on EVM `0x0001`–`0x0002`; `0x0003` **only** in a Hedera-profile registry (constructor immutable `hederaNative`, HIP-632) | `msig` members (`UAMemberUnknown`); no other family's native kind, no `hedera-native` outside Hedera and no `msig` that holds an `msig` is ever an EVM member |
+| SIGNING | every derived kind: single-key `0x0100`–`0x0108`, `0x0110`–`0x0113`, `0x0130`–`0x0135`, `0x0141`, and the structures `0x0120` and `0x0121` | `requireAuthorized` (native or SIGNING); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`) |
+| MEMBER | SIGNING single-key kinds except `0x0141` (a hot Zether key stays out of `msig`s), plus `msig`, one level down ([CTR-UA-38](#CTR-UA-38)), plus `bls12381-multi` `0x0121` ([CTR-UA-51](#CTR-UA-51)), plus the native kinds the chain profile can verify, all with `id >> 160 == 0` — on EVM `0x0001`–`0x0002`; `0x0003` **only** in a Hedera-profile registry (constructor immutable `hederaNative`, HIP-632) | `msig` members (`UAMemberUnknown`); no other family's native kind, no `hedera-native` outside Hedera and no `msig` that holds an `msig` is ever an EVM member |
+| SURPLUS FORM | `0x0121` (`UAKinds.hasSurplusForm`): a signature that may carry more signing weight than its threshold | every stored or hash-committed path checks it through `verifyMinimal` ([CTR-UA-50](#CTR-UA-50)) |
 
 #### <a id="musig2-and-frost-what-the-registry-checks"></a>1.6.1 MuSig2 and FROST: what the registry checks
 
@@ -1072,6 +1077,101 @@ the 5.95 M cached cap, 2 × 5.95 M + 2 × 35 k + the caller's hold of 88 k > 12 
 Falcon-512 v1.2 as EIP-8052 (no FIPS 206 draft is published), pinned by the vectors; a final FIPS 206 that differs is a new kind version
 (`…fndsa512.v2`), never a silent change. The earlier `PQ_COMMITMENT` scheme ("verify off chain") is retired. PQ checks
 cost real money on public chains (an ML-DSA-65 signature is 53–132 k gas of calldata alone, plus 5.8–18.9 M execution).
+
+**Threshold BLS** (Shamir or DKG shares of one BLS key) is not a kind: such a key registers as a plain `bls12381-minsig`
+`0x0106` UA, a group the chain does not see, shown attestation-only (owner 2026-11-19, the `bls12381-multi` spec's Q2).
+
+#### <a id="bls12381-multi"></a>1.6.2 `bls12381-multi` (0x0121): weighted t-of-n BLS12-381 multi-signature — BUILT (EVM, clients, node, scaas-sdk); PLANNED (Soroban and the other families)
+
+A group of n member keys with a signer bitmap: one aggregate signature `σ` over one message, checked against the sum of the
+signers' keys with one pairing check, and a weighted threshold. Design and reasons:
+[spec 2026-11-19-bls12381-multi](../superpowers/specs/2026-11-19-bls12381-multi.md) (revision 4, rulings in its §0.1). Every
+cryptographic construction here is **UNAUDITED**; the batched PoP ([CTR-UA-49](#CTR-UA-49)) is an external-audit item.
+Built: EVM `6402678a1` `f5f30b48c` `e961a27d5` `383d1e2f8` `f1e88035b` `70dcaadd8` `00cf757bf`, ua-rs `fa436d780`
+`9eacde6e6`, clientkeys `2dbb1fb1b`, vectors `b634da99f` `b8d659a31`, node `d02f07d32`, ua-py / ua-go / ua-cs / ua-dart
+`bb552d058` `5758b4476` `8869253ef` `103a63ae3`, bindings `cfb30f973`, scaas-sdk `6e16ea8d3` `ed0b3ab37`.
+
+<a id="CTR-UA-47"></a>**CTR-UA-47** — **Key data, id and the stored form.** `d = apk (256) ‖ u16 t ‖ u16 n ‖ n × (pk_i (256) ‖
+u16 w_i)`, EIP-2537 G2 encodings, `pk_i` strictly increasing (weights travel with their keys), `apk = Σ pk_i`, `2 ≤ n ≤ 64`,
+`w_i ≥ 1`, `1 ≤ t ≤ Σ w_i` (summed in at least 32 bits), no other weight bound (as `msig`); every `pk_i` checked on G2 and not
+O, `apk` not O. The id is `keccak256(TAG(0x0121) ‖ d)`, tag `scaas.ua.bls12381-multi.v1`; a structure: **no keyHash** (as
+`msig`, [CTR-UA-11](#CTR-UA-11)). A stored kind: `keyPtr` holds `p = ua (32) ‖ s`, `s` = `d` with 48-byte limbs
+(`196 + 194·n` bytes), so a verify reads `ua` and the keys from state, never from calldata; `vkLength(0x0121)` returns 228
+(the fixed part of `p`) as the stored-kind flag; `registrationOf` and `blsMultiKeyOf` return `d` byte for byte; `keyOf`
+returns `apk` (256 B). Off-chain verifiers take `d`; `p` is EVM storage only. Builders sort by key and return the caller's
+index map, weights default 1. Threshold BLS (Shamir or DKG shares) is not this kind: it registers as a plain `0x0106` key and is
+shown attestation-only, a group the chain does not see (§1.6.1).
+
+<a id="CTR-UA-48"></a>**CTR-UA-48** — **Messages and DSTs.** Members sign `m = keccak256(ua ‖ ua_msg)` (`memberDigest`) hashed to
+G1 under `DST_MULTI_SIG = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_MULTI_SIG_"`; the registration PoP part of member i is
+over `m_i = keccak256(popMsg ‖ pk_i)` under `DST_MULTI_POP = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_MULTI_POP_"` (53 bytes
+each), the only use of that DST. Neither is `0x0106`'s: a partial is never a `0x0106` signature, nor the reverse
+([CTR-UA-12](#CTR-UA-12)'s exception).
+
+<a id="CTR-UA-49"></a>**CTR-UA-49** — **Rogue-key defence: every member's proof of possession, on chain, at registration.** The
+registration `pop` is `π = Σ π_i`, each `π_i = sk_i·H(m_i)` over distinct per-member messages bound to the group's registration
+digest (`popMsg`); the verifier checks it with n + 1 pairings (`verifyPop(d)`); all n members take part (one withholding member
+blocks the registration), `π ≠ O`. The argument holds in the algebraic group model and the random-oracle model under its two
+conditions (spec §4); no published proof of the batched form is known: **external audit item**. A member signer derives `popMsg`
+and its own `pk_i` from `d` (`member_pop`), never a coordinator's message; `aggregate_pop` checks each `π_i` and names a bad one.
+
+<a id="CTR-UA-50"></a>**CTR-UA-50** — **Signature and verification; the minimal form on stored paths.** The ABI object is `σ (128,
+G1) ‖ signers (32, uint256 big-endian bitmap)`, exactly 160 bytes, in `UASig.signature` with `keyData` and `members` empty;
+node JSON, scaas-sdk and client APIs carry it by name, `signature` (σ) and `signers` (strictly increasing indices), never as one
+hex ([job-api](../node/job-api.md)). The check: every bit below n, `S ≠ ∅`, `W(S) = Σ_{i∈S} w_i ≥ t`; `apk(S)` is the stored
+`apk` when all n sign, the sum of the signers when `2k ≤ n + 1`, else `apk` minus the non-signers (Fp negation per component,
+`neg(0) = 0`), not O; one PAIRING_CHECK of k = 2, σ on G1 and not O. The **verify path** (`requireAuthorized`, a hot transaction
+authorisation) accepts surplus weight (owner ruling Q7); every path that **stores or hash-commits** a signature (`pop` v2 of an
+`msig` holding the group, `kem`, `pqz-key`, `requirePortable`, `requirePortableApp`) takes the **minimal form** (also
+`W(S) − min_{i∈S} w_i < t`: every signer necessary; [CTR-UA-07](#CTR-UA-07)'s slot rule inside the kind) through the verifier's
+`verifyMinimal` (`IUAMinimalVerifier`). Dispatch: registration `pop` v2 → `verifyPop(d)`; hot path → `verify(p)`; every stored
+path → `verifyMinimal(p)`, an `msig` member of kind `0x0121` by a direct call from `UARegistryCoreLib._memberOk` with the verifier
+from a fourth word `UARegistry._lib` appends (`_cfg(0x0121)`); no new registry selector. A stored path whose generation has no
+`0x0121` verifier is `false`, never handed to the predecessor (consequence kept as stated: a gen-2 `msig` whose `0x0121` member
+is a gen-1 record cannot accept that slot until the planned verify-only / N-generations round, where writes go to the member's
+holder). Each entry checks the length of its own form (`p`: `228 + 194·n`; `d`: `260 + 258·n`); `UASafeVerifier`'s self-call
+takes a mode (`Verify`, `Minimal`, `Pop`). Failures: `UAKeyData(0x0121)`, `UAPoP`, `UAUnauthorized(ua)`, `UAVerifyGas`; no new
+error.
+
+<a id="CTR-UA-51"></a>**CTR-UA-51** — **Registration, nesting, portability.** Typed `registerBlsMulti(BlsMultiKey key, UAAttrs
+attrs, bytes pop, bytes pqzPop)` ([CTR-UA-36](#CTR-UA-36)), the packed `register` the same id and record; no KEM key and no PQZ
+key (`UAKemHolder` / `UAPqzHolder` on a non-empty one); the record `UAPortableRecord{ua, 0x0121, 0, UAKemRecord{ua, 0, 0, 0}}`
+([CTR-UA-07](#CTR-UA-07)); portable copies by the same call; the kind's own list ([CTR-UA-29](#CTR-UA-29)). In SIGNING and MEMBER:
+an `msig` may hold a group (it adds no level, [CTR-UA-38](#CTR-UA-38)); a group holds only keys, never a UA. App purposes as every
+kind ([CTR-UA-46](#CTR-UA-46)). No membership change: new members, weights or threshold are a new UA.
+
+<a id="CTR-UA-52"></a>**CTR-UA-52** — **Gas and the member cap (64).** Two columns, regular and EIP-8037 state gas (§1.15). Measured
+(`UAGas.t.sol`, `--isolate`): `registerBlsMulti` at n = 2, 16, 32, 64 regular 476,726 / 2,139,607 / 4,066,303 / 8,003,477 and
+state 2,096,100 / 6,251,580 / 11,000,700 / 20,498,940; state = 1,530 × (new code bytes + 120 × new accounts) + 97,920 × new
+slots (183,600 a new SSTORE2 account). The cap gate (owner ruling Q4): regular gas at n = 64 within 75 % of 2^24 (8,003,477, 63.6 %):
+the cap stays 64, one constant on every chain, never lowered per chain; inclusion needs regular + state within a block's limit,
+which no figure assumes. Verifier caps: `CHECK_GAS` 300,000 (worst measured 252,564), `POP_GAS` 6,700,000 (worst 5,578,617, n =
+64), `CAP_BLS12381_MULTI` 330,000 (least `verifyCap` at n = 64, k = 33: 310,778 hot / 310,823 stored); `MSIG_MEMBER_GAS`
+unchanged (an `msig` of 16 groups of 64 registers and authorises at `verifyBudget`). The SDK quotes from the gas table's
+`item: "members"` / `per_item` rows (`gas + per_item × n`; scaas-sdk spec §13.3); the node's sponsorship books and caps regular
+plus state gas ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)).
+
+<a id="CTR-UA-53"></a>**CTR-UA-53** — **Byte formats everywhere at once.** Contracts, ua-rs, clientkeys, every `ua-*` reader, the
+vectors (`kinds.json` key-data rows from clientkeys; `groups.json` `blsMulti`, `blsMultiRegistrations` and `surplusForm` from
+ua-rs; `portable.json` registration rows), the node's typed rows and scaas-sdk change together; each language reads the same
+rows.
+
+<a id="CTR-UA-54"></a>**CTR-UA-54** — **Families: every family must support the kind** ([ARCH-POS-18](../decisions.md#ARCH-POS-18)):
+host functions or precompiles where present, else a software BLS12-381 with the same checks and the same cap. EVM: the deploy
+probe (EIP-2537 incl. G2ADD) chooses the path; `0x0121` is **disabled on Hedera** (owner-confirmed 2026-11-19); on any other EVM
+chain without EIP-2537 the deploy refuses `0x0121`, names it in the deploy book (`ua_kind_0x0121`), and the case goes to the owner.
+No software path for `0x0121` in this round. Soroban: the registry refuses `0x0121` (fail closed) until the `ua-soroban` round.
+Other families: [NET-ALL-84](../networks/README.md#NET-ALL-84) rows 3 and 11, each round. No `bls-bn254-multi` kind.
+
+<a id="CTR-UA-55"></a>**CTR-UA-55** — **Member keys.** `0x0106`-format keys (G2 `sk·g2`), derived on the `0x0121` path
+(CTR-UA-10 layer 1; EIP-2333, index 0: `ua_key(0x0121, account, 0)`); participant keys are not claimed (no keyHash). A member key
+may also be a registered `0x0106` UA's (the chain cannot tell); the DSTs keep the two uses apart.
+
+<a id="CTR-UA-56"></a>**CTR-UA-56** — **Partial signatures and aggregation.** The aggregator (ua-rs, clientkeys, scaas-sdk, anyone)
+checks each partial `σ_i` against `pk_i` on `m` under `DST_MULTI_SIG` before summing, refuses a duplicate index or one at or
+above n, names and drops an invalid partial, refuses an aggregate below t of weight, and emits a **minimal** set unless the
+caller asks for surplus (`aggregate(…, surplus)`); a member signer derives `ua` from `d` (`member_sign`). The chain's check is the
+only authority; the aggregator's checks are availability.
 
 ### 1.7 Function → accepted kinds
 
@@ -1772,7 +1872,7 @@ interface IUARegistry is IERC5267 {
     function kindOf(bytes32 ua) external view returns (uint16);              // 0 = not registered (native ids too)
     function isRegistered(bytes32 ua) external view returns (bool);
     function keyOwner(bytes32 keyHash) external view returns (bytes32);
-    function keyOf(bytes32 ua) external view returns (bytes memory);         // stored key (MuSig2 Q, FROST Y, Zether Y, PQ pk), else empty
+    function keyOf(bytes32 ua) external view returns (bytes memory);         // stored key (MuSig2 Q, FROST Y, Zether Y, PQ pk; bls12381-multi apk), else empty
     /// ML-DSA without a precompile (P6c): part `part` of the expanded key the registry derives from pk, one tx each
     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua);
     function expandedKeyOf(bytes32 ua) external view returns (address[3] memory);   // stored part pointers (0 = not yet; 3 since 3zh)
@@ -1996,6 +2096,7 @@ native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by
 | `schnorr-bn254` / `musig2-bn254` / `frost-bn254` | `R ‖ z` (96) | `e = hashToScalar(keccak256("scaas.ua.schnorr.v1" ‖ R ‖ Y ‖ ua_msg))`, `[z]G − R − [e]Y == O`, `z < r`, `R ≠ O`, `e ≠ 0` (for `frost-bn254` this is its ciphersuite's RFC 9591 verify) |
 | `schnorr-bls12381` | `R ‖ z` (160) | as above on BLS12-381 G1 |
 | `bls12381-minsig` | G1 sig (128) | `HashToCurve.hashToG1(ua_msg, DST)` with `DST_SIG = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"`, PoP uses `…_POP_`; sig in subgroup, ≠ O |
+| `bls12381-multi` | `σ (128) ‖ signers (32)` (160; named `signature` / `signers` off chain) | [CTR-UA-50](#CTR-UA-50): `σ` against `apk(S)` on `memberDigest(ua, ua_msg)` under `DST_MULTI_SIG`, `W(S) ≥ t` (`verify`), every signer necessary on stored paths (`verifyMinimal`); `p = ua ‖ s` read from `keyPtr`; σ in subgroup, ≠ O |
 | `bls-bn254-minsig` | G1 sig (64) | `mapToG1("SCAAS-UA-BLS-BN254-SIG-V1" ‖ ua_msg)` (POP label for PoP); pairing `0x08` |
 | `msig` | `auth.members`, `MemberSig{uint16 index; InnerSig[] members; bytes sig}` with strictly increasing `index`; the structure is read from the record ([CTR-UA-36](#CTR-UA-36)); a token's `bytes auth` until Part C: `abi.encode(keyData, sig)` with `sig` = `abi.encode(MemberSig[] sigs)` | for each: member `kind,id` from the structure; every `MemberSig.keyData` empty (else `UAUnauthorized`; [CTR-UA-33](#CTR-UA-33)); native ⇒ ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; registered (derived) ⇒ the key from the member's own record: `vk` at its `keyPtr` (stored kinds), else the key data in its registration blob (classical kinds; every member is registered, step 4, and records are immutable); a member of a kind gen 2 does not enable goes to gen 1 with the empty key data (gen 1 reads its record); verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound); an `auth` or `MemberSig[]` that does not ABI-decode reverts without data (fails closed) |
 | `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | ML-DSA: an EIP-8355 precompile if probed, else Solidity on the cached expanded key (`verifyCached`, parts by EXTCODECOPY; P6c; never the uncached FIPS-key verify: an incomplete cache is `UAKeyNotCached`, [CTR-UA-23](#CTR-UA-23)); FN-DSA, SLH-DSA (on SHA-256 `0x02`): Solidity; `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context, Falcon `ua_msg` ([CTR-UA-23](#CTR-UA-23); verifiers BUILT, P6a; registry BUILT, P6c) |
@@ -2387,6 +2488,7 @@ live in the separate `ComplianceRegistry`. This interface was replaced by `IUARe
 | FROST t-of-n | legacy scheme 2 (bn254); UA kinds `frost-secp256k1` `0x0111` (RFC 9591) and `frost-bn254` `0x0113` | one signature verification on chain (O(1)); UA registration checks every DKG proof of knowledge and `Y = Σ C_i0` on chain; share distribution and party distinctness are attestation-only | bn254 verification **BUILT**; UA kinds, signers and DKG **SPECIFIED** |
 | MuSig2 n-of-n | legacy scheme 3 (bn254); UA kinds `musig2-secp256k1` `0x0110` (BIP-327) and `musig2-bn254` `0x0112` | UA registration recomputes KeyAgg on chain from the member list plus one aggregate PoP; nonce reuse leaks the key | bn254 verification **BUILT**; UA kinds and signers **SPECIFIED** |
 | BLS aggregation (BN254 where the G2 probe passes, BLS12-381 via EIP-2537) | legacy schemes 4/5; UA `bls12381-minsig` `0x0106`, `bls-bn254-minsig` `0x0107`; `Bls12381.verifyMinSig`, RFC 9380 hash-to-curve (KAT tested) | one pairing check; never on the same curve as a Zether key | **BUILT** |
+| BLS weighted t-of-n multi-signature (BLS12-381, EIP-2537) | UA kind `bls12381-multi` `0x0121` ([§1.6.2](#bls12381-multi)) | one pairing check against `apk(S)` (stored `apk`, add or subtract), every member's PoP at registration; the minimal form on stored paths | **BUILT** on EVM (UNAUDITED; the batched PoP an external-audit item); Soroban PLANNED (`ua-soroban`) |
 | Threshold ECDSA (MPC providers) | not a kind: the output is an ordinary ECDSA signature ⇒ native EOA ([CTR-UA-08](#CTR-UA-08)) | — | — |
 | Smart-account policies (Safe, `SmartKeyAccount`) | legacy scheme 7; UA: native contract id (never registered) | arbitrary policy via ERC-1271 | **BUILT** |
 
@@ -2457,6 +2559,7 @@ member handed to gen 1 — it includes reading the member's key bytes from its r
 | `schnorr-bls12381` | 128 + 160 | ~41 k (measured, bounded self-call) | ~6 k (measured) | 70 k |
 | `bls-bn254-minsig` | 128 + 64 | ~125–146 k (measured; message-dependent try-and-increment map iterations, `CHECK_GAS` 330 k) | ~6 k (measured) | 345 k |
 | `bls12381-minsig` | 256 + 128 | ~159 k (measured, bounded self-call) | ~6 k (measured) | 200 k |
+| `bls12381-multi` | 160 (key data stored: `228 + 194·n` B) | inside the check, `verify` / `verifyMinimal` (measured, `UAGas.t.sol`): (n, k) (2, 2) 164,205 / 164,291; (16, 8) 183,855 / 183,941; (64, 1) 185,318; (64, 32) 251,689; (64, 33) 252,478 / 252,564 (subtract); (64, 64) 221,848 | ~6 k + EXTCODECOPY of `p` | 330 k (`CHECK_GAS` 300 k) |
 | `msig` k-of-n | 4 + 36n + Σ member sig (no member key data, CTR-UA-33) | Σ member verifies (≤ `c` members, stop at threshold) + ~2 k; each member's key read from its record (EXTCODECOPY) | ~5 k | Σ of the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` ≤ `verifyBudget` |
 | `ed25519` | 32 + 64 | ~170 k (measured: 168 k valid, 171 k worst; SHA-512 30 k per block; early reject 2.7 k) | ~6 k (measured) | 210 k |
 | `mldsa44` | 2 420 sig | EIP-8355-class precompile / 11.4 M Solidity on the FIPS 204 key (never a registry path since 2026-11-15); worst accepting input on the cache 4,187,757 least working; on the cached expanded key `verifyCached` 4.11 M (measured P6c; `requireAuthorized` of the vector row 4,117,867) | ~7 k (one part pointer, no `pk` read) | 4,250,000 (P6c); ≈ 20 k with a precompile |
@@ -2604,7 +2707,10 @@ native kind, `hedera-native` in a non-Hedera profile, a top-96-nonzero native) a
 
 `groups.json` — MuSig2: BIP-327 KeyAgg/sign vectors, KeyAgg hints, a registered group and its PoP; the bn254 port. FROST:
 RFC 9591 Appendix E.5 FROST(secp256k1, SHA-256) vectors, DKG transcripts with PoKs from the ZF `frost-secp256k1` crate, a
-bad PoK, `Y ≠ Σ C_i0`; the FROST(bn254, keccak256) ciphersuite's vectors.
+bad PoK, `Y ≠ Σ C_i0`; the FROST(bn254, keccak256) ciphersuite's vectors. `bls12381-multi` ([CTR-UA-53](#CTR-UA-53)): `groups.json` `blsMulti` (PoP and
+signature rows, the rogue-key, split-key and cross-group rows, verify vs minimal, the wallet member parts), `blsMultiRegistrations`
+and `surplusForm`, generated by ua-rs; `kinds.json` key-data rows from clientkeys; `portable.json` registration rows; every
+language reads the same rows.
 
 `metatx3.json` (BUILT, UA-4) — `UAMetaTransaction` and `UAMetaTransfer` typed data (one vector set per struct; domain `salt` = `chain_uid`), digests and auth blobs per kind (the v3 KAT,
 like `MetaTxKat`). UA-5a (BUILT; documented in `noteUA5a`, the earlier keys byte-identical): `burn` and `unwrapToUA` —

@@ -55,7 +55,7 @@ TestCase {
                          "registerKey", "releaseKey", "uaKey", "nativeKey", "fromMnemonic", "openVault", "reveal", "take",
                          "zetherKey", "pqzKey", "call", "openBalanceCache"])
             compare(UaWallet[n], undefined, n)
-        for (const n of ["keyData", "ua", "address", "network", "kind", "isUa", "signUa", "signMember", "signTyped",
+        for (const n of ["keyData", "ua", "address", "network", "kind", "isUa", "signUa", "signMember", "signBlsMulti", "signBlsMultiPop", "signTyped",
                          "signTransaction", "signKeyProof", "uaSig", "seal"])
             compare(typeof UaWallet[n], "function", n)
     }
@@ -135,6 +135,32 @@ TestCase {
         compare(UaWallet.signKeyProof(evm, "0x" + "63".repeat(9)).length, 2 + 130)
         compare(UaWallet.signUa(evm, "0x" + "00".repeat(32), "0x" + "00".repeat(32)), "")
         compare(UaWallet.lastError, "UAArgument", "sign_ua with a native key")
+    }
+
+    // bls-multi T15: a 0x0121 member key's partial and PoP part (groups.json blsMulti.wallet) byte for byte, and the refusals
+    function test_bls_multi_parts() {
+        const w = vectors.load("groups.json").blsMulti.wallet
+        compare(w.members.length, 3)
+        for (const r of w.members) {
+            const id = fixture.key(w.mnemonic, w.kind, r.account, w.index)
+            compare(UaWallet.keyData(id), r.key, "account " + r.account)
+            compare(UaWallet.signBlsMulti(id, w.keyData, w.uaMsg), r.partial, "account " + r.account)
+            compare(UaWallet.signBlsMultiPop(id, w.keyData), r.popPart, "account " + r.account)
+            compare(UaWallet.lastError, "")
+        }
+        const member = fixture.key(w.mnemonic, 0x0121, 0, 0)
+        for (const [label, id, d] of [["a key the group does not list", fixture.key(w.mnemonic, 0x0121, 3, 0), w.keyData],
+                                      ["a 0x0106 key", fixture.key(w.mnemonic, 0x0106, 0, 0), w.keyData],
+                                      ["a native key", fixture.native(w.mnemonic, "evm", 0), w.keyData],
+                                      ["key data one byte short", member, w.keyData.slice(0, -2)],
+                                      ["no key data", member, "0x"]]) {
+            compare(UaWallet.signBlsMulti(id, d, w.uaMsg), "", label)
+            compare(UaWallet.lastError, "UAArgument", label)
+            compare(UaWallet.signBlsMultiPop(id, d), "", label)
+            compare(UaWallet.lastError, "UAArgument", label)
+        }
+        compare(UaWallet.signBlsMulti(member, w.keyData, w.uaMsg.slice(0, -2)), "", "uaMsg of 31 bytes")
+        compare(UaWallet.lastError, "UAArgument")
     }
 
     function test_uasig_msig_by_handle_ids() {

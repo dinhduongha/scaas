@@ -1116,6 +1116,41 @@ void main() {
     expect(hx(keccak256(data: Uint8List(0))), '0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470');
   });
 
+  // bls-multi T15 (0x0121): groups.json blsMulti groups and its wallet group, kinds.json's builder row (key data accepted, id,
+  // popMsg), portable.json blsMultiRegistrations (digests, popMsg, registerBlsMulti's named arguments)
+  test('bls_multi', () {
+    final g = load('groups.json')['blsMulti'] as Map;
+    final all = [...g['groups'] as List, g['wallet'], load('kinds.json')['blsMultiBuilder']];
+    expect(all.length, 13);
+    for (final r in all) {
+      final d = bytes(r['keyData']);
+      validateKeyData(kind: 0x0121, keyData: d, hederaNative: false);
+      expect(hx(uaOf(kind: 0x0121, keyData: d)), r['ua']);
+      if (r['popMessage'] != null) {
+        expect(
+          hx(holderPopMessage(kind: 0x0121, ua: b32(r['ua']), keyData: d).message),
+          r['popMessage'],
+          reason: r['ua'],
+        );
+      }
+    }
+    final bm = rows(pv, 'blsMultiRegistrations');
+    expect(bm.length, 2);
+    for (final r in bm) {
+      final name = r['name'] as String;
+      expect(hx(uaOf(kind: 0x0121, keyData: bytes(r['keyData']))), r['ua'], reason: name);
+      final h = register(r);
+      expect(
+        [hx(h.portableRecordDigest), hx(h.registrationDigest), hx(h.message)],
+        [r['portableRecordDigest'], r['registrationDigest'], r['popMessage']],
+        reason: name,
+      );
+      final a = regArgs({...regInput(r), 'kemCommit': false});
+      expect(a['args'], r['args'], reason: name);
+      expect(a['args']['entry'], 'registerBlsMulti', reason: name);
+    }
+  });
+
   test('registration args', () {
     var commits = 0;
     for (final r in regs) {

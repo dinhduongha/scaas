@@ -25,7 +25,7 @@ fn signs(w: &Wallet) -> bool {
     let (p, d) = (purpose_tag("metatx").unwrap(), [7u8; 32]);
     let m = ua_message(0x0108, &p, &d).unwrap();
     key.sign_ua(&p, &d)
-        .is_ok_and(|s| scaas_ua::verify::verify(0x0108, &key.key_data(), &m, &s, false))
+        .is_ok_and(|s| scaas_ua::verify::verify(0x0108, &key.key_data(), &m, &s, false, false))
 }
 
 #[test]

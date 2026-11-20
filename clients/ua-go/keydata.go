@@ -267,6 +267,109 @@ func msig(d []byte, hederaNative bool) error {
 	return need(threshold >= 1 && threshold <= total, "threshold")
 }
 
+// blsMulti: bls12381-multi (spec 2026-11-19-bls12381-multi §2), in its order: length, n (2..64), weights (>= 1, summed
+// unbounded), t (1 <= t <= the sum); every member key a valid G2 key, strictly increasing; apk byte-equal to their sum and not
+// the identity.
+func blsMulti(d []byte) error {
+	n, err := u16At(d, 258)
+	if err != nil {
+		return err
+	}
+	if n < 2 || n > 64 {
+		return keyDataErr("n")
+	}
+	if len(d) != 260+258*n {
+		return keyDataErr("length")
+	}
+	total := 0
+	for i := 0; i < n; i++ {
+		w := int(d[516+258*i])<<8 | int(d[517+258*i])
+		if w < 1 {
+			return keyDataErr("weight")
+		}
+		total += w
+	}
+	t := int(d[256])<<8 | int(d[257])
+	if t < 1 || t > total {
+		return keyDataErr("threshold")
+	}
+	var acc bls12381.G2Jac
+	for i := 0; i < n; i++ {
+		o := 260 + 258*i
+		k := d[o : o+256]
+		if err := blsG2(k); err != nil {
+			return err
+		}
+		if i > 0 && bytes.Compare(d[o-258:o-2], k) >= 0 {
+			return keyDataErr("order")
+		}
+		var p bls12381.G2Affine
+		for j, e := range []*blsfp.Element{&p.X.A0, &p.X.A1, &p.Y.A0, &p.Y.A1} {
+			_ = e.SetBytesCanonical(k[64*j+16 : 64*j+64])
+		}
+		acc.AddMixed(&p)
+	}
+	var sum bls12381.G2Affine
+	sum.FromJacobian(&acc)
+	if sum.IsInfinity() {
+		return keyDataErr("identity")
+	}
+	return need(bytes.Equal(d[:256], blsG2Bytes(&sum)), "apk")
+}
+
+// blsG2Bytes is a G2 point in EIP-2537 form: x.c0, x.c1, y.c0, y.c1, each a 64-byte limb with 16 zero bytes in front.
+func blsG2Bytes(p *bls12381.G2Affine) []byte {
+	out := make([]byte, 256)
+	for j, e := range []*blsfp.Element{&p.X.A0, &p.X.A1, &p.Y.A0, &p.Y.A1} {
+		b := e.Bytes()
+		copy(out[64*j+16:64*j+64], b[:])
+	}
+	return out
+}
+
+// BlsMultiCompress is d -> s (spec 2026-11-19-bls12381-multi §2): each 64-byte limb without its 16 zero bytes.
+func BlsMultiCompress(d []byte) ([]byte, error) {
+	n, err := u16At(d, 258)
+	if err != nil || len(d) != 260+258*n {
+		return nil, keyDataErr("length")
+	}
+	out := make([]byte, 0, 196+194*n)
+	for i := 0; i <= n; i++ {
+		o, tail := 0, 4
+		if i > 0 {
+			o, tail = 260+258*(i-1), 2
+		}
+		for j := 0; j < 4; j++ {
+			if !isZero(d[o+64*j : o+64*j+16]) {
+				return nil, keyDataErr("padding")
+			}
+			out = append(out, d[o+64*j+16:o+64*j+64]...)
+		}
+		out = append(out, d[o+256:o+256+tail]...)
+	}
+	return out, nil
+}
+
+// BlsMultiExpand is s -> d: a 16-byte zero prefix per 48-byte limb.
+func BlsMultiExpand(s []byte) ([]byte, error) {
+	n, err := u16At(s, 194)
+	if err != nil || len(s) != 196+194*n {
+		return nil, keyDataErr("length")
+	}
+	out := make([]byte, 0, 260+258*n)
+	for i := 0; i <= n; i++ {
+		o, tail := 0, 4
+		if i > 0 {
+			o, tail = 196+194*(i-1), 2
+		}
+		for j := 0; j < 4; j++ {
+			out = append(append(out, make([]byte, 16)...), s[o+48*j:o+48*j+48]...)
+		}
+		out = append(out, s[o+192:o+192+tail]...)
+	}
+	return out, nil
+}
+
 // fndsa: head ‖ n × 14-bit h_i (big-endian bit packing), each < 12289: 0x09, n = 512 (fndsa512); 0x0A, n = 1,024 (fndsa1024).
 func fndsa(d []byte, head byte, n int) error {
 	if d[0] != head {
@@ -329,6 +432,8 @@ func ValidateKeyData(kind uint16, d []byte, hederaNative bool) error {
 		return frost(d, bnG1, 64, bnR)
 	case 0x0120:
 		return msig(d, hederaNative)
+	case 0x0121:
+		return blsMulti(d)
 	case 0x0132:
 		return fndsa(d, 0x09, 512)
 	case 0x0135:

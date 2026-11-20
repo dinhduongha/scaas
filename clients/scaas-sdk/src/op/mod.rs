@@ -4,6 +4,7 @@
 //! the chain's time, builds the typed data with `scaas-ua`, and keeps an opaque [`Prepared`] in the SDK's table. `submit` signs
 //! exactly that value under its `scaas-ua` check, writes the row (state `signed`) to `sdk.state`, and returns the operation's id;
 //! the send runs on as a task and reports as `Event::OpState`. An operation ends only on a chain fact. UNAUDITED.
+pub(crate) mod bls_multi;
 mod follow;
 pub(crate) mod gas;
 mod prepared;
@@ -14,6 +15,7 @@ pub(crate) mod submit;
 mod tests;
 
 pub use crate::events::{InFlight, OpState};
+pub use bls_multi::BlsMultiPart;
 pub use gas::{GasFrom, GasSources};
 pub(crate) use prepared::{domain_name, field, Draft, ExpectFn};
 pub use prepared::{Prepared, ReviewField, Source};
@@ -48,6 +50,15 @@ pub enum KeyRef {
         seed: String,
         network: String,
         index: u32,
+    },
+    /// a `bls12381-multi` (`0x0121`) group (plan Task 17): the seed's member key `ua_key(0x0121, account, index)` (EIP-2333:
+    /// index 0) and the group's key data `d` (`0x` hex, spec 2026-11-19-bls12381-multi §2); the signer's id is the group's
+    /// UA, its signature the members' aggregate ([`Op::submit_bls_multi`])
+    BlsMulti {
+        seed: String,
+        account: u32,
+        index: u32,
+        key_data: String,
     },
 }
 
@@ -111,7 +122,21 @@ pub(crate) fn key(sdk: &Sdk, r: &KeyRef) -> Result<Key, SdkError> {
             let k = s.wallet.imported_key(n, *index)?;
             Key::Native(s, k)
         }
+        KeyRef::BlsMulti {
+            seed,
+            account,
+            index,
+            ..
+        } => {
+            let s = sdk.open_seed(seed)?;
+            let k = s.wallet.ua_key(bls_multi_kind(), *account, *index)?;
+            Key::Ua(s, k)
+        }
     })
+}
+
+fn bls_multi_kind() -> u16 {
+    scaas_ua::bls_multi::KIND
 }
 
 /// `r`'s key after opening its vault when the session opens vaults on first use (an imported key under passkey unlock).

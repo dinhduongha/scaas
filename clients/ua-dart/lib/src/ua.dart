@@ -671,6 +671,18 @@ Map<String, Object?> msigStructure(Object? keyData) {
 Map<String, Object?>? typedKey(int kind, Object? keyData) {
   final d = keyBytes(keyData);
   String at(int o, int n) => _hexOf(d.sublist(o, o + n));
+  if (kind == 0x0121) {
+    // BlsMultiKey{aggKey, threshold, members: BlsMultiMember{key, weight}[]} (spec 2026-11-19-bls12381-multi §2)
+    final n = _be16(d, 258);
+    _lengthIs(d.length == 260 + 258 * n);
+    return {
+      'aggKey': at(0, 256),
+      'threshold': _be16(d, 256),
+      'members': [
+        for (var i = 0; i < n; i++) {'key': at(260 + 258 * i, 256), 'weight': _be16(d, 516 + 258 * i)},
+      ],
+    };
+  }
   if (kind == 0x0100) {
     _lengthIs(d.length == 96);
     return {'x': at(0, 32), 'y': at(32, 32), 'rpIdHash': at(64, 32)};
@@ -824,6 +836,11 @@ int registryCalldataLength(String entry, Map<String, Object?> a) {
   return switch (entry) {
     'register' => 4 + 160 + _tail(a['keyData']) + rest,
     'registerWebAuthn' => 4 + 192 + rest,
+    // heads 128; key 96 + aggKey + members (offset, key, weight, key bytes)
+    'registerBlsMulti' => (k!['members'] as List).fold(
+      4 + 128 + 96 + _tail(k['aggKey']) + 32 + rest,
+      (n, m) => n + 32 + 64 + _tail(m['key']),
+    ),
     'registerMuSig2' => 4 + 160 + 64 + _tail(k!['aggKey']) + _bytesArr(k['memberKeys']) + rest,
     'registerFrost' => (k!['members'] as List).fold(
       4 + 160 + 96 + _tail(k['groupKey']) + 32 + rest,
@@ -869,6 +886,7 @@ int registryCalldataLength(String entry, Map<String, Object?> a) {
     ...switch (kind) {
       0x0120 => {'entry': 'registerMsig', 'structure': msigStructure(d)},
       0x0100 => {'entry': 'registerWebAuthn', 'key': key},
+      0x0121 => {'entry': 'registerBlsMulti', 'key': key},
       0x0110 || 0x0112 => {'entry': 'registerMuSig2', 'kind': kind, 'key': key},
       0x0111 || 0x0113 => {'entry': 'registerFrost', 'kind': kind, 'key': key},
       _ => {'entry': 'register', 'kind': kind, 'keyData': _hexOf(d)},

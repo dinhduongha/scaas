@@ -20,6 +20,7 @@ import { seedFromWords } from "../src/seed.js";
 import { pqKeygen } from "../src/pq.js";
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from "../src/bytes.js";
 import * as ua from "../src/ua.js";
+import { buildKeyData, compressBlsMulti, storedBlsMulti } from "../src/bls-multi.js";
 
 const OUT = process.argv[2] ?? fileURLToPath(new URL("../../../smartcontracts/vectors/ua/", import.meta.url));
 const label = (s) => keccak_256(utf8ToBytes(`scaas ua-1 vector ${s}`));
@@ -614,7 +615,7 @@ const canonicalIds = [
 const digest = label("digest");
 // per kind: the portable PoP's purpose (pop v2, UA-8 P1); then every purpose at v1 under webauthn-p256
 const messages = [
-  ...[...key.keys(), 0x0120, 0x0142].map((kind) => [kind, "pop", 2]),
+  ...[...key.keys(), 0x0120, 0x0121, 0x0142].map((kind) => [kind, "pop", 2]),
   ...ua.PURPOSES.map((p) => [0x0100, p, 1]),
 ].map(([kind, purpose, version]) => ({
   kind,
@@ -764,6 +765,113 @@ bad(0x0135, put(fn1024, 0, Uint8Array.of(0x09)), "header 0x09", { why: "header" 
   bad(0x0135, f, "h_1023 = q", { why: "coefficient" });
 }
 bad(0x0136, ml87, "no kind 0x0136", { error: "UAKindUnknown" });
+
+// --- bls12381-multi (0x0121, spec 2026-11-19-bls12381-multi §2): d, s, p = ua ‖ s, keyOf = apk; refusals one change each ---
+const blsMember = (label) => blsG2(`bls12381-multi ${label}`);
+const blsGroup = (label, weights, t) =>
+  buildKeyData(
+    weights.map((weight, i) => ({ key: blsMember(`${label} ${i}`), weight })),
+    t,
+  ).keyData;
+const multiRow = (label, d) => ({
+  ...row(0x0121, d),
+  label,
+  n: (d[258] << 8) | d[259],
+  threshold: (d[256] << 8) | d[257],
+  compressed: hex(compressBlsMulti(d)),
+  stored: hex(storedBlsMulti(d)),
+  keyOf: hex(d.subarray(0, 256)),
+});
+const ones = (n) => Array(n).fill(1);
+for (const [label, w, t] of [
+  ["n2 t1", ones(2), 1],
+  ["n2 t2", ones(2), 2],
+  ["n16 t1", ones(16), 1],
+  ["n16 t16", ones(16), 16],
+  ["n48 t1: d is 12,644 bytes, the length of p at n = 64", ones(48), 1],
+  ["n64 t1: p is 12,644 bytes, the length of d at n = 48", ones(64), 1],
+  ["n64 t64", ones(64), 64],
+  ["weights {3, 1, 1} t3", [3, 1, 1], 3],
+  ["weights {5, 1} t2: a weight above t (R2-Q3)", [5, 1], 2],
+  ["weights {65535, 65535} t65535: the weight sum exceeds 16 bits (Review Focus 1)", [65535, 65535], 65535],
+])
+  valid.push(multiRow(label, blsGroup(label.split(":")[0], w, t)));
+{
+  const d48 = valid.find((r) => r.label?.startsWith("n48"));
+  const p64 = valid.find((r) => r.label?.startsWith("n64 t1"));
+  assert(fromHex(d48.keyData).length === 12644 && fromHex(p64.stored).length === 12644, "the 12,644-byte pair");
+}
+{
+  const base = blsGroup("refusal base", ones(3), 2); // n = 3, t = 2
+  const key = (i) => 260 + 258 * i;
+  const w16 = (b, o, v) => put(b, o, u16(v));
+  const pt = (label) => bls12_381.G2.Point.BASE.multiply(scalar(`bls12381-multi ${label}`, BLS.Fr.ORDER));
+  const raw = (points, t, weights = points.map(() => 1)) => {
+    const sum = points.reduce((a, P) => a.add(P), bls12_381.G2.Point.ZERO);
+    const enc = points.map((P) => (P.is0() ? new Uint8Array(256) : blsG2enc(P)));
+    const order = enc.map((_, i) => i).sort((a, b) => cmp(enc[a], enc[b]));
+    return concatBytes(
+      sum.is0() ? new Uint8Array(256) : blsG2enc(sum),
+      u16(t),
+      u16(points.length),
+      ...order.flatMap((i) => [enc[i], u16(weights[i])]),
+    );
+  };
+  bad(0x0121, new Uint8Array(0), "empty", { why: "length" });
+  bad(0x0121, base.subarray(0, 260), "header alone", { why: "length" });
+  bad(0x0121, base.subarray(0, base.length - 1), "one byte short", { why: "length" });
+  bad(0x0121, concatBytes(base, Uint8Array.of(0)), "one byte long", { why: "length" });
+  bad(0x0121, w16(base.subarray(0, key(1)), 258, 1), "n = 1", { why: "n" });
+  bad(
+    0x0121,
+    raw(
+      Array.from({ length: 65 }, (_, i) => pt(`n65 ${i}`)),
+      1,
+    ),
+    "n = 65",
+    { why: "n" },
+  );
+  bad(0x0121, w16(base, 256, 0), "t = 0", { why: "threshold" });
+  bad(0x0121, w16(base, 256, 4), "t = sum of weights + 1", { why: "threshold" });
+  bad(0x0121, w16(base, key(1) + 256, 0), "weight 0", { why: "weight" });
+  bad(0x0121, swap(base, key(0), key(1), 256), "unsorted pair", { why: "order" });
+  bad(0x0121, raw([pt("dup"), pt("dup"), pt("other")], 1), "duplicate key", { why: "order" });
+  bad(0x0121, put(base, key(1) + 255, Uint8Array.of(base[key(1) + 255] ^ 1)), "a key off the curve", { why: "curve" });
+  {
+    const F = BLS.Fp2;
+    const q = offSubgroup(
+      F,
+      F.create({ c0: 4n, c1: 4n }),
+      bls12_381.G2.Point,
+      (i) => F.create({ c0: i, c1: 1n }),
+      (P) => P,
+    );
+    bad(0x0121, raw([q, pt("sub")], 1), "a key on the curve outside the subgroup", { why: "curve" });
+  }
+  bad(0x0121, raw([bls12_381.G2.Point.ZERO, pt("inf a"), pt("inf b")], 1), "a key at infinity", { why: "identity" });
+  bad(0x0121, put(base, key(2), Uint8Array.of(1)), "a limb's top bytes non-zero", { why: "padding" });
+  bad(0x0121, put(base, key(2) + 16, new Uint8Array(48).fill(0xff)), "a limb >= p", { why: "range" });
+  bad(0x0121, put(base, 0, blsG2("bls12381-multi not the sum")), "apk not the sum", { why: "apk" });
+  bad(0x0121, raw([pt("cancel"), pt("cancel").negate()], 1), "apk the sum but at infinity (two keys cancel)", {
+    why: "identity",
+  });
+}
+// Review Focus 2: members in reverse key order with distinct weights; the builder sorts them, weights travel with their keys,
+// and returns the map caller index -> key-data index; the sorted input gives the same key data
+const blsMultiBuilder = (() => {
+  const keys = [0, 1, 2, 3].map((i) => blsMember(`builder ${i}`));
+  const sorted = keys.map((key, i) => ({ key, weight: i + 1 })).sort((a, b) => cmp(a.key, b.key));
+  const members = [...sorted].reverse();
+  const { keyData, indexMap } = buildKeyData(members, 5);
+  assert(hex(buildKeyData(sorted, 5).keyData) === hex(keyData), "builder order");
+  return {
+    members: members.map((m) => ({ key: hex(m.key), weight: m.weight })),
+    threshold: 5,
+    keyData: hex(keyData),
+    ua: hex(ua.deriveUA(0x0121, keyData)),
+    indexMap,
+  };
+})();
 const memberTag = ua.purposeTag("member");
 const uaAuth = [
   ["A", 1],
@@ -805,6 +913,7 @@ const kinds = ua.KINDS.map((k) => ({
   pqzHolder: ua.isPqzHolder(k.kind),
   member: ua.isMemberKind(k.kind, false),
   memberHedera: ua.isMemberKind(k.kind, true),
+  surplusForm: ua.hasSurplusForm(k.kind),
 }));
 const constants = {
   MSG_TAG: hex(ua.MSG_TAG),
@@ -852,6 +961,7 @@ write("kinds.json", {
   nativeSpace,
   messages,
   canonicalIds,
+  blsMultiBuilder,
 });
 write("structures.json", { note, version: 3, contexts, pop, pqzReg, pqzMsig, uaAuth, member });
 console.log(`kinds.json: ${valid.length} valid, ${invalid.length} invalid; structures.json written to ${OUT}`);

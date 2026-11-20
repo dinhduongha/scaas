@@ -1,0 +1,6 @@
+killed   | M1 constructor: no code check of the registration library | expect test_b_constructorNeedsTheRegLibrary 
+killed   | M2 RegLib: no code check of the core | expect test_c_regNeedsItsCore 
+killed   | M3 register routed to the core library | expect test_b_registrationRunsInTheRegLibrary 
+killed   | M4 step-6 PoP accepted without the core's verdict | expect test_c_regNeedsItsCore 
+killed   | M5 Aux: pqzHolder sent to the core | expect test_c_pqzWritesRunTheCoreHelpers 
+5 mutants, 5 killed, 0 survived, 0 not loaded

@@ -3,7 +3,7 @@
 /// Go and C# libraries (smartcontracts/vectors/ua pins all). Runs on the VM and compiled to JS. UNAUDITED.
 library;
 
-export 'src/keydata.dart' show validateKeyData;
+export 'src/keydata.dart' show validateKeyData, blsMultiCompress, blsMultiExpand;
 export 'src/table.dart'
     show
         UAError,
@@ -18,6 +18,7 @@ export 'src/table.dart'
         isNative,
         isZether,
         isSigning,
+        hasSurplusForm,
         isPqzHolder,
         isMember;
 export 'src/ua.dart';

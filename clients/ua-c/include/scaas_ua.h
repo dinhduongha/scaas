@@ -1349,6 +1349,28 @@ ScaasUaStatus scaas_ua_sign_member(const ScaasUaKey *k,
                                    size_t *sig_len);
 
 /**
+ * A `bls12381-multi` member key's (kind 0x0121) partial for the group key data `key_data` (`d`, its `ua` derived from it) over
+ * its `ua_msg`: 128 bytes (EIP-2537 G1). The aggregator combines the members' partials into the group's named `signature` and
+ * `signers`. A group that does not list this key, another kind or a native key: SCAAS_UA_ERR_ARGUMENT.
+ */
+ScaasUaStatus scaas_ua_sign_bls_multi(const ScaasUaKey *k,
+                                      const uint8_t *key_data,
+                                      size_t key_data_len,
+                                      const uint8_t *ua_msg32,
+                                      uint8_t *sig,
+                                      size_t *sig_len);
+
+/**
+ * A `bls12381-multi` member key's PoP part for the group key data `key_data` (`d`; its `popMsg` derived from it): 128 bytes.
+ * The aggregator combines all n parts into the registration's `pop`. Refusals as `scaas_ua_sign_bls_multi`.
+ */
+ScaasUaStatus scaas_ua_sign_bls_multi_pop(const ScaasUaKey *k,
+                                          const uint8_t *key_data,
+                                          size_t key_data_len,
+                                          uint8_t *sig,
+                                          size_t *sig_len);
+
+/**
  * A native EVM key's EIP-712 signature (r || s || v) of `typed_data_json` (64 KiB, depth 8), only if it is what `expect_json`
  * (clientkeys `expectDigest` input `{check, ...}`, 16 KiB, depth 4) says the user confirmed: else SCAAS_UA_ERR_POLICY_REFUSED.
  */

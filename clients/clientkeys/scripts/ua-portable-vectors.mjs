@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { hex, fromHex as B, keccak_256, utf8ToBytes, abiEncode, concatBytes } from "../src/bytes.js";
 import { encodeInnerSigs, decodeMemberSigs } from "../src/ua-verify.js";
 import * as ua from "../src/ua.js";
+import { buildKeyData, memberKey, memberPop, aggregatePop, storedBlsMulti } from "../src/bls-multi.js";
 import { PURPOSE_PQZ_SCOPED_KEY, pqzScopedKeyRecordDigest } from "../src/pqzopen.js";
 import { encodeType } from "../src/evm.js";
 import { PQ_KINDS } from "../src/pq.js";
@@ -240,6 +241,39 @@ const registrations = [
   ...SETS.map((set) => registration(pqMsig, { set })),
   registration(nativeMsig),
   ...LEVEL5.map((s) => registration(s, { kem: true })),
+];
+
+// --- bls12381-multi (0x0121, spec 2026-11-19 §2, §4, §6): the pop is the sum of the members' parts over m_i = keccak256(popMsg ‖ pk_i)
+// under DST_MULTI_POP (members sign alone); registerBlsMulti(key, attrs, pop, pqzPop) (typed) and register(0x0121, keyData, …)
+// (packed) carry the same key data, id and record; `stored` is the EVM key pointer p = ua ‖ s ---
+const BLS_R = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001n;
+const blsMulti = (name, weights, threshold) => {
+  const sks = weights.map(
+    (_, i) => (BigInt(hex(keccak_256(utf8ToBytes(`scaas portable ${name} ${i}`)))) % (BLS_R - 1n)) + 1n,
+  );
+  const { keyData, indexMap } = buildKeyData(
+    sks.map((sk, i) => ({ key: memberKey(sk), weight: weights[i] })),
+    threshold,
+  );
+  const s = signer(name, 0x0121, keyData, (_m, o) => {
+    if (!o?.pop) throw new Error("a bls12381-multi pop only");
+    return aggregatePop(
+      keyData,
+      sks.map((sk, i) => [indexMap[i], memberPop(sk, keyData)]),
+    );
+  });
+  const reg = registration(s);
+  const { entry, key, ...rest } = reg.args;
+  if (entry !== "registerBlsMulti" || key.members.length !== weights.length) throw new Error(`${name}: ${entry}`);
+  return {
+    ...reg,
+    stored: hex(storedBlsMulti(keyData)),
+    packed: { entry: "register", kind: 0x0121, keyData: hex(keyData), ...rest },
+  };
+};
+const blsMultiRegistrations = [
+  blsMulti("bls12381-multi/n3t2", [1, 1, 1], 2),
+  blsMulti("bls12381-multi/w311t3", [3, 1, 1], 3),
 ];
 
 // --- KEM records: setKemKey versions 1-3 of each KEM holder (version 0 is its register key), signed over uaMessage(kind, kem,
@@ -1470,6 +1504,7 @@ const build = () => ({
   kemPkLength: ua.KEM_PK_LENGTH,
   sets: PQZ_SETS,
   registrations,
+  blsMultiRegistrations,
   kemRecords,
   pqzKeyRecords,
   pqzKeyVersions,

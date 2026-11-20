@@ -555,9 +555,10 @@ contract GovDeployTest is Test {
         // fix2 CTR-GOV-27's Change (`transferAdmin(bytes32,bytes32)`'s stub in the dispatcher): 19,626 -> 19,652 B; fix3
         // CTR-GOV-28 (the five admin stubs take `chainUid_`): 19,652 -> 19,743 B; round 3zb + 3zc (the six supply-cap stubs,
         // the holder entries' chain word, CTR-GOV-28 Change / -30): 19,743 -> 19,988 B; code-format F2 (`bytecode_hash =
-        // "none"`, the metadata hash leaves the code): 19,988 -> 19,947 B
-        h.limitCode(19_946);
-        vm.expectRevert(bytes("WrappedToken runtime 19947 B > chain code limit 19946 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // "none"`, the metadata hash leaves the code): 19,988 -> 19,947 B; bls-multi Task 5 (kind 0x0121 joins SIGNING and
+        // MEMBER, +16 B on every token: the inlined kind-set test): 19,947 -> 19,963 B
+        h.limitCode(19_962);
+        vm.expectRevert(bytes("WrappedToken runtime 19963 B > chain code limit 19962 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 
@@ -727,8 +728,15 @@ contract GovDeployTest is Test {
         h.setWrapped(true);
         h.limitBlockGas(type(uint64).max);
         (OpenFactory f,) = h.deploy(ZUID, false, ska);
-        string[6] memory names =
-            ["UARegistry", "UARegistryCoreLib", "UARegistryAuxLib", "NormalToken", "SCaaSDex", "WrappedToken"];
+        string[7] memory names = [
+            "UARegistry",
+            "UARegistryCoreLib",
+            "UARegistryAuxLib",
+            "UARegistryRegLib",
+            "NormalToken",
+            "SCaaSDex",
+            "WrappedToken"
+        ];
         uint256 most;
         for (uint256 i; i < names.length; ++i) {
             (uint256 regular, uint256 state) = h.measured(names[i]);
@@ -798,7 +806,7 @@ contract GovDeployTest is Test {
         assertFalse(h.publicGate(), "the default is the testnet gate");
         h.setGate(1);
         string memory base = vm.readFile("./size-baseline.json");
-        string[10] memory names = [
+        string[11] memory names = [
             "NormalToken",
             "WrappedToken",
             "NormalZetherToken",
@@ -808,7 +816,8 @@ contract GovDeployTest is Test {
             "SCaaSDex",
             "UARegistry",
             "UARegistryCoreLib",
-            "UARegistryAuxLib"
+            "UARegistryAuxLib",
+            "UARegistryRegLib"
         ];
         for (uint256 i; i < names.length; ++i) {
             assertEq(
@@ -964,8 +973,9 @@ contract GovDeployTest is Test {
         // 2026-11-15; its code unchanged): 0xFf149718D2757d1afD4435AdD5c8bA80A14C2Fa4; pqvault R1 (the metadata hash: `IUARegistry`
         // gains `requirePortableApp` and `UAKinds` `appPurpose`, CTR-UA-46; its code unchanged):
         // 0x36Ebc0Ab03EB1B67D37b6443FD04C06a4E3AB091; setAuditor A1-A8 (bit 32 AUDITOR: the router's `mtxSetAuditorKey` /
-        // `mtxSetAuditorUA` ops and their typehashes) and code-format F2 (`bytecode_hash = "none"`: no metadata hash) -> this
-        assertEq(router, 0x7dABB8aA4F869fCC1449eF2f999af56C94058c56, "GovernanceRouter");
+        // `mtxSetAuditorUA` ops and their typehashes) and code-format F2 (`bytecode_hash = "none"`: no metadata hash):
+        // 0x7dABB8aA4F869fCC1449eF2f999af56C94058c56; bls-multi Task 5 (kind 0x0121 in `UAKinds`, compiled into `GovernanceLib`, whose address the router's code holds) -> this
+        assertEq(router, 0x49Df7BEb6eb1073e98A9E9A9a1acdD23C088BFe2, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

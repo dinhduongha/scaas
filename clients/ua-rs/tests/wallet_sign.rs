@@ -86,9 +86,15 @@ fn sign_json_ua_rows() {
         assert_eq!(signed, bytes(&r["signed"]), "{r}");
         let pop = r["role"] == "pop";
         let sig = bytes(&r["signature"]);
-        assert!(verify(kind, &key.key_data(), &ua_msg, &sig, pop), "{r}");
+        assert!(
+            verify(kind, &key.key_data(), &ua_msg, &sig, pop, false),
+            "{r}"
+        );
         let mine = key.sign_ua(&purpose, &digest).unwrap();
-        assert!(verify(kind, &key.key_data(), &ua_msg, &mine, pop), "{r}");
+        assert!(
+            verify(kind, &key.key_data(), &ua_msg, &mine, pop, false),
+            "{r}"
+        );
         match (r["compare"].as_str().unwrap(), r["fixed"]["aux"].as_str()) {
             ("bytes", None) => assert_eq!(hex::encode(&mine), hex::encode(&sig), "{r}"),
             ("bytes", Some(_)) => {
@@ -350,8 +356,8 @@ fn bip340_release_aux_is_random() {
     assert_ne!(a, b);
     let m = ua_message(0x0103, &p, &d).unwrap();
     assert!(
-        verify(0x0103, &key.key_data(), &m, &a, false)
-            && verify(0x0103, &key.key_data(), &m, &b, false)
+        verify(0x0103, &key.key_data(), &m, &a, false, false)
+            && verify(0x0103, &key.key_data(), &m, &b, false, false)
     );
 }
 
@@ -697,13 +703,20 @@ fn portable_app_rows() {
         let s = ua_sig_app(&key, &app_id, &digest).unwrap();
         assert!(s.key_data.is_empty() && s.members.is_empty());
         assert!(
-            verify(kind, &key.key_data(), &b32(&r["uaMsg"]), &s.signature, true),
+            verify(
+                kind,
+                &key.key_data(),
+                &b32(&r["uaMsg"]),
+                &s.signature,
+                true,
+                false
+            ),
             "{}",
             r["name"]
         );
         let theirs = ua_message(kind, &app_purpose(&other(&r["appId"])).unwrap(), &digest).unwrap();
         assert!(
-            !verify(kind, &key.key_data(), &theirs, &s.signature, true),
+            !verify(kind, &key.key_data(), &theirs, &s.signature, true, false),
             "{}: under the other app",
             r["name"]
         );
@@ -780,4 +793,80 @@ fn portable_app_rows() {
             Some(Error::Argument)
         );
     }
+}
+
+/// bls-multi T2: a `0x0121` member key on its own path `m/22776'/0'/<account>'/0x0121'` (CTR-UA-10 layer 1; EIP-2333 as the
+/// `0x0106` key), not the `0x0106` key; it signs only member parts (its partial, its PoP part), which aggregate and verify.
+#[test]
+fn derive_0x0121_path() {
+    use scaas_ua::bls_multi;
+    let w = wallet("bip39_test");
+    let (a, b) = (
+        w.ua_key(0x0121, 0, 0).unwrap(),
+        w.ua_key(0x0121, 1, 0).unwrap(),
+    );
+    let single = w.ua_key(0x0106, 0, 0).unwrap();
+    assert_eq!(a.key_data().len(), 256);
+    assert_ne!(
+        a.key_data(),
+        single.key_data(),
+        "differs from the 0x0106 key at the same account and index"
+    );
+    assert!(
+        w.ua_key(0x0121, 0, 1).is_err(),
+        "index ≠ 0 on an EIP-2333 kind"
+    );
+    let ka: [u8; 256] = a.key_data().try_into().unwrap();
+    let kb: [u8; 256] = b.key_data().try_into().unwrap();
+    let (d, map) = bls_multi::build_key_data(&[(ka, 1), (kb, 1)], 2).unwrap();
+    let m = [5u8; 32];
+    let parts: Vec<(u8, [u8; 128])> = [(&a, map[0]), (&b, map[1])]
+        .iter()
+        .map(|(k, i)| {
+            (
+                *i as u8,
+                k.sign_bls_multi(&d, &m).unwrap().try_into().unwrap(),
+            )
+        })
+        .collect();
+    let agg = bls_multi::aggregate(&d, &m, &parts, false).unwrap();
+    assert!(verify(0x0121, &d, &m, &agg.to_abi(), false, true));
+    let pops: Vec<(u8, [u8; 128])> = [(&a, map[0]), (&b, map[1])]
+        .iter()
+        .map(|(k, i)| {
+            (
+                *i as u8,
+                k.sign_bls_multi_pop(&d).unwrap().try_into().unwrap(),
+            )
+        })
+        .collect();
+    let pop = bls_multi::aggregate_pop(&d, &pops).unwrap();
+    assert!(verify(
+        0x0121,
+        &d,
+        &bls_multi::pop_message(&d).unwrap(),
+        &pop,
+        true,
+        false
+    ));
+    assert!(
+        a.sign_ua(&purpose_tag("metatx").unwrap(), &[0; 32])
+            .is_err(),
+        "no ua_msg signature of its own"
+    );
+    assert!(
+        single.sign_bls_multi(&d, &m).is_err(),
+        "a 0x0106 key signs no member part"
+    );
+    let (d2, _) =
+        bls_multi::build_key_data(&[(kb, 1), (bls_multi::member_key(&[9; 32]).unwrap(), 1)], 1)
+            .unwrap();
+    assert!(
+        a.sign_bls_multi(&d2, &m).is_err(),
+        "a group that does not list the key"
+    );
+    let KeyRef::Ua { kind, .. } = a.key_ref() else {
+        panic!()
+    };
+    assert_eq!(kind, 0x0121);
 }

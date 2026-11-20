@@ -262,13 +262,22 @@ async fn kind_of(
     Ok(kind)
 }
 
-/// The signer's id as `name`'s `from` takes it: a UA key's UA (`bytes32`); an EVM key's address, zero-padded for `bytes32`.
+/// The signer's id as `name`'s `from` takes it: a UA key's UA (`bytes32`), a group's UA; an EVM key's address, zero-padded for
+/// `bytes32`.
 async fn from_of(sdk: &Sdk, signer: &KeyRef, name: &str) -> Result<String, SdkError> {
     let ty = entry_rows()
         .into_iter()
         .find(|r| r.name == name)
         .and_then(|r| r.fields.split_once(" from").map(|(t, _)| t.to_string()))
         .ok_or(SdkError::Argument)?;
+    // a `bls12381-multi` group (plan Task 17): its UA, a `bytes32` only
+    if let KeyRef::BlsMulti { .. } = signer {
+        if ty != "bytes32" {
+            return Err(SdkError::Argument);
+        }
+        drop(key_opened(sdk, signer).await?); // a locked seed refuses here too
+        return Ok(hex(&crate::op::bls_multi::ua(signer)?));
+    }
     Ok(match (key_opened(sdk, signer).await?, ty.as_str()) {
         (Key::Ua(_, k), "bytes32") => hex(&k.ua().ok_or(SdkError::Argument)?),
         (Key::Native(_, k), t) => {

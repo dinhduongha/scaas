@@ -2439,6 +2439,46 @@ pub extern "C" fn scaas_ua_sign_member(
     })
 }
 
+/// A `bls12381-multi` member key's (kind 0x0121) partial for the group key data `key_data` (`d`, its `ua` derived from it) over
+/// its `ua_msg`: 128 bytes (EIP-2537 G1). The aggregator combines the members' partials into the group's named `signature` and
+/// `signers`. A group that does not list this key, another kind or a native key: SCAAS_UA_ERR_ARGUMENT.
+#[no_mangle]
+pub extern "C" fn scaas_ua_sign_bls_multi(
+    k: *const ScaasUaKey,
+    key_data: *const u8,
+    key_data_len: usize,
+    ua_msg32: *const u8,
+    sig: *mut u8,
+    sig_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        write_var(
+            sig,
+            sig_len,
+            &ua_key(handle(k)?)?.sign_bls_multi(bytes(key_data, key_data_len)?, arr(ua_msg32)?)?,
+        )
+    })
+}
+
+/// A `bls12381-multi` member key's PoP part for the group key data `key_data` (`d`; its `popMsg` derived from it): 128 bytes.
+/// The aggregator combines all n parts into the registration's `pop`. Refusals as `scaas_ua_sign_bls_multi`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_sign_bls_multi_pop(
+    k: *const ScaasUaKey,
+    key_data: *const u8,
+    key_data_len: usize,
+    sig: *mut u8,
+    sig_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        write_var(
+            sig,
+            sig_len,
+            &ua_key(handle(k)?)?.sign_bls_multi_pop(bytes(key_data, key_data_len)?)?,
+        )
+    })
+}
+
 /// A native EVM key's EIP-712 signature (r || s || v) of `typed_data_json` (64 KiB, depth 8), only if it is what `expect_json`
 /// (clientkeys `expectDigest` input `{check, ...}`, 16 KiB, depth 4) says the user confirmed: else SCAAS_UA_ERR_POLICY_REFUSED.
 #[no_mangle]

@@ -1225,4 +1225,47 @@ void main() {
       expect(s.isNotEmpty && s.every((x) => (x as String).isNotEmpty), isTrue, reason: 'bit $i');
     }
   });
+
+  // bls12381-multi (0x0121, spec 2026-11-19-bls12381-multi §2): kinds.json's ten valid rows (d, s, the stored ua ‖ s, keyOf, the typed
+  // key; Review Focus 1), portable.json blsMultiRegistrations (registerBlsMulti's named args, calldata length). This library verifies
+  // no BLS signature, so groups.json's signature rows are not its.
+  test('bls12381-multi rows', () {
+    expect(hasSurplusForm(0x0121), isTrue);
+    expect(hasSurplusForm(0x0106) || hasSurplusForm(0x0120), isFalse);
+    final k = _load('kinds.json') as Map;
+    var n = 0;
+    for (final r in (k['valid'] as List).cast<Map>().where((r) => _kind(r) == 0x0121)) {
+      final d = _b(r['keyData']);
+      validateKeyData(0x0121, d);
+      final s = blsMultiCompress(d);
+      expect(_hx(s), r['compressed'], reason: r['name'] as String);
+      expect(blsMultiExpand(s), d, reason: r['name'] as String);
+      expect(_hx(Uint8List.fromList([...uaOf(0x0121, d), ...s])), r['stored'], reason: r['name'] as String);
+      expect(_hx(d.sublist(0, 256)), r['keyOf']);
+      final key = typedKey(0x0121, d)!;
+      final members = (key['members'] as List).cast<Map>();
+      final packed = <int>[
+        ..._b(key['aggKey']),
+        (key['threshold'] as int) >> 8,
+        (key['threshold'] as int) & 0xff,
+        0,
+        members.length,
+        for (final m in members) ...[..._b(m['key']), (m['weight'] as int) >> 8, (m['weight'] as int) & 0xff],
+      ];
+      expect(Uint8List.fromList(packed), d, reason: r['name'] as String);
+      n++;
+    }
+    expect(n, 10);
+    final p = _load('portable.json') as Map;
+    for (final r in (p['blsMultiRegistrations'] as List).cast<Map>()) {
+      final d = _b(r['keyData']);
+      expect(_hx(uaOf(0x0121, d)), r['ua']);
+      final (args, fill) = registrationArgs(0x0121, d, pop: _b(r['pop']));
+      expect(fill, isNull);
+      expect(jsonEncode(args), jsonEncode(r['args']), reason: r['name'] as String);
+      final m = ((args['key'] as Map)['members'] as List).length;
+      // empty attrs 288, a 128-byte pop 160, no pqzPop 32
+      expect(registryCalldataLength('registerBlsMulti', args), 4 + 128 + 96 + 288 + 32 + 384 * m + 288 + 160 + 32);
+    }
+  });
 }

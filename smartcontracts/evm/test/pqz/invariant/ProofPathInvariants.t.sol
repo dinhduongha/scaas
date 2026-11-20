@@ -222,7 +222,7 @@ contract ProofPathInvariantsTest is PqzFixture {
             "uaExecuteTransfer_normalZether",
             "uaExecuteTransfer_wrappedZether"
         ];
-        uint256[8] memory at7558 = [uint256(83759), 83846, 69239, 69239, 46484, 46506, 139436, 139471]; // + B P3-1, CTR-GOV-26, -27, -28, CTR-MTX-86, K3-3, 3zb + 3zc, 3zh, pqvault R1, set-auditor A2
+        uint256[8] memory at7558 = [uint256(83759), 83846, 69273, 69273, 46484, 46506, 139486, 139521]; // + B P3-1, CTR-GOV-26, -27, -28, CTR-MTX-86, K3-3, 3zb + 3zc, 3zh, pqvault R1, set-auditor A2, bls-multi (the fourth library word)
         for (uint256 i; i < 8; ++i) {
             assertEq(vm.parseJsonUint(j, string.concat(".", k[i])), at7558[i], k[i]);
         }

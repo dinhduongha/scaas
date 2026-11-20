@@ -78,7 +78,7 @@ STEPS=(
     "ua-rs-verify-only|other|clients/ua-rs|$(uars "--no-default-features")"
     "ua-rs-signers|other|clients/ua-rs|$(uars "--no-default-features --features signers" "--test groups_verify")"
     "ua-rs-json|other|clients/ua-rs|$(uars "--no-default-features --features json" "--test json")"
-    "ua-rs-pq|other|clients/ua-rs|$(uars "--no-default-features --features pq" "--test pq --test ua8")"
+    "ua-rs-pq|other|clients/ua-rs|$(uars "--no-default-features --features pq" "--test pq --test ua_portable")"
     "ua-rs-wallet-mlock|other|clients/ua-rs|$(uars "--no-default-features --features wallet,mlock")"
     "ua-rs-zether-only|other|clients/ua-rs|$(uars "--no-default-features --features wallet,zether,mlock" "--lib --test facade_zether")"
     "ua-rs-pqz-n2048|other|clients/ua-rs|$(uars "--no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock" "--lib --bin pqz-read --test pqz_read --test facade_pqz_state --test facade_pqz --test pqz_backup --test no_oracle")"
