@@ -189,7 +189,11 @@ mod tests {
         assert_eq!(rs(&long), None, "a wrong outer length");
         let mut trailing = seq(&r, &s);
         trailing.push(0);
-        assert_eq!(rs(&trailing), None, "trailing bytes");
+        assert_eq!(rs(&trailing), None, "trailing bytes after the SEQUENCE");
+        let mut inside = seq(&r, &s);
+        inside.push(0);
+        inside[1] += 1;
+        assert_eq!(rs(&inside), None, "trailing bytes inside the SEQUENCE");
         let mut inner = seq(&r, &s);
         inner[1] += 1;
         inner[3] += 1;

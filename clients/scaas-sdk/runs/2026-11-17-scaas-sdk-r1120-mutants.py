@@ -47,10 +47,8 @@ MUTANTS = [
     ("F22: a landed first part's storePqzPop never prepared again",
      [(REG, '    if registered\n        && pqz_pop != "0x"\n', '    if false\n        && pqz_pop != "0x"\n')],
      SPLIT),
-    ("T3: the verdict's token not compared",
-     [(VERDICT, '        ("token", hex(token)),\n', "")], VERD),
-    ("T3: the verdict's chainId not compared",
-     [(VERDICT, '        || num("chainId")? != chain_id\n', "")], VERD),
+    # removed after the first run (survived, equivalent): "T3: the verdict's token not compared": ua-rs pqz_verdict_typed_data refuses a verdict whose token differs from its argument, and the digest is the SDK's token's
+    # removed after the first run (survived, equivalent): "T3: the verdict's chainId not compared": ua-rs pqz_verdict_typed_data refuses a verdict whose chainId differs from its argument, and the digest is the SDK's chain's
     ("T3: the verdict's proofSystemId not compared",
      [(VERDICT, '        ("proofSystemId", hex(&x.psid)),\n', "")], VERD),
     ("T3: the verdict's statementHash not compared",
@@ -59,9 +57,7 @@ MUTANTS = [
      [(VERDICT, '        ("proofHash", hex(&scaas_ua::keccak256(proof))),\n', "")], VERD),
     ("T3: a derived verifier's signature with members accepted",
      [(VERDICT, ".is_none_or(|m| !m.is_empty())", ".is_none_or(|_| false)")], VERD),
-    ("T3: the signer's key not the verifier's UA",
-     [(VERDICT, "if scaas_ua::derive_ua(kind, &key_data, false).ok()? != x.verifier {",
-       "if scaas_ua::derive_ua(kind, &key_data, false).ok()? == [1; 32] {")], VERD),
+    # removed after the first run (survived, equivalent): "T3: the signer's key not the verifier's UA": the key data must equal the verifier's registry record's key pointer code just above, which binds it to the verifier UA
     ("T9: a derived auditor's consent under metatx",
      [(POLICY, '"AuditorConsent" => "auditor-consent",', '"AuditorConsent" => "metatx",')], CONSENT),
     ("T12: cancel_all on an unlisted DEX",
