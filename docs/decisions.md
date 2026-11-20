@@ -7339,6 +7339,9 @@ no longer exercise 7702 end to end.
 to 8557 (the UI stays on 8558); Blockscout runs as its own compose project, the chain's compose holds the sealer and `rpc` only,
 the all-in-one compose kept beside them. `verify-blockscout.sh`, `onchain/vcheck.py` and [evm.md](networks/evm.md#NET-EVM-09)
 follow.
+**Change (owner 2026-11-20): one stack directory, two subdirectories.** The SCaaS testnet stack is one stack directory `~dockers/mba-chain-nethermind` (owner 2026-11-20): `pqz-nethermind/` (the chain: the sealer and `rpc` compose, genesis and config, keystore, data), `blockscout/` (the Blockscout compose and `sc-verifier`), `docker-compose-full.yml` (all in one) and one `.env` at the top; the stack is a standalone MIT repository meant to be public, stock Nethermind by default, the PQ precompiles opt-in. The RUNBOOK's
+commands run `docker compose` in `pqz-nethermind/` (chain) or `blockscout/` (explorer); [evm.md](networks/evm.md#NET-EVM-09)
+follows.
 
 ### NET-EVM-10 — The SCaaS testnet runs a sealer node and a public rpc node
 - old: — · status: current · owner: yes · date: 2026-10-31 · normative: networks/evm.md#NET-EVM-10 · superseded-by: —

@@ -628,8 +628,7 @@ after every block and the home-page block list stops; on the pruned node its cat
 forever, about 1.5 CPU, until a one-off cleanup of those rows, `blockscout-code-backfill.py --prune-coin-balances`,
 rerun after an outage longer than the pruning window; archive mode at the sealer / RPC node split is the root fix);
 the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 8557 (owner 2026-11-20; was 4000);
-Blockscout runs as a compose project of its own, apart from the chain's (the chain's compose holds the sealer and `rpc`
-only; the all-in-one file is kept beside it); the frontend image is pinned
+Blockscout runs as a compose project of its own, apart from the chain's (owner 2026-11-20: the stack is one stack directory `~dockers/mba-chain-nethermind` (owner 2026-11-20): `pqz-nethermind/` (the chain: the sealer and `rpc` compose, genesis and config, keystore, data), `blockscout/` (the Blockscout compose and `sc-verifier`), `docker-compose-full.yml` (all in one) and one `.env` at the top; the stack is a standalone MIT repository meant to be public, stock Nethermind by default, the PQ precompiles opt-in); the frontend image is pinned
 by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET-EVM-10)) it reads the archive `rpc`
 node, and neither the code backfill nor the coin-balance cleanup is needed. Contract verification (owner ruling 2026-10-31): a local
 `smart-contract-verifier` (v1.11.1, 768 MiB since 2026-10-31: the patched 31-contract run hit 512 MiB; 1 CPU, `mba-net` only, Solidity only, solc from
@@ -638,7 +637,7 @@ every contract on the chain is verified by the step of [NET-EVM-12](#NET-EVM-12)
 scaas-testnet` (this Blockscout's API `http://127.0.0.1:8557/api` and the RPC `http://127.0.0.1:8545`, both on the host's
 loopback: the earlier LAN address is gone; the whole-chain scan on; the older per-broadcast `verify-blockscout.sh` stays);
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
-image (built outside the repo, `~dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
+image (built outside the repo, `~dockers/mba-chain-nethermind/blockscout/sc-verifier/`), temporary until upstream supports
 Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts and the PQZ e2e contracts verified, full match; the e2e tokens are EIP-1167 clones Blockscout links to their verified implementations (RUNBOOK § Contract verification).
 First whole-chain run, 2026-11-10 (BUILT, after the T66b Step 5 deploy had only its 7 linked libraries verified): of 345
 contracts with code, 255 verified (full match), 8 linked clones, 35 CREATE3 proxies, 1 genesis predeploy, plus 90 SSTORE2 data
