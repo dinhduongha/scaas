@@ -150,7 +150,17 @@ suspend fun rows(path: String) {
     println("ok rows: ${refused.size} refused by name")
 }
 
-fun main(args: Array<String>) = runBlocking {
+fun main(args: Array<String>) {
+    try {
+        runBlocking { smoke(args) }
+    } catch (e: Exception) {
+        check(false) { "unexpected exception: $e" }
+    }
+    println(if (bad == 0) "RESULT kotlin: PASS (0 failures)" else "RESULT kotlin: FAIL ($bad failures)")
+    if (bad != 0) kotlin.system.exitProcess(1)
+}
+
+suspend fun smoke(args: Array<String>) {
     check(apiVersion() == 1u) { "load check: apiVersion ${apiVersion()}" }
     // the opening refuses a library of another api_version or without a needed feature (spec §16.3)
     check(failure { `open`(config(expectApi = 2u), MemStore(), null) } == "AbiMismatch") { "load check: api_version 2" }
@@ -207,6 +217,4 @@ fun main(args: Array<String>) = runBlocking {
     check(ep == "Internal") { "panic: $ep" }
     check(sdk.vault().seeds().size == 1) { "control: after the panic" }
     println("ok panic $ep")
-    println(if (bad == 0) "RESULT kotlin: PASS (0 failures)" else "RESULT kotlin: FAIL ($bad failures)")
-    if (bad != 0) kotlin.system.exitProcess(1)
 }

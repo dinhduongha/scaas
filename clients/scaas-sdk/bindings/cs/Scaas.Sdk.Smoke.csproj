@@ -9,6 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>false</IsPackable>
+    <!-- the test packages held by packages.lock.json (review B14); CI restores in locked mode -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
     <!-- the generated code is the generator's: its warnings are not this project's -->
     <NoWarn>$(NoWarn);CS1591;CS8618;CS8625;CS8603;CS8600;CS8602;CS8604;CS0108;CS0114</NoWarn>
   </PropertyGroup>

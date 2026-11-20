@@ -1286,7 +1286,7 @@ jobs:
             clients/scaas-sdk
             clients/scaas-sdk/ffi
       - name: uniffi-bindgen-cpp v0.10.0+v0.31.0
-        run: cargo install --git https://github.com/NordSecurity/uniffi-bindgen-cpp --tag v0.10.0+v0.31.0 --locked uniffi-bindgen-cpp
+        run: cargo install --git https://github.com/NordSecurity/uniffi-bindgen-cpp --rev c592133cac069d4e870744c1cdf09558b148c9fc --locked uniffi-bindgen-cpp
       - name: the generated C++ has no drift
         run: SCAAS_GEN=cpp bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check
       - name: the reference library with sync-api
@@ -1317,7 +1317,7 @@ jobs:
         with:
           workspaces: clients/scaas-sdk/ffi
       - name: uniffi-bindgen-cs v0.11.1+v0.31.0
-        run: cargo install --git https://github.com/NordSecurity/uniffi-bindgen-cs --tag v0.11.1+v0.31.0 --locked uniffi-bindgen-cs
+        run: cargo install --git https://github.com/NordSecurity/uniffi-bindgen-cs --rev 7b1aaae16388a8d1e739114a632f357e1926296e --locked uniffi-bindgen-cs
       - name: the generated C# has no drift
         run: SCAAS_GEN=cs bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check
       - uses: actions/setup-dotnet@v4
@@ -1374,6 +1374,7 @@ jobs:
       - name: kotlinc 2.4.21
         run: |
           curl -fsSL -o "$RUNNER_TEMP/kotlinc.zip" https://github.com/JetBrains/kotlin/releases/download/v2.4.21/kotlin-compiler-2.4.21.zip
+          echo "7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd  $RUNNER_TEMP/kotlinc.zip" | sha256sum -c -
           unzip -q "$RUNNER_TEMP/kotlinc.zip" -d "$RUNNER_TEMP"
           echo "KOTLINC=$RUNNER_TEMP/kotlinc/bin/kotlinc" >> "$GITHUB_ENV"
       - name: the Kotlin smoke test
@@ -1401,6 +1402,7 @@ jobs:
       - name: Swift 6.4.2
         run: |
           curl -fsSL -o "$RUNNER_TEMP/swift.tar.gz" https://download.swift.org/swift-6.4.2-release/ubuntu2404/swift-6.4.2-RELEASE/swift-6.4.2-RELEASE-ubuntu24.04.tar.gz
+          echo "2e9ebec040ad459dd89a6d093a02d8314939135104850fae4d5c0f174fb3ba8c  $RUNNER_TEMP/swift.tar.gz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/swift"
           tar -xzf "$RUNNER_TEMP/swift.tar.gz" -C "$RUNNER_TEMP/swift" --strip-components=1
           echo "SWIFTC=$RUNNER_TEMP/swift/usr/bin/swiftc" >> "$GITHUB_ENV"
@@ -1480,7 +1482,7 @@ jobs:
         with:
           workspaces: clients/scaas-sdk/ffi
       - name: uniffi-bindgen-go v0.7.1+v0.31.0
-        run: cargo install uniffi-bindgen-go --git https://github.com/NordSecurity/uniffi-bindgen-go --tag v0.7.1+v0.31.0 --locked
+        run: cargo install uniffi-bindgen-go --git https://github.com/NordSecurity/uniffi-bindgen-go --rev 0b7fb4ceef12021bd7f790cc516fa9133e001813 --locked
       - name: the generated Go has no drift
         run: SCAAS_GEN=go bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check
       - uses: actions/setup-go@v5

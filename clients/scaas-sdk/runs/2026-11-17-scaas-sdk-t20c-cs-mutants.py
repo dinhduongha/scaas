@@ -17,11 +17,13 @@ MUTANTS = [
         "the PRF output names another secret",
         [(B, "self.0.get_assertion(req, prf_out.id()).await", "self.0.get_assertion(req, prf_out.id() + 1).await")],
         CS,
+        "StoreAuthenticatorPanicAndExceptions",
     ),
     (
         "the store's write drops the expected revision",
         [(B, "self.0.put_if(name, prev_rev, bytes, policy).await", "self.0.put_if(name, None, bytes, policy).await")],
         CS,
+        "StoreAuthenticatorPanicAndExceptions",
     ),
 ]
 

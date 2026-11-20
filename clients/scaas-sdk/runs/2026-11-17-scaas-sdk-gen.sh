@@ -39,11 +39,14 @@ cap=("$W/scripts/capped")
 [ -n "${CI:-}" ] && cap=()
 off=(--offline)
 [ -n "${CI:-}" ] && off=()
-pin() { # <tool> <version> [<package>]: the generator on PATH is the pin, as cargo install recorded its package in its root
-    local t p=${3:-$1}
+pin() { # <tool> <version> [<package>] [<commit>]: the generator on PATH is the pin, as cargo install recorded its package in its
+    # root; a git generator also by its commit (`#<commit>` of its source, review B14: a tag can move)
+    local t p=${3:-$1} line
     t=$(command -v "$1") || { echo "[gen] FAIL $1 not on PATH (pin $2)" >&2 && exit 2; }
-    cargo install --list --root "$(dirname "$(dirname "$t")")" | grep -qF -e "$p v$2 " -e "$p v$2:" ||
-        { echo "[gen] FAIL $1 is not the pin $2" >&2 && exit 2; }
+    line=$(cargo install --list --root "$(dirname "$(dirname "$t")")" | grep -F -e "$p v$2 " -e "$p v$2:" || true)
+    [ -n "$line" ] || { echo "[gen] FAIL $1 is not the pin $2" >&2 && exit 2; }
+    [ -z "${4:-}" ] || [[ $line == *"#$4"* ]] || [[ $line == *"#${4:0:8})"* ]] ||
+        { echo "[gen] FAIL $1 is not the pinned commit $4" >&2 && exit 2; }
 }
 lib() { echo "$D/ffi/target/lib-$1/libscaas_sdk_ffi.so"; }
 if [ "${1:-}" = --check ]; then
@@ -67,7 +70,7 @@ if [[ $PARTS == *,dart,* ]]; then
 fi
 if [[ $PARTS == *,cpp,* ]]; then
     echo "[gen] start: C++ (sync-api)"
-    pin uniffi-bindgen-cpp "0.10.0+v0.31.0"
+    pin uniffi-bindgen-cpp "0.10.0+v0.31.0" uniffi-bindgen-cpp c592133cac069d4e870744c1cdf09558b148c9fc
     bash "$D/bindings/lib.sh" sync-api >/dev/null
     rm -rf "$D/bindings/cpp/generated"
     # the generator reads `cargo metadata` of the library's crate
@@ -85,7 +88,7 @@ if [[ $PARTS == *,cpp,* ]]; then
 fi
 if [[ $PARTS == *,cs,* ]]; then
     echo "[gen] start: C# (uniffi)"
-    pin uniffi-bindgen-cs "0.11.1+v0.31.0"
+    pin uniffi-bindgen-cs "0.11.1+v0.31.0" uniffi-bindgen-cs 7b1aaae16388a8d1e739114a632f357e1926296e
     bash "$D/bindings/lib.sh" uniffi >/dev/null
     rm -rf "$D/bindings/cs/generated"
     # the generator's own output: CSharpier is not run (it warns that it is not installed)
@@ -131,7 +134,7 @@ if [[ $PARTS == *,java,* ]]; then
 fi
 if [[ $PARTS == *,go,* ]]; then
     echo "[gen] start: Go (uniffi)"
-    pin uniffi-bindgen-go "0.7.1+v0.31.0"
+    pin uniffi-bindgen-go "0.7.1+v0.31.0" uniffi-bindgen-go 0b7fb4ceef12021bd7f790cc516fa9133e001813
     bash "$D/bindings/lib.sh" uniffi >/dev/null
     rm -rf "$D/bindings/go/generated"
     (cd "$D/ffi" && uniffi-bindgen-go --library "$(lib uniffi)" --config "$D/bindings/go/uniffi.toml" \

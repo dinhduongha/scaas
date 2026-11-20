@@ -26,8 +26,8 @@ MUTANTS = [
         [
             (
                 J,
-                'self.call("get_assertion", &[arg(&req)?, h.into()])',
-                'self.call("get_assertion", &[arg(&req)?, (h + 1).into()])',
+                'self.call("get_assertion", &[req, h.0.into()])',
+                'self.call("get_assertion", &[req, (h.0 + 1).into()])',
             )
         ],
         JS,
