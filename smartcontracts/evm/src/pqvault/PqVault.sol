@@ -31,6 +31,10 @@ contract PqVault is IPqVault, PqGroupBase {
     /// @notice A ciphertext is `r` (16) ‖ AES-256-GCM-SIV of a padded plaintext of at most 16,384 B ‖ its tag (16) (VC9).
     uint256 internal constant CT_MIN = 32;
     uint256 internal constant CT_MAX = 16_416;
+    /// @dev In a version-1 blob `abi.encode(item, sigHash, batchId)`: the item tuple's offset word, then `sigHash`, `batchId`
+    ///      (+64), the tuple at +96 led by `vaultId`.
+    uint256 internal constant ITEM_BATCH = 64;
+    uint256 internal constant ITEM_VAULT = 96;
 
     address public immutable FACTORY;
     uint64 internal immutable VERSION;
@@ -279,16 +283,91 @@ contract PqVault is IPqVault, PqGroupBase {
 
     // ------------------------------------------------------------------ items (CTR-PQV-07, -08, -09, -14)
 
-    function createItem(PqVaultItem calldata, IUARegistry.UASig calldata) external pure returns (bytes32) {
-        revert PqVaultShape(); // V4
+    function createItem(PqVaultItem calldata it, IUARegistry.UASig calldata sig) external returns (bytes32 iid) {
+        (IUARegistry reg, uint256 limit,) = _env();
+        _itemRights(it.epochId, it.vaultId, it.author);
+        _ciphertext(it.ciphertext);
+        _auth(reg, _v().modes[it.vaultId], it.author, PqVaultTypes.hashItem(it), sig);
+        _useNonce(PqVaultTypes.scopeItem(it.vaultId, it.author), it.nonce);
+        iid = PqVaultTypes.itemId(it.vaultId, it.author, it.nonce);
+        V storage s = _v();
+        s.record[iid] = _put(abi.encode(it, keccak256(abi.encode(sig)), bytes32(0)), limit);
+        s.items[it.vaultId].push(iid);
+        emit PqVaultItemCreated(it.vaultId, iid, it.author, 0, sig);
     }
 
-    function editItem(PqVaultEdit calldata, IUARegistry.UASig calldata) external pure {
-        revert PqVaultShape(); // V4
+    /// @notice Any member writes version `count + 1` (the first edit 2), under an epoch of the item's vault.
+    function editItem(PqVaultEdit calldata d, IUARegistry.UASig calldata sig) external {
+        (IUARegistry reg, uint256 limit,) = _env();
+        V storage s = _v();
+        address r = s.record[d.itemId];
+        if (r == address(0)) revert PqVaultUnknown(d.itemId);
+        bytes32 vid = _word(r, ITEM_VAULT);
+        _itemRights(d.epochId, vid, d.author);
+        uint32 next = uint32(s.edits[d.itemId].length) + 2;
+        if (d.version != next) revert PqVaultVersion(next, d.version);
+        _ciphertext(d.ciphertext);
+        _auth(reg, s.modes[vid], d.author, PqVaultTypes.hashEdit(d), sig);
+        _useNonce(PqVaultTypes.scopeItem(vid, d.author), d.nonce);
+        s.edits[d.itemId].push(_put(abi.encode(d, keccak256(abi.encode(sig))), limit));
+        emit PqVaultItemEdited(d.itemId, d.version, d.author, sig);
     }
 
-    function createItems(PqVaultBatch calldata, IUARegistry.UASig calldata) external pure returns (bytes32) {
-        revert PqVaultShape(); // V4
+    /// @notice One or more items of one vault, epoch and author under one signature; each item's nonce and the batch's in the
+    ///         item scope; the header kept so the signed record is rebuilt from state.
+    function createItems(PqVaultBatch calldata b, IUARegistry.UASig calldata sig) external returns (bytes32 bid) {
+        (IUARegistry reg, uint256 limit,) = _env();
+        uint256 n = b.items.length;
+        if (n == 0) revert PqVaultShape();
+        for (uint256 i; i < n; ++i) {
+            PqVaultItem calldata it = b.items[i];
+            if (it.vaultId != b.vaultId || it.epochId != b.epochId || it.author != b.author) revert PqVaultShape();
+            _ciphertext(it.ciphertext);
+        }
+        _itemRights(b.epochId, b.vaultId, b.author);
+        _auth(reg, _v().modes[b.vaultId], b.author, PqVaultTypes.hashBatch(b), sig);
+        bid = _storeBatch(b, keccak256(abi.encode(sig)), limit);
+        emit PqVaultBatchCreated(b.vaultId, bid, b.author, n, sig);
+    }
+
+    /// @dev The batch nonce, then per item its nonce, its version-1 blob `abi.encode(item, sigHash, batchId)` and its list
+    ///      entry; the header blob.
+    function _storeBatch(PqVaultBatch calldata b, bytes32 sh, uint256 limit) internal returns (bytes32 bid) {
+        V storage s = _v();
+        bytes32 scope = PqVaultTypes.scopeItem(b.vaultId, b.author);
+        _useNonce(scope, b.nonce);
+        bid = PqVaultTypes.batchId(b.vaultId, b.author, b.nonce);
+        bytes32[] memory iids = new bytes32[](b.items.length);
+        IUARegistry.UASig memory none;
+        for (uint256 i; i < iids.length; ++i) {
+            PqVaultItem calldata it = b.items[i];
+            _useNonce(scope, it.nonce);
+            bytes32 iid = PqVaultTypes.itemId(b.vaultId, b.author, it.nonce);
+            iids[i] = iid;
+            s.record[iid] = _put(abi.encode(it, sh, bid), limit);
+            s.items[b.vaultId].push(iid);
+            emit PqVaultItemCreated(b.vaultId, iid, b.author, bid, none);
+        }
+        s.batches[bid] = _put(abi.encode(b.vaultId, b.epochId, b.author, b.nonce, iids, sh), limit);
+    }
+
+    /// @dev CTR-PQV-07, CTR-PQV-14: the epoch stored here for `vid` (else `PqVaultUnknown`: a record naming another vault than
+    ///      its epoch's, R11), complete, at home with no complete child; `author` a member of it, not removed from it, not left.
+    function _itemRights(bytes32 epochId, bytes32 vid, bytes32 author) internal view {
+        Epoch storage ep = _known(epochId);
+        if (ep.sessionId != vid) revert PqVaultUnknown(epochId);
+        if (ep.landed != ep.wraps) revert PqVaultIncomplete(epochId);
+        bytes32 child = _v().childOf[epochId];
+        if (child != 0) revert PqVaultEpochTaken(epochId, child);
+        (, IPqChat.MemberKey[] memory m,) = _lists(ep);
+        if (_memberAt(m, author) == type(uint256).max || ep.left[author] || ep.removedOf[author]) {
+            revert PqVaultNotMember(author);
+        }
+    }
+
+    /// @dev VC9: 32..16,416 B.
+    function _ciphertext(bytes calldata c) internal pure {
+        if (c.length < CT_MIN || c.length > CT_MAX) revert PqVaultShape();
     }
 
     // ------------------------------------------------------------------ recovery from state alone (CTR-PQV-10)
@@ -384,28 +463,42 @@ contract PqVault is IPqVault, PqGroupBase {
         return _nonceUsed(scope, nonce);
     }
 
-    function itemCount(bytes32) external pure returns (uint256) {
-        revert PqVaultShape(); // V4
+    function itemCount(bytes32 vid) external view returns (uint256) {
+        return _v().items[vid].length;
     }
 
     function itemsOf(bytes32, uint256, uint256) external pure returns (bytes32[] memory) {
         revert PqVaultShape(); // V5
     }
 
-    function itemOf(bytes32) external pure returns (ItemView memory) {
-        revert PqVaultShape(); // V4
+    function itemOf(bytes32 iid) external view returns (ItemView memory) {
+        address r = _v().record[iid];
+        if (r == address(0)) revert PqVaultUnknown(iid);
+        return ItemView(_word(r, ITEM_VAULT), uint32(_v().edits[iid].length) + 1, _word(r, ITEM_BATCH));
     }
 
-    function versionAt(bytes32, uint32) external pure returns (VersionView memory) {
-        revert PqVaultShape(); // V4
+    function versionAt(bytes32 iid, uint32 version) public view returns (VersionView memory) {
+        V storage s = _v();
+        address r = s.record[iid];
+        uint32 count = r == address(0) ? 0 : uint32(s.edits[iid].length) + 1;
+        if (version == 0 || version > count) revert PqVaultVersion(count, version);
+        if (version == 1) {
+            (PqVaultItem memory it, bytes32 sh,) = abi.decode(_get(r), (PqVaultItem, bytes32, bytes32));
+            return VersionView(it.epochId, it.author, it.nonce, 1, it.ciphertext, sh);
+        }
+        (PqVaultEdit memory d, bytes32 dh) = abi.decode(_get(s.edits[iid][version - 2]), (PqVaultEdit, bytes32));
+        return VersionView(d.epochId, d.author, d.nonce, version, d.ciphertext, dh);
     }
 
     function latestRange(bytes32, uint256, uint256) external pure returns (LatestView[] memory) {
         revert PqVaultShape(); // V5
     }
 
-    function batchOf(bytes32) external pure returns (bytes32, bytes32, bytes32, uint64, bytes32[] memory, bytes32) {
-        revert PqVaultShape(); // V4
+    /// @notice The header blob `abi.encode(vaultId, epochId, author, nonce, itemIds, sigHash)` is exactly the return's encoding.
+    function batchOf(bytes32 bid) external view returns (bytes32, bytes32, bytes32, uint64, bytes32[] memory, bytes32) {
+        address r = _v().batches[bid];
+        if (r == address(0)) revert PqVaultUnknown(bid);
+        _returnBlob(r);
     }
 
     /// @dev `[offset, min(offset + min(limit, max), length))`; an offset past the end is empty, never a revert.

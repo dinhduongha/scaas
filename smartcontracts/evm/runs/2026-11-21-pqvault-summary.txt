@@ -7,3 +7,5 @@ V2 | forge test/pqvault (PqVaultTypes.t.sol; red first: PqVaultTypes.sol absent,
 V3 | forge test/pqvault (red first: PqVault.sol absent, compile error) | V3 tree | 0 | 49 passed 0 failed 0 skipped (forge)
 V3 | forge test/governance --match-path SingletonRescue.t.sol (PqVault's rescue) | V3 tree | 0 | 3 passed 0 failed 0 skipped (forge)
 V3 mutants | runs/2026-11-21-pqvault/mutants.py (22, test/pqvault) | V3 tree | - | 21 killed; create-min-member-0 survived: equivalent (the creator must be a member, so no member is already PqVaultShape); its rekey twin rekey-min-member-0 killed
+V4 | forge test/pqvault (red first: 40 of the new item, batch and mode tests failed against the V3 stubs) | V4 tree | 0 | 70 passed 0 failed 0 skipped (forge)
+V4 mutants | mutants.py, the 19 item mutants (version, member, left, removed, epoch taken, incomplete, the record-vault equality in createItem, createItems and editItem, the three batch field equalities, an empty batch, each nonce mark, the two ciphertext bounds) | V4 tree | - | 19 of 19 killed

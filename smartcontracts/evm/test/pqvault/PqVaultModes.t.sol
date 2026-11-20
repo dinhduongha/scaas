@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {IPqVault} from "../../src/pqvault/IPqVault.sol";
 import {PqVault} from "../../src/pqvault/PqVault.sol";
@@ -172,6 +173,81 @@ contract PqVaultModesTest is PqVaultBase {
         vm.expectRevert(_unauthorized(ids[1]));
         vault.leaveVault(l, sig);
         vault.leaveVault(l, _sig(ids[1], h.leave(l, h.dsB(address(vault)))));
+    }
+
+    // ----- the item writes in both modes (V4) -----
+
+    function _itemWrites(uint8 mode) internal {
+        (bytes32 vid,) = _newVault(3, mode);
+        bytes32 ds = _ds(mode, address(vault));
+        IPqVault.PqVaultItem memory it = IPqVault.PqVaultItem(vid, vid, ids[1], 1, new bytes(288));
+        bytes32 iid = vault.createItem(it, _sig(ids[1], h.item(it, ds)));
+        IPqVault.PqVaultEdit memory d = IPqVault.PqVaultEdit(iid, vid, ids[2], 1, 2, new bytes(288));
+        vault.editItem(d, _sig(ids[2], h.edit(d, ds)));
+        IPqVault.PqVaultBatch memory b = IPqVault.PqVaultBatch(vid, vid, ids[1], 2, new IPqVault.PqVaultItem[](1));
+        b.items[0] = IPqVault.PqVaultItem(vid, vid, ids[1], 3, new bytes(288));
+        vault.createItems(b, _sig(ids[1], h.batch(b, ds)));
+        assertEq(vault.itemCount(vid), 2);
+        assertEq(vault.itemOf(iid).versionCount, 2);
+        // the other mode's domain is refused for each
+        bytes32 other = _ds(1 - mode, address(vault));
+        it.nonce = 4;
+        IUARegistry.UASig memory sig = _sig(ids[1], h.item(it, other));
+        vm.expectRevert(_unauthorized(ids[1]));
+        vault.createItem(it, sig);
+        d.version = 3;
+        sig = _sig(ids[2], h.edit(d, other));
+        vm.expectRevert(_unauthorized(ids[2]));
+        vault.editItem(d, sig);
+        b.nonce = 5;
+        b.items[0].nonce = 6;
+        sig = _sig(ids[1], h.batch(b, other));
+        vm.expectRevert(_unauthorized(ids[1]));
+        vault.createItems(b, sig);
+    }
+
+    function test_itemWrites_mode0() public {
+        _itemWrites(0);
+    }
+
+    function test_itemWrites_mode1() public {
+        _itemWrites(1);
+    }
+
+    /// A mode-1 item replayed into a second instance: no vault there.
+    function test_mode1_itemReplayRefused() public {
+        (bytes32 vid,) = _newVault(3, 1);
+        IPqVault.PqVaultItem memory it = IPqVault.PqVaultItem(vid, vid, ids[1], 1, new bytes(288));
+        IUARegistry.UASig memory sig = _sig(ids[1], h.item(it, h.dsB(address(vault))));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultUnknown.selector, vid));
+        vaultB.createItem(it, sig);
+        vault.createItem(it, sig);
+    }
+
+    /// Review r2 R14: a native id as author in mode 1 (it passes `requireAuthorized` by its key, but holds no KEM key, so it is no
+    /// member): `PqVaultNotMember`.
+    function test_mode1_nativeAuthorNotMember() public {
+        (bytes32 vid,) = _newVault(3, 1);
+        bytes32 nat = _pad(vm.addr(EOA_SK));
+        IPqVault.PqVaultItem memory it = IPqVault.PqVaultItem(vid, vid, nat, 1, new bytes(288));
+        IUARegistry.UASig memory sig;
+        sig.signature = _nativeSig(p, EOA_SK, PqVaultTypes.P_V, h.item(it, h.dsB(address(vault))));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultNotMember.selector, nat));
+        vault.createItem(it, sig);
+    }
+
+    /// A `PURPOSE_PQCHAT` signature is refused in both modes (mode 1: `requireAuthorized` under `P_V`).
+    function test_pqchatPurposeRefusedBothModes() public {
+        for (uint8 mode; mode < 2; ++mode) {
+            (IPqVault.PqVaultCreate memory v, IPqChat.Wrap[] memory w) = _vault(1, 30 + mode, mode, address(vault));
+            IUARegistry.UASig memory sig;
+            sig.signature = _sig(
+                keyOf_[v.creator], UAKinds.uaMessage(ML, UAKinds.PURPOSE_PQCHAT, h.create(v, _ds(mode, address(vault))))
+            );
+            vm.expectRevert(_unauthorized(v.creator));
+            vault.createVault(v, w, sig);
+            _create(vault, v, w);
+        }
     }
 }
 
