@@ -5,7 +5,7 @@
 # A throwaway copy of the SCaaS testnet's chain (pqz-core/nethermind/chain/copy.sh, RUNBOOK "The copy"): its own compose
 # project `pqzcopy`, network and port 127.0.0.1:18545, a data dir from mktemp, the image of the reset-5 engine
 # (scaas/nethermind-pqz:2.2.0-pqz11) with Amsterdam from block 1 (copygen.py), chain id 31990; the live stack,
-# its containers, volumes and port are never touched. Each node is capped (1,400 MiB, 2 CPUs; with nginx under 3 GiB);
+# its containers, volumes and port are never touched. The signer alone (2,500 MiB, 2 CPUs) behind an unthrottled proxy;
 # the copy is stopped and its data removed on exit. Steps: the contracts' Deploy.s.sol, then the SDK's ignored test
 # `e2e_bls_multi_64_on_a_node` (register_bls_multi, n = 64, self-relayed), then the negative control (a call whose
 # regular gas exceeds 2^24). Progress on stdout; the full output in 2026-11-20-m20-nethermind.log (git-ignored).
@@ -57,19 +57,31 @@ for p in sys.argv[1:]:
     json.dump(c, open(p, "w"), indent=1)
 print("TargetBlockGasLimit 200 M")
 PY
-cat >"$COPY/caps.yml" <<'EOF'
+# the proxy straight to the signer, the block producer, without the copy's rate limits (10 r/s, burst 20, 8 connections:
+# a deploy batch of 16 transactions and its receipt polls got 429s, sends lost and nonce reads of 0 in the third run);
+# the follower is not started (its gossip is not what this run measures)
+cat >"$COPY/nginx-m20.conf" <<'EOF'
+server {
+    listen 8545;
+    client_max_body_size 2m;
+    location / {
+        proxy_pass http://10.76.22.10:8545;
+        proxy_http_version 1.1;
+        proxy_read_timeout 120s;
+    }
+}
+EOF
+cat >"$COPY/caps.yml" <<EOF
 services:
   signer:
-    mem_limit: 1400m
+    mem_limit: 2500m
     cpus: 2
-  follower:
-    mem_limit: 1400m
-    cpus: 2
+  rpc:
+    volumes: !override
+      - $COPY/nginx-m20.conf:/etc/nginx/conf.d/default.conf:ro
 EOF
-say "starting $IMAGE (copy, Amsterdam from block 1)"
-IMAGE=$IMAGE GENESIS=genesis.pqz0.json "${DC[@]}" up -d signer >>"$LOG" 2>&1
-sleep 20
-IMAGE=$IMAGE GENESIS=genesis.pqz0.json "${DC[@]}" up -d >>"$LOG" 2>&1
+say "starting $IMAGE (copy, Amsterdam from block 1; the signer and its proxy)"
+IMAGE=$IMAGE GENESIS=genesis.pqz0.json "${DC[@]}" up -d signer rpc >>"$LOG" 2>&1
 ok=
 for _ in $(seq 1 60); do
     if n=$(cast block-number --rpc-url "$RPC" 2>/dev/null) && [ "$n" -ge 2 ]; then
@@ -100,11 +112,39 @@ cp "$BOOK" "$COPY/book.json"
 rm -f "$W"/smartcontracts/evm/deployments/$NAME*.json
 say "deployed: registry $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["ua_registry"])' "$COPY/book.json")"
 F=vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots
-(cd clients/scaas-sdk && SCAAS_M20_RPC=$RPC SCAAS_M20_BOOK=$COPY/book.json SCAAS_M20_CHAIN_ID=$CHAIN_ID \
-    "$W/scripts/capped" cargo test --locked --offline -j2 --features $F --test e2e -- --ignored --exact \
-    e2e_bls_multi_64_on_a_node --nocapture) >>"$LOG" 2>&1 && rc=0 || rc=$?
+e2e() { # one ignored e2e test of the SDK against the copy
+    (cd clients/scaas-sdk && SCAAS_M20_RPC=$RPC SCAAS_M20_BOOK=$COPY/book.json SCAAS_M20_CHAIN_ID=$CHAIN_ID \
+        SCAAS_M20_TOKEN=${TOKEN:-} "$W/scripts/capped" cargo test --locked --offline -j2 --features $F --test e2e -- \
+        --ignored --exact "$1" --nocapture) >>"$LOG" 2>&1
+}
+rc=0
+PARTS=${M20_PARTS:-bls,pqz,control}
+if [[ ,$PARTS, == *,bls,* ]]; then
+    e2e e2e_bls_multi_64_on_a_node && r=0 || r=$?
+    say "register_bls_multi n = 64: rc=$r"
+    rc=$((rc | r))
+fi
+if [[ ,$PARTS, == *,pqz,* ]]; then
+    # a NORMAL_PQZ token of the deploy's factory (PRECOMPILE mode), its public units minted to the payer
+    FACTORY=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["token_factory"])' "$COPY/book.json")
+    CD=$(cd smartcontracts/evm && MINTER=$(cast wallet address --private-key "$PK") FOUNDRY_PROFILE=scaas-testnet \
+    FOUNDRY_OUT=out/m20 FOUNDRY_CACHE_PATH=cache/m20 "$W/scripts/capped" forge script script/SdkM20PqzToken.s.sol 2>>"$LOG" |
+        grep -A1 'M20 calldata' | tail -1 | tr -d ' ')
+    rm -rf smartcontracts/evm/out/m20 smartcontracts/evm/cache/m20
+    # the token's address by an eth_call on the node (its precompile runs the token's self-test), then the same call sent
+    T=$(cast call --from "$(cast wallet address --private-key "$PK")" "$FACTORY" "$CD" --rpc-url "$RPC")
+    cast send --private-key "$PK" --rpc-url "$RPC" --gas-limit 30000000 "$FACTORY" "$CD" >>"$LOG" 2>&1
+    UID_=$(cast call "$FACTORY" "chainUid()(bytes32)" --rpc-url "$RPC")
+    echo "M20 token 0x${T: -40}" >>"$LOG"
+    cast send --private-key "$PK" --rpc-url "$RPC" "0x${T: -40}" "mint(address,uint256,bytes32)" "$HOLDER" 1000000000000 "$UID_" >>"$LOG" 2>&1
+    TOKEN=$(grep -m1 'M20 token' "$LOG" | awk '{print $NF}')
+    say "PQZ token $TOKEN"
+    e2e e2e_pqz_debit_on_a_node && r=0 || r=$?
+    say "PQZ debit (mtxConfidentialTransferSingle): rc=$r"
+    rc=$((rc | r))
+fi
 grep '^M20 ' "$LOG" | sed 's/^/[m20] /'
-say "register_bls_multi n = 64: rc=$rc"
+[[ ,$PARTS, == *,control,* ]] || exit "$rc"
 TX=$(grep '^M20 tx ' "$LOG" | awk '{print $3}')
 [ -n "$TX" ] && say "receipt: $(cast receipt "$TX" --rpc-url "$RPC" --json | python3 -I -c 'import json,sys; r=json.load(sys.stdin); print({k: r.get(k) for k in ("status","gasUsed","blockNumber","blockGasUsed","gasUsedRegular","gasUsedState")})')"
 # the negative control: initcode that loops for ever (JUMPDEST PUSH1 0 JUMP). Its regular gas has no bound but the cap:

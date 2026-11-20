@@ -246,10 +246,10 @@ fn row(entry: &str, kind: &str, gas: u64, regular: u64) -> crate::GasBase {
     }
 }
 
-/// The SDK's figure of rows summing to `g` for a calldata of `len` bytes: the intrinsic cost, 64 gas a byte, the margin.
+/// The SDK's figure of fixed-cost rows summing to `g` for a calldata of `len` bytes: the intrinsic cost and 64 gas a byte,
+/// no margin (owner 2026-11-20, approved lowering the registry-write margin).
 fn fig(g: u64, len: usize) -> u64 {
-    let x = g + 21_000 + 64 * len as u64;
-    x + x / 2
+    g + 21_000 + 64 * len as u64
 }
 
 /// The rows of an ML-DSA-65 registration with its KEM key and PQZ key: the kind's, the KEM key's, the PQZ key's (with its
@@ -485,7 +485,7 @@ async fn pq_registration_two_steps_above_half_the_block() {
         (q.gas_limit, q.regular_gas),
         (fig(26_000_000, l1).max(40_000_000), fig(1_310_000, l1))
     );
-    // at its quote a step is held to half the block again: the chain's limit lowered to 70 M (41.5 M > 35 M)
+    // at its quote a step is held to half the block again: the chain's limit lowered to 70 M (40 M > 35 M)
     t.chain.lock().unwrap().block_gas_limit = 70_000_000;
     assert_eq!(
         t.sdk
@@ -498,7 +498,7 @@ async fn pq_registration_two_steps_above_half_the_block() {
     );
 }
 
-/// (c) A step that alone does not fit: the first above half the block (70 M: 41.5 M > 35 M) is `GasAboveBlockShare`; the
+/// (c) A step that alone does not fit: the first above half the block (70 M: 40 M > 35 M) is `GasAboveBlockShare`; the
 /// second's regular gas above 2^24 is `GasAboveTxCap`; nothing kept, nothing sent. The control: the same within both.
 #[tokio::test(flavor = "multi_thread")]
 async fn pq_registration_step_that_does_not_fit_refused() {
@@ -510,7 +510,8 @@ async fn pq_registration_step_that_does_not_fit_refused() {
             .code(),
         "GasAboveBlockShare"
     );
-    let t = reg_setup(PQ, 150_000_000, reg_rows(300_000, 12_000_000)).await;
+    // a row of 15 M: with the calldata above 2^24, no margin needed (owner 2026-11-20; it was 12 M under the margin)
+    let t = reg_setup(PQ, 150_000_000, reg_rows(300_000, 15_000_000)).await;
     assert_eq!(
         writes(&t.sdk, "local", &t.payer, t.ua, &t.args, None)
             .await
@@ -592,8 +593,8 @@ async fn pq_registration_resumes_the_second_step() {
         (Some(q.gas_limit), Some(q.regular_gas)),
         (s2.gas, s2.regular_gas)
     );
-    // the resumed step held as at the split: its regular gas above the cap (a row of 12 M) refused, nothing kept
-    let big = reg_setup(PQ, 150_000_000, reg_rows(300_000, 12_000_000)).await;
+    // the resumed step held as at the split: its regular gas above the cap (a row of 15 M) refused, nothing kept
+    let big = reg_setup(PQ, 150_000_000, reg_rows(300_000, 15_000_000)).await;
     big.chain.lock().unwrap().answers = t.chain.lock().unwrap().answers.clone();
     assert_eq!(
         writes(&big.sdk, "local", &big.payer, big.ua, &big.args, None)
@@ -610,7 +611,8 @@ async fn pq_registration_resumes_the_second_step() {
 #[tokio::test(flavor = "multi_thread")]
 async fn registration_regular_above_the_cap_refused() {
     let mut rows = reg_rows(300_000, 2_000_000);
-    rows[0] = row("register", "ua-0x0131", 15_000_000, 12_000_000);
+    // a regular row of 17 M, above 2^24 alone (it was 12 M under the margin, owner 2026-11-20)
+    rows[0] = row("register", "ua-0x0131", 20_000_000, 17_000_000);
     let t = reg_setup("mldsa65#1", 150_000_000, rows).await;
     t.chain.lock().unwrap().gas_of = Some(|_| 1_000_000);
     let ws = writes(&t.sdk, "local", &t.payer, t.ua, &t.args, None)
@@ -667,7 +669,9 @@ fn reference_rows_cover_every_registry_write() {
             &rows,
             members,
             signers,
+            0,
         )
+        .map(|f| f.map(|f| (f.gas, f.regular, f.from)))
     };
     let kinds = (0x0101..=0x0108).chain(0x0130..=0x0135).chain([0x0141]);
     for k in kinds {
@@ -787,5 +791,132 @@ fn registry_write_shapes() {
     assert!(
         shape_of("mtxPay", &a).rows.is_empty(),
         "not a registry write"
+    );
+}
+
+/// Owner 2026-11-20 (approved lowering the registry-write margin): a registry write is quoted as measured where its row is
+/// fixed cost, with the intrinsic cost and 64 gas a calldata byte; the margin stays on a base row of a data-dependent kind
+/// (ed25519 `0x0102`, FN-DSA `0x0132` / `0x0135`: its PoP's verify) and on a slot's verify row of one, regular bound included.
+#[test]
+fn registry_margin_on_the_data_dependent_parts_only() {
+    let v = |signer: u16, gas: u64| crate::GasVerify {
+        signer,
+        gas,
+        sig_bytes: 0,
+        margin: 0,
+        per_item: None,
+    };
+    let chain = crate::GasRows {
+        base: vec![
+            row("register", "ua-0x0131", 1_000_000, 100_000),
+            row("register", "ua-0x0132", 2_000_000, 200_000),
+            row("register", "ua-0x0102", 400_000, 40_000),
+            row("registerMsig", "msig", 500_000, 50_000),
+        ],
+        verify: vec![v(0x0131, 100_000), v(0x0102, 300_000), v(0x0135, 900_000)],
+    };
+    let q = |rows: &[(&str, &str)], signers: &[u16]| {
+        let rows: Vec<(String, String)> = rows
+            .iter()
+            .map(|(e, k)| (e.to_string(), k.to_string()))
+            .collect();
+        let f = crate::op::gas::registry_gas(&chain, &[], &[], &rows, 2, signers, 100)
+            .unwrap()
+            .unwrap();
+        (f.gas, f.regular)
+    };
+    let plain = |g: u64| g + 21_000 + 64 * 100;
+    let m = crate::op::gas::with_margin;
+    // a fixed-cost row: as measured
+    assert_eq!(
+        q(&[("register", "ua-0x0131")], &[]),
+        (plain(1_000_000), plain(100_000))
+    );
+    // FN-DSA-512's and ed25519's rows keep the margin; the intrinsic cost and the calldata do not take it
+    assert_eq!(
+        q(&[("register", "ua-0x0132")], &[]),
+        (plain(0) + m(2_000_000), plain(0) + m(200_000))
+    );
+    assert_eq!(
+        q(&[("register", "ua-0x0102")], &[]),
+        (plain(0) + m(400_000), plain(0) + m(40_000))
+    );
+    // msig: a fixed slot's verify row as measured, a data-dependent slot's with the margin (a verify row whole)
+    assert_eq!(
+        q(&[("registerMsig", "msig")], &[0x0131, 0x0102, 0x0135]),
+        (
+            plain(500_000 + 100_000) + m(300_000 + 900_000),
+            plain(50_000 + 100_000) + m(300_000 + 900_000)
+        )
+    );
+}
+
+/// Owner 2026-11-20 (approved lowering the registry-write margin): the reference table's quote of the M20 registration (an
+/// ML-DSA-65 UA with its PQZ key, no KEM key) never below the gas the local Nethermind copy used
+/// (`runs/2026-11-20-m20-nethermind-summary.txt`): `register` without the proof 38,807,855, `storePqzPop` 50,603,833, the one
+/// transaction at least their sum; and it fits one transaction on a block of 200 M (whole <= 100 M, regular <= 2^24).
+#[test]
+fn registry_quote_never_below_the_m20_receipts() {
+    let t = crate::GasTable::parse(crate::op::gas::REFERENCE_FILE).unwrap();
+    let opt = [crate::op::gas::REFERENCE.to_string()];
+    let none = crate::GasRows::default();
+    let v: Value = serde_json::from_str(
+        &std::fs::read_to_string(format!(
+            "{}/../../smartcontracts/vectors/ua/portable.json",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let r = v["registrations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == PQ)
+        .unwrap();
+    let mut a = r["args"].clone();
+    a["attrs"]["kem"] =
+        json!({"scheme": 0, "mlkemEk": "0x", "x25519": format!("0x{}", "00".repeat(32))});
+    let quote = |entry: &str, args: &Value| {
+        let cd = registry_call(entry, args).unwrap();
+        let s = shape_of(entry, args);
+        assert!(!s.rows.iter().any(|(_, k)| k == "kem"), "no KEM key");
+        crate::op::gas::registry_gas(
+            &none,
+            &opt,
+            std::slice::from_ref(&t),
+            &s.rows,
+            s.members,
+            &s.signers,
+            cd.len(),
+        )
+        .unwrap()
+        .unwrap()
+    };
+    let (used1, used2) = (38_807_855u64, 50_603_833u64);
+    let one = quote("register", &a);
+    let mut first = a.clone();
+    first["pqzPop"] = json!("0x");
+    let r1 = quote("register", &first);
+    let store = json!({"ua": r["ua"], "version": 0, "pqzPop": a["pqzPop"]});
+    let r2 = quote("storePqzPop", &store);
+    let above = |q: u64, used: u64| q * 1_000 / used;
+    println!(
+        "register {} / {used1} (x{}e-3), storePqzPop {} / {used2} (x{}e-3), one transaction {} regular {} / {} (x{}e-3)",
+        r1.gas,
+        above(r1.gas, used1),
+        r2.gas,
+        above(r2.gas, used2),
+        one.gas,
+        one.regular,
+        used1 + used2,
+        above(one.gas, used1 + used2)
+    );
+    assert!(r1.gas >= used1, "register below its receipt");
+    assert!(r2.gas >= used2, "storePqzPop below its receipt");
+    assert!(one.gas >= used1 + used2, "one transaction below the two");
+    assert!(
+        one.gas <= 100_000_000 && one.regular <= 1 << 24,
+        "one transaction on a block of 200 M"
     );
 }

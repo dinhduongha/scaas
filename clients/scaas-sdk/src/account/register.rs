@@ -492,8 +492,8 @@ pub(crate) fn shape_of(entry: &str, args: &Value) -> GasShape {
     g
 }
 
-/// The gas table's figure of `shape` on `chain` for `len` bytes of calldata (with the intrinsic cost and the margin); `None`
-/// without every row.
+/// The gas table's figure of `shape` on `chain` for `len` bytes of calldata ([`crate::op::gas::registry_gas`]: the intrinsic
+/// cost, the calldata, the margin on the data-dependent parts only); `None` without every row.
 fn table_figure(
     sdk: &Sdk,
     chain: &str,
@@ -505,15 +505,15 @@ fn table_figure(
         .iter()
         .find(|c| c.profile.key == chain)
         .ok_or(SdkError::ChainUnknown)?;
-    Ok(crate::op::gas::registry_gas(
+    crate::op::gas::registry_gas(
         &c.profile.gas,
         &c.profile.gas_opt_in,
         &sdk.gas_tables,
         &shape.rows,
         shape.members,
         &shape.signers,
-    )?
-    .map(|(g, r, from)| crate::op::gas::with_calldata(g, r, len, from)))
+        len,
+    )
 }
 
 /// What a registration step is held to (owner 2026-11-20): its regular gas to the profile's per-transaction cap, its whole to
