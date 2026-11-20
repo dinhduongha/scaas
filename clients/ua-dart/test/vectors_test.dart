@@ -1268,4 +1268,39 @@ void main() {
       expect(registryCalldataLength('registerBlsMulti', args), 4 + 128 + 96 + 288 + 32 + 384 * m + 288 + 160 + 32);
     }
   });
+
+  // CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
+  group('registration target', () {
+    final gen1 = '0x${'aB' * 20}', gen2 = Uint8List.fromList(List.filled(20, 0x22)), zero = Uint8List(20);
+    final gen1Bytes = Uint8List.fromList(List.filled(20, 0xab));
+    test('target_equal_ok', () {
+      registrationTargetOk(0x0131, gen1, gen1.toLowerCase());
+      registrationTargetOk(0x0131, gen1Bytes, gen1);
+    });
+    test('target_other_verify_only', () {
+      expect(
+        () => registrationTargetOk(0x0131, gen2, gen1),
+        throwsA(
+          isA<TargetError>()
+              .having((e) => e.code, 'code', 'UAVerifyOnly')
+              .having((e) => e.kind, 'kind', 0x0131)
+              .having((e) => e.kindHome, 'kindHome', gen1Bytes),
+        ),
+      );
+      expect(() => registrationTargetOk(0x0131, gen2, gen1), throwsA(isA<UAError>()));
+    });
+    test('target_zero_home_not_on_line', () {
+      for (final reg in [gen1Bytes, zero]) {
+        expect(
+          () => registrationTargetOk(0x0131, reg, zero),
+          throwsA(
+            isA<TargetError>()
+                .having((e) => e.code, 'code', 'UAKindNotOnLine')
+                .having((e) => e.kindHome, 'kindHome', zero),
+          ),
+        );
+      }
+      expect(() => registrationTargetOk(0x0131, gen1, Uint8List(19)), throwsArgumentError);
+    });
+  });
 }

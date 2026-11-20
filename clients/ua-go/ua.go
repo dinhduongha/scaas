@@ -186,6 +186,30 @@ func IsMember(kind uint16, hederaNative bool) bool {
 		(hederaNative && kind == 0x0003)
 }
 
+// TargetError is why a registration of Kind does not belong on a registry (RegistrationTargetOk): Code UAVerifyOnly (register at
+// KindHome) or UAKindNotOnLine (KindHome zero: no generation of the line enables the kind).
+type TargetError struct {
+	Code     string
+	Kind     uint16
+	KindHome [20]byte
+}
+
+func (e *TargetError) Error() string {
+	return fmt.Sprintf("%s: kind 0x%04x kindHome 0x%x", e.Code, e.Kind, e.KindHome)
+}
+
+// RegistrationTargetOk is CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of
+// kind is sent to registry only where kindHome (the registry's kindHome(kind), read by the caller: no RPC here) equals it.
+func RegistrationTargetOk(kind uint16, registry, kindHome [20]byte) error {
+	if kindHome == ([20]byte{}) {
+		return &TargetError{"UAKindNotOnLine", kind, kindHome}
+	}
+	if kindHome != registry {
+		return &TargetError{"UAVerifyOnly", kind, kindHome}
+	}
+	return nil
+}
+
 func KindTagString(kind uint16) (string, error) {
 	k, err := tagged(kind)
 	if err != nil {

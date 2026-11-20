@@ -1049,5 +1049,32 @@ class GovernanceBits(unittest.TestCase):
             self.assertTrue(row["sentences"] and all(row["sentences"].values()), i)
 
 
+class RegistrationTarget(unittest.TestCase):
+    """CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry."""
+
+    GEN1, GEN2, ZERO = bytes([0x11] * 20), bytes([0x22] * 20), bytes(20)
+
+    def test_target_equal_ok(self):
+        self.assertIsNone(ua.registration_target_ok(0x0131, self.GEN1, bytearray(self.GEN1)))
+
+    def test_target_other_verify_only(self):
+        with self.assertRaises(ua.TargetError) as c:
+            ua.registration_target_ok(0x0131, self.GEN2, self.GEN1)
+        self.assertIsInstance(c.exception, ua.UAError)
+        self.assertEqual(
+            (c.exception.code, c.exception.kind, c.exception.kind_home), ("UAVerifyOnly", 0x0131, self.GEN1)
+        )
+
+    def test_target_zero_home_not_on_line(self):
+        for reg in (self.GEN1, self.ZERO):
+            with self.assertRaises(ua.TargetError) as c:
+                ua.registration_target_ok(0x0131, reg, self.ZERO)
+            self.assertEqual(
+                (c.exception.code, c.exception.kind, c.exception.kind_home), ("UAKindNotOnLine", 0x0131, self.ZERO)
+            )
+        with self.assertRaises(ValueError):
+            ua.registration_target_ok(0x0131, self.GEN1, bytes(19))
+
+
 if __name__ == "__main__":
     unittest.main()

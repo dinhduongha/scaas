@@ -1609,3 +1609,28 @@ func TestBlsMulti(t *testing.T) {
 		}
 	}
 }
+
+// CTR-UA-65 (placeholder; spec 2026-11-19-registry-verify-only-kinds §12): a registration goes only where kindHome(kind) == registry.
+var gen1, gen2 = [20]byte{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11}, [20]byte{0x22}
+
+func TestTargetEqualOk(t *testing.T) {
+	if err := RegistrationTargetOk(0x0131, gen1, gen1); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTargetOtherVerifyOnly(t *testing.T) {
+	var te *TargetError
+	if err := RegistrationTargetOk(0x0131, gen2, gen1); !errors.As(err, &te) || *te != (TargetError{"UAVerifyOnly", 0x0131, gen1}) {
+		t.Fatal(err)
+	}
+}
+
+func TestTargetZeroHomeNotOnLine(t *testing.T) {
+	for _, reg := range [][20]byte{gen1, {}} {
+		var te *TargetError
+		if err := RegistrationTargetOk(0x0131, reg, [20]byte{}); !errors.As(err, &te) || *te != (TargetError{"UAKindNotOnLine", 0x0131, [20]byte{}}) {
+			t.Fatal(err)
+		}
+	}
+}
