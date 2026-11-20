@@ -1472,9 +1472,9 @@ final class UniffiLib {
     // uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret = findDowncallHandle("uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT, RustBuffer.LAYOUT, RustBuffer.LAYOUT, RustBuffer.LAYOUT, java.lang.foreign.ValueLayout.JAVA_LONG));
 
-    static long uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret(long ptr, java.lang.foreign.MemorySegment handle, java.lang.foreign.MemorySegment salt, java.lang.foreign.MemorySegment reason, java.lang.foreign.MemorySegment policy, long out) {
+    static long uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret(long ptr, java.lang.foreign.MemorySegment keyHandle, java.lang.foreign.MemorySegment salt, java.lang.foreign.MemorySegment reason, java.lang.foreign.MemorySegment policy, long out) {
         try {
-            return (long) MH_uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret.invokeExact(ptr, handle, salt, reason, policy, out);
+            return (long) MH_uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret.invokeExact(ptr, keyHandle, salt, reason, policy, out);
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 
@@ -1490,9 +1490,9 @@ final class UniffiLib {
     // uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign
     private static final java.lang.invoke.MethodHandle MH_uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign = findDowncallHandle("uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign", java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_LONG, java.lang.foreign.ValueLayout.JAVA_LONG, RustBuffer.LAYOUT, RustBuffer.LAYOUT, RustBuffer.LAYOUT));
 
-    static long uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign(long ptr, java.lang.foreign.MemorySegment handle, java.lang.foreign.MemorySegment uaMsg, java.lang.foreign.MemorySegment reason) {
+    static long uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign(long ptr, java.lang.foreign.MemorySegment keyHandle, java.lang.foreign.MemorySegment uaMsg, java.lang.foreign.MemorySegment reason) {
         try {
-            return (long) MH_uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign.invokeExact(ptr, handle, uaMsg, reason);
+            return (long) MH_uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign.invokeExact(ptr, keyHandle, uaMsg, reason);
         } catch (Throwable _ex) { throw new AssertionError("invokeExact failed", _ex); }
     }
 

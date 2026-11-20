@@ -9361,8 +9361,8 @@ static class _UniFFILib {
         }
         {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret();
-            if (checksum != 49374) {
-                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret` checksum `49374`, library returned `{checksum}`");
+            if (checksum != 25032) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret` checksum `25032`, library returned `{checksum}`");
             }
         }
         {
@@ -9373,8 +9373,8 @@ static class _UniFFILib {
         }
         {
             var checksum = _UniFFILib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign();
-            if (checksum != 49804) {
-                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign` checksum `49804`, library returned `{checksum}`");
+            if (checksum != 45943) {
+                throw new UniffiContractChecksumException($"uniffi.scaas_sdk: uniffi bindings expected function `uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign` checksum `45943`, library returned `{checksum}`");
             }
         }
         {
@@ -14062,6 +14062,10 @@ internal interface ForeignAuthenticator {
     Task<PasskeyCreated> CreatePasskey(string @rpId, string @userName, byte[][] @exclude);
     /// <exception cref="AuthException"></exception>
     Task<Assertion> GetAssertion(AssertionRequest @req, ulong @prfOut);
+    /// <summary>
+    /// `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+    /// `handle`, which uniffi-bindgen-cs and -go do not rename)
+    /// </summary>
     /// <exception cref="AuthException"></exception>
     Task PlatformSecret(string @keyHandle, byte[] @salt, string @reason, KeyPolicy? @policy, ulong @out);
     /// <exception cref="AuthException"></exception>
@@ -14207,6 +14211,10 @@ internal class ForeignAuthenticatorImpl : ForeignAuthenticator, IDisposable {
     );
     }
     
+    /// <summary>
+    /// `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+    /// `handle`, which uniffi-bindgen-cs and -go do not rename)
+    /// </summary>
     /// <exception cref="AuthException"></exception>
     public async Task PlatformSecret(string @keyHandle, byte[] @salt, string @reason, KeyPolicy? @policy, ulong @out) {await _UniFFIAsync.UniffiRustCallAsync(
         // Get rust future

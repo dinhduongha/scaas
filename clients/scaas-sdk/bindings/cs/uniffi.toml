@@ -11,8 +11,3 @@
 [bindings.csharp.rename."scaas_sdk::binding"]
 "SlotKey.Msig.ua" = "ua_value"
 "MsigSlotValue.Signed.member" = "member_value"
-
-# a foreign interface's argument named `handle` shadows the generated callback's own local `handle`: `key_handle` in C#
-[bindings.csharp.rename.scaas_sdk]
-"ForeignAuthenticator.platform_secret.handle" = "key_handle"
-"ForeignAuthenticator.p256_sign.handle" = "key_handle"

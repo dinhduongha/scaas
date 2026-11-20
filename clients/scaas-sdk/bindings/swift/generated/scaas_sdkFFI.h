@@ -1136,7 +1136,7 @@ uint64_t uniffi_scaas_sdk_fn_method_foreignauthenticator_get_assertion(uint64_t 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_FOREIGNAUTHENTICATOR_PLATFORM_SECRET
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_FOREIGNAUTHENTICATOR_PLATFORM_SECRET
-uint64_t uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret(uint64_t ptr, RustBuffer handle, RustBuffer salt, RustBuffer reason, RustBuffer policy, uint64_t out
+uint64_t uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret(uint64_t ptr, RustBuffer key_handle, RustBuffer salt, RustBuffer reason, RustBuffer policy, uint64_t out
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_FOREIGNAUTHENTICATOR_P256_GENERATE
@@ -1146,7 +1146,7 @@ uint64_t uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_generate(uint64_t 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_FOREIGNAUTHENTICATOR_P256_SIGN
 #define UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_METHOD_FOREIGNAUTHENTICATOR_P256_SIGN
-uint64_t uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign(uint64_t ptr, RustBuffer handle, RustBuffer ua_msg, RustBuffer reason
+uint64_t uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign(uint64_t ptr, RustBuffer key_handle, RustBuffer ua_msg, RustBuffer reason
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SCAAS_SDK_FN_CLONE_FOREIGNSTORE

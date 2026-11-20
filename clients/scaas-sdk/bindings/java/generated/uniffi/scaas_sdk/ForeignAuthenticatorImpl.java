@@ -157,17 +157,21 @@ public class ForeignAuthenticatorImpl implements AutoCloseable, ForeignAuthentic
     }
 
   
+    /**
+     * `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+     * `handle`, which uniffi-bindgen-cs and -go do not rename)
+     */
     @Override
-    public java.util.concurrent.CompletableFuture<java.lang.Void> platformSecret(java.lang.String handle, byte[] salt, java.lang.String reason, KeyPolicy policy, long out){
-        return platformSecret(handle, salt, reason, policy, out, java.util.concurrent.ForkJoinPool.commonPool());
-    }public java.util.concurrent.CompletableFuture<java.lang.Void> platformSecret(java.lang.String handle, byte[] salt, java.lang.String reason, KeyPolicy policy, long out, java.util.concurrent.Executor uniffiExecutor
+    public java.util.concurrent.CompletableFuture<java.lang.Void> platformSecret(java.lang.String keyHandle, byte[] salt, java.lang.String reason, KeyPolicy policy, long out){
+        return platformSecret(keyHandle, salt, reason, policy, out, java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<java.lang.Void> platformSecret(java.lang.String keyHandle, byte[] salt, java.lang.String reason, KeyPolicy policy, long out, java.util.concurrent.Executor uniffiExecutor
     ){
         return UniffiAsyncHelpers.uniffiRustCallAsync(
         uniffiExecutor,
         callWithHandle(uniffiHandle -> {
             return UniffiLib.uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret(
                 uniffiHandle,
-                FfiConverterString.INSTANCE.lower(handle), FfiConverterByteArray.INSTANCE.lower(salt), FfiConverterString.INSTANCE.lower(reason), FfiConverterOptionalTypeKeyPolicy.INSTANCE.lower(policy), out
+                FfiConverterString.INSTANCE.lower(keyHandle), FfiConverterByteArray.INSTANCE.lower(salt), FfiConverterString.INSTANCE.lower(reason), FfiConverterOptionalTypeKeyPolicy.INSTANCE.lower(policy), out
             );
         }),
         (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_void(future, callback, continuationHandle),
@@ -206,16 +210,16 @@ public class ForeignAuthenticatorImpl implements AutoCloseable, ForeignAuthentic
 
   
     @Override
-    public java.util.concurrent.CompletableFuture<byte[]> p256Sign(java.lang.String handle, byte[] uaMsg, java.lang.String reason){
-        return p256Sign(handle, uaMsg, reason, java.util.concurrent.ForkJoinPool.commonPool());
-    }public java.util.concurrent.CompletableFuture<byte[]> p256Sign(java.lang.String handle, byte[] uaMsg, java.lang.String reason, java.util.concurrent.Executor uniffiExecutor
+    public java.util.concurrent.CompletableFuture<byte[]> p256Sign(java.lang.String keyHandle, byte[] uaMsg, java.lang.String reason){
+        return p256Sign(keyHandle, uaMsg, reason, java.util.concurrent.ForkJoinPool.commonPool());
+    }public java.util.concurrent.CompletableFuture<byte[]> p256Sign(java.lang.String keyHandle, byte[] uaMsg, java.lang.String reason, java.util.concurrent.Executor uniffiExecutor
     ){
         return UniffiAsyncHelpers.uniffiRustCallAsync(
         uniffiExecutor,
         callWithHandle(uniffiHandle -> {
             return UniffiLib.uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign(
                 uniffiHandle,
-                FfiConverterString.INSTANCE.lower(handle), FfiConverterByteArray.INSTANCE.lower(uaMsg), FfiConverterString.INSTANCE.lower(reason)
+                FfiConverterString.INSTANCE.lower(keyHandle), FfiConverterByteArray.INSTANCE.lower(uaMsg), FfiConverterString.INSTANCE.lower(reason)
             );
         }),
         (future, callback, continuationHandle) -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuationHandle),

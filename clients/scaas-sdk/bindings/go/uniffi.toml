@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# uniffi-bindgen-go (plan T20h): the generated packages live in the Go module `scaas` (bindings/go/go.mod) under generated/, so
+# the reference library's package imports the SDK's as `scaas/generated/scaas_sdk`.
+[bindings.go]
+go_mod = "scaas/generated"

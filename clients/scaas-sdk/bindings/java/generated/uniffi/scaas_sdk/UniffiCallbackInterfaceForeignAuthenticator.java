@@ -143,11 +143,11 @@ public class UniffiCallbackInterfaceForeignAuthenticator {
         private PlatformSecretCallback() {}
 
         @Override
-        public void callback(long uniffiHandle,java.lang.foreign.MemorySegment handle,java.lang.foreign.MemorySegment salt,java.lang.foreign.MemorySegment reason,java.lang.foreign.MemorySegment policy,long out,java.lang.foreign.MemorySegment uniffiFutureCallback,long uniffiCallbackData,java.lang.foreign.MemorySegment uniffiOutDroppedCallback) {
+        public void callback(long uniffiHandle,java.lang.foreign.MemorySegment keyHandle,java.lang.foreign.MemorySegment salt,java.lang.foreign.MemorySegment reason,java.lang.foreign.MemorySegment policy,long out,java.lang.foreign.MemorySegment uniffiFutureCallback,long uniffiCallbackData,java.lang.foreign.MemorySegment uniffiOutDroppedCallback) {
             var uniffiObj = FfiConverterTypeForeignAuthenticator.INSTANCE.handleMap.get(uniffiHandle);
             java.util.function.Supplier<java.util.concurrent.CompletableFuture<java.lang.Void>> makeCall = () -> {
                 return uniffiObj.platformSecret(
-                    FfiConverterString.INSTANCE.lift(handle),
+                    FfiConverterString.INSTANCE.lift(keyHandle),
                     FfiConverterByteArray.INSTANCE.lift(salt),
                     FfiConverterString.INSTANCE.lift(reason),
                     FfiConverterOptionalTypeKeyPolicy.INSTANCE.lift(policy),
@@ -255,11 +255,11 @@ public class UniffiCallbackInterfaceForeignAuthenticator {
         private P256SignCallback() {}
 
         @Override
-        public void callback(long uniffiHandle,java.lang.foreign.MemorySegment handle,java.lang.foreign.MemorySegment uaMsg,java.lang.foreign.MemorySegment reason,java.lang.foreign.MemorySegment uniffiFutureCallback,long uniffiCallbackData,java.lang.foreign.MemorySegment uniffiOutDroppedCallback) {
+        public void callback(long uniffiHandle,java.lang.foreign.MemorySegment keyHandle,java.lang.foreign.MemorySegment uaMsg,java.lang.foreign.MemorySegment reason,java.lang.foreign.MemorySegment uniffiFutureCallback,long uniffiCallbackData,java.lang.foreign.MemorySegment uniffiOutDroppedCallback) {
             var uniffiObj = FfiConverterTypeForeignAuthenticator.INSTANCE.handleMap.get(uniffiHandle);
             java.util.function.Supplier<java.util.concurrent.CompletableFuture<byte[]>> makeCall = () -> {
                 return uniffiObj.p256Sign(
-                    FfiConverterString.INSTANCE.lift(handle),
+                    FfiConverterString.INSTANCE.lift(keyHandle),
                     FfiConverterByteArray.INSTANCE.lift(uaMsg),
                     FfiConverterString.INSTANCE.lift(reason)
                 );

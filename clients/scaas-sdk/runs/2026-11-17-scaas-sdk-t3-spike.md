@@ -119,3 +119,10 @@ uniffi 0.31): rc 0; `pingAsync` and `readAsync` return `CompletableFuture`, `Asy
 returns `CompletableFuture<byte[]>`. Java therefore takes the SDK's async API; the binding is `clients/scaas-sdk/bindings/java/`
 (decisions CLI-SDK-30, T20e2 change).
 
+## The Go half (plan T20h, 2026-11-20)
+
+The same probe through `uniffi-bindgen-go` v0.7.1+v0.31.0 (git tag, commit `0b7fb4ce`, `cargo install --git … --tag …
+--locked`): rc 0; `PingAsync(n uint32) uint32` and `ReadAsync(store AsyncStore, name string) (uint32, error)` block their
+goroutine over the async Rust, `AsyncStore` is a Go interface with `Get(name string) (*[]byte, error)`. Go therefore takes the
+SDK's async API; the binding is `clients/scaas-sdk/bindings/go/` (decisions CLI-SDK-30, T20h change).
+

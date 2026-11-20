@@ -78,13 +78,13 @@ final class FakeAuth: ForeignAuthenticator, @unchecked Sendable {
             signature: Data(count: 64), prf: true)
     }
 
-    func platformSecret(handle: String, salt: Data, reason: String, policy: KeyPolicy?, out: UInt64) async throws {
+    func platformSecret(keyHandle: String, salt: Data, reason: String, policy: KeyPolicy?, out: UInt64) async throws {
         throw AuthError.Unavailable
     }
 
     func p256Generate(policy: KeyPolicy) async throws -> SePublic { throw AuthError.Unavailable }
 
-    func p256Sign(handle: String, uaMsg: Data, reason: String) async throws -> Data { throw AuthError.Unavailable }
+    func p256Sign(keyHandle: String, uaMsg: Data, reason: String) async throws -> Data { throw AuthError.Unavailable }
 }
 
 func config() -> BindingConfig { BindingConfig(profiles: [], rpId: "wallet.example", limits: limitsDefault(), gasTables: []) }

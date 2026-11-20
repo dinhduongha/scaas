@@ -807,11 +807,11 @@ def _uniffi_check_api_checksums(lib):
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_get_assertion() != 16153:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret() != 49374:
+    if lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret() != 25032:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_generate() != 21302:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    if lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign() != 49804:
+    if lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign() != 45943:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     if lib.uniffi_scaas_sdk_checksum_method_foreignstore_get() != 59252:
         raise InternalError("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
@@ -27830,11 +27830,15 @@ class ForeignAuthenticator():
         raise NotImplementedError
     async def get_assertion(self, req: AssertionRequest,prf_out: int) -> Assertion:
         raise NotImplementedError
-    async def platform_secret(self, handle: str,salt: bytes,reason: str,policy: typing.Optional[KeyPolicy],out: int) -> None:
+    async def platform_secret(self, key_handle: str,salt: bytes,reason: str,policy: typing.Optional[KeyPolicy],out: int) -> None:
+        """
+        `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+        `handle`, which uniffi-bindgen-cs and -go do not rename)
+"""
         raise NotImplementedError
     async def p256_generate(self, policy: KeyPolicy) -> SePublic:
         raise NotImplementedError
-    async def p256_sign(self, handle: str,ua_msg: bytes,reason: str) -> bytes:
+    async def p256_sign(self, key_handle: str,ua_msg: bytes,reason: str) -> bytes:
         raise NotImplementedError
 
 class ForeignAuthenticatorImpl(ForeignAuthenticator):
@@ -27909,9 +27913,13 @@ class ForeignAuthenticatorImpl(ForeignAuthenticator):
             _uniffi_lift_return,
             _uniffi_error_converter,
         )
-    async def platform_secret(self, handle: str,salt: bytes,reason: str,policy: typing.Optional[KeyPolicy],out: int) -> None:
+    async def platform_secret(self, key_handle: str,salt: bytes,reason: str,policy: typing.Optional[KeyPolicy],out: int) -> None:
+        """
+        `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+        `handle`, which uniffi-bindgen-cs and -go do not rename)
+"""
         
-        _UniffiFfiConverterString.check_lower(handle)
+        _UniffiFfiConverterString.check_lower(key_handle)
 
         _UniffiFfiConverterBytes.check_lower(salt)
 
@@ -27922,7 +27930,7 @@ class ForeignAuthenticatorImpl(ForeignAuthenticator):
         _UniffiFfiConverterUInt64.check_lower(out)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
-            _UniffiFfiConverterString.lower(handle),
+            _UniffiFfiConverterString.lower(key_handle),
             _UniffiFfiConverterBytes.lower(salt),
             _UniffiFfiConverterString.lower(reason),
             _UniffiFfiConverterOptionalTypeKeyPolicy.lower(policy),
@@ -27955,16 +27963,16 @@ class ForeignAuthenticatorImpl(ForeignAuthenticator):
             _uniffi_lift_return,
             _uniffi_error_converter,
         )
-    async def p256_sign(self, handle: str,ua_msg: bytes,reason: str) -> bytes:
+    async def p256_sign(self, key_handle: str,ua_msg: bytes,reason: str) -> bytes:
         
-        _UniffiFfiConverterString.check_lower(handle)
+        _UniffiFfiConverterString.check_lower(key_handle)
 
         _UniffiFfiConverterBytes.check_lower(ua_msg)
 
         _UniffiFfiConverterString.check_lower(reason)
         _uniffi_lowered_args = (
             self._uniffi_clone_handle(),
-            _UniffiFfiConverterString.lower(handle),
+            _UniffiFfiConverterString.lower(key_handle),
             _UniffiFfiConverterBytes.lower(ua_msg),
             _UniffiFfiConverterString.lower(reason),
         )
@@ -28070,7 +28078,7 @@ class _UniffiTraitImplForeignAuthenticatorImpl:
     @_UNIFFI_CALLBACK_INTERFACE_SCAAS_SDK_FOREIGN_AUTHENTICATOR_METHOD2
     def platform_secret(
             uniffi_handle,
-            handle,
+            key_handle,
             salt,
             reason,
             policy,
@@ -28081,7 +28089,7 @@ class _UniffiTraitImplForeignAuthenticatorImpl:
         ):
         uniffi_obj = _UniffiFfiConverterTypeForeignAuthenticator._handle_map.get(uniffi_handle)
         def make_call():
-            uniffi_args = (_UniffiFfiConverterString.lift(handle), _UniffiFfiConverterBytes.lift(salt), _UniffiFfiConverterString.lift(reason), _UniffiFfiConverterOptionalTypeKeyPolicy.lift(policy), _UniffiFfiConverterUInt64.lift(out), )
+            uniffi_args = (_UniffiFfiConverterString.lift(key_handle), _UniffiFfiConverterBytes.lift(salt), _UniffiFfiConverterString.lift(reason), _UniffiFfiConverterOptionalTypeKeyPolicy.lift(policy), _UniffiFfiConverterUInt64.lift(out), )
             uniffi_method = uniffi_obj.platform_secret
             return uniffi_method(*uniffi_args)
         def handle_success(return_value):
@@ -28150,7 +28158,7 @@ class _UniffiTraitImplForeignAuthenticatorImpl:
     @_UNIFFI_CALLBACK_INTERFACE_SCAAS_SDK_FOREIGN_AUTHENTICATOR_METHOD4
     def p256_sign(
             uniffi_handle,
-            handle,
+            key_handle,
             ua_msg,
             reason,
             uniffi_future_callback,
@@ -28159,7 +28167,7 @@ class _UniffiTraitImplForeignAuthenticatorImpl:
         ):
         uniffi_obj = _UniffiFfiConverterTypeForeignAuthenticator._handle_map.get(uniffi_handle)
         def make_call():
-            uniffi_args = (_UniffiFfiConverterString.lift(handle), _UniffiFfiConverterBytes.lift(ua_msg), _UniffiFfiConverterString.lift(reason), )
+            uniffi_args = (_UniffiFfiConverterString.lift(key_handle), _UniffiFfiConverterBytes.lift(ua_msg), _UniffiFfiConverterString.lift(reason), )
             uniffi_method = uniffi_obj.p256_sign
             return uniffi_method(*uniffi_args)
         def handle_success(return_value):

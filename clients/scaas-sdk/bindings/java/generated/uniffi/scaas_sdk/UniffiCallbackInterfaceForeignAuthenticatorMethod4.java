@@ -6,7 +6,7 @@ public final class UniffiCallbackInterfaceForeignAuthenticatorMethod4 {
 
     @FunctionalInterface
     public interface Fn {
-        void callback(long uniffiHandle,java.lang.foreign.MemorySegment handle,java.lang.foreign.MemorySegment uaMsg,java.lang.foreign.MemorySegment reason,java.lang.foreign.MemorySegment uniffiFutureCallback,long uniffiCallbackData,java.lang.foreign.MemorySegment uniffiOutDroppedCallback);
+        void callback(long uniffiHandle,java.lang.foreign.MemorySegment keyHandle,java.lang.foreign.MemorySegment uaMsg,java.lang.foreign.MemorySegment reason,java.lang.foreign.MemorySegment uniffiFutureCallback,long uniffiCallbackData,java.lang.foreign.MemorySegment uniffiOutDroppedCallback);
     }
 
     public static java.lang.foreign.MemorySegment toUpcallStub(Fn fn, java.lang.foreign.Arena arena) {

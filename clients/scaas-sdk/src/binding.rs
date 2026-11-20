@@ -947,9 +947,11 @@ pub trait ForeignAuthenticator: Send + Sync {
         req: AssertionRequest,
         prf_out: u64,
     ) -> Result<Assertion, AuthError>;
+    /// `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+    /// `handle`, which uniffi-bindgen-cs and -go do not rename)
     async fn platform_secret(
         &self,
-        handle: String,
+        key_handle: String,
         salt: Vec<u8>,
         reason: String,
         policy: Option<KeyPolicy>,
@@ -958,7 +960,7 @@ pub trait ForeignAuthenticator: Send + Sync {
     async fn p256_generate(&self, policy: KeyPolicy) -> Result<SePublic, AuthError>;
     async fn p256_sign(
         &self,
-        handle: String,
+        key_handle: String,
         ua_msg: Vec<u8>,
         reason: String,
     ) -> Result<Vec<u8>, AuthError>;

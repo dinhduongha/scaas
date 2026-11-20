@@ -1,0 +1,5 @@
+# t20h mutants (name | outcome | commit | test | first failure line)
+the PRF output names another secret | killed | c56f5dbe7 | bash run.sh | --- FAIL: TestStoreAuthenticatorPanicAndErrors (0.89s)
+the store's write drops the expected revision | killed | c56f5dbe7 | bash run.sh | --- FAIL: TestStoreAuthenticatorPanicAndErrors (1.58s)
+the fixup leaves the bool lowering | killed | c56f5dbe7 | python3 -I test_fix_generated.py | FAIL: test_bool_custom_type_helpers (__main__.Fix.test_bool_custom_type_helpers)
+3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure

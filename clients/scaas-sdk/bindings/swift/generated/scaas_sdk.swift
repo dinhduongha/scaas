@@ -3706,11 +3706,15 @@ public protocol ForeignAuthenticator: AnyObject, Sendable {
     
     func getAssertion(req: AssertionRequest, prfOut: UInt64) async throws  -> Assertion
     
-    func platformSecret(handle: String, salt: Data, reason: String, policy: KeyPolicy?, out: UInt64) async throws 
+    /**
+     * `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+     * `handle`, which uniffi-bindgen-cs and -go do not rename)
+     */
+    func platformSecret(keyHandle: String, salt: Data, reason: String, policy: KeyPolicy?, out: UInt64) async throws 
     
     func p256Generate(policy: KeyPolicy) async throws  -> SePublic
     
-    func p256Sign(handle: String, uaMsg: Data, reason: String) async throws  -> Data
+    func p256Sign(keyHandle: String, uaMsg: Data, reason: String) async throws  -> Data
     
 }
 /**
@@ -3805,13 +3809,17 @@ open func getAssertion(req: AssertionRequest, prfOut: UInt64)async throws  -> As
         )
 }
     
-open func platformSecret(handle: String, salt: Data, reason: String, policy: KeyPolicy?, out: UInt64)async throws   {
+    /**
+     * `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+     * `handle`, which uniffi-bindgen-cs and -go do not rename)
+     */
+open func platformSecret(keyHandle: String, salt: Data, reason: String, policy: KeyPolicy?, out: UInt64)async throws   {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret(
                     self.uniffiCloneHandle(),
-                    FfiConverterString.lower(handle),FfiConverterData.lower(salt),FfiConverterString.lower(reason),FfiConverterOptionTypeKeyPolicy.lower(policy),FfiConverterUInt64.lower(out)
+                    FfiConverterString.lower(keyHandle),FfiConverterData.lower(salt),FfiConverterString.lower(reason),FfiConverterOptionTypeKeyPolicy.lower(policy),FfiConverterUInt64.lower(out)
                 )
             },
             pollFunc: ffi_scaas_sdk_rust_future_poll_void,
@@ -3839,13 +3847,13 @@ open func p256Generate(policy: KeyPolicy)async throws  -> SePublic  {
         )
 }
     
-open func p256Sign(handle: String, uaMsg: Data, reason: String)async throws  -> Data  {
+open func p256Sign(keyHandle: String, uaMsg: Data, reason: String)async throws  -> Data  {
     return
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign(
                     self.uniffiCloneHandle(),
-                    FfiConverterString.lower(handle),FfiConverterData.lower(uaMsg),FfiConverterString.lower(reason)
+                    FfiConverterString.lower(keyHandle),FfiConverterData.lower(uaMsg),FfiConverterString.lower(reason)
                 )
             },
             pollFunc: ffi_scaas_sdk_rust_future_poll_rust_buffer,
@@ -3979,7 +3987,7 @@ fileprivate struct UniffiCallbackInterfaceForeignAuthenticator {
         },
         platformSecret: { (
             uniffiHandle: UInt64,
-            handle: RustBuffer,
+            keyHandle: RustBuffer,
             salt: RustBuffer,
             reason: RustBuffer,
             policy: RustBuffer,
@@ -3994,7 +4002,7 @@ fileprivate struct UniffiCallbackInterfaceForeignAuthenticator {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.platformSecret(
-                     handle: try FfiConverterString.lift(handle),
+                     keyHandle: try FfiConverterString.lift(keyHandle),
                      salt: try FfiConverterData.lift(salt),
                      reason: try FfiConverterString.lift(reason),
                      policy: try FfiConverterOptionTypeKeyPolicy.lift(policy),
@@ -4071,7 +4079,7 @@ fileprivate struct UniffiCallbackInterfaceForeignAuthenticator {
         },
         p256Sign: { (
             uniffiHandle: UInt64,
-            handle: RustBuffer,
+            keyHandle: RustBuffer,
             uaMsg: RustBuffer,
             reason: RustBuffer,
             uniffiFutureCallback: @escaping UniffiForeignFutureCompleteRustBuffer,
@@ -4084,7 +4092,7 @@ fileprivate struct UniffiCallbackInterfaceForeignAuthenticator {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
                 return try await uniffiObj.p256Sign(
-                     handle: try FfiConverterString.lift(handle),
+                     keyHandle: try FfiConverterString.lift(keyHandle),
                      uaMsg: try FfiConverterData.lift(uaMsg),
                      reason: try FfiConverterString.lift(reason)
                 )
@@ -30079,13 +30087,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_scaas_sdk_checksum_method_foreignauthenticator_get_assertion() != 16153) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret() != 49374) {
+    if (uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret() != 25032) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_generate() != 21302) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign() != 49804) {
+    if (uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign() != 45943) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_scaas_sdk_checksum_method_foreignstore_get() != 59252) {

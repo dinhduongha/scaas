@@ -627,13 +627,13 @@ internal interface UniffiCallbackInterfaceForeignAuthenticatorMethod1 : com.sun.
     fun callback(`uniffiHandle`: Long,`req`: RustBuffer.ByValue,`prfOut`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceForeignAuthenticatorMethod2 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`handle`: RustBuffer.ByValue,`salt`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`out`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+    fun callback(`uniffiHandle`: Long,`keyHandle`: RustBuffer.ByValue,`salt`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`out`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceForeignAuthenticatorMethod3 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`policy`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceForeignAuthenticatorMethod4 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`handle`: RustBuffer.ByValue,`uaMsg`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
+    fun callback(`uniffiHandle`: Long,`keyHandle`: RustBuffer.ByValue,`uaMsg`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
 }
 internal interface UniffiCallbackInterfaceForeignStoreMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`name`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,)
@@ -1615,11 +1615,11 @@ external fun uniffi_scaas_sdk_fn_method_foreignauthenticator_create_passkey(`ptr
 ): Long
 external fun uniffi_scaas_sdk_fn_method_foreignauthenticator_get_assertion(`ptr`: Long,`req`: RustBuffer.ByValue,`prfOut`: Long,
 ): Long
-external fun uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret(`ptr`: Long,`handle`: RustBuffer.ByValue,`salt`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`out`: Long,
+external fun uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret(`ptr`: Long,`keyHandle`: RustBuffer.ByValue,`salt`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`out`: Long,
 ): Long
 external fun uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_generate(`ptr`: Long,`policy`: RustBuffer.ByValue,
 ): Long
-external fun uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign(`ptr`: Long,`handle`: RustBuffer.ByValue,`uaMsg`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,
+external fun uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign(`ptr`: Long,`keyHandle`: RustBuffer.ByValue,`uaMsg`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,
 ): Long
 external fun uniffi_scaas_sdk_fn_clone_foreignstore(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
@@ -2531,13 +2531,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_get_assertion() != 16153.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret() != 49374.toShort()) {
+    if (lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret() != 25032.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_generate() != 21302.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign() != 49804.toShort()) {
+    if (lib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign() != 45943.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_scaas_sdk_checksum_method_foreignstore_get() != 59252.toShort()) {
@@ -7646,11 +7646,15 @@ public interface ForeignAuthenticator {
     
     suspend fun `getAssertion`(`req`: AssertionRequest, `prfOut`: kotlin.ULong): Assertion
     
-    suspend fun `platformSecret`(`handle`: kotlin.String, `salt`: kotlin.ByteArray, `reason`: kotlin.String, `policy`: KeyPolicy?, `out`: kotlin.ULong)
+    /**
+     * `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+     * `handle`, which uniffi-bindgen-cs and -go do not rename)
+     */
+    suspend fun `platformSecret`(`keyHandle`: kotlin.String, `salt`: kotlin.ByteArray, `reason`: kotlin.String, `policy`: KeyPolicy?, `out`: kotlin.ULong)
     
     suspend fun `p256Generate`(`policy`: KeyPolicy): SePublic
     
-    suspend fun `p256Sign`(`handle`: kotlin.String, `uaMsg`: kotlin.ByteArray, `reason`: kotlin.String): kotlin.ByteArray
+    suspend fun `p256Sign`(`keyHandle`: kotlin.String, `uaMsg`: kotlin.ByteArray, `reason`: kotlin.String): kotlin.ByteArray
     
     companion object
 }
@@ -7799,14 +7803,18 @@ open class ForeignAuthenticatorImpl: Disposable, AutoCloseable, ForeignAuthentic
     }
 
     
+    /**
+     * `key_handle`: the platform key's handle (the Rust trait's `handle`; named apart from the generated callbacks' own local
+     * `handle`, which uniffi-bindgen-cs and -go do not rename)
+     */
     @Throws(AuthException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `platformSecret`(`handle`: kotlin.String, `salt`: kotlin.ByteArray, `reason`: kotlin.String, `policy`: KeyPolicy?, `out`: kotlin.ULong) {
+    override suspend fun `platformSecret`(`keyHandle`: kotlin.String, `salt`: kotlin.ByteArray, `reason`: kotlin.String, `policy`: KeyPolicy?, `out`: kotlin.ULong) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_scaas_sdk_fn_method_foreignauthenticator_platform_secret(
                 uniffiHandle,
-                FfiConverterString.lower(`handle`),FfiConverterByteArray.lower(`salt`),FfiConverterString.lower(`reason`),FfiConverterOptionalTypeKeyPolicy.lower(`policy`),FfiConverterULong.lower(`out`),
+                FfiConverterString.lower(`keyHandle`),FfiConverterByteArray.lower(`salt`),FfiConverterString.lower(`reason`),FfiConverterOptionalTypeKeyPolicy.lower(`policy`),FfiConverterULong.lower(`out`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_void(future, callback, continuation) },
@@ -7844,12 +7852,12 @@ open class ForeignAuthenticatorImpl: Disposable, AutoCloseable, ForeignAuthentic
     
     @Throws(AuthException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `p256Sign`(`handle`: kotlin.String, `uaMsg`: kotlin.ByteArray, `reason`: kotlin.String) : kotlin.ByteArray {
+    override suspend fun `p256Sign`(`keyHandle`: kotlin.String, `uaMsg`: kotlin.ByteArray, `reason`: kotlin.String) : kotlin.ByteArray {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_scaas_sdk_fn_method_foreignauthenticator_p256_sign(
                 uniffiHandle,
-                FfiConverterString.lower(`handle`),FfiConverterByteArray.lower(`uaMsg`),FfiConverterString.lower(`reason`),
+                FfiConverterString.lower(`keyHandle`),FfiConverterByteArray.lower(`uaMsg`),FfiConverterString.lower(`reason`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_scaas_sdk_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -7952,11 +7960,11 @@ internal object uniffiCallbackInterfaceForeignAuthenticator {
         }
     }
     internal object `platformSecret`: UniffiCallbackInterfaceForeignAuthenticatorMethod2 {
-        override fun callback(`uniffiHandle`: Long,`handle`: RustBuffer.ByValue,`salt`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`out`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+        override fun callback(`uniffiHandle`: Long,`keyHandle`: RustBuffer.ByValue,`salt`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`policy`: RustBuffer.ByValue,`out`: Long,`uniffiFutureCallback`: UniffiForeignFutureCompleteVoid,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignAuthenticator.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
                 uniffiObj.`platformSecret`(
-                    FfiConverterString.lift(`handle`),
+                    FfiConverterString.lift(`keyHandle`),
                     FfiConverterByteArray.lift(`salt`),
                     FfiConverterString.lift(`reason`),
                     FfiConverterOptionalTypeKeyPolicy.lift(`policy`),
@@ -8022,11 +8030,11 @@ internal object uniffiCallbackInterfaceForeignAuthenticator {
         }
     }
     internal object `p256Sign`: UniffiCallbackInterfaceForeignAuthenticatorMethod4 {
-        override fun callback(`uniffiHandle`: Long,`handle`: RustBuffer.ByValue,`uaMsg`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
+        override fun callback(`uniffiHandle`: Long,`keyHandle`: RustBuffer.ByValue,`uaMsg`: RustBuffer.ByValue,`reason`: RustBuffer.ByValue,`uniffiFutureCallback`: UniffiForeignFutureCompleteRustBuffer,`uniffiCallbackData`: Long,`uniffiOutDroppedCallback`: UniffiForeignFutureDroppedCallbackStruct,) {
             val uniffiObj = FfiConverterTypeForeignAuthenticator.handleMap.get(uniffiHandle)
             val makeCall = suspend { ->
                 uniffiObj.`p256Sign`(
-                    FfiConverterString.lift(`handle`),
+                    FfiConverterString.lift(`keyHandle`),
                     FfiConverterByteArray.lift(`uaMsg`),
                     FfiConverterString.lift(`reason`),
                 )

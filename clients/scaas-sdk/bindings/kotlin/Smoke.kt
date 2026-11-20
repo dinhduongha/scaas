@@ -82,12 +82,12 @@ class FakeAuth : ForeignAuthenticator {
         return Assertion(byteArrayOf(0xc1.toByte(), 0xed.toByte()), ByteArray(37), ByteArray(0), ByteArray(64), true)
     }
 
-    override suspend fun platformSecret(handle: String, salt: ByteArray, reason: String, policy: KeyPolicy?, out: ULong) =
+    override suspend fun platformSecret(keyHandle: String, salt: ByteArray, reason: String, policy: KeyPolicy?, out: ULong) =
         throw AuthException.Unavailable()
 
     override suspend fun p256Generate(policy: KeyPolicy): SePublic = throw AuthException.Unavailable()
 
-    override suspend fun p256Sign(handle: String, uaMsg: ByteArray, reason: String): ByteArray = throw AuthException.Unavailable()
+    override suspend fun p256Sign(keyHandle: String, uaMsg: ByteArray, reason: String): ByteArray = throw AuthException.Unavailable()
 }
 
 fun config() = BindingConfig(listOf(), "wallet.example", limitsDefault(), listOf())

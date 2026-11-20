@@ -18,6 +18,9 @@
 #   swift   the Swift binding (the same generator, swiftformat not run) over the same library: bindings/swift/generated/
 #   java    the Java binding (uniffi-bindgen-java 0.4.2, unformatted) over the same library: bindings/java/generated/; three
 #           generator defects fixed after it by bindings/java/fix_generated.py (decisions CLI-SDK-30, T20e2 change)
+#   go      the Go binding (uniffi-bindgen-go v0.7.1+v0.31.0, its module path in bindings/go/uniffi.toml) over the same library:
+#           bindings/go/generated/; one generator defect fixed after it by bindings/go/fix_generated.py (decisions CLI-SDK-30,
+#           T20h change)
 # A UniFFI generator is the pin when `cargo install` recorded that version in the root it runs from (locally
 # `cargo install --locked --root <main checkout>/scratchpad/tools/uniffi`, on PATH). Each part's old output is removed first,
 # so a file the surface no longer produces cannot stay behind. The codegen runs through scripts/capped, in the foreground (on
@@ -25,10 +28,10 @@
 set -euo pipefail
 W=$(git rev-parse --show-toplevel)
 D="$W/clients/scaas-sdk"
-PARTS=",${SCAAS_GEN:-dart,cpp,cs,python,kotlin,swift,java},"
+PARTS=",${SCAAS_GEN:-dart,cpp,cs,python,kotlin,swift,java,go},"
 GEN=()
 if [[ $PARTS == *,dart,* ]]; then GEN+=(bindings/dart/lib/src/rust ffi/src/frb_generated.rs); fi
-for p in cpp cs python kotlin swift java; do
+for p in cpp cs python kotlin swift java go; do
     if [[ $PARTS == *,$p,* ]]; then GEN+=("bindings/$p/generated"); fi
 done
 [ ${#GEN[@]} -gt 0 ] || { echo "[gen] FAIL no part in SCAAS_GEN=${SCAAS_GEN:-}" >&2 && exit 2; }
@@ -125,6 +128,16 @@ if [[ $PARTS == *,java,* ]]; then
     (cd "$D/ffi" && uniffi-bindgen-java generate --no-format --out-dir "$D/bindings/java/generated" "$(lib uniffi)" >/dev/null)
     python3 -I "$D/bindings/java/fix_generated.py" "$D/bindings/java/generated" >/dev/null
     echo "[gen] ok: Java"
+fi
+if [[ $PARTS == *,go,* ]]; then
+    echo "[gen] start: Go (uniffi)"
+    pin uniffi-bindgen-go "0.7.1+v0.31.0"
+    bash "$D/bindings/lib.sh" uniffi >/dev/null
+    rm -rf "$D/bindings/go/generated"
+    (cd "$D/ffi" && uniffi-bindgen-go --library "$(lib uniffi)" --config "$D/bindings/go/uniffi.toml" \
+        --out-dir "$D/bindings/go/generated" >/dev/null)
+    python3 -I "$D/bindings/go/fix_generated.py" "$D/bindings/go/generated" >/dev/null
+    echo "[gen] ok: Go"
 fi
 if [ "${1:-}" = --check ]; then
     cd "$D"

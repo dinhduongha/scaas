@@ -544,13 +544,13 @@ final class NamespaceLibrary {
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_get_assertion() != ((short) 16153)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
-        if (UniffiLib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret() != ((short) 49374)) {
+        if (UniffiLib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_platform_secret() != ((short) 25032)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_generate() != ((short) 21302)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
-        if (UniffiLib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign() != ((short) 49804)) {
+        if (UniffiLib.uniffi_scaas_sdk_checksum_method_foreignauthenticator_p256_sign() != ((short) 45943)) {
             throw new RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project");
         }
         if (UniffiLib.uniffi_scaas_sdk_checksum_method_foreignstore_get() != ((short) 59252)) {

@@ -107,13 +107,13 @@ class FakeAuth(s.ForeignAuthenticator):
             credential_id=b"\xc1\xed", authenticator_data=bytes(37), client_data_json=b"", signature=bytes(64), prf=True
         )
 
-    async def platform_secret(self, handle, salt, reason, policy, out):
+    async def platform_secret(self, key_handle, salt, reason, policy, out):
         raise s.AuthError.Unavailable()
 
     async def p256_generate(self, policy):
         raise s.AuthError.Unavailable()
 
-    async def p256_sign(self, handle, ua_msg, reason):
+    async def p256_sign(self, key_handle, ua_msg, reason):
         raise s.AuthError.Unavailable()
 
 

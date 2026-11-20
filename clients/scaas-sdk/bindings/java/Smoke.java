@@ -121,7 +121,7 @@ public final class Smoke {
                     new Assertion(new byte[] {(byte) 0xc1, (byte) 0xed}, new byte[37], new byte[0], new byte[64], true));
         }
 
-        public CompletableFuture<Void> platformSecret(String handle, byte[] salt, String reason, KeyPolicy policy, long out) {
+        public CompletableFuture<Void> platformSecret(String keyHandle, byte[] salt, String reason, KeyPolicy policy, long out) {
             return CompletableFuture.failedFuture(new AuthException.Unavailable());
         }
 
@@ -129,7 +129,7 @@ public final class Smoke {
             return CompletableFuture.failedFuture(new AuthException.Unavailable());
         }
 
-        public CompletableFuture<byte[]> p256Sign(String handle, byte[] uaMsg, String reason) {
+        public CompletableFuture<byte[]> p256Sign(String keyHandle, byte[] uaMsg, String reason) {
             return CompletableFuture.failedFuture(new AuthException.Unavailable());
         }
     }
