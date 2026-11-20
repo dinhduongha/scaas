@@ -1069,6 +1069,44 @@ async fn zether_unshield_unwrap_pair() {
     );
 }
 
+/// M13 (review 2026-11-20), F19: a long `0x0141` list is sampled, not read whole: with 5,000 entries listed, a transfer of
+/// two decoys reads the list's length and a sample of `decoys + excluded` (4) words, a few dozen storage reads in all
+/// (whatever the draws find there); the whole list would be 5,000.
+#[tokio::test(flavor = "multi_thread")]
+async fn zether_decoy_list_sampled() {
+    use scaas_sdk::confidential::{ZetherLeg, ZetherTransferMulti};
+    let (s, seed, c, k, k2) = pairs_setup().await;
+    list(&c, &[&k, &k2]);
+    put(&c, REGISTRY, &map(&be(0x0141), &be(4)), &be(5_000));
+    c.lock().unwrap().requests.clear();
+    let _ = s
+        .confidential()
+        .prepare_zether_transfer_multi(ZetherTransferMulti {
+            seed: seed.clone(),
+            account: 0,
+            chain: "local".into(),
+            token: TOKEN.into(),
+            batch: "0".into(),
+            recipients: vec![ZetherLeg {
+                to_ua: k2.ua.clone(),
+                amount: "3".into(),
+            }],
+            decoys: 2,
+            decoy_fee: "0".into(),
+            ua_signer_gas: 0,
+            valid_until_block: 1000,
+            envelope: env(),
+            table_bits: Some(18),
+            bound_bits: Some(18),
+        })
+        .await;
+    let n = log(&c)
+        .iter()
+        .filter(|r| r["method"] == "eth_getStorageAt")
+        .count();
+    assert!(n > 0 && n < 100, "{n} storage reads");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn zether_transfer_multi_pairs() {
     use scaas_sdk::confidential::{ZetherLeg, ZetherTransferMulti};

@@ -27,6 +27,7 @@ MAJ = ("cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offli
 CONSENT = f"{SDK} --lib admin::tests::pqz_auditor_consent_of_a_derived_ua"
 NOTLISTED = f"{SDK} --test dex"
 DER = f"{SDK} --lib op::external::tests::der_signature_bounds"
+DEXT = f"{SDK} --test dex "
 MUTANTS = [
     ("F1: a slot signed elsewhere combined over another operation",
      [(MSIG, "                bound_to(member, ua, purpose, digest)?;\n", "")], APART),
@@ -103,6 +104,19 @@ MUTANTS = [
     ("M5, F3: a second block read",
      [(PQZ, "    let (raws, within) = a.value;", "    let _ = pool.read_at_block(choice, PURPOSE, |at| fetch(pool, at, plan)).await?;\n    let (raws, within) = a.value;")],
      f"{SDK} --test confidential_pqz pqz_balance_all_versions"),
+    ("M13, T12: a liquidity order on an unlisted DEX",
+     [(DEX, "                let entry = listed(&sdk, &req.chain, &dex)?;",
+       "                let entry = listed(&sdk, &req.chain, &dex).unwrap_or(crate::ListedDex {\n"
+       "                    address: req.dex.clone(),\n                    liquidity: true,\n"
+       "                    position_readers: vec![],\n                });")],
+     DEXT + "dex_not_on_profile_list_is_refused"),
+    ("M13, T9: an order's signature not the signer's over its digest",
+     [(DEX, '        json!({"keyData": hex(&s.key_data), "signature": hex(&s.signature), "members": []})',
+       '        json!({"keyData": hex(&s.key_data), "signature": hex(&[&s.signature[..], &[0][..]].concat()), "members": []})')],
+     DEXT + "liquidity_order_signs_under_its_check"),
+    ("M13, F19: a long list read whole (through the fake)",
+     [(READ, "if n <= want.saturating_mul(2) {", "if n <= u64::MAX {")],
+     f"{SDK} --test confidential zether_decoy_list_sampled"),
 ]
 
 if __name__ == "__main__":
