@@ -261,7 +261,7 @@ def config(net, env):
     }
     if net == "scaas-testnet":  # its own Blockscout and RPC, loopback (NET-EVM-09)
         c["kind"] = c["kind"] or "blockscout"
-        c["url"] = c["url"] or env.get("BLOCKSCOUT_API", "http://127.0.0.1:4000/api")
+        c["url"] = c["url"] or env.get("BLOCKSCOUT_API", "http://127.0.0.1:8557/api")
         c["rpc"] = c["rpc"] or env.get("RPC_7622", "http://127.0.0.1:8545")
         c["scan"] = env.get("VERIFY_SCAN", "1") == "1"
     if not c["kind"]:

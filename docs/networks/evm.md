@@ -627,13 +627,15 @@ balances are on (owner 2026-10-31: with the coin-balance fetcher disabled, Block
 after every block and the home-page block list stops; on the pruned node its catch-up retried old-block balances
 forever, about 1.5 CPU, until a one-off cleanup of those rows, `blockscout-code-backfill.py --prune-coin-balances`,
 rerun after an outage longer than the pruning window; archive mode at the sealer / RPC node split is the root fix);
-the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 4000; the frontend image is pinned
+the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 8557 (owner 2026-11-20; was 4000);
+Blockscout runs as a compose project of its own, apart from the chain's (the chain's compose holds the sealer and `rpc`
+only; the all-in-one file is kept beside it); the frontend image is pinned
 by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET-EVM-10)) it reads the archive `rpc`
 node, and neither the code backfill nor the coin-balance cleanup is needed. Contract verification (owner ruling 2026-10-31): a local
 `smart-contract-verifier` (v1.11.1, 768 MiB since 2026-10-31: the patched 31-contract run hit 512 MiB; 1 CPU, `mba-net` only, Solidity only, solc from
 binaries.soliditylang.org, never Blockscout's hosted service) backs the backend, and
 every contract on the chain is verified by the step of [NET-EVM-12](#NET-EVM-12), `sh script/onchain/verify.sh
-scaas-testnet` (this Blockscout's API `http://127.0.0.1:4000/api` and the RPC `http://127.0.0.1:8545`, both on the host's
+scaas-testnet` (this Blockscout's API `http://127.0.0.1:8557/api` and the RPC `http://127.0.0.1:8545`, both on the host's
 loopback: the earlier LAN address is gone; the whole-chain scan on; the older per-broadcast `verify-blockscout.sh` stays);
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
 image (built outside the repo, `~dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
