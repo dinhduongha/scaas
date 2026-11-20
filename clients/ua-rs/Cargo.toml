@@ -142,6 +142,8 @@ vectors = ["wallet", "scaas-ct/vectors", "ml-kem/hazmat", "zether-prover?/hazmat
 mlock = ["wallet", "dep:libc"]
 # scaas-sdk T6: roots (c) and (d) (src/wallet/roots.rs): scaas-sdk's `classical-roots`
 roots = ["wallet", "dep:argon2"]
+# scaas-sdk T21: app-core key handles (src/wallet/appkey.rs; spec §12.2, §23.1 item 9)
+app-core = ["wallet", "dep:argon2"]
 signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha", "dep:scaas-ct", "dep:zeroize"]
 json = ["dep:serde_json"]
 pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc"]
@@ -372,3 +374,7 @@ required-features = ["wallet"]
 [[test]]
 name = "roots"
 required-features = ["roots"]
+
+[[test]]
+name = "app_core"
+required-features = ["app-core", "vectors"]

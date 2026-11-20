@@ -27,6 +27,8 @@
 )]
 
 mod aead;
+#[cfg(feature = "app-core")]
+mod appkey;
 pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
@@ -69,6 +71,10 @@ mod vault;
 mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
+#[cfg(feature = "app-core")]
+pub use appkey::{
+    AppKeys, Argon2Params, KemWrap, KeyHandle, KeyUsage, Nonce, APP_KEYS_MAX, APP_ROOT, KEYWRAP,
+};
 #[cfg(feature = "pqz")]
 pub(crate) use eip712::u256_to_dec; // the PQZ facade's
 #[cfg(any(feature = "zether", feature = "pqz"))]
@@ -191,6 +197,13 @@ pub enum Error {
     /// A WebAuthn assertion whose `authData` and `clientDataJSON` together exceed [`WEBAUTHN_MAX_ASSERTION`] (owner
     /// 2026-11-19, G3): nothing returned.
     WebAuthnTooLong,
+    /// An app-core key handle used for an operation of another usage, or a `seal` / `open` whose `aad` starts with the
+    /// key-wrap constant (scaas-sdk spec §12.2).
+    AppKeyUsage,
+    /// An app-core key handle of another scope or store (scaas-sdk spec §12.3).
+    AppHandleForeign,
+    /// The arena holds its stated number of live app-core key handles (scaas-sdk spec §12.2); nothing dropped.
+    AppArenaFull,
     Ua(UAError),
 }
 
@@ -219,6 +232,9 @@ impl Error {
             Error::WalletMismatch => "WalletMismatch",
             Error::PqzSetMismatch => "PqzSetMismatch",
             Error::ExternalSignature => "ExternalSignature",
+            Error::AppKeyUsage => "AppKeyUsage",
+            Error::AppHandleForeign => "AppHandleForeign",
+            Error::AppArenaFull => "AppArenaFull",
             Error::Ua(e) => e.code(),
         }
     }
