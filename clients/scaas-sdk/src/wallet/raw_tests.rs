@@ -409,27 +409,41 @@ async fn bitcoin_sighash_digest_only() {
     }
 }
 
-/// The default generated surface has no raw call: the Dart binding's generated files name neither the entry nor its marker.
+/// The default generated surface has no raw call: the Dart binding's generated code names neither the entry nor its marker.
+/// Comment lines are not surface: the `compile_fail` doctest of `NativeKeyRef` (the marker's absence without `raw-native`)
+/// is copied into its Dart doc comment, and that mention is seen and skipped (controller call (owner auto-run 2026-11-19),
+/// 2026-11-20); a code line naming any of them fails.
 #[test]
 fn raw_absent_from_the_generated_dart() {
     let dir = format!("{}/bindings/dart/lib", env!("CARGO_MANIFEST_DIR"));
     let mut files = vec![std::path::PathBuf::from(dir)];
-    let mut seen = 0;
+    let names = [
+        "nativeSign",
+        "native_sign",
+        "AllowRawNative",
+        "NativeSignRequest",
+    ];
+    let (mut seen, mut in_comments) = (0, 0);
     while let Some(p) = files.pop() {
         if p.is_dir() {
             files.extend(std::fs::read_dir(&p).unwrap().map(|e| e.unwrap().path()));
         } else if p.extension().is_some_and(|e| e == "dart") {
             let t = std::fs::read_to_string(&p).unwrap();
-            for name in [
-                "nativeSign",
-                "native_sign",
-                "AllowRawNative",
-                "NativeSignRequest",
-            ] {
-                assert!(!t.contains(name), "{name} in {}", p.display());
+            for line in t.lines() {
+                let comment = line.trim_start().starts_with("//");
+                for name in names {
+                    if line.contains(name) {
+                        assert!(comment, "{name} in a code line of {}: {line}", p.display());
+                        in_comments += 1;
+                    }
+                }
             }
             seen += 1;
         }
     }
     assert!(seen > 0, "the generated Dart files");
+    assert!(
+        in_comments > 0,
+        "the doc comment's mention is read and skipped"
+    );
 }

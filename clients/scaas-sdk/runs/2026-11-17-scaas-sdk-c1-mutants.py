@@ -12,7 +12,7 @@ MUTANTS = [
      [(N, "                    NodeOutcome::Refused(e) if !majority => return Err(e),\n", "")],
      T + "a_verifier_refusal_is_final_under_failover"),
     ("the majority compared with the signature",
-     [(N, '        self.post(VERDICT_ROUTE, req, |v| v["pqzVerdict"].clone())', "        self.post(VERDICT_ROUTE, req, Value::clone)")],
+     [(N, "self.post(VERDICT_ROUTE, req, verdict_compared)", "self.post(VERDICT_ROUTE, req, Value::clone)")],
      T + "verifier_strict_majority_compares_the_verdict"),
     ("a majority of one", [(N, "        let need = n / 2 + 1;", "        let need = 1;")],
      T + "verifier_strict_majority_compares_the_verdict"),

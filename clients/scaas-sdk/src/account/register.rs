@@ -228,12 +228,14 @@ pub(crate) fn record_holds(landed: Landed, out: &[u8]) -> Option<bool> {
         Landed::PqzPop(_) => {
             let off = usize::try_from(word(out, 0)?).ok()?;
             let len = usize::try_from(word(out, off / 32)?).ok()?;
-            (off % 32 == 0 && out.len() >= off + 32 + len).then_some(len > 0)
+            // F24: offsets from an RPC answer, added checked
+            let end = off.checked_add(32)?.checked_add(len)?;
+            (off % 32 == 0 && out.len() >= end).then_some(len > 0)
         }
         // `(KemKey kem, bytes sig)`: the tuple's offset, then its first word the scheme
         Landed::Kem(_) => {
             let off = usize::try_from(word(out, 0)?).ok()?;
-            Some(!out.get(off..off + 32)?.iter().all(|b| *b == 0))
+            Some(!out.get(off..off.checked_add(32)?)?.iter().all(|b| *b == 0))
         }
         // `(uint64 version, uint256 enabled, uint256 accepted)`
         Landed::Accepted(i) => (out.len() == 96)
@@ -322,7 +324,8 @@ async fn kem_pk_hash(
     let off = word(&out, 2)
         .and_then(|w| usize::try_from(w).ok())
         .ok_or_else(bad)?;
-    out.get(off + 96..off + 128)
+    let at = off.checked_add(96).ok_or_else(bad)?;
+    out.get(at..at.checked_add(32).ok_or_else(bad)?)
         .and_then(|w| w.try_into().ok())
         .ok_or_else(bad)
 }
@@ -400,7 +403,8 @@ pub(crate) fn keep(
 
 /// The writes of a registration with its arguments `args` (named fields, `entry` among them, as `scaas-ua`'s
 /// `registration_args_json` gives them) and `kem_fill` (the `setKemKey` of a hash-committed KEM key): skipped when `ua` is
-/// registered already (its KEM fill added when the commit is unfilled); split as the node's rule when it carries a `pqzPop`
+/// registered already (its KEM fill added when the commit is unfilled, its `storePqzPop` when a split's second part never
+/// landed); split as the node's rule when it carries a `pqzPop`
 /// and does not fit (module doc). `GasAboveTxCap`: a part above the cap.
 pub(crate) async fn writes(
     sdk: &Arc<Sdk>,
@@ -510,6 +514,24 @@ pub(crate) async fn writes(
                 Landed::Registered,
             )?);
         }
+    }
+    // F22 (review 2026-11-20): a split whose first part landed and whose `storePqzPop` did not (the app closed between the
+    // two parts, a lost handle, a failed submit): the second part again, from the registration's own `pqzPop`
+    let pqz_pop = args.get("pqzPop").and_then(Value::as_str).unwrap_or("0x");
+    if registered
+        && pqz_pop != "0x"
+        && !read_record(&pool, registry, Landed::PqzPop(0), &ua).await?
+    {
+        let store = json!({"ua": hex(&ua), "version": 0, "pqzPop": pqz_pop});
+        out.push(keep(
+            sdk,
+            chain,
+            "storePqzPop",
+            ua,
+            &store,
+            payer,
+            Landed::PqzPop(0),
+        )?);
     }
     if let Some(fill) = kem_fill {
         let filled = registered && read_record(&pool, registry, Landed::Kem(0), &ua).await?;

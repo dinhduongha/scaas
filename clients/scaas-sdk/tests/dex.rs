@@ -652,7 +652,27 @@ async fn liquidity_order_signs_under_its_check() {
     let s = dex.sign_order(p.clone()).await.unwrap();
     assert_eq!(s.order_hash, p.id());
     let auth: Value = serde_json::from_str(&s.signature).unwrap();
-    assert!(auth["signature"].as_str().unwrap().len() > 2);
+    // T9 (review 2026-11-20): the native key's signature recovers its address over the order's own digest (a native key
+    // signs a `trade` struct's digest bare), not over another one
+    let addr: [u8; 20] = alloy::hex::decode(&t.v["key"]["address"].as_str().unwrap()[2..])
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let sig = alloy::hex::decode(&auth["signature"].as_str().unwrap()[2..]).unwrap();
+    let d: [u8; 32] = alloy::hex::decode(&p.id()[2..])
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert!(
+        scaas_ua::verify::native_ecdsa(&addr, &d, &sig),
+        "over the order's digest"
+    );
+    let mut other = d;
+    other[0] ^= 1;
+    assert!(
+        !scaas_ua::verify::native_ecdsa(&addr, &other, &sig),
+        "control: another digest"
+    );
     // not placed by the venue route: its job is the planner's
     assert_eq!(code(dex.place(p).await), "Argument");
 }

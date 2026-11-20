@@ -23,8 +23,8 @@ MUTANTS = [
      T + "pqz_leg_of_another_key_refused"),
     ("the registry's key not compared with the handle's (R6)", [(P, "code.and_then(|c| c.split_first()) != Some((&0, pk))", "code.is_none()")],
      T + "pqz_leg_of_another_key_refused"),
-    ("a facade refusal reads again (R7)", [(P, "let out = call(&sdk, key, \"balance\", &w.words).await?;",
-                                            "let out = match call(&sdk, key, \"balance\", &w.words).await { Ok(o) => o, Err(_) => { read(&sdk, &r.chain, &r.token, ua, r.key_version, &pk, false).await?; return Err(SdkError::Argument) } };")],
+    ("a facade refusal reads again (R7)", [(P, "                decrypt(&sdk, key, w).await\n",
+                                            "                match decrypt(&sdk, key, w).await { Ok(o) => Ok(o), Err(_) => { read(&sdk, &r.chain, &r.token, ua, r.key_version, &pk, false, &[]).await?; Err(SdkError::Argument) } }\n")],
      T + "pqz_word_failure_never_fails_over"),
 ]
 

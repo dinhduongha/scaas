@@ -261,7 +261,7 @@ fn tail(calldata: &[u8], i: usize, next: Option<usize>) -> Vec<u8> {
 /// #1 w2, threshold 2) and `msig-nested-heavy-outer` (`msig-inner-pq` w2 over fndsa512 #0, #1; fndsa512 #2 w1; threshold 2), each
 /// structure read from the registry: a minimal set signs and verifies; a set with a slot more, or an inner list short of its
 /// threshold, is `UAPoP` (`scaas-ua`'s refusal before anything is signed); a slot or leaf not accepted on this registry is
-/// `Argument` (CTR-UA-37), its control signing.
+/// `MsigSlotInactive` (CTR-UA-37, M2), its control signing.
 #[tokio::test(flavor = "multi_thread")]
 async fn msig_minimal_sets() {
     let n = load("nested.json");
@@ -851,7 +851,7 @@ async fn msig_members_apart() {
     )
     .await
     .unwrap();
-    let j = serde_json::to_string(
+    let bare = serde_json::to_string(
         &members_json(&UASig {
             members: vec![m],
             ..Default::default()
@@ -859,6 +859,15 @@ async fn msig_members_apart() {
         .unwrap()[0],
     )
     .unwrap();
+    // what `Op::member_sign` adds: the operation the slot signed (F1)
+    let bound = |d: &[u8; 32]| {
+        let mut v: serde_json::Value = serde_json::from_str(&bare).unwrap();
+        v["ua"] = hex(&ua).into();
+        v["purpose"] = hex(&purpose).into();
+        v["digest"] = hex(d).into();
+        v.to_string()
+    };
+    let j = bound(&digest);
     let slots = vec![
         MsigSlot::Member {
             index: si,
@@ -928,6 +937,38 @@ async fn msig_members_apart() {
         code(uasig(&t.sdk, "local", &ua, &twice, &purpose, &digest).await),
         "Argument"
     );
+    // F1 / T10: a slot from another device over another digest (its own preparation), one naming nothing, one past a
+    // bound: each refused before the local device is asked; the bound's edges beside them
+    let asked = se.n.load(std::sync::atomic::Ordering::SeqCst);
+    let with = |member: String| {
+        vec![
+            MsigSlot::Signed { index: fi, member },
+            MsigSlot::Member {
+                index: si,
+                key: row.clone(),
+            },
+        ]
+    };
+    let at = |w: Vec<MsigSlot>| {
+        let t = &t;
+        async move { code(uasig(&t.sdk, "local", &ua, &w, &purpose, &digest).await) }
+    };
+    assert_eq!(at(with(bound(&[6u8; 32]))).await, "PreparedStale");
+    assert_eq!(at(with(bare.clone())).await, "Argument");
+    let pad = |n: usize| format!("{j}{}", " ".repeat(n - j.len()));
+    assert_eq!(at(with(pad((64 << 10) + 1))).await, "Argument");
+    let mut inner: serde_json::Value = serde_json::from_str(&j).unwrap();
+    inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 257]);
+    assert_eq!(at(with(inner.to_string())).await, "Argument");
+    assert_eq!(
+        se.n.load(std::sync::atomic::Ordering::SeqCst),
+        asked,
+        "no device asked"
+    );
+    // the controls: at 64 KiB and at 256 inner signatures the slot is read (combined; the registry checks the signatures)
+    assert_eq!(at(with(pad(64 << 10))).await, "Ok");
+    inner["members"] = serde_json::json!(vec![serde_json::json!({"index": 0, "sig": "0x00"}); 256]);
+    assert_eq!(at(with(inner.to_string())).await, "Ok");
     // the secure-element slot not accepted: its own code, no device asked
     record(&t, REGISTRY, &kd, &kd, 0, 0b11, 1 << fi);
     let n = se.n.load(std::sync::atomic::Ordering::SeqCst);

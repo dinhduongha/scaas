@@ -11,8 +11,7 @@ L = "clients/scaas-sdk/bindings/dart/lib/scaas_sdk.dart"
 ADMIN = "clients/scaas-sdk/src/admin.rs"
 POLICY = "clients/ua-rs/src/wallet/policy.rs"
 # an SDK source changed, the generated files not: the drift check (which scans the SDK crate) is red; regenerated files put back
-GEN = ("bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check; rc=$?; "
-       "git checkout -- clients/scaas-sdk/bindings/dart/lib/src/rust clients/scaas-sdk/ffi/src/frb_generated.rs; exit $rc")
+GEN = "bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check"
 DART = "cd clients/scaas-sdk/bindings/dart && bash ./run.sh"
 F = "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots"
 SDK_ADMIN = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features {F} --lib admin::tests"
@@ -23,8 +22,8 @@ MUTANTS = [
      [(SEEDS, "    /// The seeds of the keystore, in display order.", "    /// The seeds of the keystore, in display order (stale).")], GEN),
     ("a binding without its load check",
      [(L, "  checkAbi(expectApi: expectApi, needFeatures: needFeatures);\n}", "}")], DART),
-    ("the SDK signs a native auditor's consent as a UA key (the bare digest)",
-     [(ADMIN, "native_consent(&sdk, &req.chain, &k, &td, ex).await?", "crate::op::submit::sign_one(&sdk, &k, &td, &ex).await?")],
+    ("a native auditor's PQZ consent signed (PqzAuditorNative dropped)",
+     [(ADMIN, 'if want == "pqz" && matches!(req.signer,', 'if false && want == "pqz" && matches!(req.signer,')],
      SDK_ADMIN),
     ("the Zether consent over another epoch",
      [(ADMIN, '"token": hex(&token), "epoch": req.epoch});', '"token": hex(&token), "epoch": req.epoch + 1});')], SDK_ADMIN),

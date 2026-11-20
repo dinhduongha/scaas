@@ -22,10 +22,10 @@ MUTANTS = [
     ("reference: FN-DSA-512's margin dropped", [(R, '"sig_bytes": 672,\n      "margin": 1000\n', '"sig_bytes": 672\n')],
      U + "reference_rows_hold_their_sources"),
     ("reference: ed25519's row at the vector, not the forced worst case",
-     [(R, '"signer": 258,\n      "gas": 180000,\n      "measured": 179084,', '"signer": 258,\n      "gas": 177000,\n      "measured": 176208,')],
+     [(R, "\"signer\": 258,\n      \"gas\": 179000,\n      \"measured\": 178955,", "\"signer\": 258,\n      \"gas\": 177000,\n      \"measured\": 176079,")],
      U + "reference_rows_hold_their_sources"),
     ("reference: FN-DSA-1024's row at the vector, not the worst salt",
-     [(R, '"measured": 4823467,', '"measured": 4751732,')], U + "reference_rows_hold_their_sources"),
+     [(R, "\"measured\": 4823338,", "\"measured\": 4751603,")], U + "reference_rows_hold_their_sources"),
 ]
 
 if __name__ == "__main__":

@@ -402,6 +402,26 @@ async fn pqz_token_checks() {
         "257",
         "NORMAL_PQZ_REGULATED"
     );
+    // T15 (review 2026-11-20), R2: a clone of another chain (its `ChainEnv` names another `chain_uid`): `ProfileMismatch`
+    let good = c.lock().unwrap().code.get(TOKEN).cloned().unwrap();
+    let env = ChainEnv {
+        chain_uid: [7; 32],
+        registry: a20(REGISTRY),
+        gov_router: [0; 20],
+        smart_key_account_impl: [0; 20],
+        hedera: false,
+        deps: vec![],
+        params: vec![],
+    };
+    c.lock()
+        .unwrap()
+        .code
+        .insert(TOKEN.into(), hx(&clone_runtime(&a20(IMPL), &env)));
+    assert_eq!(
+        code(s.confidential().pqz_balance(req(&seed, 1, 0)).await),
+        "ProfileMismatch"
+    );
+    c.lock().unwrap().code.insert(TOKEN.into(), good);
     // T16-b: `proofStore` read from slot 0's storage word, NONE / LOG; another value is a release before 3h
     let mut slot0 = [0u8; 32];
     slot0[32 - 23 - 1] = 1;
@@ -560,7 +580,10 @@ const PROOF: &str = "0x0a0b";
 /// The verifier's answer: `m` signed by the key of `index` under `pqz-verdict`.
 fn answer(m: &Value, index: u32) -> Value {
     let uid: W = unhex(&hash_of(0)).try_into().unwrap();
-    let d = scaas_ua::wallet::pqz_verdict_typed_data(&a20(TOKEN), CHAIN_ID, &uid, m)
+    // the verdict's own token and chain (a verdict of another token or chain is signed as such: T3)
+    let token = a20(m["token"].as_str().unwrap_or(TOKEN));
+    let chain = m["chainId"].as_u64().unwrap_or(CHAIN_ID);
+    let d = scaas_ua::wallet::pqz_verdict_typed_data(&token, chain, &uid, m)
         .unwrap()
         .digest()
         .unwrap();
@@ -667,11 +690,28 @@ async fn verdict_checked_before_attach() {
         ("pqzVerifierEpoch", serde_json::json!(EPOCH + 1)),
         ("proofSystemId", serde_json::json!(hx(&[3; 32]))),
         ("validUntil", serde_json::json!(now() - 1)),
+        // T3 (review 2026-11-20): a verdict of another token or another chain, signed by the verifier's own key
+        ("token", serde_json::json!(hx(&[4; 20]))),
+        ("chainId", serde_json::json!(CHAIN_ID + 1)),
     ] {
         let mut m = verdict_of(&psid);
         m[k] = v;
         assert_eq!(refuse(m, 7).await, "VerdictRefused", "{k}");
     }
+    // a derived-key verifier's signature with members (an `msig` form): refused; the same answer without them is the control
+    let mut a = answer(&verdict_of(&psid), 7);
+    a["pqzVerdictSig"]["members"] = serde_json::json!([{"index": 0, "members": [], "sig": "0x00"}]);
+    c.lock().unwrap().verdict = Some((200, a));
+    assert_eq!(
+        code(s.confidential().request_verdict(vreq()).await),
+        "VerdictRefused",
+        "members"
+    );
+    assert_eq!(
+        refuse(verdict_of(&psid), 7).await,
+        "Ok",
+        "control: no members"
+    );
     // the right key whose registry record names another kind
     let ua = verifier_key(7).1.ua().unwrap();
     let good: W = w(&serde_json::json!(c.lock().unwrap().storage
@@ -759,9 +799,19 @@ async fn verdict_verifiers_strict_majority() {
         "Ok",
         "control: both agree"
     );
+    // F14 (review 2026-11-20): another `validUntil` (each verifier's own clock) is the same verdict: a majority
     let mut m2 = m.clone();
     m2["validUntil"] = serde_json::json!(now() + 900);
     b.lock().unwrap().verdict = Some((200, answer(&m2, 7)));
+    assert_eq!(
+        code(s.confidential().request_verdict(vreq()).await),
+        "Ok",
+        "validUntil apart"
+    );
+    // another verdict (another statement) has no majority
+    let mut m3 = m.clone();
+    m3["statementHash"] = serde_json::json!(format!("0x{}", "ab".repeat(32)));
+    b.lock().unwrap().verdict = Some((200, answer(&m3, 7)));
     assert_eq!(
         code(s.confidential().request_verdict(vreq()).await),
         "VerdictRefused"
@@ -1565,7 +1615,10 @@ fn native_verifier(
 /// `m` signed by the EVM key `index` as a native-id verifier: `uaAuthDigest` under the registry's generation-`generation` domain.
 fn native_answer(m: &Value, index: u32, generation: u32) -> Value {
     let uid: W = unhex(&hash_of(0)).try_into().unwrap();
-    let d = scaas_ua::wallet::pqz_verdict_typed_data(&a20(TOKEN), CHAIN_ID, &uid, m)
+    // the verdict's own token and chain (a verdict of another token or chain is signed as such: T3)
+    let token = a20(m["token"].as_str().unwrap_or(TOKEN));
+    let chain = m["chainId"].as_u64().unwrap_or(CHAIN_ID);
+    let d = scaas_ua::wallet::pqz_verdict_typed_data(&token, chain, &uid, m)
         .unwrap()
         .digest()
         .unwrap();

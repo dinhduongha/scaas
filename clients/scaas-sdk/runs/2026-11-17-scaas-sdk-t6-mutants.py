@@ -12,7 +12,7 @@ SDK = "cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offlin
 MUTANTS = [
     ("skip the double-signature comparison", [(R, "if sig1.len() != 65 || sig1 != sig2 {", "if sig1.len() != 65 {")],
      UA + "root_c_rows_and_refusals"),
-    ("hash r || s || v", [(R, "let ikm = Zeroizing::new(low.to_bytes());", "let ikm = Zeroizing::new([low.to_bytes().as_slice(), &[27 + bit]].concat());")],
+    ("hash r || s || v", [(R, "hkdf_sha256(&ikm[..],", "hkdf_sha256(&[&ikm[..], &[27 + bit]].concat(),")],
      UA + "root_c_rows_and_refusals"),
     ("passphrase floor 10 -> 9", [(R, "pub const ROOT_PASSPHRASE_MIN: usize = 10;", "pub const ROOT_PASSPHRASE_MIN: usize = 9;")],
      UA + "passphrase_floor"),

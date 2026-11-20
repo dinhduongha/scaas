@@ -19,7 +19,7 @@ MUTANTS = [
        "        while self.events.len() >= self.limits.event_queue as usize {\n            std::thread::yield_now();\n        }\n"
        "        let _ = self.events.send(e);")],
      T + "lagged_subscriber"),
-    ("write a hidden set's cursor", [(W, ".any(|r| rows_id(r).eq_ignore_ascii_case(&account))", ".any(|_| true)")],
+    ("write a hidden set's cursor", [(W, ".find(|r| rows_id(r).eq_ignore_ascii_case(&account))", ".find(|_| true)")],
      T + "no_hidden_set_cursor"),
     # each check of the task
     ("resume from the final block, not the cursor",
@@ -33,7 +33,7 @@ MUTANTS = [
     ("a first read is a BalanceChanged", [(W, ".is_some_and(|v| v != a.value)", ".is_none_or(|v| v != a.value)")],
      T + "history_added_and_balance_changed_events"),
     ("history older than the cursor not dropped",
-     [(H, "items.retain(|i| before.is_none_or(|c| (i.block, i.log_index) < (c.block, c.log_index)));", "")],
+     [(H, "                items.retain(|i| {\n                    before.is_none_or(|c| (i.block, i.log_index) < (c.block, c.log_index))\n                });\n", "")],
      T + "history_pages_with_logs_range"),
 ]
 

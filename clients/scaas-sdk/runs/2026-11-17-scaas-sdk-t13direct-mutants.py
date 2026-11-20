@@ -15,8 +15,8 @@ MUTANTS = [
           "        let _ = addr20(&guardian.to_ascii_lowercase())?;\n        args.extend_from_slice(&[0; 20]);")],
      E + "guardian_recovery_via_execute"),
     ("completeRecovery of another key (kind word 1)",
-     [(S, '        let data = direct_call("completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32))", &key_words(&new_key)?);',
-          '        let mut w = key_words(&new_key)?;\n        w[31] = 1;\n        let data = direct_call("completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32))", &w);')],
+     [(S, "\"completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32))\",\n            &key_words(&new_key)?,",
+          "\"completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32))\",\n            &{\n                let mut w = key_words(&new_key)?;\n                w[31] = 1;\n                w\n            },")],
      E + "guardian_recovery_via_execute"),
 ]
 

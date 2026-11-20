@@ -14,7 +14,7 @@ MUTANTS = [
     ("C3: the owner statements under metatx (the old mapping)",
      [(P, '        "ZetherRollOver" | "ZetherSetRollOverMode" => "zether-owner",\n', "")],
      U + "owner_statements_sign_under_their_contract_purpose"),
-    ("C3 class: PqzRollOver under metatx", [(P, '        "PqzRollOver" => "zether-auth",\n', "")],
+    ("C3 class: PqzRollOver under metatx", [(P, "\"PqzRollOver\" | \"PqzAuth\" => \"zether-auth\",", "\"PqzAuth\" => \"zether-auth\",")],
      U + "owner_statements_sign_under_their_contract_purpose"),
     ("C3 class: AuditorConsent under metatx", [(P, '        "AuditorConsent" => "auditor-consent",\n', "")],
      U + "owner_statements_sign_under_their_contract_purpose"),

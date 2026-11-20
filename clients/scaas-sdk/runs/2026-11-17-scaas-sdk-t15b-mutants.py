@@ -25,7 +25,7 @@ MUTANTS = [
        'const PURPOSES: [&str; 4] = ["metatx", "payee-fee", "trade", "metatx"];')],
      T + "zether_owner_statements"),
     ("the relayed form's ownerSig left unsigned",
-     [(S, "    if let Some((td, ex)) = &p.t.owner {", "    if let Some((td, ex)) = &None::<(scaas_ua::wallet::TypedData, scaas_ua::wallet::Expect)> {")],
+     [(S, "    if let Some((td, ex, slot)) = &p.t.owner {", "    if let Some((td, ex, slot)) = &None::<(scaas_ua::wallet::TypedData, scaas_ua::wallet::Expect, &str)> {")],
      T + "zether_owner_statements"),
     ("the owner statement's modeNonce not read", [(Z, '"modeNonce": mode_nonce.to_string(),', '"modeNonce": "0",')],
      T + "zether_owner_statements"),

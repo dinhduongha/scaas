@@ -63,11 +63,15 @@ fn endpoint(url: &str) -> EndpointConfig {
     }
 }
 
-/// An `anvil` on a port of this process (stopped on drop), ready to answer; its URL.
-async fn anvil(offset: u16) -> (Anvil, String) {
-    let port = 20_000 + offset + (std::process::id() % 10_000) as u16;
+/// An `anvil` (stopped on drop) on a port the OS gave as free, ready to answer as chain 31337 while the child is alive; its
+/// URL. Never a computed port: another node of the machine (another agent's `anvil`, the testnet stack) is never asked.
+async fn anvil() -> (Anvil, String) {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|l| l.local_addr())
+        .expect("a free port")
+        .port();
     let rpc = format!("http://127.0.0.1:{port}");
-    let a = Anvil(
+    let mut a = Anvil(
         Command::new("anvil")
             .args([
                 "--chain-id",
@@ -88,16 +92,25 @@ async fn anvil(offset: u16) -> (Anvil, String) {
             .expect("anvil in PATH"),
     );
     for _ in 0..100 {
-        if Command::new("cast")
+        assert!(
+            a.0.try_wait().expect("anvil's state").is_none(),
+            "anvil exited (port {port} taken?)"
+        );
+        let id = Command::new("cast")
             .args(["chain-id", "--rpc-url", &rpc])
-            .output()
-            .is_ok_and(|o| o.status.success())
-        {
-            break;
+            .output();
+        if id.is_ok_and(|o| {
+            o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "31337"
+        }) {
+            assert!(
+                a.0.try_wait().expect("anvil's state").is_none(),
+                "the node on {port} is not this anvil"
+            );
+            return (a, rpc);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    (a, rpc)
+    panic!("anvil on {port} never answered as chain 31337");
 }
 
 /// The contracts' own `script/Deploy.s.sol` on `rpc` with `env`; its book (`deployments/<name>.json`, removed after reading).
@@ -203,7 +216,7 @@ fn now() -> u64 {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_pay_on_anvil() {
-    let (_anvil, rpc) = anvil(0).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     // the seed's EVM key 0: the token holder, the payer and the signer of the pay (a native id signs its own digest)
@@ -402,7 +415,7 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
     use scaas_sdk::confidential::{
         ZetherBalanceRequest, ZetherRollOver, ZetherShield, ZetherTransfer,
     };
-    let (_anvil, rpc) = anvil(1).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let holder = funded_holder(rpc);
@@ -559,7 +572,7 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_register_pq_kind_on_anvil() {
     const FNDSA512: u16 = 0x0132;
-    let (_anvil, rpc) = anvil(2).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -621,7 +634,7 @@ fn registry_profile(rpc: &str, registry: &str, cap: Option<u64>) -> ChainProfile
 async fn e2e_pqz_pop_split_stored_on_anvil() {
     use scaas_sdk::account::{Register, RegisterAttrs};
     const FNDSA512: u16 = 0x0132;
-    let (_anvil, rpc) = anvil(6).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let payer_address = funded_holder(rpc);
@@ -690,7 +703,7 @@ async fn e2e_pqz_pop_split_stored_on_anvil() {
 async fn e2e_sponsored_registration_then_pay_on_anvil() {
     use scaas_sdk::account::RegisterAttrs;
     const ED25519: u16 = 0x0102;
-    let (_anvil, rpc) = anvil(3).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let holder = funded_holder(rpc);
@@ -982,7 +995,7 @@ async fn self_relay(sdk: &Arc<Sdk>, seed: &str, p: Arc<scaas_sdk::op::Prepared>)
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn smart_account_add_key_self_relay() {
     use scaas_sdk::account::SubjectKeyArgs;
-    let (_anvil, rpc) = anvil(4).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -1072,7 +1085,7 @@ async fn smart_account_add_key_self_relay() {
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn guardian_recovery_via_execute() {
     use scaas_sdk::account::SubjectKeyArgs;
-    let (_anvil, rpc) = anvil(5).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -1176,7 +1189,7 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
     use scaas_sdk::op::MsigSlot;
     use scaas_sdk::wallet::Transfer;
     const ED25519: u16 = 0x0102;
-    let (_anvil, rpc) = anvil(7).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let holder = funded_holder(rpc);
@@ -1425,7 +1438,7 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
 async fn e2e_register_mldsa_cached_on_anvil() {
     use scaas_sdk::account::{Register, RegisterAttrs};
     const MLDSA65: u16 = 0x0131;
-    let (_anvil, rpc) = anvil(8).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -1591,7 +1604,7 @@ impl scaas_sdk::platform::Authenticator for Passkey {
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_register_passkey_row_on_anvil() {
     use scaas_sdk::account::{CreatePasskeyKey, Register};
-    let (_anvil, rpc) = anvil(9).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     funded_holder(rpc);
@@ -1674,7 +1687,7 @@ async fn e2e_register_passkey_row_on_anvil() {
 #[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib (gate sdk-e2e)"]
 async fn e2e_dex_cancel_order_on_anvil() {
     use scaas_sdk::dex::{CancelOrder, OrderTerms};
-    let (_anvil, rpc) = anvil(10).await;
+    let (_anvil, rpc) = anvil().await;
     let rpc = rpc.as_str();
     let port = rpc.rsplit(':').next().unwrap();
     let holder = funded_holder(rpc);

@@ -17,7 +17,7 @@ MUTANTS = [
     ("M1: a Signed slot under another index", [(M, "                if m.index != *index {", "                if false && m.index != *index {")],
      L + "msig_members_apart"),
     ("M5: the device asked over another member digest",
-     [(M, "let md = scaas_ua::member_digest(ua, &scaas_ua::ua_message", "let md = scaas_ua::member_digest(&[0; 32], &scaas_ua::ua_message")],
+     [(M, "scaas_ua::member_digest(\n            ua,", "scaas_ua::member_digest(\n            &[0; 32],")],
      L + "msig_members_apart"),
     ("M2: an inactive slot is Argument",
      [(M, "        if !v.active(s.index()) {\n            return Err(SdkError::MsigSlotInactive);",

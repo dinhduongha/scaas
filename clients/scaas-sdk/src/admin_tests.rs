@@ -355,10 +355,35 @@ async fn pqz_auditor_consent_of_a_derived_ua() {
     let derived_req = derived.clone();
     let consent: Value =
         serde_json::from_str(&a.sign_pqz_auditor_consent(derived).await.unwrap()).unwrap();
-    assert!(
-        consent["keyData"].as_str().unwrap().len() > 2
-            && consent["signature"].as_str().unwrap().len() > 2
-    );
+    // T9 (review 2026-11-20): the signature verifies under `auditor-consent` over this token's consent of the derived UA
+    let kd = crate::op::unhex(consent["keyData"].as_str().unwrap()).unwrap();
+    let sig = crate::op::unhex(consent["signature"].as_str().unwrap()).unwrap();
+    let auditor = scaas_ua::derive_ua(0x0101, &kd, false).unwrap();
+    let (chain_id, uid) = ids(&sdk, "local").unwrap();
+    let t20 = addr20(&token.to_ascii_lowercase()).unwrap();
+    let digest_of = |t: &[u8; 20]| {
+        let m = serde_json::json!({"token": hex(t), "auditor": hex(&auditor), "epoch": 1, "chainUid": hex(&uid)});
+        scaas_ua::wallet::scaas_typed_data(
+            "AuditorConsent",
+            Some(crate::op::domain_name("pqz").unwrap()),
+            t,
+            chain_id,
+            &uid,
+            &m,
+        )
+        .unwrap()
+        .digest()
+        .unwrap()
+    };
+    let verifies = |purpose: &str, digest: &[u8; 32]| {
+        let msg =
+            scaas_ua::ua_message(0x0101, &scaas_ua::purpose_tag(purpose).unwrap(), digest).unwrap();
+        scaas_ua::verify::verify(0x0101, &kd, &msg, &sig, false)
+    };
+    assert!(verifies("auditor-consent", &digest_of(&t20)));
+    // the controls of the check itself: another purpose, another token's consent
+    assert!(!verifies("metatx", &digest_of(&t20)));
+    assert!(!verifies("auditor-consent", &digest_of(&[9; 20])));
     // a native (address) auditor: refused up front by name (controller call, owner auto-run 2026-11-19): a native id holds
     // no PQZ key (CTR-UA-32), so the token refuses it at `_keyOf` before the consent is read; nothing signed
     assert_eq!(

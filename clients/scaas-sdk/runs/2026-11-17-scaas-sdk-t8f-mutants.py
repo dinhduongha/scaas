@@ -9,7 +9,7 @@ K = "clients/ua-rs/src/wallet/entries/dex.rs"
 UA = "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --test entries "
 MUTANTS = [
     ("swap two arguments of mtxInvalidateNonces", [(K, '"from batch minNonce @"', '"from minNonce batch @"')], UA + "entries_dex"),
-    ("a wrong selector on mtxCancelOrders", [(K, '"CancelDexOrder", "mtxCancelOrders",', '"CancelDexOrder", "mtxCancelOrder",')], UA + "entries_dex"),
+    ("a wrong selector on mtxCancelOrders", [(K, "\"CancelDexOrder\",\n        \"mtxCancelOrders\",", "\"CancelDexOrder\",\n        \"mtxCancelOrder\",")], UA + "entries_dex"),
     ("the signature out of its one-element list", [(K, '"[order] [@]"', '"[order] @"')], UA + "entries_dex"),
 ]
 

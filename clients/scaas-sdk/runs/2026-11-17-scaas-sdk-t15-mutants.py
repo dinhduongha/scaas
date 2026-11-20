@@ -11,7 +11,7 @@ F = "vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-
 T = f"cd clients/scaas-sdk && ../../scripts/capped cargo test --locked --offline -j2 --features {F} --test confidential "
 MUTANTS = [
     # the plan's four
-    ("mark a read Plain", [(R, "const PURPOSE: Purpose = Purpose::FeedsDecryption;", "const PURPOSE: Purpose = Purpose::Plain;")],
+    ("mark a read Plain", [("clients/scaas-sdk/src/confidential/words.rs", "const PURPOSE: Purpose = Purpose::FeedsDecryption;", "const PURPOSE: Purpose = Purpose::Plain;")],
      T + "decryption_reads_skip_discovered"),
     ("retry the next endpoint on a decryption failure",
      [(M, "                let out = call(&sdk, key, cmd, words).await?;",
@@ -25,9 +25,8 @@ MUTANTS = [
        "                };")],
      T + "decryption_failure_never_fails_over"),
     ("read a word by call_at",
-     [(R, "    Ok(pool\n        .storage_at(at, who, U256::from_be_bytes(*slot))\n        .await?\n        .to_be_bytes::<32>())",
-       "    let b = pool.call_at(at, who, alloy::primitives::Bytes::from(slot.to_vec())).await?;\n"
-       "    Ok(U256::from_be_slice(&b).to_be_bytes::<32>())")],
+     [("clients/scaas-sdk/src/confidential/words.rs", "    Ok(pool\n        .storage_at(at, who, U256::from_be_bytes(*slot))\n        .await?\n        .to_be_bytes::<32>())",
+       "    let b = pool.call_at(at, who, alloy::primitives::Bytes::from(slot.to_vec())).await?;\n    Ok(U256::from_be_slice(&b).to_be_bytes::<32>())")],
      T + "view_never_serves_a_word"),
     ("read at Depth(1)", [(R, ".read_at_block(final_block(&profile), PURPOSE, |at| fetch(", ".read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), PURPOSE, |at| fetch(")],
      T + "words_at_one_final_block"),

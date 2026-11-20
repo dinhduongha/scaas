@@ -297,22 +297,56 @@ pub(crate) async fn zether(
 /// `UAStore.Layout` slots 4 and 5: `uaCount[kind]`, `uaAt[kind][i]` (CTR-UA-29).
 const REG_COUNT_SLOT: u64 = 4;
 const REG_AT_SLOT: u64 = 5;
-/// The longest `0x0141` list read (zether-prover's `zether-read-balance` reads the same at most).
-const MAX_LIST: u64 = 50_000;
+/// How many random draws a sample of `want` indexes takes from (F19): enough that fewer than `want` distinct values among
+/// them, for a list longer than `2 * want`, does not happen in practice (it is `Internal` if it does).
+fn draws(want: u64) -> u64 {
+    want.saturating_mul(4).saturating_add(64)
+}
 
-/// The decoy candidates of a multi-recipient transfer on `token` (CTR-UA-29, the default: uniform over the whole list): the
-/// registry's `0x0141` list as the token's `ChainEnv` names it, at the profile's final block, through the same sources as
-/// every read here (R1 to R3). A fixed set too: the list's length, then each of its words, chosen by that public length only,
-/// never by a decryption. `TokenUncatalogued`: the token's code is not a clone; `Argument`: a list longer than [`MAX_LIST`].
-/// Each picked decoy's record and key are then checked by [`zether`] (R6).
-pub(crate) async fn candidates(sdk: &Sdk, chain: &str, token: &str) -> Result<Vec<W>, SdkError> {
+/// The indexes of the `0x0141` list read for a sample of `want` (F19, review 2026-11-20): every index when the list holds at
+/// most `2 * want`; else the first `want` distinct values of `r[i] % n`, the draws `r` made before the read (the same at
+/// every endpoint, so a `strict_majority` read compares equal answers); `None`: too few distinct draws. A uniform subset
+/// of the list (the `% n` bias below `n / 2^64`); the decoys are then drawn from it by the facade, so they stay uniform
+/// over the whole list (CTR-UA-29) and are chosen by public data only.
+fn sample(n: u64, want: u64, r: &[u64]) -> Option<Vec<u64>> {
+    if n <= want.saturating_mul(2) {
+        return Some((0..n).collect());
+    }
+    let mut seen = std::collections::HashSet::new();
+    let out: Vec<u64> = r
+        .iter()
+        .map(|x| x % n)
+        .filter(|i| seen.insert(*i))
+        .take(usize::try_from(want).ok()?)
+        .collect();
+    (out.len() as u64 == want).then_some(out)
+}
+
+/// The decoy candidates of a multi-recipient transfer on `token` (CTR-UA-29, the default: uniform over the whole list): a
+/// uniform sample of `want` entries of the registry's `0x0141` list as the token's `ChainEnv` names it (the whole list when
+/// it holds at most `2 * want`), at the profile's final block, through the same sources as every read here (R1 to R3). A
+/// fixed set too: the list's length, then the words at [`sample`]'s indexes, chosen by that public length and draws made
+/// before the read, never by a decryption; `want` words read, whatever the list's length (F19). `TokenUncatalogued`: the
+/// token's code is not a clone. Each picked decoy's record and key are then checked by [`zether`] (R6).
+pub(crate) async fn candidates(
+    sdk: &Sdk,
+    chain: &str,
+    token: &str,
+    want: u64,
+) -> Result<Vec<W>, SdkError> {
     let (profile, _, pool) = evm(sdk, chain)?;
     let t = Address::from(addr20(&token.to_ascii_lowercase())?);
     let kind = be(u64::from(ZETHER_UA_KIND));
     let count = map_slot(&kind, &be(REG_COUNT_SLOT));
     let list = map_slot(&kind, &be(REG_AT_SLOT));
+    let mut r = vec![0u8; usize::try_from(draws(want)).map_err(|_| SdkError::Argument)? * 8];
+    getrandom::getrandom(&mut r).map_err(|_| SdkError::Internal)?;
+    let r: Vec<u64> = r
+        .chunks_exact(8)
+        .map(|c| c.try_into().map_or(0, u64::from_be_bytes))
+        .collect();
     let pool = &pool;
-    let (count, list) = (&count, &list);
+    let (count, list, r) = (&count, &list, &r);
     let a = pool
         .read_at_block(final_block(&profile), PURPOSE, |at| async move {
             let code = pool.code_at(&at, t).await?;
@@ -322,11 +356,11 @@ pub(crate) async fn candidates(sdk: &Sdk, chain: &str, token: &str) -> Result<Ve
             let reg = Address::from(env.registry);
             let n = U256::from_be_bytes(word(pool, &at, reg, count).await?);
             let n = u64::try_from(n).unwrap_or(u64::MAX);
-            if n > MAX_LIST {
+            let Some(idx) = sample(n, want, r) else {
                 return Ok(Some(Err(n)));
-            }
-            let mut out = Vec::new();
-            for i in 0..n {
+            };
+            let mut out = Vec::with_capacity(idx.len());
+            for i in idx {
                 out.push(word(pool, &at, reg, &map_slot(&be(i), list)).await?);
             }
             Ok(Some(Ok(out)))
@@ -334,11 +368,39 @@ pub(crate) async fn candidates(sdk: &Sdk, chain: &str, token: &str) -> Result<Ve
         .await?;
     match a.value {
         None => Err(SdkError::TokenUncatalogued),
-        Some(Err(_)) => Err(SdkError::Argument),
+        Some(Err(_)) => Err(SdkError::Internal),
         Some(Ok(mut l)) => {
             let mut seen = std::collections::HashSet::new();
             l.retain(|u| seen.insert(*u));
             Ok(l)
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::{draws, sample};
+
+    #[test]
+    fn decoy_sample_reads_want_words() {
+        // F19: a long list is sampled, `want` distinct indexes below `n`; a short one is read whole
+        let r: Vec<u64> = (0..draws(5))
+            .map(|i| i.wrapping_mul(0x9e37_79b9_7f4a_7c15))
+            .collect();
+        let s = sample(1_000_000, 5, &r).unwrap();
+        assert_eq!(s.len(), 5);
+        assert!(s.iter().all(|i| *i < 1_000_000));
+        assert_eq!(s.iter().collect::<std::collections::HashSet<_>>().len(), 5);
+        assert_eq!(
+            s,
+            r.iter().take(5).map(|x| x % 1_000_000).collect::<Vec<_>>()
+        );
+        assert_eq!(sample(10, 5, &r).unwrap(), (0..10).collect::<Vec<_>>());
+        assert_eq!(sample(11, 5, &r).unwrap().len(), 5);
+        // a list past the old 50,000 bound is no refusal
+        assert_eq!(sample(u64::MAX, 5, &r).unwrap().len(), 5);
+        // too few distinct draws: None (never a short sample)
+        assert_eq!(sample(1_000, 5, &[7; 100]), None);
     }
 }
