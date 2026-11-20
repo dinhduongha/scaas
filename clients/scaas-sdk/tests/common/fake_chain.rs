@@ -71,6 +71,9 @@ pub struct Chain {
     pub genesis: String,
     /// `eth_call` and `eth_estimateGas` that send a value revert (a non-payable target)
     pub value_reverts: bool,
+    /// `kindHome(uint16)` by registry (lower-case `0x` hex): the home it answers for every kind; a registry not listed answers
+    /// itself (a generation 1 registering every kind)
+    pub kind_home: HashMap<String, String>,
 }
 
 impl Default for Chain {
@@ -105,6 +108,7 @@ impl Default for Chain {
             gw_paths: vec![],
             genesis: hash_of(0),
             value_reverts: false,
+            kind_home: HashMap::new(),
         }
     }
 }
@@ -285,6 +289,9 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
                 (c.domains.get(&to), data == sel("eip712Domain()"))
             {
                 ok(json!(eip712_domain(name, &to, salt)))
+            } else if data.starts_with(&sel("kindHome(uint16)")) {
+                let home = c.kind_home.get(&to).unwrap_or(&to);
+                ok(json!(format!("0x{:0>64}", home.trim_start_matches("0x"))))
             } else if data.starts_with(&sel("balanceOfUA(bytes32)")) {
                 ok(json!(format!(
                     "0x{:064x}",

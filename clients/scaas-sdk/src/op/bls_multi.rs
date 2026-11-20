@@ -189,13 +189,12 @@ pub(crate) fn register_calldata(d: &[u8], pop: &[u8]) -> Result<Vec<u8>, SdkErro
     .abi_encode())
 }
 
-fn registry(sdk: &crate::Sdk, chain: &str) -> Result<Address, SdkError> {
-    let (profile, _, _) = evm(sdk, chain)?;
-    profile
-        .registry
-        .as_deref()
-        .and_then(|a| a.parse().ok())
-        .ok_or(SdkError::Argument)
+/// The registry a group registration goes to (spec 2026-11-19-registry-verify-only-kinds §12): `kindHome(0x0121)` of the
+/// profile's registry, which must be that registry (`RegistrationVerifyOnly`, `RegistrationKindDisabled`; `Argument` without
+/// a registry).
+async fn registry(sdk: &crate::Sdk, chain: &str) -> Result<Address, SdkError> {
+    let (r, pool) = crate::line::bound(sdk, chain)?;
+    crate::line::register_target(&pool, r, bls_multi::KIND).await
 }
 
 impl Op {
@@ -298,7 +297,7 @@ impl Op {
                     .map_err(|_| SdkError::Argument)?
                     .members
                     .len();
-                let to = registry(&sdk, &chain)?;
+                let to = registry(&sdk, &chain).await?;
                 let cd = register_calldata(&d, &[0u8; 128])?; // the PoP's length, not its value
                 let c = sdk
                     .chains
@@ -371,7 +370,7 @@ impl Op {
                     .collect::<Result<Vec<_>, _>>()?;
                 let pop = bls_multi::aggregate_pop(&d, &parts)
                     .map_err(|_| SdkError::RegistrationPopInvalid)?;
-                let to = registry(&sdk, &chain)?;
+                let to = registry(&sdk, &chain).await?;
                 let cd = register_calldata(&d, &pop)?;
                 let (_, chain_id, pool) = evm(&sdk, &chain)?;
                 let from = super::quote::payer_address(&sdk, payer)?;

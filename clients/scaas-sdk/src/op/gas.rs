@@ -9,7 +9,7 @@
 //! on the call (one total, at most `Limits::max_gas`) → none. The quote names both sources ([`GasSources`]). Without a figure
 //! a self-relay is `GasUnquoted`; a relayed (gateway) quote reports the gas as unquoted and is not refused for it. EVM only
 //! today; every family follows the same principle with its own row shape (spec §13.3).
-use crate::{GasPerItem, GasRows, GasTable, SdkError};
+use crate::{GasPerItem, GasRows, GasTable, GasVerify, SdkError};
 
 /// A native EVM key's signer kind in the table: the reference signer.
 pub const NATIVE_EVM: u16 = 0;
@@ -135,6 +135,9 @@ pub(crate) struct OpGas<'a> {
     /// a third party the entry debits besides its signer and the attached signature's owner (PR A review, finding 4:
     /// [`holder_derived`]) is, or may be, a derived UA
     pub holder: bool,
+    /// the registry the operation's contract binds (spec 2026-11-19-registry-verify-only-kinds §12: the profile's
+    /// `registry`), whose verify rows a table answers first ([`verify_row`]); `None`: no registry's rows
+    pub registry: Option<&'a str>,
 }
 
 impl OpGas<'_> {
@@ -147,23 +150,57 @@ impl OpGas<'_> {
         fee: false,
         attached: None,
         holder: false,
+        registry: None,
     };
+}
+
+/// The verify row of signer kind `signer` in `rows` for a quote bound to `registry` (spec 2026-11-19-registry-verify-only-kinds
+/// §12, CTR-UA-65): the rows keyed by that registry, the dearest of them (its paths and depths: the fallback worst, fail
+/// closed; controller call, owner auto-run 2026-11-19); else the row of no registry, no path and depth 0 (the holder's own
+/// check, every row before the line). A write row (W1) never answers a quote; a row of a path or a depth without a registry
+/// (the reference table's line rows) is carried for the reader, never quoted: the SDK does not know a holder's depth.
+pub(crate) fn verify_row<'r>(
+    rows: &'r GasRows,
+    signer: u16,
+    registry: Option<&str>,
+) -> Option<&'r GasVerify> {
+    let of = rows
+        .verify
+        .iter()
+        .filter(|v| v.signer == signer && !v.line.write);
+    let keyed = of
+        .clone()
+        .filter(|v| {
+            registry.is_some_and(|b| {
+                v.line
+                    .registry
+                    .as_deref()
+                    .is_some_and(|r| r.eq_ignore_ascii_case(b))
+            })
+        })
+        .max_by_key(|v| v.gas.saturating_add(v.margin));
+    keyed.or_else(|| {
+        of.clone()
+            .find(|v| v.line.registry.is_none() && v.line.path.is_none() && v.line.depth == 0)
+    })
 }
 
 /// A verify part of signer kind `signer`: its row's gas and `margin` (owner 2026-11-19, ruling 2 (b) of the sampled check),
 /// plus 64 gas a byte of its `sig_bytes` when `bytes` (owner 2026-11-19,
 /// ruling 2: the quote's calldata is that of the operation built with an empty signature; A3: an attached signature's bytes
 /// are in that calldata already, so only its verify gas), and its source.
+#[allow(clippy::too_many_arguments)]
 fn verify_part(
     chain: &GasRows,
     opt_in: &[String],
     tables: &[GasTable],
     signer: u16,
+    registry: Option<&str>,
     bytes: bool,
     items: &dyn Fn(&Option<GasPerItem>) -> Option<u64>,
 ) -> Option<(u64, GasFrom)> {
     part(chain, opt_in, tables, |r| {
-        let v = r.verify.iter().find(|v| v.signer == signer)?;
+        let v = verify_row(r, signer, registry)?;
         let b = if bytes { v.sig_bytes } else { 0 };
         Some(
             v.gas
@@ -228,10 +265,12 @@ pub(crate) fn lookup_by(
         g = g.saturating_add(own(&b.per_item)?);
         Some(g)
     });
-    let verify = verify_part(chain, opt_in, tables, signer, true, &own);
+    let verify = verify_part(chain, opt_in, tables, signer, op.registry, true, &own);
     let second = match op.attached {
         None => Some(0),
-        Some(Some(k)) => verify_part(chain, opt_in, tables, k, false, &attached).map(|v| v.0),
+        Some(Some(k)) => {
+            verify_part(chain, opt_in, tables, k, op.registry, false, &attached).map(|v| v.0)
+        }
         // an unknown kind may be a group's (0x0121), whose n is not read: its `members` at the kind's cap (controller call,
         // owner auto-run 2026-11-19: a bound of the kind's own rule, as K1's `ROLL_MAX`; a known kind's count stays unread)
         Some(None) => ACCEPTED_SIGNERS
@@ -240,7 +279,7 @@ pub(crate) fn lookup_by(
                 let capped = |p: &Option<GasPerItem>| {
                     items(p, &|i| (i == "members").then_some(BLS_MULTI_MAX))
                 };
-                verify_part(chain, opt_in, tables, *k, false, &capped).map(|v| v.0)
+                verify_part(chain, opt_in, tables, *k, op.registry, false, &capped).map(|v| v.0)
             })
             .try_fold(0, |m, v| v.map(|v| m.max(v))),
     };
@@ -336,13 +375,15 @@ pub(crate) fn quoted(
 }
 
 /// The calldata bytes a quote of signer kind `signer` counted (owner 2026-11-19, G3): the unsigned calldata (`unsigned`) plus
-/// the verify row's `sig_bytes` when the verify part came from a row (looked up in the same order, so from the same row); an
-/// app's figure, an estimate or no source counted the unsigned calldata only.
+/// the verify row's `sig_bytes` when the verify part came from a row (looked up in the same order for the same bound
+/// `registry`, so from the same row); an app's figure, an estimate or no source counted the unsigned calldata only.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn counted_bytes(
     chain: &GasRows,
     opt_in: &[String],
     tables: &[GasTable],
     signer: u16,
+    registry: Option<&str>,
     from: Option<&GasSources>,
     unsigned: usize,
 ) -> u64 {
@@ -350,10 +391,7 @@ pub(crate) fn counted_bytes(
     let sig = match from.map(|f| &f.verify) {
         Some(GasFrom::Chain | GasFrom::Module(_) | GasFrom::Reference) => {
             part(chain, opt_in, tables, |r| {
-                r.verify
-                    .iter()
-                    .find(|v| v.signer == signer)
-                    .map(|v| v.sig_bytes)
+                verify_row(r, signer, registry).map(|v| v.sig_bytes)
             })
             .map_or(0, |v| v.0)
         }
@@ -521,6 +559,7 @@ mod tests {
                 per_item: None,
             }],
             verify: vec![GasVerify {
+                line: Default::default(),
                 signer: 0x0101,
                 gas: verify,
                 sig_bytes: 0,
@@ -689,6 +728,163 @@ mod tests {
         )
     }
 
+    const REG_A: &str = "0x5ca00000000000000000000000000000000000a2";
+    const REG_B: &str = "0x5ca00000000000000000000000000000000000b2";
+
+    /// Spec 2026-11-19-registry-verify-only-kinds §12 (CTR-UA-65): verify rows keyed by registry address and signer kind,
+    /// the path (`cache` / `precompile` / `fallback`), the depth and the write path columns; the same signer under several
+    /// registries, paths, depths or the write path parses, the same five columns twice is refused; a column out of its
+    /// format is refused; control: a row without the columns is the holder's (all absent).
+    #[test]
+    fn verify_row_keyed_by_registry() {
+        let row = |extra: &str| {
+            v(257, 1_000, 900).replace(r#""sig_bytes":0"#, &format!(r#""sig_bytes":0{extra}"#))
+        };
+        let rows = [
+            row(""),
+            row(&format!(
+                r#","registry":"{REG_A}","path":"precompile","depth":1"#
+            )),
+            row(&format!(
+                r#","registry":"{REG_A}","path":"fallback","depth":1"#
+            )),
+            row(&format!(
+                r#","registry":"{REG_B}","path":"precompile","depth":1"#
+            )),
+            row(r#","path":"precompile","depth":2"#),
+            row(r#","path":"precompile","depth":2,"write":true"#),
+            row(r#","path":"cache""#),
+        ];
+        let t = GasTable::parse(&file("", &rows.join(","))).unwrap();
+        assert_eq!(t.rows.verify.len(), rows.len());
+        assert_eq!(
+            t.rows.verify[0].line,
+            crate::GasLine::default(),
+            "no columns: the holder's"
+        );
+        assert_eq!(
+            t.rows.verify[1].line,
+            crate::GasLine {
+                registry: Some(REG_A.into()),
+                path: Some("precompile".into()),
+                depth: 1,
+                write: false
+            }
+        );
+        // the registry is compared without its case
+        let upper = row(&format!(
+            r#","registry":"{}","path":"precompile","depth":1"#,
+            REG_A.to_ascii_uppercase().replace("0X", "0x")
+        ));
+        assert!(
+            GasTable::parse(&file("", &[rows[1].clone(), upper].join(","))).is_err(),
+            "one key twice"
+        );
+        for (i, r) in rows.iter().enumerate() {
+            assert!(
+                GasTable::parse(&file("", &[r.clone(), r.clone()].join(","))).is_err(),
+                "row {i} twice"
+            );
+        }
+        for bad in [
+            r#","registry":"0x5ca0""#,
+            r#","registry":5"#,
+            r#","path":"holder""#,
+            r#","depth":16"#,
+            r#","depth":-1"#,
+            r#","write":1"#,
+        ] {
+            assert!(GasTable::parse(&file("", &row(bad))).is_err(), "{bad}");
+        }
+        assert_eq!(
+            GasTable::parse(&file("", &row(r#","depth":15"#)))
+                .unwrap()
+                .rows
+                .verify[0]
+                .line
+                .depth,
+            15
+        );
+    }
+
+    /// CTR-UA-65: the quote takes the verify row of the registry the operation binds (the profile's), the dearest of its
+    /// rows (the fallback worst); without one, the holder's row (no registry, no path, depth 0); a write row (W1) and a
+    /// registry-less line row (the reference's) never answer; in the chain's rows and a table's alike.
+    #[test]
+    fn quote_takes_bound_registry_row() {
+        let vr = |gas: u64, registry: Option<&str>, path: Option<&str>, depth: u8, write: bool| {
+            GasVerify {
+                line: crate::GasLine {
+                    registry: registry.map(str::to_string),
+                    path: path.map(str::to_string),
+                    depth,
+                    write,
+                },
+                signer: 0x0101,
+                gas,
+                sig_bytes: 0,
+                margin: 0,
+                per_item: None,
+            }
+        };
+        let mut r = base_only(1_000);
+        r.verify = vec![
+            vr(10, None, None, 0, false),
+            vr(20, Some(REG_A), Some("precompile"), 1, false),
+            vr(30, Some(REG_A), Some("fallback"), 1, false),
+            vr(99, Some(REG_A), None, 1, true),
+            vr(50, None, Some("fallback"), 4, false),
+            vr(40, Some(REG_B), Some("precompile"), 2, false),
+        ];
+        let at = |r: &GasRows, reg: Option<&'static str>| {
+            let op = OpGas {
+                registry: reg,
+                ..OpGas::PLAIN
+            };
+            lookup_by(r, &[], &[], None, K, &op).unwrap().map(|f| f.0)
+        };
+        assert_eq!(
+            at(&r, Some(REG_A)),
+            Some(1_030),
+            "the bound registry's dearest row, never its write row"
+        );
+        assert_eq!(
+            at(&r, Some("0x5CA00000000000000000000000000000000000A2")),
+            Some(1_030),
+            "the address's case"
+        );
+        assert_eq!(at(&r, Some(REG_B)), Some(1_040));
+        assert_eq!(
+            at(&r, Some("0x5ca00000000000000000000000000000000000c2")),
+            Some(1_010),
+            "no row of it: the holder's"
+        );
+        assert_eq!(at(&r, None), Some(1_010), "no registry bound: the holder's");
+        // the holder's row absent: a registry-less line row never answers
+        r.verify.remove(0);
+        assert_eq!(at(&r, None), None);
+        assert_eq!(at(&r, Some(REG_A)), Some(1_030));
+        // a table's rows the same way, after the chain's
+        let t = table(
+            "m",
+            GasRows {
+                base: vec![],
+                verify: r.verify.clone(),
+            },
+        );
+        let chain = base_only(1_000);
+        let op = OpGas {
+            registry: Some(REG_B),
+            ..OpGas::PLAIN
+        };
+        assert_eq!(
+            lookup_by(&chain, &all(&["m"]), &[t], None, K, &op)
+                .unwrap()
+                .map(|f| (f.0, f.1.verify)),
+            Some((1_040, GasFrom::Module("m".into())))
+        );
+    }
+
     /// The table file's checks, on base and verify rows alike: the rounding (a multiple of 1,000, at least the measurement and
     /// less than 1,000 above it), the format and version 2, the bounds, no key twice; a base figure positive, a verify figure may be 0 (the
     /// reference signer's); each refusal beside its control.
@@ -779,7 +975,58 @@ mod tests {
         let native_sig = t["verify"][0]["sig_bytes"].as_u64();
         let inputs: serde_json::Value =
             serde_json::from_str(include_str!("../../gas/inputs.json")).unwrap();
+        let mut line = 0;
         for r in rows {
+            // CTR-UA-65: a line row (a path, a depth or the write path) is the kind's verify delta plus the input list's
+            // line figure, named in its source with its forge test, marked `stand_in`, never keyed by a registry
+            if r.get("depth").is_some() {
+                line += 1;
+                let vl = &inputs["verify_line"];
+                let file = format!(
+                    "{}/../../{}",
+                    env!("CARGO_MANIFEST_DIR"),
+                    inputs["measurements"].as_str().unwrap()
+                );
+                let m: serde_json::Value =
+                    serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+                let sg = r["signer"].as_u64().unwrap();
+                let delta = m[format!("verify_0x{sg:04x}_delta")].as_u64().unwrap();
+                let d = r["depth"].as_u64().unwrap();
+                let i = usize::try_from(d - 1).unwrap();
+                let extra = if r["write"] == true {
+                    let a: Vec<u64> = vl["write"]["accept"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|x| x.as_u64().unwrap())
+                        .collect();
+                    assert_eq!(vl["write"]["signer"].as_u64(), Some(sg), "{r}");
+                    d * a.windows(2).map(|w| w[1] - w[0]).max().unwrap()
+                } else {
+                    let k = &vl["kinds"][sg.to_string()];
+                    k[r["path"].as_str().unwrap()][i].as_u64().unwrap()
+                        - k["holder"].as_u64().unwrap()
+                };
+                assert_eq!(r["measured"].as_u64(), Some(delta + extra), "{r}");
+                let src = r["source"].as_str().unwrap();
+                assert!(
+                    src.contains("sdk_gas.json#verify_0x") && src.contains("UAVerifyOnlyGas.t.sol"),
+                    "{r}"
+                );
+                assert_eq!(r["stand_in"], vl["stand_in"], "{r}");
+                assert!(r.get("registry").is_none(), "{r}");
+                assert_eq!(
+                    r["sig_bytes"],
+                    m[format!("verify_0x{sg:04x}_sig_bytes")],
+                    "{r}"
+                );
+                assert_eq!(
+                    &r["margin"],
+                    &inputs["margin"][sg.to_string()],
+                    "margin {r}"
+                );
+                continue;
+            }
             let Some((path, keys)) = r["source"].as_str().unwrap().split_once('#') else {
                 assert_eq!(
                     (&r["signer"], &r["measured"]),
@@ -850,6 +1097,21 @@ mod tests {
                 assert_eq!(worst, p["gas"].as_u64().unwrap(), "{r}");
             }
         }
+        // the reference carries every line path: per kind of the input list, precompile and fallback at each depth, and W1
+        let vl = &inputs["verify_line"];
+        let per_kind: usize = vl["kinds"]
+            .as_object()
+            .unwrap()
+            .values()
+            .map(|k| {
+                k["precompile"].as_array().unwrap().len() + k["fallback"].as_array().unwrap().len()
+            })
+            .sum();
+        assert_eq!(
+            line,
+            per_kind + vl["write"]["accept"].as_array().unwrap().len()
+        );
+        assert!(line > 0);
     }
 
     /// G2 (owner 2026-11-19, "approved"): a base row's `ua_extra` covers every variant a derived signer can sign. Its own figure
@@ -1195,6 +1457,7 @@ mod tests {
         // an attached signature's verify row with a per-item part: its count is not read, refused
         let mut r = rows(1_000, 10);
         r.verify.push(GasVerify {
+            line: Default::default(),
             signer: 0x0102,
             gas: 5,
             sig_bytes: 0,
@@ -1628,6 +1891,7 @@ mod tests {
         r.verify[0].margin = 1_000;
         assert_eq!(lookup(&r, &[], &[], None, K).map(|f| f.0), Some(2_010));
         r.verify.push(GasVerify {
+            line: Default::default(),
             signer: 0x0102,
             gas: 5,
             sig_bytes: 0,
@@ -1683,6 +1947,7 @@ mod tests {
         r.verify = ACCEPTED_SIGNERS
             .iter()
             .map(|s| GasVerify {
+                line: Default::default(),
                 signer: *s,
                 gas: if *s == 0x0101 { 10 } else { 0 },
                 sig_bytes: 0,
@@ -1740,6 +2005,7 @@ mod tests {
         r.base[0].kind = "gov_router".into();
         r.base[0].ua_extra = Some(15_000);
         r.verify.push(GasVerify {
+            line: Default::default(),
             signer: NATIVE_EVM,
             gas: 0,
             sig_bytes: 0,
@@ -1806,6 +2072,7 @@ mod tests {
         r.verify = ACCEPTED_SIGNERS
             .iter()
             .map(|s| GasVerify {
+                line: Default::default(),
                 signer: *s,
                 gas: u64::from(*s),
                 sig_bytes: 1,
@@ -1883,7 +2150,7 @@ mod tests {
         let tables = vec![table("vault", m)];
         let opt = all(&["vault"]);
         let c = |chain: &GasRows, from: Option<GasSources>| {
-            counted_bytes(chain, &opt, &tables, 0x0101, from.as_ref(), 500)
+            counted_bytes(chain, &opt, &tables, 0x0101, None, from.as_ref(), 500)
         };
         assert_eq!(c(&r, Some(GasSources::both(GasFrom::Chain))), 628);
         assert_eq!(
@@ -2189,6 +2456,7 @@ mod tests {
                 &reference,
                 std::slice::from_ref(&t),
                 0x0121,
+                None,
                 false,
                 &items,
             )
@@ -2244,6 +2512,7 @@ mod tests {
         r.verify = ACCEPTED_SIGNERS
             .iter()
             .map(|s| GasVerify {
+                line: Default::default(),
                 signer: *s,
                 gas: if *s == 0x0135 { 5_000 } else { 0 },
                 sig_bytes: 0,

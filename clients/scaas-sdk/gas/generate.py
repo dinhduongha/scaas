@@ -168,6 +168,45 @@ def overshoots(m, base):
     return out
 
 
+INPUTS = "clients/scaas-sdk/gas/inputs.json"
+
+
+def line_rows(inputs, m, src):
+    """The registry line's verify rows (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65), from the input list's
+    `verify_line` (figures of its forge test's run log, typed into the input list): per signer kind and depth d (1..), a
+    `precompile` and a `fallback` row, the kind's verify delta plus the line's figure at d less the holder's own check; per
+    depth a `write` row (W1), the delta plus d times the dearest step between two depths of the write path's figures. Each
+    row is marked `stand_in` (registry overhead on stand-in verifiers) and carries the kind's `sig_bytes` and `margin`."""
+    vl = inputs.get("verify_line")
+    if not vl:
+        return []
+
+    def row(signer, measured, source, **cols):
+        r = {"signer": signer, "gas": ceil1000(measured), "measured": measured, "source": source}
+        r["sig_bytes"] = m[f"verify_0x{signer:04x}_sig_bytes"]
+        if str(signer) in inputs["margin"]:
+            r["margin"] = inputs["margin"][str(signer)]
+        r["stand_in"] = vl["stand_in"]
+        r.update(cols)
+        return r
+
+    out = []
+    for key, k in vl["kinds"].items():
+        signer = int(key)
+        delta = f"verify_0x{signer:04x}_delta"
+        for path in ("precompile", "fallback"):
+            for i, g in enumerate(k[path]):
+                src_line = f"{INPUTS}#verify_line.kinds.{key}.{path}[{i}]-holder ({vl['forge']} {k['test']})"
+                out.append(row(signer, m[delta] + g - k["holder"], f"{src}#{delta} + {src_line}", path=path, depth=i + 1))
+    w = vl["write"]
+    delta = f"verify_0x{w['signer']:04x}_delta"
+    step = max(b - a for a, b in zip(w["accept"], w["accept"][1:]))
+    for d in range(1, len(w["accept"]) + 1):
+        src_line = f"{INPUTS}#verify_line.write.accept: depth x the dearest step ({vl['forge']} {w['test']})"
+        out.append(row(w["signer"], m[delta] + d * step, f"{src}#{delta} + {src_line}", depth=d, write=True))
+    return out
+
+
 def table(inputs, m):
     src = inputs["measurements"]
     base = []
@@ -231,6 +270,7 @@ def table(inputs, m):
         if str(signer) in inputs["stand_in"]:
             row["stand_in"] = inputs["stand_in"][str(signer)]
         verify.append(row)
+    verify += line_rows(inputs, m, src)
     return {
         "format": "scaas.gas-table",
         "v": 2,

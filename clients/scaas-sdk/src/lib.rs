@@ -20,6 +20,8 @@ pub mod error;
 pub mod events;
 #[cfg(feature = "frb")]
 pub mod frb;
+#[cfg(any(feature = "account", feature = "wallet"))]
+pub mod line;
 #[cfg(feature = "wallet")]
 pub mod op;
 pub mod platform;
@@ -29,11 +31,13 @@ pub mod vault;
 pub mod wallet;
 
 pub use config::{
-    ChainProfile, Clock, EndpointConfig, Family, Finality, GasBase, GasPerByte, GasPerItem,
-    GasRows, GasTable, GasVerify, Limits, ListedToken, RuntimeChoice, SdkConfig,
+    ChainProfile, Clock, EndpointConfig, Family, Finality, GasBase, GasLine, GasPerByte,
+    GasPerItem, GasRows, GasTable, GasVerify, Limits, ListedToken, RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
+#[cfg(any(feature = "account", feature = "wallet"))]
+pub use line::UaLine;
 pub use vault::Vault;
 
 use scaas_rpc::endpoint::{READ_TIMEOUT_MS, SLOW_TIMEOUT_MS, TIMEOUT_MS};

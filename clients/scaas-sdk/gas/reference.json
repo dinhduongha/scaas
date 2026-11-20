@@ -21,6 +21,7 @@
     "Counted rows (owner 2026-11-19, I1 part 2, K2; P3: measured at the entry's bound where feasible; P4 \"approved\"): measured at several counts; on one rising sequence whose chord from the first to the last measured point is at or above every point, per_item is the chord's whole-gas rise a count (rounded up) and the row's figure the chord's line at a count of 0; otherwise per_item is the worst whole-gas rise a count between two measured points and the figure the largest measured gas less per_item times its count; either way intercept + per_item \u00d7 count is at least the measured gas at every measured count.",
     "PQZ single debits (owner 2026-11-19, I2; stand_in): mtxConfidentialTransferSingle, \u2026SingleCompact, mtxUnshield and mtxUnshieldUnwrap from alice's TRIVIAL entry with stand-ins for what the fixture mocks (each row's stand_in names them); their state gas (the ciphertexts kept in state, about 222 new slots) is most of the figure.",
     "bls12381-multi (0x0121; spec 2026-11-19-bls12381-multi \u00a78.4, plan Task 16): `members` is the group's n, read from its key data. The registerBlsMulti row (kind account, variant registry) is the registration's execution gas with its EIP-8037 state gas, a group of unit weights at t = n / 2 with its full PoP, sent by the relayer (no signer: the PoP authorizes it, so no verify part and no ua_extra); fresh is the registry's first 0x0121 registration (the kind's list count slot new; the SDK quotes it), used one after another group's. The verify row (signer 289) is the hot path's check (verify; a minimal set is accepted there too) at the worst k of the two sides of the pinned apk(S) boundary, k = floor((n + 1) / 2) and k + 1. Both lines from the n = 2 and n = 64 points (owner 2026-11-19, plan Task 16, \"approved\": per_item = ceil((g(64) - g(2)) / 62), gas = g(2) - 2 per_item, checked at or above n = 2, 16, 32, 64); where a point lies above that line (the verify row at n = 16, by 304 gas) the row's gas is the largest g(n) - per_item n, the slope kept (controller call, owner auto-run 2026-11-19), the line within 1,000 gas of the n = 64 point.",
+    "The registry line (spec 2026-11-19-registry-verify-only-kinds \u00a712, \u00a713 Gas; CTR-UA-65): a verify row with `path` and `depth` (`precompile`: the bound registry's verify-only verifier; `fallback`: the holder's verdict after it gave no answer) or `write` (W1: a registry write, its signature checked by the holder) is measured on stand-in verifiers (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol): the kind's verify delta plus the line's extra over the holder's own check. Such a row of no registry is never quoted; a chain quotes a later generation from its own rows keyed by that registry. Each further generation on the consumer path measured at most 12,410 gas (the registry's LINE_HOP_GAS bound: 13,100); a miss at generation 16 (15 hops) 158,891; depths above 4 are not extrapolated.",
     "gov_router mtxPublishClassEnv: the per-item line (worst slope) is above the measured figure at every measured count, by up to 215,839 gas at the largest (gov_router_mtxPublishClassEnv_overshoot_factory, gov_router_mtxPublishClassEnv_overshoot_ua_factory); the excess is refunded.",
     "gov_router mtxPublishDexEnv: the per-item line (worst slope) is above the measured figure at every measured count, by up to 215,839 gas at the largest (gov_router_mtxPublishDexEnv_overshoot_factory, gov_router_mtxPublishDexEnv_overshoot_ua_factory); the excess is refunded.",
     "gov_router mtxPublishTokenEnv: the per-item line (worst slope) is above the measured figure at every measured count, by up to 215,839 gas at the largest (gov_router_mtxPublishTokenEnv_overshoot_factory, gov_router_mtxPublishTokenEnv_overshoot_ua_factory); the excess is refunded.",
@@ -4430,6 +4431,214 @@
         "base_count": 0,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0121_per_item"
       }
+    },
+    {
+      "signer": 257,
+      "gas": 27000,
+      "measured": 26534,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.257.precompile[0]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: p256 requireAuthorized)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "precompile",
+      "depth": 1
+    },
+    {
+      "signer": 257,
+      "gas": 39000,
+      "measured": 38944,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.257.precompile[1]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: p256 requireAuthorized)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "precompile",
+      "depth": 2
+    },
+    {
+      "signer": 257,
+      "gas": 52000,
+      "measured": 51354,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.257.precompile[2]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: p256 requireAuthorized)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "precompile",
+      "depth": 3
+    },
+    {
+      "signer": 257,
+      "gas": 64000,
+      "measured": 63764,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.257.precompile[3]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: p256 requireAuthorized)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "precompile",
+      "depth": 4
+    },
+    {
+      "signer": 257,
+      "gas": 40000,
+      "measured": 39270,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.257.fallback[0]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: p256 requireAuthorized)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "fallback",
+      "depth": 1
+    },
+    {
+      "signer": 257,
+      "gas": 52000,
+      "measured": 51680,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.257.fallback[1]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: p256 requireAuthorized)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "fallback",
+      "depth": 2
+    },
+    {
+      "signer": 257,
+      "gas": 65000,
+      "measured": 64090,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.257.fallback[2]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: p256 requireAuthorized)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "fallback",
+      "depth": 3
+    },
+    {
+      "signer": 257,
+      "gas": 77000,
+      "measured": 76500,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.257.fallback[3]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: p256 requireAuthorized)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "fallback",
+      "depth": 4
+    },
+    {
+      "signer": 306,
+      "gas": 2389000,
+      "measured": 2388848,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.306.precompile[0]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: fndsa512 requirePortable)",
+      "sig_bytes": 672,
+      "margin": 1000,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "precompile",
+      "depth": 1
+    },
+    {
+      "signer": 306,
+      "gas": 2402000,
+      "measured": 2401258,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.306.precompile[1]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: fndsa512 requirePortable)",
+      "sig_bytes": 672,
+      "margin": 1000,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "precompile",
+      "depth": 2
+    },
+    {
+      "signer": 306,
+      "gas": 2414000,
+      "measured": 2413668,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.306.precompile[2]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: fndsa512 requirePortable)",
+      "sig_bytes": 672,
+      "margin": 1000,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "precompile",
+      "depth": 3
+    },
+    {
+      "signer": 306,
+      "gas": 2427000,
+      "measured": 2426078,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.306.precompile[3]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: fndsa512 requirePortable)",
+      "sig_bytes": 672,
+      "margin": 1000,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "precompile",
+      "depth": 4
+    },
+    {
+      "signer": 306,
+      "gas": 2408000,
+      "measured": 2407173,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.306.fallback[0]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: fndsa512 requirePortable)",
+      "sig_bytes": 672,
+      "margin": 1000,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "fallback",
+      "depth": 1
+    },
+    {
+      "signer": 306,
+      "gas": 2420000,
+      "measured": 2419583,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.306.fallback[1]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: fndsa512 requirePortable)",
+      "sig_bytes": 672,
+      "margin": 1000,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "fallback",
+      "depth": 2
+    },
+    {
+      "signer": 306,
+      "gas": 2432000,
+      "measured": 2431993,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.306.fallback[2]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: fndsa512 requirePortable)",
+      "sig_bytes": 672,
+      "margin": 1000,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "fallback",
+      "depth": 3
+    },
+    {
+      "signer": 306,
+      "gas": 2445000,
+      "measured": 2444403,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0132_delta + clients/scaas-sdk/gas/inputs.json#verify_line.kinds.306.fallback[3]-holder (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voConsumer_perDepth: fndsa512 requirePortable)",
+      "sig_bytes": 672,
+      "margin": 1000,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "path": "fallback",
+      "depth": 4
+    },
+    {
+      "signer": 257,
+      "gas": 28000,
+      "measured": 27185,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.write.accept: depth x the dearest step (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voWrite_perDepth: acceptMembership of a p256 member held in generation 1)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "depth": 1,
+      "write": true
+    },
+    {
+      "signer": 257,
+      "gas": 36000,
+      "measured": 35840,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.write.accept: depth x the dearest step (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voWrite_perDepth: acceptMembership of a p256 member held in generation 1)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "depth": 2,
+      "write": true
+    },
+    {
+      "signer": 257,
+      "gas": 45000,
+      "measured": 44495,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.write.accept: depth x the dearest step (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voWrite_perDepth: acceptMembership of a p256 member held in generation 1)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "depth": 3,
+      "write": true
+    },
+    {
+      "signer": 257,
+      "gas": 54000,
+      "measured": 53150,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#verify_0x0101_delta + clients/scaas-sdk/gas/inputs.json#verify_line.write.accept: depth x the dearest step (smartcontracts/evm/test/ua/UAVerifyOnlyGas.t.sol test_T_GAS_voWrite_perDepth: acceptMembership of a p256 member held in generation 1)",
+      "sig_bytes": 128,
+      "stand_in": "registry overhead on stand-in verifiers (the verify-only verifier VerifyOnlyStandIn, generation 1's verifiers the MockVerifier rule), added to the kind's measured verify delta: the row holds the holder verifier's cost, not the chain precompile's",
+      "depth": 4,
+      "write": true
     }
   ]
 }

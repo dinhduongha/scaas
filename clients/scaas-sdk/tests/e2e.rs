@@ -184,6 +184,7 @@ async fn e2e_pay_on_anvil() {
                 per_item: None,
             }],
             verify: vec![GasVerify {
+                line: Default::default(),
                 signer: 0,
                 gas: 0,
                 sig_bytes: 0,
