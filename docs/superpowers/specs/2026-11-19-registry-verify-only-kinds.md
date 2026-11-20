@@ -842,7 +842,8 @@ review, P3-5). **Also frozen (M8)**, because successors and the node
   walk), then read the record (keys, registration, KEM, `popOf`, `msig` state) at `holder` and the PQZ attachment at
   `pqzHomeOf(ua)`, the third word (at `holder` where it is 0). A reader that goes through the bound registry's own views gets
   the same answer by forwarding; a reader that reads storage, logs or library state of one registry directly must not assume
-  that registry holds the record: a gen-1 holder read through a gen-2 registry must not fail closed for that reason.
+  that registry holds the record: a gen-1 holder read through a gen-2 registry must not fail closed for that reason. The
+  list of a kind (decoys) is read at `kindHome(kind)`. BUILT in scaas-sdk's reading layers (the round's review F2).
 - **Clients.** Signing is unchanged (same kind, same message). A client choosing a token release shows its registry and that
   registry's verify path for the holder's kind. `ua-rs` and every `ua-*` registration builder offer a kind on a registry only
   where `kindHome(kind) == registry`.

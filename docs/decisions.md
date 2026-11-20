@@ -5377,7 +5377,10 @@ Controller calls (owner auto-run 2026-11-19, not owner rulings): the cap probe i
 - old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-70 · superseded-by: —
 
 **Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-70).) Generation n + 1 over the latest, `MAX_GENERATION` 16; `holderOf(ua) → (holder, kind, pqzHome)` one call per generation, `pqzHomeOf`, `kindHome`, `verifierOf`; every forwarding reader reads the walk once and the record at the holder; the native-space shortcut; single-key registrations walk nothing; the walk's logic in `UARegistryCoreLib`. Off-chain readers (SDK reading layers, indexers, wallets) read a record at `holderOf(ua)` and its PQZ attachment at `pqzHomeOf(ua)`, and never assume the bound registry's own storage holds the record.
-**Status.** BUILT on EVM: `9ebf6931c`, `2bbe3380d` (a miss at depth 4: 37,016 gas; the thin view ≈ 4.7 k over a local read). The off-chain reader rule BUILT in scaas-sdk's write targets (`535bf1dcb`); its reading layers PLANNED. UNAUDITED.
+**Status.** BUILT on EVM: `9ebf6931c`, `2bbe3380d` (a miss at depth 4: 37,016 gas; the thin view ≈ 4.7 k over a local read). The off-chain reader rule BUILT in scaas-sdk: the write targets (`535bf1dcb`) and, since sdk-complete's merge, the PQZ, verdict
+and Zether reading layers (the round's review F2; controller call, owner auto-run 2026-11-19: the holder and the home are read by
+one `holderOf` call at the read's block, an address and not a confidential word, so CLI-UAL-34's storage rule for every word
+holds; a registry without the view is read as its own holder). UNAUDITED.
 **Why.** One registry code for every generation; O(n) per lookup; a precompile that arrives after the latest generation is used by the next one, so no sibling generation is needed.
 **Cost if wrong.** A deep line costs ≈ 12–13 k per generation passed on every lookup of an old record; a reader of one registry's storage that skips the walk fails closed for every older record.
 **Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (R10, R11, P5, P12, X1, Y1, P14). The off-chain reader rule: controller, 2026-11-20, finding F2 of the SDK review.

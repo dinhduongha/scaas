@@ -62,3 +62,57 @@ pub(crate) async fn word(
         .await?
         .to_be_bytes::<32>())
 }
+
+/// `holderOf(bytes32)`'s selector.
+const HOLDER_OF: [u8; 4] = [0xfe, 0x6a, 0x9a, 0x8c];
+/// `kindHome(uint16)`'s selector.
+const KIND_HOME: [u8; 4] = [0x0b, 0x2e, 0xb5, 0xcc];
+
+/// Where `ua`'s record and its PQZ attachment are held on the line of `reg`, the registry the token's `ChainEnv` names
+/// (CTR-UA-70, accounts.md "Off-chain readers"; the round's review F2; an address, not a confidential word, so one `eth_call` at the
+/// read's block, CLI-UAL-34's storage rule kept for every word):
+/// `holderOf(ua)` once on `reg` at the read's block (one walk), `(holder, PQZ home)`: the record is read at the holder, the
+/// PQZ attachment at the home, else at the holder. No holder (a native-space id, or an id no generation holds): `reg`, whose
+/// records then show the absence. A registry without the view (a revert, or an answer of another length: code from before the
+/// line) holds its own records: `(reg, reg)`. A failed node is the read's error.
+pub(crate) async fn held_at(
+    pool: &EvmPool,
+    at: &ReadAt<B256>,
+    reg: Address,
+    ua: &W,
+) -> Result<(Address, Address), ReadError> {
+    let data = [&HOLDER_OF[..], &ua[..]].concat();
+    match pool.call_at(at, reg, data.into()).await {
+        Ok(r) => match (r.len(), r.get(12..32), r.get(76..96)) {
+            (96, Some(h), Some(p)) => {
+                let (holder, home) = (Address::from_slice(h), Address::from_slice(p));
+                let held = if holder.is_zero() { reg } else { holder };
+                Ok((held, if home.is_zero() { held } else { home }))
+            }
+            _ => Ok((reg, reg)),
+        },
+        Err(ReadError::Revert { .. }) => Ok((reg, reg)),
+        Err(e) => Err(e),
+    }
+}
+
+/// Where kind `kind`'s list lives on `reg`'s line (`kindHome(kind)`, CTR-UA-29: a kind's list is in its home), else `reg`
+/// (no home, or a registry without the view).
+pub(crate) async fn kind_home(
+    pool: &EvmPool,
+    at: &ReadAt<B256>,
+    reg: Address,
+    kind: u16,
+) -> Result<Address, ReadError> {
+    let mut data = KIND_HOME.to_vec();
+    data.extend_from_slice(&[0u8; 30]);
+    data.extend_from_slice(&kind.to_be_bytes());
+    match pool.call_at(at, reg, data.into()).await {
+        Ok(r) => match (r.len(), r.get(12..32)) {
+            (32, Some(h)) if h.iter().any(|b| *b != 0) => Ok(Address::from_slice(h)),
+            _ => Ok(reg),
+        },
+        Err(ReadError::Revert { .. }) => Ok(reg),
+        Err(e) => Err(e),
+    }
+}

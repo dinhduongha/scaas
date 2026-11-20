@@ -280,6 +280,39 @@ fn reads(c: &Fake) -> Vec<Value> {
         .collect()
 }
 
+/// Review F2 (CTR-UA-70): the reading layers' only `eth_call`s are the line's address reads on the bound registry,
+/// `holderOf(bytes32)` and `kindHome(uint16)`; every confidential word stays a storage read.
+fn only_line_calls(c: &Fake) {
+    for r in log(c).iter().filter(|r| r["method"] == "eth_call") {
+        let p = &r["params"][0];
+        let data = p["input"]
+            .as_str()
+            .or(p["data"].as_str())
+            .unwrap_or_default();
+        assert!(
+            data.starts_with("0xfe6a9a8c") || data.starts_with("0x0b2eb5cc"),
+            "an eth_call other than holderOf / kindHome: {data}"
+        );
+        assert_eq!(
+            p["to"].as_str().unwrap_or_default().to_ascii_lowercase(),
+            REGISTRY
+        );
+    }
+}
+
+/// `holderOf(ua)`'s answer on the bound registry: `(holder, kind, pqzHome)`.
+fn holder_answer(c: &Fake, ua: &W, holder: &str, kind: u16, home: &str) {
+    let mut a = [0u8; 96];
+    a[12..32].copy_from_slice(&a20(holder));
+    a[62..64].copy_from_slice(&kind.to_be_bytes());
+    a[76..96].copy_from_slice(&a20(home));
+    c.lock().unwrap().answers.push((
+        REGISTRY.into(),
+        format!("0xfe6a9a8c{}", &hx(ua)[2..]),
+        hx(&a),
+    ));
+}
+
 fn count(c: &Fake, method: &str) -> usize {
     log(c).iter().filter(|r| r["method"] == method).count()
 }
@@ -400,8 +433,8 @@ async fn view_never_serves_a_word() {
             .amount,
         "5"
     );
-    assert_eq!(count(&c, "eth_call"), 0);
-    // the module reaches no view: no call of the pool's that runs `eth_call`
+    only_line_calls(&c);
+    // the module reaches no view: no call of the pool's that runs `eth_call` (the line's address reads: `words.rs`, review F2)
     let src = include_str!("../src/confidential/read.rs");
     for v in ["call_at(", "call_tx(", "raw_read", "simulate"] {
         assert!(!src.contains(v), "read.rs uses {v}");
@@ -1381,4 +1414,47 @@ async fn watch_reads_a_zether_account() {
         }),
         "{ev:?}"
     );
+}
+
+/// Review F2 (CTR-UA-70): a holder whose `0x0141` record a predecessor holds, through the later generation the token binds, is
+/// read where `holderOf` names it; control: with no answer the bound registry alone is read: `LegKeyMismatch`.
+#[tokio::test(flavor = "multi_thread")]
+async fn zether_holder_in_predecessor_read_at_holder() {
+    const G1: &str = "0x5ca00000000000000000000000000000000000e1";
+    let (s, seed, c) = one(5, Finality::Finalized).await;
+    let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
+    let ua: W = unhex(&k.ua).try_into().unwrap();
+    let slot = map(&ua, &be(0));
+    let good: W = unhex(
+        c.lock()
+            .unwrap()
+            .storage
+            .get(&(REGISTRY.into(), hx(&slot)))
+            .unwrap(),
+    )
+    .try_into()
+    .unwrap();
+    put(&c, G1, &slot, &good);
+    put(&c, REGISTRY, &slot, &[0; 32]);
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "LegKeyMismatch",
+        "control: the bound registry alone"
+    );
+    holder_answer(
+        &c,
+        &ua,
+        G1,
+        0x0141,
+        "0x0000000000000000000000000000000000000000",
+    );
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
+    only_line_calls(&c);
 }

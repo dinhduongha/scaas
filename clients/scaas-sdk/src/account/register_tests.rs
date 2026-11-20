@@ -159,7 +159,7 @@ async fn pq_registration_split() {
             format!(
                 "0x{}{}{}",
                 "00".repeat(32),
-                hex(&committed)[2..].to_string(),
+                &hex(&committed)[2..],
                 "00".repeat(32)
             ),
         ));

@@ -2330,8 +2330,8 @@ keeps its rule.
 
 <a id="CTR-UA-70"></a>**CTR-UA-70** — **The registry line: up to 16 generations, one walk `holderOf`, every lookup read where
 the record is held** (owner rulings of spec §0.2 – §0.4: N generations, the depth cap 16, P5, P12, X1, Y1, P14; BUILT on EVM, `9ebf6931c`, `2bbe3380d`; the off-chain
-readers: BUILT in scaas-sdk's write targets, `535bf1dcb`; its PQZ, verdict and Zether reading layers PLANNED (they land with
-the SDK's reading layers, then follow this rule)).
+readers: BUILT in scaas-sdk, its write targets `535bf1dcb`, its PQZ, verdict and Zether reading layers since the merge of
+sdk-complete, the round's review F2).
 
 - **The line.** Generation 1 has `predecessor = 0`; a later registry takes the chain's latest generation `n` as predecessor and is
   generation `n + 1` (two generations: generation 2 takes `predecessor = gen1`); one registry code serves every generation; its EIP-712 version is the generation's decimal number.
@@ -2349,7 +2349,9 @@ the SDK's reading layers, then follow this rule)).
   [CTR-UA-71](#CTR-UA-71). `keyOwner` walks back (local first). A kind's list lives in its home; `msig` has one list per
   generation; `0x0142` one per enabling generation ([CTR-UA-29](#CTR-UA-29)).
 - <a id="off-chain-readers"></a>**Off-chain readers** (the SDK's PQZ, verdict and Zether reading layers, indexers, wallets;
-  BUILT in scaas-sdk's write targets `535bf1dcb`; its reading layers PLANNED). A record of `ua` is read **where it is held**: call `holderOf(ua)` once on the registry the
+  BUILT in scaas-sdk: the write targets `535bf1dcb`, the PQZ, verdict and Zether reading layers since sdk-complete's merge;
+  their only `eth_call`s are these address reads, `holderOf` and `kindHome`, every confidential word staying a storage read).
+  A record of `ua` is read **where it is held**: call `holderOf(ua)` once on the registry the
   token binds (one walk; a native-space id answers `(0, 0, 0)` without a walk), then read the record (keys, registration, KEM,
   `popOf`, `msig` state) at `holder`, and the PQZ attachment at `pqzHomeOf(ua)`, the walk's third word (at `holder` where it is 0:
   no generation on that walk enables `0x0142`, so an unproven key stays with the record). A reader that reads storage does the walk
