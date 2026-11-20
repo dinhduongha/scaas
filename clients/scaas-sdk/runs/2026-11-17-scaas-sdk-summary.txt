@@ -102,10 +102,7 @@ rpc-clippy | 9f3e640dd | 0 | -
 # tests), clippy --all-targets -D warnings clean. format.sh --check rust clean. Mutants t17 7/7, t18 5/5, t18b 3/3, t19 6/6
 # killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
 # T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
-bind-dart | 7f5e03caf | 0 | dart: +14:; tree dirty
-ffi | 7f5e03caf | 0 | 0 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
-sdk-wasm | 7f5e03caf | 0 | -; tree dirty
 sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
@@ -138,12 +135,10 @@ ck-test | 6dded4e97 | 0 | node: 484 pass, 0 fail, 4 skipped
 # errors; mutant t20c 3/3 killed (the new one by the test's unwrap). Not run: sdk-test whole, sdk-e2e, bind-gen (no public
 # item changed).
 sdk-test | 58099349c | 0 | 265 passed, 0 failed, 12 ignored (21 binaries)
-sdk-clippy | f4c422ef6 | 0 | -
 sdk-raw | f4c422ef6 | 0 | 114 passed, 0 failed, 0 ignored (1 binaries)
 features | f4c422ef6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 docs | f4c422ef6 | 0 | -
 mutants-check | f4c422ef6 | 0 | -
-bind-gen | f4c422ef6 | 0 | -
 sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # The two Fable reviews of T13-T20 at ecabb7d41 (2026-11-20; controller call, owner auto-run 2026-11-19; decisions CLI-SDK-30's
 # last Change line). Fixed: F1, F3 (one block), F7, F14, F16 (doc), F19, F22, F24, F26 and F30 (doc); T1, T2, T3, T5, T6,
@@ -191,16 +186,17 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 #      request count through the fake
 # M18  the regular line extrapolated past its measured counts (measure at the largest count the cap admits, or refuse above)
 # M20  the cap rule never run against an enforcing node (a recorded Nethermind run of a 64-member registration and a PQZ debit)
-sdk-uniffi | c1e777dcb | 0 | 9 passed, 0 failed, 0 ignored (2 binaries); tree dirty
-bind-cpp | 51b1973d1 | 0 | ctest: 0 tests failed out of 1
-ffi | 51b1973d1 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-sdk-clippy | 51b1973d1 | 0 | -
 sdk-deny | b5b5ec89c | 0 | -
 sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (--features <the set>,sync-api)
-bind-cs | dad0a2f3d | 0 | dotnet: 3 passed, 0 failed
-bind-python | bf66d9973 | 0 | unittest: 3 ran, OK
-bind-kotlin | 3013f346c | 0 | kotlin: PASS (0 failures)
-bind-swift | 50dd00cba | 0 | swift: PASS (0 failures)
-bind-gen | 50dd00cba | 0 | -
-sdk-wasm | fc1f01234 | 0 | -
-bind-js | fc1f01234 | 0 | node: 3 pass, 0 fail, 0 skipped
+bind-gen | 1e5867480 | 0 | -
+sdk-uniffi | 1e5867480 | 0 | 11 passed, 0 failed, 0 ignored (2 binaries)
+ffi | 1e5867480 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+sdk-wasm | 1e5867480 | 0 | -
+bind-cpp | 1e5867480 | 0 | ctest: 0 tests failed out of 1
+bind-cs | 1e5867480 | 0 | dotnet: 3 passed, 0 failed
+bind-python | 1e5867480 | 0 | unittest: 3 ran, OK
+bind-kotlin | 1e5867480 | 0 | kotlin: PASS (0 failures)
+bind-swift | 1e5867480 | 0 | swift: PASS (0 failures)
+bind-js | 1e5867480 | 0 | node: 3 pass, 0 fail, 0 skipped
+bind-dart | 1e5867480 | 0 | dart: +14:
+sdk-clippy | 1e5867480 | 0 | -
