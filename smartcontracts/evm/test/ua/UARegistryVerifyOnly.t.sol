@@ -286,6 +286,26 @@ contract UARegistryVerifyOnlyTest is UARegistryBase {
         g2.requireAuthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, a);
     }
 
+    /// Task 21 review P2-1: an inner `msig` held elsewhere is forwarded whole to its holder (R6), so the bound counts its members
+    /// on the holder's path (gen 1's `p256` cap and hand-off), never this generation's verify-only cap: a gen-2 `{inner}` that
+    /// fits only when priced at the verify-only cap is refused `UAKeyData(0x0120)` at 500,000; with the budget it registers.
+    function test_innerMsig_heldElsewhere_boundAtHolderPath() public {
+        Member[] memory mi = new Member[](1);
+        mi[0] = Member(P256, pId, 1);
+        bytes32 inner = UACall.register(g1, UAKinds.MSIG, _msigKey(1, mi), _none(), "", "");
+        Member[] memory m = new Member[](1);
+        m[0] = Member(UAKinds.MSIG, inner, 1);
+        bytes memory d = _msigKey(1, m);
+        address v = address(new VerifyOnlyStandIn(PC, 0, 0));
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
+        k[0] = UARegistry.KindConfig(P256, v, CAP_VO, true, 0);
+        UARegistry tight = _deploy(address(uint160(++at)), chainUidA, address(g1), false, 500_000, address(0), true, k);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
+        UACall.register(tight, UAKinds.MSIG, d, _none(), "", "");
+        UARegistry fits = _deploy(address(uint160(++at)), chainUidA, address(g1), false, BUDGET, address(0), true, k);
+        UACall.register(fits, UAKinds.MSIG, d, _none(), "", "");
+    }
+
     /// Key form 1 (§2, §4 "Key bytes"): the holder's complete cache; an incomplete one is `UAKeyNotCached`, its kind `holderOf`'s.
     function test_keyForm1_incompleteCache_UAKeyNotCached() public {
         bytes memory pk = new bytes(1952);

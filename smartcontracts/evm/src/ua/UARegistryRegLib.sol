@@ -801,10 +801,15 @@ library UARegistryRegLib {
         if (kind == UAKinds.MSIG) {
             if (mode & INNER != 0) revert IUARegistry.UAMemberUnknown(id);
             bool here = UAStore.layout().records[id].kind != 0;
+            // an inner `msig` held elsewhere is forwarded whole to its holder (R6), so its members never meet this generation's
+            // verify-only verifier: they count on the holder's path (`WRITE`), in every mode (Task 21 review P2-1)
             (cap, held, vo) = _worst(
-                UARegistryCoreLib._msigBytes(id), mode | INNER, here ? nativeCap : UAStore.SMART_KEY_1271_GAS, hedera
+                UARegistryCoreLib._msigBytes(id),
+                here ? mode | INNER : mode | INNER | WRITE,
+                here ? nativeCap : UAStore.SMART_KEY_1271_GAS,
+                hedera
             );
-            if (!here) cap += cap / 63 + SigCheck.GAS_MARGIN + _walk(self, id); // forwarded whole to its holder (R6, N3)
+            if (!here) (cap, vo) = (cap + cap / 63 + SigCheck.GAS_MARGIN + _walk(self, id), false); // forwarded whole (R6, N3)
             return (cap, held, vo);
         }
         cap = self.verifyCap(kind); // 0: this generation does not carry the kind (a carried cap is ≠ 0, verify-only included)

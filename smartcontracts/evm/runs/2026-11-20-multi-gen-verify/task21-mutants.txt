@@ -1,0 +1,2 @@
+mutant | red tests | rc | killed by
+p2-1-inner-at-vo-cap | test_innerMsig_heldElsewhere_boundAtHolderPath | 1 | test_innerMsig_heldElsewhere_boundAtHolderPath
