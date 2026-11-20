@@ -95,6 +95,11 @@ struct State {
     ops: Vec<Row>,
     #[serde(default)]
     cursors: std::collections::BTreeMap<String, u64>,
+    /// a split registration's `pqzPop` (`0x` hex) by its UA (`0x` hex), kept until `storePqzPop` lands: the proof is
+    /// hedged (fresh randomness each time), so only these bytes hash to the `pqzPopHash` the registration committed
+    /// (merged-tree review M1, 2026-11-20)
+    #[serde(default)]
+    pops: std::collections::BTreeMap<String, String>,
 }
 
 fn io(e: StoreError) -> SdkError {
@@ -152,6 +157,24 @@ pub(crate) async fn cursor(sdk: &Sdk, key: &str) -> Result<Option<u64>, SdkError
 pub(crate) async fn put_cursor(sdk: &Sdk, key: &str, block: u64) -> Result<(), SdkError> {
     update(sdk, |st| {
         st.cursors.insert(key.to_owned(), block);
+    })
+    .await
+}
+
+/// The `pqzPop` kept for the UA `ua` (`0x` hex), if any.
+pub(crate) async fn kept_pop(sdk: &Sdk, ua: &str) -> Result<Option<String>, SdkError> {
+    Ok(load(sdk).await?.1.pops.get(ua).cloned())
+}
+
+/// Keeps `pop` for the UA `ua` (`None`: drops it).
+pub(crate) async fn keep_pop(sdk: &Sdk, ua: &str, pop: Option<&str>) -> Result<(), SdkError> {
+    update(sdk, |st| match pop {
+        Some(p) => {
+            st.pops.insert(ua.to_owned(), p.to_owned());
+        }
+        None => {
+            st.pops.remove(ua);
+        }
     })
     .await
 }

@@ -45,7 +45,7 @@ MUTANTS = [
     ("F19: a short sample accepted",
      [(READ, "(out.len() as u64 == want).then_some(out)", "Some(out)")], SAMPLE),
     ("F22: a landed first part's storePqzPop never prepared again",
-     [(REG, '    if registered\n        && pqz_pop != "0x"\n', '    if false\n        && pqz_pop != "0x"\n')],
+     [(REG, '    if registered && pqz_pop != "0x" {', '    if false && registered && pqz_pop != "0x" {')],
      SPLIT),
     # removed after the first run (survived, equivalent): "T3: the verdict's token not compared": ua-rs pqz_verdict_typed_data refuses a verdict whose token differs from its argument, and the digest is the SDK's token's
     # removed after the first run (survived, equivalent): "T3: the verdict's chainId not compared": ua-rs pqz_verdict_typed_data refuses a verdict whose chainId differs from its argument, and the digest is the SDK's chain's

@@ -68,7 +68,9 @@ pub struct ChainProfile {
     pub factory: Option<String>,
     pub router: Option<String>,
     pub finality: Finality,
-    /// the chain's per-transaction gas cap (EIP-7825) when it has one, from the release data
+    /// the chain's per-transaction cap of the **regular** gas (EIP-7825 on a chain applying EIP-8037) when it has one, from
+    /// the release data: a quote's regular bound is held to it, its gas limit (regular + state) to the block gas limit. A
+    /// chain capping the whole gas limit (EIP-7825 without EIP-8037) is not supported (merged-tree review M19, 2026-11-20)
     pub tx_gas_cap: Option<u64>,
     /// the reviewed token list (spec §8.2): a token not on it is `unlisted` wherever it is shown
     pub tokens: Vec<ListedToken>,

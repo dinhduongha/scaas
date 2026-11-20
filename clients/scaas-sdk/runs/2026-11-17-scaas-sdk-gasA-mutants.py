@@ -27,7 +27,7 @@ MUTANTS = [
      [(G, "tables, k, false, &attached)", "tables, k, true, &attached)")],
      U + "gas_second_signature"),
     ("an unknown attached signature's bytes added again",
-     [(G, "tables, *k, false, &attached)", "tables, *k, true, &attached)")],
+     [(G, "tables, *k, false, &capped)", "tables, *k, true, &capped)")],
      U + "gas_second_signature"),
     ("the attached signature's verify gas dropped",
      [(G, "Some(Some(k)) => verify_part(chain, opt_in, tables, k, false, &attached).map(|v| v.0),", "Some(Some(_)) => Some(0),")],
@@ -52,7 +52,7 @@ MUTANTS = [
     ("A5: WebAuthn sig_bytes back at the first vector", [(R, "\"sig_bytes\": 1344", "\"sig_bytes\": 480")],
      U + "reference_rows_hold_their_sources"),
     ("A5: SLH-DSA's verify row at the valid vector",
-     [(R, "\"signer\": 307,\n      \"gas\": 1339000,\n      \"measured\": 1338020,", "\"signer\": 307,\n      \"gas\": 815000,\n      \"measured\": 814342,")],
+     [(R, "\"signer\": 307,\n      \"gas\": 1339000,\n      \"measured\": 1338105,", "\"signer\": 307,\n      \"gas\": 815000,\n      \"measured\": 814427,")],
      U + "reference_rows_hold_their_sources"),
     # A6: the wrap-in fee rows held to their source (the fee against the signer holding units)
     ("A6: a wrap-in fee_extra against the fresh row",

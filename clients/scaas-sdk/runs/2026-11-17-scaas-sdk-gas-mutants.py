@@ -140,7 +140,7 @@ MUTANTS = [
     # the paths
     (
         "the gateway quote drops the gas",
-        [(Q, "                    gas: figure.as_ref().map(|f| f.0),", "                    gas: None,")],
+        [(Q, "                    gas: figure.as_ref().map(|f| f.gas),", "                    gas: None,")],
         U + "gateway_quote_carries_gas_or_reports_it_unquoted",
     ),
     (

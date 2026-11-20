@@ -17,6 +17,31 @@ part 'op.freezed.dart';
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Op>>
 abstract class Op implements RustOpaqueInterface {
+  /// Member `member`'s partial of `prepared` (whose signer is the group, [`KeyRef::BlsMulti`] of the same key data), signed
+  /// under the operation's check (`scaas-ua` `sign_scaas_bls_multi`). `PreparedUnknown`, `PreparedStale`, `PolicyRefused`,
+  /// `Argument` (another group, a key the group does not list), `WalletLocked`.
+  Future<BlsMultiPart> blsMultiPart({
+    required ArcPrepared prepared,
+    required KeyRef member,
+  });
+
+  /// Whether `part` is a valid partial of `prepared`'s group on it: what the coordinator checks on receipt, naming a bad
+  /// partial by its index (spec §5.4). `false` too when `prepared`'s signer is not a group.
+  Future<bool> blsMultiPartOk({
+    required Prepared prepared,
+    required BlsMultiPart part_,
+  });
+
+  /// Member `member`'s PoP part for its group's registration (spec §4: over `popMsg` derived from the key data, N5).
+  /// `Argument` (not a group key, a key the group does not list), `WalletLocked`.
+  Future<BlsMultiPart> blsMultiPopPart({required KeyRef member});
+
+  /// Whether `part` is member `part.index`'s valid PoP part for the group `key_data` (`0x` hex).
+  Future<bool> blsMultiPopPartOk({
+    required String keyData,
+    required BlsMultiPart part_,
+  });
+
   /// One member's signature of a prepared operation signed by an `msig` (M1, owner 2026-11-19: members on different
   /// devices): `prepared`'s signer is `KeyRef::Msig` with exactly one local slot; the entry's check runs first, then that slot
   /// signs (its keys enabled and accepted, `MsigSlotInactive` otherwise). The `MemberSig` JSON the submitting device names as
@@ -32,6 +57,19 @@ abstract class Op implements RustOpaqueInterface {
     required SubmitPath path,
   });
 
+  /// The self-relay quote of `registerBlsMulti` of the group `key_data` (`0x` hex) on `chain` by `payer` (spec §8.4): the
+  /// registration's base row `gas + per_item × n` ([`super::gas::registration_gas`]: regular and state gas, no verify part;
+  /// its regular bound held to the per-transaction cap, EIP-8037)
+  /// with the intrinsic cost and the calldata, the margin: the cost by n before the members' parts exist. The row is gas
+  /// used; the PoP check's gas pre-check asks the verifier's whole `POP_GAS` up front, so a small group's transaction needs
+  /// more gas than it uses: [`Op::register_bls_multi`] raises the limit to the simulation's. `GasUnquoted` without a row, `Argument` for invalid key data or
+  /// a profile without a registry; then as [`Op::quote`]'s self-relay.
+  Future<SubmitQuote> quoteRegisterBlsMulti({
+    required String chain,
+    required String keyData,
+    required KeyRef payer,
+  });
+
   /// [`Op::quote`] with the app's own gas figure for the operation (execution gas, one total for base and verify), used only
   /// when the tables lack its base or its verify row (owner 2026-11-19); the quote names it `App` for both. For
   /// `mtxExecute` (owner 2026-11-19, ruling 5) the figure is instead its inner call's, added to the wallet's rows (never a
@@ -41,6 +79,20 @@ abstract class Op implements RustOpaqueInterface {
     required ArcPrepared prepared,
     required SubmitPath path,
     required BigInt gas,
+  });
+
+  /// `registerBlsMulti` of the group `key_data` (`0x` hex) on `chain` by the self-relay `quote`
+  /// ([`Op::quote_register_bls_multi`]): the PoP aggregated from every member's part (`RegistrationPopInvalid` for a bad or
+  /// missing one; [`Op::bls_multi_pop_part_ok`] names it), the calldata simulated from the payer (a revert sends nothing),
+  /// its gas the quote's or, where more, the simulation's with the margin (G3's rule: above `Limits::max_gas`
+  /// `SignedGasAboveCap`, above the chain's per-transaction cap `GasAboveTxCap`, a cost above the caps `FeeAboveCap`), then
+  /// sent; returns the transaction's id. A registration is not an operation row: it holds no lane, and a repeat lands
+  /// the identical record or reverts (CTR-UA-07). `SubmitPathNone` for another path; the quote's caps as [`Op::submit`].
+  Future<String> registerBlsMulti({
+    required String chain,
+    required String keyData,
+    required List<BlsMultiPart> parts,
+    required SubmitQuote quote,
   });
 
   /// The same signed bytes again, at the user's request only (spec §13.3): on its own path, or a gateway's operation
@@ -70,6 +122,39 @@ abstract class Op implements RustOpaqueInterface {
     required ArcPrepared prepared,
     required SubmitQuote quote,
   });
+
+  /// [`Op::submit`] of a group's operation: the aggregate of `parts` (each checked, an invalid one dropped; a minimal set
+  /// unless `surplus`, N6) in place of one key's signature, the job's `UASig` by name. `BlsMultiBelowThreshold` when the
+  /// valid partials do not reach `t`; otherwise as [`Op::submit`].
+  Future<String> submitBlsMulti({
+    required ArcPrepared prepared,
+    required SubmitQuote quote,
+    required List<BlsMultiPart> parts,
+    required bool surplus,
+  });
+}
+
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Prepared>>
+abstract class Prepared implements RustOpaqueInterface {}
+
+/// A member's part (spec §5.4, §4): its index in the group's key data and its partial `σ_i` (or PoP part `π_i`), 128 bytes,
+/// `0x` hex.
+class BlsMultiPart {
+  final int index;
+  final String signature;
+
+  const BlsMultiPart({required this.index, required this.signature});
+
+  @override
+  int get hashCode => index.hashCode ^ signature.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BlsMultiPart &&
+          runtimeType == other.runtimeType &&
+          index == other.index &&
+          signature == other.signature;
 }
 
 @freezed
@@ -149,6 +234,16 @@ sealed class KeyRef with _$KeyRef {
     required String ua,
     required List<MsigSlot> slots,
   }) = KeyRef_Msig;
+
+  /// a `bls12381-multi` (`0x0121`) group (plan Task 17): the seed's member key `ua_key(0x0121, account, index)` (EIP-2333:
+  /// index 0) and the group's key data `d` (`0x` hex, spec 2026-11-19-bls12381-multi §2); the signer's id is the group's
+  /// UA, its signature the members' aggregate ([`Op::submit_bls_multi`])
+  const factory KeyRef.blsMulti({
+    required String seed,
+    required int account,
+    required int index,
+    required String keyData,
+  }) = KeyRef_BlsMulti;
 }
 
 /// A slot of an inner `msig`: its index there and its key.
@@ -258,6 +353,11 @@ class SubmitQuote {
   /// the self-relay transaction's gas limit (`gas`); 0 on the gateway path, where the holder sends no transaction
   final BigInt gasLimit;
 
+  /// the bound of `gas_limit`'s regular part, with the margin (EIP-8037; controller call, owner auto-run 2026-11-19): the part
+  /// held to the profile's `tx_gas_cap` (EIP-7825 caps the regular gas only), the whole `gas_limit` where the split is not
+  /// known (a native send's estimate, an app's figure); 0 on the gateway path
+  final BigInt regularGas;
+
   /// what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
   /// the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
   final BigInt? gas;
@@ -285,6 +385,7 @@ class SubmitQuote {
     required this.path,
     this.payer,
     required this.gasLimit,
+    required this.regularGas,
     this.gas,
     this.gasFrom,
     required this.maxFeePerGas,
@@ -301,6 +402,7 @@ class SubmitQuote {
       path.hashCode ^
       payer.hashCode ^
       gasLimit.hashCode ^
+      regularGas.hashCode ^
       gas.hashCode ^
       gasFrom.hashCode ^
       maxFeePerGas.hashCode ^
@@ -319,6 +421,7 @@ class SubmitQuote {
           path == other.path &&
           payer == other.payer &&
           gasLimit == other.gasLimit &&
+          regularGas == other.regularGas &&
           gas == other.gas &&
           gasFrom == other.gasFrom &&
           maxFeePerGas == other.maxFeePerGas &&

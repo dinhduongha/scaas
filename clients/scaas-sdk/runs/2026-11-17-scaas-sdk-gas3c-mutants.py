@@ -77,7 +77,7 @@ MUTANTS = [
      U + "gas_execute_inner_call"),
     ("execute: the app figure as a total", [(G, "        _ if execute => None,\n", "")], U + "gas_execute_inner_call"),
     # item 6: the PQ verify rows
-    ("reference: a PQ verify row away from its measurement", [(R, "\"measured\": 4823338", "\"measured\": 4822900")],
+    ("reference: a PQ verify row away from its measurement", [(R, "\"measured\": 4823423", "\"measured\": 4822985")],
      U + "reference_rows_hold_their_sources"),
 ]
 

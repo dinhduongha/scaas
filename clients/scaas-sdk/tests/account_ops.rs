@@ -739,8 +739,19 @@ async fn split_second_part_prepared_again_after_the_first_landed() {
     t.chain.lock().unwrap().gas_of = Some(|input: &str| input.len() as u64 * 200);
     let blob = RegistrationBlob::from_json(&b.to_string()).unwrap();
     let acc = t.sdk.account();
-    // registered (the first part landed), no proof stored
+    // registered (the first part landed), no proof stored; the registration committed to the blob's proof (M1)
     registry(&t, &ua, true, &hx(&[0; 32]), false);
+    let pop_hash = scaas_ua::keccak256(
+        &alloy::hex::decode(&b["args"]["pqzPop"].as_str().unwrap()[2..]).unwrap(),
+    );
+    t.chain.lock().unwrap().answers.insert(
+        0,
+        (
+            REGISTRY.into(),
+            format!("{}{}", sel("pqzKeyAt(bytes32,uint64)"), &ua[2..]),
+            format!("0x{}{}{}", w(0x1234), hx(&pop_hash)[2..].to_string(), w(0)),
+        ),
+    );
     let ws = acc
         .prepare_submit_registration(blob.clone(), "local".into(), ua.clone(), t.payer.clone())
         .await

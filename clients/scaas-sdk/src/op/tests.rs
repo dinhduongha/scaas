@@ -692,6 +692,39 @@ async fn signed_gas_regular_is_held_to_the_cap() {
     }
 }
 
+/// M8 (review 2026-11-20): the fake chain holds a transaction's regular gas to 2^24 itself (EIP-7825 under EIP-8037), an
+/// independent control of the SDK's bound: a call executing 2^24 + 1 regular gas is refused at the send although the SDK's
+/// own rows let it through; at 2^24 it is sent (the control).
+#[tokio::test(flavor = "multi_thread")]
+async fn the_fake_chain_holds_the_regular_gas_to_the_cap() {
+    for over in [false, true] {
+        let t = setup(0, |_, _| {}).await;
+        t.chain.lock().unwrap().regular_of =
+            Some(if over { |_| (1 << 24) + 1 } else { |_| 1 << 24 });
+        let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+        let q = t
+            .sdk
+            .op()
+            .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+            .await
+            .unwrap();
+        let op = t.sdk.op().submit(p, q).await.unwrap();
+        if over {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            assert!(
+                t.chain.lock().unwrap().sent.is_empty(),
+                "the node refused it"
+            );
+            assert!(!matches!(
+                t.sdk.op().state(op).await.unwrap(),
+                OpState::Landed { .. }
+            ));
+        } else {
+            sent_txs(&t, 1).await;
+        }
+    }
+}
+
 /// M17 (review 2026-11-20): a quote never lowers the regular bound. `signed_quote` takes the operation's own regular bound
 /// as the floor (`resend`'s recomputed figure) and reads a quote naming no regular part (0) as whole; the caps are held even
 /// when nothing grew. Each row one change from the control.

@@ -14,7 +14,7 @@ MUTANTS = [
     # the ruling's two
     ("quote signs", [(Q, "let unsigned = super::submit::unsigned(&prepared)?;", "let unsigned = super::submit::sign(&sdk, &prepared)?;")],
      U + "quote_makes_no_signature"),
-    ("submit signs twice", [(S, "let signed = sign(&sdk, &prepared).await.and_then(", "let _ = sign(&sdk, &prepared).await;\n                let signed = sign(&sdk, &prepared).await.and_then(")],
+    ("submit signs twice", [(S, "                    Signing::Key => sign(&sdk, &prepared).await,\n", "                    Signing::Key => {\n                        let _ = sign(&sdk, &prepared).await;\n                        sign(&sdk, &prepared).await\n                    }\n")],
      U + "submit_signs_once_on_each_path"),
     # each check of the task
     ("submit skips the simulation's gas check", [(S, "Ok(g) if row.gas_limit.is_some_and(|l| g <= l) => {}", "Ok(_) => {}")], U + "sim_refused_is_written_and_followed"),

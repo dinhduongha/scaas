@@ -20,15 +20,15 @@ PARSE = U + "gas_table_per_item_parse"
 QUOTE = U + "a_counted_row_quotes_its_count_or_refuses"
 MUTANTS = [
     # the quote: gas + per_item × count
-    ("base per_item not added", [(G, "        g = g.saturating_add(own(&b.per_item)?);\n", "")], ADD),
+    ("base per_item not added", [(G, "        g = g.saturating_add(items(&b.per_item, reg, op.count)?);\n", "")], ADD),
     ("verify per_item not added", [(G, "                .saturating_add(items(&v.per_item)?),\n", ",\n")], ADD),
     ("the signer's verify row reads no count", [(G, "signer, true, &own);", "signer, true, &attached);")], ADD),
     ("an attached signature's count read as the operation's",
-     [(G, "    let attached = |p: &Option<GasPerItem>| items(p, &|_| None);", "    let attached = |p: &Option<GasPerItem>| items(p, op.count);")],
+     [(G, "    let attached = |p: &Option<GasPerItem>| items(p, false, &|_| None);", "    let attached = |p: &Option<GasPerItem>| items(p, false, op.count);")],
      ADD),
-    ("not saturating", [(G, "        Some(p.gas.saturating_mul(n?))", "        Some(p.gas.wrapping_mul(n?))")], ADD),
+    ("not saturating", [(G, "        Some(per.saturating_mul(n?))", "        Some(per.wrapping_mul(n?))")], ADD),
     # fail closed: a count unknown or above the bound
-    ("an unknown count falls through (no refusal)", [(G, "    if uncounted.get() {\n", "    if false && uncounted.get() {\n")], ADD),
+    ("an unknown count falls through (no refusal)", [(G, "    if uncounted.get() {\n        return Err(SdkError::GasCountUnknown);\n    }\n    let execute", "    if false && uncounted.get() {\n        return Err(SdkError::GasCountUnknown);\n    }\n    let execute")], ADD),
     ("an unknown count read as 0",
      [(G, "        let n = count(&p.item).filter(|n| *n <= COUNT_MAX);", "        let n = Some(count(&p.item).unwrap_or(0));")], ADD),
     ("the count unbounded", [(G, "        let n = count(&p.item).filter(|n| *n <= COUNT_MAX);", "        let n = count(&p.item);")], ADD),
@@ -41,10 +41,10 @@ MUTANTS = [
        '        "accounts" => len(message.get("accounts"))?,')], COUNT),
     ("entries: a decimal n not read", [(G, "let n = super::dec(message.get(\"n\")?).ok()?;",
                                         "let n = alloy::primitives::U256::from(message.get(\"n\")?.as_u64()?);")], COUNT),
-    ("the quote reads no count", [(Q, "count: &|item| super::gas::item_count(extra, message, item),",
-                                   "count: &|_| None,")], QUOTE),
-    ("the quote drops the refusal", [(Q, "                    unsigned.calldata.len(),\n                )?;",
-                                      "                    unsigned.calldata.len(),\n                )\n                .ok()\n                .flatten();")],
+    ("the quote reads no count", [(Q, "            _ => super::gas::item_count(extra, message, item),",
+                                   "            _ => None,")], QUOTE),
+    ("the quote drops the refusal", [(Q, "                    unsigned.calldata.len(),\n                    members,\n                )?;",
+                                      "                    unsigned.calldata.len(),\n                    members,\n                )\n                .ok()\n                .flatten();")],
      QUOTE),
     # the parse
     ("an unpaired item / per_item accepted",

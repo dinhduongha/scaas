@@ -37,7 +37,7 @@ MUTANTS = [
      SDK + "executed_event_per_contract"),
     ("Expired without the timestamp check", [(O + "follow.rs", "&& row.valid_until < ts =>", "&& row.valid_until > ts =>")], SDK + "all_gateways_dead_is_in_flight"),
     ("a designator not seen", [(O + "quote.rs", "code.len() == 23 && code.starts_with", "code.len() == 22 && code.starts_with")], SDK + "payer_delegated"),
-    ("the chain's per-transaction cap not applied", [(O + "quote.rs", "profile.tx_gas_cap.is_some_and(|c| gas > c)", "profile.tx_gas_cap.is_some_and(|c| gas > c + 1)")],
+    ("the chain's per-transaction cap not applied", [(O + "quote.rs", "profile.tx_gas_cap.is_some_and(|c| regular > c)", "profile.tx_gas_cap.is_some_and(|_| false)")],
      SDK + "gas_above_tx_cap"),
     ("an unlisted token shown as listed", [(O + "prepared.rs", "listed.map_or(\"unlisted\".to_string()", "listed.map_or(\"listed\".to_string()")],
      SDK + "review_lists_every_named_field_with_its_source"),

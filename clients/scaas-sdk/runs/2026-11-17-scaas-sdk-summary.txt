@@ -158,7 +158,9 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # F17  residual: a raw Message on a secp256k1 network is Argument from scaas-ua, not RawDigestRefused
 # F18  a registration's failed simulation read as above the gas cap (tell a revert from a gas figure)
 # F20  sign_rescue_vault, the two auditor consents and cancel_all sign without a prepared value and review
-# F21  a native auditor's consent under the profile's registry (moot while PqzAuditorNative refuses it)
+# F21  an msig auditor's consent built on the profile's registry, not the token's ChainEnv registry (M4: a native auditor
+#      is refused by PqzAuditorNative, an msig one is not): refused on chain with no local error when they differ; read the
+#      token's registry and refuse a mismatch
 # F23  the registry-write table unbounded; a failed row write loses the write
 # F25  proveRegister on an async worker (move to Sdk::heavy)
 # F27  a creation's review shows initHash, not the configuration
@@ -172,3 +174,13 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # T15b the PQZ read's first-Y check, the Zether digest cross-check, the debit arithmetic and secret-handling mutants
 # T17b controls that accept any other error (pay_to_unregistered_derived_ua); the probabilistic decoy kill; verifier hang
 # T18  the proof-off-the-workers timing test; raw-entry refusals without a like-for-like control
+# Fable's review of the merged tree (8cbf91468, M1-M20, no P0; decisions CLI-SDK-30's last Change line). Fixed: M1, M2, M4
+# (the F21 line above), M7, M8, M14, M15, M16, M17, M19; M9, M10, M11 by the full matrix and mutant rerun below. PLANNED:
+# M3   strict_majority returns the agreeing answer that expires first; one bad replica in the group decides (F15's fix)
+# M5   F3 (one block), F7 (an imported native member), F24 and F1's ua / purpose compares: rows and mutants
+# M6   the r1120 "signer's key not the verifier's UA" mutant: equivalent only by the key-pointer check; restore it with a row
+# M12  runner holes: failure line not compared with the intended assertion; killed with no failure line; non-Rust compile errors
+# M13  test gaps: F1's declared digest only; T9's order digest is the SDK's own; listed() mutants of liquidity / wrap; F19's
+#      request count through the fake
+# M18  the regular line extrapolated past its measured counts (measure at the largest count the cap admits, or refuse above)
+# M20  the cap rule never run against an enforcing node (a recorded Nethermind run of a 64-member registration and a PQZ debit)
