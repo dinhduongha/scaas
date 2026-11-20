@@ -188,15 +188,17 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # M20  the cap rule never run against an enforcing node (a recorded Nethermind run of a 64-member registration and a PQZ debit)
 sdk-deny | b5b5ec89c | 0 | -
 sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (--features <the set>,sync-api)
-bind-gen | 1e5867480 | 0 | -
-sdk-uniffi | 1e5867480 | 0 | 11 passed, 0 failed, 0 ignored (2 binaries)
-ffi | 1e5867480 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-sdk-wasm | 1e5867480 | 0 | -
-bind-cpp | 1e5867480 | 0 | ctest: 0 tests failed out of 1
-bind-cs | 1e5867480 | 0 | dotnet: 3 passed, 0 failed
-bind-python | 1e5867480 | 0 | unittest: 3 ran, OK
-bind-kotlin | 1e5867480 | 0 | kotlin: PASS (0 failures)
-bind-swift | 1e5867480 | 0 | swift: PASS (0 failures)
-bind-js | 1e5867480 | 0 | node: 3 pass, 0 fail, 0 skipped
-bind-dart | 1e5867480 | 0 | dart: +14:
-sdk-clippy | 1e5867480 | 0 | -
+bind-gen | 568bad427 | 0 | -
+sdk-uniffi | 568bad427 | 0 | 11 passed, 0 failed, 0 ignored (2 binaries)
+sdk-clippy | 568bad427 | 0 | -
+ffi | 568bad427 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+sdk-wasm | 568bad427 | 0 | -
+bind-cpp | 568bad427 | 0 | ctest: 0 tests failed out of 1
+bind-cs | 568bad427 | 0 | dotnet: 3 passed, 0 failed
+bind-python | 568bad427 | 0 | unittest: 3 ran, OK
+bind-kotlin | 568bad427 | 0 | kotlin: PASS (0 failures)
+bind-swift | 568bad427 | 0 | swift: PASS (0 failures)
+bind-java | 568bad427 | 0 | java: PASS (0 failures); unittest: 3 ran, OK
+bind-js | 568bad427 | 0 | node: 3 pass, 0 fail, 0 skipped
+bind-dart | 568bad427 | 0 | dart: +14:
+bind-go | 5f9ecf8dd | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
