@@ -14,12 +14,15 @@ foreground), restores the files byte for byte, and records the outcome in the ta
 from HEAD. A run of named mutants keeps the record's other rows (each with its own commit). Last line:
 `N mutants, K killed, S survived, L not loaded`. Full output in a git-ignored `.log` beside it."""
 import hashlib
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+# the test commands see foundry's tools as the gate runner's steps do (`anvil`, `cast`, `forge` of the e2e tests)
+os.environ["PATH"] = f"{Path.home() / '.foundry' / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}"
 RUNS = "clients/scaas-sdk/runs"
 # the records and the summary are written by the runners themselves; they do not make the tree dirty
 NOT_CODE = [f":!{RUNS}/*-mutants.txt", f":!{RUNS}/2026-11-17-scaas-sdk-summary.txt"]
