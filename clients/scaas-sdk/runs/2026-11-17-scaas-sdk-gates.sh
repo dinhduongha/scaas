@@ -52,6 +52,7 @@ STEPS=(
     "bind-kotlin|clients/scaas-sdk/bindings/kotlin|KOTLINC=\${KOTLINC:-$TOOLS/kotlin-2.4.21/kotlinc/bin/kotlinc} bash run.sh"
     "bind-swift|clients/scaas-sdk/bindings/swift|SWIFTC=\${SWIFTC:-$TOOLS/swift-6.4.2/usr/bin/swiftc} bash run.sh"
     "bind-js|clients/scaas-sdk/bindings/js|WASM_BINDGEN=\${WASM_BINDGEN:-$TOOLS/wasm-bindgen/bin/wasm-bindgen} bash run.sh"
+    "bind-java|clients/scaas-sdk/bindings/java|python3 -I test_fix_generated.py && JAVA_HOME=\${JAVA_HOME_25:-$TOOLS/jdk-25} bash run.sh"
     "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
     "sdk-opaque|clients/scaas-sdk|$cap cargo test $C --features $F,opaque-calls --test wallet_ops"
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"

@@ -16,6 +16,8 @@
 #   python  the Python binding (official UniFFI's uniffi-bindgen 0.31.0) over the same library: bindings/python/generated/
 #   kotlin  the Kotlin binding (the same generator, ktlint not run) over the same library: bindings/kotlin/generated/
 #   swift   the Swift binding (the same generator, swiftformat not run) over the same library: bindings/swift/generated/
+#   java    the Java binding (uniffi-bindgen-java 0.4.2, unformatted) over the same library: bindings/java/generated/; three
+#           generator defects fixed after it by bindings/java/fix_generated.py (decisions CLI-SDK-30, T20e2 change)
 # A UniFFI generator is the pin when `cargo install` recorded that version in the root it runs from (locally
 # `cargo install --locked --root <main checkout>/scratchpad/tools/uniffi`, on PATH). Each part's old output is removed first,
 # so a file the surface no longer produces cannot stay behind. The codegen runs through scripts/capped, in the foreground (on
@@ -23,10 +25,10 @@
 set -euo pipefail
 W=$(git rev-parse --show-toplevel)
 D="$W/clients/scaas-sdk"
-PARTS=",${SCAAS_GEN:-dart,cpp,cs,python,kotlin,swift},"
+PARTS=",${SCAAS_GEN:-dart,cpp,cs,python,kotlin,swift,java},"
 GEN=()
 if [[ $PARTS == *,dart,* ]]; then GEN+=(bindings/dart/lib/src/rust ffi/src/frb_generated.rs); fi
-for p in cpp cs python kotlin swift; do
+for p in cpp cs python kotlin swift java; do
     if [[ $PARTS == *,$p,* ]]; then GEN+=("bindings/$p/generated"); fi
 done
 [ ${#GEN[@]} -gt 0 ] || { echo "[gen] FAIL no part in SCAAS_GEN=${SCAAS_GEN:-}" >&2 && exit 2; }
@@ -114,6 +116,15 @@ if [[ $PARTS == *,swift,* ]]; then
     (cd "$D/ffi" && uniffi-bindgen generate --library "$(lib uniffi)" --language swift --no-format \
         --out-dir "$D/bindings/swift/generated" >/dev/null)
     echo "[gen] ok: Swift"
+fi
+if [[ $PARTS == *,java,* ]]; then
+    echo "[gen] start: Java (uniffi)"
+    pin uniffi-bindgen-java "0.4.2"
+    bash "$D/bindings/lib.sh" uniffi >/dev/null
+    rm -rf "$D/bindings/java/generated"
+    (cd "$D/ffi" && uniffi-bindgen-java generate --no-format --out-dir "$D/bindings/java/generated" "$(lib uniffi)" >/dev/null)
+    python3 -I "$D/bindings/java/fix_generated.py" "$D/bindings/java/generated" >/dev/null
+    echo "[gen] ok: Java"
 fi
 if [ "${1:-}" = --check ]; then
     cd "$D"

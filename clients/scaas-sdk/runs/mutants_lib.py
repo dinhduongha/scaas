@@ -92,9 +92,9 @@ def intended(cmd, expect=None):
 
 def killed_by(text, want):
     """Whether `text` shows a failing test, `want`'s when it is named: a Rust `test … FAILED` / `panicked`, a forge
-    `[FAIL…]`, a node `not ok`, a Python `FAIL:` / `AssertionError` line."""
+    `[FAIL…]`, a node `not ok`, a Python `FAIL:` / `AssertionError` line, a Go `--- FAIL:` line."""
     fails = [ln for ln in text.splitlines()
-             if re.search(r"\.\.\. FAILED|^\[FAIL|panicked at|^not ok|^FAIL:|AssertionError|^failures:|---- .* stdout ----", ln)]
+             if re.search(r"\.\.\. FAILED|^\[FAIL|panicked at|^not ok|^FAIL:|^\s*--- FAIL: |AssertionError|^failures:|---- .* stdout ----", ln)]
     if not fails:
         return False
     return want is None or any(want in ln for ln in fails)
@@ -103,7 +103,7 @@ def killed_by(text, want):
 def failure_line(text):
     """The first line that says why the test failed (a panic, a failed test, an error), shortened."""
     for pat in (r"panicked at [^\n]*", r"assertion[^\n]*failed[^\n]*", r"^test \S+ \.\.\. FAILED", r"^not ok [^\n]*",
-                r"(?i)^\S*error[^\n]*"):
+                r"^FAIL: [^\n]*", r"^\s*--- FAIL: [^\n]*", r"(?i)^\S*error[^\n]*"):
         m = re.search(pat, text, re.M)
         if m:
             # no machine path in a committed record: the worktree relative, the home `~`, a temp dir `<tmp>`

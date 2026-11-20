@@ -111,3 +111,11 @@ The same probe, built with `async-fn,async-callback`, through `uniffi-bindgen-cs
 `cargo install --git … --tag … --locked`): rc 0, one `sdk_spike_probe.cs`; `ping_async` and `read_async` are `async Task<uint>`,
 `AsyncStore` a C# interface with `Task<byte[]?> Get(string)`. C# therefore takes the SDK's async API; the binding and its smoke
 test over the whole surface are `clients/scaas-sdk/bindings/cs/` (decisions CLI-SDK-30, T20c change).
+
+## The Java half (plan T20e2, 2026-11-20)
+
+The same probe through `uniffi-bindgen-java` 0.4.2 (crates.io, `cargo install --version =0.4.2 --locked`; the last release on
+uniffi 0.31): rc 0; `pingAsync` and `readAsync` return `CompletableFuture`, `AsyncStore` is a Java interface whose `get`
+returns `CompletableFuture<byte[]>`. Java therefore takes the SDK's async API; the binding is `clients/scaas-sdk/bindings/java/`
+(decisions CLI-SDK-30, T20e2 change).
+
