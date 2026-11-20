@@ -54,7 +54,7 @@ repeat the spec's rules.
   `_libView` (as today's library readers). The selectors stay on the registry: the frozen interface does not change.
 - Eligible verify-only kinds this round: ML-DSA `0x0130`, `0x0131`, `0x0134` only (§2, §7); every other kind waits for its
   edge-class list and vectors.
-- Rule ids `CTR-UA-58` … `CTR-UA-72` are placeholders until Task 19.
+- Rule ids `CTR-UA-58` … `CTR-UA-72` are final (Task 19: checked free, no renumbering; normative in `docs/contracts/accounts.md` §1.8.1).
 - New source files carry `SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0`. English. No absolute or `/tmp` path in
   any committed file. No gas price 0, no block limit of ours; nothing assumes 2^24 outside a test constant.
 

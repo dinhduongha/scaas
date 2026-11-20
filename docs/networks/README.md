@@ -521,6 +521,22 @@ branch, the spec / plan file names and the commit prefixes use these names.
 | 20 | Explicit parameters | every entry and every job takes named, typed parameters, as in a REST / JSON / RPC API; no packed `bytes` bundling several fields; a genuine cryptographic blob (`proof`, `ciphertext`, `kemPk`, `pqzKey`, `signature`) is its own named parameter; the statement and digest bytes the verifiers hash stay byte-identical, and what is stored is what the packed bytes were (owner 2026-10-31, [CTR-MTX-29](../contracts/metatx.md#CTR-MTX-29), [CTR-UA-36](../contracts/accounts.md#CTR-UA-36)) | the chain's own argument types (`contracttype` structs on Soroban, ARC-4 structs on Algorand, per-token records on NEAR); a family answers this row in its UA round, NEAR and Algorand each in its own | — (the `ua8-soroban` branch carries Soroban's) |
 | 21 | Signed entries per operation | per operation a direct entry and at most one contract-verified signed entry, taking every subject the chain's host cannot authorize for a call someone else submits ([NET-ALL-28](#NET-ALL-28)) | how the host authorizes a native subject | one, `ua_*`, derived ids only; natives by `require_auth` on the direct entry ([NET-SOR-20](soroban.md#NET-SOR-20)) |
 
+<a id="registry-line-families"></a>**Later verifiers for records an earlier deployment holds** (PLANNED on every family but EVM;
+the principle is [CTR-UA-66](../contracts/accounts.md#CTR-UA-66), BUILT on EVM as the registry line of
+[accounts.md §1.8.1](../contracts/accounts.md#registry-line)). One principle everywhere: a later registry or verifier deployment
+may verify, through its own verifier (e.g. a host function or precompile that did not exist at the first deploy), records an
+earlier deployment holds for the same kind, reading them and writing nothing; equivalence and "never laxer" as
+[CTR-UA-62](../contracts/accounts.md#CTR-UA-62); the holding deployment keeps its software path and authenticates every write;
+nothing deployed is upgraded. Each family round answers how, beside the checklist above:
+
+| Family | Where the principle lands | Status |
+|---|---|---|
+| EVM (Hedera included) | a later `UARegistry` generation carries the kind verify-only, the line walked by `holderOf` | BUILT (EVM contracts, deploy, node); scaas-sdk and clients SPECIFIED |
+| Soroban | no generations: a new kind is a new registry with new tokens ([NET-SOR-17](soroban.md#NET-SOR-17)); a later registry deployment that reads an earlier one's records | PLANNED, `ua-soroban` round |
+| Solana, Move (Aptos, Sui), TON, Cosmos | the family's registry design, in its round | PLANNED, each `ua-<family>` round |
+| NEAR | no registry: the records live per token, so the principle applies to a later token release reading an earlier one's records | PLANNED, `ua-near` round |
+| Algorand | no registry: the records live in the deployment's `account` app, so the principle applies to a later account-app release | PLANNED, `ua-algorand` round |
+
 ## 7. Key lifecycle per family
 
 <a id="key-lifecycle"></a><a id="NET-ALL-05"></a>**NET-ALL-05** — **Key rotation and recovery are stated per family;

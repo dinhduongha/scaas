@@ -7,13 +7,17 @@ parameter, M2, M9), amended the same day with the owner's rulings on revision 4'
 library that holds the generation walk (§0.4, Y1). Revision 3 applied the fix-check of revision 2 (N1 – N16, rulings §0.3); revision 2 the Fable review of
 revision 1 (F1 – F17, rulings §0.2). Build plan:
 [plans/2026-11-19-registry-verify-only-kinds.md](../plans/2026-11-19-registry-verify-only-kinds.md). Status:
-**SPECIFIED**, nothing built. Everything cryptographic stays
-**UNAUDITED**. Scope: **EVM** (the contracts, the factory, the deploy, the node, the SDK and clients); the other families take
-the principle in their own rounds (§12, PLANNED).
+**BUILT (EVM contracts, deploy, node)** on branch `multi-gen-verify`: contracts `d2f6b6c32`, `9ebf6931c`, `2bbe3380d`,
+`0a78d4d64`, `cc82e3ecc`, `4f643c791`, `72ced51f3`, `0812a0467`, `a40d8acc0`, `de05b0789`, `6c558f1dd`, `773ae4988`,
+`098c30feb`; deploy `53d4ad79d`, `78ce41390`; gas rows `0cda19be5` and node `d019be659` (local work in progress, to be squashed
+into their task commits); **SPECIFIED** for scaas-sdk and the clients (Tasks 17, 18, being built); the other families
+**PLANNED** (§12, CTR-UA-66). Everything cryptographic stays **UNAUDITED**. Scope: **EVM** (the contracts, the factory, the
+deploy, the node, the SDK and clients); the other families take the principle in their own rounds.
 
-Rule ids `CTR-UA-58` … `CTR-UA-72` are **placeholders**: the highest id defined is `CTR-UA-46`, and
-`2026-11-19-bls12381-multi.md` holds `CTR-UA-47` … `CTR-UA-57` (placeholders too); landing assigns the real ones, writes the
-[decisions.md](../../decisions.md) entry with §0 verbatim and moves the rules into [accounts.md](../../contracts/accounts.md).
+Rule ids `CTR-UA-58` … `CTR-UA-72` are **final** (checked free at landing, no renumbering): the rules are normative in
+[accounts.md §1.8.1](../../contracts/accounts.md#registry-line), the owner's rulings of §0 verbatim in the
+[decisions.md](../../decisions.md) entry CTR-UA-58, the other entries CTR-UA-59 … -72 beside it. This spec stays the design
+record.
 Rows marked **owner** are the owner's ruling; **follows** applies a stated rule or a fix-check finding as the fix-check states
 it; **proposal** is the author's and is listed in §16 for the owner (revision 3's P7 – P14 and revision 4's P15 – P20 are
 owner rulings in §0.4; P21 is open). Despite the title, the design covers every later
@@ -574,8 +578,8 @@ review checked this against the code and found it holds):
 generation's verifiers:
 
 - **By default** only the addresses of an EIP in **Final** status and the precompiles the chain profile declares as the
-  chain's own: on the SCaaS chains `0x…5caa0012` / `13` / `14` ([evm.md](../../networks/evm.md) "PQ precompiles on the SCaaS
-  testnet"; the ruling cites `NET-EVM-15`, not defined on this tree, so the chain-own list gets its rule id on landing). The
+  chain's own: on the SCaaS chains `0x…5caa0012` / `13` / `14` ([NET-EVM-15](../../networks/evm.md#NET-EVM-15), defined since
+  this spec was written). The
   chain profile also states whether the chain commits to keep its own precompile (Q6 addition).
 - **A Draft address** (EIP-8355's `0x12` / `0x13` / `0x14` today) is probed only when the chain's profile sets an explicit
   flag (`probe_draft_precompiles`, name owner P6), confirmed by the owner for that chain and recorded in the deploy book,
@@ -828,6 +832,14 @@ the owner refused that (W2).
   `fallback`), the depth and the write path of W1 are columns, measured per chain per registry
   ([CLI-SDK-09](../../clients/scaas-sdk.md#CLI-SDK-09)); the quote takes the row of the registry the token binds; the
   reference table carries every path. The PQZ decoy draw reads the `0x0142` list of every enabling generation on the walk of the token's registry and concatenates them (§11.2, M5), drawing by distinct key hash (owner P19).
+- **Off-chain readers** (SDK review finding F2, 2026-11-20; normative at
+  [accounts.md, off-chain readers](../../contracts/accounts.md#off-chain-readers) under CTR-UA-70). One rule for every
+  off-chain reader (the SDK's PQZ, verdict and Zether reading layers, indexers, wallets): a record of `ua` is read where it is
+  held. Call `holderOf(ua)` once on the registry the token binds (one walk; a native-space id answers `(0, 0, 0)` without a
+  walk), then read the record (keys, registration, KEM, `popOf`, `msig` state) at `holder` and the PQZ attachment at
+  `pqzHomeOf(ua)`, the third word (at `holder` where it is 0). A reader that goes through the bound registry's own views gets
+  the same answer by forwarding; a reader that reads storage, logs or library state of one registry directly must not assume
+  that registry holds the record: a gen-1 holder read through a gen-2 registry must not fail closed for that reason.
 - **Clients.** Signing is unchanged (same kind, same message). A client choosing a token release shows its registry and that
   registry's verify path for the holder's kind. `ua-rs` and every `ua-*` registration builder offer a kind on a registry only
   where `kindHome(kind) == registry`.

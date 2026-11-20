@@ -149,7 +149,9 @@ The same key data gives the same UA on every chain of every family.
 registry generation supports a fixed set of kinds.** Adding a kind is a new registry generation and a new row with
 vectors. A kind is enabled on a chain only if the registry generation was deployed with a verifier for it. Kinds are
 part of the id; a mutable kind table would be an admin key over every account. New schemes wait for a new registry
-generation and new token implementations that point to it.
+generation and new token implementations that point to it. A later generation may also carry a kind a predecessor enables
+**verify-only** ([CTR-UA-58](#CTR-UA-58)): it verifies that kind's records with its own verifier and does not support it for
+registration; the kind keeps its number, tag and home generation.
 
 ### 1.4 Registration and proof of possession
 
@@ -360,22 +362,27 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   `UARegistered` carries all three (`checkedPop`, `checkedPqzPop`, `checkedKem`) and `UAPqzPopStored` carries `checkedPqzPop`; `UAPqzKeyAdded` has no
   field (its key is `NONE` until the `UAPqzPopStored` that proves it) and `UAKemKeySet` has none (always `CHAIN` on EVM).
   Clients of a family in relayer-checked mode re-verify before they use a key read from there (spec P11).
-- **Generations.** Generation 2 forwards the views (`registrationOf`, `popOf`, `pqzPopOf`, `pqzKeyOf`, `pqzKeySigOf`,
-  `checkedOf`, `kemKeyOf`, `kemKeyAt`) to generation 1 for records it does not hold; `setKemKey`, `storePqzPop` and `setPqzKey` for such a
-  UA go to the generation that holds the record (`UAUnauthorized` here), with one exception: a gen 2 that enables `0x0142` in front
-  of a gen 1 that does not holds the PQZ attachment of a gen-1 record itself ([CTR-UA-16](#CTR-UA-16)). **Indexers read both generations**:
-  gen 2 emits PQZ events (`UAPqzPopStored`, `UAPqzKeyAdded`) for UAs registered in gen 1, and `UARegistered` only for its own.
-  On a gen 2 in front of a gen 1 that enables `0x0142` (the PQZ attachment lives in the oldest generation with the verifier), a non-holder's PQZ key gets `UAKindDisabled(0x0142)` before `UAPqzHolder`
-  (the order of the checks is the order of the steps, [§1.8](#registry)).
+- **Generations** (the registry line, [§1.8.1](#registry-line)). A generation forwards the views (`registrationOf`, `popOf`,
+  `kemKeyOf`, `kemKeyAt`, the key and `msig` readers) of a record it does not hold to `holderOf(ua)` directly, and the PQZ views to
+  the record's PQZ home ([CTR-UA-70](#CTR-UA-70), [CTR-UA-71](#CTR-UA-71)); `setKemKey`, `acceptMembership` and `updateMsig` for
+  such a UA go to the generation that holds the record (`UAUnauthorized` here), and the PQZ writes (`storePqzPop`, `setPqzKey`,
+  and their scoped forms) to `pqzHomeOf(ua)`, their signature checked by the holder ([CTR-UA-59](#CTR-UA-59)). **Indexers read
+  every generation of the line** ([CTR-UA-65](#CTR-UA-65)): a PQZ home emits the PQZ events (`UAPqzPopStored`, `UAPqzKeyAdded`)
+  for the records it hosts, and each generation `UARegistered` only for its own. A generation without `0x0142` behind one with
+  it refuses a PQZ key for its own records, `UAKindDisabled(0x0142)` before `UAPqzHolder` (the order of the checks is the order
+  of the steps, [§1.8](#registry); built only under the owner's override, CTR-UA-71).
 - **Relaying** (owner 2026-10-30, ruling R-node; node built on `ua8` in `64c233d4`, `4d4509e7`, `51b0c027`). The node relays every registry write ([CTR-UA-36](#CTR-UA-36): `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`,
   `storePqzPop`, `setPqzKey`, `acceptMembership`; and `updateMsig`, [CTR-UA-44](#CTR-UA-44)) as ordinary `call` jobs (`kind = "call"`, target = the registry, calldata): its call table has a row for
-  each of the nine selectors under the guard rule `Rule::UaRegistry` — the target must equal the chain's `[[chains]] ua_registry`
-  (node config; unset ⇒ all nine are refused `CALL_TARGET_REFUSED`), be bound to this chain (`chainUid()`) and be neither a
+  each of the nine selectors under the guard rule `Rule::UaRegistry` — the target must be a generation of the chain's
+  `[[chains]] ua_registries` (node config, the registry line validated on chain at start, [CTR-UA-65](#CTR-UA-65); unset ⇒ all
+  nine are refused `CALL_TARGET_REFUSED`), be bound to this chain (`chainUid()`) and be neither a
   registered token nor the token factory ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)). The gateway's `~gateway` sponsor policy is
   specified to cover all nine ([NODE-GW-03](../node/gateway.md#NODE-GW-03)), but the gateway route `POST /v1/ua/register` and the
   sponsor policy are **not built** (no route, no sponsor-policy code; `TODO.md`): today relaying goes through job-API `call` jobs
-  only. The node binds one registry per chain: once a chain runs a generation 2, the writes that must go to generation 1 (e.g.
-  `setKemKey` for a generation-1 record) cannot be relayed (`TODO.md`). No new job kind, no fee form (there is no token to
+  only. The node lists every generation of the line, so a write for a record of any generation is relayable; a write sent to
+  the wrong generation is refused before sending by name, `UA_VERIFY_ONLY` / `UA_WRONG_GENERATION` with its target
+  ([CTR-UA-65](#CTR-UA-65); was: one registry per chain, the writes for generation-1 records not relayable once a generation 2
+  ran). No new job kind, no fee form (there is no token to
   take a fee from; a relayer that wants payment arranges it off chain). A relayed PQ registration **splits** (`register` / `registerMsig` without
   `pqzPop`, then `storePqzPop`) when the full call's `eth_estimateGas` exceeds **min(block gas limit, the relayer's per-transaction cap)**
   (`max_gas_per_tx`, plus the protocol caps 2^32−1 and, before Amsterdam, 2^24) or the estimate itself is refused for gas ("… exceeds
@@ -1788,7 +1795,9 @@ interface IUARegistry is IERC5267 {
     error UAIndex(uint16 kind, uint256 i);        // uaAt past the kind's count (CTR-UA-29)
     error UANotIndexed(bytes32 ua);               // uaIndex of an unregistered id
 
-    function generation() external view returns (uint8);                     // 1 or 2
+    function generation() external view returns (uint8);                     // 1 … MAX_GENERATION (16), CTR-UA-70
+    // the line (CTR-UA-58, CTR-UA-70, CTR-UA-71; in the frozen interface, CTR-UA-72):
+    // holderOf(ua) → (holder, kind, pqzHome), pqzHomeOf(ua), kindHome(kind), verifierOf(kind), verifyOnly(kind), txGasCap()
     function predecessor() external view returns (address);
     function kindEnabled(uint16 kind) external view returns (bool);          // kindEnabled(0x0142): this generation accepts PQZ keys
     function verifyCap(uint16 kind) external view returns (uint64);          // measured per chain; verifyCap(0x0142) = the R_REG cap
@@ -1922,20 +1931,25 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
    verify gas of a minimal authorizing set — Σ of the `c` largest member `verifyCap`s plus a fixed per-member overhead
    (`MSIG_MEMBER_GAS`) plus the one read of the accepted bits (`MSIG_ACCEPTED_GAS`, [CTR-UA-37](#CTR-UA-37)), `c` = the number of
    lightest-weight members needed to reach the threshold — is ≤
-   `verifyBudget()` — `UAKeyData`. A member whose kind this generation does not enable is checked by the predecessor,
-   which holds `cap / 63 + 5 k` again inside the call: it counts with `cap + cap / 63 + 5 k` (gen 2 itself keeps 1/64 of
+   `verifyBudget()` — `UAKeyData`. Over the line ([CTR-UA-60](#CTR-UA-60)): a member held elsewhere adds its walk
+   (`LINE_HOP_GAS` a generation passed); a member of a kind verify-only here counts this generation's cap plus `VO_READ_GAS`;
+   a member of a kind not carried here is checked by its holder (`holderOf(member)`, never the predecessor),
+   which holds `cap / 63 + 5 k` again inside the call: it counts with the holder's `cap + cap / 63 + 5 k` (this generation keeps 1/64 of
    what it forwards through `_viaPredecessor`, so a handed member has the caller's hold too). Let `held` be the largest
    such entry among the `c` — a member of this generation with its cap, or a handed one with `cap + cap / 63 + 5 k`; if
    `held` is above the 400 k that `MSIG_MEMBER_GAS` holds for (the PQ caps, P6c), the bound adds `(held − 400 k) / 63`. The bound is sound because
    verification stops at the threshold, so no accepted set has more than `c` members (T-GAS authorizes an `msig`
    registered exactly at the budget with `verifyBudget` gas). An `msig` member's own worst is that slot's cap, so the total counts every signature across both levels; `held` is the largest single
    cap at either level, and one held by gen 1 is one more call level, its natives at 400 k ([CTR-UA-38](#CTR-UA-38)).
+   Beside `verifyBudget`, the **hard bound** of [CTR-UA-60](#CTR-UA-60): the structure's consumer and write modes must fit one
+   transaction of `txGasCap` — `UAKeyData(0x0120)`.
 5. Attributes (before the PoP, in the order of `portable.json`'s `negatives`). PQZ key (only if `attrs.pqzKey` is non-empty): on a
-   generation 2 whose generation 1 enables `0x0142`, `UAKindDisabled(0x0142)` (the PQZ attachment lives in one generation; this
-   check comes before the holder check, so on such a gen 2 a non-holder's PQZ key gets `UAKindDisabled` and not `UAPqzHolder`); the holder
+   generation that does not enable `0x0142` while a predecessor does (`kindHome(0x0142) != 0`), `UAKindDisabled(0x0142)` (the
+   record has no PQZ home yet, [CTR-UA-71](#CTR-UA-71); this
+   check comes before the holder check, so on such a generation a non-holder's PQZ key gets `UAKindDisabled` and not `UAPqzHolder`); the holder
    rule of [CTR-UA-16](#CTR-UA-16) (single-key `mldsa44`/`mldsa65`/`fndsa512`, or an `msig` whose members of other kinds weigh
    less than its threshold, read from `keyData`, and whose worst-case authorization plus the cheapest PQZ debit and the authorization's own calldata fits the
-   EIP-7825 cap) — `UAPqzHolder`. KEM key (only if `attrs.kem` or `attrs.kemPkHash` is set): a holder of the same set
+   registry's `txGasCap`; the worst case is the consumer path's fallback worst, [CTR-UA-59](#CTR-UA-59)) — `UAPqzHolder`. KEM key (only if `attrs.kem` or `attrs.kemPkHash` is set): a holder of the same set
    (without the debit bound) — `UAKemHolder`. A PQZ key comes with `attrs.pqzPopHash` and only with it, the hash is not
    `keccak256("")`, and given proof bytes hash to it — `UAPqzPopHash`; the key has the length of one of the four parameter
    sets — `UAKeyData(0x0142)`; the KEM key is version 0 ([CTR-UA-32](#CTR-UA-32)): in full, scheme 1 — `UAKemScheme` — and 1,601 B assembled — `UAKemKeyLength`; hash-committed (`kemPkHash` ≠ 0), the scheme alone, other key bytes — `UAKemKeyLength`, scheme 1 — `UAKemScheme`. `h = keyHashOf(0x0142,
@@ -1954,7 +1968,7 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
 7. PQZ key attach (only with a PQZ key; [CTR-UA-16](#CTR-UA-16)): the key is stored (SSTORE2 pointer) with `pqzPopHash`. If `pqzPop` is given, the bytes
    are stored and, where slot `0x0142` has a verifier, `PqzKeyVerifier.verifyPop(pqzKey, uaMessage(0x0142, PURPOSE_POP_V2,
    portableRecordDigest(ua, kind, h, kemRecordHash)), pqzPop)` is checked, capped at `verifyCap(0x0142)` with the hold — `UAPoP`; then the key's
-   owner (`UAKeyInUse`, here and in the predecessor), `keyOwner[h] = ua`, the `0x0142` list and `proven = true`. Without `pqzPop`, or on a
+   owner (`UAKeyInUse`, here and through every predecessor), `keyOwner[h] = ua`, this generation's `0x0142` list and `proven = true`. Without `pqzPop`, or on a
    registry whose slot `0x0142` is empty, the key stays `proven = false` and claims nothing. The proof is bound to the signer's id, so a
    proof made for another UA fails.
 8. Store `Record{kind, uint40(block.timestamp), keyPtr, index}` (stored kinds: `keyPtr = SSTORE2.write(vk)`, `vk` = PQ
@@ -1967,11 +1981,13 @@ The later writes (each relayable by anyone, no fee):
 
 - `storePqzPop(ua, version, pqzPop)` — empty proof or bytes that do not hash to that version's stored `pqzPopHash`: `UAPqzPopHash`; once stored, a no-op with no event; else the bytes
   are stored and, where the verifier exists, checked over the key's `R_REG` message (`UAPoP`), then the key's owner, `keyOwner`, the `0x0142` list,
-  `proven`; `UAPqzPopStored` with the bytes; `UAPqzKeyCurrent` when the version becomes current ([CTR-UA-42](#CTR-UA-42)). `UAUnauthorized` for an id this registry does not hold (on gen 2 a gen-1 record goes to gen 1), except a gen 2 that enables `0x0142` in front of a
-  gen 1 that does not: it proves gen 1's key and keeps the proof, `proven`, owner and list entry itself.
-- `setPqzKey(ua, version, pqzKey, pqzPopHash, sig)` — check order: an id this registry does not hold (`UAUnauthorized`) → a gen 2 whose gen 1 enables `0x0142`
+  `proven`; `UAPqzPopStored` with the bytes; `UAPqzKeyCurrent` when the version becomes current ([CTR-UA-42](#CTR-UA-42)). `UAUnauthorized` on a generation that is not
+  the record's PQZ home (`pqzHomeOf(ua)`, [CTR-UA-71](#CTR-UA-71)): a home that does not hold the record proves the holder's key and keeps
+  the proof, `proven`, owner and list entry itself.
+- `setPqzKey(ua, version, pqzKey, pqzPopHash, sig)` — check order: a generation that is not the record's PQZ home
+  (`UAUnauthorized`; a record held here on a generation without a home: next step) → a generation without `0x0142` behind one with it
   (`UAKindDisabled(0x0142)`) → holder (`UAPqzHolder`) → the version (`UAPqzKeySet` for a second version 0, `UAPqzKeyVersion` for v ≠ latest + 1) → key length (`UAKeyData(0x0142)`) → the key repeated in the UA (`UAKeyInUse`) → a zero or `keccak256("")` hash
-  (`UAPqzPopHash`) → signature (`UAUnauthorized`). `UAPoP` and `UAKeyInUse` fire only where a proof is checked (`storePqzPop`, `register` with a `pqzPop`). `UAPqzKeyAdded`.
+  (`UAPqzPopHash`) → signature, checked by `holderOf(ua)` ([CTR-UA-59](#CTR-UA-59); `UAUnauthorized`). `UAPoP` and `UAKeyInUse` fire only where a proof is checked (`storePqzPop`, `register` with a `pqzPop`). `UAPqzKeyAdded`.
 - `setKemKey(ua, version, kem, sig)` — check order in [CTR-UA-32](#CTR-UA-32); `UAKemKeySet`.
 
 The event carries every argument of the call: records and ids are rebuildable offline from logs, and from state alone (`registrationOf`), except an `msig`'s `pop`: it comes from its `UAMemberSig` events, checked against `memberSigHashOf` / `popOf` ([CTR-UA-33](#CTR-UA-33) A). Every verifier `staticcall` is
@@ -1994,7 +2010,8 @@ mapping(bytes32 keyHash => bytes32) _keyOwner;    // single-key kinds, and kecca
 mapping(bytes32 ua      => address[2]) _ekPtr;    // ML-DSA expanded-key parts (SSTORE2), each written once (P6c)
 immutable: generation, predecessor, chainKeyHash (= keccak256("evm:" ‖ decimal(block.chainid)), computed in the
            constructor), chainUid (constructor argument, ≠ 0), hederaNative, per-kind verifier addresses
-           (0 = disabled), per-kind verifyCap, verifyBudget, SmartKeyAccount clone codehash (1271 cap),
+           (0 = disabled), per-kind verifyCap and flags (verifyOnly bit 224, keyForm bit 225; CTR-UA-58),
+           verifyBudget, txGasCap (CTR-UA-58), SmartKeyAccount clone codehash (1271 cap),
            EIP-712 domain separator (incl. salt = chainUid)
 ```
 
@@ -2022,14 +2039,18 @@ interface IUAPopVerifier is IUAKindVerifier {
 KeyAgg and FROST DKG checks are registration-only code in the kind's verifier contract (`verifyPop(keyData, message, pop)`),
 never run at verify time.
 
-**Generations.** A registry generation fixes its kind set; at most two generations per chain (each fallback costs ~5 k
-gas). Generation 2 takes `predecessor = gen1` and reads it for `UAAlreadyRegistered` / `UAKeyInUse` / `kindOf` /
-`recordOf` checks (a gen-2 `recordOf` forwards the pointer). Gen 1 is immutable and never sees gen 2, so uniqueness holds only if the generations cannot overlap:
+**Generations.** A registry generation fixes its kind set. The generations of a chain form a **line** of up to
+`MAX_GENERATION` = 16 ([§1.8.1](#registry-line), [CTR-UA-70](#CTR-UA-70); was: at most two): each later generation takes
+the chain's latest as `predecessor` and reads the line through `holderOf(ua)` for `kindOf` / `recordOf` and the other
+readers, and through `keyOwner` for `UAAlreadyRegistered` / `UAKeyInUse` where a walk is needed. A generation is immutable and never sees its successors, so uniqueness holds only if the generations cannot overlap:
 
-- **Gen 2 enables only single-key kinds (Zether included) and the scheme `0x0142` whose kind or scheme *and* keyHash group
-  are absent from every predecessor's enabled set.** A gen-1 kind (one gen 1 enables) keeps registering in gen 1 only; a kind gen 1 has disabled on this chain
-  (verifier 0) may be enabled in gen 2 if its group is also new. Then no key can register under two kinds of one group
-  across generations (the PQZ key of a holder claims group `pqz-mlwe`, so `0x0142` is enabled in one generation per chain).
+- **A later generation registers only single-key kinds (Zether included) whose kind *and* keyHash group no predecessor
+  enables** (`kindHome(kind) == 0` on the predecessor, the group checked over the whole line). A predecessor's kind keeps registering in its home only;
+  a later generation may carry it **verify-only** ([CTR-UA-58](#CTR-UA-58)): it verifies the home's records, registers none
+  (`UAVerifyOnly`), and writes no `keyOwner`. A kind every predecessor has disabled on this chain (verifier 0) may be enabled
+  later if its group is also new. Then no key can register under two kinds of one group across generations. The PQZ scheme
+  `0x0142` is the exception: a later generation may enable it again for its own records, its `pqz-mlwe` group kept unique by a
+  walk ([CTR-UA-71](#CTR-UA-71); was: `0x0142` in one generation per chain).
 - **Structures (`msig`) may be re-enabled in gen 2**: a structure record is a pure function of its key data (no keyHash;
   a PQZ key claims `pqz-mlwe` in one generation only), so the same id registered in both generations has the same `kind` and `keyPtr` (each generation keeps
   its own `registeredAt`). A gen-1 `msig` can only name gen-1 members; an `msig` with a gen-2 member registers in gen 2.
@@ -2054,8 +2075,9 @@ gas). Generation 2 takes `predecessor = gen1` and reads it for `UAAlreadyRegiste
   gen 1 is a failed check. Before, that out-of-gas came back as `UAUnauthorized` (fail-closed, but a relayer told
   "bad signature" instead of "more gas"). Tests `test_W_M_gen1OutOfGas_isUAVerifyGas_aCheapRevertIsAVerdict`, `test_W_M_gen1StarvedBeforeItsHold_isUAVerifyGas`.
 
-Tokens bind one registry address at `initialize` (immutable); a token that needs new kinds is a new implementation
-version pointing to gen 2. Gen 2 sees gen-1 records, so nobody re-registers.
+Tokens bind one registry address at `initialize` (immutable); a token that needs new kinds, or a new verifier for an existing
+kind, is a new implementation version pointing to a later generation (the factory accepts any generation of the router
+registry's line, [CTR-UA-67](#CTR-UA-67)). A later generation sees every predecessor's records, so nobody re-registers.
 
 Other families:
 
@@ -2073,6 +2095,346 @@ Other families:
 
 On every family, records, account owners and subject accounts store an explicit **`owner_kind`** next to the id and
 dispatch verification by that kind; id shape (`>> 160`) is an EVM/Cosmos-20-byte rule only.
+
+#### <a id="registry-line"></a>1.8.1 The registry line and verify-only kinds — BUILT (EVM: contracts, deploy, node); SPECIFIED (scaas-sdk, clients); PLANNED (other families)
+
+The design record is the spec [2026-11-19-registry-verify-only-kinds.md](../superpowers/specs/2026-11-19-registry-verify-only-kinds.md)
+(revision 4; the owner's rulings verbatim in its §0 and in [decisions.md](../decisions.md), entry CTR-UA-58, which also lists
+the rulings behind each rule below); the rules below are normative. Built on branch `multi-gen-verify` (plan `2026-11-19-registry-verify-only-kinds`): contracts `d2f6b6c32` (`txGasCap`),
+`9ebf6931c` (kind flags, the line), `2bbe3380d` (the walk, readers, probes), `0a78d4d64` (writes), `cc82e3ecc` (consumer path),
+`4f643c791` (fallback), `72ced51f3` and `0812a0467` (bounds), `a40d8acc0` (PQZ home), `de05b0789` (ML-DSA verify-only verifiers),
+`6c558f1dd` (equivalence), `773ae4988` (frozen interface), `098c30feb` (factory); deploy `53d4ad79d`, `78ce41390`; gas rows
+`0cda19be5` and node `d019be659` (both local work in progress, to be squashed into their task commits). Everything
+cryptographic is **UNAUDITED**.
+
+```mermaid
+flowchart TD
+  A[consumer entry of generation k<br/>requireAuthorized / requirePortable / requirePortableApp] --> B{record held here?}
+  B -- yes --> C[this generation's verifier, as today]
+  B -- no --> D["holderOf(ua): one walk → (holder, kind, pqzHome)"]
+  D --> E{kind verify-only here?}
+  E -- no --> F[hand the check to holder directly<br/>one hand-off, one hold]
+  E -- yes --> G[this generation's verifier<br/>own cap + hold]
+  G -- "exactly one word 1" --> H[accept]
+  G -- "exactly one word 0" --> I[refuse, no fallback]
+  G -- "any revert or other return" --> J[fallback: the holder's entry, the caller's auth]
+```
+
+<a id="CTR-UA-58"></a>**CTR-UA-58** — **A later generation may carry a predecessor's single-key kind verify-only, declared in
+the kind word and checked by the constructor** (owner rulings of spec §0.2 – §0.4: V1, P1, P6, P11, P16, P17, X1, M6 and others; BUILT on EVM,
+`d2f6b6c32`, `9ebf6931c`, `de05b0789`, `0812a0467`).
+
+- **Which kinds.** A single-key kind of the kind table that a predecessor enables: the signing kinds, PQ `0x0130`–`0x0135`, the
+  group kinds `0x0110`–`0x0113`, `zether-bls12381` `0x0141`. A kind is **eligible** only with its edge-class list and vectors
+  ([CTR-UA-62](#CTR-UA-62)); this build has them for ML-DSA (`0x0130`, `0x0131`, `0x0134`) only, which the deploy enforces (the
+  constructor takes any single-key kind). Never `msig` `0x0120` (a structure: re-enabled in full in every generation; a
+  predecessor's `msig` is forwarded whole, [CTR-UA-60](#CTR-UA-60)), never `pqz-mlwe` `0x0142` ([CTR-UA-71](#CTR-UA-71)), never
+  `bls12381-multi` `0x0121` in this build.
+- **Declaration.** `KindConfig{uint16 kind; address verifier; uint64 cap; bool verifyOnly; uint8 keyForm}`, one immutable word
+  `verifier | cap << 160 | verifyOnly << 224 | keyForm << 225`. Every reader masks: `_capOf(cfg) = uint64(cfg >> 160)`,
+  `_registrable(cfg) = uint160(cfg) != 0 && cfg >> 224 & 1 == 0`; `verifyCap` reads the cap; `kindEnabled` stays local (true for
+  a verify-only kind too).
+- **Key form** (bit 225, equal to the verifier's own `KEY_FORM()`). `0`: the bytes the holding generation passes on that path;
+  any other form the precompile needs is derived per call inside the verifier's cap. `1` (ML-DSA only): the holder's complete
+  expanded-key cache read through the holder's `expandedKeyOf`, allowed only where the kind's home verifier is on the cache path
+  and the holder's parts, concatenated, are exactly the precompile's input (pinned by a test). The constructor refuses form `1`
+  where `verifierOf(kindHome(kind))` of the predecessor reports `PRECOMPILE() ≠ 0` (the home's verifier, never a middle
+  generation's), `UAConfig(kind)`; the deploy first by name, `GEN_KEY_FORM_IMPOSSIBLE <kind>`. A later generation never caches.
+- **A working precompile.** A verify-only verifier whose constructor probe found no precompile (`PRECOMPILE() == 0`) is refused,
+  `UAConfig(kind)` (deploy: `GEN_VERIFY_ONLY_NO_PRECOMPILE <kind>`); there is no Solidity-only verify-only verifier: the holder's
+  software path serves [ARCH-POS-18](../decisions.md#ARCH-POS-18).
+- **Constructor.** For a single-key kind, `verifyOnly ⇔ predecessor.kindHome(kind) != 0`, else `UAConfig(kind)` (a flag on
+  generation 1 or on a kind no predecessor enables is refused, and so is an unflagged predecessor kind); `msig` and `0x0142` are
+  never flagged and never refused for a predecessor enabling them. The keyHash group check runs over the whole line
+  (`kindHome(j) != 0` for each kind `j` of the group), verify-only kinds exempt (their group is the home's), `0x0142` excepted.
+  The cap is the generation's own measured cap, `0 < cap ≤ verifyBudget`, and the deploy's 75 % rule applies.
+- **The PQZ debit check.** Where `0x0142` is on the line, each verify-only kind's single-key fallback (this generation's cap and
+  hold, then the home's cap and one hand-off, plus the reads) must pass `_msigDebit`'s bound at the compiled set's
+  `PQZ_DEBIT_MIN_GAS` and this generation's `txGasCap` (`UARegistryRegLib.voDebitFits`), else `UAConfig(kind)`; the deploy first
+  by name, `GEN_PQZ_DEBIT_BOUND <kind>`, with the numbers for the owner. The kind stays served by its home.
+- **`txGasCap`.** The chain's per-transaction gas cap is an immutable constructor argument right after `verifyBudget_`, from the
+  deploy book ([CTR-UA-64](#CTR-UA-64)); `verifyBudget ≤ txGasCap < 2^64`, else `UAConfig(0)`; view `txGasCap()`. Every bound
+  of the generation reads it (the constant `TX_GAS_CAP` is gone); nothing assumes 2^24. A raised cap later is a new generation.
+- **The group stays where it is.** A later generation writes no `keyOwner` for a verify-only kind and reads `keyOwner` through
+  the line.
+
+<a id="CTR-UA-59"></a>**CTR-UA-59** — **Every signature-authenticated write is authenticated by the generation that holds the
+signer's record; a verify-only verifier authenticates no write** (owner rulings of spec §0.2 – §0.4, W1 and M2 among them; BUILT on EVM, `2bbe3380d`,
+`0a78d4d64`, `0812a0467`).
+
+- **The holder checks.** A single-key signer is checked by `holderOf(ua)`, each derived member of an `msig` by
+  `holderOf(member)`, directly (never through `predecessor`), wherever the write is stored. `_sigOk` / `_msig` / `_memberOk` /
+  `_single` take a flag `write` whose default is the write side; only the three consumer entries (`requireAuthorized`,
+  `requirePortable`, `requirePortableApp`) pass `false`. On a write `_single` forwards to the holder whenever
+  `!_registrable(cfg)` (a kind not carried here, or carried verify-only). So a forgery a verify-only verifier accepts changes no
+  registry state in any generation. Permissionless writes have no signer: `cacheExpandedKey` (the key is authenticated by its
+  id) and `storePqzPop` / `storePqzScopedPop` (checked by a proof at the record's PQZ home).
+- **Refusals.** `register`, `registerWebAuthn`, `registerMuSig2`, `registerFrost` and `cacheExpandedKey` of a kind carried
+  verify-only revert **`UAVerifyOnly(uint16 kind)`** at step 1, before any other check (register at `kindHome(kind)`; the cache
+  is filled in the holding generation). `setKemKey`, `acceptMembership`, `updateMsig` keep `UAUnauthorized` on a generation that
+  does not hold the record; the PQZ writes go to the record's PQZ home ([CTR-UA-71](#CTR-UA-71)).
+- **The PQZ holder bound.** `_pqzHolder` / `_msigDebit` (CTR-PQZ-12's debit bound) counts the **fallback worst of the consumer
+  path** ([CTR-UA-68](#CTR-UA-68)): a single-key holder held elsewhere whose kind is verify-only here, this generation's cap and
+  hold plus the holder's cap, one hand-off and the reads; an `msig` holder, its minimal authorizing set at that worst; against
+  `txGasCap`. Over it, `UAPqzHolder` at registration, `setPqzKey` and `updateMsig`. Stated limit (owner M2): on a chain without
+  an ML-DSA precompile an `msig` with two ML-DSA members cannot hold a PQZ key (two `mldsa44` members fit at `n2304-kmax4096`
+  only: debit 15,588,664 of 16,777,216 measured).
+- **Views.** `verifyOnly(kind)`, `kindHome(kind)` (the generation where the kind registers, by the walk; 0 where none does);
+  every line-wide question is `kindHome(kind) != 0`. A client offers registration of a kind on a registry only where
+  `kindHome(kind) == registry`. `uaCount` / `uaAt` / `uaPage` / `uaIndex` of a verify-only kind answer from its home;
+  `expandedKeyOf(ua)` forwards to the holder. A generation emits no event for a verify-only kind.
+- **Cost.** A write pays the holder's path: the treasury `{mldsa65 ×3} t=2` with gen-1 members on the cache ≈ 12.3 M per
+  `updateMsig` or PQZ key write [estimate], against ≈ 2 × 0.25 M on the consumer path.
+
+<a id="CTR-UA-60"></a>**CTR-UA-60** — **A consumer check of a record held elsewhere walks once: this generation's verifier
+where the kind is verify-only here, else the holder directly; an `msig` fits `verifyBudget` and one transaction of `txGasCap`**
+(owner rulings of spec §0.2 – §0.4: V1, V3, W1, P3, P9, X1, M2, P15 and others; BUILT on EVM, `cc82e3ecc`, `72ced51f3`, `0812a0467`).
+
+- **One rule.** A consumer entry of generation `k` reads `holderOf(ua)` once. If the holder's `kind` is verify-only here, it
+  verifies with this generation's verifier, under its own `verifyCap` and the caller's hold (T-AUTH-4), with the fallback of
+  [CTR-UA-68](#CTR-UA-68); else it hands the check to `holder` directly (`via`: starvation `UAVerifyGas`, a refusal
+  `UAUnauthorized`): a middle generation that carries the kind verify-only is never asked for a later one, and holds do not
+  stack per hop. The same for a member of this generation's `msig` held elsewhere (purpose `member`, empty key data). An inner
+  `msig` held elsewhere and a predecessor's `msig` record are forwarded whole to their holder (owner, spec §0.2: a registered `msig`
+  cannot register again in a later generation, `UAAlreadyRegistered`, so it keeps its holder's verifiers). `requirePortableApp`
+  goes to the holder's `requirePortableApp` with its `appId`, never to `requirePortable` with the derived purpose. The PoP
+  (`PURPOSE_POP_V2`) is never checked by a later generation.
+- **Key bytes.** Exactly the bytes the holding generation's code passes on that path: `keyOf(ua)` for the stored kinds,
+  `webAuthnKeyOf(ua)`, `registrationOf(ua).keyData` for a classical member, `auth.keyData` checked against the id for a classical
+  signer; under key form `1` the holder's complete cache (an incomplete one is `UAKeyNotCached(ua)`, the kind read from
+  `holderOf`). The entry and the DST are the holder's for that path (`verify`, `verifyPop` on the portable path, `verifyCached`).
+  A failed read of the line is `UAVerifyGas`, never a verdict.
+- **Consumer bound, `verifyBudget`** (registration step 4, `_slotCap`). A member held elsewhere counts its walk, `LINE_HOP_GAS`
+  per generation passed (13,100: one further generation measured 12,410 cold on the consumer path, `0cda19be5`); a member whose
+  kind is verify-only here counts this generation's cap plus `VO_READ_GAS` (60,000: the reads of its record at the holder and the
+  library entry); a member of a kind not carried here counts the holder's `verifyCap` plus one hand-off (`cap / 63 + GAS_MARGIN`),
+  never the predecessor's cap.
+- **Hard bound, `txGasCap`** (owner P9, X1, M2). Over the slots of a minimal authorizing set, the larger (never the sum) of two
+  modes must fit `txGasCap`: the **consumer mode**, the fallback worst (each derived member at this generation's cap and hold
+  plus its holder's path), the intrinsic 21,000, the signatures' calldata at the larger of 16 gas a byte and the EIP-7976 floor
+  of 64, and `UA_CONSUMER_RESERVE_GAS` (350,000; measured 310,144 for an `mldsa65` UA's `mtxExecuteTransfer` with a fee beyond
+  its `requireAuthorized`); the **write mode**, each derived member at its holder's path, the calldata, and the dearest write that
+  fixes or uses the structure: `MSIG_REGISTER_GAS` (350,000; a 16-slot `registerMsig` measured 317,415 regular), `updateMsig`'s
+  constants ([CTR-UA-44](#CTR-UA-44)), `PQZ_KEY_WRITE_GAS` (2,600,000; `setPqzKey` of a 22,528 B key, regular gas only: EIP-8037
+  leaves the state gas to the block) for a PQ-eligible structure. Over it: registration `UAKeyData(0x0120)`, `updateMsig`
+  `UAMsigSlots(n)`, never at the write. A structure bound, not a disabled kind under ARCH-POS-18. At 2^24: the treasury
+  `{mldsa65 ×3} t=2` registers (consumer ≈ 12.6 M + the reserve, write ≈ 12.3 M + constants [estimates]); `{mldsa87 ×2} t=2`
+  and `{mldsa65 ×3} t=3` are refused although they fit `verifyBudget` on a precompile path.
+- **Controller calls (owner auto-run 2026-11-19).** The consumer path in `UARegistry` reads the walk through the predecessor's
+  `holderOf` for a record it does not hold (the same answer without the PQZ fill), and the verify-only check lives in
+  `UARegistryCoreLib` behind a `requireAuthorized` library entry (`UARegistry` measured 144 B over its T-1 line with it inline).
+  [CTR-UA-44](#CTR-UA-44)'s row 12 kept: the treasury registers but its `updateMsig` with a PQZ key is `UAPqzHolder`; the
+  rows the hard bound makes unregistrable at 2^24 (the `verifyBudget` capacity tables, the 12 × `slhdsa128s` rows) run on a
+  registry of `txGasCap` 2^25.
+
+<a id="CTR-UA-68"></a>**CTR-UA-68** — **When a verify-only verifier gives no answer the check falls back to the holder's
+verdict; an answer 0 refuses** (owner rulings of spec §0.2 – §0.4: P2, P3, P10, P20 and others; M7; BUILT on EVM, `4f643c791`, `de05b0789`).
+
+- **The verifier owns the three states.** Lengths and encodings first (a malformed input answers 0); the precompile called with an
+  **explicit gas limit** (`CALL_GAS`: the precompile's worst cost for the kind's largest input, measured, a constructor argument and
+  so part of the verifier's CREATE2 address), never all its gas; exactly one word `1` accepts, exactly one word `0` refuses;
+  anything else re-runs the constructor's valid row (kept in code) as an **alive-check** under the same limit: answered, the input
+  was invalid (0); else `PqNoAnswer()`. The cap covers the failed call at its limit plus the alive-check.
+- **The registry reads its own call** (`UAStore.voCall`, with `capped`'s gas rule: the cap, the hold, `UAVerifyGas` before the
+  call): exactly one word `1` accepts, exactly one word `0` refuses with no fallback; any revert and any other return (empty, two
+  words, another value) is no answer and falls back to the holder's entry for that path (`requireAuthorized` with the caller's
+  `auth`, a member's `UASig("", sig, [])`; `requirePortable`; `requirePortableApp` with its `appId`) under the holder's hold.
+- **Hold on every verify-only call**, the group kinds' portable path included (cap `verifyBudget`, ≈ 0.2 M more). So a relayer
+  cannot buy a fallback below the cap; one it could still force gains only the holder's (sound) path at more gas.
+- **Bound.** The accepted set is the holder's plus this generation's, never laxer than the holder ([CTR-UA-62](#CTR-UA-62)).
+  Nothing limits a check to `verifyBudget` at run time: the check takes what the transaction carries, up to `txGasCap`, and the
+  hard bound ([CTR-UA-60](#CTR-UA-60)) keeps the registry's check of every registered `msig` within one transaction; a consumer
+  operation dearer than its reserve fails while the precompile gives no answer and works again when it answers. A removed, moved
+  or repriced precompile no longer locks a holder's funds in tokens bound to a later generation.
+
+<a id="CTR-UA-61"></a>**CTR-UA-61** — **A verify-only verifier may use a later precompile only for the same scheme, message and
+key** (controller proposal within the owner's key-form rulings, spec §0.2 and P1; BUILT for ML-DSA, `de05b0789`). A gen-1 signature must verify unchanged:
+ML-DSA and SLH-DSA sign `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` pure with the empty context, ML-DSA in EIP-8355's layout as
+pinned ([CTR-UA-23](#CTR-UA-23)); Falcon is specification v1.2 with EIP-8052's hash-to-point over `ua_msg`. Eligible: (1) only the
+call shape differs (address, argument order, output encoding, gas), key form `0`; (2) a key form derivable per call within the
+cap (form `0`), or for ML-DSA the holder's complete cache (form `1`), else refused by name. Never: (3) a different algorithm
+(HashML-DSA, a mandatory context, Falcon FIPS 206 final ≠ v1.2): that is a new kind version with a new id. Per call an ML-DSA-65
+key expansion does not fit a useful cap, so an EIP-8051 precompile serves ML-DSA only under form `1`. Which case applies is
+decided by evidence ([CTR-UA-62](#CTR-UA-62)); the EIP's status only guards the address ([CTR-UA-69](#CTR-UA-69)).
+
+<a id="CTR-UA-62"></a>**CTR-UA-62** — **Equivalence modulo gas, never laxer, differences to the owner** (owner rulings of spec §0.2 (strictness) and P1;
+the method a proposal; BUILT for ML-DSA, `6c558f1dd`, `de05b0789`). With enough gas on both sides a verify-only verifier gives the
+same verdict as the holder's path for the same key, message and signature (same scheme, `ua_msg` / `pq_msg`, DST, encodings,
+lengths, strictness). Any difference, either way, found by the tests or the deploy probe stops that kind's verify-only deploy and
+goes to the owner with its rows; no automatic refusal or acceptance (a stricter verifier the owner confirms still falls back on
+no answer). A kind is eligible only with its **edge-class list**, each class with pinned vectors and its own mutant (ML-DSA:
+hint order, hint padding, hint count, `‖z‖∞` at its bound, `c~` flipped, lengths ± 1, a non-empty context, HashML-DSA, the NIST
+ACVP / Wycheproof sets and the KATs; Falcon and the classical kinds as listed in the spec §7). Tests per kind: (a) shared vectors
+on both verifiers, (b) a byte-flip differential, (c) the registry routing per entry, (d) per-class mutants, (e) an accept-all
+stand-in against every write ([CTR-UA-59](#CTR-UA-59)), (f) three generations with an accept-all middle generation; under form
+`1` the layout equality. On forge the precompile is a stand-in; the verdicts on real rows come from the deploy's differential
+probe against a client that has it. No difference found for ML-DSA. Controller call (owner auto-run 2026-11-19): the ACVP and
+Wycheproof sets carry no `ua_msg` framing, so they are not in the forge suite (against the stand-in they would compare the
+holder's code with itself); they run against a real precompile in the local deploy probe.
+
+<a id="CTR-UA-63"></a>**CTR-UA-63** — **Verify-only adds no message form, so no cross-generation replay** (follows from the code;
+no change). A derived kind signs `ua_msg` ([CTR-UA-12](#CTR-UA-12)), which names no registry and no generation; replay protection
+is the operation's digest. `uaAuthDigest` names the registry (EIP-712 version = the generation's decimal number) and is signed
+only by native ids and native `msig` members, which are never verify-only (a predecessor's `msig` is forwarded whole). The
+portable purposes' native members sign a chain-free typed digest, derived members `ua_msg`; neither names a registry.
+
+<a id="CTR-UA-64"></a>**CTR-UA-64** — **A later generation is deployed over the book's latest, with every refusal by name before
+broadcast** (owner rulings of spec §0.2 – §0.4: W5, X1, P18, M9, P15, P16 and others; BUILT, `53d4ad79d`; the runbook in
+[evm.md](../networks/evm.md#registry-line-deploy)). A later generation deployed after a qualifying precompile exists carries the
+kind verify-only in the same deploy (no sibling verify-only generation). Before anything is sent the deploy refuses
+`GEN_NOT_LATEST` (the predecessor is not the book's latest; overridable only with the owner's confirmation and reason in the book),
+`GEN_DEPTH`, `GEN_WALK_MISMATCH <g>` (every address, code hash, generation and library code hash from the predecessor to
+generation 1 compared with the book), `GEN_TX_CAP_UNKNOWN` / `GEN_TX_CAP_MISMATCH` (the cap probe, [CTR-UA-58](#CTR-UA-58)),
+`GEN_PQZ_OMITTED` (`0x0142` is carried, with the home's verifier and cap, wherever a predecessor enables it; overridable only by
+the owner, recorded), `GEN_KEY_FORM_IMPOSSIBLE`, `GEN_VERIFY_ONLY_NO_PRECOMPILE`, `GEN_PQZ_DEBIT_BOUND` (per verify-only kind) and
+the 75 % rule; the deploy's **differential probe** (by `eth_call` through the chain's node list under strict majority,
+[ARCH-POS-15](../decisions.md#ARCH-POS-15)) runs every KAT row on the holder's entry (on the cache: `expandedKeyPart` per part, then
+`verifyExpanded`) and on the verify-only verifier, any difference `GEN_DIFFERENTIAL_MISMATCH` with the rows (to the owner, [CTR-UA-62](#CTR-UA-62)).
+The probe is **re-run after every client upgrade** on the chain as an operations check (a precompile is client code). The book
+records the generation, predecessor, code hash, libraries and their code hashes, `tx_gas_cap` with its probe rows and the nodes'
+client versions, `gen_pqz`, `verify_only` per kind `{kind, verifier, cap, keyForm, …}`, the walk check and every owner override;
+each contract is verified on the explorer ([NET-EVM-12](../networks/evm.md#NET-EVM-12)). Generation 1 carries the line's views
+and `txGasCap` from now; a generation 1 deployed before them cannot be a predecessor (the probes of [CTR-UA-72](#CTR-UA-72)).
+Controller call (owner auto-run 2026-11-19): the cap probe runs in `deploy.sh evm`, not inside `deploy_batch.py` (a receipts and
+fee checker). Not built: `pq_verifiers.py` building the verify-only verifiers on a chain (the book names them); an ordinary new
+kind (one no predecessor enables) in the later-generation mode.
+
+<a id="CTR-UA-69"></a>**CTR-UA-69** — **A PQ verifier's deploy probes by default only Final EIP addresses and the chain's own
+precompiles; a Draft address only under the owner-confirmed flag, with the fuller probe** (owner, spec §0.2 "the middle way", and plan C5; BUILT,
+`78ce41390`). For gen 1's ML-DSA verifiers and every later generation's: by default the chain profile's own precompiles
+([NET-EVM-15](../networks/evm.md#NET-EVM-15): `0x…5caa0012` / `13` / `14` on the SCaaS chains) and any Final EIP address (no
+ML-DSA EIP is Final today). A Draft address (EIP-8355's `0x12` / `0x13` / `0x14`) is a candidate only when the chain's row in
+`chain-uids.json` sets `probe_draft_precompiles: true` **and** the chain's deploy book holds `probe_draft_precompiles_owner` (the
+owner's confirmation with its reason; the flag without it refuses `DRAFT_PROBE_UNCONFIRMED`), and then only with the fuller probe:
+the valid row, a flipped row and every edge-class row, each answered exactly. The chain profile also states whether the chain
+commits to keep its own precompile.
+
+<a id="CTR-UA-67"></a>**CTR-UA-67** — **A factory accepts one registry line: the router's registry or a registry whose
+predecessor chain reaches it** (owner rulings of spec §0.2 and §0.3, P4 among them; BUILT on EVM, `098c30feb`). `OpenFactory`'s env check (`publishTokenEnv`,
+`publishDexEnv`, `publishClassEnv`) accepts `env.registry` 0, the router's registry, or a registry whose `lineReaches(router's
+registry)` answers exactly one word `1`: the walk `predecessor()` from it reaches the router's registry within `MAX_GENERATION − 1`
+steps, each a contract, and its `smartKeyCloneHash()` equals the router's; `chainUid` as `_requireChainUid`; else
+`EnvRegistryMismatch(expected, got)`. Checked in code, no admin key, no stored list. Cost: the `SmartKeyAccount` implementation is
+frozen for the factory's line. `uaRegistry()` and the directory keep naming the router's registry, which authenticates
+governance; a release that names a later generation runs its token operations through that generation's verifiers. Which
+registry is the chain's real later generation is the deploy book's word ([CTR-UA-64](#CTR-UA-64)); a factory already deployed
+keeps its rule.
+
+<a id="CTR-UA-70"></a>**CTR-UA-70** — **The registry line: up to 16 generations, one walk `holderOf`, every lookup read where
+the record is held** (owner rulings of spec §0.2 – §0.4: N generations, the depth cap 16, P5, P12, X1, Y1, P14; BUILT on EVM, `9ebf6931c`, `2bbe3380d`; the off-chain
+readers SPECIFIED for scaas-sdk and clients).
+
+- **The line.** Generation 1 has `predecessor = 0`; a later registry takes the chain's latest generation `n` as predecessor and is
+  generation `n + 1` (two generations: generation 2 takes `predecessor = gen1`); one registry code serves every generation; its EIP-712 version is the generation's decimal number.
+  `MAX_GENERATION = 16`: the constructor refuses a predecessor of generation ≥ 16 (`UAConfig(0)`), and walks every predecessor
+  down to generation 1 (each a contract of this chain and profile, generations consecutive, at most 16 steps).
+- **One walk.** `holderOf(bytes32 ua) → (address holder, uint16 kind, address pqzHome)`: a generation that holds the record
+  answers `(this, kind, this if it enables 0x0142 else 0)`; else it asks its predecessor once (`(0, 0, 0)` at generation 1) and,
+  where the holder is not 0, the PQZ home 0 and this generation enables `0x0142`, fills `pqzHome = this`. One call per generation.
+  `pqzHomeOf(ua)` is its third word. `kindHome(kind)`: this generation if the kind is registrable here, else the predecessor's
+  answer (for `0x0142`, the newest enabling generation on the walk). `verifierOf(kind)`: this generation's verifier address.
+  The walk's logic is in `UARegistryCoreLib`; `UARegistry` keeps thin views (`_libView`), so the selectors stay on the registry.
+- **Lookups.** Every reader that forwards reads `holderOf(ua)` once and reads the record at the holder directly: `recordOf`,
+  `kindOf`, `registrationOf`, `keyOf`, `webAuthnKeyOf`, `muSig2KeyOf`, `frostKeyOf`, `blsMultiKeyOf`, `popOf`, `popSlotsOf`,
+  `msigOf`, `msigStateOf`, `memberAccepted`, `memberSigHashOf`, `checkedOf`, the KEM views, `expandedKeyOf`; the PQZ views by
+  [CTR-UA-71](#CTR-UA-71). `keyOwner` walks back (local first). A kind's list lives in its home; `msig` has one list per
+  generation; `0x0142` one per enabling generation ([CTR-UA-29](#CTR-UA-29)).
+- <a id="off-chain-readers"></a>**Off-chain readers** (the SDK's PQZ, verdict and Zether reading layers, indexers, wallets;
+  SPECIFIED for scaas-sdk and clients). A record of `ua` is read **where it is held**: call `holderOf(ua)` once on the registry the
+  token binds (one walk; a native-space id answers `(0, 0, 0)` without a walk), then read the record (keys, registration, KEM,
+  `popOf`, `msig` state) at `holder`, and the PQZ attachment at `pqzHomeOf(ua)`, the walk's third word (at `holder` where it is 0:
+  no generation on that walk enables `0x0142`, so an unproven key stays with the record). A reader that reads storage does the walk
+  and the reads at the one block it reads at ([CLI-UAL-33](../clients/ua-libraries.md#CLI-UAL-33)). A reader that goes through
+  the bound registry's own views gets the same answer by forwarding; a reader that reads **storage, logs or library state of one
+  registry directly must not assume that registry holds the record**: a gen-1 holder read through a gen-2 registry is read at
+  gen 1, never refused (fail-closed) because the gen-2 registry's own storage lacks it.
+- **Native-space shortcut.** An id in the native space (top 12 bytes zero) answers `kindOf = 0`, `holderOf = (0, 0, 0)`,
+  `isRegistered = false`, `pqzHomeOf = 0` without a walk: every generation refuses to register such an id.
+- **Single-key registrations walk nothing.** A single-key kind registrable here has its kind and group only in this generation
+  (the constructor's rule), so `UAAlreadyRegistered` and the group's `UAKeyInUse` read this generation only; `msig` and the PQZ
+  key keep the walk.
+- **Gas** (measured, `2bbe3380d`, `0cda19be5`). One further generation costs ≈ 12.4 k cold on the consumer path (`LINE_HOP_GAS`
+  13,100 in the bounds); a miss at depth 4 is one `holderOf` call per generation, 37,016 gas; a thin view costs ≈ 4.7 k over a
+  local read (`holderOf` 12,750 against `kindOf` 8,062 warm; the spec's "a few hundred gas" was low). The SDK gas table carries
+  the extra per registry and depth ([CTR-UA-65](#CTR-UA-65)).
+- **Controller call (owner auto-run 2026-11-19, refining the plan's choice C8; the spec's P21 stays the owner's open
+  question).** `UARegistry` reads the walk for a record it does not hold through its predecessor's `holderOf` (one DELEGATECALL
+  and one self-call fewer); the libraries' reader (`UARegistryCoreLib._holder`) takes it by a static self-call to the registry's
+  `holderOf`, which kept `UARegistryAuxLib` under its T-1 line.
+
+<a id="CTR-UA-71"></a>**CTR-UA-71** — **A record's PQZ attachment lives at its PQZ home: the oldest generation from its holder to
+the reader that enables `0x0142`** (owner rulings W2, P7, P8, M5, M9; replaces rulings A5-I1 and A6-I1 for more than two
+generations; BUILT on EVM, `a40d8acc0`).
+
+- **The home.** For a record held in generation `j` read through generation `k ≥ j`: the oldest `g`, `j ≤ g ≤ k`, that enables
+  `0x0142`, or none; `pqzHomeOf(ua)` (the walk's third word, never a second walk). A later generation that enables `0x0142` hosts
+  its own records and those of earlier generations without a home below it; a home, once a reader sees one, never changes; a reader
+  below the home sees none.
+- **A5-I1 changed.** (1) A later generation may enable `0x0142` although a predecessor does (exempt from the group check; never
+  verify-only). (2) The `pqz-mlwe` group stays unique by the walk: a proof in a home checks `keyOwner` here and through every
+  predecessor (`UAKeyInUse`). (3) `UAKindDisabled(0x0142)` stays only for a generation without `0x0142` behind one with it, for its
+  own records; the deploy builds such a generation only under the owner's override (`GEN_PQZ_OMITTED`, [CTR-UA-64](#CTR-UA-64)).
+  (4) A6-I1's "oldest generation that enables `0x0142`" reads "the record's PQZ home".
+- **Writes and views.** `setPqzKey`, `setPqzScopedKey`, `storePqzPop`, `storePqzScopedPop` are accepted only at the home
+  (`UAUnauthorized` elsewhere), a signed one's signature checked by `holderOf(ua)` ([CTR-UA-59](#CTR-UA-59)). Every PQZ view
+  (`pqzKeyOf`, `pqzKeyAt`, `pqzKeySigOf`, `pqzPopOf`, `pqzKeyUsed`, `pqzKeyLatest`, `recordOf`'s key, `checkedOf`'s proof,
+  `registrationOf`'s proof patch, the scoped views, `pqzOpenKemAt`): home == this ⇒ this generation's, with the holder's for a
+  version not copied (`pqzKeyLatest` the larger, `pqzKeyUsed` either); home elsewhere ⇒ forward to the home; no home ⇒ forward to the
+  holder. The copy of a version (`_pqzRecord`), `_pqzNext` and the KEM hash read the holder, never `predecessor`. A scope's holder
+  list is the line's, oldest first. The `0x0142` list of a generation is **its own** (`uaCount` / `uaAt` / `uaPage` / `uaIndex`
+  never concatenate); the SDK concatenates the lists of every enabling generation on the token registry's walk for the decoy draw,
+  drawing by distinct key hash (owner P19). `PqzStateLib._auditorChecks` asks `kindHome(0x0142) != 0` (line-wide).
+- **Residual (owner P8).** An older home cannot see a newer one, so two UAs of the line may each hold the same `pqz-mlwe` key
+  proven (newer home first, older second); only the holder of the secret key can cause it (`R_REG` binds the UA, if it is a proof
+  of knowledge: UNAUDITED); no code under `src/pqz/` reads `keyOwner` (checked on this tree), so no `PqzCore` property relies on
+  one key per UA by code; indexers flag a hash owned twice. If the review finds such a property, the reader-side rule is taken
+  instead: a key read from home `g` through `k` is usable only if no generation in `(g, k]` has `keyOwner[hash]` set to another UA.
+- **Controller call (owner auto-run 2026-11-19).** `UARegistryAuxLib` had 24 B left: the scoped readers and `pqzPopOf` /
+  `pqzKeySigOf` moved to `UARegistryCoreLib`; `registrationOf` stays in `UARegistryAuxLib`.
+
+<a id="CTR-UA-72"></a>**CTR-UA-72** — **Every generation carries the walked views, the walked interface is frozen, and a
+generation trusts its predecessors fully** (owner rulings W3, W4, W5, P13; M8; BUILT on EVM, `2bbe3380d`, `773ae4988`).
+Generation 1 carries `holderOf`, `kindHome`, `verifierOf`, `verifyOnly`, `pqzHomeOf`, `txGasCap` and a forwarding `expandedKeyOf`;
+each generation's constructor probes every predecessor for them and for `checkedOf`, `memberSigHashOf`, `msigStateOf` (`try` …
+`catch` ⇒ `UAConfig(0)`), so a read of a predecessor fails only by gas. What a successor, the node and the SDK call on a
+predecessor is frozen and pinned by `RegistryWalkInterfaceIsPinned` (53 entries, their full signatures with return types and
+selectors and the list's hash; the error selectors `UAVerifyGas`, `UAKeyNotCached`, `UAKeyCache`, `UAKeyData`, `UAPoP`,
+`UAUnauthorized`, `UAVerifyOnly`; the `UASig` / `MemberSig` encodings; the verifier getters `PRECOMPILE()`, `KEY_FORM()`,
+`verifyCached`; the hold's `GAS_MARGIN` 5,000; `expandedKeyOf`'s pointer form): a change moves the pin old → new and needs the
+owner. Trust: a middle generation answers before those below it, so wrong code there can answer for any id; nothing on chain
+checks "same code"; the guards are the deploy's walk check against the book ([CTR-UA-64](#CTR-UA-64)) and the
+governance-published env ([CTR-UA-67](#CTR-UA-67)); the only recovery from a faulty generation is a sibling line from the one below
+it, losing the records of the faulty generation and every later one.
+
+<a id="CTR-UA-65"></a>**CTR-UA-65** — **The node, indexers, the SDK and clients address the line, not one registry** (owner rulings
+of spec §0.2 – §0.4, W2 and P19 among them; node BUILT, `d019be659`, [job-api.md](../node/job-api.md#NODE-JOB-19), [ops.md](../node/ops.md); scaas-sdk
+and clients SPECIFIED).
+
+- **Node.** `ua_registries = [...]` (every generation, any order) replaces `ua_registry` (refused by name at load); validated on
+  chain at start (`chainUid()`, one generation 1 with predecessor 0, consecutive generations, one line, at most 16; refusals
+  `UA_LINE_*`). `Rule::UaRegistry` is the line's set of addresses; the allow-lists hold per registry. A registration or
+  `cacheExpandedKey` off `kindHome(kind)` is refused before sending, `UA_VERIFY_ONLY`; a key write off `holderOf(ua)` or a PQZ write
+  off `pqzHomeOf(ua)`, `UA_WRONG_GENERATION`; each names its target. `UA_KEY_NOT_CACHED` through a later generation names the
+  holding generation (the parts belong there) and stays `queued`; a part the holder refuses (`UAKeyCache`) is `dead`
+  `UA_KEY_NOT_CACHEABLE` ([NODE-JOB-29](../node/job-api.md#NODE-JOB-29)). A registry-checked job is sent with its simulated limit
+  up to the line's `txGasCap()`, never clamped to `verifyBudget`; `UAVerifyGas` waits `queued` `UA_VERIFY_GAS`, never `dead`.
+- **Indexer.** Reads every generation (`UARegistered` from each, the PQZ key-version events from every generation that enables
+  `0x0142`) and flags a `pqz-mlwe` hash proven for two UAs of the line (`pqz_key_owned_twice`). A verify-only generation emits
+  nothing for its verify-only kinds. The node verifies nothing itself: the token checks on chain.
+- **SDK.** A registration targets `kindHome(kind)`, a key write `holderOf(ua)`, a PQZ write `pqzHomeOf(ua)`; reads follow the
+  off-chain reader rule of [CTR-UA-70](#off-chain-readers). Verify rows of the gas table are keyed by chain, registry address and
+  signer kind, the verify path (`cache` / `precompile` / `fallback`), the depth and the write path as columns, measured per chain
+  per registry; the quote takes the row of the registry the token binds; `txGasCap` per chain. The PQZ decoy draw concatenates the
+  `0x0142` lists of every enabling generation on the token registry's walk, by distinct key hash.
+- **Clients.** Signing is unchanged. `ua-rs` and every `ua-*` registration builder check the target against a `kindHome` value the
+  caller passes (no RPC in `ua-*`; owner C6); only scaas-sdk reads it from the chain. A client choosing a token release shows its
+  registry and that registry's verify path for the holder's kind.
+
+<a id="CTR-UA-66"></a>**CTR-UA-66** — **One principle on every family: a later registry or verifier deployment may verify, with
+its own verifier, records an earlier deployment holds for the same kind, reading them and writing nothing** (controller proposal;
+EVM BUILT as above; every other family PLANNED in its round, [networks/README.md](../networks/README.md#registry-line-families)).
+Equivalence as [CTR-UA-62](#CTR-UA-62); nothing deployed is upgraded; the holding deployment keeps its software path
+([ARCH-POS-18](../decisions.md#ARCH-POS-18)).
 
 ### 1.9 Verifiers
 
@@ -2098,8 +2460,8 @@ native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by
 | `bls12381-minsig` | G1 sig (128) | `HashToCurve.hashToG1(ua_msg, DST)` with `DST_SIG = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"`, PoP uses `…_POP_`; sig in subgroup, ≠ O |
 | `bls12381-multi` | `σ (128) ‖ signers (32)` (160; named `signature` / `signers` off chain) | [CTR-UA-50](#CTR-UA-50): `σ` against `apk(S)` on `memberDigest(ua, ua_msg)` under `DST_MULTI_SIG`, `W(S) ≥ t` (`verify`), every signer necessary on stored paths (`verifyMinimal`); `p = ua ‖ s` read from `keyPtr`; σ in subgroup, ≠ O |
 | `bls-bn254-minsig` | G1 sig (64) | `mapToG1("SCAAS-UA-BLS-BN254-SIG-V1" ‖ ua_msg)` (POP label for PoP); pairing `0x08` |
-| `msig` | `auth.members`, `MemberSig{uint16 index; InnerSig[] members; bytes sig}` with strictly increasing `index`; the structure is read from the record ([CTR-UA-36](#CTR-UA-36)); a token's `bytes auth` until Part C: `abi.encode(keyData, sig)` with `sig` = `abi.encode(MemberSig[] sigs)` | for each: member `kind,id` from the structure; every `MemberSig.keyData` empty (else `UAUnauthorized`; [CTR-UA-33](#CTR-UA-33)); native ⇒ ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; registered (derived) ⇒ the key from the member's own record: `vk` at its `keyPtr` (stored kinds), else the key data in its registration blob (classical kinds; every member is registered, step 4, and records are immutable); a member of a kind gen 2 does not enable goes to gen 1 with the empty key data (gen 1 reads its record); verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound); an `auth` or `MemberSig[]` that does not ABI-decode reverts without data (fails closed) |
-| `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | ML-DSA: an EIP-8355 precompile if probed, else Solidity on the cached expanded key (`verifyCached`, parts by EXTCODECOPY; P6c; never the uncached FIPS-key verify: an incomplete cache is `UAKeyNotCached`, [CTR-UA-23](#CTR-UA-23)); FN-DSA, SLH-DSA (on SHA-256 `0x02`): Solidity; `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context, Falcon `ua_msg` ([CTR-UA-23](#CTR-UA-23); verifiers BUILT, P6a; registry BUILT, P6c) |
+| `msig` | `auth.members`, `MemberSig{uint16 index; InnerSig[] members; bytes sig}` with strictly increasing `index`; the structure is read from the record ([CTR-UA-36](#CTR-UA-36)); a token's `bytes auth` until Part C: `abi.encode(keyData, sig)` with `sig` = `abi.encode(MemberSig[] sigs)` | for each: member `kind,id` from the structure; every `MemberSig.keyData` empty (else `UAUnauthorized`; [CTR-UA-33](#CTR-UA-33)); native ⇒ ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; registered (derived) ⇒ the key from the member's own record: `vk` at its `keyPtr` (stored kinds), else the key data in its registration blob (classical kinds; every member is registered, step 4, and records are immutable); a member held in another generation is checked by this generation's verifier where its kind is verify-only here, else by `holderOf(member)` directly with the empty key data ([CTR-UA-60](#CTR-UA-60)); verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound); an `auth` or `MemberSig[]` that does not ABI-decode reverts without data (fails closed) |
+| `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | ML-DSA: an EIP-8355 precompile if probed (the chain's own or a Final address; a Draft address only under the owner-confirmed flag, [CTR-UA-69](#CTR-UA-69)), else Solidity on the cached expanded key (`verifyCached`, parts by EXTCODECOPY; P6c; never the uncached FIPS-key verify: an incomplete cache is `UAKeyNotCached`, [CTR-UA-23](#CTR-UA-23)); FN-DSA, SLH-DSA (on SHA-256 `0x02`): Solidity; `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context, Falcon `ua_msg` ([CTR-UA-23](#CTR-UA-23); verifiers BUILT, P6a; registry BUILT, P6c) |
 | `zether-bls12381` | `R ‖ z` (160) | Zether Schnorr with tag `SCAAS-ZETHER-SCHNORR-V1` over `ua_msg` — never the UA Schnorr tag, so a Zether key never produces a `schnorr-*` signature |
 
 Members of `msig` (kinds ∈ MEMBER) may be native EOAs, native contracts (Safe, `SmartKeyAccount`), or registered
@@ -2121,8 +2483,9 @@ Per-chain enablement:
 | scheme `0x0142` `pqz-mlwe` (PQZ key of a PQ signer) | SCaaS testnet only (`PqzKeyVerifier` refuses other chains) | [CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01), [CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10) |
 
 The enabled set, each kind's measured `verifyCap` and the chain's `verifyBudget` are constructor arguments (verifier
-address 0 = disabled); the chain profile publishes them; clients read `kindEnabled` and the caps before offering a kind
-or building a structure. `DeployBase` (`_deployUARegistry`, UA-3) deploys generation 1 on every chain it runs on with
+address 0 = disabled); the chain profile publishes them; clients read the caps before building a structure and offer
+registration of a kind on a registry only where `kindHome(kind) == registry` (`kindEnabled` is local and also true for a
+kind carried verify-only, [CTR-UA-59](#CTR-UA-59)). `DeployBase` (`_deployUARegistry`, UA-3) deploys generation 1 on every chain it runs on with
 this table's set and the gen-1 default caps; a kind whose probe fails gets no verifier (CTR-UA-23).
 
 <a id="gen1-kind-gate"></a>**Gen-1 kind gate** (owner ruling 2026-10-31, option (a); **BUILT**, ua-portable-soroban G1): every gen-1 deploy
@@ -2152,7 +2515,7 @@ deployed from a build carrying every kind built for Soroban at that time" (so af
 ### 1.10 EIP-7702 and chain identity
 
 <a id="eip7702"></a>
-<a id="CTR-UA-29"></a>**CTR-UA-29** — **The registry keeps an on-chain list of the UAs of each kind** (owner 2026-10-17). Purpose: wallets pick decoys for PQZ and classical Zether multi-recipient transfers (op 7 / Z-multi) from the UAs registered under the token's kind; on chain because event logs can be pruned on a long-running chain (EIP-4444), and in the registry because one UA serves many tokens and purposes. Every registration appends the UA at `uaCount(kind)` (assigned by the registry, `Record.index`, in the record's free 40 bits), every kind including `msig` (owner 2026-10-17: verified by its threshold as usual). Views `uaCount`, `uaAt`, `uaPage(kind, start, n)` (clipped at the end), `uaIndex`; how a wallet reads the list (all, ranges, random) is its own decision. **Decoy selection rule** (on-chain review W-C, 2026-10-19; controller proposal, owner may override): registration is permissionless, so an observer can register many UAs of a kind (a PQZ holder costs one PQ registration, ≈ 5 M gas, free on the SCaaS testnet) and recognise its own decoys; a wallet therefore draws decoys only from UAs active in the token (a pending entry, a debit or a rollover in the token within the wallet's look-back window), weighted by recency; the filter adds gas-level cost only (a pending entry from `mtxShield(sybil, 1)` costs about 52–74 k gas, the unit is recoverable, a rollover is permissionless, and a sybil picked once as a decoy is credited by the honest op 7 for free), a wallet that wants more counts only holder-authorised activity (a `sendCounter` move) in the window, and never from UAs registered after the wallet's last sync point (there is no on-chain grouping left to cap: one key per UA); threat S30. **Change (owner 2026-11-07):** the activity filter is an **option** of the wallet, not a requirement: by default a wallet draws decoys uniformly from the kind's list (all UAs registered up to its last sync point, never later ones); the token-activity filter (recent activity, recency weight, holder-authorised activity) may be turned on by the wallet or the holder; the trade-off (sybil decoys an observer can recognise) is stated to the holder. **Change (group 3g, owner 2026-11-06):** a UA whose latest PQZ key version is pending ([CTR-UA-42](#CTR-UA-42)) is never drawn as a PQZ decoy, and UAs without a recent `UAPqzKeyCurrent` come first (`clientkeys` `pqzDecoyCandidates`, BUILT). **PQZ-capable list:** a PQZ holder is also appended to the list of key `0x0142`, once per UA whatever its number of key versions ([CTR-UA-42](#CTR-UA-42)) (`uaCount(0x0142)`, `uaAt(0x0142, i)`, `uaPage(0x0142, …)`; no reverse index, `Record.index` stays the kind-list position; ≈ +27 k gas per holder registration), so PQZ decoy legs are drawn from one anonymity set of recipients that all have a PQZ key, across the signer kinds; it lives in the generation that enables `0x0142`. Classical Zether decoys keep using the `0x0141` list. Cost ≈ +27 k gas per registration (one new slot + the counter); registration stays relayable (no `msg.sender` state). A kind a generation does not enable is answered by its predecessor (a single-key kind lives in exactly one generation; `msig`, enabled in both, has one list per generation). Native ids are not listed and are never registered automatically (they cannot be decoys: no encryption key). Status: BUILT and deployed on the SCaaS testnet (2026-10-17: `UARegistry` `0x4bfb288c19f63b71ae22d326d39c865836c40d10` with the verifiers, factory and PQZ tokens redeployed; e2e 92 ok incl. the list checks, `smartcontracts/evm/runs/2026-10-17-p6g-op7-7622.txt`).
+<a id="CTR-UA-29"></a>**CTR-UA-29** — **The registry keeps an on-chain list of the UAs of each kind** (owner 2026-10-17). Purpose: wallets pick decoys for PQZ and classical Zether multi-recipient transfers (op 7 / Z-multi) from the UAs registered under the token's kind; on chain because event logs can be pruned on a long-running chain (EIP-4444), and in the registry because one UA serves many tokens and purposes. Every registration appends the UA at `uaCount(kind)` (assigned by the registry, `Record.index`, in the record's free 40 bits), every kind including `msig` (owner 2026-10-17: verified by its threshold as usual). Views `uaCount`, `uaAt`, `uaPage(kind, start, n)` (clipped at the end), `uaIndex`; how a wallet reads the list (all, ranges, random) is its own decision. **Decoy selection rule** (on-chain review W-C, 2026-10-19; controller proposal, owner may override): registration is permissionless, so an observer can register many UAs of a kind (a PQZ holder costs one PQ registration, ≈ 5 M gas, free on the SCaaS testnet) and recognise its own decoys; a wallet therefore draws decoys only from UAs active in the token (a pending entry, a debit or a rollover in the token within the wallet's look-back window), weighted by recency; the filter adds gas-level cost only (a pending entry from `mtxShield(sybil, 1)` costs about 52–74 k gas, the unit is recoverable, a rollover is permissionless, and a sybil picked once as a decoy is credited by the honest op 7 for free), a wallet that wants more counts only holder-authorised activity (a `sendCounter` move) in the window, and never from UAs registered after the wallet's last sync point (there is no on-chain grouping left to cap: one key per UA); threat S30. **Change (owner 2026-11-07):** the activity filter is an **option** of the wallet, not a requirement: by default a wallet draws decoys uniformly from the kind's list (all UAs registered up to its last sync point, never later ones); the token-activity filter (recent activity, recency weight, holder-authorised activity) may be turned on by the wallet or the holder; the trade-off (sybil decoys an observer can recognise) is stated to the holder. **Change (group 3g, owner 2026-11-06):** a UA whose latest PQZ key version is pending ([CTR-UA-42](#CTR-UA-42)) is never drawn as a PQZ decoy, and UAs without a recent `UAPqzKeyCurrent` come first (`clientkeys` `pqzDecoyCandidates`, BUILT). **PQZ-capable list:** a PQZ holder is also appended to the list of key `0x0142`, once per UA whatever its number of key versions ([CTR-UA-42](#CTR-UA-42)) (`uaCount(0x0142)`, `uaAt(0x0142, i)`, `uaPage(0x0142, …)`; no reverse index, `Record.index` stays the kind-list position; ≈ +27 k gas per holder registration), so PQZ decoy legs are drawn from one anonymity set of recipients that all have a PQZ key, across the signer kinds; each generation that enables `0x0142` keeps its own list (its own homed records), never a concatenation; the SDK concatenates the lists of every enabling generation on the token registry's walk for the decoy draw, by distinct key hash ([CTR-UA-71](#CTR-UA-71)). Classical Zether decoys keep using the `0x0141` list. Cost ≈ +27 k gas per registration (one new slot + the counter); registration stays relayable (no `msg.sender` state). A kind a generation does not register (not enabled, or carried verify-only) is answered by its home, `kindHome(kind)` (a single-key kind registers in exactly one generation; `msig`, re-enabled in every generation, has one list per generation; [CTR-UA-70](#CTR-UA-70)). Native ids are not listed and are never registered automatically (they cannot be decoys: no encryption key). Status: BUILT and deployed on the SCaaS testnet (2026-10-17: `UARegistry` `0x4bfb288c19f63b71ae22d326d39c865836c40d10` with the verifiers, factory and PQZ tokens redeployed; e2e 92 ok incl. the list checks, `smartcontracts/evm/runs/2026-10-17-p6g-op7-7622.txt`).
 
 <a id="CTR-UA-24"></a>**CTR-UA-24** — **An EIP-7702 delegated EOA is an EOA everywhere: it signs by its own key only and never
 runs code for SCaaS.** One classification by code at verify time, on every EVM path: empty code, or code that is exactly the
@@ -2741,7 +3104,7 @@ EVM tests:
 | T-REG-3 | the same `register` calldata from two senders ⇒ identical storage diff; the hash-commit form of the same `pop` registers the same id, `kemKeyAt(ua, 0)` empty until anyone sends `setKemKey(ua, 0, key, UASig())` |
 | T-REG-3b | (portable PoP) a PQZ key or KEM record stripped or swapped by a front-runner ⇒ `UAPoP`; `R_REG` over another UA's digest ⇒ `UAPoP`; the same PQZ key on two UAs (an `msig` and an ML-DSA UA) ⇒ `UAKeyInUse` once both are proven (an unproven listing blocks nobody); a non-holder (`secp256k1`, `slhdsa128s`, Zether, classical-dominant `msig`) with a key ⇒ `UAPqzHolder`; a PQ-eligible `msig` without `pop` ⇒ `UAPoP`; a `pqzKey` where `0x0142` is disabled ⇒ stored unproven, and `UAKindDisabled(0x0142)` on a gen 2 in front of a gen 1 that enables it; gen-2 `recordOf` forwards the pointer; `uaCount(0x0142)` order |
 | T-REG-3c | UA-8 (`test/ua/UARegistryUaPortable.t.sol`): `registrationOf` returns exactly the `register` arguments after later `setKemKey`s; the same registration is accepted on two registries with different chain ids, `chainUid`s and addresses (the copy from state); the `pop` covers every attribute; `storePqzPop` (hash check, no-op, proves on a registry with the verifier); `setPqzKey` once, portable; `setKemKey` any order, write-once, 1,601 B (scheme byte + key), holders; an `msig` with a native member signs the typed digest; the gen-2-over-gen-1 paths; `checkedOf` |
-| T-REG-4 | a gen-2 registry sees gen-1 records; `UAKeyInUse` across generations; gen 2 refuses (`UAKindDisabled`) every kind or keyHash group gen 1 enables, so registering in gen 1 after gen 2 for a shared group is impossible by construction; `msig` re-enabled in gen 2 gives the same `kind` and `keyPtr` (its own `registeredAt`); SCaaS testnet `mldsa65` + PQZ key in gen 1 |
+| T-REG-4 | a later generation sees every predecessor's records (`holderOf`, a line of three and more, `test/ua/UARegistryLine.t.sol`); `UAKeyInUse` across generations; a later generation refuses (`UAConfig(kind)`) a kind a predecessor enables unless it is flagged verify-only, refuses the flag otherwise, refuses the impossible key form (through a middle verify-only generation too) and a verify-only verifier without a precompile; a verify-only kind's `register*` and `cacheExpandedKey` revert `UAVerifyOnly`, its lists and `expandedKeyOf` answer from its home; every keyHash group a predecessor enables stays refused, so registering in two generations for a shared group is impossible by construction; `0x0142` may be enabled again ([CTR-UA-71](#CTR-UA-71)); `msig` re-enabled in a later generation gives the same `kind` and `keyPtr` (its own `registeredAt`); generation 16 deploys, 17 is `UAConfig(0)`; SCaaS testnet `mldsa65` + PQZ key in gen 1 ([CTR-UA-58](#CTR-UA-58), [CTR-UA-70](#CTR-UA-70)) |
 | T-REG-5 | invariants: registry balance 0, no record ever changes, `uaOf(record.keyData) == ua` |
 | T-REG-6 | MuSig2: wrong `Q`, a bad hint, unsorted keys ⇒ `UAKeyData`/`UAPoP`; FROST: one bad PoK, `Y ≠ Σ C_i0`, a commitment vector of the wrong length ⇒ refused; the attack of naming one's own key as `Q` with the board's list ⇒ refused |
 | T-AUTH-1 | `requireAuthorized` per kind × purpose; a wrong purpose fails; a wrong kind's tag fails |
