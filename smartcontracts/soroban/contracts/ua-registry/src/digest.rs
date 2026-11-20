@@ -98,6 +98,7 @@ pub fn kind_name(env: &Env, kind: u32) -> String {
         0x0112 => "musig2-bn254",
         0x0113 => "frost-bn254",
         0x0120 => "msig",
+        0x0121 => "bls12381-multi", // named here as EVM, refused by `register` until the Soroban round
         0x0130 => "mldsa44",
         0x0131 => "mldsa65",
         0x0132 => "fndsa512",

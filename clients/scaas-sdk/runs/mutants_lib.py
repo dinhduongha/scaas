@@ -74,7 +74,9 @@ def failure_line(text):
                 r"(?i)^\S*error[^\n]*"):
         m = re.search(pat, text, re.M)
         if m:
-            return m.group(0).strip().replace("|", "/")[:160]
+            # no machine path in a committed record: the worktree relative, the home `~`, a temp dir `<tmp>`
+            line = m.group(0).strip().replace(f"{ROOT}/", "").replace(str(Path.home()), "~")
+            return re.sub(r"/tmp/\S*", "<tmp>", line).replace("|", "/")[:160]
     return "-"
 
 
