@@ -75,6 +75,11 @@ contract DeployHarness is DeployBase {
         deployPqChat = on;
     }
 
+    /// `DEPLOY_PQVAULT` for the next `deploy` (PqVault plan V7).
+    function setPqVault(bool on) external {
+        deployPqVault = on;
+    }
+
     /// `NOTICE_PERIOD` for the next `deploy` (0: a release is usable at once).
     function setNotice(uint64 n) external {
         noticePeriod = n;

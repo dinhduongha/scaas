@@ -71,6 +71,8 @@
 #                            (plan 3c T92: its body module PqChatTopics by CREATE2, class env (3, 0) with the module in libs,
 #                            release 1, the switch on; one instance when NOTICE_PERIOD=0; JSON pqchat_topics,
 #                            pqchat_implementation, pqchat_instance), replayed by DeploySend.s.sol like every other transaction.
+#                            DEPLOY_PQVAULT=1 adds PqVault (PqVault plan V7: class env (4, 0), no body module, release 1, the
+#                            switch on; one instance when NOTICE_PERIOD=0; JSON pqvault_implementation, pqvault_instance).
 #                            T66b: each token release and the DEX come with their body modules (P, T, A, W, Z, Q; the
 #                            DEX's D), each its own CREATE2 transaction through the deterministic deployer with DEPLOY_SALT
 #                            (the same address on every chain) and its own gate, pinned in the release's env after the

@@ -31,6 +31,8 @@ import {ComplianceRegistry} from "../src/regulated/ComplianceRegistry.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {PqChat} from "../src/pqchat/PqChat.sol";
 import {IPqChat} from "../src/pqchat/IPqChat.sol";
+import {PqVault} from "../src/pqvault/PqVault.sol";
+import {IPqVault} from "../src/pqvault/IPqVault.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
 import {UARegistryCoreLib} from "../src/ua/UARegistryCoreLib.sol";
@@ -116,6 +118,10 @@ abstract contract DeployBase is DeployBook {
     /// @notice `DEPLOY_PQCHAT` env (default false): also register `PqChat` (UA-7, D22: class 3, kind 0 on the generic path) and,
     ///         when the chain's notice period is 0, create one instance (`_deployPqChat`, plan 3c T92).
     bool internal deployPqChat;
+    /// @notice `DEPLOY_PQVAULT` env (default false): also register `PqVault` (CTR-PQV-02, CTR-PQV-13: class 4, kind 0 on the generic
+    ///         path, no body module) and, when the chain's notice period is 0, create one instance (`_deployPqVault`, PqVault
+    ///         plan V7).
+    bool internal deployPqVault;
     /// @notice `DEPLOY_PQZ` env (default false; on for the SCaaS testnet, owner 2026-11-15): also the PQZ releases 4, 5, 12, 13
     ///         on this factory (`_deployPqz`), their one dependency `PQZ_KEY_VERIFIER`.
     bool internal deployPqz;
@@ -409,6 +415,7 @@ abstract contract DeployBase is DeployBook {
         deployWrapped = vm.envOr("DEPLOY_WRAPPED", false);
         deployRegulated = vm.envOr("DEPLOY_REGULATED", false);
         deployPqChat = vm.envOr("DEPLOY_PQCHAT", false);
+        deployPqVault = vm.envOr("DEPLOY_PQVAULT", false);
         deployPqz = vm.envOr("DEPLOY_PQZ", false);
         pqzKeyVerifier = vm.envOr("PQZ_KEY_VERIFIER", address(0));
         mldsa44Verifier = vm.envOr("MLDSA44_VERIFIER", address(0));
@@ -545,6 +552,7 @@ abstract contract DeployBase is DeployBook {
             _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
         }
         if (deployPqChat && register && !configureOnly) _deployPqChat(f, address(reg));
+        if (deployPqVault && register && !configureOnly) _deployPqVault(f, address(reg));
         if (deployPqz && register && !configureOnly) _deployPqz(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployZether && !configureOnly) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         if (register && !configureOnly && factoryAdminNext != bytes32(0)) {
@@ -652,6 +660,46 @@ abstract contract DeployBase is DeployBook {
                 id, keccak256("scaas.pqchat.instance.1"), abi.encodeCall(IPqChat.initialize, (bytes32(0)))
             );
             vm.serializeAddress("deploy", "pqchat_instance", inst);
+        }
+    }
+
+    /// @notice PqVault plan V7 (CTR-PQV-02, CTR-PQV-13): `PqVault` on the factory's generic path, as `PqChat` with no body module:
+    ///         the class env 1 of `(4, 0)` (the registry; `params[0]` the chain's declared code-size limit, `CHAIN_CODE_LIMIT`),
+    ///         release 1 from the chain-neutral init code with empty `implArgs`, the `(4, 0)` switch on, and one instance owned by
+    ///         no UA when the notice period lets it be created now (JSON `pqvault_instance`; else created after the notice period
+    ///         by anyone). JSON `pqvault_implementation`. **UNAUDITED.**
+    function _deployPqVault(OpenFactory f, address reg) internal {
+        IFactoryToken.Env memory e;
+        e.registry = reg;
+        e.params = new bytes32[](1);
+        e.params[0] = bytes32(_chainCodeLimit());
+        f.publishClassEnv(4, 0, 1, f.chainUid(), e);
+        IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(4, 0, 1);
+        bytes memory code = type(PqVault).creationCode;
+        bytes memory call = abi.encodeCall(
+            f.deployImplementation,
+            (id, 1, IPqVault.initialize.selector, type(IPqVault).interfaceId, code, "", f.chainUid())
+        );
+        _requireReleaseGas("PqVault", address(f), call);
+        address impl = f.deployImplementation(
+            id, 1, IPqVault.initialize.selector, type(IPqVault).interfaceId, code, "", f.chainUid()
+        );
+        _releaseRow(
+            "PqVault",
+            4,
+            0,
+            1,
+            impl,
+            keccak256(abi.encodePacked(code, abi.encode(id, address(f), bytes("")))),
+            keccak256("")
+        );
+        f.setClassKindEnabled(4, 0, true, f.chainUid());
+        vm.serializeAddress("deploy", "pqvault_implementation", impl);
+        if (f.classReleaseOf(id).usableFrom <= block.timestamp) {
+            address inst = f.createInstance(
+                id, keccak256("scaas.pqvault.instance.1"), abi.encodeCall(IPqVault.initialize, (bytes32(0)))
+            );
+            vm.serializeAddress("deploy", "pqvault_instance", inst);
         }
     }
 

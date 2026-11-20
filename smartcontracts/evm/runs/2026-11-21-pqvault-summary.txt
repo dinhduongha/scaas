@@ -15,3 +15,5 @@ V6 | forge test/pqvault PqVaultInvariant.t.sol (64 runs x depth 32, fail_on_reve
 V6 | forge test/pqvault PqVaultGas.t.sol (GAS_MEASURE=true, then pinned) | V6 tree | 0 | 8 passed 0 failed 0 skipped (forge)
 V6 | size (size_gate.py --self-test; forge build src --sizes; size_gate.py) | V6 tree | 0 | size gate: 0 error(s), 176 contracts; PqVault 30,152 B runtime, 30,845 B init
 V6 mutants | mutants.py, all 45 on the V6 tree (the gas pins left out of a mutant's run) | V6 tree | - | 44 killed; create-min-member-0 survived: equivalent (see V3)
+V7 | forge test/governance GovDeploy, SelectorAudit, SingletonRescue (red first: setPqVault absent, compile error) | V7 tree | 0 | 33 passed 0 failed 0 skipped (forge)
+V7 mutants | the (4, 0) switch dropped from _deployPqVault; PqVault's createItems row dropped from selector_audit.json | V7 tree | - | 2 of 2 killed (test_deployPqVaultPath; test_everySelectorIsClassified)
