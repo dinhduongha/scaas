@@ -169,7 +169,8 @@ and the SDK never converts a token fee to or from gas. `submit` signs once, writ
 (owner 2026-11-19, ruling A). Before
 `submit` a quote shows the payer, the gas limit, the maximum fee per gas and the maximum cost; the user confirms it; above the profile's
 caps it is `FeeAboveCap`, and the caps come from the SDK's configuration, never from the answering endpoint. A gas limit above the
-chain's per-transaction cap or the block limit is `GasAboveTxCap` (a PQ registration is split as the node splits it); a payer that is an
+chain's per-transaction cap (its regular part: EIP-8037; the quote's `regular_gas`, from the rows' `regular` figures, else the
+whole) or the block limit is `GasAboveTxCap` (a PQ registration is split as the node splits it); a payer that is an
 EIP-7702 designator is `PayerDelegated`; the payer's address is linked on chain to the subject, and a holder without a native key has no
 self-relay path. The job API is server-side only, never in an end-user build ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)). With no
 gateway for the entry and no payer: `SubmitPathNone`. **Write ahead:** sign, write the operation with its signed body (public data) to
@@ -191,9 +192,10 @@ regular and state gas, no verify part); `register_bls_multi` aggregates the PoP 
 part), simulates, raises the gas to the simulation's with the margin where it needs more (G3's rule; the PoP check's gas
 pre-check asks the verifier's whole `POP_GAS` up front), and self-relays (no operation row: a registration holds no lane). An
 attached signature of unknown kind counts a group's `members` at the cap 64. Rules: [CTR-UA-50](../contracts/accounts.md#CTR-UA-50),
-[CTR-UA-52](../contracts/accounts.md#CTR-UA-52), [CTR-UA-56](../contracts/accounts.md#CTR-UA-56). Open: the per-transaction cap
-check compares regular + state gas with the profile's `tx_gas_cap`, so under a 2^24 cap a registration of more than about 24
-members is `GasAboveTxCap`.
+[CTR-UA-52](../contracts/accounts.md#CTR-UA-52), [CTR-UA-56](../contracts/accounts.md#CTR-UA-56). The per-transaction cap holds the
+registration's regular gas only (EIP-8037; the row's `regular` and `per_item.regular`, controller call, owner auto-run
+2026-11-19): a group of 64 members quotes a gas limit above 2^24 (about 45 M with the margin, regular about 14 M), so it needs
+a block gas limit above that and an app `Limits::max_gas` above its default 2^24.
 
 <a id="CLI-SDK-18"></a>**CLI-SDK-18** — **An operation ends only on a chain fact** (follows [CLI-RPC-09](scaas-rpc.md#CLI-RPC-09);
 SPECIFIED). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,

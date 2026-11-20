@@ -278,7 +278,8 @@ impl Op {
     }
 
     /// The self-relay quote of `registerBlsMulti` of the group `key_data` (`0x` hex) on `chain` by `payer` (spec §8.4): the
-    /// registration's base row `gas + per_item × n` ([`super::gas::registration_gas`]: regular and state gas, no verify part)
+    /// registration's base row `gas + per_item × n` ([`super::gas::registration_gas`]: regular and state gas, no verify part;
+    /// its regular bound held to the per-transaction cap, EIP-8037)
     /// with the intrinsic cost and the calldata, the margin: the cost by n before the members' parts exist. The row is gas
     /// used; the PoP check's gas pre-check asks the verifier's whole `POP_GAS` up front, so a small group's transaction needs
     /// more gas than it uses: [`Op::register_bls_multi`] raises the limit to the simulation's. `GasUnquoted` without a row, `Argument` for invalid key data or
@@ -311,15 +312,8 @@ impl Op {
                     "registerBlsMulti",
                     n as u64,
                 )?
-                .map(|(g, from)| {
-                    let bytes = (cd.len() as u64).saturating_mul(super::gas::PER_BYTE);
-                    (
-                        super::gas::with_margin(
-                            g.saturating_add(super::gas::INTRINSIC)
-                                .saturating_add(bytes),
-                        ),
-                        super::gas::GasSources::both(from),
-                    )
+                .map(|(g, r, from)| {
+                    super::gas::with_calldata(g, r, cd.len(), super::gas::GasSources::both(from))
                 })
                 .ok_or(SdkError::GasUnquoted)?;
                 self_relay(
@@ -385,13 +379,15 @@ impl Op {
                 if gas > sdk.limits.max_gas {
                     return Err(SdkError::SignedGasAboveCap);
                 }
+                // the raise is the gas the PoP check asks up front: regular gas
+                let regular = quote.regular_gas.saturating_add(gas - quote.gas_limit);
                 let (profile, _, _) = evm(&sdk, &chain)?;
-                if profile.tx_gas_cap.is_some_and(|c| gas > c) {
-                    return Err(SdkError::GasAboveTxCap);
-                }
+                let block = pool.block_gas().await.map_err(sim)?;
+                super::quote::above_caps(&profile, regular, gas, block.limit)?;
                 let cost = super::quote::check_caps(&sdk, gas, fee)?;
                 let quote = SubmitQuote {
                     gas_limit: gas,
+                    regular_gas: regular,
                     gas: Some(gas),
                     max_cost: cost.to_string(),
                     ..quote.clone()

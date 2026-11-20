@@ -730,6 +730,7 @@ fn a_signer_cannot_bypass_the_cap() {
         &bytes(&above["keyData"]),
         &b32(&above["expectedChallenge"]),
         &blob,
+        false,
         false
     ));
     let long = Raw {

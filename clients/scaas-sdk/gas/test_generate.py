@@ -143,6 +143,34 @@ def main():
     assert all((r["sig_bytes"], r["margin"], r["stand_in"]) == (128, 7, "si") for r in rows), rows
     assert all(r["source"].startswith("m.json#verify_0x0101_delta + ") for r in rows), rows
     assert generate.line_rows({"margin": {}}, m, "m.json") == [], "no line in the input list"
+    # EIP-8037: the regular part. Uncounted: the worst `_regular` of the variants, rounded up; a variant without it: none
+    g = {**lanes("token", "mtxPay", "normal", 10_000), **lanes("token", "mtxPay", "normal_reg", 12_000)}
+    g.update({k + "_regular": v - 4_500 for k, v in list(g.items())})
+    g["token_mtxPay_ua_normal"] = 15_000
+    t = table(g, kinds=("token",))
+    assert t[("token", "mtxPay", True)]["regular"]["measured"] == 7_500, t[("token", "mtxPay", True)]
+    assert t[("token", "mtxPay", True)]["regular"]["gas"] == 8_000
+    del g["token_mtxPay_fresh_normal_reg_regular"]
+    t = table(g, kinds=("token",))
+    assert "regular" not in t[("token", "mtxPay", True)], "a variant without the split"
+    assert t[("token", "mtxPay", False)]["regular"]["measured"] == 7_400, "the used lane has its own"
+    # counted: the steepest neighbouring slope of any variant and lane, the largest own-lane point less slope × N
+    c = {**lanes("account", "reg", "registry", 1_000), "account_reg_per_item_registry": 400}
+    c["account_reg_ua_registry"] = 2_000
+    pts = {2: 400, 16: 2_000, 32: 4_000, 64: 7_700}  # slopes 114.3, 125, 115.6
+    for n, r in pts.items():
+        c[f"account_reg_n{n}_fresh_registry_regular"] = r
+        c[f"account_reg_n{n}_used_registry_regular"] = r - 50
+    c["account_reg_n16_ua_registry_regular"] = 2_000
+    c["account_reg_n32_ua_registry_regular"] = 4_100  # 131.25: the steepest
+    t = table(c, kinds=("account",), entries=("reg",), per_item={"account:reg": "members"})
+    r = t[("account", "reg", True)]
+    assert r["per_item"]["regular"] == 132, r
+    assert r["regular"]["measured"] == max(v - 132 * n for n, v in pts.items()), r  # 400 - 264 = 136
+    assert t[("account", "reg", False)]["regular"]["measured"] == 86, "the used lane's points"
+    c2 = {k: v for k, v in c.items() if "_n" not in k}
+    r = table(c2, kinds=("account",), entries=("reg",), per_item={"account:reg": "members"})[("account", "reg", True)]
+    assert "regular" not in r and "regular" not in r["per_item"], "no points: none"
     print("[test_generate] ok")
 
 

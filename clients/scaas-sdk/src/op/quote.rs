@@ -3,7 +3,7 @@
 //! maximum cost beside the operation's own fee; above the profile's caps (from the SDK's configuration, never the answering
 //! endpoint) `FeeAboveCap`; a gas limit above the chain's per-transaction cap or block limit `GasAboveTxCap`; a payer that is an
 //! EIP-7702 designator `PayerDelegated`.
-use super::gas::{GasFrom, GasSources};
+use super::gas::{Figure, GasFrom, GasSources};
 use super::prepared::{envelope, Prepared};
 use super::{evm, key, sim, KeyRef, Op};
 use crate::{Sdk, SdkError};
@@ -32,6 +32,10 @@ pub struct SubmitQuote {
     pub payer: Option<String>,
     /// the self-relay transaction's gas limit (`gas`); 0 on the gateway path, where the holder sends no transaction
     pub gas_limit: u64,
+    /// the bound of `gas_limit`'s regular part, with the margin (EIP-8037; controller call, owner auto-run 2026-11-19): the part
+    /// held to the profile's `tx_gas_cap` (EIP-7825 caps the regular gas only), the whole `gas_limit` where the split is not
+    /// known (a native send's estimate, an app's figure); 0 on the gateway path
+    pub regular_gas: u64,
     /// what the operation costs in gas, with the margin, on every path (owner 2026-11-19): on a relayed path for the user and
     /// the app only, to choose the token fee; it is not sent to the gateway. `None`: unquoted (no figure anywhere)
     pub gas: Option<u64>,
@@ -108,7 +112,7 @@ pub(crate) async fn self_relay(
     data: Bytes,
     fee_to_relayer: String,
     relayed: bool,
-    pinned: Option<(u64, GasSources)>,
+    pinned: Option<super::gas::Figure>,
 ) -> Result<SubmitQuote, SdkError> {
     let (profile, _, pool) = evm(sdk, chain)?;
     let from = payer_address(sdk, payer)?;
@@ -117,24 +121,26 @@ pub(crate) async fn self_relay(
     if relayed && delegated(&pool.code(from).await.map_err(sim)?) {
         return Err(SdkError::PayerDelegated);
     }
-    let (gas, gas_from) = if let Some(g) = pinned {
+    let Figure {
+        gas,
+        regular,
+        from: gas_from,
+    } = if let Some(g) = pinned {
         g
     } else if relayed {
         return Err(SdkError::GasUnquoted);
     } else if data.is_empty() && pool.code(to).await.map_err(sim)?.is_empty() {
-        (21_000, GasSources::both(GasFrom::Estimate)) // a plain transfer to an account without code
+        Figure::whole(21_000, GasSources::both(GasFrom::Estimate)) // a plain transfer to an account without code
     } else {
         // the estimate with the value sent (T13b ruling 5): a payable path's cost, a non-payable target's revert
         let g = pool
             .simulate_value(from, to, value, data)
             .await
             .map_err(sim)?;
-        (g, GasSources::both(GasFrom::Estimate))
+        Figure::whole(g, GasSources::both(GasFrom::Estimate))
     };
     let block = pool.block_gas().await.map_err(sim)?;
-    if profile.tx_gas_cap.is_some_and(|c| gas > c) || gas > block.limit {
-        return Err(SdkError::GasAboveTxCap);
-    }
+    above_caps(&profile, regular, gas, block.limit)?;
     let fees = pool.fees(Purpose::Plain).await?;
     let cost = check_caps(sdk, gas, fees.max_fee_per_gas)?;
     // the endpoints' nonce (under `strict_majority` the agreed committed one), never below what this session signed since
@@ -153,6 +159,7 @@ pub(crate) async fn self_relay(
         },
         payer: Some(format!("{from:#x}")),
         gas_limit: gas,
+        regular_gas: regular,
         gas: Some(gas),
         gas_from: Some(gas_from),
         max_fee_per_gas: fees.max_fee_per_gas.to_string(),
@@ -163,6 +170,21 @@ pub(crate) async fn self_relay(
         tx_nonce,
         tx_type: if block.base_fee.is_some() { 2 } else { 0 },
     })
+}
+
+/// EIP-8037 under EIP-7825 (controller call, owner auto-run 2026-11-19): a transaction's regular gas `regular` above the
+/// profile's per-transaction cap, or its gas limit `gas` (regular + state) above the chain's block gas limit `block`, is
+/// `GasAboveTxCap`. A gas limit above the cap is otherwise accepted: under EIP-8037 the cap holds the regular gas only.
+pub(crate) fn above_caps(
+    profile: &crate::ChainProfile,
+    regular: u64,
+    gas: u64,
+    block: u64,
+) -> Result<(), SdkError> {
+    if profile.tx_gas_cap.is_some_and(|c| regular > c) || gas > block {
+        return Err(SdkError::GasAboveTxCap);
+    }
+    Ok(())
 }
 
 /// The signer kind of `p`'s quote: a UA key's kind, else the native EVM key (the reference signer).
@@ -197,7 +219,7 @@ pub(crate) fn figure(
     app: Option<u64>,
     unsigned: usize,
     members: Option<u64>,
-) -> Result<Option<(u64, GasSources)>, SdkError> {
+) -> Result<Option<Figure>, SdkError> {
     let op = super::gas::OpGas {
         len: &|input| super::gas::input_len(extra, message, input),
         // I1: the count a per-item part names; a group signer's n (bls-multi plan Task 17: `members`, from its key data)
@@ -243,16 +265,16 @@ pub(crate) async fn signed_quote(
     unsigned: usize,
     q: &SubmitQuote,
     signed: usize,
-    own: Option<(u64, GasSources)>,
+    own: Option<Figure>,
 ) -> Result<SubmitQuote, SdkError> {
     let c = sdk
         .chains
         .iter()
         .find(|c| c.profile.key == chain)
         .ok_or(SdkError::ChainUnknown)?;
-    let (base, gas_from) = match own {
-        Some((g, from)) if g > q.gas_limit => (g, Some(from)),
-        _ => (q.gas_limit, q.gas_from.clone()),
+    let (base, base_regular, gas_from) = match own {
+        Some(f) if f.gas > q.gas_limit => (f.gas, f.regular, Some(f.from)),
+        _ => (q.gas_limit, q.regular_gas, q.gas_from.clone()),
     };
     let counted = super::gas::counted_bytes(
         &c.profile.gas,
@@ -272,9 +294,9 @@ pub(crate) async fn signed_quote(
     }
     let (_, _, pool) = evm(sdk, chain)?;
     let block = pool.block_gas().await.map_err(sim)?;
-    if c.profile.tx_gas_cap.is_some_and(|cap| gas > cap) || gas > block.limit {
-        return Err(SdkError::GasAboveTxCap);
-    }
+    // the signature's growth is calldata: regular gas
+    let regular = base_regular.saturating_add(gas.saturating_sub(base));
+    above_caps(&c.profile, regular, gas, block.limit)?;
     let fee = q
         .max_fee_per_gas
         .parse::<u128>()
@@ -282,6 +304,7 @@ pub(crate) async fn signed_quote(
     let cost = check_caps(sdk, gas, fee)?;
     Ok(SubmitQuote {
         gas_limit: gas,
+        regular_gas: regular,
         gas: Some(gas),
         gas_from,
         max_cost: cost.to_string(),
@@ -397,8 +420,9 @@ impl Op {
                     path: SubmitPath::Gateway,
                     payer: None,
                     gas_limit: 0,
-                    gas: figure.as_ref().map(|f| f.0),
-                    gas_from: figure.as_ref().map(|f| f.1.clone()),
+                    regular_gas: 0,
+                    gas: figure.as_ref().map(|f| f.gas),
+                    gas_from: figure.as_ref().map(|f| f.from.clone()),
                     max_fee_per_gas: "0".into(),
                     max_priority_fee_per_gas: "0".into(),
                     max_cost: "0".into(),

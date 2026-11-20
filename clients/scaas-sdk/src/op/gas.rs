@@ -233,21 +233,42 @@ pub(crate) fn lookup_by(
     key: (&str, &str, u16, bool),
     op: &OpGas,
 ) -> Result<Option<(u64, GasSources)>, SdkError> {
+    lookup_in(chain, opt_in, tables, app, key, op, false)
+}
+
+/// [`lookup_by`], or with `regular` its bound of the regular gas (EIP-8037; controller call, owner auto-run 2026-11-19): the
+/// base row's `regular` figure and its `per_item`'s `regular` slope in place of their whole gas where the row has them, every
+/// other part (and a row without them, an app's figure) counted whole.
+fn lookup_in(
+    chain: &GasRows,
+    opt_in: &[String],
+    tables: &[GasTable],
+    app: Option<u64>,
+    key: (&str, &str, u16, bool),
+    op: &OpGas,
+    regular: bool,
+) -> Result<Option<(u64, GasSources)>, SdkError> {
     let (entry, kind, signer, fresh) = key;
     let uncounted = std::cell::Cell::new(false);
-    let items = |p: &Option<GasPerItem>, count: &dyn Fn(&str) -> Option<u64>| {
+    let items = |p: &Option<GasPerItem>, reg: bool, count: &dyn Fn(&str) -> Option<u64>| {
         let Some(p) = p else { return Some(0) };
         let n = count(&p.item).filter(|n| *n <= COUNT_MAX);
         if n.is_none() {
             uncounted.set(true);
         }
-        Some(p.gas.saturating_mul(n?))
+        let per = if reg {
+            p.regular.unwrap_or(p.gas)
+        } else {
+            p.gas
+        };
+        Some(per.saturating_mul(n?))
     };
-    let own = |p: &Option<GasPerItem>| items(p, op.count);
-    let attached = |p: &Option<GasPerItem>| items(p, &|_| None);
+    let own = |p: &Option<GasPerItem>| items(p, false, op.count);
+    let attached = |p: &Option<GasPerItem>| items(p, false, &|_| None);
     let base = part(chain, opt_in, tables, |r| {
         let b = r.base.iter().find(|b| b.key() == (entry, kind, fresh))?;
-        let mut g = b.gas;
+        let reg = regular && b.regular.is_some();
+        let mut g = b.regular.filter(|_| reg).unwrap_or(b.gas);
         if let Some(p) = &b.per_byte {
             g = g.saturating_add(p.gas.saturating_mul((op.len)(&p.input)?));
         }
@@ -262,7 +283,7 @@ pub(crate) fn lookup_by(
         if signer != NATIVE_EVM || op.attached.is_some_and(|k| k != Some(NATIVE_EVM)) || op.holder {
             g = g.saturating_add(b.ua_extra.unwrap_or(0));
         }
-        g = g.saturating_add(own(&b.per_item)?);
+        g = g.saturating_add(items(&b.per_item, reg, op.count)?);
         Some(g)
     });
     let verify = verify_part(chain, opt_in, tables, signer, op.registry, true, &own);
@@ -277,7 +298,7 @@ pub(crate) fn lookup_by(
             .iter()
             .map(|k| {
                 let capped = |p: &Option<GasPerItem>| {
-                    items(p, &|i| (i == "members").then_some(BLS_MULTI_MAX))
+                    items(p, false, &|i| (i == "members").then_some(BLS_MULTI_MAX))
                 };
                 verify_part(chain, opt_in, tables, *k, op.registry, false, &capped).map(|v| v.0)
             })
@@ -306,33 +327,47 @@ pub(crate) fn lookup_by(
 /// §8.4) of `n` members and its source: the base row of the registry's first registration of the kind (`fresh`), its gas
 /// plus `per_item × n` when the row counts `members`; no verify part (no signer: the PoP authorizes it) and no other part.
 /// `None`: no row; `GasCountUnknown`: a row counting another item, or `n` above [`COUNT_MAX`] (fail closed, as [`lookup_by`]).
+/// Returns the figure, its regular part's bound (EIP-8037: the row's `regular` and its slope where it has them, else the
+/// figure) and the source.
 pub(crate) fn registration_gas(
     chain: &GasRows,
     opt_in: &[String],
     tables: &[GasTable],
     entry: &str,
     n: u64,
-) -> Result<Option<(u64, GasFrom)>, SdkError> {
+) -> Result<Option<(u64, u64, GasFrom)>, SdkError> {
     let uncounted = std::cell::Cell::new(false);
-    let found = part(chain, opt_in, tables, |r| {
-        let b = r
-            .base
-            .iter()
-            .find(|b| b.key() == (entry, "account", true))?;
-        let per = match &b.per_item {
-            None => 0,
-            Some(p) if p.item == "members" && n <= COUNT_MAX => p.gas.saturating_mul(n),
-            Some(_) => {
-                uncounted.set(true);
-                return None;
-            }
-        };
-        Some(b.gas.saturating_add(per))
-    });
+    // the figure, or with `regular` its regular bound (the row's `regular` and slope where it has them)
+    let find = |regular: bool| {
+        part(chain, opt_in, tables, |r| {
+            let b = r
+                .base
+                .iter()
+                .find(|b| b.key() == (entry, "account", true))?;
+            let reg = regular && b.regular.is_some();
+            let per = match &b.per_item {
+                None => 0,
+                Some(p) if p.item == "members" && n <= COUNT_MAX => {
+                    p.regular.filter(|_| reg).unwrap_or(p.gas).saturating_mul(n)
+                }
+                Some(_) => {
+                    uncounted.set(true);
+                    return None;
+                }
+            };
+            Some(
+                b.regular
+                    .filter(|_| reg)
+                    .unwrap_or(b.gas)
+                    .saturating_add(per),
+            )
+        })
+    };
+    let (found, regular) = (find(false), find(true));
     if uncounted.get() {
         return Err(SdkError::GasCountUnknown);
     }
-    Ok(found)
+    Ok(found.map(|(g, from)| (g, regular.map_or(g, |r| r.0.min(g)), from)))
 }
 
 /// [`lookup_by`] of an operation without a variable-length input, a saved record, a fee, a second signature or a count
@@ -350,8 +385,44 @@ pub(crate) fn lookup(
         .flatten()
 }
 
-/// The quote's gas of a key whose unsigned calldata is `len` bytes: the figure plus the intrinsic cost and the calldata, with
-/// the margin, and its sources; `None`: unquoted; `GasCountUnknown` as [`lookup_by`].
+/// A quote's gas (controller call, owner auto-run 2026-11-19, EIP-8037): `gas`, regular + state, the transaction's gas
+/// limit, held to the block gas limit; `regular`, the bound of its regular part (at most `gas`), held to the chain's
+/// per-transaction cap (EIP-7825 caps the regular gas only under EIP-8037); and the sources.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Figure {
+    pub gas: u64,
+    pub regular: u64,
+    pub from: GasSources,
+}
+
+impl Figure {
+    /// A figure whose split is not known (an estimate, an app's figure): the whole of it held to the cap.
+    pub(crate) fn whole(gas: u64, from: GasSources) -> Self {
+        Figure {
+            gas,
+            regular: gas,
+            from,
+        }
+    }
+}
+
+/// The figure `g` and its regular bound `r` of a transaction whose calldata is `len` bytes: each plus the intrinsic cost and
+/// the calldata, with the margin; the regular bound at most the gas.
+pub(crate) fn with_calldata(g: u64, r: u64, len: usize, from: GasSources) -> Figure {
+    let bytes = u64::try_from(len)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(PER_BYTE);
+    let total = |x: u64| with_margin(x.saturating_add(INTRINSIC).saturating_add(bytes));
+    let gas = total(g);
+    Figure {
+        gas,
+        regular: total(r).min(gas),
+        from,
+    }
+}
+
+/// The quote's gas of a key whose unsigned calldata is `len` bytes ([`with_calldata`] of [`lookup_by`]'s figure and its
+/// regular bound); `None`: unquoted; `GasCountUnknown` as [`lookup_by`].
 pub(crate) fn quoted(
     chain: &GasRows,
     opt_in: &[String],
@@ -360,18 +431,12 @@ pub(crate) fn quoted(
     key: (&str, &str, u16, bool),
     len: usize,
     op: &OpGas,
-) -> Result<Option<(u64, GasSources)>, SdkError> {
-    let bytes = u64::try_from(len)
-        .unwrap_or(u64::MAX)
-        .saturating_mul(PER_BYTE);
-    Ok(
-        lookup_by(chain, opt_in, tables, app, key, op)?.map(|(g, from)| {
-            (
-                with_margin(g.saturating_add(INTRINSIC).saturating_add(bytes)),
-                from,
-            )
-        }),
-    )
+) -> Result<Option<Figure>, SdkError> {
+    let Some((g, from)) = lookup_by(chain, opt_in, tables, app, key, op)? else {
+        return Ok(None);
+    };
+    let r = lookup_in(chain, opt_in, tables, app, key, op, true)?.map_or(g, |(r, _)| r);
+    Ok(Some(with_calldata(g, r, len, from)))
 }
 
 /// The calldata bytes a quote of signer kind `signer` counted (owner 2026-11-19, G3): the unsigned calldata (`unsigned`) plus
@@ -557,6 +622,7 @@ mod tests {
                 fee_extra: None,
                 ua_extra: None,
                 per_item: None,
+                regular: None,
             }],
             verify: vec![GasVerify {
                 line: Default::default(),
@@ -642,11 +708,58 @@ mod tests {
         );
         assert_eq!(
             quoted(&rows(1_000, 10), &[], &tables, None, K, 10, &OpGas::PLAIN).unwrap(),
-            Some((
+            Some(Figure::whole(
                 (1_010 + 21_000 + 640) * 3 / 2,
                 src(GasFrom::Chain, GasFrom::Chain)
             ))
         );
+    }
+
+    /// EIP-8037 (controller call, owner auto-run 2026-11-19): a quote's regular bound takes the base row's `regular` figure and
+    /// its `per_item`'s `regular` slope in place of their whole gas, every other part whole, with the intrinsic cost, the
+    /// calldata and the margin; a row without them: the whole figure; never above the gas.
+    #[test]
+    fn quoted_regular_bound() {
+        let k = ("mtxPay", "token", 0x0101, false);
+        let mut r = rows(10_000_000, 10);
+        r.base[0].regular = Some(1_000_000);
+        r.base[0].per_item = Some(GasPerItem {
+            item: "members".into(),
+            gas: 100,
+            regular: Some(40),
+        });
+        let op = OpGas {
+            count: &|i| (i == "members").then_some(5),
+            ..OpGas::PLAIN
+        };
+        let total = |g: u64| (g + 21_000 + 640) * 3 / 2;
+        let f = quoted(&r, &[], &[], None, k, 10, &op).unwrap().unwrap();
+        assert_eq!(f.gas, total(10_000_000 + 500 + 10));
+        assert_eq!(
+            f.regular,
+            total(1_000_000 + 200 + 10),
+            "the row's regular part and slope"
+        );
+        r.base[0].fee_extra = Some(7_000);
+        let fee = OpGas { fee: true, ..op };
+        let f = quoted(&r, &[], &[], None, k, 10, &fee).unwrap().unwrap();
+        assert_eq!(
+            f.regular,
+            total(1_000_000 + 200 + 10 + 7_000),
+            "another part counted whole"
+        );
+        r.base[0].regular = None;
+        r.base[0].per_item.as_mut().unwrap().regular = None;
+        let f = quoted(&r, &[], &[], None, k, 10, &op).unwrap().unwrap();
+        assert_eq!(f.regular, f.gas, "no split: the whole figure");
+        r.base[0].regular = Some(20_000_000);
+        r.base[0].per_item.as_mut().unwrap().regular = Some(40);
+        let f = quoted(&r, &[], &[], None, k, 10, &op).unwrap().unwrap();
+        assert_eq!(f.regular, f.gas, "never above the gas");
+        let app = quoted(&GasRows::default(), &[], &[], Some(9), k, 10, &op)
+            .unwrap()
+            .unwrap();
+        assert_eq!(app.regular, app.gas, "an app's figure: whole");
     }
 
     /// Base and verify are looked up independently (owner 2026-11-19, part 3b), each through its own order; `gas_from` names
@@ -949,6 +1062,58 @@ mod tests {
         let at = format!("{one}{}", " ".repeat(1024 * 1024 - one.len()));
         assert!(GasTable::parse(&at).is_ok(), "a table of exactly 1 MiB");
         assert!(GasTable::parse(&format!("{at} ")).is_err(), "above 1 MiB");
+    }
+
+    /// EIP-8037: a base row's `regular` (held like a figure) and its `per_item`'s `regular` are read; on a counted row they come
+    /// together; never on a verify row; a `regular` part with a key outside the format is `GasFieldUnknown`.
+    #[test]
+    fn gas_table_regular_parse() {
+        let reg = r#","regular":{"gas":5000,"measured":4100,"source":"s"}"#;
+        let row = |extra: &str| {
+            b(98_000, 97_947).replace(r#","source":"s"}"#, &format!(r#","source":"s"{extra}}}"#))
+        };
+        let item = |r: &str| {
+            format!(r#","item":"members","per_item":{{"gas":100,"base_count":0,"source":"s"{r}}}"#)
+        };
+        let t = GasTable::parse(&file(
+            &row(&format!("{reg}{}", item(r#","regular":40"#))),
+            "",
+        ))
+        .unwrap();
+        assert_eq!(t.rows.base[0].regular, Some(5_000));
+        assert_eq!(t.rows.base[0].per_item.as_ref().unwrap().regular, Some(40));
+        assert_eq!(
+            GasTable::parse(&file(&row(reg), "")).unwrap().rows.base[0].regular,
+            Some(5_000),
+            "an uncounted row"
+        );
+        for bad in [
+            row(&format!("{reg}{}", item(""))), // a counted row's figure without its slope
+            row(&item(r#","regular":40"#)),     // a slope without the figure
+            row(&reg.replace("5000", "5500")),  // not rounded
+            row(&reg.replace("4100", "6000")),  // below its measurement
+            file(
+                "",
+                &v(289, 1_000, 900).replace(
+                    r#""sig_bytes":0"#,
+                    &format!(r#""sig_bytes":0{}"#, item(r#","regular":40"#)),
+                ),
+            ),
+        ] {
+            let bad = if bad.starts_with('{') && !bad.contains("scaas.gas-table") {
+                file(&bad, "")
+            } else {
+                bad
+            };
+            assert!(GasTable::parse(&bad).is_err(), "{bad}");
+        }
+        assert!(matches!(
+            GasTable::parse(&file(
+                &row(&reg.replace(r#""source":"s""#, r#""source":"s","x":1"#)),
+                ""
+            )),
+            Err(SdkError::GasFieldUnknown)
+        ));
     }
 
     /// The SCaaS reference table parses, is named `reference`, and is EVM.
@@ -1360,6 +1525,7 @@ mod tests {
         Some(GasPerItem {
             item: item.into(),
             gas,
+            regular: None,
         })
     }
 
@@ -2441,7 +2607,7 @@ mod tests {
         };
         for n in [2u64, 16, 32, 64] {
             let tables = std::slice::from_ref(&t);
-            let (g, from) = registration_gas(&empty, &reference, tables, "registerBlsMulti", n)
+            let (g, r, from) = registration_gas(&empty, &reference, tables, "registerBlsMulti", n)
                 .unwrap()
                 .unwrap();
             assert_eq!(from, GasFrom::Reference);
@@ -2450,6 +2616,16 @@ mod tests {
                 .as_u64()
                 .unwrap();
             assert!(g >= measured, "base n {n}: {g} < {measured}");
+            // EIP-8037: the regular bound, the row's regular line, at or above the measured regular point
+            assert_eq!(
+                r,
+                b.regular.unwrap() + bp.regular.unwrap() * n,
+                "regular: its figure + slope × {n}"
+            );
+            let measured = m[format!("account_registerBlsMulti_n{n}_fresh_registry_regular")]
+                .as_u64()
+                .unwrap();
+            assert!(r >= measured, "regular n {n}: {r} < {measured}");
             let items = |p: &Option<GasPerItem>| Some(p.as_ref().map_or(0, |p| p.gas * n));
             let (vg, _) = verify_part(
                 &empty,
@@ -2520,6 +2696,7 @@ mod tests {
                 per_item: (*s == 0x0121).then(|| GasPerItem {
                     item: "members".into(),
                     gas: 100,
+                    regular: None,
                 }),
             })
             .collect();
