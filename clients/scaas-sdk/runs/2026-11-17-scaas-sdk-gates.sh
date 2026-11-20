@@ -48,7 +48,7 @@ STEPS=(
     "bind-gen|.|bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check"
     "bind-cpp|clients/scaas-sdk/bindings/cpp|bash ../lib.sh sync-api && $cap cmake -B build && $cap cmake --build build -j2 && cd build && $cap ctest --output-on-failure"
     "bind-cs|clients/scaas-sdk/bindings/cs|bash ../lib.sh uniffi && $cap dotnet test; rc=\$?; dotnet build-server shutdown >/dev/null 2>&1; exit \$rc"
-    "bind-python|clients/scaas-sdk/bindings/python|bash ../lib.sh uniffi && $cap python3 -I test_smoke.py"
+    "bind-python|clients/scaas-sdk/bindings/python|python3 -I test_fix_generated.py && bash ../lib.sh uniffi && $cap python3 -I test_smoke.py"
     "bind-kotlin|clients/scaas-sdk/bindings/kotlin|KOTLINC=\${KOTLINC:-$TOOLS/kotlin-2.4.21/kotlinc/bin/kotlinc} bash run.sh"
     "bind-swift|clients/scaas-sdk/bindings/swift|SWIFTC=\${SWIFTC:-$TOOLS/swift-6.4.2/usr/bin/swiftc} bash run.sh"
     "bind-js|clients/scaas-sdk/bindings/js|WASM_BINDGEN=\${WASM_BINDGEN:-$TOOLS/wasm-bindgen/bin/wasm-bindgen} bash run.sh"

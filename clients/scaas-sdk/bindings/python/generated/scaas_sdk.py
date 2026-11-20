@@ -3896,7 +3896,7 @@ _UNIFFI_FOREIGN_FUTURE_HANDLE_MAP = _UniffiHandleMap()
 @_UNIFFI_FOREIGN_FUTURE_DROPPED_CALLBACK
 def _uniffi_future_dropped_callback(handle):
     (eventloop, task) = _UNIFFI_FOREIGN_FUTURE_HANDLE_MAP.remove(handle)
-    eventloop.call_soon(_uniffi_cancel_task, task)
+    eventloop.call_soon_threadsafe(_uniffi_cancel_task, task)
 
 def _uniffi_cancel_task(task):
     if not task.done():

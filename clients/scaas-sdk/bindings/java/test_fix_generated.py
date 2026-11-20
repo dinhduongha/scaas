@@ -35,6 +35,18 @@ class Fix(unittest.TestCase):
         self.assertIn("switch (value) {", out)
         self.assertIn("INSTANCE.write(v1, buf);", out)
 
+    def test_value_binding_stops_at_the_arm(self):
+        src = (
+            "        case EndpointAuth.Header(var name, var value) -> {\n"
+            "          FfiConverterTypeSecret.INSTANCE.write(value, buf);\n"
+            "        }\n"
+            "      }\n"
+            "      FfiConverterString.INSTANCE.write(value, buf);\n"
+        )
+        out = fix(src)
+        self.assertIn("INSTANCE.write(value_, buf);", out)
+        self.assertTrue(out.endswith("FfiConverterString.INSTANCE.write(value, buf);\n"), "the method's own value kept")
+
     def test_class_shadowed(self):
         self.assertEqual(
             fix("        Class<?> ignored = UniffiLib.class;"), "        java.lang.Class<?> ignored = UniffiLib.class;"

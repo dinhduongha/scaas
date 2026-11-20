@@ -13,7 +13,8 @@
 #         (bindings/lib.sh): bindings/cpp/generated/ (compared as sorted lines: the generator's type order varies by run)
 #   cs    the C# binding (uniffi-bindgen-cs v0.11.1+v0.31.0, its renames in bindings/cs/uniffi.toml) over the reference library
 #         with the async API (`uniffi`): bindings/cs/generated/
-#   python  the Python binding (official UniFFI's uniffi-bindgen 0.31.0) over the same library: bindings/python/generated/
+#   python  the Python binding (official UniFFI's uniffi-bindgen 0.31.0) over the same library: bindings/python/generated/;
+#           one generator defect fixed after it by bindings/python/fix_generated.py (call_soon from a foreign thread)
 #   kotlin  the Kotlin binding (the same generator, ktlint not run) over the same library: bindings/kotlin/generated/
 #   swift   the Swift binding (the same generator, swiftformat not run) over the same library: bindings/swift/generated/
 #   java    the Java binding (uniffi-bindgen-java 0.4.2, unformatted) over the same library: bindings/java/generated/; three
@@ -103,6 +104,7 @@ if [[ $PARTS == *,python,* ]]; then
     rm -rf "$D/bindings/python/generated"
     (cd "$D/ffi" && uniffi-bindgen generate --library "$(lib uniffi)" --language python \
         --out-dir "$D/bindings/python/generated" >/dev/null)
+    python3 -I "$D/bindings/python/fix_generated.py" "$D/bindings/python/generated" >/dev/null
     echo "[gen] ok: Python"
 fi
 if [[ $PARTS == *,kotlin,* ]]; then

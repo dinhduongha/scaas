@@ -20,11 +20,13 @@ def fix(text):
         return re.sub(r"this\.(?=\s*[,)])", lambda _: f"this.v{next(n)}", m.group(0))
 
     t = re.sub(r"AutoCloseableHelper\.close\([^;]*\);", close, text)
-    lines, bound = t.split("\n"), False
+    lines, bound, indent = t.split("\n"), False, 0
     for i, line in enumerate(lines):
+        depth = len(line) - len(line.lstrip())
         if re.search(r"^\s*case .*\(.*\bvar value\b.*\) ->", line):
-            lines[i], bound = re.sub(r"\bvar value\b", "var value_", line), True
-        elif re.match(r"^\s*case ", line):
+            lines[i], bound, indent = re.sub(r"\bvar value\b", "var value_", line), True, depth
+        elif re.match(r"^\s*case ", line) or (line.lstrip().startswith("}") and depth <= indent):
+            # the case's arm ends at the next case or at a brace closing it or its switch (review B16: an exact stop)
             bound = False
         elif bound and "INSTANCE." in line:
             lines[i] = re.sub(r"\bvalue\b", "value_", line)
