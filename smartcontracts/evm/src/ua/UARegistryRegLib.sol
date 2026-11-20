@@ -45,8 +45,10 @@ library UARegistryRegLib {
     /// `test_gasHotPath`, 2-of-2, 52,185 -> 52,968); 2,500 -> 3,500 (gen 2 case 1 of `test_T_GAS_msigAtBudget` was 512 short at 2,500).
     uint256 internal constant MSIG_ACCEPTED_GAS = 3_500;
     /// Spec 2026-11-19-registry-verify-only-kinds §4 (P3): one generation of the walk `holderOf` between a generation and the holder of
-    /// a member it does not hold, the per-hop figure `UARegistryLine.t.sol` pins (`HOP_GAS`, a miss at depth 4 measured 37,016).
-    uint256 internal constant LINE_HOP_GAS = 10_000;
+    /// a member it does not hold. Plan Task 15 (`UAVerifyOnlyGas.t.sol` test_T_GAS_voConsumer_perDepth, cold, isolated): one
+    /// further generation on the consumer path costs 12,410 (a miss: about 10,600 a hop at depth 16, `UARegistryLine.t.sol` 37,016 at
+    /// depth 4); 10,000 -> 13,100 (12,410 x 1.05, rounded up to 100).
+    uint256 internal constant LINE_HOP_GAS = 13_100;
     /// The reads of a verify-only member's record at its holder on the consumer path (`UARegistryCoreLib._voCheck`): `keyOf` of a
     /// stored kind, a classical member's registration key data, or the key form 1 cache pointers, with this generation's library
     /// entry and its own walk. Measured in `UARegistryHardBound.t.sol` (`test_voMember_readsWithinConstant`).
