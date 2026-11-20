@@ -2298,14 +2298,18 @@ async fn e2e_pqz_debit_on_a_node() {
                 q.gas_limit,
                 q.regular_gas
             );
+            let limit = q.gas_limit;
             let op = acc.submit_registry_write(w.clone(), q).await.unwrap();
             let s = follow(&sdk, op).await;
-            println!(
-                "M20 register {a} {} {}",
-                w.entry(),
-                receipt_line(&rpc, &holder, &s)
-            );
+            let (line, used) = receipt_line(&rpc, &holder, &s);
+            println!("M20 register {a} {} {line}", w.entry());
             assert!(matches!(s, OpState::Landed { .. }), "{}: {s:?}", w.entry());
+            // owner 2026-11-20 (the registry-write margin lowered): the quote never below the gas the node used
+            assert!(
+                used.is_some_and(|u| u <= limit),
+                "{}: gasUsed {used:?} above the quote {limit}",
+                w.entry()
+            );
         }
         let r = acc
             .registration_of("copy".into(), uas.last().unwrap().clone())
@@ -2338,10 +2342,16 @@ async fn e2e_pqz_debit_on_a_node() {
                 "M20 {label} quote gas_limit {} regular_gas {}",
                 q.gas_limit, q.regular_gas
             );
+            let limit = q.gas_limit;
             let id = op.submit(p, q).await.unwrap();
             let s = follow(&sdk, id).await;
-            println!("M20 {label} {}", receipt_line(&rpc, &holder, &s));
+            let (line, used) = receipt_line(&rpc, &holder, &s);
+            println!("M20 {label} {line}");
             assert!(matches!(s, OpState::Landed { .. }), "{label}: {s:?}");
+            assert!(
+                used.is_some_and(|u| u <= limit),
+                "{label}: gasUsed {used:?} above the quote {limit}"
+            );
         }
     };
     let conf = sdk.confidential();
@@ -2392,9 +2402,9 @@ async fn e2e_pqz_debit_on_a_node() {
     run(debit, "transfer_single").await;
 }
 
-/// An operation's end with its transaction's receipt (status, `gasUsed`) when it landed (the M20 record): a `Landed`
-/// names the block of the operation's fact (its hash), so the payer's transaction is found in that block.
-fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> String {
+/// An operation's end with its transaction's receipt (status, `gasUsed`) when it landed (the M20 record), and that
+/// `gasUsed`: a `Landed` names the block of the operation's fact (its hash), so the payer's transaction is found in that block.
+fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> (String, Option<u64>) {
     match s {
         OpState::Landed { block, .. } => {
             // the block by number through the raw RPC (its `transactions`: the hashes)
@@ -2407,7 +2417,7 @@ fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> String {
                 rpc,
             ]))
             .unwrap();
-            let mut out = format!("landed block {block}");
+            let (mut out, mut gas) = (format!("landed block {block}"), None);
             for tx in b["transactions"]
                 .as_array()
                 .unwrap_or_else(|| panic!("no transactions in {b}"))
@@ -2434,10 +2444,11 @@ fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> String {
                     )
                     .unwrap();
                     out += &format!(" tx {tx} status {} gasUsed {used}", r["status"]);
+                    gas = Some(used);
                 }
             }
-            out
+            (out, gas)
         }
-        other => format!("state {other:?}"),
+        other => (format!("state {other:?}"), None),
     }
 }

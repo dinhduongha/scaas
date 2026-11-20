@@ -202,9 +202,10 @@ pre-check asks the verifier's whole `POP_GAS` up front), and self-relays (no ope
 attached signature of unknown kind counts a group's `members` at the cap 64. Rules: [CTR-UA-50](../contracts/accounts.md#CTR-UA-50),
 [CTR-UA-52](../contracts/accounts.md#CTR-UA-52), [CTR-UA-56](../contracts/accounts.md#CTR-UA-56). The per-transaction cap holds the
 registration's regular gas only (EIP-8037; the row's `regular` and `per_item.regular`, controller call, owner auto-run
-2026-11-19): a group of 64 members quotes a gas limit above 2^24 (about 45 M with the margin, regular about 14 M), so it needs
+2026-11-19): a group of 64 members quotes a gas limit above 2^24 (about 30 M, regular about 9.5 M: a registry write's fixed-cost
+row takes no margin, owner 2026-11-20; it was about 45 M with the margin), so it needs
 a block gas limit above that and an app `Limits::max_gas` above its default 2^24. Measured (merged-tree review M20,
-2026-11-20, `clients/scaas-sdk/runs/2026-11-20-m20-nethermind-summary.txt`): on a local Nethermind copy with Amsterdam
+2026-11-20, `clients/scaas-sdk/runs/2026-11-20-m20-nethermind-summary.txt`, before the margin was lowered): on a local Nethermind copy with Amsterdam
 (EIP-8037, EIP-7825 enforced) the SDK's 64-member registration, quoted 44,983,452 gas with a regular bound of 14,240,076,
 was included (`gasUsed` 28,600,373), and a call whose regular gas has no bound stopped at exactly 2^24 under a 30 M gas
 limit; a PQZ debit (`mtxConfidentialTransferSingle`, quoted 46,445,076 with a regular bound of

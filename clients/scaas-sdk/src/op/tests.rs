@@ -3077,10 +3077,11 @@ async fn bls_multi_bad_partial_named() {
 }
 
 /// Spec §8.4, plan Task 17: the registration's self-relay quote is the reference row's `gas + per_item × n` (regular and
-/// state gas, no verify part), the intrinsic cost and the calldata, with the margin; it grows with n; its regular bound the
+/// state gas, no verify part), the intrinsic cost and the calldata, no margin (a fixed-cost registry row, owner 2026-11-20:
+/// approved lowering the registry-write margin); it grows with n; its regular bound the
 /// row's `regular + per_item.regular × n` the same way (EIP-8037, controller call, owner auto-run 2026-11-19): a group of 64
 /// members quotes a gas limit above 2^24, its regular bound within the cap, under a 200 M block gas limit, and is
-/// `GasAboveTxCap` under the fake's 30 M; no registry, no row: refused.
+/// `GasAboveTxCap` under a 25 M one; no registry, no row: refused.
 #[tokio::test(flavor = "multi_thread")]
 async fn bls_multi_register_quote_by_n() {
     let t = setup(0, |p, _| {
@@ -3107,30 +3108,24 @@ async fn bls_multi_register_quote_by_n() {
             .unwrap()
             .len() as u64;
         let g = row.gas + row.per_item.as_ref().unwrap().gas * u64::from(n);
-        assert_eq!(
-            q.gas_limit,
-            gas::with_margin(g + 21_000 + 64 * len),
-            "n {n}"
-        );
+        assert_eq!(q.gas_limit, g + 21_000 + 64 * len, "n {n}");
         let r =
             row.regular.unwrap() + row.per_item.as_ref().unwrap().regular.unwrap() * u64::from(n);
-        assert_eq!(
-            q.regular_gas,
-            gas::with_margin(r + 21_000 + 64 * len),
-            "regular n {n}"
-        );
+        assert_eq!(q.regular_gas, r + 21_000 + 64 * len, "regular n {n}");
         assert_eq!(q.gas_from, Some(GasSources::both(GasFrom::Reference)));
         assert!(q.gas_limit > last, "grows with n");
         last = q.gas_limit;
     }
     let (d64, _) = bls_group(&(0..64).collect::<Vec<_>>(), 32);
+    // a block of 25 M (n 64 quotes about 30 M without the margin; it was the fake's 30 M under the margin, owner 2026-11-20)
+    t.chain.lock().unwrap().block_gas_limit = 25_000_000;
     assert_eq!(
         code(
             op.quote_register_bls_multi("local".into(), d64.clone(), payer(&t))
                 .await
         ),
         "GasAboveTxCap",
-        "above the fake's 30 M block gas limit"
+        "above a 25 M block gas limit"
     );
     let big = setup(0, |p, l| {
         p.registry = Some(REGISTRY.into());
