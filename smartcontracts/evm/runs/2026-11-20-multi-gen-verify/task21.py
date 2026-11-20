@@ -17,4 +17,7 @@ M = [
      "                true || vm.keyExistsJson(book, string.concat(e, \".differential\"))\n", F, "test_deploy_voDifferentialMissing_named"),
     ("p2-4-cap-unchecked", D, "            c.cap >= 2 * callGas + VO_VERIFIER_OVERHEAD,", "            c.cap >= 0,", F,
      "test_deploy_voCapBelowCallGas_named"),
+    ("p3-5-lineReaches-unpinned", "test/ua/RegistryWalkInterface.t.sol", "            \"lineReaches(address)(bool)\"\n",
+     "            \"lineReaches(address)(uint256)\"\n", "test/ua/RegistryWalkInterface.t.sol",
+     "test_walkInterface_signaturesSelectorsAndHash"),
 ]

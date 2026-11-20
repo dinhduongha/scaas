@@ -594,7 +594,9 @@ generation's verifiers:
 predecessor chain reaches `uaRegistry()`: walk `r = r.predecessor()` at most `MAX_GENERATION − 1` times (§11), each step a
 contract, the reached registry equal to `uaRegistry()`; `chainUid()` equal (the existing `_requireChainUid`); and
 `smartKeyCloneHash()` of the env's registry equal to the router's (owner P4); else `EnvRegistryMismatch(expected, got)` as
-today. Checked in code, no admin key, no stored list.
+today. Checked in code, no admin key, no stored list. As built, the factory asks the env's registry `lineReaches(uaRegistry())`, which runs this
+walk in the registry's library and answers exactly one word `1`; the trust is the same (a fake can lie about `predecessor()` as
+well, the env's publisher is the guard) and the selector is in the frozen list (§11.3).
 
 - **Cost of P4.** Every generation of a factory's line must be deployed with the same `SmartKeyAccount` implementation: the
   implementation is frozen for the factory's line. A new implementation needs a new factory line. Without the check a
@@ -789,7 +791,8 @@ the owner refused that (W2).
   `msigStateOf`, `memberAccepted`, `memberSigHashOf`; KEM `kemKeyOf`, `kemKeyAt`; PQZ `pqzHomeOf`, `pqzKeyOf`, `pqzKeyAt`,
   `pqzKeyLatest`, `pqzKeyUsed`, `pqzKeySigOf`, `pqzPopOf`, `pqzScopedKeyOf`, `pqzScopedKeyAt`, `pqzScopedKeyLatest`,
   `pqzScopedPopOf`, `pqzOpenKemAt`, `pqzScopedCount`, `pqzScopedAt`; lists `uaCount`, `uaAt`, `uaPage`, `uaIndex`; checks
-  `requireAuthorized`, `requirePortable`, `requirePortableApp`. **Also frozen (M8)**, because successors and the node
+  `requireAuthorized`, `requirePortable`, `requirePortableApp`; the factory's walk `lineReaches` (§10, added at the round's
+review, P3-5). **Also frozen (M8)**, because successors and the node
   depend on them: the error selectors `UAStore.via` matches (`UAVerifyGas`) and the errors the node names (`UAKeyNotCached`,
   `UAKeyCache`, `UAKeyData`, `UAPoP`, `UAUnauthorized`, and the new `UAVerifyOnly`); the ABI encodings of `UASig` and
   `MemberSig`; the verifier getters a successor calls on a predecessor's verifier (`PRECOMPILE()` on every PQ verifier, and

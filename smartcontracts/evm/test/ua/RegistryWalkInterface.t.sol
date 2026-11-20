@@ -14,7 +14,7 @@ import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 /// entries' selectors), the verifier getters, the hold constants, and each view's Solidity type (a typed function pointer per
 /// entry: a changed argument or return type does not compile). A change moves the pin with old -> new and needs the owner.
 contract RegistryWalkInterfaceIsPinned is Test {
-    string[53] internal SIGS = [
+    string[54] internal SIGS = [
             "predecessor()(address)",
             "generation()(uint8)",
             "chainUid()(bytes32)",
@@ -67,13 +67,14 @@ contract RegistryWalkInterfaceIsPinned is Test {
             "uaIndex(bytes32)(uint256)",
             "requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()",
             "requirePortable(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()",
-            "requirePortableApp(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()"
+            "requirePortableApp(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()",
+            "lineReaches(address)(bool)"
     ];
 
-    bytes32 internal constant LIST_HASH = 0x9b671c727828678393537179834b1d5f55dd6ee4c21a17031ad4f4705987df8c;
+    bytes32 internal constant LIST_HASH = 0x3b34c54d64d7c8c3a5984af50db132f9aa744fff8d92a9d299dc118469272ebf; // Task 21 P3-5 (lineReaches): 0x9b671c72… -> 0x3b34c54d…
 
     function test_walkInterface_signaturesSelectorsAndHash() public view {
-        bytes4[53] memory sel = [
+        bytes4[54] memory sel = [
             IUARegistry.predecessor.selector,
             IUARegistry.generation.selector,
             IUARegistry.chainUid.selector,
@@ -126,7 +127,8 @@ contract RegistryWalkInterfaceIsPinned is Test {
             IUARegistry.uaIndex.selector,
             IUARegistry.requireAuthorized.selector,
             IUARegistry.requirePortable.selector,
-            IUARegistry.requirePortableApp.selector
+            IUARegistry.requirePortableApp.selector,
+            IUARegistry.lineReaches.selector // Task 21 review P3-5: OpenFactory's env check asks it of a later generation (§10)
         ];
         bytes memory all;
         for (uint256 i; i < SIGS.length; ++i) {
@@ -380,6 +382,10 @@ contract RegistryWalkInterfaceIsPinned is Test {
         {
             function(bytes32, bytes32, bytes32, IUARegistry.UASig memory) external view f52 = r.requirePortableApp;
             f52;
+        }
+        {
+            function(address) external view returns (bool) f53 = r.lineReaches;
+            f53;
         }
     }
 }

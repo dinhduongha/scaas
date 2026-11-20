@@ -4,3 +4,4 @@ p2-2-no-newer-book-check | test_deploy_newerGenBook_GEN_NOT_LATEST | 1 | test_de
 p2-3-unbound-accepted | test_deploy_voUnbound_named | 1 | test_deploy_voUnbound_named
 p2-3-no-differential | test_deploy_voDifferentialMissing_named | 1 | test_deploy_voDifferentialMissing_named
 p2-4-cap-unchecked | test_deploy_voCapBelowCallGas_named | 1 | test_deploy_voCapBelowCallGas_named
+p3-5-lineReaches-unpinned | test_walkInterface_signaturesSelectorsAndHash | 1 | test_walkInterface_signaturesSelectorsAndHash
