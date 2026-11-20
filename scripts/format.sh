@@ -84,10 +84,12 @@ if want yaml; then
 fi
 
 # Python: ruff (pyproject.toml) over clients/ua-py and pqz-core, and every other tracked Python file outside runs/ and docs/
-# (scripts/, the generators, smartcontracts/algorand, smartcontracts/evm/script, the clients' tools)
+# (scripts/, the generators, smartcontracts/algorand, smartcontracts/evm/script, the clients' tools); UniFFI's generated
+# Python (clients/scaas-sdk/bindings/python/generated/) is the generator's
 if want py; then
     ruff format $([ $check = 1 ] && echo --check) -q clients/ua-py pqz-core \
-        $(ls_files '*.py' | grep -v -E '^(clients/ua-py|pqz-core|docs)/') && say "py ok" || fail py
+        $(ls_files '*.py' | grep -v -E '^(clients/ua-py|pqz-core|docs)/|^clients/scaas-sdk/bindings/python/generated/') &&
+        say "py ok" || fail py
 fi
 
 # Go: gofmt has no settings; in check mode any listed file fails (legacy/ left out)

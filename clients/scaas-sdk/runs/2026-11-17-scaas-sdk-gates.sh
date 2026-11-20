@@ -46,6 +46,7 @@ STEPS=(
     "bind-gen|.|bash clients/scaas-sdk/runs/2026-11-17-scaas-sdk-gen.sh --check"
     "bind-cpp|clients/scaas-sdk/bindings/cpp|bash ../lib.sh sync-api && $cap cmake -B build && $cap cmake --build build -j2 && cd build && $cap ctest --output-on-failure"
     "bind-cs|clients/scaas-sdk/bindings/cs|bash ../lib.sh uniffi && $cap dotnet test; rc=\$?; dotnet build-server shutdown >/dev/null 2>&1; exit \$rc"
+    "bind-python|clients/scaas-sdk/bindings/python|bash ../lib.sh uniffi && $cap python3 -I test_smoke.py"
     "sdk-uniffi|clients/scaas-sdk|$cap cargo test $C --features $F,uniffi --test binding && $cap cargo test $C --features $F,sync-api --test binding && $cap cargo clippy $C --all-targets --features $F,uniffi -- -D warnings && $cap cargo clippy $C --all-targets --features $F,sync-api -- -D warnings"
     "sdk-opaque|clients/scaas-sdk|$cap cargo test $C --features $F,opaque-calls --test wallet_ops"
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"
@@ -108,12 +109,16 @@ counts() { # the test counts of a log, by runner
        /tests passed, .* tests failed out of/ { ct = $0; sub(/^.*% tests passed, /, "", ct) }
        /^[0-9:]+ \+[0-9]+/ { d = $2 }
        /^RESULT / { sub(/^RESULT /, ""); r = r (r ? "; " : "") $0 }
+       /^(Passed|Failed)! +- Failed: / { dn = $0; sub(/^.*Failed: +/, "", dn); df = dn + 0; sub(/^.*Passed: +/, "", dn); dp += dn + 0; dff += df; dnn++ }
+       /^Ran [0-9]+ tests? in / { ur += $2; un++ } /^FAILED \(/ { uf = $0 }
        END { o = "";
              if (n) o = sprintf("%d passed, %d failed, %d ignored (%d binaries)", p, f, g, n);
              if (nn) o = o (o ? "; " : "") sprintf("node: %d pass, %d fail, %d skipped", np, nf, ns);
              if (ct != "") o = o (o ? "; " : "") "ctest: " ct;
              if (d != "") o = o (o ? "; " : "") "dart: " d;
              if (r) o = o (o ? "; " : "") r;
+             if (dnn) o = o (o ? "; " : "") sprintf("dotnet: %d passed, %d failed", dp, dff);
+             if (un) o = o (o ? "; " : "") sprintf("unittest: %d ran%s", ur, (uf != "" ? ", " uf : ", OK"));
              printf "%s", (o ? o : "-") }' "$1"
 }
 

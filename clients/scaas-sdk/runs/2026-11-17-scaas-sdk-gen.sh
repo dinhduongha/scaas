@@ -12,6 +12,7 @@
 #         (bindings/lib.sh): bindings/cpp/generated/ (compared as sorted lines: the generator's type order varies by run)
 #   cs    the C# binding (uniffi-bindgen-cs v0.11.1+v0.31.0, its renames in bindings/cs/uniffi.toml) over the reference library
 #         with the async API (`uniffi`): bindings/cs/generated/
+#   python  the Python binding (official UniFFI's uniffi-bindgen 0.31.0) over the same library: bindings/python/generated/
 # A UniFFI generator is the pin when `cargo install` recorded that version in the root it runs from (locally
 # `cargo install --locked --root <main checkout>/scratchpad/tools/uniffi`, on PATH). Each part's old output is removed first,
 # so a file the surface no longer produces cannot stay behind. The codegen runs through scripts/capped, in the foreground (on
@@ -19,16 +20,16 @@
 set -euo pipefail
 W=$(git rev-parse --show-toplevel)
 D="$W/clients/scaas-sdk"
-PARTS=",${SCAAS_GEN:-dart,cpp,cs},"
+PARTS=",${SCAAS_GEN:-dart,cpp,cs,python},"
 GEN=()
 cap=("$W/scripts/capped")
 [ -n "${CI:-}" ] && cap=()
 off=(--offline)
 [ -n "${CI:-}" ] && off=()
-pin() { # <tool> <version>: the generator on PATH is the pin, as cargo install recorded it in its root
-    local t
+pin() { # <tool> <version> [<package>]: the generator on PATH is the pin, as cargo install recorded its package in its root
+    local t p=${3:-$1}
     t=$(command -v "$1") || { echo "[gen] FAIL $1 not on PATH (pin $2)" >&2 && exit 2; }
-    cargo install --list --root "$(dirname "$(dirname "$t")")" | grep -qF "$1 v$2 " ||
+    cargo install --list --root "$(dirname "$(dirname "$t")")" | grep -qF -e "$p v$2 " -e "$p v$2:" ||
         { echo "[gen] FAIL $1 is not the pin $2" >&2 && exit 2; }
 }
 lib() { echo "$D/ffi/target/lib-$1/libscaas_sdk_ffi.so"; }
@@ -74,6 +75,16 @@ if [[ $PARTS == *,cs,* ]]; then
     out=$(cd "$D/ffi" && uniffi-bindgen-cs --library "$(lib uniffi)" --config "$D/bindings/cs/uniffi.toml" \
         --out-dir "$D/bindings/cs/generated" 2>&1) || { echo "$out" >&2 && exit 1; }
     echo "[gen] ok: C#"
+fi
+if [[ $PARTS == *,python,* ]]; then
+    GEN+=(bindings/python/generated)
+    echo "[gen] start: Python (uniffi)"
+    pin uniffi-bindgen "0.31.0" uniffi
+    bash "$D/bindings/lib.sh" uniffi >/dev/null
+    rm -rf "$D/bindings/python/generated"
+    (cd "$D/ffi" && uniffi-bindgen generate --library "$(lib uniffi)" --language python \
+        --out-dir "$D/bindings/python/generated" >/dev/null)
+    echo "[gen] ok: Python"
 fi
 [ ${#GEN[@]} -gt 0 ] || { echo "[gen] FAIL no part in SCAAS_GEN=${SCAAS_GEN:-}" >&2 && exit 2; }
 if [ "${1:-}" = --check ]; then
