@@ -189,17 +189,20 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # M20  the cap rule never run against an enforcing node (a recorded Nethermind run of a 64-member registration and a PQZ debit)
 sdk-deny | b5b5ec89c | 0 | -
 sdk-test-sync | b5b5ec89c | 0 | 272 passed, 0 failed, 12 ignored (22 binaries) (--features <the set>,sync-api)
-bind-gen | 568bad427 | 0 | -
-sdk-uniffi | 568bad427 | 0 | 11 passed, 0 failed, 0 ignored (2 binaries)
-sdk-clippy | 568bad427 | 0 | -
-ffi | 568bad427 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-sdk-wasm | 568bad427 | 0 | -
-bind-cpp | 568bad427 | 0 | ctest: 0 tests failed out of 1
-bind-cs | 568bad427 | 0 | dotnet: 3 passed, 0 failed
-bind-python | 568bad427 | 0 | unittest: 3 ran, OK
-bind-kotlin | 568bad427 | 0 | kotlin: PASS (0 failures)
-bind-swift | 568bad427 | 0 | swift: PASS (0 failures)
-bind-java | 568bad427 | 0 | java: PASS (0 failures); unittest: 3 ran, OK
-bind-js | 568bad427 | 0 | node: 3 pass, 0 fail, 0 skipped
-bind-dart | 568bad427 | 0 | dart: +14:
-bind-go | 5f9ecf8dd | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-gen | 4e9aabf8b | 0 | -
+sdk-uniffi | 4e9aabf8b | 101 | 18 passed, 0 failed, 0 ignored (2 binaries)
+sdk-clippy | 4e9aabf8b | 101 | -
+ffi | 4e9aabf8b | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+sdk-wasm | 4e9aabf8b | 0 | -
+bind-cpp | 4e9aabf8b | 0 | ctest: 0 tests failed out of 1
+bind-cs | 4e9aabf8b | 0 | dotnet: 4 passed, 0 failed
+bind-python | 4e9aabf8b | 0 | unittest: 6 ran, OK
+bind-kotlin | 4e9aabf8b | 0 | kotlin: PASS (0 failures)
+bind-swift | 4e9aabf8b | 0 | swift: PASS (0 failures)
+bind-java | 4e9aabf8b | 0 | java: PASS (0 failures); unittest: 4 ran, OK
+bind-go | 4e9aabf8b | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-js | 4e9aabf8b | 0 | node: 4 pass, 0 fail, 0 skipped
+bind-dart | 4e9aabf8b | 0 | dart: +14:
+# the rows above at 4e9aabf8b (the merge of ua-rs-sign 34f882da6): sdk-uniffi and sdk-clippy rc 101 on one clippy error in
+# ua-rs-sign's src/op/gas.rs (indexing_slicing), fixed by c21803966 (clippy clean on the four feature sets by hand; the two
+# gate steps not rerun); sdk-test stopped for the machine's shutdown, not recorded.
