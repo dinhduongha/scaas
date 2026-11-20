@@ -80,6 +80,18 @@ pub(crate) fn with_margin(g: u64) -> u64 {
     g.saturating_add(g / 2)
 }
 
+/// The kinds whose verify gas depends on the data (owner 2026-11-19, "approved, as proposed"): ed25519 (its row the forced
+/// worst case), FN-DSA-512 / -1024 (the most of 64 salts plus `margin`).
+pub(crate) const DATA_DEPENDENT: [u16; 3] = [0x0102, 0x0132, 0x0135];
+
+/// A registry write's base row `kind` (`ua-<kind>`) whose measured part holds a data-dependent verify ([`DATA_DEPENDENT`]:
+/// the registration's PoP).
+fn data_dependent_row(kind: &str) -> bool {
+    kind.strip_prefix("ua-0x")
+        .and_then(|h| u16::from_str_radix(h, 16).ok())
+        .is_some_and(|k| DATA_DEPENDENT.contains(&k))
+}
+
 /// One part's figure and source, in the lookup order: the chain's rows → the module tables opted in (profile order) → the
 /// reference table if opted in; `find` reads the part's row of a table.
 fn part(
@@ -332,6 +344,7 @@ fn lookup_in(
 /// `None`: no row; `GasCountUnknown`: a row counting another item, or `n` above [`COUNT_MAX`] (fail closed, as [`lookup_by`]).
 /// Returns the figure, its regular part's bound (EIP-8037: the row's `regular` and its slope where it has them, else the
 /// figure) and the source.
+#[cfg(test)] // the quote reads the row through [`registry_gas`] since owner 2026-11-20
 pub(crate) fn registration_gas(
     chain: &GasRows,
     opt_in: &[String],
@@ -387,11 +400,17 @@ pub(crate) fn base_gas(
     Ok(found.map(|(g, from)| (g, regular.map_or(g, |r| r.0.min(g)), from)))
 }
 
-/// The execution gas of a registry write (controller call, owner auto-run 2026-11-19; owner 2026-11-20): the sum of its base
-/// rows `rows` (each `(entry, kind)` by [`base_gas`] at `members`) and of each signing slot's verify row (`signers`: its
-/// kind's excess over the native reference; the slot's bytes are in the calldata already, a row counting `members` not read:
-/// no figure). `None` when any is missing: the write is then quoted by the node's estimate alone, whole. Returns the figure,
-/// its regular bound (the base rows' regular parts, a verify row whole) and the sources (the first row's, the first slot's).
+/// The quote's figure of a registry write whose calldata is `len` bytes (controller call, owner auto-run 2026-11-19; owner
+/// 2026-11-20): the sum of its base rows `rows` (each `(entry, kind)` by [`base_gas`] at `members`) and of each signing
+/// slot's verify row (`signers`: its kind's excess over the native reference; the slot's bytes are in the calldata already,
+/// a row counting `members` not read: no figure), plus the intrinsic cost and 64 gas a calldata byte. The margin (owner
+/// 2026-11-20, approved lowering the registry-write margin): a registry write is measured fixed cost, so a row whose
+/// measured part has no data-dependent verify, and the intrinsic cost and the calldata (64 gas a byte, at or above what any
+/// transaction pays for it), are quoted as measured; the large margin ([`with_margin`]) stays on the parts whose gas depends
+/// on the data: a base row of a [`DATA_DEPENDENT`] kind and a slot's verify row of one (a counted row is quoted only up to
+/// its measured count, M18). `None` when any row is missing: the write is then quoted by the node's estimate alone, whole.
+/// The regular bound: the base rows' regular parts, a verify row whole, at most the gas; the sources the first row's and the
+/// first slot's.
 pub(crate) fn registry_gas(
     chain: &GasRows,
     opt_in: &[String],
@@ -399,13 +418,20 @@ pub(crate) fn registry_gas(
     rows: &[(String, String)],
     members: u64,
     signers: &[u16],
-) -> Result<Option<(u64, u64, GasSources)>, SdkError> {
-    let (mut g, mut r, mut base) = (0u64, 0u64, None);
+    len: usize,
+) -> Result<Option<Figure>, SdkError> {
+    // (gas, regular) of the fixed-cost parts [0] and of the data-dependent ones [1]
+    let (mut parts, mut base) = ([(0u64, 0u64); 2], None);
+    let mut add = |dependent: bool, g: u64, r: u64| {
+        let [fixed, data] = &mut parts;
+        let p = if dependent { data } else { fixed };
+        *p = (p.0.saturating_add(g), p.1.saturating_add(r));
+    };
     for (entry, kind) in rows {
         let Some((x, y, from)) = base_gas(chain, opt_in, tables, entry, kind, members)? else {
             return Ok(None);
         };
-        (g, r) = (g.saturating_add(x), r.saturating_add(y));
+        add(data_dependent_row(kind), x, y);
         base.get_or_insert(from);
     }
     let Some(base) = base else { return Ok(None) };
@@ -416,17 +442,27 @@ pub(crate) fn registry_gas(
         else {
             return Ok(None);
         };
-        (g, r) = (g.saturating_add(v), r.saturating_add(v));
+        add(DATA_DEPENDENT.contains(s), v, v);
         verify.get_or_insert(from);
     }
-    Ok(Some((
-        g,
-        r,
-        GasSources {
+    let bytes = u64::try_from(len)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(PER_BYTE);
+    let total = |f: u64, d: u64| {
+        f.saturating_add(INTRINSIC)
+            .saturating_add(bytes)
+            .saturating_add(with_margin(d))
+    };
+    let [fixed, data] = parts;
+    let gas = total(fixed.0, data.0);
+    Ok(Some(Figure {
+        gas,
+        regular: total(fixed.1, data.1).min(gas),
+        from: GasSources {
             verify: verify.unwrap_or_else(|| base.clone()),
             base,
         },
-    )))
+    }))
 }
 
 /// [`lookup_by`] of an operation without a variable-length input, a saved record, a fee, a second signature or a count
@@ -1476,10 +1512,8 @@ mod tests {
         }
     }
 
-    /// The kinds whose verify gas depends on the data (owner 2026-11-19, "approved, as proposed"): ed25519 (its row the forced
-    /// worst case), FN-DSA-512 / -1024 (the most of 64 salts plus `margin`). Each is checked twice: its composition at a
-    /// signature of its row's worst-case class (both bounds) and many ordinary ones (the lower bound only).
-    const DATA_DEPENDENT: [u16; 3] = [0x0102, 0x0132, 0x0135];
+    // [`DATA_DEPENDENT`]: each is checked twice, its composition at a signature of its row's worst-case class (both bounds)
+    // and many ordinary ones (the lower bound only).
 
     /// The sampled end-to-end check (spec §13.3; owner 2026-11-19, item 7, A1 and the two rulings on the check): the `token`
     /// entries `SdkGasSample.t.sol` signs end to end on `NormalToken` by the native key, P-256, ed25519 and secp256k1, both

@@ -101,7 +101,7 @@ MUTANTS = [
     ),
     (
         "a slot's verify row not added",
-        [(G, "(g, r) = (g.saturating_add(v), r.saturating_add(v));", "(g, r) = (g.saturating_add(0 * v), r);")],
+        [(G, "add(DATA_DEPENDENT.contains(s), v, v);", "add(DATA_DEPENDENT.contains(s), 0 * v, 0);")],
         RT + "reference_rows_cover_every_registry_write",
     ),
     (

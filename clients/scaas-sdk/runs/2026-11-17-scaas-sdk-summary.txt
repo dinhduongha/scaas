@@ -183,4 +183,4 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # M13  test gaps: F1's declared digest only; T9's order digest is the SDK's own; listed() mutants of liquidity / wrap; F19's
 #      request count through the fake
 # M18  the regular line extrapolated past its measured counts (measure at the largest count the cap admits, or refuse above)
-# M20  the cap rule never run against an enforcing node (a recorded Nethermind run of a 64-member registration and a PQZ debit)
+# M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt

@@ -2186,3 +2186,277 @@ async fn e2e_bls_multi_64_on_a_node() {
     );
     assert_eq!(registered, "true", "registerBlsMulti of 64 included {tx}");
 }
+
+/// Merged-tree review M20 (owner 2026-11-20), the PQZ part: one PQZ debit (`mtxConfidentialTransferSingle`) by SDK self-relay
+/// on the copy (the `PQZ` precompile verifies the proof): two `mldsa65` UAs registered with their PQZ keys (split when the
+/// cap requires it), the payer's public units shielded to the holder, both halves of its account prepared, then the single
+/// transfer to the other UA. Env as `e2e_bls_multi_64_on_a_node` plus `SCAAS_M20_TOKEN` (a `NORMAL_PQZ` token whose public
+/// units the seed's EVM key 0 holds). Prints one `M20` line per figure.
+#[cfg(feature = "pqz")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs a local Nethermind copy with the PQZ precompile (clients/scaas-sdk/runs/2026-11-20-m20-nethermind.sh)"]
+async fn e2e_pqz_debit_on_a_node() {
+    use scaas_sdk::account::{Register, RegisterAttrs};
+    use scaas_sdk::confidential::{PqzAccountOp, PqzShield, PqzTransfer};
+    let rpc = std::env::var("SCAAS_M20_RPC").expect("SCAAS_M20_RPC");
+    // the payer: the seed's EVM key 0 (funded by the runner)
+    let holder = Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .native_key(Network::Evm, 0, None)
+        .unwrap()
+        .address()
+        .unwrap();
+    let dep: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(std::env::var("SCAAS_M20_BOOK").unwrap()).unwrap(),
+    )
+    .unwrap();
+    let chain_id: u64 = std::env::var("SCAAS_M20_CHAIN_ID")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let token = std::env::var("SCAAS_M20_TOKEN")
+        .unwrap()
+        .to_ascii_lowercase();
+    let registry = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let factory = dep["token_factory"].as_str().unwrap().to_ascii_lowercase();
+    let profile_with = |cap: Option<u64>| {
+        let mut profile = registry_profile(&rpc, &registry, cap);
+        (profile.key, profile.chain_id, profile.finality) =
+            ("copy".into(), Some(chain_id), Finality::Depth(1));
+        profile.factory = Some(factory.clone());
+        profile.gas_opt_in = vec!["reference".into()];
+        profile.tokens = vec![ListedToken {
+            address: token.clone(),
+            symbol: "m20PQ".into(),
+            decimals: 6,
+        }];
+        profile
+    };
+    let open = |cap: Option<u64>| {
+        let profile = profile_with(cap);
+        async move {
+            let sdk = Sdk::open(SdkConfig {
+                profiles: vec![profile],
+                store: MemoryStore::new(),
+                authenticator: None,
+                rp_id: None,
+                runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+                limits: Limits {
+                    max_gas: 1 << 27,
+                    ..Limits::default()
+                },
+                clock: None,
+                gas_tables: vec![],
+            })
+            .await
+            .unwrap();
+            let seed = sdk
+                .vault()
+                .import_words(ImportWords {
+                    label: "main".into(),
+                    words: sec(REPO),
+                    vault_passphrase: sec(PASS),
+                })
+                .await
+                .unwrap()
+                .id;
+            (sdk, seed)
+        }
+    };
+    // the registrations on the capped profile (owner ruling 2026-11-20): quoted from the gas table's rows, one transaction
+    // when it fits (whole <= 50 % of the block gas limit, regular <= the cap), else `register` then `storePqzPop`
+    let (sdk, seed) = open(Some(1 << 24)).await;
+    let payer = KeyRef::Native {
+        seed: seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let ua_key = |account: u32| KeyRef::Ua {
+        seed: seed.clone(),
+        kind: 0x0131,
+        account,
+        index: 0,
+    };
+    let acc = sdk.account();
+    let mut uas = vec![];
+    for a in [1u32, 2] {
+        let writes = acc
+            .prepare_register(Register {
+                key: ua_key(a),
+                chain: "copy".into(),
+                attrs: RegisterAttrs {
+                    pqz_key: true,
+                    kem: false,
+                },
+                payer: payer.clone(),
+            })
+            .await
+            .unwrap();
+        uas.push(writes[0].ua());
+        println!(
+            "M20 register {a} form: {} transaction(s) {:?}",
+            writes.len(),
+            writes.iter().map(|w| w.entry()).collect::<Vec<_>>()
+        );
+        for w in writes {
+            let q = acc.quote_registry_write(w.clone()).await.unwrap();
+            println!(
+                "M20 register {a} {} quote gas_limit {} regular_gas {}",
+                w.entry(),
+                q.gas_limit,
+                q.regular_gas
+            );
+            let limit = q.gas_limit;
+            let op = acc.submit_registry_write(w.clone(), q).await.unwrap();
+            let s = follow(&sdk, op).await;
+            let (line, used) = receipt_line(&rpc, &holder, &s);
+            println!("M20 register {a} {} {line}", w.entry());
+            assert!(matches!(s, OpState::Landed { .. }), "{}: {s:?}", w.entry());
+            // owner 2026-11-20 (the registry-write margin lowered): the quote never below the gas the node used
+            assert!(
+                used.is_some_and(|u| u <= limit),
+                "{}: gasUsed {used:?} above the quote {limit}",
+                w.entry()
+            );
+        }
+        let r = acc
+            .registration_of("copy".into(), uas.last().unwrap().clone())
+            .await
+            .unwrap();
+        println!("M20 registered {a} proven {}", r.pqz_proven);
+    }
+    let envelope = || Envelope {
+        valid_until: now() + 600,
+        mode: 0,
+        relayer: None,
+        fee: "0".into(),
+        fee_recipient: None,
+    };
+    let op = sdk.op();
+    let run = |p: std::sync::Arc<scaas_sdk::op::Prepared>, label: &'static str| {
+        let (op, sdk, payer, rpc, holder) = (
+            op.clone(),
+            sdk.clone(),
+            payer.clone(),
+            rpc.clone(),
+            holder.clone(),
+        );
+        async move {
+            let q = op
+                .quote(p.clone(), SubmitPath::SelfRelay { payer })
+                .await
+                .unwrap();
+            println!(
+                "M20 {label} quote gas_limit {} regular_gas {}",
+                q.gas_limit, q.regular_gas
+            );
+            let limit = q.gas_limit;
+            let id = op.submit(p, q).await.unwrap();
+            let s = follow(&sdk, id).await;
+            let (line, used) = receipt_line(&rpc, &holder, &s);
+            println!("M20 {label} {line}");
+            assert!(matches!(s, OpState::Landed { .. }), "{label}: {s:?}");
+            assert!(
+                used.is_some_and(|u| u <= limit),
+                "{label}: gasUsed {used:?} above the quote {limit}"
+            );
+        }
+    };
+    let conf = sdk.confidential();
+    let shield = conf
+        .prepare_pqz_shield(PqzShield {
+            signer: payer.clone(),
+            chain: "copy".into(),
+            token: token.clone(),
+            batch: "0".into(),
+            to_ua: uas[0].clone(),
+            amount: "1000000".into(),
+            envelope: envelope(),
+        })
+        .await
+        .unwrap();
+    run(shield, "shield").await;
+    for half in ["0", "1"] {
+        let p = conf
+            .prepare_pqz_prepare_acc(PqzAccountOp {
+                signer: ua_key(1),
+                chain: "copy".into(),
+                token: token.clone(),
+                batch: "0".into(),
+                ua: uas[0].clone(),
+                key_version: 0,
+                value: half.into(),
+                envelope: envelope(),
+            })
+            .await
+            .unwrap();
+        run(p, "prepare_acc").await;
+    }
+    let block: u64 = cast(&["block-number", "--rpc-url", &rpc]).parse().unwrap();
+    let debit = conf
+        .prepare_pqz_transfer(PqzTransfer {
+            signer: ua_key(1),
+            chain: "copy".into(),
+            token: token.clone(),
+            batch: "1".into(),
+            key_version: 0,
+            to_ua: uas[1].clone(),
+            amount: "30".into(),
+            valid_until_block: block + 200,
+            envelope: envelope(),
+        })
+        .await
+        .unwrap();
+    run(debit, "transfer_single").await;
+}
+
+/// An operation's end with its transaction's receipt (status, `gasUsed`) when it landed (the M20 record), and that
+/// `gasUsed`: a `Landed` names the block of the operation's fact (its hash), so the payer's transaction is found in that block.
+fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> (String, Option<u64>) {
+    match s {
+        OpState::Landed { block, .. } => {
+            // the block by number through the raw RPC (its `transactions`: the hashes)
+            let b: serde_json::Value = serde_json::from_str(&cast(&[
+                "rpc",
+                "eth_getBlockByNumber",
+                &format!("{block:#x}"),
+                "false",
+                "--rpc-url",
+                rpc,
+            ]))
+            .unwrap();
+            let (mut out, mut gas) = (format!("landed block {block}"), None);
+            for tx in b["transactions"]
+                .as_array()
+                .unwrap_or_else(|| panic!("no transactions in {b}"))
+            {
+                let tx = tx
+                    .as_str()
+                    .map_or_else(|| tx["hash"].as_str().unwrap().to_string(), String::from);
+                let r: serde_json::Value = serde_json::from_str(&cast(&[
+                    "receipt",
+                    &tx,
+                    "--json",
+                    "--async",
+                    "--rpc-url",
+                    rpc,
+                ]))
+                .unwrap();
+                if r["from"]
+                    .as_str()
+                    .is_some_and(|f| f.eq_ignore_ascii_case(payer))
+                {
+                    let used = u64::from_str_radix(
+                        r["gasUsed"].as_str().unwrap().trim_start_matches("0x"),
+                        16,
+                    )
+                    .unwrap();
+                    out += &format!(" tx {tx} status {} gasUsed {used}", r["status"]);
+                    gas = Some(used);
+                }
+            }
+            (out, gas)
+        }
+        other => (format!("state {other:?}"), None),
+    }
+}
