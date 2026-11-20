@@ -120,6 +120,7 @@ counts() { # the test counts of a log, by runner
        /^RESULT / { sub(/^RESULT /, ""); r = r (r ? "; " : "") $0 }
        /^(Passed|Failed)! +- Failed: / { dn = $0; sub(/^.*Failed: +/, "", dn); df = dn + 0; sub(/^.*Passed: +/, "", dn); dp += dn + 0; dff += df; dnn++ }
        /^Ran [0-9]+ tests? in / { ur += $2; un++ } /^FAILED \(/ { uf = $0 }
+       /^ok[ \t]+[^ \t]+[ \t]+[0-9.]+s$/ { gok++ } /^FAIL[ \t]+[^ \t]+[ \t]+[0-9.]+s$/ { gfail++ }
        END { o = "";
              if (n) o = sprintf("%d passed, %d failed, %d ignored (%d binaries)", p, f, g, n);
              if (nn) o = o (o ? "; " : "") sprintf("node: %d pass, %d fail, %d skipped", np, nf, ns);
@@ -128,6 +129,7 @@ counts() { # the test counts of a log, by runner
              if (r) o = o (o ? "; " : "") r;
              if (dnn) o = o (o ? "; " : "") sprintf("dotnet: %d passed, %d failed", dp, dff);
              if (un) o = o (o ? "; " : "") sprintf("unittest: %d ran%s", ur, (uf != "" ? ", " uf : ", OK"));
+             if (gok + gfail) o = o (o ? "; " : "") sprintf("go test: %d ok, %d FAIL", gok, gfail);
              printf "%s", (o ? o : "-") }' "$1"
 }
 
