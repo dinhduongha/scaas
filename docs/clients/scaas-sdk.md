@@ -253,8 +253,8 @@ envelope binding folded by the form, the facade's proof off the async workers, `
 and attached, relayed by a gateway (its job submission cap, NODE-GW-08) or self-relayed. The verdict path of an `OFFCHAIN`
 debit (asked, checked, attached) is SPECIFIED for a real holder: its tests run on a fake chain state whose scoped record holds
 the facade's registry key, and no real `OFFCHAIN` holder reaches it before P-T16-7 below (review 2026-11-20, F30). Under
-`strict_majority` verifiers agree on the verdict apart from `validUntil` (each sets it from its own clock), and the answer that
-expires first is taken (F14). `pqz_balance_all` reads every key version at one final block (F3). An opening token
+`strict_majority` verifiers agree on the verdict apart from `validUntil` (each sets it from its own clock), and of the agreeing answers
+the one with the median `validUntil` is taken, so no one replica decides (F14, M3). `pqz_balance_all` reads every key version at one final block (F3). An opening token
 is `PqzOpeningUnsupported`. A native-id verifier is checked (P-T16-3, `verdict_native_verifier`); `pqz_balance_all` sums the key
 versions (P-T16-5, `pqz_balance_all_versions`). PLANNED (P-T16-7): an `OFFCHAIN` holder's
 debits, once `ua-rs`'s `PqzKeyHandle` can prove a debit with its scoped secret (today it opens one and proves its own

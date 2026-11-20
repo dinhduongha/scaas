@@ -495,7 +495,7 @@ pub const PROBE_ROUTE: &str = "/v1/pqz-verdict/probe";
 pub const VERDICT_BODY_MAX: usize = 8 << 20;
 
 /// What `strict_majority` compares of a verdict answer: its `pqzVerdict` without `validUntil`, which each verifier sets from
-/// its own clock (F14, review 2026-11-20); the group's answer with the smallest `validUntil` is returned.
+/// its own clock (F14, review 2026-11-20); the group's answer with the median `validUntil` is returned (M3).
 fn verdict_compared(v: &Value) -> Value {
     let mut c = v["pqzVerdict"].clone();
     if let Some(o) = c.as_object_mut() {
@@ -517,8 +517,8 @@ fn valid_until(v: &Value) -> u64 {
 /// 2xx answer in list order, moving on past an unreachable one (transport, timeout, 3xx, 5xx: the verifier's `BUSY`,
 /// `RPC_UNAVAILABLE`), and a 4xx is the verifier's refusal, final (`NodeRefused` by its `error` code, never retried elsewhere);
 /// `strict_majority` asks every endpoint and needs more than half of them to give a 2xx answer equal in what is compared (a
-/// verdict's `pqzVerdict` without `validUntil`, the signature apart, and of the group the answer that expires first; a probe's
-/// whole answer), else `EndpointNoMajority`. The answer is returned as the verifier sent it: the caller checks the verdict's typed data and its signer before it attaches it.
+/// verdict's `pqzVerdict` without `validUntil`, the signature apart, and of the group the answer whose `validUntil` is the
+/// median; a probe's whole answer), else `EndpointNoMajority`. The answer is returned as the verifier sent it: the caller checks the verdict's typed data and its signer before it attaches it.
 #[derive(Clone)]
 pub struct VerifierClient {
     list: Arc<NodeList>,
@@ -617,12 +617,18 @@ impl VerifierClient {
         let need = n / 2 + 1;
         let mut largest = 0;
         for (c, _) in &answers {
-            let group = answers.iter().filter(|(d, _)| d == c);
-            let k = group.clone().count();
+            let mut group: Vec<&Value> = answers
+                .iter()
+                .filter(|(d, _)| d == c)
+                .map(|(_, v)| v)
+                .collect();
+            let k = group.len();
             if k >= need {
-                // the group's answer that expires first: each verifier sets `validUntil` from its own clock
-                if let Some((_, v)) = group.min_by_key(|(_, v)| valid_until(v)) {
-                    return Ok(v.clone());
+                // each verifier sets `validUntil` from its own clock: the group's median answer, so no one replica (a clock
+                // behind or far ahead) decides the outcome (merged-tree review M3)
+                group.sort_by_key(|v| valid_until(v));
+                if let Some(v) = group.get(k / 2) {
+                    return Ok((*v).clone());
                 }
             }
             largest = largest.max(k);
