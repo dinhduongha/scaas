@@ -128,6 +128,11 @@ pub(crate) fn sign(
     parts: &[BlsMultiPart],
     surplus: bool,
 ) -> Result<scaas_ua::wallet::entries::Built, SdkError> {
+    // an owner statement (`ownerSig`, `pqzAuth`) is signed by one key before the entry: a group has no such path (M15,
+    // review 2026-11-20; as `sign_msig`)
+    if p.t.owner.is_some() {
+        return Err(SdkError::Argument);
+    }
     let d = key_data(&p.signer())?;
     let ua_msg = scaas_ua::wallet::scaas_bls_multi_message(&p.t.td)?;
     let parts = parts

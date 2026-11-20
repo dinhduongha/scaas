@@ -641,6 +641,39 @@ fn liquidity(t: &T, dex: &str) -> LiquidityOrder {
     }
 }
 
+/// M16 (review 2026-11-20): a `bls12381-multi` group signs by its members' aggregate only: as an order's or a lane's signer
+/// it is refused at prepare (`Argument`), before any read; the same requests by the EVM key are the controls.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_group_is_no_order_signer() {
+    let t = setup(1, 0).await;
+    let KeyRef::Imported { seed, .. } = t.signer.clone() else {
+        panic!()
+    };
+    let group = KeyRef::BlsMulti {
+        seed,
+        account: 0,
+        index: 0,
+        key_data: "0x00".into(),
+    };
+    let dex = t.sdk.dex();
+    let n = t.chain.lock().unwrap().requests.len();
+    let mut o = order(&t, TOKEN, DEX);
+    o.signer = group.clone();
+    assert_eq!(code(dex.prepare_trade_order(o).await), "Argument");
+    let mut l = liquidity(&t, DEX);
+    l.signer = group.clone();
+    assert_eq!(code(dex.prepare_liquidity_order(l).await), "Argument");
+    assert_eq!(t.chain.lock().unwrap().requests.len(), n, "nothing read");
+    assert_eq!(
+        code(dex.prepare_trade_order(order(&t, TOKEN, DEX)).await),
+        "Ok"
+    );
+    assert_eq!(
+        code(dex.prepare_liquidity_order(liquidity(&t, DEX)).await),
+        "Ok"
+    );
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn liquidity_order_signs_under_its_check() {
     let t = setup(1, 0).await;

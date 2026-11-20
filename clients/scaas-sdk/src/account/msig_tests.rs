@@ -1033,15 +1033,72 @@ async fn msig_auditor_pqz_consent() {
     .unwrap();
     assert_eq!(out["keyData"], "0x");
     assert_eq!(out["signature"], "0x");
-    assert_eq!(out["members"].as_array().unwrap().len(), 2, "both slots");
-    // below the threshold: refused, nothing returned
-    assert_ne!(
+    // M2 (review 2026-11-20): each slot's signature verifies under `auditor-consent` over this token's consent of the
+    // msig's own UA; another purpose and another token's consent are the controls
+    let members: Vec<MemberSig> = out["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| member_of(&m.to_string()).unwrap())
+        .collect();
+    assert_eq!(members.len(), 2, "both slots");
+    let (chain_id, uid) = crate::wallet::ops::ids(&t.sdk, "local").unwrap();
+    let ua32 = id32(&ua).unwrap();
+    let digest_of = |tok: &str| {
+        let t20 = crate::op::addr20(tok).unwrap();
+        let m = serde_json::json!({"token": hex(&t20), "auditor": hex(&ua32), "epoch": 1, "chainUid": hex(&uid)});
+        scaas_ua::wallet::scaas_typed_data(
+            "AuditorConsent",
+            Some(crate::op::domain_name("pqz").unwrap()),
+            &t20,
+            chain_id,
+            &uid,
+            &m,
+        )
+        .unwrap()
+        .digest()
+        .unwrap()
+    };
+    let lookup = |id: [u8; 32]| {
+        (0..2).find_map(|i| {
+            let k = wallet.ua_key(FNDSA512, 0, i).unwrap();
+            (k.ua() == Some(id)).then(|| (FNDSA512, k.key_data()))
+        })
+    };
+    let verify = |purpose: &str, digest: [u8; 32]| {
+        check_authorization_current(
+            &kd,
+            &ua32,
+            &scaas_ua::purpose_tag(purpose).unwrap(),
+            &digest,
+            &members,
+            &domain(),
+            &lookup,
+            &|_| None,
+            Some(&all),
+        )
+    };
+    assert_eq!(verify("auditor-consent", digest_of(token)), Ok(()));
+    assert!(
+        verify("metatx", digest_of(token)).is_err(),
+        "another purpose"
+    );
+    assert!(
+        verify(
+            "auditor-consent",
+            digest_of("0x5ca00000000000000000000000000000000000a4")
+        )
+        .is_err(),
+        "another token's consent"
+    );
+    // below the threshold: refused by name (a set short of the threshold is not minimal), nothing returned
+    assert_eq!(
         code(
             t.sdk
                 .admin()
                 .sign_pqz_auditor_consent(req(vec![member(&t, slot_of(0), FNDSA512, 0)]))
                 .await
         ),
-        "Ok"
+        "UAPoP"
     );
 }

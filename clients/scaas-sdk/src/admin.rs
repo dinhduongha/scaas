@@ -447,6 +447,10 @@ impl Admin {
     }
 
     async fn consent(&self, req: AuditorConsent, want: &'static str) -> Result<String, SdkError> {
+        // a group auditor has no consent path (M16; PLANNED)
+        if matches!(req.signer, KeyRef::BlsMulti { .. }) {
+            return Err(SdkError::Argument);
+        }
         // a native (address) auditor of a PQZ token: refused up front (controller call, owner auto-run 2026-11-19); a native id
         // holds no PQZ key (CTR-UA-32), so the token refuses it at `_keyOf` before the consent is read
         if want == "pqz" && matches!(req.signer, KeyRef::Native { .. } | KeyRef::Imported { .. }) {

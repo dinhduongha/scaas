@@ -692,6 +692,52 @@ async fn signed_gas_regular_is_held_to_the_cap() {
     }
 }
 
+/// M17 (review 2026-11-20): a quote never lowers the regular bound. `signed_quote` takes the operation's own regular bound
+/// as the floor (`resend`'s recomputed figure) and reads a quote naming no regular part (0) as whole; the caps are held even
+/// when nothing grew. Each row one change from the control.
+#[tokio::test(flavor = "multi_thread")]
+async fn signed_quote_never_lowers_the_regular_bound() {
+    let t = setup(0, |_, l| l.max_gas = 1 << 26).await;
+    let p = prepare(&t, cancel(&t, "token", TOKEN, "5", "0")).await;
+    let mut q = t
+        .sdk
+        .op()
+        .quote(p.clone(), SubmitPath::SelfRelay { payer: payer(&t) })
+        .await
+        .unwrap();
+    (q.gas_limit, q.regular_gas, q.gas) = (20_000_000, 1_000_000, Some(20_000_000));
+    let own = |regular: u64| {
+        Some(gas::Figure {
+            gas: 18_000_000,
+            regular,
+            from: gas::GasSources::both(gas::GasFrom::App),
+        })
+    };
+    let at = |q: SubmitQuote, own: Option<gas::Figure>| {
+        let t = &t;
+        async move {
+            code(
+                super::quote::signed_quote(&t.sdk, "local", gas::NATIVE_EVM, 100, &q, 100, own)
+                    .await,
+            )
+        }
+    };
+    // the control: both bounds within 2^24
+    assert_eq!(at(q.clone(), own(1_000_000)).await, "Ok");
+    assert_eq!(at(q.clone(), None).await, "Ok");
+    // the row's own regular bound above the cap, the caller's quote below it: refused
+    assert_eq!(at(q.clone(), own(17_000_000)).await, "GasAboveTxCap");
+    // a quote naming no regular part is whole (20 M above the cap): refused, though nothing grew
+    let mut zero = q.clone();
+    zero.regular_gas = 0;
+    assert_eq!(at(zero, None).await, "GasAboveTxCap");
+    // the caller's own regular bound above the cap, nothing grew: refused (the caps held without growth)
+    let mut high = q.clone();
+    high.regular_gas = 17_000_000;
+    assert_eq!(at(high, None).await, "GasAboveTxCap");
+    assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn payer_delegated() {
     let t = setup(0, |_, _| {}).await;

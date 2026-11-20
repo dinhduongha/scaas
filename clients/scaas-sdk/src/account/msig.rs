@@ -343,7 +343,8 @@ async fn open(sdk: &Sdk, slots: &[MsigSlot]) -> Result<Vec<Key>, SdkError> {
             MsigSlot::Signed { .. } => vec![],
         };
         for r in refs {
-            if matches!(r, KeyRef::Msig { .. }) {
+            // a slot's key is a single key: never an `msig` nor a `bls12381-multi` group (M16; a group slot PLANNED)
+            if matches!(r, KeyRef::Msig { .. } | KeyRef::BlsMulti { .. }) {
                 return Err(SdkError::Argument);
             }
             keys.push(key_opened(sdk, r).await?);
