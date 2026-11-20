@@ -57,6 +57,7 @@ import {FrostSecp256k1Verifier} from "../src/ua/verifiers/FrostSecp256k1Verifier
 import {Musig2Bn254Verifier} from "../src/ua/verifiers/Musig2Bn254Verifier.sol";
 import {FrostBn254Verifier} from "../src/ua/verifiers/FrostBn254Verifier.sol";
 import {MldsaVerifier} from "../src/ua/MlDsa.sol";
+import {MldsaVerifyOnly} from "../src/ua/MlDsaVerifyOnly.sol";
 import {FndsaVerifier} from "../src/ua/FnDsa.sol";
 import {SlhdsaVerifier} from "../src/ua/SlhDsa.sol";
 import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
@@ -1286,7 +1287,7 @@ abstract contract DeployBase is DeployBook {
         // before the script's first transaction (`create2_library_salt`), so their addresses, and through the code that embeds
         // them the registry's, depend on the sources only. Each one's own transaction is a release like the registry's: the
         // same gate.
-        _requireRegistryGas(isHedera, budget, smartKeyAccountImpl, k);
+        _requireRegistryGas(address(0), isHedera, budget, smartKeyAccountImpl, k);
         reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, txGasCap, smartKeyAccountImpl, true, k);
         _checkGen1Kinds(reg, bls, isHedera, pqz, ml[2] && mldsaPrecompile);
         _gate(address(reg));
@@ -1310,6 +1311,233 @@ abstract contract DeployBase is DeployBook {
         vm.serializeAddress("deploy", "ua_registry_core_lib", address(UARegistryCoreLib));
         vm.serializeAddress("deploy", "ua_registry_aux_lib", address(UARegistryAuxLib));
         vm.serializeAddress("deploy", "ua_registry_reg_lib", address(UARegistryRegLib));
+        _genBookCommon(reg);
+    }
+
+    /// @notice Spec 2026-11-19-registry-verify-only-kinds §9 (F14): the line fields every generation's book carries (generation 1's
+    ///         too, so a later deploy can check its walk against them): generation, predecessor, code hash, the three libraries
+    ///         with their code hashes, `tx_gas_cap`.
+    function _genBookCommon(UARegistry reg) internal {
+        vm.serializeUint("deploy", "ua_registry_generation", reg.generation());
+        vm.serializeAddress("deploy", "ua_registry_predecessor", reg.predecessor());
+        vm.serializeBytes32("deploy", "ua_registry_codehash", address(reg).codehash);
+        vm.serializeUint("deploy", "tx_gas_cap", txGasCap);
+        string memory l = "ua_registry_libraries";
+        address[3] memory a = [address(UARegistryCoreLib), address(UARegistryAuxLib), address(UARegistryRegLib)];
+        string[3] memory n = ["UARegistryCoreLib", "UARegistryAuxLib", "UARegistryRegLib"];
+        string memory o;
+        for (uint256 i; i < 3; ++i) {
+            vm.serializeAddress(n[i], "address", a[i]);
+            o = vm.serializeString(l, n[i], vm.serializeBytes32(n[i], "codehash", a[i].codehash));
+        }
+        vm.serializeString("deploy", l, o);
+    }
+
+    /// @notice A book field `path` as a number, `dflt` when absent.
+    function _bookUint(string memory book, string memory path, uint256 dflt) internal view returns (uint256) {
+        return vm.keyExistsJson(book, path) ? vm.parseJsonUint(book, path) : dflt;
+    }
+
+    /// @notice The owner's confirmation of refusal `name`, recorded in the book with its reason (`owner_override_<name>`, W5, M9).
+    function _ownerOverride(string memory book, string memory name) internal view returns (bool) {
+        string memory p = string.concat(".owner_override_", name);
+        return vm.keyExistsJson(book, p) && bytes(vm.parseJsonString(book, p)).length != 0;
+    }
+
+    /// @notice The later-generation mode (spec 2026-11-19-registry-verify-only-kinds §9, CTR-UA-64; owner W5, M9, M10 d, X1): generation
+    ///         n + 1 over the book's registry `ua_registry` (generation n). Before anything is sent, each refused by name:
+    ///         `GEN_NOT_LATEST` (the book's `ua_registry_latest` is another registry; only with the owner's override), `GEN_DEPTH`
+    ///         (n + 1 over `MAX_GENERATION`), `GEN_WALK_MISMATCH <g>` (the walk from the predecessor to generation 1 against the
+    ///         book: every address, code hash and generation, `ua_registry_line[g - 1]` for the generations below n, and the
+    ///         libraries' code hashes), `GEN_TX_CAP_UNKNOWN` (no `tx_gas_cap` in the book: `script/tx_gas_cap.py` writes it) and
+    ///         `GEN_TX_CAP_MISMATCH` (`TX_GAS_CAP` other than the book's), then the kinds of `_genKinds`. Carries `msig` in full,
+    ///         `0x0142` where a predecessor enables it, the book's `gen_verify_only` kinds. A kind no predecessor enables (an
+    ///         ordinary later-generation kind) is not built in this mode. **UNAUDITED.**
+    function _deployUARegistryGen(string memory book, address ska) internal returns (UARegistry reg) {
+        UARegistry pred = UARegistry(vm.parseJsonAddress(book, ".ua_registry"));
+        address latest =
+            vm.keyExistsJson(book, ".ua_registry_latest") ? vm.parseJsonAddress(book, ".ua_registry_latest") : address(pred);
+        require(
+            latest == address(pred) || _ownerOverride(book, "GEN_NOT_LATEST"),
+            string.concat(
+                "GEN_NOT_LATEST: the predecessor ", vm.toString(address(pred)), " is not the book's latest ", vm.toString(latest)
+            )
+        );
+        uint256 g = _bookUint(book, ".ua_registry_generation", 1) + 1;
+        require(
+            g <= MAX_GEN,
+            string.concat("GEN_DEPTH: generation ", vm.toString(g), " over MAX_GENERATION ", vm.toString(MAX_GEN))
+        );
+        _walkCheck(book, address(pred), g - 1);
+        uint64 cap = uint64(_bookUint(book, ".tx_gas_cap", 0));
+        require(cap != 0, "GEN_TX_CAP_UNKNOWN: no tx_gas_cap in the book (script/tx_gas_cap.py, owner X1)");
+        require(
+            txGasCap == 0 || txGasCap == cap,
+            string.concat(
+                "GEN_TX_CAP_MISMATCH: TX_GAS_CAP ", vm.toString(txGasCap), ", the book's ", vm.toString(uint256(cap))
+            )
+        );
+        txGasCap = cap;
+        bool hedera = pred.hederaNative();
+        uint64 budget = hedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
+        UARegistry.KindConfig[] memory k = _genKinds(book, pred, g, budget);
+        _requireRegistryGas(address(pred), hedera, budget, ska, k);
+        reg = new UARegistry{salt: salt}(uid, address(pred), hedera, budget, cap, ska, true, k);
+        require(reg.generation() == g, "gen registry: not the generation the book gives");
+        _gate(address(reg));
+        vm.serializeAddress("deploy", "ua_registry", address(reg));
+        vm.serializeString("deploy", "ua_registry_walk_check", string.concat("ok: generations 1-", vm.toString(g - 1)));
+        vm.serializeBool("deploy", "gen_pqz", reg.kindEnabled(UAKinds.PQZ_MLWE));
+        vm.serializeString("deploy", "owner_overrides", _overridesUsed(book));
+        _genBookCommon(reg);
+    }
+
+    /// @notice The owner's overrides this deploy used, with their reasons (W5, M9): an object keyed by the refusal's name.
+    function _overridesUsed(string memory book) internal returns (string memory ov) {
+        ov = "{}";
+        string[2] memory names = ["GEN_NOT_LATEST", "GEN_PQZ_OMITTED"];
+        for (uint256 i; i < 2; ++i) {
+            if (!_ownerOverride(book, names[i])) continue;
+            string memory why = vm.parseJsonString(book, string.concat(".owner_override_", names[i]));
+            ov = vm.serializeString("owner_overrides", names[i], why);
+        }
+    }
+
+    uint256 internal constant MAX_GEN = 16; // `UARegistry.MAX_GENERATION`
+
+    /// @notice W5: the walk from `p` (generation `n`) to generation 1 against the book, else `GEN_WALK_MISMATCH <g>`.
+    function _walkCheck(string memory book, address p, uint256 n) internal view {
+        for (uint256 g = n; g != 0; --g) {
+            string memory at = g == n ? "." : string.concat(".ua_registry_line.gen", vm.toString(g), ".");
+            string memory a = string.concat(at, g == n ? "ua_registry" : "registry");
+            string memory h = string.concat(at, g == n ? "ua_registry_codehash" : "codehash");
+            string memory err = string.concat("GEN_WALK_MISMATCH ", vm.toString(g));
+            require(vm.keyExistsJson(book, a) && vm.keyExistsJson(book, h), string.concat(err, ": not in the book"));
+            require(
+                p.code.length != 0 && p == vm.parseJsonAddress(book, a) && p.codehash == vm.parseJsonBytes32(book, h)
+                    && UARegistry(p).generation() == g,
+                string.concat(err, ": address, code hash or generation differs from the book")
+            );
+            p = UARegistry(p).predecessor();
+        }
+        require(p == address(0), "GEN_WALK_MISMATCH 1: generation 1 has a predecessor");
+        if (!vm.keyExistsJson(book, ".ua_registry_libraries")) return;
+        string[3] memory names = ["UARegistryCoreLib", "UARegistryAuxLib", "UARegistryRegLib"];
+        for (uint256 i; i < 3; ++i) {
+            string memory q = string.concat(".ua_registry_libraries.", names[i]);
+            if (!vm.keyExistsJson(book, q)) continue;
+            address l = vm.parseJsonAddress(book, string.concat(q, ".address"));
+            require(
+                l.code.length != 0 && l.codehash == vm.parseJsonBytes32(book, string.concat(q, ".codehash")),
+                string.concat("GEN_WALK_MISMATCH ", vm.toString(n), ": library ", names[i])
+            );
+        }
+    }
+
+    /// @notice The kinds of generation `g` over `pred`: `0x0142` with the home's `pqz-mlwe` verifier and cap wherever a
+    ///         predecessor enables it (M9; leaving it out, `gen_pqz: false`, is `GEN_PQZ_OMITTED` unless the owner's override),
+    ///         and each `gen_verify_only` entry `{kind, verifier, cap, keyForm}` (`_voKind`).
+    function _genKinds(string memory book, UARegistry pred, uint256 g, uint64 budget)
+        internal
+        returns (UARegistry.KindConfig[] memory k)
+    {
+        uint256 m;
+        while (vm.keyExistsJson(book, string.concat(".gen_verify_only[", vm.toString(m), "]"))) ++m;
+        k = new UARegistry.KindConfig[](m + 1);
+        uint256 n;
+        address ph = pred.kindHome(UAKinds.PQZ_MLWE);
+        if (ph != address(0)) {
+            if (!vm.keyExistsJson(book, ".gen_pqz") || vm.parseJsonBool(book, ".gen_pqz")) {
+                address v = UARegistry(ph).verifierOf(UAKinds.PQZ_MLWE);
+                require(
+                    v.code.length != 0 && PqzKeyVerifier(v).PRECOMPILE() == PqzSafety.PQZ
+                        && PqzKeyVerifier(v).PROOF_SYSTEM_ID() == PqzSafety.PQZL_ID,
+                    "gen registry: the home's pqz-mlwe verifier is not a PqzKeyVerifier on the PQZ precompile"
+                );
+                k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, v, UARegistry(ph).verifyCap(UAKinds.PQZ_MLWE), false, 0);
+                vm.serializeBytes32("deploy", "pqz_key_verifier_codehash", v.codehash);
+            } else {
+                require(
+                    _ownerOverride(book, "GEN_PQZ_OMITTED"),
+                    "GEN_PQZ_OMITTED: a predecessor enables 0x0142; leaving it out needs the owner's override in the book (M9)"
+                );
+            }
+        }
+        string memory list = "{}"; // `verify_only`: an object keyed by the kind (forge's JSON writer keeps no array of objects)
+        for (uint256 i; i < m; ++i) {
+            string memory e = string.concat(".gen_verify_only[", vm.toString(i), "]");
+            UARegistry.KindConfig memory c = UARegistry.KindConfig(
+                uint16(vm.parseJsonUint(book, string.concat(e, ".kind"))),
+                vm.parseJsonAddress(book, string.concat(e, ".verifier")),
+                uint64(vm.parseJsonUint(book, string.concat(e, ".cap"))),
+                true,
+                uint8(vm.parseJsonUint(book, string.concat(e, ".keyForm")))
+            );
+            _voKind(pred, c, g, budget, ph != address(0));
+            k[n++] = c;
+            string memory o = vm.toString(abi.encodePacked(c.kind));
+            vm.serializeUint(o, "kind", c.kind);
+            vm.serializeAddress(o, "verifier", c.verifier);
+            vm.serializeBytes32(o, "codehash", c.verifier.codehash);
+            vm.serializeUint(o, "cap", c.cap);
+            vm.serializeUint(o, "keyForm", c.keyForm);
+            list = vm.serializeString("verify_only", o, vm.serializeAddress(o, "precompile", _precompileOf(c.verifier)));
+        }
+        vm.serializeString("deploy", "verify_only", list);
+        assembly ("memory-safe") {
+            mstore(k, n)
+        }
+    }
+
+    /// @notice One verify-only kind (§2, §9): an eligible ML-DSA kind (§7) a predecessor enables; `GEN_KEY_FORM_IMPOSSIBLE <kind>`
+    ///         for key form 1 where the home's verifier has a precompile (N8); `GEN_VERIFY_ONLY_NO_PRECOMPILE <kind>` for a verifier
+    ///         whose probe found none (N16, P11); the verifier's `KIND` and `KEY_FORM`; the 75 % rule; where `0x0142` is on the
+    ///         line, `GEN_PQZ_DEBIT_BOUND <kind>` (M10 d, `UARegistryRegLib.voDebitFits`, the registry constructor's own check).
+    function _voKind(UARegistry pred, UARegistry.KindConfig memory c, uint256 g, uint64 budget, bool pqzLine)
+        internal
+        view
+    {
+        string memory kh = vm.toString(abi.encodePacked(c.kind));
+        require(
+            c.kind == UAKinds.MLDSA44 || c.kind == UAKinds.MLDSA65 || c.kind == UAKinds.MLDSA87,
+            string.concat("gen registry: kind ", kh, " is not eligible verify-only (ML-DSA only, spec section 7)")
+        );
+        address home = pred.kindHome(c.kind);
+        require(home != address(0), string.concat("gen registry: no predecessor enables kind ", kh));
+        require(
+            c.keyForm == 0 || (c.keyForm == 1 && _precompileOf(UARegistry(home).verifierOf(c.kind)) == address(0)),
+            string.concat("GEN_KEY_FORM_IMPOSSIBLE ", kh, ": the home's verifier has a precompile, no cache can exist")
+        );
+        require(
+            c.verifier.code.length != 0 && _precompileOf(c.verifier) != address(0),
+            string.concat("GEN_VERIFY_ONLY_NO_PRECOMPILE ", kh, ": the verifier's probe found no precompile")
+        );
+        require(
+            MldsaVerifier(c.verifier).KIND() == c.kind && MldsaVerifyOnly(c.verifier).KEY_FORM() == c.keyForm,
+            string.concat("gen registry: the verify-only verifier of ", kh, " has another kind or key form")
+        );
+        require(_pqKindFits(c.cap, budget), string.concat("gen registry: the cap of ", kh, " is over 75 % of the budget"));
+        if (!pqzLine) return;
+        uint256 hc = UARegistry(home).verifyCap(c.kind);
+        require(
+            UARegistryRegLib.voDebitFits(c.kind, c.cap, hc, g - UARegistry(home).generation(), txGasCap),
+            string.concat(
+                "GEN_PQZ_DEBIT_BOUND ",
+                kh,
+                ": cap ",
+                vm.toString(uint256(c.cap)),
+                " + the home's ",
+                vm.toString(hc),
+                " + PQZ_DEBIT_MIN_GAS over txGasCap ",
+                vm.toString(uint256(txGasCap))
+            )
+        );
+    }
+
+    /// @notice A verifier's `PRECOMPILE()`, 0 when it has none or does not answer one word.
+    function _precompileOf(address v) internal view returns (address) {
+        (bool ok, bytes memory r) = v.staticcall(abi.encodeWithSignature("PRECOMPILE()"));
+        return ok && r.length == 32 ? abi.decode(r, (address)) : address(0);
     }
 
     /// @notice `bls12381-multi`'s line in the deploy book (spec 2026-11-19-bls12381-multi §7, §10; ARCH-POS-18): its path where the
@@ -1323,12 +1551,14 @@ abstract contract DeployBase is DeployBook {
 
     /// @notice The gates of the registry's release and of its three libraries', each its own transaction (CREATE2 of the
     ///         registry's init code with these arguments; each library's creation code).
-    function _requireRegistryGas(bool isHedera, uint64 budget, address ska, UARegistry.KindConfig[] memory k) internal {
+    function _requireRegistryGas(address pred, bool isHedera, uint64 budget, address ska, UARegistry.KindConfig[] memory k)
+        internal
+    {
         _requireReleaseGas(
             "UARegistry",
             address(0),
             abi.encodePacked(
-                type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, txGasCap, ska, true, k)
+                type(UARegistry).creationCode, abi.encode(uid, pred, isHedera, budget, txGasCap, ska, true, k)
             )
         );
         _requireReleaseGas("UARegistryCoreLib", address(0), vm.getCode("UARegistryCoreLib.sol:UARegistryCoreLib"));

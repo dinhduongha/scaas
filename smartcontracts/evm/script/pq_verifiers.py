@@ -201,5 +201,103 @@ def main(rpc):
         print(f"{n}={a}")
 
 
-if __name__ == "__main__":
+# The deploy's differential probe of a later generation (spec 2026-11-19-registry-verify-only-kinds §9, F4, R5; plan Task 13): per
+# row, the holder's entry on the kind's home verifier and the verify-only verifier's `verify`, each by `eth_call` through the node
+# list under strict majority (ARCH-POS-15). The holder on a precompile: `verify(pk, ua_msg, sig)`; on the cache: each
+# `expandedKeyPart(pk, p)`, concatenated, then `verifyExpanded(ek, ua_msg, sig)` (never `verify` on the FIPS key: over 2^24 for
+# ML-DSA-65 / -87). Any verdict that differs from the other or from the row's `valid` stops before broadcast, with the rows.
+#   python3 -I script/pq_verifiers.py differential <rpc>[,<rpc>…] <kind> <home verifier> <verify-only verifier> <parts>
+# (<parts>: the home's `expandedKeyParts()`, 0 on a precompile). UNAUDITED tooling.
+SEL_VERIFY, SEL_PART, SEL_EXPANDED = "024ad318", "b733b5e4", "6e2fe976"
+
+
+class DiffError(Exception):
+    pass
+
+
+def abi_args(*args):
+    """ABI encoding of `args`: ("w", 32-byte word | int) or ("b", bytes)."""
+    head, tail, n = [], b"", 32 * len(args)
+    for t, v in args:
+        if t == "w":
+            head.append(v if isinstance(v, bytes) else int(v).to_bytes(32, "big"))
+        else:
+            head.append((n + len(tail)).to_bytes(32, "big"))
+            tail += len(v).to_bytes(32, "big") + v + b"\0" * (-len(v) % 32)
+    return b"".join(head) + tail
+
+
+def abi_bytes(ret):
+    """The one `bytes` an ABI return holds."""
+    o = int.from_bytes(ret[:32], "big")
+    n = int.from_bytes(ret[o : o + 32], "big")
+    return ret[o + 32 : o + 32 + n]
+
+
+def majority(nodes, to, data, what):
+    """The strict majority's answer of `eth_call(to, data)` over `nodes` (callables -> bytes, None on an error)."""
+    answers = [n(to, data) for n in nodes]
+    for a in answers:
+        if 2 * answers.count(a) > len(answers):
+            return a
+    raise DiffError(f"GEN_DIFFERENTIAL_NODES: no strict majority on {what}")
+
+
+def verdict(ret):
+    return ret is not None and len(ret) == 32 and int.from_bytes(ret, "big") == 1
+
+
+def differential(nodes, home, vo, parts, rows):
+    """`rows`: (what, pk, ua_msg, sig, valid). Returns [(what, holder, verify-only, valid)]; DiffError on any difference."""
+    out, ek = [], {}
+    for what, pk, msg, sig, valid in rows:
+        if parts == 0:
+            h = verdict(majority(nodes, home, bytes.fromhex(SEL_VERIFY) + abi_args(("b", pk), ("w", msg), ("b", sig)), what))
+        else:
+            if pk not in ek:
+                ek[pk] = b"".join(
+                    abi_bytes(majority(nodes, home, bytes.fromhex(SEL_PART) + abi_args(("b", pk), ("w", p)), f"part {p}") or b"")
+                    for p in range(parts)
+                )
+            data = bytes.fromhex(SEL_EXPANDED) + abi_args(("b", ek[pk]), ("w", msg), ("b", sig))
+            h = verdict(majority(nodes, home, data, what))
+        v = verdict(majority(nodes, vo, bytes.fromhex(SEL_VERIFY) + abi_args(("b", pk), ("w", msg), ("b", sig)), what))
+        out.append((what, h, v, valid))
+    bad = [r for r in out if not r[1] == r[2] == r[3]]
+    if bad:
+        raise DiffError(f"GEN_DIFFERENTIAL_MISMATCH: rows (what, holder, verify-only, valid) {bad}: to the owner (R5)")
+    return out
+
+
+def kat_rows(name):
+    """The level's pq_kat.json rows: the valid one and its mutations."""
+    k = json.load(open(os.path.join(E.EVM, "..", "vectors", "ua", "pq_kat.json")))["kinds"][name]
+    b = lambda h: bytes.fromhex(h.removeprefix("0x"))  # noqa: E731
+    rows = [("valid", b(k["pk"]), b(k["ua_msg"]), b(k["sig"]), True)]
+    return rows + [(m["what"], b(m["pk"]), b(m["ua_msg"]), b(m["sig"]), bool(m["valid"])) for m in k["mutations"]]
+
+
+def rpc_call(url):
+    import urllib.request
+
+    def call(to, data):
+        body = {"jsonrpc": "2.0", "id": 1, "method": "eth_call", "params": [{"to": to, "data": "0x" + data.hex()}, "latest"]}
+        req = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            j = json.load(r)
+        return None if "error" in j else bytes.fromhex(j["result"].removeprefix("0x"))
+
+    return call
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["differential"]:
+    urls, kind, home, vo, parts = sys.argv[2].split(","), int(sys.argv[3], 0), sys.argv[4], sys.argv[5], int(sys.argv[6])
+    name = {0x0130: "mldsa44", 0x0131: "mldsa65", 0x0134: "mldsa87"}[kind]
+    try:
+        for r in differential([rpc_call(u) for u in urls], home, vo, parts, kat_rows(name)):
+            say(f"differential {name} {r[0]}: holder {r[1]}, verify-only {r[2]}, valid {r[3]}")
+    except DiffError as e:
+        say(f"FAIL {e}")
+        sys.exit(1)
+elif __name__ == "__main__":
     main(*sys.argv[1:])

@@ -4,6 +4,9 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {MldsaKit} from "../helpers/MldsaKit.sol";
+import {PcStandIn} from "./MlDsaVerifyOnly.t.sol";
+import {MldsaVerifyOnly44, MldsaVerifyOnly65, MldsaVerifyOnly87} from "../../src/ua/MlDsaVerifyOnly.sol";
+import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
 import {UAPrecompileProbe} from "../../script/UAPrecompileProbe.sol";
 import {Bls12381} from "../../src/common/Bls12381.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -18,6 +21,12 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 ///         accounts.md §1.9: the precompile probe (`UAPrecompileProbe`: the kinds.json points outside the subgroup,
 ///         the registry's caps) gates the EIP-2537 kinds (`zether-bls12381` among them, on every chain: owner ruling 2026-10-31)
 ///         and `bls-bn254-minsig`.
+/// The getters `DeployBase` checks on a `pqz-mlwe` verifier (a real one needs the PQZ precompile in its constructor).
+contract PqzKeyVerifierGetters {
+    address public constant PRECOMPILE = PqzSafety.PQZ;
+    bytes32 public constant PROOF_SYSTEM_ID = PqzSafety.PQZL_ID;
+}
+
 contract UADeployTest is Test {
     bytes32 constant UID = keccak256("scaas.ua3.deploy");
     uint16[12] internal EVERYWHERE =
@@ -477,15 +486,14 @@ contract UADeployTest is Test {
         assertEq(lib, vm.parseJsonUint(base, ".UARegistryCoreLib") * 1530 + 16_777_216);
         assertEq(key, vm.parseJsonUint(base, ".UARegistryAuxLib") * 1530 + 16_777_216);
         assertEq(rl, vm.parseJsonUint(base, ".UARegistryRegLib") * 1530 + 16_777_216);
-        // owner 2026-11-19 (the split, candidate (2)): the core (15,737 B) and the registration library (30,157 B) are below the
-        // registry (33,293 B), whose gate is checked first, so theirs are implied by it; the Aux library (35,417 B) is above it
-        // and is the next gate refused (was: the core above the registry, the Aux library between them)
+        // multi-gen-verify Task 8 moved the PQZ readers out of the Aux library (35,670 -> 33,858 B): all three libraries (core
+        // 23,465, registration 31,665, Aux 33,858 B) are now below the registry (35,166 B), whose gate is checked first, so
+        // theirs are implied by it (was, after the split: the Aux library above the registry, the next gate refused)
         assertLt(lib, need);
         assertLt(rl, need);
-        assertGt(key, need);
+        assertLt(key, need);
         _refused(h, need - 1, need, "UARegistry");
-        _refused(h, need, key, "UARegistryAuxLib");
-        uint256 top = key;
+        uint256 top = need;
         uint256 token = h.gasNeed("NormalToken");
         uint256 dex = h.gasNeed("SCaaSDex");
         if (token > top) top = token;
@@ -534,5 +542,170 @@ contract UADeployTest is Test {
             )
         );
         h.deploy(UID, false, ska);
+    }
+
+    // ----- later-generation mode (spec 2026-11-19-registry-verify-only-kinds §9, X1, M9, M10 d, W5; plan Task 13 Step 1) -----
+    // Red until `DeployHarness.deployGen(bytes32 uid, address ska, string book)` exists: it deploys generation n + 1 over the
+    // book's latest registry and returns (registry, json); a refusal reverts with its name. Called by name so the suite
+    // compiles before it is built.
+
+    function _gen(DeployHarness h, string memory book) internal returns (bool ok, bytes memory ret) {
+        (ok, ret) = address(h).call(abi.encodeWithSignature("deployGen(bytes32,address,string)", UID, ska, book));
+    }
+
+    /// A book of `generations` generations (gen 1 from the harness), `extra` JSON fields appended.
+    function _book(DeployHarness h, string memory extra) internal returns (string memory) {
+        (, string memory json) = h.deploy(UID, false, ska, false);
+        address r = vm.parseJsonAddress(json, ".ua_registry");
+        return string.concat(
+            '{"ua_registry":"', vm.toString(r), '","ua_registry_codehash":"', vm.toString(r.codehash), '",',
+            '"tx_gas_cap":16777216', extra, "}"
+        );
+    }
+
+    /// `extra` fields appended to a flat book.
+    function _add(string memory b, string memory extra) internal pure returns (string memory) {
+        return vm.replace(b, "}", string.concat(extra, "}"));
+    }
+
+    function _named(DeployHarness h, string memory book, string memory name) internal {
+        (bool ok, bytes memory ret) = _gen(h, book);
+        assertFalse(ok, name);
+        assertTrue(vm.contains(string(ret), name), name);
+    }
+
+    /// A verify-only ML-DSA verifier of `kind` (key form `form`) whose probe finds the stand-in precompile (`working`), or none.
+    function _vo(uint16 kind, uint8 form, bool working) internal returns (address) {
+        PcStandIn p = new PcStandIn();
+        bytes[] memory rows = new bytes[](1);
+        rows[0] = "flipped";
+        p.set(keccak256("valid"), rows, 0, 0);
+        address[] memory c = new address[](1);
+        c[0] = working ? address(p) : address(0x5CAa0099);
+        if (kind == UAKinds.MLDSA44) return address(new MldsaVerifyOnly44(c, "valid", rows, form, 100_000));
+        if (kind == UAKinds.MLDSA65) return address(new MldsaVerifyOnly65(c, "valid", rows, form, 100_000));
+        return address(new MldsaVerifyOnly87(c, "valid", rows, form, 100_000));
+    }
+
+    /// The book's `gen_verify_only` list of one entry.
+    function _voEntry(uint16 kind, address v, uint64 cap, uint8 form) internal pure returns (string memory) {
+        return string.concat(
+            ',"gen_verify_only":[{"kind":', vm.toString(kind), ',"verifier":"', vm.toString(v), '","cap":',
+            vm.toString(cap), ',"keyForm":', vm.toString(form), "}]"
+        );
+    }
+
+    /// Gen 1 with `pqz-mlwe` 0x0142 (a stand-in with the getters `DeployBase` checks).
+    function _pqzHarness() internal returns (DeployHarness h) {
+        h = new DeployHarness();
+        h.setPqz(false, address(new PqzKeyVerifierGetters()), address(0));
+    }
+
+    function test_deploy_gen2_overGen1_fromBook() public {
+        vm.chainId(31337);
+        DeployHarness h = new DeployHarness();
+        address v = _vo(UAKinds.MLDSA65, 0, true);
+        (bool ok, bytes memory ret) = _gen(h, _book(h, _voEntry(UAKinds.MLDSA65, v, 250_000, 0)));
+        assertTrue(ok, "deployGen");
+        (address r, string memory json) = abi.decode(ret, (address, string));
+        assertEq(UARegistry(r).generation(), 2);
+        assertEq(UARegistry(r).txGasCap(), 1 << 24, "from the book's probed cap");
+        assertTrue(UARegistry(r).verifyOnly(UAKinds.MLDSA65) && UARegistry(r).verifierOf(UAKinds.MLDSA65) == v);
+        assertTrue(UARegistry(r).kindEnabled(UAKinds.MSIG), "msig re-enabled in full");
+        assertFalse(UARegistry(r).kindEnabled(UAKinds.PQZ_MLWE), "no predecessor enables 0x0142");
+        assertEq(vm.parseJsonUint(json, ".ua_registry_generation"), 2);
+        assertEq(vm.parseJsonBytes32(json, ".ua_registry_codehash"), r.codehash);
+        assertEq(vm.parseJsonAddress(json, ".verify_only.0x0131.verifier"), v);
+    }
+
+    function test_deploy_notLatest_GEN_NOT_LATEST() public {
+        DeployHarness h = new DeployHarness();
+        _named(h, _book(h, ',"ua_registry_latest":"0x00000000000000000000000000000000000000aa"'), "GEN_NOT_LATEST");
+    }
+
+    function test_deploy_notLatest_ownerOverride() public {
+        DeployHarness h = new DeployHarness();
+        (bool ok,) = _gen(
+            h,
+            _book(
+                h,
+                ',"ua_registry_latest":"0x00000000000000000000000000000000000000aa","owner_override_GEN_NOT_LATEST":"owner: reason"'
+            )
+        );
+        assertTrue(ok, "the owner's override recorded in the book");
+    }
+
+    function test_deploy_gen17_GEN_DEPTH() public {
+        DeployHarness h = new DeployHarness();
+        _named(h, _book(h, ',"ua_registry_generation":16'), "GEN_DEPTH");
+    }
+
+    function test_deploy_walkMismatch_codeHash() public {
+        DeployHarness h = new DeployHarness();
+        string memory b = _book(h, "");
+        b = vm.replace(b, vm.parseJsonString(b, ".ua_registry_codehash"), vm.toString(bytes32(uint256(1))));
+        _named(h, b, "GEN_WALK_MISMATCH");
+    }
+
+    function test_deploy_omits0142_GEN_PQZ_OMITTED() public {
+        DeployHarness h = _pqzHarness();
+        string memory b = _book(h, "");
+        (bool ok, bytes memory ret) = _gen(h, b);
+        assertTrue(ok, "positive control: 0x0142 carried");
+        (address r,) = abi.decode(ret, (address, string));
+        assertTrue(UARegistry(r).kindEnabled(UAKinds.PQZ_MLWE) && !UARegistry(r).verifyOnly(UAKinds.PQZ_MLWE));
+        h = _pqzHarness();
+        _named(h, _book(h, ',"gen_pqz":false'), "GEN_PQZ_OMITTED");
+    }
+
+    function test_deploy_omits0142_ownerOverride() public {
+        DeployHarness h = _pqzHarness();
+        (bool ok, bytes memory ret) = _gen(h, _book(h, ',"gen_pqz":false,"owner_override_GEN_PQZ_OMITTED":"owner: reason"'));
+        assertTrue(ok);
+        (address r,) = abi.decode(ret, (address, string));
+        assertFalse(UARegistry(r).kindEnabled(UAKinds.PQZ_MLWE));
+    }
+
+    /// Key form 1 where the home's `mldsa65` verifier is on a precompile (no cache can exist there); key form 0 passes.
+    function test_deploy_keyForm1_precompileHome_named() public {
+        DeployHarness h = new DeployHarness();
+        h.setMldsa(true, address(0), MldsaKit.onChain(1, 0x000000000000000000000000000000005CAa0013, keccak256("scaas.deploy.v1")));
+        h.forceMl(false, true);
+        string memory b = _book(h, "");
+        (bool ok,) = _gen(h, _add(b, _voEntry(UAKinds.MLDSA65, _vo(UAKinds.MLDSA65, 0, true), 250_000, 0)));
+        assertTrue(ok, "positive control: key form 0");
+        _named(
+            h,
+            _add(b, _voEntry(UAKinds.MLDSA65, _vo(UAKinds.MLDSA65, 1, true), 250_000, 1)),
+            "GEN_KEY_FORM_IMPOSSIBLE"
+        );
+    }
+
+    function test_deploy_verifyOnlyNoPrecompile_named() public {
+        DeployHarness h = new DeployHarness();
+        _named(
+            h, _book(h, _voEntry(UAKinds.MLDSA65, _vo(UAKinds.MLDSA65, 0, false), 250_000, 0)), "GEN_VERIFY_ONLY_NO_PRECOMPILE"
+        );
+    }
+
+    /// M10 d: with 0x0142 on the line, `mldsa87`'s single-key fallback (this cap, the home's cached 8.85 M, the set's debit) over
+    /// the cap is refused by name; a precompile-sized cap passes.
+    function test_deploy_debitBound_named() public {
+        DeployHarness h = _pqzHarness();
+        string memory b = _book(h, "");
+        address v = _vo(UAKinds.MLDSA87, 0, true);
+        (bool ok,) = _gen(h, _add(b, _voEntry(UAKinds.MLDSA87, v, 150_000, 0)));
+        assertTrue(ok, "positive control: a precompile-sized cap");
+        _named(h, _add(b, _voEntry(UAKinds.MLDSA87, v, 4_000_000, 0)), "GEN_PQZ_DEBIT_BOUND");
+    }
+
+    function test_deploy_txGasCap_fromProbe() public {
+        DeployHarness h = new DeployHarness();
+        string memory b = vm.replace(_book(h, ""), '"tx_gas_cap":16777216', '"tx_gas_cap":30000000');
+        (bool ok, bytes memory ret) = _gen(h, b);
+        assertTrue(ok);
+        (address r,) = abi.decode(ret, (address, string));
+        assertEq(UARegistry(r).txGasCap(), 30_000_000);
+        _named(h, vm.replace(b, ',"tx_gas_cap":30000000', ""), "GEN_TX_CAP_UNKNOWN");
     }
 }

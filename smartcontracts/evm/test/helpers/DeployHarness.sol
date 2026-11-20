@@ -127,6 +127,14 @@ contract DeployHarness is DeployBase {
         json = vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
+    /// The later-generation mode (`_deployUARegistryGen`) over `book` (a JSON string): generation n + 1 and the JSON. No env here:
+    /// `TX_GAS_CAP` unset (`txGasCap` 0, the book's value taken), the salt and `chain_uid` as `deploy` sets them.
+    function deployGen(bytes32 uid_, address ska, string calldata book) external returns (address reg, string memory json) {
+        (salt, uid, txGasCap) = (keccak256("scaas.deploy.v1"), uid_, 0);
+        reg = address(_deployUARegistryGen(book, ska));
+        json = vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
     function gasNeed(string calldata name) external view returns (uint256) {
         return _releaseGasNeed(name);
     }
