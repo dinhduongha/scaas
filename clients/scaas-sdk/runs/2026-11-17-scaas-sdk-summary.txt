@@ -107,7 +107,6 @@ rpc-clippy | 9f3e640dd | 0 | -
 bind-dart | 7f5e03caf | 0 | dart: +14:; tree dirty
 sdk-test | 7f5e03caf | 0 | 264 passed, 0 failed, 12 ignored (21 binaries); tree dirty
 sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
-sdk-wasm | 7f5e03caf | 0 | -; tree dirty
 features | 7f5e03caf | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
@@ -134,3 +133,5 @@ bind-python | bf66d9973 | 0 | unittest: 3 ran, OK
 bind-kotlin | 3013f346c | 0 | kotlin: PASS (0 failures)
 bind-swift | 50dd00cba | 0 | swift: PASS (0 failures)
 bind-gen | 50dd00cba | 0 | -
+sdk-wasm | fc1f01234 | 0 | -
+bind-js | fc1f01234 | 0 | node: 3 pass, 0 fail, 0 skipped
