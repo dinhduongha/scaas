@@ -2297,8 +2297,12 @@ client versions, `gen_pqz`, `verify_only` per kind `{kind, verifier, cap, keyFor
 each contract is verified on the explorer ([NET-EVM-12](../networks/evm.md#NET-EVM-12)). Generation 1 carries the line's views
 and `txGasCap` from now; a generation 1 deployed before them cannot be a predecessor (the probes of [CTR-UA-72](#CTR-UA-72)).
 Controller call (owner auto-run 2026-11-19): the cap probe runs in `deploy.sh evm`, not inside `deploy_batch.py` (a receipts and
-fee checker). Not built: `pq_verifiers.py` building the verify-only verifiers on a chain (the book names them); an ordinary new
-kind (one no predecessor enables) in the later-generation mode.
+fee checker). A verify-only verifier must be this build's CREATE2 over the chain's candidates and `pq_kat.json`'s valid and edge
+rows (`GEN_VERIFY_ONLY_UNBOUND`), its cap at least 2 x `CALL_GAS` + 40,000 (`GEN_VERIFY_ONLY_CAP`), and its book entry must carry
+the differential probe's `ok` for its address (`GEN_DIFFERENTIAL_MISSING`); `pq_verifiers.py verify-only` builds it, runs the
+differential and writes the entry (`4984efa8c`; not yet run on a chain with an ML-DSA precompile). A book of the next generation
+already written refuses a deploy over an older one (`GEN_NOT_LATEST`, owner override recorded). Not built: an ordinary new kind
+(one no predecessor enables) in the later-generation mode.
 
 <a id="CTR-UA-69"></a>**CTR-UA-69** — **A PQ verifier's deploy probes by default only Final EIP addresses and the chain's own
 precompiles; a Draft address only under the owner-confirmed flag, with the fuller probe** (owner, spec §0.2 "the middle way", and plan C5; BUILT,

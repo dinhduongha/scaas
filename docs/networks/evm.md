@@ -577,7 +577,9 @@ plus a voluntary migration.
   hash, libraries with code hashes, `tx_gas_cap`, `gen_pqz`, `verify_only` keyed by kind). Every contract of it is verified on the
   explorer ([NET-EVM-12](#NET-EVM-12)), and the node's `ua_registries` lists the new generation
   ([CTR-UA-65](../contracts/accounts.md#CTR-UA-65)).
-- **The differential probe, an operations check.** `script/pq_verifiers.py differential` runs every KAT row on the kind's home
+- **The differential probe, a deploy gate and an operations check.** `script/pq_verifiers.py verify-only` builds the verifier
+  and runs it before a later generation's broadcast, and the deploy refuses an entry without its `ok`
+  (`GEN_DIFFERENTIAL_MISSING`); `script/pq_verifiers.py differential` runs every KAT row on the kind's home
   verifier (on the cache: `expandedKeyPart` per part, then `verifyExpanded`; on a precompile: `verify`) and on the verify-only
   verifier, each by `eth_call` under strict majority; any difference is `GEN_DIFFERENTIAL_MISMATCH` with the rows, for the owner.
   It runs before a later generation's broadcast and **again after every client upgrade on the chain**: a precompile is client
