@@ -22,6 +22,9 @@
     "Counted rows (owner 2026-11-19, I1 part 2, K2; P3: measured at the entry's bound where feasible; P4 \"approved\"): measured at several counts; on one rising sequence whose chord from the first to the last measured point is at or above every point, per_item is the chord's whole-gas rise a count (rounded up) and the row's figure the chord's line at a count of 0; otherwise per_item is the worst whole-gas rise a count between two measured points and the figure the largest measured gas less per_item times its count; either way intercept + per_item \u00d7 count is at least the measured gas at every measured count.",
     "PQZ single debits (owner 2026-11-19, I2; stand_in): mtxConfidentialTransferSingle, \u2026SingleCompact, mtxUnshield and mtxUnshieldUnwrap from alice's TRIVIAL entry with stand-ins for what the fixture mocks (each row's stand_in names them); their state gas (the ciphertexts kept in state, about 222 new slots) is most of the figure.",
     "bls12381-multi (0x0121; spec 2026-11-19-bls12381-multi \u00a78.4, plan Task 16): `members` is the group's n, read from its key data. The registerBlsMulti row (kind account, variant registry) is the registration's execution gas with its EIP-8037 state gas, a group of unit weights at t = n / 2 with its full PoP, sent by the relayer (no signer: the PoP authorizes it, so no verify part and no ua_extra); fresh is the registry's first 0x0121 registration (the kind's list count slot new; the SDK quotes it), used one after another group's. The verify row (signer 289) is the hot path's check (verify; a minimal set is accepted there too) at the worst k of the two sides of the pinned apk(S) boundary, k = floor((n + 1) / 2) and k + 1. Both lines from the n = 2 and n = 64 points (owner 2026-11-19, plan Task 16, \"approved\": per_item = ceil((g(64) - g(2)) / 62), gas = g(2) - 2 per_item, checked at or above n = 2, 16, 32, 64); where a point lies above that line (the verify row at n = 16, by 304 gas) the row's gas is the largest g(n) - per_item n, the slope kept (controller call, owner auto-run 2026-11-19), the line within 1,000 gas of the n = 64 point.",
+    "Registry writes (controller call, owner auto-run 2026-11-19; test/gas/SdkGasRegistry.t.sol): real calls on the registry as a deploy configures it (G4), measured inside the transaction by the meter (a large registration sits on EIP-7976's calldata floor, which the SDK prices at 64 gas a byte itself), fresh rows only: the registry's first write of its kind, the lane the SDK quotes (a fresh_only group). A kind's register row (ua-<kind>; registerWebAuthn for 0x0100) is its registration with no attribute on its vector PoP plus the forced worst case the verify rows measured over the vector (ed25519, SLH-DSA-128s worst_extra; FN-DSA varied_extra; WebAuthn at ua-rs's 1,024-byte assertion cap); ML-DSA-44 / -65 on the registry's expanded-key cache (the deploy's path; their cacheExpandedKey rows the worst part), ML-DSA-87 on its precompile stand-in.",
+    "A registration's attributes are additions quoted on top of its kind's row: kem register (the full KEM key or its hash commit, the worse), pqz-key register (the PQZ key with its proof hash, the proof later: a split's first step), pqz-pop register (the key with its R_REG proof), each the registration with it less the same ML-DSA-87 registration without it; kem setKemKey the fill of a commit, pqz storePqzPop a split's second step. The PQZ rows are the committed set's: another set's key and proof lengths differ.",
+    "msig rows (registerMsig, acceptMembership, updateMsig): counted by members (2, 4, 8, 16 EOA members, weight 1, threshold all; the update signed by every member, so a member's slope holds one native signature check); the SDK adds each signing slot's verify row (its kind's excess over the native reference; an msig PoP slot's own native check within the margin). A larger count is refused (measured_max), a slot of a kind without a verify row leaves the write to the node's estimate.",
     "gov_router mtxPublishClassEnv: the per-item line (worst slope) is above the measured figure at every measured count, by up to 215,839 gas at the largest (gov_router_mtxPublishClassEnv_overshoot_factory, gov_router_mtxPublishClassEnv_overshoot_ua_factory); the excess is refunded.",
     "gov_router mtxPublishDexEnv: the per-item line (worst slope) is above the measured figure at every measured count, by up to 215,839 gas at the largest (gov_router_mtxPublishDexEnv_overshoot_factory, gov_router_mtxPublishDexEnv_overshoot_ua_factory); the excess is refunded.",
     "gov_router mtxPublishTokenEnv: the per-item line (worst slope) is above the measured figure at every measured count, by up to 215,839 gas at the largest (gov_router_mtxPublishTokenEnv_overshoot_factory, gov_router_mtxPublishTokenEnv_overshoot_ua_factory); the excess is refunded.",
@@ -5795,6 +5798,371 @@
         "gas": 208000,
         "measured": 207850,
         "source": "smartcontracts/evm/test/vectors/sdk_gas.json#account_registerBlsMulti_n16_fresh_registry_regular,account_registerBlsMulti_n16_used_registry_regular,account_registerBlsMulti_n2_fresh_registry_regular,account_registerBlsMulti_n2_used_registry_regular,account_registerBlsMulti_n32_fresh_registry_regular,account_registerBlsMulti_n32_used_registry_regular,account_registerBlsMulti_n64_fresh_registry_regular,account_registerBlsMulti_n64_used_registry_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0101",
+      "fresh": true,
+      "gas": 1318000,
+      "measured": 1317786,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0101_register_fresh_vector",
+      "regular": {
+        "gas": 154000,
+        "measured": 153456,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0101_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0102",
+      "fresh": true,
+      "gas": 1432000,
+      "measured": 1431717,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0102_register_fresh_vector",
+      "regular": {
+        "gas": 317000,
+        "measured": 316347,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0102_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0103",
+      "fresh": true,
+      "gas": 1267000,
+      "measured": 1266130,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0103_register_fresh_vector",
+      "regular": {
+        "gas": 151000,
+        "measured": 150760,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0103_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0104",
+      "fresh": true,
+      "gas": 1378000,
+      "measured": 1377386,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0104_register_fresh_vector",
+      "regular": {
+        "gas": 165000,
+        "measured": 164096,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0104_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0105",
+      "fresh": true,
+      "gas": 1600000,
+      "measured": 1599178,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0105_register_fresh_vector",
+      "regular": {
+        "gas": 191000,
+        "measured": 190048,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0105_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0106",
+      "fresh": true,
+      "gas": 1881000,
+      "measured": 1880879,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0106_register_fresh_vector",
+      "regular": {
+        "gas": 325000,
+        "measured": 324869,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0106_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0107",
+      "fresh": true,
+      "gas": 1604000,
+      "measured": 1603660,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0107_register_fresh_vector",
+      "regular": {
+        "gas": 342000,
+        "measured": 341410,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0107_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0108",
+      "fresh": true,
+      "gas": 1363000,
+      "measured": 1362434,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0108_register_fresh_vector",
+      "regular": {
+        "gas": 150000,
+        "measured": 149144,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0108_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0130",
+      "fresh": true,
+      "gas": 11166000,
+      "measured": 11166000,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0130_register_fresh_vector",
+      "regular": {
+        "gas": 4285000,
+        "measured": 4284060,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0130_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0131",
+      "fresh": true,
+      "gas": 15231000,
+      "measured": 15230937,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0131_register_fresh_vector",
+      "regular": {
+        "gas": 5999000,
+        "measured": 5998917,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0131_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0132",
+      "fresh": true,
+      "gas": 6185000,
+      "measured": 6184939,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0132_register_fresh_vector",
+      "regular": {
+        "gas": 2631000,
+        "measured": 2630749,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0132_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0133",
+      "fresh": true,
+      "gas": 14767000,
+      "measured": 14766119,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0133_register_fresh_vector",
+      "regular": {
+        "gas": 1520000,
+        "measured": 1519379,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0133_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0134",
+      "fresh": true,
+      "gas": 12558000,
+      "measured": 12557844,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0134_register_fresh_vector",
+      "regular": {
+        "gas": 340000,
+        "measured": 339264,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0134_register_fresh_vector_regular"
+      },
+      "stand_in": "ML-DSA-87's PoP on a GasBurner standing in for its precompile (0x...5caa0014) at the calibrated 135,000 + 6 a message word, less 2,900 (CTR-UA-39: the kind is enabled only where a precompile verifies it)"
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0135",
+      "fresh": true,
+      "gas": 11303000,
+      "measured": 11302461,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0135_register_fresh_vector",
+      "regular": {
+        "gas": 5448000,
+        "measured": 5447151,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0135_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "ua-0x0141",
+      "fresh": true,
+      "gas": 1798000,
+      "measured": 1797055,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0141_register_fresh_vector",
+      "regular": {
+        "gas": 203000,
+        "measured": 202795,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0141_register_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "registerWebAuthn",
+      "kind": "ua-0x0100",
+      "fresh": true,
+      "gas": 2055000,
+      "measured": 2054692,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0100_registerWebAuthn_fresh_vector",
+      "regular": {
+        "gas": 352000,
+        "measured": 351802,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0100_registerWebAuthn_fresh_vector_regular"
+      }
+    },
+    {
+      "entry": "cacheExpandedKey",
+      "kind": "ua-0x0130",
+      "fresh": true,
+      "gas": 40311000,
+      "measured": 40310928,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0130_cacheExpandedKey_fresh_p0",
+      "regular": {
+        "gas": 8596000,
+        "measured": 8595558,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0130_cacheExpandedKey_fresh_p0_regular"
+      }
+    },
+    {
+      "entry": "cacheExpandedKey",
+      "kind": "ua-0x0131",
+      "fresh": true,
+      "gas": 42317000,
+      "measured": 42316400,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0131_cacheExpandedKey_fresh_p0,ua-0x0131_cacheExpandedKey_fresh_p1",
+      "regular": {
+        "gas": 9035000,
+        "measured": 9034310,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#ua-0x0131_cacheExpandedKey_fresh_p0_regular,ua-0x0131_cacheExpandedKey_fresh_p1_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "kem",
+      "fresh": true,
+      "gas": 2888000,
+      "measured": 2887545,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#kem_register_fresh_commit,kem_register_fresh_full",
+      "regular": {
+        "gas": 58000,
+        "measured": 57045,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#kem_register_fresh_commit_regular,kem_register_fresh_full_regular"
+      }
+    },
+    {
+      "entry": "setKemKey",
+      "kind": "kem",
+      "fresh": true,
+      "gas": 2922000,
+      "measured": 2921461,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#kem_setKemKey_fresh_commit",
+      "regular": {
+        "gas": 91000,
+        "measured": 90961,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#kem_setKemKey_fresh_commit_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "pqz-key",
+      "fresh": true,
+      "gas": 28951000,
+      "measured": 28950084,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz-key_register_fresh_mldsa87",
+      "regular": {
+        "gas": 271000,
+        "measured": 270234,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz-key_register_fresh_mldsa87_regular"
+      }
+    },
+    {
+      "entry": "register",
+      "kind": "pqz-pop",
+      "fresh": true,
+      "gas": 79016000,
+      "measured": 79015773,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz-pop_register_fresh_mldsa87",
+      "regular": {
+        "gas": 3084000,
+        "measured": 3083403,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz-pop_register_fresh_mldsa87_regular"
+      },
+      "stand_in": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: REGISTER 2,093,000 + 3 a word of its 48,912-byte input = 2,097,587) less 2,900 (a cold stand-in against a warm precompile), behind the registry's PqzKeyVerifier (slot 0x0142); the key and proof the set's self-test R_REG vector (30,379 bytes); the addition measured on ML-DSA-87, its PoP on its stand-in (cancels in the difference)"
+    },
+    {
+      "entry": "storePqzPop",
+      "kind": "pqz",
+      "fresh": true,
+      "gas": 50108000,
+      "measured": 50107385,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_storePqzPop_fresh_mldsa87",
+      "regular": {
+        "gas": 2855000,
+        "measured": 2854865,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#pqz_storePqzPop_fresh_mldsa87_regular"
+      },
+      "stand_in": "the PQZ precompile a GasBurner at the set's calibrated row (test/vectors/pqz-gas/n2304-kmax4096.json, calibrated rows 2026-11-15: REGISTER 2,093,000 + 3 a word of its 48,912-byte input = 2,097,587) less 2,900 (a cold stand-in against a warm precompile), behind the registry's PqzKeyVerifier (slot 0x0142); the key and proof the set's self-test R_REG vector (30,379 bytes)"
+    },
+    {
+      "entry": "registerMsig",
+      "kind": "msig",
+      "fresh": true,
+      "gas": 1012000,
+      "measured": 1011164,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_registerMsig_fresh_native",
+      "item": "members",
+      "per_item": {
+        "gas": 68164,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_registerMsig_per_item_native",
+        "regular": 6986,
+        "measured_max": 16
+      },
+      "regular": {
+        "gas": 117000,
+        "measured": 116070,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_registerMsig_n16_fresh_native_regular,msig_registerMsig_n2_fresh_native_regular,msig_registerMsig_n4_fresh_native_regular,msig_registerMsig_n8_fresh_native_regular"
+      }
+    },
+    {
+      "entry": "acceptMembership",
+      "kind": "msig",
+      "fresh": true,
+      "gas": 255000,
+      "measured": 254329,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_acceptMembership_fresh_native",
+      "item": "members",
+      "per_item": {
+        "gas": 12,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_acceptMembership_per_item_native",
+        "regular": 12,
+        "measured_max": 16
+      },
+      "regular": {
+        "gas": 59000,
+        "measured": 58489,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_acceptMembership_n16_fresh_native_regular,msig_acceptMembership_n2_fresh_native_regular,msig_acceptMembership_n4_fresh_native_regular,msig_acceptMembership_n8_fresh_native_regular"
+      }
+    },
+    {
+      "entry": "updateMsig",
+      "kind": "msig",
+      "fresh": true,
+      "gas": 323000,
+      "measured": 322320,
+      "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_updateMsig_fresh_native",
+      "item": "members",
+      "per_item": {
+        "gas": 77484,
+        "base_count": 0,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_updateMsig_per_item_native",
+        "regular": 22404,
+        "measured_max": 16
+      },
+      "regular": {
+        "gas": 70000,
+        "measured": 69870,
+        "source": "smartcontracts/evm/test/vectors/sdk_gas.json#msig_updateMsig_n16_fresh_native_regular,msig_updateMsig_n2_fresh_native_regular,msig_updateMsig_n4_fresh_native_regular,msig_updateMsig_n8_fresh_native_regular"
       }
     }
   ],
