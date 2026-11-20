@@ -623,7 +623,9 @@ pub fn line_target(data: &[u8]) -> Option<LineTarget> {
         registerMuSig2Call::SELECTOR => Kind(registerMuSig2Call::abi_decode(data).ok()?.kind),
         registerFrostCall::SELECTOR => Kind(registerFrostCall::abi_decode(data).ok()?.kind),
         cacheExpandedKeyCall::SELECTOR => Kind(cacheExpandedKeyCall::abi_decode(data).ok()?.kind),
-        registerMsigCall::SELECTOR => Kind(0x0120),
+        // `msig` is registrable in every generation (re-enabled in full, spec §2): no line target, the contract decides; asking
+        // the newest generation's `kindHome(0x0120)` refused every `registerMsig` to an older one (Task 21 review P2-5)
+        registerMsigCall::SELECTOR => return None,
         registerWebAuthnCall::SELECTOR => Kind(0x0100),
         registerBlsMultiCall::SELECTOR => Kind(0x0121),
         setKemKeyCall::SELECTOR => Holder(setKemKeyCall::abi_decode(data).ok()?.ua),
@@ -6230,6 +6232,55 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         );
     }
 
+    /// Task 21 review P2-5: `msig` is registrable in every generation, so a `registerMsig` to an older generation passes the line
+    /// check (the newest generation's `kindHome(0x0120)` is never asked); the `register` of a verify-only kind stays refused.
+    #[tokio::test]
+    async fn guard_register_msig_older_generation_passes() {
+        use crate::abi::IUARegistry as R;
+        let f = Arc::new(Mutex::new(LineFake {
+            home: G3,
+            ..Default::default()
+        }));
+        let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
+        let attrs = R::UAAttrs {
+            pqzKey: Bytes::new(),
+            pqzPopHash: B256::ZERO,
+            kem: kem(),
+            kemPkHash: B256::ZERO,
+        };
+        let msig = R::registerMsigCall {
+            structure: R::MsigStructure {
+                threshold: 1,
+                members: vec![],
+            },
+            attrs: attrs.clone(),
+            pop: vec![],
+            pqzPop: Bytes::new(),
+        }
+        .abi_encode();
+        assert_eq!(line_target(&msig), None);
+        for to in [G1, G2, G3] {
+            assert_eq!(
+                g.check(&chain, &reg_work(to, msig.clone())).await,
+                Ok(()),
+                "{to:#x}"
+            );
+        }
+        let register = R::registerCall {
+            kind: 0x0131,
+            keyData: Bytes::from(vec![1; 1952]),
+            attrs,
+            pop: Bytes::new(),
+            pqzPop: Bytes::new(),
+        }
+        .abi_encode();
+        let e = g.check(&chain, &reg_work(G1, register)).await;
+        assert!(
+            matches!(&e, Err(Refusal::Policy(r)) if r.starts_with(&format!("{UA_VERIFY_ONLY}: "))),
+            "control: {e:?}"
+        );
+    }
+
     /// CTR-UA-65: a key write held in the holding generation (`setKemKey`, `acceptMembership`, `updateMsig`) sent to a generation
     /// that does not hold the record is refused `UA_WRONG_GENERATION`, naming `holderOf(ua)`. Control: on the holder it passes; an
     /// id no generation holds is the simulation's.
@@ -6372,7 +6423,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
 
     /// CTR-UA-65 (F9): `Rule::UaRegistry` is the set of the line's addresses: a registry row runs on every generation of the line
     /// and on no other address (a former generation dropped from the config included); every `REG` row of the call table has its
-    /// line target, so the generation rule covers each.
+    /// line target but `registerMsig` (every generation registers an `msig`), so the generation rule covers each.
     #[tokio::test]
     async fn guard_allow_lists_per_registry() {
         let f = Arc::new(Mutex::new(LineFake::default()));
@@ -6398,9 +6449,11 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         assert_eq!(reg.len(), 14, "the registry rows");
         for r in reg {
             let data = [&r.sent[..], &[0u8; 4096][..]].concat();
-            assert!(
+            // `registerMsig` alone has none: `msig` is registrable in every generation (Task 21 review P2-5)
+            assert_eq!(
                 line_target(&data).is_some(),
-                "{} has no line target",
+                r.entry != "registerMsig",
+                "{}: its line target",
                 r.entry
             );
         }
