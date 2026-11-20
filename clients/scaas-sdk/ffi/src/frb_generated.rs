@@ -16322,6 +16322,7 @@ const _: fn() = || {
         let _: String = GasPerItem.item;
         let _: u64 = GasPerItem.gas;
         let _: Option<u64> = GasPerItem.regular;
+        let _: Option<u64> = GasPerItem.measured_max;
     }
     {
         let GasRows = None::<scaas_sdk::config::GasRows>.unwrap();
@@ -19866,10 +19867,12 @@ impl SseDecode for scaas_sdk::config::GasPerItem {
         let mut var_item = <String>::sse_decode(deserializer);
         let mut var_gas = <u64>::sse_decode(deserializer);
         let mut var_regular = <Option<u64>>::sse_decode(deserializer);
+        let mut var_measuredMax = <Option<u64>>::sse_decode(deserializer);
         return scaas_sdk::config::GasPerItem {
             item: var_item,
             gas: var_gas,
             regular: var_regular,
+            measured_max: var_measuredMax,
         };
     }
 }
@@ -27383,6 +27386,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::GasPerItem>
             self.0.item.into_into_dart().into_dart(),
             self.0.gas.into_into_dart().into_dart(),
             self.0.regular.into_into_dart().into_dart(),
+            self.0.measured_max.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -33359,6 +33363,7 @@ impl SseEncode for scaas_sdk::config::GasPerItem {
         <String>::sse_encode(self.item, serializer);
         <u64>::sse_encode(self.gas, serializer);
         <Option<u64>>::sse_encode(self.regular, serializer);
+        <Option<u64>>::sse_encode(self.measured_max, serializer);
     }
 }
 

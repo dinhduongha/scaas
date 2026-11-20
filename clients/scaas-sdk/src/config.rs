@@ -149,6 +149,9 @@ pub struct GasPerItem {
     pub gas: u64,
     /// the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
     pub regular: Option<u64>,
+    /// the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+    /// extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+    pub measured_max: Option<u64>,
 }
 
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
@@ -270,7 +273,10 @@ const GAS_VERIFY_KEYS: &[&str] = &[
 /// A row's parts, each with its keys (`second_party` is a part of `ua_extra`).
 const GAS_PART_KEYS: &[(&str, &[&str])] = &[
     ("per_byte", &["input", "gas", "source"]),
-    ("per_item", &["gas", "base_count", "source", "regular"]),
+    (
+        "per_item",
+        &["gas", "base_count", "source", "regular", "measured_max"],
+    ),
     ("save", &["gas", "measured", "source"]),
     ("fee_extra", &["gas", "measured", "source"]),
     (
@@ -483,10 +489,18 @@ fn per_item(
         None => None,
         Some(x) => Some(x.as_u64().filter(|g| *g <= GAS_PER_ITEM_MAX)?),
     };
+    let measured_max = match p.get("measured_max") {
+        None => None,
+        Some(x) => Some(
+            x.as_u64()
+                .filter(|n| (1..=u64::from(u32::MAX)).contains(n))?,
+        ),
+    };
     Some(Some(GasPerItem {
         item: item.to_string(),
         gas,
         regular,
+        measured_max,
     }))
 }
 

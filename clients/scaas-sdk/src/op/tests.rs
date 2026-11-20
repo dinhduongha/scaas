@@ -1404,6 +1404,7 @@ async fn a_counted_row_quotes_its_count_or_refuses() {
                         item: i.into(),
                         gas: 7_000,
                         regular: None,
+                        measured_max: None,
                     });
                 }
             }
@@ -2984,6 +2985,7 @@ async fn bls_multi_stored_path_minimal() {
                 item: "members".into(),
                 gas: 1_000,
                 regular: None,
+                measured_max: None,
             }),
         })
     })

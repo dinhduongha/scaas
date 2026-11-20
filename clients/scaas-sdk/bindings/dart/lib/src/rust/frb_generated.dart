@@ -15895,12 +15895,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   GasPerItem dco_decode_gas_per_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return GasPerItem(
       item: dco_decode_String(arr[0]),
       gas: dco_decode_u_64(arr[1]),
       regular: dco_decode_opt_box_autoadd_u_64(arr[2]),
+      measuredMax: dco_decode_opt_box_autoadd_u_64(arr[3]),
     );
   }
 
@@ -22229,7 +22230,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     var var_item = sse_decode_String(deserializer);
     var var_gas = sse_decode_u_64(deserializer);
     var var_regular = sse_decode_opt_box_autoadd_u_64(deserializer);
-    return GasPerItem(item: var_item, gas: var_gas, regular: var_regular);
+    var var_measuredMax = sse_decode_opt_box_autoadd_u_64(deserializer);
+    return GasPerItem(
+      item: var_item,
+      gas: var_gas,
+      regular: var_regular,
+      measuredMax: var_measuredMax,
+    );
   }
 
   @protected
@@ -29768,6 +29775,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     sse_encode_String(self.item, serializer);
     sse_encode_u_64(self.gas, serializer);
     sse_encode_opt_box_autoadd_u_64(self.regular, serializer);
+    sse_encode_opt_box_autoadd_u_64(self.measuredMax, serializer);
   }
 
   @protected

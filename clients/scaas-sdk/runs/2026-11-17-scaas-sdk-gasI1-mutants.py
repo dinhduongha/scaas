@@ -30,9 +30,9 @@ MUTANTS = [
     # fail closed: a count unknown or above the bound
     ("an unknown count falls through (no refusal)", [(G, "    if uncounted.get() {\n        return Err(SdkError::GasCountUnknown);\n    }\n    let execute", "    if false && uncounted.get() {\n        return Err(SdkError::GasCountUnknown);\n    }\n    let execute")], ADD),
     ("an unknown count read as 0",
-     [(G, "        let n = count(&p.item).filter(|n| *n <= COUNT_MAX);", "        let n = Some(count(&p.item).unwrap_or(0));")], ADD),
-    ("the count unbounded", [(G, "        let n = count(&p.item).filter(|n| *n <= COUNT_MAX);", "        let n = count(&p.item);")], ADD),
-    ("the bound off by one", [(G, "filter(|n| *n <= COUNT_MAX);", "filter(|n| *n < COUNT_MAX);")], ADD),
+     [(G, "count(&p.item).filter(|n| *n <= COUNT_MAX && p.measured_max.is_none_or(|m| *n <= m));", "Some(count(&p.item).unwrap_or(0));")], ADD),
+    ("the count unbounded", [(G, "count(&p.item).filter(|n| *n <= COUNT_MAX && p.measured_max.is_none_or(|m| *n <= m));", "count(&p.item);")], ADD),
+    ("the bound off by one", [(G, "filter(|n| *n <= COUNT_MAX && p.measured_max", "filter(|n| *n < COUNT_MAX && p.measured_max")], ADD),
     # the count read from the operation
     ("legs: args.legs not read", [(G, '        "legs" => len(message.get("args").and_then(|a| a.get("legs")))\n',
                                    '        "legs" => len(message.get("legs"))\n')], COUNT),

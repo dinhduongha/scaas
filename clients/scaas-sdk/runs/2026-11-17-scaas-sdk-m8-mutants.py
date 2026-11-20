@@ -49,6 +49,14 @@ MUTANTS = [
     ("M8: the fake chain's regular cap removed",
      [(FAKE, "                if regular > c.tx_cap {", "                if regular > u64::MAX - 1 {")],
      T + "op::tests::the_fake_chain_holds_the_regular_gas_to_the_cap"),
+    ("M18: a count above the measured range quoted (lookup)",
+     [(G, "*n <= COUNT_MAX && p.measured_max.is_none_or(|m| *n <= m));", "*n <= COUNT_MAX);")],
+     T + "op::gas::tests::gas_per_item_adds_gas_times_its_count"),
+    ("M18: a group above the measured range quoted (registration)",
+     [(G, "                        && p.measured_max.is_none_or(|m| n <= m) =>", "                        =>")],
+     T + "op::gas::tests::gas_bls_multi_rows_quote_by_members"),
+    ("M18 generator: the measured range not written",
+     [(GEN, '                        row["per_item"]["measured_max"] = top', '                        pass')], PY),
 ]
 
 if __name__ == "__main__":

@@ -287,10 +287,20 @@ class GasPerItem {
   /// the regular part of `gas` (EIP-8037), on a base row with a `regular` figure only
   final BigInt? regular;
 
-  const GasPerItem({required this.item, required this.gas, this.regular});
+  /// the largest count the row was measured at (`gas/generate.py`); a count above it is `GasCountUnknown`, never a line
+  /// extrapolated past its points (merged-tree review M18, 2026-11-20); `None`: a row that names none (the chain's own)
+  final BigInt? measuredMax;
+
+  const GasPerItem({
+    required this.item,
+    required this.gas,
+    this.regular,
+    this.measuredMax,
+  });
 
   @override
-  int get hashCode => item.hashCode ^ gas.hashCode ^ regular.hashCode;
+  int get hashCode =>
+      item.hashCode ^ gas.hashCode ^ regular.hashCode ^ measuredMax.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -299,7 +309,8 @@ class GasPerItem {
           runtimeType == other.runtimeType &&
           item == other.item &&
           gas == other.gas &&
-          regular == other.regular;
+          regular == other.regular &&
+          measuredMax == other.measuredMax;
 }
 
 /// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.

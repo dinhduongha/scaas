@@ -216,7 +216,9 @@ fn lookup_in(
     let uncounted = std::cell::Cell::new(false);
     let items = |p: &Option<GasPerItem>, reg: bool, count: &dyn Fn(&str) -> Option<u64>| {
         let Some(p) = p else { return Some(0) };
-        let n = count(&p.item).filter(|n| *n <= COUNT_MAX);
+        // M18: never above the largest measured count (the line is not extrapolated past its points)
+        let n =
+            count(&p.item).filter(|n| *n <= COUNT_MAX && p.measured_max.is_none_or(|m| *n <= m));
         if n.is_none() {
             uncounted.set(true);
         }
@@ -309,7 +311,11 @@ pub(crate) fn registration_gas(
             let reg = regular && b.regular.is_some();
             let per = match &b.per_item {
                 None => 0,
-                Some(p) if p.item == "members" && n <= COUNT_MAX => {
+                Some(p)
+                    if p.item == "members"
+                        && n <= COUNT_MAX
+                        && p.measured_max.is_none_or(|m| n <= m) =>
+                {
                     p.regular.filter(|_| reg).unwrap_or(p.gas).saturating_mul(n)
                 }
                 Some(_) => {
@@ -704,6 +710,7 @@ mod tests {
             item: "members".into(),
             gas: 100,
             regular: Some(40),
+            measured_max: None,
         });
         let op = OpGas {
             count: &|i| (i == "members").then_some(5),
@@ -1280,6 +1287,7 @@ mod tests {
             item: item.into(),
             gas,
             regular: None,
+            measured_max: None,
         })
     }
 
@@ -1353,6 +1361,19 @@ mod tests {
             Ok(Some(1_010 + 30_000 * COUNT_MAX)),
             "the bound itself"
         );
+        // M18: a row measured up to 8 counts: 8 quoted, 9 refused (never a line extrapolated past its points)
+        r.base[0].per_item.as_mut().unwrap().measured_max = Some(8);
+        assert_eq!(
+            by(&r, &[("legs", 8), ("members", 0)], None, None),
+            Ok(Some(1_010 + 30_000 * 8)),
+            "at the largest measured count"
+        );
+        assert_eq!(
+            by(&r, &[("legs", 9), ("members", 0)], None, None),
+            Err("GasCountUnknown"),
+            "above it"
+        );
+        r.base[0].per_item.as_mut().unwrap().measured_max = None;
         // a count unknown on the chain's row refuses, though a later table's row would answer without one (fail closed)
         let mut chain = rows(1_000, 10);
         chain.base[0].per_item = per_item("legs", 30_000);
@@ -2354,6 +2375,19 @@ mod tests {
             base: vec![],
             verify: vec![],
         };
+        // M18: the reference row was measured up to 64 members: a group of 65 is refused, never extrapolated
+        assert_eq!(bp.measured_max, Some(64));
+        assert_eq!(
+            registration_gas(
+                &empty,
+                &reference,
+                std::slice::from_ref(&t),
+                "registerBlsMulti",
+                65
+            )
+            .map_err(|e| e.code()),
+            Err("GasCountUnknown")
+        );
         for n in [2u64, 16, 32, 64] {
             let tables = std::slice::from_ref(&t);
             let (g, r, from) = registration_gas(&empty, &reference, tables, "registerBlsMulti", n)
@@ -2444,6 +2478,7 @@ mod tests {
                     item: "members".into(),
                     gas: 100,
                     regular: None,
+                    measured_max: None,
                 }),
             })
             .collect();

@@ -188,6 +188,14 @@ def regular(m, src, kind, entry, lane, keys, counted):
     return {"gas": ceil1000(x), "measured": x, "source": f"{src}#{','.join(used)}"}, s
 
 
+def measured_max(m, kind, entry, lane):
+    """M18 (merged-tree review, 2026-11-20): the largest count `N` a counted row's own lane was measured at
+    (`<kind>_<entry>_n<N>_<lane>_<variant>`); a quote above it is refused, the line never extrapolated past its points."""
+    pat = re.compile(rf"^{re.escape(kind)}_{re.escape(entry)}_n(\d+)_{lane}_")
+    ns = [int(hit[1]) for k in m if (hit := pat.match(k))]
+    return max(ns) if ns else None
+
+
 def overshoots(m, base):
     """The counted rows whose line the harness let sit above the largest count (owner 2026-11-19, P1, P2; proposal P4):
     one assumption each, its worst excess over the variants and signers."""
@@ -247,6 +255,8 @@ def table(inputs, m):
                         row["regular"] = reg
                         if slope is not None:
                             row["per_item"]["regular"] = slope
+                    if "per_item" in row and (top := measured_max(m, kind, entry, lane)) is not None:
+                        row["per_item"]["measured_max"] = top
                     if f"{kind}:{entry}" in inputs.get("base_stand_in", {}):  # I2: a stand-in priced the row
                         row["stand_in"] = inputs["base_stand_in"][f"{kind}:{entry}"]
                     base.append(row)
