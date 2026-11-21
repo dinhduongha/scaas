@@ -172,10 +172,8 @@ sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 ua-clippy | 287e83eb2 | 0 | -
 bind-dart | 7104a069f | 0 | dart: +14:
-ffi | 7104a069f | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 rpc-clippy | cd3b6c03e | 0 | -
 rpc-wasm | cd3b6c03e | 0 | -
-mutants-check | 6e7e71142 | 1 | -
 features | 6e7e71142 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-gen | 6e7e71142 | 0 | -
 gas-gen | 6e7e71142 | 0 | -
@@ -186,3 +184,5 @@ ua-test | 6e7e71142 | 0 | 604 passed, 0 failed, 3 ignored (60 binaries)
 ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
 cli | 25e9b20a3 | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
 docs | 25e9b20a3 | 0 | -
+mutants-check | 8897d3999 | 0 | -
+ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
