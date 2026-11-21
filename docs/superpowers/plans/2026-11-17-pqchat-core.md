@@ -274,6 +274,8 @@ script (`script/DeployBase.sol` with `DEPLOY_PQCHAT`) into a test `anvil --enabl
       message store, two Matrix entries or duplicate chain entries refused (`StoreListInvalid`); a rekey by a non-admin member that
       adds a chain store: not written to or read until the user confirms (`StoreUnconfirmed`), `StoresChanged` with `by_admin` false;
       a test-chain store warned about.
+      Note (2026-11-22): the HCS store stays outside this round (CLI-PQC-02; `StoreUnsupported` kept), and is now unblocked on
+      the SDK side: the SDK plan's T43 builds `hcs_submit` and `hcs_read` (owner 2026-11-22, Hedera needed for HCS).
 - [ ] Code; green. Gates: `pqc-test`, `pqc-chain`.
 - Mutants: send to the first store only; send `typing` to a chain store; skip the spend consent; use a new store without
   confirmation; accept a list with no message store; sign before the store-list check.

@@ -72,7 +72,7 @@ Status: SPECIFIED.
 | 9 | OP Mainnet (10; OP Sepolia 11155420) | B‡ | B | B | B | B | B | M T38, T40 | P T40 | P T40 | P T40 | M T41.evm | M T38, T40 |
 | 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
 | 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
-| 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | M T41.evm | B |
+| 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | M T41.evm (EVM side; the native side's sends wait for Q-R5) | B (EVM side; native side: P T41.hedera read, ed25519 sends wait for Q-R5) |
 | 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | P CA-T3 | P CA-T3 | B | P CA-T2 | B | P CA-T2 | M ARCH-POS-18 | B‡ | B‡ | M T41.evm | P CA-T2 |
 | 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | M T41.evm | deferred (sends, owner 2026-11-22) (read B) |
 | 15 | Moonbeam (Moonbase Alpha) | B‡ | P CA-T3, T15 | P CA-T3 | B | P CA-T11 | B | P CA-T11 | B‡ | P CA-T15 | P CA-T15 | M T41.evm | P CA-T11 |
@@ -112,7 +112,8 @@ Status: SPECIFIED.
   reads, Bitcoin Core sends and cross-checks), the SDK's balance, UTXOs, history and send (T37).
 - **Native (column 12).** EVM rows: the native coin through the EVM account, `balances`' `native` and `prepare_native_send`
   (BUILT, SDK spec §8.5) wherever the row's profile and SDK are (rows 1, 3, 4, 6, 12; HBAR through the JSON-RPC Relay with an
-  `hedera_ecdsa` account; Hedera's native HAPI is not offered), else the row's profile task (T38, T40, chains-arweave CA-T2,
+  `hedera_ecdsa` account; Hedera's native side, `0.0.x` accounts with ed25519 keys, HBAR and HTS under `fam-hedera`: mirror-node
+  reads and the HAPI format PLANNED (SDK plan T41.hedera, HCS T43), its broadcast an open question for the owner, SDK spec Q-R5), else the row's profile task (T38, T40, chains-arweave CA-T2,
   CA-T11). Polkadot Hub (row 14): the Substrate side, plain sr25519 accounts (`ua-rs` sr25519, CLI-SGN-53), `System.Account`
   reads (BUILT: SDK plan T32's read part, before T36, owner 2026-11-22; `scaas-rpc` `substrate`, the profile's
   `FamilyParams::Substrate`, `balances` of an SS58 id; tested on answers recorded from Westend Asset Hub, the public Paseo Hub

@@ -98,7 +98,6 @@ gas-gen | cd3cc4c93 | 0 | -
 # tests), clippy --all-targets -D warnings clean. format.sh --check rust clean. Mutants t17 7/7, t18 5/5, t18b 3/3, t19 6/6
 # killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
 # T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
-ffi | 7f5e03caf | 0 | 0 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
 sdk-wasm | 7f5e03caf | 0 | -; tree dirty
 sdk-deny | 7f5e03caf | 0 | -; tree dirty
@@ -172,17 +171,18 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-bind-gen | 46eabe7f5 | 0 | -
 ck-test | 46eabe7f5 | 0 | node: 537 pass, 0 fail, 4 skipped
-ua-clippy | 46eabe7f5 | 0 | -
-bind-dart | 46eabe7f5 | 0 | dart: +14:
-ua-test | 69e936a2b | 0 | 599 passed, 0 failed, 3 ignored (59 binaries)
-rpc-test | 3100b200c | 0 | 188 passed, 0 failed, 10 ignored (18 binaries)
-rpc-clippy | 3100b200c | 0 | -
-rpc-wasm | 3100b200c | 0 | -
-sdk-test | ddb52c33b | 0 | 369 passed, 0 failed, 16 ignored (34 binaries)
-sdk-clippy | ddb52c33b | 0 | -
-cli | ddb52c33b | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
-docs | 9698e5369 | 0 | -
-mutants-check | 9698e5369 | 0 | -
-features | 9698e5369 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+ua-test | 287e83eb2 | 0 | 601 passed, 0 failed, 3 ignored (59 binaries)
+ua-clippy | 287e83eb2 | 0 | -
+rpc-test | 287e83eb2 | 0 | 195 passed, 0 failed, 10 ignored (19 binaries)
+rpc-wasm | 287e83eb2 | 0 | -
+rpc-clippy | 7104a069f | 0 | -
+sdk-test | 7104a069f | 0 | 376 passed, 0 failed, 16 ignored (35 binaries)
+sdk-clippy | 7104a069f | 0 | -
+features | 7104a069f | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+docs | 7104a069f | 0 | -
+mutants-check | 7104a069f | 0 | -
+bind-gen | 7104a069f | 0 | -
+bind-dart | 7104a069f | 0 | dart: +14:
+ffi | 7104a069f | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+cli | 7104a069f | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
