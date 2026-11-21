@@ -48,9 +48,8 @@ Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([C
 | NEAR | `near:<genesis hash, base58>` (near-sandbox built; testnet / mainnet not deployed) | contract-level `MetaOp` v1 in Borsh, verified by the NEP-141 token against SCaaS key records ([near.md](near.md)) | ed25519 (NEP-413 `signMessage`) / secp256k1 / WebAuthn P-256 (in wasm) / msig; never a NEAR access key; a mandate's delegate is a `Holder` | ed25519 `m/44'/397'/0'/0'/i'` (implicit account) | no (job API only) | BUILT (branch `near-algorand`) |
 | Algorand | `algorand:<genesis hash, base64>` (localnet built; testnet / mainnet not deployed) | app-level `MetaOp` v1 in ARC-4, ARC-200 token in boxes, one shared `account` app ([algorand.md](algorand.md)) | ed25519 (`"MX"` sign-bytes, current authority) / secp256k1 / WebAuthn P-256 / msig | ed25519 `m/44'/283'/0'/0'/i'` | no (job API only) | BUILT (branch `near-algorand`) |
 
-Chain status per chain (one row each: contract, node relay and index, `ua-rs` signing, `scaas-rpc` read and write, SDK, Zether,
-PQ, PQZ) for the `sdk-complete` done rule (owner 2026-11-21): the matrix in the SDK spec,
-[§27](../superpowers/specs/2026-11-17-scaas-sdk.md#done-every-chain), the one place it is kept.
+What each chain supports today, one row per chain (contract, node relay and index, `ua-rs` signing, `scaas-rpc` read and write,
+SDK, Zether, PQ, PQZ), against the owner's done rule of 2026-11-21: [chain-support.md](chain-support.md).
 
 Lane keys come from one 24-word BIP-39 mnemonic or a raw private key per lane (Pi Network overrides the SLIP-44
 `coin_type`)
