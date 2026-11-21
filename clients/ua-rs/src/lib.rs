@@ -10,6 +10,8 @@
 use sha3::{Digest, Keccak256};
 
 pub mod algorand;
+/// The non-EVM families' own formats (Solana's program addresses, plan scaas-sdk T24, T27).
+pub mod families;
 /// `bls12381-multi` (0x0121): key data, the stored form, verify / verifyMinimal / verifyPop, partials and aggregation.
 pub mod bls_multi;
 mod keydata;

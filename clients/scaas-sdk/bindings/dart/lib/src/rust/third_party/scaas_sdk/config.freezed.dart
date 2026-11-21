@@ -14,22 +14,22 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$FamilyParams {
 
- Object get chainId;
+
 
 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is FamilyParams&&const DeepCollectionEquality().equals(other.chainId, chainId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is FamilyParams);
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(chainId));
+int get hashCode => runtimeType.hashCode;
 
 @override
 String toString() {
-  return 'FamilyParams(chainId: $chainId)';
+  return 'FamilyParams()';
 }
 
 
@@ -55,12 +55,13 @@ extension FamilyParamsPatterns on FamilyParams {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( FamilyParams_Cosmos value)?  cosmos,TResult Function( FamilyParams_Aptos value)?  aptos,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( FamilyParams_Cosmos value)?  cosmos,TResult Function( FamilyParams_Aptos value)?  aptos,TResult Function( FamilyParams_Solana value)?  solana,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that);case FamilyParams_Aptos() when aptos != null:
-return aptos(_that);case _:
+return aptos(_that);case FamilyParams_Solana() when solana != null:
+return solana(_that);case _:
   return orElse();
 
 }
@@ -78,12 +79,13 @@ return aptos(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( FamilyParams_Cosmos value)  cosmos,required TResult Function( FamilyParams_Aptos value)  aptos,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( FamilyParams_Cosmos value)  cosmos,required TResult Function( FamilyParams_Aptos value)  aptos,required TResult Function( FamilyParams_Solana value)  solana,}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos():
 return cosmos(_that);case FamilyParams_Aptos():
-return aptos(_that);}
+return aptos(_that);case FamilyParams_Solana():
+return solana(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -97,12 +99,13 @@ return aptos(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( FamilyParams_Cosmos value)?  cosmos,TResult? Function( FamilyParams_Aptos value)?  aptos,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( FamilyParams_Cosmos value)?  cosmos,TResult? Function( FamilyParams_Aptos value)?  aptos,TResult? Function( FamilyParams_Solana value)?  solana,}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that);case FamilyParams_Aptos() when aptos != null:
-return aptos(_that);case _:
+return aptos(_that);case FamilyParams_Solana() when solana != null:
+return solana(_that);case _:
   return null;
 
 }
@@ -119,11 +122,12 @@ return aptos(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult Function( int chainId,  String package)?  aptos,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult Function( int chainId,  String package)?  aptos,TResult Function( String program)?  solana,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos() when aptos != null:
-return aptos(_that.chainId,_that.package);case _:
+return aptos(_that.chainId,_that.package);case FamilyParams_Solana() when solana != null:
+return solana(_that.program);case _:
   return orElse();
 
 }
@@ -141,11 +145,12 @@ return aptos(_that.chainId,_that.package);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)  cosmos,required TResult Function( int chainId,  String package)  aptos,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)  cosmos,required TResult Function( int chainId,  String package)  aptos,required TResult Function( String program)  solana,}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos():
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos():
-return aptos(_that.chainId,_that.package);}
+return aptos(_that.chainId,_that.package);case FamilyParams_Solana():
+return solana(_that.program);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -159,11 +164,12 @@ return aptos(_that.chainId,_that.package);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult? Function( int chainId,  String package)?  aptos,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult? Function( int chainId,  String package)?  aptos,TResult? Function( String program)?  solana,}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos() when aptos != null:
-return aptos(_that.chainId,_that.package);case _:
+return aptos(_that.chainId,_that.package);case FamilyParams_Solana() when solana != null:
+return solana(_that.program);case _:
   return null;
 
 }
@@ -178,7 +184,7 @@ class FamilyParams_Cosmos extends FamilyParams {
   const FamilyParams_Cosmos({required this.chainId, required final  List<EndpointConfig> rest, required this.restPolicy, required this.denom, required this.prefix}): _rest = rest,super._();
   
 
-@override final  String chainId;
+ final  String chainId;
  final  List<EndpointConfig> _rest;
  List<EndpointConfig> get rest {
   if (_rest is EqualUnmodifiableListView) return _rest;
@@ -258,7 +264,7 @@ class FamilyParams_Aptos extends FamilyParams {
   const FamilyParams_Aptos({required this.chainId, required this.package}): super._();
   
 
-@override final  int chainId;
+ final  int chainId;
  final  String package;
 
 /// Create a copy of FamilyParams
@@ -312,6 +318,72 @@ class _$FamilyParams_AptosCopyWithImpl<$Res>
   return _then(FamilyParams_Aptos(
 chainId: null == chainId ? _self.chainId : chainId // ignore: cast_nullable_to_non_nullable
 as int,package: null == package ? _self.package : package // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class FamilyParams_Solana extends FamilyParams {
+  const FamilyParams_Solana({required this.program}): super._();
+  
+
+ final  String program;
+
+/// Create a copy of FamilyParams
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$FamilyParams_SolanaCopyWith<FamilyParams_Solana> get copyWith => _$FamilyParams_SolanaCopyWithImpl<FamilyParams_Solana>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is FamilyParams_Solana&&(identical(other.program, program) || other.program == program));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,program);
+
+@override
+String toString() {
+  return 'FamilyParams.solana(program: $program)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $FamilyParams_SolanaCopyWith<$Res> implements $FamilyParamsCopyWith<$Res> {
+  factory $FamilyParams_SolanaCopyWith(FamilyParams_Solana value, $Res Function(FamilyParams_Solana) _then) = _$FamilyParams_SolanaCopyWithImpl;
+@useResult
+$Res call({
+ String program
+});
+
+
+
+
+}
+/// @nodoc
+class _$FamilyParams_SolanaCopyWithImpl<$Res>
+    implements $FamilyParams_SolanaCopyWith<$Res> {
+  _$FamilyParams_SolanaCopyWithImpl(this._self, this._then);
+
+  final FamilyParams_Solana _self;
+  final $Res Function(FamilyParams_Solana) _then;
+
+/// Create a copy of FamilyParams
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? program = null,}) {
+  return _then(FamilyParams_Solana(
+program: null == program ? _self.program : program // ignore: cast_nullable_to_non_nullable
 as String,
   ));
 }

@@ -15857,6 +15857,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           chainId: dco_decode_u_8(raw[1]),
           package: dco_decode_String(raw[2]),
         );
+      case 2:
+        return FamilyParams_Solana(program: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -22274,6 +22276,9 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         var var_chainId = sse_decode_u_8(deserializer);
         var var_package = sse_decode_String(deserializer);
         return FamilyParams_Aptos(chainId: var_chainId, package: var_package);
+      case 2:
+        var var_program = sse_decode_String(deserializer);
+        return FamilyParams_Solana(program: var_program);
       default:
         throw UnimplementedError('');
     }
@@ -29949,6 +29954,9 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         sse_encode_i_32(1, serializer);
         sse_encode_u_8(chainId, serializer);
         sse_encode_String(package, serializer);
+      case FamilyParams_Solana(program: final program):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(program, serializer);
     }
   }
 

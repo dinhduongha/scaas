@@ -11,7 +11,8 @@
         feature = "near",
         feature = "algorand",
         feature = "cosmos",
-        feature = "aptos"
+        feature = "aptos",
+        feature = "solana"
     )),
     allow(dead_code, unused_imports, unused_variables)
 )]
@@ -23,6 +24,8 @@ pub(crate) mod aptos;
 pub(crate) mod cosmos;
 #[cfg(feature = "near")]
 pub(crate) mod near;
+#[cfg(feature = "solana")]
+pub(crate) mod solana;
 
 use super::Balances;
 use crate::{Sdk, SdkError};
@@ -43,6 +46,8 @@ pub(crate) async fn balances(sdk: &Sdk, chain: &str, id: &str) -> Result<Balance
         crate::Family::Cosmos => cosmos::balances(c, id).await,
         #[cfg(feature = "aptos")]
         crate::Family::Aptos => aptos::balances(c, id).await,
+        #[cfg(feature = "solana")]
+        crate::Family::Solana => solana::balances(c, id).await,
         _ => Err(SdkError::FeatureMissing),
     }
 }
@@ -53,7 +58,7 @@ pub(crate) fn malformed(i: usize, why: &str) -> ReadError {
 }
 
 /// A balance as a family sends it: a decimal string of 1 to 78 digits within a U256, written back without leading zeros.
-#[cfg(any(feature = "near", feature = "cosmos", feature = "aptos"))]
+#[cfg(any(feature = "near", feature = "cosmos", feature = "aptos", feature = "solana"))]
 pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
     if s.is_empty() || s.len() > 78 || !s.bytes().all(|b| b.is_ascii_digit()) {
         return Err(malformed(i, "a balance that is not a decimal string"));
@@ -68,7 +73,12 @@ pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
 /// (its identity checked) reads the set at that height with `at(j, height)`, and the answering endpoint with those agreeing
 /// must be a strict majority of the list.
 #[cfg_attr(
-    not(any(feature = "near", feature = "algorand", feature = "cosmos")),
+    not(any(
+        feature = "near",
+        feature = "algorand",
+        feature = "cosmos",
+        feature = "solana"
+    )),
     allow(dead_code)
 )]
 pub(crate) async fn read_set<V, P, F, Fut, G, Gut>(

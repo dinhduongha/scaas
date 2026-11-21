@@ -192,6 +192,10 @@ pub(crate) struct Chain {
     /// an Aptos profile's family client (plan T24), named by its params' chain id
     #[cfg(all(feature = "wallet", feature = "aptos"))]
     pub(crate) aptos: Option<Arc<scaas_rpc::aptos::Aptos>>,
+    /// a Solana profile's family client (plan T24.solana), named by its genesis hash (`chain_uid`'s 32 bytes in base58), and
+    /// its params' program
+    #[cfg(all(feature = "wallet", feature = "solana"))]
+    pub(crate) solana: Option<(Arc<scaas_rpc::solana::Solana>, [u8; 32])>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -383,6 +387,28 @@ impl Sdk {
                 }
                 _ => None,
             };
+            // a Solana profile's family client (plan T24.solana): its JSON-RPC endpoints (`rpc`), named by the genesis hash;
+            // the params' program decoded to its 32 bytes, else `Argument`
+            #[cfg(all(feature = "wallet", feature = "solana"))]
+            let solana = match &p.family_params {
+                Some(FamilyParams::Solana { program }) => {
+                    let program: [u8; 32] = bs58::decode(program)
+                        .into_vec()
+                        .ok()
+                        .and_then(|v| v.try_into().ok())
+                        .ok_or(SdkError::Argument)?;
+                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
+                    Some((
+                        Arc::new(scaas_rpc::solana::Solana::new(
+                            client,
+                            &bs58::encode(uid).into_string(),
+                        )),
+                        program,
+                    ))
+                }
+                _ => None,
+            };
             #[cfg(any(feature = "account", feature = "wallet"))]
             let pool = match (p.family, p.chain_id) {
                 (Family::Evm, Some(id)) => {
@@ -422,6 +448,8 @@ impl Sdk {
                 cosmos,
                 #[cfg(all(feature = "wallet", feature = "aptos"))]
                 aptos,
+                #[cfg(all(feature = "wallet", feature = "solana"))]
+                solana,
             });
         }
         let rt = runtime(config.runtime)?;

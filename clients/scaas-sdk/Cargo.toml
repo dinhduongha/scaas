@@ -28,7 +28,8 @@ dex = ["wallet"]
 admin = ["wallet"]
 mlock = ["vault", "scaas-ua/mlock"]
 soroban = ["scaas-rpc/soroban"]
-solana = ["scaas-rpc/solana"]
+# T24.solana: the genesis hash, the program, the holder and the mints in base58 (an encoding; the PDA is ua-rs's)
+solana = ["scaas-rpc/solana", "dep:bs58"]
 # T24 (spec §8.7): the family's balance reads; base58 (the genesis hash the endpoint names) and base64 (a view's arguments) are
 # encodings, no cryptography
 near = ["scaas-rpc/near", "dep:bs58", "dep:base64"]
@@ -188,6 +189,10 @@ required-features = ["wallet", "cosmos"]
 [[test]]
 name = "aptos"
 required-features = ["wallet", "aptos"]
+
+[[test]]
+name = "solana"
+required-features = ["wallet", "solana"]
 
 [[test]]
 name = "governance_delay"

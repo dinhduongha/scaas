@@ -118,6 +118,17 @@ pub enum FamilyParams {
     /// and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
     /// (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
     Aptos { chain_id: u8, package: String },
+    /// Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+    /// program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+    Solana { program: String },
+}
+
+/// Base58 (Bitcoin's alphabet) of 32 to 44 characters: a Solana key's form (its exact 32 bytes are checked where it is
+/// decoded, under the family's feature).
+pub(crate) fn is_base58_key(s: &str) -> bool {
+    (32..=44).contains(&s.len())
+        && s.bytes()
+            .all(|b| b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains(&b))
 }
 
 /// An Aptos address in AIP-40's long form: `0x` + 64 lowercase hex.
@@ -132,7 +143,7 @@ pub(crate) fn is_aptos_address(s: &str) -> bool {
 impl FamilyParams {
     /// Its family, and each field in its form: Cosmos, a chain id of 1 to 50 printable ASCII bytes (CometBFT's bound), a denom
     /// as the Cosmos SDK's rule (`[a-zA-Z][a-zA-Z0-9/:._-]{2,127}`), a prefix of 1 to 83 lowercase letters and digits; Aptos,
-    /// a chain id other than 0 and the package in the long form.
+    /// a chain id other than 0 and the package in the long form; Solana, the program in base58's form.
     pub(crate) fn fits(&self, family: Family) -> bool {
         match self {
             FamilyParams::Cosmos {
@@ -157,6 +168,7 @@ impl FamilyParams {
             FamilyParams::Aptos { chain_id, package } => {
                 family == Family::Aptos && *chain_id != 0 && is_aptos_address(package)
             }
+            FamilyParams::Solana { program } => family == Family::Solana && is_base58_key(program),
         }
     }
 }

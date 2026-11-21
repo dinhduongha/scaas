@@ -16303,6 +16303,9 @@ const _: fn() = || {
             let _: u8 = chain_id;
             let _: String = package;
         }
+        scaas_sdk::config::FamilyParams::Solana { program } => {
+            let _: String = program;
+        }
     }
     match None::<scaas_sdk::config::Finality>.unwrap() {
         scaas_sdk::config::Finality::Finalized => {}
@@ -19835,6 +19838,12 @@ impl SseDecode for scaas_sdk::config::FamilyParams {
                 return scaas_sdk::config::FamilyParams::Aptos {
                     chain_id: var_chainId,
                     package: var_package,
+                };
+            }
+            2 => {
+                let mut var_program = <String>::sse_decode(deserializer);
+                return scaas_sdk::config::FamilyParams::Solana {
+                    program: var_program,
                 };
             }
             _ => {
@@ -27439,6 +27448,9 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::FamilyParam
                 package.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            scaas_sdk::config::FamilyParams::Solana { program } => {
+                [2.into_dart(), program.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -33536,6 +33548,10 @@ impl SseEncode for scaas_sdk::config::FamilyParams {
                 <i32>::sse_encode(1, serializer);
                 <u8>::sse_encode(chain_id, serializer);
                 <String>::sse_encode(package, serializer);
+            }
+            scaas_sdk::config::FamilyParams::Solana { program } => {
+                <i32>::sse_encode(2, serializer);
+                <String>::sse_encode(program, serializer);
             }
             _ => {
                 unimplemented!("");

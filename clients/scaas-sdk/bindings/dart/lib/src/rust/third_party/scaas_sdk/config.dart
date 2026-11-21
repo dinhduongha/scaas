@@ -205,6 +205,11 @@ sealed class FamilyParams with _$FamilyParams {
     required int chainId,
     required String package,
   }) = FamilyParams_Aptos;
+
+  /// Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
+  /// program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
+  const factory FamilyParams.solana({required String program}) =
+      FamilyParams_Solana;
 }
 
 @freezed

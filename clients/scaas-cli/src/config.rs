@@ -104,6 +104,13 @@ struct Profile {
 enum Fam {
     Cosmos(CosmosFam),
     Aptos(AptosFam),
+    Solana(SolanaFam),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SolanaFam {
+    program: String,
 }
 
 #[derive(Deserialize)]
@@ -137,6 +144,7 @@ fn fam(f: Fam) -> FamilyParams {
             chain_id: a.chain_id,
             package: a.package,
         },
+        Fam::Solana(s) => FamilyParams::Solana { program: s.program },
     }
 }
 
@@ -494,6 +502,7 @@ mod tests {
     }
     const COSMOS: &str = r#"{"cosmos":{"chain_id":"scaas-local-1","rest":[{"url":"http://127.0.0.1:1","label":"r"},{"url":"http://127.0.0.1:2","label":"s"}],"rest_policy":"strict_majority","denom":"uscaas","prefix":"wasm"}}"#;
     const APTOS: &str = r#"{"aptos":{"chain_id":4,"package":"0x00000000000000000000000000000000000000000000000000000000000000aa"}}"#;
+    const SOLANA: &str = r#"{"solana":{"program":"7DYCAhqwQSKqqL1h8V1XmY1BTcMWxrASQYKNMy87jeg3"}}"#;
 
     #[test]
     fn family_params_are_read_by_name() {
@@ -533,9 +542,13 @@ mod tests {
     /// answers here) instead of `FeatureMissing`; params out of their form are `Argument` at `Sdk::open`.
     #[tokio::test(flavor = "multi_thread")]
     async fn family_profiles_open_and_read() {
-        for (params, family) in [(COSMOS, "Cosmos"), (APTOS, "Aptos")] {
+        for (params, family) in [(COSMOS, "Cosmos"), (APTOS, "Aptos"), (SOLANA, "Solana")] {
             let sdk = open_with(&fam(params, family)).await.unwrap();
-            let id = "0x0000000000000000000000000000000000000000000000000000000000000003".to_string();
+            let id = match family {
+                "Solana" => "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx",
+                _ => "0x0000000000000000000000000000000000000000000000000000000000000003",
+            }
+            .to_string();
             let r = sdk.wallet().balances(id, "f".into()).await;
             assert_ne!(code(r.map_err(Fail::Sdk)), "FeatureMissing", "{family}");
         }

@@ -138,3 +138,59 @@ async fn the_head_is_the_confirmed_slot() {
         .unwrap();
     assert_eq!(a.endpoint, 1);
 }
+
+/// SDK plan T24.solana: `Solana::batch`, one JSON-RPC batch (a read set answered together): each call's result or its error
+/// object in the calls' order, whatever order the answer lists them in; an answer that is not one member per call by `id` (one
+/// missing, one twice, an id not asked, not an array) is the endpoint's `AnswerMalformed`. Control: the full answer reversed.
+#[tokio::test]
+async fn a_batch_answers_each_call_by_id() {
+    async fn batch(shape: &'static str) -> String {
+        serve(axum::Router::new().route(
+            "/",
+            axum::routing::post(move |axum::Json(r): axum::Json<Value>| async move {
+                if r["method"] == "getGenesisHash" {
+                    return axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": GENESIS}));
+                }
+                let mut out: Vec<Value> = r
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|c| match c["method"].as_str() {
+                        Some("getBalance") => json!({"jsonrpc": "2.0", "id": c["id"], "result": {"context": {"slot": 9}, "value": 5}}),
+                        _ => json!({"jsonrpc": "2.0", "id": c["id"], "error": {"code": -32601, "message": "Method not found"}}),
+                    })
+                    .collect();
+                out.reverse();
+                match shape {
+                    "missing" => drop(out.pop()),
+                    "twice" => out.push(out[0].clone()),
+                    "foreign" => out[0]["id"] = json!(7),
+                    "object" => return axum::Json(out[0].clone()),
+                    _ => {}
+                }
+                axum::Json(Value::Array(out))
+            }),
+        ))
+        .await
+    }
+    let calls = [
+        ("getBalance", json!(["a"])),
+        ("nope", json!([])),
+        ("getBalance", json!(["b"])),
+    ];
+    let s = solana(&[&batch("full").await]);
+    let r = s.batch(0, &calls).await.unwrap();
+    assert_eq!(r.len(), 3);
+    assert_eq!(r[0].as_ref().unwrap()["value"], 5);
+    assert_eq!(r[1].as_ref().unwrap_err().rpc_error().unwrap()["code"], -32601);
+    assert_eq!(r[2].as_ref().unwrap()["context"]["slot"], 9);
+    for shape in ["missing", "twice", "foreign", "object"] {
+        let s = solana(&[&batch(shape).await]);
+        match s.batch(0, &calls).await {
+            Err(FamilyError::Failure(f)) => {
+                assert_eq!(f.kind, scaas_rpc::FailureKind::AnswerMalformed, "{shape}")
+            }
+            r => panic!("{shape}: {r:?}"),
+        }
+    }
+}
