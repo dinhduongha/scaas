@@ -180,6 +180,9 @@ pub(crate) struct Chain {
     /// the profile's PQZ verifiers (spec §9.3; owner 2026-11-19, T16-a)
     #[cfg(feature = "pqz")]
     pub(crate) verifiers: Option<scaas_rpc::node::VerifierClient>,
+    /// a NEAR profile's family client (plan T24), named by its genesis hash: `chain_uid`'s 32 bytes in base58
+    #[cfg(all(feature = "wallet", feature = "near"))]
+    pub(crate) near: Option<Arc<scaas_rpc::near::Near>>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -314,6 +317,18 @@ impl Sdk {
             } else {
                 Some(list(&p.gateways, scaas_rpc::Policy::Failover)?)
             };
+            #[cfg(all(feature = "wallet", feature = "near"))]
+            let near = match p.family {
+                Family::Near => {
+                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
+                    Some(Arc::new(scaas_rpc::near::Near::new(
+                        client,
+                        &bs58::encode(uid).into_string(),
+                    )))
+                }
+                _ => None,
+            };
             #[cfg(any(feature = "account", feature = "wallet"))]
             let pool = match (p.family, p.chain_id) {
                 (Family::Evm, Some(id)) => {
@@ -345,6 +360,8 @@ impl Sdk {
                 gateways,
                 #[cfg(feature = "pqz")]
                 verifiers,
+                #[cfg(all(feature = "wallet", feature = "near"))]
+                near,
             });
         }
         let rt = runtime(config.runtime)?;
@@ -514,6 +531,15 @@ impl Sdk {
 
     /// An EVM chain's profile, chain id and the session's pool (`ChainUnknown`; `Argument`: not an EVM profile with a chain id).
     #[cfg(any(feature = "account", feature = "wallet"))]
+    /// The chain of profile `chain` (`ChainUnknown`).
+    #[cfg(feature = "wallet")]
+    pub(crate) fn chain(&self, chain: &str) -> Result<&Chain, SdkError> {
+        self.chains
+            .iter()
+            .find(|c| c.profile.key == chain)
+            .ok_or(SdkError::ChainUnknown)
+    }
+
     pub(crate) fn evm(
         &self,
         chain: &str,

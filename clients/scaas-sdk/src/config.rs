@@ -532,7 +532,7 @@ impl GasBase {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ListedToken {
-    /// `0x` + 40 hex
+    /// EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
     pub address: String,
     pub symbol: String,
     pub decimals: u8,

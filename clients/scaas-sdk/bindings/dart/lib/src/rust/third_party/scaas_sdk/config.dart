@@ -532,7 +532,7 @@ class ListedDex {
 
 /// A token of a profile's reviewed list (spec §8.2).
 class ListedToken {
-  /// `0x` + 40 hex
+  /// EVM: `0x` + 40 hex; another family: its token id as text, checked by the family's form (spec §8.7; a NEAR account)
   final String address;
   final String symbol;
   final int decimals;

@@ -54,12 +54,17 @@ pub(crate) fn id_word(id: &str) -> Result<([u8; 32], Option<Address>), SdkError>
 }
 
 impl Wallet {
-    /// The balances of `id` (a `0x` 20-byte address or a `0x` 32-byte UA) on `chain` at one block. `ChainUnknown`,
-    /// `ProfileMismatch` (a listed token's `chainUid()`), `Argument` (an id of another length).
+    /// The balances of `id` on `chain` at one block. EVM: `id` a `0x` 20-byte address or a `0x` 32-byte UA; another family
+    /// (spec §8.7): the family's printed form, or a `0x` 32-byte UA id where the family keeps a UA ledger, read at one final
+    /// height. `ChainUnknown`, `ProfileMismatch` (a listed token's `chainUid()`), `Argument` (an id of another form),
+    /// `FeatureMissing` (a family this build does not read).
     pub async fn balances(&self, id: String, chain: String) -> Result<Balances, SdkError> {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
+                if sdk.chain(&chain)?.profile.family != crate::Family::Evm {
+                    return super::families::balances(&sdk, &chain, &id).await;
+                }
                 let (word, native) = id_word(&id)?;
                 let (profile, _, pool) = evm(&sdk, &chain)?;
                 let mut infos = Vec::with_capacity(profile.tokens.len());

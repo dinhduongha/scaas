@@ -29,7 +29,9 @@ admin = ["wallet"]
 mlock = ["vault", "scaas-ua/mlock"]
 soroban = ["scaas-rpc/soroban"]
 solana = ["scaas-rpc/solana"]
-near = ["scaas-rpc/near"]
+# T24 (spec §8.7): the family's balance reads; base58 (the genesis hash the endpoint names) and base64 (a view's arguments) are
+# encodings, no cryptography
+near = ["scaas-rpc/near", "dep:bs58", "dep:base64"]
 algorand = ["scaas-rpc/algorand"]
 aptos = ["scaas-rpc/aptos"]
 sui = ["scaas-rpc/sui"]
@@ -69,6 +71,9 @@ zeroize = "=1.8.2"
 # ids (seed, account, operation): a UUID v4 from 16 bytes of the OS generator (not a key)
 uuid = { version = "1", default-features = false }
 getrandom = "0.2"
+# T24: the non-EVM families' encodings (the versions in the graph already: bs58 by scaas-ua, base64 by scaas-rpc)
+bs58 = { version = "=0.5.1", default-features = false, features = ["alloc"], optional = true }
+base64 = { version = "0.22", optional = true }
 # T9: the EVM reads of `account` (the restore scan); T10: the operations of `wallet` (logs, blocks, `U256`); the version and
 # features scaas-rpc takes
 alloy = { version = "~1.6", default-features = false, features = [
@@ -99,6 +104,8 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "m
 bip39 = { version = "=2.2.2", default-features = false, features = ["alloc"] }
 # the test device's passkey and secure-element keys (plan T13, S1); scaas-ua's pin
 p256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa"] }
+# the NEAR fake's view arguments (plan T24)
+base64 = "0.22"
 
 # scrypt (N = 2^17) and the ML-KEM / arkworks code crawl unoptimised: the dependencies built at opt-level 3, as ua-rs
 [profile.dev.package."*"]
@@ -163,6 +170,10 @@ required-features = ["dex"]
 [[test]]
 name = "completeness"
 required-features = ["wallet"]
+
+[[test]]
+name = "near"
+required-features = ["wallet", "near"]
 
 [[test]]
 name = "governance_delay"

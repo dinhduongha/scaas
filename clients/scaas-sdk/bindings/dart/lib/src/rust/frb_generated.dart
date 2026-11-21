@@ -35388,8 +35388,10 @@ class WalletImpl extends RustOpaque implements Wallet {
         ScaasSdk.instance.api.rust_arc_decrement_strong_count_WalletPtr,
   );
 
-  /// The balances of `id` (a `0x` 20-byte address or a `0x` 32-byte UA) on `chain` at one block. `ChainUnknown`,
-  /// `ProfileMismatch` (a listed token's `chainUid()`), `Argument` (an id of another length).
+  /// The balances of `id` on `chain` at one block. EVM: `id` a `0x` 20-byte address or a `0x` 32-byte UA; another family
+  /// (spec §8.7): the family's printed form, or a `0x` 32-byte UA id where the family keeps a UA ledger, read at one final
+  /// height. `ChainUnknown`, `ProfileMismatch` (a listed token's `chainUid()`), `Argument` (an id of another form),
+  /// `FeatureMissing` (a family this build does not read).
   Future<Balances> balances({required String id, required String chain}) =>
       ScaasSdk.instance.api.scaasSdkWalletWalletBalances(
         that: this,

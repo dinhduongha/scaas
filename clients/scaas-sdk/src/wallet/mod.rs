@@ -4,6 +4,7 @@
 //! a token off the profile's reviewed list is `unlisted`, its name and symbol bounded and stripped, never shown without the
 //! mark. Values are decimal strings of the smallest unit; no floating point. UNAUDITED.
 pub(crate) mod balances;
+pub(crate) mod families;
 pub(crate) mod history;
 pub(crate) mod native;
 mod native_evm;
