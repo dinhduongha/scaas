@@ -768,6 +768,54 @@ T11–T14, T17–T20). Which device-id version a client defaults to is open (a c
 chain, since v7 puts its creation time on chain). The Rust client core that does all of this above `scaas-sdk`, with key handles only, is
 [`pqchat-core`](pqchat-core.md) (SPECIFIED).
 
+<a id="arweave-clients"></a>**Arweave data items and file objects** (SPECIFIED, nothing built; owner 2026-11-21,
+[ARCH-POS-19](../decisions.md#ARCH-POS-19) (2), Q4; the rules below controller calls of
+[ARCH-POS-20](../decisions.md#ARCH-POS-20); design in the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part D; UNAUDITED):
+
+<a id="CLI-UAL-64"></a>**CLI-UAL-64** — **`ua-rs` builds, signs and parses ANS-104 data items as `arbundles` builds them, with a
+per-file upload key that is never a UA, wallet or funded key and signs exactly one item; no RSA wallet.** Layout: signature
+type (2 B, little-endian), signature, owner, target and anchor (each a presence byte 0 or 1, then 32 B), tag count and tag
+bytes length (8 B each), the Avro tags, data; tags ≤ 128, name ≤ 1,024 B, value ≤ 3,072 B, both non-empty, ≤ 4,096 tag bytes; an
+item at least 80 B; a negative Avro block count, trailing tag bytes and a header tag count other than the Avro count refused.
+The signed message is the 48-byte SHA-384 deep hash of `["dataitem", "1", <type as decimal text>, owner, target, anchor, <raw
+Avro tag bytes>, data]` (an absent target or anchor an empty blob, an empty tag list 0 bytes); the id is base64url, unpadded,
+of SHA-256 of the signature. Types: 2 or 4 (ed25519, raw signature over the 48 bytes; which one Turbo takes is set by a probe)
+by default, 3 (secp256k1, EIP-191 `personal_sign` over the 48 bytes, 65-byte uncompressed owner, signature `r ‖ s ‖ v` with
+`v ∈ {27, 28}` and low `s`, both produced and checked) for a bundler that takes only EVM signers; no type 1. Items carry no
+target, no anchor and no tags (one fixed `Content-Type: application/octet-stream` tag only if the probe shows one is needed).
+**The upload key** is derived inside one `ua-rs` call that also seals the file (CLI-UAL-65), so no caller passes the hash it
+binds: `HKDF-SHA-256(ikm = the app root key ‖ the file key (32 B each), salt = empty, info = "scaas/arweave/v1/upload" ‖ type
+(1 B) ‖ ctSha256, L = 32)`, where `ctSha256` is SHA-256 of the object `ua-rs` has just encrypted under the file key handle; the
+ed25519 seed, or a big-endian secp256k1 scalar (0 or ≥ n: a counter byte `0x01`, `0x02`, … appended to `info`). It lives
+behind a handle of the single usage `UploadSign`, created in that call and bound to one type and one `ctSha256`; its only
+operation signs an item `ua-rs` built (a type with no public constructor), after recomputing SHA-256 of the item's data and
+refusing (`AppKeyUsage`) unless it equals the bound hash; it takes no digest and no message. Invariant: one upload key signs
+exactly one byte string. The signature is verified before the item is returned. Vectors: `smartcontracts/vectors/arweave/`,
+written by clientkeys first and cross-checked both ways against a pinned `arbundles` (each item byte-identical to the one
+`arbundles` builds from the same key and data, and accepted by `arbundles`' own verification), with tags, a target and an
+anchor in some rows; reproduced by `ua-rs`.
+
+<a id="CLI-UAL-65"></a>**CLI-UAL-65** — **A file on Arweave is encrypted with its padding inside the AEAD: the plaintext is
+framed as `len ‖ file ‖ zero pad` up to a power-of-two bucket, so the public object is exactly bucket + 16 B; it is named by
+`ar://<id>` in the `file` content's `url`, checked before decryption by length and `ctSha256`, and after decryption by the frame,
+the zero pad, `size` and `sha256`.** `frame = size (8 B, big-endian) ‖ file ‖ 0x00…` of length `bucket(size)`, where
+`bucket(size)` is the smallest power of two that is at least `max(2^16, size + 8)`, computed in integers (never floating point);
+the object is `AES-256-GCM(key, 0^96, frame)`, `bucket(size) + 16` B, and `ctSha256` is SHA-256 of the whole object. This
+replaces UA-7's `ct = AES-256-GCM(key, 0^96, file)` for a `file` content whose `url` is `ar://` (a `store` copy of such a file
+holds the same object); a content without an `ar://` `url` keeps UA-7's form. The largest bucket is the smaller of the bundler
+profile's largest single request and the platform's in-memory cap, 2^30 B on 64-bit targets and 2^27 B on wasm32; above it
+the writer refuses (`FileTooLarge`), and a reader refuses a signed `size` whose bucket is above its own cap before any request.
+`url` accepts `ar://<id>` beside `https://` and `ipfs://`: `<id>` exactly 43 characters of canonical base64url (no padding, the
+last character one of `AEIMQUYcgkosw048`), nothing after it, the scheme in lower case. A reader accepts the object only when its
+length is exactly `bucket(size) + 16` (an announced other length refused unread, no `Range` request) and its SHA-256 equals
+`ctSha256`; after the tag verifies, `open_file` requires the frame's `len` to equal the signed `size`, every pad byte zero, and
+SHA-256 of the file to equal the signed `sha256`, before any plaintext byte leaves `ua-rs`; a cache is keyed by the plaintext
+`sha256`, never by the id or `ctSha256` alone. Since the file key is random and arrives in a signed message, that check binds
+one message to one file without a separate key commitment. A failure is shown on the device only. PqVault's `file` item takes
+the same rules. Vectors: new rows in `smartcontracts/vectors/pqchat/` (an `ar://` `file` content and its refusals) and the
+frames, buckets (`size = 0`, and `size + 8 = 2^k − 1, 2^k, 2^k + 1` for every `k` from 16 to 31) and objects in
+`smartcontracts/vectors/arweave/`, written by clientkeys first and read by every client that reads those directories.
+
 <a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
 the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
 first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):

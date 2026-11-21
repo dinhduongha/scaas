@@ -30,6 +30,7 @@ design: the UA-7 spec [`2026-10-25-ua7-pq-e2e-sessions.md`](../superpowers/specs
 12. [Gas and size](#12-gas-and-size)
 13. [Tests](#13-tests)
 14. [Clients and other families](#14-clients-and-other-families)
+15. [The standalone store on 24,576-B chains](#15-the-standalone-store-on-24576-b-chains)
 
 ## 1. Overview
 
@@ -656,3 +657,41 @@ Status: **PLANNED**.
   reference `clients/clientkeys/src/pqchat.js`, which writes the vectors (plan 3c T84; test `clients/clientkeys/test/pqchat.test.js`).
 - **Other families**: each takes `PqChat` in its own `pqchat-<family>` round (owner 2026-11-04), with the same records,
   ids and epoch rule; until then a family has no `PqChat`.
+
+## 15. The standalone store on 24,576-B chains
+
+Status: **SPECIFIED**, nothing built (the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part B; UNAUDITED).
+
+<a id="CTR-CHAT-22"></a>**CTR-CHAT-22** — **`PqChatStore` is a standalone contract with exactly the store part of `PqChat`:
+it keeps each payload in state as one SSTORE2 blob of at most 24,576 B, and has no owner, admin, constructor argument or
+signature check** (owner 2026-11-21, [ARCH-POS-19](../decisions.md#ARCH-POS-19) Q1: Avalanche serves now as a message and text
+store path, as HCS does on Hedera; the contract, its state storage and its bound controller calls of
+[ARCH-POS-20](../decisions.md#ARCH-POS-20)).
+
+- **Why a new contract.** `PqChat` (29,111 B) and `OpenFactory` (34,999 B) are above the 24,576-B runtime cap of Avalanche
+  C-Chain, Fuji and Polkadot Hub, and `storeMessage` lives in `PqChat` ([CTR-CHAT-13](#CTR-CHAT-13)), so no split store exists
+  to reuse.
+- **Entries.** `storeMessage(uint8 v, bytes8 hint, bytes env) returns (uint256 index)`, `storedCount(hint)`,
+  `storedAt(hint, index)`, `storedRange(hint, offset, limit)`, the event `PqChatStored(bytes8 indexed hint, uint256 index)`
+  and the error `PqChatShape`: selectors, topic and behaviour equal `IPqChat`'s (CTR-CHAT-13, a test), so a client reads it with
+  the code it reads a `PqChat` store with. The blob bound is the constant 24,576 B (EIP-170), not a chain value: `env` is at most
+  24,416 B; `STORED_RANGE_MAX = 16`; an offset past the end is an empty page.
+- **Nothing else.** No owner, admin, pause, upgrade, registry, fee or `chainUid` (it binds no digest), no `msg.sender` read;
+  ERC-165 for `IPqChatStore`; storage in the ERC-7201 namespace `scaas.pqchatstore`, its layout pinned; runtime ≤ 24,576 B
+  asserted by a test and the size gate.
+- **State, never events only** ([CTR-CHAT-05](#CTR-CHAT-05)): recovery from state ([CTR-CHAT-14](#CTR-CHAT-14)) and one reader
+  for every chain store. Cost, an estimate at Cancun pricing to be measured: about 8 times an event-only store (about 1.22 M gas
+  for a 5,100-B envelope).
+- **Deployment.** Through the deterministic deployer with salt 0, the `amsterdam` build under
+  [NET-EVM-18](../networks/evm.md#NET-EVM-18), so one address on every chain. The release data pins the init-code hash, the
+  runtime code hash and the address: the script refuses a local build whose init-code hash differs, and treats the address
+  already holding the pinned runtime code as done (anyone may deploy it first; that is harmless, with no constructor argument).
+  Before a profile lists the store, probes on that chain: the deployer's code present, an SSTORE2 write and read, and
+  `eth_getCode` equal to the pinned bytes. Explorer-verified after every deploy.
+- **Clients.** A session lists it in `sealedInfo` as `{"kind": "chainstore", "chainId", "chainUid", "contract"}` (the UA-7 spec
+  §4.2, P27); a reader checks the chain pair and the contract's runtime code hash against the pinned release data before it
+  reads, and checks every payload as for `storeMessage` (UA-7 P25, P29). Since the same envelope goes to every listed store, a
+  session's envelope is bounded by the smallest blob bound among its listed stores (here `env` ≤ 24,416 B). Relaying as
+  [CTR-CHAT-19](#CTR-CHAT-19)'s unsigned writes: no SCaaS set (so no `RelayFeeRouter`) is deployed on Avalanche, so the paths
+  today are the operator's lane policy or the user's own account, which shows the user's address beside the hint.
+
