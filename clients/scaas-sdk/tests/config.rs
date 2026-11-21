@@ -48,6 +48,7 @@ fn profile(key: &str) -> ChainProfile {
         dexes: vec![],
         wrappers: vec![],
         tokens: vec![],
+        family_params: None,
     }
 }
 

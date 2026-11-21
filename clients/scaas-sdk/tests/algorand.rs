@@ -190,6 +190,7 @@ fn profile(rpc: &[&str], policy: scaas_rpc::Policy) -> ChainProfile {
             token(&USDC.to_string(), "USDC", 6),
             token(&VND.to_string(), "VND", 0),
         ],
+        family_params: None,
     }
 }
 

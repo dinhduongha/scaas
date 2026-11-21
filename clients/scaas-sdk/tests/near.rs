@@ -199,6 +199,7 @@ fn profile(rpc: &[&str], policy: scaas_rpc::Policy) -> ChainProfile {
         dexes: vec![],
         wrappers: vec![],
         tokens: vec![token(USDC, "USDC", 6), token(VND, "VND", 0)],
+        family_params: None,
     }
 }
 

@@ -694,6 +694,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Execute dco_decode_box_autoadd_execute(dynamic raw);
 
   @protected
+  FamilyParams dco_decode_box_autoadd_family_params(dynamic raw);
+
+  @protected
   GasPerByte dco_decode_box_autoadd_gas_per_byte(dynamic raw);
 
   @protected
@@ -1199,6 +1202,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Family dco_decode_family(dynamic raw);
 
   @protected
+  FamilyParams dco_decode_family_params(dynamic raw);
+
+  @protected
   Finality dco_decode_finality(dynamic raw);
 
   @protected
@@ -1475,6 +1481,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   Event? dco_decode_opt_box_autoadd_event(dynamic raw);
+
+  @protected
+  FamilyParams? dco_decode_opt_box_autoadd_family_params(dynamic raw);
 
   @protected
   GasPerByte? dco_decode_opt_box_autoadd_gas_per_byte(dynamic raw);
@@ -2543,6 +2552,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Execute sse_decode_box_autoadd_execute(SseDeserializer deserializer);
 
   @protected
+  FamilyParams sse_decode_box_autoadd_family_params(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   GasPerByte sse_decode_box_autoadd_gas_per_byte(SseDeserializer deserializer);
 
   @protected
@@ -3194,6 +3208,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   Family sse_decode_family(SseDeserializer deserializer);
 
   @protected
+  FamilyParams sse_decode_family_params(SseDeserializer deserializer);
+
+  @protected
   Finality sse_decode_finality(SseDeserializer deserializer);
 
   @protected
@@ -3494,6 +3511,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   Event? sse_decode_opt_box_autoadd_event(SseDeserializer deserializer);
+
+  @protected
+  FamilyParams? sse_decode_opt_box_autoadd_family_params(
+    SseDeserializer deserializer,
+  );
 
   @protected
   GasPerByte? sse_decode_opt_box_autoadd_gas_per_byte(
@@ -4808,6 +4830,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_box_autoadd_execute(Execute self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_family_params(
+    FamilyParams self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_gas_per_byte(
     GasPerByte self,
     SseSerializer serializer,
@@ -5666,6 +5694,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void sse_encode_family(Family self, SseSerializer serializer);
 
   @protected
+  void sse_encode_family_params(FamilyParams self, SseSerializer serializer);
+
+  @protected
   void sse_encode_finality(Finality self, SseSerializer serializer);
 
   @protected
@@ -6043,6 +6074,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_event(Event? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_family_params(
+    FamilyParams? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_gas_per_byte(

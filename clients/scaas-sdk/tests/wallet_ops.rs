@@ -121,6 +121,7 @@ async fn setup(gateways: usize) -> T {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        family_params: None,
     };
     let store = MemoryStore::new();
     let sdk = Sdk::open(SdkConfig {

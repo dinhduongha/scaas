@@ -98,6 +98,7 @@ async fn setup() -> (Arc<Sdk>, KeyRef, Value) {
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        family_params: None,
     };
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],

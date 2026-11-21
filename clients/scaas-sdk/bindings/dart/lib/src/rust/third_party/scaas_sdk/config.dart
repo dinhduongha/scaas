@@ -12,7 +12,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'config.freezed.dart';
 
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RuntimeChoice`, `SdkConfig`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A chain as the app's release pins it (spec §4).
 class ChainProfile {
@@ -69,6 +69,11 @@ class ChainProfile {
   /// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
   final List<String> wrappers;
 
+  /// the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+  /// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+  /// `Sdk::open`
+  final FamilyParams? familyParams;
+
   const ChainProfile({
     required this.key,
     required this.family,
@@ -90,6 +95,7 @@ class ChainProfile {
     required this.verifierPolicy,
     required this.dexes,
     required this.wrappers,
+    this.familyParams,
   });
 
   @override
@@ -113,7 +119,8 @@ class ChainProfile {
       verifiers.hashCode ^
       verifierPolicy.hashCode ^
       dexes.hashCode ^
-      wrappers.hashCode;
+      wrappers.hashCode ^
+      familyParams.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -139,7 +146,8 @@ class ChainProfile {
           verifiers == other.verifiers &&
           verifierPolicy == other.verifierPolicy &&
           dexes == other.dexes &&
-          wrappers == other.wrappers;
+          wrappers == other.wrappers &&
+          familyParams == other.familyParams;
 }
 
 /// One endpoint of a profile's RPC or gateway list (CLI-RPC-02): `{url, class, label, auth}`; `auth` belongs to this endpoint
@@ -174,6 +182,22 @@ class EndpointConfig {
 
 /// A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
 enum Family { evm, soroban, solana, near, algorand, aptos, sui, cosmos, ton }
+
+@freezed
+sealed class FamilyParams with _$FamilyParams {
+  const FamilyParams._();
+
+  /// Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+  /// profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+  /// the native denom and the bech32 prefix of the chain's addresses
+  const factory FamilyParams.cosmos({
+    required String chainId,
+    required List<EndpointConfig> rest,
+    required Policy restPolicy,
+    required String denom,
+    required String prefix,
+  }) = FamilyParams_Cosmos;
+}
 
 @freezed
 sealed class Finality with _$Finality {

@@ -66,9 +66,9 @@ pub mod wallet;
 mod watch;
 
 pub use config::{
-    ChainProfile, Clock, EndpointConfig, Family, Finality, GasBase, GasPerByte, GasPerItem,
-    GasRows, GasTable, GasVerify, Limits, ListedDex, ListedToken, PositionReader, RuntimeChoice,
-    SdkConfig,
+    ChainProfile, Clock, EndpointConfig, Family, FamilyParams, Finality, GasBase, GasPerByte,
+    GasPerItem, GasRows, GasTable, GasVerify, Limits, ListedDex, ListedToken, PositionReader,
+    RuntimeChoice, SdkConfig,
 };
 pub use error::SdkError;
 pub use events::{Event, InFlight, OpState, Subscription};
@@ -186,6 +186,9 @@ pub(crate) struct Chain {
     /// an Algorand profile's family client (plan T24), named by its genesis hash: `chain_uid`'s 32 bytes in base64
     #[cfg(all(feature = "wallet", feature = "algorand"))]
     pub(crate) algorand: Option<Arc<scaas_rpc::algorand::Algorand>>,
+    /// a Cosmos profile's family client (plan T24), named by its params' chain id
+    #[cfg(all(feature = "wallet", feature = "cosmos"))]
+    pub(crate) cosmos: Option<Arc<scaas_rpc::cosmos::Cosmos>>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -289,6 +292,9 @@ impl Sdk {
             if !keys.insert(p.key.clone()) {
                 return Err(SdkError::Argument);
             }
+            if p.family_params.as_ref().is_some_and(|f| !f.fits(p.family)) {
+                return Err(SdkError::Argument);
+            }
             // the DEX list and the wrapper list hold addresses (CLI-SGN-35)
             let readers = p.dexes.iter().flat_map(|d| {
                 d.position_readers
@@ -345,6 +351,22 @@ impl Sdk {
                 }
                 _ => None,
             };
+            // a Cosmos profile's family client (plan T24.cosmos): its CometBFT endpoints (`rpc`) and its REST gateways, named by
+            // the chain id of its params
+            #[cfg(all(feature = "wallet", feature = "cosmos"))]
+            let cosmos = match &p.family_params {
+                Some(FamilyParams::Cosmos {
+                    chain_id,
+                    rest,
+                    rest_policy,
+                    ..
+                }) => Some(Arc::new(scaas_rpc::cosmos::Cosmos::new(
+                    scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?,
+                    scaas_rpc::family::Client::new(list(rest, *rest_policy)?)?,
+                    chain_id,
+                ))),
+                None => None,
+            };
             #[cfg(any(feature = "account", feature = "wallet"))]
             let pool = match (p.family, p.chain_id) {
                 (Family::Evm, Some(id)) => {
@@ -380,6 +402,8 @@ impl Sdk {
                 near,
                 #[cfg(all(feature = "wallet", feature = "algorand"))]
                 algorand,
+                #[cfg(all(feature = "wallet", feature = "cosmos"))]
+                cosmos,
             });
         }
         let rt = runtime(config.runtime)?;

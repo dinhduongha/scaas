@@ -144,6 +144,7 @@ pub fn parse_profiles(text: &str) -> Result<Vec<ChainProfile>, Fail> {
             verifier_policy: pol(p.verifier_policy),
             dexes: p.dexes,
             wrappers: p.wrappers,
+            family_params: None,
         })
         .collect())
 }

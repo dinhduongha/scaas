@@ -117,6 +117,7 @@ fn profile(url: String, genesis: String) -> ChainProfile {
         dexes: vec![],
         wrappers: vec![],
         tokens: vec![],
+        family_params: None,
     }
 }
 /// The SDK on the fake chain, the repository mnemonic imported (its `0x0131` account 0 is the vectors' `alice`).

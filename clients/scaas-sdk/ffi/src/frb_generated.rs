@@ -16141,6 +16141,7 @@ const _: fn() = || {
         let _: crate::api::Policy = ChainProfile.verifier_policy;
         let _: Vec<scaas_sdk::config::ListedDex> = ChainProfile.dexes;
         let _: Vec<String> = ChainProfile.wrappers;
+        let _: Option<scaas_sdk::config::FamilyParams> = ChainProfile.family_params;
     }
     {
         let ConfirmRemove = None::<scaas_sdk::vault::seeds::ConfirmRemove>.unwrap();
@@ -16282,6 +16283,21 @@ const _: fn() = || {
             let _: String = value;
             let _: String = data;
             let _: Option<AllowOpaqueCall> = allow;
+        }
+    }
+    match None::<scaas_sdk::config::FamilyParams>.unwrap() {
+        scaas_sdk::config::FamilyParams::Cosmos {
+            chain_id,
+            rest,
+            rest_policy,
+            denom,
+            prefix,
+        } => {
+            let _: String = chain_id;
+            let _: Vec<scaas_sdk::config::EndpointConfig> = rest;
+            let _: crate::api::Policy = rest_policy;
+            let _: String = denom;
+            let _: String = prefix;
         }
     }
     match None::<scaas_sdk::config::Finality>.unwrap() {
@@ -19437,6 +19453,8 @@ impl SseDecode for scaas_sdk::config::ChainProfile {
         let mut var_verifierPolicy = <crate::api::Policy>::sse_decode(deserializer);
         let mut var_dexes = <Vec<scaas_sdk::config::ListedDex>>::sse_decode(deserializer);
         let mut var_wrappers = <Vec<String>>::sse_decode(deserializer);
+        let mut var_familyParams =
+            <Option<scaas_sdk::config::FamilyParams>>::sse_decode(deserializer);
         return scaas_sdk::config::ChainProfile {
             key: var_key,
             family: var_family,
@@ -19458,6 +19476,7 @@ impl SseDecode for scaas_sdk::config::ChainProfile {
             verifier_policy: var_verifierPolicy,
             dexes: var_dexes,
             wrappers: var_wrappers,
+            family_params: var_familyParams,
         };
     }
 }
@@ -19783,6 +19802,33 @@ impl SseDecode for scaas_sdk::config::Family {
             8 => scaas_sdk::config::Family::Ton,
             _ => unreachable!("Invalid variant for Family: {}", inner),
         };
+    }
+}
+
+impl SseDecode for scaas_sdk::config::FamilyParams {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_chainId = <String>::sse_decode(deserializer);
+                let mut var_rest =
+                    <Vec<scaas_sdk::config::EndpointConfig>>::sse_decode(deserializer);
+                let mut var_restPolicy = <crate::api::Policy>::sse_decode(deserializer);
+                let mut var_denom = <String>::sse_decode(deserializer);
+                let mut var_prefix = <String>::sse_decode(deserializer);
+                return scaas_sdk::config::FamilyParams::Cosmos {
+                    chain_id: var_chainId,
+                    rest: var_rest,
+                    rest_policy: var_restPolicy,
+                    denom: var_denom,
+                    prefix: var_prefix,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 
@@ -21135,6 +21181,17 @@ impl SseDecode for Option<scaas_sdk::events::Event> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<scaas_sdk::events::Event>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<scaas_sdk::config::FamilyParams> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<scaas_sdk::config::FamilyParams>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -26903,6 +26960,7 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::ChainProfil
             self.0.verifier_policy.into_into_dart().into_dart(),
             self.0.dexes.into_into_dart().into_dart(),
             self.0.wrappers.into_into_dart().into_dart(),
+            self.0.family_params.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -27341,6 +27399,42 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::config::Family>>
     for scaas_sdk::config::Family
 {
     fn into_into_dart(self) -> FrbWrapper<scaas_sdk::config::Family> {
+        self.into()
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::FamilyParams> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self.0 {
+            scaas_sdk::config::FamilyParams::Cosmos {
+                chain_id,
+                rest,
+                rest_policy,
+                denom,
+                prefix,
+            } => [
+                0.into_dart(),
+                chain_id.into_into_dart().into_dart(),
+                rest.into_into_dart().into_dart(),
+                rest_policy.into_into_dart().into_dart(),
+                denom.into_into_dart().into_dart(),
+                prefix.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for FrbWrapper<scaas_sdk::config::FamilyParams>
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<scaas_sdk::config::FamilyParams>>
+    for scaas_sdk::config::FamilyParams
+{
+    fn into_into_dart(self) -> FrbWrapper<scaas_sdk::config::FamilyParams> {
         self.into()
     }
 }
@@ -33133,6 +33227,7 @@ impl SseEncode for scaas_sdk::config::ChainProfile {
         <crate::api::Policy>::sse_encode(self.verifier_policy, serializer);
         <Vec<scaas_sdk::config::ListedDex>>::sse_encode(self.dexes, serializer);
         <Vec<String>>::sse_encode(self.wrappers, serializer);
+        <Option<scaas_sdk::config::FamilyParams>>::sse_encode(self.family_params, serializer);
     }
 }
 
@@ -33398,6 +33493,31 @@ impl SseEncode for scaas_sdk::config::Family {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for scaas_sdk::config::FamilyParams {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            scaas_sdk::config::FamilyParams::Cosmos {
+                chain_id,
+                rest,
+                rest_policy,
+                denom,
+                prefix,
+            } => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(chain_id, serializer);
+                <Vec<scaas_sdk::config::EndpointConfig>>::sse_encode(rest, serializer);
+                <crate::api::Policy>::sse_encode(rest_policy, serializer);
+                <String>::sse_encode(denom, serializer);
+                <String>::sse_encode(prefix, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 
@@ -34413,6 +34533,16 @@ impl SseEncode for Option<scaas_sdk::events::Event> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <scaas_sdk::events::Event>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<scaas_sdk::config::FamilyParams> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <scaas_sdk::config::FamilyParams>::sse_encode(value, serializer);
         }
     }
 }

@@ -78,6 +78,7 @@ fn profile(rpc: Vec<String>, gateways: Vec<String>, uid: &str) -> ChainProfile {
                 decimals: 6,
             },
         ],
+        family_params: None,
     }
 }
 

@@ -36,7 +36,8 @@ near = ["scaas-rpc/near", "dep:bs58", "dep:base64"]
 algorand = ["scaas-rpc/algorand", "dep:base64"]
 aptos = ["scaas-rpc/aptos"]
 sui = ["scaas-rpc/sui"]
-cosmos = ["scaas-rpc/cosmos"]
+# T24: a CW20 smart query is base64 JSON in the path (an encoding)
+cosmos = ["scaas-rpc/cosmos", "dep:base64"]
 ton = ["scaas-rpc/ton"]
 file-store = ["vault"]
 # roots (c) and (d) (spec §6.6; T6): scaas-ua's Argon2id roots
@@ -179,6 +180,10 @@ required-features = ["wallet", "algorand"]
 [[test]]
 name = "near"
 required-features = ["wallet", "near"]
+
+[[test]]
+name = "cosmos"
+required-features = ["wallet", "cosmos"]
 
 [[test]]
 name = "governance_delay"

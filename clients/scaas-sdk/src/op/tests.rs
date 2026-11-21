@@ -164,6 +164,7 @@ async fn setup_with(
         gas_opt_in: vec![],
         dexes: vec![],
         wrappers: vec![],
+        family_params: None,
     };
     let mut limits = Limits::default();
     edit(&mut profile, &mut limits);

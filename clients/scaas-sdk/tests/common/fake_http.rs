@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! A fake HTTP endpoint on 127.0.0.1:0 for the non-EVM families' reads (plan T24; local only): every request `(method, path,
-//! body)` goes to the test's handler, which answers `(status, body bytes)`; each request is recorded. `DOWN` is an endpoint
-//! nothing listens on.
+//! body)` goes to the test's handler, which answers `(status, body bytes)` (`serve_head`'s handler also gets the request's
+//! header lines, lowercased); each request is recorded. `DOWN` is an endpoint nothing listens on.
 #![allow(
     dead_code,
     clippy::unwrap_used,
@@ -18,11 +18,22 @@ pub const DOWN: &str = "http://127.0.0.1:9";
 
 pub type Handler = Arc<dyn Fn(&str, &str, &[u8]) -> (u16, Vec<u8>) + Send + Sync>;
 
+/// A handler of `(method, path, header lines lowercased, body)`.
+pub type HeadHandler = Arc<dyn Fn(&str, &str, &str, &[u8]) -> (u16, Vec<u8>) + Send + Sync>;
+
 /// The requests an endpoint received, as `(method, path, body)`.
 pub type Seen = Arc<Mutex<Vec<(String, String, String)>>>;
 
 /// Serves `h` on 127.0.0.1:0; returns the base URL and the requests it receives.
 pub async fn serve(h: Handler) -> (String, Seen) {
+    serve_head(Arc::new(move |m: &str, p: &str, _: &str, b: &[u8]| {
+        h(m, p, b)
+    }))
+    .await
+}
+
+/// Serves `h`, which also reads the request's headers.
+pub async fn serve_head(h: HeadHandler) -> (String, Seen) {
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}", l.local_addr().unwrap());
     let seen: Seen = Arc::default();
@@ -67,7 +78,7 @@ pub async fn serve(h: Handler) -> (String, Seen) {
                         path.clone(),
                         String::from_utf8_lossy(&body).to_string(),
                     ));
-                    let (status, out) = h(&method, &path, &body);
+                    let (status, out) = h(&method, &path, &head.to_ascii_lowercase(), &body);
                     let resp = format!(
                         "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n",
                         out.len()

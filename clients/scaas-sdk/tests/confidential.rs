@@ -121,6 +121,7 @@ pub fn profile(
         dexes: vec![],
         wrappers: vec![],
         tokens: vec![],
+        family_params: None,
     }
 }
 

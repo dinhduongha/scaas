@@ -93,6 +93,7 @@ async fn open(url: &str, n: usize, store: Arc<dyn SecureStore>, limits: Limits) 
                 decimals: 0,
             })
             .collect(),
+        family_params: None,
     };
     Sdk::open(SdkConfig {
         profiles: vec![profile],

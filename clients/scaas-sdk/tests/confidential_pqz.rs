@@ -133,6 +133,7 @@ fn profile(rpc: Vec<EndpointConfig>) -> ChainProfile {
         dexes: vec![],
         wrappers: vec![],
         tokens: vec![],
+        family_params: None,
     }
 }
 

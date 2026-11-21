@@ -137,3 +137,29 @@ async fn the_failover_drops_another_network_and_skips_an_endpoint_behind() {
     assert_eq!((a.endpoint, seen.lock().unwrap().clone()), (3, vec![3]));
     assert_eq!(n.rest.client.pool().identity_of(1), Some(false));
 }
+
+/// SDK plan T24.cosmos: `get_at_height` sends `x-cosmos-block-height` (the gateway answers from that block's state); `get`
+/// sends none (control).
+#[tokio::test]
+async fn a_rest_read_at_a_height_sends_the_height_header() {
+    let u = serve(axum::Router::new().fallback(
+        |uri: axum::http::Uri, h: axum::http::HeaderMap| async move {
+            let v = match uri.path() {
+                "/cosmos/base/tendermint/v1beta1/node_info" => {
+                    json!({"default_node_info": {"network": "scaas-1"}})
+                }
+                _ => json!({"height": h.get("x-cosmos-block-height").map(|v| v.to_str().unwrap())}),
+            };
+            serde_json::to_vec(&v).unwrap()
+        },
+    ))
+    .await;
+    let n = cosmos(&[&u], &[&u]);
+    let (s, v) = n.rest.get_at_height(0, "/x", 4242).await.unwrap();
+    assert_eq!((s, v["height"].as_str()), (200, Some("4242")));
+    assert_eq!(
+        n.rest.get(0, "/x").await.unwrap().1["height"],
+        Value::Null,
+        "control"
+    );
+}

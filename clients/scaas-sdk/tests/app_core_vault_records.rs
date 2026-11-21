@@ -189,6 +189,7 @@ fn profile(url: String, genesis: String) -> ChainProfile {
         dexes: vec![],
         wrappers: vec![],
         tokens: vec![],
+        family_params: None,
     }
 }
 

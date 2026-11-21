@@ -221,7 +221,9 @@ impl Client {
             .await?)
     }
 
-    /// [`Client::raw_at`] keeping a 5xx answer too (a gateway whose error is its JSON at any status: Cosmos REST, plan T21).
+    /// [`Client::raw_at`] keeping a 5xx answer too (a gateway whose error is its JSON at any status: Cosmos REST, plan T21),
+    /// with one request header of the caller's (`x-cosmos-block-height`: a REST read at one height, SDK plan T24.cosmos).
+    #[allow(clippy::too_many_arguments)]
     pub async fn raw_any_at(
         &self,
         i: usize,
@@ -230,10 +232,11 @@ impl Client {
         body: Option<Vec<u8>>,
         ctype: &str,
         cap: usize,
+        header: Option<(&str, &str)>,
     ) -> Result<(u16, Vec<u8>), FamilyError> {
         Ok(self
             .http
-            .raw_any(&self.list, i, method, path, body, ctype, cap, None)
+            .raw_any(&self.list, i, method, path, body, ctype, cap, None, header)
             .await?)
     }
 

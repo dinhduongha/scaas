@@ -94,6 +94,54 @@ pub struct ChainProfile {
     pub dexes: Vec<ListedDex>,
     /// the reviewed wrapped tokens a `UAWrapOrder` may mint (`Expect::WrapOrder`'s list; `DexNotListed` for another)
     pub wrappers: Vec<String>,
+    /// the family data a non-EVM read needs beyond the fields above (spec §8.7 rule 2), release data as the rest; `None` on a
+    /// family that needs none. Params of another family than `family`, or a field out of its form, are `Argument` at
+    /// `Sdk::open`
+    pub family_params: Option<FamilyParams>,
+}
+
+/// A family's own profile data (spec §8.7 rule 2; decisions CLI-SDK-15's Changes of 2026-11-21).
+#[derive(Debug, Clone)]
+#[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
+pub enum FamilyParams {
+    /// Cosmos: the chain id the gateways' `node_info` must name (the identity a Cosmos node answers; `chain_uid` stays the
+    /// profile's 32-byte network id), the REST gateways with their policy (the profile's `rpc` are the CometBFT endpoints),
+    /// the native denom and the bech32 prefix of the chain's addresses
+    Cosmos {
+        chain_id: String,
+        rest: Vec<EndpointConfig>,
+        rest_policy: Policy,
+        denom: String,
+        prefix: String,
+    },
+}
+
+impl FamilyParams {
+    /// Its family, and each field in its form: a chain id of 1 to 50 printable ASCII bytes (CometBFT's bound); a denom as the
+    /// Cosmos SDK's rule (`[a-zA-Z][a-zA-Z0-9/:._-]{2,127}`); a prefix of 1 to 83 lowercase letters and digits.
+    pub(crate) fn fits(&self, family: Family) -> bool {
+        match self {
+            FamilyParams::Cosmos {
+                chain_id,
+                denom,
+                prefix,
+                ..
+            } => {
+                let d = denom.as_bytes();
+                family == Family::Cosmos
+                    && (1..=50).contains(&chain_id.len())
+                    && chain_id.bytes().all(|b| b.is_ascii_graphic())
+                    && (3..=128).contains(&d.len())
+                    && d.first().is_some_and(u8::is_ascii_alphabetic)
+                    && d.iter()
+                        .all(|b| b.is_ascii_alphanumeric() || b"/:._-".contains(b))
+                    && (1..=83).contains(&prefix.len())
+                    && prefix
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+            }
+        }
+    }
 }
 
 /// A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,

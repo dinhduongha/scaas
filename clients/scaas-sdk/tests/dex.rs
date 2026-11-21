@@ -181,6 +181,7 @@ async fn setup(gateways: usize, dead: usize) -> T {
             },
         ],
         wrappers: vec![WRAPPER.into()],
+        family_params: None,
     };
     let sdk = Sdk::open(SdkConfig {
         profiles: vec![profile],

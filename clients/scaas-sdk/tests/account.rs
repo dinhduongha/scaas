@@ -68,6 +68,7 @@ fn profile(urls: &[String]) -> ChainProfile {
         dexes: vec![],
         wrappers: vec![],
         tokens: vec![],
+        family_params: None,
     }
 }
 

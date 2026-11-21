@@ -66,6 +66,7 @@ fn profile() -> ChainProfile {
             symbol: "T".into(),
             decimals: 6,
         }],
+        family_params: None,
     }
 }
 async fn sdk() -> (Arc<Sdk>, String) {
