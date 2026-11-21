@@ -57,3 +57,21 @@ F12 1,024 B | clientkeys node --test test/pqvault.test.js (red first: the F12 te
 F12 1,024 B | forge test/pqvault (red first: 4 gas rows; re-pinned from GAS_MEASURE) | F12c tree | 0 | 92 passed 0 failed 0 skipped (forge)
 F12 1,024 B | ua-rs --features vectors,pqvault --test pqvault_keys --test pqvault_pass | F12c tree | 0 | 9 passed 0 failed 0 ignored (cargo)
 F12 1,024 B | node cargo test --test e2e pqvault --ignored (both modes) | F12c tree | 0 | 2 passed 0 failed 0 ignored (cargo)
+# Merge of origin/ua-rs-sign (multi-gen-verify, e2842754b) as 08a57caf6, targeted suites on the merged tree (GATE_TAG=final). Between
+# 08a57caf6 and 1c6773d73 only test/pqvault changed (two merge fixes), which only forge-pqvault compiles; format sol rechecked at 1c6773d73.
+# The full round-end matrix was stopped at forge-confidential on the owner's decision (2026-11-21): chains-arweave's contract part merges first, then one matrix.
+merge | format | 08a57caf6 | 0 | -
+merge | docs | 08a57caf6 | 0 | -
+merge | docs-test | 08a57caf6 | 0 | -
+merge | ci-guards | 08a57caf6 | 0 | -
+merge | size | 08a57caf6 | 0 | size gate: 0 error(s), 179 contracts
+merge | clientkeys | af317db9e | 0 | 538 passed 0 failed (node)
+merge | ua-rs-pqvault | af317db9e | 0 | 4 passed 0 failed 0 ignored (cargo)
+merge | ua-rs-pqvault-vectors | af317db9e | 0 | 9 passed 0 failed 0 ignored (cargo)
+merge | node-clippy | af317db9e | 0 | -
+merge | forge-pqchat | af317db9e | 0 | 103 passed 0 failed 0 skipped (forge)
+merge | forge-top | af317db9e | 0 | 29 passed 0 failed 0 skipped (forge)
+merge | forge-modules | 50ca829ee | 0 | 35 passed 0 failed 0 skipped (forge)
+merge | uagas | 50ca829ee | 0 | 29 passed 0 failed 0 skipped (forge)
+merge | forge-account | 50ca829ee | 0 | 103 passed 0 failed 0 skipped (forge)
+merge | forge-pqvault (red first at 50ca829ee: test_gas_perVaultUaRegistration regular 459,203 vs 460,749; at 08a57caf6: compile error 9755, KindConfig arity) | 1c6773d73 | 0 | 92 passed 0 failed 0 skipped (forge)
