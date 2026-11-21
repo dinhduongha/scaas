@@ -265,6 +265,7 @@ def deploy_gate_runs_every_check():
         write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
         write(t, "out/Fx.sol/Fx.json", art([STOP], 1))
         write(t, "release-data/Fx.json", {"precompiles": [KAT]})
+        write(t, "cases.json", {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]})
         ran, lines = [], []
         run4 = lambda *a: ran.append(a) or 3  # noqa: E731
         good = node(pre={P256: {KAT["input"]: KAT["output"]}})
@@ -357,6 +358,42 @@ def majority_on_the_used_fields():
     bad = lambda m, p: {"result": {"gasLimit": 7}} if m == "eth_getBlockByNumber" else node()(m, p)  # noqa: E731
     refused("FORKCHECK_NODES", f.check_gas, [bad, bad, honest[0]], "0x00")
     assert f.check_gas([bad, honest[0], honest[0]], "0x00")[1] == 32_000_000
+
+
+def cases_bound_to_the_contract():
+    """Check (4) runs the cases of the contract under deploy: a cases file whose entries are another artifact's (by bytes), an
+    empty file or an entry without a case is refused before anything runs (review P2-5)."""
+    with tempfile.TemporaryDirectory() as t:
+        write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
+        write(t, "out/Fx.sol/Fx.json", art([STOP], 1))
+        write(t, "out/Foo.sol/Foo.json", art([PUSH1, 2, STOP], 2, name="Foo"))
+        write(t, "out/Copy.sol/Fx.json", art([STOP], 1))  # the same bytes under another path: the same contract
+        write(t, "release-data/Foo.json", {"precompiles": []})
+        good = node()
+        one = [{"name": "f", "sig": "f()", "ok": True}]
+        ran = []
+
+        def gate(cases):
+            write(t, "cases.json", cases)
+            ran.clear()
+            f.deploy_gate("avalanche-testnet", "out/Foo.sol/Foo.json", [good], "cases.json", root=t,
+                          run4=lambda *a: ran.append(a) or 1, say=lambda s: None)  # fmt: skip
+
+        for bad in (
+            {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": one}]},  # another contract's cases
+            {"contracts": [{"artifact": "Foo.sol/Foo.json", "cases": one}, {"artifact": "Fx.sol/Fx.json", "cases": one}]},
+            {"contracts": []},
+            {"contracts": [{"artifact": "Foo.sol/Foo.json", "cases": []}]},
+            {},
+        ):
+            refused("FORKCHECK_CASES", gate, bad)
+            assert not ran
+        gate({"contracts": [{"artifact": "Foo.sol/Foo.json", "cases": one}]})  # twin
+        assert ran
+        write(t, "release-data/Fx.json", {"precompiles": []})
+        write(t, "cases.json", {"contracts": [{"artifact": "Copy.sol/Fx.json", "cases": one}]})
+        f.deploy_gate("avalanche-testnet", "out/Fx.sol/Fx.json", [good], "cases.json", root=t, run4=lambda *a: 1,
+                      say=lambda s: None)  # fmt: skip
 
 
 # ---- check (4): the control must be red
@@ -479,6 +516,7 @@ TESTS = [
     precompile_known_answer,
     majority_on_the_used_fields,
     deploy_gate_runs_every_check,
+    cases_bound_to_the_contract,
     control_green_voids_the_run,
     case_from_revert_logs,
 ]

@@ -147,6 +147,30 @@ MUTANTS = [
         TD + "the_transaction_from_the_majority",
         "FAIL the_transaction_from_the_majority",
     ),
+    (
+        "P2-5 the cases of another artifact accepted",
+        [(F, "        if (b[\"bytecode\"][\"object\"].lower(), b[\"deployedBytecode\"][\"object\"].lower()) != mine:", "        if False:")],
+        T + "cases_bound_to_the_contract",
+        "FAIL cases_bound_to_the_contract",
+    ),
+    (
+        "P2-5 an empty cases file accepted",
+        [(F, "    if not isinstance(contracts, list) or not contracts:", "    if not isinstance(contracts, list):")],
+        T + "cases_bound_to_the_contract",
+        "FAIL cases_bound_to_the_contract",
+    ),
+    (
+        "P2-5 an entry without a case accepted",
+        [(F, '        if not isinstance(c.get("cases"), list) or not c["cases"]:', '        if not isinstance(c.get("cases"), list):')],
+        T + "cases_bound_to_the_contract",
+        "FAIL cases_bound_to_the_contract",
+    ),
+    (
+        "P2-5 the binding not called",
+        [(F, "    n, m = bound_cases(a, cases_path, root, out)", "    n, m = 0, 0")],
+        T + "cases_bound_to_the_contract",
+        "FAIL cases_bound_to_the_contract",
+    ),
 ]
 
 if __name__ == "__main__":

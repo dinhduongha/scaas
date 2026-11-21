@@ -560,6 +560,26 @@ def exec_cases(fork, cases_path, code_size_limit=None, say=print, root=EVM, out=
         return execute(rpc, fork, contracts, say, root, out) + 1  # + the control's scan refusal
 
 
+def bound_cases(a, cases_path, root=EVM, out="out"):
+    """Check (4)'s cases are the contract's under deploy (review P2-5): at least one entry, each entry's artifact the deployed
+    one's bytes (init code and runtime; never another contract's) with at least one case; returns (cases, entries)."""
+    try:
+        contracts = json.load(open(os.path.join(root, cases_path)))["contracts"]
+    except (OSError, ValueError, KeyError, TypeError):
+        raise ForkError(f"FORKCHECK_CASES: {cases_path} is no cases file") from None
+    if not isinstance(contracts, list) or not contracts:
+        raise ForkError(f"FORKCHECK_CASES: {cases_path} lists no contract")
+    mine, n = (a["bytecode"]["object"].lower(), a["deployedBytecode"]["object"].lower()), 0
+    for c in contracts:
+        b = load_artifact(os.path.join(out, c["artifact"]), root)
+        if (b["bytecode"]["object"].lower(), b["deployedBytecode"]["object"].lower()) != mine:
+            raise ForkError(f"FORKCHECK_CASES: {c['artifact']} is not {a['_name']}, the contract under deploy")
+        if not isinstance(c.get("cases"), list) or not c["cases"]:
+            raise ForkError(f"FORKCHECK_CASES: an entry of {a['_name']} has no case")
+        n += len(c["cases"])
+    return n, len(contracts)
+
+
 def deploy_gate(
     key,
     artifact_path,
@@ -591,6 +611,8 @@ def deploy_gate(
     entries = precompiles(json.load(open(os.path.join(root, rel))))
     if not cases_path:
         raise ForkError(f"FORKCHECK_CASES: no cases for {a['_name']} at {fork}")
+    n, m = bound_cases(a, cases_path, root, out)
+    say(f"forkcheck {key}: (4) {n} cases of {a['_name']} in {m} entries")
     say(
         f"forkcheck {key}: (4) {(run4 or exec_cases)(fork, cases_path, pr['codeSizeLimit'], say, root, out)} rows at {fork} ok"
     )
