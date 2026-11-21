@@ -5447,6 +5447,36 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .collect()
     }
 
+    /// Fable code review of PqVault F10: `test/vectors/selector_audit.json`'s block of `name` (from the built artifact, every
+    /// non-view external): the selectors of its `SIGNED` and `PERMISSIONLESS(unsigned …)` rows (the node's rows) and of the rest
+    /// (`FACTORY`, `rescue`: no row).
+    fn audited(name: &str) -> (HashSet<[u8; 4]>, HashSet<[u8; 4]>) {
+        let v: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(format!(
+                "{}/../smartcontracts/evm/test/vectors/selector_audit.json",
+                env!("CARGO_MANIFEST_DIR")
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let (mut rows, mut none) = (HashSet::new(), HashSet::new());
+        for r in v[name].as_array().unwrap() {
+            let sig = r["sig"].as_str().unwrap();
+            let sel: [u8; 4] = alloy::primitives::keccak256(sig)[..4].try_into().unwrap();
+            let class = r["class"].as_str().unwrap();
+            if class == "SIGNED"
+                || (class.starts_with("PERMISSIONLESS(")
+                    && class.contains("unsigned")
+                    && !sig.starts_with("rescue("))
+            {
+                rows.insert(sel);
+            } else {
+                none.insert(sel);
+            }
+        }
+        (rows, none)
+    }
+
     /// PqVault plan V8 (CTR-PQV-11, CTR-PQV-13; AGENTS "Node"): the `pqvault` allow-list equals the contract's writes both
     /// directions, the contract side derived from `IPqVault.sol` with `IPqChat`'s and `IUARegistry`'s types resolved (`initialize`
     /// is the factory's alone, no row); the selectors are forge's `methodIdentifiers`; each write is a row of `pqvault` and of no
@@ -5473,6 +5503,14 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap())
             .collect();
         assert_eq!(ours, forge, "forge's IPqVault methodIdentifiers");
+        let (audit_rows, audit_none) = audited("PqVault");
+        assert_eq!(ours, audit_rows, "selector_audit.json's PqVault: its SIGNED and unsigned-write rows are the allow-list (Fable F10)");
+        for x in &audit_none {
+            assert!(
+                !ours.contains(x),
+                "PqVault: a FACTORY or rescue entry is no row"
+            );
+        }
         let chat: HashSet<[u8; 4]> = pqchat_writes().iter().map(|s| sel(s)).collect();
         assert!(
             ours.is_disjoint(&chat),
@@ -5714,6 +5752,14 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         .map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap())
         .collect();
         assert_eq!(ours, forge, "forge's IPqChat methodIdentifiers");
+        let (audit_rows, audit_none) = audited("PqChat");
+        assert_eq!(ours, audit_rows, "selector_audit.json's PqChat: its SIGNED and unsigned-write rows are the allow-list (Fable F10)");
+        for x in &audit_none {
+            assert!(
+                !ours.contains(x),
+                "PqChat: a FACTORY or rescue entry is no row"
+            );
+        }
         let kinds = [
             "token",
             "zether",

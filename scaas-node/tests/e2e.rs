@@ -7099,14 +7099,24 @@ impl VaultMember {
 /// signatures, never decrypts) create a chain-bound vault (mode 1: `DS_B(instance)`, `requireAuthorized` under `P_V`), write an
 /// item, edit it, write a batch of two, each a `call` job of named fields relayed at fee 0; then every byte is read back from
 /// the views alone (`vaultsOf`, `latestEpoch`, `itemsOf`, `latestRange`, `versionAt`). A job naming a record as hex is
-/// `HEX_ARGS_REFUSED`, `dead` with nothing sent.
+/// `HEX_ARGS_REFUSED`, `dead` with nothing sent. Fable code review F11: the same in mode 0 (`DS_V`, `requirePortableApp`
+/// under PqVault's app id), the default of every client.
 #[tokio::test]
 #[ignore]
 async fn pqvault_vault_items_and_recovery() {
+    pqvault_flow(1, 31920).await;
+}
+
+#[tokio::test]
+#[ignore]
+async fn pqvault_vault_items_and_recovery_mode0() {
+    pqvault_flow(0, 31921).await;
+}
+
+async fn pqvault_flow(mode: u8, chain_id: u64) {
     use alloy::sol_types::SolStruct;
     use pqvault_types::*;
-    let chain_id = 31920;
-    let (_anvil, rpc) = start_anvil(chain_id, 31920).await;
+    let (_anvil, rpc) = start_anvil(chain_id, chain_id as u16).await;
     let holder = small_key(0x9a17);
     let dep = deploy_env(
         &rpc,
@@ -7130,11 +7140,19 @@ async fn pqvault_vault_items_and_recovery() {
     );
     let (a, b) = (ma.ua, mb.ua);
     let (lo, hi) = if a < b { (a, b) } else { (b, a) };
-    let domain = alloy::sol_types::eip712_domain! {
-        name: "SCaaS PqVault",
-        version: "1",
-        chain_id: chain_id,
-        verifying_contract: inst,
+    let domain = if mode == 0 {
+        alloy::sol_types::eip712_domain! {
+            name: "SCaaS PqVault",
+            version: "1",
+            salt: keccak256(b"scaas.pqvault.v1"),
+        }
+    } else {
+        alloy::sol_types::eip712_domain! {
+            name: "SCaaS PqVault",
+            version: "1",
+            chain_id: chain_id,
+            verifying_contract: inst,
+        }
     };
     let p_v = keccak256(
         (
@@ -7159,7 +7177,7 @@ async fn pqvault_vault_items_and_recovery() {
             keccak256(b"scaas/pqvault/v1/vault"),
             a,
             nonce,
-            U256::from(1u8),
+            U256::from(mode),
             uid,
             inst,
         )
@@ -7190,7 +7208,7 @@ async fn pqvault_vault_items_and_recovery() {
     let v = PqVaultCreate {
         creator: a,
         nonce,
-        mode: 1,
+        mode,
         homeChain: uid,
         homeVaultContract: inst,
         admins: vec![a],
@@ -7198,7 +7216,7 @@ async fn pqvault_vault_items_and_recovery() {
         wrapHashes: wraps.iter().map(|w| w.eip712_hash_struct()).collect(),
         passKdf: 1,
         passSalt: B256::repeat_byte(0x5a),
-        sealedInfo: vec![0x5e; 64].into(),
+        sealedInfo: vec![0x5e; 1052].into(), // a nonce, the 1,024-B bucket, a tag (F8, F12)
     };
     let jm = |m: &MemberKey| json!({"ua": hb(m.ua), "keyId": "0", "via": hb(m.via)});
     let jw = |w: &Wrap| {
@@ -7206,7 +7224,7 @@ async fn pqvault_vault_items_and_recovery() {
         "sealedKey": h(&w.sealedKey)})
     };
     let v_args = json!({
-        "v": {"creator": hb(v.creator), "nonce": nonce.to_string(), "mode": 1, "homeChain": hb(uid),
+        "v": {"creator": hb(v.creator), "nonce": nonce.to_string(), "mode": mode, "homeChain": hb(uid),
             "homeVaultContract": format!("{inst:#x}"), "admins": [hb(a)], "members": members.iter().map(jm).collect::<Vec<_>>(),
             "wrapHashes": v.wrapHashes.iter().map(|x| hb(*x)).collect::<Vec<_>>(), "passKdf": 1, "passSalt": hb(v.passSalt),
             "sealedInfo": h(&v.sealedInfo)},
