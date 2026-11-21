@@ -36,3 +36,4 @@ F4 | clientkeys node --test test/pqvault.test.js (red first: the new test failed
 F4 | ua-rs --features pqvault clippy -D warnings + --test pqvault_pass (red first: compile error, the crate absent) | F4 tree | 0 | 4 passed 0 failed 0 ignored (cargo)
 F5 | ua-rs --features vectors --test pqvault_keys (a second implementation of keys.json, items.json, pqvAccount, nativeMember) | F5 tree | 0 | 5 passed 0 failed 0 ignored (cargo); clippy --all-targets --features vectors -D warnings rc 0
 F5 control | one byte of items.json's first ciphertext flipped (restored after) | F5 tree | 101 | items_keys_aad_ciphertexts FAILED: the reproducer can fail
+F6 | forge PqVaultInvariant.t.sol (red first: both positive controls failed, the old check() compared nothing between handler writes) | F6 tree | 0 | 4 passed 0 failed 0 skipped (forge), invariants 64 runs x depth 32

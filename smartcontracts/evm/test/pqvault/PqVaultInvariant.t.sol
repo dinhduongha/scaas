@@ -87,7 +87,7 @@ contract PqVaultHandler is Test {
         if (bytes(breach).length == 0) breach = why;
     }
 
-    function createVault(uint256 seed) external {
+    function createVault(uint256 seed) external tracked {
         IPqVault.PqVaultCreate memory c;
         c.members = _members(seed);
         c.creator = c.members[seed % c.members.length].ua;
@@ -132,7 +132,7 @@ contract PqVaultHandler is Test {
         (w, e.wrapHashes) = _wraps(e.members, PqVaultTypes.epochId(vid, e.author, e.nonce));
     }
 
-    function rekeyVault(uint256 seed, uint256 who) external {
+    function rekeyVault(uint256 seed, uint256 who) external tracked {
         bytes32 parent = _pick(epochs, seed);
         if (!v.epochComplete(parent)) return;
         (bytes32 vid, bytes32[] memory pa, uint64 number) = _parentInfo(parent);
@@ -162,7 +162,7 @@ contract PqVaultHandler is Test {
         require(ok);
     }
 
-    function removeVaultMembers(uint256 seed, uint256 who) external {
+    function removeVaultMembers(uint256 seed, uint256 who) external tracked {
         bytes32 ep = _pick(epochs, seed);
         bytes32 vid = ep;
         (bool ok, bytes memory ret) = address(v).staticcall(abi.encodeCall(IPqVault.epochOf, (ep)));
@@ -177,7 +177,7 @@ contract PqVaultHandler is Test {
         } catch {}
     }
 
-    function leaveVault(uint256 seed, uint256 who) external {
+    function leaveVault(uint256 seed, uint256 who) external tracked {
         bytes32 ep = _pick(epochs, seed);
         bytes32 vid = ep;
         (bool ok, bytes memory ret) = address(v).staticcall(abi.encodeCall(IPqVault.epochOf, (ep)));
@@ -200,7 +200,7 @@ contract PqVaultHandler is Test {
         ++accepted;
     }
 
-    function createItem(uint256 seed, uint256 who) external {
+    function createItem(uint256 seed, uint256 who) external tracked {
         bytes32 ep = _pick(epochs, seed);
         bytes32 vid = ep;
         (bool ok, bytes memory ret) = address(v).staticcall(abi.encodeCall(IPqVault.epochOf, (ep)));
@@ -212,7 +212,7 @@ contract PqVaultHandler is Test {
         } catch {}
     }
 
-    function editItem(uint256 seed, uint256 who, uint32 version) external {
+    function editItem(uint256 seed, uint256 who, uint32 version) external tracked {
         if (itemIds.length == 0) return;
         bytes32 iid = itemIds[seed % itemIds.length];
         bytes32 vid = v.itemOf(iid).vaultId;
@@ -230,7 +230,7 @@ contract PqVaultHandler is Test {
         } catch {}
     }
 
-    function createItems(uint256 seed, uint256 who, uint8 n) external {
+    function createItems(uint256 seed, uint256 who, uint8 n) external tracked {
         bytes32 ep = _pick(epochs, seed);
         bytes32 vid = ep;
         (bool ok, bytes memory ret) = address(v).staticcall(abi.encodeCall(IPqVault.epochOf, (ep)));
@@ -251,7 +251,7 @@ contract PqVaultHandler is Test {
         } catch {}
     }
 
-    function addVaultWraps(uint256 seed) external {
+    function addVaultWraps(uint256 seed) external tracked {
         bytes32 ep = _pick(epochs, seed);
         IPqChat.MemberKey[] memory m = _members(seed >> 8);
         (IPqChat.Wrap[] memory w,) = _wraps(m, ep);
@@ -266,29 +266,54 @@ contract PqVaultHandler is Test {
         return vaults.length;
     }
 
-    /// Lengths only grow; versions never decrease and each decodes, 32..16,416 B.
-    function check() external returns (string memory) {
+    // ----- the ghost baselines (Fable code review F6): kept and compared in the handler's own writes, which Foundry commits; an
+    // `invariant_*` call's state changes are not, so a baseline written there would be 0 again at every check
+
+    uint256 public lastItemTotal;
+    mapping(bytes32 => uint256) public lastVaultCount;
+
+    /// After every handler write: no item's `versionCount` decreased, the vaults' item lists and each UA's `vaultsOf` did not
+    /// shrink; the baselines move up.
+    modifier tracked() {
+        _;
         for (uint256 i; i < itemIds.length; ++i) {
             uint32 c = v.itemOf(itemIds[i]).versionCount;
             if (c < seenVersions[itemIds[i]]) _fail("versionCount decreased");
             seenVersions[itemIds[i]] = c;
+        }
+        uint256 total;
+        for (uint256 i; i < vaults.length; ++i) {
+            total += v.itemCount(vaults[i]);
+        }
+        if (total < lastItemTotal) _fail("itemsOf shrank");
+        lastItemTotal = total;
+        for (uint256 i; i < ids.length; ++i) {
+            uint256 n = v.vaultCount(ids[i]);
+            if (n < lastVaultCount[ids[i]]) _fail("vaultsOf shrank");
+            lastVaultCount[ids[i]] = n;
+        }
+    }
+
+    /// The breach recorded by a handler write, if any; every stored version decodes and is 32..16,416 B (read now).
+    function check() external view returns (string memory) {
+        if (bytes(breach).length != 0) return breach;
+        for (uint256 i; i < itemIds.length; ++i) {
+            uint32 c = v.itemOf(itemIds[i]).versionCount;
             for (uint32 k = 1; k <= c; ++k) {
                 uint256 n = v.versionAt(itemIds[i], k).ciphertext.length;
-                if (n < 32 || n > 16_416) _fail("a stored ciphertext outside 32..16,416 B");
+                if (n < 32 || n > 16_416) return "a stored ciphertext outside 32..16,416 B";
             }
         }
-        return breach;
+        return "";
     }
 }
 
 /// PqVault plan V6 (spec §11 "Invariants"): a handler over the eight writes with honest and hostile actors. `versionCount` never
 /// decreases and every stored version decodes; at home every epoch has at most one complete child; no removed (or leaving) member
 /// writes under that epoch; every complete epoch >= 1 was authored by an admin of its parent; every stored ciphertext is 32..16,416
-/// B; `itemsOf` and `vaultsOf` only grow; every accepted write's nonce is marked. **UNAUDITED.**
+/// B; `itemsOf` and `vaultsOf` only grow (the handler's ghost baselines, F6); every accepted write's nonce is marked. **UNAUDITED.**
 contract PqVaultInvariantTest is PqVaultBase {
     PqVaultHandler internal hd;
-    uint256 internal lastItems;
-    mapping(bytes32 => uint256) internal lastVaults;
 
     function setUp() public override {
         super.setUp();
@@ -300,21 +325,14 @@ contract PqVaultInvariantTest is PqVaultBase {
         targetContract(address(hd));
     }
 
-    function invariant_noBreach() public {
+    function invariant_noBreach() public view {
         assertEq(hd.check(), "");
     }
 
-    function invariant_listsOnlyGrow() public {
-        uint256 total;
-        for (uint256 i; i < hd.vaultCount(); ++i) {
-            total += vault.itemCount(hd.vaults(i));
-        }
-        assertGe(total, lastItems);
-        lastItems = total;
+    /// `vaultsOf` pages at most 128 entries of each UA's list (its growth: the handler's ghost baselines, `invariant_noBreach`).
+    function invariant_vaultsOfPages() public view {
         for (uint256 i; i < ids.length; ++i) {
             uint256 n = vault.vaultCount(ids[i]);
-            assertGe(n, lastVaults[ids[i]]);
-            lastVaults[ids[i]] = n;
             assertEq(vault.vaultsOf(ids[i], 0, 128).length, n > 128 ? 128 : n);
         }
     }
@@ -331,5 +349,32 @@ contract PqVaultInvariantTest is PqVaultBase {
         hd.removeVaultMembers(0, 4);
         assertEq(hd.accepted(), 7, "createVault, createItem, two batch items, editItem, leaveVault, removeVaultMembers");
         assertEq(hd.check(), "");
+    }
+
+    /// Fable code review F6: the baselines live in the handler (committed by its write calls), so a decrease between two handler
+    /// writes is a breach. Positive controls: after a write, `itemOf` mocked to a lower `versionCount`, then `vaultCount` mocked
+    /// to a lower count; the next handler write records each breach.
+    function test_ghostBaselinesCatchADecrease() public {
+        hd.createVault(4);
+        hd.createItem(32, 1);
+        bytes32 iid = hd.itemIds(0);
+        IPqVault.ItemView memory iv = vault.itemOf(iid);
+        assertEq(iv.versionCount, 1);
+        hd.createItem(33, 2); // a later write: no breach yet
+        assertEq(hd.breach(), "");
+        vm.mockCall(
+            address(vault), abi.encodeCall(IPqVault.itemOf, (iid)), abi.encode(IPqVault.ItemView(iv.vaultId, 0, 0))
+        );
+        hd.createItem(34, 3);
+        assertEq(hd.breach(), "versionCount decreased");
+    }
+
+    function test_ghostBaselinesCatchAShrinkingList() public {
+        hd.createVault(4);
+        hd.createItem(32, 1);
+        assertEq(hd.breach(), "");
+        vm.mockCall(address(vault), abi.encodeCall(IPqVault.vaultCount, (ids[0])), abi.encode(uint256(0)));
+        hd.createItem(33, 2);
+        assertEq(hd.breach(), "vaultsOf shrank");
     }
 }
