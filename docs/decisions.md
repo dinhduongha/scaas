@@ -363,6 +363,29 @@ Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck R-6 and recheck 2 P
 **Cost if wrong.** A software path is far more expensive in gas than a precompile and may not fit a transaction on some chains; that case comes back to the owner with numbers.
 **Source.** Owner 2026-11-19 (chat): "Lưu ý thêm chút là evm support tối đa, đến cả pqz dù chain chưa hỗ trợ native PQ. Các chain khác cũng phải hỗ trợ được như vậy." (EVM supports the maximum, PQZ included, even where the chain has no native PQ support; other chains must support it the same way), then "Duyệt, ghi vào tài liệu" (approved; write it into the docs); then "Trường hợp gas cao quá, phải tắt thì phải được xác nhận." (where gas is too high and the kind must be disabled, that needs confirmation).
 
+<a id="ARCH-POS-19"></a>
+### ARCH-POS-19 — Avalanche and Polkadot EVMs join; Arweave stores encrypted files
+- old: — · status: current · owner: yes · date: 2026-11-21 · normative: decisions.md#ARCH-POS-19 · superseded-by: —
+
+**Rule.** (1) Avalanche's EVM (C-Chain and Fuji; Avalanche L1s studied) and Polkadot's EVM (Polkadot Hub's pallet-revive and the
+parachain EVMs) become chain profiles under the EVM family's rules: one rule on every chain, the deploy condition per contract
+(owner 2026-11-09), Glamsterdam before a public chain is deployed ([NET-EVM-06](networks/evm.md#NET-EVM-06)), maximal support
+([ARCH-POS-18](#ARCH-POS-18)). (2) Arweave joins as a store of ciphertext only: PqChat messages and images, and the files embedded
+in a message or a vault item, encrypted on the client and pushed to Arweave. (3) `scaas-rpc` gains the Avalanche and Polkadot
+profiles and an Arweave reader and uploader under CLI-RPC-01..11. (4) Attachments join the `pqchat-core` round (O9 (b),
+[CLI-PQC-02](clients/pqchat-core.md#CLI-PQC-02) on branch `pqchat-core-build`).
+**Status.** PLANNED. Research first (the note on the Source line: facts per chain, the ANS-104 format, bundlers, gateways, the `ua-rs` and `scaas-rpc` changes, open questions Q1–Q8); then specs
+and plans. Its main finding: no SCaaS contract set deploys on Avalanche C-Chain, Polkadot Hub or Moonbeam today, because each
+caps runtime code at 24,576 B and none has the Amsterdam fork.
+**Why.** More EVM chains for customers on those ecosystems; a permanent store for encrypted files, which never go on chain
+(UA-7 P28: 1 MiB is about 1.6 G state gas).
+**Cost if wrong.** Profiles and a store module that wait for chain forks; Arweave uploads are public forever with their size, time
+and upload key, so the metadata rules of the research note (rotating upload keys, padding, the payer path) must hold.
+**Source.** Research [research/2026-11-21-avax-polkadot-arweave.md](research/2026-11-21-avax-polkadot-arweave.md). Owner 2026-11-21 (chat, translated from Vietnamese): "I have decided to also support the EVMs of AVAX and Polkadot.
+Message and image storage may also use Arweave."; "scaas-rpc probably needs to add EVM AVAX and Polkadot, and Arweave."; "Note that
+image files and data embedded in a message or in the vault may be encrypted and pushed to Arweave."; and, on attachments in the
+`pqchat-core` round, "Put it in." TODO 8i.
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
