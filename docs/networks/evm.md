@@ -330,15 +330,24 @@ client). A contract that fails (3) or (5) waits and goes to the owner: a build f
 precompile means [ARCH-POS-18](../decisions.md#ARCH-POS-18)'s software path, never a disabled kind. A whole
 SCaaS set still waits for the chain's Amsterdam fork. Design: the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §4.5.
 How it is built (controller calls, ARCH-POS-20 Change of T4): a profile states its fork and caps in
-`smartcontracts/evm/src/chains/<key>/profile.json` (`evmFork`, `codeSizeLimit`, `initCodeSizeLimit`; a profile without the file is
-`amsterdam`), and `deploy.sh` refuses a whole set on any other fork (`FORKCHECK_SET_FORK`); a contract declares its precompiles in
+`smartcontracts/evm/src/chains/<key>/profile.json` (`evmFork`, `codeSizeLimit`, `initCodeSizeLimit`, `txGasCap` (null: none) and
+the recorded `blockGasLimit`; a key without the file is refused by name, `FORKCHECK_PROFILE`, except the reset chain `scaas-testnet`
+and a local anvil `local-…-testnet`, which are `amsterdam`; `avalanche-mainnet` and `avalanche-testnet` are `cancun`, 24,576 B and
+49,152 B, no transaction cap), and `deploy.sh` refuses a whole set on any other fork (`FORKCHECK_SET_FORK`); a contract declares its precompiles in
 `smartcontracts/evm/release-data/<Contract>.json` (`precompiles`: address, input, known output; a file without the list is
-refused); the scan places code by the compiler's source-map instruction count, then solc's `INVALID`, then the runtime (in the
+refused, and an empty list is refused when the code holds `CALL`, `CALLCODE`, `DELEGATECALL` or `STATICCALL` in code
+position); the scan cannot see code a contract builds at run time (`SSTORE2.write` assembles its blob's init code in memory:
+`PUSH2`, `DUP1`, `PUSH1`, `CODECOPY`, `RETURN`, all Cancun), which check (4) covers by running the writes; the control is red only for its missing opcode (its deploy green, its call an execution error and its receipt status 0;
+else `FORKCHECK_CONTROL`), and the gate step `forkcheck` also runs it green at `osaka`, where that green run under the
+Cancun expectation is void; check (4) runs only the cases of the contract under deploy (each entry's artifact its init code and runtime, at
+least one case; else `FORKCHECK_CASES`); the scan places code by the compiler's source-map instruction count, then solc's `INVALID`, then the runtime (in the
 init code), then the data sections the compiler's legacy assembly lists (`forge build --extra-output evm.legacyAssembly`; none
 without it), then the CBOR metadata (in the runtime), and refuses anything else, a second sub-assembly (code the walk does not
 reach) included; `DUPN`, `SWAPN` and `EXCHANGE`
 (EIP-8024), which solc 0.8.37 does not emit, are bytes the walk cannot place; chain reads take the strict majority of the node
-list. Each refusal is named `FORKCHECK_*`.
+list on the value used, never a whole answer (a block's hash and gas limit at a number 16 below the head a strict majority
+reaches, a code, a call's answer, a receipt's consensus fields; a height, an estimate or a fee is the number a strict majority
+reports at least). Each refusal is named `FORKCHECK_*`.
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
 Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the

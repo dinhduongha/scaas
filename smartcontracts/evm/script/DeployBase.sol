@@ -552,6 +552,7 @@ abstract contract DeployBase is DeployBook {
         internal
         returns (OpenFactory f)
     {
+        _requireKindHere("OpenFactory", uid); // NET-ALL-25 (C18), where the factory is created (review P3-1)
         if (deployZether) {
             require(!isHedera, "DEPLOY_ZETHER: not on Hedera (ZetherLayer refuses a Hedera env)");
             (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
@@ -691,14 +692,6 @@ abstract contract DeployBase is DeployBook {
         return at.codehash;
     }
 
-    /// @notice NET-ALL-25 (C18): no homeChain kind on a shared genesis, before anything is sent: the factory always, `PqChat`
-    ///         and `PqVault` when this run deploys them (`chain-uids.json`'s `homeChainKinds`, `_requireKindHere`).
-    function _requireHomeKindsHere() internal view {
-        _requireKindHere("OpenFactory", uid);
-        if (deployPqChat) _requireKindHere("PqChat", uid);
-        if (deployPqVault) _requireKindHere("PqVault", uid);
-    }
-
     /// @notice Plan 3c T92 (UA-7 D22, topics spec §11): `PqChat` on the factory's generic path, with no factory code: its
     ///         body module `PqChatTopics` (CTR-TOK-30, 3C-D2) by CREATE2 with `DEPLOY_SALT` (`_module`, its own gate), the
     ///         class env 1 of `(3, 0)` (the registry; `params[0]` the chain's declared code-size limit, `CHAIN_CODE_LIMIT`;
@@ -707,6 +700,7 @@ abstract contract DeployBase is DeployBook {
     ///         `pqchat_instance`; else created after the notice period by anyone, `createInstance`). JSON
     ///         `pqchat_implementation`, `pqchat_topics`. **UNAUDITED.**
     function _deployPqChat(OpenFactory f, address reg) internal {
+        _requireKindHere("PqChat", uid); // NET-ALL-25 (C18), where PqChat is created (review P3-1)
         address topics = _module("PqChatTopics.sol:PqChatTopics", abi.encode(address(f)), 3, 0);
         f.publishClassEnv(3, 0, 1, f.chainUid(), _pqchatEnv(reg, topics));
         address impl = _pqchatRelease(f, abi.encode(topics));
@@ -728,6 +722,7 @@ abstract contract DeployBase is DeployBook {
     ///         no UA when the notice period lets it be created now (JSON `pqvault_instance`; else created after the notice period
     ///         by anyone). JSON `pqvault_implementation`. **UNAUDITED.**
     function _deployPqVault(OpenFactory f, address reg) internal {
+        _requireKindHere("PqVault", uid); // NET-ALL-25 (C18), where PqVault is created (review P3-1)
         IFactoryToken.Env memory e;
         e.registry = reg;
         e.params = new bytes32[](1);
@@ -1286,6 +1281,7 @@ abstract contract DeployBase is DeployBook {
     }
 
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
+        _requireKindHere("UARegistry", uid); // NET-ALL-25: UAMsigUpdate and the scoped keys bind chain_uid, no chain id
         require(txGasCap != 0, "TX_GAS_CAP: the chain's per-transaction gas cap from the deploy book (owner X1)");
         (bool bls, bool bnG2) = _precompiles();
         (bool pqz, bool[3] memory ml) = _pqPrecompiles();
@@ -1453,6 +1449,7 @@ abstract contract DeployBase is DeployBook {
     ///         `0x0142` where a predecessor enables it, the book's `gen_verify_only` kinds. A kind no predecessor enables (an
     ///         ordinary later-generation kind) is not built in this mode. **UNAUDITED.**
     function _deployUARegistryGen(string memory book, address ska) internal returns (UARegistry reg) {
+        _requireKindHere("UARegistry", uid); // NET-ALL-25, as _deployUARegistry: before the book is read
         UARegistry pred = UARegistry(vm.parseJsonAddress(book, ".ua_registry"));
         address latest = vm.keyExistsJson(book, ".ua_registry_latest")
             ? vm.parseJsonAddress(book, ".ua_registry_latest")

@@ -18,15 +18,21 @@ chain without the Amsterdam fork a contract deploys only when its `amsterdam` bu
                            Amsterdam pins;
   (5) FORKCHECK_PRECOMPILE every precompile the contract declares in its release data (release-data/<Contract>.json,
                            `precompiles`: [{address, name, input, output}]; a file without the list is FORKCHECK_RELEASE_DATA)
-                           answers its known answer to an eth_call on the chain.
-The profile states the fork: src/chains/<key>/profile.json {"evmFork", "codeSizeLimit", "initCodeSizeLimit"}; a profile
-without the file is `amsterdam` (NET-EVM-06), where nothing here applies. Chain reads ask every node of the list and take the
-strict majority (ARCH-POS-15), else FORKCHECK_NODES. One rule on every chain: no chain id is read here.
+                           answers its known answer to an eth_call on the chain; an empty list with a CALL,
+                           CALLCODE, DELEGATECALL or STATICCALL in code position is FORKCHECK_RELEASE_DATA.
+The profile states the fork: src/chains/<key>/profile.json {"evmFork", "codeSizeLimit", "initCodeSizeLimit", "txGasCap"?
+(null: none), "blockGasLimit"? (a record; check (2) reads the live block)}; at `amsterdam` (NET-EVM-06) nothing here applies.
+A key without the file is refused (FORKCHECK_PROFILE), except the reset chain `scaas-testnet` and a local anvil
+(`local-…-testnet`), which are `amsterdam` (ARCH-POS-20, review P1-1). Chain reads ask every node of the list and take the
+strict majority (ARCH-POS-15) on the value used (a block's hash and gas limit at a number below the head, a code, a call's
+answer; a height, an estimate or a fee: the number a strict majority reaches), else FORKCHECK_NODES. One rule on every chain: no chain id is read here.
   python3 -I script/forkcheck.py set-gate <key>        exit 1 (FORKCHECK_SET_FORK) when the profile's fork is not amsterdam:
                                                        a whole SCaaS set waits for the chain's Amsterdam fork (deploy.sh)
   python3 -I script/forkcheck.py scan <fork> <artifact> [<args hex>]   check (3)
   scripts/capped python3 -I script/forkcheck.py exec <fork> <cases.json> [--out <dir>]   check (3) and (4) on a local anvil
                                                        (started and stopped here); prints `gas <contract> <case> <gasUsed>`
+  scripts/capped python3 -I script/forkcheck.py control <fork> [--out <dir>]   the control's positive run: green on anvil
+                                                       at the first fork with its opcode, and void under <fork>'s expectation
   scripts/capped python3 -I script/forkcheck.py deploy <key> <artifact> <rpc>[,<rpc>…] --cases <cases.json>
       [--args <hex>] [--gas-limit <gas>] [--release <release-data json>] [--out <dir>]   the five checks before a single
                                                        contract's deploy
@@ -82,6 +88,7 @@ AMSTERDAM = CANCUN | {0x1E, 0x4B}
 FORKS = {"cancun": CANCUN, "amsterdam": AMSTERDAM}
 TARGET = "amsterdam"
 CLZ = 0x1E
+CALLS = {0xF1: "CALL", 0xF2: "CALLCODE", 0xF4: "DELEGATECALL", 0xFA: "STATICCALL"}
 
 
 def immediate(op):
@@ -89,7 +96,7 @@ def immediate(op):
     return op - 0x5F if 0x60 <= op <= 0x7F else 0
 
 
-def walk(code, count, fork, where):
+def walk(code, count, fork, where, seen=None):
     """The offset after `count` instructions of `code` (the compiler's source-map count), each byte in code position checked:
     placeable by the compile target's table, else FORKCHECK_UNPLACED; an opcode of `fork`, else FORKCHECK_OPCODE."""
     allowed, i = FORKS[fork], 0
@@ -103,6 +110,8 @@ def walk(code, count, fork, where):
             )
         if op not in allowed:
             raise ForkError(f"FORKCHECK_OPCODE: {where}: opcode 0x{op:02x} at {i} is not a {fork} opcode")
+        if seen is not None:
+            seen.add(op)
         i += 1 + immediate(op)
         if i > len(code):
             raise ForkError(f"FORKCHECK_UNPLACED: {where}: the immediate of 0x{op:02x} runs past the code")
@@ -173,7 +182,8 @@ def scan(artifact, fork, args=b""):
         raise ForkError(
             f"FORKCHECK_BOUNDARY: {name} runtime: {len(rt_subs)} sub-assemblies (code the walk does not reach)"
         )
-    end = walk(rt, g["runtime_n"], fork, f"{name} runtime")
+    g["ops"] = set()  # the opcodes in code position, runtime and init code
+    end = walk(rt, g["runtime_n"], fork, f"{name} runtime", g["ops"])
     if rt[end:] != b"\xfe" + rt_data + rt[g["meta_at"] :]:
         how = (
             "the compiler's assembly"
@@ -184,7 +194,7 @@ def scan(artifact, fork, args=b""):
             f"FORKCHECK_BOUNDARY: {name} runtime: the code ends at {end}, the metadata starts at {g['meta_at']}: the "
             f"{g['meta_at'] - end} bytes between them are not INVALID and the {len(rt_data)} data bytes of {how}"
         )
-    end = walk(init, g["init_n"], fork, f"{name} init")
+    end = walk(init, g["init_n"], fork, f"{name} init", g["ops"])
     if init[end:] != b"\xfe" + rt + init_data:
         raise ForkError(
             f"FORKCHECK_BOUNDARY: {name} init: the code ends at {end}; the {len(init) - end} bytes after it are not INVALID, "
@@ -209,13 +219,23 @@ def check_sizes(g, profile):
 # ---- the profile and the release data
 
 
+# The keys that are amsterdam without a profile file: the reset chain and a local anvil (ARCH-POS-20, review P1-1)
+NO_PROFILE_AMSTERDAM = re.compile(r"scaas-testnet|local(-[a-z0-9-]+)?-testnet")
+
+
 def profile(key, root=EVM):
-    """The profile's fork and caps: src/chains/<key>/profile.json; none: amsterdam (NET-EVM-06)."""
+    """The profile's fork and caps: src/chains/<key>/profile.json; none: amsterdam for the reset chain and a local anvil,
+    else FORKCHECK_PROFILE (fail closed: a chain without a profile never defaults to amsterdam)."""
     if not re.fullmatch(r"[a-z0-9-]+", key):
         raise ForkError(f"FORKCHECK_PROFILE: {key!r} is not a chain key")
     p = os.path.join(root, "src", "chains", key, "profile.json")
     if not os.path.exists(p):
-        return {"evmFork": TARGET}
+        if NO_PROFILE_AMSTERDAM.fullmatch(key):
+            return {"evmFork": TARGET}
+        raise ForkError(
+            f"FORKCHECK_PROFILE: {key} has no src/chains/{key}/profile.json (a chain states its fork; only the reset chain "
+            "and a local anvil are amsterdam without one)"
+        )
     pr = json.load(open(p))
     if pr.get("evmFork") not in FORKS:
         raise ForkError(f"FORKCHECK_FORK_UNKNOWN: {key}: evmFork {pr.get('evmFork')!r} (known: {', '.join(FORKS)})")
@@ -223,6 +243,9 @@ def profile(key, root=EVM):
         for f in ("codeSizeLimit", "initCodeSizeLimit"):
             if not isinstance(pr.get(f), int) or pr[f] <= 0:
                 raise ForkError(f"FORKCHECK_PROFILE: {key}: {f} missing (a chain without {TARGET} states its caps)")
+    cap = pr.get("txGasCap")
+    if cap is not None and (not isinstance(cap, int) or isinstance(cap, bool) or cap <= 0):
+        raise ForkError(f"FORKCHECK_PROFILE: {key}: txGasCap {cap!r} is neither null nor a positive integer")
     return pr
 
 
@@ -239,6 +262,11 @@ def precompiles(release):
 # ---- chain reads through a node list (strict majority)
 
 
+MAX_ANSWER = (
+    4 << 20
+)  # bytes of one answer read at most (a block is under 1 MiB, a 16-blob page under 1 MiB of hex; P3-3)
+
+
 def _post(url, method, params, timeout=30):
     req = urllib.request.Request(
         url,
@@ -247,31 +275,101 @@ def _post(url, method, params, timeout=30):
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.load(r)
+            body = r.read(MAX_ANSWER + 1)
+        if len(body) > MAX_ANSWER:
+            return {"error": {"message": f"no answer (an answer above {MAX_ANSWER} B)", "transport": True}}
+        a = json.loads(body)
+        return a if isinstance(a, dict) else {"error": {"message": "no answer (not a JSON object)", "transport": True}}
     except Exception as e:  # never the URL: it may hold a key
-        return {"error": {"message": f"no answer ({type(e).__name__})"}}
+        return {"error": {"message": f"no answer ({type(e).__name__})", "transport": True}}
 
 
 def http_node(url):
     return lambda method, params: _post(url, method, params)
 
 
-def agree(nodes, method, params):
-    """The strict majority's answer ({"result": …} or {"error": …}); the error message is not compared, only its presence."""
+BAD_ANSWER = (ValueError, TypeError, KeyError, AttributeError, IndexError)
+
+
+def qty(x):
+    """A JSON-RPC quantity (a 0x-hex string) as an int; anything else raises ValueError (a malformed answer)."""
+    if not isinstance(x, str) or not re.fullmatch(r"0x[0-9a-fA-F]{1,64}", x):
+        raise ValueError("not a quantity")
+    return int(x, 16)
+
+
+def data(x):
+    """JSON-RPC data (0x and whole bytes), lower case; anything else raises ValueError."""
+    if not isinstance(x, str) or not re.fullmatch(r"0x(?:[0-9a-fA-F]{2})*", x):
+        raise ValueError("not data")
+    return x.lower()
+
+
+def agree(nodes, method, params, pick):
+    """The strict majority on the value used: each answer reduced by `pick` to the fields that matter, normalized (never the
+    whole object, whose fields outside consensus differ between honest nodes; review P2-2); returns {"result": picked} or
+    {"error": …}. The error message is not compared, only its presence; an answer `pick` cannot read is malformed and is
+    never a vote for a value."""
     if not nodes:
         raise ForkError("FORKCHECK_NODES: no node")
-    answers = [n(method, params) for n in nodes]
-    keys = [json.dumps(a["result"], sort_keys=True) if "error" not in a and "result" in a else "error" for a in answers]
+    answers, keys, vals = [n(method, params) for n in nodes], [], []
+    for a in answers:
+        if not isinstance(a, dict) or "error" in a or "result" not in a:
+            keys.append("error")
+            vals.append(None)
+            continue
+        try:
+            v = pick(a["result"])
+        except BAD_ANSWER:
+            keys.append("malformed")
+            vals.append(None)
+            continue
+        keys.append(json.dumps(v, sort_keys=True))
+        vals.append(v)
     for k in set(keys):
-        if 2 * keys.count(k) > len(keys):
-            return answers[keys.index(k)]
+        if k != "malformed" and 2 * keys.count(k) > len(keys):
+            i = keys.index(k)
+            return {"error": answers[i].get("error", {})} if k == "error" else {"result": vals[i]}
     raise ForkError(f"FORKCHECK_NODES: no strict majority on {method} ({len(nodes)} nodes)")
+
+
+def majority_number(nodes, method, params):
+    """A number a strict majority of the list reports at least (the descending list's middle: between two honest answers
+    while a strict majority is honest): heads, estimates and fees differ between honest nodes, so they are never voted on
+    exactly (review P2-2); fewer than a strict majority answering a number: FORKCHECK_NODES."""
+    if not nodes:
+        raise ForkError("FORKCHECK_NODES: no node")
+    got = []
+    for n in nodes:
+        a = n(method, params)
+        try:
+            if "error" not in a:
+                got.append(qty(a["result"]))
+        except BAD_ANSWER:
+            pass
+    if 2 * len(got) <= len(nodes):
+        raise ForkError(
+            f"FORKCHECK_NODES: fewer than a strict majority of {len(nodes)} nodes answer {method} with a number"
+        )
+    return sorted(got, reverse=True)[len(nodes) // 2]
+
+
+BLOCK_MARGIN = 16  # the block check (2) reads: this far below the head a strict majority reaches
+
+
+def pinned_block(nodes):
+    """(number, hash, gas limit) of a block below the head a strict majority reaches, its hash and gas limit voted on."""
+    n = max(0, majority_number(nodes, "eth_blockNumber", []) - BLOCK_MARGIN)
+    b = agree(nodes, "eth_getBlockByNumber", [hex(n), False], lambda r: [data(r["hash"]), qty(r["gasLimit"])])
+    if "error" in b:
+        raise ForkError(f"FORKCHECK_GAS: no block {n}")
+    return n, b["result"][0], b["result"][1]
 
 
 def check_precompiles(nodes, entries):
     """Check (5): each declared precompile answers its known answer to an eth_call."""
     for e in entries:
-        a = agree(nodes, "eth_call", [{"to": e["address"], "data": e["input"]}, "latest"])
+        a = agree(nodes, "eth_call", [{"to": e["address"], "data": e["input"]}, "latest"], data)
         got = a.get("result")
         if "error" in a or not isinstance(got, str) or got.lower() != e["output"].lower():
             raise ForkError(
@@ -281,23 +379,20 @@ def check_precompiles(nodes, entries):
     return len(entries)
 
 
-def check_gas(nodes, data, gas_limit=None, sender=None):
+def check_gas(nodes, code, gas_limit=None, sender=None, tx_cap=None):
     """Check (2): the deploy transaction's gas (the limit the deploy sends, else the chain's estimate) within the live block
-    gas limit and accepted under the chain's per-transaction cap. Returns (gas, block gas limit)."""
+    gas limit, the profile's per-transaction cap `tx_cap` (None: none) and accepted under the chain's per-transaction cap.
+    Returns (gas, block gas limit)."""
     if gas_limit is None:
-        tx = {"data": data} | ({"from": sender} if sender else {})
-        a = agree(nodes, "eth_estimateGas", [tx])
-        if "error" in a:
-            raise ForkError("FORKCHECK_GAS: the chain does not estimate the deploy transaction")
-        gas_limit = int(a["result"], 16)
-    b = agree(nodes, "eth_getBlockByNumber", ["latest", False])
-    if "error" in b or not b.get("result"):
-        raise ForkError("FORKCHECK_GAS: no latest block")
-    block = int(b["result"]["gasLimit"], 16)
+        tx = {"data": code} | ({"from": sender} if sender else {})
+        gas_limit = majority_number(nodes, "eth_estimateGas", [tx])
+    if tx_cap is not None and gas_limit > tx_cap:
+        raise ForkError(f"FORKCHECK_GAS: the deploy needs {gas_limit} gas, the profile's txGasCap is {tx_cap}")
+    block = pinned_block(nodes)[2]
     if gas_limit > block:
         raise ForkError(f"FORKCHECK_GAS: the deploy needs {gas_limit} gas, the live block gas limit is {block}")
     zero = "0x" + "00" * 20
-    a = agree(nodes, "eth_call", [{"from": zero, "to": zero, "gas": hex(gas_limit)}, "latest"])
+    a = agree(nodes, "eth_call", [{"from": zero, "to": zero, "gas": hex(gas_limit)}, "latest"], data)
     if "error" in a:
         msg = json.dumps(a["error"])
         if CAP_REFUSAL.search(msg):
@@ -309,18 +404,13 @@ def check_gas(nodes, data, gas_limit=None, sender=None):
 # ---- check (4): real transactions at the chain's fork
 
 
-CONTROL = {  # per fork: a fixture whose amsterdam artifact uses an opcode the fork lacks, and its amsterdam answer
+CONTROL = {  # per fork: a fixture whose amsterdam artifact uses an opcode the fork lacks, its case (red at the fork: the call
+    # an execution error, the receipt status 0), its amsterdam answer (`green`) and the first anvil fork with the opcode
     "cancun": {
         "artifact": "ForkcheckClz.sol/ForkcheckClz.json",
-        "cases": [
-            {
-                "name": "clz(1) = 255",
-                "sig": "lz(uint256)",
-                "args": "0x" + "00" * 31 + "01",
-                "ok": True,
-                "return": "0x" + "00" * 31 + "ff",
-            }
-        ],
+        "cases": [{"name": "clz(1)", "sig": "lz(uint256)", "args": "0x" + "00" * 31 + "01", "ok": False}],
+        "green": "0x" + "00" * 31 + "ff",
+        "green_at": "osaka",
     }
 }
 
@@ -387,7 +477,9 @@ def run_contract(rpc, accts, gas, artifact, args, cases):
         rec = _send(rpc, frm, tx, gas)
         status = int(rec["status"], 16) == 1
         why = ""
-        if ok != c["ok"] or status != c["ok"]:
+        if isinstance(call.get("error"), dict) and call["error"].get("transport"):
+            why = "no answer to the call (transport)"  # never an execution error
+        elif ok != c["ok"] or status != c["ok"]:
             why = f"ok {ok} (call), {status} (receipt), expected {c['ok']}"
         elif c["ok"] and "return" in c and call["result"].lower() != c["return"].lower():
             why = f"returned {call['result'][:66]}, expected {c['return'][:66]}"
@@ -399,6 +491,13 @@ def run_contract(rpc, accts, gas, artifact, args, cases):
     return out
 
 
+def _local_gas(rpc):
+    try:
+        return qty(rpc("eth_getBlockByNumber", ["latest", False])["result"]["gasLimit"])
+    except BAD_ANSWER:
+        raise ForkError("FORKCHECK_EXEC: the local node gave no latest block gas limit") from None
+
+
 def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     """Check (4) on a node at `fork` (rpc: a callable); returns the number of rows passed. Every contract's rows must pass and
     the fork's control must be red: a green control voids the run (FORKCHECK_CONTROL)."""
@@ -407,14 +506,20 @@ def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     accts = rpc("eth_accounts", []).get("result") or []
     if not accts:
         raise ForkError("FORKCHECK_EXEC: the node has no unlocked account")
-    gas = int(rpc("eth_getBlockByNumber", ["latest", False])["result"]["gasLimit"], 16)
+    gas = _local_gas(rpc)
     ctl = CONTROL[fork]
     rows = run_contract(rpc, accts, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", ctl["cases"])
-    red = [r for r in rows if not r[1]]
     for name, ok, g, why in rows:
-        say(f"control {name}: {'green' if ok else 'red'} gas {g}{' (' + why + ')' if why else ''}")
-    if not red:
-        raise ForkError(f"FORKCHECK_CONTROL: the {fork} control is green: the run is void (it is not at {fork})")
+        say(f"control {name}: {'as expected' if ok else 'NOT as expected'} gas {g}{' (' + why + ')' if why else ''}")
+    # red for the missing opcode alone (review P2-6): the deploy green, each case red by both signals; else no evidence
+    ran = rows[0][:2] == ("deploy", True) and [r[0] for r in rows[1:]] == [c["name"] for c in ctl["cases"]]
+    if not ran or any(r[3].startswith("no answer") for r in rows):
+        raise ForkError(f"FORKCHECK_CONTROL: the {fork} control did not run: {'; '.join(r[3] for r in rows if r[3])}")
+    if not all(r[1] for r in rows):
+        raise ForkError(
+            f"FORKCHECK_CONTROL: the {fork} control is green (call or transaction): the run is void (it is not at {fork})"
+        )
+    say(f"control: red at {fork} (the call an execution error, the receipt status 0)")
     passed, failed = 1, []  # the control's red counts as one expectation met
     for c in contracts:
         a = load_artifact(os.path.join(out, c["artifact"]), root)
@@ -427,6 +532,35 @@ def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     if failed:
         raise ForkError(f"FORKCHECK_EXEC: at {fork}: " + "; ".join(failed))
     return passed
+
+
+def control_check(rpc, fork, say=print, root=EVM, out="out"):
+    """The control's positive run on a node at the first fork with its opcode (review P2-6): green with its amsterdam answer,
+    and the same node under `fork`'s expectation is void (FORKCHECK_CONTROL): a control that should fail but passes fails the
+    step. Returns 2."""
+    ctl = CONTROL[fork]
+    accts = rpc("eth_accounts", []).get("result") or []
+    if not accts:
+        raise ForkError("FORKCHECK_EXEC: the node has no unlocked account")
+    gas = _local_gas(rpc)
+    green = [dict(c, ok=True, **{"return": ctl["green"]}) for c in ctl["cases"]]
+    rows = run_contract(rpc, accts, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", green)
+    for name, ok, g, why in rows:
+        say(
+            f"control {name} at {ctl['green_at']}: {'green' if ok else 'NOT green'} gas {g}{' (' + why + ')' if why else ''}"
+        )
+    if len(rows) != 1 + len(green) or not all(r[1] for r in rows):
+        raise ForkError(
+            f"FORKCHECK_CONTROL: the {fork} control is not green at {ctl['green_at']}: the fixture is wrong"
+        )
+    try:
+        execute(rpc, fork, [], lambda s: None, root, out)
+    except ForkError as e:
+        if not str(e).startswith("FORKCHECK_CONTROL"):
+            raise
+        say(f"control at {ctl['green_at']} under the {fork} expectation: void ({str(e)[:60]})")
+        return 2
+    raise ForkError(f"FORKCHECK_CONTROL: a green control did not void the {fork} run")
 
 
 class Anvil:
@@ -467,6 +601,8 @@ class Anvil:
 
 def exec_cases(fork, cases_path, code_size_limit=None, say=print, root=EVM, out="out"):
     """Check (3) on every contract of the cases file and the control (which must be refused), then check (4) on anvil."""
+    if fork not in CONTROL:
+        raise ForkError(f"FORKCHECK_FORK_UNKNOWN: no control fixture for {fork}")
     contracts = json.load(open(os.path.join(root, cases_path)))["contracts"]
     for c in contracts:
         scan(load_artifact(os.path.join(out, c["artifact"]), root), fork, _hex(c.get("args") or "0x", "args"))
@@ -481,6 +617,26 @@ def exec_cases(fork, cases_path, code_size_limit=None, say=print, root=EVM, out=
         raise ForkError(f"FORKCHECK_CONTROL: the scan passes the {fork} control: the scan is void")
     with Anvil(fork, code_size_limit) as rpc:
         return execute(rpc, fork, contracts, say, root, out) + 1  # + the control's scan refusal
+
+
+def bound_cases(a, cases_path, root=EVM, out="out"):
+    """Check (4)'s cases are the contract's under deploy (review P2-5): at least one entry, each entry's artifact the deployed
+    one's bytes (init code and runtime; never another contract's) with at least one case; returns (cases, entries)."""
+    try:
+        contracts = json.load(open(os.path.join(root, cases_path)))["contracts"]
+    except (OSError, ValueError, KeyError, TypeError):
+        raise ForkError(f"FORKCHECK_CASES: {cases_path} is no cases file") from None
+    if not isinstance(contracts, list) or not contracts:
+        raise ForkError(f"FORKCHECK_CASES: {cases_path} lists no contract")
+    mine, n = (a["bytecode"]["object"].lower(), a["deployedBytecode"]["object"].lower()), 0
+    for c in contracts:
+        b = load_artifact(os.path.join(out, c["artifact"]), root)
+        if (b["bytecode"]["object"].lower(), b["deployedBytecode"]["object"].lower()) != mine:
+            raise ForkError(f"FORKCHECK_CASES: {c['artifact']} is not {a['_name']}, the contract under deploy")
+        if not isinstance(c.get("cases"), list) or not c["cases"]:
+            raise ForkError(f"FORKCHECK_CASES: an entry of {a['_name']} has no case")
+        n += len(c["cases"])
+    return n, len(contracts)
 
 
 def deploy_gate(
@@ -512,13 +668,21 @@ def deploy_gate(
     if not os.path.exists(os.path.join(root, rel)):
         raise ForkError(f"FORKCHECK_RELEASE_DATA: {rel} missing (the contract's precompile list)")
     entries = precompiles(json.load(open(os.path.join(root, rel))))
+    calls = sorted(g["ops"] & CALLS.keys())
+    if not entries and calls:  # review P3-4: an empty list is checked against the code, never trusted alone
+        raise ForkError(
+            f"FORKCHECK_RELEASE_DATA: {rel} declares no precompile, but {a['_name']}'s code holds "
+            + ", ".join(CALLS[c] for c in calls)
+        )
     if not cases_path:
         raise ForkError(f"FORKCHECK_CASES: no cases for {a['_name']} at {fork}")
+    n, m = bound_cases(a, cases_path, root, out)
+    say(f"forkcheck {key}: (4) {n} cases of {a['_name']} in {m} entries")
     say(
         f"forkcheck {key}: (4) {(run4 or exec_cases)(fork, cases_path, pr['codeSizeLimit'], say, root, out)} rows at {fork} ok"
     )
     say(f"forkcheck {key}: (5) {check_precompiles(nodes, entries)} precompiles answer")  # (5)
-    gas, block = check_gas(nodes, a["bytecode"]["object"] + args[2:], gas_limit)  # (2)
+    gas, block = check_gas(nodes, a["bytecode"]["object"] + args[2:], gas_limit, tx_cap=pr.get("txGasCap"))  # (2)
     say(f"forkcheck {key}: (2) gas {gas} within block {block} and the transaction cap")
 
 
@@ -542,6 +706,13 @@ def main(argv):
         elif argv[:1] == ["exec"] and len(argv) in (3, 5) and argv[3:4] in ([], ["--out"]):
             out = argv[4] if len(argv) == 5 else "out"
             n = exec_cases(argv[1], argv[2], say=lambda s: print(f"[forkcheck] {s}", flush=True), out=out)
+            print(f"ok {n}/{n}")
+        elif argv[:1] == ["control"] and len(argv) in (2, 4) and argv[2:3] in ([], ["--out"]):
+            if argv[1] not in CONTROL:
+                raise ForkError(f"FORKCHECK_FORK_UNKNOWN: no control fixture for {argv[1]}")
+            with Anvil(CONTROL[argv[1]]["green_at"]) as rpc:
+                say = lambda s: print(f"[forkcheck] {s}", flush=True)  # noqa: E731
+                n = control_check(rpc, argv[1], say, out=argv[3] if len(argv) == 4 else "out")
             print(f"ok {n}/{n}")
         elif argv[:1] == ["deploy"] and len(argv) >= 4:
             o = dict(zip(argv[4::2], argv[5::2]))

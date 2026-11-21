@@ -245,16 +245,22 @@ def private_genesis_refused():
 
 
 def home_chain_kinds_refused():
-    assert d.table()["homeChainKinds"] == ["PqChat", "OpenFactory", "PqVault"]
+    # UARegistry (review P1-2): UAMsigUpdate and UAPqzScopedKey(Record) bind chain_uid under the portable domain, no chain id
+    kinds = ("PqChat", "OpenFactory", "PqVault", "UARegistry")
+    assert d.table()["homeChainKinds"] == list(kinds)
     for cid in (43114, 43113):
-        for kind in ("PqChat", "OpenFactory", "PqVault"):
+        for kind in kinds:
             fails("HOME_CHAIN_SHARED_GENESIS", d.kind_check, kind, cid, AVAX)
         assert d.kind_check("PqChatStore", cid, AVAX) == "PqChatStore"  # twin: the store keeps no homeChain record
-    for kind in ("PqChat", "OpenFactory", "PqVault"):  # twin: a genesis no other row shares
+    for kind in kinds:  # twin: a genesis no other row shares
         assert d.kind_check(kind, *SCAAS) == kind
         assert (
             d.kind_check(kind, 11155111, "0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9") == kind
         )
+    # a kind name on neither list (a typo) is refused, never passed (review P3-1); a kind of the other list passes
+    fails("KIND_UNKNOWN", d.kind_check, "PqChatt", *SCAAS)
+    fails("KIND_UNKNOWN", d.kind_check, "uaregistry", 43113, AVAX)
+    assert "PqChatStore" in d.table()["otherKinds"] and d.kind_check("RescueVault", 43113, AVAX) == "RescueVault"
     fails("HOME_CHAIN_SHARED_GENESIS", d.kind_check, "PqChat", 43112, AVAX)  # an unlisted chain on a listed genesis
     assert d.kind_check("PqChat", 43112, OTHER) == "PqChat"
 

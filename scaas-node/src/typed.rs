@@ -4382,6 +4382,14 @@ mod tests {
             o.as_object_mut().unwrap().remove("contract");
         })
         .starts_with("ENTRY_AMBIGUOUS"));
+        // review P3-6: `storeMessage` is on `pqchat` and `pqchatstore`: without `contract` ambiguous, with either it parses
+        let mut sm = testkit::pqchat_op("storeMessage", Address::repeat_byte(0x5c));
+        Op::parse(&sm, FEE).unwrap();
+        sm["contract"] = json!("pqchatstore");
+        Op::parse(&sm, FEE).unwrap();
+        sm.as_object_mut().unwrap().remove("contract");
+        let e = Op::parse(&sm, FEE).unwrap_err().to_string();
+        assert!(e.starts_with("ENTRY_AMBIGUOUS"), "{e}");
         assert!(
             err(&|o| o["args"]["underlying"] = json!(format!("{:#x}", Address::ZERO)))
                 .contains("args.underlying: unknown field"),

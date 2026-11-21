@@ -160,8 +160,14 @@ def write(root, rel, obj):
 
 def profile_and_set_gate():
     with tempfile.TemporaryDirectory() as t:
+        # no file: only the reset chain and a local anvil are amsterdam (ARCH-POS-20, review P1-1); any other key refused
         assert f.profile("scaas-testnet", t) == {"evmFork": "amsterdam"}
         f.set_gate("scaas-testnet", t)
+        assert f.profile("local-31337-testnet", t) == f.profile("local-testnet", t) == {"evmFork": "amsterdam"}
+        refused("FORKCHECK_PROFILE", f.profile, "avalanche-testnet", t)
+        refused("FORKCHECK_PROFILE", f.set_gate, "ethereum-testnet", t)
+        refused("FORKCHECK_PROFILE", f.profile, "local-mainnet", t)
+        refused("FORKCHECK_PROFILE", f.profile, "scaas-testnet-2", t)
         write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
         assert f.profile("avalanche-testnet", t)["codeSizeLimit"] == 24576
         refused("FORKCHECK_SET_FORK", f.set_gate, "avalanche-testnet", t)
@@ -170,18 +176,48 @@ def profile_and_set_gate():
         write(t, "src/chains/y-testnet/profile.json", {"evmFork": "byzantium"})
         refused("FORKCHECK_FORK_UNKNOWN", f.profile, "y-testnet", t)
         refused("FORKCHECK_PROFILE", f.profile, "../x", t)
+        write(t, "src/chains/z-testnet/profile.json", dict(AVAX, txGasCap="16777216"))
+        refused("FORKCHECK_PROFILE", f.profile, "z-testnet", t)
+        write(t, "src/chains/z-testnet/profile.json", dict(AVAX, txGasCap=None))
+        f.profile("z-testnet", t)
+
+
+def real_tree_profiles():
+    """The committed profiles: Avalanche at cancun with its caps; every chain-uids.json key has a profile or is refused by
+    name (none falls back to amsterdam but the reset chain)."""
+    for k in ("avalanche-mainnet", "avalanche-testnet"):
+        pr = f.profile(k)
+        assert (pr["evmFork"], pr["codeSizeLimit"], pr["initCodeSizeLimit"]) == ("cancun", 24576, 49152), (k, pr)
+        assert pr["txGasCap"] is None and isinstance(pr["blockGasLimit"], int), (k, pr)
+        refused("FORKCHECK_SET_FORK", f.set_gate, k)
+    assert f.profile("scaas-testnet") == {"evmFork": "amsterdam"}
+    keys = [r["key"] for r in json.load(open(os.path.join(f.EVM, "chain-uids.json")))["chains"]]
+    for k in keys:
+        if os.path.exists(os.path.join(f.EVM, "src", "chains", k, "profile.json")) or k == "scaas-testnet":
+            f.profile(k)
+        else:
+            refused("FORKCHECK_PROFILE", f.profile, k)
 
 
 # ---- checks (2) and (5) against fake nodes
 
 
-def node(block=32_000_000, cap=None, estimate=1_000_000, pre=None):
-    """A fake chain node: `cap` its per-transaction gas cap (None: none), `pre` its precompiles {address: {input: output}}."""
+def node(block=32_000_000, cap=None, estimate=1_000_000, pre=None, head=0x100, extra=0, fork=False):
+    """A fake chain node: `cap` its per-transaction gas cap (None: none), `pre` its precompiles {address: {input: output}};
+    `head` its latest block number, `extra` a value in the fields outside consensus (size, totalDifficulty), `fork` other
+    block hashes."""
     pre = pre or {}
 
     def rpc(method, params):
+        if method == "eth_blockNumber":
+            return {"result": hex(head)}
         if method == "eth_getBlockByNumber":
-            return {"result": {"gasLimit": hex(block)}}
+            n = head if params[0] == "latest" else int(params[0], 16)
+            if n > head:
+                return {"result": None}
+            h = "0x%064x" % (n + (1 << 255 if fork else 0))
+            return {"result": {"number": hex(n), "hash": h, "gasLimit": hex(block), "size": hex(extra),
+                               "totalDifficulty": hex(extra)}}  # fmt: skip
         if method == "eth_estimateGas":
             return {"result": hex(estimate)}
         if method == "eth_call":
@@ -207,6 +243,9 @@ def gas_against_the_live_caps():
     refused("FORKCHECK_GAS", f.check_gas, [node(cap=1 << 24)], "0x00", gas_limit=(1 << 24) + 1)
     assert f.check_gas([node(cap=1 << 24)], "0x00", gas_limit=1 << 24)[0] == 1 << 24
     refused("FORKCHECK_NODES", f.check_gas, [node(), node(block=10)], "0x00")
+    # the profile's per-transaction cap (txGasCap; null: none) beside the chain's
+    refused("FORKCHECK_GAS", f.check_gas, [node()], "0x00", gas_limit=1_000_001, tx_cap=1_000_000)
+    assert f.check_gas([node()], "0x00", gas_limit=1_000_000, tx_cap=1_000_000)[0] == 1_000_000
 
 
 def precompile_known_answer():
@@ -226,6 +265,11 @@ def deploy_gate_runs_every_check():
         write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
         write(t, "out/Fx.sol/Fx.json", art([STOP], 1))
         write(t, "release-data/Fx.json", {"precompiles": [KAT]})
+        write(
+            t,
+            "cases.json",
+            {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]},
+        )
         ran, lines = [], []
         run4 = lambda *a: ran.append(a) or 3  # noqa: E731
         good = node(pre={P256: {KAT["input"]: KAT["output"]}})
@@ -279,6 +323,9 @@ def deploy_gate_runs_every_check():
             run4=run4,
             say=lines.append,
         )
+        write(t, "src/chains/capped-testnet/profile.json", dict(AVAX, txGasCap=999_999))  # the profile's tx cap applies
+        refused("FORKCHECK_GAS", f.deploy_gate, "capped-testnet", "out/Fx.sol/Fx.json", [good], "cases.json", root=t,
+                run4=run4, say=lines.append)  # fmt: skip
         os.remove(os.path.join(t, "release-data/Fx.json"))
         refused(
             "FORKCHECK_RELEASE_DATA",
@@ -296,21 +343,146 @@ def deploy_gate_runs_every_check():
         assert not ran  # amsterdam: nothing to check
 
 
+def majority_on_the_used_fields():
+    """Honest nodes differ in their head, in fields outside consensus and in their estimates: the vote is on the value used
+    (a block's hash and gas limit at a number below the majority's head, the estimate a strict majority reaches), never
+    the whole answer (review P2-2)."""
+    honest = [node(head=0x100 + i, extra=i, estimate=1_000_000 + 10 * i) for i in range(3)]
+    assert f.check_gas(honest, "0x00") == (1_000_010, 32_000_000)
+    assert f.check_gas(honest[:1], "0x00") == (1_000_000, 32_000_000)
+    # one node on another branch (other hashes) is outvoted; three different blocks: no strict majority
+    assert f.check_gas(honest[:2] + [node(fork=True)], "0x00")[1] == 32_000_000
+    refused("FORKCHECK_NODES", f.check_gas, [honest[0], node(fork=True), node(block=10)], "0x00")
+    refused("FORKCHECK_NODES", f.check_gas, [honest[0], node(block=10, extra=5)], "0x00")
+    # a number a strict majority reaches: the median; a hostile high or low answer moves nothing past an honest one
+    est = [node(estimate=e) for e in (1_000_000, 1_000_005, 10**12)]
+    assert f.majority_number(est, "eth_estimateGas", [{}]) == 1_000_005
+    refused("FORKCHECK_NODES", f.majority_number, [node(), lambda m, p: {"error": {}}], "eth_estimateGas", [{}])
+    # an answer the field cannot be read from is malformed, never a vote for a value
+    bad = lambda m, p: {"result": {"gasLimit": 7}} if m == "eth_getBlockByNumber" else node()(m, p)  # noqa: E731
+    refused("FORKCHECK_NODES", f.check_gas, [bad, bad, honest[0]], "0x00")
+    assert f.check_gas([bad, honest[0], honest[0]], "0x00")[1] == 32_000_000
+
+
+def cases_bound_to_the_contract():
+    """Check (4) runs the cases of the contract under deploy: a cases file whose entries are another artifact's (by bytes), an
+    empty file or an entry without a case is refused before anything runs (review P2-5)."""
+    with tempfile.TemporaryDirectory() as t:
+        write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
+        write(t, "out/Fx.sol/Fx.json", art([STOP], 1))
+        write(t, "out/Foo.sol/Foo.json", art([PUSH1, 2, STOP], 2, name="Foo"))
+        write(t, "out/Copy.sol/Fx.json", art([STOP], 1))  # the same bytes under another path: the same contract
+        write(t, "release-data/Foo.json", {"precompiles": []})
+        good = node()
+        one = [{"name": "f", "sig": "f()", "ok": True}]
+        ran = []
+
+        def gate(cases):
+            write(t, "cases.json", cases)
+            ran.clear()
+            f.deploy_gate("avalanche-testnet", "out/Foo.sol/Foo.json", [good], "cases.json", root=t,
+                          run4=lambda *a: ran.append(a) or 1, say=lambda s: None)  # fmt: skip
+
+        for bad in (
+            {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": one}]},  # another contract's cases
+            {
+                "contracts": [
+                    {"artifact": "Foo.sol/Foo.json", "cases": one},
+                    {"artifact": "Fx.sol/Fx.json", "cases": one},
+                ]
+            },
+            {"contracts": []},
+            {"contracts": [{"artifact": "Foo.sol/Foo.json", "cases": []}]},
+            {},
+        ):
+            refused("FORKCHECK_CASES", gate, bad)
+            assert not ran
+        gate({"contracts": [{"artifact": "Foo.sol/Foo.json", "cases": one}]})  # twin
+        assert ran
+        write(t, "release-data/Fx.json", {"precompiles": []})
+        write(t, "cases.json", {"contracts": [{"artifact": "Copy.sol/Fx.json", "cases": one}]})
+        f.deploy_gate("avalanche-testnet", "out/Fx.sol/Fx.json", [good], "cases.json", root=t, run4=lambda *a: 1,
+                      say=lambda s: None)  # fmt: skip
+
+
+def answers_bounded():
+    """An answer above MAX_ANSWER bytes is never read whole: a transport error (review P3-3); one at the bound is read; a
+    result of another JSON type is malformed, never a vote (agree)."""
+    import http.server
+    import threading
+
+    size = {"n": 0}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            self.rfile.read(int(self.headers["Content-Length"]))
+            pad = size["n"] - len('{"jsonrpc":"2.0","id":1,"result":""}')
+            body = ('{"jsonrpc":"2.0","id":1,"result":"' + "0" * pad + '"}').encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        size["n"] = f.MAX_ANSWER
+        assert "result" in f._post(url, "eth_call", [])
+        size["n"] = f.MAX_ANSWER + 1
+        a = f._post(url, "eth_call", [])
+        assert a["error"].get("transport") and "above" in a["error"]["message"], a
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    refused("FORKCHECK_NODES", f.agree, [lambda m, p: {"result": 7}], "eth_call", [], f.data)
+
+
+def empty_precompile_list_with_calls_refused():
+    """Check (5) never trusts an empty list alone: a contract whose code holds CALL, CALLCODE, DELEGATECALL or STATICCALL
+    in code position and declares no precompile is refused; a call byte inside data is not code (review P3-4)."""
+    with tempfile.TemporaryDirectory() as t:
+        write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
+        write(
+            t,
+            "cases.json",
+            {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]},
+        )
+        good = node(pre={P256: {KAT["input"]: KAT["output"]}})
+
+        def gate(code, n, pre, **init):
+            write(t, "out/Fx.sol/Fx.json", art(code, n, **init))
+            write(t, "release-data/Fx.json", {"precompiles": pre})
+            f.deploy_gate("avalanche-testnet", "out/Fx.sol/Fx.json", [good], "cases.json", root=t, run4=lambda *a: 1,
+                          say=lambda s: None)  # fmt: skip
+
+        for op in (0xF1, 0xF2, 0xF4, 0xFA):
+            refused("FORKCHECK_RELEASE_DATA", gate, [op, STOP], 2, [])
+        refused("FORKCHECK_RELEASE_DATA", gate, [STOP], 1, [], init_code=[0xFA, *CTOR], n_init=4)  # in the init code
+        gate([0xFA, STOP], 2, [KAT])  # twin: the call listed
+        gate([PUSH1, 0xFA, STOP], 2, [])  # twin: 0xfa as a PUSH1 immediate is data
+
+
 # ---- check (4): the control must be red
 
 
-def fake_evm(control_green):
+def fake_evm(control_green, mode=None):
     """A fake anvil: deploys succeed; a call to the control (deployed first) succeeds only when `control_green`; the other
-    contract's `f()` returns 1."""
+    contract's `f()` returns 1. `mode`: "nodeploy" the control's deploy reverts, "half" its call errors but its transaction
+    succeeds, "transport" its call gets no answer."""
     st = {"n": 0, "receipts": {}}
     one = "0x" + "00" * 31 + "01"
+    ctl = "0x" + f"{1:040x}"
 
-    def outcome(tx):
+    def outcome(tx, send=False):
         if "to" not in tx:
             st["n"] += 1
-            return True, "0x", "0x" + f"{st['n']:040x}"
-        if tx["to"] == "0x" + f"{1:040x}":
-            return control_green, "0x" + "00" * 31 + "ff", None
+            return mode != "nodeploy" or st["n"] > 1, "0x", "0x" + f"{st['n']:040x}"
+        if tx["to"] == ctl:
+            return control_green or (send and mode == "half"), "0x" + "00" * 31 + "ff", None
         return True, one, None
 
     def rpc(method, params):
@@ -321,10 +493,12 @@ def fake_evm(control_green):
         if method == "eth_getCode":
             return {"result": art([STOP], 1)["deployedBytecode"]["object"]}
         if method == "eth_call":
+            if mode == "transport" and params[0].get("to") == ctl:
+                return {"error": {"message": "no answer (URLError)", "transport": True}}
             ok, ret, _ = outcome(params[0]) if "to" in params[0] else (True, "0x", None)
             return {"result": ret} if ok else {"error": {"message": "invalid opcode"}}
         if method == "eth_sendTransaction":
-            ok, _, addr = outcome(params[0])
+            ok, _, addr = outcome(params[0], send=True)
             h = "0x%064x" % (len(st["receipts"]) + 1)
             st["receipts"][h] = {"status": "0x1" if ok else "0x0", "gasUsed": "0x5208", "contractAddress": addr}
             return {"result": h}
@@ -347,11 +521,33 @@ def control_green_voids_the_run():
         ]
         lines = []
         assert f.execute(fake_evm(False), "cancun", cs, lines.append, t) == 3  # control red, deploy and f() green
-        assert any(s.startswith("control clz(1) = 255: red") for s in lines), lines
+        assert any(s.startswith("control: red at cancun") for s in lines), lines
         refused("FORKCHECK_CONTROL", f.execute, fake_evm(True), "cancun", cs, lines.append, t)
         bad = [dict(cs[0], cases=[dict(cs[0]["cases"][0], **{"return": "0x" + "00" * 32})])]
         refused("FORKCHECK_EXEC", f.execute, fake_evm(False), "cancun", bad, lines.append, t)
         refused("FORKCHECK_FORK_UNKNOWN", f.execute, fake_evm(False), "osaka", cs, lines.append, t)
+        write(t, "cases.json", {"contracts": cs})  # exec at a fork with no control: named before anything runs (P3-10)
+        refused("FORKCHECK_FORK_UNKNOWN", f.exec_cases, "amsterdam", "cases.json", root=t, say=lines.append)
+
+
+def control_red_for_its_reason():
+    """The control is red only for the missing opcode: its deploy green, its call an execution error and its receipt status
+    0; a deploy that reverts, a call with no answer, or a call red with a transaction green is FORKCHECK_CONTROL, never a
+    red control (review P2-6). The positive run: at the fork with the opcode the control is green with its amsterdam
+    answer, and the same run under the cancun control's expectation is void."""
+    with tempfile.TemporaryDirectory() as t:
+        write(t, "out/" + f.CONTROL["cancun"]["artifact"], art([STOP], 1, name="ForkcheckClz"))
+        write(t, "out/Fx.sol/Fx.json", art([STOP], 1))
+        cs = [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]
+        for mode, why in (("nodeploy", "did not run"), ("transport", "did not run"), ("half", "is green")):
+            e = refused("FORKCHECK_CONTROL", f.execute, fake_evm(False, mode), "cancun", cs, lambda s: None, t)
+            assert why in e, (mode, e)
+        assert f.execute(fake_evm(False), "cancun", cs, lambda s: None, t) == 3  # twin: red for its reason
+        lines = []
+        assert f.control_check(fake_evm(True), "cancun", lines.append, t) == 2
+        assert any("green" in s for s in lines), lines
+        e = refused("FORKCHECK_CONTROL", f.control_check, fake_evm(False), "cancun", lambda s: None, t)
+        assert "not green" in e, e
 
 
 def case_from_revert_logs():
@@ -411,10 +607,16 @@ TESTS = [
     data_sections_from_the_assembly,
     sizes_against_the_profile,
     profile_and_set_gate,
+    real_tree_profiles,
     gas_against_the_live_caps,
     precompile_known_answer,
+    majority_on_the_used_fields,
+    answers_bounded,
     deploy_gate_runs_every_check,
+    cases_bound_to_the_contract,
+    empty_precompile_list_with_calls_refused,
     control_green_voids_the_run,
+    control_red_for_its_reason,
     case_from_revert_logs,
 ]
 

@@ -233,20 +233,20 @@ contract GovDeployTest is Test {
         assertFalse(p.classKindEnabled(4, 0));
     }
 
-    /// NET-ALL-25 (C18): with `DEPLOY_PQVAULT` the deploy refuses `PqVault` on a genesis another row shares, before anything is
-    /// sent (`_requireHomeKindsHere`); the fixture lists `PqVault` alone in `homeChainKinds`, so the factory's line cannot answer
-    /// first.
+    /// NET-ALL-25 (C18; review P3-1): `_deployPqVault` refuses `PqVault` on a genesis another row shares, where it is created and
+    /// before any call; the fixture lists `PqVault` alone in `homeChainKinds`, so no other kind's line can answer first.
     function test_pqVaultRefusedOnSharedGenesis() public {
-        string memory p = "./deployments/govdeploy-pqvault-table-test.json";
-        vm.createDir("./deployments", true);
+        string memory p = "./cache/test-fixtures/govdeploy-pqvault-table-test.json";
+        vm.createDir("./cache/test-fixtures", true);
         bytes32 u = keccak256("one genesis, two chain ids");
-        string memory r = string.concat('"chainUid":"', vm.toString(u), '"}');
+        string memory r = string.concat('"chainUid":"', vm.toString(u), '","private":false}');
         vm.writeFile(
             p,
             string.concat(
-                '{"homeChainKinds":["PqVault"],"chains":[{"key":"a-mainnet","chainId":43114,',
+                '{"homeChainKinds":["PqVault"],"otherKinds":["PqChatStore"],',
+                '"chains":[{"key":"a-mainnet","name":"a","chainId":43114,"network":"mainnet",',
                 r,
-                ',{"key":"b-testnet","chainId":43113,',
+                ',{"key":"b-testnet","name":"b","chainId":43113,"network":"testnet",',
                 r,
                 "]}"
             )
@@ -254,15 +254,18 @@ contract GovDeployTest is Test {
         DeployHarness h = new DeployHarness();
         h.setTable(p);
         vm.chainId(43114);
-        h.requireHomeKindsHere(u); // twin: no PqVault in this run
-        h.setPqVault(true);
         vm.expectRevert(
             bytes(
-                "HOME_CHAIN_SHARED_GENESIS: PqVault keeps homeChain records; chain 43114 shares its chain_uid with b-testnet (NET-ALL-25)"
+                "HOME_CHAIN_SHARED_GENESIS: PqVault keeps records bound to chain_uid without the chain id; chain 43114 shares its chain_uid with b-testnet (NET-ALL-25)"
             )
         );
-        h.requireHomeKindsHere(u);
-        h.requireHomeKindsHere(keccak256("its own genesis")); // twin: a genesis no other row shares
+        h.deployPqVaultOnly(u);
+        // twin: a genesis no other row shares passes the gate; the next step then calls the absent factory (no revert data)
+        try h.deployPqVaultOnly(keccak256("its own genesis")) {
+            fail();
+        } catch (bytes memory e) {
+            assertEq(e.length, 0, "past the gate");
+        }
         vm.removeFile(p);
     }
 

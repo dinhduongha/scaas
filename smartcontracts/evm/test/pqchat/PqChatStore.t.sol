@@ -35,6 +35,21 @@ contract PqChatStoreTest is Test {
         return abi.encode(v, hint, env);
     }
 
+    /// C23 (review P3-7): the build is the release data's: the init code and the runtime hash to the pinned values, and the
+    /// address is the deterministic deployer's CREATE2 of that init code at salt 0, so a change that moves the bytes fails
+    /// here, not at a deploy (`CHATSTORE_INIT_HASH`) or in the node (`CHATSTORE_CODE_HASH`).
+    function test_releaseDataPinsTheBuild() public view {
+        string memory r = vm.readFile("./release-data/PqChatStore.json");
+        bytes32 init = keccak256(vm.getCode("PqChatStore.sol:PqChatStore"));
+        assertEq(init, r.readBytes32(".initCodeHash"), "init code hash");
+        assertEq(
+            keccak256(vm.getDeployedCode("PqChatStore.sol:PqChatStore")), r.readBytes32(".runtimeCodeHash"), "runtime"
+        );
+        address deployer = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+        assertEq(vm.computeCreate2Address(bytes32(0), init, deployer), r.readAddress(".address"), "CREATE2 address");
+        assertEq(address(store).codehash, r.readBytes32(".runtimeCodeHash"), "deployed code");
+    }
+
     // ------------------------------------------------------------------ CTR-CHAT-13's behaviour
 
     function test_storeMessage_appendsAndEmits() public {

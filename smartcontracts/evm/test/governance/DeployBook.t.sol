@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {DeployBook} from "../../script/DeployBook.sol";
+import {DeployHarness} from "../helpers/DeployHarness.sol";
 
 contract BookHarness is DeployBook {
     string internal name;
@@ -49,6 +50,8 @@ contract DeployBookTest is Test {
     bytes32 constant SCAAS_UID = 0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13;
     bytes32 constant HOODI_UID = 0xbbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b;
     bytes32 constant AVAX_UID = 0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b; // 43114 and 43113
+    // fixtures under forge's git-ignored cache, never beside the books in deployments/ (review P3-9)
+    string constant FIXTURES = "./cache/test-fixtures";
     BookHarness h;
 
     function setUp() public {
@@ -117,8 +120,8 @@ contract DeployBookTest is Test {
 
     function test_headerFirstAndChecked() public {
         vm.chainId(7622);
-        string memory p = "./deployments/deploybook-test.json";
-        vm.createDir("./deployments", true);
+        string memory p = string.concat(FIXTURES, "/deploybook-test.json");
+        vm.createDir(FIXTURES, true);
         // the body's keys in its own order (forge's writeJson keeps it), after the header; 2-space indent, as
         // json.dumps(…, indent=2)
         h.write(
@@ -176,8 +179,8 @@ contract DeployBookTest is Test {
     /// NET-ALL-25: a second row of one (chainId, chainUid) pair is refused by name; the same genesis under its own chain id
     /// (public chains sharing one) resolves.
     function test_pairTakenRefused() public {
-        string memory p = "./deployments/deploybook-table-test.json";
-        vm.createDir("./deployments", true);
+        string memory p = string.concat(FIXTURES, "/deploybook-table-test.json");
+        vm.createDir(FIXTURES, true);
         string memory r = string.concat('"chainUid":"', vm.toString(AVAX_UID), '","private":false}');
         vm.writeFile(
             p,
@@ -192,16 +195,70 @@ contract DeployBookTest is Test {
             )
         );
         h.setTable(p);
-        vm.chainId(43114);
-        (string memory k,,) = h.key(AVAX_UID); // twin: the pair held once
-        assertEq(k, "avalanche-mainnet");
+        bytes memory e = bytes(
+            "CHAIN_PAIR_TAKEN: avalanche-testnet repeats the (chainId, chainUid) pair of copy-testnet (NET-ALL-25)"
+        );
         vm.chainId(43113);
-        vm.expectRevert(
-            bytes(
-                "CHAIN_PAIR_TAKEN: avalanche-testnet repeats the (chainId, chainUid) pair of another row (NET-ALL-25)"
+        vm.expectRevert(e);
+        h.key(AVAX_UID);
+        vm.chainId(43114); // the whole table is checked (P3-2): the other chain's read is refused too
+        vm.expectRevert(e);
+        h.key(AVAX_UID);
+        vm.writeFile(
+            p,
+            string.concat(
+                '{"chains":[{"key":"avalanche-mainnet","name":"a","chainId":43114,"network":"mainnet",',
+                r,
+                ',{"key":"avalanche-testnet","name":"b","chainId":43113,"network":"testnet",',
+                r,
+                "]}"
             )
         );
-        h.key(AVAX_UID);
+        (string memory k,,) = h.key(AVAX_UID); // twin: each pair held once
+        assertEq(k, "avalanche-mainnet");
+        vm.removeFile(p);
+    }
+
+    /// NET-ALL-25 (review P3-2): the whole table is checked on every read, as `deploybook.py table()`: a row without
+    /// `private`, a pair held twice and a private genesis in a second row are refused even when this chain's row is there.
+    function test_tableCheckedWhole() public {
+        string memory p = string.concat(FIXTURES, "/deploybook-whole-test.json");
+        vm.createDir(FIXTURES, true);
+        string memory s = string.concat('"chainUid":"', vm.toString(SCAAS_UID), '"');
+        string memory a = string.concat('"chainUid":"', vm.toString(AVAX_UID), '"');
+        string memory hit = string.concat(
+            '{"key":"scaas-testnet","name":"s","chainId":7622,"network":"testnet",', s, ',"private":true}'
+        );
+        h.setTable(p);
+        vm.chainId(7622);
+        string[4] memory rest = [
+            string.concat(
+                ',{"key":"copy-testnet","name":"c","chainId":7623,"network":"testnet",', s, ',"private":false}'
+            ),
+            string.concat(',{"key":"x-testnet","name":"x","chainId":5,"network":"testnet",', a, "}"),
+            string.concat(
+                ',{"key":"y-testnet","name":"y","chainId":5,"network":"testnet",',
+                a,
+                ',"private":false}',
+                ',{"key":"z-testnet","name":"z","chainId":5,"network":"testnet",',
+                a,
+                ',"private":false}'
+            ),
+            string.concat(',{"key":"w-testnet","name":"w","chainId":5,"network":"testnet",', a, ',"private":false}')
+        ];
+        string[3] memory why = [
+            "CHAIN_UID_PRIVATE: the private chain scaas-testnet's genesis is also copy-testnet's (NET-ALL-25)",
+            "CHAIN_ROW_PRIVATE: x-testnet in chain-uids.json has no private (true | false)",
+            "CHAIN_PAIR_TAKEN: z-testnet repeats the (chainId, chainUid) pair of y-testnet (NET-ALL-25)"
+        ];
+        for (uint256 i; i < 3; ++i) {
+            vm.writeFile(p, string.concat('{"chains":[', hit, rest[i], "]}"));
+            vm.expectRevert(bytes(why[i]));
+            h.key(SCAAS_UID);
+        }
+        vm.writeFile(p, string.concat('{"chains":[', hit, rest[3], "]}")); // twin: a clean table
+        (string memory k,,) = h.key(SCAAS_UID);
+        assertEq(k, "scaas-testnet");
         vm.removeFile(p);
     }
 
@@ -232,18 +289,18 @@ contract DeployBookTest is Test {
     /// NET-ALL-25 (C18): the deploy gate refuses `PqChat`, `OpenFactory` and `PqVault` on a genesis another row shares, and
     /// passes `PqChatStore` there; on a genesis no other row shares, every kind passes.
     function test_homeChainKindsRefused() public {
-        string[3] memory ks = ["PqChat", "OpenFactory", "PqVault"];
+        string[4] memory ks = ["PqChat", "OpenFactory", "PqVault", "UARegistry"];
         uint256[2] memory ids = [uint256(43114), 43113];
         for (uint256 c; c < 2; ++c) {
             vm.chainId(ids[c]);
             string memory other = c == 0 ? "avalanche-testnet" : "avalanche-mainnet";
-            for (uint256 i; i < 3; ++i) {
+            for (uint256 i; i < 4; ++i) {
                 vm.expectRevert(
                     bytes(
                         string.concat(
                             "HOME_CHAIN_SHARED_GENESIS: ",
                             ks[i],
-                            " keeps homeChain records; chain ",
+                            " keeps records bound to chain_uid without the chain id; chain ",
                             vm.toString(ids[c]),
                             " shares its chain_uid with ",
                             other,
@@ -256,8 +313,50 @@ contract DeployBookTest is Test {
             h.kind("PqChatStore", AVAX_UID); // twin: the store keeps no homeChain record
         }
         vm.chainId(7622);
-        for (uint256 i; i < 3; ++i) {
+        for (uint256 i; i < 4; ++i) {
             h.kind(ks[i], SCAAS_UID); // twin: a genesis no other row shares
         }
+    }
+
+    /// Review P3-1: a kind name on neither list of the table (a typo) is refused by name; the gate sits where the factory and
+    /// PqChat are created (`_deployTokenFactory`, `_deployPqChat`), so no script that creates them skips it.
+    function test_kindGateWhereCreated() public {
+        vm.expectRevert(bytes("KIND_UNKNOWN: PqChatt is on neither homeChainKinds nor otherKinds of chain-uids.json"));
+        h.kind("PqChatt", SCAAS_UID);
+        h.kind("PqChatStore", AVAX_UID); // twin: a kind of the other list
+        DeployHarness d = new DeployHarness();
+        d.setTxGasCap(1 << 24);
+        vm.chainId(43113);
+        vm.expectRevert(
+            bytes(
+                "HOME_CHAIN_SHARED_GENESIS: OpenFactory keeps records bound to chain_uid without the chain id; chain 43113 shares its chain_uid with avalanche-mainnet (NET-ALL-25)"
+            )
+        );
+        d.deploy(AVAX_UID, false, address(0));
+        vm.expectRevert(
+            bytes(
+                "HOME_CHAIN_SHARED_GENESIS: PqChat keeps records bound to chain_uid without the chain id; chain 43113 shares its chain_uid with avalanche-mainnet (NET-ALL-25)"
+            )
+        );
+        d.deployPqChatOnly(AVAX_UID);
+    }
+
+    /// NET-ALL-25 (review P1-2): the UA registry is refused where it is created, the gen-1 deploy (`_deployUARegistry`, under
+    /// `Deploy.s.sol` and `DeployHedera.s.sol`) and a later generation (`_deployUARegistryGen`, `DeployUAGen.s.sol`), before
+    /// anything else of that path.
+    function test_registryRefusedOnSharedGenesis() public {
+        DeployHarness d = new DeployHarness();
+        d.setTxGasCap(1 << 24);
+        vm.chainId(43113);
+        bytes memory e = bytes(
+            "HOME_CHAIN_SHARED_GENESIS: UARegistry keeps records bound to chain_uid without the chain id; chain 43113 shares its chain_uid with avalanche-mainnet (NET-ALL-25)"
+        );
+        vm.expectRevert(e);
+        d.deployRegistry(AVAX_UID);
+        vm.expectRevert(e);
+        d.deployGen(AVAX_UID, address(0), "{}");
+        vm.chainId(7622); // twin: the gate passes, the gen mode then refuses the empty book by its own check
+        vm.expectRevert();
+        d.deployGen(SCAAS_UID, address(0), "{}");
     }
 }
