@@ -265,7 +265,11 @@ def deploy_gate_runs_every_check():
         write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
         write(t, "out/Fx.sol/Fx.json", art([STOP], 1))
         write(t, "release-data/Fx.json", {"precompiles": [KAT]})
-        write(t, "cases.json", {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]})
+        write(
+            t,
+            "cases.json",
+            {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]},
+        )
         ran, lines = [], []
         run4 = lambda *a: ran.append(a) or 3  # noqa: E731
         good = node(pre={P256: {KAT["input"]: KAT["output"]}})
@@ -381,7 +385,12 @@ def cases_bound_to_the_contract():
 
         for bad in (
             {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": one}]},  # another contract's cases
-            {"contracts": [{"artifact": "Foo.sol/Foo.json", "cases": one}, {"artifact": "Fx.sol/Fx.json", "cases": one}]},
+            {
+                "contracts": [
+                    {"artifact": "Foo.sol/Foo.json", "cases": one},
+                    {"artifact": "Fx.sol/Fx.json", "cases": one},
+                ]
+            },
             {"contracts": []},
             {"contracts": [{"artifact": "Foo.sol/Foo.json", "cases": []}]},
             {},
@@ -437,7 +446,11 @@ def empty_precompile_list_with_calls_refused():
     in code position and declares no precompile is refused; a call byte inside data is not code (review P3-4)."""
     with tempfile.TemporaryDirectory() as t:
         write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
-        write(t, "cases.json", {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]})
+        write(
+            t,
+            "cases.json",
+            {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]},
+        )
         good = node(pre={P256: {KAT["input"]: KAT["output"]}})
 
         def gate(code, n, pre, **init):

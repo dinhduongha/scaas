@@ -262,7 +262,9 @@ def precompiles(release):
 # ---- chain reads through a node list (strict majority)
 
 
-MAX_ANSWER = 4 << 20  # bytes of one answer read at most (a block is under 1 MiB, a 16-blob page under 1 MiB of hex; P3-3)
+MAX_ANSWER = (
+    4 << 20
+)  # bytes of one answer read at most (a block is under 1 MiB, a 16-blob page under 1 MiB of hex; P3-3)
 
 
 def _post(url, method, params, timeout=30):
@@ -346,7 +348,9 @@ def majority_number(nodes, method, params):
         except BAD_ANSWER:
             pass
     if 2 * len(got) <= len(nodes):
-        raise ForkError(f"FORKCHECK_NODES: fewer than a strict majority of {len(nodes)} nodes answer {method} with a number")
+        raise ForkError(
+            f"FORKCHECK_NODES: fewer than a strict majority of {len(nodes)} nodes answer {method} with a number"
+        )
     return sorted(got, reverse=True)[len(nodes) // 2]
 
 
@@ -512,7 +516,9 @@ def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     if not ran or any(r[3].startswith("no answer") for r in rows):
         raise ForkError(f"FORKCHECK_CONTROL: the {fork} control did not run: {'; '.join(r[3] for r in rows if r[3])}")
     if not all(r[1] for r in rows):
-        raise ForkError(f"FORKCHECK_CONTROL: the {fork} control is green (call or transaction): the run is void (it is not at {fork})")
+        raise ForkError(
+            f"FORKCHECK_CONTROL: the {fork} control is green (call or transaction): the run is void (it is not at {fork})"
+        )
     say(f"control: red at {fork} (the call an execution error, the receipt status 0)")
     passed, failed = 1, []  # the control's red counts as one expectation met
     for c in contracts:
@@ -540,9 +546,13 @@ def control_check(rpc, fork, say=print, root=EVM, out="out"):
     green = [dict(c, ok=True, **{"return": ctl["green"]}) for c in ctl["cases"]]
     rows = run_contract(rpc, accts, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", green)
     for name, ok, g, why in rows:
-        say(f"control {name} at {ctl['green_at']}: {'green' if ok else 'NOT green'} gas {g}{' (' + why + ')' if why else ''}")
+        say(
+            f"control {name} at {ctl['green_at']}: {'green' if ok else 'NOT green'} gas {g}{' (' + why + ')' if why else ''}"
+        )
     if len(rows) != 1 + len(green) or not all(r[1] for r in rows):
-        raise ForkError(f"FORKCHECK_CONTROL: the {fork} control is not green at {ctl['green_at']}: the fixture is wrong")
+        raise ForkError(
+            f"FORKCHECK_CONTROL: the {fork} control is not green at {ctl['green_at']}: the fixture is wrong"
+        )
     try:
         execute(rpc, fork, [], lambda s: None, root, out)
     except ForkError as e:

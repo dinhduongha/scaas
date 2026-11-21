@@ -192,7 +192,9 @@ SIGNED = ("chainId", "nonce", "gas", "maxFeePerGas", "maxPriorityFeePerGas")
 def _cast(args, url, what):
     r = subprocess.run([CAST] + args, capture_output=True, text=True, env=dict(os.environ, ETH_RPC_URL=url))
     if r.returncode:
-        raise StoreError(f"CHATSTORE_SEND: cast {what} failed (rc {r.returncode}): {r.stderr.replace(url, '<rpc>')[:200]}")
+        raise StoreError(
+            f"CHATSTORE_SEND: cast {what} failed (rc {r.returncode}): {r.stderr.replace(url, '<rpc>')[:200]}"
+        )
     return r.stdout.strip()
 
 
@@ -366,7 +368,9 @@ def deploy(
     have = code_hash(nodes, rel, final)
     if have != rel["runtimeCodeHash"].lower():
         where = "no code" if have is None else f"{have[:18]}…"
-        raise StoreError(f"CHATSTORE_CODE_HASH: the code at {addr} at block {final} is not the pinned runtime ({where})")
+        raise StoreError(
+            f"CHATSTORE_CODE_HASH: the code at {addr} at block {final} is not the pinned runtime ({where})"
+        )
     entry = {
         "address": addr,
         "deployer": DEPLOYER,
@@ -401,7 +405,9 @@ def probe(
     if code_hash(nodes, rel, final) != rel["runtimeCodeHash"].lower():
         raise StoreError(f"CHATSTORE_CODE_HASH: eth_getCode at {addr} at block {final} is not the pinned runtime")
     ids, want = a["methodIdentifiers"], payload(1, PROBE_HINT, PROBE_ENV)
-    h, rec = send(nodes, sign, addr, "0x" + ids["storeMessage(uint8,bytes8,bytes)"] + want.hex(), None, header["chainId"])
+    h, rec = send(
+        nodes, sign, addr, "0x" + ids["storeMessage(uint8,bytes8,bytes)"] + want.hex(), None, header["chainId"]
+    )
     hint = "0x" + PROBE_HINT.hex() + "00" * 24
     logs = [x for x in rec["logs"] if x["address"] == addr and x["topics"] == [STORED_TOPIC, hint]]
     if len(logs) != 1:
@@ -432,7 +438,14 @@ def local(out, say=print):
             json.dump(cancun, fh)
         frm = rpc("eth_accounts", [])["result"][0]
         sign = cast_signer(rpc.url, ["--ethsign", "--from", frm])
-        o = {"out": out, "books": t, "profiles": t, "env": {"DEPLOY_NAME": "local-testnet"}, "say": say, "final": "latest"}
+        o = {
+            "out": out,
+            "books": t,
+            "profiles": t,
+            "env": {"DEPLOY_NAME": "local-testnet"},
+            "say": say,
+            "final": "latest",
+        }
         first = deploy([rpc], sign, **o)
         if not first["tx"]:
             raise StoreError("CHATSTORE_SEND: a fresh chain had code at the pinned address")

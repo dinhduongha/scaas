@@ -259,7 +259,10 @@ def forkcheck_runs_before_the_send():
         assert not ch.sent
 
 
-FUJI = (43113, "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b")  # avalanche-testnet in chain-uids.json
+FUJI = (
+    43113,
+    "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b",
+)  # avalanche-testnet in chain-uids.json
 
 
 def fuji_dry_run_needs_a_profile():
@@ -323,7 +326,12 @@ def the_transaction_from_the_majority():
                    eth_getTransactionCount=hex(9))  # fmt: skip
         d.deploy([lie, ch, ch], sign, **o)
         tx = ch.sent[0]
-        assert (tx["chainId"], tx["nonce"], tx["maxFeePerGas"], tx["maxPriorityFeePerGas"]) == (31337, 0, 50 * GWEI, GWEI)
+        assert (tx["chainId"], tx["nonce"], tx["maxFeePerGas"], tx["maxPriorityFeePerGas"]) == (
+            31337,
+            0,
+            50 * GWEI,
+            GWEI,
+        )
         d.probe([ch, lie, ch], sign, **o)
         assert ch.sent[1]["nonce"] == 1 and ch.sent[1]["chainId"] == 31337
         ch = Chain(release_of(a)["address"], a["deployedBytecode"]["object"])
