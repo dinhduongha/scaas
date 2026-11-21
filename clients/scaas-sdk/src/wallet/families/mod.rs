@@ -7,11 +7,18 @@
 //! strict majority must agree (`EndpointNoMajority`). UNAUDITED.
 // a build with no family feature reads EVM only: the shared helpers below stay unused there
 #![cfg_attr(
-    not(any(feature = "near", feature = "algorand", feature = "cosmos")),
-    allow(dead_code, unused_imports)
+    not(any(
+        feature = "near",
+        feature = "algorand",
+        feature = "cosmos",
+        feature = "aptos"
+    )),
+    allow(dead_code, unused_imports, unused_variables)
 )]
 #[cfg(feature = "algorand")]
 pub(crate) mod algorand;
+#[cfg(feature = "aptos")]
+pub(crate) mod aptos;
 #[cfg(feature = "cosmos")]
 pub(crate) mod cosmos;
 #[cfg(feature = "near")]
@@ -34,6 +41,8 @@ pub(crate) async fn balances(sdk: &Sdk, chain: &str, id: &str) -> Result<Balance
         crate::Family::Algorand => algorand::balances(c, id).await,
         #[cfg(feature = "cosmos")]
         crate::Family::Cosmos => cosmos::balances(c, id).await,
+        #[cfg(feature = "aptos")]
+        crate::Family::Aptos => aptos::balances(c, id).await,
         _ => Err(SdkError::FeatureMissing),
     }
 }
@@ -44,7 +53,7 @@ pub(crate) fn malformed(i: usize, why: &str) -> ReadError {
 }
 
 /// A balance as a family sends it: a decimal string of 1 to 78 digits within a U256, written back without leading zeros.
-#[cfg(any(feature = "near", feature = "cosmos"))]
+#[cfg(any(feature = "near", feature = "cosmos", feature = "aptos"))]
 pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
     if s.is_empty() || s.len() > 78 || !s.bytes().all(|b| b.is_ascii_digit()) {
         return Err(malformed(i, "a balance that is not a decimal string"));
@@ -58,6 +67,10 @@ pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
 /// failover (each endpoint's identity, none behind the head endpoint 0 showed); under `strict_majority` every other endpoint
 /// (its identity checked) reads the set at that height with `at(j, height)`, and the answering endpoint with those agreeing
 /// must be a strict majority of the list.
+#[cfg_attr(
+    not(any(feature = "near", feature = "algorand", feature = "cosmos")),
+    allow(dead_code)
+)]
 pub(crate) async fn read_set<V, P, F, Fut, G, Gut>(
     client: &Client,
     probe: &P,
@@ -72,10 +85,37 @@ where
     G: Fn(usize, u64) -> Gut,
     Gut: Future<Output = Result<V, ReadError>>,
 {
+    let first = &first;
+    read_set_pinned(
+        client,
+        probe,
+        |i| async move { first(i).await.map(|(h, v)| (h, h, v)) },
+        at,
+    )
+    .await
+}
+
+/// [`read_set`] for a family whose pin is not its head (Aptos: the set is pinned at a `ledger_version`, the floor of the
+/// failover is the `block_height`): `first(i)` gives `(head, pin, set)`; endpoint 0's head raises the floor, the others read
+/// at the pin, and the pin is the set's height.
+pub(crate) async fn read_set_pinned<V, P, F, Fut, G, Gut>(
+    client: &Client,
+    probe: &P,
+    first: F,
+    at: G,
+) -> Result<(u64, V), SdkError>
+where
+    V: PartialEq,
+    P: Probe,
+    F: Fn(usize) -> Fut,
+    Fut: Future<Output = Result<(u64, u64, V), ReadError>>,
+    G: Fn(usize, u64) -> Gut,
+    Gut: Future<Output = Result<V, ReadError>>,
+{
     let a = client.failover(probe, first).await?;
-    let (height, value) = a.value;
+    let (head, height, value) = a.value;
     if a.endpoint == 0 {
-        client.pool().saw_block(height);
+        client.pool().saw_block(head);
     }
     if client.pool().policy() == Policy::StrictMajority {
         let n = client.len();

@@ -197,6 +197,14 @@ sealed class FamilyParams with _$FamilyParams {
     required String denom,
     required String prefix,
   }) = FamilyParams_Cosmos;
+
+  /// Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+  /// and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+  /// (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+  const factory FamilyParams.aptos({
+    required int chainId,
+    required String package,
+  }) = FamilyParams_Aptos;
 }
 
 @freezed

@@ -17,7 +17,7 @@ SUMMARY=$R/2026-11-17-scaas-sdk-summary.txt
 export PATH="$HOME/.foundry/bin:$PATH"
 C="--locked --offline ${J:--j2}"
 cap="$W/scripts/capped"
-F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos"
+F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos"
 # with the test feature `vectors` (pqchat-core T1): built by clippy, run only by its own test (a `vectors` build refuses
 # scaas-ua key handles until a test unlocks them, so the whole suite stays without it)
 V="$F,vectors"

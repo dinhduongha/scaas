@@ -15852,6 +15852,11 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           denom: dco_decode_String(raw[4]),
           prefix: dco_decode_String(raw[5]),
         );
+      case 1:
+        return FamilyParams_Aptos(
+          chainId: dco_decode_u_8(raw[1]),
+          package: dco_decode_String(raw[2]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -22265,6 +22270,10 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           denom: var_denom,
           prefix: var_prefix,
         );
+      case 1:
+        var var_chainId = sse_decode_u_8(deserializer);
+        var var_package = sse_decode_String(deserializer);
+        return FamilyParams_Aptos(chainId: var_chainId, package: var_package);
       default:
         throw UnimplementedError('');
     }
@@ -29936,6 +29945,10 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         sse_encode_policy(restPolicy, serializer);
         sse_encode_String(denom, serializer);
         sse_encode_String(prefix, serializer);
+      case FamilyParams_Aptos(chainId: final chainId, package: final package):
+        sse_encode_i_32(1, serializer);
+        sse_encode_u_8(chainId, serializer);
+        sse_encode_String(package, serializer);
     }
   }
 

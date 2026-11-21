@@ -186,6 +186,10 @@ name = "cosmos"
 required-features = ["wallet", "cosmos"]
 
 [[test]]
+name = "aptos"
+required-features = ["wallet", "aptos"]
+
+[[test]]
 name = "governance_delay"
 required-features = ["admin"]
 

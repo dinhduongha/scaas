@@ -114,11 +114,25 @@ pub enum FamilyParams {
         denom: String,
         prefix: String,
     },
+    /// Aptos: the chain id ledger info must name (`aptos_framework::chain_id`, 1 to 255; the identity an Aptos node answers)
+    /// and the `scaas` package's address, whose view `meta::account_of(owner)` gives the Account an owner's tokens are in
+    /// (NET-APT-05), as `0x` + 64 lowercase hex (AIP-40's long form)
+    Aptos { chain_id: u8, package: String },
+}
+
+/// An Aptos address in AIP-40's long form: `0x` + 64 lowercase hex.
+pub(crate) fn is_aptos_address(s: &str) -> bool {
+    s.len() == 66
+        && s.starts_with("0x")
+        && s.bytes()
+            .skip(2)
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 impl FamilyParams {
-    /// Its family, and each field in its form: a chain id of 1 to 50 printable ASCII bytes (CometBFT's bound); a denom as the
-    /// Cosmos SDK's rule (`[a-zA-Z][a-zA-Z0-9/:._-]{2,127}`); a prefix of 1 to 83 lowercase letters and digits.
+    /// Its family, and each field in its form: Cosmos, a chain id of 1 to 50 printable ASCII bytes (CometBFT's bound), a denom
+    /// as the Cosmos SDK's rule (`[a-zA-Z][a-zA-Z0-9/:._-]{2,127}`), a prefix of 1 to 83 lowercase letters and digits; Aptos,
+    /// a chain id other than 0 and the package in the long form.
     pub(crate) fn fits(&self, family: Family) -> bool {
         match self {
             FamilyParams::Cosmos {
@@ -139,6 +153,9 @@ impl FamilyParams {
                     && prefix
                         .bytes()
                         .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+            }
+            FamilyParams::Aptos { chain_id, package } => {
+                family == Family::Aptos && *chain_id != 0 && is_aptos_address(package)
             }
         }
     }

@@ -16299,6 +16299,10 @@ const _: fn() = || {
             let _: String = denom;
             let _: String = prefix;
         }
+        scaas_sdk::config::FamilyParams::Aptos { chain_id, package } => {
+            let _: u8 = chain_id;
+            let _: String = package;
+        }
     }
     match None::<scaas_sdk::config::Finality>.unwrap() {
         scaas_sdk::config::Finality::Finalized => {}
@@ -19823,6 +19827,14 @@ impl SseDecode for scaas_sdk::config::FamilyParams {
                     rest_policy: var_restPolicy,
                     denom: var_denom,
                     prefix: var_prefix,
+                };
+            }
+            1 => {
+                let mut var_chainId = <u8>::sse_decode(deserializer);
+                let mut var_package = <String>::sse_decode(deserializer);
+                return scaas_sdk::config::FamilyParams::Aptos {
+                    chain_id: var_chainId,
+                    package: var_package,
                 };
             }
             _ => {
@@ -27421,6 +27433,12 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::FamilyParam
                 prefix.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            scaas_sdk::config::FamilyParams::Aptos { chain_id, package } => [
+                1.into_dart(),
+                chain_id.into_into_dart().into_dart(),
+                package.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -33513,6 +33531,11 @@ impl SseEncode for scaas_sdk::config::FamilyParams {
                 <crate::api::Policy>::sse_encode(rest_policy, serializer);
                 <String>::sse_encode(denom, serializer);
                 <String>::sse_encode(prefix, serializer);
+            }
+            scaas_sdk::config::FamilyParams::Aptos { chain_id, package } => {
+                <i32>::sse_encode(1, serializer);
+                <u8>::sse_encode(chain_id, serializer);
+                <String>::sse_encode(package, serializer);
             }
             _ => {
                 unimplemented!("");

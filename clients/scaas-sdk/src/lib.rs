@@ -189,6 +189,9 @@ pub(crate) struct Chain {
     /// a Cosmos profile's family client (plan T24), named by its params' chain id
     #[cfg(all(feature = "wallet", feature = "cosmos"))]
     pub(crate) cosmos: Option<Arc<scaas_rpc::cosmos::Cosmos>>,
+    /// an Aptos profile's family client (plan T24), named by its params' chain id
+    #[cfg(all(feature = "wallet", feature = "aptos"))]
+    pub(crate) aptos: Option<Arc<scaas_rpc::aptos::Aptos>>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -365,7 +368,20 @@ impl Sdk {
                     scaas_rpc::family::Client::new(list(rest, *rest_policy)?)?,
                     chain_id,
                 ))),
-                None => None,
+                _ => None,
+            };
+            // an Aptos profile's family client (plan T24.aptos): its REST endpoints (`rpc`), named by the chain id of its
+            // params; the reads use no Indexer API, so the indexer slot holds the same list, never asked
+            #[cfg(all(feature = "wallet", feature = "aptos"))]
+            let aptos = match &p.family_params {
+                Some(FamilyParams::Aptos { chain_id, .. }) => {
+                    Some(Arc::new(scaas_rpc::aptos::Aptos::new(
+                        scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?,
+                        scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?,
+                        *chain_id,
+                    )))
+                }
+                _ => None,
             };
             #[cfg(any(feature = "account", feature = "wallet"))]
             let pool = match (p.family, p.chain_id) {
@@ -404,6 +420,8 @@ impl Sdk {
                 algorand,
                 #[cfg(all(feature = "wallet", feature = "cosmos"))]
                 cosmos,
+                #[cfg(all(feature = "wallet", feature = "aptos"))]
+                aptos,
             });
         }
         let rt = runtime(config.runtime)?;
