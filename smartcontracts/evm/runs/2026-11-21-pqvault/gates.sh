@@ -18,7 +18,9 @@
 #   clientkeys, ua-rs-<cell>, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-dart, ua-dart-frb, ua-qt   the clients' own tests (the
 #                    CI header's commands; ua-rs per CI cell)
 #   deploy-py, forkcheck, chatstore-cancun   the chains-arweave steps (runs/2026-11-21-avax-dot-arweave-gates.sh, same commands):
-#                    script/test_*.py; NET-EVM-18's checks on test/forkcheck at Cancun; PqChatStore's deploy path on anvil at Cancun
+#                    script/test_*.py; NET-EVM-18's checks on test/forkcheck at Cancun, then the control's positive run (review
+#                    P2-6); PqChatStore's deploy path on anvil at Cancun
+#   testnet-build    FOUNDRY_PROFILE=scaas-testnet forge build (the CI header)
 #   docs, docs-test, ci-guards, format (scripts/format.sh --check; FORMAT_PARTS limits the parts; the pinned tools of the main
 #                    checkout's git-ignored scratchpad/tools/bin first on PATH)
 set -u
@@ -132,10 +134,11 @@ step() {
         done) ;;
         forkcheck) (cd $EVM && T=$(mktemp -d) && trap 'rm -rf "$T"' EXIT && "$C" forge build test/forkcheck --extra-output \
             evm.legacyAssembly --out "$T"/out --cache-path "$T"/cache && "$C" python3 -I script/forkcheck.py exec cancun \
-            test/forkcheck/cases.json --out "$T"/out) ;;
+            test/forkcheck/cases.json --out "$T"/out && "$C" python3 -I script/forkcheck.py control cancun --out "$T"/out) ;;
         chatstore-cancun) (cd $EVM && T=$(mktemp -d) && trap 'rm -rf "$T"' EXIT && "$C" forge build src/pqchat/PqChatStore.sol \
             test/forkcheck --extra-output evm.legacyAssembly --out "$T"/out --cache-path "$T"/cache &&
             "$C" python3 -I script/deploy_pqchatstore.py local --out "$T"/out) ;;
+        testnet-build) (cd $EVM && FOUNDRY_PROFILE=scaas-testnet "$C" forge build -j 1) ;;
         docs) python3 scripts/docs_check.py check ;;
         docs-test) python3 scripts/test_docs_check.py ;;
         format) PATH="$(git rev-parse --path-format=absolute --git-common-dir)/../scratchpad/tools/bin:$PATH" scripts/format.sh --check ${FORMAT_PARTS:-} ;;
