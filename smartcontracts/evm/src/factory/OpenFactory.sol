@@ -11,6 +11,7 @@ import {IGovernance} from "../governance/IGovernance.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {RescueLib} from "../governance/RescueLib.sol";
 import {UAAdmin} from "../governance/UAAdmin.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25, CTR-TOK-29): the one token factory of a chain (plan 5g-Z2), at the same
 ///        address on every chain.
@@ -980,7 +981,10 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         // the env names its registry and its `SmartKeyAccount` implementation, or none (spec §13.4)
         if (govRouter != address(0)) {
             address reg = uaRegistry();
-            if (env.registry != address(0) && env.registry != reg) revert EnvRegistryMismatch(reg, env.registry);
+            // spec 2026-11-19-registry-verify-only-kinds §10 (CTR-UA-67): or a later generation of the router's registry's line
+            if (env.registry != address(0) && env.registry != reg && !_lineReaches(env.registry, reg)) {
+                revert EnvRegistryMismatch(reg, env.registry);
+            }
             address ska = env.smartKeyAccountImpl;
             if (ska != address(0)) {
                 bytes32 want = _routerCloneHash();
@@ -1204,6 +1208,12 @@ contract OpenFactory is IOpenFactory, UAAdmin {
         for (uint256 i; i < m; ++i) {
             page[i] = _created(l[from + i]);
         }
+    }
+
+    /// @dev `IUARegistry(r).lineReaches(root)`: exactly one word 1 (a non-registry answers anything else: false).
+    function _lineReaches(address r, address root) private view returns (bool) {
+        (bool ok, bytes memory ret) = r.staticcall(abi.encodeWithSelector(IUARegistry.lineReaches.selector, root));
+        return ok && ret.length == 32 && abi.decode(ret, (uint256)) == 1;
     }
 
     function _word(address target, bytes4 sel) private view returns (bool ok, uint256 w) {

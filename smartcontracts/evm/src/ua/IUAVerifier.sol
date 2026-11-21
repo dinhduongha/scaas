@@ -26,3 +26,11 @@ interface IUAPopVerifier is IUAKindVerifier {
 interface IUAMinimalVerifier is IUAPopVerifier {
     function verifyMinimal(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool);
 }
+
+/// A verify-only verifier (spec 2026-11-19-registry-verify-only-kinds §2, §5): the precompile its constructor probe found (0 =
+/// none: such a verifier is refused by the registry constructor, P11) and the key form it takes (0 the stored bytes, 1 the
+/// holder's ML-DSA cache). A successor reads both (frozen, §11.3 M8).
+interface IUAVerifyOnlyVerifier {
+    function PRECOMPILE() external view returns (address);
+    function KEY_FORM() external view returns (uint8);
+}

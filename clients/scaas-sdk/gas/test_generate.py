@@ -5,7 +5,7 @@
 derived measurement, a row with no donor is refused, `second_party` is the second derived party over the first less the
 verify delta; I1 part 2 / K2: `per_item` keyed by `<kind>:<entry>` only (Zether's `mtxRollOver` has no count, PQZ's
 has), the new items `env_items` and `orders` taken, an unknown one refused, an overshoot pinned by the harness stated as an
-assumption. Run: python3 clients/scaas-sdk/gas/test_generate.py"""
+assumption; the registry line's verify rows (CTR-UA-65). Run: python3 clients/scaas-sdk/gas/test_generate.py"""
 
 import os
 import sys
@@ -126,6 +126,23 @@ def main():
     )
     got = {(x["kind"], x.get("stand_in")) for x in t["base"]}
     assert got == {("pqz", "the PQZ precompile's stand-in"), ("zether", None)}, got
+    # CTR-UA-65: the line's rows, the kind's delta plus the line's figure less the holder's; the write path d times the
+    # dearest step; the kind's sig_bytes and margin, marked stand_in
+    vl = {
+        "forge": "f.t.sol",
+        "stand_in": "si",
+        "kinds": {"257": {"test": "t", "holder": 100, "precompile": [150, 170], "fallback": [300, 320]}},
+        "write": {"test": "w", "signer": 257, "accept": [1_000, 1_030, 1_050]},
+    }
+    m = {"verify_0x0101_delta": 10, "verify_0x0101_sig_bytes": 128}
+    rows = generate.line_rows({"verify_line": vl, "margin": {"257": 7}}, m, "m.json")
+    got = [(r.get("path"), r["depth"], r.get("write", False), r["measured"]) for r in rows]
+    want = [("precompile", 1, False, 60), ("precompile", 2, False, 80), ("fallback", 1, False, 210)]
+    want += [("fallback", 2, False, 230), (None, 1, True, 40), (None, 2, True, 70), (None, 3, True, 100)]
+    assert got == want, got
+    assert all((r["sig_bytes"], r["margin"], r["stand_in"]) == (128, 7, "si") for r in rows), rows
+    assert all(r["source"].startswith("m.json#verify_0x0101_delta + ") for r in rows), rows
+    assert generate.line_rows({"margin": {}}, m, "m.json") == [], "no line in the input list"
     # EIP-8037: the regular part. Uncounted: the worst `_regular` of the variants, rounded up; a variant without it: none
     g = {**lanes("token", "mtxPay", "normal", 10_000), **lanes("token", "mtxPay", "normal_reg", 12_000)}
     g.update({k + "_regular": v - 4_500 for k, v in list(g.items())})

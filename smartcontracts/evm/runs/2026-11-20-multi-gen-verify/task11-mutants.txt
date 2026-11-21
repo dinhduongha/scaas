@@ -1,0 +1,2 @@
+mutant | red tests | rc | killed by
+return-type-txGasCap (IUARegistry.txGasCap returns uint256, by hand) | compile: RegistryWalkInterface.t.sol test_walkInterface_types (Error 9574, the typed pointer) and UARegistry (Error 4822) | 1 | test_walkInterface_types

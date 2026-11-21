@@ -265,6 +265,20 @@ async fn main() -> Result<()> {
         let num = cc.evm_chain_number;
         let mut lanes = chain::Chain::connect_lanes(cc, &signers)?;
         let shared = Arc::new(lanes.remove(0));
+        // CTR-UA-65: the registry line checked on chain and put in generation order before any lane, guard or indexer reads it
+        let line = config::read_ua_line(&shared, &cc.ua_registries)
+            .await
+            .with_context(|| format!("chain {num}: ua_registries"))?;
+        let resolved = config::ChainCfg {
+            ua_registries: line.iter().map(|g| g.registry).collect(),
+            ua_pqz_registries: line.iter().filter(|g| g.pqz).map(|g| g.registry).collect(),
+            ua_tx_gas_cap: line.last().map(|g| g.tx_gas_cap),
+            ..cc.clone()
+        };
+        let cc = &resolved;
+        if let Some(g) = line.last() {
+            info!(chain = num, generations = line.len(), newest = %g.registry, tx_gas_cap = g.tx_gas_cap, "ua registry line");
+        }
         let (mut first_tx, mut first_breaker) = (None, None);
         if cfg.modules.submit {
             let relay = legacy(&cfg, true)?;
@@ -323,9 +337,12 @@ async fn main() -> Result<()> {
             let idx = legacy(&cfg, false)?;
             let (c, key) = (shared.clone(), cc.chain_key());
             let router = scaas_node::guard::RelayFee::from_cfg(cc)?.map(|r| r.router);
-            let registry = cc.ua_registry;
+            let registries = indexer::Line {
+                all: cc.ua_registries.clone(),
+                pqz: cc.ua_pqz_registries.clone(),
+            };
             set.spawn(async move {
-                indexer::run(c, idx, poll, key, router, registry).await;
+                indexer::run(c, idx, poll, key, router, registries).await;
                 Err(anyhow!("indexer loop ended"))
             });
         }

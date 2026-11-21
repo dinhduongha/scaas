@@ -148,6 +148,8 @@ pub struct RegistryWrite {
     pub(crate) landed: Landed,
     pub(crate) shape: GasShape,
     registration: Option<RegistrationGas>,
+    /// the generation the write goes to on the bound registry's line (`line::write_target`)
+    pub(crate) to: Address,
 }
 
 impl std::fmt::Debug for RegistryWrite {
@@ -587,8 +589,20 @@ fn flatten(prefix: &str, v: &Value, out: &mut Vec<ReviewField>) {
     }
 }
 
+/// The kind a registration's (or cache part's) named arguments carry: `kind`, else the entry's own.
+fn write_kind(entry: &str, args: &Value) -> Option<u16> {
+    match entry {
+        "registerWebAuthn" => Some(0x0100),
+        "registerBlsMulti" => Some(0x0121),
+        _ => args
+            .get("kind")
+            .and_then(Value::as_u64)
+            .and_then(|k| u16::try_from(k).ok()),
+    }
+}
+
 /// One write kept in the table, its gas rows read from its arguments ([`shape_of`]).
-pub(crate) fn keep(
+pub(crate) async fn keep(
     sdk: &Sdk,
     chain: &str,
     entry: &str,
@@ -598,12 +612,13 @@ pub(crate) fn keep(
     landed: Landed,
 ) -> Result<Arc<RegistryWrite>, SdkError> {
     let shape = shape_of(entry, args);
-    keep_with(sdk, chain, entry, ua, args, payer, landed, shape, None)
+    keep_with(sdk, chain, entry, ua, args, payer, landed, shape, None).await
 }
 
-/// [`keep`] with its gas rows `shape` and, for a registration carrying its proof, the plan it was quoted in.
+/// [`keep`] with its gas rows `shape` and, for a registration carrying its proof, the plan it was quoted in; its target the
+/// generation of the bound registry's line it belongs to (`line::write_target`).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn keep_with(
+pub(crate) async fn keep_with(
     sdk: &Sdk,
     chain: &str,
     entry: &str,
@@ -614,7 +629,9 @@ pub(crate) fn keep_with(
     shape: GasShape,
     registration: Option<RegistrationGas>,
 ) -> Result<Arc<RegistryWrite>, SdkError> {
-    let registry = registry_of(sdk, chain)?;
+    let (bound, pool) = crate::line::bound(sdk, chain)?;
+    let registry =
+        crate::line::write_target(&pool, bound, entry, ua, write_kind(entry, args)).await?;
     let calldata = registry_call(entry, args)?;
     let mut review = vec![
         field("entry", entry, entry, Source::Derived),
@@ -638,6 +655,7 @@ pub(crate) fn keep_with(
         landed,
         shape,
         registration,
+        to: registry,
     });
     sdk.registry_writes
         .lock()
@@ -695,15 +713,18 @@ pub(crate) async fn writes(
                 for p in 0..parts {
                     if !read_record(&pool, registry, Landed::Cached(p), &ua).await? {
                         let a = json!({"kind": kind, "pk": hex(&pk), "part": p});
-                        out.push(keep(
-                            sdk,
-                            chain,
-                            "cacheExpandedKey",
-                            ua,
-                            &a,
-                            payer,
-                            Landed::Cached(p),
-                        )?);
+                        out.push(
+                            keep(
+                                sdk,
+                                chain,
+                                "cacheExpandedKey",
+                                ua,
+                                &a,
+                                payer,
+                                Landed::Cached(p),
+                            )
+                            .await?,
+                        );
                         cache_pending = true;
                     }
                 }
@@ -718,15 +739,7 @@ pub(crate) async fn writes(
             false => None,
         };
         if pqz_pop == "0x" {
-            out.push(keep(
-                sdk,
-                chain,
-                &entry,
-                ua,
-                args,
-                payer,
-                Landed::Registered,
-            )?);
+            out.push(keep(sdk, chain, &entry, ua, args, payer, Landed::Registered).await?);
         } else if let Some(s) = one.filter(|s| caps.refusal(s).is_none()) {
             let plan = RegistrationGas {
                 transactions: 1,
@@ -734,17 +747,20 @@ pub(crate) async fn writes(
                 steps: vec![s],
             };
             let shape = shape_of(&entry, args);
-            out.push(keep_with(
-                sdk,
-                chain,
-                &entry,
-                ua,
-                args,
-                payer,
-                Landed::Registered,
-                shape,
-                Some(plan),
-            )?);
+            out.push(
+                keep_with(
+                    sdk,
+                    chain,
+                    &entry,
+                    ua,
+                    args,
+                    payer,
+                    Landed::Registered,
+                    shape,
+                    Some(plan),
+                )
+                .await?,
+            );
         } else {
             let mut first = args.clone();
             first
@@ -786,29 +802,35 @@ pub(crate) async fn writes(
                 steps: vec![s1, s2],
             };
             let shape = shape_of(&entry, &first);
-            out.push(keep_with(
-                sdk,
-                chain,
-                &entry,
-                ua,
-                &first,
-                payer,
-                Landed::Registered,
-                shape,
-                Some(plan.clone()),
-            )?);
+            out.push(
+                keep_with(
+                    sdk,
+                    chain,
+                    &entry,
+                    ua,
+                    &first,
+                    payer,
+                    Landed::Registered,
+                    shape,
+                    Some(plan.clone()),
+                )
+                .await?,
+            );
             let shape = shape_of("storePqzPop", &store);
-            out.push(keep_with(
-                sdk,
-                chain,
-                "storePqzPop",
-                ua,
-                &store,
-                payer,
-                Landed::PqzPop(0),
-                shape,
-                Some(plan),
-            )?);
+            out.push(
+                keep_with(
+                    sdk,
+                    chain,
+                    "storePqzPop",
+                    ua,
+                    &store,
+                    payer,
+                    Landed::PqzPop(0),
+                    shape,
+                    Some(plan),
+                )
+                .await?,
+            );
             // the second part's proof outlives this process (M1)
             crate::op::state::keep_pop(sdk, &hex(&ua), Some(pqz_pop)).await?;
         }
@@ -831,33 +853,15 @@ pub(crate) async fn writes(
                 .find(|p| unhex(p).is_ok_and(|b| scaas_ua::keccak256(&b) == want))
                 .ok_or(SdkError::RegistrationPopInvalid)?;
             let store = json!({"ua": uah, "version": 0, "pqzPop": pop});
+            let to = crate::line::write_target(&pool, registry, "storePqzPop", ua, None).await?;
             // the second of two steps (owner 2026-11-20), held as at the split: estimated now the registration landed (the
             // table's alone where the node cannot)
-            let est = step(
-                sdk,
-                chain,
-                &pool,
-                from,
-                registry,
-                "storePqzPop",
-                &store,
-                true,
-            )
-            .await?;
+            let est = step(sdk, chain, &pool, from, to, "storePqzPop", &store, true).await?;
             let s2 = match est {
                 Some(s) => s,
-                None => step(
-                    sdk,
-                    chain,
-                    &pool,
-                    from,
-                    registry,
-                    "storePqzPop",
-                    &store,
-                    false,
-                )
-                .await?
-                .ok_or(SdkError::Internal)?,
+                None => step(sdk, chain, &pool, from, to, "storePqzPop", &store, false)
+                    .await?
+                    .ok_or(SdkError::Internal)?,
             };
             if let Some(e) = Caps::of(sdk, chain, &pool).await?.refusal(&s2) {
                 return Err(e);
@@ -868,31 +872,26 @@ pub(crate) async fn writes(
                 steps: vec![s2],
             };
             let shape = shape_of("storePqzPop", &store);
-            out.push(keep_with(
-                sdk,
-                chain,
-                "storePqzPop",
-                ua,
-                &store,
-                payer,
-                Landed::PqzPop(0),
-                shape,
-                Some(plan),
-            )?);
+            out.push(
+                keep_with(
+                    sdk,
+                    chain,
+                    "storePqzPop",
+                    ua,
+                    &store,
+                    payer,
+                    Landed::PqzPop(0),
+                    shape,
+                    Some(plan),
+                )
+                .await?,
+            );
         }
     }
     if let Some(fill) = kem_fill {
         let filled = registered && read_record(&pool, registry, Landed::Kem(0), &ua).await?;
         if !filled {
-            out.push(keep(
-                sdk,
-                chain,
-                "setKemKey",
-                ua,
-                fill,
-                payer,
-                Landed::Kem(0),
-            )?);
+            out.push(keep(sdk, chain, "setKemKey", ua, fill, payer, Landed::Kem(0)).await?);
         }
     }
     Ok(out)
@@ -1145,7 +1144,7 @@ impl Account {
         self.sdk
             .spawn(async move {
                 known(&sdk, &write)?;
-                let registry = registry_of(&sdk, &write.chain)?;
+                let registry = write.to;
                 let (_, _, pool) = evm(&sdk, &write.chain)?;
                 let from = payer_address(&sdk, &write.payer)?;
                 let est = pool
@@ -1210,7 +1209,7 @@ impl Account {
                     return Err(SdkError::Argument);
                 }
                 let (profile, chain_id, pool) = evm(&sdk, &write.chain)?;
-                let registry = registry_of(&sdk, &write.chain)?;
+                let registry = write.to;
                 let from_block = crate::op::final_number(&pool, &profile).await?;
                 // one submit of a write: taken out of the table before it is signed, put back when the signing fails (owner
                 // 2026-11-19, R4: as `Op::submit`)
@@ -1347,7 +1346,7 @@ impl Account {
                     "kem": {"scheme": fix.kem.scheme, "mlkemEk": hex(&fix.kem.mlkem_ek), "x25519": hex(&fix.kem.x25519)},
                     "sig": {"keyData": "0x", "signature": "0x", "members": []},
                 });
-                Ok(Some(keep(&sdk, &chain, "setKemKey", ua, &args, &payer, Landed::Kem(0))?))
+                Ok(Some(keep(&sdk, &chain, "setKemKey", ua, &args, &payer, Landed::Kem(0)).await?))
             })
             .await
     }

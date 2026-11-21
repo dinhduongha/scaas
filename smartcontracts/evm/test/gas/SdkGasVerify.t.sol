@@ -118,11 +118,11 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
         ];
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](10);
         for (uint256 i; i < 8; ++i) {
-            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
+            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]), false, 0);
         }
-        c[8] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
+        c[8] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000, false, 0);
         // the Zether UA kind (owner 2026-11-19, P1): Schnorr under the Zether tag, `UALedgerBase`'s cap
-        c[9] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        c[9] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000, false, 0);
         // G4: the registry as a deploy configures it (`SdkGasDeploy`), these verifiers kept (the PQ precompile stand-ins);
         // the forwarder reads its `SmartKeyAccount` clone hash, as the token's pipeline does
         _sgSkaSetup(chainUidA);
@@ -153,15 +153,15 @@ contract SdkGasVerifyTest is SdkGasRows, UARegistryBase {
             vm.mockCall(at, invalid, abi.encode(uint256(0)));
             MldsaVerifier v = new MldsaVerifier(ml[i], at, valid, invalid);
             assertEq(v.PRECOMPILE(), at, "the precompile path");
-            c[b.length + i] = UARegistry.KindConfig(ml[i], address(v), 250_000);
+            c[b.length + i] = UARegistry.KindConfig(ml[i], address(v), 250_000, false, 0);
         }
         vm.clearMockedCalls();
         for (uint256 i; i < 3; ++i) {
             vm.etch(address(uint160(0x5caa0012 + i)), address(new GasBurner(price[i] + 6 - 2_900)).code);
         }
-        c[b.length + 3] = UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), 1_400_000);
-        c[b.length + 4] = UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), 2_500_000);
-        c[b.length + 5] = UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), 5_250_000);
+        c[b.length + 3] = UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), 1_400_000, false, 0);
+        c[b.length + 4] = UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), 2_500_000, false, 0);
+        c[b.length + 5] = UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), 5_250_000, false, 0);
     }
 
     function _d(uint256 i, string memory f) internal pure returns (string memory) {

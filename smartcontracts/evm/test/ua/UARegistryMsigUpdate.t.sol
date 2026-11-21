@@ -115,7 +115,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         for (uint256 i; i < base.length; ++i) {
             cfg[i] = base[i];
         }
-        cfg[base.length] = UARegistry.KindConfig(ML, address(mock), mlCap);
+        cfg[base.length] = UARegistry.KindConfig(ML, address(mock), mlCap, false, 0);
     }
 
     function _mlKey(uint256 salt) internal pure returns (bytes memory pk) {
@@ -842,7 +842,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
 
     /// Row 12's debit bound: caps chosen from this set's `PQZ_DEBIT_MIN_GAS` so that 2-of-3 passes and 3-of-3 does not.
     function test_refusedDebitBound() public {
-        uint256 room = UARegistryRegLib.TX_GAS_CAP - PqzSet.PQZ_DEBIT_MIN_GAS; // what the authorization may take
+        uint256 room = uint256(txCap) - PqzSet.PQZ_DEBIT_MIN_GAS; // what the authorization may take
         uint64 cap = uint64(room * 63 / 64 / 3 + 50_000); // three such signers exceed it; two do not
         UARegistry x =
             _deploy(REG_X, keccak256("chain x"), address(0), false, 3 * cap + 300_000, address(0), true, _cfgsMl(cap));
@@ -861,8 +861,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         bytes32 ua = _reg(r, 3, _ids(ml[1], ml[2], ml[3]), _w(3), _ids(ml[1], ml[2], ml[3]));
         uint256 worst = 3 * (UARegistryRegLib.MSIG_MEMBER_GAS + 400_000) + UARegistryRegLib.MSIG_ACCEPTED_GAS;
         worst += 16 * 3 * (192 + 3_328); // Fable P2-1: the quorum's signature calldata, three mldsa65 signatures (3,309 B each)
-        uint256 fit = (UARegistryRegLib.TX_GAS_CAP - UARegistryRegLib.MSIG_UPDATE_GAS - worst)
-            / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
+        uint256 fit =
+            (uint256(txCap) - UARegistryRegLib.MSIG_UPDATE_GAS - worst) / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
         assertLt(fit, 256, "row 13 must be able to refuse here: heavier signers if the constants move");
         Up memory u = _next(r, ua);
         for (uint256 i = 3; i <= fit; ++i) {
@@ -887,11 +887,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
             + (UARegistryRegLib.MSIG_MEMBER_GAS + UARegistryRegLib.MSIG_ACCEPTED_GAS + 400_000);
         uint256 calldata_ = 16 * ((192 + 128 + 3_328) + (192 + 1_024));
         uint256 fit =
-            (UARegistryRegLib.TX_GAS_CAP
-                    - UARegistryRegLib.MSIG_UPDATE_GAS
-                    - w
-                    - calldata_
-                    - UARegistryRegLib.MSIG_UPDATE_INNER_GAS) / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
+            (uint256(txCap) - UARegistryRegLib.MSIG_UPDATE_GAS - w - calldata_ - UARegistryRegLib.MSIG_UPDATE_INNER_GAS)
+                / UARegistryRegLib.MSIG_UPDATE_SLOT_GAS;
         assertLt(fit, 256);
         Up memory u = _next(r, ua);
         for (uint256 k = 3; k <= fit; ++k) {
@@ -958,7 +955,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         _apply(r, u, _ids(ml[1], ml[2]));
         _accept(r, ua, ml[4]);
         UARegistry.KindConfig[] memory cfg = new UARegistry.KindConfig[](1);
-        cfg[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 400_000);
+        cfg[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 400_000, false, 0);
         UARegistry g2 = _deploy(REG_G2, chainUidA, address(r), false, BUDGET, address(0), true, cfg);
         (bool ok,) = _call(address(g2), _pqzKeyCall(g2, ua, 0, _ids(ml[1], ml[4]), 1));
         assertTrue(ok, "an appended signer");
@@ -1070,9 +1067,38 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         );
         uint256 total = _gasTotal(address(x), data);
         emit log_named_uint("updateMsig, 256 slots, a further update (regular + state)", total);
-        assertLe(total, UARegistryRegLib.TX_GAS_CAP, "the next update fits one transaction");
+        assertLe(total, x.txGasCap(), "the next update fits one transaction");
         (, uint256 en,) = x.msigStateOf(ua);
         assertEq(en >> 255, 1);
+    }
+
+    /// Owner X1: row 13's bound reads the registry's `txGasCap`, never 2^24. The 256-slot update `test_256Slots` applies at 2^24
+    /// (its next update ≈ 16.3 M, regular + state) is refused `UAMsigSlots(256)` on the same registry built with a cap of 15 M,
+    /// more than 1 M below its need (and above `verifyBudget`).
+    function test_msigBound_readsTxGasCap() public {
+        for (uint256 i; i < 2; ++i) {
+            txCap = i == 0 ? 1 << 24 : 15_000_000;
+            UARegistry x = _deploy(
+                address(uint160(REG_X) + uint160(i)),
+                keccak256("chain x"),
+                address(0),
+                false,
+                BUDGET,
+                address(0),
+                true,
+                _cfgsMl(100_000)
+            );
+            assertEq(x.txGasCap(), txCap);
+            _members(x);
+            bytes32 ua = _pq3(x);
+            Up memory u = _next(x, ua);
+            for (uint256 j; j < 253; ++j) {
+                _append(u, EOA, bytes32(uint256(0x10000 + j)), 1, false);
+            }
+            if (i == 0) _apply(x, u, _ids(ml[1], ml[2])); // the positive control
+            else _refused(x, u, _ids(ml[1], ml[2]), _slots(256));
+        }
+        txCap = 1 << 24;
     }
 
     // ----- gas -----
@@ -1138,6 +1164,42 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         }
         emit log_named_uint("per slot (256 - 16) / 240", (g[3] - g[1]) / 240);
         emit log_named_uint("fixed (3 slots less 3 per-slot)", g[0] - 3 * ((g[3] - g[1]) / 240));
+    }
+
+    /// Spec 2026-11-19-registry-verify-only-kinds §4 (owner P9, P15): `MSIG_REGISTER_GAS` covers the dearest registration of a
+    /// structure, 16 slots (the most a registration takes), no attributes (a PQZ key is the debit bound's, M2): regular gas,
+    /// intrinsic and calldata included (EIP-8037: the per-transaction cap binds the regular dimension). Logs the figures.
+    function test_gas_registerRowModel() public {
+        Member[] memory m = new Member[](16);
+        for (uint256 i; i < 16; ++i) {
+            m[i] = Member(EOA, _eoaId(0x1000 + i), 1);
+        }
+        bytes memory key = _msigKey(1, m);
+        bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, key);
+        IUARegistry.MemberSig[] memory pop;
+        _callOrRevert(address(r), abi.encodeCall(IUARegistry.registerMsig, (UACall.structure(key), _none(), pop, "")));
+        uint256 g = vm.lastCallGas().gasTotalUsed;
+        emit log_named_uint("registerMsig regular gas, 16 EOA slots", g);
+        emit log_named_uint("its state gas (the block's)", uint256(int256(vm.lastCallGas().gasStateUsed)));
+        assertLe(g, UARegistryRegLib.MSIG_REGISTER_GAS, "MSIG_REGISTER_GAS");
+    }
+
+    /// §4 (owner P15): `PQZ_KEY_WRITE_GAS` covers a `setPqzKey` of the largest PQZ key of the four sets (22,528 B) by a PQ
+    /// `msig` (two `mldsa65` members on the mock): regular gas, intrinsic and calldata included. Logs the figures.
+    function test_gas_pqzKeyWriteRowModel() public {
+        bytes32 ua = _pq3(r);
+        bytes memory key = new bytes(22_528);
+        key[0] = 0x01;
+        bytes32 hash = keccak256("proof");
+        bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
+        IUARegistry.UASig memory s =
+            _auth(_sigs(r, r.msigOf(ua), ua, _ids(ml[1], ml[2]), UAKinds.PURPOSE_PQZ_KEY, rd, true));
+        _callOrRevert(address(r), abi.encodeCall(IUARegistry.setPqzKey, (ua, 0, key, hash, s)));
+        uint256 g = vm.lastCallGas().gasTotalUsed;
+        emit log_named_uint("setPqzKey regular gas, 22,528 B key, 2 mldsa65 members", g);
+        emit log_named_uint("its state gas (the block's)", uint256(int256(vm.lastCallGas().gasStateUsed)));
+        // the key's calldata at the EIP-7976 floor: 64 gas a byte where the measured run paid 16
+        assertLe(g + 48 * key.length, UARegistryRegLib.PQZ_KEY_WRITE_GAS, "PQZ_KEY_WRITE_GAS");
     }
 
     /// The hot path: `requireAuthorized` of a 2-of-3 EOA `msig`, never updated and updated (the blob read replaces the registration
@@ -1222,7 +1284,7 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         uint256 bound = 1_387_000;
         Burner burner = new Burner();
         UARegistry.KindConfig[] memory cfg = new UARegistry.KindConfig[](1);
-        cfg[0] = UARegistry.KindConfig(ML, address(burner), 400_000);
+        cfg[0] = UARegistry.KindConfig(ML, address(burner), 400_000, false, 0);
         UARegistry x = _deploy(REG_X, keccak256("chain x"), address(0), false, uint64(bound), address(0), true, cfg);
         for (uint256 i = 1; i <= 4; ++i) {
             _register(x, ML, keyOfId[ml[i]]);

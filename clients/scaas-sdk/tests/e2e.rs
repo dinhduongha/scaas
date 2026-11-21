@@ -136,6 +136,8 @@ fn deploy(rpc: &str, name: &str, env: &[(&str, &str)]) -> serde_json::Value {
         ])
         .env("PRIVATE_KEY", DEPLOYER)
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        // owner X1: the registry's txGasCap, the deploy book's value; a local anvil applies EIP-7825's 2^24
+        .env("TX_GAS_CAP", "16777216")
         .env("DEPLOY_NAME", name)
         .envs(env.iter().copied())
         .status()
@@ -262,6 +264,7 @@ async fn e2e_pay_on_anvil() {
                 regular: None,
             }],
             verify: vec![GasVerify {
+                line: Default::default(),
                 signer: 0,
                 gas: 0,
                 sig_bytes: 0,
@@ -748,6 +751,7 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
                 regular: None,
             }],
             verify: vec![GasVerify {
+                line: Default::default(),
                 signer: 0,
                 gas: 0,
                 sig_bytes: 0,
@@ -877,6 +881,7 @@ fn account_profile(rpc: &str) -> ChainProfile {
                 .flat_map(|&f| [row("mtxAddKey", f), row("mtxExecute", f)])
                 .collect(),
             verify: vec![GasVerify {
+                line: Default::default(),
                 signer: 0,
                 gas: 0,
                 sig_bytes: 0,
@@ -1229,6 +1234,7 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
             .collect(),
         verify: vec![
             GasVerify {
+                line: Default::default(),
                 signer: 0,
                 gas: 0,
                 sig_bytes: 0,
@@ -1236,6 +1242,7 @@ async fn e2e_msig_register_accept_transfer_update_on_anvil() {
                 per_item: None,
             },
             GasVerify {
+                line: Default::default(),
                 signer: 0x0120,
                 gas: 300_000,
                 sig_bytes: 0,
@@ -1732,6 +1739,7 @@ async fn e2e_dex_cancel_order_on_anvil() {
         gas: GasRows {
             base: vec![row("mtxCancelOrder", true), row("mtxCancelOrder", false)],
             verify: vec![GasVerify {
+                line: Default::default(),
                 signer: 0,
                 gas: 0,
                 sig_bytes: 0,

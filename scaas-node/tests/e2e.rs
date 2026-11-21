@@ -157,6 +157,8 @@ fn deploy_env(
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", format!("{holder:#x}"))
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        // owner X1: the registry's txGasCap, the deploy book's value; a local anvil applies EIP-7825's 2^24
+        .env("TX_GAS_CAP", "16777216")
         .env("DEPLOY_NAME", book_name(chain_id))
         .status()
         .expect("forge in PATH");
@@ -4695,6 +4697,8 @@ async fn regulated_token(
         .env("DEMO_HOLDER", format!("{holder:#x}"))
         .env("FOUNDRY_PROFILE", "scaas-testnet")
         .env("DEPLOY_REGULATED", "true")
+        // owner X1: the registry's txGasCap, the deploy book's value; a local anvil applies EIP-7825's 2^24
+        .env("TX_GAS_CAP", "16777216")
         .env("COMPLIANCE_ADMIN", format!("{:#x}", admin.into_word()))
         .env("DEPLOY_NAME", book_name(chain_id))
         .status()
@@ -5103,7 +5107,7 @@ async fn pqz_rotation_on_anvil() {
     let state = Arc::new(Mutex::new(FakeExternalPull::default()));
     let external_pull = external_pull_at(start_fake(state.clone()).await);
     let mut cfg = chain_cfg(chain_id, &rpc, None);
-    cfg.ua_registry = Some(registry);
+    cfg.ua_registries = vec![registry];
     cfg.max_gas_per_tx = 64_000_000; // a Falcon registration with its KEM key, the SCaaS testnet's relayer cap
     let mut s = Submitter::start(
         Chain::with_signer(&cfg, key(RELAYER)).unwrap(),
@@ -5216,13 +5220,13 @@ async fn pqz_rotation_on_anvil() {
             head,
             &mut vec![],
             None,
-            Some(registry),
+            &[registry],
         ))
         .await
         .unwrap();
     let rows = scaas_node::indexer::pqz_key_origin(
         scaas_node::indexer::pay_events(&logs, None),
-        Some(registry),
+        &scaas_node::indexer::Line::one(registry),
     );
     let feed = |f: &str| {
         rows.iter()
@@ -6042,7 +6046,7 @@ impl OffchainStack {
         }));
         let external_pull = external_pull_at(start_fake(state.clone()).await);
         let mut cfg = chain_cfg(self.chain_id, &self.rpc, None);
-        cfg.ua_registry = Some(self.registry);
+        cfg.ua_registries = vec![self.registry];
         cfg.max_gas_per_tx = 64_000_000;
         cfg.pqz_verifier = pqz;
         let s = Submitter::start(
@@ -6962,4 +6966,200 @@ async fn liquidity_pre_checks_on_a_chain() {
         "{r5}"
     );
     assert_eq!(sends().await, n0, "no refusal sends");
+}
+
+/// CTR-UA-65 (plan 2026-11-19-registry-verify-only-kinds Task 16): a registry line of two generations on anvil, generation 2 deployed
+/// over the book by `script/DeployUAGen.s.sol` (spec §9). The node's start check orders `[gen2, gen1]` by the links and refuses
+/// generation 2 alone (`UA_LINE_ROOT`); a `register` of `fndsa512` sent to generation 2 is `dead` `UA_VERIFY_ONLY` naming
+/// generation 1 (`kindHome`), nothing sent; on generation 1 it lands; a key write for that record on generation 2 is `dead`
+/// `UA_WRONG_GENERATION` naming generation 1 (`holderOf`); the indexer's filter reads both and keeps generation 1's
+/// `UARegistered`. UNAUDITED.
+#[tokio::test]
+#[ignore]
+async fn ua_line_two_generations_on_anvil() {
+    let chain_id = 31920;
+    let (_anvil, rpc) = start_anvil(chain_id, 31920).await;
+    let dep = deploy_env(
+        &rpc,
+        chain_id,
+        key(DEPLOYER).address(),
+        false,
+        &[("MLDSA_PRECOMPILE", "off")],
+    );
+    let gen1: Address = dep["ua_registry"].as_str().unwrap().parse().unwrap();
+    let sc = sc();
+    let status = Command::new("forge")
+        .current_dir(sc)
+        .args([
+            "script",
+            "script/DeployUAGen.s.sol",
+            "--rpc-url",
+            &rpc,
+            "--broadcast",
+            "--slow",
+            "--silent",
+            "--disable-code-size-limit",
+            "--sender",
+            DEPLOYER_ADDRESS,
+        ])
+        .env("PRIVATE_KEY", DEPLOYER)
+        .env("FOUNDRY_PROFILE", "scaas-testnet")
+        .env("TX_GAS_CAP", "16777216")
+        .env("MLDSA_PRECOMPILE", "off")
+        .env("DEPLOY_NAME", book_name(chain_id))
+        .env(
+            "UA_GEN_BOOK",
+            format!("deployments/{}.json", book_name(chain_id)),
+        )
+        .env(
+            "SMART_KEY_ACCOUNT_IMPL",
+            dep["smart_key_account_implementation"].as_str().unwrap(),
+        )
+        .status()
+        .expect("forge in PATH");
+    assert!(status.success(), "DeployUAGen failed");
+    let books = [
+        format!("{sc}/deployments/{}.json", book_name(chain_id)),
+        format!("{sc}/deployments/{}-ua-gen2.json", book_name(chain_id)),
+    ];
+    let raw = std::fs::read_to_string(&books[1]).expect("gen 2 book");
+    books.iter().for_each(|b| _ = std::fs::remove_file(b)); // a local anvil's books
+    let gen2: Address = serde_json::from_str::<Value>(&raw).unwrap()["ua_registry"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_ne!(gen1, gen2);
+
+    let mut cfg = chain_cfg(chain_id, &rpc, None);
+    let chain = Chain::with_signer(&cfg, key(RELAYER)).unwrap();
+    let line = scaas_node::config::read_ua_line(&chain, &[gen2, gen1])
+        .await
+        .unwrap();
+    assert_eq!(
+        line.iter()
+            .map(|g| (g.registry, g.generation))
+            .collect::<Vec<_>>(),
+        [(gen1, 1), (gen2, 2)],
+        "ordered by the links"
+    );
+    assert_eq!(line[1].tx_gas_cap, 1 << 24);
+    let e = scaas_node::config::read_ua_line(&chain, &[gen2])
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(e.starts_with(scaas_node::config::UA_LINE_ROOT), "{e}");
+
+    let p: Value = serde_json::from_str(
+        &std::fs::read_to_string(format!("{sc}/../vectors/ua/portable.json")).unwrap(),
+    )
+    .unwrap();
+    let reg = p["registrations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "fndsa512")
+        .unwrap()
+        .clone();
+    let ua: B256 = reg["ua"].as_str().unwrap().parse().unwrap();
+    let state = Arc::new(Mutex::new(FakeExternalPull::default()));
+    let external_pull = external_pull_at(start_fake(state.clone()).await);
+    cfg.ua_registries = line.iter().map(|g| g.registry).collect();
+    cfg.ua_pqz_registries = line.iter().filter(|g| g.pqz).map(|g| g.registry).collect();
+    cfg.ua_tx_gas_cap = line.last().map(|g| g.tx_gas_cap);
+    cfg.max_gas_per_tx = 64_000_000;
+    let mut s = Submitter::start(
+        chain,
+        external_pull,
+        cfg.clone(),
+        "e2e-ualine".into(),
+        Default::default(),
+    )
+    .await
+    .unwrap();
+    let until = (now() + 300).to_string();
+    let mut id = 0;
+    let mut job = |entry: &str, to: Address, args: Value| {
+        id += 1;
+        let mut a = args;
+        a.as_object_mut().unwrap().remove("entry");
+        state.lock().unwrap().jobs.push(
+            json!({"id": id, "kind": "call", "op": {"entry": entry, "token": format!("{to:#x}"),
+            "validUntil": until, "args": a}}),
+        );
+        id
+    };
+    let last = |id: i64| {
+        state
+            .lock()
+            .unwrap()
+            .reports
+            .iter()
+            .rev()
+            .find(|r| r["job_id"] == id)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let r2 = job("register", gen2, reg["args"].clone());
+    run_outbox(&mut s).await;
+    let l = last(r2);
+    assert!(
+        l["chain_state"] == "dead"
+            && l["error"].as_str().is_some_and(
+                |e| e.starts_with("UA_VERIFY_ONLY: ") && e.contains(&format!("{gen1:#x}"))
+            ),
+        "register on generation 2: {l}"
+    );
+    let r1 = job("register", gen1, reg["args"].clone());
+    run_outbox(&mut s).await;
+    assert_eq!(
+        last(r1)["chain_state"],
+        "mined",
+        "register on generation 1: {}",
+        last(r1)
+    );
+    let mut kem = p["kemRecords"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "fndsa512")
+        .unwrap()["args"]
+        .clone();
+    kem["version"] = json!(kem["version"].to_string()); // the node's uint64 is a decimal string
+    let k = job("setKemKey", gen2, kem);
+    run_outbox(&mut s).await;
+    let l = last(k);
+    assert!(
+        l["chain_state"] == "dead"
+            && l["error"].as_str().is_some_and(
+                |e| e.starts_with("UA_WRONG_GENERATION: ") && e.contains(&format!("{gen1:#x}"))
+            ),
+        "setKemKey on generation 2: {l}"
+    );
+    // the indexer reads both generations and keeps generation 1's `UARegistered`
+    let pr = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let head = pr.get_block_number().await.unwrap();
+    let logs = pr
+        .get_logs(&scaas_node::indexer::pay_filter_with(
+            0,
+            head,
+            &mut vec![],
+            None,
+            &cfg.ua_registries,
+        ))
+        .await
+        .unwrap();
+    let rows = scaas_node::indexer::pqz_key_origin(
+        scaas_node::indexer::pay_events(&logs, None),
+        &scaas_node::indexer::Line {
+            all: cfg.ua_registries.clone(),
+            pqz: cfg.ua_pqz_registries.clone(),
+        },
+    );
+    assert!(
+        rows.iter().any(|r| r["event"] == "UARegistered"
+            && r["ua"] == json!(format!("{ua:#x}"))
+            && r["contract"] == json!(format!("{gen1:#x}"))),
+        "{rows:?}"
+    );
 }

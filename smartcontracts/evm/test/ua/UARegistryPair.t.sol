@@ -210,12 +210,15 @@ contract UARegistryPairTest is UARegistryBase {
         reg.registrationOf(ua);
         _routed(r, k, UARegistryCoreLib.uaCount.selector);
         reg.uaCount(0x0103);
-        bytes4[8] memory aux = [
+        // spec 2026-11-19-registry-verify-only-kinds §11.2 (controller call): the PQZ readers moved to the core library (Aux's size)
+        _routed(r, k, UARegistryCoreLib.pqzPopOf.selector);
+        reg.pqzPopOf(ua, 0);
+        _routed(r, k, UARegistryCoreLib.pqzKeySigOf.selector);
+        reg.pqzKeySigOf(ua, 0);
+        bytes4[6] memory aux = [
             UARegistryAuxLib.popOf.selector,
             UARegistryAuxLib.popSlotsOf.selector,
             UARegistryAuxLib.webAuthnKeyOf.selector,
-            UARegistryAuxLib.pqzPopOf.selector,
-            UARegistryAuxLib.pqzKeySigOf.selector,
             UARegistryAuxLib.uaAt.selector,
             UARegistryAuxLib.uaPage.selector,
             UARegistryAuxLib.uaIndex.selector
@@ -226,8 +229,6 @@ contract UARegistryPairTest is UARegistryBase {
         reg.popOf(ua);
         reg.popSlotsOf(ua);
         reg.webAuthnKeyOf(ua);
-        reg.pqzPopOf(ua, 0);
-        reg.pqzKeySigOf(ua, 0);
         _try(abi.encodeCall(UARegistry.uaAt, (0x0103, 0)));
         reg.uaPage(0x0103, 0, 4);
         _try(abi.encodeCall(UARegistry.uaIndex, (ua)));
@@ -276,18 +277,18 @@ contract UARegistryPairTest is UARegistryBase {
 
     /// The constructor refuses a registry whose auxiliary library has no code (`_lib` would "succeed" on it, every write a no-op).
     function test_b_constructorNeedsTheAuxLibrary() public {
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock))); // the control
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, _cfgs(address(mock))); // the control
         vm.etch(address(UARegistryAuxLib), "");
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, _cfgs(address(mock)));
     }
 
     /// The same for the registration library (owner 2026-11-19): without its code every `register` would be a silent no-op.
     function test_b_constructorNeedsTheRegLibrary() public {
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock))); // the control
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, _cfgs(address(mock))); // the control
         vm.etch(address(UARegistryRegLib), "");
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
-        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, 1 << 24, address(0), true, _cfgs(address(mock)));
     }
 
     // ----- 3.1c (owner 2026-11-09, spec §11 (f)): the auxiliary library runs the core's shared helpers by a nested DELEGATECALL -----
@@ -299,7 +300,7 @@ contract UARegistryPairTest is UARegistryBase {
         uint16[8] memory ks = [uint16(0x0101), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](8);
         for (uint256 i; i < 8; ++i) {
-            c[i] = UARegistry.KindConfig(ks[i], address(mock), i == 0 ? 400_000 : 4_250_000);
+            c[i] = UARegistry.KindConfig(ks[i], address(mock), i == 0 ? 400_000 : 4_250_000, false, 0);
         }
         r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
         pk = new bytes(1312);
@@ -372,9 +373,9 @@ contract UARegistryPairTest is UARegistryBase {
     /// refusal passes verbatim.
     function test_c_cacheRunsTheCoreKeyCheck() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
-        c[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);
+        c[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000, false, 0);
         c[1] = UARegistry.KindConfig(
-            UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000
+            UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000, false, 0
         );
         UARegistry r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
         vm.expectCall(address(UARegistryRegLib), abi.encodeWithSelector(UARegistryRegLib.keyUa.selector), 1);
@@ -428,7 +429,7 @@ contract UARegistryPairTest is UARegistryBase {
     /// (owner 2026-11-19). The control: the same registration passes with the core in place, by `portableOk`, once.
     function test_c_regNeedsItsCore() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(UAKinds.MLDSA44, address(mock), 4_250_000);
+        c[0] = UARegistry.KindConfig(UAKinds.MLDSA44, address(mock), 4_250_000, false, 0);
         UARegistry r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
         bytes memory pk = new bytes(1312);
         pk[0] = 0x01;

@@ -7,8 +7,9 @@ real chain BEFORE Deploy.s.sol, with script/pqz/e2e.py's builders and probes (P6
     (statement_register.json row 0, proof_pqzl.json row 4: the constructor's probe), when the precompile answers its
     OP_SELFTEST with the set's hash; after the deploy `isSupportedOnThisChain()` must be true;
   - with `MLDSA_PRECOMPILE=on` (the default; owner 2026-11-15, MD-6 / MD-7): `MldsaVerifier(kind, candidate, probe valid, probe
-    invalid)` for `mldsa44` 0x0130, `mldsa65` 0x0131 and `mldsa87` 0x0134, each on the first candidate (EIP-8355's 0x12 / 0x13 /
-    0x14, then the SCaaS testnet's 0x...5caa0012 / 13 / 14, DeployBase._mldsaCandidates) that answers that level's pq_kat.json
+    invalid)` for `mldsa44` 0x0130, `mldsa65` 0x0131 and `mldsa87` 0x0134, each on the first candidate (the chain's own
+    0x...5caa0012 / 13 / 14; EIP-8355's Draft 0x12 / 0x13 / 0x14 after them only under the chain's probe_draft_precompiles flag
+    with the owner's confirmation in the book, then with the fuller probe: CTR-UA-69, DeployBase._mldsaCandidates) that answers that level's pq_kat.json
     EIP-8355 probe exactly (valid => the word 1, flipped => 0); after the deploy `PRECOMPILE()` must be that candidate, and
     `verify` of the level's pq_kat.json row with gas cap + cap / 63 (DeployBase's precompile-path cap, the registry's hold)
     must answer true, its flipped message false (F-6); `MLDSA_PRECOMPILE=off`: none of them (DeployBase builds the cache path).
@@ -33,8 +34,32 @@ E.OUT_DIR = os.environ.get("FOUNDRY_OUT", "out")
 MLDSA = ((0x0130, "mldsa44", 200_000), (0x0131, "mldsa65", 200_000), (0x0134, "mldsa87", 250_000))
 
 
-def candidates(i):
-    return ("0x" + f"{0x12 + i:040x}", "0x" + f"{0x5CAA0012 + i:040x}")
+def candidates(i, draft=False):
+    """CTR-UA-69 (owner R9): the chain's own address first (the Final EIP addresses with it: none for ML-DSA today); EIP-8355's
+    Draft 0x12 / 0x13 / 0x14 after it, only when `draft_allowed`."""
+    own = "0x" + f"{0x5CAA0012 + i:040x}"
+    return (own, "0x" + f"{0x12 + i:040x}") if draft else (own,)
+
+
+def draft_allowed(row, book):
+    """The chain row's `probe_draft_precompiles` (chain-uids.json, owner C5) with the owner's confirmation in the chain's book
+    (`probe_draft_precompiles_owner`, its reason); the flag without it: DRAFT_PROBE_UNCONFIRMED."""
+    if not (row or {}).get("probe_draft_precompiles"):
+        return False
+    if not (book or {}).get("probe_draft_precompiles_owner"):
+        raise SystemExit(
+            "[deploy] pq-verifiers FAIL DRAFT_PROBE_UNCONFIRMED: chain-uids.json sets probe_draft_precompiles, the book has "
+            "no probe_draft_precompiles_owner (CTR-UA-69)"
+        )
+    return True
+
+
+def edge_rows(k, name):
+    """The fuller probe's extra rows (CTR-UA-69): each pq_kat.json mutation of level `name` as its EIP-8355 input
+    `pk ‖ sig ‖ pq_msg` (pq_msg = keccak256(TAG(kind) ‖ ua_msg), PqUA.pqMessage), each to be answered with the word 0."""
+    t = E.keccak256(f"scaas.ua.{name}.v1".encode())
+    b = lambda h: bytes.fromhex(h.removeprefix("0x"))  # noqa: E731
+    return [b(m["pk"]) + b(m["sig"]) + E.keccak256(t + b(m["ua_msg"])) for m in k["mutations"]]
 
 
 def say(s):
@@ -146,6 +171,13 @@ def main(rpc):
     if mode not in ("on", "off"):
         raise SystemExit("[deploy] pq-verifiers FAIL MLDSA_PRECOMPILE: on or off")
     kat = json.load(open(os.path.join(E.EVM, "../vectors/ua/pq_kat.json")))["kinds"]
+    sys.path.insert(0, HERE)
+    import deploybook
+
+    uid = "0x" + E.CTX[1].hex()
+    row = next((r for r in deploybook.rows() if r["chainId"] == chain and r["chainUid"].lower() == uid), None)
+    bp = os.path.join(deploybook.EVM, "deployments", f"{row['key']}.json") if row else None
+    draft = draft_allowed(row, json.load(open(bp)) if bp and os.path.exists(bp) else None)
     for i, (kind, name, cap) in enumerate(MLDSA):
         if mode == "off":
             say(f"skip MldsaVerifier({kind:#06x}): MLDSA_PRECOMPILE=off (the registry's expanded-key cache)")
@@ -154,12 +186,16 @@ def main(rpc):
         valid, bad = bytes.fromhex(k["eip8355_probe_valid"][2:]), bytes.fromhex(k["eip8355_probe_invalid"][2:])
 
         def answers(at):
+            # a Draft address: the fuller probe, every mutation row too (CTR-UA-69)
+            neg = [bad] + (edge_rows(k, name) if int(at, 16) < 0x100 else [])
             try:
-                return E.call(at, valid) == "0x" + "00" * 31 + "01" and E.call(at, bad) == "0x" + "00" * 32
+                return E.call(at, valid) == "0x" + "00" * 31 + "01" and all(
+                    E.call(at, x) == "0x" + "00" * 32 for x in neg
+                )
             except RuntimeError:
                 return False
 
-        cs = candidates(i)
+        cs = candidates(i, draft)
         cand = next((c for c in cs if answers(c)), None)
         if cand is None:
             say(f"skip MldsaVerifier({kind:#06x}): no {name} precompile answers the KAT probe at {', '.join(cs)}")
@@ -201,5 +237,178 @@ def main(rpc):
         print(f"{n}={a}")
 
 
-if __name__ == "__main__":
+# The deploy's differential probe of a later generation (spec 2026-11-19-registry-verify-only-kinds §9, F4, R5; plan Task 13): per
+# row, the holder's entry on the kind's home verifier and the verify-only verifier's `verify`, each by `eth_call` through the node
+# list under strict majority (ARCH-POS-15). The holder on a precompile: `verify(pk, ua_msg, sig)`; on the cache: each
+# `expandedKeyPart(pk, p)`, concatenated, then `verifyExpanded(ek, ua_msg, sig)` (never `verify` on the FIPS key: over 2^24 for
+# ML-DSA-65 / -87). Any verdict that differs from the other or from the row's `valid` stops before broadcast, with the rows.
+#   python3 -I script/pq_verifiers.py differential <rpc>[,<rpc>…] <kind> <home verifier> <verify-only verifier> <parts>
+# (<parts>: the home's `expandedKeyParts()`, 0 on a precompile). UNAUDITED tooling.
+#   python3 -I script/pq_verifiers.py verify-only <rpc>[,<rpc>…] <kind> <keyForm> <callGas> <cap> <home verifier> <parts>
+# builds the verify-only verifier (CREATE2 of DeployBase._voInit's init code), runs the differential, prints the book entry.
+SEL_VERIFY, SEL_PART, SEL_EXPANDED = "024ad318", "b733b5e4", "6e2fe976"
+
+
+class DiffError(Exception):
+    pass
+
+
+def abi_args(*args):
+    """ABI encoding of `args`: ("w", 32-byte word | int) or ("b", bytes)."""
+    head, tail, n = [], b"", 32 * len(args)
+    for t, v in args:
+        if t == "w":
+            head.append(v if isinstance(v, bytes) else int(v).to_bytes(32, "big"))
+        else:
+            head.append((n + len(tail)).to_bytes(32, "big"))
+            tail += len(v).to_bytes(32, "big") + v + b"\0" * (-len(v) % 32)
+    return b"".join(head) + tail
+
+
+def abi_bytes(ret):
+    """The one `bytes` an ABI return holds."""
+    o = int.from_bytes(ret[:32], "big")
+    n = int.from_bytes(ret[o : o + 32], "big")
+    return ret[o + 32 : o + 32 + n]
+
+
+def majority(nodes, to, data, what):
+    """The strict majority's answer of `eth_call(to, data)` over `nodes` (callables -> bytes, None on an error)."""
+    answers = [n(to, data) for n in nodes]
+    for a in answers:
+        if 2 * answers.count(a) > len(answers):
+            return a
+    raise DiffError(f"GEN_DIFFERENTIAL_NODES: no strict majority on {what}")
+
+
+def verdict(ret):
+    return ret is not None and len(ret) == 32 and int.from_bytes(ret, "big") == 1
+
+
+def differential(nodes, home, vo, parts, rows):
+    """`rows`: (what, pk, ua_msg, sig, valid). Returns [(what, holder, verify-only, valid)]; DiffError on any difference."""
+    out, ek = [], {}
+    for what, pk, msg, sig, valid in rows:
+        if parts == 0:
+            h = verdict(
+                majority(nodes, home, bytes.fromhex(SEL_VERIFY) + abi_args(("b", pk), ("w", msg), ("b", sig)), what)
+            )
+        else:
+            if pk not in ek:
+                ek[pk] = b"".join(
+                    abi_bytes(
+                        majority(nodes, home, bytes.fromhex(SEL_PART) + abi_args(("b", pk), ("w", p)), f"part {p}")
+                        or b""
+                    )
+                    for p in range(parts)
+                )
+            data = bytes.fromhex(SEL_EXPANDED) + abi_args(("b", ek[pk]), ("w", msg), ("b", sig))
+            h = verdict(majority(nodes, home, data, what))
+        v = verdict(majority(nodes, vo, bytes.fromhex(SEL_VERIFY) + abi_args(("b", pk), ("w", msg), ("b", sig)), what))
+        out.append((what, h, v, valid))
+    bad = [r for r in out if not r[1] == r[2] == r[3]]
+    if bad:
+        raise DiffError(f"GEN_DIFFERENTIAL_MISMATCH: rows (what, holder, verify-only, valid) {bad}: to the owner (R5)")
+    return out
+
+
+def kat_rows(name):
+    """The level's pq_kat.json rows: the valid one and its mutations."""
+    k = json.load(open(os.path.join(E.EVM, "..", "vectors", "ua", "pq_kat.json")))["kinds"][name]
+    b = lambda h: bytes.fromhex(h.removeprefix("0x"))  # noqa: E731
+    rows = [("valid", b(k["pk"]), b(k["ua_msg"]), b(k["sig"]), True)]
+    return rows + [(m["what"], b(m["pk"]), b(m["ua_msg"]), b(m["sig"]), bool(m["valid"])) for m in k["mutations"]]
+
+
+def rpc_call(url):
+    import urllib.request
+
+    def call(to, data):
+        body = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_call",
+            "params": [{"to": to, "data": "0x" + data.hex()}, "latest"],
+        }
+        req = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            j = json.load(r)
+        return None if "error" in j else bytes.fromhex(j["result"].removeprefix("0x"))
+
+    return call
+
+
+def vo_args(k, name, i, form, call_gas, draft):
+    """The constructor arguments of `MldsaVerifyOnly<x>` as `DeployBase._voInit` builds them (Task 21 review P2-3): this chain's
+    candidates, pq_kat.json's EIP-8355 valid row, the flipped row then every mutation row, the key form, `CALL_GAS`."""
+    valid = bytes.fromhex(k["eip8355_probe_valid"][2:])
+    rows = [bytes.fromhex(k["eip8355_probe_invalid"][2:])] + edge_rows(k, name)
+    cands = [int(c, 16) for c in candidates(i, draft)]
+    return E.encs([("a", "w"), "b", ("a", "b"), "w", "w"], [cands, valid, rows, form, call_gas]), valid + b"".join(rows)
+
+
+def verify_only(urls, kind, form, call_gas, cap, home, parts):
+    """Builds the verify-only verifier of `kind` on the chain (CREATE2, DEPLOY_SALT), runs the differential probe against the
+    home verifier through the node list, and prints the book's `gen_verify_only` entry with `differential` "ok <verifier>"
+    only when every row agrees (spec §9, F4, R5); a verifier whose probe found no precompile is refused by name."""
+    i = {0x0130: 0, 0x0131: 1, 0x0134: 2}[kind]
+    name = MLDSA[i][1]
+    E.RPC = urls[0]
+    chain = int(E.rpc("eth_chainId"), 16)
+    E.CTX[:] = [chain, bytes.fromhex(E.rpc("eth_getBlockByNumber", ["0x0", False])["hash"][2:])]
+    sys.path.insert(0, HERE)
+    import deploybook
+
+    uid = "0x" + E.CTX[1].hex()
+    row = next((r for r in deploybook.rows() if r["chainId"] == chain and r["chainUid"].lower() == uid), None)
+    bp = os.path.join(deploybook.EVM, "deployments", f"{row['key']}.json") if row else None
+    draft = draft_allowed(row, json.load(open(bp)) if bp and os.path.exists(bp) else None)
+    k = json.load(open(os.path.join(E.EVM, "../vectors/ua/pq_kat.json")))["kinds"][name]
+    args, rows = vo_args(k, name, i, form, call_gas, draft)
+    D = E.Deployer(E.Sender(int(os.environ["PRIVATE_KEY"], 16)))
+    contract = "MldsaVerifyOnly" + name[5:]
+    v = D.deploy2(contract, args, f"{name}_verify_only", src="MlDsaVerifyOnly")
+    pc = "0x" + E.words(E.call(v, E.cd("PRECOMPILE()", [])))[0][12:].hex()
+    if int(pc, 16) == 0:
+        raise SystemExit(
+            f"[deploy] pq-verifiers FAIL GEN_VERIFY_ONLY_NO_PRECOMPILE {kind:#06x}: {v} found no precompile"
+        )
+    differential([rpc_call(u) for u in urls], home, v, parts, kat_rows(name))
+    entry = {
+        "kind": kind,
+        "verifier": v,
+        "cap": cap,
+        "keyForm": form,
+        "callGas": call_gas,
+        "precompile": pc,
+        "probe_rows_hash": "0x" + E.keccak256(rows).hex(),
+        "differential": f"ok {v}",
+    }
+    print(json.dumps(entry))
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["verify-only"]:
+    #   pq_verifiers.py verify-only <rpc>[,<rpc>…] <kind> <keyForm> <callGas> <cap> <home verifier> <parts>
+    a = sys.argv[2:]
+    try:
+        verify_only(a[0].split(","), int(a[1], 0), int(a[2]), int(a[3]), int(a[4]), a[5], int(a[6]))
+    except DiffError as e:
+        say(f"FAIL {e}")
+        sys.exit(1)
+elif __name__ == "__main__" and sys.argv[1:2] == ["differential"]:
+    urls, kind, home, vo, parts = (
+        sys.argv[2].split(","),
+        int(sys.argv[3], 0),
+        sys.argv[4],
+        sys.argv[5],
+        int(sys.argv[6]),
+    )
+    name = {0x0130: "mldsa44", 0x0131: "mldsa65", 0x0134: "mldsa87"}[kind]
+    try:
+        for r in differential([rpc_call(u) for u in urls], home, vo, parts, kat_rows(name)):
+            say(f"differential {name} {r[0]}: holder {r[1]}, verify-only {r[2]}, valid {r[3]}")
+    except DiffError as e:
+        say(f"FAIL {e}")
+        sys.exit(1)
+elif __name__ == "__main__":
     main(*sys.argv[1:])

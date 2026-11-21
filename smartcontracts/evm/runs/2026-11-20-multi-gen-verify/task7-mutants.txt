@@ -1,0 +1,4 @@
+mutant | red tests | rc | killed by
+predecessor-cap | test_notCarriedMember_boundUsesHoldersCap | 1 | test_notCarriedMember_boundUsesHoldersCap
+walk-not-counted | test_notCarriedMember_boundUsesHoldersCap, test_voMember_boundCountsReads | 1 | test_notCarriedMember_boundUsesHoldersCap
+vo-reads-dropped | test_voMember_boundCountsReads | 1 | test_voMember_boundCountsReads

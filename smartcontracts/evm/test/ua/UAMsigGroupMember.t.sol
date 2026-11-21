@@ -29,7 +29,7 @@ contract UAMsigGroupMemberTest is UARegistryBase, GroupFixtures {
         ];
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](4);
         for (uint256 i; i < 4; ++i) {
-            c[i] = UARegistry.KindConfig(kinds[i], v[i], 50_000);
+            c[i] = UARegistry.KindConfig(kinds[i], v[i], 50_000, false, 0);
         }
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
         for (uint256 i; i < 4; ++i) {

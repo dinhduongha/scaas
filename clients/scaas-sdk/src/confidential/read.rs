@@ -21,7 +21,9 @@
 //!   failure never makes the pool ask another endpoint.
 //!
 //! UNAUDITED.
-use super::words::{add, be, class_kind, map_slot, rec_slot, word, CLASS_TOKEN, PURPOSE, W};
+use super::words::{
+    add, be, class_kind, held_at, kind_home, map_slot, rec_slot, word, CLASS_TOKEN, PURPOSE, W,
+};
 use crate::op::{addr20, evm, final_block, hex, unhex};
 use crate::{Sdk, SdkError};
 use alloy::primitives::{Address, U256};
@@ -144,7 +146,9 @@ async fn fetch(
     for ua in &p.uas {
         let (r, c) = match registry {
             Some(reg) => {
-                let r = w(reg, map_slot(ua, &be(REG_RECORDS_SLOT))).await?;
+                // CTR-UA-70 (review F2): the record where it is held on the bound registry's line
+                let (held, _) = held_at(pool, at, reg, ua).await?;
+                let r = w(held, map_slot(ua, &be(REG_RECORDS_SLOT))).await?;
                 let ptr = Address::from_slice(&r[5..25]);
                 let c = if ptr.is_zero() {
                     vec![]
@@ -353,7 +357,8 @@ pub(crate) async fn candidates(
             let Some((_, env)) = scaas_ua::factory::clone_env(&code) else {
                 return Ok(None);
             };
-            let reg = Address::from(env.registry);
+            // the kind's list lives in its home generation (CTR-UA-29; review F2)
+            let reg = kind_home(pool, &at, Address::from(env.registry), ZETHER_UA_KIND).await?;
             let n = U256::from_be_bytes(word(pool, &at, reg, count).await?);
             let n = u64::try_from(n).unwrap_or(u64::MAX);
             let Some(idx) = sample(n, want, r) else {

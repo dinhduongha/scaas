@@ -90,7 +90,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     function _config(Case memory c) internal returns (UARegistry.KindConfig[] memory k, address burn) {
         burn = PqUA.mldsaParts(c.kind) != 0 ? address(new BurnAllPrecompile()) : address(new BurnAll());
         k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(c.kind, burn, c.cap);
+        k[0] = UARegistry.KindConfig(c.kind, burn, c.cap, false, 0);
     }
 
     /// The registered inner `msig` of `n` fresh signing slots, n-of-n, its `pop` of all of them (BurnAll accepts anything).
@@ -319,6 +319,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     }
 
     function test_nested_mldsa65Precompile() public {
+        txCap = 1 << 25; // a verifyBudget capacity table: P9 (`UARegistryHardBound.t.sol`) refuses some shapes at 2^24
         _run(_case("mldsa65 200k 1L", 0x0131, 200_000, 3309, 16, _none256()));
         _run(_case("mldsa65 200k 2L [16x3]", 0x0131, 200_000, 3309, 0, _uints(16, 3)));
         uint256[] memory g = _uints(10, 5);
@@ -329,6 +330,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     /// A kind of cap 50 k (`bip340`, the group kinds, an ERC-1271 member without a clone implementation): the most signatures any
     /// shape reaches at 12 M, the leaf path of a classical key read from its registration blob.
     function test_nested_mostSignatures() public {
+        txCap = 1 << 25; // a verifyBudget capacity table: P9 (`UARegistryHardBound.t.sol`) refuses some shapes at 2^24
         uint256[] memory g = _uints(16, 8);
         g[7] = 10;
         _run(_case("bip340 cap 50k 2L [16x7,10]", 0x0103, 50_000, 64, 0, g));
@@ -375,13 +377,14 @@ contract UARegistryNestedGasTest is UARegistryBase {
     // ----- generations -----
 
     /// gen 2's bound of the outer `c` whose inner `msig`s and signing kind are gen 1's: a handed leaf counts `cap + cap / 63 + margin`,
-    /// a handed inner `msig` the same again over its whole worst case.
+    /// a handed inner `msig` the same again over its whole worst case; each plus its walk of one generation (`LINE_HOP_GAS`,
+    /// spec 2026-11-19-registry-verify-only-kinds §4 P3).
     function _boundGen2(Case memory c) internal pure returns (uint256 b) {
-        uint256 leaf = c.cap + c.cap / 63 + 5_000;
+        uint256 leaf = c.cap + c.cap / 63 + 5_000 + UARegistryRegLib.LINE_HOP_GAS;
         b = ACCEPTED + c.plain * (leaf + MEMBER);
         for (uint256 i; i < c.groups.length; ++i) {
             uint256 w = c.groups[i] * (leaf + MEMBER) + ACCEPTED;
-            b += w + w / 63 + 5_000 + MEMBER;
+            b += w + w / 63 + 5_000 + UARegistryRegLib.LINE_HOP_GAS + MEMBER;
         }
         if (leaf > SMART) b += (leaf - SMART) / 63;
     }
@@ -415,8 +418,8 @@ contract UARegistryNestedGasTest is UARegistryBase {
         Case memory c = _case("ml65", 0x0131, 200_000, 3309, 0, _none256());
         address burn = address(new BurnAll());
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(0x0131, burn, 200_000);
-        k[1] = UARegistry.KindConfig(0x0132, burn, 2_500_000);
+        k[0] = UARegistry.KindConfig(0x0131, burn, 200_000, false, 0);
+        k[1] = UARegistry.KindConfig(0x0132, burn, 2_500_000, false, 0);
         r = _deploy(_at(), chainUidA, address(0), false, 12_000_000, address(0), true, k);
         Member[] memory m = new Member[](3);
         m[0] = Member(0x0132, UACall.register(r, 0x0132, _pk(0x0132), _none(), hex"01", ""), 1);
@@ -472,21 +475,23 @@ contract UARegistryNestedGasTest is UARegistryBase {
         assertLe(spend, 1 << 24);
     }
 
-    /// The EIP-7976 floor, 64 per byte: a cheap-cap kind with long signatures meets it before the regular gas does.
+    /// The EIP-7976 floor, 64 per byte: a cheap-cap kind with long signatures meets it before the regular gas does. 24 signatures:
+    /// the hard bound (spec 2026-11-19-registry-verify-only-kinds §4, owner P9) admits the structure (its floor 64 × 192,384 B plus the
+    /// consumer reserve fits 2^24; at 32 signatures it does not, `UAKeyData(0x0120)` first), the debit's floor does not.
     function test_pqzHolderCalldataFloor() public {
         address burn = address(new BurnAll());
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(0x0133, burn, 20_000);
+        k[0] = UARegistry.KindConfig(0x0133, burn, 20_000, false, 0);
         UARegistry r = _deploy(_at(), chainUidA, address(0), false, 12_000_000, address(0), true, k);
         Case memory c = _case("slh", 0x0133, 20_000, 7856, 0, _none256());
         Member[] memory m = new Member[](2);
         (, bytes32 i1) = _inner(r, c, 16);
-        (, bytes32 i2) = _inner(r, c, 16);
+        (, bytes32 i2) = _inner(r, c, 8);
         m[0] = Member(UAKinds.MSIG, i1, 1);
         m[1] = Member(UAKinds.MSIG, i2, 1);
         bytes memory d = _msigKey(2, m);
-        uint256 auth = 2 * 192 + 32 * (128 + 7_872);
-        uint256 w = 32 * (20_000 + MEMBER) + 2 * (MEMBER + ACCEPTED) + ACCEPTED;
+        uint256 auth = 2 * 192 + 24 * (128 + 7_872);
+        uint256 w = 24 * (20_000 + MEMBER) + 2 * (MEMBER + ACCEPTED) + ACCEPTED;
         assertLe(w + w / 63 + 5_000 + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * auth, 1 << 24, "the regular term alone admits it");
         assertGt(PqzSet.PQZ_DEBIT_MIN_GAS + 64 * auth, 1 << 24);
         bytes memory key = new bytes(PqzSet.PK);
@@ -502,10 +507,10 @@ contract UARegistryNestedGasTest is UARegistryBase {
     function test_pqzHolderGen1RecordCountsGen1NativeCap() public {
         address burn = address(new BurnAll());
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(0x0131, burn, 4_000_000);
+        k[0] = UARegistry.KindConfig(0x0131, burn, 4_000_000, false, 0);
         UARegistry g1 = _deploy(_at(), chainUidA, address(0), false, 12_000_000, burn, true, k);
         UARegistry.KindConfig[] memory p = new UARegistry.KindConfig[](1);
-        p[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, burn, 400_000);
+        p[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, burn, 400_000, false, 0);
         UARegistry g2 = _deploy(_at(), chainUidA, address(g1), false, 12_000_000, address(0), true, p);
         bytes32 ml = UACall.register(g1, 0x0131, _pk(0x0131), _none(), hex"01", "");
         bytes memory key = new bytes(PqzSet.PK);
@@ -559,6 +564,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     }
 
     function test_registrationCostRows() public {
+        txCap = 1 << 25; // a verifyBudget capacity table: P9 (`UARegistryHardBound.t.sol`) refuses some shapes at 2^24
         _regCost(_case("mldsa65 200k 1L", 0x0131, 200_000, 3309, 16, _none256()));
         _regCost(_case("mldsa65 200k [16x3]", 0x0131, 200_000, 3309, 0, _uints(16, 3)));
         _regCost(_case("mldsa65 200k [16x2]", 0x0131, 200_000, 3309, 0, _uints(16, 2)));
