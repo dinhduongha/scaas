@@ -180,6 +180,11 @@ required-features = ["signers"]
 name = "json"
 required-features = ["json"]
 
+# Fable code review of PqVault F5: the second implementation of keys.json, items.json, pqvAccount and nativeMember
+[[test]]
+name = "pqvault_keys"
+required-features = ["vectors"]
+
 # PqVault plan V1: the Argon2id reproducer of smartcontracts/vectors/pqvault/pass.json
 [[test]]
 name = "pqvault_pass"
