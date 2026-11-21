@@ -10,7 +10,8 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 /// An item and its revision (its JSON `rev`; `u64::MAX` when the bytes hold none, so no `put_if` matches it).
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StoredItem {
     pub bytes: Vec<u8>,
     pub rev: u64,
@@ -26,7 +27,7 @@ impl std::fmt::Debug for StoredItem {
 }
 
 /// Whether the platform asks for the user before it gives the item.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Presence {
     #[default]
     None,
@@ -34,7 +35,8 @@ pub enum Presence {
 }
 
 /// How an item is kept: on this device only, out of cloud backups, behind user presence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StorePolicy {
     pub device_only: bool,
     pub no_cloud_backup: bool,

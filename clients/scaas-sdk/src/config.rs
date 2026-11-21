@@ -8,7 +8,7 @@ use scaas_rpc::{Class, EndpointAuth, Policy};
 use std::sync::Arc;
 
 /// A chain family (the `scaas-rpc` readers'). Hedera is `Evm` with its chain id.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Family {
     Evm,
     Soroban,
@@ -43,7 +43,7 @@ impl std::fmt::Debug for EndpointConfig {
 }
 
 /// The block of every decisive and decryption read (§9.4 requirement 3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum Finality {
     Finalized,
@@ -98,7 +98,8 @@ pub struct ChainProfile {
 
 /// A DEX of the chain profile (NET-ALL-24): its address, its liquidity mark (a module of group 11 among its `modules()`,
 /// CTR-DEX-30) and the position readers reviewed for it, each beside its position manager.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListedDex {
     /// `0x` + 40 hex
     pub address: String,
@@ -107,7 +108,8 @@ pub struct ListedDex {
 }
 
 /// A reviewed position reader of a position manager (a liquidity order that receives a position names one).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PositionReader {
     pub manager: String,
     pub reader: String,
@@ -116,7 +118,8 @@ pub struct PositionReader {
 /// A base row (gas table v2, owner 2026-11-19): the execution gas of `entry` (`mtxCancelNonce`, `mtxExecuteTransfer`, …) on a
 /// contract of domain kind `kind` (`token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `gov_router`), on a lane whose nonce
 /// is 0 (`fresh`) or above, signed by the reference signer, a native EVM key (its path makes no registry call).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GasBase {
     pub entry: String,
     pub kind: String,
@@ -143,7 +146,8 @@ pub struct GasBase {
 /// up) for each counted `item` of the operation, one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`,
 /// `env_items`, `orders`). The row's own `gas` is its figure at a count of 0 (the line's intercept; the file states
 /// `"base_count": 0`), so the quote adds `gas × count` with no offset.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GasPerItem {
     pub item: String,
     pub gas: u64,
@@ -156,7 +160,8 @@ pub struct GasPerItem {
 
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
 /// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GasPerByte {
     pub input: String,
     pub gas: u64,
@@ -164,7 +169,8 @@ pub struct GasPerByte {
 
 /// A verify row (gas table v2): what a signer of UA kind `signer` (`0`: a native EVM key, the reference) adds over the
 /// reference signer's execution gas.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GasVerify {
     pub signer: u16,
     pub gas: u64,
@@ -180,7 +186,8 @@ pub struct GasVerify {
 }
 
 /// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GasRows {
     pub base: Vec<GasBase>,
     pub verify: Vec<GasVerify>,
@@ -192,7 +199,8 @@ pub struct GasRows {
 /// per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
 /// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GasTable {
     /// a module's name, `reference`, or the chain key of a chain's measured rows
     pub name: String,
@@ -521,7 +529,8 @@ impl GasBase {
 }
 
 /// A token of a profile's reviewed list (spec §8.2).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ListedToken {
     /// `0x` + 40 hex
     pub address: String,
@@ -531,7 +540,8 @@ pub struct ListedToken {
 
 /// The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
 /// against a runaway quote, never a value assumed of a chain.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Limits {
     /// decimal wei
     pub max_fee_per_gas: String,

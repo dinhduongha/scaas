@@ -30,7 +30,8 @@ alloy::sol! {
 
 /// A member's part (spec §5.4, §4): its index in the group's key data and its partial `σ_i` (or PoP part `π_i`), 128 bytes,
 /// `0x` hex.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BlsMultiPart {
     pub index: u8,
     pub signature: String,

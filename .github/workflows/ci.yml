@@ -74,6 +74,8 @@
 #                          generated FRB Dart surface of the whole SDK equals the committed one); in clients/scaas-sdk/ffi: cargo clippy --locked --all-targets
 #                          -- -D warnings; cargo build --locked; in clients/scaas-sdk/bindings/dart: dart pub get --enforce-lockfile; dart test (the load check,
 #                          the vault and keystore rows, the e2e smoke on a local anvil: foundry v1.8.5)
+#   scaas-cli:             in clients/scaas-cli: cargo test --locked; cargo test --locked --features dev-profiles (the review and the quote
+#                          before a submit, against the SDK tests' fake chain); cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -195,6 +197,7 @@ jobs:
       scaas_sdk: ${{ steps.f.outputs.scaas_sdk }}
       scaas_sdk_wasm: ${{ steps.f.outputs.scaas_sdk_wasm }}
       scaas_sdk_bindings: ${{ steps.f.outputs.scaas_sdk_bindings }}
+      scaas_cli: ${{ steps.f.outputs.scaas_cli }}
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -1187,6 +1190,30 @@ jobs:
           workspaces: clients/scaas-sdk
       - name: compiles for wasm32 (not run)
         run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet
+
+  # the CLI `scaas` (plan T22, CLI-SDK-17): one command per SDK call, both builds (release profiles; dev-profiles)
+  scaas-cli:
+    needs: changes
+    if: needs.changes.outputs.scaas_cli == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-cli
+      - name: cargo test (the release build)
+        run: cargo test --locked
+      - name: cargo test (dev-profiles)
+        run: cargo test --locked --features dev-profiles
+      - name: cargo clippy
+        run: cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
 
   # the generated bindings (spec §16): the FRB Dart surface regenerated equals the committed one; the reference library and
   # the Dart tests over it

@@ -44,6 +44,8 @@ ARTIFACTS = [
     # the reference library of its binding tests
     ("clients/scaas-sdk", "shipped"),
     ("clients/scaas-sdk/ffi", []),
+    # the CLI `scaas` (plan T22): every feature it ships (dev-profiles included); the SDK's `vectors` never reaches it
+    ("clients/scaas-cli", "shipped"),
 ]
 
 

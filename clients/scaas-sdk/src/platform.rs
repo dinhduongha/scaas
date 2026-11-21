@@ -8,7 +8,7 @@ use scaas_ua::wallet::SecretBytes;
 use std::sync::Arc;
 
 /// An authenticator's failure; `Unexpected` is a foreign exception inside the app's implementation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AuthError {
     Refused,
     Cancelled,
@@ -17,7 +17,8 @@ pub enum AuthError {
 }
 
 /// A WebAuthn get-assertion request: the RP ID (the deployment's), a 32-byte challenge, the allowed credentials, the PRF salt.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AssertionRequest {
     pub rp_id: String,
     pub challenge: Vec<u8>,
@@ -26,7 +27,8 @@ pub struct AssertionRequest {
 }
 
 /// A WebAuthn assertion as the platform returns it; `prf` says whether a PRF output was written.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Assertion {
     pub credential_id: Vec<u8>,
     pub authenticator_data: Vec<u8>,
@@ -36,21 +38,24 @@ pub struct Assertion {
 }
 
 /// A new passkey: its credential id and its key data (`webauthn-p256` 0x0100).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PasskeyCreated {
     pub credential_id: Vec<u8>,
     pub key_data: Vec<u8>,
 }
 
 /// A secure-element key's handle and public key data (`p256` 0x0101).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SePublic {
     pub handle: String,
     pub key_data: Vec<u8>,
 }
 
 /// A platform key's access policy (biometry of the current enrollment, invalidated by a new one: research decision 8).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct KeyPolicy {
     pub biometry_current_set: bool,
     pub invalidated_by_enrollment: bool,

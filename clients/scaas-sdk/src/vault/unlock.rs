@@ -21,7 +21,8 @@ pub enum Unlock {
 }
 
 /// A hidden set: its own session id, used in every reference to it; never written.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SessionSet {
     pub id: String,
 }

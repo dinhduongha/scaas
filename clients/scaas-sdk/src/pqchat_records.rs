@@ -13,7 +13,8 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 /// `MemberKey(bytes32 ua, uint64 keyId, bytes32 via)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqMemberKey {
     pub ua: String,
     pub key_id: u64,
@@ -21,7 +22,8 @@ pub struct PqMemberKey {
 }
 
 /// `Wrap(bytes32 member, uint64 keyId, bytes mlkemCt, bytes32 x25519Eph, bytes sealedKey)`: hashed into `wrapHashes`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqWrap {
     pub member: String,
     pub key_id: u64,
@@ -31,7 +33,8 @@ pub struct PqWrap {
 }
 
 /// `PqChatSession`: `wrapHashes` computed from `wraps`; id `sessionId(creator, nonce)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqChatSession {
     pub creator: String,
     pub nonce: u64,
@@ -44,7 +47,8 @@ pub struct PqChatSession {
 }
 
 /// `PqChatEpoch`: `wrapHashes` computed from `wraps`; id `epochId(sessionId, author, nonce)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqChatEpoch {
     pub session_id: String,
     pub author: String,
@@ -58,7 +62,8 @@ pub struct PqChatEpoch {
 }
 
 /// `PqChatLeave`: id its typed digest.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqChatLeave {
     pub session_id: String,
     pub epoch_id: String,
@@ -67,7 +72,8 @@ pub struct PqChatLeave {
 }
 
 /// `PqChatRemove`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqChatRemove {
     pub session_id: String,
     pub epoch_id: String,
@@ -78,7 +84,8 @@ pub struct PqChatRemove {
 }
 
 /// `PqChatMessage`: id its typed digest.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqChatMessage {
     pub session_id: String,
     pub epoch_id: String,
@@ -91,7 +98,8 @@ pub struct PqChatMessage {
 }
 
 /// `PqTopic`: id `topicId(admin, nonce)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqTopic {
     pub admin: String,
     pub nonce: u64,
@@ -103,7 +111,8 @@ pub struct PqTopic {
 }
 
 /// `PqTopicUpdate`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqTopicUpdate {
     pub topic_id: String,
     pub seq: u64,
@@ -113,7 +122,8 @@ pub struct PqTopicUpdate {
 }
 
 /// `PqTopicWriter`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqTopicWriter {
     pub topic_id: String,
     pub writer: String,
@@ -122,7 +132,8 @@ pub struct PqTopicWriter {
 }
 
 /// `EntryRef(bytes32 chainUid, address pqchat, bytes32 entryId, bytes32 contentHash)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqEntryRef {
     pub chain_uid: String,
     pub pqchat: String,
@@ -131,7 +142,8 @@ pub struct PqEntryRef {
 }
 
 /// `PqTopicEntry`: id `entryId(topicId, author, nonce)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqTopicEntry {
     pub topic_id: String,
     pub author: String,
@@ -143,7 +155,8 @@ pub struct PqTopicEntry {
 }
 
 /// `PqTopicEdit`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqTopicEdit {
     pub entry_id: String,
     pub author: String,
@@ -154,7 +167,8 @@ pub struct PqTopicEdit {
 }
 
 /// `PqTopicVote`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqTopicVote {
     pub entry_id: String,
     pub voter: String,
@@ -164,7 +178,8 @@ pub struct PqTopicVote {
 
 /// A signed PqChat record: its struct, id (`None` for a struct without one), typed digest, the `wrapHashes` it computed, the
 /// `UASig` and the review shown before signing.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqChatSigned {
     pub record: String,
     pub id: Option<String>,

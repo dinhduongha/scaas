@@ -13,7 +13,8 @@ use crate::SdkError;
 use alloy::primitives::{Bytes, U256};
 
 /// `prepare_native_send`'s request.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NativeSend {
     /// a native `evm` key
     pub key: KeyRef,
@@ -30,7 +31,8 @@ pub struct NativeSend {
 }
 
 /// A native send as the user reviews it: the transaction's fields and the quote; `submit_native_send` signs exactly these.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NativeQuote {
     pub key: KeyRef,
     pub chain: String,

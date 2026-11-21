@@ -57,7 +57,8 @@ fn hex(b: &[u8]) -> String {
 }
 
 /// What an app core declares of itself (all self-declared: §12.3).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppDesc {
     /// `0x` + 64 hex, not zero; `None`: a scope that holds handles and labels and signs nothing under an app purpose
     pub app_id: Option<String>,
@@ -69,7 +70,7 @@ pub struct AppDesc {
 }
 
 /// A handle's usage (spec §12.2): fixed at its making, enforced at every use, never in a byte.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AppKeyUsage {
     Derive,
     Data,
@@ -97,7 +98,8 @@ pub enum AppNonce {
 }
 
 /// A KEM wrap's named fields.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppWrap {
     pub mlkem_ct: Vec<u8>,
     pub x25519_eph: Vec<u8>,
@@ -119,7 +121,7 @@ impl AppKey {
 }
 
 /// An app record's path (spec §12.2).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum AppPath {
     /// (A) `requirePortableApp`: the scope's `app_id`, its purpose `appPurpose(app_id)`
     Portable,
@@ -131,7 +133,8 @@ pub enum AppPath {
 }
 
 /// A signed app record: the `UASig`'s named fields, the typed digest and the review shown before it was signed.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppSigned {
     pub key_data: Vec<u8>,
     pub signature: Vec<u8>,
@@ -141,7 +144,8 @@ pub struct AppSigned {
 
 /// A `UASig` as an app record carries it (TS-D12): a single key `key_data` (empty for a stored kind and on path A) and
 /// `signature`; an `msig` `members` only.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppUaSig {
     pub key_data: Vec<u8>,
     pub signature: Vec<u8>,
@@ -149,7 +153,8 @@ pub struct AppUaSig {
 }
 
 /// One `msig` slot's signature: a signing member `sig`, an `msig` member its leaves' `members`.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppMemberSig {
     pub index: u16,
     pub members: Vec<AppInnerSig>,
@@ -157,7 +162,8 @@ pub struct AppMemberSig {
 }
 
 /// One leaf of an `msig` member's slot.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppInnerSig {
     pub index: u16,
     pub sig: Vec<u8>,
@@ -190,7 +196,8 @@ impl From<&AppUaSig> for UASig {
 
 /// A call of an app's own contract as the user reviews it ([`AppCore::prepare_app_call`]): the entry, the contract and every
 /// named argument, and the payer's transaction (`Wallet::submit_native_send` sends exactly it).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AppCall {
     pub review: Vec<ReviewField>,
     pub quote: crate::wallet::NativeQuote,

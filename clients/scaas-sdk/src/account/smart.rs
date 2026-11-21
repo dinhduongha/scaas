@@ -23,7 +23,8 @@ use std::sync::Arc;
 
 /// A `SubjectKey` by name: `kind` 1 a passkey (`x`, `y` P-256, `rpIdHash`, `originHash`), 2 a secp256k1 key (`x` its address
 /// right-aligned, the rest 0); words as `0x` + 64 hex.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SubjectKeyArgs {
     pub kind: u8,
     pub x: String,
@@ -74,7 +75,8 @@ impl SubjectKeyArgs {
 
 /// The part every `SmartKeyAccount` entry shares: the account (`0x` + 40 hex), the key of it that signs, the lane, the envelope.
 /// `key_index` (decimal) is the signer's index in the account; `None`: read from the account (S3).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SmartOp {
     pub signer: KeyRef,
     pub key_index: Option<String>,
@@ -85,7 +87,7 @@ pub struct SmartOp {
 }
 
 /// The call of a `SmartKeyAccount`'s `Execute` (spec §13.2): decoded, or opaque under the marker.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[cfg_attr(frb_expand, doc = frb_hint!(non_opaque))]
 pub enum SmartCall {
     /// an ERC-20 `transfer(to, amount)` of `token` held by the account

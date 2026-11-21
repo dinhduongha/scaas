@@ -13,7 +13,8 @@ use scaas_rpc::Purpose;
 use std::sync::PoisonError;
 
 /// A token as the wallet shows it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TokenInfo {
     /// `0x` + 40 hex, lower case
     pub address: String,

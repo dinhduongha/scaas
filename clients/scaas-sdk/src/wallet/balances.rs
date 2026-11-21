@@ -11,7 +11,8 @@ use scaas_rpc::pool::{BlockChoice, ReadError};
 use scaas_rpc::Purpose;
 
 /// One token's balance.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TokenBalance {
     pub address: String,
     pub display: String,
@@ -21,7 +22,8 @@ pub struct TokenBalance {
 }
 
 /// An account's balances at one block.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Balances {
     pub block: u64,
     /// the native balance of an address or a native id (`None` for a derived UA: it holds no native coin)

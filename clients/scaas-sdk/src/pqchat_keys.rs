@@ -20,7 +20,8 @@ use scaas_ua::wallet::{pqchat, KemWrap, SecretBytes};
 use std::sync::Arc;
 
 /// A message's header as S5 takes it: the sender is the signing account's UA.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqMessageHeader {
     pub session_id: String,
     pub epoch_id: String,
@@ -32,7 +33,8 @@ pub struct PqMessageHeader {
 }
 
 /// S5's output: the record, its signature and id, and the bytes each store takes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqSealedMessage {
     pub record: PqChatMessage,
     pub sig: AppUaSig,
@@ -46,14 +48,16 @@ pub struct PqSealedMessage {
 }
 
 /// An envelope opened (K4, first half): the record and its signature, not yet checked (V1 and the membership check next).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqInner {
     pub record: PqChatMessage,
     pub sig: AppUaSig,
 }
 
 /// A stored payload decoded (V2).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqPayload {
     pub hint: Vec<u8>,
     pub env: Vec<u8>,
@@ -61,7 +65,8 @@ pub struct PqPayload {
 
 /// A session record to seal and sign (S1): the creator is the signing account; `info_json` the `sealedInfo`'s named fields
 /// as one JSON object, sealed inside under `K` (canonical JSON, padded) and listed field by field in the review.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqSessionNew {
     pub nonce: u64,
     pub home_chain: String,
@@ -73,7 +78,8 @@ pub struct PqSessionNew {
 }
 
 /// An epoch record to seal and sign (S2): the author is the signing account.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqEpochNew {
     pub session_id: String,
     pub nonce: u64,

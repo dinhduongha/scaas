@@ -40,7 +40,7 @@ ls_files() { ls_all "$@" | grep -v -E '(^|/)runs/'; }
 # Rust: one rustfmt run per crate root at its edition. rustfmt follows out-of-line `mod`s, so a file of .rustfmt-ignore
 # it reaches is kept as it was (format) or not reported (check).
 RUST_CRATES="scaas-node scaas-pqz-verifier clients/ua-rs clients/ua-c clients/zether-prover clients/scaas-rpc
-  clients/scaas-ct clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/scaas-sdk pqz-core
+  clients/scaas-ct clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/scaas-sdk clients/scaas-cli pqz-core
   smartcontracts/evm/script/pqz/wallet
   smartcontracts/soroban smartcontracts/cosmos smartcontracts/solana smartcontracts/near"
 rust_ignored() { grep -v -E '^\s*(#|$)' .rustfmt-ignore | sed 's/^/:(glob)/' | xargs git ls-files --; }

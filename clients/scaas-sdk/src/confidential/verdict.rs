@@ -108,7 +108,8 @@ fn native(ua: &W) -> bool {
 /// A verdict request (spec §9.3): the verifier's named fields of the operation (`op`: `{entry, args, binding?, amount?,
 /// recipient?, unwrap?}`, the proof-carrying entry and its argument struct, as `POST /v1/pqz-verdict` takes them), the
 /// statement the token rebuilds and the proof, `0x` hex.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(frb_expand, doc = frb_hint!(opaque))]
 pub struct PqzVerdictRequest {
     pub chain: String,

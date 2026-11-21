@@ -530,7 +530,8 @@ pub(crate) async fn read_all(
 /// A PQZ balance read (spec §9.2, §9.4): the account of the UA key `signer` (a PQZ-capable kind, `KeyRef::Ua`) at key
 /// version `key_version`, whose PQZ key is the wallet's `pqz_key_version(account, index, key_version)` of the same account and
 /// index (spec §7).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqzBalanceRequest {
     pub signer: KeyRef,
     pub chain: String,
@@ -540,7 +541,8 @@ pub struct PqzBalanceRequest {
 }
 
 /// A decrypted PQZ balance, for the holder only.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqzBalance {
     /// the smallest unit, decimal: what a debit at this block may spend (the account and the window `[rolled, p)`)
     pub amount: String,
@@ -652,7 +654,8 @@ async fn decrypt(
 /// Every key version's balance of `signer` on `token` and their sum (P-T16-5): versions `0..=latest`, `latest` the registry's
 /// `pqzVersions` word read with version 0's words; each version a [`super::Confidential::pqz_balance`] read of its own fixed
 /// word set (R1 to R7), decrypted by its own key.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqzBalanceAll {
     /// the sum, decimal
     pub amount: String,
@@ -696,7 +699,8 @@ impl super::Confidential {
 // --- the PQZ rows without a proof (spec §9.2, §21): `wallet`'s plain path, the contract's domain must be a PQZ token's ---
 
 /// `pqz_shield` (`UAShield` on a PQZ token): `amount` of the signer's public balance into `to_ua`'s pending window.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqzShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -708,7 +712,8 @@ pub struct PqzShield {
 }
 
 /// `pqz_wrap_shield` (`WrapShield` on a PQZ token): wrap `amount_in` of `underlying` and shield it to `to_ua`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqzWrapShield {
     pub signer: KeyRef,
     pub chain: String,
@@ -722,7 +727,8 @@ pub struct PqzWrapShield {
 
 /// `UAPrepareAcc` (`half` 0 or 1 of the materialisation) and `UAPqzRollOver` (`n` pending entries) of `ua`'s account at key
 /// version `key_version`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PqzAccountOp {
     pub signer: KeyRef,
     pub chain: String,
