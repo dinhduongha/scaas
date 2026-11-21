@@ -203,7 +203,7 @@ contract PqVaultGasTest is PqVaultBase {
         IUARegistry.UAAttrs memory a;
         a.kem = _kem(99);
         _register(p, UAKinds.FNDSA512, key, a, _pop(p, UAKinds.FNDSA512, key, a), "");
-        _row("register a per-vault FN-DSA-512 UA with its KEM key (stand-in verifier)", 460_749, 5_405_490);
+        _row("register a per-vault FN-DSA-512 UA with its KEM key (stand-in verifier)", 459_203, 5_405_490);
     }
 
     // ----- the release -----
