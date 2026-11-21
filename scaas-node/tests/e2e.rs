@@ -1211,6 +1211,8 @@ fn plain_rows_match_the_forge_abi() {
                 "pqchat" => "IPqChat",
                 // PqVault plan V8 (CTR-PQV-11): the eight `PqVault` writes
                 "pqvault" => "IPqVault",
+                // chains-arweave T9 (CTR-CHAT-22): `PqChatStore`'s one write, `storeMessage`
+                "pqchatstore" => "IPqChatStore",
                 other => panic!("a plain row on {other}: {}", r.entry),
             };
             let p = format!(
@@ -1235,7 +1237,7 @@ fn plain_rows_match_the_forge_abi() {
             n += 1;
         }
     }
-    assert_eq!(n, 45, "45 rows, one contract each (37 -> 45: PqVault's eight writes, PqVault plan V8; before (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
+    assert_eq!(n, 46, "46 rows, one contract each (45 -> 46: PqChatStore's storeMessage, chains-arweave T9; 37 -> 45: PqVault's eight writes, PqVault plan V8; before (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
         30 -> 32: the DEX's mtxLiquidity (CTR-DEX-30) and PqChat's remove (UA-7 P48); 32 -> 34: the registry's setPqzScopedKey, \
         storePqzScopedPop (K3-3); 34 -> 35: the registry's updateMsig (CTR-UA-44); 35 -> 36: the registry's cacheExpandedKey \
         (NODE-JOB-29, TODO 3zh MD-14); 36 -> 37: the registry's registerBlsMulti (bls-multi Task 10)))");
