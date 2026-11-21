@@ -11238,6 +11238,8 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", the rpc spe
 **Source.** ARCH-POS-15; Fable review 2026-11-17 F23, F24, F27; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.7.
 Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C20; owner: no; status: SPECIFIED): one exception to "no automatic re-send": the SDK re-posts the same bytes of an unsettled Arweave item (same id) at 24 h, 72 h and 7 days ([CLI-SDK-21](clients/scaas-sdk.md#CLI-SDK-21)); the crate itself re-sends nothing. Why: the bytes and the id are the same, so nothing lands twice, and the sender's device holds the only copy until settlement (review F14). The owner may override.
 
+Change (owner 2026-11-21, "agreed, the CLI-RPC-08 exception"; owner: yes; status: SPECIFIED): one exception to CLI-RPC-08's "no automatic re-send": an Arweave upload not yet settled ([CLI-SDK-21](clients/scaas-sdk.md#CLI-SDK-21), [CLI-RPC-13](clients/scaas-rpc.md#CLI-RPC-13)) is re-posted with the same signed bytes at 24 h, 72 h and 7 days, asking the payer again if a re-post is refused for payment; after that it shows as `UploadUnsettled`. No other send is re-sent automatically. Spec `superpowers/specs/2026-11-21-avax-polkadot-arweave.md` revision 2, F14.
+
 ### CLI-RPC-09 — A transaction ends only on facts from a decisive read at a final block
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-09 · superseded-by: —
 

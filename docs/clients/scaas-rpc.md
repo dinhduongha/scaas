@@ -275,5 +275,5 @@ bounds (signature types 2, 3 and 4 only), computes its id (base64url of SHA-256 
 merged `Sent` or `Rejected` as [CLI-RPC-08](#CLI-RPC-08). `paid_by` is the caller's, sent as `x-paid-by` to that bundler only.
 The body cap is the largest single-request object plus 1,024 B. Settlement is read later through [CLI-RPC-13](#CLI-RPC-13)'s
 `settled`, never taken from a receipt. The crate re-sends nothing; the SDK's bounded re-post of an unsettled item
-([CLI-SDK-21](scaas-sdk.md#CLI-SDK-21)) is the one exception to CLI-RPC-08's "no automatic re-send".
+([CLI-SDK-21](scaas-sdk.md#CLI-SDK-21)) is the one exception to CLI-RPC-08's "no automatic re-send".amp; The owner agreed to this exception (2026-11-21).
 
