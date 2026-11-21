@@ -338,7 +338,9 @@ library PqzStateLib {
         PqzCore.PqzStorage storage s = PqzCore.$();
         (uint64 v, address ptr, bool proven) = PqzCore._keyOf(registry, a);
         // spec 2026-11-19-registry-verify-only-kinds §11.2: a `0x0142` verifier anywhere on the registry's line asks for proven
-        if (!PqzCore._usable(proven, ptr) || (!proven && IUARegistry(registry).kindHome(UAKinds.PQZ_MLWE) != address(0))) {
+        if (
+            !PqzCore._usable(proven, ptr) || (!proven && IUARegistry(registry).kindHome(UAKinds.PQZ_MLWE) != address(0))
+        ) {
             revert IPqzToken.AccountNotRegistered(a);
         }
         if (

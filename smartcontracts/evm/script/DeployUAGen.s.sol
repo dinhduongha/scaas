@@ -33,7 +33,8 @@ contract DeployUAGen is DeployBase {
     /// The new generation's line below it, an object keyed `gen<g>` (forge's JSON writer keeps no array of objects): the
     /// predecessor book's `ua_registry_line`, then the predecessor itself.
     function _lineBelow(string memory book) internal view returns (string memory l) {
-        uint256 n = vm.keyExistsJson(book, ".ua_registry_generation") ? vm.parseJsonUint(book, ".ua_registry_generation") : 1;
+        uint256 n =
+            vm.keyExistsJson(book, ".ua_registry_generation") ? vm.parseJsonUint(book, ".ua_registry_generation") : 1;
         for (uint256 g = 1; g < n; ++g) {
             string memory p = string.concat(".ua_registry_line.gen", vm.toString(g));
             l = string.concat(
@@ -41,13 +42,21 @@ contract DeployUAGen is DeployBase {
                 '"gen',
                 vm.toString(g),
                 '":',
-                _entry(vm.parseJsonAddress(book, string.concat(p, ".registry")), vm.parseJsonBytes32(book, string.concat(p, ".codehash"))),
+                _entry(
+                    vm.parseJsonAddress(book, string.concat(p, ".registry")),
+                    vm.parseJsonBytes32(book, string.concat(p, ".codehash"))
+                ),
                 ","
             );
         }
         l = string.concat(
-            "{", l, '"gen', vm.toString(n), '":',
-            _entry(vm.parseJsonAddress(book, ".ua_registry"), vm.parseJsonBytes32(book, ".ua_registry_codehash")), "}"
+            "{",
+            l,
+            '"gen',
+            vm.toString(n),
+            '":',
+            _entry(vm.parseJsonAddress(book, ".ua_registry"), vm.parseJsonBytes32(book, ".ua_registry_codehash")),
+            "}"
         );
     }
 

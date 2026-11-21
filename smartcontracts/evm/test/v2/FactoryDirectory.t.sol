@@ -716,7 +716,9 @@ contract FactoryDirectoryTest is Test {
         assertEq(UARegistry(r).generation(), 16);
         assertTrue(UARegistry(r).lineReaches(address(g1)));
         _call(deployer, address(f), _pub(0, 1, _env(r, address(0))));
-        assertFalse(UARegistry(r).lineReaches(address(_gen(UID, address(0), impl))), "another generation 1: not on the line");
+        assertFalse(
+            UARegistry(r).lineReaches(address(_gen(UID, address(0), impl))), "another generation 1: not on the line"
+        );
     }
 
     /// `MAX_LIBS` (spec §5.4, the node's decode bound): 32 libraries pass, 33 are `EnvInvalid`.

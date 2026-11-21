@@ -77,7 +77,10 @@ contract UAVerifyOnlyGasTest is UARegistryBase {
     /// key's 897 B read at the holder).
     function _call(uint16 kind) internal view returns (bytes memory) {
         if (kind == P256) {
-            return _reqCall(pId, UAKinds.PURPOSE_METATX, DIGEST, _auth(g1, P256, _key(P256), UAKinds.PURPOSE_METATX, DIGEST));
+            return
+                _reqCall(
+                    pId, UAKinds.PURPOSE_METATX, DIGEST, _auth(g1, P256, _key(P256), UAKinds.PURPOSE_METATX, DIGEST)
+                );
         }
         IUARegistry.UASig memory s;
         s.signature = _sig(fnKey, UAKinds.uaMessage(FN, UAKinds.PURPOSE_PQCHAT, TYPED));

@@ -566,8 +566,14 @@ contract UADeployTest is Test {
         (, string memory json) = h.deploy(UID, false, ska, false);
         address r = vm.parseJsonAddress(json, ".ua_registry");
         return string.concat(
-            '{"ua_registry":"', vm.toString(r), '","ua_registry_codehash":"', vm.toString(r.codehash), '",',
-            '"tx_gas_cap":16777216', extra, "}"
+            '{"ua_registry":"',
+            vm.toString(r),
+            '","ua_registry_codehash":"',
+            vm.toString(r.codehash),
+            '",',
+            '"tx_gas_cap":16777216',
+            extra,
+            "}"
         );
     }
 
@@ -598,7 +604,8 @@ contract UADeployTest is Test {
         address pc = address(uint160(0x5caa0012 + i));
         string memory k = string.concat(".kinds.mldsa", ["44", "65", "87"][i], ".eip8355_probe_valid");
         vm.etch(pc, address(new PcStandIn()).code);
-        PcStandIn(pc).set(keccak256(vm.parseJsonBytes(vm.readFile("../vectors/ua/pq_kat.json"), k)), new bytes[](0), 0, 0);
+        PcStandIn(pc)
+            .set(keccak256(vm.parseJsonBytes(vm.readFile("../vectors/ua/pq_kat.json"), k)), new bytes[](0), 0, 0);
     }
 
     function _create2(bytes memory init) internal returns (address v) {
@@ -621,8 +628,17 @@ contract UADeployTest is Test {
         returns (string memory)
     {
         return string.concat(
-            ',"gen_verify_only":[{"kind":', vm.toString(kind), ',"verifier":"', vm.toString(v), '","cap":',
-            vm.toString(cap), ',"keyForm":', vm.toString(form), ',"differential":"', diff, '"}]'
+            ',"gen_verify_only":[{"kind":',
+            vm.toString(kind),
+            ',"verifier":"',
+            vm.toString(v),
+            '","cap":',
+            vm.toString(cap),
+            ',"keyForm":',
+            vm.toString(form),
+            ',"differential":"',
+            diff,
+            '"}]'
         );
     }
 
@@ -691,7 +707,8 @@ contract UADeployTest is Test {
 
     function test_deploy_omits0142_ownerOverride() public {
         DeployHarness h = _pqzHarness();
-        (bool ok, bytes memory ret) = _gen(h, _book(h, ',"gen_pqz":false,"owner_override_GEN_PQZ_OMITTED":"owner: reason"'));
+        (bool ok, bytes memory ret) =
+            _gen(h, _book(h, ',"gen_pqz":false,"owner_override_GEN_PQZ_OMITTED":"owner: reason"'));
         assertTrue(ok);
         (address r,) = abi.decode(ret, (address, string));
         assertFalse(UARegistry(r).kindEnabled(UAKinds.PQZ_MLWE));
@@ -700,7 +717,11 @@ contract UADeployTest is Test {
     /// Key form 1 where the home's `mldsa65` verifier is on a precompile (no cache can exist there); key form 0 passes.
     function test_deploy_keyForm1_precompileHome_named() public {
         DeployHarness h = new DeployHarness();
-        h.setMldsa(true, address(0), MldsaKit.onChain(1, 0x000000000000000000000000000000005CAa0013, keccak256("scaas.deploy.v1")));
+        h.setMldsa(
+            true,
+            address(0),
+            MldsaKit.onChain(1, 0x000000000000000000000000000000005CAa0013, keccak256("scaas.deploy.v1"))
+        );
         h.forceMl(false, true);
         string memory b = _book(h, "");
         (bool ok,) = _gen(h, _add(b, _voEntry(UAKinds.MLDSA65, _vo(h, UAKinds.MLDSA65, 0, true), 250_000, 0)));
@@ -715,7 +736,9 @@ contract UADeployTest is Test {
     function test_deploy_verifyOnlyNoPrecompile_named() public {
         DeployHarness h = new DeployHarness();
         _named(
-            h, _book(h, _voEntry(UAKinds.MLDSA65, _vo(h, UAKinds.MLDSA65, 0, false), 250_000, 0)), "GEN_VERIFY_ONLY_NO_PRECOMPILE"
+            h,
+            _book(h, _voEntry(UAKinds.MLDSA65, _vo(h, UAKinds.MLDSA65, 0, false), 250_000, 0)),
+            "GEN_VERIFY_ONLY_NO_PRECOMPILE"
         );
     }
 
@@ -786,7 +809,11 @@ contract UADeployTest is Test {
             rows[0] = abi.encodePacked(
                 vm.parseJsonBytes(kat, string.concat(m, ".pk")),
                 vm.parseJsonBytes(kat, string.concat(m, ".sig")),
-                keccak256(abi.encodePacked(keccak256("scaas.ua.mldsa65.v1"), vm.parseJsonBytes32(kat, string.concat(m, ".ua_msg"))))
+                keccak256(
+                    abi.encodePacked(
+                        keccak256("scaas.ua.mldsa65.v1"), vm.parseJsonBytes32(kat, string.concat(m, ".ua_msg"))
+                    )
+                )
             );
         }
         address at = address(0x13);
@@ -825,7 +852,8 @@ contract UADeployTest is Test {
         assertEq(c[1], address(0x13));
         _draft65(0);
         assertEq(h.mldsaPrecompileOf(1), address(0x13), "every row answered exactly");
-        for (uint256 r = 1; r <= 8; ++r) { // pq_kat.json's 8 mldsa65 mutation rows
+        for (uint256 r = 1; r <= 8; ++r) {
+            // pq_kat.json's 8 mldsa65 mutation rows
             _draft65(r);
             assertEq(h.mldsaPrecompileOf(1), address(0), string.concat("lax on mutation row ", vm.toString(r)));
         }
@@ -861,7 +889,11 @@ contract UADeployTest is Test {
         string memory b = _book(h, "");
         address v = _vo(h, UAKinds.MLDSA65, 0, true);
         _named(h, _add(b, _voEntry(UAKinds.MLDSA65, v, 250_000, 0, "")), "GEN_DIFFERENTIAL_MISSING");
-        _named(h, _add(b, _voEntry(UAKinds.MLDSA65, v, 250_000, 0, "ok 0x0000000000000000000000000000000000000001")), "GEN_DIFFERENTIAL_MISSING");
+        _named(
+            h,
+            _add(b, _voEntry(UAKinds.MLDSA65, v, 250_000, 0, "ok 0x0000000000000000000000000000000000000001")),
+            "GEN_DIFFERENTIAL_MISSING"
+        );
     }
 
     /// A cap below 2 x CALL_GAS + the verifier's own work (140,000 at CALL_GAS 50,000): GEN_VERIFY_ONLY_CAP; at it, deployed.

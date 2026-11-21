@@ -425,8 +425,9 @@ contract PqzAuditorTest is PqzOffchainBase {
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000, false, 0);
         k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mlv), 1_000_000, false, 0);
         UARegistry r1 = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
-        UARegistry r2 =
-            new UARegistry(PQZ_UID, address(r1), false, 12_000_000, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
+        UARegistry r2 = new UARegistry(
+            PQZ_UID, address(r1), false, 12_000_000, 1 << 24, address(0), true, new UARegistry.KindConfig[](0)
+        );
         OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
         Catalogue.release(

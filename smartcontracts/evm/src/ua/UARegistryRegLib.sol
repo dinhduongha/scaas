@@ -437,9 +437,8 @@ library UARegistryRegLib {
         // MD-13 (owner 2026-11-15, F-1): every holder kind, a single key with its own cap (gen 1's for a record gen 1 holds)
         // owner M2: `w` the fallback worst of the consumer path (§4's consumer mode), for a record held elsewhere `_slotCap`'s
         if (kind != UAKinds.MSIG) {
-            (uint256 w,,) = gen1
-                ? _slotCap(kind, ua, FALLBACK, 0, false)
-                : (UAStore._capOf(UARegistryCoreLib._cfgKind()), 0, false);
+            (uint256 w,,) =
+                gen1 ? _slotCap(kind, ua, FALLBACK, 0, false) : (UAStore._capOf(UARegistryCoreLib._cfgKind()), 0, false);
             return _msigDebit(w, 192 + _slotBytes(kind, 0), ua);
         }
         // CTR-PQZ-12 (review2 C0-5, controller proposal, owner may override): an `msig` holder's worst-case
@@ -656,13 +655,21 @@ library UARegistryRegLib {
     /// hold for the largest single cap, at either level, beyond the 400 k that `MSIG_MEMBER_GAS` covers) fits `verifyBudget`;
     /// `nativeCap` what one native slot of `d` may spend in the generation that verifies it. CTR-UA-44: the enabled slots only;
     /// `lenient` (MM-14): a member's own `msig` slots are left out, else `UAMemberUnknown`.
-    function _membersWorst(bytes memory d, uint256 nativeCap, bool lenient) internal view returns (uint256 worst, bool vo) {
+    function _membersWorst(bytes memory d, uint256 nativeCap, bool lenient)
+        internal
+        view
+        returns (uint256 worst, bool vo)
+    {
         (worst, vo) = _worstHeld(d, lenient ? LENIENT : 0, nativeCap);
         if (worst > IUARegistry(address(this)).verifyBudget()) revert IUARegistry.UAKeyData(UAKinds.MSIG);
     }
 
     /// `_worst` of `d` in `mode` with the caller's hold for its largest held cap beyond the 400 k `MSIG_MEMBER_GAS` covers.
-    function _worstHeld(bytes memory d, uint256 mode, uint256 nativeCap) internal view returns (uint256 worst, bool vo) {
+    function _worstHeld(bytes memory d, uint256 mode, uint256 nativeCap)
+        internal
+        view
+        returns (uint256 worst, bool vo)
+    {
         uint256 held;
         (worst, held, vo) = _worst(d, mode, nativeCap, IUARegistry(address(this)).hederaNative());
         if (held > UAStore.SMART_KEY_1271_GAS) worst += (held - UAStore.SMART_KEY_1271_GAS) / 63;
@@ -719,9 +726,8 @@ library UARegistryRegLib {
         returns (uint256 cap)
     {
         (uint256 h, bool v) = (0, false);
-        (cap, h, v) = _slotCap(
-            uint16(UAStore.u16(d, 4 + 36 * i)), bytes32(UAStore.word(d, 6 + 36 * i)), mode, nativeCap, hedera
-        );
+        (cap, h, v) =
+            _slotCap(uint16(UAStore.u16(d, 4 + 36 * i)), bytes32(UAStore.word(d, 6 + 36 * i)), mode, nativeCap, hedera);
         if (h > hv[0]) hv[0] = h;
         if (v) hv[1] = 1;
     }
@@ -729,9 +735,8 @@ library UARegistryRegLib {
     /// Can slot `i` of `d` sign at this level (CTR-UA-44): enabled (MM-9), and not a member's own `msig` slot under `LENIENT`
     /// (MM-14: verification gives it no list, `UAStore.lift`).
     function _signs(bytes memory d, uint256 i, uint256 mode) internal pure returns (bool) {
-        return
-            UAStore.enabledOf(d) >> i & 1 != 0
-                && (mode & (INNER | LENIENT) != INNER | LENIENT || UAStore.u16(d, 4 + 36 * i) != UAKinds.MSIG);
+        return UAStore.enabledOf(d) >> i & 1 != 0
+            && (mode & (INNER | LENIENT) != INNER | LENIENT || UAStore.u16(d, 4 + 36 * i) != UAKinds.MSIG);
     }
 
     /// How many of the lightest slots reach `threshold`: no quorum has more (a minimal one, or one that stops at the threshold).

@@ -2,7 +2,12 @@
 pragma solidity ^0.8.24;
 
 import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
-import {MldsaVerifyOnly, MldsaVerifyOnly44, MldsaVerifyOnly65, MldsaVerifyOnly87} from "../../src/ua/MlDsaVerifyOnly.sol";
+import {
+    MldsaVerifyOnly,
+    MldsaVerifyOnly44,
+    MldsaVerifyOnly65,
+    MldsaVerifyOnly87
+} from "../../src/ua/MlDsaVerifyOnly.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
 import {PqVectors} from "./PqVectors.sol";
 import {Eip8355Emulator, Eip8355Emulator87, eip8355, eip8355_87} from "./MlDsa.t.sol";
@@ -158,7 +163,8 @@ contract VerifyOnlyEquivalenceTest is PqVectors {
         for (uint256 n; vm.keyExistsJson(kat, _mu(kat, "mldsa65", n)); ++n) {
             string memory mu = _mu(kat, "mldsa65", n);
             if (vm.parseJsonBool(kat, string.concat(mu, ".valid"))) continue;
-            (bytes memory pk, bytes memory sig) = (_b(kat, string.concat(mu, ".pk")), _b(kat, string.concat(mu, ".sig")));
+            (bytes memory pk, bytes memory sig) =
+                (_b(kat, string.concat(mu, ".pk")), _b(kat, string.concat(mu, ".sig")));
             bytes32 m = bytes32(_b(kat, string.concat(mu, ".ua_msg")));
             lax.set(keccak256(abi.encodePacked(pk, sig, PqUA.pqMessage(tag, m))), false);
             // a length mutation never reaches the precompile (lengths first, `test_malformed_answersZero`)
@@ -168,7 +174,9 @@ contract VerifyOnlyEquivalenceTest is PqVectors {
                 ++caught; // the row is the probe's own negative row: the probe refuses the lax precompile first
                 continue;
             }
-            assertTrue(v.verify(pk, m, sig) != h.verify(pk, m, sig), vm.parseJsonString(kat, string.concat(mu, ".what")));
+            assertTrue(
+                v.verify(pk, m, sig) != h.verify(pk, m, sig), vm.parseJsonString(kat, string.concat(mu, ".what"))
+            );
             ++caught;
         }
         assertGt(caught, 0);

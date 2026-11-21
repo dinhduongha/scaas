@@ -1192,7 +1192,8 @@ contract UARegistryMsigUpdateTest is UARegistryBase {
         key[0] = 0x01;
         bytes32 hash = keccak256("proof");
         bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
-        IUARegistry.UASig memory s = _auth(_sigs(r, r.msigOf(ua), ua, _ids(ml[1], ml[2]), UAKinds.PURPOSE_PQZ_KEY, rd, true));
+        IUARegistry.UASig memory s =
+            _auth(_sigs(r, r.msigOf(ua), ua, _ids(ml[1], ml[2]), UAKinds.PURPOSE_PQZ_KEY, rd, true));
         _callOrRevert(address(r), abi.encodeCall(IUARegistry.setPqzKey, (ua, 0, key, hash, s)));
         uint256 g = vm.lastCallGas().gasTotalUsed;
         emit log_named_uint("setPqzKey regular gas, 22,528 B key, 2 mldsa65 members", g);

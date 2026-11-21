@@ -2,7 +2,12 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {MldsaVerifyOnly, MldsaVerifyOnly44, MldsaVerifyOnly65, MldsaVerifyOnly87} from "../../src/ua/MlDsaVerifyOnly.sol";
+import {
+    MldsaVerifyOnly,
+    MldsaVerifyOnly44,
+    MldsaVerifyOnly65,
+    MldsaVerifyOnly87
+} from "../../src/ua/MlDsaVerifyOnly.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
 
 /// A precompile stand-in (forge has no ML-DSA precompile): one word `1` for the valid row, one word `0` for each probe row (but

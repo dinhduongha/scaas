@@ -15,60 +15,60 @@ import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 /// entry: a changed argument or return type does not compile). A change moves the pin with old -> new and needs the owner.
 contract RegistryWalkInterfaceIsPinned is Test {
     string[54] internal SIGS = [
-            "predecessor()(address)",
-            "generation()(uint8)",
-            "chainUid()(bytes32)",
-            "hederaNative()(bool)",
-            "verifyBudget()(uint64)",
-            "txGasCap()(uint64)",
-            "smartKeyCloneHash()(bytes32)",
-            "kindEnabled(uint16)(bool)",
-            "verifyOnly(uint16)(bool)",
-            "verifyCap(uint16)(uint64)",
-            "verifierOf(uint16)(address)",
-            "kindHome(uint16)(address)",
-            "holderOf(bytes32)(address,uint16,address)",
-            "kindOf(bytes32)(uint16)",
-            "isRegistered(bytes32)(bool)",
-            "recordOf(bytes32)((uint16,uint40,address,uint40),address)",
-            "keyOf(bytes32)(bytes)",
-            "webAuthnKeyOf(bytes32)((bytes32,bytes32,bytes32))",
-            "muSig2KeyOf(bytes32)((bytes,bytes[]))",
-            "frostKeyOf(bytes32)((bytes,uint16,(bytes[],bytes,bytes32)[]))",
-            "registrationOf(bytes32)(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)",
-            "popOf(bytes32)(bytes)",
-            "popSlotsOf(bytes32)(uint16[],bytes32[])",
-            "expandedKeyOf(bytes32)(address[3])",
-            "keyOwner(bytes32)(bytes32)",
-            "checkedOf(bytes32)(uint8,uint8,uint8)",
-            "msigOf(bytes32)((uint16,(uint16,bytes32,uint16)[]))",
-            "msigStateOf(bytes32)(uint64,uint256,uint256)",
-            "memberAccepted(bytes32,uint256)(bool)",
-            "memberSigHashOf(bytes32,uint256)(bytes32)",
-            "kemKeyOf(bytes32)(uint64,(uint8,bytes,bytes32),bytes)",
-            "kemKeyAt(bytes32,uint64)((uint8,bytes,bytes32),bytes)",
-            "pqzHomeOf(bytes32)(address)",
-            "pqzKeyOf(bytes32)(uint64,address,bytes32,bool)",
-            "pqzKeyAt(bytes32,uint64)(address,bytes32,bool)",
-            "pqzKeyLatest(bytes32)(uint64)",
-            "pqzKeyUsed(bytes32,bytes32)(bool)",
-            "pqzKeySigOf(bytes32,uint64)(bytes)",
-            "pqzPopOf(bytes32,uint64)(bytes)",
-            "pqzScopedKeyOf(bytes32,address)(uint64,address,bytes32,bool)",
-            "pqzScopedKeyAt(bytes32,address,uint64)(address,bytes32,bool)",
-            "pqzScopedKeyLatest(bytes32,address)(uint64)",
-            "pqzScopedPopOf(bytes32,address,uint64)(bytes)",
-            "pqzOpenKemAt(bytes32,address,uint64)((uint8,bytes,bytes32))",
-            "pqzScopedCount(address)(uint256)",
-            "pqzScopedAt(address,uint256)(bytes32)",
-            "uaCount(uint16)(uint256)",
-            "uaAt(uint16,uint256)(bytes32)",
-            "uaPage(uint16,uint256,uint256)(bytes32[])",
-            "uaIndex(bytes32)(uint256)",
-            "requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()",
-            "requirePortable(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()",
-            "requirePortableApp(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()",
-            "lineReaches(address)(bool)"
+        "predecessor()(address)",
+        "generation()(uint8)",
+        "chainUid()(bytes32)",
+        "hederaNative()(bool)",
+        "verifyBudget()(uint64)",
+        "txGasCap()(uint64)",
+        "smartKeyCloneHash()(bytes32)",
+        "kindEnabled(uint16)(bool)",
+        "verifyOnly(uint16)(bool)",
+        "verifyCap(uint16)(uint64)",
+        "verifierOf(uint16)(address)",
+        "kindHome(uint16)(address)",
+        "holderOf(bytes32)(address,uint16,address)",
+        "kindOf(bytes32)(uint16)",
+        "isRegistered(bytes32)(bool)",
+        "recordOf(bytes32)((uint16,uint40,address,uint40),address)",
+        "keyOf(bytes32)(bytes)",
+        "webAuthnKeyOf(bytes32)((bytes32,bytes32,bytes32))",
+        "muSig2KeyOf(bytes32)((bytes,bytes[]))",
+        "frostKeyOf(bytes32)((bytes,uint16,(bytes[],bytes,bytes32)[]))",
+        "registrationOf(bytes32)(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)",
+        "popOf(bytes32)(bytes)",
+        "popSlotsOf(bytes32)(uint16[],bytes32[])",
+        "expandedKeyOf(bytes32)(address[3])",
+        "keyOwner(bytes32)(bytes32)",
+        "checkedOf(bytes32)(uint8,uint8,uint8)",
+        "msigOf(bytes32)((uint16,(uint16,bytes32,uint16)[]))",
+        "msigStateOf(bytes32)(uint64,uint256,uint256)",
+        "memberAccepted(bytes32,uint256)(bool)",
+        "memberSigHashOf(bytes32,uint256)(bytes32)",
+        "kemKeyOf(bytes32)(uint64,(uint8,bytes,bytes32),bytes)",
+        "kemKeyAt(bytes32,uint64)((uint8,bytes,bytes32),bytes)",
+        "pqzHomeOf(bytes32)(address)",
+        "pqzKeyOf(bytes32)(uint64,address,bytes32,bool)",
+        "pqzKeyAt(bytes32,uint64)(address,bytes32,bool)",
+        "pqzKeyLatest(bytes32)(uint64)",
+        "pqzKeyUsed(bytes32,bytes32)(bool)",
+        "pqzKeySigOf(bytes32,uint64)(bytes)",
+        "pqzPopOf(bytes32,uint64)(bytes)",
+        "pqzScopedKeyOf(bytes32,address)(uint64,address,bytes32,bool)",
+        "pqzScopedKeyAt(bytes32,address,uint64)(address,bytes32,bool)",
+        "pqzScopedKeyLatest(bytes32,address)(uint64)",
+        "pqzScopedPopOf(bytes32,address,uint64)(bytes)",
+        "pqzOpenKemAt(bytes32,address,uint64)((uint8,bytes,bytes32))",
+        "pqzScopedCount(address)(uint256)",
+        "pqzScopedAt(address,uint256)(bytes32)",
+        "uaCount(uint16)(uint256)",
+        "uaAt(uint16,uint256)(bytes32)",
+        "uaPage(uint16,uint256,uint256)(bytes32[])",
+        "uaIndex(bytes32)(uint256)",
+        "requireAuthorized(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()",
+        "requirePortable(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()",
+        "requirePortableApp(bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))()",
+        "lineReaches(address)(bool)"
     ];
 
     bytes32 internal constant LIST_HASH = 0x3b34c54d64d7c8c3a5984af50db132f9aa744fff8d92a9d299dc118469272ebf; // Task 21 P3-5 (lineReaches): 0x9b671c72… -> 0x3b34c54d…
@@ -163,7 +163,11 @@ contract RegistryWalkInterfaceIsPinned is Test {
         assertEq(IUARegistry.UAVerifyOnly.selector, bytes4(keccak256("UAVerifyOnly(uint16)")));
         assertEq(IUAVerifyOnlyVerifier.PRECOMPILE.selector, bytes4(keccak256("PRECOMPILE()")));
         assertEq(IUAVerifyOnlyVerifier.KEY_FORM.selector, bytes4(keccak256("KEY_FORM()")));
-        assertEq(MldsaVerifier(address(0)).PRECOMPILE.selector, bytes4(keccak256("PRECOMPILE()")), "every PQ verifier's getter");
+        assertEq(
+            MldsaVerifier(address(0)).PRECOMPILE.selector,
+            bytes4(keccak256("PRECOMPILE()")),
+            "every PQ verifier's getter"
+        );
         assertEq(MldsaVerifier.verifyCached.selector, bytes4(keccak256("verifyCached(bytes,bytes32,bytes)")));
         assertEq(SigCheck.GAS_MARGIN, 5_000, "the hold: cap / 63 + GAS_MARGIN");
     }
@@ -252,7 +256,10 @@ contract RegistryWalkInterfaceIsPinned is Test {
             f19;
         }
         {
-            function(bytes32) external view returns (uint16, bytes memory, IUARegistry.UAAttrs memory, bytes memory, bytes memory) f20 = r.registrationOf;
+            function(bytes32)
+                external
+                view returns (uint16, bytes memory, IUARegistry.UAAttrs memory, bytes memory, bytes memory)
+                f20 = r.registrationOf;
             f20;
         }
         {

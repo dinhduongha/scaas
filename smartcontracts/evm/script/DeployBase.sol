@@ -1398,8 +1398,9 @@ abstract contract DeployBase is DeployBook {
     ///         ordinary later-generation kind) is not built in this mode. **UNAUDITED.**
     function _deployUARegistryGen(string memory book, address ska) internal returns (UARegistry reg) {
         UARegistry pred = UARegistry(vm.parseJsonAddress(book, ".ua_registry"));
-        address latest =
-            vm.keyExistsJson(book, ".ua_registry_latest") ? vm.parseJsonAddress(book, ".ua_registry_latest") : address(pred);
+        address latest = vm.keyExistsJson(book, ".ua_registry_latest")
+            ? vm.parseJsonAddress(book, ".ua_registry_latest")
+            : address(pred);
         // Task 21 review P2-2: a book of the next generation already written (`<key>-ua-gen<n + 1>.json`) means the line has
         // moved past this predecessor: a deploy over it would be a sibling
         require(
@@ -1409,7 +1410,10 @@ abstract contract DeployBase is DeployBook {
         require(
             latest == address(pred) || _ownerOverride(book, "GEN_NOT_LATEST"),
             string.concat(
-                "GEN_NOT_LATEST: the predecessor ", vm.toString(address(pred)), " is not the book's latest ", vm.toString(latest)
+                "GEN_NOT_LATEST: the predecessor ",
+                vm.toString(address(pred)),
+                " is not the book's latest ",
+                vm.toString(latest)
             )
         );
         uint256 g = _bookUint(book, ".ua_registry_generation", 1) + 1;
@@ -1508,7 +1512,8 @@ abstract contract DeployBase is DeployBook {
                         && PqzKeyVerifier(v).PROOF_SYSTEM_ID() == PqzSafety.PQZL_ID,
                     "gen registry: the home's pqz-mlwe verifier is not a PqzKeyVerifier on the PQZ precompile"
                 );
-                k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, v, UARegistry(ph).verifyCap(UAKinds.PQZ_MLWE), false, 0);
+                k[n++] =
+                    UARegistry.KindConfig(UAKinds.PQZ_MLWE, v, UARegistry(ph).verifyCap(UAKinds.PQZ_MLWE), false, 0);
                 vm.serializeBytes32("deploy", "pqz_key_verifier_codehash", v.codehash);
             } else {
                 require(
@@ -1533,7 +1538,12 @@ abstract contract DeployBase is DeployBook {
                 vm.keyExistsJson(book, string.concat(e, ".differential"))
                     && keccak256(bytes(vm.parseJsonString(book, string.concat(e, ".differential"))))
                         == keccak256(bytes(string.concat("ok ", vm.toString(c.verifier)))),
-                string.concat("GEN_DIFFERENTIAL_MISSING ", vm.toString(abi.encodePacked(c.kind)), ": no differential probe ok for ", vm.toString(c.verifier))
+                string.concat(
+                    "GEN_DIFFERENTIAL_MISSING ",
+                    vm.toString(abi.encodePacked(c.kind)),
+                    ": no differential probe ok for ",
+                    vm.toString(c.verifier)
+                )
             );
             _voKind(pred, c, g, budget, ph != address(0));
             k[n++] = c;
@@ -1604,7 +1614,9 @@ abstract contract DeployBase is DeployBook {
                 vm.toString(VO_VERIFIER_OVERHEAD)
             )
         );
-        require(_pqKindFits(c.cap, budget), string.concat("gen registry: the cap of ", kh, " is over 75 % of the budget"));
+        require(
+            _pqKindFits(c.cap, budget), string.concat("gen registry: the cap of ", kh, " is over 75 % of the budget")
+        );
         if (!pqzLine) return;
         uint256 hc = UARegistry(home).verifyCap(c.kind);
         require(
@@ -1665,9 +1677,13 @@ abstract contract DeployBase is DeployBook {
 
     /// @notice The gates of the registry's release and of its three libraries', each its own transaction (CREATE2 of the
     ///         registry's init code with these arguments; each library's creation code).
-    function _requireRegistryGas(address pred, bool isHedera, uint64 budget, address ska, UARegistry.KindConfig[] memory k)
-        internal
-    {
+    function _requireRegistryGas(
+        address pred,
+        bool isHedera,
+        uint64 budget,
+        address ska,
+        UARegistry.KindConfig[] memory k
+    ) internal {
         _requireReleaseGas(
             "UARegistry",
             address(0),
@@ -1719,9 +1735,10 @@ abstract contract DeployBase is DeployBook {
         (bytes memory v44, bytes memory b44) = _mldsaProbe(0);
         (bytes memory v65, bytes memory b65) = _mldsaProbe(1);
         (bytes memory v87, bytes memory b87) = _mldsaProbe(2);
-        return abi.encodePacked(
-            type(PqPrecompileProbe).creationCode, abi.encode(v44, b44, v65, b65, v87, b87, _draftProbe())
-        );
+        return
+            abi.encodePacked(
+                type(PqPrecompileProbe).creationCode, abi.encode(v44, b44, v65, b65, v87, b87, _draftProbe())
+            );
     }
 
     /// @notice The `pq_kat.json` EIP-8355 probe inputs of ML-DSA kind `i` (0, 1, 2 = 44, 65, 87): valid ⇒ the word 1, flipped ⇒ 0.

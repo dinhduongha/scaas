@@ -44,7 +44,9 @@ abstract contract MldsaVerifyOnly is IUAPopVerifier, IUAVerifyOnlyVerifier {
         uint8 keyForm,
         uint256 callGas
     ) {
-        if (kind != PqUA.MLDSA44 && kind != PqUA.MLDSA65 && kind != PqUA.MLDSA87) revert UAMldsaKind(kind);
+        if (kind != PqUA.MLDSA44 && kind != PqUA.MLDSA65 && kind != PqUA.MLDSA87) {
+            revert UAMldsaKind(kind);
+        }
         (KIND, KIND_TAG, KEY_FORM, CALL_GAS) = (kind, PqUA.tag(kind), keyForm, callGas);
         _valid = SSTORE2.writeChunks(valid);
         for (uint256 i; i < candidates.length; ++i) {

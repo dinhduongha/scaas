@@ -221,8 +221,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                 | uint256(c.keyForm) << 225;
         }
         // M10 (d) (owner P16): where `0x0142` is on the line, each verify-only kind's single-key fallback within the PQZ debit bound
-        if (predecessor_ != address(0) && (k[18] != 0 || IUARegistry(predecessor_).kindHome(UAKinds.PQZ_MLWE) != address(0)))
-        {
+        if (
+            predecessor_ != address(0)
+                && (k[18] != 0 || IUARegistry(predecessor_).kindHome(UAKinds.PQZ_MLWE) != address(0))
+        ) {
             _voDebit(predecessor_, kinds_, g, txGasCap_);
         }
         (_CFG0, _CFG1, _CFG2, _CFG3) = (k[0], k[1], k[2], k[3]);

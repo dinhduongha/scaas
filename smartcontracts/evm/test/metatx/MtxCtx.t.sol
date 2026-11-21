@@ -669,7 +669,8 @@ contract MtxCtxTest is PqzRegistryBase {
         assertTrue(ok, vm.toString(ret));
         VmSafe.Gas memory g = vm.lastCallGas();
         uint256 op = g.gasTotalUsed + uint256(int256(g.gasStateUsed));
-        (ok,) = address(reg).call(abi.encodeCall(IUARegistry.requireAuthorized, (u, UAKinds.PURPOSE_METATX, keccak256("d"), s)));
+        (ok,) = address(reg)
+            .call(abi.encodeCall(IUARegistry.requireAuthorized, (u, UAKinds.PURPOSE_METATX, keccak256("d"), s)));
         assertTrue(ok);
         g = vm.lastCallGas();
         uint256 check = g.gasTotalUsed + uint256(int256(g.gasStateUsed));

@@ -238,7 +238,10 @@ contract UARegistryHardBoundModesTest is UARegistryBase {
     }
 
     /// `d` registered on `r` with attributes `a`, its PoP by a quorum (the first `threshold` members); `err` empty: it passes.
-    function _regA(UARegistry r, bytes memory d, IUARegistry.UAAttrs memory a, bytes memory err) internal returns (bytes32 ua) {
+    function _regA(UARegistry r, bytes memory d, IUARegistry.UAAttrs memory a, bytes memory err)
+        internal
+        returns (bytes32 ua)
+    {
         ua = UAKinds.uaOf(UAKinds.MSIG, d);
         uint16 t = uint16(uint8(d[0])) << 8 | uint16(uint8(d[1]));
         // a PQ structure's PoP by a quorum; a classical one registers without (its members accept one by one)
@@ -391,7 +394,12 @@ contract UARegistryHardBoundModesTest is UARegistryBase {
         IUARegistry.UAAttrs memory a;
         a.pqzKey = new bytes(PqzSet.PK);
         a.pqzPopHash = keccak256("proof");
-        _regA(r, d, a, fits ? bytes("") : abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, UAKinds.uaOf(UAKinds.MSIG, d)));
+        _regA(
+            r,
+            d,
+            a,
+            fits ? bytes("") : abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, UAKinds.uaOf(UAKinds.MSIG, d))
+        );
     }
 
     /// M2: `_msigDebit`'s `w` is the fallback worst (this generation's cap, the reads, the holder's path), not the write mode's
@@ -450,7 +458,9 @@ contract UARegistryHardBoundModesTest is UARegistryBase {
         for (uint256 i; i < t; ++i) {
             bytes32 id = ids[kind][i];
             s.members[i] = IUARegistry.MemberSig(
-                _indexOf(d, id), new IUARegistry.InnerSig[](0), _sig(keyOf_[id], UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, md))
+                _indexOf(d, id),
+                new IUARegistry.InnerSig[](0),
+                _sig(keyOf_[id], UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, md))
             );
         }
         for (uint256 i = 1; i < t; ++i) {
@@ -468,7 +478,9 @@ contract UARegistryHardBoundModesTest is UARegistryBase {
         r.acceptMembership(
             ua,
             IUARegistry.MemberSig(
-                _indexOf(d, id), new IUARegistry.InnerSig[](0), _sig(keyOf_[id], UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, md))
+                _indexOf(d, id),
+                new IUARegistry.InnerSig[](0),
+                _sig(keyOf_[id], UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, md))
             )
         );
     }
