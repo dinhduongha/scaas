@@ -1,4 +1,4 @@
-# gas3c mutants at commit 6d99b2332 (name | outcome | test)
+# gas3c mutants (name | outcome | commit | test | first failure line)
 save not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
 a saving operation on a row without save answers | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
 the quote never saves | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops pay_with_paymeta_v3
@@ -13,7 +13,7 @@ fee_extra not added | killed | ../../scripts/capped cargo test --locked --offlin
 fee_extra added without a fee | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_save_fee
 the quote reads no fee | killed | ../../scripts/capped cargo test --locked --offline -j2 --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots --test wallet_ops pay_with_paymeta_v3
 parse: fee_extra dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_table_extra_fields_parse
-a known second signature ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature
+a known second signature ignored | killed | e2d9383a5 dirty | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature | panicked at src/op/gas.rs:2399:9:
 an unknown second signature: the cheapest | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature
 an unknown second signature: a kind without a row skipped | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_second_signature
 attached: empty key data native on any id | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib attached_signature_kind
@@ -23,5 +23,5 @@ the quote attaches nothing | killed | ../../scripts/capped cargo test --locked -
 execute: the app figure not added | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_execute_inner_call
 execute: the inner figure optional | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_execute_inner_call
 execute: the app figure as a total | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib gas_execute_inner_call
-reference: a PQ verify row away from its measurement | killed | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources
-25 mutants, 25 killed, 0 survived, 0 not loaded
+reference: a PQ verify row away from its measurement | killed | e2d9383a5 dirty | ../../scripts/capped cargo test --locked --offline -j2 --lib reference_rows_hold_their_sources | panicked at src/op/gas.rs:1338:13:
+25 mutants, 25 killed, 0 survived, 0 not loaded, 0 other failure
