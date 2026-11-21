@@ -281,6 +281,24 @@ MUTANTS = [
         T + "empty_precompile_list_with_calls_refused",
         "FAIL empty_precompile_list_with_calls_refused",
     ),
+    (
+        "P3-8 the deploy's block not waited final",
+        [(D, '        wait_final(nodes, rec["blockNumber"], final, final_wait)\n    elif', "        pass\n    elif")],
+        TD + "book_written_at_the_final_block",
+        "FAIL book_written_at_the_final_block",
+    ),
+    (
+        "P3-8 the book's code hash read at latest",
+        [(D, "    have = code_hash(nodes, rel, final)", "    have = code_hash(nodes, rel)")],
+        TD + "book_written_at_the_final_block",
+        "FAIL book_written_at_the_final_block",
+    ),
+    (
+        "P3-8 the probe's block not waited final",
+        [(D, '    wait_final(nodes, rec["blockNumber"], final, final_wait)\n    call =', "    call =")],
+        TD + "book_written_at_the_final_block",
+        "FAIL book_written_at_the_final_block",
+    ),
 ]
 
 if __name__ == "__main__":

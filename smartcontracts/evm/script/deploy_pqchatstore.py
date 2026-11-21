@@ -17,6 +17,9 @@ build, through the deterministic deployer 0x4e59b448…956c with salt 0, so one 
                          no node took them, the nodes answered other hashes, the receipt failed or never came;
   CHATSTORE_FEE          the majority's priority fee is above the max fee (FEE_FACTOR x the majority's gas price);
   CHATSTORE_PROBE        the SSTORE2 write and read of the probe gave other bytes;
+The book is written from reads at the `finalized` block once the transaction's block is final (review P3-8): the send is
+decided at latest, the code hash and the probe's read taken at the final block; not final within the wait: CHATSTORE_SEND,
+no entry, and a rerun sends nothing.
   CHATSTORE_BOOK         the chain's key (deploybook.py: chain-uids.json by (chainId, chain_uid), else DEPLOY_NAME).
 The chain's key names both its profile (src/chains/<key>/profile.json) and its book (deployments/<key>.json, the deploybook
 header, the entry under `PqChatStore`). Reads take the strict majority of the node list; a write sends the same signed bytes
@@ -163,10 +166,23 @@ def deployer_present(nodes):
         raise StoreError(f"CHATSTORE_NO_DEPLOYER: no deterministic deployer code at {DEPLOYER} (NET-EVM-05)")
 
 
-def code_hash(nodes, rel):
-    """The keccak of the code at the pinned address, None when there is none."""
-    code = _read(nodes, "eth_getCode", [rel["address"], "latest"], f.data)
+def code_hash(nodes, rel, tag="latest"):
+    """The keccak of the code at the pinned address at block `tag`, None when there is none."""
+    code = _read(nodes, "eth_getCode", [rel["address"], tag], f.data)
     return None if code == "0x" else keccak(code)
+
+
+FINAL = "finalized"  # the block tag the book is written from (review P3-8); `local` (one anvil, no reorg) reads latest
+
+
+def wait_final(nodes, n, tag, wait):
+    """Waits (bounded: `wait` reads, 0.5 s apart) until block `tag` of a strict majority is at or past block `n`."""
+    for i in range(wait):
+        if tag == "latest" or _read(nodes, "eth_getBlockByNumber", [tag, False], lambda r: f.qty(r["number"])) >= n:
+            return
+        if i + 1 < wait:
+            time.sleep(0.5)
+    raise StoreError(f"CHATSTORE_SEND: block {n} is not final ({tag}) yet: no book entry; run again once it is")
 
 
 FEE_FACTOR = 2  # the max fee per gas: this times the gas price a strict majority reports at least (review P2-1)
@@ -318,8 +334,11 @@ def deploy(
     env=os.environ,
     say=print,
     run4=None,
+    final=FINAL,
+    final_wait=1800,
 ):
-    """The deploy path; returns the book entry (`tx` None when the pinned code was there)."""
+    """The deploy path; returns the book entry (`tx` None when the pinned code was there). Whether to send is read at latest
+    (code there: no send); the book is written only from the code at the `final` block once the deploy's block is final."""
     rel, a = _load(out, release)
     local_build(a, rel)
     key, header = chain_key(nodes, env)
@@ -341,13 +360,13 @@ def deploy(
             raise StoreError(f"CHATSTORE_FORKCHECK: {e}") from None
         tx, rec = send(nodes, sign, DEPLOYER, data, gas, header["chainId"])
         say(f"{key}: sent {tx}, gas {rec['gasUsed']}")
-        have = code_hash(nodes, rel)
-    else:
+        wait_final(nodes, rec["blockNumber"], final, final_wait)
+    elif have == rel["runtimeCodeHash"].lower():
         say(f"{key}: code already at {addr}, no send")
+    have = code_hash(nodes, rel, final)
     if have != rel["runtimeCodeHash"].lower():
-        raise StoreError(
-            f"CHATSTORE_CODE_HASH: the code at {addr} is not the pinned runtime ({(have or 'none')[:18]}…)"
-        )
+        where = "no code" if have is None else f"{have[:18]}…"
+        raise StoreError(f"CHATSTORE_CODE_HASH: the code at {addr} at block {final} is not the pinned runtime ({where})")
     entry = {
         "address": addr,
         "deployer": DEPLOYER,
@@ -361,14 +380,26 @@ def deploy(
     return entry
 
 
-def probe(nodes, sign, out, release=os.path.join(EVM, RELEASE), books=EVM, env=os.environ, say=print, **_):
-    """The probes before a profile lists the store; returns the book entry's `probe`."""
+def probe(
+    nodes,
+    sign,
+    out,
+    release=os.path.join(EVM, RELEASE),
+    books=EVM,
+    env=os.environ,
+    say=print,
+    final=FINAL,
+    final_wait=1800,
+    **_,
+):
+    """The probes before a profile lists the store; returns the book entry's `probe`, written from reads at the `final`
+    block once the store's block is final."""
     rel, a = _load(out, release)
     key, header = chain_key(nodes, env)
     deployer_present(nodes)
     addr = rel["address"].lower()
-    if code_hash(nodes, rel) != rel["runtimeCodeHash"].lower():
-        raise StoreError(f"CHATSTORE_CODE_HASH: eth_getCode at {addr} is not the pinned runtime")
+    if code_hash(nodes, rel, final) != rel["runtimeCodeHash"].lower():
+        raise StoreError(f"CHATSTORE_CODE_HASH: eth_getCode at {addr} at block {final} is not the pinned runtime")
     ids, want = a["methodIdentifiers"], payload(1, PROBE_HINT, PROBE_ENV)
     h, rec = send(nodes, sign, addr, "0x" + ids["storeMessage(uint8,bytes8,bytes)"] + want.hex(), None, header["chainId"])
     hint = "0x" + PROBE_HINT.hex() + "00" * 24
@@ -379,8 +410,9 @@ def probe(nodes, sign, out, release=os.path.join(EVM, RELEASE), books=EVM, env=o
         index = f.qty(logs[0]["data"])
     except f.BAD_ANSWER:
         raise StoreError(f"CHATSTORE_PROBE: the probe event's data in {h} is no index") from None
+    wait_final(nodes, rec["blockNumber"], final, final_wait)
     call = "0x" + ids["storedAt(bytes8,uint256)"] + PROBE_HINT.ljust(32, b"\0").hex() + word(index).hex()
-    got = _read(nodes, "eth_call", [{"to": addr, "data": call}, "latest"], f.data)
+    got = _read(nodes, "eth_call", [{"to": addr, "data": call}, final], f.data)
     if got != "0x" + abi_bytes(want).hex():
         raise StoreError(f"CHATSTORE_PROBE: storedAt(probe hint, {index}) is not the bytes written")
     p = {"tx": h, "block": rec["blockNumber"], "index": index}
@@ -400,7 +432,7 @@ def local(out, say=print):
             json.dump(cancun, fh)
         frm = rpc("eth_accounts", [])["result"][0]
         sign = cast_signer(rpc.url, ["--ethsign", "--from", frm])
-        o = {"out": out, "books": t, "profiles": t, "env": {"DEPLOY_NAME": "local-testnet"}, "say": say}
+        o = {"out": out, "books": t, "profiles": t, "env": {"DEPLOY_NAME": "local-testnet"}, "say": say, "final": "latest"}
         first = deploy([rpc], sign, **o)
         if not first["tx"]:
             raise StoreError("CHATSTORE_SEND: a fresh chain had code at the pinned address")

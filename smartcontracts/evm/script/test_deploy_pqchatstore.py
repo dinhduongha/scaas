@@ -49,6 +49,8 @@ class Chain:
         self.addr, self.place, self.read_back = addr.lower(), place, read_back
         self.chain_id, self.uid = chain_id, uid
         self.price, self.tip = 25 * GWEI, GWEI
+        self.final = None  # the final block's number (None: the head)
+        self.placed = {}  # address -> the block its code landed in
         self.code = {d.DEPLOYER: deployer} if deployer else {}
         if at:
             self.code[self.addr] = at
@@ -60,10 +62,14 @@ class Chain:
         if method == "eth_blockNumber":
             return {"result": hex(0x40)}
         if method == "eth_getBlockByNumber":
-            h = self.uid if params[0] == "0x0" else "0x%064x" % int(params[0], 16)
-            return {"result": {"hash": h, "gasLimit": hex(30_000_000)}}
-        if method == "eth_getCode":
-            return {"result": self.code.get(params[0].lower(), "0x")}
+            n = (0x40 if self.final is None else self.final) if params[0] == "finalized" else int(params[0], 16)
+            h = self.uid if n == 0 else "0x%064x" % n
+            return {"result": {"number": hex(n), "hash": h, "gasLimit": hex(30_000_000)}}
+        if method == "eth_getCode":  # the n-th write lands in block 4 + n: at "finalized" once the final block is there
+            a = params[0].lower()
+            if params[1] == "finalized" and self.final is not None and self.placed.get(a, 0) > self.final:
+                return {"result": "0x"}
+            return {"result": self.code.get(a, "0x")}
         if method == "eth_estimateGas":
             return {"result": hex(500_000)}
         if method == "eth_getTransactionCount":
@@ -86,7 +92,7 @@ class Chain:
             self.sent.append(tx)
             logs = []
             if tx["to"].lower() == d.DEPLOYER:
-                self.code[self.addr] = self.place
+                self.code[self.addr], self.placed[self.addr] = self.place, 4 + len(self.sent)
             elif tx["to"].lower() == self.addr:
                 p = bytes.fromhex(tx["data"][10:])
                 self.stored.append(p)
@@ -97,7 +103,7 @@ class Chain:
                         "data": "0x" + d.word(len(self.stored) - 1).hex(),
                     }
                 ]
-            self.receipts[h] = {"status": "0x1", "gasUsed": hex(400_000), "blockNumber": "0x5", "blockHash": "0x" + "5b" * 32,
+            self.receipts[h] = {"status": "0x1", "gasUsed": hex(400_000), "blockNumber": hex(4 + len(self.sent)), "blockHash": "0x" + "5b" * 32,
                                 "logs": logs}  # fmt: skip
             return {"result": h}
         if method == "eth_getTransactionReceipt":
@@ -375,6 +381,30 @@ def answers_of_another_type_named():
         refused("CHATSTORE_PROBE", d.probe, [no_word], sign, **o)
 
 
+def book_written_at_the_final_block():
+    """The book is written from reads at the final block (`finalized`): the code hash once the deploy's block is final, the
+    probe's storedAt once the store's block is final; not final within the wait, no book entry and a named refusal; a rerun
+    sees the code at latest, sends nothing, and writes the book when it is final (review P3-8)."""
+    a = artifact()
+    with tempfile.TemporaryDirectory() as t:
+        o = setup(t, a)
+        book = os.path.join(t, "deployments/local-testnet.json")
+        ch = Chain(release_of(a)["address"], a["deployedBytecode"]["object"])
+        ch.final = 4
+        e = refused("CHATSTORE_SEND", run, ch, o, final_wait=3)
+        assert "not final" in e and len(ch.sent) == 1 and not os.path.exists(book), e
+        e = refused("CHATSTORE_CODE_HASH", run, ch, o, final_wait=3)  # code at latest, none at the final block yet
+        assert "no code" in e and len(ch.sent) == 1 and not os.path.exists(book), e
+        ch.final = None
+        assert run(ch, o)["tx"] is None and len(ch.sent) == 1 and os.path.exists(book)
+        ch.final = 5  # the deploy's block final, the probe's (6) not
+        e = refused("CHATSTORE_SEND", d.probe, [ch], sign, final_wait=3, **o)
+        assert "not final" in e and "probe" not in json.load(open(book))["PqChatStore"], e
+        ch.final = None
+        d.probe([ch], sign, **o)
+        assert json.load(open(book))["PqChatStore"]["probe"]["index"] == 1
+
+
 def book_entry_under_the_chain_key():
     a = artifact()
     rel = release_of(a)
@@ -443,6 +473,7 @@ TESTS = [
     the_transaction_from_the_majority,
     cast_signs_what_was_asked,
     answers_of_another_type_named,
+    book_written_at_the_final_block,
     book_entry_under_the_chain_key,
     probes_write_and_read,
     abi_encoding,
