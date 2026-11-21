@@ -66,7 +66,7 @@ MUTANTS = [
     ),
     (
         "the public MAC on a derived key",
-        [(AK, "        if key.origin == Origin::Derived {", "        if false {")],
+        [(AK, "        if !matches!(key.origin, Origin::Drawn | Origin::Unwrapped) {", "        if false {")],
         UT + "derive_and_mac_rows",
     ),
     (

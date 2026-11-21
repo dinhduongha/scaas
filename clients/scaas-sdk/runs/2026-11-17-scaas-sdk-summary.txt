@@ -135,7 +135,6 @@ sdk-raw | f4c422ef6 | 0 | 114 passed, 0 failed, 0 ignored (1 binaries)
 features | f4c422ef6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 docs | f4c422ef6 | 0 | -
 mutants-check | f4c422ef6 | 0 | -
-bind-gen | f4c422ef6 | 0 | -
 sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # The two Fable reviews of T13-T20 at ecabb7d41 (2026-11-20; controller call, owner auto-run 2026-11-19; decisions CLI-SDK-30's
 # last Change line). Fixed: F1, F3 (one block), F7, F14, F16 (doc), F19, F22, F24, F26 and F30 (doc); T1, T2, T3, T5, T6,
@@ -187,3 +186,4 @@ sdk-test | 7cc8be95f | 0 | 308 passed, 0 failed, 16 ignored (26 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli | 122651cbd | 0 | 38 passed, 0 failed, 1 ignored (6 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+bind-gen | b90dfd9d1 | 0 | -
