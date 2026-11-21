@@ -320,6 +320,9 @@ take the sender, creator or author from the account and never a digest or a ciph
 (`compile_error!`), `scripts/check_test_features.py` keeps it out of every shipped artifact and the bind-gen check out of
 every binding. It runs alone, in its own test (`--test pqchat_keys`): a `vectors` build of `ua-rs` refuses key handles until
 a test unlocks them (no-decryption-oracle §4.8), so the whole suite runs without it and clippy builds it.
+`argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
+OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control character or bytes that are not UTF-8: `Argument`), so
+a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`.
 
 ## 8. Runtime, events, errors
 

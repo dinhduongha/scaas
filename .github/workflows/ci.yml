@@ -65,7 +65,7 @@
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
 #   scaas-sdk:             in clients/scaas-sdk: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records;
 #                          cargo test --locked --no-default-features --features vault,file-store; cargo test --locked --lib --features <the same>,native-networks,raw-native;
-#                          cargo test --locked --features <the same>,vectors --test pqchat_keys (the test feature alone: a vectors build refuses
+#                          cargo test --locked --features <the same>,vectors --test pqchat_keys --test app_core_vault_rows (the test feature alone: a vectors build refuses
 #                          scaas-ua key handles until a test unlocks them); cargo clippy --locked --all-targets --features <the same>,vectors,native-networks,raw-native -- -D warnings; per PQZ set
 #                          (n2048-kmax1024, n2560-kmax16384, n2816-kmax65536): cargo test --locked --no-default-features --features vault,account,wallet,pqz,pqz-set-<set> --test sets;
 #                          cargo test --locked --test feature_tree (the e2e on anvil, 6 GB, stays the local gate sdk-e2e)
@@ -1153,8 +1153,8 @@ jobs:
           workspaces: clients/scaas-sdk
       - name: cargo test (full feature set)
         run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records
-      - name: the test feature vectors (pqchat-core T1 rows)
-        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,vectors --test pqchat_keys
+      - name: the test feature vectors (pqchat-core T1 rows, PqVault V9 rows)
+        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,vectors --test pqchat_keys --test app_core_vault_rows
       - name: cargo test (vault and file store only)
         run: cargo test --locked --no-default-features --features vault,file-store
       - name: the raw native entry and native networks

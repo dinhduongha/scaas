@@ -136,6 +136,29 @@ fn key32(s: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
     Ok(Zeroizing::new(s.try_into().map_err(|_| Error::Argument)?))
 }
 
+/// Unicode's space separators (category Zs) other than U+0020.
+const ZS: [char; 16] = [
+    '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}', '\u{2004}', '\u{2005}',
+    '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}', '\u{200A}', '\u{202F}', '\u{205F}', '\u{3000}',
+];
+
+/// RFC 8265's OpaqueString of a typed passphrase (UTF-8): every non-ASCII space (Zs) to U+0020, then NFC, as UTF-8, so one
+/// passphrase typed where the platform composes and where it decomposes gives one key. Not UTF-8, empty, or holding a
+/// control character (Cc): `Argument`.
+pub fn passphrase_bytes(passphrase: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+    use unicode_normalization::UnicodeNormalization;
+    let s = std::str::from_utf8(passphrase).map_err(|_| Error::Argument)?;
+    // capacity reserved up front (NFC grows a string at most 3×), so no copy is left behind by a reallocation
+    let mut mapped = Zeroizing::new(String::with_capacity(s.len()));
+    mapped.extend(s.chars().map(|c| if ZS.contains(&c) { ' ' } else { c }));
+    let mut out = Zeroizing::new(String::with_capacity(3 * s.len()));
+    out.extend(mapped.nfc());
+    if out.is_empty() || out.chars().any(char::is_control) {
+        return Err(Error::Argument);
+    }
+    Ok(Zeroizing::new(std::mem::take(&mut *out).into_bytes()))
+}
+
 fn keywrap_aad(usage: KeyUsage, aad: &[u8]) -> Vec<u8> {
     [KEYWRAP, &[usage as u8], aad].concat()
 }
@@ -390,6 +413,16 @@ impl AppKeys {
             .hash_password_into(password, salt, &mut out[..])
             .map_err(|_| Error::Argument)?;
         self.make(&out[..], KeyUsage::Derive, Origin::Derived, None)
+    }
+
+    /// [`AppKeys::argon2id`] of a typed passphrase's UTF-8 bytes after [`passphrase_bytes`] (RFC 8265 OpaqueString, NFC).
+    pub fn argon2id_passphrase(
+        &self,
+        passphrase: &[u8],
+        salt: &[u8],
+        params: Argon2Params,
+    ) -> Result<KeyHandle> {
+        self.argon2id(&passphrase_bytes(passphrase)?, salt, params)
     }
 
     pub(super) fn wrap_with(

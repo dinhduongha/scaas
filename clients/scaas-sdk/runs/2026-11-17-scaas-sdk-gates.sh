@@ -36,7 +36,7 @@ STEPS=(
     "sdk-min|clients/scaas-sdk|$cap cargo test $C --no-default-features --features vault,file-store"
     "sdk-sets|clients/scaas-sdk|$SETS_CMD"
     "sdk-clippy|clients/scaas-sdk|$cap cargo clippy $C --all-targets --features $V -- -D warnings"
-    "sdk-vectors|clients/scaas-sdk|$cap cargo test $C --features $V --test pqchat_keys"
+    "sdk-vectors|clients/scaas-sdk|$cap cargo test $C --features $V --test pqchat_keys --test app_core_vault_rows"
     "sdk-e2e|clients/scaas-sdk|CAPPED_MEM=6G $cap cargo test $C --features $F --test e2e -- --ignored"
     "sdk-wasm|clients/scaas-sdk|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet"
     "sdk-deny|clients/scaas-sdk|$cap cargo deny --all-features check && $cap cargo audit"

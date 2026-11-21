@@ -798,6 +798,29 @@ impl AppCore {
         .await
     }
 
+    /// [`AppCore::argon2id`] of a typed passphrase (UTF-8) after RFC 8265's OpaqueString (every non-ASCII space to U+0020,
+    /// then NFC), so a composed and a decomposed form give one key; not UTF-8, empty or a control character: `Argument`.
+    pub async fn argon2id_passphrase(
+        self: &Arc<Self>,
+        seed: String,
+        passphrase: Arc<SecretBytes>,
+        salt: Vec<u8>,
+        m_kib: u32,
+        t: u32,
+        p: u32,
+    ) -> Result<Arc<AppKey>, SdkError> {
+        let me = self.clone();
+        let sdk = self.sdk.clone();
+        sdk.heavy(move || {
+            let scope = me.scope(&seed)?;
+            let h = passphrase
+                .with(|pw| scope.argon2id_passphrase(pw, &salt, Argon2Params { m_kib, t, p }))
+                .map_err(ua)?;
+            Ok(me.wrap(&seed, h))
+        })
+        .await
+    }
+
     /// `key` wrapped to the KEM key `kem_pk` (a fresh ephemeral key of a device link, or a UA's at a version the app read
     /// under `Purpose::FeedsDecryption`); `label` under the scope's prefixes.
     pub fn kem_wrap_to_key(
@@ -1368,6 +1391,67 @@ impl AppCore {
     /// The handle's key bytes (a vector's comparison).
     pub fn vectors_reveal(&self, key: Arc<AppKey>) -> Result<Vec<u8>, SdkError> {
         self.with(&[&key], |s, hs| s.vectors_reveal(at(hs, 0)?).map_err(ua))
+    }
+
+    /// [`AppCore::kem_wrap_to_key`] with fixed `m` and X25519 ephemeral secret `e`.
+    pub fn vectors_kem_wrap(
+        &self,
+        key: Arc<AppKey>,
+        kem_pk: Vec<u8>,
+        label: Vec<u8>,
+        aad: Vec<u8>,
+        m: [u8; 32],
+        e: [u8; 32],
+    ) -> Result<AppWrap, SdkError> {
+        self.label(&label)?;
+        let w = self.with(&[&key], |s, hs| {
+            s.vectors_kem_wrap(at(hs, 0)?, &label, &aad, &kem_pk, &m, &e)
+                .map_err(ua)
+        })?;
+        Ok(AppWrap {
+            mlkem_ct: w.mlkem_ct,
+            x25519_eph: w.x25519_eph.to_vec(),
+            sealed_key: w.sealed_key,
+        })
+    }
+
+    /// [`AppCore::kem_unwrap`] by a vector's KEM key (`mlkemSeed ‖ x25519Secret`, 96 bytes) into `seed`'s arena.
+    pub fn vectors_kem_unwrap(
+        &self,
+        seed: &str,
+        kem_seed: Vec<u8>,
+        wrap: AppWrap,
+        label: Vec<u8>,
+        aad: Vec<u8>,
+        usage: AppKeyUsage,
+    ) -> Result<Arc<AppKey>, SdkError> {
+        self.label(&label)?;
+        let ks: [u8; 96] = kem_seed.try_into().map_err(|_| SdkError::Argument)?;
+        let kem = scaas_ua::wallet::KemKeyPair::vectors_ephemeral(&ks).map_err(ua)?;
+        let w = KemWrap {
+            mlkem_ct: wrap.mlkem_ct,
+            x25519_eph: wrap.x25519_eph.try_into().map_err(|_| SdkError::Argument)?,
+            sealed_key: wrap.sealed_key,
+        };
+        let h = self
+            .scope(seed)?
+            .kem_unwrap(&kem, &w, &label, &aad, usage.into())
+            .map_err(ua)?;
+        Ok(self.wrap(seed, h))
+    }
+
+    /// [`AppCore::seal_key`] with a fixed nonce.
+    pub fn vectors_seal_key(
+        &self,
+        under: Arc<AppKey>,
+        key: Arc<AppKey>,
+        nonce: [u8; 12],
+        aad: Vec<u8>,
+    ) -> Result<Vec<u8>, SdkError> {
+        self.with(&[&under, &key], |s, hs| {
+            s.vectors_seal_key(at(hs, 0)?, at(hs, 1)?, &nonce, &aad)
+                .map_err(ua)
+        })
     }
 
     /// [`AppCore::seal`] with a fixed nonce, the nonce not in the output.
