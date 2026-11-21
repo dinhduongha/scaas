@@ -17,6 +17,8 @@
 #   node, node-clippy, node-e2e   the whole node suite (6 GB, alone), its clippy, its e2e on anvil (--ignored)
 #   clientkeys, ua-rs-<cell>, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-dart, ua-dart-frb, ua-qt   the clients' own tests (the
 #                    CI header's commands; ua-rs per CI cell)
+#   deploy-py, forkcheck, chatstore-cancun   the chains-arweave steps (runs/2026-11-21-avax-dot-arweave-gates.sh, same commands):
+#                    script/test_*.py; NET-EVM-18's checks on test/forkcheck at Cancun; PqChatStore's deploy path on anvil at Cancun
 #   docs, docs-test, ci-guards, format (scripts/format.sh --check; FORMAT_PARTS limits the parts; the pinned tools of the main
 #                    checkout's git-ignored scratchpad/tools/bin first on PATH)
 set -u
@@ -124,6 +126,16 @@ step() {
         ) ;;
         ua-dart-frb) (cd clients/ua-dart-frb && "$C" dart pub get --enforce-lockfile && "$C" cargo build --locked \
             --manifest-path rust/Cargo.toml && "$C" dart test) ;;
+        deploy-py) (cd $EVM && for t in script/test_*.py; do
+            echo "## $t"
+            python3 "$t" || exit 1
+        done) ;;
+        forkcheck) (cd $EVM && T=$(mktemp -d) && trap 'rm -rf "$T"' EXIT && "$C" forge build test/forkcheck --extra-output \
+            evm.legacyAssembly --out "$T"/out --cache-path "$T"/cache && "$C" python3 -I script/forkcheck.py exec cancun \
+            test/forkcheck/cases.json --out "$T"/out) ;;
+        chatstore-cancun) (cd $EVM && T=$(mktemp -d) && trap 'rm -rf "$T"' EXIT && "$C" forge build src/pqchat/PqChatStore.sol \
+            test/forkcheck --extra-output evm.legacyAssembly --out "$T"/out --cache-path "$T"/cache &&
+            "$C" python3 -I script/deploy_pqchatstore.py local --out "$T"/out) ;;
         docs) python3 scripts/docs_check.py check ;;
         docs-test) python3 scripts/test_docs_check.py ;;
         format) PATH="$(git rev-parse --path-format=absolute --git-common-dir)/../scratchpad/tools/bin:$PATH" scripts/format.sh --check ${FORMAT_PARTS:-} ;;
