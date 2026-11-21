@@ -567,6 +567,8 @@ killed by a named test). Highlights:
 
 ## 12. Open points
 
+**Settled (owner 2026-11-21, "ok" on the recommendations; [ARCH-POS-20](../../decisions.md#ARCH-POS-20)):** O1 (a) a node service, O2 (a) anonymous with budgets per IP and gateway credential, O3 (a) `chainId` in the `chain` entry and shared-genesis homes refused, O4 (a) no Arweave message store kind now, O5 (a) Turbo alone with the signed bytes kept. Uploads above the 2^16-B bucket go through the node's payer once it is built. The text below keeps the options as asked.
+
 **O1 — Where the operator payer runs.** (a) A node service: a gateway route under the node's sponsorship policy, off by default, its
 payer key holding Turbo credits only, never a chain key or contract role (the lane-key rule, NODE-GEN-01, applied to credits). (b) A
 separate process beside the node, like the PQZ verifier, with its own key custody. (c) The app vendor's own server, outside SCaaS.

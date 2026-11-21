@@ -412,6 +412,8 @@ Change (owner 2026-11-21, answers to the note's open questions; owner: yes; stat
 **Cost if wrong.** A standalone store or a key derivation the owner would have shaped otherwise; nothing is deployed or built, so a change costs a spec edit.
 **Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §2; [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md).
 
+Change (owner 2026-11-21, "ok" on the spec's recommendations; owner: yes; status: SPECIFIED): the open points O1–O5 of `superpowers/specs/2026-11-21-avax-polkadot-arweave.md` §12 settled as recommended: **O1** the operator payer is a node service (a gateway route under the node's sponsorship policy, off by default, its payer key holding Turbo credits only, never a chain key or contract role); **O2** payer requests are anonymous, budgets per IP and per gateway credential, no UA signature (it would link a UA to its upload keys); **O3** `chainId` joins the `chain` store entry now and clients refuse a session homed on a chain whose `chain_uid` another profile shares, until a typed-record change carries the chain id; **O4** no Arweave message store kind now (large messages reach Arweave as `file` attachments), revisited after attachments run; **O5** Turbo alone, the single-vendor risk stated, the signed bytes kept for re-posting.
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
