@@ -92,6 +92,36 @@ def boundaries_from_the_compiler():
     refused("FORKCHECK_FORK_UNKNOWN", f.scan, art([STOP], 1), "frontier")
 
 
+def asm(rt_data=(), init_data=(), subs=1):
+    """A legacy assembly as solc writes it: data sections keyed by their hash, the runtime as sub-assembly 0."""
+    rt = {".code": [], ".data": {k: v.hex() for k, v in rt_data}} if rt_data else {".code": []}
+    out = {".code": [], ".data": {str(i): rt for i in range(subs)}}
+    out[".data"].update({k: v.hex() for k, v in init_data})
+    return out
+
+
+K1, K2 = "0A" + "00" * 31, "F0" + "00" * 31  # two data keys; solc lays the sections out by key, ascending
+
+
+def data_sections_from_the_assembly():
+    """Data sections (the constant optimiser's, string data) are placed by the compiler's legacy assembly, never guessed."""
+    d1, d2 = bytes([CLZ] * 32), bytes([DUPN, 0x0C])
+    a = art([STOP], 1, rt_data=d1 + d2, init_data=d2)
+    a["legacyAssembly"] = asm(rt_data=[(K2, d2), (K1, d1)], init_data=[(K1, d2)])
+    f.scan(a, "cancun")  # 0x1e, 0xe6 and 0x0c inside data are never walked
+    del a["legacyAssembly"]
+    refused("FORKCHECK_BOUNDARY", f.scan, a, "cancun")  # the same bytes without the assembly: unplaced
+    a["legacyAssembly"] = asm(rt_data=[(K1, d2), (K2, d1)], init_data=[(K1, d2)])
+    refused("FORKCHECK_BOUNDARY", f.scan, a, "cancun")  # sections in another order than the assembly's
+    a["legacyAssembly"] = asm(rt_data=[(K2, d2), (K1, d1)])
+    refused("FORKCHECK_BOUNDARY", f.scan, a, "cancun")  # the init code's data not listed
+    b = art([STOP], 1)
+    b["legacyAssembly"] = asm(subs=2)
+    refused("FORKCHECK_BOUNDARY", f.scan, b, "cancun")  # a second sub-assembly: code the walk does not reach
+    b["legacyAssembly"] = asm()
+    f.scan(b, "cancun")
+
+
 # ---- check (1): the caps from the profile
 
 AVAX = {"evmFork": "cancun", "codeSizeLimit": 24576, "initCodeSizeLimit": 49152}
@@ -307,11 +337,11 @@ def fake_evm(control_green):
 
 def control_green_voids_the_run():
     with tempfile.TemporaryDirectory() as t:
-        write(t, f.CONTROL["cancun"]["artifact"], art([STOP], 1, name="ForkcheckClz"))
+        write(t, "out/" + f.CONTROL["cancun"]["artifact"], art([STOP], 1, name="ForkcheckClz"))
         write(t, "out/Fx.sol/Fx.json", art([STOP], 1))
         cs = [
             {
-                "artifact": "out/Fx.sol/Fx.json",
+                "artifact": "Fx.sol/Fx.json",
                 "cases": [{"name": "f", "sig": "f()", "ok": True, "return": "0x" + "00" * 31 + "01"}],
             }
         ]
@@ -330,6 +360,7 @@ TESTS = [
     push_data_1e_passes,
     unknown_immediate_refused,
     boundaries_from_the_compiler,
+    data_sections_from_the_assembly,
     sizes_against_the_profile,
     profile_and_set_gate,
     gas_against_the_live_caps,

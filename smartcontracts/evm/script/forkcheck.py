@@ -9,9 +9,9 @@ chain without the Amsterdam fork a contract deploys only when its `amsterdam` bu
   (3) FORKCHECK_OPCODE     every byte in code position is an opcode of the chain's fork (an allow-list, FORKS); the walk
       FORKCHECK_UNPLACED   takes each immediate's length from the compile target's table (AMSTERDAM: PUSH1-PUSH32); a byte
       FORKCHECK_BOUNDARY   that table cannot place is a refusal; the code ends where the compiler's source map says (its
-                           instruction count), then the INVALID solc writes, then data: in the init code exactly the runtime,
-                           in the runtime exactly the CBOR metadata (its length the last two bytes); any other data section is
-                           a refusal (it needs the compiler's assembly to place; the owner decides);
+                           instruction count), then the INVALID solc writes, then in the init code exactly the runtime, then
+                           the data sections the compiler's legacy assembly lists (none without it), then in the runtime
+                           exactly the CBOR metadata (its length the last two bytes); anything else is a refusal;
   (4) FORKCHECK_EXEC       the contract's cases run as real transactions on `anvil --hardfork <fork>` on the `amsterdam`
       FORKCHECK_CONTROL    artifact's bytes (never a recompile), beside the fork's control fixture, whose case must be red
                            (a green control voids the run); gas at that fork is printed as a record, never compared with the
@@ -25,12 +25,15 @@ strict majority (ARCH-POS-15), else FORKCHECK_NODES. One rule on every chain: no
   python3 -I script/forkcheck.py set-gate <key>        exit 1 (FORKCHECK_SET_FORK) when the profile's fork is not amsterdam:
                                                        a whole SCaaS set waits for the chain's Amsterdam fork (deploy.sh)
   python3 -I script/forkcheck.py scan <fork> <artifact> [<args hex>]   check (3)
-  scripts/capped python3 -I script/forkcheck.py exec <fork> <cases.json>   check (3) and (4) on a local anvil (started and
-                                                       stopped here); prints `gas <contract> <case> <gasUsed>` records
+  scripts/capped python3 -I script/forkcheck.py exec <fork> <cases.json> [--out <dir>]   check (3) and (4) on a local anvil
+                                                       (started and stopped here); prints `gas <contract> <case> <gasUsed>`
   scripts/capped python3 -I script/forkcheck.py deploy <key> <artifact> <rpc>[,<rpc>…] --cases <cases.json>
-      [--args <hex>] [--gas-limit <gas>] [--release <release-data json>]   the five checks before a single contract's deploy
-cases.json: {"contracts": [{"artifact": "out/<F>.sol/<C>.json", "args": "0x…"?, "cases": [{"name", "sig": "f(uint256)",
-"args": "0x…"?, "ok": true|false, "return": "0x…"?}]}]}; paths from smartcontracts/evm. UNAUDITED tooling."""
+      [--args <hex>] [--gas-limit <gas>] [--release <release-data json>] [--out <dir>]   the five checks before a single
+                                                       contract's deploy
+cases.json: {"contracts": [{"artifact": "<F>.sol/<C>.json", "args": "0x…"?, "cases": [{"name", "sig": "f(uint256)",
+"args": "0x…"?, "ok": true|false, "return": "0x…"?}]}]}; artifacts in forge's out directory (--out, default out), built with
+`--extra-output evm.legacyAssembly` so the scan places the compiler's data sections; other paths from smartcontracts/evm.
+UNAUDITED tooling."""
 
 import json
 import os
@@ -118,8 +121,8 @@ def _count(source_map):
 
 
 def regions(artifact):
-    """(init, runtime) of a forge artifact, each with its code end, the boundaries from the compiler's output:
-    {"init": bytes, "init_code_end": n, "runtime": bytes, "runtime_code_end": n}."""
+    """The init code and the runtime of a forge artifact with their instruction counts (the source maps) and where the
+    runtime's CBOR metadata starts (its length the last two bytes)."""
     name = artifact.get("_name", "artifact")
     init = _hex(artifact["bytecode"]["object"], f"{name} bytecode")
     rt = _hex(artifact["deployedBytecode"]["object"], f"{name} deployedBytecode")
@@ -137,23 +140,55 @@ def regions(artifact):
     return {"init": init, "init_n": n_init, "runtime": rt, "runtime_n": n_rt, "meta_at": tail, "_name": name}
 
 
+def _sections(asm, where):
+    """The sections solc appends after an assembly's code (its legacy assembly `.data`): the sub-assemblies by index, and
+    the data bytes, in solc's order (its map of data keyed by their hash: ascending). No assembly: none."""
+    subs, data = [], []
+    for k, v in ((asm or {}).get(".data") or {}).items():
+        if isinstance(v, dict) and k.isdigit():
+            subs.append((int(k), v))
+        elif isinstance(v, str) and re.fullmatch(r"[0-9A-Fa-f]{64}", k):
+            data.append((int(k, 16), _hex(v, f"{where} data")))
+        else:
+            raise ForkError(f"FORKCHECK_BOUNDARY: {where}: an assembly section {k!r} the scan cannot place")
+    return [v for _, v in sorted(subs)], b"".join(b for _, b in sorted(data))
+
+
 def scan(artifact, fork, args=b""):
-    """Check (3) on a forge artifact; returns the regions. `args`: the constructor arguments, data after the init code."""
+    """Check (3) on a forge artifact; returns the regions. `args`: the constructor arguments, data after the init code.
+    After the code: solc's INVALID, then (init code) the runtime as its one sub-assembly, then the data sections the
+    compiler's legacy assembly lists (`forge build --extra-output evm.legacyAssembly`; without it: none), then (runtime) the
+    CBOR metadata. Anything else, a second sub-assembly (code the walk does not reach) included, is refused."""
     if fork not in FORKS:
         raise ForkError(f"FORKCHECK_FORK_UNKNOWN: {fork!r} (known: {', '.join(FORKS)})")
     g = regions(artifact)
     name, rt, init = g["_name"], g["runtime"], g["init"]
-    end = walk(rt, g["runtime_n"], fork, f"{name} runtime")
-    if end != g["meta_at"] - 1 or rt[end] != 0xFE:
+    asm = artifact.get("legacyAssembly")
+    subs, init_data = _sections(asm, f"{name} init")
+    rt_asm = subs[0] if subs else None
+    if len(subs) > 1 or (asm and not subs):
+        raise ForkError(f"FORKCHECK_BOUNDARY: {name} init: {len(subs)} sub-assemblies, not the runtime alone")
+    rt_subs, rt_data = _sections(rt_asm, f"{name} runtime")
+    if rt_subs:
         raise ForkError(
-            f"FORKCHECK_BOUNDARY: {name} runtime: the code ends at {end}, the metadata starts at {g['meta_at']}: "
-            f"{g['meta_at'] - end} bytes between them (a data section the scan cannot place)"
+            f"FORKCHECK_BOUNDARY: {name} runtime: {len(rt_subs)} sub-assemblies (code the walk does not reach)"
+        )
+    end = walk(rt, g["runtime_n"], fork, f"{name} runtime")
+    if rt[end:] != b"\xfe" + rt_data + rt[g["meta_at"] :]:
+        how = (
+            "the compiler's assembly"
+            if asm
+            else "no assembly in the artifact (build with --extra-output evm.legacyAssembly)"
+        )
+        raise ForkError(
+            f"FORKCHECK_BOUNDARY: {name} runtime: the code ends at {end}, the metadata starts at {g['meta_at']}: the "
+            f"{g['meta_at'] - end} bytes between them are not INVALID and the {len(rt_data)} data bytes of {how}"
         )
     end = walk(init, g["init_n"], fork, f"{name} init")
-    if init[end : end + 1] != b"\xfe" or init[end + 1 :] != rt:
+    if init[end:] != b"\xfe" + rt + init_data:
         raise ForkError(
-            f"FORKCHECK_BOUNDARY: {name} init: the code ends at {end}; what follows is not INVALID and exactly the runtime "
-            f"({len(init) - end - 1} bytes against {len(rt)})"
+            f"FORKCHECK_BOUNDARY: {name} init: the code ends at {end}; the {len(init) - end} bytes after it are not INVALID, "
+            f"the runtime ({len(rt)} B) and the {len(init_data)} data bytes of the compiler's assembly"
         )
     g["args"] = args
     return g
@@ -276,7 +311,7 @@ def check_gas(nodes, data, gas_limit=None, sender=None):
 
 CONTROL = {  # per fork: a fixture whose amsterdam artifact uses an opcode the fork lacks, and its amsterdam answer
     "cancun": {
-        "artifact": "out/ForkcheckClz.sol/ForkcheckClz.json",
+        "artifact": "ForkcheckClz.sol/ForkcheckClz.json",
         "cases": [
             {
                 "name": "clz(1) = 255",
@@ -348,7 +383,7 @@ def run_contract(rpc, frm, gas, artifact, args, cases):
     return out
 
 
-def execute(rpc, fork, contracts, say=print, root=EVM):
+def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     """Check (4) on a node at `fork` (rpc: a callable); returns the number of rows passed. Every contract's rows must pass and
     the fork's control must be red: a green control voids the run (FORKCHECK_CONTROL)."""
     if fork not in CONTROL:
@@ -359,7 +394,7 @@ def execute(rpc, fork, contracts, say=print, root=EVM):
     frm = accts[0]
     gas = int(rpc("eth_getBlockByNumber", ["latest", False])["result"]["gasLimit"], 16)
     ctl = CONTROL[fork]
-    rows = run_contract(rpc, frm, gas, load_artifact(ctl["artifact"], root), "0x", ctl["cases"])
+    rows = run_contract(rpc, frm, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", ctl["cases"])
     red = [r for r in rows if not r[1]]
     for name, ok, g, why in rows:
         say(f"control {name}: {'green' if ok else 'red'} gas {g}{' (' + why + ')' if why else ''}")
@@ -367,7 +402,7 @@ def execute(rpc, fork, contracts, say=print, root=EVM):
         raise ForkError(f"FORKCHECK_CONTROL: the {fork} control is green: the run is void (it is not at {fork})")
     passed, failed = 1, []  # the control's red counts as one expectation met
     for c in contracts:
-        a = load_artifact(c["artifact"], root)
+        a = load_artifact(os.path.join(out, c["artifact"]), root)
         for name, ok, g, why in run_contract(rpc, frm, gas, a, c.get("args"), c["cases"]):
             say(f"gas {a['_name']} {name} {g} at {fork}" + ("" if ok else f" FAIL {why}"))
             if ok:
@@ -414,14 +449,14 @@ class Anvil:
             self.p.wait()
 
 
-def exec_cases(fork, cases_path, code_size_limit=None, say=print, root=EVM):
+def exec_cases(fork, cases_path, code_size_limit=None, say=print, root=EVM, out="out"):
     """Check (3) on every contract of the cases file and the control (which must be refused), then check (4) on anvil."""
     contracts = json.load(open(os.path.join(root, cases_path)))["contracts"]
     for c in contracts:
-        scan(load_artifact(c["artifact"], root), fork, _hex(c.get("args") or "0x", "args"))
+        scan(load_artifact(os.path.join(out, c["artifact"]), root), fork, _hex(c.get("args") or "0x", "args"))
         say(f"scan {c['artifact']}: {fork} ok")
     try:
-        scan(load_artifact(CONTROL[fork]["artifact"], root), fork)
+        scan(load_artifact(os.path.join(out, CONTROL[fork]["artifact"]), root), fork)
     except ForkError as e:
         if not str(e).startswith("FORKCHECK_OPCODE"):
             raise
@@ -429,7 +464,7 @@ def exec_cases(fork, cases_path, code_size_limit=None, say=print, root=EVM):
     else:
         raise ForkError(f"FORKCHECK_CONTROL: the scan passes the {fork} control: the scan is void")
     with Anvil(fork, code_size_limit) as rpc:
-        return execute(rpc, fork, contracts, say, root) + 1  # + the control's scan refusal
+        return execute(rpc, fork, contracts, say, root, out) + 1  # + the control's scan refusal
 
 
 def deploy_gate(
@@ -443,6 +478,7 @@ def deploy_gate(
     say=print,
     root=EVM,
     run4=None,
+    out="out",
 ):
     """The five checks before a single contract's deploy on profile `key`; amsterdam: nothing to check. `run4`: check (4)'s
     runner (default exec_cases on a local anvil)."""
@@ -462,7 +498,7 @@ def deploy_gate(
     if not cases_path:
         raise ForkError(f"FORKCHECK_CASES: no cases for {a['_name']} at {fork}")
     say(
-        f"forkcheck {key}: (4) {(run4 or exec_cases)(fork, cases_path, pr['codeSizeLimit'], say, root)} rows at {fork} ok"
+        f"forkcheck {key}: (4) {(run4 or exec_cases)(fork, cases_path, pr['codeSizeLimit'], say, root, out)} rows at {fork} ok"
     )
     say(f"forkcheck {key}: (5) {check_precompiles(nodes, entries)} precompiles answer")  # (5)
     gas, block = check_gas(nodes, a["bytecode"]["object"] + args[2:], gas_limit)  # (2)
@@ -486,8 +522,9 @@ def main(argv):
         elif argv[:1] == ["scan"] and len(argv) in (3, 4):
             scan(load_artifact(argv[2]), argv[1], _hex(argv[3] if len(argv) == 4 else "0x", "args"))
             print(f"[forkcheck] scan {argv[2]}: {argv[1]} ok")
-        elif argv[:1] == ["exec"] and len(argv) == 3:
-            n = exec_cases(argv[1], argv[2], say=lambda s: print(f"[forkcheck] {s}", flush=True))
+        elif argv[:1] == ["exec"] and len(argv) in (3, 5) and argv[3:4] in ([], ["--out"]):
+            out = argv[4] if len(argv) == 5 else "out"
+            n = exec_cases(argv[1], argv[2], say=lambda s: print(f"[forkcheck] {s}", flush=True), out=out)
             print(f"ok {n}/{n}")
         elif argv[:1] == ["deploy"] and len(argv) >= 4:
             o = dict(zip(argv[4::2], argv[5::2]))
@@ -499,6 +536,7 @@ def main(argv):
                 o.get("--args", "0x"),
                 int(o["--gas-limit"]) if "--gas-limit" in o else None,
                 o.get("--release"),
+                out=o.get("--out", "out"),
                 say=lambda s: print(f"[deploy] {s}", flush=True),
             )
         else:

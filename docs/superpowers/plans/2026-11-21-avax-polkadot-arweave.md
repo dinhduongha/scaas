@@ -68,7 +68,7 @@ only `TODO.md`.
 | `forge-sets` | `script/pqz/at-set.sh others sensitive`, then `script/pqz/at-set.sh others modules` (round end; restore `PqzSet.sol`) |
 | `size` | `T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json; python3 ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json` |
 | `deploy-py` | `python3 smartcontracts/evm/script/test_deploybook.py` and the new deploy-check tests |
-| `forkcheck` | `cd smartcontracts/evm && cap forge build test/forkcheck && cap python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json` (T4) |
+| `forkcheck` | `cd smartcontracts/evm && T=$(mktemp -d); cap forge build test/forkcheck --extra-output evm.legacyAssembly --out "$T"/out --cache-path "$T"/cache && cap python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json --out "$T"/out` (T4) |
 | `ck-test` | `cd clients/clientkeys && cap npm test` |
 | `ua-test` | `cd clients/ua-rs && cap cargo test C --all-features` |
 | `rpc-test` | `cd clients/scaas-rpc && cap cargo test C --all-features`, then `cargo clippy C --all-targets --all-features -- -D warnings` |

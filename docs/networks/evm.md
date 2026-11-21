@@ -333,8 +333,10 @@ How it is built (controller calls, ARCH-POS-20 Change of T4): a profile states i
 `smartcontracts/evm/src/chains/<key>/profile.json` (`evmFork`, `codeSizeLimit`, `initCodeSizeLimit`; a profile without the file is
 `amsterdam`), and `deploy.sh` refuses a whole set on any other fork (`FORKCHECK_SET_FORK`); a contract declares its precompiles in
 `smartcontracts/evm/release-data/<Contract>.json` (`precompiles`: address, input, known output; a file without the list is
-refused); the scan places code by the compiler's source-map instruction count, then solc's `INVALID`, then exactly the runtime (in
-the init code) or exactly the CBOR metadata (in the runtime), and refuses any other data section; `DUPN`, `SWAPN` and `EXCHANGE`
+refused); the scan places code by the compiler's source-map instruction count, then solc's `INVALID`, then the runtime (in the
+init code), then the data sections the compiler's legacy assembly lists (`forge build --extra-output evm.legacyAssembly`; none
+without it), then the CBOR metadata (in the runtime), and refuses anything else, a second sub-assembly (code the walk does not
+reach) included; `DUPN`, `SWAPN` and `EXCHANGE`
 (EIP-8024), which solc 0.8.37 does not emit, are bytes the walk cannot place; chain reads take the strict majority of the node
 list. Each refusal is named `FORKCHECK_*`.
 
