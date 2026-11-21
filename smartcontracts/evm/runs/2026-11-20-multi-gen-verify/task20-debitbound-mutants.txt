@@ -1,5 +1,11 @@
-# test_deploy_debitBound_named (test/ua/UADeploy.t.sol) at n2048-kmax1024, after the matrix's red: mutant | outcome | first failure
-M1 the test's branch forced to "fits" | killed | a precompile-sized cap over the cached home, where the set leaves room
-M2 DeployBase's GEN_PQZ_DEBIT_BOUND check dropped (voDebitFits -> true) | killed | GEN_PQZ_DEBIT_BOUND
-M3 DeployBase's check always refuses (voDebitFits -> false) | killed | positive control: a precompile-sized cap over a home on its precompile
-3 mutants, 3 killed; unmutated: passed at n2048-kmax1024 and n2304-kmax4096
+# test_deploy_debitBound_named (test/ua/UADeploy.t.sol), after the matrix's n2048-kmax1024 red and its review: the expected
+# outcome is the test's own figure of the M10 (d) bound and the set's PQZ_DEBIT_MIN_GAS (fits at n2304-kmax4096 only), and
+# voDebitFits must equal it. mutant | set | outcome | first failure
+unmutated | n2048-kmax1024 | passed |
+unmutated | n2304-kmax4096 | passed |
+M1 the test's branch forced to "fits" | n2048-kmax1024 | killed | a precompile-sized cap over the cached home, where the set leaves room
+M2 DeployBase's GEN_PQZ_DEBIT_BOUND check dropped (voDebitFits -> true) | n2048-kmax1024 | killed | GEN_PQZ_DEBIT_BOUND
+M3 DeployBase's check always refuses (voDebitFits -> false) | n2304-kmax4096 | killed | a precompile-sized cap over the cached home, where the set leaves room
+M4 voDebitFits without VO_READ_GAS | n2048-kmax1024 | killed | voDebitFits as the bound: true != false
+M5 voDebitFits over-counts by 1,300,000 | n2304-kmax4096 | killed | voDebitFits as the bound: false != true
+5 mutants, 5 killed

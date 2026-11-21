@@ -7,6 +7,7 @@ import {MldsaKit} from "../helpers/MldsaKit.sol";
 import {PcStandIn} from "./MlDsaVerifyOnly.t.sol";
 import {MldsaVerifyOnly65} from "../../src/ua/MlDsaVerifyOnly.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
+import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UAPrecompileProbe} from "../../script/UAPrecompileProbe.sol";
 import {Bls12381} from "../../src/common/Bls12381.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -720,8 +721,9 @@ contract UADeployTest is Test {
 
     /// M10 d: with 0x0142 on the line, `mldsa87`'s single-key fallback (this cap, the home's cap, the set's debit) over the cap
     /// is refused by name. Over the home's cached path (8.85 M) a 4 M cap is refused at every set, and a precompile-sized cap
-    /// fits only where the set's `PQZ_DEBIT_MIN_GAS` leaves room (n2304-kmax4096; not n2048, n2560, n2816: refused by name
-    /// there, as `voDebitFits` answers); over a home on its precompile (250,000) a precompile-sized cap fits at every set.
+    /// fits only where the set's `PQZ_DEBIT_MIN_GAS` leaves room: the test's own figure (the bound spelled out below,
+    /// not read from the code under test), n2304-kmax4096 only, and `voDebitFits` must answer the same; over a home on
+    /// its precompile (250,000) a precompile-sized cap fits at every set.
     function test_deploy_debitBound_named() public {
         DeployHarness h = _pqzHarness();
         string memory b = _book(h, "");
@@ -731,9 +733,20 @@ contract UADeployTest is Test {
         );
         _named(h, _add(b, _voEntry(UAKinds.MLDSA87, v, 4_000_000, 0)), "GEN_PQZ_DEBIT_BOUND");
         string memory small = _add(b, _voEntry(UAKinds.MLDSA87, v, 150_000, 0));
-        if (UARegistryRegLib.voDebitFits(UAKinds.MLDSA87, 150_000, 8_850_000, 1, 1 << 24)) {
-            (bool fits,) = _gen(h, small);
-            assertTrue(fits, "a precompile-sized cap over the cached home, where the set leaves room");
+        // the bound by hand (spec M10 d): w = this cap + one hop (LINE_HOP_GAS 13,100) + VO_READ_GAS 60,000 + the
+        // home's cap and its hold (cap / 63) + GAS_MARGIN 5,000; then the walk's hold w / 63, GAS_MARGIN, the set's
+        // debit and mldsa87's largest signature as calldata (192 + 4,627 rounded up to a word = 4,832 B, 16 gas a byte;
+        // the debit alone at 64 a byte)
+        uint256 hc = 8_850_000;
+        uint256 w = 150_000 + 13_100 + 60_000 + hc + hc / 63 + 5_000;
+        uint256 d = PqzSet.PQZ_DEBIT_MIN_GAS;
+        bool fits = w + w / 63 + 5_000 + d + 16 * 4_832 <= 1 << 24 && d + 64 * 4_832 <= 1 << 24;
+        assertEq(fits, keccak256(bytes(PqzSet.NAME)) == keccak256("n2304-kmax4096"), "fits at n2304-kmax4096 only");
+        bool lib = UARegistryRegLib.voDebitFits(UAKinds.MLDSA87, 150_000, hc, 1, 1 << 24);
+        assertEq(lib, fits, "voDebitFits as the bound");
+        if (fits) {
+            (bool ok0,) = _gen(h, small);
+            assertTrue(ok0, "a precompile-sized cap over the cached home, where the set leaves room");
         } else {
             _named(h, small, "GEN_PQZ_DEBIT_BOUND");
         }
