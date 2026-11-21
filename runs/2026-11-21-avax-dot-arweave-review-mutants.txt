@@ -1,0 +1,8 @@
+# review mutants at commit fb084accc (name | outcome | test)
+P1-1 a key without a profile defaults to amsterdam | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py profile_and_set_gate
+P1-1 any local- key amsterdam without a profile | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py profile_and_set_gate
+P1-1 txGasCap not checked in the profile | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py profile_and_set_gate
+P1-1 the profile's txGasCap ignored by check (2) | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py gas_against_the_live_caps
+P1-1 deploy_gate drops the profile's txGasCap | killed | python3 -I smartcontracts/evm/script/test_forkcheck.py deploy_gate_runs_every_check
+P1-1 the Fuji profile at amsterdam | killed | python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py fuji_dry_run_needs_a_profile
+6 mutants, 6 killed, 0 survived (0 killed elsewhere), 0 not loaded

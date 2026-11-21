@@ -160,8 +160,14 @@ def write(root, rel, obj):
 
 def profile_and_set_gate():
     with tempfile.TemporaryDirectory() as t:
+        # no file: only the reset chain and a local anvil are amsterdam (ARCH-POS-20, review P1-1); any other key refused
         assert f.profile("scaas-testnet", t) == {"evmFork": "amsterdam"}
         f.set_gate("scaas-testnet", t)
+        assert f.profile("local-31337-testnet", t) == f.profile("local-testnet", t) == {"evmFork": "amsterdam"}
+        refused("FORKCHECK_PROFILE", f.profile, "avalanche-testnet", t)
+        refused("FORKCHECK_PROFILE", f.set_gate, "ethereum-testnet", t)
+        refused("FORKCHECK_PROFILE", f.profile, "local-mainnet", t)
+        refused("FORKCHECK_PROFILE", f.profile, "scaas-testnet-2", t)
         write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
         assert f.profile("avalanche-testnet", t)["codeSizeLimit"] == 24576
         refused("FORKCHECK_SET_FORK", f.set_gate, "avalanche-testnet", t)
@@ -170,6 +176,27 @@ def profile_and_set_gate():
         write(t, "src/chains/y-testnet/profile.json", {"evmFork": "byzantium"})
         refused("FORKCHECK_FORK_UNKNOWN", f.profile, "y-testnet", t)
         refused("FORKCHECK_PROFILE", f.profile, "../x", t)
+        write(t, "src/chains/z-testnet/profile.json", dict(AVAX, txGasCap="16777216"))
+        refused("FORKCHECK_PROFILE", f.profile, "z-testnet", t)
+        write(t, "src/chains/z-testnet/profile.json", dict(AVAX, txGasCap=None))
+        f.profile("z-testnet", t)
+
+
+def real_tree_profiles():
+    """The committed profiles: Avalanche at cancun with its caps; every chain-uids.json key has a profile or is refused by
+    name (none falls back to amsterdam but the reset chain)."""
+    for k in ("avalanche-mainnet", "avalanche-testnet"):
+        pr = f.profile(k)
+        assert (pr["evmFork"], pr["codeSizeLimit"], pr["initCodeSizeLimit"]) == ("cancun", 24576, 49152), (k, pr)
+        assert pr["txGasCap"] is None and isinstance(pr["blockGasLimit"], int), (k, pr)
+        refused("FORKCHECK_SET_FORK", f.set_gate, k)
+    assert f.profile("scaas-testnet") == {"evmFork": "amsterdam"}
+    keys = [r["key"] for r in json.load(open(os.path.join(f.EVM, "chain-uids.json")))["chains"]]
+    for k in keys:
+        if os.path.exists(os.path.join(f.EVM, "src", "chains", k, "profile.json")) or k == "scaas-testnet":
+            f.profile(k)
+        else:
+            refused("FORKCHECK_PROFILE", f.profile, k)
 
 
 # ---- checks (2) and (5) against fake nodes
@@ -207,6 +234,9 @@ def gas_against_the_live_caps():
     refused("FORKCHECK_GAS", f.check_gas, [node(cap=1 << 24)], "0x00", gas_limit=(1 << 24) + 1)
     assert f.check_gas([node(cap=1 << 24)], "0x00", gas_limit=1 << 24)[0] == 1 << 24
     refused("FORKCHECK_NODES", f.check_gas, [node(), node(block=10)], "0x00")
+    # the profile's per-transaction cap (txGasCap; null: none) beside the chain's
+    refused("FORKCHECK_GAS", f.check_gas, [node()], "0x00", gas_limit=1_000_001, tx_cap=1_000_000)
+    assert f.check_gas([node()], "0x00", gas_limit=1_000_000, tx_cap=1_000_000)[0] == 1_000_000
 
 
 def precompile_known_answer():
@@ -279,6 +309,9 @@ def deploy_gate_runs_every_check():
             run4=run4,
             say=lines.append,
         )
+        write(t, "src/chains/capped-testnet/profile.json", dict(AVAX, txGasCap=999_999))  # the profile's tx cap applies
+        refused("FORKCHECK_GAS", f.deploy_gate, "capped-testnet", "out/Fx.sol/Fx.json", [good], "cases.json", root=t,
+                run4=run4, say=lines.append)  # fmt: skip
         os.remove(os.path.join(t, "release-data/Fx.json"))
         refused(
             "FORKCHECK_RELEASE_DATA",
@@ -411,6 +444,7 @@ TESTS = [
     data_sections_from_the_assembly,
     sizes_against_the_profile,
     profile_and_set_gate,
+    real_tree_profiles,
     gas_against_the_live_caps,
     precompile_known_answer,
     deploy_gate_runs_every_check,

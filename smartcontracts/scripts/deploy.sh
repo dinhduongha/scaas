@@ -141,7 +141,8 @@ case "$FAMILY" in
         K="$(python3 -I script/deploybook.py key "$C" "$G0")"
         # NET-EVM-06 / NET-EVM-18: a profile whose fork is not amsterdam (src/chains/<key>/profile.json evmFork) takes no
         # whole SCaaS set, refused by name before anything is sent; a single contract deploys there through
-        # script/forkcheck.py deploy (the five checks)
+        # script/forkcheck.py deploy (the five checks); a key without the file is refused (FORKCHECK_PROFILE) but the reset
+        # chain and a local anvil (local-…-testnet)
         python3 -I script/forkcheck.py set-gate "$K" || exit 1
         # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET names this deploy's set
         # (mldsa-off with MLDSA_PRECOMPILE=off, mldsa-on with on), refused by name before anything is sent; the book then

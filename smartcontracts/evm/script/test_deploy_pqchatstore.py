@@ -44,8 +44,9 @@ class Chain:
     """A fake chain: the deterministic deployer's code (unless `deployer` is False or other code), `at` code already at the
     pinned address, `place` the code a deploy through the deployer leaves there, a store that keeps its payloads."""
 
-    def __init__(self, addr, place, at=None, deployer=d.DEPLOYER_CODE, read_back=None):
+    def __init__(self, addr, place, at=None, deployer=d.DEPLOYER_CODE, read_back=None, chain_id=31337, uid=UID):
         self.addr, self.place, self.read_back = addr.lower(), place, read_back
+        self.chain_id, self.uid = chain_id, uid
         self.code = {d.DEPLOYER: deployer} if deployer else {}
         if at:
             self.code[self.addr] = at
@@ -53,9 +54,9 @@ class Chain:
 
     def __call__(self, method, params):
         if method == "eth_chainId":
-            return {"result": hex(31337)}
+            return {"result": hex(self.chain_id)}
         if method == "eth_getBlockByNumber":
-            return {"result": {"hash": UID} if params[0] == "0x0" else {"gasLimit": hex(30_000_000)}}
+            return {"result": {"hash": self.uid} if params[0] == "0x0" else {"gasLimit": hex(30_000_000)}}
         if method == "eth_getCode":
             return {"result": self.code.get(params[0].lower(), "0x")}
         if method == "eth_estimateGas":
@@ -231,6 +232,26 @@ def forkcheck_runs_before_the_send():
         assert not ch.sent
 
 
+FUJI = (43113, "0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b")  # avalanche-testnet in chain-uids.json
+
+
+def fuji_dry_run_needs_a_profile():
+    """A Fuji deploy (its key from chain-uids.json) with no profile is refused by name before any send; with the committed
+    profile (cancun) the five checks run, each its line, before the send (ARCH-POS-20, review P1-1)."""
+    a = artifact()
+    with tempfile.TemporaryDirectory() as t:
+        o = setup(t, a)
+        ch = Chain(release_of(a)["address"], a["deployedBytecode"]["object"], chain_id=FUJI[0], uid=FUJI[1])
+        e = refused("CHATSTORE_FORKCHECK", run, ch, o, env={})
+        assert "FORKCHECK_PROFILE: avalanche-testnet" in e and not ch.sent, e
+        lines, ran = [], []
+        run(ch, o, env={}, profiles=None, say=lines.append, run4=lambda *x: ran.append((x[0], x[2], len(ch.sent))) or 1)
+        assert ran == [("cancun", 24576, 0)], ran
+        for n in ("(1) runtime", "(3) cancun scan ok", "(4) 1 rows at cancun", "(5) 0 precompiles", "(2) gas"):
+            assert any(n in s for s in lines), (n, lines)
+        assert len(ch.sent) == 1 and os.path.exists(os.path.join(t, "deployments/avalanche-testnet.json"))
+
+
 def book_entry_under_the_chain_key():
     a = artifact()
     rel = release_of(a)
@@ -294,6 +315,7 @@ TESTS = [
     deployed_code_hash_differs_refused,
     deployer_missing_refused,
     forkcheck_runs_before_the_send,
+    fuji_dry_run_needs_a_profile,
     book_entry_under_the_chain_key,
     probes_write_and_read,
     abi_encoding,

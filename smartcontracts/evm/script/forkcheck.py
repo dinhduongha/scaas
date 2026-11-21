@@ -19,8 +19,10 @@ chain without the Amsterdam fork a contract deploys only when its `amsterdam` bu
   (5) FORKCHECK_PRECOMPILE every precompile the contract declares in its release data (release-data/<Contract>.json,
                            `precompiles`: [{address, name, input, output}]; a file without the list is FORKCHECK_RELEASE_DATA)
                            answers its known answer to an eth_call on the chain.
-The profile states the fork: src/chains/<key>/profile.json {"evmFork", "codeSizeLimit", "initCodeSizeLimit"}; a profile
-without the file is `amsterdam` (NET-EVM-06), where nothing here applies. Chain reads ask every node of the list and take the
+The profile states the fork: src/chains/<key>/profile.json {"evmFork", "codeSizeLimit", "initCodeSizeLimit", "txGasCap"?
+(null: none), "blockGasLimit"? (a record; check (2) reads the live block)}; at `amsterdam` (NET-EVM-06) nothing here applies.
+A key without the file is refused (FORKCHECK_PROFILE), except the reset chain `scaas-testnet` and a local anvil
+(`local-…-testnet`), which are `amsterdam` (ARCH-POS-20, review P1-1). Chain reads ask every node of the list and take the
 strict majority (ARCH-POS-15), else FORKCHECK_NODES. One rule on every chain: no chain id is read here.
   python3 -I script/forkcheck.py set-gate <key>        exit 1 (FORKCHECK_SET_FORK) when the profile's fork is not amsterdam:
                                                        a whole SCaaS set waits for the chain's Amsterdam fork (deploy.sh)
@@ -209,13 +211,23 @@ def check_sizes(g, profile):
 # ---- the profile and the release data
 
 
+# The keys that are amsterdam without a profile file: the reset chain and a local anvil (ARCH-POS-20, review P1-1)
+NO_PROFILE_AMSTERDAM = re.compile(r"scaas-testnet|local(-[a-z0-9-]+)?-testnet")
+
+
 def profile(key, root=EVM):
-    """The profile's fork and caps: src/chains/<key>/profile.json; none: amsterdam (NET-EVM-06)."""
+    """The profile's fork and caps: src/chains/<key>/profile.json; none: amsterdam for the reset chain and a local anvil,
+    else FORKCHECK_PROFILE (fail closed: a chain without a profile never defaults to amsterdam)."""
     if not re.fullmatch(r"[a-z0-9-]+", key):
         raise ForkError(f"FORKCHECK_PROFILE: {key!r} is not a chain key")
     p = os.path.join(root, "src", "chains", key, "profile.json")
     if not os.path.exists(p):
-        return {"evmFork": TARGET}
+        if NO_PROFILE_AMSTERDAM.fullmatch(key):
+            return {"evmFork": TARGET}
+        raise ForkError(
+            f"FORKCHECK_PROFILE: {key} has no src/chains/{key}/profile.json (a chain states its fork; only the reset chain "
+            "and a local anvil are amsterdam without one)"
+        )
     pr = json.load(open(p))
     if pr.get("evmFork") not in FORKS:
         raise ForkError(f"FORKCHECK_FORK_UNKNOWN: {key}: evmFork {pr.get('evmFork')!r} (known: {', '.join(FORKS)})")
@@ -223,6 +235,9 @@ def profile(key, root=EVM):
         for f in ("codeSizeLimit", "initCodeSizeLimit"):
             if not isinstance(pr.get(f), int) or pr[f] <= 0:
                 raise ForkError(f"FORKCHECK_PROFILE: {key}: {f} missing (a chain without {TARGET} states its caps)")
+    cap = pr.get("txGasCap")
+    if cap is not None and (not isinstance(cap, int) or isinstance(cap, bool) or cap <= 0):
+        raise ForkError(f"FORKCHECK_PROFILE: {key}: txGasCap {cap!r} is neither null nor a positive integer")
     return pr
 
 
@@ -281,15 +296,18 @@ def check_precompiles(nodes, entries):
     return len(entries)
 
 
-def check_gas(nodes, data, gas_limit=None, sender=None):
+def check_gas(nodes, data, gas_limit=None, sender=None, tx_cap=None):
     """Check (2): the deploy transaction's gas (the limit the deploy sends, else the chain's estimate) within the live block
-    gas limit and accepted under the chain's per-transaction cap. Returns (gas, block gas limit)."""
+    gas limit, the profile's per-transaction cap `tx_cap` (None: none) and accepted under the chain's per-transaction cap.
+    Returns (gas, block gas limit)."""
     if gas_limit is None:
         tx = {"data": data} | ({"from": sender} if sender else {})
         a = agree(nodes, "eth_estimateGas", [tx])
         if "error" in a:
             raise ForkError("FORKCHECK_GAS: the chain does not estimate the deploy transaction")
         gas_limit = int(a["result"], 16)
+    if tx_cap is not None and gas_limit > tx_cap:
+        raise ForkError(f"FORKCHECK_GAS: the deploy needs {gas_limit} gas, the profile's txGasCap is {tx_cap}")
     b = agree(nodes, "eth_getBlockByNumber", ["latest", False])
     if "error" in b or not b.get("result"):
         raise ForkError("FORKCHECK_GAS: no latest block")
@@ -518,7 +536,7 @@ def deploy_gate(
         f"forkcheck {key}: (4) {(run4 or exec_cases)(fork, cases_path, pr['codeSizeLimit'], say, root, out)} rows at {fork} ok"
     )
     say(f"forkcheck {key}: (5) {check_precompiles(nodes, entries)} precompiles answer")  # (5)
-    gas, block = check_gas(nodes, a["bytecode"]["object"] + args[2:], gas_limit)  # (2)
+    gas, block = check_gas(nodes, a["bytecode"]["object"] + args[2:], gas_limit, tx_cap=pr.get("txGasCap"))  # (2)
     say(f"forkcheck {key}: (2) gas {gas} within block {block} and the transaction cap")
 
 
