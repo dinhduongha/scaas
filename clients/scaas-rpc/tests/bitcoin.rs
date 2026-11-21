@@ -210,6 +210,12 @@ async fn esplora_reads_the_recorded_answers() {
     assert_eq!(f.first(), Some(&(1, 2000)));
     assert!(f.contains(&(7, 263787)));
     assert!(f.windows(2).all(|w| w[0].0 < w[1].0));
+    // a rate of three decimals is that many msat/vB, never one more by the float's last bit (2.007 × 1000 = 2007.0000000000002)
+    fn three_decimals(p: &str) -> Option<(u16, Vec<u8>)> {
+        (p == "/fee-estimates").then(|| (200, br#"{"1":2.007}"#.to_vec()))
+    }
+    let e = esp(&[&esplora(Default::default(), three_decimals).await]);
+    assert_eq!(e.fee_estimates(0).await.unwrap(), vec![(1, 2007)]);
 }
 
 /// CLI-RPC-03: an Esplora of another network (its block 0 regtest's) is refused before its reads. Control: testnet3's.
