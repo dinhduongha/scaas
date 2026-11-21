@@ -46,6 +46,9 @@ pub struct Chain {
     /// The pool's `chain_uid` once read.
     #[cfg_attr(not(test), allow(dead_code))]
     uid: std::sync::Arc<std::sync::OnceLock<B256>>,
+    /// The lane's final block (`finality.mode`): `tag` the `finalized` block, `depth` the head less `finality.depth`,
+    /// `instant` the head.
+    final_choice: scaas_rpc::pool::BlockChoice,
 }
 
 impl Chain {
@@ -100,6 +103,11 @@ impl Chain {
                 .compliance_registry
                 .zip(cfg.compliance_registry_codehash),
             head: cfg.head.clone(),
+            final_choice: match cfg.finality.mode.as_str() {
+                "tag" => scaas_rpc::pool::BlockChoice::Finalized,
+                "depth" => scaas_rpc::pool::BlockChoice::Depth(cfg.finality.depth),
+                _ => scaas_rpc::pool::BlockChoice::Latest,
+            },
         })
     }
 
@@ -272,6 +280,26 @@ impl Chain {
     /// `who`'s runtime code, through [`Chain::read`].
     pub async fn code_at(&self, who: Address) -> std::result::Result<Bytes, SimError> {
         self.pool.code(who).await
+    }
+
+    /// `who`'s runtime code at the lane's final block (`finality.mode`), read pinned to that block's hash: (code, number,
+    /// hash). Review P2-3: a check that must outlive a reorg reads here, never at `latest`.
+    pub async fn code_final(&self, who: Address) -> Result<(Bytes, u64, B256)> {
+        let pool = &self.pool;
+        pool.read_at_block(
+            self.final_choice,
+            scaas_rpc::Purpose::Plain,
+            |at| async move { pool.code_at(&at, who).await },
+        )
+        .await
+        .map(|a| (a.value, a.number, a.hash))
+        .map_err(|e| anyhow!("{e}"))
+    }
+
+    /// Block `n`'s hash on the chain now (`None`: no such block), failed over: a hash read earlier and no longer this is a
+    /// reorg.
+    pub async fn block_hash_now(&self, n: u64) -> Result<Option<B256>> {
+        self.pool.block_hash(n).await.map_err(|e| anyhow!("{e}"))
     }
 
     /// The lane's EIP-1559 fees, from the first endpoint only (F4).

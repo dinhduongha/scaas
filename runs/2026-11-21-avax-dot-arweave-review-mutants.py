@@ -19,6 +19,12 @@ TB = "python3 -I smartcontracts/evm/script/test_deploybook.py"
 FG = "cd smartcontracts/evm && ../../scripts/capped forge test --match-path "
 GOV = FG + "test/governance/DeployBook.t.sol --match-test "
 BK = "smartcontracts/evm/script/deploybook.py"
+G = "scaas-node/src/guard.rs"
+CH = "scaas-node/src/chain.rs"
+CF = "scaas-node/src/config.rs"
+EA = "scaas-node/src/adapters/evm.rs"
+TY = "scaas-node/src/typed.rs"
+NT = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j2 --lib "
 BS = "smartcontracts/evm/script/DeployBook.sol"
 MUTANTS = [
     (
@@ -304,6 +310,72 @@ MUTANTS = [
         [("smartcontracts/evm/release-data/PqChatStore.json", '"runtimeCodeHash": "0xb7c1', '"runtimeCodeHash": "0xb7c2')],
         FG + "test/pqchat/PqChatStore.t.sol --match-test test_releaseDataPinsTheBuild",
         "test_releaseDataPinsTheBuild",
+    ),
+    (
+        "P2-3 any address a store",
+        [(G, "        if to != self.chatstore_address {", "        if false {")],
+        NT + "pqchatstore",
+        "a_pqchatstore_job_runs_on_the_pinned_code_under_the_lane_policy",
+    ),
+    (
+        "P2-3 the code read at latest",
+        [(CH, "            self.final_choice,\n            scaas_rpc::Purpose::Plain,", "            scaas_rpc::pool::BlockChoice::Latest,\n            scaas_rpc::Purpose::Plain,")],
+        NT + "pqchatstore",
+        "a_pqchatstore_pass_is_read_at_the_final_block_and_not_kept_for_ever",
+    ),
+    (
+        "P2-3 no code at the final block a policy refusal",
+        [(G, "        if code.is_empty() {\n            return Err(Refusal::Transport(format!(\n                \"CHATSTORE_NOT_FINAL", "        if false {\n            return Err(Refusal::Transport(format!(\n                \"CHATSTORE_NOT_FINAL")],
+        NT + "pqchatstore",
+        "a_pqchatstore_pass_is_read_at_the_final_block_and_not_kept_for_ever",
+    ),
+    (
+        "P2-3 a pass kept across a reorg",
+        [(G, "                && chain.block_hash_now(n).await.ok().flatten() == Some(h)\n", "")],
+        NT + "pqchatstore",
+        "a_pqchatstore_pass_is_read_at_the_final_block_and_not_kept_for_ever",
+    ),
+    (
+        "P2-3 a pass kept for ever",
+        [(G, "            if at.elapsed() < self.chatstore_recheck\n", "            if true\n")],
+        NT + "pqchatstore",
+        "a_pqchatstore_pass_is_read_at_the_final_block_and_not_kept_for_ever",
+    ),
+    (
+        "P2-4 the resolved pair not checked at lane start",
+        [(EA, "            crate::config::check_resolved_pair(&self.key, c.number, c.uid().await?)?;", "            c.uid().await?;")],
+        NT + "an_unpinned_profile",
+        "an_unpinned_profile_is_checked_at_lane_start",
+    ),
+    (
+        "P2-4 a resolved pair of another key taken",
+        [(CF, "        Some(k) if k != key => {", "        Some(k) if false && k != key => {")],
+        NT + "resolved_pairs_at_lane_start",
+        "resolved_pairs_at_lane_start",
+    ),
+    (
+        "P3-5 a paid storeMessage to the store refused",
+        [(G, "                if target == self.chatstore_address\n                    && inner", "                if false\n                    && inner")],
+        NT + "a_paid_store",
+        "a_paid_store_message_relays_to_the_store",
+    ),
+    (
+        "P3-5 any PqChat entry relayed to the store",
+        [(G, '.and_then(|s| self::row(s, "pqchatstore"))', '.and_then(|s| self::row(s, "pqchat"))')],
+        NT + "a_paid_store",
+        "a_paid_store_message_relays_to_the_store",
+    ),
+    (
+        "P3-6 a second write on the store's kind",
+        [(TY, '    ("addWraps", PC, "bytes32 epochId', '    ("addWraps", &["pqchat", "pqchatstore"], "bytes32 epochId')],
+        NT + "pqchat_rows_equal_the_contract_both_directions",
+        "pqchat_rows_equal_the_contract_both_directions",
+    ),
+    (
+        "P3-6 storeMessage without contract taken as pqchat",
+        [(TY, '        _ => bail!("ENTRY_AMBIGUOUS: {entry} is several structs', '        [r, ..] => Ok((r, r.contracts[0])),\n        #[allow(unreachable_patterns)]\n        _ => bail!("ENTRY_AMBIGUOUS: {entry} is several structs')],
+        NT + "an_op_is_exact",
+        "an_op_is_exact",
     ),
 ]
 
