@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Script} from "forge-std/Script.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 
 /// @notice NET-EVM-13 (owner 2026-11-10): a chain's deployment books are named by its key: `deployments/<key>.json` its
 ///         book (a Hedera chain's from `DeployHedera.s.sol`, its only deploy), `<key>-<what>.json` a companion (the
@@ -48,7 +49,7 @@ abstract contract DeployBook is Script {
         returns (string memory key, string memory name, string memory network)
     {
         string memory dn = _deployName();
-        BookRow[] memory r = DeployBook(address(this)).bookRows(_bookTable());
+        BookRow[] memory r = _bookRows();
         uint256 hit = type(uint256).max; // the row of (block.chainid, uid)
         string memory priv; // a private row's key with this genesis
         bool taken; // DEPLOY_NAME names another row
@@ -112,13 +113,31 @@ abstract contract DeployBook is Script {
         string key;
     }
 
+    /// @dev The table's rows (`bookRows`): in its own frame through `this` (a static call), except under `forge script`,
+    ///      which refuses `address(this)` in a script contract (the e2e deploys and `deploy.sh`); there in the script's frame.
+    function _bookRows() internal view returns (BookRow[] memory) {
+        if (vm.isContext(VmSafe.ForgeContext.ScriptGroup)) return _bookRowsAt(_bookTable());
+        return DeployBook(address(this)).bookRows(_bookTable());
+    }
+
+    /// @dev The table's kind lists (`bookKinds`), framed as `_bookRows`.
+    function _bookKinds() internal view returns (string[] memory, string[] memory) {
+        if (vm.isContext(VmSafe.ForgeContext.ScriptGroup)) return _bookKindsAt(_bookTable());
+        return DeployBook(address(this)).bookKinds(_bookTable());
+    }
+
     /// @notice NET-ALL-25, the table at `path` as read, whole (review P3-2; `deploybook.py table()` is the twin): every row
     ///         says `private` (`CHAIN_ROW_PRIVATE`), no two rows share the pair (chainId, chainUid) (`CHAIN_PAIR_TAKEN`), and
     ///         a private chain's genesis is in no other row (`CHAIN_UID_PRIVATE`); returns the rows. External and called
     ///         through `this` (a static call, never broadcast): each cheatcode call copies the whole table into memory, so
     ///         it runs in its own frame, whose memory ends with it, and reads the rows in one typed call, never per row and
     ///         field (in the caller's frame those copies grew with every gate of a deploy).
-    function bookRows(string calldata path) external view returns (BookRow[] memory r) {
+    function bookRows(string calldata path) external view returns (BookRow[] memory) {
+        return _bookRowsAt(path);
+    }
+
+    /// @dev `bookRows`'s body, in the caller's frame.
+    function _bookRowsAt(string memory path) private view returns (BookRow[] memory r) {
         string memory j = vm.readFile(path);
         BookRowKey[] memory ks =
             abi.decode(vm.parseJsonTypeArray(j, ".chains", "ChainUidsKey(string key)"), (BookRowKey[]));
@@ -170,7 +189,12 @@ abstract contract DeployBook is Script {
     }
 
     /// @notice The table's two kind lists (`homeChainKinds`, `otherKinds`), in their own frame as `bookRows`.
-    function bookKinds(string calldata path) external view returns (string[] memory home, string[] memory other) {
+    function bookKinds(string calldata path) external view returns (string[] memory, string[] memory) {
+        return _bookKindsAt(path);
+    }
+
+    /// @dev `bookKinds`'s body, in the caller's frame.
+    function _bookKindsAt(string memory path) private view returns (string[] memory home, string[] memory other) {
         string memory j = vm.readFile(path);
         (home, other) = (vm.parseJsonStringArray(j, ".homeChainKinds"), vm.parseJsonStringArray(j, ".otherKinds"));
     }
@@ -180,7 +204,7 @@ abstract contract DeployBook is Script {
     ///         the one list) is refused on a chain whose `chain_uid` another
     ///         row shares, `HOME_CHAIN_SHARED_GENESIS`; a kind of `otherKinds` passes; a name on neither list is `KIND_UNKNOWN`. `deploybook.py kind_check` is the twin.
     function _requireKindHere(string memory kind, bytes32 uid) internal view {
-        (string[] memory ks, string[] memory os) = DeployBook(address(this)).bookKinds(_bookTable());
+        (string[] memory ks, string[] memory os) = _bookKinds();
         bool home;
         for (uint256 i; i < ks.length; ++i) {
             if (_bookEq(ks[i], kind)) home = true;
@@ -193,7 +217,7 @@ abstract contract DeployBook is Script {
                 string.concat("KIND_UNKNOWN: ", kind, " is on neither homeChainKinds nor otherKinds of chain-uids.json")
             );
         }
-        BookRow[] memory r = DeployBook(address(this)).bookRows(_bookTable());
+        BookRow[] memory r = _bookRows();
         for (uint256 i; i < r.length; ++i) {
             if (r[i].chainUid == uid && r[i].chainId != block.chainid) {
                 revert(
@@ -298,7 +322,7 @@ abstract contract DeployBook is Script {
     function _networkOf(string memory key) internal view returns (string memory net) {
         net = _bookSuffix(key);
         if (bytes(net).length != 0) return net;
-        BookRow[] memory r = DeployBook(address(this)).bookRows(_bookTable());
+        BookRow[] memory r = _bookRows();
         for (uint256 i; i < r.length; ++i) {
             if (_bookEq(r[i].key, key)) return r[i].network;
         }
