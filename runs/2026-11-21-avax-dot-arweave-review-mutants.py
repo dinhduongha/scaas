@@ -299,6 +299,12 @@ MUTANTS = [
         TD + "book_written_at_the_final_block",
         "FAIL book_written_at_the_final_block",
     ),
+    (
+        "P3-7 the release data not the build",
+        [("smartcontracts/evm/release-data/PqChatStore.json", '"runtimeCodeHash": "0xb7c1', '"runtimeCodeHash": "0xb7c2')],
+        FG + "test/pqchat/PqChatStore.t.sol --match-test test_releaseDataPinsTheBuild",
+        "test_releaseDataPinsTheBuild",
+    ),
 ]
 
 if __name__ == "__main__":
