@@ -6,6 +6,7 @@ never the real deployments/. `cast keccak` hashes.
   python3 -I script/test_deploy_pqchatstore.py [<test name>…]      (from smartcontracts/evm)
 A failing test prints `FAIL <name>` and exits 1. UNAUDITED tooling."""
 
+import hashlib
 import json
 import os
 import sys
@@ -55,8 +56,11 @@ class Chain:
     def __call__(self, method, params):
         if method == "eth_chainId":
             return {"result": hex(self.chain_id)}
+        if method == "eth_blockNumber":
+            return {"result": hex(0x40)}
         if method == "eth_getBlockByNumber":
-            return {"result": {"hash": self.uid} if params[0] == "0x0" else {"gasLimit": hex(30_000_000)}}
+            h = self.uid if params[0] == "0x0" else "0x%064x" % int(params[0], 16)
+            return {"result": {"hash": h, "gasLimit": hex(30_000_000)}}
         if method == "eth_getCode":
             return {"result": self.code.get(params[0].lower(), "0x")}
         if method == "eth_estimateGas":
@@ -67,10 +71,12 @@ class Chain:
                 i = int(tx["data"][10 + 64 :], 16)
                 return {"result": "0x" + d.abi_bytes(self.read_back or self.stored[i]).hex()}
             return {"result": "0x"}
-        if method == "eth_sendRawTransaction":
+        if method == "eth_sendRawTransaction":  # the same bytes again: the same hash, applied once
+            h = "0x" + hashlib.sha256(params[0].encode()).hexdigest()
+            if h in self.receipts:
+                return {"result": h}
             tx = json.loads(bytes.fromhex(params[0][2:]))
             self.sent.append(tx)
-            h = "0x%064x" % len(self.sent)
             logs = []
             if tx["to"].lower() == d.DEPLOYER:
                 self.code[self.addr] = self.place
@@ -84,7 +90,8 @@ class Chain:
                         "data": "0x" + d.word(len(self.stored) - 1).hex(),
                     }
                 ]
-            self.receipts[h] = {"status": "0x1", "gasUsed": hex(400_000), "blockNumber": "0x5", "logs": logs}
+            self.receipts[h] = {"status": "0x1", "gasUsed": hex(400_000), "blockNumber": "0x5", "blockHash": "0x" + "5b" * 32,
+                                "logs": logs}  # fmt: skip
             return {"result": h}
         if method == "eth_getTransactionReceipt":
             return {"result": self.receipts.get(params[0])}
@@ -252,6 +259,33 @@ def fuji_dry_run_needs_a_profile():
         assert len(ch.sent) == 1 and os.path.exists(os.path.join(t, "deployments/avalanche-testnet.json"))
 
 
+def noisy(ch, i):
+    """A second honest node of the chain `ch`: other values in the fields outside consensus of every object it answers
+    (size, totalDifficulty, a provider's extra), another gas estimate."""
+
+    def rpc(method, params):
+        a = ch(method, params)
+        if method == "eth_estimateGas":
+            return {"result": hex(500_000 + 1000 * i)}
+        r = a.get("result")
+        return {"result": dict(r, size=hex(i), totalDifficulty=hex(i), provider=i)} if isinstance(r, dict) else a
+
+    return rpc
+
+
+def three_honest_nodes_agree():
+    """Three honest nodes that differ outside consensus: the deploy and the probe run (the strict majority on the fields used,
+    review P2-2); the deploy's gas is the estimate a strict majority reaches."""
+    a = artifact()
+    with tempfile.TemporaryDirectory() as t:
+        o = setup(t, a)
+        ch = Chain(release_of(a)["address"], a["deployedBytecode"]["object"])
+        nodes = [noisy(ch, i) for i in range(3)]
+        assert d.deploy(nodes, sign, **o)["tx"] and len(ch.sent) == 1 and ch.sent[0]["gas"] == 501_000
+        d.probe(nodes, sign, **o)
+        assert len(ch.sent) == 2
+
+
 def book_entry_under_the_chain_key():
     a = artifact()
     rel = release_of(a)
@@ -316,6 +350,7 @@ TESTS = [
     deployer_missing_refused,
     forkcheck_runs_before_the_send,
     fuji_dry_run_needs_a_profile,
+    three_honest_nodes_agree,
     book_entry_under_the_chain_key,
     probes_write_and_read,
     abi_encoding,

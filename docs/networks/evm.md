@@ -340,7 +340,9 @@ init code), then the data sections the compiler's legacy assembly lists (`forge 
 without it), then the CBOR metadata (in the runtime), and refuses anything else, a second sub-assembly (code the walk does not
 reach) included; `DUPN`, `SWAPN` and `EXCHANGE`
 (EIP-8024), which solc 0.8.37 does not emit, are bytes the walk cannot place; chain reads take the strict majority of the node
-list. Each refusal is named `FORKCHECK_*`.
+list on the value used, never a whole answer (a block's hash and gas limit at a number 16 below the head a strict majority
+reaches, a code, a call's answer, a receipt's consensus fields; a height, an estimate or a fee is the number a strict majority
+reports at least). Each refusal is named `FORKCHECK_*`.
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
 Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the

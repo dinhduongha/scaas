@@ -50,6 +50,36 @@ MUTANTS = [
         TD + "fuji_dry_run_needs_a_profile",
         "FAIL fuji_dry_run_needs_a_profile",
     ),
+    (
+        "P2-2 the vote on the whole answer",
+        [(F, "        keys.append(json.dumps(v, sort_keys=True))", '        keys.append(json.dumps(a["result"], sort_keys=True))')],
+        T + "majority_on_the_used_fields",
+        "FAIL majority_on_the_used_fields",
+    ),
+    (
+        "P2-2 a number: the highest answer",
+        [(F, "    return sorted(got, reverse=True)[len(nodes) // 2]", "    return max(got)")],
+        T + "majority_on_the_used_fields",
+        "FAIL majority_on_the_used_fields",
+    ),
+    (
+        "P2-2 a malformed answer counted as a vote",
+        [(F, '        if k != "malformed" and 2 * keys.count(k) > len(keys):', "        if 2 * keys.count(k) > len(keys):")],
+        T + "majority_on_the_used_fields",
+        "FAIL majority_on_the_used_fields",
+    ),
+    (
+        "P2-2 the block read at latest",
+        [(F, '"eth_getBlockByNumber", [hex(n), False], lambda r:', '"eth_getBlockByNumber", ["latest", False], lambda r:')],
+        T + "majority_on_the_used_fields",
+        "FAIL majority_on_the_used_fields",
+    ),
+    (
+        "P2-2 a receipt field outside consensus voted on",
+        [(D, '        "gasUsed": f.qty(r["gasUsed"]),', '        "gasUsed": r.get("size"),')],
+        TD + "three_honest_nodes_agree",
+        "FAIL three_honest_nodes_agree",
+    ),
 ]
 
 if __name__ == "__main__":

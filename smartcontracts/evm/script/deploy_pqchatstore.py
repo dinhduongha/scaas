@@ -133,9 +133,10 @@ def local_build(a, rel):
 # ---- the chain
 
 
-def _read(nodes, method, params):
+def _read(nodes, method, params, pick):
+    """The strict majority on `pick`'s value (forkcheck.agree)."""
     try:
-        a = f.agree(nodes, method, params)
+        a = f.agree(nodes, method, params, pick)
     except f.ForkError as e:
         raise StoreError(f"CHATSTORE_SEND: {e}") from None
     if "error" in a:
@@ -145,7 +146,8 @@ def _read(nodes, method, params):
 
 def chain_key(nodes, env):
     """The chain's key and book header (deploybook.py)."""
-    cid, uid = int(_read(nodes, "eth_chainId", []), 16), _read(nodes, "eth_getBlockByNumber", ["0x0", False])["hash"]
+    cid = _read(nodes, "eth_chainId", [], f.qty)
+    uid = _read(nodes, "eth_getBlockByNumber", ["0x0", False], lambda r: f.data(r["hash"]))
     try:
         key, name, net = deploybook.resolve(cid, uid, env)
     except deploybook.BookError as e:
@@ -154,14 +156,14 @@ def chain_key(nodes, env):
 
 
 def deployer_present(nodes):
-    if _read(nodes, "eth_getCode", [DEPLOYER, "latest"]).lower() != DEPLOYER_CODE:
+    if _read(nodes, "eth_getCode", [DEPLOYER, "latest"], f.data) != DEPLOYER_CODE:
         raise StoreError(f"CHATSTORE_NO_DEPLOYER: no deterministic deployer code at {DEPLOYER} (NET-EVM-05)")
 
 
 def code_hash(nodes, rel):
     """The keccak of the code at the pinned address, None when there is none."""
-    code = _read(nodes, "eth_getCode", [rel["address"], "latest"])
-    return None if code in ("0x", "") else keccak(code)
+    code = _read(nodes, "eth_getCode", [rel["address"], "latest"], f.data)
+    return None if code == "0x" else keccak(code)
 
 
 def cast_signer(url, wallet):
@@ -179,9 +181,33 @@ def cast_signer(url, wallet):
     return sign
 
 
+def _number(nodes, method, params):
+    try:
+        return f.majority_number(nodes, method, params)
+    except f.ForkError as e:
+        raise StoreError(f"CHATSTORE_SEND: {e}") from None
+
+
+def receipt_fields(r):
+    """A receipt's consensus fields, as voted on (review P2-2); None: no receipt yet."""
+    if r is None:
+        return None
+    logs = [{"address": f.data(x["address"]), "topics": [f.data(t) for t in x["topics"]], "data": f.data(x["data"])}
+            for x in r.get("logs") or []]  # fmt: skip
+    ca = r.get("contractAddress")
+    return {
+        "status": f.qty(r["status"]),
+        "blockHash": f.data(r["blockHash"]),
+        "blockNumber": f.qty(r["blockNumber"]),
+        "gasUsed": f.qty(r["gasUsed"]),
+        "contractAddress": f.data(ca) if ca else None,
+        "logs": logs,
+    }
+
+
 def send(nodes, sign, to, data, gas=None, wait=600):
     """Signs once (at `gas`, default the chain's estimate), sends the same bytes to every node; returns (hash, receipt)."""
-    gas = gas or int(_read(nodes, "eth_estimateGas", [{"to": to, "data": data}]), 16)
+    gas = gas or _number(nodes, "eth_estimateGas", [{"to": to, "data": data}])
     raw = sign({"to": to, "data": data, "gas": gas})
     answers = [n("eth_sendRawTransaction", [raw]) for n in nodes]
     hashes = {a["result"].lower() for a in answers if "result" in a}
@@ -190,11 +216,11 @@ def send(nodes, sign, to, data, gas=None, wait=600):
     h = hashes.pop()
     for _ in range(wait):  # a bounded wait for the majority's receipt
         try:
-            rec = f.agree(nodes, "eth_getTransactionReceipt", [h]).get("result")
+            rec = f.agree(nodes, "eth_getTransactionReceipt", [h], receipt_fields).get("result")
         except f.ForkError:
             rec = None
         if rec:
-            if int(rec["status"], 16) != 1:
+            if rec["status"] != 1:
                 raise StoreError(f"CHATSTORE_SEND: {h} failed (status 0)")
             return h, rec
         time.sleep(0.5)
@@ -242,7 +268,7 @@ def deploy(
     have = code_hash(nodes, rel)
     if have is None:
         data = "0x" + SALT + a["bytecode"]["object"][2:]
-        gas = int(_read(nodes, "eth_estimateGas", [{"to": DEPLOYER, "data": data}]), 16)
+        gas = _number(nodes, "eth_estimateGas", [{"to": DEPLOYER, "data": data}])
         try:  # NET-EVM-18 on a profile without amsterdam, before any send; (4) runs the generated cases
             with tempfile.TemporaryDirectory() as t:
                 cs = os.path.join(t, "cases.json")
@@ -254,7 +280,7 @@ def deploy(
         except f.ForkError as e:
             raise StoreError(f"CHATSTORE_FORKCHECK: {e}") from None
         tx, rec = send(nodes, sign, DEPLOYER, data, gas)
-        say(f"{key}: sent {tx}, gas {int(rec['gasUsed'], 16)}")
+        say(f"{key}: sent {tx}, gas {rec['gasUsed']}")
         have = code_hash(nodes, rel)
     else:
         say(f"{key}: code already at {addr}, no send")
@@ -286,19 +312,15 @@ def probe(nodes, sign, out, release=os.path.join(EVM, RELEASE), books=EVM, env=o
     ids, want = a["methodIdentifiers"], payload(1, PROBE_HINT, PROBE_ENV)
     h, rec = send(nodes, sign, addr, "0x" + ids["storeMessage(uint8,bytes8,bytes)"] + want.hex())
     hint = "0x" + PROBE_HINT.hex() + "00" * 24
-    logs = [
-        x
-        for x in rec.get("logs") or []
-        if x["address"].lower() == addr and [t.lower() for t in x["topics"]] == [STORED_TOPIC, hint]
-    ]
+    logs = [x for x in rec["logs"] if x["address"] == addr and x["topics"] == [STORED_TOPIC, hint]]
     if len(logs) != 1:
         raise StoreError(f"CHATSTORE_PROBE: {len(logs)} PqChatStored events of the probe hint in {h}")
     index = int(logs[0]["data"], 16)
     call = "0x" + ids["storedAt(bytes8,uint256)"] + PROBE_HINT.ljust(32, b"\0").hex() + word(index).hex()
-    got = _read(nodes, "eth_call", [{"to": addr, "data": call}, "latest"])
-    if got.lower() != "0x" + abi_bytes(want).hex():
+    got = _read(nodes, "eth_call", [{"to": addr, "data": call}, "latest"], f.data)
+    if got != "0x" + abi_bytes(want).hex():
         raise StoreError(f"CHATSTORE_PROBE: storedAt(probe hint, {index}) is not the bytes written")
-    p = {"tx": h, "block": int(rec["blockNumber"], 16), "index": index}
+    p = {"tx": h, "block": rec["blockNumber"], "index": index}
     say(f"{key}: probes ok (deployer, code hash, SSTORE2 write {h} and read at index {index})")
     _book(books, key, header, lambda old: dict(old or {"address": addr}, probe=p))
     return p

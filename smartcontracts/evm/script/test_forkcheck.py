@@ -202,13 +202,22 @@ def real_tree_profiles():
 # ---- checks (2) and (5) against fake nodes
 
 
-def node(block=32_000_000, cap=None, estimate=1_000_000, pre=None):
-    """A fake chain node: `cap` its per-transaction gas cap (None: none), `pre` its precompiles {address: {input: output}}."""
+def node(block=32_000_000, cap=None, estimate=1_000_000, pre=None, head=0x100, extra=0, fork=False):
+    """A fake chain node: `cap` its per-transaction gas cap (None: none), `pre` its precompiles {address: {input: output}};
+    `head` its latest block number, `extra` a value in the fields outside consensus (size, totalDifficulty), `fork` other
+    block hashes."""
     pre = pre or {}
 
     def rpc(method, params):
+        if method == "eth_blockNumber":
+            return {"result": hex(head)}
         if method == "eth_getBlockByNumber":
-            return {"result": {"gasLimit": hex(block)}}
+            n = head if params[0] == "latest" else int(params[0], 16)
+            if n > head:
+                return {"result": None}
+            h = "0x%064x" % (n + (1 << 255 if fork else 0))
+            return {"result": {"number": hex(n), "hash": h, "gasLimit": hex(block), "size": hex(extra),
+                               "totalDifficulty": hex(extra)}}  # fmt: skip
         if method == "eth_estimateGas":
             return {"result": hex(estimate)}
         if method == "eth_call":
@@ -329,6 +338,27 @@ def deploy_gate_runs_every_check():
         assert not ran  # amsterdam: nothing to check
 
 
+def majority_on_the_used_fields():
+    """Honest nodes differ in their head, in fields outside consensus and in their estimates: the vote is on the value used
+    (a block's hash and gas limit at a number below the majority's head, the estimate a strict majority reaches), never
+    the whole answer (review P2-2)."""
+    honest = [node(head=0x100 + i, extra=i, estimate=1_000_000 + 10 * i) for i in range(3)]
+    assert f.check_gas(honest, "0x00") == (1_000_010, 32_000_000)
+    assert f.check_gas(honest[:1], "0x00") == (1_000_000, 32_000_000)
+    # one node on another branch (other hashes) is outvoted; three different blocks: no strict majority
+    assert f.check_gas(honest[:2] + [node(fork=True)], "0x00")[1] == 32_000_000
+    refused("FORKCHECK_NODES", f.check_gas, [honest[0], node(fork=True), node(block=10)], "0x00")
+    refused("FORKCHECK_NODES", f.check_gas, [honest[0], node(block=10, extra=5)], "0x00")
+    # a number a strict majority reaches: the median; a hostile high or low answer moves nothing past an honest one
+    est = [node(estimate=e) for e in (1_000_000, 1_000_005, 10**12)]
+    assert f.majority_number(est, "eth_estimateGas", [{}]) == 1_000_005
+    refused("FORKCHECK_NODES", f.majority_number, [node(), lambda m, p: {"error": {}}], "eth_estimateGas", [{}])
+    # an answer the field cannot be read from is malformed, never a vote for a value
+    bad = lambda m, p: {"result": {"gasLimit": 7}} if m == "eth_getBlockByNumber" else node()(m, p)  # noqa: E731
+    refused("FORKCHECK_NODES", f.check_gas, [bad, bad, honest[0]], "0x00")
+    assert f.check_gas([bad, honest[0], honest[0]], "0x00")[1] == 32_000_000
+
+
 # ---- check (4): the control must be red
 
 
@@ -447,6 +477,7 @@ TESTS = [
     real_tree_profiles,
     gas_against_the_live_caps,
     precompile_known_answer,
+    majority_on_the_used_fields,
     deploy_gate_runs_every_check,
     control_green_voids_the_run,
     case_from_revert_logs,

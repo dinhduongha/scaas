@@ -23,7 +23,8 @@ The profile states the fork: src/chains/<key>/profile.json {"evmFork", "codeSize
 (null: none), "blockGasLimit"? (a record; check (2) reads the live block)}; at `amsterdam` (NET-EVM-06) nothing here applies.
 A key without the file is refused (FORKCHECK_PROFILE), except the reset chain `scaas-testnet` and a local anvil
 (`local-…-testnet`), which are `amsterdam` (ARCH-POS-20, review P1-1). Chain reads ask every node of the list and take the
-strict majority (ARCH-POS-15), else FORKCHECK_NODES. One rule on every chain: no chain id is read here.
+strict majority (ARCH-POS-15) on the value used (a block's hash and gas limit at a number below the head, a code, a call's
+answer; a height, an estimate or a fee: the number a strict majority reaches), else FORKCHECK_NODES. One rule on every chain: no chain id is read here.
   python3 -I script/forkcheck.py set-gate <key>        exit 1 (FORKCHECK_SET_FORK) when the profile's fork is not amsterdam:
                                                        a whole SCaaS set waits for the chain's Amsterdam fork (deploy.sh)
   python3 -I script/forkcheck.py scan <fork> <artifact> [<args hex>]   check (3)
@@ -271,22 +272,86 @@ def http_node(url):
     return lambda method, params: _post(url, method, params)
 
 
-def agree(nodes, method, params):
-    """The strict majority's answer ({"result": …} or {"error": …}); the error message is not compared, only its presence."""
+BAD_ANSWER = (ValueError, TypeError, KeyError, AttributeError, IndexError)
+
+
+def qty(x):
+    """A JSON-RPC quantity (a 0x-hex string) as an int; anything else raises ValueError (a malformed answer)."""
+    if not isinstance(x, str) or not re.fullmatch(r"0x[0-9a-fA-F]{1,64}", x):
+        raise ValueError("not a quantity")
+    return int(x, 16)
+
+
+def data(x):
+    """JSON-RPC data (0x and whole bytes), lower case; anything else raises ValueError."""
+    if not isinstance(x, str) or not re.fullmatch(r"0x(?:[0-9a-fA-F]{2})*", x):
+        raise ValueError("not data")
+    return x.lower()
+
+
+def agree(nodes, method, params, pick):
+    """The strict majority on the value used: each answer reduced by `pick` to the fields that matter, normalized (never the
+    whole object, whose fields outside consensus differ between honest nodes; review P2-2); returns {"result": picked} or
+    {"error": …}. The error message is not compared, only its presence; an answer `pick` cannot read is malformed and is
+    never a vote for a value."""
     if not nodes:
         raise ForkError("FORKCHECK_NODES: no node")
-    answers = [n(method, params) for n in nodes]
-    keys = [json.dumps(a["result"], sort_keys=True) if "error" not in a and "result" in a else "error" for a in answers]
+    answers, keys, vals = [n(method, params) for n in nodes], [], []
+    for a in answers:
+        if not isinstance(a, dict) or "error" in a or "result" not in a:
+            keys.append("error")
+            vals.append(None)
+            continue
+        try:
+            v = pick(a["result"])
+        except BAD_ANSWER:
+            keys.append("malformed")
+            vals.append(None)
+            continue
+        keys.append(json.dumps(v, sort_keys=True))
+        vals.append(v)
     for k in set(keys):
-        if 2 * keys.count(k) > len(keys):
-            return answers[keys.index(k)]
+        if k != "malformed" and 2 * keys.count(k) > len(keys):
+            i = keys.index(k)
+            return {"error": answers[i].get("error", {})} if k == "error" else {"result": vals[i]}
     raise ForkError(f"FORKCHECK_NODES: no strict majority on {method} ({len(nodes)} nodes)")
+
+
+def majority_number(nodes, method, params):
+    """A number a strict majority of the list reports at least (the descending list's middle: between two honest answers
+    while a strict majority is honest): heads, estimates and fees differ between honest nodes, so they are never voted on
+    exactly (review P2-2); fewer than a strict majority answering a number: FORKCHECK_NODES."""
+    if not nodes:
+        raise ForkError("FORKCHECK_NODES: no node")
+    got = []
+    for n in nodes:
+        a = n(method, params)
+        try:
+            if "error" not in a:
+                got.append(qty(a["result"]))
+        except BAD_ANSWER:
+            pass
+    if 2 * len(got) <= len(nodes):
+        raise ForkError(f"FORKCHECK_NODES: fewer than a strict majority of {len(nodes)} nodes answer {method} with a number")
+    return sorted(got, reverse=True)[len(nodes) // 2]
+
+
+BLOCK_MARGIN = 16  # the block check (2) reads: this far below the head a strict majority reaches
+
+
+def pinned_block(nodes):
+    """(number, hash, gas limit) of a block below the head a strict majority reaches, its hash and gas limit voted on."""
+    n = max(0, majority_number(nodes, "eth_blockNumber", []) - BLOCK_MARGIN)
+    b = agree(nodes, "eth_getBlockByNumber", [hex(n), False], lambda r: [data(r["hash"]), qty(r["gasLimit"])])
+    if "error" in b:
+        raise ForkError(f"FORKCHECK_GAS: no block {n}")
+    return n, b["result"][0], b["result"][1]
 
 
 def check_precompiles(nodes, entries):
     """Check (5): each declared precompile answers its known answer to an eth_call."""
     for e in entries:
-        a = agree(nodes, "eth_call", [{"to": e["address"], "data": e["input"]}, "latest"])
+        a = agree(nodes, "eth_call", [{"to": e["address"], "data": e["input"]}, "latest"], data)
         got = a.get("result")
         if "error" in a or not isinstance(got, str) or got.lower() != e["output"].lower():
             raise ForkError(
@@ -296,26 +361,20 @@ def check_precompiles(nodes, entries):
     return len(entries)
 
 
-def check_gas(nodes, data, gas_limit=None, sender=None, tx_cap=None):
+def check_gas(nodes, code, gas_limit=None, sender=None, tx_cap=None):
     """Check (2): the deploy transaction's gas (the limit the deploy sends, else the chain's estimate) within the live block
     gas limit, the profile's per-transaction cap `tx_cap` (None: none) and accepted under the chain's per-transaction cap.
     Returns (gas, block gas limit)."""
     if gas_limit is None:
-        tx = {"data": data} | ({"from": sender} if sender else {})
-        a = agree(nodes, "eth_estimateGas", [tx])
-        if "error" in a:
-            raise ForkError("FORKCHECK_GAS: the chain does not estimate the deploy transaction")
-        gas_limit = int(a["result"], 16)
+        tx = {"data": code} | ({"from": sender} if sender else {})
+        gas_limit = majority_number(nodes, "eth_estimateGas", [tx])
     if tx_cap is not None and gas_limit > tx_cap:
         raise ForkError(f"FORKCHECK_GAS: the deploy needs {gas_limit} gas, the profile's txGasCap is {tx_cap}")
-    b = agree(nodes, "eth_getBlockByNumber", ["latest", False])
-    if "error" in b or not b.get("result"):
-        raise ForkError("FORKCHECK_GAS: no latest block")
-    block = int(b["result"]["gasLimit"], 16)
+    block = pinned_block(nodes)[2]
     if gas_limit > block:
         raise ForkError(f"FORKCHECK_GAS: the deploy needs {gas_limit} gas, the live block gas limit is {block}")
     zero = "0x" + "00" * 20
-    a = agree(nodes, "eth_call", [{"from": zero, "to": zero, "gas": hex(gas_limit)}, "latest"])
+    a = agree(nodes, "eth_call", [{"from": zero, "to": zero, "gas": hex(gas_limit)}, "latest"], data)
     if "error" in a:
         msg = json.dumps(a["error"])
         if CAP_REFUSAL.search(msg):
