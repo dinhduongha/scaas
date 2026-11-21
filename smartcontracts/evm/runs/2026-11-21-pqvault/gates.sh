@@ -153,6 +153,12 @@ for st in "$@"; do
         echo "$st: done"
         continue
     fi
+    # MIN_FREE_GB (default 8): a step starts only with that much MemAvailable, else the run stops here (rc 4), nothing waits
+    free=$(awk '/^MemAvailable:/ { print int($2 / 1048576) }' /proc/meminfo)
+    [ "$free" -ge "${MIN_FREE_GB:-8}" ] || {
+        echo "$(date +%H:%M:%S) $st: not started, ${free} GB available < ${MIN_FREE_GB:-8} GB" | tee -a $HERE/progress.log
+        exit 4
+    }
     [ ! -f "$log" ] || mv "$log" "$HERE/$st.red.log"
     echo "$(date +%H:%M:%S) $st: start" | tee -a $HERE/progress.log
     {
