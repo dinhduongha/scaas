@@ -233,6 +233,39 @@ contract GovDeployTest is Test {
         assertFalse(p.classKindEnabled(4, 0));
     }
 
+    /// NET-ALL-25 (C18): with `DEPLOY_PQVAULT` the deploy refuses `PqVault` on a genesis another row shares, before anything is
+    /// sent (`_requireHomeKindsHere`); the fixture lists `PqVault` alone in `homeChainKinds`, so the factory's line cannot answer
+    /// first.
+    function test_pqVaultRefusedOnSharedGenesis() public {
+        string memory p = "./deployments/govdeploy-pqvault-table-test.json";
+        vm.createDir("./deployments", true);
+        bytes32 u = keccak256("one genesis, two chain ids");
+        string memory r = string.concat('"chainUid":"', vm.toString(u), '"}');
+        vm.writeFile(
+            p,
+            string.concat(
+                '{"homeChainKinds":["PqVault"],"chains":[{"key":"a-mainnet","chainId":43114,',
+                r,
+                ',{"key":"b-testnet","chainId":43113,',
+                r,
+                "]}"
+            )
+        );
+        DeployHarness h = new DeployHarness();
+        h.setTable(p);
+        vm.chainId(43114);
+        h.requireHomeKindsHere(u); // twin: no PqVault in this run
+        h.setPqVault(true);
+        vm.expectRevert(
+            bytes(
+                "HOME_CHAIN_SHARED_GENESIS: PqVault keeps homeChain records; chain 43114 shares its chain_uid with b-testnet (NET-ALL-25)"
+            )
+        );
+        h.requireHomeKindsHere(u);
+        h.requireHomeKindsHere(keccak256("its own genesis")); // twin: a genesis no other row shares
+        vm.removeFile(p);
+    }
+
     /// The opcodes of `c` up to its last INVALID (solc's trailing data after it), PUSH data skipped.
     function _opcodes(bytes memory c) internal pure returns (uint256 sd, uint256 cc, uint256 dc) {
         uint256 end = c.length;

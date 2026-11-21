@@ -153,6 +153,23 @@ contract DeployHarness is DeployBase {
         accountFactory = a;
     }
 
+    string internal tablePath;
+
+    /// A `chain-uids.json` fixture in place of the table (NET-ALL-25 tests).
+    function setTable(string calldata p) external {
+        tablePath = p;
+    }
+
+    function _bookTable() internal view override returns (string memory) {
+        return bytes(tablePath).length != 0 ? tablePath : super._bookTable();
+    }
+
+    /// `_requireHomeKindsHere` at chain_uid `uid_`, with the `DEPLOY_PQCHAT` / `DEPLOY_PQVAULT` flags set.
+    function requireHomeKindsHere(bytes32 uid_) external {
+        uid = uid_;
+        _requireHomeKindsHere();
+    }
+
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);
     }

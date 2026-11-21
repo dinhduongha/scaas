@@ -691,6 +691,14 @@ abstract contract DeployBase is DeployBook {
         return at.codehash;
     }
 
+    /// @notice NET-ALL-25 (C18): no homeChain kind on a shared genesis, before anything is sent: the factory always, `PqChat`
+    ///         and `PqVault` when this run deploys them (`chain-uids.json`'s `homeChainKinds`, `_requireKindHere`).
+    function _requireHomeKindsHere() internal view {
+        _requireKindHere("OpenFactory", uid);
+        if (deployPqChat) _requireKindHere("PqChat", uid);
+        if (deployPqVault) _requireKindHere("PqVault", uid);
+    }
+
     /// @notice Plan 3c T92 (UA-7 D22, topics spec §11): `PqChat` on the factory's generic path, with no factory code: its
     ///         body module `PqChatTopics` (CTR-TOK-30, 3C-D2) by CREATE2 with `DEPLOY_SALT` (`_module`, its own gate), the
     ///         class env 1 of `(3, 0)` (the registry; `params[0]` the chain's declared code-size limit, `CHAIN_CODE_LIMIT`;
