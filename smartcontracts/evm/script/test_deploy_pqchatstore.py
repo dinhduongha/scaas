@@ -354,6 +354,27 @@ def cast_signs_what_was_asked():
     refused("CHATSTORE_SEND", d.cast_signer("http://127.0.0.1:9", ["--private-key", ANVIL_KEY, "--legacy"]), tx)
 
 
+def answers_of_another_type_named():
+    """A node's answer of another JSON type, where the script reads a field, is a named refusal, never a traceback (review
+    P3-3): a transaction hash that is a number, a probe event whose data is no word."""
+    a = artifact()
+    with tempfile.TemporaryDirectory() as t:
+        o = setup(t, a)
+        ch = Chain(release_of(a)["address"], a["deployedBytecode"]["object"])
+        num = liar(ch, eth_sendRawTransaction=5)
+        assert "no hash" in refused("CHATSTORE_SEND", d.deploy, [num], sign, **o)
+        run(ch, o)
+        real = ch.__call__
+
+        def no_word(m, p):
+            r = real(m, p)
+            if m == "eth_getTransactionReceipt" and r.get("result") and r["result"]["logs"]:
+                r = {"result": dict(r["result"], logs=[dict(r["result"]["logs"][0], data="0x")])}
+            return r
+
+        refused("CHATSTORE_PROBE", d.probe, [no_word], sign, **o)
+
+
 def book_entry_under_the_chain_key():
     a = artifact()
     rel = release_of(a)
@@ -421,6 +442,7 @@ TESTS = [
     three_honest_nodes_agree,
     the_transaction_from_the_majority,
     cast_signs_what_was_asked,
+    answers_of_another_type_named,
     book_entry_under_the_chain_key,
     probes_write_and_read,
     abi_encoding,

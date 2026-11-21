@@ -201,6 +201,24 @@ MUTANTS = [
         T + "control_green_voids_the_run",
         "FAIL control_green_voids_the_run",
     ),
+    (
+        "P3-3 an answer above the bound read",
+        [(F, "        if len(body) > MAX_ANSWER:", "        if False:")],
+        T + "answers_bounded",
+        "FAIL answers_bounded",
+    ),
+    (
+        "P3-3 a transaction hash of another type taken",
+        [(D, '            hashes |= {f.data(a["result"])} if "result" in a else set()', '            hashes |= {a["result"]} if "result" in a else set()')],
+        TD + "answers_of_another_type_named",
+        "FAIL answers_of_another_type_named",
+    ),
+    (
+        "P3-3 a probe event without an index unnamed",
+        [(D, '        index = f.qty(logs[0]["data"])\n    except f.BAD_ANSWER:', '        index = f.qty(logs[0]["data"])\n    except KeyError:')],
+        TD + "answers_of_another_type_named",
+        "FAIL answers_of_another_type_named",
+    ),
 ]
 
 if __name__ == "__main__":

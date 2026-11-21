@@ -396,6 +396,42 @@ def cases_bound_to_the_contract():
                       say=lambda s: None)  # fmt: skip
 
 
+def answers_bounded():
+    """An answer above MAX_ANSWER bytes is never read whole: a transport error (review P3-3); one at the bound is read; a
+    result of another JSON type is malformed, never a vote (agree)."""
+    import http.server
+    import threading
+
+    size = {"n": 0}
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            self.rfile.read(int(self.headers["Content-Length"]))
+            pad = size["n"] - len('{"jsonrpc":"2.0","id":1,"result":""}')
+            body = ('{"jsonrpc":"2.0","id":1,"result":"' + "0" * pad + '"}').encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{srv.server_address[1]}"
+        size["n"] = f.MAX_ANSWER
+        assert "result" in f._post(url, "eth_call", [])
+        size["n"] = f.MAX_ANSWER + 1
+        a = f._post(url, "eth_call", [])
+        assert a["error"].get("transport") and "above" in a["error"]["message"], a
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    refused("FORKCHECK_NODES", f.agree, [lambda m, p: {"result": 7}], "eth_call", [], f.data)
+
+
 # ---- check (4): the control must be red
 
 
@@ -541,6 +577,7 @@ TESTS = [
     gas_against_the_live_caps,
     precompile_known_answer,
     majority_on_the_used_fields,
+    answers_bounded,
     deploy_gate_runs_every_check,
     cases_bound_to_the_contract,
     control_green_voids_the_run,

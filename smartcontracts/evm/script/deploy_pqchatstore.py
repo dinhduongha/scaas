@@ -265,7 +265,12 @@ def send(nodes, sign, to, data, gas=None, chain_id=None, wait=600):
     tx = {"to": to, "data": data, "gas": gas, "chainId": cid, "nonce": nonce, "maxFeePerGas": cap}
     raw = sign(dict(tx, maxPriorityFeePerGas=tip))
     answers = [n("eth_sendRawTransaction", [raw]) for n in nodes]
-    hashes = {a["result"].lower() for a in answers if "result" in a}
+    hashes = set()
+    for a in answers:
+        try:
+            hashes |= {f.data(a["result"])} if "result" in a else set()
+        except f.BAD_ANSWER:
+            raise StoreError("CHATSTORE_SEND: a node answered eth_sendRawTransaction with no hash") from None
     if len(hashes) != 1:
         raise StoreError(f"CHATSTORE_SEND: {len(hashes)} distinct hashes from {len(nodes)} nodes")
     h = hashes.pop()
@@ -370,7 +375,10 @@ def probe(nodes, sign, out, release=os.path.join(EVM, RELEASE), books=EVM, env=o
     logs = [x for x in rec["logs"] if x["address"] == addr and x["topics"] == [STORED_TOPIC, hint]]
     if len(logs) != 1:
         raise StoreError(f"CHATSTORE_PROBE: {len(logs)} PqChatStored events of the probe hint in {h}")
-    index = int(logs[0]["data"], 16)
+    try:
+        index = f.qty(logs[0]["data"])
+    except f.BAD_ANSWER:
+        raise StoreError(f"CHATSTORE_PROBE: the probe event's data in {h} is no index") from None
     call = "0x" + ids["storedAt(bytes8,uint256)"] + PROBE_HINT.ljust(32, b"\0").hex() + word(index).hex()
     got = _read(nodes, "eth_call", [{"to": addr, "data": call}, "latest"], f.data)
     if got != "0x" + abi_bytes(want).hex():

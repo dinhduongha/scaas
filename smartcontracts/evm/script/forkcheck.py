@@ -257,6 +257,9 @@ def precompiles(release):
 # ---- chain reads through a node list (strict majority)
 
 
+MAX_ANSWER = 4 << 20  # bytes of one answer read at most (a block is under 1 MiB, a 16-blob page under 1 MiB of hex; P3-3)
+
+
 def _post(url, method, params, timeout=30):
     req = urllib.request.Request(
         url,
@@ -265,7 +268,11 @@ def _post(url, method, params, timeout=30):
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.load(r)
+            body = r.read(MAX_ANSWER + 1)
+        if len(body) > MAX_ANSWER:
+            return {"error": {"message": f"no answer (an answer above {MAX_ANSWER} B)", "transport": True}}
+        a = json.loads(body)
+        return a if isinstance(a, dict) else {"error": {"message": "no answer (not a JSON object)", "transport": True}}
     except Exception as e:  # never the URL: it may hold a key
         return {"error": {"message": f"no answer ({type(e).__name__})", "transport": True}}
 
@@ -475,6 +482,13 @@ def run_contract(rpc, accts, gas, artifact, args, cases):
     return out
 
 
+def _local_gas(rpc):
+    try:
+        return qty(rpc("eth_getBlockByNumber", ["latest", False])["result"]["gasLimit"])
+    except BAD_ANSWER:
+        raise ForkError("FORKCHECK_EXEC: the local node gave no latest block gas limit") from None
+
+
 def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     """Check (4) on a node at `fork` (rpc: a callable); returns the number of rows passed. Every contract's rows must pass and
     the fork's control must be red: a green control voids the run (FORKCHECK_CONTROL)."""
@@ -483,7 +497,7 @@ def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     accts = rpc("eth_accounts", []).get("result") or []
     if not accts:
         raise ForkError("FORKCHECK_EXEC: the node has no unlocked account")
-    gas = int(rpc("eth_getBlockByNumber", ["latest", False])["result"]["gasLimit"], 16)
+    gas = _local_gas(rpc)
     ctl = CONTROL[fork]
     rows = run_contract(rpc, accts, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", ctl["cases"])
     for name, ok, g, why in rows:
@@ -517,7 +531,7 @@ def control_check(rpc, fork, say=print, root=EVM, out="out"):
     accts = rpc("eth_accounts", []).get("result") or []
     if not accts:
         raise ForkError("FORKCHECK_EXEC: the node has no unlocked account")
-    gas = int(rpc("eth_getBlockByNumber", ["latest", False])["result"]["gasLimit"], 16)
+    gas = _local_gas(rpc)
     green = [dict(c, ok=True, **{"return": ctl["green"]}) for c in ctl["cases"]]
     rows = run_contract(rpc, accts, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", green)
     for name, ok, g, why in rows:
