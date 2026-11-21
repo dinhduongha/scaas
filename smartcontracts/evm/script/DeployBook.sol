@@ -49,6 +49,7 @@ abstract contract DeployBook is Script {
     {
         string memory dn = _deployName();
         string memory j = vm.readFile(_bookTable());
+        _checkTable(j);
         string memory hit; // the row of (block.chainid, uid)
         string memory priv; // a private row's key with this genesis
         bool taken; // DEPLOY_NAME names another row
@@ -58,13 +59,7 @@ abstract contract DeployBook is Script {
             string memory k = vm.parseJsonString(j, string.concat(p, ".key"));
             bool sameUid = vm.parseJsonBytes32(j, string.concat(p, ".chainUid")) == uid;
             if (sameUid && vm.parseJsonUint(j, string.concat(p, ".chainId")) == block.chainid) {
-                require(
-                    bytes(hit).length == 0,
-                    string.concat(
-                        "CHAIN_PAIR_TAKEN: ", k, " repeats the (chainId, chainUid) pair of another row (NET-ALL-25)"
-                    )
-                );
-                hit = p;
+                hit = p; // one at most: _checkTable refused a second row of the pair
                 continue;
             }
             if (_bookEq(dn, k)) taken = true;
@@ -111,6 +106,55 @@ abstract contract DeployBook is Script {
         return (dn, dn, network);
     }
 
+    /// @notice NET-ALL-25, the table as read, whole (review P3-2; `deploybook.py table()` is the twin): every row says
+    ///         `private` (`CHAIN_ROW_PRIVATE`), no two rows share the pair (chainId, chainUid) (`CHAIN_PAIR_TAKEN`), and a
+    ///         private chain's genesis is in no other row (`CHAIN_UID_PRIVATE`).
+    function _checkTable(string memory j) internal view {
+        uint256 n;
+        while (vm.keyExistsJson(j, string.concat(".chains[", vm.toString(n), "]"))) ++n;
+        string[] memory key = new string[](n);
+        uint256[] memory id = new uint256[](n);
+        bytes32[] memory gen = new bytes32[](n);
+        bool[] memory priv = new bool[](n);
+        for (uint256 i; i < n; ++i) {
+            string memory p = string.concat(".chains[", vm.toString(i), "]");
+            key[i] = vm.parseJsonString(j, string.concat(p, ".key"));
+            require(
+                vm.keyExistsJson(j, string.concat(p, ".private")),
+                string.concat("CHAIN_ROW_PRIVATE: ", key[i], " in chain-uids.json has no private (true | false)")
+            );
+            (id[i], gen[i]) =
+            (vm.parseJsonUint(j, string.concat(p, ".chainId")), vm.parseJsonBytes32(j, string.concat(p, ".chainUid")));
+            priv[i] = vm.parseJsonBool(j, string.concat(p, ".private"));
+            for (uint256 k; k < i; ++k) {
+                require(
+                    id[k] != id[i] || gen[k] != gen[i],
+                    string.concat(
+                        "CHAIN_PAIR_TAKEN: ",
+                        key[i],
+                        " repeats the (chainId, chainUid) pair of ",
+                        key[k],
+                        " (NET-ALL-25)"
+                    )
+                );
+            }
+        }
+        for (uint256 i; i < n; ++i) {
+            for (uint256 k; k < n && priv[i]; ++k) {
+                require(
+                    k == i || gen[k] != gen[i],
+                    string.concat(
+                        "CHAIN_UID_PRIVATE: the private chain ",
+                        key[i],
+                        "'s genesis is also ",
+                        key[k],
+                        "'s (NET-ALL-25)"
+                    )
+                );
+            }
+        }
+    }
+
     /// @notice NET-ALL-25 (C18), the deploy gate: a kind keeping or checking records bound to `chain_uid` without the chain
     ///         id (`homeChain` records, the registry's portable `UAMsigUpdate` and scoped keys; the table's `homeChainKinds`,
     ///         the one list) is refused on a chain whose `chain_uid` another
@@ -127,7 +171,9 @@ abstract contract DeployBook is Script {
             for (uint256 i; i < os.length; ++i) {
                 if (_bookEq(os[i], kind)) return;
             }
-            revert(string.concat("KIND_UNKNOWN: ", kind, " is on neither homeChainKinds nor otherKinds of chain-uids.json"));
+            revert(
+                string.concat("KIND_UNKNOWN: ", kind, " is on neither homeChainKinds nor otherKinds of chain-uids.json")
+            );
         }
         for (uint256 i;; ++i) {
             string memory p = string.concat(".chains[", vm.toString(i), "]");

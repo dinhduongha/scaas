@@ -245,6 +245,30 @@ MUTANTS = [
         GOV + "test_kindGateWhereCreated",
         "test_kindGateWhereCreated",
     ),
+    (
+        "P3-2 the table not checked whole",
+        [(BS, "        string memory j = vm.readFile(_bookTable());\n        _checkTable(j);\n", "        string memory j = vm.readFile(_bookTable());\n")],
+        GOV + "test_tableCheckedWhole",
+        "test_tableCheckedWhole",
+    ),
+    (
+        "P3-2 a row without private unnamed",
+        [(BS, '                vm.keyExistsJson(j, string.concat(p, ".private")),', "                true,")],
+        GOV + "test_tableCheckedWhole",
+        "test_tableCheckedWhole",
+    ),
+    (
+        "P3-2 a pair held twice elsewhere",
+        [(BS, "                    id[k] != id[i] || gen[k] != gen[i],", "                    true,")],
+        GOV + "test_tableCheckedWhole",
+        "test_tableCheckedWhole",
+    ),
+    (
+        "P3-2 a private genesis in a second row",
+        [(BS, "                    k == i || gen[k] != gen[i],", "                    true,")],
+        GOV + "test_tableCheckedWhole",
+        "test_tableCheckedWhole",
+    ),
 ]
 
 if __name__ == "__main__":
