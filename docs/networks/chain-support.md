@@ -74,7 +74,7 @@ Status: SPECIFIED.
 | 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
 | 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | M T41.evm (EVM side; the native side's sends wait for Q-R5) | B (EVM side; native side: P T41.hedera read, ed25519 sends wait for Q-R5) |
 | 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | P CA-T3 | P CA-T3 | B | P CA-T2 | B | P CA-T2 | M ARCH-POS-18 | B‡ | B‡ | M T41.evm | P CA-T2 |
-| 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | M T41.evm | deferred (sends, owner 2026-11-22) (read B) |
+| 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | M T41.evm | P T41.dot (read B; the sends, owner 2026-11-22) |
 | 15 | Moonbeam (Moonbase Alpha) | B‡ | P CA-T3, T15 | P CA-T3 | B | P CA-T11 | B | P CA-T11 | B‡ | P CA-T15 | P CA-T15 | M T41.evm | P CA-T11 |
 | 16 | NEAR (SCaaS family) | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-near` | M family round | M T41.near | M T41.near (read B) |
 | 17 | Algorand | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-algorand` | M family round | M T41.algorand | M T41.algorand (read B) |
@@ -87,7 +87,7 @@ Status: SPECIFIED.
 | 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (send; its reads B), T37 (SDK) |
 | 25 | Arweave (store) | n/a | n/a | n/a | P CA-T16, T17 | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a | n/a | P CA-T17, T19, T20 |
 
-Counts (25 rows): Contract B 23 (14 B‡), n/a 2. Relay B 20, P 3, n/a 2. Index B 20, P 3, n/a 2. Signing B 17, P 1, M 6, n/a 1. rpc read B 20, P 4, n/a 1. rpc write B 15, P 1, M 8, n/a 1. SDK B 5, P 4, M 15, n/a 1. Zether B 8 (7 B‡), P 6, M 9, n/a 2. PQ B 8 (7 B‡), P 8, M 7, n/a 2. PQZ B 8 (7 B‡), P 6, M 9, n/a 2. Self-relay M 23, n/a 2. Native B 5, P 3, deferred 1 (its read built), M 16 (8 of them with the read built).
+Counts (25 rows): Contract B 23 (14 B‡), n/a 2. Relay B 20, P 3, n/a 2. Index B 20, P 3, n/a 2. Signing B 17, P 1, M 6, n/a 1. rpc read B 20, P 4, n/a 1. rpc write B 15, P 1, M 8, n/a 1. SDK B 5, P 4, M 15, n/a 1. Zether B 8 (7 B‡), P 6, M 9, n/a 2. PQ B 8 (7 B‡), P 8, M 7, n/a 2. PQZ B 8 (7 B‡), P 6, M 9, n/a 2. Self-relay M 23, n/a 2. Native B 5, P 4 (one with its read built), M 16 (8 of them with the read built).
 
 ## 4. Notes on the cells
 

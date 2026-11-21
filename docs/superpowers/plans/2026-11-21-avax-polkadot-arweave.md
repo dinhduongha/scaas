@@ -351,6 +351,11 @@ outside clientkeys' dependency tree.
 
 ## T17 — `ua-rs`: ANS-104, the sealed upload and the upload key
 
+Placement (SDK plan T42, decisions CLI-SDK-33 (35), on branch `sdk-complete`): the generic file seal (the frame inside the
+AEAD, the buckets, `open_file`'s `size` and `sha256` checks, the file-key handle) is in the app-core core; ANS-104, the deep
+hash, `UploadSign`, the upload key, `seal_for_arweave`, `ar://` and `scaas-rpc`'s `arweave` module are behind `fam-arweave`.
+Test: a build without `fam-arweave` seals and opens a file; a build with it uploads.
+
 **Files:** `clients/ua-rs/src/arweave.rs` (new), the app-core handle usages, `tests/arweave.rs`.
 
 - [ ] Reproduce every T16 row byte for byte. The parser's bounds and refusals of spec §7.2; the signature verified before an item is
