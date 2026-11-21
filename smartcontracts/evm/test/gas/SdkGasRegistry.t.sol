@@ -72,8 +72,8 @@ contract SdkGasRegistryTest is SdkGasRows, UARegistryBase, PqzMock {
         super.setUp();
         _sgSkaSetup(chainUidA);
         UARegistry.KindConfig[] memory keep = new UARegistry.KindConfig[](2);
-        keep[0] = UARegistry.KindConfig(UAKinds.MLDSA87, address(_ml87()), CAP_ML87);
-        keep[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(_pqzVerifier()), CAP_PQZ_MLWE);
+        keep[0] = UARegistry.KindConfig(UAKinds.MLDSA87, address(_ml87()), CAP_ML87, false, 0);
+        keep[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(_pqzVerifier()), CAP_PQZ_MLWE, false, 0);
         vm.clearMockedCalls();
         vm.etch(ML87, address(new GasBurner(135_000 + 6 - 2_900)).code);
         vm.etch(PQZ, address(new GasBurner(_regRow() - 2_900)).code);

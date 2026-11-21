@@ -54,7 +54,7 @@ pub enum Rule {
     SelfAuth,
     /// A DEX on the chain's DEX list (`dex`), bound to this chain.
     Dex,
-    /// The chain's `UARegistry` (`ua_registry`), bound to this chain: its writes (UA-8, ruling R-node; `registerMsig` since typed-signing R1, `registerWebAuthn` / `registerMuSig2` / `registerFrost` since R1b, `registerBlsMulti` since bls-multi Task 10).
+    /// A generation of the chain's `UARegistry` line (`ua_registries`, CTR-UA-65), bound to this chain: its writes (UA-8, ruling R-node; `registerMsig` since typed-signing R1, `registerWebAuthn` / `registerMuSig2` / `registerFrost` since R1b, `registerBlsMulti` since bls-multi Task 10).
     UaRegistry,
     /// One of the chain's `GovernanceRouter`s (`governance_routers`), bound to this chain (spec 2026-11-02-governance §12.7): its
     /// typed entries only; a router is no target of any other kind's row.
@@ -355,6 +355,15 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
     if reason.starts_with("UAKeyNotCached") {
         return Verdict::Requeue(format!("{UA_KEY_NOT_CACHED}: {reason}"));
     }
+    // CTR-UA-65: the holding generation refuses the cache (its verifier has a precompile): the key's cache never completes
+    if reason.starts_with("UAKeyCache") {
+        return Verdict::Dead(format!("{UA_KEY_NOT_CACHEABLE}: {reason}"));
+    }
+    // Review Focus 5 (spec 2026-11-19-registry-verify-only-kinds §5, N13): a starved registry check is gas, never the job's
+    // answer: a resend sized by a fresh simulation (up to `txGasCap`) may land, so the job waits
+    if reason.starts_with("UAVerifyGas") {
+        return Verdict::Requeue(format!("{UA_VERIFY_GAS}: {reason}"));
+    }
     // NODE-JOB-24 (group 3h, pqz-proof-path spec §10): under `LOG` a holder of bit 24 may switch the token to `NONE` and the job
     // may land: `PROOF_STORE_OVER_LANE_CAP`, back in the queue; under `NONE`, or without the view, the plain refusal
     if over_cap(&reason) && crate::pqz::is_debit(w) {
@@ -585,6 +594,59 @@ pub fn pq_register(data: &[u8]) -> bool {
 /// reverts `UAKeyNotCached(ua)` until every part of the key's expanded-key cache is stored. The job waits under this name, `queued`,
 /// never `dead`: anyone may send the parts (`cacheExpandedKey`), and for a `register` the lane sends them itself.
 pub const UA_KEY_NOT_CACHED: &str = "UA_KEY_NOT_CACHED";
+
+/// Review Focus 5 (CTR-UA-68, N13): a registry check starved of gas (`UAVerifyGas`): back in the queue, never `dead`, while a
+/// resend with a fresh estimate may land.
+pub const UA_VERIFY_GAS: &str = "UA_VERIFY_GAS";
+
+/// CTR-UA-65 (F9): a registration (or `cacheExpandedKey`) of a kind sent to a generation where the kind is not registrable
+/// (verify-only there, or not carried): refused before sending; the refusal names `kindHome(kind)`.
+pub const UA_VERIFY_ONLY: &str = "UA_VERIFY_ONLY";
+/// CTR-UA-65 (F9): a key write sent to a generation that does not hold the record, or a PQZ write sent elsewhere than the
+/// record's PQZ home: refused before sending; the refusal names `holderOf(ua)` / `pqzHomeOf(ua)`.
+pub const UA_WRONG_GENERATION: &str = "UA_WRONG_GENERATION";
+/// NODE-JOB-29 (CTR-UA-65): the holding generation refuses the cache (`UAKeyCache`, its verifier has a precompile): a key that
+/// waits for its cache never completes, `dead` under this name.
+pub const UA_KEY_NOT_CACHEABLE: &str = "UA_KEY_NOT_CACHEABLE";
+
+/// Where a registry write belongs on the line (CTR-UA-65).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineTarget {
+    /// A registration or a cache part of `kind`: `kindHome(kind)`.
+    Kind(u16),
+    /// A key write held in the holding generation (`setKemKey`, `acceptMembership`, `updateMsig`): `holderOf(ua)`.
+    Holder(B256),
+    /// A write of the PQZ attachment (`setPqzKey`, `setPqzScopedKey`, `storePqzPop`, `storePqzScopedPop`): `pqzHomeOf(ua)`.
+    PqzHome(B256),
+}
+
+/// The line target of a registry row's calldata; `None` for calldata that is no registry row.
+pub fn line_target(data: &[u8]) -> Option<LineTarget> {
+    use crate::abi::IUARegistry::*;
+    use LineTarget::*;
+    let sel: [u8; 4] = data.get(..4)?.try_into().ok()?;
+    Some(match sel {
+        registerCall::SELECTOR => Kind(registerCall::abi_decode(data).ok()?.kind),
+        registerMuSig2Call::SELECTOR => Kind(registerMuSig2Call::abi_decode(data).ok()?.kind),
+        registerFrostCall::SELECTOR => Kind(registerFrostCall::abi_decode(data).ok()?.kind),
+        cacheExpandedKeyCall::SELECTOR => Kind(cacheExpandedKeyCall::abi_decode(data).ok()?.kind),
+        // `msig` is registrable in every generation (re-enabled in full, spec §2): no line target, the contract decides; asking
+        // the newest generation's `kindHome(0x0120)` refused every `registerMsig` to an older one (Task 21 review P2-5)
+        registerMsigCall::SELECTOR => return None,
+        registerWebAuthnCall::SELECTOR => Kind(0x0100),
+        registerBlsMultiCall::SELECTOR => Kind(0x0121),
+        setKemKeyCall::SELECTOR => Holder(setKemKeyCall::abi_decode(data).ok()?.ua),
+        acceptMembershipCall::SELECTOR => Holder(acceptMembershipCall::abi_decode(data).ok()?.ua),
+        updateMsigCall::SELECTOR => Holder(updateMsigCall::abi_decode(data).ok()?.ua),
+        setPqzKeyCall::SELECTOR => PqzHome(setPqzKeyCall::abi_decode(data).ok()?.ua),
+        setPqzScopedKeyCall::SELECTOR => PqzHome(setPqzScopedKeyCall::abi_decode(data).ok()?.ua),
+        storePqzPopCall::SELECTOR => PqzHome(storePqzPopCall::abi_decode(data).ok()?.ua),
+        storePqzScopedPopCall::SELECTOR => {
+            PqzHome(storePqzScopedPopCall::abi_decode(data).ok()?.ua)
+        }
+        _ => return None,
+    })
+}
 
 /// An ML-DSA kind's FIPS 204 public key length and its cache part count (`PqUA.mldsaParts`): mldsa44 1,312 B / 1 part, mldsa65
 /// 1,952 B / 2, mldsa87 2,592 B / 3; `None` for every other kind (no cache).
@@ -1307,7 +1369,8 @@ pub struct Guard {
     max_pay_meta_bytes: usize,
     token_factory: Option<Address>,
     account_factory: Option<Address>,
-    ua_registry: Option<Address>,
+    /// The registry line in generation order (CTR-UA-65; ordered at start by [`crate::config::read_ua_line`]).
+    ua_registries: Vec<Address>,
     dexes: Vec<Address>,
     gov_routers: Vec<Address>,
     bound: Mutex<HashSet<Address>>,
@@ -1341,7 +1404,7 @@ impl Guard {
             tokens,
             token_factory: cfg.token_factory,
             account_factory: cfg.account_factory,
-            ua_registry: cfg.ua_registry,
+            ua_registries: cfg.ua_registries.clone(),
             dexes: cfg.dex.into_iter().collect(),
             gov_routers: cfg.governance_routers.clone(),
             bound: Default::default(),
@@ -1659,6 +1722,9 @@ impl Guard {
         if !allowed(rule, &self.facts(chain, w.to, rule).await?) {
             return Err(refused(format!("{} on {:#x}", row.entry, w.to)));
         }
+        if rule == Rule::UaRegistry {
+            self.check_generation(chain, row, w).await?;
+        }
         if sel == ISCaaSDex::mtxLiquidityCall::SELECTOR {
             return check_liquidity(chain, w, self.max_gas_per_tx).await;
         }
@@ -1805,7 +1871,7 @@ impl Guard {
             token_factory: self.token_factory == Some(to),
             account_factory: self.account_factory == Some(to),
             dex: self.dexes.contains(&to),
-            ua_registry: self.ua_registry == Some(to),
+            ua_registry: self.ua_registries.contains(&to),
             gov_router: self.gov_routers.contains(&to),
             listed: if class {
                 self.listed(chain, to).await?
@@ -1815,6 +1881,59 @@ impl Guard {
             // an instance answers no `chainUid()`: its rule reads the factory's record instead
             bound: !class && self.bound(chain, to).await?,
         })
+    }
+
+    /// CTR-UA-65 (F9): a registry write goes to the generation that takes it, read through the line's newest generation (its
+    /// walk answers for every generation): a registration (and `cacheExpandedKey`) to `kindHome(kind)`, else `UA_VERIFY_ONLY`;
+    /// a key write held in the holding generation to `holderOf(ua)`, a PQZ write to the record's PQZ home, else
+    /// `UA_WRONG_GENERATION`; each names its target. An id no generation holds, a kind no generation registers, a read the
+    /// registry refuses: the simulation's (the contract stays the guard). One generation: nothing to choose.
+    async fn check_generation(
+        &self,
+        chain: &Chain,
+        row: &typed::Row,
+        w: &Work,
+    ) -> Result<(), Refusal> {
+        use crate::abi::IUARegistry as R;
+        let (Some(newest), true) = (
+            self.ua_registries.last().copied(),
+            self.ua_registries.len() > 1,
+        ) else {
+            return Ok(());
+        };
+        let Some(target) = line_target(&w.data) else {
+            return Ok(());
+        };
+        let read = |e: SimError| match e {
+            SimError::Transport(e) => Err(Refusal::Transport(format!("registry line: {e}"))),
+            SimError::Revert(_) => Ok(()),
+        };
+        let (to, entry) = (w.to, row.entry);
+        let policy = |s: String| Err(Refusal::Policy(s));
+        match target {
+            LineTarget::Kind(kind) => match chain.call_view(newest, R::kindHomeCall { kind }).await {
+                Ok(home) if home != Address::ZERO && home != to => policy(format!(
+                    "{UA_VERIFY_ONLY}: {entry} of kind {kind:#06x} on {to:#x}, where it is not registrable; \
+                     send it to kindHome(kind) {home:#x}")),
+                Ok(_) => Ok(()),
+                Err(e) => read(e),
+            },
+            LineTarget::Holder(ua) | LineTarget::PqzHome(ua) => {
+                let h = match chain.call_view(newest, R::holderOfCall { ua }).await {
+                    Ok(h) => h,
+                    Err(e) => return read(e),
+                };
+                let (at, what) = match target {
+                    LineTarget::Holder(_) => (h.holder, "the generation that holds the record, holderOf(ua)"),
+                    _ => (h.pqzHome, "the record's PQZ home, pqzHomeOf(ua)"),
+                };
+                if at != Address::ZERO && at != to {
+                    return policy(format!(
+                        "{UA_WRONG_GENERATION}: {entry} of {ua:#x} on {to:#x}; send it to {what} {at:#x}"));
+                }
+                Ok(())
+            }
+        }
     }
 
     /// `infoOf(to)` on `token_factory`: `(contractClass, version)` of a contract it made, cached (a record never changes once
@@ -2047,6 +2166,19 @@ pub fn rpc_cap(reason: &str) -> bool {
 }
 
 pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
+    gas_capped(chain, w, max, None).await
+}
+
+/// [`gas`] with the registry line's `txGasCap()` (`tx_cap`, read at start; Review Focus 5, spec 2026-11-19-registry-verify-only-kinds
+/// §5 N13): a registry-checked job (a derived subject, whose check runs in the registry) takes its simulated limit up to the
+/// chain registry's `txGasCap()` (never below the estimate itself), never a verify budget: a check that passes only on the
+/// fallback path is sent with the gas the simulation found.
+pub async fn gas_capped(
+    chain: &Chain,
+    w: &Work,
+    max: u64,
+    tx_cap: Option<u64>,
+) -> Result<u64, SimError> {
     let block = chain
         .block_gas()
         .await
@@ -2124,6 +2256,14 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
             },
             None => false,
         };
+        let registry_checked = w
+            .meta
+            .as_ref()
+            .is_some_and(|m| crate::metatx::native(&m.from).is_none());
+        let cap = match tx_cap {
+            Some(t) if registry_checked => max.min(t.max(est)),
+            _ => max,
+        };
         gas_limit(
             est,
             if contract_signer {
@@ -2131,7 +2271,7 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
             } else {
                 0
             },
-            max,
+            cap,
         )
     };
     if g >= block.limit {
@@ -3203,10 +3343,10 @@ mod tests {
             ),
             (
                 ChainCfg {
-                    ua_registry: Some(s),
+                    ua_registries: vec![s],
                     ..base.clone()
                 },
-                "ua_registry",
+                "ua_registries",
             ),
             (
                 ChainCfg {
@@ -6018,7 +6158,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                         ..cfg.clone()
                     },
                     "registry" => ChainCfg {
-                        ua_registry: Some(to),
+                        ua_registries: vec![to],
                         ..cfg.clone()
                     },
                     "factory" => ChainCfg {
@@ -6226,6 +6366,437 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 &cd[2..10],
                 alloy::hex::encode(sel),
                 "{op}: the router's selector"
+            );
+        }
+    }
+
+    /// CTR-UA-65: what the fake line answers through its newest generation: `kindHome(kind)`, `holderOf(ua)`'s holder and PQZ home,
+    /// and the registries those two views were asked on.
+    #[derive(Default)]
+    struct LineFake {
+        home: Address,
+        holder: Address,
+        pqz_home: Address,
+        asked: Vec<Address>,
+    }
+
+    /// An RPC answering `kindHome` and `holderOf` from `f`, every other `eth_call` with `uid` (every target bound), block 0 `uid`.
+    async fn line_rpc(uid: B256, f: Arc<Mutex<LineFake>>) -> ChainCfg {
+        use crate::abi::IUARegistry as R;
+        let app = axum::Router::new().route(
+            "/",
+            axum::routing::post(move |axum::Json(r): axum::Json<serde_json::Value>| {
+                let f = f.clone();
+                async move {
+                    if let Some(b) = block0_of(&r, uid, 31337) {
+                        return axum::Json(
+                            serde_json::json!({"jsonrpc": "2.0", "id": r["id"], "result": b}),
+                        );
+                    }
+                    let p = &r["params"][0];
+                    let input = alloy::hex::decode(
+                        p["input"]
+                            .as_str()
+                            .or(p["data"].as_str())
+                            .unwrap_or("0x")
+                            .trim_start_matches("0x"),
+                    )
+                    .unwrap_or_default();
+                    let to: Address = p["to"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .parse()
+                        .unwrap_or_default();
+                    let mut f = f.lock().unwrap();
+                    let out: Vec<u8> = match input.get(..4) {
+                        Some(s) if s == R::kindHomeCall::SELECTOR => {
+                            f.asked.push(to);
+                            f.home.abi_encode()
+                        }
+                        Some(s) if s == R::holderOfCall::SELECTOR => {
+                            f.asked.push(to);
+                            R::holderOfCall::abi_encode_returns(&R::holderOfReturn {
+                                holder: f.holder,
+                                kind: 0x0131,
+                                pqzHome: f.pqz_home,
+                            })
+                        }
+                        _ => uid.abi_encode(),
+                    };
+                    let result = match r["method"].as_str() {
+                        Some("eth_call") => {
+                            serde_json::json!(format!("0x{}", alloy::hex::encode(out)))
+                        }
+                        Some("eth_getCode") => serde_json::json!("0x"),
+                        _ => serde_json::Value::Null,
+                    };
+                    axum::Json(
+                        serde_json::json!({"jsonrpc": "2.0", "id": r["id"], "result": result}),
+                    )
+                }
+            }),
+        );
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        ChainCfg {
+            evm_chain_number: 31337,
+            rpc_urls: vec![url],
+            chain_uid: Some(uid),
+            ..Default::default()
+        }
+    }
+
+    const G1: Address = Address::repeat_byte(0x61);
+    const G2: Address = Address::repeat_byte(0x62);
+    const G3: Address = Address::repeat_byte(0x63);
+
+    /// A registry write of `data` on `to`, as the call table builds it.
+    fn reg_work(to: Address, data: Vec<u8>) -> Work {
+        Work {
+            job_id: Some(1),
+            to,
+            data: data.into(),
+            valid_until: 0,
+            envelope_until: 0,
+            meta: None,
+            entry: true,
+            typed: Some(typed::Typed {
+                pay_meta_len: 0,
+                pqz_parties: vec![],
+                pqz_auditor: false,
+                pqz_verdict: None,
+                pqz_fee: None,
+                contract: "registry",
+                domain_of: to,
+                struct_hash: None,
+                lane_hash: None,
+                signer: None,
+                payee: None,
+                digest: None,
+                derived_signer: false,
+                derived_side: false,
+            }),
+        }
+    }
+
+    /// The line `g1, g2, g3` (already in generation order, as the start check leaves it) over `f`.
+    async fn line_guard(f: &Arc<Mutex<LineFake>>, line: Vec<Address>) -> (Guard, Chain) {
+        let cfg = ChainCfg {
+            ua_registries: line,
+            ..line_rpc(B256::repeat_byte(0x24), f.clone()).await
+        };
+        (
+            Guard::new(&cfg, Default::default()).unwrap(),
+            Chain::with_signer(&cfg, signer()).unwrap(),
+        )
+    }
+
+    fn sig() -> crate::abi::UASig {
+        crate::abi::UASig {
+            keyData: Bytes::new(),
+            signature: Bytes::from(vec![7; 65]),
+            members: vec![],
+        }
+    }
+
+    fn kem() -> crate::abi::IUARegistry::KemKey {
+        crate::abi::IUARegistry::KemKey {
+            scheme: 0,
+            mlkemEk: Bytes::new(),
+            x25519: B256::ZERO,
+        }
+    }
+
+    /// CTR-UA-65: a `register` (and `cacheExpandedKey`) of a kind sent to a generation where it is not registrable is refused
+    /// before sending, `UA_VERIFY_ONLY`, naming `kindHome(kind)`, read through the newest generation. Positive control: the same
+    /// write on the home passes; a kind no generation registers (home 0) and a one-generation line are the simulation's.
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn guard_register_verifyOnly_UA_VERIFY_ONLY() {
+        use crate::abi::IUARegistry as R;
+        let f = Arc::new(Mutex::new(LineFake {
+            home: G1,
+            ..Default::default()
+        }));
+        let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
+        let attrs = R::UAAttrs {
+            pqzKey: Bytes::new(),
+            pqzPopHash: B256::ZERO,
+            kem: kem(),
+            kemPkHash: B256::ZERO,
+        };
+        let register = R::registerCall {
+            kind: 0x0131,
+            keyData: Bytes::from(vec![1; 1952]),
+            attrs,
+            pop: Bytes::new(),
+            pqzPop: Bytes::new(),
+        }
+        .abi_encode();
+        let cache = R::cacheExpandedKeyCall {
+            kind: 0x0131,
+            pk: Bytes::from(vec![1; 1952]),
+            part: alloy::primitives::U256::ZERO,
+        }
+        .abi_encode();
+        for data in [register.clone(), cache] {
+            assert_eq!(
+                g.check(&chain, &reg_work(G1, data.clone())).await,
+                Ok(()),
+                "control: on kindHome"
+            );
+            for to in [G2, G3] {
+                let e = g.check(&chain, &reg_work(to, data.clone())).await;
+                assert!(
+                    matches!(&e, Err(Refusal::Policy(r)) if r.starts_with(&format!("{UA_VERIFY_ONLY}: "))
+                        && r.contains(&format!("kindHome(kind) {G1:#x}")) && r.contains("0x0131")),
+                    "{to:#x}: {e:?}"
+                );
+            }
+        }
+        assert!(
+            f.lock().unwrap().asked.iter().all(|a| *a == G3),
+            "read through the newest generation"
+        );
+        f.lock().unwrap().home = Address::ZERO;
+        assert_eq!(
+            g.check(&chain, &reg_work(G2, register.clone())).await,
+            Ok(()),
+            "no home: the simulation's"
+        );
+        f.lock().unwrap().home = G1;
+        let (one, chain) = line_guard(&f, vec![G2]).await;
+        assert_eq!(
+            one.check(&chain, &reg_work(G2, register)).await,
+            Ok(()),
+            "one generation"
+        );
+    }
+
+    /// Task 21 review P2-5: `msig` is registrable in every generation, so a `registerMsig` to an older generation passes the line
+    /// check (the newest generation's `kindHome(0x0120)` is never asked); the `register` of a verify-only kind stays refused.
+    #[tokio::test]
+    async fn guard_register_msig_older_generation_passes() {
+        use crate::abi::IUARegistry as R;
+        let f = Arc::new(Mutex::new(LineFake {
+            home: G3,
+            ..Default::default()
+        }));
+        let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
+        let attrs = R::UAAttrs {
+            pqzKey: Bytes::new(),
+            pqzPopHash: B256::ZERO,
+            kem: kem(),
+            kemPkHash: B256::ZERO,
+        };
+        let msig = R::registerMsigCall {
+            structure: R::MsigStructure {
+                threshold: 1,
+                members: vec![],
+            },
+            attrs: attrs.clone(),
+            pop: vec![],
+            pqzPop: Bytes::new(),
+        }
+        .abi_encode();
+        assert_eq!(line_target(&msig), None);
+        for to in [G1, G2, G3] {
+            assert_eq!(
+                g.check(&chain, &reg_work(to, msig.clone())).await,
+                Ok(()),
+                "{to:#x}"
+            );
+        }
+        let register = R::registerCall {
+            kind: 0x0131,
+            keyData: Bytes::from(vec![1; 1952]),
+            attrs,
+            pop: Bytes::new(),
+            pqzPop: Bytes::new(),
+        }
+        .abi_encode();
+        let e = g.check(&chain, &reg_work(G1, register)).await;
+        assert!(
+            matches!(&e, Err(Refusal::Policy(r)) if r.starts_with(&format!("{UA_VERIFY_ONLY}: "))),
+            "control: {e:?}"
+        );
+    }
+
+    /// CTR-UA-65: a key write held in the holding generation (`setKemKey`, `acceptMembership`, `updateMsig`) sent to a generation
+    /// that does not hold the record is refused `UA_WRONG_GENERATION`, naming `holderOf(ua)`. Control: on the holder it passes; an
+    /// id no generation holds is the simulation's.
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn guard_keyWrite_wrongGeneration() {
+        use crate::abi::IUARegistry as R;
+        let f = Arc::new(Mutex::new(LineFake {
+            holder: G1,
+            pqz_home: G2,
+            ..Default::default()
+        }));
+        let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
+        let ua = B256::repeat_byte(0x11);
+        let writes = [
+            R::setKemKeyCall {
+                ua,
+                version: 1,
+                kem: kem(),
+                sig: sig(),
+            }
+            .abi_encode(),
+            R::acceptMembershipCall {
+                ua,
+                memberSig: crate::abi::MemberSig {
+                    index: 0,
+                    members: vec![],
+                    sig: Bytes::new(),
+                },
+            }
+            .abi_encode(),
+            R::updateMsigCall {
+                ua,
+                version: 2,
+                structure: R::MsigStructure {
+                    threshold: 1,
+                    members: vec![],
+                },
+                enabled: alloy::primitives::U256::from(1),
+                validUntilBlock: 9,
+                sigs: vec![],
+                chainUid_: B256::repeat_byte(0x24),
+            }
+            .abi_encode(),
+        ];
+        for data in writes {
+            assert_eq!(
+                g.check(&chain, &reg_work(G1, data.clone())).await,
+                Ok(()),
+                "control: on the holder"
+            );
+            for to in [G2, G3] {
+                let e = g.check(&chain, &reg_work(to, data.clone())).await;
+                assert!(
+                    matches!(&e, Err(Refusal::Policy(r)) if r.starts_with(&format!("{UA_WRONG_GENERATION}: "))
+                        && r.contains(&format!("holderOf(ua) {G1:#x}"))),
+                    "{to:#x}: {e:?}"
+                );
+            }
+        }
+        f.lock().unwrap().holder = Address::ZERO;
+        let w = R::setKemKeyCall {
+            ua,
+            version: 1,
+            kem: kem(),
+            sig: sig(),
+        }
+        .abi_encode();
+        assert_eq!(
+            g.check(&chain, &reg_work(G3, w)).await,
+            Ok(()),
+            "unregistered: the simulation's"
+        );
+    }
+
+    /// CTR-UA-65, spec §11.2: a PQZ write (`setPqzKey`, `setPqzScopedKey`, `storePqzPop`, `storePqzScopedPop`) sent elsewhere than
+    /// the record's PQZ home, the holder included, is refused `UA_WRONG_GENERATION`, naming `pqzHomeOf(ua)`. Control: on the home.
+    #[tokio::test]
+    #[allow(non_snake_case)]
+    async fn guard_pqzWrite_wrongHome() {
+        use crate::abi::IUARegistry as R;
+        let f = Arc::new(Mutex::new(LineFake {
+            holder: G1,
+            pqz_home: G2,
+            ..Default::default()
+        }));
+        let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
+        let ua = B256::repeat_byte(0x11);
+        let scope = Address::repeat_byte(0x5c);
+        let writes = [
+            R::setPqzKeyCall {
+                ua,
+                version: 1,
+                pqzKey: Bytes::new(),
+                pqzPopHash: B256::ZERO,
+                sig: sig(),
+            }
+            .abi_encode(),
+            R::storePqzPopCall {
+                ua,
+                version: 1,
+                pqzPop: Bytes::from(vec![3; 64]),
+            }
+            .abi_encode(),
+            R::setPqzScopedKeyCall {
+                ua,
+                scope,
+                version: 1,
+                pqzKey: Bytes::new(),
+                pqzPopHash: B256::ZERO,
+                openKem: kem(),
+                validUntilBlock: 9,
+                sig: sig(),
+            }
+            .abi_encode(),
+            R::storePqzScopedPopCall {
+                ua,
+                scope,
+                version: 1,
+                pqzPop: Bytes::from(vec![3; 64]),
+            }
+            .abi_encode(),
+        ];
+        for data in writes {
+            assert_eq!(
+                g.check(&chain, &reg_work(G2, data.clone())).await,
+                Ok(()),
+                "control: on the PQZ home"
+            );
+            for to in [G1, G3] {
+                let e = g.check(&chain, &reg_work(to, data.clone())).await;
+                assert!(
+                    matches!(&e, Err(Refusal::Policy(r)) if r.starts_with(&format!("{UA_WRONG_GENERATION}: "))
+                        && r.contains(&format!("pqzHomeOf(ua) {G2:#x}"))),
+                    "{to:#x}: {e:?}"
+                );
+            }
+        }
+    }
+
+    /// CTR-UA-65 (F9): `Rule::UaRegistry` is the set of the line's addresses: a registry row runs on every generation of the line
+    /// and on no other address (a former generation dropped from the config included); every `REG` row of the call table has its
+    /// line target but `registerMsig` (every generation registers an `msig`), so the generation rule covers each.
+    #[tokio::test]
+    async fn guard_allow_lists_per_registry() {
+        let f = Arc::new(Mutex::new(LineFake::default()));
+        let (g, chain) = line_guard(&f, vec![G1, G2, G3]).await;
+        for to in [G1, G2, G3, Address::repeat_byte(0x64)] {
+            let facts = g.facts(&chain, to, Rule::UaRegistry).await.unwrap();
+            assert_eq!(
+                allowed(Rule::UaRegistry, &facts),
+                to != Address::repeat_byte(0x64),
+                "{to:#x}"
+            );
+            for other in [Rule::Dex, Rule::AccountFactory, Rule::GovRouter] {
+                assert!(
+                    !allowed(other, &facts) || to == Address::repeat_byte(0x64),
+                    "{other:?} on {to:#x}"
+                );
+            }
+        }
+        let reg: Vec<&typed::Row> = typed::rows()
+            .iter()
+            .filter(|r| !r.entry.is_empty() && r.contracts == ["registry"])
+            .collect();
+        assert_eq!(reg.len(), 14, "the registry rows");
+        for r in reg {
+            let data = [&r.sent[..], &[0u8; 4096][..]].concat();
+            // `registerMsig` alone has none: `msig` is registrable in every generation (Task 21 review P2-5)
+            assert_eq!(
+                line_target(&data).is_some(),
+                r.entry != "registerMsig",
+                "{}: its line target",
+                r.entry
             );
         }
     }

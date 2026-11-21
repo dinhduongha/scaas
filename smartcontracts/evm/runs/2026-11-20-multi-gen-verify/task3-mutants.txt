@@ -1,0 +1,8 @@
+mutant | red tests | rc | killed by
+pqzHome-newest | test_holderOf_pqzHome_thirdWord | 1 | test_holderOf_pqzHome_thirdWord
+pqzHomeOf-second-walk | test_holderOf_oneCallPerGeneration | 1 | test_holderOf_oneCallPerGeneration
+nativeSpace-shortcut-removed | test_nativeSpace_noWalk_noStore | 1 | test_nativeSpace_noWalk_noStore
+step1-verifyOnly-after-disabled | test_n12_flaggedWord_capAndRegistrable, test_register_verifyOnly_UAVerifyOnly | 1 | test_register_verifyOnly_UAVerifyOnly
+identify-walks | test_identify_singleKey_noWalk | 1 | test_identify_singleKey_noWalk
+readers-via-predecessor | test_readers_forwardByHolder | 1 | test_readers_forwardByHolder
+cache-verifyOnly-not-refused | test_cacheExpandedKey_verifyOnly_UAVerifyOnly | 1 | test_cacheExpandedKey_verifyOnly_UAVerifyOnly

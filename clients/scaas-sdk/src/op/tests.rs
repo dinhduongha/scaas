@@ -216,6 +216,7 @@ fn gas_rows(g: u64) -> crate::GasRows {
     }
     let verify = [0x0101, gas::NATIVE_EVM]
         .map(|signer| crate::GasVerify {
+            line: Default::default(),
             signer,
             gas: 0,
             sig_bytes: 0,
@@ -1236,6 +1237,7 @@ async fn an_operation_without_a_gas_row_is_gas_unquoted() {
     let t = setup(0, |p, _| {
         let mut g = gas_rows(100_000);
         g.verify = vec![crate::GasVerify {
+            line: Default::default(),
             signer: 0x0131,
             gas: 0,
             sig_bytes: 0,
@@ -2183,6 +2185,7 @@ async fn device_op(dev: &Arc<Device>, se: bool) -> (T, Arc<Prepared>, SubmitQuot
             p.gas
                 .verify
                 .extend([0x0100, 0x0101].map(|signer| crate::GasVerify {
+                    line: Default::default(),
                     signer,
                     gas: 0,
                     sig_bytes: 0,
@@ -2977,6 +2980,7 @@ async fn bls_multi_stored_path_minimal() {
     // the quote counts the group's n: signer 289's verify row `gas + per_item × 4`
     let t = setup(0, |p, _| {
         p.gas.verify.push(crate::GasVerify {
+            line: Default::default(),
             signer: 0x0121,
             gas: 0,
             sig_bytes: 0,
@@ -3181,6 +3185,33 @@ async fn bls_multi_register_quote_by_n() {
         "GasUnquoted",
         "no row"
     );
+}
+
+/// Spec 2026-11-19-registry-verify-only-kinds §12 (CTR-UA-65): a group registration goes to `kindHome(0x0121)` of the profile's
+/// registry, which must be that registry: another home (the registry carries the kind verify-only) is `RegistrationVerifyOnly`,
+/// none `RegistrationKindDisabled`, nothing quoted or sent; control: the registry its own home quotes.
+#[tokio::test(flavor = "multi_thread")]
+async fn bls_multi_register_target_is_kind_home() {
+    let t = setup(0, |p, _| {
+        p.registry = Some(REGISTRY.into());
+        p.gas_opt_in = vec![gas::REFERENCE.into()];
+    })
+    .await;
+    let op = t.sdk.op();
+    let (d, _) = bls_group(&[0, 1, 2], 2);
+    let reg = REGISTRY.to_ascii_lowercase();
+    let quote = || op.quote_register_bls_multi("local".into(), d.clone(), payer(&t));
+    quote().await.unwrap();
+    let gen1 = format!("0x{}", "5c".repeat(20));
+    t.chain.lock().unwrap().kind_home.insert(reg.clone(), gen1);
+    assert_eq!(code(quote().await), "RegistrationVerifyOnly");
+    t.chain
+        .lock()
+        .unwrap()
+        .kind_home
+        .insert(reg, format!("0x{}", "00".repeat(20)));
+    assert_eq!(code(quote().await), "RegistrationKindDisabled");
+    assert!(t.chain.lock().unwrap().sent.is_empty(), "nothing sent");
 }
 
 /// Spec §4, plan Task 17: every member's PoP part (each checked), aggregated into the registration's `pop`, sent as

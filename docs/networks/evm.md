@@ -426,7 +426,9 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   the precompile does not answer; `DEPLOY_PQZ=1` adds the PQZ releases 4, 5, 12, 13 to the plan
   ([gen-1 kind gate](../contracts/accounts.md#gen1-kind-gate)). Change (owner 2026-11-15, TODO 3zh; BUILT on `3zh-mldsa`):
   with `MLDSA_PRECOMPILE=on` (the default) the same step builds `MldsaVerifier` 0x0130 / 0x0131 / 0x0134 on the chain's ML-DSA
-  precompiles where each probe passes (EIP-8355's `0x12` / `0x13` / `0x14`, then `0x…5caa0012` / `13` / `14`), each checked by
+  precompiles where each probe passes (the chain's own `0x…5caa0012` / `13` / `14` and Final EIP addresses; EIP-8355's Draft
+  `0x12` / `0x13` / `0x14` only under the owner-confirmed flag, [CTR-UA-69](../contracts/accounts.md#CTR-UA-69), changed
+  2026-11-19 from "Draft first"), each checked by
   `verify` of its `pq_kat.json` row within `cap + cap / 63` gas (the verifier's call itself held to it, by an eth_call to a
   state-override caller: the calldata floor of EIP-7623 / EIP-7976 applies to the transaction, not to the hold; reset 5 fix), and hands them over as `MLDSA44_VERIFIER` / `MLDSA65_VERIFIER`
   / `MLDSA87_VERIFIER`; `MLDSA_PRECOMPILE=off` builds none and every ML-DSA kind is on the registry's expanded-key cache. The
@@ -540,6 +542,51 @@ Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](..
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version deployed by the factory
 plus a voluntary migration.
 
+<a id="registry-line-deploy"></a>**Registry generations, PQ precompile candidates and the per-transaction cap** (BUILT on branch
+`multi-gen-verify`, `d2f6b6c32`, `53d4ad79d`, `78ce41390`; UNAUDITED; the rules are
+[CTR-UA-58](../contracts/accounts.md#CTR-UA-58), [CTR-UA-64](../contracts/accounts.md#CTR-UA-64) and
+[CTR-UA-69](../contracts/accounts.md#CTR-UA-69); this is the chain-side runbook).
+
+- **Chain-own precompiles and the keep commitment.** A chain profile lists the PQ precompiles it serves as its own (the SCaaS
+  chains: `0x…5caa0012` / `13` / `14` and `0x…5caa0f01`, [NET-EVM-15](#NET-EVM-15)) and states whether the chain commits to keep
+  them (the SCaaS chains do: NET-EVM-15 keeps the `0x…5caa` addresses when a Final address is added). A verifier deployed against
+  a chain-own address relies on that commitment; where a precompile is removed anyway, a verify-only kind falls back to its
+  holder ([CTR-UA-68](../contracts/accounts.md#CTR-UA-68)).
+- **Draft addresses.** `DeployBase._mldsaCandidates`, `script/PqPrecompileProbe.sol` and `script/pq_verifiers.py` probe the
+  chain's own addresses and Final EIP addresses only. EIP-8355's Draft `0x12` / `0x13` / `0x14` join them only when the chain's row
+  in `smartcontracts/evm/chain-uids.json` sets `probe_draft_precompiles: true` **and** the chain's deploy book records the owner's
+  confirmation `probe_draft_precompiles_owner` (with its reason); the flag without the confirmation refuses the deploy by name,
+  `DRAFT_PROBE_UNCONFIRMED`. A Draft candidate is taken only if it answers the fuller probe exactly: the valid row, the flipped
+  row and every `pq_kat.json` mutation row. No chain sets the flag today. Consequence on a chain whose only ML-DSA-87 precompile
+  is a Draft address: `mldsa87` runs on the cache (8,850,000) instead of the precompile path.
+- **`txGasCap`, probed.** Every `UARegistry` (generation 1 included) takes the chain's per-transaction gas cap as a constructor
+  argument (`TX_GAS_CAP`, required, no default; 0 refused by name). `deploy.sh evm` runs `script/tx_gas_cap.py` first: `eth_call`
+  of a cheap call at `2^24` and `2^24 + 1` gas through the chain's node list (`TX_CAP_NODES`, default the RPC) under strict
+  majority ([ARCH-POS-15](../decisions.md#ARCH-POS-15)), then, where `2^24 + 1` is accepted, a binary search up to the block gas
+  limit; the rows and the nodes' client versions (never a URL) go to the book. No cap found below the block gas limit (a chain
+  without EIP-7825) refuses `GEN_TX_CAP_UNKNOWN` until the owner sets `tx_gas_cap` in the book (`--owner-set`); a book value the
+  probe contradicts refuses `GEN_TX_CAP_MISMATCH`. Nothing assumes 2^24; a chain that raises its cap later keeps the old bound
+  in every deployed generation.
+- **A later generation.** With `UA_GEN_BOOK` set, `deploy.sh evm` runs `script/DeployUAGen.s.sol` (`SMART_KEY_ACCOUNT_IMPL` the
+  line's implementation): generation n + 1 over the book's latest, its own libraries, `0x0142` carried with the home's verifier
+  wherever a predecessor enables it, `msig` in full, the verify-only kinds of the book's `gen_verify_only` (ML-DSA only in this
+  build). Refused by name before anything is sent: `GEN_NOT_LATEST`, `GEN_DEPTH`, `GEN_WALK_MISMATCH <g>`, `GEN_TX_CAP_UNKNOWN`,
+  `GEN_TX_CAP_MISMATCH`, `GEN_PQZ_OMITTED`, `GEN_KEY_FORM_IMPOSSIBLE <kind>`, `GEN_VERIFY_ONLY_NO_PRECOMPILE <kind>`,
+  `GEN_PQZ_DEBIT_BOUND <kind>`; the owner's overrides (`GEN_NOT_LATEST`, `GEN_PQZ_OMITTED`) only as book fields with a reason. It
+  writes `deployments/<key>-ua-gen<g>.json` with the line (`ua_registry_line.gen<g>`: address, generation, predecessor, code
+  hash, libraries with code hashes, `tx_gas_cap`, `gen_pqz`, `verify_only` keyed by kind). Every contract of it is verified on the
+  explorer ([NET-EVM-12](#NET-EVM-12)), and the node's `ua_registries` lists the new generation
+  ([CTR-UA-65](../contracts/accounts.md#CTR-UA-65)).
+- **The differential probe, a deploy gate and an operations check.** `script/pq_verifiers.py verify-only` builds the verifier
+  and runs it before a later generation's broadcast, and the deploy refuses an entry without its `ok`
+  (`GEN_DIFFERENTIAL_MISSING`); `script/pq_verifiers.py differential` runs every KAT row on the kind's home
+  verifier (on the cache: `expandedKeyPart` per part, then `verifyExpanded`; on a precompile: `verify`) and on the verify-only
+  verifier, each by `eth_call` under strict majority; any difference is `GEN_DIFFERENTIAL_MISMATCH` with the rows, for the owner.
+  It runs before a later generation's broadcast and **again after every client upgrade on the chain**: a precompile is client
+  code, and a deployed verifier cannot follow a change. A precompile that stops answering is covered by the fallback; one that
+  answers differently goes to the owner (a laxer answer is a forgery). Not built: `pq_verifiers.py` building the verify-only
+  verifiers on a chain (the book names them today).
+
 ## 5. EIP-7702 accounts
 
 <a id="eip7702"></a>
@@ -580,16 +627,18 @@ balances are on (owner 2026-10-31: with the coin-balance fetcher disabled, Block
 after every block and the home-page block list stops; on the pruned node its catch-up retried old-block balances
 forever, about 1.5 CPU, until a one-off cleanup of those rows, `blockscout-code-backfill.py --prune-coin-balances`,
 rerun after an outage longer than the pruning window; archive mode at the sealer / RPC node split is the root fix);
-the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 4000; the frontend image is pinned
+the UI is published on host port 8549 and the API on 8548 (owner 2026-11-20; before: UI 8558, owner 2026-10-31 not 3000, and API
+4000, then 8557 the same day);
+Blockscout runs as a compose project of its own, apart from the chain's (owner 2026-11-20: the stack is one stack directory `~dockers/mba-chain-nethermind` (owner 2026-11-20): `pqz-nethermind/` (the chain: the sealer and `rpc` compose, genesis and config, keystore, data), `blockscout/` (the Blockscout compose and `sc-verifier`), `docker-compose-full.yml` (all in one) and one `.env` at the top; the stack is a standalone MIT repository meant to be public, stock Nethermind by default, the PQ precompiles opt-in); the frontend image is pinned
 by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET-EVM-10)) it reads the archive `rpc`
 node, and neither the code backfill nor the coin-balance cleanup is needed. Contract verification (owner ruling 2026-10-31): a local
 `smart-contract-verifier` (v1.11.1, 768 MiB since 2026-10-31: the patched 31-contract run hit 512 MiB; 1 CPU, `mba-net` only, Solidity only, solc from
 binaries.soliditylang.org, never Blockscout's hosted service) backs the backend, and
 every contract on the chain is verified by the step of [NET-EVM-12](#NET-EVM-12), `sh script/onchain/verify.sh
-scaas-testnet` (this Blockscout's API `http://127.0.0.1:4000/api` and the RPC `http://127.0.0.1:8545`, both on the host's
+scaas-testnet` (this Blockscout's API `http://127.0.0.1:8548/api` and the RPC `http://127.0.0.1:8545`, both on the host's
 loopback: the earlier LAN address is gone; the whole-chain scan on; the older per-broadcast `verify-blockscout.sh` stays);
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
-image (built outside the repo, `~dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
+image (built outside the repo, `~dockers/mba-chain-nethermind/blockscout/sc-verifier/`), temporary until upstream supports
 Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts and the PQZ e2e contracts verified, full match; the e2e tokens are EIP-1167 clones Blockscout links to their verified implementations (RUNBOOK § Contract verification).
 First whole-chain run, 2026-11-10 (BUILT, after the T66b Step 5 deploy had only its 7 linked libraries verified): of 345
 contracts with code, 255 verified (full match), 8 linked clones, 35 CREATE3 proxies, 1 genesis predeploy, plus 90 SSTORE2 data

@@ -959,7 +959,7 @@ mod tests {
             rpc_urls: vec![url],
             chain_uid: Some(d["salt"].as_str().unwrap().parse().unwrap()),
             account_factory: Some(FACTORY),
-            ua_registry: Some(REGISTRY),
+            ua_registries: vec![REGISTRY],
             dex: Some(DEX),
             ..Default::default()
         };

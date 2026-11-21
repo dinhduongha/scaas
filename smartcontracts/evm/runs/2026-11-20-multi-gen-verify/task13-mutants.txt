@@ -1,0 +1,4 @@
+mutant | red tests | rc | killed by
+walk-addresses-only | test_deploy_walkMismatch_codeHash | 1 | test_deploy_walkMismatch_codeHash
+pqz-omitted-silently | test_deploy_omits0142_GEN_PQZ_OMITTED | 1 | test_deploy_omits0142_GEN_PQZ_OMITTED
+tx-cap-default-2-24 | test_deploy_txGasCap_fromProbe | 1 | test_deploy_txGasCap_fromProbe

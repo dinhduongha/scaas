@@ -67,6 +67,27 @@ Uint8List _sized(Uint8List b, int n, String what) {
 
 String _hex(Uint8List b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 
+/// Why a registration of [kind] does not belong on a registry ([registrationTargetOk]): [code] `UAVerifyOnly` (register at
+/// [kindHome]) or `UAKindNotOnLine` ([kindHome] zero: no generation of the line enables the kind).
+class TargetError extends UAError {
+  final int kind;
+  final Uint8List kindHome;
+  TargetError(String code, this.kind, this.kindHome)
+    : super(code, 'kind 0x${kind.toRadixString(16).padLeft(4, '0')} kindHome 0x${_hex(kindHome)}');
+}
+
+/// CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of [kind] is sent to
+/// [registry] only where [kindHome] (the registry's `kindHome(kind)`, read by the caller: no RPC here) equals it. Addresses:
+/// Uint8List or hex String in any case, 20 bytes. Throws [TargetError].
+void registrationTargetOk(int kind, Object? registry, Object? kindHome) {
+  final reg = _sized(keyBytes(registry), 20, 'registry');
+  final home = Uint8List.fromList(_sized(keyBytes(kindHome), 20, 'kindHome'));
+  if (home.every((b) => b == 0)) throw TargetError('UAKindNotOnLine', kind, home);
+  for (var i = 0; i < 20; i++) {
+    if (home[i] != reg[i]) throw TargetError('UAVerifyOnly', kind, home);
+  }
+}
+
 /// keccak256(TAG(kind) ‖ keyData); no validation (see [deriveUA]). [keyData]: Uint8List or hex String.
 Uint8List uaOf(int kind, Object? keyData) => _k([tag(_derived(kind).number), keyBytes(keyData)]);
 

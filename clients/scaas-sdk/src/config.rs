@@ -177,7 +177,32 @@ pub struct GasVerify {
     pub margin: u64,
     /// the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
     pub per_item: Option<GasPerItem>,
+    /// the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+    /// check on any registry (every row before the line)
+    pub line: GasLine,
 }
+
+/// A verify row's registry-line columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65; §13 Gas): the row is
+/// keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
+/// columns. Within one table no two verify rows share signer, registry, path, depth and write.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GasLine {
+    /// the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+    /// registry
+    pub registry: Option<String>,
+    /// `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+    /// the holder's own check
+    pub path: Option<String>,
+    /// the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+    pub depth: u8,
+    /// the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+    pub write: bool,
+}
+
+/// A verify row's paths.
+const GAS_VERIFY_PATHS: [&str; 3] = ["cache", "precompile", "fallback"];
+/// The deepest line: `MAX_GENERATION` (16) less one.
+const GAS_DEPTH_MAX: u64 = 15;
 
 /// The rows of a gas table: base and verify, looked up independently (spec §13.3). The quote's figure is base + verify.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -190,7 +215,8 @@ pub struct GasRows {
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 /// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
 /// per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
-/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?, registry?, path?, depth?, write?}` (the
+/// line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GasTable {
@@ -269,6 +295,10 @@ const GAS_VERIFY_KEYS: &[&str] = &[
     "item",
     "per_item",
     "stand_in",
+    "registry",
+    "path",
+    "depth",
+    "write",
 ];
 /// A row's parts, each with its keys (`second_party` is a part of `ua_extra`).
 const GAS_PART_KEYS: &[(&str, &[&str])] = &[
@@ -319,7 +349,7 @@ impl GasTable {
     /// verify row's may be 0: the reference signer's own row); `source` present; a base row's optional `per_byte` names an
     /// input of [`GasPerByte`] with a `gas` of 1–1,000 and its `source`; a base row's optional `save`, `fee_extra` and
     /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536,
-    /// its optional `margin` 1–100,000; a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
+    /// its optional `margin` 1–100,000, its optional line columns ([`GasLine`]: `registry` an address, `path` one of `cache`, `precompile`, `fallback`, `depth` 0–15, `write` a bool); a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
     /// I1), `item` one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`, `env_items`, `orders`), `per_item` `{gas,
     /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); a base row's
     /// optional `regular` (EIP-8037, the part EIP-7825's cap holds) held like a row's figure, positive, and on a counted row
@@ -444,12 +474,44 @@ impl GasTable {
                     Some(m) => m.as_u64().filter(|m| (1..=GAS_MARGIN_MAX).contains(m))?,
                 },
                 per_item: per_item(r, &mut named)?,
+                line: GasLine {
+                    registry: match r.get("registry") {
+                        None => None,
+                        Some(a) => Some(
+                            a.as_str()
+                                .filter(|a| is_address_hex(a))?
+                                .to_ascii_lowercase(),
+                        ),
+                    },
+                    path: match r.get("path") {
+                        None => None,
+                        Some(p) => Some(
+                            p.as_str()
+                                .filter(|p| GAS_VERIFY_PATHS.contains(p))?
+                                .to_string(),
+                        ),
+                    },
+                    depth: match r.get("depth") {
+                        None => 0,
+                        Some(d) => {
+                            u8::try_from(d.as_u64().filter(|d| *d <= GAS_DEPTH_MAX)?).ok()?
+                        }
+                    },
+                    write: match r.get("write") {
+                        None => false,
+                        Some(w) => w.as_bool()?,
+                    },
+                },
             };
             // no regular part on a verify row: its gas is regular whole
             if row.per_item.as_ref().is_some_and(|p| p.regular.is_some()) {
                 return None;
             }
-            if rows.verify.iter().any(|o| o.signer == row.signer) {
+            if rows
+                .verify
+                .iter()
+                .any(|o| o.signer == row.signer && o.line == row.line)
+            {
                 return None;
             }
             rows.verify.push(row);
@@ -614,12 +676,12 @@ impl std::fmt::Debug for SdkConfig {
     }
 }
 
-/// `0x` and 64 hex digits.
-/// `0x` + 40 hex.
+/// `0x` and 40 hex digits.
 pub(crate) fn is_address_hex(s: &str) -> bool {
     s.len() == 42 && s.starts_with("0x") && s.bytes().skip(2).all(|b| b.is_ascii_hexdigit())
 }
 
+/// `0x` and 64 hex digits.
 pub(crate) fn is_word_hex(s: &str) -> bool {
     s.len() == 66 && s.starts_with("0x") && s.bytes().skip(2).all(|b| b.is_ascii_hexdigit())
 }

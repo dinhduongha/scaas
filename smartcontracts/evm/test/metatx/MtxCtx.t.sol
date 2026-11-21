@@ -20,6 +20,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
 import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
@@ -655,6 +656,27 @@ contract MtxCtxTest is PqzRegistryBase {
         console2.log("min frame gas (1,000 steps), mldsa65 uaExecute:", frameMin);
         assertGt(frameMin, 0);
         assertGt(starved, 0, "the registry's starvation error fires below the minimum");
+    }
+
+    /// Spec 2026-11-19-registry-verify-only-kinds §4 (owner P9, P15): `UA_CONSUMER_RESERVE_GAS` covers a consumer's operation
+    /// beside the registry's check: an `mldsa65` UA's `mtxExecuteTransfer` with a fee (cold, regular + EIP-8037 state) less the
+    /// same check alone (`requireAuthorized` cold, the mock verifier answers any digest). Logs the figures.
+    function test_consumerReserve_transferBesideCheck() public {
+        MetaTxLib.UAMetaTransfer memory ut = _ut(u, MetaTxLib.pad(BOB), 14);
+        IUARegistry.UASig memory s = UACall.auth(ut.from, _mlAuth());
+        vm.prank(RELAYER);
+        (bool ok, bytes memory ret) = address(tok).call(abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (ut, s)));
+        assertTrue(ok, vm.toString(ret));
+        VmSafe.Gas memory g = vm.lastCallGas();
+        uint256 op = g.gasTotalUsed + uint256(int256(g.gasStateUsed));
+        (ok,) = address(reg)
+            .call(abi.encodeCall(IUARegistry.requireAuthorized, (u, UAKinds.PURPOSE_METATX, keccak256("d"), s)));
+        assertTrue(ok);
+        g = vm.lastCallGas();
+        uint256 check = g.gasTotalUsed + uint256(int256(g.gasStateUsed));
+        console2.log("mtxExecuteTransfer, mldsa65 UA, fee (regular + state):", op);
+        console2.log("requireAuthorized alone (regular + state):", check);
+        assertLe(op - check, UARegistryRegLib.UA_CONSUMER_RESERVE_GAS, "UA_CONSUMER_RESERVE_GAS");
     }
 
     // ------------------------------------------------------------------ R12: Hedera one frame deeper

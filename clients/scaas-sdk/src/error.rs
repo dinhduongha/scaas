@@ -124,6 +124,13 @@ own_codes! {
     /// A gas table with a key outside the format, at the top, on a row or inside a row's part (PR A review, finding 1): an
     /// unknown part is refused, never dropped from a quote.
     GasFieldUnknown,
+    /// A registration of a kind whose home (`kindHome(kind)`) is another generation than the bound registry: that registry
+    /// carries it verify-only, or not at all (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); nothing is sent.
+    RegistrationVerifyOnly,
+    /// A UA no generation of the bound registry's line holds (`holderOf(ua)` answers no holder, §11.1).
+    UaUnregistered,
+    /// A PQZ write or read of a UA whose record has no PQZ home on the bound registry's walk (`pqzHomeOf(ua)` 0, §11.2).
+    PqzHomeNone,
     /// An order, a cancel or a liquidity order naming a DEX that is not on the chain profile's list, or a wrap order whose
     /// wrapped token is not on its wrapper list (CLI-SGN-35): refused before anything is signed (plan T17).
     DexNotListed,

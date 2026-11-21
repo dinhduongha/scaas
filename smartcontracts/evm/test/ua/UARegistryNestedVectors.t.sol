@@ -32,7 +32,8 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         }
         c[1].verifier = address(new P256Verifier());
         c[2].verifier = address(new Ed25519Verifier());
-        c[base.length] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(0x0132)), 2_500_000);
+        c[base.length] =
+            UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(0x0132)), 2_500_000, false, 0);
         return _deploy(at, chainUidA, address(0), false, BUDGET, address(0), true, c);
     }
 

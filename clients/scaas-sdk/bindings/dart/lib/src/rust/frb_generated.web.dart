@@ -22,6 +22,7 @@ import 'third_party/scaas_sdk/config.dart';
 import 'third_party/scaas_sdk/dex.dart';
 import 'third_party/scaas_sdk/error.dart';
 import 'third_party/scaas_sdk/events.dart';
+import 'third_party/scaas_sdk/line.dart';
 import 'third_party/scaas_sdk/op.dart';
 import 'third_party/scaas_sdk/platform.dart';
 import 'third_party/scaas_sdk/vault.dart';
@@ -928,6 +929,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   UaGrantRole dco_decode_box_autoadd_ua_grant_role(dynamic raw);
 
   @protected
+  UaLine dco_decode_box_autoadd_ua_line(dynamic raw);
+
+  @protected
   UaMint dco_decode_box_autoadd_ua_mint(dynamic raw);
 
   @protected
@@ -1208,6 +1212,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   GasFrom dco_decode_gas_from(dynamic raw);
+
+  @protected
+  GasLine dco_decode_gas_line(dynamic raw);
 
   @protected
   GasPerByte dco_decode_gas_per_byte(dynamic raw);
@@ -1798,6 +1805,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   UaGrantRole dco_decode_ua_grant_role(dynamic raw);
+
+  @protected
+  UaLine dco_decode_ua_line(dynamic raw);
 
   @protected
   UaMint dco_decode_ua_mint(dynamic raw);
@@ -2843,6 +2853,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  UaLine sse_decode_box_autoadd_ua_line(SseDeserializer deserializer);
+
+  @protected
   UaMint sse_decode_box_autoadd_ua_mint(SseDeserializer deserializer);
 
   @protected
@@ -3203,6 +3216,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   GasFrom sse_decode_gas_from(SseDeserializer deserializer);
+
+  @protected
+  GasLine sse_decode_gas_line(SseDeserializer deserializer);
 
   @protected
   GasPerByte sse_decode_gas_per_byte(SseDeserializer deserializer);
@@ -3851,6 +3867,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   UaGrantRole sse_decode_ua_grant_role(SseDeserializer deserializer);
+
+  @protected
+  UaLine sse_decode_ua_line(SseDeserializer deserializer);
 
   @protected
   UaMint sse_decode_ua_mint(SseDeserializer deserializer);
@@ -5224,6 +5243,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_ua_line(UaLine self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_ua_mint(UaMint self, SseSerializer serializer);
 
   @protected
@@ -5675,6 +5697,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_gas_from(GasFrom self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_gas_line(GasLine self, SseSerializer serializer);
 
   @protected
   void sse_encode_gas_per_byte(GasPerByte self, SseSerializer serializer);
@@ -6474,6 +6499,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_ua_grant_role(UaGrantRole self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_line(UaLine self, SseSerializer serializer);
 
   @protected
   void sse_encode_ua_mint(UaMint self, SseSerializer serializer);

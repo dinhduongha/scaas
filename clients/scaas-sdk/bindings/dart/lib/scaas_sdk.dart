@@ -30,6 +30,7 @@ export 'src/rust/third_party/scaas_sdk/config.dart';
 export 'src/rust/third_party/scaas_sdk/dex.dart';
 export 'src/rust/third_party/scaas_sdk/error.dart';
 export 'src/rust/third_party/scaas_sdk/events.dart';
+export 'src/rust/third_party/scaas_sdk/line.dart';
 export 'src/rust/third_party/scaas_sdk/op.dart';
 export 'src/rust/third_party/scaas_sdk/platform.dart';
 export 'src/rust/third_party/scaas_sdk/vault.dart';

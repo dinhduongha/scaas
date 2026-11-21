@@ -32,31 +32,35 @@ contract SdkGasKindTable {
 
     constructor() {
         UARegistry.KindConfig[20] memory d = [
-            UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier()), 400_000),
-            UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier()), 400_000),
-            UARegistry.KindConfig(UAKinds.ED25519, address(new Ed25519Verifier()), 210_000),
-            UARegistry.KindConfig(UAKinds.BIP340, address(new Bip340Verifier()), 50_000),
-            UARegistry.KindConfig(UAKinds.SECP256K1, address(new Secp256k1Verifier()), 50_000),
-            UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier()), 50_000),
-            UARegistry.KindConfig(UAKinds.SCHNORR_BLS12381, address(new SchnorrBls12381Verifier()), 70_000),
-            UARegistry.KindConfig(UAKinds.BLS12381_MINSIG, address(new BlsMinSigBls12381Verifier()), 200_000),
-            UARegistry.KindConfig(UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier()), 345_000),
-            UARegistry.KindConfig(UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier()), 50_000),
-            UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new FrostSecp256k1Verifier()), 50_000),
-            UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier()), 50_000),
-            UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier()), 50_000),
-            UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000),
+            UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier()), 400_000, false, 0),
+            UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier()), 400_000, false, 0),
+            UARegistry.KindConfig(UAKinds.ED25519, address(new Ed25519Verifier()), 210_000, false, 0),
+            UARegistry.KindConfig(UAKinds.BIP340, address(new Bip340Verifier()), 50_000, false, 0),
+            UARegistry.KindConfig(UAKinds.SECP256K1, address(new Secp256k1Verifier()), 50_000, false, 0),
+            UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier()), 50_000, false, 0),
+            UARegistry.KindConfig(UAKinds.SCHNORR_BLS12381, address(new SchnorrBls12381Verifier()), 70_000, false, 0),
+            UARegistry.KindConfig(UAKinds.BLS12381_MINSIG, address(new BlsMinSigBls12381Verifier()), 200_000, false, 0),
+            UARegistry.KindConfig(UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier()), 345_000, false, 0),
+            UARegistry.KindConfig(UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier()), 50_000, false, 0),
+            UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new FrostSecp256k1Verifier()), 50_000, false, 0),
+            UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier()), 50_000, false, 0),
+            UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier()), 50_000, false, 0),
             UARegistry.KindConfig(
-                UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000
+                UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000, false, 0
             ),
             UARegistry.KindConfig(
-                UAKinds.MLDSA65, address(new MldsaVerifier(UAKinds.MLDSA65, address(0), "", "")), 5_950_000
+                UAKinds.MLDSA44, address(new MldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000, false, 0
             ),
-            UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(UAKinds.FNDSA512)), 2_500_000),
-            UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhdsaVerifier()), 1_400_000),
-            UARegistry.KindConfig(UAKinds.FNDSA1024, address(new FndsaVerifier(UAKinds.FNDSA1024)), 5_250_000),
+            UARegistry.KindConfig(
+                UAKinds.MLDSA65, address(new MldsaVerifier(UAKinds.MLDSA65, address(0), "", "")), 5_950_000, false, 0
+            ),
+            UARegistry.KindConfig(UAKinds.FNDSA512, address(new FndsaVerifier(UAKinds.FNDSA512)), 2_500_000, false, 0),
+            UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhdsaVerifier()), 1_400_000, false, 0),
+            UARegistry.KindConfig(
+                UAKinds.FNDSA1024, address(new FndsaVerifier(UAKinds.FNDSA1024)), 5_250_000, false, 0
+            ),
             // bls-multi Task 16: `bls12381-multi` as `DeployBase` enables it (EIP-2537), `CAP_BLS12381_MULTI`
-            UARegistry.KindConfig(UAKinds.BLS12381_MULTI, address(new BlsMultiBls12381Verifier()), 330_000)
+            UARegistry.KindConfig(UAKinds.BLS12381_MULTI, address(new BlsMultiBls12381Verifier()), 330_000, false, 0)
         ];
         for (uint256 i; i < d.length; ++i) {
             table.push(d[i]);
@@ -128,7 +132,7 @@ abstract contract SdkGasDeploy is Test {
         require(sgSka != address(0), "_sgSkaSetup first");
         deployCodeTo(
             "UARegistry.sol:UARegistry",
-            abi.encode(uid, address(0), false, uint64(12_000_000), sgSka, true, _sgDeployKinds(keep)),
+            abi.encode(uid, address(0), false, uint64(12_000_000), uint64(1 << 24), sgSka, true, _sgDeployKinds(keep)),
             at
         );
     }

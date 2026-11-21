@@ -119,6 +119,8 @@ fn deploy(rpc: &str) -> Value {
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        // owner X1: the registry's txGasCap, the deploy book's value; a local anvil applies EIP-7825's 2^24
+        .env("TX_GAS_CAP", "16777216")
         .env("DEPLOY_NAME", format!("local-{CHAIN_ID}-testnet")) // NET-EVM-13: the anvil is not in chain-uids.json
         .status()
         .expect("forge in PATH");

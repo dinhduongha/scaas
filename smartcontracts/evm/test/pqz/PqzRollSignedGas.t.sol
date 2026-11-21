@@ -270,10 +270,10 @@ contract PqzRollSignedGasSolTest is PqzRollSignedGasBase {
         // a registry like the fixture's with Solidity-priced verifiers (cheap until `_burners`), its factory and release
         (mlSol, fnSol) = (address(new SlhStandIn(0)), address(new SlhStandIn(0)));
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](3);
-        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, mlSol, 5_950_000);
-        k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ);
-        k[2] = UARegistry.KindConfig(UAKinds.FNDSA512, fnSol, 2_500_000);
-        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, mlSol, 5_950_000, false, 0);
+        k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ, false, 0);
+        k[2] = UARegistry.KindConfig(UAKinds.FNDSA512, fnSol, 2_500_000, false, 0);
+        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
         OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
         Catalogue.release(
@@ -331,10 +331,10 @@ contract PqzRollSignedGasSol87Test is PqzRollSignedGasBase {
         _stack();
         (ml87, ml65) = (address(new SlhStandIn(0)), address(new SlhStandIn(0)));
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](3);
-        k[0] = UARegistry.KindConfig(UAKinds.MLDSA87, ml87, 8_850_000);
-        k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ);
-        k[2] = UARegistry.KindConfig(UAKinds.MLDSA65, ml65, 5_950_000);
-        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA87, ml87, 8_850_000, false, 0);
+        k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ, false, 0);
+        k[2] = UARegistry.KindConfig(UAKinds.MLDSA65, ml65, 5_950_000, false, 0);
+        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
         OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
         Catalogue.release(

@@ -158,7 +158,8 @@ pub fn encode_event(log: &Log) -> Option<Value> {
 }
 
 /// The topics of [`pqz_key_event`] (group 3g, spec §7.3): the registry's version events and a PQZ token's per-version state events.
-pub const PQZ_KEY_TOPICS: [B256; 6] = [
+pub const PQZ_KEY_TOPICS: [B256; 7] = [
+    IUARegistry::UARegistered::SIGNATURE_HASH,
     IUARegistry::UAPqzKeyAdded::SIGNATURE_HASH,
     IUARegistry::UAPqzPopStored::SIGNATURE_HASH,
     IUARegistry::UAPqzKeyCurrent::SIGNATURE_HASH,
@@ -167,20 +168,88 @@ pub const PQZ_KEY_TOPICS: [B256; 6] = [
     IPqzToken::PqzRolledOver::SIGNATURE_HASH,
 ];
 
-/// The registry's version events only from the registry, a token's per-version events only from a token (never the registry).
-pub fn pqz_key_origin(events: Vec<Value>, registry: Option<Address>) -> Vec<Value> {
-    let reg = registry.map(|r| format!("{r:#x}"));
-    let ours = |v: &Value| {
-        let from_reg = reg
-            .as_deref()
-            .is_some_and(|r| v["contract"].as_str() == Some(r));
-        match v["event"].as_str() {
-            Some("UAPqzKeyAdded" | "UAPqzPopStored" | "UAPqzKeyCurrent") => from_reg,
-            Some("Credited" | "Debited" | "PqzRolledOver") => !from_reg,
-            _ => true,
+/// CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12): the chain's registry line as the indexer reads it, from the start
+/// check ([`crate::config::read_ua_line`]): every generation (`UARegistered`) and the generations that enable `0x0142` (the PQZ
+/// homes, whose key-version events it reads).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Line {
+    pub all: Vec<Address>,
+    pub pqz: Vec<Address>,
+}
+
+impl Line {
+    /// A line of one registry that is a PQZ home too (the one-generation chain).
+    pub fn one(registry: Address) -> Self {
+        Self {
+            all: vec![registry],
+            pqz: vec![registry],
         }
+    }
+}
+
+/// The registry's version events only from a PQZ home of the line, `UARegistered` only from a generation of the line, a token's
+/// per-version events only from a token (never a registry).
+pub fn pqz_key_origin(events: Vec<Value>, line: &Line) -> Vec<Value> {
+    let from = |v: &Value, regs: &[Address]| {
+        v["contract"]
+            .as_str()
+            .and_then(|c| c.parse::<Address>().ok())
+            .is_some_and(|c| regs.contains(&c))
+    };
+    let ours = |v: &Value| match v["event"].as_str() {
+        Some("UAPqzKeyAdded" | "UAPqzPopStored" | "UAPqzKeyCurrent") => from(v, &line.pqz),
+        Some("UARegistered") => from(v, &line.all),
+        Some("Credited" | "Debited" | "PqzRolledOver") => !from(v, &line.all),
+        _ => true,
     };
     events.into_iter().filter(ours).collect()
+}
+
+/// Spec §11.2 (owner P8): the owners of `pqz-mlwe` key hashes seen on the line, kept across ranges (in memory: after a restart a
+/// hash proven before it is not seen again). `keys`: `(ua, version) → hash` from `UARegistered` (version 0) and `UAPqzKeyAdded`;
+/// `owners`: `hash → ua` from a proof stored and checked (`UAPqzPopStored`, `checked` 1).
+#[derive(Debug, Default)]
+pub struct PqzOwners {
+    keys: std::collections::HashMap<(String, u64), String>,
+    owners: std::collections::HashMap<String, String>,
+}
+
+/// Spec §11.2, §12 (owner P8): a `pqz-mlwe` key hash owned by two UAs of the line (an older home cannot see a newer one) is
+/// flagged on the proof that makes the second owner: `alert`, `pqz_key_owned_twice` = the hash and both UAs. The `UARegistered`
+/// rows are read for the version-0 hashes and dropped (no ingest row).
+pub fn flag_duplicate_pqz(state: &mut PqzOwners, rows: &mut Vec<Value>) {
+    let s = |v: &Value| v.as_str().unwrap_or_default().to_string();
+    // a `register` stores its proof before its `UARegistered` (one transaction, one range): the hashes first
+    for r in rows.iter() {
+        let version = match r["event"].as_str() {
+            Some("UARegistered") => 0,
+            Some("UAPqzKeyAdded") => r["version"].as_u64().unwrap_or_default(),
+            _ => continue,
+        };
+        if !r["pqz_key_hash"].is_null() {
+            state
+                .keys
+                .insert((s(&r["ua"]), version), s(&r["pqz_key_hash"]));
+        }
+    }
+    for r in rows.iter_mut() {
+        if r["event"] != "UAPqzPopStored" || r["checked"] != 1 {
+            continue;
+        }
+        let (ua, version) = (s(&r["ua"]), r["version"].as_u64().unwrap_or_default());
+        let Some(hash) = state.keys.get(&(ua.clone(), version)).cloned() else {
+            continue;
+        };
+        match state.owners.get(&hash) {
+            Some(first) if *first != ua => {
+                r["alert"] = json!(true);
+                r["pqz_key_owned_twice"] = json!({"pqz_key_hash": hash, "uas": [first, ua]});
+            }
+            Some(_) => {}
+            None => _ = state.owners.insert(hash, ua),
+        }
+    }
+    rows.retain(|r| r["event"] != "UARegistered");
 }
 
 /// Group 3g: a PQZ key-version event into `v`, ids as `bytes32` hex. Feed rows: `UAPqzKeyCurrent` is "current version of a UA"
@@ -191,7 +260,20 @@ fn pqz_key_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
     use IPqzToken as T;
     use IUARegistry as R;
     let h = |b: B256| json!(format!("{b:#x}"));
-    if topic0 == R::UAPqzKeyAdded::SIGNATURE_HASH {
+    if topic0 == R::UARegistered::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::UARegistered>() else {
+            return false;
+        };
+        let e = e.inner.data;
+        (v["event"], v["ua"], v["kind"]) = (json!("UARegistered"), h(e.ua), json!(e.kind));
+        // version 0 of the PQZ key (`keyHashOf(0x0142, pqzKey)`), for the duplicate flag
+        if let (false, Ok(Some(k))) = (
+            e.attrs.pqzKey.is_empty(),
+            scaas_ua::key_hash_of(0x0142, &e.attrs.pqzKey),
+        ) {
+            v["pqz_key_hash"] = h(B256::from(k));
+        }
+    } else if topic0 == R::UAPqzKeyAdded::SIGNATURE_HASH {
         let Ok(e) = log.log_decode::<R::UAPqzKeyAdded>() else {
             return false;
         };
@@ -901,19 +983,20 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
 /// The token events the indexer reads (the UA ledger's `UAPaymentSettled` / `UAMetaTransactionExecuted` too; with a
 /// router, its `RelayFeePaid`), decoded and joined.
 pub fn pay_filter(from: u64, to: u64, mut addrs: Vec<Address>, router: Option<Address>) -> Filter {
-    pay_filter_with(from, to, &mut addrs, router, None)
+    pay_filter_with(from, to, &mut addrs, router, &[])
 }
 
-/// [`pay_filter`] with the chain's UA registry (`ua_registry`), whose PQZ key-version events ([`PQZ_KEY_TOPICS`]) it reads too.
+/// [`pay_filter`] with every generation of the chain's registry line (`ua_registries`), whose `UARegistered` and PQZ
+/// key-version events ([`PQZ_KEY_TOPICS`]) it reads too (CTR-UA-65).
 pub fn pay_filter_with(
     from: u64,
     to: u64,
     addrs: &mut Vec<Address>,
     router: Option<Address>,
-    registry: Option<Address>,
+    registries: &[Address],
 ) -> Filter {
     addrs.extend(router);
-    addrs.extend(registry);
+    addrs.extend(registries);
     let mut topics = vec![
         IToken::PaymentSettled::SIGNATURE_HASH,
         IToken::MetaTransactionExecuted::SIGNATURE_HASH,
@@ -970,12 +1053,21 @@ pub async fn run(
     poll: Duration,
     chain_key: String,
     router: Option<Address>,
-    registry: Option<Address>,
+    line: Line,
 ) {
     let mut drift_due = std::time::Instant::now();
-    let mut health = PqzHealth::default();
+    let (mut health, mut owners) = (PqzHealth::default(), PqzOwners::default());
     loop {
-        match step_health(&chain, &external_pull, router, registry, &mut health).await {
+        match step_health(
+            &chain,
+            &external_pull,
+            router,
+            &line,
+            &mut health,
+            &mut owners,
+        )
+        .await
+        {
             Ok(true) => continue, // còn tồn đọng: đi tiếp ngay
             Ok(false) => {}
             Err(e) => warn!(chain = chain.number, "indexer: {e:#}"),
@@ -1003,33 +1095,36 @@ pub async fn step(
     external_pull: &ExternalPull,
     router: Option<Address>,
 ) -> anyhow::Result<bool> {
-    step_with(chain, external_pull, router, None).await
+    step_with(chain, external_pull, router, &Line::default()).await
 }
 
-/// [`step`] reading the registry's PQZ key-version events too (group 3g).
+/// [`step`] reading the registry line's events too (group 3g, CTR-UA-65).
 pub async fn step_with(
     chain: &Chain,
     external_pull: &ExternalPull,
     router: Option<Address>,
-    registry: Option<Address>,
+    line: &Line,
 ) -> anyhow::Result<bool> {
     step_health(
         chain,
         external_pull,
         router,
-        registry,
+        line,
         &mut PqzHealth::default(),
+        &mut PqzOwners::default(),
     )
     .await
 }
 
-/// [`step_with`] keeping the PQZ verifier state (group 3f, [`pqz_health`]) across ranges in `health`.
+/// [`step_with`] keeping the PQZ verifier state (group 3f, [`pqz_health`]) and the line's PQZ key owners ([`flag_duplicate_pqz`])
+/// across ranges.
 pub async fn step_health(
     chain: &Chain,
     external_pull: &ExternalPull,
     router: Option<Address>,
-    registry: Option<Address>,
+    line: &Line,
     health: &mut PqzHealth,
+    owners: &mut PqzOwners,
 ) -> anyhow::Result<bool> {
     let nc = external_pull.node_config(chain.number, None).await?;
     // Không token nào đăng ký: không ai lọc được vùng này ⇒ giữ con trỏ (recipe M1), đọc lại khi có token.
@@ -1083,13 +1178,14 @@ pub async fn step_health(
                     to,
                     &mut addrs.clone(),
                     router,
-                    registry,
+                    &line.all,
                 ))
                 .await?,
             router,
         ),
-        registry,
+        line,
     );
+    flag_duplicate_pqz(owners, &mut events);
     let pairs = receiving_pairs(&nc);
     if !pairs.is_empty() {
         let tokens: Vec<Address> = pairs.iter().map(|p| p.0).collect();
@@ -1588,7 +1684,7 @@ mod tests {
                 .encode_log_data(),
             ),
         ];
-        let rows = pqz_key_origin(pay_events(&logs, None), Some(reg));
+        let rows = pqz_key_origin(pay_events(&logs, None), &Line::one(reg));
         let got: Vec<(String, Value, Value)> = rows
             .iter()
             .map(|r| {
@@ -1620,7 +1716,7 @@ mod tests {
             rows[3]["entry_ref"],
             json!(format!("{:#x}", B256::repeat_byte(3)))
         );
-        let f = pay_filter_with(0, 9, &mut vec![tok], None, Some(reg));
+        let f = pay_filter_with(0, 9, &mut vec![tok], None, &[reg]);
         assert!(
             f.address.iter().any(|a| *a == reg) && f.address.iter().any(|a| *a == tok),
             "the registry is read"
@@ -2688,5 +2784,184 @@ mod tests {
         ] {
             assert!(f.topics[0].matches(&t), "{t:#x} not asked");
         }
+    }
+
+    /// `UARegistered` of `ua` with a PQZ key `pqz_key` (empty: none).
+    fn registered(ua: B256, pqz_key: &[u8]) -> LogData {
+        let kem = IUARegistry::KemKey {
+            scheme: 0,
+            mlkemEk: Default::default(),
+            x25519: B256::ZERO,
+        };
+        IUARegistry::UARegistered {
+            ua,
+            kind: 0x0131,
+            keyData: vec![1u8; 1952].into(),
+            attrs: IUARegistry::UAAttrs {
+                pqzKey: pqz_key.to_vec().into(),
+                pqzPopHash: B256::ZERO,
+                kem,
+                kemPkHash: B256::ZERO,
+            },
+            popHash: B256::ZERO,
+            pqzPop: Default::default(),
+            checkedPop: 1,
+            checkedPqzPop: 0,
+            checkedKem: 0,
+        }
+        .encode_log_data()
+    }
+
+    /// CTR-UA-65 (F9, W2): the filter reads every generation of the line and `UARegistered`; `UARegistered` is kept from every
+    /// generation, the PQZ key-version events only from the generations that enable `0x0142`, a token's events never from a
+    /// registry, nothing from an address off the line.
+    #[test]
+    fn indexer_reads_every_generation() {
+        let (g1, g2, g3, off, tok) = (
+            Address::repeat_byte(0x61),
+            Address::repeat_byte(0x62),
+            Address::repeat_byte(0x63),
+            Address::repeat_byte(0x64),
+            Address::repeat_byte(0x70),
+        );
+        let line = Line {
+            all: vec![g1, g2, g3],
+            pqz: vec![g1, g3],
+        };
+        let f = pay_filter_with(0, 9, &mut vec![tok], None, &line.all);
+        for a in [g1, g2, g3, tok] {
+            assert!(f.address.iter().any(|x| *x == a), "{a:#x} read");
+        }
+        for t in PQZ_KEY_TOPICS {
+            assert!(f.topics[0].iter().any(|x| *x == t), "{t:#x}");
+        }
+        assert!(f.topics[0]
+            .iter()
+            .any(|x| *x == IUARegistry::UARegistered::SIGNATURE_HASH));
+        let (ua1, ua2, ua3) = (
+            B256::repeat_byte(1),
+            B256::repeat_byte(2),
+            B256::repeat_byte(3),
+        );
+        let added = |ua: B256| {
+            IUARegistry::UAPqzKeyAdded {
+                ua,
+                version: 1,
+                pqzKeyHash: B256::repeat_byte(0x99),
+                pqzPopHash: B256::ZERO,
+                pqzKey: Default::default(),
+                sig: Default::default(),
+            }
+            .encode_log_data()
+        };
+        let credited = IPqzToken::Credited {
+            ua: ua1,
+            index: 1,
+            keyVersion: 0,
+            entryRef: B256::ZERO,
+        }
+        .encode_log_data();
+        let logs = [
+            log_at(g1, 1, 0, registered(ua1, &[])),
+            log_at(g2, 2, 0, registered(ua2, &[])),
+            log_at(g3, 3, 0, registered(ua3, &[])),
+            log_at(off, 4, 0, registered(B256::repeat_byte(4), &[])),
+            log_at(g1, 5, 0, added(ua1)),
+            log_at(g2, 6, 0, added(ua2)),
+            log_at(g3, 7, 0, added(ua3)),
+            log_at(g3, 8, 0, credited.clone()),
+            log_at(tok, 9, 0, credited),
+        ];
+        let rows = pqz_key_origin(pay_events(&logs, None), &line);
+        let got: Vec<(String, String)> = rows
+            .iter()
+            .map(|r| {
+                (
+                    r["event"].as_str().unwrap().into(),
+                    r["contract"].as_str().unwrap().into(),
+                )
+            })
+            .collect();
+        let n = |e: &str, a: Address| (e.to_string(), format!("{a:#x}"));
+        assert_eq!(
+            got,
+            [
+                n("UARegistered", g1),
+                n("UARegistered", g2),
+                n("UARegistered", g3),
+                n("UAPqzKeyAdded", g1),
+                n("UAPqzKeyAdded", g3),
+                n("Credited", tok)
+            ]
+        );
+        assert_eq!(rows[1]["ua"], json!(format!("{ua2:#x}")));
+    }
+
+    /// Spec §11.2 (owner P8), §12: a `pqz-mlwe` key hash proven for a second UA on the line (here: first in a newer home through
+    /// `setPqzKey` + `storePqzPop`, then in an older home through `register` with its proof) is flagged on the second proof,
+    /// across ranges; one owner, an unchecked proof and the same UA's proof are not. `UARegistered` reaches no ingest row.
+    #[test]
+    fn indexer_duplicate_pqz_hash_flag() {
+        let (g1, g3) = (Address::repeat_byte(0x61), Address::repeat_byte(0x63));
+        let line = Line {
+            all: vec![g1, Address::repeat_byte(0x62), g3],
+            pqz: vec![g1, g3],
+        };
+        let key = vec![0x42u8; 64];
+        let hash = B256::from(scaas_ua::key_hash_of(0x0142, &key).unwrap().unwrap());
+        let (ua_new, ua_old) = (B256::repeat_byte(0x0a), B256::repeat_byte(0x0b));
+        let stored = |ua: B256, version: u64, checked: u8| {
+            IUARegistry::UAPqzPopStored {
+                ua,
+                version,
+                checkedPqzPop: checked,
+                pqzPop: Default::default(),
+            }
+            .encode_log_data()
+        };
+        let rows = |logs: &[Log]| pqz_key_origin(pay_events(logs, None), &line);
+        let mut owners = PqzOwners::default();
+        // range 1: the newer home (gen 3) owns the hash for `ua_new` (version 1)
+        let mut r1 = rows(&[
+            log_at(g3, 1, 0, registered(ua_new, &[])),
+            log_at(
+                g3,
+                2,
+                0,
+                IUARegistry::UAPqzKeyAdded {
+                    ua: ua_new,
+                    version: 1,
+                    pqzKeyHash: hash,
+                    pqzPopHash: B256::ZERO,
+                    pqzKey: key.clone().into(),
+                    sig: Default::default(),
+                }
+                .encode_log_data(),
+            ),
+            log_at(g3, 3, 0, stored(ua_new, 1, 0)),
+            log_at(g3, 4, 0, stored(ua_new, 1, 1)),
+        ]);
+        flag_duplicate_pqz(&mut owners, &mut r1);
+        assert!(
+            r1.iter()
+                .all(|r| r["alert"].is_null() && r["event"] != "UARegistered"),
+            "one owner: {r1:?}"
+        );
+        // range 2: the older home (gen 1) proves the same hash for `ua_old` in its `register` (the proof, then `UARegistered`)
+        let mut r2 = rows(&[
+            log_at(g1, 5, 0, stored(ua_old, 0, 1)),
+            log_at(g1, 5, 1, registered(ua_old, &key)),
+        ]);
+        flag_duplicate_pqz(&mut owners, &mut r2);
+        assert_eq!(r2.len(), 1, "UARegistered dropped: {r2:?}");
+        assert_eq!(r2[0]["alert"], json!(true), "{r2:?}");
+        assert_eq!(
+            r2[0]["pqz_key_owned_twice"],
+            json!({"pqz_key_hash": format!("{hash:#x}"), "uas": [format!("{ua_new:#x}"), format!("{ua_old:#x}")]})
+        );
+        // the first owner's own proof again: no flag
+        let mut r3 = rows(&[log_at(g3, 6, 0, stored(ua_new, 1, 1))]);
+        flag_duplicate_pqz(&mut owners, &mut r3);
+        assert!(r3[0]["alert"].is_null());
     }
 }

@@ -106,9 +106,14 @@ chain_uid = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"
 # token_factory = "0x..."                        # the token factory (OpenFactory): never a call target; its infoOf
 # lists the PqChat instances (class 3, version != 0) that pqchat jobs
 # run on (unset: every pqchat job refused, CALL_TARGET_REFUSED)
-# ua_registry = "0x..."                          # UARegistry: the only target of register / setKemKey / storePqzPop /
-# setPqzKey call jobs (unset: refused); a relayed PQ register over
-# max_gas_per_tx or the block gas limit is refused UA_REGISTER_SPLIT
+# ua_registries = ["0x...", "0x..."]             # the UARegistry line (CTR-UA-65): every generation, any order; replaces the
+# one-address key ua_registry (refused by name). The only targets of register* / setKemKey / storePqzPop / setPqzKey / ...
+# call jobs (empty: refused). Checked on chain at start: each chainUid() is this chain's, exactly one generation 1 with
+# predecessor 0, the others one line (each predecessor an entry, generations consecutive, at most 16); else the node does
+# not start (UA_LINE_CHAIN_UID, UA_LINE_ROOT, UA_LINE_GAP, UA_LINE_FORK, UA_LINE_DEPTH). A write sent to the wrong
+# generation is refused before sending: UA_VERIFY_ONLY (a registration off kindHome(kind)), UA_WRONG_GENERATION (a key
+# write off holderOf(ua), a PQZ write off pqzHomeOf(ua)). A relayed PQ register over max_gas_per_tx or the block gas limit
+# is refused UA_REGISTER_SPLIT
 governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
 # GovernanceRouter ("governance_router" in deployments/<key>.json): the only
 # targets of gov_router jobs, direct or relayed (empty: refused); on 7622
@@ -164,7 +169,7 @@ breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_re
 # pullToken, t, auth}}). Its entries must equal the contract's servicePullEntries(), both directions, and its eip712Domain()
 # must be on this chain, at startup (else SERVICE_ENTRIES_MISMATCH stops the lane); at most 32 entries, op_type at most
 # 1,024 bytes, C3 fields only (address, bool, bytesN, uintN, bytes, string; at most 16; the first `bytes32 payer`). A
-# service is no other kind's address (dex, governance_routers, ua_registry, the factories, the relay-fee router or its
+# service is no other kind's address (dex, governance_routers, ua_registries, the factories, the relay-fee router or its
 # executor, a registered token). params.max_service_op_bytes (default 2048) caps one bytes / string field. Must follow
 # every key of this [[chains]] table (a TOML sub-table):
 # [[chains.services]]

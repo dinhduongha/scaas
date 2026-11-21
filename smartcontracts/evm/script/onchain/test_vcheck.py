@@ -121,7 +121,7 @@ def nc(net, env):
 c = v.config("scaas-testnet", {})
 assert (c["kind"], c["url"], c["rpc"], c["scan"]) == (
     "blockscout",
-    "http://127.0.0.1:4000/api",
+    "http://127.0.0.1:8548/api",
     "http://127.0.0.1:8545",
     True,
 )
@@ -146,8 +146,8 @@ assert (
 # request shapes, offline
 A = "0x" + "11" * 20
 assert (
-    v.lookup_url("blockscout", "http://127.0.0.1:4000/api", 7622, A)
-    == f"http://127.0.0.1:4000/api/v2/smart-contracts/{A}"
+    v.lookup_url("blockscout", "http://127.0.0.1:8548/api", 7622, A)
+    == f"http://127.0.0.1:8548/api/v2/smart-contracts/{A}"
 )
 u = v.lookup_url("etherscan", "https://api.etherscan.io/v2/api", 8453, A, "k123")
 assert u.startswith("https://api.etherscan.io/v2/api?") and "chainid=8453" in u and "module=contract" in u
@@ -157,7 +157,7 @@ assert (
     == f"https://sourcify.dev/server/v2/contract/100/{A}"
 )
 for kind, url in (
-    ("blockscout", "http://127.0.0.1:4000/api"),
+    ("blockscout", "http://127.0.0.1:8548/api"),
     ("etherscan", "https://api.etherscan.io/v2/api"),
     ("sourcify", "https://sourcify.dev/server"),
 ):

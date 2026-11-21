@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Deploy one family's contracts with its native tool. Keys/credentials come from the tool's own config or env.
 # usage: deploy.sh <family> <network> [args…]   (args go to the native tool)
-#   evm     <rpc-url>        forge script script/Deploy.s.sol --broadcast; env PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?,
+#   evm     <rpc-url>        forge script script/Deploy.s.sol --broadcast; env PRIVATE_KEY, TX_GAS_CAP? (the chain's per-transaction
+#                            gas cap, the registry's txGasCap, owner X1: probed first by script/tx_gas_cap.py through TX_CAP_NODES?
+#                            (default the RPC); TX_GAS_CAP is the book's owner-set value, used only where no cap is found, else
+#                            it must equal the probe's), UA_GEN_BOOK? (a later UARegistry generation over that book's
+#                            registry, script/DeployUAGen.s.sol, SMART_KEY_ACCOUNT_IMPL), REGISTRAR?, DEMO_SUPPLY?,
 #                            DEMO_HOLDER?, CHAIN_UID? (genesis hash from evm/chain-uids.json; defaults to blockhash(0),
 #                            which is 0 past block 256, so a long-running chain needs it), DEPLOY_SALT? (CREATE2 salt);
 #                            FOUNDRY_PROFILE=scaas-testnet|gnosis|celo|bsc|polygon|base (all osaka). Needs the deterministic
@@ -117,6 +121,15 @@ shift 2
 case "$FAMILY" in
     evm)
         cd "$SC/evm"
+        # owner X1, P18 (spec 2026-11-19-registry-verify-only-kinds §9): the chain's per-transaction gas cap probed through the node
+        # list (TX_CAP_NODES, comma-separated, default the RPC) under strict majority, before anything else; TX_GAS_CAP, when
+        # set, is the book's owner-set value: taken where no cap is found, else it must equal the probe's (GEN_TX_CAP_MISMATCH)
+        TXR="$(mktemp)"
+        TX_GAS_CAP="$(python3 -I script/tx_gas_cap.py "${TX_CAP_NODES:-$NET}" ${TX_GAS_CAP:+--owner-set "$TX_GAS_CAP"} --rows-out "$TXR")" || exit 1
+        export TX_GAS_CAP
+        # UA_GEN_BOOK (the predecessor's book): a later UARegistry generation (script/DeployUAGen.s.sol), not the gen-1 deploy
+        DSCRIPT=Deploy.s.sol
+        [ -z "${UA_GEN_BOOK:-}" ] || DSCRIPT=DeployUAGen.s.sol
         Z=(--disable-code-size-limit) # forge 1.8.5: EIP-3860 on the script contract itself (Deploy.s.sol initcode > 48 KiB); the chain enforces 64 KiB
         # The scripts' own gas budget (forge's gas_limit, foundry.toml 2^33), not a chain figure: the simulations run every
         # transaction twice (DeploySend: measured, then sent; Deploy.s.sol's public gate: each release measured, then
@@ -142,9 +155,9 @@ case "$FAMILY" in
         [ -f "$J" ] && cp "$J" "$J.prev"
         # NET-EVM-11: Deploy.s.sol simulated on the RPC's fork, nothing sent (the JSON, the release list, the plan in
         # forge's dry-run file), then DeploySend.s.sol sends that plan, each transaction with an explicit gas limit
-        P="broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" B="broadcast/DeploySend.s.sol/$C/run-latest.json"
-        Q="broadcast/Deploy.s.sol/$C/dry-run/send-plan.json" # DeploySend.plan's arrays, written from $P
-        rm -f "$P" "$Q" "$B"                                 # never a stale plan, never a previous run's receipts
+        P="broadcast/$DSCRIPT/$C/dry-run/run-latest.json" B="broadcast/DeploySend.s.sol/$C/run-latest.json"
+        Q="broadcast/$DSCRIPT/$C/dry-run/send-plan.json" # DeploySend.plan's arrays, written from $P
+        rm -f "$P" "$Q" "$B"                             # never a stale plan, never a previous run's receipts
         DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K${DS:+-$DS}.log}"
         mkdir -p "$(dirname "$DL")"
         : >"$DL"
@@ -203,7 +216,7 @@ case "$FAMILY" in
         printf '%s\n' "$PV" | grep '^\[deploy\]' || true
         for kv in $(printf '%s\n' "$PV" | grep -E '^(PQZ_KEY_VERIFIER|MLDSA44_VERIFIER|MLDSA65_VERIFIER|MLDSA87_VERIFIER)=0x[0-9a-fA-F]{40}$'); do export "${kv?}"; done
         say "simulate start chain $C $K"
-        forge script script/Deploy.s.sol --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" >>"$DL" 2>&1 &
+        forge script "script/$DSCRIPT" --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" >>"$DL" 2>&1 &
         follow $! || fail simulate $?
         [ -f "$P" ] || fail simulate "1 (no plan $P)"
         say "simulate ok $(python3 -I -c 'import json,sys; t=json.load(open(sys.argv[1]))["transactions"]; print(len(t), "txs, est gas", format(sum(int(x["transaction"].get("gas") or "0x0", 16) for x in t), ","))' "$P")"
@@ -255,6 +268,10 @@ json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 2
                 }
             say "set $DS in $J (sets: $(python3 -I -c 'import json, sys; b = json.load(open(sys.argv[1])); print(", ".join(b["sets"]), "default", b["default_set"])' "$J"))"
         fi
+        # the tx-cap probe's rows into the book this run wrote (the chain's, or the later generation's companion)
+        JW="$J"
+        [ -z "${UA_GEN_BOOK:-}" ] || JW="$(ls -t "deployments/$K-ua-gen"*.json | head -n 1)"
+        python3 -I script/deploybook.py add "$JW" "$TXR" && rm -f "$TXR"
         rm -f "$J.prev"
         say "ok $(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["receipts"]))' "$AL" 2>/dev/null || echo 0) txs $((SECONDS - T0))s book $J"
         # NET-EVM-12: a remote deploy is source-verified on the chain's explorer, VERIFY_TARGET naming its config
@@ -264,8 +281,11 @@ json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 2
             echo "[local/verify] local, not verified (no explorer)"
         else VERIFY_RPC="$NET" sh script/onchain/verify.sh "${VERIFY_TARGET:-chain-$C}"; fi
         ;;
-    hedera) cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
-        --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
+    hedera)
+        : "${TX_GAS_CAP:?TX_GAS_CAP: the per-transaction gas cap of the chain, from the deploy book (owner X1)}"
+        cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
+            --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@"
+        ;;
     aptos) exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
     sui)
         out="$(sui client --client.env "$NET" publish --json "$@" "$SC/move/sui")" || {

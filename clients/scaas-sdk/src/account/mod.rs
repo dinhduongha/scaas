@@ -3,6 +3,7 @@
 //! seed; a UA key is `(seed, kind, account, index)` and its UA is the one `scaas-ua` derives; one account index per wallet (a new
 //! wallet takes the next free index, so no two wallets share one); the EIP-2333 kinds at index 0 only (CLI-UAL-15). Every change
 //! rewrites the seed's index MAC (the seed unlocked). A watch row holds no key and signs nothing. UNAUDITED.
+mod line;
 #[cfg(feature = "wallet")]
 pub mod msig;
 #[cfg(feature = "wallet")]

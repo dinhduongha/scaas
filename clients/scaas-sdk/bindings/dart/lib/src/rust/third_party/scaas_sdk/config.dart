@@ -12,7 +12,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'config.freezed.dart';
 
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `RuntimeChoice`, `SdkConfig`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A chain as the app's release pins it (spec §4).
 class ChainProfile {
@@ -256,6 +256,49 @@ class GasBase {
           regular == other.regular;
 }
 
+/// A verify row's registry-line columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65; §13 Gas): the row is
+/// keyed by chain (the table it is in), registry address and signer kind; the verify path, the depth and the write path are
+/// columns. Within one table no two verify rows share signer, registry, path, depth and write.
+class GasLine {
+  /// the registry the row was measured through (`0x` + 40 hex): a quote bound to it takes it first; `None`: a row of no one
+  /// registry
+  final String? registry;
+
+  /// `cache`, `precompile` or `fallback` (the holder's verdict after the verify-only verifier gave no answer, §5); `None`:
+  /// the holder's own check
+  final String? path;
+
+  /// the generations between the registry asked and the holder (0: the registry holds the record), at most 15
+  final int depth;
+
+  /// the write path of W1 (a registry write whose signature the holder checks), never a consumer operation's quote
+  final bool write;
+
+  const GasLine({
+    this.registry,
+    this.path,
+    required this.depth,
+    required this.write,
+  });
+
+  static Future<GasLine> default_() =>
+      ScaasSdk.instance.api.scaasSdkConfigGasLineDefault();
+
+  @override
+  int get hashCode =>
+      registry.hashCode ^ path.hashCode ^ depth.hashCode ^ write.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GasLine &&
+          runtimeType == other.runtimeType &&
+          registry == other.registry &&
+          path == other.path &&
+          depth == other.depth &&
+          write == other.write;
+}
+
 /// A base row's per-byte part (owner 2026-11-19, ruling B): `gas` (whole gas, rounded up) for each byte of the operation's
 /// variable-length `input`: `meta.body` (a pay entry's `PayMeta` body, as encoded) or `data` (`mtxExecute`'s call data).
 class GasPerByte {
@@ -339,7 +382,8 @@ class GasRows {
 /// verify}`, each base row `{entry, kind, fresh, gas, measured, source, calldata_gas?, per_byte?: {input, gas, source},
 /// save?: {gas, measured, source}, fee_extra?: {gas, measured, source}, ua_extra?: {gas, measured, source}, item?,
 /// per_item?: {gas, base_count, source, regular?}, stand_in?, regular?: {gas, measured, source}}`, each verify row
-/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?}`, read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
+/// `{signer, gas, measured, source, sig_bytes, margin?, item?, per_item?, stand_in?, registry?, path?, depth?, write?}` (the
+/// line's columns, [`GasLine`]), read by [`GasTable::parse`]. One format for the chain's measured rows, a module's table
 /// and the SDK's reference table.
 class GasTable {
   /// a module's name, `reference`, or the chain key of a chain's measured rows
@@ -361,7 +405,7 @@ class GasTable {
   /// verify row's may be 0: the reference signer's own row); `source` present; a base row's optional `per_byte` names an
   /// input of [`GasPerByte`] with a `gas` of 1–1,000 and its `source`; a base row's optional `save`, `fee_extra` and
   /// `ua_extra` are `{gas, measured, source}` held like a row's figure, positive; a verify row's `sig_bytes` at most 65,536,
-  /// its optional `margin` 1–100,000; a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
+  /// its optional `margin` 1–100,000, its optional line columns ([`GasLine`]: `registry` an address, `path` one of `cache`, `precompile`, `fallback`, `depth` 0–15, `write` a bool); a base or verify row's optional `item` and `per_item` come together (owner 2026-11-19,
   /// I1), `item` one of `GAS_ITEMS` (`legs`, `accounts`, `entries`, `members`, `env_items`, `orders`), `per_item` `{gas,
   /// base_count, source}` with a `gas` of 1–2^24 and `base_count` 0 (the row's figure is at a count of 0); a base row's
   /// optional `regular` (EIP-8037, the part EIP-7825's cap holds) held like a row's figure, positive, and on a counted row
@@ -405,12 +449,17 @@ class GasVerify {
   /// the part that grows with a count of the signer's (owner 2026-11-19, I1: `members`, a `0x0121` UA's n); `None`: none
   final GasPerItem? perItem;
 
+  /// the registry line's columns (spec 2026-11-19-registry-verify-only-kinds §12, CTR-UA-65); all absent: the holder's own
+  /// check on any registry (every row before the line)
+  final GasLine line;
+
   const GasVerify({
     required this.signer,
     required this.gas,
     required this.sigBytes,
     required this.margin,
     this.perItem,
+    required this.line,
   });
 
   @override
@@ -419,7 +468,8 @@ class GasVerify {
       gas.hashCode ^
       sigBytes.hashCode ^
       margin.hashCode ^
-      perItem.hashCode;
+      perItem.hashCode ^
+      line.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -430,7 +480,8 @@ class GasVerify {
           gas == other.gas &&
           sigBytes == other.sigBytes &&
           margin == other.margin &&
-          perItem == other.perItem;
+          perItem == other.perItem &&
+          line == other.line;
 }
 
 /// The SDK's caps and queues (spec §4). The fee caps are the app's to set for its chains; the defaults below are a floor
