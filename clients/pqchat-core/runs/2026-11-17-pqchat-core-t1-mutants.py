@@ -7,11 +7,11 @@ from pqc_mutants import main  # noqa: E402
 
 K = "clients/ua-rs/src/wallet/pqchat_keys.rs"
 A = "clients/ua-rs/src/wallet/appkey.rs"
-M = "clients/ua-rs/src/wallet/kem.rs"
 T = "cd clients/ua-rs && ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys "
 MUTANTS = [
-    ("K2 without the P14 modulus check",
-     [(M, "    if !ek_modulus_ok(ek) {", "    if false && !ek_modulus_ok(ek) {")], T + "wraps_and_p14"),
+    # removed after the first run (survived, equivalent): "K2 without the P14 modulus check": `ml_kem`'s `Ek::new` runs the
+    # same FIPS 203 §7.2 modulus check again (kem.rs `encaps`), so the p14 rows stay refused with `KemCheck`; the function
+    # itself is tested directly (tests/wallet_kem.rs, `ek_modulus_ok` on the FIPS rows)
     ("K2's info without kemPkHash",
      [(A, "    let info = [label, aad, &[1u8], &crate::keccak256(kem_pk)].concat();",
        "    let info = [label, aad, &[1u8]].concat();")], T + "wraps_and_p14"),
