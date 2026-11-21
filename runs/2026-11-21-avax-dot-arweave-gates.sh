@@ -78,7 +78,11 @@ clean() { git diff --quiet HEAD -- . "$X" && git diff --quiet --cached HEAD -- .
 counts() { # sum of the `test result:` lines of a log
     awk '/^test result:/ { for (i = 1; i <= NF; i++) { if ($(i+1) ~ /^passed/) p += $i; if ($(i+1) ~ /^failed/) f += $i; if ($(i+1) ~ /^ignored/) g += $i }; n++ }
        /^RESULT / { sub(/^RESULT /, ""); r = r (r ? "; " : "") $0 }
-       END { if (n) printf "%d passed, %d failed, %d ignored (%d binaries)", p, f, g, n; else if (r) printf "%s", r; else printf "-" }' "$1"
+       /^Ran [0-9]+ test suites?/ { for (i = 1; i <= NF; i++) { if ($(i+1) ~ /^tests?$/ && $(i+2) == "passed,") p += $i; if ($(i+1) == "failed,") f += $i; if ($(i+1) ~ /^skipped/) g += $i }; n++ }
+       /^# (pass|fail|skipped|todo) [0-9]+$/ { if ($2 == "pass") p += $3; else if ($2 == "fail") f += $3; else g += $3; if ($2 == "pass") n++ }
+       /^ok [0-9]+\/[0-9]+$/ { split($2, a, "/"); p += a[1]; f += a[2] - a[1]; n++ }
+       /^check: [0-9]+ error/ { r = r (r ? "; " : "") $0 }
+       END { if (n) printf "%d passed, %d failed, %d ignored (%d binaries)%s", p, f, g, n, (r ? "; " r : ""); else if (r) printf "%s", r; else printf "-" }' "$1"
 }
 
 row() { # replace the step's summary row
