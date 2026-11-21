@@ -69,6 +69,8 @@ STEPS=(
     "mutants-check|.|$MCHECK"
     # plan T22: the CLI `scaas`, its release build and its dev-profiles build (the CI job scaas-cli)
     "cli|clients/scaas-cli|$cap cargo test $C && $cap cargo test $C --features dev-profiles && $cap cargo clippy $C --all-targets --features dev-profiles -- -D warnings"
+    # plan T22's gap (a): the SDK e2e's chain driven through the CLI (its own anvil, stopped after)
+    "cli-e2e|clients/scaas-cli|$cap cargo test $C --features dev-profiles --test e2e -- --ignored"
 )
 
 cmd_of() {

@@ -96,6 +96,36 @@ pub enum Out {
     Handle(Arc<dyn Any + Send + Sync>, Value),
 }
 
+/// An operation object, the body of an `op` command (`calls!`): `finish` shows its review and quote and asks before one
+/// command submits it, so a command that returns one cannot submit it unasked.
+pub trait IntoOp {
+    fn into_op(self) -> Out;
+}
+
+impl IntoOp for Arc<Prepared> {
+    fn into_op(self) -> Out {
+        Out::Prepared(self)
+    }
+}
+
+impl IntoOp for Vec<Arc<scaas_sdk::account::RegistryWrite>> {
+    fn into_op(self) -> Out {
+        Out::Writes(self)
+    }
+}
+
+impl IntoOp for Arc<scaas_sdk::dex::PreparedOrder> {
+    fn into_op(self) -> Out {
+        Out::Order(self)
+    }
+}
+
+impl IntoOp for scaas_sdk::wallet::NativeQuote {
+    fn into_op(self) -> Out {
+        Out::Native(Box::new(self))
+    }
+}
+
 /// Objects named in this process (`--as`), by name.
 static HANDLES: Mutex<Option<HashMap<String, Arc<dyn Any + Send + Sync>>>> = Mutex::new(None);
 
@@ -460,7 +490,7 @@ async fn finish(cx: &mut Cx, call: &str, out: Out) -> Result<Value, Fail> {
                 r.map_err(|_| Fail::cli("Internal", "stdout"))?;
             }
             if session {
-                keep(name.as_deref().unwrap_or(call), s.backup.clone());
+                keep(name.as_deref().unwrap_or(call), Arc::new(s.backup.clone()));
             }
             Ok(
                 json!({"backup": if session { name.unwrap_or_else(|| call.to_string()) } else { "closed".into() }}),
@@ -469,7 +499,7 @@ async fn finish(cx: &mut Cx, call: &str, out: Out) -> Result<Value, Fail> {
         (Out::Prepared(p), true) => {
             let n = name.unwrap_or_else(|| call.to_string());
             let shown = shown_prepared(&p);
-            keep(&n, p);
+            keep(&n, Arc::new(p));
             Ok(json!({"handle": n, "prepared": shown}))
         }
         (Out::Writes(ws), true) => {
@@ -481,7 +511,7 @@ async fn finish(cx: &mut Cx, call: &str, out: Out) -> Result<Value, Fail> {
                 )
                 .collect();
             for (i, w) in ws.iter().enumerate() {
-                keep(&format!("{n}.{i}"), w.clone());
+                keep(&format!("{n}.{i}"), Arc::new(w.clone()));
             }
             keep(&n, Arc::new(ws));
             Ok(json!({"handle": n, "writes": shown}))
@@ -489,7 +519,7 @@ async fn finish(cx: &mut Cx, call: &str, out: Out) -> Result<Value, Fail> {
         (Out::Order(o), true) => {
             let n = name.unwrap_or_else(|| call.to_string());
             let shown = json!({"id": o.id(), "chain": o.chain()});
-            keep(&n, o);
+            keep(&n, Arc::new(o));
             Ok(json!({"handle": n, "order": shown}))
         }
         (Out::Native(q), true) => {
@@ -562,7 +592,7 @@ fn globals(args: &[String]) -> Result<(Globals, Vec<String>), Fail> {
 fn commands() -> Value {
     let list: Vec<Value> = calls::CALLS
         .iter()
-        .map(|(cli, sdk)| json!({"command": cli, "sdk": sdk, "flags": calls::describe(cli).unwrap_or_default(), "secret_fds": calls::secrets(cli)}))
+        .map(|(cli, sdk, confirm)| json!({"command": cli, "sdk": sdk, "confirm": confirm, "flags": calls::describe(cli).unwrap_or_default(), "secret_fds": calls::secrets(cli)}))
         .collect();
     json!({"commands": list, "excluded": calls::EXCLUDED.iter().map(|(s, why)| json!({"sdk": s, "why": why})).collect::<Vec<_>>()})
 }

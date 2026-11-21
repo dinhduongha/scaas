@@ -104,15 +104,39 @@ macro_rules! desc {
     };
 }
 
+/// A command's confirm (`scaas commands`): `op` returns an operation object, which one command submits only after its review
+/// and quote are confirmed (`finish`; the body's type must be one, [`crate::IntoOp`]); `sign` asks in its body before it signs
+/// or submits; none neither signs nor submits.
+macro_rules! class {
+    (op) => {
+        Some("op")
+    };
+    (sign) => {
+        Some("sign")
+    };
+    () => {
+        None
+    };
+}
+
+macro_rules! body {
+    (op; $body:expr) => {
+        crate::IntoOp::into_op($body)
+    };
+    ($($c:ident)?; $body:expr) => {
+        $body
+    };
+}
+
 macro_rules! calls {
-    ($cx:ident; $( $cli:literal $sdk:literal $args:tt $([$($s:literal),*])? => $body:expr; )*) => {
-        /// Every command and the SDK call it runs.
-        pub const CALLS: &[(&str, &str)] = &[ $( ($cli, $sdk), )* ];
+    ($cx:ident; $( $cli:literal $sdk:literal $args:tt $([$($s:literal),*])? $(@$class:ident)? => $body:expr; )*) => {
+        /// Every command, the SDK call it runs and its confirm.
+        pub const CALLS: &[(&str, &str, Option<&str>)] = &[ $( ($cli, $sdk, class!($($class)?)), )* ];
 
         /// Runs command `cmd` with flags `m`.
         pub async fn dispatch($cx: &mut Cx, cmd: &str, m: Map<String, Value>) -> Result<Out, Fail> {
             match cmd {
-                $( $cli => args!(m, $args, $body), )*
+                $( $cli => args!(m, $args, body!($($class)?; $body)), )*
                 _ => Err(Fail::cli("UnknownCommand", cmd)),
             }
         }
@@ -211,7 +235,7 @@ calls! { cx;
     "vault word-in-list" "Vault::word_in_list" {} ["word"] => { let w = cx.secret("word")?; named("in_list", sdk(cx).vault().word_in_list(w)) };
     "vault confirm-backup" "Vault::confirm_backup" {seed: String} => { sdk(cx).vault().confirm_backup(seed).await?; ok() };
     "vault rename" "Vault::rename" {seed: String, label: String} => { sdk(cx).vault().rename(seed, label).await?; ok() };
-    "vault remove" "Vault::remove" {seed: String, unbacked: bool} => {
+    "vault remove" "Vault::remove" {seed: String, unbacked: bool} @sign => {
         cx.confirm(json!({"remove": seed, "unbacked": unbacked}))?;
         sdk(cx).vault().remove(Remove { seed, confirm: ConfirmRemove {}, unbacked: unbacked.then_some(ConfirmRemoveUnbacked {}) }).await?;
         ok()
@@ -279,35 +303,35 @@ calls! { cx;
     "account add-watch" "Account::add_watch" (r: scaas_sdk::account::AddWatch) => js(sdk(cx).account().add_watch(r).await?);
     "account signs" "Account::signs" {seed: String, id: String} => named("signs", sdk(cx).account().signs(seed, id).await?);
     "account msig-state" "Account::msig_state" {chain: String, ua: String} => js(sdk(cx).account().msig_state(chain, ua).await?);
-    "account prepare-msig-register" "Account::prepare_msig_register" (r: MsigRegister) => Out::Writes(sdk(cx).account().prepare_msig_register(r).await?);
-    "account prepare-accept-membership" "Account::prepare_accept_membership" (r: AcceptMembership) => Out::Writes(sdk(cx).account().prepare_accept_membership(r).await?.into_iter().collect());
-    "account prepare-update-msig" "Account::prepare_update_msig" (r: UpdateMsig) => {
+    "account prepare-msig-register" "Account::prepare_msig_register" (r: MsigRegister) @op => sdk(cx).account().prepare_msig_register(r).await?;
+    "account prepare-accept-membership" "Account::prepare_accept_membership" (r: AcceptMembership) @op => sdk(cx).account().prepare_accept_membership(r).await?.into_iter().collect::<Vec<_>>();
+    "account prepare-update-msig" "Account::prepare_update_msig" (r: UpdateMsig) @op => {
         let plan = sdk(cx).account().prepare_update_msig(r).await?;
         if !plan.warnings.is_empty() { crate::print_warnings(cx, &plan.warnings)?; }
-        Out::Writes(vec![plan.write])
+        vec![plan.write]
     };
-    "account prepare-register" "Account::prepare_register" (r: Register) => Out::Writes(sdk(cx).account().prepare_register(r).await?);
+    "account prepare-register" "Account::prepare_register" (r: Register) @op => sdk(cx).account().prepare_register(r).await?;
     "account quote-registry-write" "Account::quote_registry_write" {write: H<Arc<RegistryWrite>>} => { let q = sdk(cx).account().quote_registry_write(write.0).await?; let v = serde_json::to_value(&q).unwrap_or(Value::Null); handle(q, v) };
-    "account submit-registry-write" "Account::submit_registry_write" {write: H<Arc<RegistryWrite>>, quote: H<SubmitQuote>} => {
+    "account submit-registry-write" "Account::submit_registry_write" {write: H<Arc<RegistryWrite>>, quote: H<SubmitQuote>} @sign => {
         cx.confirm(json!({"review": review(&write.0.review()), "quote": quote.0, "write": write.0.id(), "chain": write.0.chain(), "entry": write.0.entry(), "ua": write.0.ua()}))?;
         { let op = sdk(cx).account().submit_registry_write(write.0, quote.0).await?; cx.sent(op).await }
     };
     "account registration-of" "Account::registration_of" {chain: String, ua: String} => js(sdk(cx).account().registration_of(chain, ua).await?);
-    "account prepare-kem-repair" "Account::prepare_kem_repair" {key: KeyRef, chain: String, payer: KeyRef} => Out::Writes(sdk(cx).account().prepare_kem_repair(key, chain, payer).await?.into_iter().collect());
+    "account prepare-kem-repair" "Account::prepare_kem_repair" {key: KeyRef, chain: String, payer: KeyRef} @op => sdk(cx).account().prepare_kem_repair(key, chain, payer).await?.into_iter().collect::<Vec<_>>();
     "account marks" "Account::marks" {seed: String, chain: String} => js(sdk(cx).account().marks(seed, chain).await?);
     "account restore" "Account::restore" (r: Restore) => js(sdk(cx).account().restore(r).await?);
-    "account prepare-smart-add-key" "Account::prepare_smart_add_key" {op: SmartOp, key: SubjectKeyArgs} => Out::Prepared(sdk(cx).account().prepare_smart_add_key(op, key).await?);
-    "account prepare-smart-remove-key" "Account::prepare_smart_remove_key" {op: SmartOp, index: String} => Out::Prepared(sdk(cx).account().prepare_smart_remove_key(op, index).await?);
-    "account prepare-smart-rotate-key" "Account::prepare_smart_rotate_key" {op: SmartOp, index: String, key: SubjectKeyArgs} => Out::Prepared(sdk(cx).account().prepare_smart_rotate_key(op, index, key).await?);
-    "account prepare-smart-set-guardian" "Account::prepare_smart_set_guardian" {op: SmartOp, guardian: String} => Out::Prepared(sdk(cx).account().prepare_smart_set_guardian(op, guardian).await?);
-    "account prepare-smart-cancel-recovery" "Account::prepare_smart_cancel_recovery" {op: SmartOp} => Out::Prepared(sdk(cx).account().prepare_smart_cancel_recovery(op).await?);
-    "account prepare-smart-cancel-nonce" "Account::prepare_smart_cancel_nonce" {op: SmartOp, lane: String} => Out::Prepared(sdk(cx).account().prepare_smart_cancel_nonce(op, lane).await?);
-    "account prepare-smart-execute" "Account::prepare_smart_execute" {op: SmartOp, call: SmartCall} => Out::Prepared(sdk(cx).account().prepare_smart_execute(op, call).await?);
-    "account prepare-initiate-recovery" "Account::prepare_initiate_recovery" {op: SmartOp, account: String, new_key: SubjectKeyArgs} => Out::Prepared(sdk(cx).account().prepare_initiate_recovery(op, account, new_key).await?);
-    "account prepare-smart-deploy" "Account::prepare_smart_deploy" {key: KeyRef, chain: String, factory: String, first_key: SubjectKeyArgs, guardian: String} => Out::Native(Box::new(sdk(cx).account().prepare_smart_deploy(key, chain, factory, first_key, guardian).await?));
-    "account prepare-complete-recovery" "Account::prepare_complete_recovery" {key: KeyRef, chain: String, account: String, new_key: SubjectKeyArgs} => Out::Native(Box::new(sdk(cx).account().prepare_complete_recovery(key, chain, account, new_key).await?));
+    "account prepare-smart-add-key" "Account::prepare_smart_add_key" {op: SmartOp, key: SubjectKeyArgs} @op => sdk(cx).account().prepare_smart_add_key(op, key).await?;
+    "account prepare-smart-remove-key" "Account::prepare_smart_remove_key" {op: SmartOp, index: String} @op => sdk(cx).account().prepare_smart_remove_key(op, index).await?;
+    "account prepare-smart-rotate-key" "Account::prepare_smart_rotate_key" {op: SmartOp, index: String, key: SubjectKeyArgs} @op => sdk(cx).account().prepare_smart_rotate_key(op, index, key).await?;
+    "account prepare-smart-set-guardian" "Account::prepare_smart_set_guardian" {op: SmartOp, guardian: String} @op => sdk(cx).account().prepare_smart_set_guardian(op, guardian).await?;
+    "account prepare-smart-cancel-recovery" "Account::prepare_smart_cancel_recovery" {op: SmartOp} @op => sdk(cx).account().prepare_smart_cancel_recovery(op).await?;
+    "account prepare-smart-cancel-nonce" "Account::prepare_smart_cancel_nonce" {op: SmartOp, lane: String} @op => sdk(cx).account().prepare_smart_cancel_nonce(op, lane).await?;
+    "account prepare-smart-execute" "Account::prepare_smart_execute" {op: SmartOp, call: SmartCall} @op => sdk(cx).account().prepare_smart_execute(op, call).await?;
+    "account prepare-initiate-recovery" "Account::prepare_initiate_recovery" {op: SmartOp, account: String, new_key: SubjectKeyArgs} @op => sdk(cx).account().prepare_initiate_recovery(op, account, new_key).await?;
+    "account prepare-smart-deploy" "Account::prepare_smart_deploy" {key: KeyRef, chain: String, factory: String, first_key: SubjectKeyArgs, guardian: String} @op => sdk(cx).account().prepare_smart_deploy(key, chain, factory, first_key, guardian).await?;
+    "account prepare-complete-recovery" "Account::prepare_complete_recovery" {key: KeyRef, chain: String, account: String, new_key: SubjectKeyArgs} @op => sdk(cx).account().prepare_complete_recovery(key, chain, account, new_key).await?;
     "account registration-blob" "Account::registration_blob" {key: KeyRef, attrs: RegisterAttrs} => js(sdk(cx).account().registration_blob(key, attrs).await?);
-    "account prepare-submit-registration" "Account::prepare_submit_registration" {blob: RegistrationBlob, chain: String, expected_ua: String, payer: KeyRef} => Out::Writes(sdk(cx).account().prepare_submit_registration(blob, chain, expected_ua, payer).await?);
+    "account prepare-submit-registration" "Account::prepare_submit_registration" {blob: RegistrationBlob, chain: String, expected_ua: String, payer: KeyRef} @op => sdk(cx).account().prepare_submit_registration(blob, chain, expected_ua, payer).await?;
     "account msig-structure" "msig::msig_structure" {members: Vec<MsigMemberArgs>, threshold: u16} => js(msig_structure(members, threshold)?);
     "account smart-account-address" "smart::smart_account_address" {factory: String, implementation: String, first_key: SubjectKeyArgs, guardian: String} => named("address", smart_account_address(&factory, &implementation, &first_key, &guardian)?);
     "msig-structure ua" "MsigStructureArgs::ua" (m: MsigStructureArgs) => named("ua", m.ua()?);
@@ -327,29 +351,29 @@ calls! { cx;
     "op state" "Op::state" {op: String} => js(sdk(cx).op().state(op).await?);
     "op quote" "Op::quote" {prepared: H<Arc<Prepared>>, path: SubmitPath} => { let q = sdk(cx).op().quote(prepared.0, path).await?; let v = serde_json::to_value(&q).unwrap_or(Value::Null); handle(q, v) };
     "op quote-with-gas" "Op::quote_with_gas" {prepared: H<Arc<Prepared>>, path: SubmitPath, gas: u64} => { let q = sdk(cx).op().quote_with_gas(prepared.0, path, gas).await?; let v = serde_json::to_value(&q).unwrap_or(Value::Null); handle(q, v) };
-    "op submit" "Op::submit" {prepared: H<Arc<Prepared>>, quote: H<SubmitQuote>} => { cx.confirm_op(&prepared.0, &quote.0)?; { let op = sdk(cx).op().submit(prepared.0, quote.0).await?; cx.sent(op).await } };
+    "op submit" "Op::submit" {prepared: H<Arc<Prepared>>, quote: H<SubmitQuote>} @sign => { cx.confirm_op(&prepared.0, &quote.0)?; { let op = sdk(cx).op().submit(prepared.0, quote.0).await?; cx.sent(op).await } };
     "op resume" "Op::resume" {} => named("resumed", sdk(cx).op().resume().await?);
-    "op resend" "Op::resend" {op: String, quote: H<SubmitQuote>} => { cx.confirm(json!({"resend": op, "quote": quote.0}))?; sdk(cx).op().resend(op.clone(), quote.0).await?; cx.sent(op).await };
-    "op member-sign" "Op::member_sign" {prepared: H<Arc<Prepared>>} => {
+    "op resend" "Op::resend" {op: String, quote: H<SubmitQuote>} @sign => { cx.confirm(json!({"resend": op, "quote": quote.0}))?; sdk(cx).op().resend(op.clone(), quote.0).await?; cx.sent(op).await };
+    "op member-sign" "Op::member_sign" {prepared: H<Arc<Prepared>>} @sign => {
         cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "as an msig member"}))?;
         named("signature", sdk(cx).op().member_sign(prepared.0).await?)
     };
-    "op bls-multi-part" "Op::bls_multi_part" {prepared: H<Arc<Prepared>>, member: KeyRef} => {
+    "op bls-multi-part" "Op::bls_multi_part" {prepared: H<Arc<Prepared>>, member: KeyRef} @sign => {
         cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "a BLS multi part"}))?;
         let p = sdk(cx).op().bls_multi_part(prepared.0, member).await?; let v = serde_json::to_value(&p).unwrap_or(Value::Null); handle(p, v)
     };
     "op bls-multi-part-ok" "Op::bls_multi_part_ok" {prepared: H<Arc<Prepared>>, part: BlsMultiPart} => named("ok", sdk(cx).op().bls_multi_part_ok(&prepared.0, &part));
-    "op submit-bls-multi" "Op::submit_bls_multi" {prepared: H<Arc<Prepared>>, quote: H<SubmitQuote>, parts: Vec<BlsMultiPart>, surplus: bool} => {
+    "op submit-bls-multi" "Op::submit_bls_multi" {prepared: H<Arc<Prepared>>, quote: H<SubmitQuote>, parts: Vec<BlsMultiPart>, surplus: bool} @sign => {
         cx.confirm_op(&prepared.0, &quote.0)?;
         { let op = sdk(cx).op().submit_bls_multi(prepared.0, quote.0, parts, surplus).await?; cx.sent(op).await }
     };
-    "op bls-multi-pop-part" "Op::bls_multi_pop_part" {member: KeyRef} => {
+    "op bls-multi-pop-part" "Op::bls_multi_pop_part" {member: KeyRef} @sign => {
         cx.confirm(json!({"sign": "a BLS proof-of-possession part", "member": member}))?;
         js(sdk(cx).op().bls_multi_pop_part(member)?)
     };
     "op bls-multi-pop-part-ok" "Op::bls_multi_pop_part_ok" {key_data: String, part: BlsMultiPart} => named("ok", sdk(cx).op().bls_multi_pop_part_ok(&key_data, &part));
     "op quote-register-bls-multi" "Op::quote_register_bls_multi" {chain: String, key_data: String, payer: KeyRef} => { let q = sdk(cx).op().quote_register_bls_multi(chain, key_data, payer).await?; let v = serde_json::to_value(&q).unwrap_or(Value::Null); handle(q, v) };
-    "op register-bls-multi" "Op::register_bls_multi" {chain: String, key_data: String, parts: Vec<BlsMultiPart>, quote: H<SubmitQuote>} => {
+    "op register-bls-multi" "Op::register_bls_multi" {chain: String, key_data: String, parts: Vec<BlsMultiPart>, quote: H<SubmitQuote>} @sign => {
         cx.confirm(json!({"register": "a BLS multi key", "chain": chain, "key_data": key_data, "quote": quote.0}))?;
         { let op = sdk(cx).op().register_bls_multi(chain, key_data, parts, quote.0).await?; cx.sent(op).await }
     };
@@ -366,28 +390,28 @@ calls! { cx;
     "wallet balances" "Wallet::balances" {id: String, chain: String} => js(sdk(cx).wallet().balances(id, chain).await?);
     "wallet history" "Wallet::history" {account: String, chain: String, before: Option<Cursor>, limit: u32} => js(sdk(cx).wallet().history(account, chain, before, limit).await?);
     "wallet native-address" "Wallet::native_address" {key: NativeKeyRef, ss58_prefix: Option<u16>} => js(sdk(cx).wallet().native_address(key, ss58_prefix).await?);
-    "wallet prepare-native-send" "Wallet::prepare_native_send" (r: NativeSend) => Out::Native(Box::new(sdk(cx).wallet().prepare_native_send(r).await?));
-    "wallet submit-native-send" "Wallet::submit_native_send" (q: NativeQuote) => { cx.confirm(json!({"quote": q}))?; named("tx", sdk(cx).wallet().submit_native_send(q).await?) };
-    "wallet prepare-transfer" "Wallet::prepare_transfer" (r: Transfer) => Out::Prepared(sdk(cx).wallet().prepare_transfer(r).await?);
-    "wallet prepare-pay" "Wallet::prepare_pay" (r: Pay) => Out::Prepared(sdk(cx).wallet().prepare_pay(r).await?);
-    "wallet prepare-pay-with-tax" "Wallet::prepare_pay_with_tax" (r: PayWithTax) => Out::Prepared(sdk(cx).wallet().prepare_pay_with_tax(r).await?);
-    "wallet prepare-payee-fee" "Wallet::prepare_payee_fee" (r: PayeeFee) => Out::Prepared(sdk(cx).wallet().prepare_payee_fee(r).await?);
-    "wallet prepare-pay-under-mandate" "Wallet::prepare_pay_under_mandate" (r: PayUnderMandate) => Out::Prepared(sdk(cx).wallet().prepare_pay_under_mandate(r).await?);
-    "wallet prepare-relay-fee" "Wallet::prepare_relay_fee" (r: RelayFee) => Out::Prepared(sdk(cx).wallet().prepare_relay_fee(r).await?);
-    "wallet prepare-execute" "Wallet::prepare_execute" (r: Execute) => Out::Prepared(sdk(cx).wallet().prepare_execute(r).await?);
-    "wallet prepare-cancel-nonce" "Wallet::prepare_cancel_nonce" (r: CancelNonce) => Out::Prepared(sdk(cx).wallet().prepare_cancel_nonce(r).await?);
-    "wallet prepare-burn" "Wallet::prepare_burn" (r: Burn) => Out::Prepared(sdk(cx).wallet().prepare_burn(r).await?);
-    "wallet prepare-wrap" "Wallet::prepare_wrap" (r: Wrap) => Out::Prepared(sdk(cx).wallet().prepare_wrap(r).await?);
-    "wallet prepare-wrap-leg" "Wallet::prepare_wrap_leg" (r: WrapLeg) => Out::Prepared(sdk(cx).wallet().prepare_wrap_leg(r).await?);
-    "wallet prepare-unwrap" "Wallet::prepare_unwrap" (r: Unwrap) => Out::Prepared(sdk(cx).wallet().prepare_unwrap(r).await?);
-    "wallet prepare-unwrap-leg" "Wallet::prepare_unwrap_leg" (r: UnwrapLeg) => Out::Prepared(sdk(cx).wallet().prepare_unwrap_leg(r).await?);
-    "wallet prepare-add-reserve" "Wallet::prepare_add_reserve" (r: AddReserve) => Out::Prepared(sdk(cx).wallet().prepare_add_reserve(r).await?);
-    "wallet prepare-wrap-to-ua" "Wallet::prepare_wrap_to_ua" (r: WrapToUa) => Out::Prepared(sdk(cx).wallet().prepare_wrap_to_ua(r).await?);
-    "wallet prepare-unwrap-to-ua" "Wallet::prepare_unwrap_to_ua" (r: UnwrapToUa) => Out::Prepared(sdk(cx).wallet().prepare_unwrap_to_ua(r).await?);
-    "wallet prepare-set-mandate" "Wallet::prepare_set_mandate" (r: SetMandate) => Out::Prepared(sdk(cx).wallet().prepare_set_mandate(r).await?);
-    "wallet prepare-set-payee" "Wallet::prepare_set_payee" (r: SetPayee) => Out::Prepared(sdk(cx).wallet().prepare_set_payee(r).await?);
-    "wallet prepare-revoke-mandate" "Wallet::prepare_revoke_mandate" (r: RevokeMandate) => Out::Prepared(sdk(cx).wallet().prepare_revoke_mandate(r).await?);
-    "wallet prepare-delegate-revoke" "Wallet::prepare_delegate_revoke" (r: DelegateRevoke) => Out::Prepared(sdk(cx).wallet().prepare_delegate_revoke(r).await?);
+    "wallet prepare-native-send" "Wallet::prepare_native_send" (r: NativeSend) @op => sdk(cx).wallet().prepare_native_send(r).await?;
+    "wallet submit-native-send" "Wallet::submit_native_send" (q: NativeQuote) @sign => { cx.confirm(json!({"quote": q}))?; named("tx", sdk(cx).wallet().submit_native_send(q).await?) };
+    "wallet prepare-transfer" "Wallet::prepare_transfer" (r: Transfer) @op => sdk(cx).wallet().prepare_transfer(r).await?;
+    "wallet prepare-pay" "Wallet::prepare_pay" (r: Pay) @op => sdk(cx).wallet().prepare_pay(r).await?;
+    "wallet prepare-pay-with-tax" "Wallet::prepare_pay_with_tax" (r: PayWithTax) @op => sdk(cx).wallet().prepare_pay_with_tax(r).await?;
+    "wallet prepare-payee-fee" "Wallet::prepare_payee_fee" (r: PayeeFee) @op => sdk(cx).wallet().prepare_payee_fee(r).await?;
+    "wallet prepare-pay-under-mandate" "Wallet::prepare_pay_under_mandate" (r: PayUnderMandate) @op => sdk(cx).wallet().prepare_pay_under_mandate(r).await?;
+    "wallet prepare-relay-fee" "Wallet::prepare_relay_fee" (r: RelayFee) @op => sdk(cx).wallet().prepare_relay_fee(r).await?;
+    "wallet prepare-execute" "Wallet::prepare_execute" (r: Execute) @op => sdk(cx).wallet().prepare_execute(r).await?;
+    "wallet prepare-cancel-nonce" "Wallet::prepare_cancel_nonce" (r: CancelNonce) @op => sdk(cx).wallet().prepare_cancel_nonce(r).await?;
+    "wallet prepare-burn" "Wallet::prepare_burn" (r: Burn) @op => sdk(cx).wallet().prepare_burn(r).await?;
+    "wallet prepare-wrap" "Wallet::prepare_wrap" (r: Wrap) @op => sdk(cx).wallet().prepare_wrap(r).await?;
+    "wallet prepare-wrap-leg" "Wallet::prepare_wrap_leg" (r: WrapLeg) @op => sdk(cx).wallet().prepare_wrap_leg(r).await?;
+    "wallet prepare-unwrap" "Wallet::prepare_unwrap" (r: Unwrap) @op => sdk(cx).wallet().prepare_unwrap(r).await?;
+    "wallet prepare-unwrap-leg" "Wallet::prepare_unwrap_leg" (r: UnwrapLeg) @op => sdk(cx).wallet().prepare_unwrap_leg(r).await?;
+    "wallet prepare-add-reserve" "Wallet::prepare_add_reserve" (r: AddReserve) @op => sdk(cx).wallet().prepare_add_reserve(r).await?;
+    "wallet prepare-wrap-to-ua" "Wallet::prepare_wrap_to_ua" (r: WrapToUa) @op => sdk(cx).wallet().prepare_wrap_to_ua(r).await?;
+    "wallet prepare-unwrap-to-ua" "Wallet::prepare_unwrap_to_ua" (r: UnwrapToUa) @op => sdk(cx).wallet().prepare_unwrap_to_ua(r).await?;
+    "wallet prepare-set-mandate" "Wallet::prepare_set_mandate" (r: SetMandate) @op => sdk(cx).wallet().prepare_set_mandate(r).await?;
+    "wallet prepare-set-payee" "Wallet::prepare_set_payee" (r: SetPayee) @op => sdk(cx).wallet().prepare_set_payee(r).await?;
+    "wallet prepare-revoke-mandate" "Wallet::prepare_revoke_mandate" (r: RevokeMandate) @op => sdk(cx).wallet().prepare_revoke_mandate(r).await?;
+    "wallet prepare-delegate-revoke" "Wallet::prepare_delegate_revoke" (r: DelegateRevoke) @op => sdk(cx).wallet().prepare_delegate_revoke(r).await?;
 
     // ---- confidential
     "confidential zether-key" "Confidential::zether_key" {seed: String, account: u32} => js(sdk(cx).confidential().zether_key(seed, account).await?);
@@ -395,29 +419,29 @@ calls! { cx;
     "confidential pqz-balance" "Confidential::pqz_balance" (r: PqzBalanceRequest) => js(sdk(cx).confidential().pqz_balance(r).await?);
     "confidential pqz-balance-all" "Confidential::pqz_balance_all" (r: PqzBalanceRequest) => js(sdk(cx).confidential().pqz_balance_all(r).await?);
     "confidential request-verdict" "Confidential::request_verdict" (r: PqzVerdictRequest) => js(sdk(cx).confidential().request_verdict(r).await?);
-    "confidential prepare-pqz-shield" "Confidential::prepare_pqz_shield" (r: PqzShield) => Out::Prepared(sdk(cx).confidential().prepare_pqz_shield(r).await?);
-    "confidential prepare-pqz-wrap-shield" "Confidential::prepare_pqz_wrap_shield" (r: PqzWrapShield) => Out::Prepared(sdk(cx).confidential().prepare_pqz_wrap_shield(r).await?);
-    "confidential prepare-pqz-prepare-acc" "Confidential::prepare_pqz_prepare_acc" (r: PqzAccountOp) => Out::Prepared(sdk(cx).confidential().prepare_pqz_prepare_acc(r).await?);
-    "confidential prepare-pqz-roll-over" "Confidential::prepare_pqz_roll_over" (r: PqzAccountOp) => Out::Prepared(sdk(cx).confidential().prepare_pqz_roll_over(r).await?);
-    "confidential prepare-pqz-transfer" "Confidential::prepare_pqz_transfer" (r: PqzTransfer) => Out::Prepared(sdk(cx).confidential().prepare_pqz_transfer(r).await?);
-    "confidential prepare-pqz-transfer-compact" "Confidential::prepare_pqz_transfer_compact" (r: PqzTransfer) => Out::Prepared(sdk(cx).confidential().prepare_pqz_transfer_compact(r).await?);
-    "confidential prepare-pqz-transfer-multi" "Confidential::prepare_pqz_transfer_multi" (r: PqzTransferMulti) => Out::Prepared(sdk(cx).confidential().prepare_pqz_transfer_multi(r).await?);
-    "confidential prepare-pqz-transfer-multi-compact" "Confidential::prepare_pqz_transfer_multi_compact" (r: PqzTransferMulti) => Out::Prepared(sdk(cx).confidential().prepare_pqz_transfer_multi_compact(r).await?);
-    "confidential prepare-pqz-unshield" "Confidential::prepare_pqz_unshield" (r: PqzUnshield) => Out::Prepared(sdk(cx).confidential().prepare_pqz_unshield(r).await?);
-    "confidential prepare-pqz-unshield-unwrap" "Confidential::prepare_pqz_unshield_unwrap" (r: PqzUnshieldUnwrap) => Out::Prepared(sdk(cx).confidential().prepare_pqz_unshield_unwrap(r).await?);
-    "confidential prepare-zether-shield" "Confidential::prepare_zether_shield" (r: ZetherShield) => Out::Prepared(sdk(cx).confidential().prepare_zether_shield(r).await?);
-    "confidential prepare-zether-wrap-shield" "Confidential::prepare_zether_wrap_shield" (r: ZetherWrapShield) => Out::Prepared(sdk(cx).confidential().prepare_zether_wrap_shield(r).await?);
-    "confidential prepare-zether-roll-over" "Confidential::prepare_zether_roll_over" (r: ZetherRollOver) => Out::Prepared(sdk(cx).confidential().prepare_zether_roll_over(r).await?);
-    "confidential prepare-zether-roll-over-batch" "Confidential::prepare_zether_roll_over_batch" (r: ZetherRollOverBatch) => Out::Prepared(sdk(cx).confidential().prepare_zether_roll_over_batch(r).await?);
-    "confidential prepare-zether-transfer" "Confidential::prepare_zether_transfer" (r: ZetherTransfer) => Out::Prepared(sdk(cx).confidential().prepare_zether_transfer(r).await?);
-    "confidential prepare-zether-unshield" "Confidential::prepare_zether_unshield" (r: ZetherUnshield) => Out::Prepared(sdk(cx).confidential().prepare_zether_unshield(r).await?);
-    "confidential prepare-zether-unshield-unwrap" "Confidential::prepare_zether_unshield_unwrap" (r: ZetherUnshieldUnwrap) => Out::Prepared(sdk(cx).confidential().prepare_zether_unshield_unwrap(r).await?);
-    "confidential prepare-zether-transfer-multi" "Confidential::prepare_zether_transfer_multi" (r: ZetherTransferMulti) => Out::Prepared(sdk(cx).confidential().prepare_zether_transfer_multi(r).await?);
-    "confidential prepare-zether-transfer-compact" "Confidential::prepare_zether_transfer_compact" (r: ZetherTransferMulti) => Out::Prepared(sdk(cx).confidential().prepare_zether_transfer_compact(r).await?);
-    "confidential prepare-zether-owner-roll-over" "Confidential::prepare_zether_owner_roll_over" (r: ZetherOwnerRollOver) => Out::Prepared(sdk(cx).confidential().prepare_zether_owner_roll_over(r).await?);
-    "confidential prepare-zether-roll-over-signed" "Confidential::prepare_zether_roll_over_signed" {r: ZetherOwnerRollOver, relay: OwnerRelay} => Out::Prepared(sdk(cx).confidential().prepare_zether_roll_over_signed(r, relay).await?);
-    "confidential prepare-zether-owner-set-mode" "Confidential::prepare_zether_owner_set_mode" (r: ZetherOwnerSetMode) => Out::Prepared(sdk(cx).confidential().prepare_zether_owner_set_mode(r).await?);
-    "confidential prepare-zether-set-roll-over-mode" "Confidential::prepare_zether_set_roll_over_mode" {r: ZetherOwnerSetMode, relay: OwnerRelay} => Out::Prepared(sdk(cx).confidential().prepare_zether_set_roll_over_mode(r, relay).await?);
+    "confidential prepare-pqz-shield" "Confidential::prepare_pqz_shield" (r: PqzShield) @op => sdk(cx).confidential().prepare_pqz_shield(r).await?;
+    "confidential prepare-pqz-wrap-shield" "Confidential::prepare_pqz_wrap_shield" (r: PqzWrapShield) @op => sdk(cx).confidential().prepare_pqz_wrap_shield(r).await?;
+    "confidential prepare-pqz-prepare-acc" "Confidential::prepare_pqz_prepare_acc" (r: PqzAccountOp) @op => sdk(cx).confidential().prepare_pqz_prepare_acc(r).await?;
+    "confidential prepare-pqz-roll-over" "Confidential::prepare_pqz_roll_over" (r: PqzAccountOp) @op => sdk(cx).confidential().prepare_pqz_roll_over(r).await?;
+    "confidential prepare-pqz-transfer" "Confidential::prepare_pqz_transfer" (r: PqzTransfer) @op => sdk(cx).confidential().prepare_pqz_transfer(r).await?;
+    "confidential prepare-pqz-transfer-compact" "Confidential::prepare_pqz_transfer_compact" (r: PqzTransfer) @op => sdk(cx).confidential().prepare_pqz_transfer_compact(r).await?;
+    "confidential prepare-pqz-transfer-multi" "Confidential::prepare_pqz_transfer_multi" (r: PqzTransferMulti) @op => sdk(cx).confidential().prepare_pqz_transfer_multi(r).await?;
+    "confidential prepare-pqz-transfer-multi-compact" "Confidential::prepare_pqz_transfer_multi_compact" (r: PqzTransferMulti) @op => sdk(cx).confidential().prepare_pqz_transfer_multi_compact(r).await?;
+    "confidential prepare-pqz-unshield" "Confidential::prepare_pqz_unshield" (r: PqzUnshield) @op => sdk(cx).confidential().prepare_pqz_unshield(r).await?;
+    "confidential prepare-pqz-unshield-unwrap" "Confidential::prepare_pqz_unshield_unwrap" (r: PqzUnshieldUnwrap) @op => sdk(cx).confidential().prepare_pqz_unshield_unwrap(r).await?;
+    "confidential prepare-zether-shield" "Confidential::prepare_zether_shield" (r: ZetherShield) @op => sdk(cx).confidential().prepare_zether_shield(r).await?;
+    "confidential prepare-zether-wrap-shield" "Confidential::prepare_zether_wrap_shield" (r: ZetherWrapShield) @op => sdk(cx).confidential().prepare_zether_wrap_shield(r).await?;
+    "confidential prepare-zether-roll-over" "Confidential::prepare_zether_roll_over" (r: ZetherRollOver) @op => sdk(cx).confidential().prepare_zether_roll_over(r).await?;
+    "confidential prepare-zether-roll-over-batch" "Confidential::prepare_zether_roll_over_batch" (r: ZetherRollOverBatch) @op => sdk(cx).confidential().prepare_zether_roll_over_batch(r).await?;
+    "confidential prepare-zether-transfer" "Confidential::prepare_zether_transfer" (r: ZetherTransfer) @op => sdk(cx).confidential().prepare_zether_transfer(r).await?;
+    "confidential prepare-zether-unshield" "Confidential::prepare_zether_unshield" (r: ZetherUnshield) @op => sdk(cx).confidential().prepare_zether_unshield(r).await?;
+    "confidential prepare-zether-unshield-unwrap" "Confidential::prepare_zether_unshield_unwrap" (r: ZetherUnshieldUnwrap) @op => sdk(cx).confidential().prepare_zether_unshield_unwrap(r).await?;
+    "confidential prepare-zether-transfer-multi" "Confidential::prepare_zether_transfer_multi" (r: ZetherTransferMulti) @op => sdk(cx).confidential().prepare_zether_transfer_multi(r).await?;
+    "confidential prepare-zether-transfer-compact" "Confidential::prepare_zether_transfer_compact" (r: ZetherTransferMulti) @op => sdk(cx).confidential().prepare_zether_transfer_compact(r).await?;
+    "confidential prepare-zether-owner-roll-over" "Confidential::prepare_zether_owner_roll_over" (r: ZetherOwnerRollOver) @op => sdk(cx).confidential().prepare_zether_owner_roll_over(r).await?;
+    "confidential prepare-zether-roll-over-signed" "Confidential::prepare_zether_roll_over_signed" {r: ZetherOwnerRollOver, relay: OwnerRelay} @op => sdk(cx).confidential().prepare_zether_roll_over_signed(r, relay).await?;
+    "confidential prepare-zether-owner-set-mode" "Confidential::prepare_zether_owner_set_mode" (r: ZetherOwnerSetMode) @op => sdk(cx).confidential().prepare_zether_owner_set_mode(r).await?;
+    "confidential prepare-zether-set-roll-over-mode" "Confidential::prepare_zether_set_roll_over_mode" {r: ZetherOwnerSetMode, relay: OwnerRelay} @op => sdk(cx).confidential().prepare_zether_set_roll_over_mode(r, relay).await?;
 
     // ---- dex
     "dex markets" "Dex::markets" {chain: String} => named("markets", raw_json(sdk(cx).dex().markets(chain).await?));
@@ -425,20 +449,20 @@ calls! { cx;
     "dex trades" "Dex::trades" {chain: String, market: i64} => named("trades", raw_json(sdk(cx).dex().trades(chain, market).await?));
     "dex ticker" "Dex::ticker" {chain: String, market: i64} => named("ticker", raw_json(sdk(cx).dex().ticker(chain, market).await?));
     "dex orders" "Dex::orders" {chain: String, maker: String} => named("orders", raw_json(sdk(cx).dex().orders(chain, maker).await?));
-    "dex prepare-trade-order" "Dex::prepare_trade_order" (r: TradeOrder) => Out::Order(sdk(cx).dex().prepare_trade_order(r).await?);
-    "dex prepare-liquidity-order" "Dex::prepare_liquidity_order" (r: LiquidityOrder) => Out::Order(sdk(cx).dex().prepare_liquidity_order(r).await?);
-    "dex sign-order" "Dex::sign_order" {order: H<Arc<PreparedOrder>>} => {
+    "dex prepare-trade-order" "Dex::prepare_trade_order" (r: TradeOrder) @op => sdk(cx).dex().prepare_trade_order(r).await?;
+    "dex prepare-liquidity-order" "Dex::prepare_liquidity_order" (r: LiquidityOrder) @op => sdk(cx).dex().prepare_liquidity_order(r).await?;
+    "dex sign-order" "Dex::sign_order" {order: H<Arc<PreparedOrder>>} @sign => {
         cx.confirm(json!({"review": review(&order.0.review()), "order": order.0.id(), "chain": order.0.chain()}))?;
         js(sdk(cx).dex().sign_order(order.0).await?)
     };
-    "dex place" "Dex::place" {order: H<Arc<PreparedOrder>>} => {
+    "dex place" "Dex::place" {order: H<Arc<PreparedOrder>>} @sign => {
         cx.confirm(json!({"review": review(&order.0.review()), "order": order.0.id(), "chain": order.0.chain()}))?;
         named("placed", raw_json(sdk(cx).dex().place(order.0).await?))
     };
-    "dex cancel-all" "Dex::cancel_all" (r: CancelAll) => { cx.confirm(json!({"cancel_all": r}))?; named("cancelled", raw_json(sdk(cx).dex().cancel_all(r).await?)) };
-    "dex prepare-cancel-order" "Dex::prepare_cancel_order" (r: CancelOrder) => Out::Prepared(sdk(cx).dex().prepare_cancel_order(r).await?);
-    "dex prepare-cancel-wrap-order" "Dex::prepare_cancel_wrap_order" (r: CancelWrapOrder) => Out::Prepared(sdk(cx).dex().prepare_cancel_wrap_order(r).await?);
-    "dex prepare-wrap-order" "Dex::prepare_wrap_order" (r: WrapOrder) => Out::Prepared(sdk(cx).dex().prepare_wrap_order(r).await?);
+    "dex cancel-all" "Dex::cancel_all" (r: CancelAll) @sign => { cx.confirm(json!({"cancel_all": r}))?; named("cancelled", raw_json(sdk(cx).dex().cancel_all(r).await?)) };
+    "dex prepare-cancel-order" "Dex::prepare_cancel_order" (r: CancelOrder) @op => sdk(cx).dex().prepare_cancel_order(r).await?;
+    "dex prepare-cancel-wrap-order" "Dex::prepare_cancel_wrap_order" (r: CancelWrapOrder) @op => sdk(cx).dex().prepare_cancel_wrap_order(r).await?;
+    "dex prepare-wrap-order" "Dex::prepare_wrap_order" (r: WrapOrder) @op => sdk(cx).dex().prepare_wrap_order(r).await?;
     "prepared-order id" "PreparedOrder::id" {order: H<Arc<PreparedOrder>>} => named("id", order.0.id());
     "prepared-order chain" "PreparedOrder::chain" {order: H<Arc<PreparedOrder>>} => named("chain", order.0.chain());
     "prepared-order review" "PreparedOrder::review" {order: H<Arc<PreparedOrder>>} => named("review", review(&order.0.review()));
@@ -446,72 +470,72 @@ calls! { cx;
 
     // ---- admin
     "admin create3-address" "Admin::create3_address" {factory: String, creator_id: String, contract_class: u16, kind: u16, salt: String} => js(sdk(cx).admin().create3_address(factory, creator_id, contract_class, kind, salt)?);
-    "admin sign-rescue-vault" "Admin::sign_rescue_vault" (r: RescueVault) => { cx.confirm(json!({"sign": r}))?; js(sdk(cx).admin().sign_rescue_vault(r).await?) };
-    "admin sign-pqz-auditor-consent" "Admin::sign_pqz_auditor_consent" (r: AuditorConsent) => { cx.confirm(json!({"sign": r}))?; named("signature", sdk(cx).admin().sign_pqz_auditor_consent(r).await?) };
-    "admin sign-zether-auditor-consent" "Admin::sign_zether_auditor_consent" (r: AuditorConsent) => { cx.confirm(json!({"sign": r}))?; named("signature", sdk(cx).admin().sign_zether_auditor_consent(r).await?) };
+    "admin sign-rescue-vault" "Admin::sign_rescue_vault" (r: RescueVault) @sign => { cx.confirm(json!({"sign": r}))?; js(sdk(cx).admin().sign_rescue_vault(r).await?) };
+    "admin sign-pqz-auditor-consent" "Admin::sign_pqz_auditor_consent" (r: AuditorConsent) @sign => { cx.confirm(json!({"sign": r}))?; named("signature", sdk(cx).admin().sign_pqz_auditor_consent(r).await?) };
+    "admin sign-zether-auditor-consent" "Admin::sign_zether_auditor_consent" (r: AuditorConsent) @sign => { cx.confirm(json!({"sign": r}))?; named("signature", sdk(cx).admin().sign_zether_auditor_consent(r).await?) };
     "admin governance-delay" "Admin::governance_delay" {chain: String, token: String, bit: u16, holder: Option<HolderKind>} => js(sdk(cx).admin().governance_delay(chain, token, bit, holder).await?);
-    "admin ua-grant-role" "Admin::admin_ua_grant_role" (r: UaGrantRole) => Out::Prepared(sdk(cx).admin().admin_ua_grant_role(r).await?);
-    "admin ua-revoke-role" "Admin::admin_ua_revoke_role" (r: UaRevokeRole) => Out::Prepared(sdk(cx).admin().admin_ua_revoke_role(r).await?);
-    "admin ua-set-grant" "Admin::admin_ua_set_grant" (r: UaSetGrant) => Out::Prepared(sdk(cx).admin().admin_ua_set_grant(r).await?);
-    "admin ua-cancel-grant" "Admin::admin_ua_cancel_grant" (r: UaCancelGrant) => Out::Prepared(sdk(cx).admin().admin_ua_cancel_grant(r).await?);
-    "admin ua-disable-feature" "Admin::admin_ua_disable_feature" (r: UaDisableFeature) => Out::Prepared(sdk(cx).admin().admin_ua_disable_feature(r).await?);
-    "admin ua-transfer-admin" "Admin::admin_ua_transfer_admin" (r: UaTransferAdmin) => Out::Prepared(sdk(cx).admin().admin_ua_transfer_admin(r).await?);
-    "admin ua-accept-admin" "Admin::admin_ua_accept_admin" (r: UaAcceptAdmin) => Out::Prepared(sdk(cx).admin().admin_ua_accept_admin(r).await?);
-    "admin ua-renounce-admin" "Admin::admin_ua_renounce_admin" (r: UaRenounceAdmin) => Out::Prepared(sdk(cx).admin().admin_ua_renounce_admin(r).await?);
-    "admin ua-renounce-role" "Admin::admin_ua_renounce_role" (r: UaRenounceRole) => Out::Prepared(sdk(cx).admin().admin_ua_renounce_role(r).await?);
-    "admin ua-mint" "Admin::admin_ua_mint" (r: UaMint) => Out::Prepared(sdk(cx).admin().admin_ua_mint(r).await?);
-    "admin ua-mint-to-ua" "Admin::admin_ua_mint_to_ua" (r: UaMintToUA) => Out::Prepared(sdk(cx).admin().admin_ua_mint_to_ua(r).await?);
-    "admin ua-disable-wrap" "Admin::admin_ua_disable_wrap" (r: UaDisableWrap) => Out::Prepared(sdk(cx).admin().admin_ua_disable_wrap(r).await?);
-    "admin ua-propose-rate" "Admin::admin_ua_propose_rate" (r: UaProposeRate) => Out::Prepared(sdk(cx).admin().admin_ua_propose_rate(r).await?);
-    "admin ua-cancel-rate" "Admin::admin_ua_cancel_rate" (r: UaCancelRate) => Out::Prepared(sdk(cx).admin().admin_ua_cancel_rate(r).await?);
-    "admin ua-execute-rate" "Admin::admin_ua_execute_rate" (r: UaExecuteRate) => Out::Prepared(sdk(cx).admin().admin_ua_execute_rate(r).await?);
-    "admin ua-set-market" "Admin::admin_ua_set_market" (r: UaSetMarket) => Out::Prepared(sdk(cx).admin().admin_ua_set_market(r).await?);
-    "admin ua-set-exchange-target" "Admin::admin_ua_set_exchange_target" (r: UaSetExchangeTarget) => Out::Prepared(sdk(cx).admin().admin_ua_set_exchange_target(r).await?);
-    "admin ua-set-listed-only" "Admin::admin_ua_set_listed_only" (r: UaSetListedOnly) => Out::Prepared(sdk(cx).admin().admin_ua_set_listed_only(r).await?);
-    "admin ua-set-fee-split" "Admin::admin_ua_set_fee_split" (r: UaSetFeeSplit) => Out::Prepared(sdk(cx).admin().admin_ua_set_fee_split(r).await?);
-    "admin ua-freeze" "Admin::admin_ua_freeze" (r: UaFreeze) => Out::Prepared(sdk(cx).admin().admin_ua_freeze(r).await?);
-    "admin ua-unfreeze" "Admin::admin_ua_unfreeze" (r: UaUnfreeze) => Out::Prepared(sdk(cx).admin().admin_ua_unfreeze(r).await?);
-    "admin ua-force-transfer" "Admin::admin_ua_force_transfer" (r: UaForceTransfer) => Out::Prepared(sdk(cx).admin().admin_ua_force_transfer(r).await?);
-    "admin ua-pause" "Admin::admin_ua_pause" (r: UaPause) => Out::Prepared(sdk(cx).admin().admin_ua_pause(r).await?);
-    "admin ua-unpause" "Admin::admin_ua_unpause" (r: UaUnpause) => Out::Prepared(sdk(cx).admin().admin_ua_unpause(r).await?);
-    "admin ua-record-order" "Admin::admin_ua_record_order" (r: UaRecordOrder) => Out::Prepared(sdk(cx).admin().admin_ua_record_order(r).await?);
-    "admin ua-revoke-order" "Admin::admin_ua_revoke_order" (r: UaRevokeOrder) => Out::Prepared(sdk(cx).admin().admin_ua_revoke_order(r).await?);
-    "admin ua-operator-transfer" "Admin::admin_ua_operator_transfer" (r: UaOperatorTransfer) => Out::Prepared(sdk(cx).admin().admin_ua_operator_transfer(r).await?);
-    "admin ua-set-tax-rate" "Admin::admin_ua_set_tax_rate" (r: UaSetTaxRate) => Out::Prepared(sdk(cx).admin().admin_ua_set_tax_rate(r).await?);
-    "admin ua-set-tax-recipient" "Admin::admin_ua_set_tax_recipient" (r: UaSetTaxRecipient) => Out::Prepared(sdk(cx).admin().admin_ua_set_tax_recipient(r).await?);
-    "admin ua-pqz-set-verifier" "Admin::admin_ua_pqz_set_verifier" (r: UaPqzSetVerifier) => Out::Prepared(sdk(cx).admin().admin_ua_pqz_set_verifier(r).await?);
-    "admin ua-pqz-cancel-verifier" "Admin::admin_ua_pqz_cancel_verifier" (r: UaPqzCancelVerifier) => Out::Prepared(sdk(cx).admin().admin_ua_pqz_cancel_verifier(r).await?);
-    "admin ua-pqz-revoke-verifier" "Admin::admin_ua_pqz_revoke_verifier" (r: UaPqzRevokeVerifier) => Out::Prepared(sdk(cx).admin().admin_ua_pqz_revoke_verifier(r).await?);
-    "admin ua-set-proof-store" "Admin::admin_ua_set_proof_store" (r: UaSetProofStore) => Out::Prepared(sdk(cx).admin().admin_ua_set_proof_store(r).await?);
-    "admin ua-set-auditor-key" "Admin::admin_ua_set_auditor_key" (r: UaSetAuditorKey) => Out::Prepared(sdk(cx).admin().admin_ua_set_auditor_key(r).await?);
-    "admin ua-set-auditor-ua" "Admin::admin_ua_set_auditor_ua" (r: UaSetAuditorUA) => Out::Prepared(sdk(cx).admin().admin_ua_set_auditor_ua(r).await?);
-    "admin ua-set-verifier-fee" "Admin::admin_ua_set_verifier_fee" (r: UaSetVerifierFee) => Out::Prepared(sdk(cx).admin().admin_ua_set_verifier_fee(r).await?);
-    "admin ua-set-wrap-limits" "Admin::admin_ua_set_wrap_limits" (r: UaSetWrapLimits) => Out::Prepared(sdk(cx).admin().admin_ua_set_wrap_limits(r).await?);
-    "admin ua-set-wrap-member" "Admin::admin_ua_set_wrap_member" (r: UaSetWrapMember) => Out::Prepared(sdk(cx).admin().admin_ua_set_wrap_member(r).await?);
-    "admin ua-set-max-supply" "Admin::admin_ua_set_max_supply" (r: UaSetMaxSupply) => Out::Prepared(sdk(cx).admin().admin_ua_set_max_supply(r).await?);
-    "admin ua-set-max-wrap-supply" "Admin::admin_ua_set_max_wrap_supply" (r: UaSetMaxWrapSupply) => Out::Prepared(sdk(cx).admin().admin_ua_set_max_wrap_supply(r).await?);
-    "admin ua-set-allowed" "Admin::admin_ua_set_allowed" (r: UaSetAllowed) => Out::Prepared(sdk(cx).admin().admin_ua_set_allowed(r).await?);
-    "admin ua-set-denied" "Admin::admin_ua_set_denied" (r: UaSetDenied) => Out::Prepared(sdk(cx).admin().admin_ua_set_denied(r).await?);
-    "admin ua-enable-feature" "Admin::admin_ua_enable_feature" (r: UaEnableFeature) => Out::Prepared(sdk(cx).admin().admin_ua_enable_feature(r).await?);
-    "admin ua-publish-token-env" "Admin::admin_ua_publish_token_env" (r: UaPublishTokenEnv) => Out::Prepared(sdk(cx).admin().admin_ua_publish_token_env(r).await?);
-    "admin ua-publish-dex-env" "Admin::admin_ua_publish_dex_env" (r: UaPublishDexEnv) => Out::Prepared(sdk(cx).admin().admin_ua_publish_dex_env(r).await?);
-    "admin ua-publish-class-env" "Admin::admin_ua_publish_class_env" (r: UaPublishClassEnv) => Out::Prepared(sdk(cx).admin().admin_ua_publish_class_env(r).await?);
-    "admin ua-deprecate-token" "Admin::admin_ua_deprecate_token" (r: UaDeprecateToken) => Out::Prepared(sdk(cx).admin().admin_ua_deprecate_token(r).await?);
-    "admin ua-deprecate-dex" "Admin::admin_ua_deprecate_dex" (r: UaDeprecateDex) => Out::Prepared(sdk(cx).admin().admin_ua_deprecate_dex(r).await?);
-    "admin ua-deprecate-release" "Admin::admin_ua_deprecate_release" (r: UaDeprecateRelease) => Out::Prepared(sdk(cx).admin().admin_ua_deprecate_release(r).await?);
-    "admin ua-set-token-kind-enabled" "Admin::admin_ua_set_token_kind_enabled" (r: UaSetTokenKindEnabled) => Out::Prepared(sdk(cx).admin().admin_ua_set_token_kind_enabled(r).await?);
-    "admin ua-set-class-kind-enabled" "Admin::admin_ua_set_class_kind_enabled" (r: UaSetClassKindEnabled) => Out::Prepared(sdk(cx).admin().admin_ua_set_class_kind_enabled(r).await?);
-    "admin ua-set-kyc-provider" "Admin::admin_ua_set_kyc_provider" (r: UaSetKycProvider) => Out::Prepared(sdk(cx).admin().admin_ua_set_kyc_provider(r).await?);
-    "admin ua-set-compliance" "Admin::admin_ua_set_compliance" (r: UaSetCompliance) => Out::Prepared(sdk(cx).admin().admin_ua_set_compliance(r).await?);
-    "admin ua-create-token" "Admin::admin_ua_create_token" (r: UaCreateToken) => Out::Prepared(sdk(cx).admin().admin_ua_create_token(r).await?);
-    "admin ua-create-dex" "Admin::admin_ua_create_dex" (r: UaCreateDex) => Out::Prepared(sdk(cx).admin().admin_ua_create_dex(r).await?);
-    "admin ua-create-instance" "Admin::admin_ua_create_instance" (r: UaCreateInstance) => Out::Prepared(sdk(cx).admin().admin_ua_create_instance(r).await?);
-    "admin ua-set-chain-entries" "Admin::admin_ua_set_chain_entries" (r: UaSetChainEntries) => Out::Prepared(sdk(cx).admin().admin_ua_set_chain_entries(r).await?);
-    "admin ua-approve-token-release" "Admin::admin_ua_approve_token_release" (r: UaApproveTokenRelease) => Out::Prepared(sdk(cx).admin().admin_ua_approve_token_release(r).await?);
-    "admin ua-approve-dex-release" "Admin::admin_ua_approve_dex_release" (r: UaApproveDexRelease) => Out::Prepared(sdk(cx).admin().admin_ua_approve_dex_release(r).await?);
-    "admin ua-approve-release" "Admin::admin_ua_approve_release" (r: UaApproveRelease) => Out::Prepared(sdk(cx).admin().admin_ua_approve_release(r).await?);
-    "admin ua-revoke-approval" "Admin::admin_ua_revoke_approval" (r: UaRevokeApproval) => Out::Prepared(sdk(cx).admin().admin_ua_revoke_approval(r).await?);
-    "admin ua-cancel-nonce" "Admin::admin_ua_cancel_nonce" (r: UaCancelNonce) => Out::Prepared(sdk(cx).admin().admin_ua_cancel_nonce(r).await?);
+    "admin ua-grant-role" "Admin::admin_ua_grant_role" (r: UaGrantRole) @op => sdk(cx).admin().admin_ua_grant_role(r).await?;
+    "admin ua-revoke-role" "Admin::admin_ua_revoke_role" (r: UaRevokeRole) @op => sdk(cx).admin().admin_ua_revoke_role(r).await?;
+    "admin ua-set-grant" "Admin::admin_ua_set_grant" (r: UaSetGrant) @op => sdk(cx).admin().admin_ua_set_grant(r).await?;
+    "admin ua-cancel-grant" "Admin::admin_ua_cancel_grant" (r: UaCancelGrant) @op => sdk(cx).admin().admin_ua_cancel_grant(r).await?;
+    "admin ua-disable-feature" "Admin::admin_ua_disable_feature" (r: UaDisableFeature) @op => sdk(cx).admin().admin_ua_disable_feature(r).await?;
+    "admin ua-transfer-admin" "Admin::admin_ua_transfer_admin" (r: UaTransferAdmin) @op => sdk(cx).admin().admin_ua_transfer_admin(r).await?;
+    "admin ua-accept-admin" "Admin::admin_ua_accept_admin" (r: UaAcceptAdmin) @op => sdk(cx).admin().admin_ua_accept_admin(r).await?;
+    "admin ua-renounce-admin" "Admin::admin_ua_renounce_admin" (r: UaRenounceAdmin) @op => sdk(cx).admin().admin_ua_renounce_admin(r).await?;
+    "admin ua-renounce-role" "Admin::admin_ua_renounce_role" (r: UaRenounceRole) @op => sdk(cx).admin().admin_ua_renounce_role(r).await?;
+    "admin ua-mint" "Admin::admin_ua_mint" (r: UaMint) @op => sdk(cx).admin().admin_ua_mint(r).await?;
+    "admin ua-mint-to-ua" "Admin::admin_ua_mint_to_ua" (r: UaMintToUA) @op => sdk(cx).admin().admin_ua_mint_to_ua(r).await?;
+    "admin ua-disable-wrap" "Admin::admin_ua_disable_wrap" (r: UaDisableWrap) @op => sdk(cx).admin().admin_ua_disable_wrap(r).await?;
+    "admin ua-propose-rate" "Admin::admin_ua_propose_rate" (r: UaProposeRate) @op => sdk(cx).admin().admin_ua_propose_rate(r).await?;
+    "admin ua-cancel-rate" "Admin::admin_ua_cancel_rate" (r: UaCancelRate) @op => sdk(cx).admin().admin_ua_cancel_rate(r).await?;
+    "admin ua-execute-rate" "Admin::admin_ua_execute_rate" (r: UaExecuteRate) @op => sdk(cx).admin().admin_ua_execute_rate(r).await?;
+    "admin ua-set-market" "Admin::admin_ua_set_market" (r: UaSetMarket) @op => sdk(cx).admin().admin_ua_set_market(r).await?;
+    "admin ua-set-exchange-target" "Admin::admin_ua_set_exchange_target" (r: UaSetExchangeTarget) @op => sdk(cx).admin().admin_ua_set_exchange_target(r).await?;
+    "admin ua-set-listed-only" "Admin::admin_ua_set_listed_only" (r: UaSetListedOnly) @op => sdk(cx).admin().admin_ua_set_listed_only(r).await?;
+    "admin ua-set-fee-split" "Admin::admin_ua_set_fee_split" (r: UaSetFeeSplit) @op => sdk(cx).admin().admin_ua_set_fee_split(r).await?;
+    "admin ua-freeze" "Admin::admin_ua_freeze" (r: UaFreeze) @op => sdk(cx).admin().admin_ua_freeze(r).await?;
+    "admin ua-unfreeze" "Admin::admin_ua_unfreeze" (r: UaUnfreeze) @op => sdk(cx).admin().admin_ua_unfreeze(r).await?;
+    "admin ua-force-transfer" "Admin::admin_ua_force_transfer" (r: UaForceTransfer) @op => sdk(cx).admin().admin_ua_force_transfer(r).await?;
+    "admin ua-pause" "Admin::admin_ua_pause" (r: UaPause) @op => sdk(cx).admin().admin_ua_pause(r).await?;
+    "admin ua-unpause" "Admin::admin_ua_unpause" (r: UaUnpause) @op => sdk(cx).admin().admin_ua_unpause(r).await?;
+    "admin ua-record-order" "Admin::admin_ua_record_order" (r: UaRecordOrder) @op => sdk(cx).admin().admin_ua_record_order(r).await?;
+    "admin ua-revoke-order" "Admin::admin_ua_revoke_order" (r: UaRevokeOrder) @op => sdk(cx).admin().admin_ua_revoke_order(r).await?;
+    "admin ua-operator-transfer" "Admin::admin_ua_operator_transfer" (r: UaOperatorTransfer) @op => sdk(cx).admin().admin_ua_operator_transfer(r).await?;
+    "admin ua-set-tax-rate" "Admin::admin_ua_set_tax_rate" (r: UaSetTaxRate) @op => sdk(cx).admin().admin_ua_set_tax_rate(r).await?;
+    "admin ua-set-tax-recipient" "Admin::admin_ua_set_tax_recipient" (r: UaSetTaxRecipient) @op => sdk(cx).admin().admin_ua_set_tax_recipient(r).await?;
+    "admin ua-pqz-set-verifier" "Admin::admin_ua_pqz_set_verifier" (r: UaPqzSetVerifier) @op => sdk(cx).admin().admin_ua_pqz_set_verifier(r).await?;
+    "admin ua-pqz-cancel-verifier" "Admin::admin_ua_pqz_cancel_verifier" (r: UaPqzCancelVerifier) @op => sdk(cx).admin().admin_ua_pqz_cancel_verifier(r).await?;
+    "admin ua-pqz-revoke-verifier" "Admin::admin_ua_pqz_revoke_verifier" (r: UaPqzRevokeVerifier) @op => sdk(cx).admin().admin_ua_pqz_revoke_verifier(r).await?;
+    "admin ua-set-proof-store" "Admin::admin_ua_set_proof_store" (r: UaSetProofStore) @op => sdk(cx).admin().admin_ua_set_proof_store(r).await?;
+    "admin ua-set-auditor-key" "Admin::admin_ua_set_auditor_key" (r: UaSetAuditorKey) @op => sdk(cx).admin().admin_ua_set_auditor_key(r).await?;
+    "admin ua-set-auditor-ua" "Admin::admin_ua_set_auditor_ua" (r: UaSetAuditorUA) @op => sdk(cx).admin().admin_ua_set_auditor_ua(r).await?;
+    "admin ua-set-verifier-fee" "Admin::admin_ua_set_verifier_fee" (r: UaSetVerifierFee) @op => sdk(cx).admin().admin_ua_set_verifier_fee(r).await?;
+    "admin ua-set-wrap-limits" "Admin::admin_ua_set_wrap_limits" (r: UaSetWrapLimits) @op => sdk(cx).admin().admin_ua_set_wrap_limits(r).await?;
+    "admin ua-set-wrap-member" "Admin::admin_ua_set_wrap_member" (r: UaSetWrapMember) @op => sdk(cx).admin().admin_ua_set_wrap_member(r).await?;
+    "admin ua-set-max-supply" "Admin::admin_ua_set_max_supply" (r: UaSetMaxSupply) @op => sdk(cx).admin().admin_ua_set_max_supply(r).await?;
+    "admin ua-set-max-wrap-supply" "Admin::admin_ua_set_max_wrap_supply" (r: UaSetMaxWrapSupply) @op => sdk(cx).admin().admin_ua_set_max_wrap_supply(r).await?;
+    "admin ua-set-allowed" "Admin::admin_ua_set_allowed" (r: UaSetAllowed) @op => sdk(cx).admin().admin_ua_set_allowed(r).await?;
+    "admin ua-set-denied" "Admin::admin_ua_set_denied" (r: UaSetDenied) @op => sdk(cx).admin().admin_ua_set_denied(r).await?;
+    "admin ua-enable-feature" "Admin::admin_ua_enable_feature" (r: UaEnableFeature) @op => sdk(cx).admin().admin_ua_enable_feature(r).await?;
+    "admin ua-publish-token-env" "Admin::admin_ua_publish_token_env" (r: UaPublishTokenEnv) @op => sdk(cx).admin().admin_ua_publish_token_env(r).await?;
+    "admin ua-publish-dex-env" "Admin::admin_ua_publish_dex_env" (r: UaPublishDexEnv) @op => sdk(cx).admin().admin_ua_publish_dex_env(r).await?;
+    "admin ua-publish-class-env" "Admin::admin_ua_publish_class_env" (r: UaPublishClassEnv) @op => sdk(cx).admin().admin_ua_publish_class_env(r).await?;
+    "admin ua-deprecate-token" "Admin::admin_ua_deprecate_token" (r: UaDeprecateToken) @op => sdk(cx).admin().admin_ua_deprecate_token(r).await?;
+    "admin ua-deprecate-dex" "Admin::admin_ua_deprecate_dex" (r: UaDeprecateDex) @op => sdk(cx).admin().admin_ua_deprecate_dex(r).await?;
+    "admin ua-deprecate-release" "Admin::admin_ua_deprecate_release" (r: UaDeprecateRelease) @op => sdk(cx).admin().admin_ua_deprecate_release(r).await?;
+    "admin ua-set-token-kind-enabled" "Admin::admin_ua_set_token_kind_enabled" (r: UaSetTokenKindEnabled) @op => sdk(cx).admin().admin_ua_set_token_kind_enabled(r).await?;
+    "admin ua-set-class-kind-enabled" "Admin::admin_ua_set_class_kind_enabled" (r: UaSetClassKindEnabled) @op => sdk(cx).admin().admin_ua_set_class_kind_enabled(r).await?;
+    "admin ua-set-kyc-provider" "Admin::admin_ua_set_kyc_provider" (r: UaSetKycProvider) @op => sdk(cx).admin().admin_ua_set_kyc_provider(r).await?;
+    "admin ua-set-compliance" "Admin::admin_ua_set_compliance" (r: UaSetCompliance) @op => sdk(cx).admin().admin_ua_set_compliance(r).await?;
+    "admin ua-create-token" "Admin::admin_ua_create_token" (r: UaCreateToken) @op => sdk(cx).admin().admin_ua_create_token(r).await?;
+    "admin ua-create-dex" "Admin::admin_ua_create_dex" (r: UaCreateDex) @op => sdk(cx).admin().admin_ua_create_dex(r).await?;
+    "admin ua-create-instance" "Admin::admin_ua_create_instance" (r: UaCreateInstance) @op => sdk(cx).admin().admin_ua_create_instance(r).await?;
+    "admin ua-set-chain-entries" "Admin::admin_ua_set_chain_entries" (r: UaSetChainEntries) @op => sdk(cx).admin().admin_ua_set_chain_entries(r).await?;
+    "admin ua-approve-token-release" "Admin::admin_ua_approve_token_release" (r: UaApproveTokenRelease) @op => sdk(cx).admin().admin_ua_approve_token_release(r).await?;
+    "admin ua-approve-dex-release" "Admin::admin_ua_approve_dex_release" (r: UaApproveDexRelease) @op => sdk(cx).admin().admin_ua_approve_dex_release(r).await?;
+    "admin ua-approve-release" "Admin::admin_ua_approve_release" (r: UaApproveRelease) @op => sdk(cx).admin().admin_ua_approve_release(r).await?;
+    "admin ua-revoke-approval" "Admin::admin_ua_revoke_approval" (r: UaRevokeApproval) @op => sdk(cx).admin().admin_ua_revoke_approval(r).await?;
+    "admin ua-cancel-nonce" "Admin::admin_ua_cancel_nonce" (r: UaCancelNonce) @op => sdk(cx).admin().admin_ua_cancel_nonce(r).await?;
 
     // ---- app-core (spec §12): key handles live in this process, named by `--as` in a session
     "app-core random-bytes" "AppCore::random_bytes" {seed: String, n: u32} => hexed("bytes", &cx.app()?.random_bytes(&seed, n)?);
@@ -539,14 +563,14 @@ calls! { cx;
     "app-core kem-unwrap" "AppCore::kem_unwrap" {account: KeyRef, key_version: u64, wrap: AppWrap, label: Vec<u8>, aad: Vec<u8>, usage: AppKeyUsage} => handle(cx.app()?.kem_unwrap(account, key_version, wrap, label, aad, usage)?, key_shown());
     "app-core app-root-key" "AppCore::app_root_key" {account: KeyRef} => handle(cx.app()?.app_root_key(account)?, key_shown());
     "app-core destroy" "AppCore::destroy" {key: H<Arc<AppKey>>} => { cx.app()?.destroy(key.0)?; ok() };
-    "app-core sign-app-record" "AppCore::sign_app_record" {account: KeyRef, path: AppPath, typed_json: String} => {
+    "app-core sign-app-record" "AppCore::sign_app_record" {account: KeyRef, path: AppPath, typed_json: String} @sign => {
         cx.confirm(json!({"sign": "an app record", "account": account, "path": path, "typed_data": typed_json}))?;
         js(cx.app()?.sign_app_record(account, path, typed_json).await?)
     };
     "app-core kem-wrap" "AppCore::kem_wrap" {chain: String, recipient: String, kem_version: u64, key: H<Arc<AppKey>>, label: Vec<u8>, aad: Vec<u8>} => js(cx.app()?.kem_wrap(chain, recipient, kem_version, key.0, label, aad).await?);
     "app-core verify-app-record" "AppCore::verify_app_record" {chain: String, ua: String, path: AppPath, typed_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_app_record(chain, ua, path, typed_json, sig).await?);
     "app-core verify-app-record-key" "AppCore::verify_app_record_key" {kind: u16, key_data: Vec<u8>, path: AppPath, purpose: Option<String>, typed_json: String, signature: Vec<u8>} => named("valid", cx.app()?.verify_app_record_key(kind, key_data, path, purpose, typed_json, signature)?);
-    "app-core prepare-app-call" "AppCore::prepare_app_call" {chain: String, contract: String, entry: String, args: String, payer: KeyRef} => {
+    "app-core prepare-app-call" "AppCore::prepare_app_call" {chain: String, contract: String, entry: String, args: String, payer: KeyRef} @sign => {
         let call = cx.app()?.prepare_app_call(chain, contract, entry, args, payer).await?;
         cx.confirm(json!({"review": review(&call.review), "quote": call.quote}))?;
         named("tx", sdk(cx).wallet().submit_native_send(call.quote).await?)
@@ -565,29 +589,29 @@ calls! { cx;
     "app-core pqchat-open-message" "AppCore::pqchat_open_message" {pos: H<Arc<AppKey>>, record: PqChatMessage} => {
         let p = cx.app()?.pqchat_open_message(pos.0, record)?; p.with(|b| hexed("content", b))
     };
-    "app-core pqchat-seal-message" "AppCore::pqchat_seal_message" {account: KeyRef, k: H<Arc<AppKey>>, pos: H<Arc<AppKey>>, header: PqMessageHeader, content_json: String} => {
+    "app-core pqchat-seal-message" "AppCore::pqchat_seal_message" {account: KeyRef, k: H<Arc<AppKey>>, pos: H<Arc<AppKey>>, header: PqMessageHeader, content_json: String} @sign => {
         cx.confirm(json!({"sign": "a PqChat message", "account": account, "header": header}))?;
         js(cx.app()?.pqchat_seal_message(account, k.0, pos.0, header, content_json).await?)
     };
-    "app-core pqchat-sign-session" "AppCore::pqchat_sign_session" {account: KeyRef, k: H<Arc<AppKey>>, r: PqSessionNew} => {
+    "app-core pqchat-sign-session" "AppCore::pqchat_sign_session" {account: KeyRef, k: H<Arc<AppKey>>, r: PqSessionNew} @sign => {
         cx.confirm(json!({"sign": "a PqChat session", "account": account, "record": r}))?; js(cx.app()?.pqchat_sign_session(account, k.0, r).await?)
     };
-    "app-core pqchat-sign-epoch" "AppCore::pqchat_sign_epoch" {account: KeyRef, k: H<Arc<AppKey>>, r: PqEpochNew} => {
+    "app-core pqchat-sign-epoch" "AppCore::pqchat_sign_epoch" {account: KeyRef, k: H<Arc<AppKey>>, r: PqEpochNew} @sign => {
         cx.confirm(json!({"sign": "a PqChat epoch", "account": account, "record": r}))?; js(cx.app()?.pqchat_sign_epoch(account, k.0, r).await?)
     };
     "app-core verify-pqchat-record" "AppCore::verify_pqchat_record" {chain: String, ua: String, name: String, record_json: String, sig: AppUaSig} => named("valid", cx.app()?.verify_pqchat_record(chain, ua, name, record_json, sig).await?);
     "app-core pqchat-decode-payload" "AppCore::pqchat_decode_payload" {payload: Vec<u8>} => js(cx.app()?.pqchat_decode_payload(payload)?);
-    "app-core sign-pqchat-session" "AppCore::sign_pqchat_session" {account: KeyRef, r: PqChatSession} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_session(account, r).await?) };
-    "app-core sign-pqchat-epoch" "AppCore::sign_pqchat_epoch" {account: KeyRef, r: PqChatEpoch} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_epoch(account, r).await?) };
-    "app-core sign-pqchat-leave" "AppCore::sign_pqchat_leave" {account: KeyRef, r: PqChatLeave} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_leave(account, r).await?) };
-    "app-core sign-pqchat-remove" "AppCore::sign_pqchat_remove" {account: KeyRef, r: PqChatRemove} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_remove(account, r).await?) };
-    "app-core sign-pqchat-message" "AppCore::sign_pqchat_message" {account: KeyRef, r: PqChatMessage} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_message(account, r).await?) };
-    "app-core sign-pqchat-topic" "AppCore::sign_pqchat_topic" {account: KeyRef, r: PqTopic} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic(account, r).await?) };
-    "app-core sign-pqchat-topic-update" "AppCore::sign_pqchat_topic_update" {account: KeyRef, r: PqTopicUpdate} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_update(account, r).await?) };
-    "app-core sign-pqchat-topic-writer" "AppCore::sign_pqchat_topic_writer" {account: KeyRef, r: PqTopicWriter} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_writer(account, r).await?) };
-    "app-core sign-pqchat-topic-entry" "AppCore::sign_pqchat_topic_entry" {account: KeyRef, r: PqTopicEntry} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_entry(account, r).await?) };
-    "app-core sign-pqchat-topic-edit" "AppCore::sign_pqchat_topic_edit" {account: KeyRef, r: PqTopicEdit} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_edit(account, r).await?) };
-    "app-core sign-pqchat-topic-vote" "AppCore::sign_pqchat_topic_vote" {account: KeyRef, r: PqTopicVote} => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_vote(account, r).await?) };
+    "app-core sign-pqchat-session" "AppCore::sign_pqchat_session" {account: KeyRef, r: PqChatSession} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_session(account, r).await?) };
+    "app-core sign-pqchat-epoch" "AppCore::sign_pqchat_epoch" {account: KeyRef, r: PqChatEpoch} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_epoch(account, r).await?) };
+    "app-core sign-pqchat-leave" "AppCore::sign_pqchat_leave" {account: KeyRef, r: PqChatLeave} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_leave(account, r).await?) };
+    "app-core sign-pqchat-remove" "AppCore::sign_pqchat_remove" {account: KeyRef, r: PqChatRemove} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_remove(account, r).await?) };
+    "app-core sign-pqchat-message" "AppCore::sign_pqchat_message" {account: KeyRef, r: PqChatMessage} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_message(account, r).await?) };
+    "app-core sign-pqchat-topic" "AppCore::sign_pqchat_topic" {account: KeyRef, r: PqTopic} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic(account, r).await?) };
+    "app-core sign-pqchat-topic-update" "AppCore::sign_pqchat_topic_update" {account: KeyRef, r: PqTopicUpdate} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_update(account, r).await?) };
+    "app-core sign-pqchat-topic-writer" "AppCore::sign_pqchat_topic_writer" {account: KeyRef, r: PqTopicWriter} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_writer(account, r).await?) };
+    "app-core sign-pqchat-topic-entry" "AppCore::sign_pqchat_topic_entry" {account: KeyRef, r: PqTopicEntry} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_entry(account, r).await?) };
+    "app-core sign-pqchat-topic-edit" "AppCore::sign_pqchat_topic_edit" {account: KeyRef, r: PqTopicEdit} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_edit(account, r).await?) };
+    "app-core sign-pqchat-topic-vote" "AppCore::sign_pqchat_topic_vote" {account: KeyRef, r: PqTopicVote} @sign => { cx.confirm(json!({"sign": r}))?; js(cx.app()?.sign_pqchat_topic_vote(account, r).await?) };
 }
 
 /// A JSON text the SDK returned (a node's or a contract's answer), as JSON; text that is not JSON stays a string.

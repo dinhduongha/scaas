@@ -110,10 +110,14 @@ impl<'de> Deserializer<'de> for Flex {
         v.visit_newtype_struct(self)
     }
     fn deserialize_string<V: Visitor<'de>>(self, v: V) -> Result<V::Value, Error> {
-        self.0.deserialize_string(v)
+        match self.0 {
+            // a text field given JSON (`--typed-json {…}`): the JSON's text
+            o @ (Value::Object(_) | Value::Array(_)) => v.visit_string(o.to_string()),
+            o => o.deserialize_string(v),
+        }
     }
     fn deserialize_str<V: Visitor<'de>>(self, v: V) -> Result<V::Value, Error> {
-        self.0.deserialize_string(v)
+        self.deserialize_string(v)
     }
     fn deserialize_identifier<V: Visitor<'de>>(self, v: V) -> Result<V::Value, Error> {
         self.0.deserialize_string(v)
