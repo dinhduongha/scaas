@@ -5,6 +5,13 @@
 //! digits within a U256, else the endpoint's `AnswerMalformed`. ARCH-POS-15 by [`read_set`]: failover through the family
 //! client; under `strict_majority` the other endpoints read the set at the height the answering endpoint read it at, and a
 //! strict majority must agree (`EndpointNoMajority`). UNAUDITED.
+// a build with no family feature reads EVM only: the shared helpers below stay unused there
+#![cfg_attr(
+    not(any(feature = "near", feature = "algorand")),
+    allow(dead_code, unused_imports)
+)]
+#[cfg(feature = "algorand")]
+pub(crate) mod algorand;
 #[cfg(feature = "near")]
 pub(crate) mod near;
 
@@ -21,6 +28,8 @@ pub(crate) async fn balances(sdk: &Sdk, chain: &str, id: &str) -> Result<Balance
     match c.profile.family {
         #[cfg(feature = "near")]
         crate::Family::Near => near::balances(c, id).await,
+        #[cfg(feature = "algorand")]
+        crate::Family::Algorand => algorand::balances(c, id).await,
         _ => Err(SdkError::FeatureMissing),
     }
 }
@@ -30,7 +39,8 @@ pub(crate) fn malformed(i: usize, why: &str) -> ReadError {
     ReadError::Failure(EndpointFailure::new(i, FailureKind::AnswerMalformed, why))
 }
 
-/// A balance as the families send it: a decimal string of 1 to 78 digits within a U256, written back without leading zeros.
+/// A balance as a family sends it: a decimal string of 1 to 78 digits within a U256, written back without leading zeros.
+#[cfg(feature = "near")]
 pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
     if s.is_empty() || s.len() > 78 || !s.bytes().all(|b| b.is_ascii_digit()) {
         return Err(malformed(i, "a balance that is not a decimal string"));

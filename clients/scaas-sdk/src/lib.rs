@@ -183,6 +183,9 @@ pub(crate) struct Chain {
     /// a NEAR profile's family client (plan T24), named by its genesis hash: `chain_uid`'s 32 bytes in base58
     #[cfg(all(feature = "wallet", feature = "near"))]
     pub(crate) near: Option<Arc<scaas_rpc::near::Near>>,
+    /// an Algorand profile's family client (plan T24), named by its genesis hash: `chain_uid`'s 32 bytes in base64
+    #[cfg(all(feature = "wallet", feature = "algorand"))]
+    pub(crate) algorand: Option<Arc<scaas_rpc::algorand::Algorand>>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -329,6 +332,19 @@ impl Sdk {
                 }
                 _ => None,
             };
+            #[cfg(all(feature = "wallet", feature = "algorand"))]
+            let algorand = match p.family {
+                Family::Algorand => {
+                    use base64::Engine;
+                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
+                    Some(Arc::new(scaas_rpc::algorand::Algorand::new(
+                        client,
+                        &base64::engine::general_purpose::STANDARD.encode(uid),
+                    )))
+                }
+                _ => None,
+            };
             #[cfg(any(feature = "account", feature = "wallet"))]
             let pool = match (p.family, p.chain_id) {
                 (Family::Evm, Some(id)) => {
@@ -362,6 +378,8 @@ impl Sdk {
                 verifiers,
                 #[cfg(all(feature = "wallet", feature = "near"))]
                 near,
+                #[cfg(all(feature = "wallet", feature = "algorand"))]
+                algorand,
             });
         }
         let rt = runtime(config.runtime)?;

@@ -32,7 +32,8 @@ solana = ["scaas-rpc/solana"]
 # T24 (spec §8.7): the family's balance reads; base58 (the genesis hash the endpoint names) and base64 (a view's arguments) are
 # encodings, no cryptography
 near = ["scaas-rpc/near", "dep:bs58", "dep:base64"]
-algorand = ["scaas-rpc/algorand"]
+# T24: the boxes' names and values and the genesis hash in base64 (an encoding)
+algorand = ["scaas-rpc/algorand", "dep:base64"]
 aptos = ["scaas-rpc/aptos"]
 sui = ["scaas-rpc/sui"]
 cosmos = ["scaas-rpc/cosmos"]
@@ -104,7 +105,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "m
 bip39 = { version = "=2.2.2", default-features = false, features = ["alloc"] }
 # the test device's passkey and secure-element keys (plan T13, S1); scaas-ua's pin
 p256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa"] }
-# the NEAR fake's view arguments (plan T24)
+# the NEAR fake's view arguments, the Algorand fake's boxes (plan T24)
 base64 = "0.22"
 
 # scrypt (N = 2^17) and the ML-KEM / arkworks code crawl unoptimised: the dependencies built at opt-level 3, as ua-rs
@@ -170,6 +171,10 @@ required-features = ["dex"]
 [[test]]
 name = "completeness"
 required-features = ["wallet"]
+
+[[test]]
+name = "algorand"
+required-features = ["wallet", "algorand"]
 
 [[test]]
 name = "near"
