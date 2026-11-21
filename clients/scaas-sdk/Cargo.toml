@@ -43,6 +43,10 @@ opaque-calls = []
 app-core = ["account", "wallet", "scaas-ua/app-core"]
 # T21 (spec §12.5; bit 27): PqChat's signed records as named entries
 pqchat-records = ["app-core"]
+# pqchat-core T1 (bit 28): test-only entry points with fixed randomness and key bytes in and out, for the vectors; refused in
+# a release build (`compile_error!` without `debug_assertions`), never in a binding (scripts/check_test_features.py, the
+# bind-gen check)
+vectors = ["app-core", "scaas-ua/vectors"]
 # T19: Bitcoin (P2WPKH, P2TR), NEAR and Polkadot native keys (spec §8.5); the raw native entry for an app's own encoder of a
 # non-EVM chain (spec §8.6), off by default and never in the default generated surface
 native-networks = ["wallet"]

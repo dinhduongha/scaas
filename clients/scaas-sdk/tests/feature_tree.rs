@@ -39,6 +39,9 @@ fn this_build() -> Vec<&'static str> {
         (cfg!(feature = "mlock"), "mlock"),
         (cfg!(feature = "file-store"), "file-store"),
         (cfg!(feature = "classical-roots"), "classical-roots"),
+        (cfg!(feature = "app-core"), "app-core"),
+        (cfg!(feature = "pqchat-records"), "pqchat-records"),
+        (cfg!(feature = "vectors"), "vectors"),
     ];
     all.iter().filter(|(on, _)| *on).map(|(_, f)| *f).collect()
 }
@@ -100,4 +103,10 @@ fn feature_tree() {
     assert_eq!(sets, asked, "scaas-ua's PQZ sets: {f:?}");
     assert!(sets.len() <= 1);
     assert_eq!(f.iter().any(|x| x == "pqz"), cfg!(feature = "pqz"), "{f:?}");
+    // pqchat-core T1: scaas-ua's test feature comes only with the SDK's own `vectors`
+    assert_eq!(
+        f.iter().any(|x| x == "vectors"),
+        cfg!(feature = "vectors"),
+        "{f:?}"
+    );
 }

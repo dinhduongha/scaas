@@ -18,6 +18,9 @@ export PATH="$HOME/.foundry/bin:$PATH"
 C="--locked --offline ${J:--j2}"
 cap="$W/scripts/capped"
 F="vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records"
+# with the test feature `vectors` (pqchat-core T1): built by clippy, run only by its own test (a `vectors` build refuses
+# scaas-ua key handles until a test unlocks them, so the whole suite stays without it)
+V="$F,vectors"
 SETS_CMD=""
 for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do
     m="--no-default-features --features vault,account,wallet,pqz,pqz-set-$s"
@@ -32,7 +35,8 @@ STEPS=(
     "sdk-test|clients/scaas-sdk|$cap cargo test $C --features $F"
     "sdk-min|clients/scaas-sdk|$cap cargo test $C --no-default-features --features vault,file-store"
     "sdk-sets|clients/scaas-sdk|$SETS_CMD"
-    "sdk-clippy|clients/scaas-sdk|$cap cargo clippy $C --all-targets --features $F -- -D warnings"
+    "sdk-clippy|clients/scaas-sdk|$cap cargo clippy $C --all-targets --features $V -- -D warnings"
+    "sdk-vectors|clients/scaas-sdk|$cap cargo test $C --features $V --test pqchat_keys"
     "sdk-e2e|clients/scaas-sdk|CAPPED_MEM=6G $cap cargo test $C --features $F --test e2e -- --ignored"
     "sdk-wasm|clients/scaas-sdk|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet"
     "sdk-deny|clients/scaas-sdk|$cap cargo deny --all-features check && $cap cargo audit"
@@ -61,7 +65,7 @@ STEPS=(
     "gas-gen|clients/scaas-sdk/gas|python3 -I generate.py --check && python3 -I test_generate.py"
     "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"
     "features|.|python3 scripts/check_test_features.py && cd clients/scaas-sdk && $cap cargo test $C --test feature_tree"
-    "sdk-raw|clients/scaas-sdk|$cap cargo test $C --lib --features $F,native-networks,raw-native && $cap cargo clippy $C --all-targets --features $F,native-networks,raw-native -- -D warnings"
+    "sdk-raw|clients/scaas-sdk|$cap cargo test $C --lib --features $F,native-networks,raw-native && $cap cargo clippy $C --all-targets --features $V,native-networks,raw-native -- -D warnings"
     "mutants-check|.|$MCHECK"
 )
 

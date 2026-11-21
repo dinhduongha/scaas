@@ -31,6 +31,8 @@ macro_rules! frb_hint {
 
 #[cfg(not(feature = "vault"))]
 compile_error!("scaas-sdk needs the feature `vault` (every module does)");
+#[cfg(all(feature = "vectors", not(debug_assertions)))]
+compile_error!("scaas-sdk's feature `vectors` is test-only: never in a release build");
 
 #[cfg(feature = "account")]
 pub mod account;
@@ -51,6 +53,8 @@ pub mod frb;
 #[cfg(feature = "wallet")]
 pub mod op;
 pub mod platform;
+#[cfg(feature = "pqchat-records")]
+pub mod pqchat_keys;
 #[cfg(feature = "pqchat-records")]
 pub mod pqchat_records;
 pub mod surface;
@@ -109,6 +113,8 @@ pub mod bits {
     pub const OPAQUE_CALLS: u64 = 1 << 25;
     pub const APP_CORE: u64 = 1 << 26;
     pub const PQCHAT_RECORDS: u64 = 1 << 27;
+    /// test-only entry points (pqchat-core T1): never in a release build nor a binding
+    pub const VECTORS: u64 = 1 << 28;
 }
 
 /// The bits of this build's features.
@@ -155,6 +161,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "opaque-calls"), OPAQUE_CALLS),
         (cfg!(feature = "app-core"), APP_CORE),
         (cfg!(feature = "pqchat-records"), PQCHAT_RECORDS),
+        (cfg!(feature = "vectors"), VECTORS),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)

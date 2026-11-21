@@ -22,7 +22,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-GUARDED = ("scaas-ua", "zether-prover", "pqz-ffi", "scaas-ct")
+GUARDED = ("scaas-ua", "zether-prover", "pqz-ffi", "scaas-ct", "scaas-sdk")
 TEST = ("vectors", "hazmat")
 # test-only crates: the fuzz harness of ua-rs (its targets reach the facades through `vectors`)
 TEST_ONLY = {"clients/ua-rs/fuzz/Cargo.toml"}
@@ -40,8 +40,17 @@ ARTIFACTS = [
         "clients/scaas-rpc",
         ["--all-features"],
     ),  # the network crate (scaas-ua for its depth scan), every feature it ships
-    ("clients/scaas-sdk", ["--all-features"]),  # the SDK apps call (scaas-sdk plan T1), every feature it ships
+    # the SDK apps call (scaas-sdk plan T1): every feature it ships, its own test feature `vectors` excepted (pqchat-core T1);
+    # the reference library of its binding tests
+    ("clients/scaas-sdk", "shipped"),
+    ("clients/scaas-sdk/ffi", []),
 ]
+
+
+def shipped(cwd):
+    """`--features` with every feature of the crate in `cwd` but its test features."""
+    m = tomllib.loads((ROOT / cwd / "Cargo.toml").read_text(encoding="utf-8"))
+    return ["--features", ",".join(f for f in m.get("features", {}) if f not in TEST and f != "default")]
 DEP_TABLES = ("dependencies", "build-dependencies")
 
 
@@ -168,7 +177,7 @@ def main():
     )
     bad += [] if ok else ["positive control (manifests) failed"]
     for cwd, extra in ARTIFACTS:
-        found = check_graph(cwd, extra)
+        found = check_graph(cwd, shipped(cwd) if extra == "shipped" else extra)
         print(f"graph {cwd}: {len(found)} findings")
         bad += found
     # positive control 2: the same graph with `vectors` forced is found (and, through it, zether-prover's `hazmat`)
@@ -194,6 +203,15 @@ def main():
         f"graph {node}, pqz-ffi in pqz-core/ffi/wasm's {wasm}: {ok}"
     )
     bad += [] if ok else ["positive control (graph, T15l rows) failed"]
+    # pqchat-core T1: the SDK row is not vacuous: its own `vectors` forced is found, in the SDK and in scaas-ua
+    forced = check_graph("clients/scaas-sdk", ["--features", "vectors"])
+    ok = (
+        "vectors" not in shipped("clients/scaas-sdk")[1].split(",")
+        and any('scaas-sdk feature "vectors"' in x for x in forced)
+        and any('scaas-ua feature "vectors"' in x for x in forced)
+    )
+    print(f"positive control (graph): clients/scaas-sdk with vectors forced: {len(forced)} findings, both crates found: {ok}")
+    bad += [] if ok else ["positive control (graph, scaas-sdk row) failed"]
     # T15m: the ua-rs row is not vacuous: its own `vectors` forced is found
     forced = check_graph("clients/ua-rs", ["--features", "vectors"])
     ok = "clients/ua-rs" in rows and any('scaas-ua feature "vectors"' in x for x in forced)

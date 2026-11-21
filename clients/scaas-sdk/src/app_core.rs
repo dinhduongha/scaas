@@ -34,7 +34,7 @@ fn ua(e: scaas_ua::wallet::Error) -> SdkError {
     SdkError::Ua(e)
 }
 
-fn hex32(s: &str) -> Result<[u8; 32], SdkError> {
+pub(crate) fn hex32(s: &str) -> Result<[u8; 32], SdkError> {
     let h = s.strip_prefix("0x").ok_or(SdkError::Argument)?;
     let v = (0..h.len())
         .step_by(2)
@@ -45,7 +45,7 @@ fn hex32(s: &str) -> Result<[u8; 32], SdkError> {
 }
 
 /// The `i`-th handle `with` gave (it gives as many as it was asked for).
-fn at<'a>(hs: &[&'a KeyHandle], i: usize) -> Result<&'a KeyHandle, SdkError> {
+pub(crate) fn at<'a>(hs: &[&'a KeyHandle], i: usize) -> Result<&'a KeyHandle, SdkError> {
     hs.get(i).copied().ok_or(SdkError::Argument)
 }
 
@@ -109,6 +109,13 @@ pub struct AppKey {
     core: u64,
     seed: String,
     h: Mutex<Option<KeyHandle>>,
+}
+
+impl AppKey {
+    /// The seed whose arena holds the key.
+    pub(crate) fn seed(&self) -> &str {
+        &self.seed
+    }
 }
 
 /// An app record's path (spec §12.2).
@@ -387,6 +394,100 @@ fn abi_value(
         .map_err(|_| SdkError::Argument)
 }
 
+/// An entry call: the function, the arguments' object, the calldata.
+type EntryCall = (
+    alloy::json_abi::Function,
+    serde_json::Map<String, serde_json::Value>,
+    Vec<u8>,
+);
+
+/// An app entry's JSON ABI item `entry` and its named arguments `args` (bounded: 64 KiB, 128 KiB) as the function, the
+/// arguments' object and the calldata; `Argument` for an entry that does not parse or arguments that are not its names and
+/// types.
+fn entry_call(entry: &str, args: &str) -> Result<EntryCall, SdkError> {
+    use alloy::dyn_abi::JsonAbiExt;
+    if entry.len() > 64 * 1024 || args.len() > 128 * 1024 {
+        return Err(SdkError::Argument);
+    }
+    let f: alloy::json_abi::Function =
+        serde_json::from_str(entry).map_err(|_| SdkError::Argument)?;
+    let a: serde_json::Value = serde_json::from_str(args).map_err(|_| SdkError::Argument)?;
+    let serde_json::Value::Object(o) = a else {
+        return Err(SdkError::Argument);
+    };
+    if o.len() != f.inputs.len() || f.inputs.iter().any(|p| p.name.is_empty()) {
+        return Err(SdkError::Argument);
+    }
+    let values = f
+        .inputs
+        .iter()
+        .map(|p| {
+            let v = o.get(&p.name).ok_or(SdkError::Argument)?;
+            abi_value(&p.ty, &p.components, v, 0)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let data = f
+        .abi_encode_input(&values)
+        .map_err(|_| SdkError::Argument)?;
+    Ok((f, o, data))
+}
+
+/// The deepest a [`AppCore::read_app`] output type nests (each tuple and each array dimension one level).
+const READ_DEPTH: usize = 16;
+/// The most bytes a [`AppCore::read_app`] answer holds.
+const READ_MAX: usize = 1 << 20;
+
+fn type_depth(ty: &str, comps: &[alloy::json_abi::Param]) -> usize {
+    let inner = comps
+        .iter()
+        .map(|c| type_depth(&c.ty, &c.components))
+        .max()
+        .map_or(0, |d| d + 1);
+    ty.matches('[').count() + inner
+}
+
+/// A decoded value as named JSON: a tuple an object of its components' names (an unnamed one its index), an array an array,
+/// an integer its decimal string, an address, bytes and fixed bytes `0x` + lower-case hex, a bool and a string as JSON's.
+fn named(
+    v: &alloy::dyn_abi::DynSolValue,
+    comps: &[alloy::json_abi::Param],
+) -> Result<serde_json::Value, SdkError> {
+    use alloy::dyn_abi::DynSolValue as D;
+    use serde_json::Value;
+    Ok(match v {
+        D::Bool(b) => Value::Bool(*b),
+        D::Int(i, _) => Value::String(i.to_string()),
+        D::Uint(u, _) => Value::String(u.to_string()),
+        D::FixedBytes(w, n) => Value::String(hex(w.get(..*n).ok_or(SdkError::Argument)?)),
+        D::Address(a) => Value::String(hex(a.as_slice())),
+        D::Function(f) => Value::String(hex(f.as_slice())),
+        D::Bytes(b) => Value::String(hex(b)),
+        D::String(s) => Value::String(s.clone()),
+        D::Array(xs) | D::FixedArray(xs) => Value::Array(
+            xs.iter()
+                .map(|x| named(x, comps))
+                .collect::<Result<_, _>>()?,
+        ),
+        D::Tuple(xs) => {
+            if xs.len() != comps.len() {
+                return Err(SdkError::Argument);
+            }
+            let mut o = serde_json::Map::new();
+            for (i, (x, c)) in xs.iter().zip(comps).enumerate() {
+                let k = if c.name.is_empty() {
+                    i.to_string()
+                } else {
+                    c.name.clone()
+                };
+                o.insert(k, named(x, &c.components)?);
+            }
+            Value::Object(o)
+        }
+        #[allow(unreachable_patterns)]
+        _ => return Err(SdkError::Argument),
+    })
+}
+
 /// One app core's scope (spec §12.2).
 pub struct AppCore {
     pub(crate) sdk: Arc<Sdk>,
@@ -448,7 +549,7 @@ impl AppCore {
         }))
     }
 
-    fn scope(&self, seed: &str) -> Result<Arc<AppKeys>, SdkError> {
+    pub(crate) fn scope(&self, seed: &str) -> Result<Arc<AppKeys>, SdkError> {
         let open = self.sdk.open_seed(seed)?;
         let mut m = self.keys.lock().unwrap_or_else(PoisonError::into_inner);
         Ok(m.entry(seed.to_string())
@@ -456,7 +557,7 @@ impl AppCore {
             .clone())
     }
 
-    fn label(&self, label: &[u8]) -> Result<(), SdkError> {
+    pub(crate) fn label(&self, label: &[u8]) -> Result<(), SdkError> {
         let ok = self.labels.iter().any(|p| label.starts_with(p.as_bytes()));
         ok.then_some(()).ok_or(SdkError::AppLabelRefused)
     }
@@ -468,7 +569,7 @@ impl AppCore {
     }
 
     /// `f` over the handles `ks` (each this scope's, of one seed), in `seed`'s `scaas-ua` scope.
-    fn with<R>(
+    pub(crate) fn with<R>(
         &self,
         ks: &[&AppKey],
         f: impl FnOnce(&AppKeys, &[&KeyHandle]) -> Result<R, SdkError>,
@@ -498,7 +599,7 @@ impl AppCore {
         f(&scope, &hs)
     }
 
-    fn wrap(&self, seed: &str, h: KeyHandle) -> Arc<AppKey> {
+    pub(crate) fn wrap(&self, seed: &str, h: KeyHandle) -> Arc<AppKey> {
         Arc::new(AppKey {
             core: self.id,
             seed: seed.to_string(),
@@ -758,22 +859,10 @@ impl AppCore {
     /// The scope's per-account storage root of `account` (a UA key): `app_id` required (`Argument` without).
     pub fn app_root_key(&self, account: KeyRef) -> Result<Arc<AppKey>, SdkError> {
         let app_id = self.app_id.ok_or(SdkError::Argument)?;
-        let KeyRef::Ua {
-            seed,
-            kind,
-            account,
-            index,
-        } = account
-        else {
+        let id = self.account_ua(&account)?;
+        let KeyRef::Ua { seed, .. } = account else {
             return Err(SdkError::Argument);
         };
-        let open = self.sdk.open_seed(&seed)?;
-        let id = open
-            .wallet
-            .ua_key(kind, account, index)
-            .map_err(ua)?
-            .ua()
-            .ok_or(SdkError::Argument)?;
         let h = self.scope(&seed)?.app_root_key(&app_id, &id).map_err(ua)?;
         Ok(self.wrap(&seed, h))
     }
@@ -956,12 +1045,25 @@ impl AppCore {
         aad: Vec<u8>,
     ) -> Result<AppWrap, SdkError> {
         self.label(&label)?;
-        let ua = hex32(&recipient)?;
-        let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
+        let kem_pk = self
+            .kem_pk_at(&chain, hex32(&recipient)?, kem_version)
+            .await?;
+        self.kem_wrap_to_key(kem_pk, key, label, aad)
+    }
+
+    /// `kemKeyAt(ua, version)` of the profile's registry on `chain` as the KEM key `scheme ‖ ek ‖ x25519`, read at the final
+    /// block as a read that feeds a decryption, bounded; scheme 1 only (`KemCheck`).
+    pub(crate) async fn kem_pk_at(
+        &self,
+        chain: &str,
+        ua: [u8; 32],
+        version: u64,
+    ) -> Result<Vec<u8>, SdkError> {
+        let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
         let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
         let registry = Address::from(addr20(&r.to_ascii_lowercase())?);
         let mut v = [0u8; 32];
-        v[24..].copy_from_slice(&kem_version.to_be_bytes());
+        v[24..].copy_from_slice(&version.to_be_bytes());
         let pool = &pool;
         let out = pool
             .read_at_block(
@@ -973,8 +1075,26 @@ impl AppCore {
             )
             .await?
             .value;
-        let kem_pk = kem_pk_of(&out)?;
-        self.kem_wrap_to_key(kem_pk, key, label, aad)
+        kem_pk_of(&out)
+    }
+
+    /// The UA of `account` (a UA key; any other: `Argument`).
+    pub(crate) fn account_ua(&self, account: &KeyRef) -> Result<[u8; 32], SdkError> {
+        let KeyRef::Ua {
+            seed,
+            kind,
+            account,
+            index,
+        } = account
+        else {
+            return Err(SdkError::Argument);
+        };
+        let open = self.sdk.open_seed(seed)?;
+        open.wallet
+            .ua_key(*kind, *account, *index)
+            .map_err(ua)?
+            .ua()
+            .ok_or(SdkError::Argument)
     }
 
     /// Whether `sig` is `ua`'s signature of the app record `typed_json` on `path`, as the profile's registry on `chain` judges
@@ -1012,7 +1132,24 @@ impl AppCore {
                 }
             }
         };
-        let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
+        let chain_bound = matches!(p, UaPath::ChainBound { .. });
+        self.with_records(&chain, id, chain_bound, |state| {
+            scaas_ua::wallet::verify_app_record(&id, &p, &typed, &UASig::from(&sig), state)
+        })
+        .await
+    }
+
+    /// `f` over the registry state of `id` on `chain` (its records, its members' and theirs, two levels), read at the
+    /// profile's final block as a read that feeds a decryption; with `chain_bound`, the registry's domain too when `id` is a
+    /// native id or an `msig` (a native member signs `UAAuth` in it).
+    pub(crate) async fn with_records<R>(
+        &self,
+        chain: &str,
+        id: [u8; 32],
+        chain_bound: bool,
+        f: impl FnOnce(&AppRecordState) -> R,
+    ) -> Result<R, SdkError> {
+        let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
         let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
         let registry = Address::from(addr20(&r.to_ascii_lowercase())?);
         let poolr = &pool;
@@ -1024,28 +1161,22 @@ impl AppCore {
             )
             .await?
             .value;
-        let needs_domain = matches!(p, UaPath::ChainBound { .. })
+        let needs_domain = chain_bound
             && (scaas_ua::in_native_space(&id) || recs.get(&id).is_some_and(|r| r.kind == MSIG));
         let domain = if needs_domain {
-            Some(crate::account::msig::domain(&self.sdk, &chain, &pool, registry).await?)
+            Some(crate::account::msig::domain(&self.sdk, chain, &pool, registry).await?)
         } else {
             None
         };
         let members = |x: [u8; 32]| recs.get(&x).map(|r| (r.kind, r.key_data.clone()));
         let current = |x: [u8; 32]| recs.get(&x).and_then(|r| r.current.clone());
         let accepted = |x: [u8; 32], i: u16| recs.get(&x).is_some_and(|r| bit(&r.active, i));
-        Ok(scaas_ua::wallet::verify_app_record(
-            &id,
-            &p,
-            &typed,
-            &UASig::from(&sig),
-            &AppRecordState {
-                members: &members,
-                current: &current,
-                accepted: &accepted,
-                domain: domain.as_ref(),
-            },
-        ))
+        Ok(f(&AppRecordState {
+            members: &members,
+            current: &current,
+            accepted: &accepted,
+            domain: domain.as_ref(),
+        }))
     }
 
     /// A call of the app's own contract `contract` on `chain` (spec §12.2, §13): `entry` the function's JSON ABI item as solc
@@ -1062,30 +1193,15 @@ impl AppCore {
         args: String,
         payer: KeyRef,
     ) -> Result<AppCall, SdkError> {
-        use alloy::dyn_abi::JsonAbiExt;
-        if entry.len() > 64 * 1024 || args.len() > 128 * 1024 {
-            return Err(SdkError::Argument);
-        }
-        let f: alloy::json_abi::Function =
-            serde_json::from_str(&entry).map_err(|_| SdkError::Argument)?;
-        let a: serde_json::Value = serde_json::from_str(&args).map_err(|_| SdkError::Argument)?;
-        let o = a.as_object().ok_or(SdkError::Argument)?;
-        if o.len() != f.inputs.len() || f.inputs.iter().any(|p| p.name.is_empty()) {
-            return Err(SdkError::Argument);
-        }
+        let (f, o, data) = entry_call(&entry, &args)?;
         let mut review = vec![
             field("contract", contract.to_ascii_lowercase(), Source::Derived),
             field("entry", f.signature(), Source::Derived),
         ];
-        let mut values = vec![];
         for p in &f.inputs {
             let v = o.get(&p.name).ok_or(SdkError::Argument)?;
-            values.push(abi_value(&p.ty, &p.components, v, 0)?);
             flatten(&format!("args.{}", p.name), v, &mut review);
         }
-        let data = f
-            .abi_encode_input(&values)
-            .map_err(|_| SdkError::Argument)?;
         let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
         self.refuse_contract(&profile, &pool, &contract).await?;
         let quote = self
@@ -1144,18 +1260,126 @@ pub(crate) fn field(name: &str, value: String, source: Source) -> ReviewField {
 }
 
 pub(crate) fn flatten(prefix: &str, v: &serde_json::Value, out: &mut Vec<ReviewField>) {
+    flatten_as(prefix, v, Source::Signed, out);
+}
+
+/// [`flatten`] with the fields' source.
+pub(crate) fn flatten_as(
+    prefix: &str,
+    v: &serde_json::Value,
+    source: Source,
+    out: &mut Vec<ReviewField>,
+) {
     match v {
         serde_json::Value::Object(o) => {
             for (k, x) in o {
-                flatten(&format!("{prefix}.{k}"), x, out);
+                flatten_as(&format!("{prefix}.{k}"), x, source, out);
             }
         }
         serde_json::Value::Array(a) => {
             for (i, x) in a.iter().enumerate() {
-                flatten(&format!("{prefix}[{i}]"), x, out);
+                flatten_as(&format!("{prefix}[{i}]"), x, source, out);
             }
         }
-        serde_json::Value::String(s) => out.push(field(prefix, s.clone(), Source::Signed)),
-        other => out.push(field(prefix, other.to_string(), Source::Signed)),
+        serde_json::Value::String(s) => out.push(field(prefix, s.clone(), source)),
+        other => out.push(field(prefix, other.to_string(), source)),
+    }
+}
+
+impl AppCore {
+    /// A view of an app's contract (or a SCaaS view an app reads, a registry's `kemKeyOf`, a factory listing): `entry` the
+    /// function's JSON ABI item (`view` or `pure`, its parameters named; `Argument` otherwise), `args` a JSON object of exactly
+    /// its parameter names (as [`AppCore::prepare_app_call`]), read at the profile's final block. Bounded: the entry 64 KiB,
+    /// the arguments 128 KiB, the answer 1 MiB, an output type nesting at most 16 levels (`Argument`). `trusted`: the read
+    /// feeds a decryption (`Purpose::FeedsDecryption`, ARCH-POS-15: a discovered node only under the majority option with at
+    /// least three nodes). The answer: a JSON object of the outputs by name (an unnamed one by its index), tuples by their
+    /// components' names, integers as decimal strings, bytes, addresses and fixed bytes as `0x` hex.
+    pub async fn read_app(
+        self: &Arc<Self>,
+        chain: String,
+        contract: String,
+        entry: String,
+        args: String,
+        trusted: bool,
+    ) -> Result<String, SdkError> {
+        use alloy::dyn_abi::FunctionExt;
+        use alloy::json_abi::StateMutability;
+        let (f, _, data) = entry_call(&entry, &args)?;
+        if !matches!(
+            f.state_mutability,
+            StateMutability::View | StateMutability::Pure
+        ) || f
+            .outputs
+            .iter()
+            .any(|p| type_depth(&p.ty, &p.components) > READ_DEPTH)
+        {
+            return Err(SdkError::Argument);
+        }
+        let to = Address::from(addr20(&contract.to_ascii_lowercase())?);
+        let (profile, _, pool) = crate::op::evm(&self.sdk, &chain)?;
+        let purpose = if trusted {
+            Purpose::FeedsDecryption
+        } else {
+            Purpose::Plain
+        };
+        let (pool, data) = (&pool, Bytes::from(data));
+        let out = pool
+            .read_at_block(final_block(&profile), purpose, |at| {
+                let d = data.clone();
+                async move { pool.call_at(&at, to, d).await.map(|b| b.to_vec()) }
+            })
+            .await?
+            .value;
+        if out.len() > READ_MAX {
+            return Err(SdkError::Argument);
+        }
+        let values = f.abi_decode_output(&out).map_err(|_| SdkError::Argument)?;
+        let mut o = serde_json::Map::new();
+        for (i, (v, p)) in values.iter().zip(&f.outputs).enumerate() {
+            let k = if p.name.is_empty() {
+                i.to_string()
+            } else {
+                p.name.clone()
+            };
+            o.insert(k, named(v, &p.components)?);
+        }
+        Ok(serde_json::Value::Object(o).to_string())
+    }
+}
+
+/// Test-only entry points (feature `vectors`, never in a release build nor a binding): key bytes in and out and fixed
+/// randomness, for the vectors.
+#[cfg(feature = "vectors")]
+impl AppCore {
+    /// A handle of `usage` holding `key` (a vector's input), in `seed`'s arena.
+    pub fn vectors_import(
+        &self,
+        seed: &str,
+        key: [u8; 32],
+        usage: AppKeyUsage,
+    ) -> Result<Arc<AppKey>, SdkError> {
+        let h = self
+            .scope(seed)?
+            .vectors_import(&key, usage.into())
+            .map_err(ua)?;
+        Ok(self.wrap(seed, h))
+    }
+
+    /// The handle's key bytes (a vector's comparison).
+    pub fn vectors_reveal(&self, key: Arc<AppKey>) -> Result<Vec<u8>, SdkError> {
+        self.with(&[&key], |s, hs| s.vectors_reveal(at(hs, 0)?).map_err(ua))
+    }
+
+    /// [`AppCore::seal`] with a fixed nonce, the nonce not in the output.
+    pub fn vectors_seal(
+        &self,
+        key: Arc<AppKey>,
+        nonce: [u8; 12],
+        aad: Vec<u8>,
+        pt: Vec<u8>,
+    ) -> Result<Vec<u8>, SdkError> {
+        self.with(&[&key], |s, hs| {
+            s.vectors_seal(at(hs, 0)?, &nonce, &aad, &pt).map_err(ua)
+        })
     }
 }
