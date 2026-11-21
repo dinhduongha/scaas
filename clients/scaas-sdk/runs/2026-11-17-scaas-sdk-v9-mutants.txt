@@ -1,0 +1,7 @@
+# v9 mutants (name | outcome | commit | test | first failure line)
+the passphrase without NFC | killed | c96fbd809 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core_vault_rows passphrase_rows | panicked at tests/app_core_vault_rows.rs:259:9:
+the passphrase's non-ASCII spaces kept | killed | c96fbd809 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core_vault_rows passphrase_rows | panicked at tests/app_core_vault_rows.rs:259:9:
+a control character accepted | killed | c96fbd809 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core_vault_rows passphrase_rows | panicked at tests/app_core_vault_rows.rs:277:9:
+an empty passphrase accepted | killed | c96fbd809 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core_vault_rows passphrase_rows | panicked at tests/app_core_vault_rows.rs:277:9:
+bytes that are not UTF-8 accepted | killed | c96fbd809 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test app_core_vault_rows passphrase_rows | panicked at tests/app_core_vault_rows.rs:288:5:
+5 mutants, 5 killed, 0 survived, 0 not loaded, 0 other failure
