@@ -111,8 +111,9 @@ abstract contract DeployBook is Script {
         return (dn, dn, network);
     }
 
-    /// @notice NET-ALL-25 (C18), the deploy gate: a kind keeping records that name their chain by `chain_uid` alone
-    ///         (`homeChain`; the table's `homeChainKinds`, the one list) is refused on a chain whose `chain_uid` another
+    /// @notice NET-ALL-25 (C18), the deploy gate: a kind keeping or checking records bound to `chain_uid` without the chain
+    ///         id (`homeChain` records, the registry's portable `UAMsigUpdate` and scoped keys; the table's `homeChainKinds`,
+    ///         the one list) is refused on a chain whose `chain_uid` another
     ///         row shares, `HOME_CHAIN_SHARED_GENESIS`; any other kind passes. `deploybook.py kind_check` is the twin.
     function _requireKindHere(string memory kind, bytes32 uid) internal view {
         string memory j = vm.readFile(_bookTable());
@@ -133,7 +134,7 @@ abstract contract DeployBook is Script {
                     string.concat(
                         "HOME_CHAIN_SHARED_GENESIS: ",
                         kind,
-                        " keeps homeChain records; chain ",
+                        " keeps records bound to chain_uid without the chain id; chain ",
                         vm.toString(block.chainid),
                         " shares its chain_uid with ",
                         vm.parseJsonString(j, string.concat(p, ".key")),

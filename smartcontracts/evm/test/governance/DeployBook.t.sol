@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {DeployBook} from "../../script/DeployBook.sol";
+import {DeployHarness} from "../helpers/DeployHarness.sol";
 
 contract BookHarness is DeployBook {
     string internal name;
@@ -232,18 +233,18 @@ contract DeployBookTest is Test {
     /// NET-ALL-25 (C18): the deploy gate refuses `PqChat`, `OpenFactory` and `PqVault` on a genesis another row shares, and
     /// passes `PqChatStore` there; on a genesis no other row shares, every kind passes.
     function test_homeChainKindsRefused() public {
-        string[3] memory ks = ["PqChat", "OpenFactory", "PqVault"];
+        string[4] memory ks = ["PqChat", "OpenFactory", "PqVault", "UARegistry"];
         uint256[2] memory ids = [uint256(43114), 43113];
         for (uint256 c; c < 2; ++c) {
             vm.chainId(ids[c]);
             string memory other = c == 0 ? "avalanche-testnet" : "avalanche-mainnet";
-            for (uint256 i; i < 3; ++i) {
+            for (uint256 i; i < 4; ++i) {
                 vm.expectRevert(
                     bytes(
                         string.concat(
                             "HOME_CHAIN_SHARED_GENESIS: ",
                             ks[i],
-                            " keeps homeChain records; chain ",
+                            " keeps records bound to chain_uid without the chain id; chain ",
                             vm.toString(ids[c]),
                             " shares its chain_uid with ",
                             other,
@@ -256,8 +257,27 @@ contract DeployBookTest is Test {
             h.kind("PqChatStore", AVAX_UID); // twin: the store keeps no homeChain record
         }
         vm.chainId(7622);
-        for (uint256 i; i < 3; ++i) {
+        for (uint256 i; i < 4; ++i) {
             h.kind(ks[i], SCAAS_UID); // twin: a genesis no other row shares
         }
+    }
+
+    /// NET-ALL-25 (review P1-2): the UA registry is refused where it is created, the gen-1 deploy (`_deployUARegistry`, under
+    /// `Deploy.s.sol` and `DeployHedera.s.sol`) and a later generation (`_deployUARegistryGen`, `DeployUAGen.s.sol`), before
+    /// anything else of that path.
+    function test_registryRefusedOnSharedGenesis() public {
+        DeployHarness d = new DeployHarness();
+        d.setTxGasCap(1 << 24);
+        vm.chainId(43113);
+        bytes memory e = bytes(
+            "HOME_CHAIN_SHARED_GENESIS: UARegistry keeps records bound to chain_uid without the chain id; chain 43113 shares its chain_uid with avalanche-mainnet (NET-ALL-25)"
+        );
+        vm.expectRevert(e);
+        d.deployRegistry(AVAX_UID);
+        vm.expectRevert(e);
+        d.deployGen(AVAX_UID, address(0), "{}");
+        vm.chainId(7622); // twin: the gate passes, the gen mode then refuses the empty book by its own check
+        vm.expectRevert();
+        d.deployGen(SCAAS_UID, address(0), "{}");
     }
 }

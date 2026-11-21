@@ -1230,6 +1230,7 @@ abstract contract DeployBase is DeployBook {
     }
 
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
+        _requireKindHere("UARegistry", uid); // NET-ALL-25: UAMsigUpdate and the scoped keys bind chain_uid, no chain id
         require(txGasCap != 0, "TX_GAS_CAP: the chain's per-transaction gas cap from the deploy book (owner X1)");
         (bool bls, bool bnG2) = _precompiles();
         (bool pqz, bool[3] memory ml) = _pqPrecompiles();
@@ -1397,6 +1398,7 @@ abstract contract DeployBase is DeployBook {
     ///         `0x0142` where a predecessor enables it, the book's `gen_verify_only` kinds. A kind no predecessor enables (an
     ///         ordinary later-generation kind) is not built in this mode. **UNAUDITED.**
     function _deployUARegistryGen(string memory book, address ska) internal returns (UARegistry reg) {
+        _requireKindHere("UARegistry", uid); // NET-ALL-25, as _deployUARegistry: before the book is read
         UARegistry pred = UARegistry(vm.parseJsonAddress(book, ".ua_registry"));
         address latest = vm.keyExistsJson(book, ".ua_registry_latest")
             ? vm.parseJsonAddress(book, ".ua_registry_latest")

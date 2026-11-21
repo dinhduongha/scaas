@@ -167,6 +167,12 @@ contract DeployHarness is DeployBase {
         json = vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
+    /// The gen-1 registry alone (`_deployUARegistry`, not Hedera, no account implementation) on the chain of `uid_`.
+    function deployRegistry(bytes32 uid_) external returns (address) {
+        (salt, uid) = (keccak256("scaas.deploy.v1"), uid_);
+        return address(_deployUARegistry(address(0), false));
+    }
+
     /// The later-generation mode (`_deployUARegistryGen`) over `book` (a JSON string): generation n + 1 and the JSON. No env here:
     /// `TX_GAS_CAP` unset (`txGasCap` 0, the book's value taken), the salt and `chain_uid` as `deploy` sets them.
     function deployGen(bytes32 uid_, address ska, string calldata book)

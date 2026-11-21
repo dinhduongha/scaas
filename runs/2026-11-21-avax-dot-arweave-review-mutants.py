@@ -13,6 +13,11 @@ D = "smartcontracts/evm/script/deploy_pqchatstore.py"
 T = "python3 -I smartcontracts/evm/script/test_forkcheck.py "
 TD = "python3 -I smartcontracts/evm/script/test_deploy_pqchatstore.py "
 FUJI = "smartcontracts/evm/src/chains/avalanche-testnet/profile.json"
+U = "smartcontracts/evm/chain-uids.json"
+B = "smartcontracts/evm/script/DeployBase.sol"
+TB = "python3 -I smartcontracts/evm/script/test_deploybook.py"
+FG = "cd smartcontracts/evm && ../../scripts/capped forge test --match-path "
+GOV = FG + "test/governance/DeployBook.t.sol --match-test "
 MUTANTS = [
     (
         "P1-1 a key without a profile defaults to amsterdam",
@@ -79,6 +84,68 @@ MUTANTS = [
         [(D, '        "gasUsed": f.qty(r["gasUsed"]),', '        "gasUsed": r.get("size"),')],
         TD + "three_honest_nodes_agree",
         "FAIL three_honest_nodes_agree",
+    ),
+    (
+        "P1-2 UARegistry off homeChainKinds",
+        [(U, '    "PqVault",\n    "UARegistry"\n', '    "PqVault"\n')],
+        TB,
+        "home_chain_kinds_refused",
+    ),
+    (
+        "P1-2 the gen-1 registry not gated",
+        [(B, '        _requireKindHere("UARegistry", uid); // NET-ALL-25: UAMsigUpdate', "        // NET-ALL-25: UAMsigUpdate")],
+        GOV + "test_registryRefusedOnSharedGenesis",
+        "test_registryRefusedOnSharedGenesis",
+    ),
+    (
+        "P1-2 a later registry generation not gated",
+        [(B, '        _requireKindHere("UARegistry", uid); // NET-ALL-25, as', "        // NET-ALL-25, as")],
+        GOV + "test_registryRefusedOnSharedGenesis",
+        "test_registryRefusedOnSharedGenesis",
+    ),
+    (
+        "P2-1 cast mktx without --chain",
+        [(D, '"--gas-limit", str(tx["gas"]), "--chain", str(tx["chainId"])]', '"--gas-limit", str(tx["gas"])]')],
+        TD + "cast_signs_what_was_asked",
+        "FAIL cast_signs_what_was_asked",
+    ),
+    (
+        "P2-1 the signed bytes not compared",
+        [(D, "        if bad:\n", "        if False:\n")],
+        TD + "cast_signs_what_was_asked",
+        "FAIL cast_signs_what_was_asked",
+    ),
+    (
+        "P2-1 the chain id from the first node",
+        [(D, '    cid = _read(nodes, "eth_chainId", [], f.qty)\n    if chain_id', '    cid = f.qty(nodes[0]("eth_chainId", [])["result"])\n    if chain_id')],
+        TD + "the_transaction_from_the_majority",
+        "FAIL the_transaction_from_the_majority",
+    ),
+    (
+        "P2-1 the chain id not the resolved one",
+        [(D, "    if chain_id is not None and cid != chain_id:", "    if False:")],
+        TD + "the_transaction_from_the_majority",
+        "FAIL the_transaction_from_the_majority",
+    ),
+    (
+        "P2-1 the nonce from the first node",
+        [(D, '    nonce = _read(nodes, "eth_getTransactionCount", [sign.address(), "latest"], f.qty)',
+          '    nonce = f.qty(nodes[0]("eth_getTransactionCount", [sign.address(), "latest"])["result"])')],
+        TD + "the_transaction_from_the_majority",
+        "FAIL the_transaction_from_the_majority",
+    ),
+    (
+        "P2-1 the fee cap from the highest node",
+        [(D, '    cap = FEE_FACTOR * _number(nodes, "eth_gasPrice", [])',
+          '    cap = FEE_FACTOR * max(f.qty(n("eth_gasPrice", [])["result"]) for n in nodes)')],
+        TD + "the_transaction_from_the_majority",
+        "FAIL the_transaction_from_the_majority",
+    ),
+    (
+        "P2-1 a tip above the cap signed",
+        [(D, "    if tip > cap:", "    if False:")],
+        TD + "the_transaction_from_the_majority",
+        "FAIL the_transaction_from_the_majority",
     ),
 ]
 

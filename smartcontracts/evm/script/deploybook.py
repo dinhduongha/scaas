@@ -12,7 +12,8 @@ the form of json.dumps(…, indent=2), the header first. script/DeployBook.sol i
   python3 -I script/deploybook.py path <chainId> <chainUid> [<suffix>]   deployments/<key><suffix> (default .json)
 NET-ALL-25: chain-uids.json as read refuses a second row of one (chainId, chainUid) pair (CHAIN_PAIR_TAKEN), a private
 chain's genesis in another row or under another chain id (CHAIN_UID_PRIVATE), a row without `private` (CHAIN_ROW_PRIVATE);
-a kind keeping homeChain records (`homeChainKinds`) on a genesis another row shares: HOME_CHAIN_SHARED_GENESIS.
+a kind keeping or checking records bound to chain_uid without the chain id (`homeChainKinds`) on a genesis another row
+shares: HOME_CHAIN_SHARED_GENESIS.
   python3 -I script/deploybook.py kind-check <kind> <chainId> <chainUid>   the kind may deploy on this chain
 Deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; NET-EVM-11 Change): one chain may carry more
 than one deploy of the same build, each with its own DEPLOY_SALT, named by a set label (SETS: `mldsa-off`, the deploy with
@@ -141,14 +142,16 @@ def find(chain_id, chain_uid, suffix=".json", env=os.environ):
 
 
 def kind_check(kind, chain_id, chain_uid):
-    """NET-ALL-25 (C18): a kind keeping homeChain records (chain-uids.json `homeChainKinds`) is refused on a chain whose
+    """NET-ALL-25 (C18): a kind keeping or checking records bound to chain_uid without the chain id (chain-uids.json
+    `homeChainKinds`: homeChain records, the registry's portable UAMsigUpdate and scoped keys) is refused on a chain whose
     chain_uid another row shares, until those records carry the chain id; any other kind passes."""
     t, cid, uid = table(), int(chain_id), chain_uid.lower()
     if kind in t["homeChainKinds"]:
         other = [r["key"] for r in t["chains"] if r["chainUid"].lower() == uid and r["chainId"] != cid]
         if other:
             raise BookError(
-                f"HOME_CHAIN_SHARED_GENESIS: {kind} keeps homeChain records; chain {cid} shares its chain_uid with "
+                f"HOME_CHAIN_SHARED_GENESIS: {kind} keeps records bound to chain_uid without the chain id; chain {cid} "
+                f"shares its chain_uid with "
                 f"{', '.join(other)} (NET-ALL-25)"
             )
     return kind
