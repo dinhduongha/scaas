@@ -572,6 +572,8 @@ class Anvil:
 
 def exec_cases(fork, cases_path, code_size_limit=None, say=print, root=EVM, out="out"):
     """Check (3) on every contract of the cases file and the control (which must be refused), then check (4) on anvil."""
+    if fork not in CONTROL:
+        raise ForkError(f"FORKCHECK_FORK_UNKNOWN: no control fixture for {fork}")
     contracts = json.load(open(os.path.join(root, cases_path)))["contracts"]
     for c in contracts:
         scan(load_artifact(os.path.join(out, c["artifact"]), root), fork, _hex(c.get("args") or "0x", "args"))

@@ -456,6 +456,8 @@ def control_green_voids_the_run():
         bad = [dict(cs[0], cases=[dict(cs[0]["cases"][0], **{"return": "0x" + "00" * 32})])]
         refused("FORKCHECK_EXEC", f.execute, fake_evm(False), "cancun", bad, lines.append, t)
         refused("FORKCHECK_FORK_UNKNOWN", f.execute, fake_evm(False), "osaka", cs, lines.append, t)
+        write(t, "cases.json", {"contracts": cs})  # exec at a fork with no control: named before anything runs (P3-10)
+        refused("FORKCHECK_FORK_UNKNOWN", f.exec_cases, "amsterdam", "cases.json", root=t, say=lines.append)
 
 
 def control_red_for_its_reason():

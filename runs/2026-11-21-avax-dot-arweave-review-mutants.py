@@ -195,6 +195,12 @@ MUTANTS = [
         T + "control_red_for_its_reason",
         "FAIL control_red_for_its_reason",
     ),
+    (
+        "P3-10 exec at a fork with no control unchecked",
+        [(F, "    if fork not in CONTROL:\n        raise ForkError(f\"FORKCHECK_FORK_UNKNOWN: no control fixture for {fork}\")\n    contracts =", "    contracts =")],
+        T + "control_green_voids_the_run",
+        "FAIL control_green_voids_the_run",
+    ),
 ]
 
 if __name__ == "__main__":
