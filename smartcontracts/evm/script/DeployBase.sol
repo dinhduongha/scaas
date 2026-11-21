@@ -57,6 +57,7 @@ import {FrostSecp256k1Verifier} from "../src/ua/verifiers/FrostSecp256k1Verifier
 import {Musig2Bn254Verifier} from "../src/ua/verifiers/Musig2Bn254Verifier.sol";
 import {FrostBn254Verifier} from "../src/ua/verifiers/FrostBn254Verifier.sol";
 import {MldsaVerifier} from "../src/ua/MlDsa.sol";
+import {MldsaVerifyOnly, MldsaVerifyOnly44, MldsaVerifyOnly65, MldsaVerifyOnly87} from "../src/ua/MlDsaVerifyOnly.sol";
 import {FndsaVerifier} from "../src/ua/FnDsa.sol";
 import {SlhdsaVerifier} from "../src/ua/SlhDsa.sol";
 import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
@@ -160,6 +161,11 @@ abstract contract DeployBase is DeployBook {
     ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
     ///         (`MAX_NOTICE_PERIOD`, the factory's).
     uint64 internal noticePeriod;
+    /// @notice The chain's per-transaction gas cap (owner X1, spec 2026-11-19-registry-verify-only-kinds §9): `TX_GAS_CAP`
+    ///         (env), required, no default: the deploy book's value, which `script/tx_gas_cap.py` probes. The registry's
+    ///         constructor argument `txGasCap` and every deploy gate that counted EIP-7825's 2^24 read it. 0 until `_setup`:
+    ///         `_deployUARegistry` refuses it by name.
+    uint64 internal txGasCap;
     /// @notice This chain's `GovernanceRouter` (`_deployGovRouter`), the factory's one-time `govRouter`; 0 until deployed.
     address internal govRouter;
     /// @notice Its code hash from this build (`_builtHash`), what `configureChain` pins; 0 with no router.
@@ -221,15 +227,58 @@ abstract contract DeployBase is DeployBook {
     /// path (`verifyMinimal`), both set by `CHECK_GAS`'s floor; 330,000 keeps 19,177 (6.2 %) over it.
     uint64 internal constant CAP_BLS12381_MULTI = 330_000;
 
-    /// @notice The ML-DSA precompile candidates, probed in order (CTR-UA-23 / CTR-UA-39): EIP-8355's `0x12` / `0x13` / `0x14`,
-    ///         then the SCaaS testnet's `MLDSA44` / `MLDSA65` / `MLDSA87` `0x…5caa0012` / `…0013` / `…0014`; `i` 0, 1, 2 = 44, 65, 87.
-    function _mldsaCandidates(uint256 i) internal pure returns (address[2] memory) {
-        return [address(uint160(0x12 + i)), address(uint160(0x5caa0012 + i))];
+    /// @notice The ML-DSA precompile candidates, probed in order (CTR-UA-69, owner R9; CTR-UA-23 / CTR-UA-39): by default the
+    ///         addresses of an EIP in Final status (none for ML-DSA today) and the chain's own, the SCaaS chains'
+    ///         `0x…5caa0012` / `…0013` / `…0014`; EIP-8355's Draft `0x12` / `0x13` / `0x14` only after them and only under the
+    ///         chain's `probe_draft_precompiles` flag with the owner's confirmation in the book (`_draftProbe`), probed then with
+    ///         the fuller probe (`_mldsaPrecompile`). `i` 0, 1, 2 = 44, 65, 87.
+    function _mldsaCandidates(uint256 i) internal view returns (address[] memory c) {
+        bool draft = _draftProbe();
+        c = new address[](draft ? 2 : 1);
+        c[0] = address(uint160(0x5caa0012 + i));
+        if (draft) c[1] = address(uint160(0x12 + i));
+    }
+
+    /// @notice CTR-UA-69 (owner R9, C5): the Draft candidates are probed only where the chain's row in `chain-uids.json` sets
+    ///         `probe_draft_precompiles: true` and the chain's book records the owner's confirmation
+    ///         (`probe_draft_precompiles_owner`, its reason); the flag without it refuses by name (`DRAFT_PROBE_UNCONFIRMED`).
+    function _draftProbe() internal view returns (bool) {
+        if (!_draftFlag()) return false;
+        require(
+            _draftConfirmed(),
+            "DRAFT_PROBE_UNCONFIRMED: chain-uids.json sets probe_draft_precompiles, the book has no probe_draft_precompiles_owner (CTR-UA-69)"
+        );
+        return true;
+    }
+
+    /// @notice The chain's `probe_draft_precompiles` (its `chain-uids.json` row by chain id and `uid`; absent: false).
+    function _draftFlag() internal view virtual returns (bool) {
+        string memory j = vm.readFile("./chain-uids.json");
+        for (uint256 i;; ++i) {
+            string memory p = string.concat(".chains[", vm.toString(i), "]");
+            if (!vm.keyExistsJson(j, p)) return false;
+            if (
+                vm.parseJsonUint(j, string.concat(p, ".chainId")) == block.chainid
+                    && vm.parseJsonBytes32(j, string.concat(p, ".chainUid")) == uid
+            ) {
+                string memory f = string.concat(p, ".probe_draft_precompiles");
+                return vm.keyExistsJson(j, f) && vm.parseJsonBool(j, f);
+            }
+        }
+    }
+
+    /// @notice The owner's confirmation of the Draft probe in the chain's book (`probe_draft_precompiles_owner`, non-empty).
+    function _draftConfirmed() internal view virtual returns (bool) {
+        string memory path = _bookPath(uid, ".json");
+        if (!vm.exists(path)) return false;
+        string memory b = vm.readFile(path);
+        return vm.keyExistsJson(b, ".probe_draft_precompiles_owner")
+            && bytes(vm.parseJsonString(b, ".probe_draft_precompiles_owner")).length != 0;
     }
 
     /// @notice C5-1, NET-EVM-06. A release is one CREATE2 of the whole implementation in the registrar's transaction.
     ///         Under EIP-8037 the code deposit is state gas, `STATE_GAS_PER_BYTE` per byte of runtime, on top of the
-    ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24). Two gates, chosen by the declared
+    ///         regular gas, which EIP-7825 caps at the chain's `txGasCap` (2^24 there; owner X1: `TX_GAS_CAP`). Two gates, chosen by the declared
     ///         `RELEASE_GAS_GATE` (`_publicGate`; Q4 of CTR-MTX-30, R40), each refusing by name before anything is sent:
     ///         the SCaaS testnet's (`testnet`, the default, the owner's formula): the transaction needs
     ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit, runtime sizes from `size-baseline.json`
@@ -241,7 +290,6 @@ abstract contract DeployBase is DeployBook {
     ///         (`public`): the release transaction measured (`_measuredGas`), regular + state x 1.05 within the block
     ///         gas limit and regular x 1.05 < 2^24 (`_checkMeasuredGas`).
     uint256 internal constant STATE_GAS_PER_BYTE = 1530;
-    uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
     uint256 internal constant EIP170_LIMIT = 24_576;
 
     /// @notice EIP-7954's code size limit, the default of `CHAIN_CODE_LIMIT` (GD-4).
@@ -257,7 +305,7 @@ abstract contract DeployBase is DeployBook {
 
     /// @notice The block gas limit the release of contract `name` needs.
     function _releaseGasNeed(string memory name) internal view returns (uint256) {
-        return _baselineRuntime(name) * STATE_GAS_PER_BYTE + TX_REGULAR_GAS_CAP;
+        return _baselineRuntime(name) * STATE_GAS_PER_BYTE + txGasCap;
     }
 
     /// @notice CTR-GOV-19, GD-4: the chain's code size limit is declared, never derived from a chain id. `CHAIN_CODE_LIMIT`
@@ -361,15 +409,17 @@ abstract contract DeployBase is DeployBook {
     /// @notice The public-chain gate (Q4, R40): a release fits when `(regular + state) x 1.05` (the gas limit the deploy sends,
     ///         `DeploySend.s.sol`, NET-EVM-11; EIP-8037: a transaction is included only if regular + state fits, never by
     ///         a block's `gas_used`) is within the chain's block gas limit, and `regular x 1.05 < 2^24` (EIP-7825).
-    function _checkMeasuredGas(string memory name, uint256 regular, uint256 state, uint256 limit) internal pure {
+    function _checkMeasuredGas(string memory name, uint256 regular, uint256 state, uint256 limit) internal view {
         uint256 asked = (regular + state) * 105 / 100;
-        if (regular * 105 / 100 >= TX_REGULAR_GAS_CAP) {
+        if (regular * 105 / 100 >= txGasCap) {
             revert(
                 string.concat(
                     name,
                     " release: regular gas x 1.05 = ",
                     vm.toString(regular * 105 / 100),
-                    " >= 2^24 (EIP-7825, NET-EVM-06)"
+                    " >= txGasCap ",
+                    vm.toString(uint256(txGasCap)),
+                    " (EIP-7825, NET-EVM-06)"
                 )
             );
         }
@@ -405,6 +455,7 @@ abstract contract DeployBase is DeployBook {
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
         salt = vm.envOr("DEPLOY_SALT", keccak256("scaas.deploy.v1"));
+        txGasCap = _txGasCapEnv();
         deployZether = vm.envOr("DEPLOY_ZETHER", false);
         deployWrapped = vm.envOr("DEPLOY_WRAPPED", false);
         deployRegulated = vm.envOr("DEPLOY_REGULATED", false);
@@ -1148,7 +1199,7 @@ abstract contract DeployBase is DeployBook {
         for (uint256 p; p < PqUA.mldsaParts([UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87][i]); ++p) {
             uint256 reg = r[i][p];
             uint256 total = (reg + st[i][p]) * 105 / 100;
-            if (reg * 105 / 100 >= TX_REGULAR_GAS_CAP || total > limit) {
+            if (reg * 105 / 100 >= txGasCap || total > limit) {
                 console.log(
                     string.concat(
                         "ML-DSA kind ",
@@ -1172,73 +1223,97 @@ abstract contract DeployBase is DeployBook {
         return true;
     }
 
+    /// @notice `TX_GAS_CAP` (owner X1): required, no default; a missing or zero value reverts by name.
+    function _txGasCapEnv() internal view returns (uint64 cap) {
+        cap = uint64(vm.envUint("TX_GAS_CAP"));
+        require(cap != 0, "TX_GAS_CAP: the chain's per-transaction gas cap from the deploy book (owner X1)");
+    }
+
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
+        require(txGasCap != 0, "TX_GAS_CAP: the chain's per-transaction gas cap from the deploy book (owner X1)");
         (bool bls, bool bnG2) = _precompiles();
         (bool pqz, bool[3] memory ml) = _pqPrecompiles();
         uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](22);
         uint256 n;
-        k[n++] = UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier{salt: salt}()), 400_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.ED25519, address(new Ed25519Verifier{salt: salt}()), 210_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.BIP340, address(new Bip340Verifier{salt: salt}()), 50_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.SECP256K1, address(new Secp256k1Verifier{salt: salt}()), 50_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier{salt: salt}()), 50_000);
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000, false, 0
+        );
+        k[n++] = UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier{salt: salt}()), 400_000, false, 0);
+        k[n++] = UARegistry.KindConfig(UAKinds.ED25519, address(new Ed25519Verifier{salt: salt}()), 210_000, false, 0);
+        k[n++] = UARegistry.KindConfig(UAKinds.BIP340, address(new Bip340Verifier{salt: salt}()), 50_000, false, 0);
+        k[n++] =
+            UARegistry.KindConfig(UAKinds.SECP256K1, address(new Secp256k1Verifier{salt: salt}()), 50_000, false, 0);
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier{salt: salt}()), 50_000, false, 0
+        );
         if (bls) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.SCHNORR_BLS12381, address(new SchnorrBls12381Verifier{salt: salt}()), 70_000
+                UAKinds.SCHNORR_BLS12381, address(new SchnorrBls12381Verifier{salt: salt}()), 70_000, false, 0
             );
             k[n++] = UARegistry.KindConfig(
-                UAKinds.BLS12381_MINSIG, address(new BlsMinSigBls12381Verifier{salt: salt}()), 200_000
+                UAKinds.BLS12381_MINSIG, address(new BlsMinSigBls12381Verifier{salt: salt}()), 200_000, false, 0
             );
         }
         if (bnG2) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier{salt: salt}()), 345_000
+                UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier{salt: salt}()), 345_000, false, 0
             );
         }
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier{salt: salt}()), 50_000, false, 0
+        );
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.FROST_SECP256K1, address(new FrostSecp256k1Verifier{salt: salt}()), 50_000, false, 0
+        );
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000, false, 0
+        );
         k[n++] =
-            UARegistry.KindConfig(UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier{salt: salt}()), 50_000);
-        k[n++] =
-            UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new FrostSecp256k1Verifier{salt: salt}()), 50_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000);
-        k[n++] = UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000);
+            UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000, false, 0);
         if (bls && !isHedera) {
             // ARCH-POS-18: the probe chooses the path; the EIP-2537 one, the only one built (spec 2026-11-19-bls12381-multi §7)
             k[n++] = UARegistry.KindConfig(
-                UAKinds.BLS12381_MULTI, address(new BlsMultiBls12381Verifier{salt: salt}()), CAP_BLS12381_MULTI
+                UAKinds.BLS12381_MULTI,
+                address(new BlsMultiBls12381Verifier{salt: salt}()),
+                CAP_BLS12381_MULTI,
+                false,
+                0
             );
         }
         vm.serializeString("deploy", "ua_kind_0x0121", _blsMultiPath(bls, isHedera));
         if (bls && !isHedera) {
             // never on Hedera: no Zether token can exist there (`ZetherLayer`)
             k[n++] = UARegistry.KindConfig(
-                UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
+                UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000, false, 0
             );
         }
         // the PQ signing kinds (CTR-UA-23): wherever the kind's cap is at most 75 % of the chain's verify budget; ML-DSA on
         // the chain's precompile or on the registry's cache (`MLDSA_PRECOMPILE`)
         for (uint256 i; i < 2; ++i) {
             (address v, uint64 cap) = _mldsaVerifier(i, ml[i], budget);
-            if (v != address(0)) k[n++] = UARegistry.KindConfig([UAKinds.MLDSA44, UAKinds.MLDSA65][i], v, cap);
+            if (v != address(0)) {
+                k[n++] = UARegistry.KindConfig([UAKinds.MLDSA44, UAKinds.MLDSA65][i], v, cap, false, 0);
+            }
         }
         if (_pqKindFits(CAP_FNDSA512, budget)) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.FNDSA512, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA512)), CAP_FNDSA512
+                UAKinds.FNDSA512, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA512)), CAP_FNDSA512, false, 0
             );
         }
         if (_pqKindFits(CAP_SLHDSA128S, budget)) {
-            k[n++] =
-                UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.SLHDSA128S, address(new SlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S, false, 0
+            );
         }
         if (_pqKindFits(CAP_FNDSA1024, budget)) {
             k[n++] = UARegistry.KindConfig(
-                UAKinds.FNDSA1024, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA1024)), CAP_FNDSA1024
+                UAKinds.FNDSA1024, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA1024)), CAP_FNDSA1024, false, 0
             );
         }
         { // `mldsa87` after the FN-DSA kinds, as before (the kind table's order moves the registry's address)
             (address v, uint64 cap) = _mldsaVerifier(2, ml[2], budget);
-            if (v != address(0)) k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, v, cap);
+            if (v != address(0)) k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, v, cap, false, 0);
         }
         if (pqzKeyVerifier != address(0) && _pqKindFits(CAP_PQZ_MLWE, budget)) {
             require(
@@ -1246,7 +1321,7 @@ abstract contract DeployBase is DeployBook {
                     && PqzKeyVerifier(pqzKeyVerifier).PROOF_SYSTEM_ID() == PqzSafety.PQZL_ID,
                 "PQZ_KEY_VERIFIER: not a PqzKeyVerifier on the PQZ precompile and the set's PQZL id"
             );
-            k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, pqzKeyVerifier, CAP_PQZ_MLWE);
+            k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, pqzKeyVerifier, CAP_PQZ_MLWE, false, 0);
         }
         assembly ("memory-safe") {
             mstore(k, n)
@@ -1255,8 +1330,8 @@ abstract contract DeployBase is DeployBook {
         // before the script's first transaction (`create2_library_salt`), so their addresses, and through the code that embeds
         // them the registry's, depend on the sources only. Each one's own transaction is a release like the registry's: the
         // same gate.
-        _requireRegistryGas(isHedera, budget, smartKeyAccountImpl, k);
-        reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
+        _requireRegistryGas(address(0), isHedera, budget, smartKeyAccountImpl, k);
+        reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, txGasCap, smartKeyAccountImpl, true, k);
         _checkGen1Kinds(reg, bls, isHedera, pqz, ml[2] && mldsaPrecompile);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
@@ -1279,6 +1354,316 @@ abstract contract DeployBase is DeployBook {
         vm.serializeAddress("deploy", "ua_registry_core_lib", address(UARegistryCoreLib));
         vm.serializeAddress("deploy", "ua_registry_aux_lib", address(UARegistryAuxLib));
         vm.serializeAddress("deploy", "ua_registry_reg_lib", address(UARegistryRegLib));
+        _genBookCommon(reg);
+    }
+
+    /// @notice Spec 2026-11-19-registry-verify-only-kinds §9 (F14): the line fields every generation's book carries (generation 1's
+    ///         too, so a later deploy can check its walk against them): generation, predecessor, code hash, the three libraries
+    ///         with their code hashes, `tx_gas_cap`.
+    function _genBookCommon(UARegistry reg) internal {
+        vm.serializeUint("deploy", "ua_registry_generation", reg.generation());
+        vm.serializeAddress("deploy", "ua_registry_predecessor", reg.predecessor());
+        vm.serializeBytes32("deploy", "ua_registry_codehash", address(reg).codehash);
+        vm.serializeUint("deploy", "tx_gas_cap", txGasCap);
+        string memory l = "ua_registry_libraries";
+        address[3] memory a = [address(UARegistryCoreLib), address(UARegistryAuxLib), address(UARegistryRegLib)];
+        string[3] memory n = ["UARegistryCoreLib", "UARegistryAuxLib", "UARegistryRegLib"];
+        string memory o;
+        for (uint256 i; i < 3; ++i) {
+            vm.serializeAddress(n[i], "address", a[i]);
+            o = vm.serializeString(l, n[i], vm.serializeBytes32(n[i], "codehash", a[i].codehash));
+        }
+        vm.serializeString("deploy", l, o);
+    }
+
+    /// @notice A book field `path` as a number, `dflt` when absent.
+    function _bookUint(string memory book, string memory path, uint256 dflt) internal view returns (uint256) {
+        return vm.keyExistsJson(book, path) ? vm.parseJsonUint(book, path) : dflt;
+    }
+
+    /// @notice The owner's confirmation of refusal `name`, recorded in the book with its reason (`owner_override_<name>`, W5, M9).
+    function _ownerOverride(string memory book, string memory name) internal view returns (bool) {
+        string memory p = string.concat(".owner_override_", name);
+        return vm.keyExistsJson(book, p) && bytes(vm.parseJsonString(book, p)).length != 0;
+    }
+
+    /// @notice The later-generation mode (spec 2026-11-19-registry-verify-only-kinds §9, CTR-UA-64; owner W5, M9, M10 d, X1): generation
+    ///         n + 1 over the book's registry `ua_registry` (generation n). Before anything is sent, each refused by name:
+    ///         `GEN_NOT_LATEST` (the book's `ua_registry_latest` is another registry; only with the owner's override), `GEN_DEPTH`
+    ///         (n + 1 over `MAX_GENERATION`), `GEN_WALK_MISMATCH <g>` (the walk from the predecessor to generation 1 against the
+    ///         book: every address, code hash and generation, `ua_registry_line[g - 1]` for the generations below n, and the
+    ///         libraries' code hashes), `GEN_TX_CAP_UNKNOWN` (no `tx_gas_cap` in the book: `script/tx_gas_cap.py` writes it) and
+    ///         `GEN_TX_CAP_MISMATCH` (`TX_GAS_CAP` other than the book's), then the kinds of `_genKinds`. Carries `msig` in full,
+    ///         `0x0142` where a predecessor enables it, the book's `gen_verify_only` kinds. A kind no predecessor enables (an
+    ///         ordinary later-generation kind) is not built in this mode. **UNAUDITED.**
+    function _deployUARegistryGen(string memory book, address ska) internal returns (UARegistry reg) {
+        UARegistry pred = UARegistry(vm.parseJsonAddress(book, ".ua_registry"));
+        address latest = vm.keyExistsJson(book, ".ua_registry_latest")
+            ? vm.parseJsonAddress(book, ".ua_registry_latest")
+            : address(pred);
+        // Task 21 review P2-2: a book of the next generation already written (`<key>-ua-gen<n + 1>.json`) means the line has
+        // moved past this predecessor: a deploy over it would be a sibling
+        require(
+            !_newerGenBook(_bookUint(book, ".ua_registry_generation", 1) + 1) || _ownerOverride(book, "GEN_NOT_LATEST"),
+            "GEN_NOT_LATEST: a book of the next generation exists, the predecessor is not the line's latest"
+        );
+        require(
+            latest == address(pred) || _ownerOverride(book, "GEN_NOT_LATEST"),
+            string.concat(
+                "GEN_NOT_LATEST: the predecessor ",
+                vm.toString(address(pred)),
+                " is not the book's latest ",
+                vm.toString(latest)
+            )
+        );
+        uint256 g = _bookUint(book, ".ua_registry_generation", 1) + 1;
+        require(
+            g <= MAX_GEN,
+            string.concat("GEN_DEPTH: generation ", vm.toString(g), " over MAX_GENERATION ", vm.toString(MAX_GEN))
+        );
+        _walkCheck(book, address(pred), g - 1);
+        uint64 cap = uint64(_bookUint(book, ".tx_gas_cap", 0));
+        require(cap != 0, "GEN_TX_CAP_UNKNOWN: no tx_gas_cap in the book (script/tx_gas_cap.py, owner X1)");
+        require(
+            txGasCap == 0 || txGasCap == cap,
+            string.concat(
+                "GEN_TX_CAP_MISMATCH: TX_GAS_CAP ", vm.toString(txGasCap), ", the book's ", vm.toString(uint256(cap))
+            )
+        );
+        txGasCap = cap;
+        bool hedera = pred.hederaNative();
+        uint64 budget = hedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
+        UARegistry.KindConfig[] memory k = _genKinds(book, pred, g, budget);
+        _requireRegistryGas(address(pred), hedera, budget, ska, k);
+        reg = new UARegistry{salt: salt}(uid, address(pred), hedera, budget, cap, ska, true, k);
+        require(reg.generation() == g, "gen registry: not the generation the book gives");
+        _gate(address(reg));
+        vm.serializeAddress("deploy", "ua_registry", address(reg));
+        vm.serializeString("deploy", "ua_registry_walk_check", string.concat("ok: generations 1-", vm.toString(g - 1)));
+        vm.serializeBool("deploy", "gen_pqz", reg.kindEnabled(UAKinds.PQZ_MLWE));
+        vm.serializeString("deploy", "owner_overrides", _overridesUsed(book));
+        _genBookCommon(reg);
+    }
+
+    /// @notice The owner's overrides this deploy used, with their reasons (W5, M9): an object keyed by the refusal's name.
+    function _overridesUsed(string memory book) internal returns (string memory ov) {
+        ov = "{}";
+        string[2] memory names = ["GEN_NOT_LATEST", "GEN_PQZ_OMITTED"];
+        for (uint256 i; i < 2; ++i) {
+            if (!_ownerOverride(book, names[i])) continue;
+            string memory why = vm.parseJsonString(book, string.concat(".owner_override_", names[i]));
+            ov = vm.serializeString("owner_overrides", names[i], why);
+        }
+    }
+
+    uint256 internal constant MAX_GEN = 16; // `UARegistry.MAX_GENERATION`
+
+    /// @notice Whether this chain's book of generation `g` exists (`deployments/<key>-ua-gen<g>.json`, `DeployUAGen.s.sol`).
+    function _newerGenBook(uint256 g) internal view virtual returns (bool) {
+        return vm.exists(_bookPath(uid, string.concat("-ua-gen", vm.toString(g), ".json")));
+    }
+
+    /// @notice W5: the walk from `p` (generation `n`) to generation 1 against the book, else `GEN_WALK_MISMATCH <g>`.
+    function _walkCheck(string memory book, address p, uint256 n) internal view {
+        for (uint256 g = n; g != 0; --g) {
+            string memory at = g == n ? "." : string.concat(".ua_registry_line.gen", vm.toString(g), ".");
+            string memory a = string.concat(at, g == n ? "ua_registry" : "registry");
+            string memory h = string.concat(at, g == n ? "ua_registry_codehash" : "codehash");
+            string memory err = string.concat("GEN_WALK_MISMATCH ", vm.toString(g));
+            require(vm.keyExistsJson(book, a) && vm.keyExistsJson(book, h), string.concat(err, ": not in the book"));
+            require(
+                p.code.length != 0 && p == vm.parseJsonAddress(book, a) && p.codehash == vm.parseJsonBytes32(book, h)
+                    && UARegistry(p).generation() == g,
+                string.concat(err, ": address, code hash or generation differs from the book")
+            );
+            p = UARegistry(p).predecessor();
+        }
+        require(p == address(0), "GEN_WALK_MISMATCH 1: generation 1 has a predecessor");
+        if (!vm.keyExistsJson(book, ".ua_registry_libraries")) return;
+        string[3] memory names = ["UARegistryCoreLib", "UARegistryAuxLib", "UARegistryRegLib"];
+        for (uint256 i; i < 3; ++i) {
+            string memory q = string.concat(".ua_registry_libraries.", names[i]);
+            if (!vm.keyExistsJson(book, q)) continue;
+            address l = vm.parseJsonAddress(book, string.concat(q, ".address"));
+            require(
+                l.code.length != 0 && l.codehash == vm.parseJsonBytes32(book, string.concat(q, ".codehash")),
+                string.concat("GEN_WALK_MISMATCH ", vm.toString(n), ": library ", names[i])
+            );
+        }
+    }
+
+    /// @notice The kinds of generation `g` over `pred`: `0x0142` with the home's `pqz-mlwe` verifier and cap wherever a
+    ///         predecessor enables it (M9; leaving it out, `gen_pqz: false`, is `GEN_PQZ_OMITTED` unless the owner's override),
+    ///         and each `gen_verify_only` entry `{kind, verifier, cap, keyForm}` (`_voKind`).
+    function _genKinds(string memory book, UARegistry pred, uint256 g, uint64 budget)
+        internal
+        returns (UARegistry.KindConfig[] memory k)
+    {
+        uint256 m;
+        while (vm.keyExistsJson(book, string.concat(".gen_verify_only[", vm.toString(m), "]"))) ++m;
+        k = new UARegistry.KindConfig[](m + 1);
+        uint256 n;
+        address ph = pred.kindHome(UAKinds.PQZ_MLWE);
+        if (ph != address(0)) {
+            if (!vm.keyExistsJson(book, ".gen_pqz") || vm.parseJsonBool(book, ".gen_pqz")) {
+                address v = UARegistry(ph).verifierOf(UAKinds.PQZ_MLWE);
+                require(
+                    v.code.length != 0 && PqzKeyVerifier(v).PRECOMPILE() == PqzSafety.PQZ
+                        && PqzKeyVerifier(v).PROOF_SYSTEM_ID() == PqzSafety.PQZL_ID,
+                    "gen registry: the home's pqz-mlwe verifier is not a PqzKeyVerifier on the PQZ precompile"
+                );
+                k[n++] =
+                    UARegistry.KindConfig(UAKinds.PQZ_MLWE, v, UARegistry(ph).verifyCap(UAKinds.PQZ_MLWE), false, 0);
+                vm.serializeBytes32("deploy", "pqz_key_verifier_codehash", v.codehash);
+            } else {
+                require(
+                    _ownerOverride(book, "GEN_PQZ_OMITTED"),
+                    "GEN_PQZ_OMITTED: a predecessor enables 0x0142; leaving it out needs the owner's override in the book (M9)"
+                );
+            }
+        }
+        string memory list = "{}"; // `verify_only`: an object keyed by the kind (forge's JSON writer keeps no array of objects)
+        for (uint256 i; i < m; ++i) {
+            string memory e = string.concat(".gen_verify_only[", vm.toString(i), "]");
+            UARegistry.KindConfig memory c = UARegistry.KindConfig(
+                uint16(vm.parseJsonUint(book, string.concat(e, ".kind"))),
+                vm.parseJsonAddress(book, string.concat(e, ".verifier")),
+                uint64(vm.parseJsonUint(book, string.concat(e, ".cap"))),
+                true,
+                uint8(vm.parseJsonUint(book, string.concat(e, ".keyForm")))
+            );
+            // P2-3 (spec §9, F4, R5): the differential probe ran for this verifier and found no difference
+            // (`script/pq_verifiers.py differential ... --book-out`, its `differential` field "ok" and the verifier's address)
+            require(
+                vm.keyExistsJson(book, string.concat(e, ".differential"))
+                    && keccak256(bytes(vm.parseJsonString(book, string.concat(e, ".differential"))))
+                        == keccak256(bytes(string.concat("ok ", vm.toString(c.verifier)))),
+                string.concat(
+                    "GEN_DIFFERENTIAL_MISSING ",
+                    vm.toString(abi.encodePacked(c.kind)),
+                    ": no differential probe ok for ",
+                    vm.toString(c.verifier)
+                )
+            );
+            _voKind(pred, c, g, budget, ph != address(0));
+            k[n++] = c;
+            string memory o = vm.toString(abi.encodePacked(c.kind));
+            vm.serializeUint(o, "kind", c.kind);
+            vm.serializeAddress(o, "verifier", c.verifier);
+            vm.serializeBytes32(o, "codehash", c.verifier.codehash);
+            vm.serializeUint(o, "cap", c.cap);
+            vm.serializeUint(o, "keyForm", c.keyForm);
+            list = vm.serializeString("verify_only", o, vm.serializeAddress(o, "precompile", _precompileOf(c.verifier)));
+        }
+        vm.serializeString("deploy", "verify_only", list);
+        assembly ("memory-safe") {
+            mstore(k, n)
+        }
+    }
+
+    /// @notice One verify-only kind (§2, §9): an eligible ML-DSA kind (§7) a predecessor enables; `GEN_KEY_FORM_IMPOSSIBLE <kind>`
+    ///         for key form 1 where the home's verifier has a precompile (N8); `GEN_VERIFY_ONLY_NO_PRECOMPILE <kind>` for a verifier
+    ///         whose probe found none (N16, P11); the verifier's `KIND` and `KEY_FORM`; the 75 % rule; where `0x0142` is on the
+    ///         line, `GEN_PQZ_DEBIT_BOUND <kind>` (M10 d, `UARegistryRegLib.voDebitFits`, the registry constructor's own check).
+    function _voKind(UARegistry pred, UARegistry.KindConfig memory c, uint256 g, uint64 budget, bool pqzLine)
+        internal
+        view
+    {
+        string memory kh = vm.toString(abi.encodePacked(c.kind));
+        require(
+            c.kind == UAKinds.MLDSA44 || c.kind == UAKinds.MLDSA65 || c.kind == UAKinds.MLDSA87,
+            string.concat("gen registry: kind ", kh, " is not eligible verify-only (ML-DSA only, spec section 7)")
+        );
+        address home = pred.kindHome(c.kind);
+        require(home != address(0), string.concat("gen registry: no predecessor enables kind ", kh));
+        require(
+            c.keyForm == 0 || (c.keyForm == 1 && _precompileOf(UARegistry(home).verifierOf(c.kind)) == address(0)),
+            string.concat("GEN_KEY_FORM_IMPOSSIBLE ", kh, ": the home's verifier has a precompile, no cache can exist")
+        );
+        require(
+            c.verifier.code.length != 0 && _precompileOf(c.verifier) != address(0),
+            string.concat("GEN_VERIFY_ONLY_NO_PRECOMPILE ", kh, ": the verifier's probe found no precompile")
+        );
+        require(
+            MldsaVerifier(c.verifier).KIND() == c.kind && MldsaVerifyOnly(c.verifier).KEY_FORM() == c.keyForm,
+            string.concat("gen registry: the verify-only verifier of ", kh, " has another kind or key form")
+        );
+        uint256 callGas = MldsaVerifyOnly(c.verifier).CALL_GAS();
+        // Task 21 review P2-3: the verifier is this build's CREATE2 of its kind over this chain's candidates, pq_kat.json's valid
+        // row and every edge row (the flipped row, each mutation row): what the chain's precompile was probed on is bound
+        require(
+            c.verifier == _voCreate2(c.kind, c.keyForm, callGas),
+            string.concat(
+                "GEN_VERIFY_ONLY_UNBOUND ",
+                kh,
+                ": not this build's CREATE2 of MldsaVerifyOnly over the candidates and pq_kat.json's rows (DEPLOY_SALT)"
+            )
+        );
+        // P2-4: the cap covers the precompile call and the alive-check at CALL_GAS each and the verifier's own work, so a
+        // precompile that burns its gas cannot starve the alive-check into a caller-forced fallback (M7)
+        require(
+            c.cap >= 2 * callGas + VO_VERIFIER_OVERHEAD,
+            string.concat(
+                "GEN_VERIFY_ONLY_CAP ",
+                kh,
+                ": cap ",
+                vm.toString(uint256(c.cap)),
+                " below 2 x CALL_GAS ",
+                vm.toString(callGas),
+                " + ",
+                vm.toString(VO_VERIFIER_OVERHEAD)
+            )
+        );
+        require(
+            _pqKindFits(c.cap, budget), string.concat("gen registry: the cap of ", kh, " is over 75 % of the budget")
+        );
+        if (!pqzLine) return;
+        uint256 hc = UARegistry(home).verifyCap(c.kind);
+        require(
+            UARegistryRegLib.voDebitFits(c.kind, c.cap, hc, g - UARegistry(home).generation(), txGasCap),
+            string.concat(
+                "GEN_PQZ_DEBIT_BOUND ",
+                kh,
+                ": cap ",
+                vm.toString(uint256(c.cap)),
+                " + the home's ",
+                vm.toString(hc),
+                " + PQZ_DEBIT_MIN_GAS over txGasCap ",
+                vm.toString(uint256(txGasCap))
+            )
+        );
+    }
+
+    /// @notice The verify-only verifier's own work beside its two limited calls (lengths, the message hash, the valid row read back,
+    ///         the encoding), `test/ua/MlDsaVerifyOnly.t.sol` `OVERHEAD` (its worst input measured 134,921 within 2 x 100,000 + this).
+    uint256 internal constant VO_VERIFIER_OVERHEAD = 40_000;
+
+    /// @notice The init code of `MldsaVerifyOnly<x>` for `kind` (key form `form`, precompile limit `callGas`) as `pq_verifiers.py
+    ///         verify-only` builds it: this chain's candidates (`_mldsaCandidates`), pq_kat.json's EIP-8355 valid row, the flipped
+    ///         row then every mutation row (`_mldsaEdgeRows`).
+    function _voInit(uint16 kind, uint8 form, uint256 callGas) internal view returns (bytes memory) {
+        uint256 i = kind == UAKinds.MLDSA44 ? 0 : kind == UAKinds.MLDSA65 ? 1 : 2;
+        (bytes memory valid, bytes memory flipped) = _mldsaProbe(i);
+        bytes[] memory edge = _mldsaEdgeRows(i);
+        bytes[] memory rows = new bytes[](edge.length + 1);
+        rows[0] = flipped;
+        for (uint256 r; r < edge.length; ++r) {
+            rows[r + 1] = edge[r];
+        }
+        bytes memory code = i == 0
+            ? type(MldsaVerifyOnly44).creationCode
+            : i == 1 ? type(MldsaVerifyOnly65).creationCode : type(MldsaVerifyOnly87).creationCode;
+        return abi.encodePacked(code, abi.encode(_mldsaCandidates(i), valid, rows, form, callGas));
+    }
+
+    function _voCreate2(uint16 kind, uint8 form, uint256 callGas) internal view returns (address) {
+        return vm.computeCreate2Address(salt, keccak256(_voInit(kind, form, callGas)), CREATE2_FACTORY);
+    }
+
+    /// @notice A verifier's `PRECOMPILE()`, 0 when it has none or does not answer one word.
+    function _precompileOf(address v) internal view returns (address) {
+        (bool ok, bytes memory r) = v.staticcall(abi.encodeWithSignature("PRECOMPILE()"));
+        return ok && r.length == 32 ? abi.decode(r, (address)) : address(0);
     }
 
     /// @notice `bls12381-multi`'s line in the deploy book (spec 2026-11-19-bls12381-multi §7, §10; ARCH-POS-18): its path where the
@@ -1292,11 +1677,19 @@ abstract contract DeployBase is DeployBook {
 
     /// @notice The gates of the registry's release and of its three libraries', each its own transaction (CREATE2 of the
     ///         registry's init code with these arguments; each library's creation code).
-    function _requireRegistryGas(bool isHedera, uint64 budget, address ska, UARegistry.KindConfig[] memory k) internal {
+    function _requireRegistryGas(
+        address pred,
+        bool isHedera,
+        uint64 budget,
+        address ska,
+        UARegistry.KindConfig[] memory k
+    ) internal {
         _requireReleaseGas(
             "UARegistry",
             address(0),
-            abi.encodePacked(type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, ska, true, k))
+            abi.encodePacked(
+                type(UARegistry).creationCode, abi.encode(uid, pred, isHedera, budget, txGasCap, ska, true, k)
+            )
         );
         _requireReleaseGas("UARegistryCoreLib", address(0), vm.getCode("UARegistryCoreLib.sol:UARegistryCoreLib"));
         _requireReleaseGas("UARegistryAuxLib", address(0), vm.getCode("UARegistryAuxLib.sol:UARegistryAuxLib"));
@@ -1342,7 +1735,10 @@ abstract contract DeployBase is DeployBook {
         (bytes memory v44, bytes memory b44) = _mldsaProbe(0);
         (bytes memory v65, bytes memory b65) = _mldsaProbe(1);
         (bytes memory v87, bytes memory b87) = _mldsaProbe(2);
-        return abi.encodePacked(type(PqPrecompileProbe).creationCode, abi.encode(v44, b44, v65, b65, v87, b87));
+        return
+            abi.encodePacked(
+                type(PqPrecompileProbe).creationCode, abi.encode(v44, b44, v65, b65, v87, b87, _draftProbe())
+            );
     }
 
     /// @notice The `pq_kat.json` EIP-8355 probe inputs of ML-DSA kind `i` (0, 1, 2 = 44, 65, 87): valid ⇒ the word 1, flipped ⇒ 0.
@@ -1353,13 +1749,43 @@ abstract contract DeployBase is DeployBook {
         invalid = vm.parseJsonBytes(kat, string.concat(k, ".eip8355_probe_invalid"));
     }
 
+    /// @notice The `pq_kat.json` mutation rows of ML-DSA kind `i` as EIP-8355 inputs `pk ‖ sig ‖ pq_msg` (each invalid).
+    function _mldsaEdgeRows(uint256 i) internal view returns (bytes[] memory rows) {
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        string memory k = string.concat(".kinds.mldsa", ["44", "65", "87"][i], ".mutations");
+        uint256 n;
+        while (vm.keyExistsJson(kat, string.concat(k, "[", vm.toString(n), "]"))) ++n;
+        rows = new bytes[](n);
+        bytes32 t = PqUA.tag([UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87][i]);
+        for (uint256 r; r < n; ++r) {
+            string memory m = string.concat(k, "[", vm.toString(r), "]");
+            rows[r] = abi.encodePacked(
+                vm.parseJsonBytes(kat, string.concat(m, ".pk")),
+                vm.parseJsonBytes(kat, string.concat(m, ".sig")),
+                PqUA.pqMessage(t, vm.parseJsonBytes32(kat, string.concat(m, ".ua_msg")))
+            );
+        }
+    }
+
     /// @notice CTR-UA-23 / CTR-UA-39: the first candidate (`_mldsaCandidates`) that answers ML-DSA kind `i`'s probe exactly in
     ///         this run's EVM, with the probe inputs the verifier checks again; else 0 (forge's EVM: none, unless a test mocks one).
+    ///         A Draft candidate (`0x12` + i) is taken only with the fuller probe of CTR-UA-69: the valid row, the flipped row and
+    ///         every `pq_kat.json` mutation row as its EIP-8355 input (`_mldsaEdgeRows`), each answered exactly.
     function _mldsaPrecompile(uint256 i) internal view returns (address p, bytes memory valid, bytes memory invalid) {
         (valid, invalid) = _mldsaProbe(i);
-        address[2] memory c = _mldsaCandidates(i);
-        if (PqUA.probe(c[0], valid, invalid)) p = c[0];
-        else if (PqUA.probe(c[1], valid, invalid)) p = c[1];
+        address[] memory c = _mldsaCandidates(i);
+        for (uint256 j; j < c.length && p == address(0); ++j) {
+            if (!PqUA.probe(c[j], valid, invalid)) continue;
+            if (c[j] == address(uint160(0x12 + i))) {
+                bytes[] memory rows = _mldsaEdgeRows(i);
+                bool all = true;
+                for (uint256 r; r < rows.length && all; ++r) {
+                    all = PqUA.probe(c[j], valid, rows[r]);
+                }
+                if (!all) continue;
+            }
+            p = c[j];
+        }
     }
 
     /// @notice The chain's own verdict on its PQ precompiles (`PqPrecompileProbe`: the `PQZ` self-test; each ML-DSA kind's KAT

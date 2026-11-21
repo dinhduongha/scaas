@@ -248,6 +248,8 @@ pub(crate) fn figure(
         attached: super::gas::attached_kind(extra, message),
         // PR A review, finding 4: a third party's derived holder debited
         holder: super::gas::holder_derived(key.0, message),
+        // CTR-UA-65: the verify rows of the registry the operation's contract binds (the profile's)
+        registry: profile.registry.as_deref(),
     };
     super::gas::quoted(
         &profile.gas,
@@ -298,6 +300,7 @@ pub(crate) async fn signed_quote(
         &c.profile.gas_opt_in,
         &sdk.gas_tables,
         signer,
+        c.profile.registry.as_deref(),
         gas_from.as_ref(),
         unsigned,
     );

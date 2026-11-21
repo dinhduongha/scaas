@@ -87,6 +87,6 @@ abstract contract SdkGasRouterFix is SdkGasOps, GovRouterFixture {
 /// `CAP_PQZ_MLWE` 4,500,000.
 function _sgPqzKeep(address mlv, address pqv) pure returns (UARegistry.KindConfig[] memory k) {
     k = new UARegistry.KindConfig[](2);
-    k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, mlv, 200_000);
-    k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, pqv, 4_500_000);
+    k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, mlv, 200_000, false, 0);
+    k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, pqv, 4_500_000, false, 0);
 }

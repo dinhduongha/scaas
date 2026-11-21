@@ -427,6 +427,59 @@ pub fn is_member(kind: u16, hedera_native: bool) -> bool {
         || (hedera_native && kind == 0x0003)
 }
 
+/// Why a registration of `kind` does not belong on a registry ([`registration_target_ok`]; CTR-UA-65).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetError {
+    /// `UAVerifyOnly`: this registry carries `kind` verify-only; the registration belongs at `kind_home`, the registry of the line
+    /// where the kind is registrable.
+    VerifyOnly { kind: u16, kind_home: [u8; 20] },
+    /// `UAKindNotOnLine`: `kindHome(kind)` is zero: no generation of the registry's line enables `kind`.
+    KindNotOnLine { kind: u16 },
+}
+
+impl TargetError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            TargetError::VerifyOnly { .. } => "UAVerifyOnly",
+            TargetError::KindNotOnLine { .. } => "UAKindNotOnLine",
+        }
+    }
+}
+
+impl core::fmt::Display for TargetError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            TargetError::VerifyOnly { kind, kind_home } => {
+                write!(f, "UAVerifyOnly: kind 0x{kind:04x} registers at 0x")?;
+                kind_home.iter().try_for_each(|b| write!(f, "{b:02x}"))
+            }
+            TargetError::KindNotOnLine { kind } => write!(f, "UAKindNotOnLine: kind 0x{kind:04x}"),
+        }
+    }
+}
+
+impl std::error::Error for TargetError {}
+
+/// CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of `kind` is sent to
+/// `registry` only where `kind_home == registry`, `kind_home` the `kindHome(kind)` the caller read from `registry` on chain (no RPC
+/// here, owner C6). A different non-zero home is [`TargetError::VerifyOnly`], a zero home [`TargetError::KindNotOnLine`].
+pub fn registration_target_ok(
+    kind: u16,
+    registry: &[u8; 20],
+    kind_home: &[u8; 20],
+) -> core::result::Result<(), TargetError> {
+    if *kind_home == [0; 20] {
+        Err(TargetError::KindNotOnLine { kind })
+    } else if kind_home != registry {
+        Err(TargetError::VerifyOnly {
+            kind,
+            kind_home: *kind_home,
+        })
+    } else {
+        Ok(())
+    }
+}
+
 // tag / keyHash / message accept a kind or a scheme; id derivation and key-data validation accept kinds only
 fn tagged_kind(kind: u16) -> Result<&'static Kind> {
     SCHEMES

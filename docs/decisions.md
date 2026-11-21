@@ -363,6 +363,68 @@ Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck R-6 and recheck 2 P
 **Cost if wrong.** A software path is far more expensive in gas than a precompile and may not fit a transaction on some chains; that case comes back to the owner with numbers.
 **Source.** Owner 2026-11-19 (chat): "Lưu ý thêm chút là evm support tối đa, đến cả pqz dù chain chưa hỗ trợ native PQ. Các chain khác cũng phải hỗ trợ được như vậy." (EVM supports the maximum, PQZ included, even where the chain has no native PQ support; other chains must support it the same way), then "Duyệt, ghi vào tài liệu" (approved; write it into the docs); then "Trường hợp gas cao quá, phải tắt thì phải được xác nhận." (where gas is too high and the kind must be disabled, that needs confirmation).
 
+<a id="ARCH-POS-19"></a>
+### ARCH-POS-19 — Avalanche and Polkadot EVMs join; Arweave stores encrypted files
+- old: — · status: current · owner: yes · date: 2026-11-21 · normative: decisions.md#ARCH-POS-19 · superseded-by: —
+
+**Rule.** (1) Avalanche's EVM (C-Chain and Fuji; Avalanche L1s studied) and Polkadot's EVM (Polkadot Hub's pallet-revive and the
+parachain EVMs) become chain profiles under the EVM family's rules: one rule on every chain, the deploy condition per contract
+(owner 2026-11-09), Glamsterdam before a public chain is deployed ([NET-EVM-06](networks/evm.md#NET-EVM-06)), maximal support
+([ARCH-POS-18](#ARCH-POS-18)). (2) Arweave joins as a store of ciphertext only: PqChat messages and images, and the files embedded
+in a message or a vault item, encrypted on the client and pushed to Arweave. (3) `scaas-rpc` gains the Avalanche and Polkadot
+profiles and an Arweave reader and uploader under CLI-RPC-01..11. (4) Attachments join the `pqchat-core` round (O9 (b),
+[CLI-PQC-02](clients/pqchat-core.md#CLI-PQC-02) on branch `pqchat-core-build`).
+**Status.** PLANNED. Research first (the note on the Source line: facts per chain, the ANS-104 format, bundlers, gateways, the `ua-rs` and `scaas-rpc` changes, open questions Q1–Q8); then specs
+and plans. Its main finding: no SCaaS contract set deploys on Avalanche C-Chain, Polkadot Hub or Moonbeam today, because each
+caps runtime code at 24,576 B and none has the Amsterdam fork.
+**Why.** More EVM chains for customers on those ecosystems; a permanent store for encrypted files, which never go on chain
+(UA-7 P28: 1 MiB is about 1.6 G state gas).
+**Cost if wrong.** Profiles and a store module that wait for chain forks; Arweave uploads are public forever with their size, time
+and upload key, so the metadata rules of the research note (rotating upload keys, padding, the payer path) must hold.
+**Source.** Research [research/2026-11-21-avax-polkadot-arweave.md](research/2026-11-21-avax-polkadot-arweave.md). Owner 2026-11-21 (chat, translated from Vietnamese): "I have decided to also support the EVMs of AVAX and Polkadot.
+Message and image storage may also use Arweave."; "scaas-rpc probably needs to add EVM AVAX and Polkadot, and Arweave."; "Note that
+image files and data embedded in a message or in the vault may be encrypted and pushed to Arweave."; and, on attachments in the
+`pqchat-core` round, "Put it in." TODO 8i.
+
+Change (owner 2026-11-21, answers to the note's open questions; owner: yes; status: PLANNED): **Q1** wait, as recommended: a draft Avalanche profile and its `scaas-rpc` part are written now, contracts deploy when C-Chain has the Amsterdam fork (a contract within the chain's code size deploys earlier, per contract), and, the owner added, Avalanche may serve now as a store path for messages and text, as HCS does on Hedera (a store contract within the chain's limits in PqChat's store list). **Q2** Polkadot Hub first, Moonbeam second. **Q4** UA-7's `url` gains `ar://<id>`. **Q5** uploads paid by an operator payer (credit sharing), small items on the free tier; the client never holds operator credentials, and the payer link between uploads is a stated metadata cost. Controller calls (owner: no): **Q3** the software BLS12-381 path is built and measured, no kind disabled ([ARCH-POS-18](#ARCH-POS-18)); **Q6** size buckets in powers of two; **Q7** Turbo probed with both ed25519 signature types before one is chosen; **Q8** NET-ALL-25 reworded to the `(chainId, chain_uid)` pair.
+
+<a id="ARCH-POS-20"></a>
+### ARCH-POS-20 — Controller calls of the Avalanche, Polkadot and Arweave spec
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: decisions.md#ARCH-POS-20 · superseded-by: —
+
+**Rule.** The owner may override any. Each is applied where named; the spec's section in brackets.
+- **C1** A new standalone contract `PqChatStore` serves the Avalanche store path; `PqChat` is not reused, since `PqChat` (29,111 B) and `OpenFactory` (34,999 B) exceed 24,576 B and no split store exists ([CTR-CHAT-22](contracts/pqchat.md#CTR-CHAT-22); §5.1).
+- **C2** Its payloads stay in contract state (SSTORE2), never only in events (CTR-CHAT-05; cost about 8 times an event-only store) (§5.2).
+- **C3** Its blob bound is the constant 24,576 B (EIP-170), not a chain value: one bytecode and one address on every chain; `env` at most 24,416 B (§5.3).
+- **C4** The store-list entry `{"kind": "chainstore", "chainId", "chainUid", "contract"}`; a client trusts the contract by its runtime code hash pinned in release data, after the chain pair check (§5.5; UA-7 spec §4.2 Change).
+- **C5** (revised, review F7, F8) Before a chain's Amsterdam fork a contract deploys only when its `amsterdam` build fits the chain's caps, passes an allow-list opcode scan that walks immediates by the compile target's table with code and data boundaries from the compiler, passes its tests executed at the chain's fork on the artifact's bytes with a control that must fail, and finds every precompile it calls on the chain; a testnet round trip before a mainnet deploy ([NET-EVM-18](networks/evm.md#NET-EVM-18); §4.5).
+- **C6** Avalanche lanes and readers: `tag finalized`; logs at or below `finalized`; no receipt yet is `Pending`; the gas limit is the estimate with the lane's margin; at most 16 in flight per key ([NET-EVM-16](networks/evm.md#NET-EVM-16); §4.3, §4.4).
+- **C7** (revised, review F10) Polkadot Hub is `enabled` only after the probes of every profile (C19) and the weight measurement; its gas cap is a profile value from that measurement; the storage deposit is part of the fee ([NET-EVM-17](networks/evm.md#NET-EVM-17); §6).
+- **C8** (revised, review F2, F13) The Arweave upload key is derived per file inside the one `ua-rs` call that seals the file, `HKDF-SHA-256(ikm = app root key ‖ file key, info = "scaas/arweave/v1/upload" ‖ type ‖ ctSha256)` with `ctSha256` computed there, never passed by a caller; its `UploadSign` handle signs only the item `ua-rs` built over that object, so one key signs one byte string; for ed25519 (default) or secp256k1; never a UA or wallet key ([CLI-UAL-64](clients/ua-libraries.md#CLI-UAL-64); §7.3).
+- **C9** A data item has no target, no anchor and no tags (one fixed `Content-Type` tag only if the Turbo probe needs one) (CLI-UAL-64; §7.2).
+- **C10** (revised, review F1, F20) The padding is inside the AEAD: the plaintext `size (8 B) ‖ file ‖ zero pad` up to the bucket, the object exactly bucket + 16 B, `ctSha256` its SHA-256; buckets from 2^16 B to the platform's cap, computed in integers; the reader checks the frame and the zero pad after decryption ([CLI-UAL-65](clients/ua-libraries.md#CLI-UAL-65); §7.4; UA-7 §6.4.1 Change).
+- **C11** An upload posts the same signed bytes to the bundler list; the client keeps them until settled (C16) and re-posts the same bytes on the schedule of C20, never re-signed and never under a new key ([CLI-RPC-14](clients/scaas-rpc.md#CLI-RPC-14), [CLI-SDK-21](clients/scaas-sdk.md#CLI-SDK-21); §7.8, §7.11).
+- **C12** Every Arweave read of an attachment feeds a decryption (CLI-RPC-06); its exact length is the bucket + 16 (C17); a gateway whose bytes fail the caller's check is that gateway's failure ([CLI-RPC-13](clients/scaas-rpc.md#CLI-RPC-13); §7.7).
+- **C13** (revised, review F16) The free tier carries only objects in the 2^16-B bucket, best effort (10 MiB per IP for life); anything larger, or a free-tier refusal, goes to the operator payer; until the payer runs, larger objects serve tests only (CLI-SDK-21; §7.9).
+- **C14** PqVault `file` items use the same calls, with PqVault's app root key; an item naming an `ar://` object is written only after one gateway read of it passed (§7.10).
+- **C15** (review F3) `open_file` checks the tag, the frame, the zero pad, `size` and the plaintext `sha256` inside `ua-rs` before any plaintext leaves it; a cache is keyed by the plaintext `sha256`, never by the id or `ctSha256` alone; no separate key commitment, since the file key is random and arrives in a signed message (CLI-UAL-65, CLI-SDK-21; §7.6, §9).
+- **C16** (review F4) "Settled" = a strict majority of at least two gateways of different operators (never discovered ones) report the item's block, that block is at least `depth` blocks below the tip (default 50), and one data read returns the kept object's bytes; until then the client keeps its copy (CLI-RPC-13; §7.7, §7.11).
+- **C17** (review F5) Reads are bounded to the exact length bucket + 16, read incrementally: an announced other length refused unread, no `Range` request; an in-memory cap of 2^30 B on 64-bit targets and 2^27 B on wasm32, a signed `size` above it refused before any request (CLI-RPC-13, CLI-UAL-65; §7.4, §7.7).
+- **C18** (review F9) NET-ALL-25 reworded so it holds for `homeChain` records; the deploy gate refuses a kind that keeps such records (`PqChat`, `OpenFactory`, `PqVault`) on a profile whose `chain_uid` another profile shares, beside the clients' refusal of O3 ([NET-ALL-25](networks/README.md#NET-ALL-25); §8).
+- **C19** (review F10) One probe set H1–H8 for every EVM profile before `enabled`, never a rule for one chain kind ([NET-EVM-19](networks/evm.md#NET-EVM-19); §6.2).
+- **C20** (review F14) An unsettled item is re-posted, the same bytes, at 24 h, 72 h and 7 days, with a new payer approval of the same upload address on a payment refusal; then `UploadUnsettled` is shown and the user may re-post by hand; the one exception to [CLI-RPC-08](clients/scaas-rpc.md#CLI-RPC-08)'s "no automatic re-send" (CLI-SDK-21; §7.11).
+- **C21** (O1, O2 conditions) The payer is a node service, off by default, written in the node docs; requests anonymous behind a gateway credential with per-credential and per-IP budgets; each approval for one upload address and one object's price with a short expiry; no UA-signed fallback ([NODE-SPN-05](node/sponsorship.md#NODE-SPN-05); §7.9).
+- **C22** (review F11) NET-EVM-16, NET-EVM-17, CLI-UAL-65 and CLI-SDK-21 are `owner: no`: they hold controller calls; their owner parts are ARCH-POS-19 Q1, Q2, Q4 and Q5.
+- **C23** (review F18) `PqChatStore`'s release data pins the init-code hash, the runtime code hash and the address; a local build with another init-code hash is refused; the deployer, SSTORE2 and `eth_getCode` are probed on each chain before a profile lists the store ([CTR-CHAT-22](contracts/pqchat.md#CTR-CHAT-22); §5.3).
+**Status.** SPECIFIED, nothing built. UNAUDITED. Open points O1–O5 settled by the owner (the Change line below).
+**Why.** Each is the smallest choice that applies the owner's answers of ARCH-POS-19 (Q1, Q2, Q4, Q5) and the earlier controller calls (Q3, Q6, Q7, Q8) without a second compile target, a contract change to `PqChat` or a new signed format.
+**Cost if wrong.** A standalone store or a key derivation the owner would have shaped otherwise; nothing is deployed or built, so a change costs a spec edit.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §2; [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md).
+
+Change (owner 2026-11-21, "ok" on the spec's recommendations; owner: yes; status: SPECIFIED): the open points O1–O5 of `superpowers/specs/2026-11-21-avax-polkadot-arweave.md` §12 settled as recommended: **O1** the operator payer is a node service (a gateway route under the node's sponsorship policy, off by default, its payer key holding Turbo credits only, never a chain key or contract role); **O2** payer requests are anonymous, budgets per IP and per gateway credential, no UA signature (it would link a UA to its upload keys); **O3** `chainId` joins the `chain` store entry now and clients refuse a session homed on a chain whose `chain_uid` another profile shares, until a typed-record change carries the chain id; **O4** no Arweave message store kind now (large messages reach Arweave as `file` attachments), revisited after attachments run; **O5** Turbo alone, the single-vendor risk stated, the signed bytes kept for re-posting.
+
+Change (2026-11-21, the spec's revision 2 after Fable's review (P0 0, P1 1, P2 11, P3 9, info 5); controller calls; owner: no; status: SPECIFIED): C5, C7, C8, C10, C11, C12, C13 and C14 revised and C15–C23 added, as listed above; old → new: C8 `ikm` the app root key with a caller's `ctSha256` → the app root key and the file key, `ctSha256` computed in `ua-rs`; C10 zero padding outside the AEAD (`ct ‖ 0x00…`, a public reader learned the exact size) → padding inside it, the object bucket + 16 B; buckets up to 2^31 B → up to 2^30 B (2^27 B on wasm32); C5 a deny-list scan and `anvil` tests → an allow-list scan, execution at the chain's fork with a failing control, a precompile check; settlement "a block height shown" → C16. The spec §14 maps each finding to its fix.
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
@@ -700,6 +762,8 @@ Change: rows renamed (`SmartKeyAccount.mtxExecuteAsOwner`, `MandateWallet.mtxPay
 Change (2026-11-04, governance T17; owner ruling CTR-GOV-15 with its Change): a `GovernanceRouter` is the contract kind `gov_router` of the typed table, named by config `governance_routers` (no `chain_contract` row): its 38 typed `mtx<Op>` / `ua<Op>` entries are rows, relayed at fee 0, target one of the chain's routers (config `governance_routers`, a list; empty: every router job refused) with `chainUid()` equal to `chain.chain_uid`, on the direct path and on the inner target of `RelayFeeRouter.relayCall` and `uaRelayCall`; its generic entries are no rows, and no governance operation of a governed contract is a row of any kind (NODE-JOB-01, -20). `GrantTerms` is a nested struct; a lane stays no holder; no existing job's shape changes. Status: BUILT on branch `governance` (T15 `efa7f54f`).
 Change (2026-11-06 / 2026-11-07, groups 3f and 3h): the router's rows gain `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` (3f, NODE-JOB-22) and `mtxSetProofStore` (3h, CTR-GOV-22), at fee 0; the token's owner stubs `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier` are no rows. `typed.rs` holds 35 `gov_router` rows at `26586d2e` (the earlier count of 38 counted `mtx` and `ua` forms before the merge). Status: BUILT (T47 `75ddccc4`…`062133b6`, T63 `39fa296c`; test `router_pqz_verifier_rows`).
 
+Change (owner 2026-11-19, rulings R8 Q8, R10 of spec `2026-11-19-registry-verify-only-kinds.md`; status: BUILT, branch `multi-gen-verify` `d019be659`, `e6268a472`, UNAUDITED): the `UARegistry` row's `Rule::UaRegistry` is the set of the chain's `ua_registries` (every generation of the line, validated on chain at start; `ua_registry` is refused at load); a registration or `cacheExpandedKey` off `kindHome(kind)` is refused `UA_VERIFY_ONLY`, a key write off `holderOf(ua)` or a PQZ write off `pqzHomeOf(ua)` `UA_WRONG_GENERATION`, each naming its target ([CTR-UA-65](contracts/accounts.md#CTR-UA-65)); the writes for records of every generation are relayable.
+
 ### NODE-JOB-20 — Meta-tx `data` read through the implementation's selector allowlist
 - old: typed-signing:TS-D21 · status: current · owner: yes · date: 2026-10-08 · normative: node/job-api.md#NODE-JOB-20 · superseded-by: —
 
@@ -847,6 +911,8 @@ Change (2026-11-11, ua-mtx-fix-node, Fable re-check 2 S-1..S-3; controller call;
 Change (owner 2026-11-16, T21 review of `ua-rs-sign`, Fable part 5 findings 1, 2, 4, 5, ledger rows L60–L63; owner: yes, "ok, as proposed" on O7 (b), O8 (a) and batch G; status: BUILT on branch `t21-fix-node`, UNAUDITED): (1) before the first cache part the node checks the `register`'s `pop` off chain (`ua8::check_registration`), refused ⇒ `dead` as `UA_REGISTER_POP_REFUSED`, no part sent; the parts are the `call` share of the EVM spend breaker (`breaker.call_budget_pct`, default 50). (2) `dead` only for the part's own contract revert and the chain's limit (`TX_EXCEEDS_CHAIN_LIMIT`); a part over the lane's `max_gas_per_tx` or the RPC's gas cap puts the `register` back `queued` as `UA_KEY_NOT_CACHED: part <n> over this lane's cap`, as NODE-JOB-24 does; the RPC-cap answer, which Nethermind also gives for EIP-7825's 2^24, only 3 times in a row, then `dead` as `TX_EXCEEDS_CHAIN_LIMIT` (coordinator, same day, within O8's "dead for the chain's limit"). (3) Each part the lane sends has a journal row of its own in the node store (namespace `~node`, a `call` job), so a restart tracks and bumps its nonce. (4) A reverted ML-DSA `register` whose re-simulation cannot be read or now passes goes back to the queue, not `reverted`; the `register`'s status names only the parts sent and those in flight. Normative: [job-api.md#NODE-JOB-29](node/job-api.md#NODE-JOB-29), [submit-lanes.md#journal](node/submit-lanes.md#journal).
 
 Change (owner 2026-11-16, "ok, as proposed" on the second T21 fix wave; Codex part 5 findings 1 and 2, ledger rows L80, L81; owner: yes via O7 (b) and O8 (a); status: BUILT on branch `t21-fix2-node`, UNAUDITED): (1) a cache part's `~node` row is never `dead` while its transaction may still land: at start a row at or above `pending` keeps its hash and uid beside the gap-fill (a failed gap-fill send stays tracked and is bumped), a part stuck past its `register`'s deadline is gap-filled with its row live, and the row settles at a receipt: the part's `mined` / `reverted`, the gap-fill's (the lane's 0-value self-transfer) `dead`. (2) The `call` share counts the parts in flight: each call-share send (the lane's parts and a producer's named `cacheExpandedKey` job) is admitted at the one send boundary against the settled spend plus the in-flight parts' gas limit × max fee, held until the receipt and restored after a restart from the journal; replacements of a signed part are never stopped. Normative: [job-api.md#NODE-JOB-29](node/job-api.md#NODE-JOB-29), [submit-lanes.md#journal](node/submit-lanes.md#journal).
+
+Change (owner 2026-11-19, spec `2026-11-19-registry-verify-only-kinds.md` F9; status: BUILT, branch `multi-gen-verify` `d019be659`, UNAUDITED): through a later generation `UA_KEY_NOT_CACHED` names the holding generation (`holderOf(ua)`), where the parts belong, and the job stays `queued`; a part the holder refuses (`UAKeyCache`: its verifier has a precompile) is `dead` `UA_KEY_NOT_CACHEABLE` (unreachable by the constructor rule of [CTR-UA-58](contracts/accounts.md#CTR-UA-58); named anyway).
 
 ### NODE-JOB-80 — Node talks to ERP only over json/2
 - old: R6 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: ARCH-POS-05, NODE-JOB-06, INT-ERP-16, INT-ERP-18
@@ -1270,6 +1336,15 @@ It said: jWS verification on ring.
 **Why.** An on-chain pool lets sponsors fund relays without trusting one node; on the mesh only the fee path applies.
 **Cost if wrong.** Planned.
 **Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 199.
+
+### NODE-SPN-05 — The Arweave credit payer: a node service, off by default, anonymous requests behind a gateway credential
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: node/sponsorship.md#NODE-SPN-05 · superseded-by: —
+
+**Rule.** (Summary; normative [sponsorship.md](node/sponsorship.md#NODE-SPN-05).) Off unless the operator enables it; the payer key holds Turbo credits only (NODE-GEN-01 applied to credits); a request names the upload address, the signature type and the bucket, nothing that names a UA, and is served only behind a gateway credential within per-credential and per-IP budgets; an approval covers one object of that bucket for that address, with a short expiry; no UA-signed fallback.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner O1 (a) and O2 (a) of the Avalanche, Polkadot and Arweave spec (ARCH-POS-20's Change line, owner: yes); the conditions (off by default, the credential, one object per approval, no UA fallback) are controller call C21, after Fable's review: a per-IP budget alone makes the operator a free publisher of permanent data, and a UA signature links each UA to its upload keys.
+**Cost if wrong.** An operator paying for anyone's permanent uploads, or a log that links users to their files.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §7.9, §12; [ARCH-POS-20](#ARCH-POS-20).
 
 ## 10. Node — DEX venue
 
@@ -4687,6 +4762,8 @@ passes unchanged. On malformed calldata only, a `ZetherMulti` offset aimed at a 
 **Source.** `history/specs/2026-10-06-universal-account-design.md:117`
 Change (2026-10-19): controller proposal (owner may override) — **gen 1 starving behind gen 2 is `UAVerifyGas`, never a verdict** (the second code review, on-chain part (plan Task 5g, branch `rev2-chain-sol`; triage W-A…W-S in `pqz-core/research/code-review-2026-10-19/U-agy-chain.md`, row W-M; report `V2-claude-ua-account-wallet.md` V2-5). `_viaPredecessor` / `_zetherViaPredecessor` turned every gen-1 revert except a 4-byte `UAVerifyGas` into `false`, so gen 1 running out of gas before its own hold (its pre-hold work: record SLOAD, `abi.decode(auth)`, `uaOf` / `uaMessage` keccaks, `SSTORE2.read`) came back `UAUnauthorized`: fail-closed, but a relayer is told "bad signature" instead of "more gas" (T-AUTH-4). Now both read `g = gasleft()` before the call and also re-raise `UAVerifyGas` for a revert with no data while `gasleft() < g / 63` (gen 1 used up all it was given, i.e. ran out of gas; any other gen-1 revert returns its unused gas and stays a failed check). Deviation from the triage's wording ("a minimum-gas guard before the hand-off"): a constant guard must cover gen 1's pre-hold work, which grows with the caller's `auth` (an `msig` with PQ member signatures), so no constant is sound; the check after the call needs none. Edge: an `auth` whose decoding alone exceeds the gas supplied reads `UAVerifyGas` too (still fail-closed). Tests: `test_W_M_gen1OutOfGas_isUAVerifyGas_aCheapRevertIsAVerdict` (a gen 1 that burns all its gas behind gen 2: `UAVerifyGas` on both hand-offs, `UAUnauthorized` on the old code; a gen 1 that reverts at once with no data stays `UAUnauthorized`); `test_W_M_gen1StarvedBeforeItsHold_isUAVerifyGas` (a 5 k–300 k gas sweep with the real p256 path never yields `UAUnauthorized`; it passes on the old code too: there the gas gen 2 keeps is too little to finish any verdict, so the misclassification needs a gen 1 whose pre-hold work is large, e.g. a big `auth`). Deployed bytecode: `UARegistry` (only a gen 2 takes the path; none is deployed). Status: **done** (`17c72d62`).
 
+Change (owner 2026-11-19, ruling V1 of spec `2026-11-19-registry-verify-only-kinds.md`; status: BUILT on EVM, branch `multi-gen-verify`, UNAUDITED): a later generation may carry a kind a predecessor enables **verify-only** ([CTR-UA-58](contracts/accounts.md#CTR-UA-58)): verified with its own verifier, not supported for registration; the kind table stays fixed.
+
 ### CTR-UA-06 — Native kinds unregistered; derived kinds register first
 - old: R294 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-06 · superseded-by: —
 
@@ -4803,6 +4880,8 @@ Change (2026-11-04, owner, CTR-UA-40 Q2): **`fndsa1024` (0x0135) is a holder** o
 Change (2026-11-06, owner ruling R2; group 3g, CTR-UA-42; and owner ruling R3 of group 3f, CTR-PQZ-30): **version 0 is write-once without exception, and the token view names the version.** Old (owner 2026-10-30, ruling R-cross-set): a stored unproven key of another set's length could be replaced once by `setPqzKey`. New: a second version 0 reverts `UAPqzKeySet` whatever its set; a new key is a version v ≥ 1 (CTR-UA-42); `pqzKeyOf(ua)` returns `(version, ptr, pqzPopHash, proven)` of the current version. "PQZ tokens accept only proven keys" now reads "`PRECOMPILE` PQZ tokens"; an `OFFCHAIN` token accepts an unproven key of this set's length, which its verifier checks off chain (CTR-PQZ-30). Status: BUILT on EVM (T51 `3f80f072`, T54; 3f T44 + T45 `2cce490d`).
 
 Change (2026-11-15, owner, MD-13 / Fable F-1; status: BUILT on branch `3zh-mldsa`, UNAUDITED): the PQZ debit bound of `_pqzHolder` (CTR-PQZ-12's review2 C0-5 bound, which covered `msig` holders only) applies to **every** holder kind: a single key counts its kind's cap (`cfg >> 160`, gen 1's for a record gen 1 holds) plus the verifier call's hold and its signature's calldata, `UAPqzHolder` where `w + w / 63 + margin + PQZ_DEBIT_MIN_GAS + 16 × bytes > 2^24` (at `register`, `setPqzKey`, `setPqzScopedKey`), so a kind that can receive PQZ credits can spend them. Effect: a cached `mldsa87` (8,850,000) is a PQZ holder at `n2048-kmax1024` (16.37 M) and `n2304-kmax4096` (16.59 M), not at `n2560-kmax16384` (16.80 M) or `n2816-kmax65536` (17.04 M); every other holder kind fits every set. Re-measured in 3zh-core group 2 (2026-11-15, after `debit_min_gas` moved, CTR-PQZ-12's Change of that day): 16.44 M / 15.15 M / 16.87 M / 17.11 M, the same verdict per set; at `n2304-kmax4096` the `msig` `{fndsa512 × 4}, t = 4` (≈ 10.2 M) now fits (room ≈ 10.70 M), the one verdict that changes. Owner ruling 2026-11-15 (relayed by the controller: "ok, as proposed"): the rule is unchanged; the negative test's second fixture moves to a holder over the bound at every set (2-of-2 `fndsa1024` at `DeployBase`'s 5,250,000: bound 18,255,960 / 16,965,960 / 18,684,960 / 18,924,960 at the four sets; `UAPqzHolder` asserted as before), and a positive per-set test states the boundary (`{fndsa512 × 4}, t = 4` a PQZ holder at `n2304-kmax4096`, `UAPqzHolder` at the other three). Why: raising the rule to 75 % for a pure-Solidity 8.85 M kind would otherwise let a holder receive credits it can never debit within 2^24.
+
+Change (owner 2026-11-19, rulings W2, P7, P8, M9; status: BUILT on EVM, branch `multi-gen-verify`, UNAUDITED): rulings A5-I1 and A6-I1 of Change (d) above are replaced for a line of more than two generations by [CTR-UA-71](contracts/accounts.md#CTR-UA-71): a record's PQZ attachment lives at its PQZ home (the oldest generation from its holder to the reader that enables `0x0142`), a later generation may enable `0x0142` again for its own records, and `UAKindDisabled(0x0142)` stays only for a generation without `0x0142` behind one with it. Today's two-generation behaviour is its case `k ≤ 2`.
 
 ### CTR-UA-17 — Verify through registry; large keys stored once
 - old: R306 · status: current · owner: no · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-17 · superseded-by: —
@@ -5126,6 +5205,283 @@ UNAUDITED.
 **Source.** Controller proposal (spec §5.4), N5 and N6 of the revision-3 fix-check; owner 2026-11-19, "Approved the 7 choices":
 choice 6, one function `aggregate(…, surplus: bool)`, minimal when false.
 
+### CTR-UA-58 — A later generation may carry a predecessor's single-key kind verify-only, declared in the kind word
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-58 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-58).) A later `UARegistry` may carry verify-only a single-key kind a predecessor enables (eligible with its edge-class list and vectors; ML-DSA in this build; never `msig`, `0x0142`, `0x0121`), declared by bits 224 (`verifyOnly`) and 225 (`keyForm`) of the kind word, every reader masking; the constructor requires `verifyOnly ⇔ predecessor.kindHome(kind) != 0`, `KEY_FORM()` equal to bit 225, form 1 only where the home's verifier has no precompile, `PRECOMPILE() ≠ 0`, the PQZ debit check where `0x0142` is on the line; `txGasCap` an immutable constructor argument, `verifyBudget ≤ txGasCap < 2^64`.
+**Status.** BUILT on EVM (branch `multi-gen-verify`): `d2f6b6c32` (`txGasCap`), `9ebf6931c` (flags, constructor rules), `de05b0789` (`MldsaVerifyOnly44` / `65` / `87`), `0812a0467` (the PQZ debit check). UNAUDITED.
+**Why.** Ethereum has no PQ precompile today; without this a gen-1 UA of a PQ kind could never use one accepted later, only a new kind version (new id, re-registration, assets moved). No admin key and no mutable table: a later generation is a new immutable deployment and each token release chooses its registry.
+**Cost if wrong.** A verify-only verifier that accepts a forgery authorizes as any holder of that kind in every consumer bound to its generation (no registry state changes: CTR-UA-59); a laxer precompile after a client upgrade is the same row (CTR-UA-64's re-run probe).
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58).
+
+**Owner rulings of the round (spec §0, verbatim).**
+
+**0.1 Option (b) (2026-11-19, revision 1)**
+
+The question: Ethereum has no PQ precompile today (EIP-8051, 8052 and 8355 are drafts). If one is accepted later, how does
+SCaaS use it? Today a verifier's path is fixed at deploy by a probe, the verifier is immutable, and a generation 2 may enable
+only kinds whose kind **and** keyHash group gen 1 does not enable ([accounts.md §1.8](contracts/accounts.md#registry)
+"Generations", T-REG-4). So a gen-1 UA of a PQ kind could never use a later precompile; only a new kind version (a new UA
+id, re-registration, assets moved) would.
+
+The owner chose option **(b)**: "Do option b, write the spec, then a Fable review." Option (b): **a gen-2 registry may
+re-enable a kind that gen 1 enables, for verification only**, with its own (new) verifier, e.g. one that calls a precompile
+that did not exist when gen 1 was deployed. Registration, the record, the key pointer, the keyHash group and every key write
+stay with gen 1 (no second record, no second owner of the group, no re-registration: the UA id is unchanged). Token
+implementations released later (factory catalogue) that point to gen 2 verify gen-1 UAs of that kind through gen 2's
+verifier; existing tokens keep gen 1. No admin key, no mutable verifier table: gen 2 is a new immutable deployment, and each
+token release chooses its registry.
+
+**0.2 Rulings on the review of revision 1 (owner 2026-11-19)**
+
+The owner on the review's positions and the spec's proposals: **"approved all as proposed"**; on the probe of Draft
+addresses: **"the middle way, as proposed"**; on "only two generations" against "N generations": **"Choose b, put it in
+revision 2"**; on the depth cap: **"Accept 16 generations"**.
+
+| # | Topic | Ruling | Where |
+|---|---|---|---|
+| V1 | Verify-only kinds | a later generation may carry a kind a predecessor enables as verify-only, with its own verifier | **owner** (b); §2 |
+| V2 | Writes | registration, record, key pointer, keyHash group, every key write stay with the generation that holds them | **owner** (b); §3 |
+| V3 | Who uses it | releases that bind the later generation; existing tokens keep theirs | **owner** (b); §10 |
+| V4 | Mutability | none: a new immutable deployment, no admin, no table | **owner** (b); [CTR-UA-15](contracts/accounts.md#CTR-UA-15) |
+| R1 (Q11, F1) | How a release binds gen 2 | relax "one registry per factory": the factory's env checks accept the router's registry **or** a registry whose `predecessor()` is the router's registry, same `chainUid`, `generation() == 2`, checked in code, no admin key; the statement of [admin-not-owner §13.4](superpowers/specs/2026-11-10-admin-not-owner.md) changes on landing (§15). Generalised by R10 to a bounded walk of the predecessor chain | **owner**; §10 |
+| R2 (F2) | Who authenticates writes | one rule: **every write is authenticated by the generation that holds the record**: a gen-1 record's `setPqzKey` / `setPqzScopedKey` and any other write go to gen 1; a gen-1 `msig` holder's derived members `via(_pred())`; §13 corrected. Revision 3: the target is `holderOf` (W1, W2 below), and the rule reads "every signature-authenticated write" (N14) | **owner**; §3, §4 |
+| R3 (F5) | Key form | an explicit key-form bit per verify-only kind, checked in the constructor; only key forms the verifier can **derive per call** within its gas cap are allowed; no cache in gen 2 ("gen 2 writes nothing"); a form that cannot be derived per call makes the kind ineligible; the deploy refuses the impossible combination by name. Revision 3: reading the holder's existing ML-DSA cache (key form `1`) is allowed too (P1, §0.3) | **owner**; §2, §6 |
+| R4 (Q10, F6) | Fallback | when gen 2's verifier gives **no answer** (no code at the precompile, revert, out of gas), gen 2 falls back to gen 1's verdict; **never** when it answers 0 (invalid). A relayer forcing out-of-gas only gains gen 1's (sound) path at more gas: stated and bounded | **owner**; §5 |
+| R5 (Q7, F15) | Strictness | gen 2 is **never laxer** than gen 1; a difference found by the equivalence tests or the deploy probe goes to the owner with its rows (no automatic refusal, no automatic acceptance); equivalence is defined modulo gas (F3) | **owner**; §7 |
+| R6 (Q1, F7) | Gen-1 `msig` | gen-1 `msig` records stay on gen 1's verifiers; the reason is that a registered gen-1 `msig` cannot register in gen 2 (`UAAlreadyRegistered` via `_kindOf`) | **owner**; §4 |
+| R7 (Q2, F10) | Sibling verify-only generation | none. A gen 2 deployed after a qualifying precompile exists enables the verify-only kinds in the same deploy. The case "a gen 2 deployed for new kinds before the precompile" was left to a later gen-3 design; R10 now covers it (§11) | **owner**; §9, §11 |
+| R8 (Q3 – Q6, Q8, Q9) | As proposed, with the review's additions | Q3 `KindConfig.verifyOnly` + the key-form bit; Q4 `UAVerifyOnly`, `verifyOnly(kind)`, and `expandedKeyOf` forwarded (F12); Q5 every single-key kind, each eligible only with its own edge-class list and vectors, ML-DSA first; Q6 a Final EIP address or the chain profile's own precompile; Q8 `ua_registries` validated on chain, order carries no meaning, plus F9's node rules; Q9 SDK verify rows keyed by chain, registry address and kind, the verify path a column | **owner**; §2, §3, §6, §12 |
+| R9 | Probe of Draft addresses ("the middle way") | `script/pq_verifiers.py` (gen 1's ML-DSA verifiers today, and gen 2's) probes by default only Final EIP addresses and the precompiles the chain profile declares as the chain's own (`0x…5caa…` on the SCaaS chains). A Draft address (EIP-8355's `0x12` / `0x13` / `0x14`) is probed only when the chain's profile sets an explicit flag, confirmed by the owner per chain and recorded in the deploy book, and then with a fuller probe: the valid row, a flipped row and the edge-class vectors | **owner**; §9 |
+| R10 | N generations | a registry takes as predecessor the chain's **latest** generation (any n ≥ 1) and is generation n + 1; one registry code serves every generation; lookups walk back to the generation that holds the record, under a fixed depth cap; R2 generalises to N; a generation may re-enable as verify-only a kind any predecessor enables; keyHash groups stay with the generation that first enabled them, checked across the whole chain; a sibling generation (Q2) is unnecessary; the factory binding becomes a bounded walk to the router's registry; node `ua_registries` the ordered chain, validated on chain | **owner**; §11 |
+| R11 | Depth cap | the line of generations is capped at **16**: a deploy of generation 17 is refused by name | **owner**; §11 |
+
+**0.3 Rulings on the fix-check of revision 2 (owner 2026-11-19)**
+
+The owner on the fix-check's two decisions and its positions: **"Approved both as proposed"**; **"approved all as
+proposed"**.
+
+| # | Topic | Ruling | Where |
+|---|---|---|---|
+| W1 (N1, severity P1) | Member signatures on writes | option (b): member signatures on **write** paths (the registration PoP, `acceptMembership`, `updateMsig`, `setPqzKey` / `setPqzScopedKey` of an `msig`, any signature-authenticated write) are verified by `holderOf(member)`, the generation holding that member's record, never by a verify-only verifier; verify-only runs only on consumer entries. The gas cost is stated (writes pay the holder's path; the treasury example ≈ 2 × 5.95 M), and `msigBound` counts that path against 2^24 (refuse or flag an `msig` whose write path cannot fit, numbers to the owner per [ARCH-POS-18](#ARCH-POS-18)). Test: an accept-all stand-in verifier against each write | **owner**; §3, §4, §14 |
+| W2 (N6) | PQZ host over N generations | do **not** accept that later-generation UAs can never hold a PQZ key. Redesign the PQZ host for N generations: a later generation may host the PQZ attachment of its **own** records (enable `0x0142` for them); the `pqz-mlwe` keyHash group uniqueness is checked across the whole line (walk); the spec states the rule per position (`_pqzHost`, `_host`, `_away`, `_scopedFrom`, `_pqzRecord`, `pqzKeyLatest`, `_kemHash`, the per-kind lists and decoys), with three-generation tests, and marks what changes in today's A5-I1 rule | **owner**; §11.2 (`CTR-UA-71`) |
+| W3 (N7 i) | Views on every generation | gen 1 carries the new views (`holderOf` returning the kind too, `kindHome`, `verifierOf`, a forwarding `expandedKeyOf`) from now (pre-freeze; the SCaaS testnet redeploys at its next reset); every generation's constructor probes them on its predecessors | **owner**; §11.3 (`CTR-UA-72`) |
+| W4 (N7 ii) | Frozen interface | the walked selectors are listed and pinned as a frozen interface | **owner**; §11.3 |
+| W5 (N7 iii) | Trust in predecessors | every generation trusts its predecessors fully; the deploy compares every address and code hash on the walk with the deploy book; `GEN_NOT_LATEST` can be overridden only with the owner's confirmation recorded in the book | **owner**; §9, §11.3 |
+| P1 | Key form `1` | accepted: reading the holder's existing ML-DSA expanded-key cache, with the fix-check's conditions: byte-level layout equality or a counted transform, as an equivalence class of §7; N8 (the home's verifier decides the impossible combination); the F13 wording | **owner**; §2, §4, §6, §7 |
+| P2 | Three-state answer | accepted: fallback on any revert of the verifier call, never on word 0, with N5: the verifier owns the mapping of its precompile to {1, 0, `PqNoAnswer`} | **owner**; §5 |
+| P3 | `_slotCap` and the fallback | accepted: `verifyBudget` counts the normal path, **plus a hard bound** per N1: the fallback and the write path must fit one 2^24 transaction | **owner**; §4, §5 |
+| P4 | Factory clone-hash check | accepted: `smartKeyCloneHash()` of the env's registry equals the router's; cost stated: the `SmartKeyAccount` implementation is frozen for the factory's line | **owner**; §10 |
+| P5 | Views and the native-space shortcut | accepted, with `holderOf` returning the kind, the views in the frozen list, the shortcut on `kindOf`, `holderOf` and `isRegistered`, and a test that no registration stores a native-space id | **owner**; §11 |
+| P6 | Names | accepted, with `GEN2_KEY_FORM_IMPOSSIBLE` renamed generation-neutral: **`GEN_KEY_FORM_IMPOSSIBLE`** | **owner**; §2, §16 |
+
+Every other finding (N2 – N5, N8 – N16) is applied as the fix-check states it (**follows**); a detail it leaves open is a
+**proposal** in §16. The rules `CTR-UA-58` … `-72` below write these rulings out.
+
+**0.4 Rulings on the fix-check of revision 3 (owner 2026-11-19)**
+
+The owner on revision 3's proposals P7 – P14, through the controller's proposal to take them with the fix-check's
+positions: **"approve all 8 as proposed"**. On P9: **"refuse such msigs at registration — ok"**. On the per-transaction cap:
+**"agreed, as proposed"**. On M2 and M9: **"approve M2 and M9 as proposed"**.
+
+| # | Topic | Ruling | Where |
+|---|---|---|---|
+| P7 | The PQZ home | the home rule of §11.2 (a record's PQZ home is the oldest generation from its holder to the reader that enables `0x0142`; every PQZ view by §11.2's one rule) and A5-I1's changes (1) – (4), with the fix-check's M1 (the write flag reaches `_single`), M4 (one walk returns `(holder, kind, pqzHome)`), M5 (one `0x0142` list per enabling generation, the SDK concatenates) and M9 (below) | **owner**; §3, §11.1, §11.2 |
+| P8 | The `pqz-mlwe` residual | accepted with the corrected text of M3: not A1-I1's class; a duplicate needs the secret key; the reader-side rule exists on chain. **If a `PqzCore` property relies on one key per UA, the reader-side rule is taken instead** | **owner**; §11.2 Residual |
+| P9 | The hard bound | an `msig` whose write path cannot fit the per-transaction cap is **refused at registration and at `updateMsig`** (not at the write), with the existing named errors `UAKeyData(0x0120)` and `UAMsigSlots(n)`. It is a structure bound, not a disabled kind under [ARCH-POS-18](#ARCH-POS-18) | **owner**; §4 |
+| P10 | Hold on the group kinds' verify-only path | as proposed: hold, ≈ 0.2 M more on that path | **owner**; §5 |
+| P11 | Verify-only verifiers without a working precompile | as proposed: refused by the registry constructor and the deploy; no Solidity-only verify-only verifier | **owner**; §2 |
+| P12 | Single-key registrations | as proposed: no line walk for `UAAlreadyRegistered` and the group's `UAKeyInUse`; this rests on the constructor's "kind and group only here", so on the predecessors' `kindHome` answers (W5's trust) | **owner**; §11.1 |
+| P13 | The frozen interface's pin | as proposed: `RegistryWalkInterfaceIsPinned` pins the full signatures with return types, their selectors and the list's hash; with M8's additions (error selectors, `UASig` / `MemberSig` encodings, verifier getters, the hold formula, `expandedKeyOf`'s pointer form) | **owner**; §11.3 |
+| P14 | Names | as proposed: view `pqzHomeOf` (a view over the one walk, M4), test `RegistryWalkInterfaceIsPinned`, deploy refusals `GEN_VERIFY_ONLY_NO_PRECOMPILE` and `GEN_WALK_MISMATCH`, helpers `_capOf` and `_registrable` | **owner**; §2, §9, §11 |
+| X1 | Per-transaction cap | the registry takes the chain's per-transaction gas cap as an **immutable constructor parameter** (`txGasCap`) from the deploy book, not a hard-coded 2^24; the deploy script probes it off chain (e.g. `eth_estimateGas` / `eth_call` above 2^24; no opcode exposes EIP-7825's cap); every bound (P9, M2, M10, the fallback and write bounds) uses it; a raised cap later is a new generation | **owner**; §4, §9 |
+| M2 | The consumer's reserve and the PQZ debit | accepted as a stated limit: on a chain without an ML-DSA precompile, an `msig` with two ML-DSA members cannot hold a PQZ key (fallback worst + `PQZ_DEBIT_MIN_GAS` > the cap); such a registration (`msig` + PQZ key) is refused like P9; the bound uses the fallback worst for consumer paths: `w` of `_msigDebit` is the fallback worst, a reserve is stated for the consumer's operation, and "never for good" is narrowed to the registry's check | **owner**; §3, §4, §5, §13 |
+| M9 | `0x0142` in later generations | the deploy enables `0x0142` in every later generation whenever a predecessor enables it; omitting it is refused by name and can be overridden only with the owner's confirmation recorded in the book | **owner**; §9, §11.2 |
+
+The fix-check's M1, M3 – M8 and M10 are applied as it states them (**follows**; M1, M3, M4, M5 and M8 also through P7, P8,
+P13 and P14 above).
+
+The owner on revision 4's own proposals P15 – P20 and on the controller's proposal for the walk's library (Y1): **"approve
+all as proposed"** (2026-11-19).
+
+| # | Topic | Ruling | Where |
+|---|---|---|---|
+| P15 | Names | constants `UA_CONSUMER_RESERVE_GAS`, `MSIG_REGISTER_GAS`, `PQZ_KEY_WRITE_GAS` (values measured by the round, pinned old → new); deploy refusals `GEN_PQZ_OMITTED` (M9), `GEN_PQZ_DEBIT_BOUND <kind>` (M10 d), `GEN_TX_CAP_UNKNOWN`, `GEN_TX_CAP_MISMATCH` (X1); view `txGasCap()` | **owner**; §2, §4, §9 |
+| P16 | Where M10 (d)'s check runs | in the constructor (`UAConfig(kind)`) and first in the deploy by name, only where `0x0142` is on the line; the kind stays served by its home | **owner**; §2, §9 |
+| P17 | `txGasCap`'s constructor bounds | `verifyBudget ≤ txGasCap < 2^64`, else `UAConfig(0)`; no relation to a predecessor's value is required (each generation's bounds use its own) | **owner**; §2 |
+| P18 | The cap probe | `eth_call` at `2^24` and `2^24 + 1` through the node list under strict majority, then a binary search up to the block gas limit where `2^24 + 1` is accepted; the rows in the book; no cap found ⇒ `GEN_TX_CAP_UNKNOWN` until the owner sets the value in the book | **owner**; §9 |
+| P19 | Decoys over concatenated lists | the SDK draws decoys by distinct key hash, so a key held by two UAs (§11.2 residual) counts once | **owner**; §11.2, §12 |
+| P20 | The explicit gas limit of a verify-only verifier's precompile call (M7) | the precompile's worst cost for the kind's largest input, measured on the chain's client, a constant of the verifier (part of its init code, so of its CREATE2 address) and covered by its cap | **owner**; §5 |
+| Y1 | Where the walk lives | the generation walk's **logic** (`holderOf`'s recursion and `pqzHome` fill, `kindHome`, the forwarding readers' target choice, the constructor-time line checks that can run in a library) lives in `UARegistryCoreLib` (≈ 20 KB of room after `bls-multi`'s split), not in `UARegistry` (≈ 2 KB of room). `UARegistry` keeps thin views (`holderOf`, `kindHome`, `verifierOf`, `pqzHomeOf`, the forwarding readers) that DELEGATECALL into the library walk through `_libView` / `_lib`, as today's library readers and writers do. The frozen interface is unchanged: its selectors stay on the registry | **owner**; §9 Size, §11.1, §14 |
+
+**Owner rulings on the plan (2026-11-19, "approve all as proposed").** C1 `txGasCap` is the constructor's argument right after `verifyBudget_`; C2 the runs folder `smartcontracts/evm/runs/<round-start-date>-multi-gen-verify/`; C3 the round gate runs every forge directory at all four sets (`PqzStateLib` changes); C4 the three ML-DSA verify-only verifiers in one file `src/ua/MlDsaVerifyOnly.sol` with a shared base; C5 the Draft probe flag a field of the chain's row in `chain-uids.json`, the owner's confirmation a book field; C6 the client libraries check the registration target from a `kindHome` value the caller passes, only scaas-sdk reads it from the chain; C7 writes (Task 4) before the consumer path (Task 5). Open: the plan's C8 (the consumer path reads the walk by a static self-call; the spec's P21, the owner's open question; see CTR-UA-70).
+
+Controller calls (owner auto-run 2026-11-19, not owner rulings): `verifierOf` reads the local word in `UARegistry` (smaller than a library stub); the constructor takes any single-key kind verify-only and the ML-DSA-only eligibility of this build is the deploy's (`53d4ad79d`); every dispatch-only gas pin the contract tasks moved is re-pinned once in the gas task, old → new.
+
+**Review (Fable, 2026-11-20, at `0d9a64022`; controller calls, owner auto-run 2026-11-19).** P0 0, P1 0, P2 5 (all fixed:
+`6546768be` an inner `msig` held elsewhere bounded on its holder's path; `4984efa8c` the verify-only verifier bound to its rows
+(`GEN_VERIFY_ONLY_UNBOUND`), the differential's ok required (`GEN_DIFFERENTIAL_MISSING`), its cap over 2 x `CALL_GAS`
+(`GEN_VERIFY_ONLY_CAP`), no sibling over an older book (`GEN_NOT_LATEST`); `ed2537302` the node's `registerMsig` without a line
+target). P3 fixed: P3-5 `lineReaches` in the frozen list (`001f11c08`; owner 2026-11-20: approved, see CTR-UA-72), P3-6 the tx-cap probe's error classes (`869ee608c`), P3-7,
+P3-8, P3-9, P3-10 docs. P3 deferred, each with its reason:
+- P3-1 (the fallback's nested 63/64 holds not counted in the hard and debit bounds, ≈ 3–5 % of the holder's cap): the fix moves
+  every hard-bound and debit boundary row and pin, and it is only justified by an at-the-bound fallback run through a consumer
+  with exactly `txGasCap`, a harness that does not exist yet; worked by hand, no admitted structure fails; that measured test
+  comes first, before the freeze.
+- P3-2 (M1's mutant equivalent): no entry reaches `_single` with a verify-only word for a record held elsewhere (every entry
+  appends `_cfg(0)` = 0 for it), so `uint160(cfg) == 0` and `!_registrable(cfg)` agree on every reachable input; the guard
+  stays as defence in depth, and a harness feeding `_single` an unreachable word would test the harness, not the registry.
+- P3-3 (three walks per verify-only member): gas only and already inside the measured `LINE_HOP_GAS`; removing two walks
+  changes the registry-to-library call shape and every pin this round measured, and `UARegistry` has 120 B of room.
+- P3-4 (scoped PQZ views without the holder fallback): no line this build can deploy reaches the case (a later generation
+  carries `0x0142` only where a predecessor enables it, and ordinary new kinds are not built in the later-generation mode),
+  and nothing is lost (the holder sets a new scoped key); the holder fallback and its §11.2 (d) test go with the next
+  registry round.
+
+### CTR-UA-59 — Every signature-authenticated write is authenticated by the generation that holds the signer's record
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-59 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-59).) A single-key signer by `holderOf(ua)`, each derived `msig` member by `holderOf(member)`, directly; the `write` flag defaults to the write side, only the three consumer entries pass `false`; a verify-only verifier authenticates no write. `register*` and `cacheExpandedKey` of a verify-only kind revert `UAVerifyOnly(kind)`; the PQZ holder bound counts the consumer path's fallback worst against `txGasCap`; views `verifyOnly`, `kindHome`; a client offers a kind only where `kindHome(kind) == registry`.
+**Status.** BUILT on EVM: `2bbe3380d`, `0a78d4d64`, `0812a0467`. UNAUDITED.
+**Why.** A forgery accepted by a verify-only verifier then changes no registry state in any generation: no record, `msig` or key attachment can be altered through it.
+**Cost if wrong.** Writes pay the holder's path (the treasury `{mldsa65 ×3} t=2` ≈ 12.3 M per `updateMsig` or PQZ key write [estimate]); on a chain without an ML-DSA precompile an `msig` with two ML-DSA members cannot hold a PQZ key (owner M2, a stated limit).
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (R2, W1, R8 Q4, M2).
+
+### CTR-UA-60 — A consumer check walks once: own verifier where verify-only, else the holder directly; an `msig` fits `txGasCap`
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-60 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-60).) A consumer entry reads `holderOf(ua)` once; a kind verify-only here is verified with this generation's verifier under its cap and hold, any other kind is handed to the holder directly (never `predecessor`; holds do not stack); a predecessor's `msig` is forwarded whole; key bytes as the holder passes them; `_slotCap` counts the walk (`LINE_HOP_GAS`), a verify-only member's cap plus `VO_READ_GAS`, else the holder's cap and one hand-off; the hard bound is the larger of a consumer mode (fallback worst, 21,000, calldata, `UA_CONSUMER_RESERVE_GAS`) and a write mode (holders' paths, the dearest write: `MSIG_REGISTER_GAS`, `updateMsig`, `PQZ_KEY_WRITE_GAS`) against `txGasCap`: `UAKeyData(0x0120)` / `UAMsigSlots(n)`.
+**Status.** BUILT on EVM: `cc82e3ecc`, `72ced51f3`, `0812a0467`; constants measured: `UA_CONSUMER_RESERVE_GAS` 350,000 (310,144), `MSIG_REGISTER_GAS` 350,000 (317,415 regular), `PQZ_KEY_WRITE_GAS` 2,600,000 (1,510,296 regular + the key at the 64 floor), `VO_READ_GAS` 60,000; `LINE_HOP_GAS` 10,000 → 13,100 (one further generation measured 12,410 cold, `0cda19be5`, work in progress). UNAUDITED.
+**Why.** A middle generation's verify-only verifier is never asked for a later one; the hard bound keeps every registered `msig`'s check, fallback included, within one transaction.
+**Cost if wrong.** Structures that fit `verifyBudget` on a precompile path are refused (`{mldsa87 ×2} t=2`, `{mldsa65 ×3} t=3` at 2^24): a structure bound, not a disabled kind (owner P9).
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (V1, V3, R2, R6, W1, P3, P9, X1, M2, P15).
+
+Controller calls (owner auto-run 2026-11-19, not owner rulings): the consumer path in `UARegistry` reads the walk through the predecessor's `holderOf` for a record it does not hold (beside the plan's C8); the verify-only check lives in `UARegistryCoreLib` behind a `requireAuthorized` library entry (inline it put `UARegistry` 144 B over its T-1 line); CTR-UA-44's row 12 kept (the treasury registers, its `updateMsig` with a PQZ key is `UAPqzHolder`); the rows the hard bound makes unregistrable at 2^24 run on a registry of `txGasCap` 2^25; two `mldsa44` members hold a PQZ key at `n2304-kmax4096` only (debit 15,588,664 of 16,777,216; the spec's estimate named `n2048-kmax1024` too).
+
+### CTR-UA-61 — A verify-only verifier may use a later precompile only for the same scheme, message and key
+- old: — · status: current · owner: no · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-61 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-61).) Eligible: only the call shape differs (key form 0), or a key form derivable per call within the cap, or for ML-DSA the holder's complete cache (form 1); never a different algorithm (HashML-DSA, a mandatory context, Falcon FIPS 206 final ≠ v1.2), which is a new kind version.
+**Status.** BUILT for ML-DSA (`de05b0789`: EIP-8355 layout under form 0, the holder's EIP-8051 parts under form 1). UNAUDITED.
+**Why.** A gen-1 signature must verify unchanged; what separates the cases is evidence (CTR-UA-62), not the EIP's text.
+**Cost if wrong.** A precompile for another algorithm would refuse every existing signature (liveness) or, if laxer, accept forgeries.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (§6, a proposal within R3 and P1).
+
+### CTR-UA-62 — Verify-only equivalence modulo gas, never laxer, every difference to the owner
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-62 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-62).) Same verdict as the holder's path for the same key, message and signature with enough gas; any difference stops that kind's verify-only deploy and goes to the owner with its rows; eligibility needs the kind's edge-class list with vectors and a mutant per class; tests (a) – (f) and the form-1 layout equality.
+**Status.** BUILT for ML-DSA (`6c558f1dd`, `de05b0789`); no difference found. The ACVP / Wycheproof rows and the verdicts on a real precompile run in the deploy's differential probe (`53d4ad79d`). UNAUDITED.
+**Why.** Gen 2 is never laxer than the holder (owner R5).
+**Cost if wrong.** A missed edge class lets a precompile accept a malleated or forged signature in every consumer bound to that generation.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (R5, P1).
+
+Controller calls (owner auto-run 2026-11-19, not owner rulings): the ACVP and Wycheproof sets carry no `ua_msg` framing, so they are not in the forge suite (against the stand-in they would compare the holder's code with itself); §7 (c) on KAT keys needs their PoP, which the vectors do not carry, so the routing per entry is covered by `UARegistryVerifyOnly.t.sol`.
+
+### CTR-UA-63 — Verify-only adds no message form: no cross-generation replay
+- old: — · status: current · owner: no · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-63 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-63).) `ua_msg` names no registry or generation; `uaAuthDigest` is signed only by native ids and native `msig` members, never verify-only; the portable digests name no registry.
+**Status.** Holds on the code (no change).
+**Why.** The review checked the message forms against the code.
+**Cost if wrong.** A message form that named the generation would split signatures between generations.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (§8, follows from the code).
+
+### CTR-UA-64 — A later generation deploys over the book's latest, refused by name before broadcast; the probe re-run after upgrades
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-64 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-64).) `DeployUAGen.s.sol` (`UA_GEN_BOOK`) deploys generation n + 1 over the book's latest: `GEN_NOT_LATEST` (owner override only), `GEN_DEPTH`, `GEN_WALK_MISMATCH`, `GEN_TX_CAP_UNKNOWN`, `GEN_TX_CAP_MISMATCH`, `GEN_PQZ_OMITTED` (owner override only), `GEN_KEY_FORM_IMPOSSIBLE`, `GEN_VERIFY_ONLY_NO_PRECOMPILE`, `GEN_PQZ_DEBIT_BOUND`, `GEN_DIFFERENTIAL_MISMATCH`; the cap probe `script/tx_gas_cap.py`; the differential probe `script/pq_verifiers.py differential`, re-run after every client upgrade; the book fields; generation 1 carries the line's views and `txGasCap`.
+**Status.** BUILT: `53d4ad79d` (local anvil run: gen 1, 2, 3 read back, a stale book `GEN_NOT_LATEST`). Not built: `pq_verifiers.py` building the verify-only verifiers on a chain; an ordinary new kind in the later-generation mode. UNAUDITED.
+**Why.** What binds a later generation to the chain's real line is the deploy's walk check against the book; a precompile is client code that a deployed verifier cannot follow.
+**Cost if wrong.** A wrong predecessor or library is trusted completely by every later generation (CTR-UA-72).
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (R7, W5, X1, P18, M9, P15, P16).
+
+Controller calls (owner auto-run 2026-11-19, not owner rulings): the cap probe is wired in `deploy.sh evm`, the runner of `deploy_batch.py`, not inside `deploy_batch.py` (a receipts and fee checker).
+
+### CTR-UA-65 — The node, indexers, the SDK and clients address the registry line
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-65 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-65).) Node `ua_registries` (validated on chain at start, `UA_LINE_*`), `Rule::UaRegistry` the line's set, `UA_VERIFY_ONLY` and `UA_WRONG_GENERATION` before sending with the target named, NODE-JOB-29's target the holder and `UA_KEY_NOT_CACHEABLE`, the send limit up to `txGasCap()`, `UA_VERIFY_GAS` queued; the indexer over every generation and the duplicate-hash flag; SDK targets `kindHome` / `holderOf` / `pqzHomeOf`, verify rows keyed by chain, registry and kind with path, depth and write path as columns; clients check the target against a `kindHome` the caller passes.
+**Status.** Node BUILT (`d019be659`, `e6268a472`); scaas-sdk BUILT (`535bf1dcb`); clients' target check BUILT (`ff732ade0`,
+`9cac74ea0`, `afbc160f2`; the ua-rs bindings' export PLANNED).
+**Why.** The node is open: relaying a write to any generation is its guarantee, and a job sent to the wrong generation is refused by name, never `dead` silently.
+**Cost if wrong.** Config shape change: an operator on `ua_registry` is refused at load until the list is written.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (R8 Q8 / Q9, R10, W2, P19; plan C6).
+
+### CTR-UA-66 — One principle on every family: a later deployment may verify an earlier one's records, writing nothing
+- old: — · status: current · owner: no · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-66 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-66).) A later registry or verifier deployment may verify, through its own verifier, records an earlier deployment holds for the same kind; equivalence as CTR-UA-62; nothing deployed is upgraded.
+**Status.** EVM BUILT; Soroban, Solana, Move, TON, Cosmos, NEAR and Algorand PLANNED, each in its own round.
+**Why.** One rule on every chain; immutable deployments still reach a later verifier.
+**Cost if wrong.** A family without the principle keeps its first verifier for the life of a record.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (§12, a proposal).
+
+### CTR-UA-67 — A factory accepts one registry line: the router's registry or a registry whose predecessor chain reaches it
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-67 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-67).) `OpenFactory`'s env check accepts `env.registry` 0, the router's registry, or one whose `lineReaches(router's registry)` answers exactly one word 1 (a bounded walk of at most 15 steps, each a contract, the same `smartKeyCloneHash`); `chainUid` as before; else `EnvRegistryMismatch`.
+**Status.** BUILT on EVM: `098c30feb` (`OpenFactory` 34,999 → 35,238 B, 48 B under its T-1 line). UNAUDITED.
+**Why.** A release can bind a later generation without an admin key or a stored list; governance publishes the env.
+**Cost if wrong.** The `SmartKeyAccount` implementation is frozen for a factory's line; a sibling line is accepted where governance names it.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (R1, R10, P4); admin-not-owner §13.4 changed on landing (one registry line per factory).
+
+### CTR-UA-68 — No answer from a verify-only verifier falls back to the holder's verdict; an answer 0 refuses
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-68 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-68).) The verifier maps its precompile to {1, 0, `PqNoAnswer`} (lengths first, an explicit gas limit `CALL_GAS`, an alive-check on the kept valid row); the registry accepts exactly one word 1, refuses exactly one word 0, and falls back on any revert or other return to the holder's entry for that path, with the hold on every verify-only call.
+**Status.** BUILT on EVM: `4f643c791` (`UAStore.voCall`, the fallback), `de05b0789` (the verifiers). UNAUDITED.
+**Why.** A removed, moved or repriced precompile no longer locks a holder's funds in tokens bound to a later generation; the holder keeps its software path (ARCH-POS-18).
+**Cost if wrong.** A caller able to force a fallback gains only the holder's (sound) path at more gas; an operation dearer than the consumer reserve fails while the precompile gives no answer.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (R4, P2, P3, P10, P20; M7).
+
+### CTR-UA-69 — A PQ verifier's deploy probes Final and chain-own addresses; a Draft address only under the owner-confirmed flag
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-69 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-69).) Default candidates: the chain profile's own precompiles and Final EIP addresses; a Draft address only with `probe_draft_precompiles: true` in the chain's row of `chain-uids.json` and `probe_draft_precompiles_owner` in its book (else `DRAFT_PROBE_UNCONFIRMED`), and then with the fuller probe (valid, flipped and every edge-class row).
+**Status.** BUILT: `78ce41390` (`DeployBase._mldsaCandidates`, `PqPrecompileProbe`, `pq_verifiers.py`); the field is absent on every chain today. UNAUDITED.
+**Why.** A Draft's address may be assigned to another function later (NET-EVM-15).
+**Cost if wrong.** A Draft probe without the fuller rows could take a lax precompile.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (R9; plan C5).
+
+### CTR-UA-70 — The registry line: up to 16 generations, one walk `holderOf`, every lookup read where the record is held
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-70 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-70).) Generation n + 1 over the latest, `MAX_GENERATION` 16; `holderOf(ua) → (holder, kind, pqzHome)` one call per generation, `pqzHomeOf`, `kindHome`, `verifierOf`; every forwarding reader reads the walk once and the record at the holder; the native-space shortcut; single-key registrations walk nothing; the walk's logic in `UARegistryCoreLib`. Off-chain readers (SDK reading layers, indexers, wallets) read a record at `holderOf(ua)` and its PQZ attachment at `pqzHomeOf(ua)`, and never assume the bound registry's own storage holds the record.
+**Status.** BUILT on EVM: `9ebf6931c`, `2bbe3380d` (a miss at depth 4: 37,016 gas; the thin view ≈ 4.7 k over a local read). The off-chain reader rule BUILT in scaas-sdk: the write targets (`535bf1dcb`) and, since sdk-complete's merge, the PQZ, verdict
+and Zether reading layers (the round's review F2; controller call, owner auto-run 2026-11-19: the holder and the home are read by
+one `holderOf` call at the read's block, an address and not a confidential word, so CLI-UAL-34's storage rule for every word
+holds; a registry without the view is read as its own holder). UNAUDITED.
+**Why.** One registry code for every generation; O(n) per lookup; a precompile that arrives after the latest generation is used by the next one, so no sibling generation is needed.
+**Cost if wrong.** A deep line costs ≈ 12–13 k per generation passed on every lookup of an old record; a reader of one registry's storage that skips the walk fails closed for every older record.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (R10, R11, P5, P12, X1, Y1, P14). The off-chain reader rule: controller, 2026-11-20, finding F2 of the SDK review.
+
+Controller calls (owner auto-run 2026-11-19, not owner rulings): refining the plan's C8, `UARegistry` reads the walk for a record it does not hold through its predecessor's `holderOf` (one DELEGATECALL and one self-call fewer); `UARegistryCoreLib._holder` takes it by a static self-call to the registry's `holderOf`, which kept `UARegistryAuxLib` 24 B under its T-1 line. The spec's P21 remains the owner's open question.
+
+### CTR-UA-71 — A record's PQZ attachment lives at its PQZ home: the oldest generation from its holder to the reader with `0x0142`
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-71 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-71).) `pqzHomeOf(ua)` is the walk's third word; the four PQZ writes only at the home, signatures by the holder; a later generation may enable `0x0142` again, the `pqz-mlwe` group unique by the walk; `UAKindDisabled(0x0142)` only for a generation without `0x0142` behind one with it (deployed only under the owner's override); every PQZ view by one rule; one `0x0142` list per enabling generation, concatenated by the SDK by distinct key hash; the residual of two homes accepted.
+**Status.** BUILT on EVM: `a40d8acc0` (`_pqzWhere`, `_host`, `PqzStateLib._auditorChecks` line-wide). UNAUDITED.
+**Why.** The owner refused barring every later generation's records from PQZ (W2).
+**Cost if wrong.** Two UAs of the line may each hold one `pqz-mlwe` key proven (only the secret key's holder can cause it); the reader-side rule is taken instead if a `PqzCore` property relies on one key per UA (owner P8).
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (W2, P7, P8, M5, M9); replaces rulings A5-I1 and A6-I1 of CTR-UA-16's UA-8 Change (d) for more than two generations.
+
+Controller calls (owner auto-run 2026-11-19, not owner rulings): `UARegistryAuxLib` had 24 B left, so the scoped readers and `pqzPopOf` / `pqzKeySigOf` moved to `UARegistryCoreLib` (`registrationOf` stays); the per-set run of this task was deferred to the round gate (every forge directory at all four sets).
+
+### CTR-UA-72 — Every generation carries the walked views; the walked interface is frozen; predecessors are trusted fully
+- old: — · status: current · owner: yes · date: 2026-11-19 · normative: contracts/accounts.md#CTR-UA-72 · superseded-by: —
+
+**Rule.** (Summary; the normative text is [accounts.md](contracts/accounts.md#CTR-UA-72).) Generation 1 carries `holderOf`, `kindHome`, `verifierOf`, `verifyOnly`, `pqzHomeOf`, `txGasCap` and a forwarding `expandedKeyOf`; every constructor probes each predecessor for them; `RegistryWalkInterfaceIsPinned` pins the 53 entries, error selectors, encodings, verifier getters and the hold constant; a change needs the owner.
+**Status.** BUILT on EVM: `2bbe3380d` (probes), `773ae4988` (the pin, list hash `0x9b671c727828678393537179834b1d5f55dd6ee4c21a17031ad4f4705987df8c`). UNAUDITED.
+**Why.** Later generations are later code; what they call on a predecessor must not move.
+**Cost if wrong.** A faulty middle generation can answer for any id; recovery is a sibling line losing its records and every later one's.
+**Source.** spec `superpowers/specs/2026-11-19-registry-verify-only-kinds.md` revision 4; the owner's rulings verbatim under [CTR-UA-58](contracts/accounts.md#CTR-UA-58) (W3, W4, W5, P13; M8).
+Change (owner 2026-11-20: approved; owner: yes; status: BUILT, `001f11c08`): `lineReaches(address)` joins the frozen list
+(53 -> 54 entries; list hash `0x9b671c727828678393537179834b1d5f55dd6ee4c21a17031ad4f4705987df8c` ->
+`0x3b34c54d64d7c8c3a5984af50db132f9aa744fff8d92a9d299dc118469272ebf`): `OpenFactory`'s env check ([CTR-UA-67](contracts/accounts.md#CTR-UA-67))
+asks it of a later generation, so later registry code must keep it (the round's Fable review, P3-5).
+
 ## 25. Contracts — Post-quantum Zether
 
 ### CTR-UA-29 — The registry keeps an on-chain list of the UAs of each kind
@@ -5143,6 +5499,8 @@ Change (2026-10-19): owner rulings on the on-chain review (both proposals accept
 
 Change (2026-10-20): controller proposal (owner may override) — UA-6 U11, **the PQZ-capable list**: each UA stays in its kind's list (`msig` included); a PQZ holder is also appended to the list of key `0x0142`, read with the same `uaCount(0x0142)`, `uaAt(0x0142, i)`, `uaPage(0x0142, …)`, so PQZ decoy legs come from one anonymity set of recipients that all have a PQZ key (a per-kind filter would leak which kind the real recipient is); no reverse index, `Record.index` stays the kind-list position; ≈ +27 k gas per holder registration; it lives in the generation that enables 0x0142. Classical Zether decoys keep the `0x0141` list. **The decoy rule of the 2026-10-19 Change loses its `authRef` clause** (no on-chain grouping is left to cap with one key per UA): it keeps "active in the token within the look-back window, weighted by recency, never registered after the wallet's sync point"; threat S30 now records that a sybil decoy set costs one PQ registration per decoy (≈ 5 M gas, free on the SCaaS testnet, bounded by node sponsorship quotas, CTR-UA-25). Status: proposal; built in UA-6 (branch `ua6`, commit 9c2cbc5c).
 Change (2026-11-06, group 3g, CTR-UA-42): **the `0x0142` list takes a UA once, whatever its number of key versions, and a wallet never draws a decoy with a pending version** (a latest version of this set's length not yet eligible); UAs without a recent `UAPqzKeyCurrent` come first. Status: BUILT (registry T51 `3f80f072`; `clientkeys` `pqzDecoyCandidates`, test `pqz-versions.test.js`).
+
+Change (owner 2026-11-19, rulings P7 with M5, R10; status: BUILT on EVM, branch `multi-gen-verify`, UNAUDITED): the list of a kind lives in its home (`kindHome`), a verify-only kind's list is answered there; `msig` keeps one list per generation; the `0x0142` list is one per enabling generation, never concatenated on chain; the SDK concatenates the lists of every enabling generation on the token registry's walk for the decoy draw, drawing by distinct key hash (owner P19) ([CTR-UA-70](contracts/accounts.md#CTR-UA-70), [CTR-UA-71](contracts/accounts.md#CTR-UA-71)).
 
 ### CTR-UA-30 — A UA is one signature-verifying entity; a PQZ key is an attribute of a PQ-signing UA
 - old: — · status: current · owner: yes · date: 2026-10-20 · normative: decisions.md · superseded-by: —
@@ -5283,6 +5641,8 @@ families and order); plan `superpowers/plans/2026-10-30-ua8-portable-registratio
 (`6f72d0ba` … `5a970b4c`, tasks A1–A11; A12 docs), not merged; step 2 (Soroban) was waiting for the Soroban UA base; **Change (2026-11-01):** it is built on branch `ua8-soroban` (ua8-soroban M3, B1 to B9a), local end-to-end passed, done only after B10, the Stellar testnet run (NET-SOR-27, CTR-UA-34).
 
 Change (2026-11-08, owner, status: decided): the family order becomes EVM → Soroban → **Cosmos → NEAR** → Sui / Aptos / Solana → Algorand → TON (Cosmos moves before NEAR); the Sui round also moves the node's Sui adapter off JSON-RPC to gRPC.
+
+Change (owner 2026-11-19, ruling R8 Q8; status: BUILT in the node, `multi-gen-verify` `d019be659`, UNAUDITED): the relaying paragraph's "the node binds one registry per chain, so once a chain runs a generation 2 the writes for generation-1 records cannot be relayed" is resolved: the node lists every generation (`ua_registries`) and refuses a write sent to the wrong one by name ([CTR-UA-65](contracts/accounts.md#CTR-UA-65)).
 
 ### CTR-UA-32 — KEM (chat) key records: signed, versioned, write-once in any order, never revoked
 - old: — · status: current · owner: yes · date: 2026-10-25 · normative: contracts/accounts.md#CTR-UA-32 · superseded-by: —
@@ -5775,6 +6135,16 @@ Change (owner 2026-11-10, before the SCaaS testnet reset 2; status: BUILT on bra
 **Why.** The owner's ruling on the name; the field holds the address of the home `PqChat` instance.
 **Cost if wrong.** A signer on the old type string signs a digest no instance accepts; every chain is test-only, so nothing deployed needs a migration.
 **Source.** owner 2026-11-10 (relayed by the controller). Status: BUILT on branch `ua-mtx-merge` (EVM, the node's type strings, clientkeys and the vectors), UNAUDITED; `ua-rs` PLANNED (the ua-rs-sign round).
+
+### CTR-CHAT-22 — `PqChatStore`: the standalone store, state only, within 24,576 B
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: contracts/pqchat.md#CTR-CHAT-22 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-22).) A new contract with exactly `PqChat`'s store part (selectors, topic, error, behaviour of CTR-CHAT-13), each payload one SSTORE2 blob of at most 24,576 B (a constant), no owner, admin, constructor argument, fee or `chainUid`; deployed by the deterministic deployer with salt 0 under NET-EVM-18, the init-code hash, runtime code hash and address pinned in release data; listed by clients as `{"kind": "chainstore", "chainId", "chainUid", "contract"}` and trusted by its pinned runtime code hash; a session's envelope bounded by its smallest listed store.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q1: Avalanche as a message and text store path like HCS; `PqChat` and `OpenFactory` exceed 24,576 B and no split store exists; CTR-CHAT-05 keeps stored payloads in state (controller calls C1-C4).
+**Cost if wrong.** About 8 times the gas of an event-only store; or a store whose payloads a pruned log index loses.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C23; owner: no): the init-code hash and the address pinned beside the runtime code hash, an existing deployment with the pinned code taken as done, deployer and SSTORE2 probes per chain (review F18); the smallest-store bound and the relay paths without `RelayFeeRouter` stated (review F19).
 
 ### CTR-PQV-01 — PqVault: PqChat's group rules with at least one member plus a topics-style item model
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-01 · superseded-by: —
@@ -6313,6 +6683,7 @@ Change (2026-11-02, owner rule for this pin, ruling on Task MA: re-pin at the fi
 Change (owner 2026-11-09, T66b spec §11 (j); status: current; commit: ua-mtx-merge T66b `44343adf`): `debit_min_gas` is set to the measured cheapest LOG debit at every set (burn 1 to an address, LOG, `uaExecute` with the ML-DSA-65 fee UA; `test/research` `PqzProofStoreGas.test_debitMinGas_isTheCheapestLogDebit`, each set by `at-set.sh`), `set.toml` edited and `PqzSet.sol` regenerated by `gen_set.py`: the body modules ([CTR-TOK-30](#ctr-tok-30--body-modules-every-body-but-the-erc-20-core-runs-in-a-delegatecall-module-of-its-kind)) add two frames to the relayed debit (the stub to P, the self-call's stub to Q). n2048-kmax1024 7,258,188 -> 7,298,111 (+39,923), n2304-kmax4096 7,468,120 -> 7,513,388 (+45,268), n2560-kmax16384 7,675,561 -> 7,726,229 (+50,668), n2816-kmax65536 7,910,855 -> 7,968,014 (+57,159). A gas parameter, not a cryptographic one: no `proofSystemId`, header, `set.json` or vector moves, so the affected steps only. The PQ `msig` holder cap tightens by the same difference; the 2-of-2 boundary of `test_register_msigHolderBoundary` old -> new: n2048 mldsa65 4,548,075 -> 4,528,580, mldsa87 4,527,573 -> 4,508,079, fndsa1024 4,580,077 -> 4,560,582; n2304 4,445,562 -> 4,423,457, 4,425,061 -> 4,402,956, 4,477,564 -> 4,455,459; n2560 4,344,266 -> 4,319,525, 4,323,765 -> 4,299,023, 4,376,268 -> 4,351,527; n2816 4,229,370 -> 4,201,458, 4,208,868 -> 4,180,957, 4,261,372 -> 4,233,460.
 Change (owner 2026-11-11, ruling "move the pin" after the stacked gate of rounds 3r + 3s + 3t; status: current; commit: ua-mtx-merge debit_min_gas pins): `debit_min_gas` follows the measured cheapest LOG debit again (same rule and test, `test_debitMinGas_isTheCheapestLogDebit` at each set by `at-set.sh`; `set.toml` edited, `PqzSet.sol` regenerated by `gen_set.py --all`): n2048-kmax1024 7,298,111 -> 7,299,074 (+963), n2304-kmax4096 7,513,388 -> 7,514,360 (+972), n2560-kmax16384 7,726,229 -> 7,727,209 (+980), n2816-kmax65536 7,968,014 -> 7,969,003 (+989); 3r measured +44 at n2304-kmax4096, the rest came with 3s + 3t, not split by round (`smartcontracts/evm/runs/2026-11-11-stacked-gate/summary.txt`). A gas parameter: no `proofSystemId`, header, `set.json` or vector moves. The 2-of-2 boundary of `test_register_msigHolderBoundary` old -> new (mldsa65, mldsa87, fndsa1024): n2048 4,528,580 -> 4,528,110, 4,508,079 -> 4,507,608, 4,560,582 -> 4,560,112; n2304 4,423,457 -> 4,422,983, 4,402,956 -> 4,402,481, 4,455,459 -> 4,454,985; n2560 4,319,525 -> 4,319,046, 4,299,023 -> 4,298,545, 4,351,527 -> 4,351,048; n2816 4,201,458 -> 4,200,975, 4,180,957 -> 4,180,474, 4,233,460 -> 4,232,977.
 Change (owner 2026-11-11, ruling "move the pin" after the Fable review fixes; status: BUILT on branch `ua-mtx-fix-contracts`): `debit_min_gas` follows the measured cheapest LOG debit again (`test_debitMinGas_isTheCheapestLogDebit` at each set by `at-set.sh`; `set.toml` edited, `PqzSet.sol` regenerated by `gen_set.py --all`, the contracts' copy the generated n2304-kmax4096 text): n2048-kmax1024 7,299,074 -> 7,299,398, n2304-kmax4096 7,514,360 -> 7,514,684, n2560-kmax16384 7,727,209 -> 7,727,533, n2816-kmax65536 7,969,003 -> 7,969,327 (+324 each). Cause: the review fixes on the relayed burn path, not split by finding (`_poolMove`'s native `UA_POOL` check, B P3-1; `_callFee`'s two refusals, B P3-4; A-1's fee test in `PqzLayer._burn`). A gas parameter: no `proofSystemId`, header, `set.json` or vector moves.
+Change (owner 2026-11-20, owner: yes; status: current; commit: multi-gen-verify `3f3031ed9`): `debit_min_gas` follows the measured cheapest LOG debit again (`test_debitMinGas_isTheCheapestLogDebit` at each set by `at-set.sh`, +603 at every set on the multi-gen-verify tree; the rule of 2026-11-12 option (b)): n2048-kmax1024 7,364,000 -> 7,365,000 (measured 7,364,107), n2816-kmax65536 8,033,000 -> 8,034,000 (measured 8,033,327); n2304-kmax4096 (6,073,782) and n2560-kmax16384 (7,792,980) unchanged. Owner 2026-11-20: no full gate.sh for the debit_min_gas change (n2048-kmax1024 7,365,000, n2816-kmax65536 8,034,000); the Task 20 matrix at all four sets suffices.
 
 Change (2026-10-31): controller correction, no new ruling — the normative text's reason for having no `SENDER_CP` ("a PQZ transfer has one recipient") predates `R_TXM`: since CTR-PQZ-25 / CTR-PQZ-26 a PQZ transfer is either op 1 (one recipient) or op 7 (several recipients plus decoys). The rule is unchanged: still three kinds and no `SENDER_CP`, because PQZ's `SENDER_S` is a zero-knowledge proof for one leg (`verifyTransferAmount(entryRef, leg, amount, kind, proof)`, leg `j` of an op 7 entry, leg 0 of an op 1 entry) that reveals neither `r` nor noise and so never opens the other legs or the decoys. pq-zero-knowledge.md §7.9 now gives that reason. Status: done (docs only).
 Change (2026-11-06, owner ruling R2; group 3f, CTR-PQZ-29; with 3g's `keyVersion`, KV-11): **on an OFFCHAIN token the verdict-less `verifyTransferAmount(entryRef, leg, amount, kind, keyVersion, proof)` reverts `PqzVerdictRequired()`** ("cannot verify": a `bool` has no third value and `false` would read "the amount is wrong", C2-6). The form with `PqzSignedVerdict pqzVerdict` last: PRECOMPILE ignores the verdict and the precompile answers as before; OFFCHAIN answers `true` iff CTR-PQZ-29's checks pass against `disclosureStatement(…)` and the proof, `false` on a field mismatch, a refused signature, a revoked or changed verifier, an empty proof and the statement's shape errors, `UAVerifyGas` when starved. Nothing is recorded, so the rule of no on-chain record holds (as Zether's CTR-ZTH-39, unchanged). The stronger check stays off chain: `pqz-ffi` on `disclosureStatement(…)` and the proof ([integration.md](integration.md#pqz-offchain-checks)). The spec's "five-argument" / "seven-argument" forms are six / seven arguments since 3g's `keyVersion`. Status: BUILT (T45 `2cce490d`).
@@ -6852,12 +7223,14 @@ Change (2026-11-02, typed-signing CD; owner 2026-10-31, one rule (owner 2026-10-
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §3 MG-4, MG-6; §4; §13 N-H1.
 Change (2026-11-09, group 3i, owner Q1 B): a chain profile also lists its services, the `chain_contract` rows of kind `service` (the node's `[[chains.services]]` today, [NODE-JOB-25](node/job-api.md#NODE-JOB-25)), advisory as the DEX list is: a client warns for a service off the list. Status: the node's config BUILT (T79 `711f4f35`); the profile's published list SPECIFIED.
 
-### NET-ALL-25 — A chain we run that forks becomes a new chain; no shared genesis hash
+### NET-ALL-25 — A chain we run that forks becomes a new chain; no two profiles share `(chainId, chain_uid)`
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-25 · superseded-by: —
 
 **Why.** Two branches of a fork share genesis, so `chain_uid` cannot separate them; a PoA chain re-created from the same genesis file repeats its hash. Owner ruling (2026-10-08): a fork of a chain we run gets a new chain id and `chain_key`; every private genesis carries a unique `extraData` nonce and a known genesis hash is refused.
 **Cost if wrong.** Signatures made on one branch or one incarnation of a chain replay on the other.
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §3 MG-4 (limits), §10 OQ3.
+Change (controller call of 2026-11-21, [ARCH-POS-19](#ARCH-POS-19) Q8; owner: no; status: the text current, the pair check SPECIFIED, plan [`2026-11-21-avax-polkadot-arweave.md`](superpowers/plans/2026-11-21-avax-polkadot-arweave.md) T1): old, "no two chain profiles share a genesis hash"; new, "no two chain profiles share the pair `(chainId, chain_uid)`": a private chain's genesis hash stays unique (its `extraData` nonce) and a known private genesis hash is still refused; public chains may share a genesis (Avalanche C-Chain and Fuji, Ethereum and ETC) and are told apart by the chain id, a profile whose pair is already present refused; every chain-bound SCaaS digest binds the chain id beside `chain_uid`. Why: the old text was false for public chains already in `chain-uids.json`, while NET-ALL-22, NET-EVM-13 and the deploy gate already key on the pair.
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C18; owner: no; status: SPECIFIED, plan T1): old, "every chain-bound SCaaS digest binds the chain id beside `chain_uid`"; new: a digest that binds the chain id is told apart on a shared genesis, a record that names its home by `homeChain` (`chain_uid`) alone is not (`PqChatSession`, `PqTopic`, PqVault's records), so the deploy gate refuses a kind that keeps such records on a profile whose `chain_uid` another profile shares, until the records carry the chain id; clients refuse such a home as well (O3); T1 audits every digest that binds `chain_uid` and defines the `chain-uids.json` field that marks a chain as private. Why: review F9, the old sentence was false for `homeChain` records, and a client refusal alone is an off-chain guard. The owner may override the rewording.
 
 Under "Networks — EVM":
 
@@ -7061,6 +7434,13 @@ no longer exercise 7702 end to end.
 **Addendum (2026-10-31, owner, branch `fs3-t13-rollout`, Task 13 final): `sc-verifier` memory 768 MiB.** The patched verifier's 31-contract run hit the 512 MiB cap (cgroup `memory.peak` at the cap, page cache reclaimed, no OOM kill), so the cap is 768 MiB (stack config); later runs sit at the 768 MiB cap with no OOM kill. Owner: no further raise, verification is occasional. Status: **done** (live).
 **Addendum (2026-10-31, owner, branch `fs3-t13-rollout`, Task 13 final): `API_RATE_LIMIT_DISABLED` true on the backend.** Blockscout's default per-IP API limit (500 `/api/v2` calls per 15 minutes) answered HTTP 429 to every caller, the UI included, during a verification run; on this private chain the limit is off. `verify-blockscout.sh` stays gentle anyway (one address call per check, curl retries a 429 up to six times with a fixed 15 s delay, a pause between contracts). Status: **done** (live; RUNBOOK § Contract verification).
 **Addendum (2026-11-10, owner rulings via the controller, branch `ua-mtx-merge`, T66b Step 5b): every contract on the SCaaS testnet, by the chain-neutral step of NET-EVM-12.** The T66b Step 5 deploy had only its 7 linked libraries verified: the old run waited on `capped` slots held by other jobs, printed nothing until its end and never finished a pass. Now `sh script/onchain/verify.sh scaas-testnet` (Blockscout `http://127.0.0.1:4000/api` and RPC `http://127.0.0.1:8545` on loopback; the LAN address of the earlier notes is gone) compiles each source snapshot once under `capped`, then verifies outside it, one contract at a time in a 1 GiB scope. Result (rows `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-step5b/verify-scaas-testnet.txt`): of 345 contracts with code, before 74 verified / 5 linked clones / 265 unverified (34 of them CREATE3 proxies, then unclassified), after 255 verified (full match) / 8 linked clones / 35 CREATE3 proxies / 1 genesis predeploy, plus 90 SSTORE2 data contracts and 500 book or fork-broadcast addresses without code. Sources: `6df89135` (Step 5, PqChat, the tokens harness), `11349728` (the dex harness, `Dex.s.sol` changed after its run), `bf6f3d04` (the 2026-11-04 reset's PQZ e2e `GovernanceRouter`). Seen on the way: forge 1.8.5 exits 0 on Blockscout's `Fail - Unable to verify` (19 of the 67 contracts the last pass verified, large modules mostly, failed once and passed when submitted again), so the explorer's answer decides. **Open, for the owner (46 rows):** (1) 43 EIP-1167 clones with 95–175 bytes of appended data (the factory's `ChainEnv`, PqChat instances): Blockscout 9.0.2 answers `proxy_type` `unknown` with no implementation, while a 45-byte clone is linked (`eip1167`); every implementation is verified; options are the owner's (a patched Blockscout proxy detection, or accepting the clone's own code as its link as on Etherscan and Sourcify). (2) The 3 `OnchainFwd` harness contracts of the tokens group: `sc-verifier` answers `Fail - Unable to verify` on every attempt although their init code equals the snapshot's creation bytecode and their runtime differs only in the immutable; their standard JSON is 1,717,975 B against at most 1,255,036 B for every verified contract, so a request-size limit in the stack is the likely cause (not confirmed: the stack's containers were not touched). Status: **done** for the rest, the 46 rows open. **Closed (owner rulings 2026-11-10 via the controller):** (1) `vcheck.py` counts an EIP-1167 clone with appended data as linked, state `linked (clone, appended data)`, apart from Blockscout's own `linked clone`, when its first 45 bytes are exactly the EIP-1167 proxy naming an implementation and that implementation is fully verified (43 rows). (2) A partial match is accepted for a harness contract, state `verified (partial, harness)`: the code's metadata hash names a `script/` artifact of a source snapshot and the explorer's name matches. `forge verify-contract --flatten` was refused (the whole `Tokens.s.sol`, 1.65 MB, and the forwarder alone, 1,011 B); a standard JSON holding only the forwarder's source (1,784 B) verified the 3 `OnchainFwd`, partial match, which points to the request size for the 1.72 MB one. (3) For later deploys the forwarder is its own file without imports, `script/onchain/OnchainForwarder.sol`, renamed `OnchainFwd` → `OnchainForwarder` and `exec` (0xbe6002c2) → `forwardCall` (0x22bee494), behaviour unchanged, standard JSON 2,048 B, so a full match; the books and records of the deploy before the SCaaS testnet's reset 2 keep the old name. Read-only pass after: 0 unverified. Status: **done**, 0 open rows.
+**Change (owner 2026-11-20): API on host port 8548, UI on 8549; Blockscout a separate compose project.** The API moved from host
+port 4000 to 8548 (8557 for a few hours the same day), the UI from 8558 to 8549; Blockscout runs as its own compose project, the chain's compose holds the sealer and `rpc` only,
+the all-in-one compose kept beside them. `verify-blockscout.sh`, `onchain/vcheck.py` and [evm.md](networks/evm.md#NET-EVM-09)
+follow.
+**Change (owner 2026-11-20): one stack directory, two subdirectories.** The SCaaS testnet stack is one stack directory `~dockers/mba-chain-nethermind` (owner 2026-11-20): `pqz-nethermind/` (the chain: the sealer and `rpc` compose, genesis and config, keystore, data), `blockscout/` (the Blockscout compose and `sc-verifier`), `docker-compose-full.yml` (all in one) and one `.env` at the top; the stack is a standalone MIT repository meant to be public, stock Nethermind by default, the PQ precompiles opt-in. The RUNBOOK's
+commands run `docker compose` in `pqz-nethermind/` (chain) or `blockscout/` (explorer); [evm.md](networks/evm.md#NET-EVM-09)
+follows.
 
 ### NET-EVM-10 — The SCaaS testnet runs a sealer node and a public rpc node
 - old: — · status: current · owner: yes · date: 2026-10-31 · normative: networks/evm.md#NET-EVM-10 · superseded-by: —
@@ -7085,6 +7465,8 @@ Change (2026-11-11, Fable review D P3-3 and D P3-6; controller calls under the o
 Change (2026-11-15, owner, TODO 3zh MD-7; status: BUILT on branch `3zh-mldsa`): `deploy.sh evm`'s first step (`script/pq_verifiers.py`) also deploys `MldsaVerifier` 0x0130 / 0x0131 / 0x0134 on the chain's ML-DSA precompiles where each probe passes and `MLDSA_PRECOMPILE=on` (the default), by CREATE2 with `DEPLOY_SALT` after the release gas gate of the declared `RELEASE_GAS_GATE`, each checked by `verify` of its `pq_kat.json` row within `cap + cap / 63` gas; their addresses reach `DeployBase` as `MLDSA44_VERIFIER` / `MLDSA65_VERIFIER` / `MLDSA87_VERIFIER`, taken only at this build's CREATE2 address. `MLDSA_PRECOMPILE=off`: none, every ML-DSA kind on the cache.
 
 Change (2026-11-15, owner "Ok", TODO 3zh send speed (b); status: BUILT on branch `reset5`, UNAUDITED): `deploy.sh evm` sends DeploySend's plan in batches of `DEPLOY_BATCH` (16) without `--slow`, one forge run per batch (`DeploySend.run(string,uint256,uint256)`, each batch measured on the fork of the chain as the batches before it left it; `BatchOutOfRange` for a window outside the plan); still one short line per transaction (address and tx hash, from the receipts after each batch) plus `batch k/n ok` and a nonce-count heartbeat between; every receipt status 1 checked before the next batch (`script/deploy_batch.py check`), a named stop at the first failure; the release-done check kept. Mainnet fee gate `MAX_FEE_GWEI`: default 0.1 gwei on a mainnet (chain key `-mainnet`), none on a testnet unless set; 2 × base fee + tip (`fee.sh`, the fee forge signs) compared before every batch, a named stop above it (`FEE_OVER_MAX`); a re-run skips the releases already there. Why: one transaction per block (`--slow`) made a 153-transaction deploy take 1,564 s on the SCaaS testnet (reset 4b); a deploy has one sender, so the chain takes several of its nonces per block. Cost if wrong: a batch whose later transaction depends on an earlier one of the same batch is measured on the fork in order, so it fits; a failure inside a batch may leave the rest of that batch pending or reverted (the stop names the first), and a re-run re-plans from `Deploy.s.sol`; the default tip of 1 gwei is above the default mainnet cap of 0.1 gwei, so a mainnet deploy sets `ONCHAIN_TIP` (or `MAX_FEE_GWEI`) explicitly. Evidence `smartcontracts/evm/runs/2026-11-16-reset5.txt`; rule text [networks/evm.md](networks/evm.md#NET-EVM-11).
+
+Change (owner 2026-11-19, ruling R9; status: BUILT, branch `multi-gen-verify` `78ce41390`, UNAUDITED): the ML-DSA verifiers' candidates are by default the chain's own precompiles and Final EIP addresses only; EIP-8355's Draft `0x12` / `0x13` / `0x14` only under the owner-confirmed flag with the fuller probe ([CTR-UA-69](contracts/accounts.md#CTR-UA-69)). A later registry generation deploys by `script/DeployUAGen.s.sol` after the per-transaction cap probe `script/tx_gas_cap.py` ([CTR-UA-64](contracts/accounts.md#CTR-UA-64)).
 
 ### NET-EVM-12 — Every contract a remote deploy leaves on a chain is source-verified on its explorer
 - old: — · status: current · owner: yes · date: 2026-11-10 · normative: networks/evm.md#NET-EVM-12 · superseded-by: —
@@ -7124,6 +7506,45 @@ Change (2026-11-16, owner ruling relayed by the controller: "ok, option 2, one c
 **Why.** A Draft's address can be assigned to another function later; the same address with a different function on our chain would make a contract written for Ethereum call the wrong code. Verifiers take the address by probe at deploy, so matching a Draft gains nothing today.
 **Cost if wrong.** A third-party contract written for a Draft EIP-8355 address does not find the precompile on our chains until the EIP is Final and the fork adds it.
 **Source.** Owner 2026-11-19, in chat: "OK, không đổi địa chỉ." (OK, do not change the address), on the controller's proposal to keep the `0x…5caa` range and add the Final address alongside once an EIP is Final.
+
+### NET-EVM-16 — Avalanche C-Chain and Fuji: draft profiles; lanes and readers follow the chain after Helicon
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: networks/evm.md#NET-EVM-16 · superseded-by: —
+
+**Rule.** (Summary; normative [evm.md](networks/evm.md#NET-EVM-16).) Seeded `draft` (`avalanche-mainnet` 43114, `avalanche-testnet` 43113, one shared genesis told apart by the chain id); `tag finalized`; logs at or below the final block; accepted without a receipt is `Pending`; gas limit = the estimate with the lane margin; at most 16 in flight per lane key; the per-transaction ceiling read live; no SCaaS set before Amsterdam, a single contract earlier under NET-EVM-18; `enabled` after the probes of NET-EVM-19.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q1 (wait for Amsterdam, a draft profile now); the lane facts are the chain's after Helicon (ACP-194).
+**Cost if wrong.** A fixed high gas limit pays half of it; a log read above the final block taken as absence; a Fuji endpoint answering for C-Chain.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C19, C22; owner: no): the header's `owner: yes` corrected to `owner: no` (review F11: the entry holds controller calls; the owner's part is ARCH-POS-19 Q1); `enabled` also needs NET-EVM-19's probes (review F10).
+
+### NET-EVM-17 — Polkadot Hub first, Moonbeam second: draft profiles, probes and measurement before `enabled`
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: networks/evm.md#NET-EVM-17 · superseded-by: —
+
+**Rule.** (Summary; normative [evm.md](networks/evm.md#NET-EVM-17).) Hub (`polkadot-hub-mainnet` 420420419, `polkadot-hub-testnet` 420420417, `polkadot-hub-westend` 420420421) is `enabled` only after the probes of every EVM profile (NET-EVM-19) and the weight-to-gas measurement on Paseo, whose `max_tx_gas` is the profile's gas cap; the storage deposit is a fee; Moonbeam (1284, 1287) follows with the same probes.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q2; CLI-RPC-03 and CLI-RPC-05 pin `chain_uid` and blocks by hash, and Hub's gas has no Ethereum figure.
+**Cost if wrong.** A pinned read answered from another block; an op priced in Ethereum gas that does not fit Hub.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C19, C22; owner: no): the header's `owner: yes` corrected to `owner: no` (review F11; the owner's part is ARCH-POS-19 Q2, the order); the Hub-only probe list moved to NET-EVM-19, which every EVM profile passes (review F10).
+
+### NET-EVM-18 — A contract deploys before a chain's Amsterdam fork only when its `amsterdam` build fits that chain
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: networks/evm.md#NET-EVM-18 · superseded-by: —
+
+**Rule.** (Summary; normative [evm.md](networks/evm.md#NET-EVM-18).) Five checks before the send: code within the chain's caps; the deploy transaction within its live cap at its pricing; an allow-list opcode scan (immediates walked by the compile target's table, boundaries from the compiler); the tests executed at the chain's fork on the artifact's bytes, with a control that must fail; every precompile called present on the chain. A testnet round trip before a mainnet deploy. One compile target stays (NET-EVM-06); a contract failing the opcode or precompile check waits for the owner.
+**Status.** SPECIFIED, nothing built. UNAUDITED. Today only `PqChatStore` qualifies.
+**Why.** Owner Q1 "per contract", made concrete without a second compile target (controller call C5 of ARCH-POS-20).
+**Cost if wrong.** A contract that uses an opcode the chain lacks deploys and fails at run time.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C5; owner: no): old, a linear disassembly against a list of new opcodes and the tests "against `anvil --hardfork`" (forge runs its own EVM at its `evm_version`, so that could pass under Amsterdam rules); new, the allow-list scan, execution at the chain's fork with a control that must fail, check (5) for precompiles, and a testnet round trip (review F7, F8).
+
+### NET-EVM-19 — Every EVM profile passes one probe set before `enabled`
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: networks/evm.md#NET-EVM-19 · superseded-by: —
+
+**Rule.** (Summary; normative [evm.md](networks/evm.md#NET-EVM-19).) Before `enabled`, from two independent RPC providers: H1 block 0 hash equal and stable 7 days; H2 EIP-1898 reads by a canonical hash, a made-up hash refused; H3 `latest` reorgs over 24 h; H4 a block asked by hash is that block or an error; H5 `latest` − `finalized` p99 over 7 days; H6 `eth_getLogs` limits; H7 `finalized` served and never moving back; H8 a read pinned by the newest head's hash answered from that block's state or refused. One foreground sample per invocation; the windows are the operator's scheduler. A failed probe stops `enabled` and goes to the owner.
+**Status.** SPECIFIED, nothing run. UNAUDITED.
+**Why.** CLI-RPC-03 and CLI-RPC-05 pin `chain_uid` and every agreed read by block hash, verified so far on `anvil` and Nethermind only; a check required on one chain kind and not another splits a rule by chain (review F10; controller call C19).
+**Cost if wrong.** A pinned read answered from another state on a chain already `enabled`.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
 ### NET-EVM-80 — First chain Gnosis, then Celo
 - old: UD:§1:first-chain · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: NET-EVM-03
 
@@ -11003,6 +11424,26 @@ The controller's calls of the round are a separate record, CLI-UAL-63.
 
 **Change (coordinator 2026-11-17, T13 C6 of Fable's code review, the range ruling; BUILT, UNAUDITED).** (13) gains a refusal. Old: `sign_near_transaction` / `signNearTransaction` signed `sha256` of any bytes. New: `Argument` when the first four bytes, read as a little-endian `u32`, are at or above 2^30: the two ranges NEP-461 reserves, 2^30 to 2^31 − 1 for on-chain actions (a NEP-366 delegate action) and 2^31 to 2^32 − 1 for off-chain messages (NEP-413). Reason: the call named for transactions also signed those payloads, which a verifier or relayer accepts; a Borsh `Transaction` starts with its `signer_id`'s length (at most 64), so no transaction is refused. `native.json`: a second one-time exception to (15), granted by the coordinator on C1's grounds (rows of this round, never merged or consumed) and named by the generator: the accepted 131,072-byte neighbour of `sign_near_transaction 131,073 bytes` is `0x00` bytes, not `0xa5` (it keeps testing the size bound), and the exact-tag row `… the NEP-413 tag, the next value accepted`, whose neighbour the range refuses, leaves; refusal rows for the two tags in use and for 2^30, 2^31 and 2^32 − 1. [Native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §8.1 item 3.
 
+### CLI-UAL-64 — ANS-104 data items as `arbundles` builds them, and a per-file upload key, in `ua-rs`
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/ua-libraries.md#CLI-UAL-64 · superseded-by: —
+
+**Rule.** (Summary; normative [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-64).) Layout, deep hash and id as `arbundles`; types 2 or 4 (ed25519, by the Turbo probe) and 3 (secp256k1, EIP-191); no type 1; no target, anchor or tags; type 3 with `v ∈ {27, 28}` and low `s`; the upload key `HKDF-SHA-256(ikm = app root key ‖ file key, info = "scaas/arweave/v1/upload" ‖ type ‖ ctSha256)`, derived in the one `ua-rs` call that seals the file, `ctSha256` computed there; a handle of usage `UploadSign` bound to that hash, which signs only the item `ua-rs` built after re-checking its data hash: one key, one byte string; clientkeys vectors first, cross-checked both ways against `arbundles` with tag, target and anchor rows.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner rulings ARCH-POS-19 (2) and Q5; a per-file key links no two uploads, and a key bound to the object `ua-rs` sealed signs one item only (controller calls C8, C9).
+**Cost if wrong.** Uploads linked by their owner key, or a handle that signs a caller's digest.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C8; owner: no): old, the key derived from the app root key and a `ctSha256` the caller passed (one key could sign many items; review F2); new, the app root key and the file key as `ikm`, `ctSha256` computed inside `ua-rs` over the object it sealed, signing only an item `ua-rs` built; a seed holder alone can no longer link uploads without the file keys (review F13); type 3's `v` and low `s` pinned and the cross-check run both ways (review F6).
+
+### CLI-UAL-65 — The file object on Arweave: `ar://<id>`, power-of-two buckets, the read check
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/ua-libraries.md#CLI-UAL-65 · superseded-by: —
+
+**Rule.** (Summary; normative [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-65).) `url` accepts `ar://<id>` (43 canonical base64url characters); the plaintext is framed `size (8 B) ‖ file ‖ zero pad` up to the bucket, the smallest power of two at least `max(2^16, size + 8)` in integers, at most 2^30 B (2^27 B on wasm32), and encrypted, so the object is exactly bucket + 16 B and `ctSha256` is its SHA-256; a reader checks the exact length and `ctSha256` before decryption, then the frame, the zero pad, `size` and `sha256` before any plaintext leaves `ua-rs`; a cache keyed by the plaintext `sha256`; new vector rows in every client.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q4 (`ar://`); controller calls Q6, C10, C15, C17 (buckets, padding inside the AEAD, the plaintext check, the read cap).
+**Cost if wrong.** Anyone learns the exact size from the public object, or a client shows a file other than the one the message signed.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C10, C15, C17, C22; owner: no): the header's `owner: yes` corrected to `owner: no` (review F11; the owner's part is ARCH-POS-19 Q4, `ar://`). Old, `ct ‖ 0x00…` up to the bucket with `ctSha256` of `ct` (the GCM tag ends in a non-zero byte, so stripping the zeros gave the exact size, review F1, P1); new, the padding inside the AEAD as above, which changes UA-7's `ct` for `ar://` files (UA-7 §6.4.1 Change). The plaintext `size` and `sha256` checked in `open_file` (review F3); buckets in integers with edge rows (review F20); the in-memory cap and the exact-length read (review F5).
+
 ## 40. Clients — network crate (`scaas-rpc`)
 
 The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the [scaas-rpc spec](superpowers/specs/2026-11-17-scaas-rpc.md), reviewed by Fable on 2026-11-17 (findings F1–F28, I1–I3, all applied before any code).
@@ -11098,6 +11539,9 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", the rpc spe
 **Why.** ARCH-POS-15 (owner 2026-11-08): the same signed bytes to one or more nodes, never re-signed per node. A refusing endpoint may lie or may have relayed the bytes anyway. Fable F24: a blob transaction's network form is not hashed as its id.
 **Cost if wrong.** A re-signed copy lands twice; a refusal read as final makes a user sign again while the first transaction lands.
 **Source.** ARCH-POS-15; Fable review 2026-11-17 F23, F24, F27; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.7.
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C20; owner: no; status: SPECIFIED): one exception to "no automatic re-send": the SDK re-posts the same bytes of an unsettled Arweave item (same id) at 24 h, 72 h and 7 days ([CLI-SDK-21](clients/scaas-sdk.md#CLI-SDK-21)); the crate itself re-sends nothing. Why: the bytes and the id are the same, so nothing lands twice, and the sender's device holds the only copy until settlement (review F14). The owner may override.
+
+Change (owner 2026-11-21, "agreed, the CLI-RPC-08 exception"; owner: yes; status: SPECIFIED): one exception to CLI-RPC-08's "no automatic re-send": an Arweave upload not yet settled ([CLI-SDK-21](clients/scaas-sdk.md#CLI-SDK-21), [CLI-RPC-13](clients/scaas-rpc.md#CLI-RPC-13)) is re-posted with the same signed bytes at 24 h, 72 h and 7 days, asking the payer again if a re-post is refused for payment; after that it shows as `UploadUnsettled`. No other send is re-sent automatically. Spec `superpowers/specs/2026-11-21-avax-polkadot-arweave.md` revision 2, F14.
 
 ### CLI-RPC-09 — A transaction ends only on facts from a decisive read at a final block
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-09 · superseded-by: —
@@ -11136,6 +11580,26 @@ Change (2026-11-17, owner: yes (the owner took the review's proposal, Fable code
 **Why.** Owner 2026-11-11: the verifier's strict-majority option is built in `scaas-rpc`; until then its `rpc_urls` point only at nodes its operator trusts. Fable F9: reading first changes the cost before the proof check, so it is limited to the option and its refusal order pinned; F10: the verifier's agreed path must be the crate's EIP-1898 code, for `probe` too. Owner 2026-11-17 (CLI-RPC-50): one classifier.
 **Cost if wrong.** A lying RPC passes an off-chain key check that `OFFCHAIN` tokens trust the verifier for (CTR-PQZ-30); or a garbage proof costs every key read on every endpoint unannounced.
 **Source.** CTR-PQZ-29 Change of 2026-11-11; owner 2026-11-11 "hoãn, ghi rõ chỉ chạy với node của mình", corrected to "node do họ tin cậy"; Fable review 2026-11-17 F9, F10; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §11.2.
+
+### CLI-RPC-13 — Arweave reads: a gateway list, the caller's check, every attachment read feeds a decryption
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/scaas-rpc.md#CLI-RPC-13 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-13).) Gateways as CLI-RPC-02 lists, identity by `GET /info`; `data(id, len, purpose, check)` streamed within the exact length, an announced other length refused unread, no `Range`, a per-platform cap, a body failing the check is that gateway's failure; failover or strict majority by SHA-256; discovered gateways never alone (CLI-RPC-06); `status` by GraphQL, bounded; `settled` = a strict majority of at least two gateways of different operators, a block at least `depth` below the tip, and the bytes read back.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** ARCH-POS-15 applied to gateways; the check is cheap (controller call C12).
+**Cost if wrong.** A gateway serving chosen bytes to a decryption, or an unbounded body.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C16, C17; owner: no): old, `data(id, max_bytes, …)` read to the bound and "settled" when one gateway shows a block height under the list's policy (failover by default); new, the exact length streamed and the platform cap (review F5), and settlement by agreement, depth and the bytes, so the threat table and this rule agree (review F4).
+
+### CLI-RPC-14 — Arweave uploads: the same signed item to a bundler list, no keys, never final
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/scaas-rpc.md#CLI-RPC-14 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-14).) `upload(item, paid_by)` parses the header within bounds (types 2, 3, 4), computes the id locally, posts the same bytes; a receipt for another id is a refusal; HTTP 402 is `PaymentRequired`; merged as CLI-RPC-08; `paid_by` sent as `x-paid-by` to that bundler only.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** CLI-RPC-08's send rule; a Turbo receipt is acceptance, not retrieval (controller call C11).
+**Cost if wrong.** A bundler receipt for other bytes taken as an upload.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C20; owner: no): settlement read through CLI-RPC-13's `settled`; the crate re-sends nothing, the SDK's bounded re-post being the one exception to CLI-RPC-08 (review F4, F14).
 
 <a id="CLI-RPC-50"></a>
 ### CLI-RPC-50 — Owner rulings on the `scaas-rpc` questions, 2026-11-17
@@ -11430,6 +11894,16 @@ Change (coordinator, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/
 Change (coordinator, 2026-11-17, findings K4 and K5 of Fable's `pqchat-core` spec review (`scratchpad/pqchat-core-review/20261117-19-fable-fable-high-spec.md` in the pqchat-core worktree, kept outside the tracked files); status: SPECIFIED): (K4) old, "the usage is an input of the derivation's info"; new, the usage is handle metadata enforced at use and never enters any derivation's info, HMAC message or other byte, so UA-7's, clientkeys `pqchat.js`'s and the pqvault spec's pinned bytes stay as they are; `seal_key`'s key-wrap AAD (`"scaas/ua/v1/keywrap" ‖ u8(usage) ‖ aad`) is a new format of the SDK's own, and `seal` / `open` refuse an AAD starting with that constant; a public MAC output of at most 8 bytes (`mac_public`) and `derive` with a binary context are added. (K5) `kem_wrap` builds the scheme byte and `kemPkHash` from the recipient's KEM key record at `kem_version` itself; the app core never passes them; the wrapped key is sealed by AES-256-GCM with nonce `0^96` as UA-7 pins it.
 
 Change (controller, 2026-11-21, pqchat-core T1's SDK rows; owner: no; status: BUILT, UNAUDITED): `read_app` added (a bounded, ABI-driven view read of named JSON at the final block, `Purpose::FeedsDecryption` when trusted: the views of CLI-PQC-13 and pqvault-core's reads); PqChat's key entries K1–K6, S1, S2, S5, V1, V2 on the scope's handles under PqChat's declared prefix; the test feature `vectors` (bit 28) refused in a release build and kept out of every shipped artifact and binding.
+
+### CLI-SDK-21 — `upload_file` / `fetch_file`: the free tier for the smallest bucket, the operator payer for the rest
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/scaas-sdk.md#CLI-SDK-21 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-21).) `seal_for_arweave` seals, frames, derives the upload key and signs in one `ua-rs` call; `upload_file` takes only that item and posts it through CLI-RPC-14 on the user's send; the 2^16-B bucket on the free tier (best effort), larger ones `x-paid-by` the node's payer (NODE-SPN-05; `PayerUnavailable` while none is configured); the signed bytes kept until CLI-RPC-13 reports them settled, re-posted unchanged at 24 h, 72 h and 7 days, then `UploadUnsettled`; `fetch_file` reads the exact length with the `ctSha256` check; `open_file` checks the frame, `size` and `sha256` in `ua-rs`; PqVault writes an `ar://` item after one gateway read passed; the user told the object is public and permanent; no operator credential in the client; the payer link is a stated metadata cost.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q4 and Q5 (`ar://`; operator payer, free tier, no credential in the client); controller calls C8, C11, C13–C17, C20.
+**Cost if wrong.** A client holding an operator credential, or a per-user payer linking all of a user's uploads.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C8, C15, C16, C20, C22; owner: no): the header's `owner: yes` corrected to `owner: no` (review F11; the owner's parts are ARCH-POS-19 Q4 and Q5). Old, `upload_file(app, ct, ct_sha256)` with the caller's hash (review F2), `open_file` without the plaintext check (review F3), a re-post every 24 h with no end (review F14); new, `seal_for_arweave` and `upload_file(app, item)`, `open_file(app, object, key, size, sha256)`, the bounded re-post schedule and its terminal state, the free tier best effort (review F16), the user notice of permanence (review F17).
 
 ### CLI-SDK-30 — Owner rulings of the SDK spec, 2026-11-11 to 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-SDK-30 · superseded-by: —

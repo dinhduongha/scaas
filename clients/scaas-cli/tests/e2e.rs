@@ -90,6 +90,7 @@ async fn cli_pay_on_anvil() {
             regular: None,
         }],
         verify: vec![scaas_sdk::GasVerify {
+            line: Default::default(),
             signer: 0,
             gas: 0,
             sig_bytes: 0,

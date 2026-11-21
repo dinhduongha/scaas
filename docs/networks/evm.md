@@ -25,6 +25,9 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
 | BNB Smart Chain | 56 | `bsc` (`amsterdam`; Mendel = Osaka since 2026-04-28; deploy after its Glamsterdam fork) | BNB (~0.05 gwei) | `tag finalized` (BEP-126 fast finality, ~1 s), quorum ≥ 2 | seeded `draft` |
 | Polygon PoS | 137 | `polygon` (`amsterdam`; runs the Osaka opcode set today; deploy after its Glamsterdam fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
 | Base | 8453 | `base` (`amsterdam`; Azul since 2026-05-28; deploy after its Glamsterdam fork) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
+| Avalanche C-Chain, Fuji | 43114, 43113 | `avalanche-mainnet`, `avalanche-testnet` (`amsterdam`; Cancun today, no Amsterdam; a single contract earlier under [NET-EVM-18](#NET-EVM-18)) | AVAX; a transaction pays at least half its gas limit | `tag finalized` (= `safe`, the settled block, ~5 s) | seeded `draft`, [NET-EVM-16](#NET-EVM-16) |
+| Polkadot Hub; Paseo; Westend | 420420419; 420420417; 420420421 | `polkadot-hub-mainnet`, `polkadot-hub-testnet`, `polkadot-hub-westend` (`amsterdam`; REVM, 24,576-B runtime cap) | DOT; gas folds weight and the storage deposit | `tag finalized` (GRANDPA) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes and the measurement, [NET-EVM-17](#NET-EVM-17) |
+| Moonbeam; Moonbase Alpha | 1284; 1287 | `moonbeam-mainnet`, `moonbeam-testnet` (second, after Polkadot Hub) | GLMR; storage-growth gas | `tag finalized` (relay-finalized) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes, [NET-EVM-17](#NET-EVM-17) |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas
   costs are predictable in unit, though their size still follows the gas price (the often-quoted < $0.001/tx is not a
@@ -58,7 +61,50 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
   (`polygon-rpc.com` answered 401/403); `mainnet.base.org` (rate-limited), `base-rpc.publicnode.com`. The switch to
   `enabled` follows the same operator gate as Gnosis (measured finality p99 over 7 days, RPC quorum, a passing deployment).
 
-Other EVM chains (Ethereum L1, Arbitrum, Optimism, Avalanche, Linea) are **unsupported until
+- <a id="NET-EVM-16"></a>**NET-EVM-16** — **Avalanche C-Chain (43114) and Fuji (43113) are seeded `draft` profiles; their
+  lanes and readers follow the chain's facts after Helicon** (owner 2026-11-21, [ARCH-POS-19](../decisions.md#ARCH-POS-19)
+  Q1; the facts and lane rules controller calls of [ARCH-POS-20](../decisions.md#ARCH-POS-20), owner: no; SPECIFIED, design in the
+  [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part A). Both share the genesis `0x31ced5b9…a96b` and are told apart by the chain id
+  ([NET-ALL-25](README.md#NET-ALL-25)). The EVM is Cancun (`libevm`) with P-256 at `0x100`; no EIP-2537, EIP-7702, EIP-7825,
+  EIP-7954 or EIP-8037; runtime code is capped at 24,576 B and init code at 49,152 B. Finality is `tag finalized` (`finalized` =
+  `safe` = the last settled block); logs are read at or below the final block, since `eth_getLogs` returns nothing for a block not
+  yet executed; a transaction accepted but without a receipt is `Pending`, never `dead`; the gas limit is the lane's estimate with
+  its margin, never a fixed padding (a transaction pays `max(gasUsed, gasLimit / 2)`, ACP-194); a lane key keeps at most 16
+  transactions in flight; the per-transaction ceiling is the live block cap (the sum of gas limits), read, never a constant; real
+  gas comes from receipts, since a header's `gasUsed` sums gas limits. No SCaaS contract set deploys before C-Chain has the
+  Amsterdam fork ([NET-EVM-06](#NET-EVM-06)); a single contract may deploy earlier under [NET-EVM-18](#NET-EVM-18). `enabled`
+  follows the operator gate of every public profile, the probes of [NET-EVM-19](#NET-EVM-19) included (after Helicon a block is
+  accepted before it executes, so H7 and H8 matter here most).
+- <a id="NET-EVM-17"></a>**NET-EVM-17** — **Polkadot Hub first, Moonbeam second: draft profiles, and Hub is `enabled` only after
+  the probes every profile passes and its weight-to-gas measurement** (owner 2026-11-21, ARCH-POS-19 Q2: the order; the
+  measurement condition a controller call of ARCH-POS-20, owner: no; SPECIFIED, the
+  [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part C). Hub (pallet-revive) runs solc bytecode on REVM
+  through `eth-rpc`, with a hard 24,576-B runtime cap and `tag finalized` (GRANDPA). Before `enabled` the probes of
+  [NET-EVM-19](#NET-EVM-19) pass, as on every EVM profile (H4 matters most here: `eth-rpc` maps Ethereum and Substrate hashes).
+  Hub's gas folds `ref_time`, `proof_size` and the storage deposit into one figure with no Ethereum equivalent, so every line
+  priced in Ethereum gas is measured again on Paseo, and the profile's `max_tx_gas` (Hub gas units) is the gas cap
+  [CLI-RPC-05](../clients/scaas-rpc.md#CLI-RPC-05) and the node use there; an op that does not fit goes to the owner with
+  numbers ([ARCH-POS-18](../decisions.md#ARCH-POS-18)). The storage deposit is part of the fee: nothing SCaaS writes there is
+  ever cleared, so it is never refunded, and a lane's balance alert adds the existential deposit. Moonbeam (Frontier, Ethereum
+  gas, EIP-2537 and P-256 present) follows with the same probes and a Moonbase check.
+- <a id="NET-EVM-19"></a>**NET-EVM-19** — **Every EVM profile passes one probe set before `enabled`: block 0, reads by hash,
+  head stability and finality** (controller call of 2026-11-21, [ARCH-POS-20](../decisions.md#ARCH-POS-20) C19, owner: no;
+  one rule on every chain, never a rule for one chain kind; SPECIFIED, the
+  [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §6.2). Public reads, no spend, from at least two independent
+  RPC providers: **H1** `eth_getBlockByNumber("0x0").hash` equal on both and unchanged over 7 days
+  ([CLI-RPC-03](../clients/scaas-rpc.md#CLI-RPC-03) pins `chain_uid` to it); **H2** `eth_call`, `eth_getStorageAt`,
+  `eth_getCode`, `eth_getBalance` and `eth_getTransactionCount` answer with `{blockHash, requireCanonical: true}` for a canonical
+  hash and refuse a made-up one ([CLI-RPC-05](../clients/scaas-rpc.md#CLI-RPC-05)); **H3** `latest` sampled each block over 24 h
+  and compared later with the canonical chain, replaced heads counted; **H4** a block asked by its hash returns that hash or an
+  error, never another block; **H5** p99 of `latest` − `finalized` over 7 days (the operator gate); **H6** `eth_getLogs` range
+  limits; **H7** the `finalized` tag is served and its number never moves back over the window; **H8** a read pinned by the hash
+  of the newest head, sent as soon as the head is seen, is answered from that block's state (compared with the same read once
+  the block is final) or refused, never answered from another state (on Avalanche: a block accepted and not yet executed is
+  refused). A probe that fails stops `enabled` and goes to the owner: CLI-RPC-03 or CLI-RPC-05 cannot hold on that chain. A
+  probe runs one foreground sample per invocation; the 24-h and 7-day windows are the operator's scheduler calling it, never a
+  background loop.
+
+Other EVM chains (Ethereum L1, Arbitrum, Optimism, Linea) are **unsupported until
 configured**: no profile, no finality gate, no tested deployment. A chain becomes supported only through a chain
 profile with a measured finality gate, an RPC quorum and a passing deployment. Reference values for such a profile,
 to be re-measured before use: Ethereum L1 12-s slots, finality = 2 epochs (~12.8 min); Arbitrum One / Base sequencer
@@ -263,6 +309,25 @@ state gas) exceeds 2^24, up to about 115.7 M simulated for the largest implement
 
 **Change (owner 2026-11-03, [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)):** the SCaaS testnet runs every Amsterdam EIP but EIP-7954, by removing `eip7954TransitionTimestamp` from its chainspec, because with EIP-7954 active the code limit is 65,536 B whatever `maxCodeSize` says (`pqz-core/nethermind/runs/2026-11-03-code-size-probe.txt`). `maxCodeSize` is `0x20000` (131,072 B); the init code limit is then 262,144 B, measured. 22776 stays the owner's at launch. Every other chain keeps the rule above. Status: **BUILT, executed 2026-11-04** (SCaaS testnet reset 1, owner's go; `patch-chainspec.py --testnet-reset`, governance T16 `52ef7d22`, `55a97e0e`, refusing every chain but 7622): image `2.2.0-pqz7`, genesis unchanged `0xf1f491ab…3164`; 65,537 B and 119,800 B deploy at a 200 M block, `WrappedPqzToken` (72,160 B) is deployed; `pqz-core/nethermind/chain/RUNBOOK.md` "Code size 128 KiB on the SCaaS testnet: reset 1", `smartcontracts/evm/runs/2026-11-04-testnet-reset1-7622.txt`.
 
+<a id="NET-EVM-18"></a>**NET-EVM-18** — **On a chain without the Amsterdam fork a contract deploys only when its `amsterdam`
+build fits that chain** (owner 2026-11-21, ARCH-POS-19 Q1 "per contract"; the five conditions a controller call of
+[ARCH-POS-20](../decisions.md#ARCH-POS-20) C5, revised after the review; SPECIFIED). NET-EVM-06 is unchanged: one compile
+target, `amsterdam`. The deploy script checks before it sends: (1) the runtime and init code are within the chain's caps; (2)
+the deploy transaction is within the chain's live block or transaction cap at the chain's own pricing; (3) an **allow-list**
+scan: every byte in code position of the runtime and init code is an opcode the chain's fork defines, the code walked with each
+opcode's immediate length from the compile target's table (`PUSH1`–`PUSH32` and any `amsterdam` opcode with an immediate), the
+code and data boundaries taken from the compiler's output (the metadata length, the constructor arguments and the runtime
+appended to the init code), never guessed; a byte the scan cannot place is a refusal; (4) the contract's tests **execute at
+the chain's fork** on the `amsterdam` artifact's bytes, never a recompile: real transactions to `anvil --hardfork <the chain's
+fork>`, or a forge profile whose `evm_version` is that fork and which loads the pinned artifact's bytes; the same run holds a
+control that must fail, a fixture whose `amsterdam` artifact uses an opcode the fork lacks (`CLZ` for Cancun), and a run whose
+control is green is void; gas figures at that fork are recorded and never compared with the Amsterdam pins; (5) every
+precompile the contract calls, declared per contract in the release data, answers a known-answer `eth_call` on the chain at
+deploy time. Before a mainnet deploy, the chain's testnet runs a real round trip of the contract (`anvil` is not the chain's
+client). A contract that fails (3) or (5) waits and goes to the owner: a build for an older fork changes NET-EVM-06, and a missing
+precompile means [ARCH-POS-18](../decisions.md#ARCH-POS-18)'s software path, never a disabled kind. A whole
+SCaaS set still waits for the chain's Amsterdam fork. Design: the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §4.5.
+
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
 Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the
 code deposit is state gas at 1,530 per byte of runtime, EIP-7825 caps only the regular gas at 2^24 = 16,777,216, and the
@@ -426,7 +491,9 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   the precompile does not answer; `DEPLOY_PQZ=1` adds the PQZ releases 4, 5, 12, 13 to the plan
   ([gen-1 kind gate](../contracts/accounts.md#gen1-kind-gate)). Change (owner 2026-11-15, TODO 3zh; BUILT on `3zh-mldsa`):
   with `MLDSA_PRECOMPILE=on` (the default) the same step builds `MldsaVerifier` 0x0130 / 0x0131 / 0x0134 on the chain's ML-DSA
-  precompiles where each probe passes (EIP-8355's `0x12` / `0x13` / `0x14`, then `0x…5caa0012` / `13` / `14`), each checked by
+  precompiles where each probe passes (the chain's own `0x…5caa0012` / `13` / `14` and Final EIP addresses; EIP-8355's Draft
+  `0x12` / `0x13` / `0x14` only under the owner-confirmed flag, [CTR-UA-69](../contracts/accounts.md#CTR-UA-69), changed
+  2026-11-19 from "Draft first"), each checked by
   `verify` of its `pq_kat.json` row within `cap + cap / 63` gas (the verifier's call itself held to it, by an eth_call to a
   state-override caller: the calldata floor of EIP-7623 / EIP-7976 applies to the transaction, not to the hold; reset 5 fix), and hands them over as `MLDSA44_VERIFIER` / `MLDSA65_VERIFIER`
   / `MLDSA87_VERIFIER`; `MLDSA_PRECOMPILE=off` builds none and every ML-DSA kind is on the registry's expanded-key cache. The
@@ -540,6 +607,51 @@ Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](..
 upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version deployed by the factory
 plus a voluntary migration.
 
+<a id="registry-line-deploy"></a>**Registry generations, PQ precompile candidates and the per-transaction cap** (BUILT on branch
+`multi-gen-verify`, `d2f6b6c32`, `53d4ad79d`, `78ce41390`; UNAUDITED; the rules are
+[CTR-UA-58](../contracts/accounts.md#CTR-UA-58), [CTR-UA-64](../contracts/accounts.md#CTR-UA-64) and
+[CTR-UA-69](../contracts/accounts.md#CTR-UA-69); this is the chain-side runbook).
+
+- **Chain-own precompiles and the keep commitment.** A chain profile lists the PQ precompiles it serves as its own (the SCaaS
+  chains: `0x…5caa0012` / `13` / `14` and `0x…5caa0f01`, [NET-EVM-15](#NET-EVM-15)) and states whether the chain commits to keep
+  them (the SCaaS chains do: NET-EVM-15 keeps the `0x…5caa` addresses when a Final address is added). A verifier deployed against
+  a chain-own address relies on that commitment; where a precompile is removed anyway, a verify-only kind falls back to its
+  holder ([CTR-UA-68](../contracts/accounts.md#CTR-UA-68)).
+- **Draft addresses.** `DeployBase._mldsaCandidates`, `script/PqPrecompileProbe.sol` and `script/pq_verifiers.py` probe the
+  chain's own addresses and Final EIP addresses only. EIP-8355's Draft `0x12` / `0x13` / `0x14` join them only when the chain's row
+  in `smartcontracts/evm/chain-uids.json` sets `probe_draft_precompiles: true` **and** the chain's deploy book records the owner's
+  confirmation `probe_draft_precompiles_owner` (with its reason); the flag without the confirmation refuses the deploy by name,
+  `DRAFT_PROBE_UNCONFIRMED`. A Draft candidate is taken only if it answers the fuller probe exactly: the valid row, the flipped
+  row and every `pq_kat.json` mutation row. No chain sets the flag today. Consequence on a chain whose only ML-DSA-87 precompile
+  is a Draft address: `mldsa87` runs on the cache (8,850,000) instead of the precompile path.
+- **`txGasCap`, probed.** Every `UARegistry` (generation 1 included) takes the chain's per-transaction gas cap as a constructor
+  argument (`TX_GAS_CAP`, required, no default; 0 refused by name). `deploy.sh evm` runs `script/tx_gas_cap.py` first: `eth_call`
+  of a cheap call at `2^24` and `2^24 + 1` gas through the chain's node list (`TX_CAP_NODES`, default the RPC) under strict
+  majority ([ARCH-POS-15](../decisions.md#ARCH-POS-15)), then, where `2^24 + 1` is accepted, a binary search up to the block gas
+  limit; the rows and the nodes' client versions (never a URL) go to the book. No cap found below the block gas limit (a chain
+  without EIP-7825) refuses `GEN_TX_CAP_UNKNOWN` until the owner sets `tx_gas_cap` in the book (`--owner-set`); a book value the
+  probe contradicts refuses `GEN_TX_CAP_MISMATCH`. Nothing assumes 2^24; a chain that raises its cap later keeps the old bound
+  in every deployed generation.
+- **A later generation.** With `UA_GEN_BOOK` set, `deploy.sh evm` runs `script/DeployUAGen.s.sol` (`SMART_KEY_ACCOUNT_IMPL` the
+  line's implementation): generation n + 1 over the book's latest, its own libraries, `0x0142` carried with the home's verifier
+  wherever a predecessor enables it, `msig` in full, the verify-only kinds of the book's `gen_verify_only` (ML-DSA only in this
+  build). Refused by name before anything is sent: `GEN_NOT_LATEST`, `GEN_DEPTH`, `GEN_WALK_MISMATCH <g>`, `GEN_TX_CAP_UNKNOWN`,
+  `GEN_TX_CAP_MISMATCH`, `GEN_PQZ_OMITTED`, `GEN_KEY_FORM_IMPOSSIBLE <kind>`, `GEN_VERIFY_ONLY_NO_PRECOMPILE <kind>`,
+  `GEN_PQZ_DEBIT_BOUND <kind>`; the owner's overrides (`GEN_NOT_LATEST`, `GEN_PQZ_OMITTED`) only as book fields with a reason. It
+  writes `deployments/<key>-ua-gen<g>.json` with the line (`ua_registry_line.gen<g>`: address, generation, predecessor, code
+  hash, libraries with code hashes, `tx_gas_cap`, `gen_pqz`, `verify_only` keyed by kind). Every contract of it is verified on the
+  explorer ([NET-EVM-12](#NET-EVM-12)), and the node's `ua_registries` lists the new generation
+  ([CTR-UA-65](../contracts/accounts.md#CTR-UA-65)).
+- **The differential probe, a deploy gate and an operations check.** `script/pq_verifiers.py verify-only` builds the verifier
+  and runs it before a later generation's broadcast, and the deploy refuses an entry without its `ok`
+  (`GEN_DIFFERENTIAL_MISSING`); `script/pq_verifiers.py differential` runs every KAT row on the kind's home
+  verifier (on the cache: `expandedKeyPart` per part, then `verifyExpanded`; on a precompile: `verify`) and on the verify-only
+  verifier, each by `eth_call` under strict majority; any difference is `GEN_DIFFERENTIAL_MISMATCH` with the rows, for the owner.
+  It runs before a later generation's broadcast and **again after every client upgrade on the chain**: a precompile is client
+  code, and a deployed verifier cannot follow a change. A precompile that stops answering is covered by the fallback; one that
+  answers differently goes to the owner (a laxer answer is a forgery). Not built: `pq_verifiers.py` building the verify-only
+  verifiers on a chain (the book names them today).
+
 ## 5. EIP-7702 accounts
 
 <a id="eip7702"></a>
@@ -580,16 +692,18 @@ balances are on (owner 2026-10-31: with the coin-balance fetcher disabled, Block
 after every block and the home-page block list stops; on the pruned node its catch-up retried old-block balances
 forever, about 1.5 CPU, until a one-off cleanup of those rows, `blockscout-code-backfill.py --prune-coin-balances`,
 rerun after an outage longer than the pruning window; archive mode at the sealer / RPC node split is the root fix);
-the UI is published on host port 8558 (owner 2026-10-31: not 3000) and the API on 4000; the frontend image is pinned
+the UI is published on host port 8549 and the API on 8548 (owner 2026-11-20; before: UI 8558, owner 2026-10-31 not 3000, and API
+4000, then 8557 the same day);
+Blockscout runs as a compose project of its own, apart from the chain's (owner 2026-11-20: the stack is one stack directory `~dockers/mba-chain-nethermind` (owner 2026-11-20): `pqz-nethermind/` (the chain: the sealer and `rpc` compose, genesis and config, keystore, data), `blockscout/` (the Blockscout compose and `sc-verifier`), `docker-compose-full.yml` (all in one) and one `.env` at the top; the stack is a standalone MIT repository meant to be public, stock Nethermind by default, the PQ precompiles opt-in); the frontend image is pinned
 by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET-EVM-10)) it reads the archive `rpc`
 node, and neither the code backfill nor the coin-balance cleanup is needed. Contract verification (owner ruling 2026-10-31): a local
 `smart-contract-verifier` (v1.11.1, 768 MiB since 2026-10-31: the patched 31-contract run hit 512 MiB; 1 CPU, `mba-net` only, Solidity only, solc from
 binaries.soliditylang.org, never Blockscout's hosted service) backs the backend, and
 every contract on the chain is verified by the step of [NET-EVM-12](#NET-EVM-12), `sh script/onchain/verify.sh
-scaas-testnet` (this Blockscout's API `http://127.0.0.1:4000/api` and the RPC `http://127.0.0.1:8545`, both on the host's
+scaas-testnet` (this Blockscout's API `http://127.0.0.1:8548/api` and the RPC `http://127.0.0.1:8545`, both on the host's
 loopback: the earlier LAN address is gone; the whole-chain scan on; the older per-broadcast `verify-blockscout.sh` stays);
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
-image (built outside the repo, `~dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
+image (built outside the repo, `~dockers/mba-chain-nethermind/blockscout/sc-verifier/`), temporary until upstream supports
 Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts and the PQZ e2e contracts verified, full match; the e2e tokens are EIP-1167 clones Blockscout links to their verified implementations (RUNBOOK § Contract verification).
 First whole-chain run, 2026-11-10 (BUILT, after the T66b Step 5 deploy had only its 7 linked libraries verified): of 345
 contracts with code, 255 verified (full match), 8 linked clones, 35 CREATE3 proxies, 1 genesis predeploy, plus 90 SSTORE2 data

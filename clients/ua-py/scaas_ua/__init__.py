@@ -225,6 +225,27 @@ def is_member(kind, hedera_native=False):
     return _single_signing(kind) or kind in (0x0001, 0x0002, 0x0120, 0x0121) or (hedera_native and kind == 0x0003)
 
 
+class TargetError(UAError):
+    """Why a registration of ``kind`` does not belong on a registry (``registration_target_ok``): ``code`` ``UAVerifyOnly`` (register
+    at ``kind_home``) or ``UAKindNotOnLine`` (``kind_home`` zero: no generation of the line enables the kind)."""
+
+    def __init__(self, code, kind, kind_home):
+        super().__init__(code, f"kind 0x{kind:04x} kindHome 0x{kind_home.hex()}")
+        self.kind = kind
+        self.kind_home = kind_home
+
+
+def registration_target_ok(kind, registry, kind_home):
+    """CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of ``kind`` is sent to
+    ``registry`` only where ``kind_home`` (the registry's ``kindHome(kind)``, read by the caller: no RPC here) equals it. Both 20
+    bytes. Returns None; raises ``TargetError``."""
+    registry, kind_home = _sized(registry, 20, "registry"), _sized(kind_home, 20, "kindHome")
+    if kind_home == bytes(20):
+        raise TargetError("UAKindNotOnLine", kind, kind_home)
+    if kind_home != registry:
+        raise TargetError("UAVerifyOnly", kind, kind_home)
+
+
 def kind_tag_string(kind):
     return f"scaas.ua.{_tagged(kind)[0]}.v1"
 

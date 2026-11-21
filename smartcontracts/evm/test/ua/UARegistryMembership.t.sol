@@ -53,7 +53,7 @@ contract UARegistryMembershipTest is UARegistryBase {
         for (uint256 i; i < base.length; ++i) {
             c[i] = base[i];
         }
-        c[base.length] = UARegistry.KindConfig(ML, address(mock), 400_000);
+        c[base.length] = UARegistry.KindConfig(ML, address(mock), 400_000, false, 0);
     }
 
     function _ml(uint256 salt) internal pure returns (bytes memory pk) {
@@ -625,7 +625,7 @@ contract UARegistryMembershipTest is UARegistryBase {
 
     function _gen2(bool pqz) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](pqz ? 1 : 0);
-        if (pqz) c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 400_000);
+        if (pqz) c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 400_000, false, 0);
         return _deploy(REG_G2, chainUidA, address(r), false, BUDGET, address(0), true, c);
     }
 

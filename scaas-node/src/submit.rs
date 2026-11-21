@@ -1035,16 +1035,31 @@ impl Submitter {
             }
             return;
         }
-        let gas = match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
+        let gas = match guard::gas_capped(
+            &self.chain,
+            &w,
+            self.cfg.max_gas_per_tx,
+            self.cfg.ua_tx_gas_cap,
+        )
+        .await
+        {
             Ok(g) => g,
             // NODE-JOB-29: an ML-DSA registration on a registry without the precompile needs its cache parts first
-            Err(SimError::Revert(reason))
-                if reason.starts_with("UAKeyNotCached") && w.meta.is_none() =>
-            {
-                return match guard::mldsa_register(&w.data) {
-                    Some((kind, pk)) => self.cache_parts(w, kind, pk, reason).await,
-                    None => self.refused(&w, reason).await,
-                };
+            Err(SimError::Revert(reason)) if reason.starts_with("UAKeyNotCached") => {
+                if let (None, Some((kind, pk))) = (&w.meta, guard::mldsa_register(&w.data)) {
+                    return self.cache_parts(w, kind, pk, reason).await;
+                }
+                // NODE-JOB-29 (CTR-UA-65): through a later generation, the parts belong in the holding generation; the job waits
+                let at = self.cache_holder(&reason).await;
+                return self
+                    .requeue(
+                        &w,
+                        format!(
+                            "{}: {reason}; the parts belong in {at} (cacheExpandedKey there)",
+                            guard::UA_KEY_NOT_CACHED
+                        ),
+                    )
+                    .await;
             }
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => {
@@ -1052,6 +1067,29 @@ impl Submitter {
             }
         };
         self.dispatch(w, guard, gas, None).await;
+    }
+
+    /// NODE-JOB-29 (CTR-UA-65): the generation whose cache a `UAKeyNotCached(ua)` waits for: `holderOf(ua)` through the line's
+    /// newest generation; unread, "the holding generation".
+    async fn cache_holder(&self, reason: &str) -> String {
+        let ua = reason
+            .split("ua: ")
+            .nth(1)
+            .and_then(|r| r.get(..66))
+            .and_then(|h| h.parse::<B256>().ok());
+        let (Some(ua), Some(newest)) = (ua, self.cfg.ua_registries.last()) else {
+            return "the holding generation".into();
+        };
+        match self
+            .chain
+            .call_view(*newest, crate::abi::IUARegistry::holderOfCall { ua })
+            .await
+        {
+            Ok(h) if h.holder != Address::ZERO => {
+                format!("{:#x}, the generation that holds {ua:#x}", h.holder)
+            }
+            _ => "the holding generation".into(),
+        }
     }
 
     /// NODE-JOB-29: the `register` of an ML-DSA key whose simulation reverted `UAKeyNotCached` (the registry reverts it only when
@@ -1157,6 +1195,18 @@ impl Submitter {
                         regular gas of a transaction or the RPC gas cap ({r}); {reason}", guard::UA_KEY_NOT_CACHED, guard::TX_EXCEEDS_CHAIN_LIMIT)).await;
                 }
                 // owner O8: anyone may still send the part; NODE-JOB-24's precedent (`PROOF_STORE_OVER_LANE_CAP`)
+                // CTR-UA-65: the holding generation refuses the cache (its verifier has a precompile): never completes
+                Err(SimError::Revert(r)) if r.starts_with("UAKeyCache") => {
+                    return self
+                        .fail(
+                            &w,
+                            format!(
+                                "{}: part {part} refused: {r}; {reason}",
+                                guard::UA_KEY_NOT_CACHEABLE
+                            ),
+                        )
+                        .await;
+                }
                 Err(SimError::Revert(r)) if guard::lane_cap(&r) => {
                     return self.requeue(&w, format!("{}: part {part} over this lane's cap ({r}); the register waits for the part from \
                         another sender; {reason}", guard::UA_KEY_NOT_CACHED)).await;
@@ -1815,6 +1865,7 @@ impl Submitter {
     /// `consumed`, không `reverted` (ExternalPull đặt `failed` và chạy `_fail_dependents`); không đọc được ⇒ giữ, vòng sau.
     async fn settle(&mut self, n: u64, h: B256, rc: TransactionReceipt) {
         let work = self.inflight.get(&n).and_then(|s| s.work.clone());
+        let sent_gas = self.inflight.get(&n).map(|s| s.gas);
         let orphan = self
             .inflight
             .get(&n)
@@ -1889,6 +1940,31 @@ impl Submitter {
                             .requeue(
                                 &w,
                                 format!("{}: the receipt reverted; {r}", guard::UA_KEY_NOT_CACHED),
+                            )
+                            .await;
+                    }
+                }
+                // Review Focus 5 (CTR-UA-68, N13): a registry-checked job whose check starved at the gas it was sent with
+                // (`UAVerifyGas` replayed at that limit): its nonce is unspent and a resend with a fresh estimate may land, so it
+                // waits, never `reverted`; unread, it may land too
+                let registry_checked = w
+                    .meta
+                    .as_ref()
+                    .is_some_and(|m| crate::metatx::native(&m.from).is_none());
+                if let (true, Some(g)) = (registry_checked, sent_gas) {
+                    let why = match self.chain.call_with_gas(w.to, w.data.clone(), g).await {
+                        Err(SimError::Revert(r)) if r.starts_with("UAVerifyGas") => Some(r),
+                        Err(SimError::Transport(e)) => Some(format!("replay unread: {e}")),
+                        Ok(_) | Err(SimError::Revert(_)) => None,
+                    };
+                    if let Some(r) = why {
+                        return self
+                            .requeue(
+                                &w,
+                                format!(
+                                    "{}: the receipt reverted at gas {g}; {r}",
+                                    guard::UA_VERIFY_GAS
+                                ),
                             )
                             .await;
                     }
@@ -2113,6 +2189,10 @@ pub(crate) mod tests {
         ek: Option<[bool; 3]>,
         /// `cacheExpandedKey` reverts (the chain refuses the part).
         ek_refuse: bool,
+        /// CTR-UA-65: `cacheExpandedKey` reverts `UAKeyCache(kind)` (the holding generation's verifier has a precompile).
+        ek_uncacheable: bool,
+        /// CTR-UA-65: `holderOf(ua)` answers `(holder, 0x0131, 0)` (`None`: it reverts).
+        holder: Option<Address>,
         /// `eth_feeHistory` fails (a transport error): no fee, nothing signed.
         fees_down: bool,
         /// `eth_getTransactionCount` at `latest` (default `count`: nothing in the mempool).
@@ -2325,6 +2405,15 @@ pub(crate) mod tests {
                     } else if sel == crate::abi::IUARegistry::expandedKeyOfCall::SELECTOR {
                         let ek = e.ek.unwrap_or_default().map(|on| if on { Address::repeat_byte(0xee) } else { Address::ZERO });
                         Ok(json!(format!("0x{}", alloy::hex::encode(ek.abi_encode()))))
+                    } else if sel == crate::abi::IUARegistry::cacheExpandedKeyCall::SELECTOR && e.ek_uncacheable {
+                        let data = crate::abi::IUARegistry::UAKeyCache { kind: 0x0131 };
+                        Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(alloy::sol_types::SolError::abi_encode(&data))))))
+                    } else if sel == crate::abi::IUARegistry::holderOfCall::SELECTOR {
+                        match e.holder {
+                            Some(holder) => Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::holderOfCall::abi_encode_returns(
+                                &crate::abi::IUARegistry::holderOfReturn { holder, kind: 0x0131, pqzHome: Address::ZERO }))))),
+                            None => Err(err(3, "execution reverted", Some("0x".into()))),
+                        }
                     } else if sel == crate::abi::IUARegistry::cacheExpandedKeyCall::SELECTOR && e.ek_refuse {
                         Err(err(3, "execution reverted", Some("0xdeadbeef".into())))
                     } else if sel == crate::abi::IUARegistry::registerCall::SELECTOR && e.ek.is_some_and(|ek| {
@@ -2341,6 +2430,15 @@ pub(crate) mod tests {
                         Err(err(3, "execution reverted", Some("0x".into()))) // no address view on a token
                     } else {
                         match e.sim {
+                            // NODE-JOB-29 / Review Focus 5: a registry check through a later generation, an uncached key; a starved check
+                            Some("not_cached") => {
+                                let data = crate::abi::IUARegistry::UAKeyNotCached { ua: B256::repeat_byte(0xab) };
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(alloy::sol_types::SolError::abi_encode(&data))))))
+                            }
+                            Some("verify_gas") => {
+                                let data = crate::abi::IUALedger::UAVerifyGas {};
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(alloy::sol_types::SolError::abi_encode(&data))))))
+                            }
                             Some("revert") => {
                                 let data = IToken::MetaTxBadNonce { expected: U256::from(1), got: U256::ZERO };
                                 let data = alloy::sol_types::SolError::abi_encode(&data);
@@ -4776,7 +4874,7 @@ pub(crate) mod tests {
         );
         let fac = move |c: &mut ChainCfg| {
             c.max_gas_per_tx = 64_000_000;
-            c.ua_registry = Some(af);
+            c.ua_registries = vec![af];
         };
         let (r, rpc) = outcomes(ok(), vec![call_job(9, af, deploy(261_924))], fac).await;
         assert!(
@@ -4857,7 +4955,7 @@ pub(crate) mod tests {
         .abi_encode();
         let fac = move |c: &mut ChainCfg| {
             c.max_gas_per_tx = 64_000_000;
-            c.ua_registry = Some(af);
+            c.ua_registries = vec![af];
         };
         let (r, _) = outcomes(
             Evm {
@@ -5661,7 +5759,7 @@ pub(crate) mod tests {
             ..Default::default()
         };
         let (reg, other) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x5f));
-        let cfg = move |c: &mut ChainCfg| c.ua_registry = Some(reg);
+        let cfg = move |c: &mut ChainCfg| c.ua_registries = vec![reg];
         let refused = |r: &[(String, String)]| {
             r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("CALL_TARGET_REFUSED")
         };
@@ -5713,7 +5811,7 @@ pub(crate) mod tests {
         };
         let reg = Address::repeat_byte(0x5e);
         let tn = move |c: &mut ChainCfg| {
-            c.ua_registry = Some(reg);
+            c.ua_registries = vec![reg];
             c.max_gas_per_tx = 64_000_000;
         };
         let (full, bare) = (
@@ -5856,7 +5954,7 @@ pub(crate) mod tests {
         })
         .await;
         let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
-            c.ua_registry = Some(reg);
+            c.ua_registries = vec![reg];
             c.max_gas_per_tx = 64_000_000;
         })
         .await
@@ -5922,7 +6020,7 @@ pub(crate) mod tests {
         use crate::abi::IUARegistry::{cacheExpandedKeyCall, registerCall};
         let reg = Address::repeat_byte(0x5e);
         let tn = move |c: &mut ChainCfg| {
-            c.ua_registry = Some(reg);
+            c.ua_registries = vec![reg];
             c.max_gas_per_tx = 64_000_000;
         };
         let bare = mldsa65_register(); // owner O7: a valid pop (the parts are sent only for one)
@@ -6081,7 +6179,7 @@ pub(crate) mod tests {
         use crate::abi::IUARegistry::registerCall;
         let reg = Address::repeat_byte(0x5e);
         let tn = move |c: &mut ChainCfg| {
-            c.ua_registry = Some(reg);
+            c.ua_registries = vec![reg];
             c.max_gas_per_tx = 64_000_000;
         };
         let ok = || Evm {
@@ -6140,7 +6238,7 @@ pub(crate) mod tests {
             ..Default::default()
         };
         let tn = move |c: &mut ChainCfg| {
-            c.ua_registry = Some(reg);
+            c.ua_registries = vec![reg];
             c.max_gas_per_tx = 64_000_000;
         };
         let (r, rpc) = outcomes(
@@ -6212,7 +6310,7 @@ pub(crate) mod tests {
         })
         .await;
         let mut cfg = test_cfg(&url);
-        (cfg.ua_registry, cfg.max_gas_per_tx) = (Some(reg), 64_000_000);
+        (cfg.ua_registries, cfg.max_gas_per_tx) = (vec![reg], 64_000_000);
         let key = cfg.chain_key();
         let lanes = vec![LaneRow {
             chain_key: key.clone(),
@@ -6422,7 +6520,7 @@ pub(crate) mod tests {
         })
         .await;
         let mut cfg = test_cfg(&url);
-        (cfg.ua_registry, cfg.max_gas_per_tx) = (Some(reg), 64_000_000);
+        (cfg.ua_registries, cfg.max_gas_per_tx) = (vec![reg], 64_000_000);
         let key = cfg.chain_key();
         let lanes = vec![LaneRow {
             chain_key: key.clone(),
@@ -6555,7 +6653,7 @@ pub(crate) mod tests {
             ),
         ] {
             let (r, rpc) = outcomes(e, vec![call_job(9, reg, mldsa65_register())], |c| {
-                c.ua_registry = Some(reg)
+                c.ua_registries = vec![reg]
             })
             .await;
             assert!(
@@ -6578,7 +6676,7 @@ pub(crate) mod tests {
             },
             vec![call_job(9, reg, mldsa65_register())],
             |c| {
-                c.ua_registry = Some(reg);
+                c.ua_registries = vec![reg];
                 c.max_gas_per_tx = 200_000_000;
             },
         )
@@ -6602,7 +6700,7 @@ pub(crate) mod tests {
     async fn mldsa_cache_part_rpc_cap_waits_are_bounded() {
         let reg = Address::repeat_byte(0x5e);
         let tn = move |c: &mut ChainCfg| {
-            c.ua_registry = Some(reg);
+            c.ua_registries = vec![reg];
             c.max_gas_per_tx = 64_000_000;
         };
         for (e, dies) in [(Some("estimate_oog"), true), (None, false)] {
@@ -6677,7 +6775,7 @@ pub(crate) mod tests {
             })
             .await;
             let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
-                c.ua_registry = Some(reg);
+                c.ua_registries = vec![reg];
                 c.max_gas_per_tx = 64_000_000;
                 c.breaker.gas_budget_per_hour = Some(100);
                 c.breaker.call_budget_pct = 50;
@@ -6724,7 +6822,7 @@ pub(crate) mod tests {
             })
             .await;
             let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
-                (c.ua_registry, c.max_gas_per_tx) = (Some(reg), 64_000_000);
+                (c.ua_registries, c.max_gas_per_tx) = (vec![reg], 64_000_000);
                 (c.breaker.gas_budget_per_hour, c.breaker.call_budget_pct) = (budget, 50);
             })
             .await
@@ -6808,7 +6906,7 @@ pub(crate) mod tests {
             })
             .await;
             let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
-                (c.ua_registry, c.max_gas_per_tx) = (Some(reg), 64_000_000);
+                (c.ua_registries, c.max_gas_per_tx) = (vec![reg], 64_000_000);
                 (c.breaker.gas_budget_per_hour, c.breaker.call_budget_pct) = (Some(100), 50);
             })
             .await
@@ -6854,7 +6952,7 @@ pub(crate) mod tests {
             })
             .await;
             let s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
-                c.ua_registry = Some(reg);
+                c.ua_registries = vec![reg];
                 c.max_gas_per_tx = 64_000_000;
             })
             .await
@@ -6890,7 +6988,7 @@ pub(crate) mod tests {
             })
             .await;
             let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
-                c.ua_registry = Some(reg);
+                c.ua_registries = vec![reg];
                 c.max_gas_per_tx = 64_000_000;
             })
             .await
@@ -9420,5 +9518,162 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         );
         assert_eq!(rpc.lock().unwrap().sent.len(), 2);
         assert!(!crate::config::PqzVerifierCfg::default().refuse_shield_when_unserved);
+    }
+
+    /// Review Focus 5 (spec 2026-11-19-registry-verify-only-kinds §5, N13): a registry-checked job (a derived subject) whose
+    /// simulation passes only above the verify budget (the fallback path) is sent with its simulated limit (+20 %) up to the line's
+    /// `txGasCap()`, never clamped to a verify budget, and never below the estimate; without the cap read, the lane's cap. A
+    /// `UAVerifyGas` simulation waits `queued` (`UA_VERIFY_GAS`); a receipt that reverted with the check starved at the gas it was
+    /// sent with (replayed at that limit) waits too; another revert stays `reverted`.
+    #[tokio::test]
+    async fn submit_gas_up_to_tx_cap() {
+        const CAP: u64 = 1 << 24;
+        let run = |estimate: u64, cap: Option<u64>| async move {
+            let (r, rpc) = outcomes(
+                Evm {
+                    mtx_nonce: Some(0),
+                    estimate: Some(estimate),
+                    ..Default::default()
+                },
+                vec![ua_job(7, &ua_meta(7))],
+                move |c| {
+                    (c.max_gas_per_tx, c.ua_tx_gas_cap) = (64_000_000, cap);
+                },
+            )
+            .await;
+            assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+            let g = rpc.lock().unwrap().gas[0];
+            g
+        };
+        // the fallback: 6.5 M, far above a verify budget (0.25 M on the consumer path of `mldsa65`)
+        assert_eq!(run(6_500_000, Some(CAP)).await, 7_800_000);
+        assert_eq!(run(15_000_000, Some(CAP)).await, CAP, "up to txGasCap");
+        assert_eq!(
+            run(15_000_000, None).await,
+            18_000_000,
+            "control: no line read"
+        );
+        assert_eq!(
+            run(17_000_000, Some(CAP)).await,
+            17_000_000,
+            "never below the estimate"
+        );
+        // a starved check in the simulation: queued by name, nothing sent
+        let (r, rpc) = outcomes(
+            Evm {
+                mtx_nonce: Some(0),
+                sim: Some("verify_gas"),
+                ..Default::default()
+            },
+            vec![ua_job(7, &ua_meta(7))],
+            |c| c.ua_tx_gas_cap = Some(CAP),
+        )
+        .await;
+        assert!(
+            r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("UA_VERIFY_GAS: UAVerifyGas"),
+            "{r:?}"
+        );
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // the receipt reverted: replayed at the sent gas, `UAVerifyGas` waits; another revert is `reverted`
+        for (sim, want) in [("verify_gas", "queued"), ("revert", "reverted")] {
+            let (url, rpc) = fake_evm(Evm {
+                mtx_nonce: Some(0),
+                ..Default::default()
+            })
+            .await;
+            let (external_pull, o) = fake_external_pull(Fake {
+                jobs: vec![ua_job(7, &ua_meta(7))],
+                tokens: toks(),
+                ..Default::default()
+            })
+            .await;
+            let mut s = lane_cfg(&url, external_pull, 1, InflightSet::default(), |c| {
+                c.ua_tx_gas_cap = Some(CAP)
+            })
+            .await
+            .unwrap();
+            s.poll_outbox().await;
+            assert_eq!(states(&o), ["signed", "broadcast"]);
+            let h = rpc.lock().unwrap().sent[0].0;
+            rpc.lock().unwrap().receipts.insert(h, false);
+            rpc.lock().unwrap().sim = Some(sim);
+            s.track().await;
+            let r = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(r["chain_state"].as_str(), Some(want), "{sim}: {r}");
+            assert_eq!(
+                want == "queued",
+                r["error"]
+                    .as_str()
+                    .is_some_and(|e| e.starts_with("UA_VERIFY_GAS: the receipt reverted at gas")),
+                "{sim}: {r}"
+            );
+        }
+    }
+
+    /// NODE-JOB-29 (CTR-UA-65): a job whose check through a later generation reverts `UAKeyNotCached(ua)` waits `queued`, its
+    /// reason naming the holding generation (`holderOf(ua)` through the line's newest generation) where the parts belong; unread,
+    /// "the holding generation". A cache part the holding generation refuses (`UAKeyCache`) makes the registration `dead`
+    /// `UA_KEY_NOT_CACHEABLE`, nothing sent.
+    #[tokio::test]
+    async fn nodejob29_target_holder() {
+        let (g1, g2) = (Address::repeat_byte(0x61), Address::repeat_byte(0x62));
+        for (holder, named) in [
+            (
+                Some(g1),
+                format!(
+                    "the parts belong in {g1:#x}, the generation that holds {:#x}",
+                    B256::repeat_byte(0xab)
+                ),
+            ),
+            (
+                None,
+                "the parts belong in the holding generation".to_string(),
+            ),
+        ] {
+            let (r, rpc) = outcomes(
+                Evm {
+                    mtx_nonce: Some(0),
+                    sim: Some("not_cached"),
+                    holder,
+                    ..Default::default()
+                },
+                vec![ua_job(7, &ua_meta(7))],
+                move |c| c.ua_registries = vec![g1, g2],
+            )
+            .await;
+            assert!(
+                r.len() == 1
+                    && r[0].0 == "queued"
+                    && r[0].1.starts_with("UA_KEY_NOT_CACHED: UAKeyNotCached")
+                    && r[0].1.contains(&named),
+                "{r:?}"
+            );
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+        let reg = Address::repeat_byte(0x5e);
+        let (r, rpc) = outcomes(
+            Evm {
+                mtx_nonce: Some(0),
+                estimate: Some(40_000_000),
+                ek: Some([false; 3]),
+                ek_uncacheable: true,
+                ..Default::default()
+            },
+            vec![call_job(9, reg, mldsa65_register())],
+            move |c| {
+                c.ua_registries = vec![reg];
+                c.max_gas_per_tx = 64_000_000;
+            },
+        )
+        .await;
+        assert!(
+            r.len() == 1
+                && r[0].0 == "dead"
+                && r[0]
+                    .1
+                    .starts_with("UA_KEY_NOT_CACHEABLE: part 0 refused: UAKeyCache"),
+            "{r:?}"
+        );
+        assert!(rpc.lock().unwrap().sent.is_empty());
     }
 }

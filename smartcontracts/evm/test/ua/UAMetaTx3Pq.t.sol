@@ -40,12 +40,14 @@ contract UAMetaTx3PqTest is UARegistryBase {
         super.setUp();
         string memory pj = _pj();
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](6);
-        c[0] = UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), 4_250_000);
-        c[1] = UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
-        c[2] = UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), 2_500_000);
-        c[3] = UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), 1_400_000);
-        c[4] = UARegistry.KindConfig(0x0134, _ml87(pj), 250_000); // CTR-UA-39: precompile only, the cap a provisional estimate
-        c[5] = UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), 5_250_000); // CTR-UA-40, provisional cap
+        c[0] =
+            UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), 4_250_000, false, 0);
+        c[1] =
+            UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), 5_950_000, false, 0);
+        c[2] = UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), 2_500_000, false, 0);
+        c[3] = UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), 1_400_000, false, 0);
+        c[4] = UARegistry.KindConfig(0x0134, _ml87(pj), 250_000, false, 0); // CTR-UA-39: precompile only, the cap a provisional estimate
+        c[5] = UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), 5_250_000, false, 0); // CTR-UA-40, provisional cap
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
         for (uint256 i; i < 6; ++i) {
             string memory k = string.concat(".kinds[", vm.toString(i), "].");

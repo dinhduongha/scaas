@@ -36,8 +36,8 @@ contract UARegistryBlsMultiTest is Test {
 
     function _registry(bytes32 uid, address v, uint64 cap) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](v == address(0) ? 0 : 1);
-        if (v != address(0)) k[0] = UARegistry.KindConfig(K, v, cap);
-        return new UARegistry(uid, address(0), false, BUDGET, address(0), true, k);
+        if (v != address(0)) k[0] = UARegistry.KindConfig(K, v, cap, false, 0);
+        return new UARegistry(uid, address(0), false, BUDGET, 1 << 24, address(0), true, k);
     }
 
     function _groupsJson() internal view returns (string memory) {
@@ -414,7 +414,7 @@ contract UARegistryBlsMultiTest is Test {
         BlsMultiKit.Group memory g = _kit(3, 2, 41);
         reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
         UARegistry gen2 =
-            new UARegistry(UID, address(reg), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+            new UARegistry(UID, address(reg), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
         // Fable build review B1: a gen-2 `msig` cannot list the gen-1 group at all (its slot could never sign there)
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAMemberUnknown.selector, g.ua));
         this.msigOn(gen2, g);
@@ -428,9 +428,9 @@ contract UARegistryBlsMultiTest is Test {
     /// set (3 of a 2-of-3) is `UAPoP`, a minimal one registers.
     function test_msigPop_blsMultiMember_minimalOnly() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(K, address(verifier), CAP);
-        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000);
-        reg = new UARegistry(UID, address(0), false, BUDGET, address(0), true, k);
+        k[0] = UARegistry.KindConfig(K, address(verifier), CAP, false, 0);
+        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000, false, 0);
+        reg = new UARegistry(UID, address(0), false, BUDGET, 1 << 24, address(0), true, k);
         BlsMultiKit.Group memory g = _kit(3, 2, 47);
         reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
         bytes32 slh = reg.register(0x0133, abi.encodePacked(keccak256("slh")), _none(), hex"01", "");
@@ -456,9 +456,9 @@ contract UARegistryBlsMultiTest is Test {
     /// 2-of-3) is `UAUnauthorized`, a minimal one updates (the version moves).
     function test_updateMsig_blsMultiMember_minimalOnly() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(K, address(verifier), CAP);
-        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000);
-        reg = new UARegistry(UID, address(0), false, BUDGET, address(0), true, k);
+        k[0] = UARegistry.KindConfig(K, address(verifier), CAP, false, 0);
+        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000, false, 0);
+        reg = new UARegistry(UID, address(0), false, BUDGET, 1 << 24, address(0), true, k);
         BlsMultiKit.Group memory g = _kit(3, 2, 53);
         reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
         bytes32 slh = reg.register(0x0133, abi.encodePacked(keccak256("slh-up")), _none(), hex"01", "");
@@ -493,9 +493,9 @@ contract UARegistryBlsMultiTest is Test {
     /// key (version 0 latest, its signature stored as `abi.encode(members)`).
     function test_setPqzKey_blsMultiMember_minimalOnly() public {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(K, address(verifier), CAP);
-        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000);
-        reg = new UARegistry(UID, address(0), false, BUDGET, address(0), true, k);
+        k[0] = UARegistry.KindConfig(K, address(verifier), CAP, false, 0);
+        k[1] = UARegistry.KindConfig(0x0133, address(new AcceptAllPq()), 1_400_000, false, 0);
+        reg = new UARegistry(UID, address(0), false, BUDGET, 1 << 24, address(0), true, k);
         BlsMultiKit.Group memory g = _kit(3, 2, 59);
         reg.register(K, g.d, _none(), BlsMultiKit.pop(g, BlsMultiKit.popMsg(g.ua)), "");
         bytes32 slh = reg.register(0x0133, abi.encodePacked(keccak256("slh-pqz")), _none(), hex"01", "");

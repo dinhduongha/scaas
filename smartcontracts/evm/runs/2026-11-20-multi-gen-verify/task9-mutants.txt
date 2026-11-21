@@ -1,0 +1,5 @@
+mutant | red tests | rc | killed by
+no-explicit-gas-limit | test_burnAll_aliveCheckKeepsGas, test_cap_coversWorstInput | 1 | test_burnAll_aliveCheckKeepsGas
+no-alive-check | testFuzz_noPqNoAnswer_onWorkingStandIn, test_burnAll_aliveCheckKeepsGas, test_cap_coversWorstInput | 1 | testFuzz_noPqNoAnswer_onWorkingStandIn
+edge-row-dropped | test_probe_edgeRowWrong_precompileZero | 1 | test_probe_edgeRowWrong_precompileZero
+lengths-not-first | test_malformed_answersZero | 1 | test_malformed_answersZero

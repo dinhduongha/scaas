@@ -327,6 +327,40 @@ a composed and a decomposed form of one passphrase give one key; the normalisati
 `vectors`, `tests/app_core_vault_records.rs` in the main suite: typed digests in both domains, both signing paths,
 `verify_app_record`); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
 
+<a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`seal_for_arweave`, `upload_file`, `fetch_file` and `open_file` put an app core's
+file on Arweave and read it back; the upload key signs only the item `ua-rs` built; the client keeps the signed bytes until
+the item is settled; the free tier carries the smallest bucket, the operator payer the rest, and the client never holds an
+operator credential** (owner 2026-11-21, [ARCH-POS-19](../decisions.md#ARCH-POS-19) Q4 (`ar://`) and Q5 (operator payer, free
+tier, no credential in the client); the calls, the bucket split, settlement and the re-post schedule controller calls of
+[ARCH-POS-20](../decisions.md#ARCH-POS-20), owner: no; SPECIFIED, nothing built; design in the
+[spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part D). Beside the file seal calls of `pqchat-core`'s O9 (b):
+`seal_for_arweave(app, file) -> ArweaveFile {url, ct_sha256, sha256, size, key, item}` runs in one `ua-rs` call: a fresh file key
+handle, the frame and the object of [CLI-UAL-65](ua-libraries.md#CLI-UAL-65), `ctSha256` computed there, the upload key derived
+and the item built, signed and verified ([CLI-UAL-64](ua-libraries.md#CLI-UAL-64)); `key` comes out as `seal_file` gives it
+(PqChat: in the `file` content; PqVault: sealed under `kFile`), and `url` = `ar://<id>` is known before any upload.
+`upload_file(app, item)` takes only an item `ua-rs` built (a kept item is reloaded by a parser that verifies its signature and
+the no-tag shape) and posts it through `scaas-rpc` ([CLI-RPC-14](scaas-rpc.md#CLI-RPC-14)) to the release's bundler list, only on
+the user's send; an object in the 2^16-B bucket goes on the free tier, best effort; a larger one, or a free-tier refusal, carries
+`x-paid-by` with the operator payer's address after the node's payer ([NODE-SPN-05](../node/sponsorship.md#NODE-SPN-05)) approved
+that upload address, and while no payer is configured that is `PayerUnavailable` (until the payer runs, objects above 2^16 B
+serve tests only). **Settlement and re-posts.** The app core keeps the signed bytes until [CLI-RPC-13](scaas-rpc.md#CLI-RPC-13)
+reports the item settled. If it is not settled, the SDK re-posts the same bytes (same id, never re-signed, never under another
+key) at 24 h, 72 h and 7 days after the send, asking the payer for a new approval of the same upload address when a re-post is
+refused for payment; this bounded schedule is the one exception to [CLI-RPC-08](scaas-rpc.md#CLI-RPC-08)'s "no automatic
+re-send", allowed because the bytes and the id are the same. After the last re-post the file is `UploadUnsettled`, shown to the
+user, who may re-post the same bytes by hand; the bytes are kept until settlement or the user's deletion. A PqVault item that
+names an `ar://` object is written only after one gateway read of the object has passed the check. `fetch_file(app, url, size,
+ct_sha256) -> FileObject` refuses a malformed `url`, and a `size` whose bucket is above the platform's cap, before any request;
+reads through CLI-RPC-13 with the exact length `bucket(size) + 16`, marked as feeding a decryption, with SHA-256 equal to
+`ct_sha256` as the gateway's acceptance check. `open_file(app, object, key, size, sha256) -> Plaintext` checks the tag, the frame,
+the zero pad, `size` and `sha256` in `ua-rs` before any plaintext leaves it; a failure is `FileHashMismatch` (or the read's
+error), shown on the device only, and nothing the client sends depends on it ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). It
+runs on the user's action, or for the 2^16-B bucket automatically if the app allows it. The gateway and bundler lists are the
+release's pinned data, with `named` entries from the operator or holder. The user is told, before the first upload, that the
+object is public and permanent: a `redact` hides the message, never the object. The metadata cost is stated: the payer's
+approvals and the receipt's `payer` link every funded upload key to the operator's payer address, and the bundler sees the
+uploader's IP.
+
 ## 8. Runtime, events, errors
 
 <a id="CLI-SDK-11"></a>**CLI-SDK-11** — **The SDK is async on tokio and reports by subscription** (SPECIFIED). The API is `async`;
@@ -357,7 +391,9 @@ by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `Key
 `GasAboveTxCap`, `GasUnquoted`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
 `AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`,
 `ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`,
-`GasAboveBlockShare`. A
+`GasAboveBlockShare`, `RegistrationVerifyOnly` (the kind's home, `kindHome(kind)`, is another generation of the line), `UaUnregistered`
+(no generation of the bound registry's line holds the UA), `PqzHomeNone` (no PQZ home on the walk)
+([CTR-UA-65](../contracts/accounts.md#CTR-UA-65), [off-chain readers](../contracts/accounts.md#off-chain-readers)). A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.
 
 ## 9. Bindings

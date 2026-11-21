@@ -281,6 +281,39 @@ fn reads(c: &Fake) -> Vec<Value> {
         .collect()
 }
 
+/// Review F2 (CTR-UA-70): the reading layers' only `eth_call`s are the line's address reads on the bound registry,
+/// `holderOf(bytes32)` and `kindHome(uint16)`; every confidential word stays a storage read.
+fn only_line_calls(c: &Fake) {
+    for r in log(c).iter().filter(|r| r["method"] == "eth_call") {
+        let p = &r["params"][0];
+        let data = p["input"]
+            .as_str()
+            .or(p["data"].as_str())
+            .unwrap_or_default();
+        assert!(
+            data.starts_with("0xfe6a9a8c") || data.starts_with("0x0b2eb5cc"),
+            "an eth_call other than holderOf / kindHome: {data}"
+        );
+        assert_eq!(
+            p["to"].as_str().unwrap_or_default().to_ascii_lowercase(),
+            REGISTRY
+        );
+    }
+}
+
+/// `holderOf(ua)`'s answer on the bound registry: `(holder, kind, pqzHome)`.
+fn holder_answer(c: &Fake, ua: &W, holder: &str, kind: u16, home: &str) {
+    let mut a = [0u8; 96];
+    a[12..32].copy_from_slice(&a20(holder));
+    a[62..64].copy_from_slice(&kind.to_be_bytes());
+    a[76..96].copy_from_slice(&a20(home));
+    c.lock().unwrap().answers.push((
+        REGISTRY.into(),
+        format!("0xfe6a9a8c{}", &hx(ua)[2..]),
+        hx(&a),
+    ));
+}
+
 fn count(c: &Fake, method: &str) -> usize {
     log(c).iter().filter(|r| r["method"] == method).count()
 }
@@ -401,8 +434,8 @@ async fn view_never_serves_a_word() {
             .amount,
         "5"
     );
-    assert_eq!(count(&c, "eth_call"), 0);
-    // the module reaches no view: no call of the pool's that runs `eth_call`
+    only_line_calls(&c);
+    // the module reaches no view: no call of the pool's that runs `eth_call` (the line's address reads: `words.rs`, review F2)
     let src = include_str!("../src/confidential/read.rs");
     for v in ["call_at(", "call_tx(", "raw_read", "simulate"] {
         assert!(!src.contains(v), "read.rs uses {v}");
@@ -700,6 +733,7 @@ async fn pairs_setup_verify(
         verify: verify
             .iter()
             .map(|&signer| scaas_sdk::GasVerify {
+                line: Default::default(),
                 signer,
                 gas: 0,
                 sig_bytes: 0,
@@ -1431,4 +1465,113 @@ async fn short_seed_zether_key_is_the_provers() {
 
 fn hex_of(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// Review F2 (CTR-UA-70): a holder whose `0x0141` record a predecessor holds, through the later generation the token binds, is
+/// read where `holderOf` names it; control: with no answer the bound registry alone is read: `LegKeyMismatch`.
+#[tokio::test(flavor = "multi_thread")]
+async fn zether_holder_in_predecessor_read_at_holder() {
+    const G1: &str = "0x5ca00000000000000000000000000000000000e1";
+    let (s, seed, c) = one(5, Finality::Finalized).await;
+    let k = s.confidential().zether_key(seed.clone(), 0).await.unwrap();
+    let ua: W = unhex(&k.ua).try_into().unwrap();
+    let slot = map(&ua, &be(0));
+    let good: W = unhex(
+        c.lock()
+            .unwrap()
+            .storage
+            .get(&(REGISTRY.into(), hx(&slot)))
+            .unwrap(),
+    )
+    .try_into()
+    .unwrap();
+    put(&c, G1, &slot, &good);
+    put(&c, REGISTRY, &slot, &[0; 32]);
+    assert_eq!(
+        code(s.confidential().zether_balance(req(&seed)).await),
+        "LegKeyMismatch",
+        "control: the bound registry alone"
+    );
+    holder_answer(
+        &c,
+        &ua,
+        G1,
+        0x0141,
+        "0x0000000000000000000000000000000000000000",
+    );
+    assert_eq!(
+        s.confidential()
+            .zether_balance(req(&seed))
+            .await
+            .unwrap()
+            .amount,
+        "5"
+    );
+    only_line_calls(&c);
+}
+
+/// The round's merge review A4 (CTR-UA-29, CTR-UA-70): the `0x0141` decoy list is read in the kind's home generation
+/// (`kindHome(0x0141)` on the bound registry), not the bound registry's storage; control: a bound registry that is its own home
+/// (the fake's default) is read itself.
+#[tokio::test(flavor = "multi_thread")]
+async fn zether_decoy_list_at_kind_home() {
+    use scaas_sdk::confidential::{ZetherLeg, ZetherTransferMulti};
+    const G1: &str = "0x5ca00000000000000000000000000000000000e1";
+    let (s, seed, c, k, k2) = pairs_setup().await;
+    list(&c, &[&k, &k2]);
+    let t = || ZetherTransferMulti {
+        seed: seed.clone(),
+        account: 0,
+        chain: "local".into(),
+        token: TOKEN.into(),
+        batch: "0".into(),
+        recipients: vec![ZetherLeg {
+            to_ua: k2.ua.clone(),
+            amount: "3".into(),
+        }],
+        decoys: 2,
+        decoy_fee: "0".into(),
+        ua_signer_gas: 0,
+        valid_until_block: 1000,
+        envelope: env(),
+        table_bits: Some(18),
+        bound_bits: Some(18),
+    };
+    let count = map(&be(0x0141), &be(4));
+    let reads_at = |c: &Fake, who: &str| {
+        log(c)
+            .iter()
+            .filter(|r| r["method"] == "eth_getStorageAt")
+            .filter(|r| {
+                r["params"][0]
+                    .as_str()
+                    .unwrap_or_default()
+                    .eq_ignore_ascii_case(who)
+            })
+            .filter(|r| {
+                r["params"][1]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim_start_matches("0x")
+                    .trim_start_matches('0')
+                    == hx(&count)[2..].trim_start_matches('0')
+            })
+            .count()
+    };
+    c.lock().unwrap().requests.clear();
+    let _ = s.confidential().prepare_zether_transfer_multi(t()).await;
+    assert!(
+        reads_at(&c, REGISTRY) > 0 && reads_at(&c, G1) == 0,
+        "control: the bound registry its own home"
+    );
+    c.lock()
+        .unwrap()
+        .kind_home
+        .insert(REGISTRY.into(), G1.into());
+    c.lock().unwrap().requests.clear();
+    let _ = s.confidential().prepare_zether_transfer_multi(t()).await;
+    assert!(
+        reads_at(&c, G1) > 0 && reads_at(&c, REGISTRY) == 0,
+        "the list's length read at the kind's home"
+    );
 }

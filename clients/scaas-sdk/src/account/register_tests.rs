@@ -796,6 +796,98 @@ fn registry_write_shapes() {
     );
 }
 
+/// The round's merge review A3 (§12, CTR-UA-65): a registry write goes where it belongs on the bound registry's line: a key
+/// write (`setKemKey`, `acceptMembership`, `updateMsig`) to the UA's holder, a PQZ write to its PQZ home (the holder where
+/// it has none), `registerMsig` to the bound registry, a registration of a kind the bound registry carries verify-only
+/// refused (`RegistrationVerifyOnly`); a UA no generation holds yet, or a registry without `holderOf`, the bound registry.
+#[tokio::test(flavor = "multi_thread")]
+async fn write_targets_follow_the_line() {
+    const G1: &str = "0x5ca00000000000000000000000000000000000b1";
+    const G2: &str = "0x5ca00000000000000000000000000000000000b2";
+    let ua = [7u8; 32];
+    let chain = fake();
+    let url = serve(chain.clone()).await;
+    let p = ChainProfile {
+        key: "local".into(),
+        family: Family::Evm,
+        chain_id: Some(CHAIN_ID),
+        chain_uid: chain.lock().unwrap().genesis.clone(),
+        rpc: vec![EndpointConfig {
+            url,
+            class: scaas_rpc::Class::Named,
+            label: None,
+            auth: None,
+        }],
+        rpc_policy: scaas_rpc::Policy::Failover,
+        gateways: vec![],
+        registry: Some(REGISTRY.into()),
+        factory: None,
+        router: None,
+        finality: Finality::Finalized,
+        tx_gas_cap: Some(1 << 24),
+        tokens: vec![],
+        gas: Default::default(),
+        max_valid_secs: None,
+        verifiers: vec![],
+        verifier_policy: scaas_rpc::Policy::Failover,
+        gas_opt_in: vec![],
+        dexes: vec![],
+        wrappers: vec![],
+        family_params: None,
+    };
+    let sdk = crate::Sdk::open(SdkConfig {
+        profiles: vec![p],
+        store: MemoryStore::new(),
+        authenticator: None,
+        rp_id: None,
+        runtime: RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+        limits: Limits::default(),
+        clock: None,
+        gas_tables: vec![],
+    })
+    .await
+    .unwrap();
+    let (bound, pool) = crate::line::bound(&sdk, "local").unwrap();
+    let t = |entry: &'static str, kind: Option<u16>| {
+        let pool = pool.clone();
+        async move { crate::line::write_target(&pool, bound, entry, ua, kind).await }
+    };
+    // control: no holderOf answer (a registry before the line): the bound registry
+    assert_eq!(t("setKemKey", None).await.unwrap(), bound);
+    assert_eq!(t("storePqzPop", None).await.unwrap(), bound);
+    // holderOf(ua) = (G1, 0x0131, G2)
+    let mut a = String::from("0x");
+    a.push_str(&format!("{:0>64}", &G1[2..]));
+    a.push_str(&format!("{:064x}", 0x0131));
+    a.push_str(&format!("{:0>64}", &G2[2..]));
+    let sel = keccak_hex(b"holderOf(bytes32)")[..10].to_string();
+    chain
+        .lock()
+        .unwrap()
+        .answers
+        .push((REGISTRY.into(), format!("{sel}{}", "07".repeat(32)), a));
+    let g1: Address = G1.parse().unwrap();
+    let g2: Address = G2.parse().unwrap();
+    for e in ["setKemKey", "acceptMembership", "updateMsig"] {
+        assert_eq!(t(e, None).await.unwrap(), g1, "{e}: the holder");
+    }
+    for e in ["storePqzPop", "setPqzKey"] {
+        assert_eq!(t(e, None).await.unwrap(), g2, "{e}: the PQZ home");
+    }
+    assert_eq!(t("registerMsig", None).await.unwrap(), bound);
+    // the bound registry its own kindHome (the fake's default): registered there; another home: refused
+    assert_eq!(t("register", Some(0x0131)).await.unwrap(), bound);
+    chain
+        .lock()
+        .unwrap()
+        .kind_home
+        .insert(REGISTRY.into(), G1.into());
+    assert!(matches!(
+        t("register", Some(0x0131)).await,
+        Err(SdkError::RegistrationVerifyOnly)
+    ));
+}
+
 /// Owner 2026-11-20 (approved lowering the registry-write margin): a registry write is quoted as measured where its row is
 /// fixed cost, with the intrinsic cost and 64 gas a calldata byte; the margin stays on a base row of a data-dependent kind
 /// (ed25519 `0x0102`, FN-DSA `0x0132` / `0x0135`: its PoP's verify) and on a slot's verify row of one, regular bound included.
@@ -807,6 +899,7 @@ fn registry_margin_on_the_data_dependent_parts_only() {
         sig_bytes: 0,
         margin: 0,
         per_item: None,
+        line: Default::default(),
     };
     let chain = crate::GasRows {
         base: vec![

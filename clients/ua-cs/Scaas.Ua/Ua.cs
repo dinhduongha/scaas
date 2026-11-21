@@ -10,11 +10,21 @@ using Org.BouncyCastle.Crypto.Digests;
 namespace Scaas.Ua;
 
 /// <summary>An error whose <see cref="Code"/> every implementation and the vector files share.</summary>
-public sealed class UAException(string code, string? reason = null)
+public class UAException(string code, string? reason = null)
     : Exception(reason is null ? code : $"{code}: {reason}")
 {
     public string Code { get; } = code;
     public string? Reason { get; } = reason;
+}
+
+/// <summary>Why a registration of <see cref="Kind"/> does not belong on a registry (<see cref="UA.RegistrationTargetOk"/>): code
+/// <c>UAVerifyOnly</c> (register at <see cref="KindHome"/>) or <c>UAKindNotOnLine</c> (<see cref="KindHome"/> zero: no generation of
+/// the line enables the kind).</summary>
+public sealed class TargetException(string code, ushort kind, byte[] kindHome)
+    : UAException(code, $"kind 0x{kind:x4} kindHome 0x{Convert.ToHexStringLower(kindHome)}")
+{
+    public ushort Kind { get; } = kind;
+    public byte[] KindHome { get; } = kindHome;
 }
 
 /// <summary>One row of the kind table; <c>Lengths</c> empty = variable-length key data; <c>Group</c> null = none.</summary>
@@ -137,6 +147,17 @@ public static partial class UA
     /// <summary>An msig too, one level down: a record that holds one is refused as a member by the registry.</summary>
     public static bool IsMember(ushort kind, bool hederaNative = false) =>
         SingleSigning(kind) || kind is 0x0120 or 0x0121 or 0x0001 or 0x0002 || (hederaNative && kind == 0x0003);
+
+    /// <summary>CTR-UA-65 (spec 2026-11-19-registry-verify-only-kinds §12 "Clients"): a registration of <paramref name="kind"/>
+    /// is sent to <paramref name="registry"/> only where <paramref name="kindHome"/> (the registry's <c>kindHome(kind)</c>, read by the
+    /// caller: no RPC here) equals it. Both 20 bytes. Throws <see cref="TargetException"/>.</summary>
+    public static void RegistrationTargetOk(ushort kind, byte[] registry, byte[] kindHome)
+    {
+        Sized(registry, 20, "registry");
+        var home = (byte[])Sized(kindHome, 20, "kindHome").Clone();
+        if (home.AsSpan().IndexOfAnyExcept((byte)0) < 0) throw new TargetException("UAKindNotOnLine", kind, home);
+        if (!home.AsSpan().SequenceEqual(registry)) throw new TargetException("UAVerifyOnly", kind, home);
+    }
 
     public static string KindTagString(ushort kind) => $"scaas.ua.{Tagged(kind).Name}.v1";
     public static byte[] Tag(ushort kind) => Keccak256(Utf8(KindTagString(kind)));

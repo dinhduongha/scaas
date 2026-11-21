@@ -96,8 +96,8 @@ contract PqzScopedKeysTest is UARegistryBase {
 
     function _kinds(bool pqz) internal view returns (UARegistry.KindConfig[] memory c) {
         c = new UARegistry.KindConfig[](pqz ? 2 : 1);
-        c[0] = UARegistry.KindConfig(ML, address(mock), 400_000);
-        if (pqz) c[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 1_000_000);
+        c[0] = UARegistry.KindConfig(ML, address(mock), 400_000, false, 0);
+        if (pqz) c[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(mock), 1_000_000, false, 0);
     }
 
     function _bytes(uint256 salt, uint256 n) internal pure returns (bytes memory b) {
@@ -755,8 +755,8 @@ contract PqzScopedKeysTest is UARegistryBase {
     /// A registry whose 0x0142 verifier checks this set only (`SetVerifierStandIn`, the real verifier's length rule).
     function _setReg() internal returns (UARegistry r) {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
-        c[0] = UARegistry.KindConfig(ML, address(mock), 400_000);
-        c[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(new SetVerifierStandIn()), 1_000_000);
+        c[0] = UARegistry.KindConfig(ML, address(mock), 400_000, false, 0);
+        c[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(new SetVerifierStandIn()), 1_000_000, false, 0);
         r = _deploy(
             address(0x5ca0000000000000000000000000000000000043),
             chainUidA,

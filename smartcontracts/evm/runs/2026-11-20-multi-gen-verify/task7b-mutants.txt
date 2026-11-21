@@ -1,0 +1,11 @@
+mutant | red tests | rc | killed by
+sum-not-max | test_acceptMembership_oneSlot, test_bound_consumerModeBinds, test_bound_isMaxNotSum, test_mldsa44x2_pqzKey_fitsAtDefaultSet, test_msigDebit_wIsFallbackWorst, test_treasury_mldsa65x3_t2_fits, test_treasury_withPqzKey_UAPqzHolder, test_updateMsig_toOverBound_UAMsigSlots | 1 | test_bound_isMaxNotSum
+write-update-constants-only | test_bound_isMaxNotSum, test_writeMode_dearestOfThree | 1 | test_writeMode_dearestOfThree
+debit-write-mode-w | test_msigDebit_wIsFallbackWorst | 1 | test_msigDebit_wIsFallbackWorst
+consumer-reserve-dropped | test_bound_consumerModeBinds | 1 | test_bound_consumerModeBinds
+m10d-home-numbers | test_constructor_verifyOnlyFallback_overDebitBound_UAConfig | 1 | test_constructor_verifyOnlyFallback_overDebitBound_UAConfig
+m10d-skipped | test_constructor_verifyOnlyFallback_overDebitBound_UAConfig | 1 | test_constructor_verifyOnlyFallback_overDebitBound_UAConfig
+modes-never-split | test_bound_consumerModeBinds, test_bound_isMaxNotSum, test_mldsa65x3_t3_registration_UAKeyData0120, test_mldsa87x2_t2_registration_UAKeyData0120, test_treasury_mldsa65x3_t2_fits, test_updateMsig_toOverBound_UAMsigSlots, test_writeMode_dearestOfThree | 1 | test_writeMode_dearestOfThree
+fallback-without-holder | test_bound_consumerModeBinds, test_msigDebit_wIsFallbackWorst, test_treasury_mldsa65x3_t2_fits, test_treasury_withPqzKey_UAPqzHolder | 1 | test_bound_consumerModeBinds
+registration-hard-dropped | test_bound_consumerModeBinds, test_bound_isMaxNotSum, test_mldsa65x3_t3_registration_UAKeyData0120, test_mldsa87x2_t2_registration_UAKeyData0120, test_writeMode_dearestOfThree | 1 | test_mldsa87x2_t2_registration_UAKeyData0120
+update-hard-dropped | test_updateMsig_toOverBound_UAMsigSlots | 1 | test_updateMsig_toOverBound_UAMsigSlots

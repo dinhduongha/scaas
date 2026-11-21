@@ -24,7 +24,9 @@
 //!   failed decryption goes back to the holder only.
 //!
 //! UNAUDITED.
-use super::words::{add, be, class_kind, map_slot, rec_slot, word, CLASS_TOKEN, PURPOSE, W};
+use super::words::{
+    add, be, class_kind, held_at, map_slot, rec_slot, word, CLASS_TOKEN, PURPOSE, W,
+};
 use crate::op::{addr20, evm, final_block, hex, unhex, KeyRef};
 use crate::vault::OpenSeed;
 use crate::{Sdk, SdkError};
@@ -234,8 +236,10 @@ async fn fetch(pool: &EvmPool, at: ReadAt<B256>, p: &Plan) -> Result<Raw, ReadEr
     let reg = Address::from(env.registry);
     let slot0 = tok(ns("disclosureMode")).await?;
     let (keys_of, versions_of) = key_maps(&slot0, &p.token, &p.ua);
-    let key_record = word(pool, at, reg, &map_slot(&be(p.version), &keys_of)).await?;
-    let key_versions = word(pool, at, reg, &versions_of).await?;
+    // CTR-UA-70 (review F2): the key records at the UA's PQZ home on the bound registry's line, never the bound registry alone
+    let (_, home) = held_at(pool, at, reg, &p.ua).await?;
+    let key_record = word(pool, at, home, &map_slot(&be(p.version), &keys_of)).await?;
+    let key_versions = word(pool, at, home, &versions_of).await?;
     let base = acct_base(&p.ua, p.version);
     let mut account = Vec::with_capacity(4);
     for i in 0..4 {
@@ -275,8 +279,9 @@ async fn fetch(pool: &EvmPool, at: ReadAt<B256>, p: &Plan) -> Result<Raw, ReadEr
     let mut keys = Vec::with_capacity(names.len());
     for u in names {
         let (k, v) = key_maps(&slot0, &p.token, &u);
-        let cur = current(&word(pool, at, reg, &v).await?);
-        let record = word(pool, at, reg, &map_slot(&be(cur), &k)).await?;
+        let (_, home) = held_at(pool, at, reg, &u).await?;
+        let cur = current(&word(pool, at, home, &v).await?);
+        let record = word(pool, at, home, &map_slot(&be(cur), &k)).await?;
         let ptr = low_addr(&record, 0);
         let code = if ptr == [0; 20] {
             vec![]

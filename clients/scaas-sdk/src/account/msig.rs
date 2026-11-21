@@ -931,17 +931,20 @@ impl Account {
                 })?;
                 let args =
                     json!({"ua": hex(&ua), "memberSig": ms.get(0).ok_or(SdkError::Internal)?});
-                Ok(Some(keep_with(
-                    &sdk,
-                    &req.chain,
-                    "acceptMembership",
-                    ua,
-                    &args,
-                    &req.payer,
-                    Landed::Accepted(index),
-                    shape,
-                    None,
-                )?))
+                Ok(Some(
+                    keep_with(
+                        &sdk,
+                        &req.chain,
+                        "acceptMembership",
+                        ua,
+                        &args,
+                        &req.payer,
+                        Landed::Accepted(index),
+                        shape,
+                        None,
+                    )
+                    .await?,
+                ))
             })
             .await
     }
@@ -1035,7 +1038,7 @@ impl Account {
                         .collect(),
                 };
                 let landed = Landed::MsigUpdate(u.version, hash);
-                let write = keep_with(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, landed, shape, None)?;
+                let write = keep_with(&sdk, &req.chain, "updateMsig", ua, args, &req.payer, landed, shape, None).await?;
                 Ok(MsigUpdatePlan {
                     write,
                     warnings: warnings.iter().map(|w| format!("{w:?}")).collect(),

@@ -113,6 +113,8 @@ pub fn deploy(rpc: &str, name: &str, env: &[(&str, &str)]) -> serde_json::Value 
         ])
         .env("PRIVATE_KEY", DEPLOYER)
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        // owner X1: the registry's txGasCap, the deploy book's value; a local anvil applies EIP-7825's 2^24
+        .env("TX_GAS_CAP", "16777216")
         .env("DEPLOY_NAME", name)
         .envs(env.iter().copied())
         .status()

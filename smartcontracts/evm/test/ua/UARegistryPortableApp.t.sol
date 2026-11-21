@@ -180,22 +180,20 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
     }
 
     /// Spec §4.1 (iii), review r2 R10: gen 1 deployed from the pre-change `UARegistry` bytecode (no stub, which could have a fallback)
-    /// holds a record and answers `requirePortable` (directly and through gen 2: the positive control). It has no `requirePortableApp`
-    /// and no fallback, so the entry reverts with empty data, called directly and forwarded by gen 2: a refusal of a void view.
+    /// holds a record and answers `requirePortable`. It has no `requirePortableApp` and no fallback, so the entry reverts with empty
+    /// data: a refusal of a void view. Spec 2026-11-19-registry-verify-only-kinds §11.3 (W3): it lacks the line's views too, so no
+    /// later generation takes it as predecessor (`UAConfig(0)`).
     function test_requirePortableApp_gen2PreChangeGen1() public {
         UARegistry g1 = _preApp(_cfgs(address(mock)));
         bytes memory key = _key(0x0101);
         bytes32 ua = _register(g1, 0x0101, key);
-        UARegistry g2 =
-            _deploy(REG_G2B, chainUidA, address(g1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
         IUARegistry.UASig memory chat = _single(0x0101, key, UAKinds.PURPOSE_PQCHAT);
         _portable(g1, ua, UAKinds.PURPOSE_PQCHAT, chat);
-        _portable(g2, ua, UAKinds.PURPOSE_PQCHAT, chat);
         IUARegistry.UASig memory a = _single(0x0101, key, UAKinds.appPurpose(APP_A));
         vm.expectRevert(bytes(""));
         g1.requirePortableApp(ua, APP_A, TYPED, a);
-        vm.expectRevert(bytes(""));
-        g2.requirePortableApp(ua, APP_A, TYPED, a);
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
+        new UARegistry(chainUidA, address(g1), false, BUDGET, 1 << 24, address(0), true, new UARegistry.KindConfig[](0));
         // the same record on a gen 1 of this tree: accepted through gen 2
         bytes32 ua2 = _register(p, 0x0101, key);
         UARegistry g2p =
@@ -205,12 +203,16 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
 
     /// The pre-change `UARegistry` (legacy/ua-pre-app/: its source and its libraries as of f655cb0e0, compiled with this build;
     /// owner 2026-11-18, no bytecode in the repository) deployed with `cfgs`, its libraries linked by forge: a gen 1 without
-    /// `requirePortableApp` and without a fallback. Its creation code with the constructor arguments, so the arguments are this
-    /// tree's `KindConfig` (the same struct at f655cb0e0).
+    /// `requirePortableApp` and without a fallback. Its creation code with the constructor arguments, so the arguments are its own
+    /// `KindConfig` (three fields at f655cb0e0).
     function _preApp(UARegistry.KindConfig[] memory cfgs) internal returns (UARegistry r) {
+        // its `KindConfig` has three fields (verify-only kinds came later, spec 2026-11-19-registry-verify-only-kinds §2)
+        UARegistryPreApp.KindConfig[] memory old = new UARegistryPreApp.KindConfig[](cfgs.length);
+        for (uint256 i; i < cfgs.length; ++i) {
+            old[i] = UARegistryPreApp.KindConfig(cfgs[i].kind, cfgs[i].verifier, cfgs[i].cap);
+        }
         bytes memory init = abi.encodePacked(
-            type(UARegistryPreApp).creationCode,
-            abi.encode(chainUidA, address(0), false, BUDGET, address(0), true, cfgs)
+            type(UARegistryPreApp).creationCode, abi.encode(chainUidA, address(0), false, BUDGET, address(0), true, old)
         );
         assembly ("memory-safe") {
             r := create(0, add(init, 32), mload(init))

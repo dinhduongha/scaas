@@ -405,7 +405,8 @@ def run(runs, name, f, old, new, tdir, tfile):
         open(f, "w").write(src)
     assert sha(f) == h, f"{f} not restored byte-equal"
     text = open(log).read()
-    red = sorted(set(re.findall(r"\[FAIL[^\]]*\] (\w+)\(", text)))
+    # a fuzz failure's `[FAIL; counterexample: ... args=[...]]` nests brackets: the line's last `] name(` names the test
+    red = sorted(set(re.findall(r"^\[FAIL.*\] (\w+)\(", text, re.M)))
     if "Compiler run failed" in text:
         red = ["(compile error)"]
     return rc, red

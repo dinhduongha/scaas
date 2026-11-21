@@ -1,0 +1,8 @@
+mutant | red tests | rc | killed by
+identify-unmasked | test_n12_flaggedWord_capAndRegistrable | 1 | test_n12_flaggedWord_capAndRegistrable
+kindHome-unmasked | test_keyForm1_throughMiddleVerifyOnly_readsHome, test_n12_flaggedWord_capAndRegistrable | 1 | test_n12_flaggedWord_capAndRegistrable
+iff-rule-on-0142 | test_flagOn0142_UAConfig, test_msigAnd0142_reenabled_notRefused | 1 | test_msigAnd0142_reenabled_notRefused
+keyForm1-checks-predecessor | test_keyForm1_throughMiddleVerifyOnly_readsHome | 1 | test_keyForm1_throughMiddleVerifyOnly_readsHome
+group-on-kindEnabled | test_groupAcrossLine_UAConfig | 1 | test_groupAcrossLine_UAConfig
+no-precompile-check | test_verifyOnly_noPrecompile_UAConfig | 1 | test_verifyOnly_noPrecompile_UAConfig
+walk-no-generation-order | test_fakePredecessor_generationOutOfRange_UAConfig0, test_fakePredecessor_selfLoop_UAConfig0 | 1 | test_fakePredecessor_generationOutOfRange_UAConfig0

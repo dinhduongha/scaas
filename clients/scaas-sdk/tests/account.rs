@@ -122,6 +122,8 @@ struct Fake {
     short: std::sync::atomic::AtomicBool,
     code: Vec<(String, String)>,
     calls: AtomicUsize,
+    /// `eth_call` answers by `(to, calldata)` (lower-case `0x` hex), before the `isRegistered` rule
+    views: Vec<(String, String, String)>,
 }
 
 fn block(number: u64) -> Value {
@@ -150,6 +152,13 @@ fn answer(f: &Fake, r: &Value) -> Value {
                 .or(r["params"][0]["data"].as_str())
                 .unwrap_or_default()
                 .to_string();
+            let to = r["params"][0]["to"]
+                .as_str()
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if let Some((_, _, out)) = f.views.iter().find(|(t, d, _)| *t == to && *d == data) {
+                return json!({"jsonrpc": "2.0", "id": r["id"], "result": out});
+            }
             let ua = format!("0x{}", &data[10..]);
             if f.short.load(SeqCst) {
                 json!(format!("0x{:02x}", u8::from(f.registered.contains(&ua))))
@@ -230,7 +239,33 @@ fn fake(registered: &[String], code: &[(String, String)]) -> Arc<Fake> {
         code: code.to_vec(),
         calls: AtomicUsize::new(0),
         short: Default::default(),
+        views: vec![],
     })
+}
+
+/// A fake whose registries answer `views` (`(to, calldata, result)`), with the pointers' `code`.
+fn line_fake(views: Vec<(String, String, String)>, code: &[(String, String)]) -> Arc<Fake> {
+    Arc::new(Fake {
+        registered: HashSet::new(),
+        code: code.to_vec(),
+        calls: AtomicUsize::new(0),
+        short: Default::default(),
+        views,
+    })
+}
+
+/// A function's selector, `0x` + 8 hex.
+fn sel(sig: &str) -> String {
+    format!("0x{}", hex(&scaas_ua::keccak256(sig.as_bytes())[..4]))
+}
+
+/// An ABI word of an address, a `u64` or a 32-byte id (each `0x`-less hex).
+fn word(x: &str) -> String {
+    format!("{:0>64}", x.trim_start_matches("0x"))
+}
+
+fn n(x: u64) -> String {
+    format!("{x:064x}")
 }
 
 fn ua_at(kind: u16, account: u32, index: u32) -> String {
@@ -633,4 +668,190 @@ async fn restore_reads_a_whole_bool_word() {
         1,
         "control: the word"
     );
+}
+
+// --- the registry line (spec 2026-11-19-registry-verify-only-kinds §11, §12; CTR-UA-65) ---
+
+const GEN1: &str = "0x5ca00000000000000000000000000000000000b1";
+const ZERO: &str = "0x0000000000000000000000000000000000000000";
+
+fn ua_of(b: u8) -> String {
+    format!("0x{}", format!("{b:02x}").repeat(32))
+}
+
+/// `holderOf(ua)` on `registry` answering `(holder, kind, pqzHome)`.
+fn holder_view(
+    registry: &str,
+    ua: &str,
+    holder: &str,
+    kind: u64,
+    home: &str,
+) -> (String, String, String) {
+    (
+        registry.into(),
+        format!("{}{}", sel("holderOf(bytes32)"), word(ua)),
+        format!("0x{}{}{}", word(holder), n(kind), word(home)),
+    )
+}
+
+fn kind_home_view(registry: &str, kind: u64, home: &str) -> (String, String, String) {
+    (
+        registry.into(),
+        format!("{}{}", sel("kindHome(uint16)"), n(kind)),
+        format!("0x{}", word(home)),
+    )
+}
+
+/// Plan Task 17: a registration's target is `kindHome(kind)` of the profile's registry, which must be that registry:
+/// another home (verify-only there) `RegistrationVerifyOnly`, none `RegistrationKindDisabled`; control: its own home.
+#[tokio::test(flavor = "multi_thread")]
+#[allow(non_snake_case)] // the plan's name (Task 17)
+async fn register_target_is_kindHome() {
+    let f = line_fake(
+        vec![
+            kind_home_view(REGISTRY, 0x0101, REGISTRY),
+            kind_home_view(REGISTRY, 0x0130, GEN1),
+            kind_home_view(REGISTRY, 0x0199, ZERO),
+        ],
+        &[],
+    );
+    let s = open(MemoryStore::new(), &[serve(f).await]).await;
+    let a = s.account();
+    let at = |k| a.register_target("local-testnet".into(), k);
+    assert_eq!(at(0x0101).await.unwrap(), REGISTRY);
+    assert_eq!(code(at(0x0130).await), "RegistrationVerifyOnly");
+    assert_eq!(code(at(0x0199).await), "RegistrationKindDisabled");
+}
+
+/// Plan Task 17: a key write of `ua` goes to `holderOf(ua).holder`, read once on the profile's registry; a UA no generation
+/// holds is `UaUnregistered`; a malformed id `Argument`.
+#[tokio::test(flavor = "multi_thread")]
+async fn key_write_target_is_holder() {
+    let (ua, none) = (ua_of(0x11), ua_of(0x12));
+    let f = line_fake(
+        vec![
+            holder_view(REGISTRY, &ua, REGISTRY, 0x0101, ZERO),
+            holder_view(REGISTRY, &none, ZERO, 0, ZERO),
+        ],
+        &[],
+    );
+    let s = open(MemoryStore::new(), &[serve(f).await]).await;
+    let a = s.account();
+    let line = a.ua_line("local-testnet".into(), ua).await.unwrap();
+    assert_eq!((line.key_target().as_str(), line.kind), (REGISTRY, 0x0101));
+    assert_eq!(
+        code(a.ua_line("local-testnet".into(), none).await),
+        "UaUnregistered"
+    );
+    assert_eq!(
+        code(a.ua_line("local-testnet".into(), "0x11".into()).await),
+        "Argument"
+    );
+}
+
+/// Plan Task 17: a PQZ write of `ua` goes to `pqzHomeOf(ua)` (`holderOf`'s third word), which may be neither the holder nor
+/// the bound registry; none on the walk is `PqzHomeNone`.
+#[tokio::test(flavor = "multi_thread")]
+async fn pqz_write_target_is_home() {
+    let (ua, homeless) = (ua_of(0x21), ua_of(0x22));
+    let gen2 = "0x5ca00000000000000000000000000000000000b2";
+    let f = line_fake(
+        vec![
+            holder_view(REGISTRY, &ua, GEN1, 0x0101, gen2),
+            holder_view(REGISTRY, &homeless, GEN1, 0x0101, ZERO),
+        ],
+        &[],
+    );
+    let s = open(MemoryStore::new(), &[serve(f).await]).await;
+    let a = s.account();
+    let line = a.ua_line("local-testnet".into(), ua).await.unwrap();
+    assert_eq!(
+        (
+            line.key_target().as_str(),
+            line.pqz_target().unwrap().as_str()
+        ),
+        (GEN1, gen2)
+    );
+    let line = a.ua_line("local-testnet".into(), homeless).await.unwrap();
+    assert_eq!(code(line.pqz_target()), "PqzHomeNone");
+}
+
+/// SDK review F2: a holder registered in generation 1, read through a generation-2 bound registry, is found at generation 1
+/// (the record read there, never at the bound registry's storage); its PQZ attachment at the home the walk names.
+#[tokio::test(flavor = "multi_thread")]
+async fn gen1_holder_read_through_gen2_registry() {
+    let ua = ua_of(0x31);
+    let f = line_fake(
+        vec![holder_view(REGISTRY, &ua, GEN1, 0x0132, REGISTRY)],
+        &[],
+    );
+    let s = open(MemoryStore::new(), &[serve(f).await]).await;
+    let line = s
+        .account()
+        .ua_line("local-testnet".into(), ua)
+        .await
+        .unwrap();
+    assert_eq!(
+        line.holder, GEN1,
+        "the record's generation, not the bound registry"
+    );
+    assert_ne!(line.holder, REGISTRY);
+    assert_eq!(line.pqz_home.as_deref(), Some(REGISTRY));
+}
+
+/// Owner P19 over a chain: the `0x0142` lists of the bound registry (generation 2) and its predecessor (generation 1), both
+/// enabling it, read oldest first and concatenated; a key held by two UAs (one in each list) counts once.
+#[tokio::test(flavor = "multi_thread")]
+async fn decoys_over_the_line() {
+    let (u1, u2, u3, u4) = (ua_of(0x41), ua_of(0x42), ua_of(0x43), ua_of(0x44));
+    let ptr = |i: u8| format!("0x{}", format!("{i:02x}").repeat(20));
+    let mut views = vec![
+        (
+            REGISTRY.into(),
+            sel("predecessor()"),
+            format!("0x{}", word(GEN1)),
+        ),
+        (GEN1.into(), sel("predecessor()"), format!("0x{}", n(0))),
+    ];
+    for (g, list) in [(GEN1, [&u1, &u2]), (REGISTRY, [&u3, &u4])] {
+        views.push((
+            g.into(),
+            format!("{}{}", sel("kindEnabled(uint16)"), n(0x0142)),
+            format!("0x{}", n(1)),
+        ));
+        views.push((
+            g.into(),
+            format!("{}{}", sel("uaCount(uint16)"), n(0x0142)),
+            format!("0x{}", n(2)),
+        ));
+        views.push((
+            g.into(),
+            format!(
+                "{}{}{}{}",
+                sel("uaPage(uint16,uint256,uint256)"),
+                n(0x0142),
+                n(0),
+                n(2)
+            ),
+            format!("0x{}{}{}{}", n(32), n(2), word(list[0]), word(list[1])),
+        ));
+    }
+    // u4 holds u1's key (the §11.2 residual)
+    for (ua, p) in [(&u1, 1u8), (&u2, 2), (&u3, 3), (&u4, 1)] {
+        views.push((
+            REGISTRY.into(),
+            format!("{}{}", sel("pqzKeyOf(bytes32)"), word(ua)),
+            format!("0x{}{}{}{}", n(1), word(&ptr(p)), n(0), n(1)),
+        ));
+    }
+    let code: Vec<_> = (1u8..=3)
+        .map(|i| (ptr(i), format!("0x00{}", format!("{i:02x}").repeat(64))))
+        .collect();
+    let s = open(MemoryStore::new(), &[serve(line_fake(views, &code)).await]).await;
+    let c = s
+        .account()
+        .pqz_decoy_candidates("local-testnet".into())
+        .await
+        .unwrap();
+    assert_eq!(c, vec![u1, u2, u3]);
 }

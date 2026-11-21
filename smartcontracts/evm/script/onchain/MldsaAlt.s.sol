@@ -29,6 +29,7 @@ contract MldsaAlt is OnchainBase, DeployBase {
         _init("mldsaalt");
         salt = vm.envBytes32("MLDSAALT_SALT");
         uid = _chainUid();
+        txGasCap = _txGasCapEnv(); // owner X1: the book's TX_GAS_CAP
         bytes32 m = keccak256(bytes(vm.envString("MLDSA_PRECOMPILE")));
         require(m == keccak256("on") || m == keccak256("off"), "MLDSA_PRECOMPILE: on or off");
         mldsaPrecompile = m == keccak256("on");
