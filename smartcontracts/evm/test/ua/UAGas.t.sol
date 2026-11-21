@@ -88,7 +88,7 @@ contract UAGasTest is UARegistryBase {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](8);
         for (uint256 i; i < 8; ++i) {
             v[i] = address(new AcceptAll());
-            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
+            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]), false, 0);
         }
         UARegistry home = _deploy(address(0x5ca1), chainUidA, address(0), false, BUDGET, address(0), true, c);
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
@@ -139,7 +139,7 @@ contract UAGasTest is UARegistryBase {
         _impl = address(impl);
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](8);
         for (uint256 i; i < 8; ++i) {
-            c[i] = UARegistry.KindConfig(KINDS[i], address(new BurnAll()), _cap(KINDS[i]));
+            c[i] = UARegistry.KindConfig(KINDS[i], address(new BurnAll()), _cap(KINDS[i]), false, 0);
         }
         UARegistry home = _deploy(address(0x5ce0), chainUidA, address(0), false, BUDGET, address(impl), true, c);
         Member[] memory all = new Member[](16);
@@ -176,7 +176,7 @@ contract UAGasTest is UARegistryBase {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](8);
         for (uint256 i; i < 8; ++i) {
             v[i] = address(new AcceptAll());
-            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
+            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]), false, 0);
         }
         UARegistry small = _deploy(address(0x5cb1), chainUidA, address(0), false, BUDGET, address(0), true, c);
         UARegistry padded = _deploy(address(0x5cb2), chainUidA, address(0), false, BUDGET, address(0), true, c);
@@ -199,7 +199,7 @@ contract UAGasTest is UARegistryBase {
         _impl = address(impl);
         _big = new bytes(7_856);
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(0x0133, address(new BurnAll()), 1_400_000);
+        c[0] = UARegistry.KindConfig(0x0133, address(new BurnAll()), 1_400_000, false, 0);
         address clone = address(0x5cf40);
         vm.etch(clone, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
         // bound: 8 x (cap + member gas) + the clone (400 k + member gas) + the registry's own hold (1.4 M - 400 k) / 63
@@ -241,7 +241,8 @@ contract UAGasTest is UARegistryBase {
         for (uint256 j; j < count; ++j) {
             uint16 kind = uint16(bytes2(abi.encodePacked(d[4 + 36 * j], d[5 + 36 * j])));
             uint256 cap = kind < 0x0100 ? SMART_KEY_1271_GAS : _cap(kind);
-            uint256 e = cap + (handed && kind >= 0x0100 ? cap / 63 + 5_000 : 0);
+            // handed: one hand-off and the walk of one generation (`LINE_HOP_GAS`, spec 2026-11-19-registry-verify-only-kinds §4 P3)
+            uint256 e = cap + (handed && kind >= 0x0100 ? cap / 63 + 5_000 + UARegistryRegLib.LINE_HOP_GAS : 0);
             b += e + MSIG_MEMBER_GAS;
             if (e > held) held = e;
         }
@@ -591,7 +592,7 @@ contract UAGasTest is UARegistryBase {
     function test_T_GAS_registerHeadroomBlsBn254() public {
         string memory sj = vm.readFile("../vectors/ua/signatures.json");
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(0x0107, address(new BlsMinSigBn254Verifier()), 345_000);
+        c[0] = UARegistry.KindConfig(0x0107, address(new BlsMinSigBn254Verifier()), 345_000, false, 0);
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), false, c);
         bytes memory call = abi.encodeCall(
             r.register,
@@ -643,7 +644,7 @@ contract UAGasTest is UARegistryBase {
 
         string memory sj = vm.readFile("../vectors/ua/signatures.json");
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(0x0102, address(ev), uint64(cap));
+        c[0] = UARegistry.KindConfig(0x0102, address(ev), uint64(cap), false, 0);
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), false, c);
         bytes memory k = vm.parseJsonBytes(sj, ".derived[7].keyData");
         bytes memory call =
@@ -696,8 +697,8 @@ contract UAGasBlsMultiTest is Test {
 
     function _reg(uint64 budget, uint64 cap) internal returns (UARegistry) {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
-        k[0] = UARegistry.KindConfig(K, address(verifier), cap);
-        return new UARegistry(UID, address(0), false, budget, address(0), true, k);
+        k[0] = UARegistry.KindConfig(K, address(verifier), cap, false, 0);
+        return new UARegistry(UID, address(0), false, budget, 1 << 24, address(0), true, k);
     }
 
     function _none() internal pure returns (IUARegistry.UAAttrs memory) {}

@@ -172,7 +172,7 @@ services:
     networks:
       - mba-net
     ports:
-      - "4000:4000"
+      - "8548:4000" # owner 2026-11-20: the API on host port 8548 (was 4000, then 8557)
 
   # Blockscout smart-contract-verifier (owner 2026-10-31): Solidity only (Vyper, Sourcify, zkSync off), solc from
   # binaries.soliditylang.org (the only outbound traffic), HTTP 8050 on mba-net only (no published port, gRPC off).
@@ -214,11 +214,11 @@ services:
     environment:
       PORT: "3000"
       NEXT_PUBLIC_API_HOST: "${EXPLORER_HOST:-192.168.1.72}"
-      NEXT_PUBLIC_API_PORT: "4000"
+      NEXT_PUBLIC_API_PORT: "8548"
       NEXT_PUBLIC_API_PROTOCOL: "http"
       NEXT_PUBLIC_API_WEBSOCKET_PROTOCOL: "ws"
       NEXT_PUBLIC_APP_HOST: "${EXPLORER_HOST:-192.168.1.72}"
-      NEXT_PUBLIC_APP_PORT: "8558" # host port of the UI (owner 2026-10-31: not 3000)
+      NEXT_PUBLIC_APP_PORT: "8549" # host port of the UI (owner 2026-11-20; was 8558, owner 2026-10-31: not 3000)
       NEXT_PUBLIC_APP_PROTOCOL: "http"
       NEXT_PUBLIC_NETWORK_NAME: "MBANetwork"
       NEXT_PUBLIC_NETWORK_SHORT_NAME: "MBA"
@@ -228,6 +228,6 @@ services:
       NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS: "18"
       NEXT_PUBLIC_IS_TESTNET: "true"
     ports:
-      - "8558:3000" # UI at http://<host>:8558; the container still listens on PORT 3000 (owner 2026-10-31)
+      - "8549:3000" # UI at http://<host>:8549 (owner 2026-11-20; was 8558); the container still listens on PORT 3000
     networks:
       - mba-net

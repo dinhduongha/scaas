@@ -18,7 +18,8 @@ MLDSA_PRECOMPILE=off, the default set; `mldsa-on`, MLDSA_PRECOMPILE=on). The cha
 lacks: DEPLOY_SET_MISSING; a label that is not the deploy's MLDSA_PRECOMPILE: DEPLOY_SET_MISMATCH.
   python3 -I script/deploybook.py set-check <label> [<MLDSA_PRECOMPILE>]   the label known (and the deploy's mode its own)
   python3 -I script/deploybook.py set-merge <book> <previous book | -> <label> <releases json>   the new set into the book
-  python3 -I script/deploybook.py set-book <book> <label> <out>   header + that set's entries in <out> (a reader's book)"""
+  python3 -I script/deploybook.py set-book <book> <label> <out>   header + that set's entries in <out> (a reader's book)
+  python3 -I script/deploybook.py add <book> <fields json>   the fields (e.g. tx_gas_cap.py --rows-out) into the book"""
 
 import json
 import os
@@ -157,6 +158,41 @@ def set_book(book, label):
     return out
 
 
+# A later generation's book fields (spec 2026-11-19-registry-verify-only-kinds §9, F14; plan Task 13): DeployBase's later-generation
+# mode writes the registry's own (address, generation, predecessor, code hash, libraries with their code hashes, tx_gas_cap,
+# gen_pqz, verify_only); the deploy adds the tx-cap probe's rows (script/tx_gas_cap.py) and the owner overrides with reasons.
+GEN_FIELDS = (
+    "ua_registry",
+    "ua_registry_generation",
+    "ua_registry_predecessor",
+    "ua_registry_codehash",
+    "ua_registry_libraries",
+    "tx_gas_cap",
+    "tx_gas_cap_probe_rows",
+    "gen_pqz",
+    "verify_only",
+    "owner_overrides",
+)
+VERIFY_ONLY_FIELDS = ("kind", "verifier", "cap", "keyForm", "precompile", "eip", "status", "probe_rows_hash")
+
+
+def gen_fields(book, gen):
+    """`book` with a generation's fields `gen` (each of GEN_FIELDS) set over it."""
+    out = dict(book)
+    out.update({k: gen[k] for k in GEN_FIELDS if k in gen})
+    return out
+
+
+def gen_check(book, where):
+    """A later generation's book as read: every field of GEN_FIELDS and of each verify-only entry, else BOOK_GEN_FIELD."""
+    miss = [k for k in GEN_FIELDS if k not in book]
+    vo = book.get("verify_only") or {}  # keyed by the kind (forge's JSON writer keeps no array of objects)
+    miss += [f"verify_only.{i}.{k}" for i, e in vo.items() for k in VERIFY_ONLY_FIELDS if k not in e]
+    if miss:
+        raise BookError(f"BOOK_GEN_FIELD: {where} has no {', '.join(miss)}")
+    return True
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:1] == ["key"] and len(a) == 3:
@@ -169,6 +205,12 @@ if __name__ == "__main__":
         new = json.load(open(a[1]))
         prev = None if a[2] == "-" else json.load(open(a[2]))
         out = set_merge(new, prev, a[3], a[4])
+        with open(a[1], "w") as f:
+            json.dump(out, f, indent=2)
+            f.write("\n")
+    elif a[:1] == ["add"] and len(a) == 3:  # add <book> <fields json>: the fields at the book's top level
+        out = check(json.load(open(a[1])), a[1])
+        out.update(json.load(open(a[2])))
         with open(a[1], "w") as f:
             json.dump(out, f, indent=2)
             f.write("\n")

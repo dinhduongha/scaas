@@ -125,6 +125,17 @@ library UAStore {
 
     // ----- kinds -----
 
+    /// The cap of a kind word `cfg` (`verifier | cap << 160 | verifyOnly << 224 | keyForm << 225`, spec
+    /// 2026-11-19-registry-verify-only-kinds §2, N12): the flags masked (a flagged word read raw is above 2^64).
+    function _capOf(uint256 cfg) internal pure returns (uint256) {
+        return uint64(cfg >> 160);
+    }
+
+    /// A kind registrable here (N12): a verifier word set, not verify-only (`kindEnabled` stays `uint160(cfg) != 0`).
+    function _registrable(uint256 cfg) internal pure returns (bool) {
+        return uint160(cfg) != 0 && cfg >> 224 & 1 == 0;
+    }
+
     /// PQ weight in an `msig` (CTR-PQZ-12): 0x0130–0x0135, `mldsa87` and `fndsa1024` since owner 2026-11-04 (CTR-UA-39 / -40 Q3).
     /// Not the registry's config slot map (`UARegistry._slot`).
     function isPq(uint16 kind) internal pure returns (bool) {
@@ -352,6 +363,59 @@ library UAStore {
     /// UAVerifyGas, never a verdict (T-AUTH-4): the target's own `UAVerifyGas` (at a hold) is re-raised, and so is the
     /// target running out of gas before its hold (W-M): no revert data and at most the 1/64 this frame kept (`g` = gasleft
     /// before the call); any other revert returns its unused gas and stays a verdict.
+    /// A view `call` on the line (spec 2026-11-19-registry-verify-only-kinds §4, F11): its return data; a failed read is never a
+    /// verdict but `UAVerifyGas` (§11.3's probes leave only gas to fail it).
+    function read(address target, bytes memory call) internal view returns (bytes memory ret) {
+        bool ok;
+        (ok, ret) = target.staticcall(call);
+        if (!ok) revert UAKinds.UAVerifyGas();
+    }
+
+    /// The registration key data of `ua` at its holder `h` (`registrationOf`'s first two words, the rest not decoded), by `read`.
+    function regKey(address h, bytes32 ua) internal view returns (bytes memory d) {
+        (, d) = abi.decode(read(h, abi.encodeCall(IUARegistry.registrationOf, (ua))), (uint16, bytes));
+    }
+
+    /// The complete ML-DSA cache of `ua` (`kind`) at its holder `h` (key form 1, §2 / §4): its part pointers, 20 bytes each, as
+    /// `expanded` returns them; an incomplete one is `UAKeyNotCached(ua)`.
+    function cacheAt(address h, bytes32 ua, uint16 kind) internal view returns (bytes memory ek) {
+        address[3] memory p = abi.decode(read(h, abi.encodeCall(IUARegistry.expandedKeyOf, (ua))), (address[3]));
+        uint256 n = kind == UAKinds.MLDSA44 ? 1 : kind == UAKinds.MLDSA65 ? 2 : 3;
+        for (uint256 i; i < n; ++i) {
+            if (p[i] == address(0)) revert IUARegistry.UAKeyNotCached(ua);
+            ek = bytes.concat(ek, bytes20(p[i]));
+        }
+    }
+
+    /// Spec 2026-11-19-registry-verify-only-kinds §5 (CTR-UA-68; P2, M7): a verify-only verifier's call, `capped`'s gas rule (the cap,
+    /// the hold, `UAVerifyGas`), read in three states: 1 exactly one word 1 (accept), 0 exactly one word 0 (refuse), 2 anything else
+    /// (any revert, `PqNoAnswer` or out of gas, an empty, longer or other return): no answer, the caller falls back to the holder.
+    function voCall(address target, uint256 cap, bytes memory data) internal view returns (uint256 r) {
+        if (gasleft() < cap + cap / 63 + SigCheck.GAS_MARGIN) revert UAKinds.UAVerifyGas();
+        assembly ("memory-safe") {
+            mstore(0, 2)
+            let s := staticcall(cap, target, add(data, 0x20), mload(data), 0, 0x20)
+            r := 2
+            if and(s, eq(returndatasize(), 0x20)) {
+                r := mload(0)
+                if gt(r, 1) { r := 2 }
+            }
+        }
+    }
+
+    /// A holder's portable check `call` (`requirePortable` / `requirePortableApp`) as a verdict, `via`'s rule: starvation is
+    /// `UAVerifyGas`, any other revert a refusal.
+    function verdict(address target, bytes memory call) internal view returns (bool ok) {
+        uint256 g = gasleft();
+        bytes memory err;
+        (ok, err) = target.staticcall(call);
+        if (
+            !ok
+                && ((err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector)
+                    || (err.length == 0 && gasleft() < g / 63))
+        ) revert UAKinds.UAVerifyGas();
+    }
+
     function via(address target, bytes32 id, bytes32 purposeTag, bytes32 digest, IUARegistry.UASig memory auth)
         internal
         view

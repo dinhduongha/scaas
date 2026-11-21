@@ -794,7 +794,7 @@ contract GovDeployTest is Test {
     /// gas limit; one gas under passes.
     function test_publicGateRefusesRegularOver2pow24() public {
         DeployHarness h = new DeployHarness();
-        vm.expectRevert(bytes("X release: regular gas x 1.05 = 16777216 >= 2^24 (EIP-7825, NET-EVM-06)"));
+        vm.expectRevert(bytes("X release: regular gas x 1.05 = 16777216 >= txGasCap 16777216 (EIP-7825, NET-EVM-06)"));
         h.checkMeasured("X", 15_978_301, 0, type(uint256).max);
         h.checkMeasured("X", 15_978_300, 0, type(uint256).max);
     }

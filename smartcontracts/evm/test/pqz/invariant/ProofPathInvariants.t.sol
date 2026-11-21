@@ -209,7 +209,9 @@ contract ProofPathInvariantsTest is PqzFixture {
     /// 139,535; pqvault R1 (CTR-UA-46: `requirePortableApp`, a selector more in the registry's dispatch, `requireAuthorized`
     /// reached sooner) 139,522 / 139,535 -> 139,436 / 139,449; set-auditor A2 (CTR-ZTH-95: three entries more in each Zether
     /// face's dispatch) mtxTransfer normal 83,781 -> 83,759, transferToUA normal 69,240 -> 69,239, transfer wrapped 46,484 ->
-    /// 46,506, uaExecuteTransfer wrapped 139,449 -> 139,471. The test keeps P7's claim as: these rows are the pins.
+    /// 46,506, uaExecuteTransfer wrapped 139,449 -> 139,471; multi-gen-verify (the registry's kind word flags, the holderOf walk on
+    /// the signer path) transferToUA 69,273 / 69,273 -> 69,321 / 69,321, uaExecuteTransfer 139,486 / 139,521 -> 139,838 / 139,873.
+    /// The test keeps P7's claim as: these rows are the pins.
     function test_P7_zetherPinsUnchanged() public view {
         string memory j = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/plus_zero_gas.json"));
         string[8] memory k = [
@@ -222,7 +224,7 @@ contract ProofPathInvariantsTest is PqzFixture {
             "uaExecuteTransfer_normalZether",
             "uaExecuteTransfer_wrappedZether"
         ];
-        uint256[8] memory at7558 = [uint256(83759), 83846, 69273, 69273, 46484, 46506, 139486, 139521]; // + B P3-1, CTR-GOV-26, -27, -28, CTR-MTX-86, K3-3, 3zb + 3zc, 3zh, pqvault R1, set-auditor A2, bls-multi (the fourth library word)
+        uint256[8] memory at7558 = [uint256(83759), 83846, 69321, 69321, 46484, 46506, 139838, 139873]; // + B P3-1, CTR-GOV-26, -27, -28, CTR-MTX-86, K3-3, 3zb + 3zc, 3zh, pqvault R1, set-auditor A2, bls-multi (the fourth library word), multi-gen-verify
         for (uint256 i; i < 8; ++i) {
             assertEq(vm.parseJsonUint(j, string.concat(".", k[i])), at7558[i], k[i]);
         }

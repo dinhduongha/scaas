@@ -135,4 +135,38 @@ fails("DEPLOY_SET_UNKNOWN", d.set_book, b2, "mldsa-x")
 fails("DEPLOY_SET_UNKNOWN", d.set_merge, on, None, "mldsa-x", "r.json")
 fails("BOOK_SET_CHAIN", d.set_merge, on, dict(b1, chainUid=OTHER), "mldsa-on", "r.json")
 
+# plan 2026-11-19-registry-verify-only-kinds Task 13 (spec §9, F14): the later-generation book fields round-trip (red until
+# deploybook.gen_fields / gen_check exist)
+GEN = {
+    "ua_registry": "0x" + "0d" * 20,
+    "ua_registry_generation": 2,
+    "ua_registry_predecessor": "0x" + "0a" * 20,
+    "ua_registry_codehash": "0x" + "11" * 32,
+    "ua_registry_libraries": {"UARegistryCoreLib": {"address": "0x" + "0e" * 20, "codehash": "0x" + "12" * 32}},
+    "tx_gas_cap": 16777216,
+    "tx_gas_cap_probe_rows": [{"gas": 16777216, "accepted": True}, {"gas": 16777217, "accepted": False}],
+    "gen_pqz": True,
+    "verify_only": {
+        "0x0131": {
+            "kind": "0x0131",
+            "verifier": "0x" + "0f" * 20,
+            "cap": 250000,
+            "keyForm": 0,
+            "precompile": "0x000000000000000000000000000000005caa0013",
+            "eip": "EIP-8355",
+            "status": "chain-own",
+            "probe_rows_hash": "0x" + "13" * 32,
+        }
+    },
+    "owner_overrides": [],
+}
+
+
+def book_fields_roundtrip():
+    b = d.gen_fields(dict(H), GEN)
+    assert d.gen_check(b, "gen") and {k: b[k] for k in GEN} == GEN
+    fails("BOOK_GEN_FIELD", d.gen_check, {k: v for k, v in b.items() if k != "tx_gas_cap"}, "gen")
+
+
+book_fields_roundtrip()
 print("test_deploybook: ok")

@@ -181,14 +181,14 @@ contract PqzStatePinGasTest is PqzSlots {
         );
         meter = new GasMeter();
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000);
-        k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), 12_000_000);
-        regL = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000, false, 0);
+        k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), 12_000_000, false, 0);
+        regL = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
         verL = pqv;
         if (PqzSet.HAS_PQZH) {
             verH = _newPqzVerifier(PqzSet.PQZH_ID);
-            k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(verH), 12_000_000);
-            regH = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+            k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(verH), 12_000_000, false, 0);
+            regH = new UARegistry(PQZ_UID, address(0), false, 12_000_000, 1 << 24, address(0), true, k);
             vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
         }
     }

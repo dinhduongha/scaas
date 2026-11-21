@@ -202,8 +202,8 @@ contract FactoryAdminTest is UARegistryBase {
         super.setUp();
         vm.warp(1_800_000_000);
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
-        c[0] = UARegistry.KindConfig(K1, address(mock), 50_000);
-        c[1] = UARegistry.KindConfig(ML44, address(mock), CAP);
+        c[0] = UARegistry.KindConfig(K1, address(mock), 50_000, false, 0);
+        c[1] = UARegistry.KindConfig(ML44, address(mock), CAP, false, 0);
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, c);
         router = new GovernanceRouter(chainUidA, PREG, address(0), false);
         trouter = new TestRouter(chainUidA, PREG);
