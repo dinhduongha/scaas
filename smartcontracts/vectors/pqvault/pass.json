@@ -52,6 +52,56 @@
       "Pk": "0xb5a949c9c8783d5ed241c3ac8b97f2d5f4fb69e0065b03cc4de99cc07e05104d"
     }
   ],
+  "normalization": {
+    "rule": "RFC 8265 OpaqueString before Argon2id: every non-ASCII space (Unicode Zs) to U+0020, then NFC, then UTF-8; empty or a control character (Cc) is PassphraseInvalid. Each row: nfc and nfd give the same bytes and the same P_k under passSalt (set 1); rawNfdArgon2 = Argon2id(UTF-8 of nfd, not normalised) differs.",
+    "passSalt": "0xa7ed919a2e0896bf7c9d65f82ff608f5454157ab7424a2e4b5bc2e3807927c02",
+    "rows": [
+      {
+        "name": "Vietnamese, tone marks",
+        "nfc": "Mật khẩu đẹp quá cà phê sữa",
+        "nfd": "Mật khẩu đẹp quá cà phê sữa",
+        "nfdUtf8": "0x4d61cca3cc8274206b6861cc82cc897520c49165cca37020717561cc81206361cc8020706865cc82207375cc9bcc8361",
+        "bytes": "0x4de1baad74206b68e1baa97520c491e1bab970207175c3a12063c3a0207068c3aa2073e1bbaf61",
+        "Pk": "0xbcc68f4e6133aca3a27de5fe0f4a8e8b35b03da35be5d02ea5fcb8cd33c7c055",
+        "rawNfdArgon2": "0xcc88bb61f9e3d6f20f809f964e1640d8a5cabfe41cfdce6b4ce656bac9ab88df"
+      },
+      {
+        "name": "Hangul",
+        "nfc": "비밀번호 저장소 하나 둘",
+        "nfd": "비밀번호 저장소 하나 둘",
+        "nfdUtf8": "0xe18487e185b5e18486e185b5e186afe18487e185a5e186abe18492e185a920e1848ce185a5e1848ce185a1e186bce18489e185a920e18492e185a1e18482e185a120e18483e185aee186af",
+        "bytes": "0xebb984ebb080ebb288ed98b820eca080ec9ea5ec868c20ed9598eb829820eb9198",
+        "Pk": "0xfcf368ecf737ca0fb3962ea8344d3c34652be87ffa3d6e092301b45b513ef873",
+        "rawNfdArgon2": "0x17a14d39e88829285013b5fa09f5a0aba20a3bfb0e104bc2270667969ee3f4cd"
+      },
+      {
+        "name": "Latin, a no-break and an ideographic space",
+        "nfc": "Café Ångström　naïve",
+        "nfd": "Café Ångström　naïve",
+        "nfdUtf8": "0x43616665cc81c2a041cc8a6e677374726fcc886de380806e6169cc887665",
+        "bytes": "0x436166c3a920c3856e67737472c3b66d206e61c3af7665",
+        "Pk": "0x74fed86f8442ea63aefef4b31071f03491a2f22131cf1b2b26bb0e4c23cf43f3",
+        "rawNfdArgon2": "0xfafe0e1be1bd30d8abfdc65bce8c5e3ff2706f0caa43b60d9d0fb4e68b1bdf59"
+      }
+    ],
+    "refusals": [
+      {
+        "name": "empty",
+        "input": "",
+        "error": "PassphraseInvalid"
+      },
+      {
+        "name": "only a control character",
+        "input": "\u0007",
+        "error": "PassphraseInvalid"
+      },
+      {
+        "name": "a line feed inside",
+        "input": "two\nlines here",
+        "error": "PassphraseInvalid"
+      }
+    ]
+  },
   "refusals": [
     {
       "name": "an unknown passKdf",

@@ -805,7 +805,10 @@ stay under the old passphrase** (owner 2026-11-17, P2, changing V9). SPECIFIED. 
 [CLI-PQV-10](#CLI-PQV-10)'s. **Biometric unlock per device, opt-in** (owner 2026-11-21, O7 (b)): a client may keep
 `Argon2id`'s output `P_k`, never the passphrase, wrapped by a device-keystore key behind a biometric access policy; it is
 off by default, turned on per device, and on that device the device key and the seed then open the vault (the client says
-so when it is turned on); `passKdf = 1` is Argon2id 64 MiB / 3 / 4 (owner 2026-11-21, O8). SPECIFIED.
+so when it is turned on); `passKdf = 1` is Argon2id 64 MiB / 3 / 4 (owner 2026-11-21, O8). SPECIFIED. **The passphrase's
+bytes** (controller call 2026-11-21, the Fable code review F4): RFC 8265's OpaqueString before Argon2id: non-ASCII spaces to
+U+0020, Unicode NFC, UTF-8; empty or a control character refused (`PassphraseInvalid`). BUILT in clientkeys (`passphraseBytes`)
+and reproduced by `ua-rs` (`tests/pqvault_pass.rs`), pinned by `smartcontracts/vectors/pqvault/pass.json` `normalization`.
 
 <a id="CLI-PQV-08"></a>**CLI-PQV-08** — **A migration tool moves the live items to vaults under a new seed and says that the
 old ciphertexts stay on chain and every secret must be changed at its service; until the audit round that covers the

@@ -32,3 +32,5 @@ V9 | blocked | - | - | the scaas-sdk T21 app-core surface (feature app-core, cli
 F1-F3,F7 | forge test/pqvault (red first: 4 new tests failed) | F1 tree | 0 | 88 passed 0 failed 0 skipped (forge)
 F1-F3,F7 | forge test/pqchat (red first: 3 new tests failed) | F1 tree | 0 | 102 passed 0 failed 0 skipped (forge)
 F1-F3,F7 mutants | completion-author-removed, live-admin-removed, live-admin-left (each against test/pqvault and test/pqchat), remove-admin-only-removable; rekey-admin-to-member and rekey-removed-admin re-pointed | F1 tree | - | 6 of 6 killed
+F4 | clientkeys node --test test/pqvault.test.js (red first: the new test failed) | F4 tree | 0 | 14 passed 0 failed (node); generator rerun: only pass.json changes (+ normalization)
+F4 | ua-rs --features pqvault clippy -D warnings + --test pqvault_pass (red first: compile error, the crate absent) | F4 tree | 0 | 4 passed 0 failed 0 ignored (cargo)

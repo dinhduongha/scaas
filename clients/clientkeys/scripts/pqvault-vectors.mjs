@@ -705,6 +705,29 @@ must(
   "wrong passphrase",
 );
 
+// ------------------------------------------------------------------ passphrase bytes (Fable code review F4)
+const nfcSalt = hex(rnd("normalization/pass-salt"));
+const normRows = [
+  ["Vietnamese, tone marks", "M\u1eadt kh\u1ea9u \u0111\u1eb9p qu\u00e1 c\u00e0 ph\u00ea s\u1eefa"],
+  ["Hangul", "\ube44\ubc00\ubc88\ud638 \uc800\uc7a5\uc18c \ud558\ub098 \ub458"],
+  ["Latin, a no-break and an ideographic space", "Caf\u00e9\u00a0\u00c5ngstr\u00f6m\u3000na\u00efve"],
+].map(([name, nfc]) => {
+  const nfd = nfc.normalize("NFD");
+  must(nfd !== nfc, `${name}: NFD differs`);
+  const b = pv.passphraseBytes(nfc);
+  const Pk = pv.passKey(1, nfc, nfcSalt);
+  must(hex(pv.passKey(1, nfd, nfcSalt).key) === hex(Pk.key), `${name}: NFD gives the same P_k`);
+  const rawNfdArgon2 = hex(argon2id(utf8ToBytes(nfd), fromHex(nfcSalt), { t: 3, m: 65536, p: 4, dkLen: 32 }));
+  must(rawNfdArgon2 !== hex(Pk.key), `${name}: raw NFD differs`);
+  return { name, nfc, nfd, nfdUtf8: hex(utf8ToBytes(nfd)), bytes: hex(b), Pk: hex(Pk.key), rawNfdArgon2 };
+});
+const normRefusals = [
+  { name: "empty", input: "", error: "PassphraseInvalid" },
+  { name: "only a control character", input: "\u0007", error: "PassphraseInvalid" },
+  { name: "a line feed inside", input: "two\nlines here", error: "PassphraseInvalid" },
+];
+for (const r of normRefusals) must(refused(() => pv.passphraseBytes(r.input)) === r.error, r.name);
+
 // ------------------------------------------------------------------ files
 const write = (file, doc) =>
   writeFileSync(join(OUT, file), `${JSON.stringify(doc, (_, v) => (v instanceof Uint8Array ? hex(v) : v), 2)}\n`);
@@ -839,6 +862,15 @@ write("pass.json", {
   rfc9106: rfc,
   sets: { 1: { algorithm: "argon2id", ...pv.PASS_KDF[1] } },
   rows: passRows,
+  normalization: {
+    rule:
+      "RFC 8265 OpaqueString before Argon2id: every non-ASCII space (Unicode Zs) to U+0020, then NFC, then UTF-8; empty or a " +
+      "control character (Cc) is PassphraseInvalid. Each row: nfc and nfd give the same bytes and the same P_k under passSalt " +
+      "(set 1); rawNfdArgon2 = Argon2id(UTF-8 of nfd, not normalised) differs.",
+    passSalt: nfcSalt,
+    rows: normRows,
+    refusals: normRefusals,
+  },
   refusals: [
     { name: "an unknown passKdf", passKdf: 2, error: "PassKdfUnknown" },
     {

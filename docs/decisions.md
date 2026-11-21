@@ -10931,6 +10931,12 @@ Change (owner 2026-11-17, ruling N2; status: SPECIFIED): the refusal is `pqvault
 **Cost if wrong.** A seed thief can still guess the passphrase offline; a forgotten passphrase is unrecoverable.
 **Source.** owner 2026-11-17 ("Ok, theo đề xuất, đưa điểm 1 và 2 vào spec", relayed by the coordinator); spec `superpowers/specs/2026-11-17-pqvault.md` §3, §6.5. Status: SPECIFIED.
 
+
+Change (controller call, owner: no, 2026-11-21, the Fable code review of V1-V8 F4; status: BUILT in clientkeys and the `ua-rs`
+reproducer on `pqvault-v`, UNAUDITED): the passphrase's bytes are RFC 8265's OpaqueString of the text typed (non-ASCII spaces to
+U+0020, Unicode NFC, UTF-8; empty or a control character refused), applied before Argon2id; vector rows in NFC and NFD give one
+`P_k`. **Why.** Without one Unicode form the same passphrase typed on a composing and on a decomposing platform gives two keys,
+and a user who forgot nothing loses the vault. **Cost if wrong.** Changing the bytes later is a new `passKdf` id.
 ### CLI-PQV-08 — PqVault migration to a new seed, and the UNAUDITED label until the audit
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-PQV-08 · superseded-by: —
 

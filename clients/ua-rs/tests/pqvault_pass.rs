@@ -134,3 +134,56 @@ fn pk_rows_of_set_1() {
         .unwrap();
     assert!(d["sets"].get(u["passKdf"].to_string()).is_none());
 }
+
+/// Fable code review F4 (controller call 2026-11-21; spec §6.3, CLI-PQV-07): RFC 8265's OpaqueString before Argon2id: every
+/// non-ASCII space (Unicode Zs) to U+0020, then NFC, then UTF-8. Each row's NFC and NFD inputs give the row's bytes and `P_k`;
+/// the raw NFD bytes give another Argon2id output.
+#[test]
+fn passphrase_bytes_nfc() {
+    use unicode_normalization::UnicodeNormalization;
+    // Unicode 15's Zs other than U+0020
+    const ZS: [char; 16] = [
+        '\u{00A0}', '\u{1680}', '\u{2000}', '\u{2001}', '\u{2002}', '\u{2003}', '\u{2004}',
+        '\u{2005}', '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}', '\u{200A}', '\u{202F}',
+        '\u{205F}', '\u{3000}',
+    ];
+    let bytes = |s: &str| -> Vec<u8> {
+        let mapped: String = s
+            .chars()
+            .map(|c| if ZS.contains(&c) { ' ' } else { c })
+            .collect();
+        mapped.nfc().collect::<String>().into_bytes()
+    };
+    let d = doc();
+    let n = &d["normalization"];
+    let salt = unhex(&n["passSalt"]);
+    let rows = n["rows"].as_array().unwrap();
+    assert!(rows.len() >= 2);
+    for r in rows {
+        let (nfc, nfd) = (r["nfc"].as_str().unwrap(), r["nfd"].as_str().unwrap());
+        assert_ne!(nfc, nfd);
+        assert_eq!(bytes(nfc), unhex(&r["bytes"]), "{}", r["name"]);
+        assert_eq!(bytes(nfd), unhex(&r["bytes"]), "{}", r["name"]);
+        assert_eq!(nfd.as_bytes(), unhex(&r["nfdUtf8"]).as_slice());
+        let pk = set1_bytes(&bytes(nfd), &salt);
+        assert_eq!(pk.as_slice(), unhex(&r["Pk"]).as_slice(), "{}", r["name"]);
+        let raw = set1_bytes(nfd.as_bytes(), &salt);
+        assert_eq!(raw.as_slice(), unhex(&r["rawNfdArgon2"]).as_slice());
+        assert_ne!(raw, pk, "without the normalisation the key differs");
+    }
+}
+
+fn set1_bytes(passphrase: &[u8], salt: &[u8]) -> [u8; 32] {
+    let params = ParamsBuilder::new()
+        .m_cost(65_536)
+        .t_cost(3)
+        .p_cost(4)
+        .output_len(32)
+        .build()
+        .unwrap();
+    let mut out = [0u8; 32];
+    Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+        .hash_password_into(passphrase, salt, &mut out)
+        .unwrap();
+    out
+}

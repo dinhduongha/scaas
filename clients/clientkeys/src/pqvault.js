@@ -296,15 +296,27 @@ export function openWrap({ wrap, vaultId: v, epochId: e, kemPk, dk, x25519Secret
 
 /** `passKdf` sets (owner 2026-11-21, O8): 1 = Argon2id v0x13, 65,536 KiB, 3 passes, parallelism 4, 32 B, no secret, no data. */
 export const PASS_KDF = Object.freeze({ 1: Object.freeze({ version: 0x13, m: 65536, t: 3, p: 4, dkLen: 32 }) });
-/** `P_k` as a `Derive` handle: Argon2id of the UTF-8 passphrase under `passSalt`; `null` for `passKdf` 0 (no passphrase); an
- *  unknown set is `PassKdfUnknown`. */
+/** The passphrase's bytes (Fable code review F4, controller call 2026-11-21; spec §6.3, CLI-PQV-07): RFC 8265's OpaqueString
+ *  profile, applied before Argon2id: every non-ASCII space (Unicode category Zs) mapped to U+0020, then Unicode NFC, then UTF-8;
+ *  an empty result or a control character (category Cc) is `PassphraseInvalid`. So one passphrase typed on two platforms, one
+ *  composing and one decomposing (é, Vietnamese tone marks, Hangul), gives one `P_k`. */
+export function passphraseBytes(passphrase) {
+  const s = String(passphrase)
+    .replace(/\p{Zs}/gu, " ")
+    .normalize("NFC");
+  if (s.length === 0 || /\p{Cc}/u.test(s)) throw new PqVaultError("PassphraseInvalid");
+  return utf8ToBytes(s);
+}
+
+/** `P_k` as a `Derive` handle: Argon2id of `passphraseBytes(passphrase)` under `passSalt`; `null` for `passKdf` 0 (no
+ *  passphrase); an unknown set is `PassKdfUnknown`. */
 export function passKey(passKdf, passphrase, passSalt) {
   if (passKdf === 0) return null;
   const set = PASS_KDF[passKdf];
   if (!set) throw new PqVaultError("PassKdfUnknown");
   const salt = bytes(passSalt);
   if (salt.length !== 32 || salt.every((b) => b === 0)) throw new PqVaultError("PqVaultShape");
-  return handle(USAGE.Derive, argon2id(utf8ToBytes(passphrase), salt, { ...set, maxmem: 2 ** 31 }));
+  return handle(USAGE.Derive, argon2id(passphraseBytes(passphrase), salt, { ...set, maxmem: 2 ** 31 }));
 }
 /** `K_v = HKDF(K_e ‖ P_k, "scaas/pqvault/v1/vkey" ‖ vaultId ‖ epochId ‖ be16(passKdf))`, `P_k` empty for `passKdf` 0. */
 export const vaultKey = (Ke, Pk, vault, epoch, passKdf) =>

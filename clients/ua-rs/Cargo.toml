@@ -145,8 +145,9 @@ roots = ["wallet", "dep:argon2"]
 # PqVault plan V1 (spec §6.5, CLI-PQV-10; owner 2026-11-21, O8): the vault passphrase's Argon2id set 1 (64 MiB / 3 / 4), the same
 # `argon2` 0.5.3 pin as `roots` (MIT OR Apache-2.0, `alloc` + `zeroize`, no `password-hash`; its blake2 0.10.6 is ua-rs's), so no
 # second version enters the lock. Today only tests/pqvault_pass.rs reads it (the reproducer of vectors/pqvault/pass.json); the key
-# handle over it is the SDK's app-core task (plan V9 / scaas-sdk T21).
-pqvault = ["dep:argon2"]
+# handle over it is the SDK's app-core task (plan V9 / scaas-sdk T21). `unicode-normalization` (the wallet's pin, in the lock): the
+# passphrase's NFC of RFC 8265 OpaqueString before Argon2id (Fable code review F4).
+pqvault = ["dep:argon2", "dep:unicode-normalization"]
 signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha", "dep:scaas-ct", "dep:zeroize"]
 json = ["dep:serde_json"]
 pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc"]

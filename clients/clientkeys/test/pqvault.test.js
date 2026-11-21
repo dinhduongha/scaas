@@ -488,3 +488,31 @@ test("item refusals: the length bounds, bad padding, each AAD field, a wrong K_v
   );
   assert.equal(pv.padItem(new Uint8Array(16380)).length, 16384);
 });
+
+test("passphrase bytes (Fable code review F4): RFC 8265 OpaqueString: spaces to U+0020, NFC, UTF-8; NFC and NFD give one P_k", () => {
+  const N = P.normalization;
+  assert.ok(N.rows.length >= 2);
+  for (const r of N.rows) {
+    assert.equal(h(pv.passphraseBytes(r.nfc)), r.bytes, r.name);
+    assert.equal(h(pv.passphraseBytes(r.nfd)), r.bytes, r.name);
+    assert.notEqual(r.nfc, r.nfd, `${r.name}: two code-point sequences`);
+    assert.notEqual(h(utf8ToBytes(r.nfd)), r.bytes, `${r.name}: the raw NFD bytes differ`);
+    const a = pv.passKey(1, r.nfc, N.passSalt);
+    const b = pv.passKey(1, r.nfd, N.passSalt);
+    assert.equal(h(a.key), r.Pk, r.name);
+    assert.equal(h(b.key), r.Pk, `${r.name}: NFD gives the same P_k`);
+    assert.equal(
+      h(argon2id(utf8ToBytes(r.nfd), fromHex(N.passSalt), { t: 3, m: 65536, p: 4, dkLen: 32 })),
+      r.rawNfdArgon2,
+      r.name,
+    );
+    assert.notEqual(r.rawNfdArgon2, r.Pk, `${r.name}: without the normalisation the key differs`);
+  }
+  for (const r of N.refusals)
+    assert.equal(
+      code(() => pv.passphraseBytes(r.input)),
+      r.error,
+      r.name,
+    );
+  assert.equal(h(pv.passphraseBytes("plain ascii")), h(utf8ToBytes("plain ascii")), "ASCII unchanged");
+});
