@@ -140,7 +140,8 @@ transaction in its network form is refused by name); an endpoint that answers an
 the outcome is `accepted` (an "already known" answer included), `refused` (a well-formed rejection, its reason kept, capped), or
 `unreachable`. The merge is `Sent` when at least one endpoint accepted, else `Rejected` (code `BroadcastRejected`) with every
 endpoint's outcome. Neither is a final verdict on the transaction ([CLI-RPC-09](#CLI-RPC-09)), and no consumer re-sends
-automatically on either. The same rule holds for a signed operation posted to several scaas-node gateways (§6).
+automatically on either (one exception, a controller call of 2026-11-21 ([ARCH-POS-20](../decisions.md#ARCH-POS-20) C20, owner:
+no): the SDK's bounded re-post of the same bytes of an unsettled Arweave item, [CLI-SDK-21](scaas-sdk.md#CLI-SDK-21)). The same rule holds for a signed operation posted to several scaas-node gateways (§6).
 
 <a id="CLI-RPC-09"></a>**CLI-RPC-09** — **A transaction ends only on facts from a decisive read at a final block** (follows "never
 report `dead` while a transaction may still land"; BUILT for EVM, plan T7, T13 S7: `final_from_an_agreed_read_is_terminal`,
@@ -247,16 +248,23 @@ controller calls of [ARCH-POS-20](../decisions.md#ARCH-POS-20); the [spec](../su
 profiles need no new rule here: they are configuration of the EVM reader ([NET-EVM-16](../networks/evm.md#NET-EVM-16),
 [NET-EVM-17](../networks/evm.md#NET-EVM-17)).
 
-<a id="CLI-RPC-13"></a>**CLI-RPC-13** — **Arweave reads go to a list of gateways; every attachment read feeds a decryption and is
-accepted only when the caller's check passes** (SPECIFIED). The list is [CLI-RPC-02](#CLI-RPC-02)'s: `default` the release's
-reviewed gateways, `named` the operator's or holder's, `discovered` only as the caller passes them (the crate discovers nothing and
-follows no redirect). A gateway answers `GET /info` with the configured `network` or is dropped for the process
-([CLI-RPC-03](#CLI-RPC-03)). `data(id, max_bytes, purpose, check)` reads `GET /raw/{id}`: `id` is checked as 43 canonical base64url
-characters before any request; an announced length above `max_bytes` is refused unread and reading stops at `max_bytes`; a body
-that fails `check` is that gateway's failure (`EndpointAnswerRefused`), so failover moves on. Failover by default; under strict
-majority ⌊n/2⌋ + 1 gateways return bytes with the same SHA-256 that also pass `check` (the id fixes the content; no block).
-Every attachment read is marked as feeding a decryption ([CLI-RPC-06](#CLI-RPC-06)). `status(id)` reads GraphQL
-`transactions(ids: [id])`, the answer capped at 64 KiB and depth 64; "settled" means a block height is shown. Logs carry ids and
+<a id="CLI-RPC-13"></a>**CLI-RPC-13** — **Arweave reads go to a list of gateways, streamed within an exact length; every
+attachment read feeds a decryption and is accepted only when the caller's check passes; "settled" needs agreement, depth and
+the bytes** (SPECIFIED). The list is [CLI-RPC-02](#CLI-RPC-02)'s: `default` the release's reviewed gateways, `named` the
+operator's or holder's, `discovered` only as the caller passes them (the crate discovers nothing and follows no redirect); each
+entry names its operator. A gateway answers `GET /info` with the configured `network` or is dropped for the process
+([CLI-RPC-03](#CLI-RPC-03)). `data(id, len, purpose, check)` reads `GET /raw/{id}`: `id` is checked as 43 canonical base64url
+characters before any request; `len` above the platform's cap (2^30 + 16 B on 64-bit targets, 2^27 + 16 B on wasm32) is refused
+before any request; an announced length other than `len` is refused unread; the body is streamed, its SHA-256 computed as it
+arrives, into a buffer of at most `len` bytes, and a body longer or shorter than `len` is refused; no `Range` request is sent
+(a range would tell the gateway the size). A body that fails `check` is that gateway's failure (`EndpointAnswerRefused`), so
+failover moves on. Failover by default; under strict majority ⌊n/2⌋ + 1 gateways return bytes with the same SHA-256 that also
+pass `check` (the id fixes the content; no block). Every attachment read is marked as feeding a decryption
+([CLI-RPC-06](#CLI-RPC-06)). `status(id)` reads GraphQL `transactions(ids: [id])` from each gateway, each answer capped at 64 KiB
+and depth 64, with the tip height. `settled(id, depth, object_sha256)` is true only when (a) a strict majority of at least two
+gateways run by different operators (`default` or `named`; discovered gateways never count) report the item in one block, (b)
+that block is at least `depth` blocks below the tip they report (`depth` a list setting, default 50), and (c) one `data` read
+returns bytes whose SHA-256 is `object_sha256`; with fewer than two such gateways nothing is ever settled. Logs carry ids and
 sizes only ([CLI-RPC-11](#CLI-RPC-11)).
 
 <a id="CLI-RPC-14"></a>**CLI-RPC-14** — **An upload posts the same signed data item to a list of bundlers; a receipt counts only
@@ -265,6 +273,7 @@ bounds (signature types 2, 3 and 4 only), computes its id (base64url of SHA-256 
 (`POST /tx`, `application/octet-stream`) to the first or to every bundler of the list (`default` Turbo). Per bundler: `accepted`
 (the receipt kept, capped), `refused` (HTTP 402 as `PaymentRequired`) or `unreachable`; a receipt for another id is `refused`;
 merged `Sent` or `Rejected` as [CLI-RPC-08](#CLI-RPC-08). `paid_by` is the caller's, sent as `x-paid-by` to that bundler only.
-The body cap is the largest single-request bucket plus 1,024 B. Settlement is read later through [CLI-RPC-13](#CLI-RPC-13)'s
-`status`, never taken from a receipt.
+The body cap is the largest single-request object plus 1,024 B. Settlement is read later through [CLI-RPC-13](#CLI-RPC-13)'s
+`settled`, never taken from a receipt. The crate re-sends nothing; the SDK's bounded re-post of an unsettled item
+([CLI-SDK-21](scaas-sdk.md#CLI-SDK-21)) is the one exception to CLI-RPC-08's "no automatic re-send".
 

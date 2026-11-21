@@ -26,8 +26,8 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
 | Polygon PoS | 137 | `polygon` (`amsterdam`; runs the Osaka opcode set today; deploy after its Glamsterdam fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
 | Base | 8453 | `base` (`amsterdam`; Azul since 2026-05-28; deploy after its Glamsterdam fork) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
 | Avalanche C-Chain, Fuji | 43114, 43113 | `avalanche-mainnet`, `avalanche-testnet` (`amsterdam`; Cancun today, no Amsterdam; a single contract earlier under [NET-EVM-18](#NET-EVM-18)) | AVAX; a transaction pays at least half its gas limit | `tag finalized` (= `safe`, the settled block, ~5 s) | seeded `draft`, [NET-EVM-16](#NET-EVM-16) |
-| Polkadot Hub; Paseo; Westend | 420420419; 420420417; 420420421 | `polkadot-hub-mainnet`, `polkadot-hub-testnet`, `polkadot-hub-westend` (`amsterdam`; REVM, 24,576-B runtime cap) | DOT; gas folds weight and the storage deposit | `tag finalized` (GRANDPA) | seeded `draft` after its probes, [NET-EVM-17](#NET-EVM-17) |
-| Moonbeam; Moonbase Alpha | 1284; 1287 | `moonbeam-mainnet`, `moonbeam-testnet` (second, after Polkadot Hub) | GLMR; storage-growth gas | `tag finalized` (relay-finalized) | PLANNED, [NET-EVM-17](#NET-EVM-17) |
+| Polkadot Hub; Paseo; Westend | 420420419; 420420417; 420420421 | `polkadot-hub-mainnet`, `polkadot-hub-testnet`, `polkadot-hub-westend` (`amsterdam`; REVM, 24,576-B runtime cap) | DOT; gas folds weight and the storage deposit | `tag finalized` (GRANDPA) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes and the measurement, [NET-EVM-17](#NET-EVM-17) |
+| Moonbeam; Moonbase Alpha | 1284; 1287 | `moonbeam-mainnet`, `moonbeam-testnet` (second, after Polkadot Hub) | GLMR; storage-growth gas | `tag finalized` (relay-finalized) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes, [NET-EVM-17](#NET-EVM-17) |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas
   costs are predictable in unit, though their size still follows the gas price (the often-quoted < $0.001/tx is not a
@@ -63,7 +63,7 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
 
 - <a id="NET-EVM-16"></a>**NET-EVM-16** — **Avalanche C-Chain (43114) and Fuji (43113) are seeded `draft` profiles; their
   lanes and readers follow the chain's facts after Helicon** (owner 2026-11-21, [ARCH-POS-19](../decisions.md#ARCH-POS-19)
-  Q1; the facts and lane rules controller calls of [ARCH-POS-20](../decisions.md#ARCH-POS-20); SPECIFIED, design in the
+  Q1; the facts and lane rules controller calls of [ARCH-POS-20](../decisions.md#ARCH-POS-20), owner: no; SPECIFIED, design in the
   [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part A). Both share the genesis `0x31ced5b9…a96b` and are told apart by the chain id
   ([NET-ALL-25](README.md#NET-ALL-25)). The EVM is Cancun (`libevm`) with P-256 at `0x100`; no EIP-2537, EIP-7702, EIP-7825,
   EIP-7954 or EIP-8037; runtime code is capped at 24,576 B and init code at 49,152 B. Finality is `tag finalized` (`finalized` =
@@ -73,20 +73,36 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
   transactions in flight; the per-transaction ceiling is the live block cap (the sum of gas limits), read, never a constant; real
   gas comes from receipts, since a header's `gasUsed` sums gas limits. No SCaaS contract set deploys before C-Chain has the
   Amsterdam fork ([NET-EVM-06](#NET-EVM-06)); a single contract may deploy earlier under [NET-EVM-18](#NET-EVM-18). `enabled`
-  follows the operator gate of every public profile.
+  follows the operator gate of every public profile, the probes of [NET-EVM-19](#NET-EVM-19) included (after Helicon a block is
+  accepted before it executes, so H7 and H8 matter here most).
 - <a id="NET-EVM-17"></a>**NET-EVM-17** — **Polkadot Hub first, Moonbeam second: draft profiles, and Hub is `enabled` only after
-  its probes and its weight-to-gas measurement** (owner 2026-11-21, ARCH-POS-19 Q2; the probe and measurement conditions
-  controller calls of ARCH-POS-20; SPECIFIED, the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part C). Hub (pallet-revive) runs solc bytecode on REVM
-  through `eth-rpc`, with a hard 24,576-B runtime cap and `tag finalized` (GRANDPA). Before `enabled` the probes pass: block 0
-  hash equal on two independent `eth-rpc` instances and stable for 7 days; EIP-1898 reads by a canonical hash, a made-up hash
-  refused; a block asked by an Ethereum hash returns that block or an error; `latest` reorgs counted over 24 h; the
-  `latest` → `finalized` p99 over 7 days; `eth_getLogs` range limits. A failed probe stops `enabled` and goes to the owner.
+  the probes every profile passes and its weight-to-gas measurement** (owner 2026-11-21, ARCH-POS-19 Q2: the order; the
+  measurement condition a controller call of ARCH-POS-20, owner: no; SPECIFIED, the
+  [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part C). Hub (pallet-revive) runs solc bytecode on REVM
+  through `eth-rpc`, with a hard 24,576-B runtime cap and `tag finalized` (GRANDPA). Before `enabled` the probes of
+  [NET-EVM-19](#NET-EVM-19) pass, as on every EVM profile (H4 matters most here: `eth-rpc` maps Ethereum and Substrate hashes).
   Hub's gas folds `ref_time`, `proof_size` and the storage deposit into one figure with no Ethereum equivalent, so every line
   priced in Ethereum gas is measured again on Paseo, and the profile's `max_tx_gas` (Hub gas units) is the gas cap
   [CLI-RPC-05](../clients/scaas-rpc.md#CLI-RPC-05) and the node use there; an op that does not fit goes to the owner with
   numbers ([ARCH-POS-18](../decisions.md#ARCH-POS-18)). The storage deposit is part of the fee: nothing SCaaS writes there is
   ever cleared, so it is never refunded, and a lane's balance alert adds the existential deposit. Moonbeam (Frontier, Ethereum
-  gas, EIP-2537 and P-256 present) follows with its own read probes and a Moonbase check.
+  gas, EIP-2537 and P-256 present) follows with the same probes and a Moonbase check.
+- <a id="NET-EVM-19"></a>**NET-EVM-19** — **Every EVM profile passes one probe set before `enabled`: block 0, reads by hash,
+  head stability and finality** (controller call of 2026-11-21, [ARCH-POS-20](../decisions.md#ARCH-POS-20) C19, owner: no;
+  one rule on every chain, never a rule for one chain kind; SPECIFIED, the
+  [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §6.2). Public reads, no spend, from at least two independent
+  RPC providers: **H1** `eth_getBlockByNumber("0x0").hash` equal on both and unchanged over 7 days
+  ([CLI-RPC-03](../clients/scaas-rpc.md#CLI-RPC-03) pins `chain_uid` to it); **H2** `eth_call`, `eth_getStorageAt`,
+  `eth_getCode`, `eth_getBalance` and `eth_getTransactionCount` answer with `{blockHash, requireCanonical: true}` for a canonical
+  hash and refuse a made-up one ([CLI-RPC-05](../clients/scaas-rpc.md#CLI-RPC-05)); **H3** `latest` sampled each block over 24 h
+  and compared later with the canonical chain, replaced heads counted; **H4** a block asked by its hash returns that hash or an
+  error, never another block; **H5** p99 of `latest` − `finalized` over 7 days (the operator gate); **H6** `eth_getLogs` range
+  limits; **H7** the `finalized` tag is served and its number never moves back over the window; **H8** a read pinned by the hash
+  of the newest head, sent as soon as the head is seen, is answered from that block's state (compared with the same read once
+  the block is final) or refused, never answered from another state (on Avalanche: a block accepted and not yet executed is
+  refused). A probe that fails stops `enabled` and goes to the owner: CLI-RPC-03 or CLI-RPC-05 cannot hold on that chain. A
+  probe runs one foreground sample per invocation; the 24-h and 7-day windows are the operator's scheduler calling it, never a
+  background loop.
 
 Other EVM chains (Ethereum L1, Arbitrum, Optimism, Linea) are **unsupported until
 configured**: no profile, no finality gate, no tested deployment. A chain becomes supported only through a chain
@@ -294,13 +310,22 @@ state gas) exceeds 2^24, up to about 115.7 M simulated for the largest implement
 **Change (owner 2026-11-03, [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)):** the SCaaS testnet runs every Amsterdam EIP but EIP-7954, by removing `eip7954TransitionTimestamp` from its chainspec, because with EIP-7954 active the code limit is 65,536 B whatever `maxCodeSize` says (`pqz-core/nethermind/runs/2026-11-03-code-size-probe.txt`). `maxCodeSize` is `0x20000` (131,072 B); the init code limit is then 262,144 B, measured. 22776 stays the owner's at launch. Every other chain keeps the rule above. Status: **BUILT, executed 2026-11-04** (SCaaS testnet reset 1, owner's go; `patch-chainspec.py --testnet-reset`, governance T16 `52ef7d22`, `55a97e0e`, refusing every chain but 7622): image `2.2.0-pqz7`, genesis unchanged `0xf1f491ab…3164`; 65,537 B and 119,800 B deploy at a 200 M block, `WrappedPqzToken` (72,160 B) is deployed; `pqz-core/nethermind/chain/RUNBOOK.md` "Code size 128 KiB on the SCaaS testnet: reset 1", `smartcontracts/evm/runs/2026-11-04-testnet-reset1-7622.txt`.
 
 <a id="NET-EVM-18"></a>**NET-EVM-18** — **On a chain without the Amsterdam fork a contract deploys only when its `amsterdam`
-build fits that chain** (owner 2026-11-21, ARCH-POS-19 Q1 "per contract"; the four conditions a controller call of
-[ARCH-POS-20](../decisions.md#ARCH-POS-20); SPECIFIED). NET-EVM-06 is unchanged: one compile target, `amsterdam`. The deploy
-script checks before it sends: (1) the runtime and init code are within the chain's caps; (2) the deploy transaction is within the
-chain's live block or transaction cap at the chain's own pricing; (3) a linear disassembly of the runtime and init code finds no
-opcode the chain's fork lacks (on Cancun: no Osaka `CLZ` and no opcode Amsterdam adds); (4) the contract's tests pass against
-`anvil --hardfork <the chain's fork>` with the deployed `amsterdam` bytecode, gas figures at that fork recorded and never compared
-with the Amsterdam pins. A contract that fails (3) waits: a build for an older fork changes NET-EVM-06 and is the owner's. A whole
+build fits that chain** (owner 2026-11-21, ARCH-POS-19 Q1 "per contract"; the five conditions a controller call of
+[ARCH-POS-20](../decisions.md#ARCH-POS-20) C5, revised after the review; SPECIFIED). NET-EVM-06 is unchanged: one compile
+target, `amsterdam`. The deploy script checks before it sends: (1) the runtime and init code are within the chain's caps; (2)
+the deploy transaction is within the chain's live block or transaction cap at the chain's own pricing; (3) an **allow-list**
+scan: every byte in code position of the runtime and init code is an opcode the chain's fork defines, the code walked with each
+opcode's immediate length from the compile target's table (`PUSH1`–`PUSH32` and any `amsterdam` opcode with an immediate), the
+code and data boundaries taken from the compiler's output (the metadata length, the constructor arguments and the runtime
+appended to the init code), never guessed; a byte the scan cannot place is a refusal; (4) the contract's tests **execute at
+the chain's fork** on the `amsterdam` artifact's bytes, never a recompile: real transactions to `anvil --hardfork <the chain's
+fork>`, or a forge profile whose `evm_version` is that fork and which loads the pinned artifact's bytes; the same run holds a
+control that must fail, a fixture whose `amsterdam` artifact uses an opcode the fork lacks (`CLZ` for Cancun), and a run whose
+control is green is void; gas figures at that fork are recorded and never compared with the Amsterdam pins; (5) every
+precompile the contract calls, declared per contract in the release data, answers a known-answer `eth_call` on the chain at
+deploy time. Before a mainnet deploy, the chain's testnet runs a real round trip of the contract (`anvil` is not the chain's
+client). A contract that fails (3) or (5) waits and goes to the owner: a build for an older fork changes NET-EVM-06, and a missing
+precompile means [ARCH-POS-18](../decisions.md#ARCH-POS-18)'s software path, never a disabled kind. A whole
 SCaaS set still waits for the chain's Amsterdam fork. Design: the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §4.5.
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before

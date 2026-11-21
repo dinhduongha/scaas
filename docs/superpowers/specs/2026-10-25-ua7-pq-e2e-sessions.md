@@ -236,9 +236,13 @@ minimal form, CTR-UA-07). The contract verifies it through the registry's portab
   Change (2026-11-21, owner ARCH-POS-19 Q1 and controller call C4 of ARCH-POS-20; SPECIFIED, the
   [Avalanche, Polkadot and Arweave spec](2026-11-21-avax-polkadot-arweave.md) §5.5): a store entry may also be
   `{"kind": "chainstore", "chainId": <decimal u64>, "chainUid": <chain_uid>, "contract": <PqChatStore address>}`, a message
-  store written through `storeMessage` on a standalone `PqChatStore` (CTR-CHAT-22) on a chain whose code cap no `PqChat`
-  fits; `chainstore` entries are distinct by `(chainId, chainUid, contract)`; the reader checks the chain pair and the
-  contract's pinned runtime code hash before it reads.
+  store written through `storeMessage` on a standalone `PqChatStore` (CTR-CHAT-22); `chainstore` entries are distinct by
+  `(chainId, chainUid, contract)`; the reader checks the chain pair and the contract's pinned runtime code hash before it
+  reads. Since the same envelope goes to every listed store, a session's envelope is bounded by the smallest blob bound among
+  its listed stores. Change (2026-11-21, the spec's revision 2, review F19): the clause "on a chain whose code cap no `PqChat`
+  fits" dropped (a store kind is never defined by a chain kind) and the smallest-bound rule added; and, owner O3 (a), the
+  `chain` entry gains `chainId` (decimal u64), distinct by `(chainId, chainUid, contract)`, and a client refuses a session homed
+  on a chain whose `chain_uid` another profile shares.
 - `parents` = the ids of the conversation heads the sender has seen, at most 8, sorted (P19).
 - `ciphertext` = §6.4.
 
@@ -551,9 +555,13 @@ its ciphertext.
 - `url` (optional): 1–2,048 B, `https://` or `ipfs://` (a blob store, P28), naming `ct` itself.
   Change (2026-11-21, owner ARCH-POS-19 Q4, controller calls Q6 and C10; SPECIFIED, CLI-UAL-65, the
   [Avalanche, Polkadot and Arweave spec](2026-11-21-avax-polkadot-arweave.md) §7.4, §7.5): `url` may also be `ar://<id>`,
-  `<id>` exactly 43 characters of canonical base64url and nothing after it; it names `ct` padded with zeros to a power-of-two
-  bucket, and the reader checks the length, the zero tail and `ctSha256` before any decryption. `ctSha256` stays SHA-256 of
-  `ct`; no signed byte of this section changes.
+  `<id>` exactly 43 characters of canonical base64url and nothing after it. Change (2026-11-21, the spec's revision 2, review
+  F1, controller call; CLI-UAL-65): the padding is **inside** the AEAD. For a content whose `url` is `ar://`, `ct =
+  AES-256-GCM(key, 0^96, frame)` with `frame = size (8 B, big-endian) ‖ file ‖ 0x00…` up to `bucket(size)`, the smallest power of
+  two at least `max(2^16, size + 8)`; the object is exactly `bucket(size) + 16` B and `ctSha256` is SHA-256 of it (a `store`
+  copy holds the same object). The reader checks the length and `ctSha256` before decryption, then the frame's `len` equal to
+  `size`, the pad all zero, and `sha256` of the file, before any use. A content without an `ar://` `url` keeps the form above.
+  The earlier zero tail outside the AEAD is dropped: a public reader stripped it and learned the exact size.
 - At least one of `store` and `url`; when both are given the reader tries `store` first.
 - `name` is display only: a client never uses it as a path without making it safe.
 

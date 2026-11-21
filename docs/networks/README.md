@@ -370,8 +370,15 @@ enforces it. A private chain re-created from the **same** genesis file would als
 private chain's genesis carries a unique `extraData` nonce, and the deploy gate and the node refuse a private chain whose
 genesis hash is already present in any chain profile. Public chains may share a genesis (Avalanche C-Chain and Fuji,
 Ethereum and ETC): their profiles are told apart by the chain id, and the deploy gate and the node refuse a profile whose
-pair is already present. Every chain-bound SCaaS digest binds the chain id beside `chain_uid`; a portable record binds no
-chain by design. On public chains SCaaS relies on the fork's own chain-id change; a fork without one is a documented
+pair is already present. A digest that binds the chain id beside `chain_uid` (an EIP-712 domain with `chainId`) is told
+apart on a shared genesis; a record that names its chain by `chain_uid` alone is not: PqChat's `PqChatSession` and `PqTopic`
+and PqVault's records name their home by `homeChain` (a `chain_uid`) and a contract address, and on a shared genesis with a
+deterministic factory both hold on both chains. So the deploy gate refuses a kind that keeps such records (`PqChat`,
+`OpenFactory`, `PqVault`, and any later kind with a `homeChain` field) on a profile whose `chain_uid` another profile
+shares, until those records carry the chain id; clients refuse such a home as well. A portable record binds no chain by
+design. Which digests bind the chain id is listed, per digest, by the audit of the spec's plan T1. A chain is private
+(ours) when its `chain-uids.json` row says so in the field T1 defines. (This paragraph's wording after the pair is a
+controller call of 2026-11-21, [ARCH-POS-20](../decisions.md#ARCH-POS-20) C18.) On public chains SCaaS relies on the fork's own chain-id change; a fork without one is a documented
 residual (signatures replay on both branches until the profile is withdrawn). Cost: a fork of our own chain needs fresh
 deployments and profiles.
 

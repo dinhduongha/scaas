@@ -683,10 +683,15 @@ store path, as HCS does on Hedera; the contract, its state storage and its bound
   for every chain store. Cost, an estimate at Cancun pricing to be measured: about 8 times an event-only store (about 1.22 M gas
   for a 5,100-B envelope).
 - **Deployment.** Through the deterministic deployer with salt 0, the `amsterdam` build under
-  [NET-EVM-18](../networks/evm.md#NET-EVM-18), so one address on every chain; the deploy refuses a code hash other than the
-  release data's; explorer-verified after every deploy.
+  [NET-EVM-18](../networks/evm.md#NET-EVM-18), so one address on every chain. The release data pins the init-code hash, the
+  runtime code hash and the address: the script refuses a local build whose init-code hash differs, and treats the address
+  already holding the pinned runtime code as done (anyone may deploy it first; that is harmless, with no constructor argument).
+  Before a profile lists the store, probes on that chain: the deployer's code present, an SSTORE2 write and read, and
+  `eth_getCode` equal to the pinned bytes. Explorer-verified after every deploy.
 - **Clients.** A session lists it in `sealedInfo` as `{"kind": "chainstore", "chainId", "chainUid", "contract"}` (the UA-7 spec
   §4.2, P27); a reader checks the chain pair and the contract's runtime code hash against the pinned release data before it
-  reads, and checks every payload as for `storeMessage` (UA-7 P25, P29). Relaying as [CTR-CHAT-19](#CTR-CHAT-19)'s unsigned
-  writes.
+  reads, and checks every payload as for `storeMessage` (UA-7 P25, P29). Since the same envelope goes to every listed store, a
+  session's envelope is bounded by the smallest blob bound among its listed stores (here `env` ≤ 24,416 B). Relaying as
+  [CTR-CHAT-19](#CTR-CHAT-19)'s unsigned writes: no SCaaS set (so no `RelayFeeRouter`) is deployed on Avalanche, so the paths
+  today are the operator's lane policy or the user's own account, which shows the user's address beside the hint.
 
