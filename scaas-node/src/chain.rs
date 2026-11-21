@@ -547,7 +547,7 @@ pub(crate) mod tests {
     }
 
     /// [`fake_rpc`] answering `eth_chainId` with `id` (P3-5) and block 0 with hash `zero` (R3-3); neither is counted.
-    async fn fake_rpc_on(
+    pub(crate) async fn fake_rpc_on(
         f: fn(&Value) -> Value,
         id: u64,
         zero: B256,

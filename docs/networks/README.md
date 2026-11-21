@@ -363,7 +363,8 @@ warns for a service off the list.
 
 <a id="chain-forks"></a><a id="NET-ALL-25"></a>**NET-ALL-25** — **A chain we run that forks becomes a new chain, and
 no two chain profiles share the pair `(chainId, chain_uid)`.** Owner ruling 2026-10-08; the pair wording is a controller call
-of 2026-11-21 ([ARCH-POS-19](../decisions.md#ARCH-POS-19) Q8; the pair check BUILT on branch `chains-arweave` (plan T1): `script/deploybook.py`, `script/DeployBook.sol` and the node's start check `CHAIN_PAIR_TAKEN` / `CHAIN_UID_PRIVATE`). Two branches of a fork share their
+of 2026-11-21 ([ARCH-POS-19](../decisions.md#ARCH-POS-19) Q8; the pair check BUILT on branch `chains-arweave` (plan T1): `script/deploybook.py`, `script/DeployBook.sol` and the node's start check `CHAIN_PAIR_TAKEN` / `CHAIN_UID_PRIVATE`, run again at lane start over the pair the RPC resolves, so a
+profile without `chain_uid` is checked too). Two branches of a fork share their
 genesis block, so `chain_uid` cannot tell them apart and a signature made on one replays on the other. For chains SCaaS runs,
 a fork is a new chain: a new chain id (EIP-155 practice) and a new `chain_key`, with its own profile; the deploy gate
 enforces it. A private chain re-created from the **same** genesis file would also repeat its genesis hash, so every
