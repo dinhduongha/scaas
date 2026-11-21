@@ -229,7 +229,7 @@ MUTANTS = [
     ),
     (
         "P3-1 an unknown kind name passes (Solidity)",
-        [(BS, "        if (!home) {\n            string[] memory os", "        if (!home) {\n            return;\n            string[] memory os")],
+        [(BS, "                if (_bookEq(os[i], kind)) return;", "                return;")],
         GOV + "test_kindGateWhereCreated",
         "test_kindGateWhereCreated",
     ),
@@ -246,28 +246,28 @@ MUTANTS = [
         "test_kindGateWhereCreated",
     ),
     (
-        "P3-2 the table not checked whole",
-        [(BS, "        string memory j = vm.readFile(_bookTable());\n        _checkTable(j);\n", "        string memory j = vm.readFile(_bookTable());\n")],
-        GOV + "test_tableCheckedWhole",
-        "test_tableCheckedWhole",
-    ),
-    (
         "P3-2 a row without private unnamed",
-        [(BS, '                vm.keyExistsJson(j, string.concat(p, ".private")),', "                true,")],
+        [(BS, '            if (!vm.keyExistsJson(j, string.concat(".chains[", vm.toString(i), "].private"))) {', "            if (false) {")],
         GOV + "test_tableCheckedWhole",
         "test_tableCheckedWhole",
     ),
     (
         "P3-2 a pair held twice elsewhere",
-        [(BS, "                    id[k] != id[i] || gen[k] != gen[i],", "                    true,")],
+        [(BS, "                if (r[k].chainId == r[i].chainId && r[k].chainUid == r[i].chainUid) {", "                if (false) {")],
         GOV + "test_tableCheckedWhole",
         "test_tableCheckedWhole",
     ),
     (
         "P3-2 a private genesis in a second row",
-        [(BS, "                    k == i || gen[k] != gen[i],", "                    true,")],
+        [(BS, "                if (k != i && r[k].chainUid == r[i].chainUid) {", "                if (false) {")],
         GOV + "test_tableCheckedWhole",
         "test_tableCheckedWhole",
+    ),
+    (
+        "ZetherDeploy fix: the shared-genesis test on the rows read in their own frame",
+        [(BS, "            if (r[i].chainUid == uid && r[i].chainId != block.chainid) {", "            if (false) {")],
+        GOV + "test_homeChainKindsRefused",
+        "test_homeChainKindsRefused",
     ),
 ]
 

@@ -48,36 +48,28 @@ abstract contract DeployBook is Script {
         returns (string memory key, string memory name, string memory network)
     {
         string memory dn = _deployName();
-        string memory j = vm.readFile(_bookTable());
-        _checkTable(j);
-        string memory hit; // the row of (block.chainid, uid)
+        BookRow[] memory r = DeployBook(address(this)).bookRows(_bookTable());
+        uint256 hit = type(uint256).max; // the row of (block.chainid, uid)
         string memory priv; // a private row's key with this genesis
         bool taken; // DEPLOY_NAME names another row
-        for (uint256 i;; ++i) {
-            string memory p = string.concat(".chains[", vm.toString(i), "]");
-            if (!vm.keyExistsJson(j, p)) break;
-            string memory k = vm.parseJsonString(j, string.concat(p, ".key"));
-            bool sameUid = vm.parseJsonBytes32(j, string.concat(p, ".chainUid")) == uid;
-            if (sameUid && vm.parseJsonUint(j, string.concat(p, ".chainId")) == block.chainid) {
-                hit = p; // one at most: _checkTable refused a second row of the pair
+        for (uint256 i; i < r.length; ++i) {
+            if (r[i].chainUid == uid && r[i].chainId == block.chainid) {
+                hit = i; // one at most: bookRows refused a second row of the pair
                 continue;
             }
-            if (_bookEq(dn, k)) taken = true;
-            if (sameUid && vm.parseJsonBool(j, string.concat(p, ".private"))) priv = k;
+            if (_bookEq(dn, r[i].key)) taken = true;
+            if (r[i].chainUid == uid && r[i].priv) priv = r[i].key;
         }
-        if (bytes(hit).length != 0) {
-            key = vm.parseJsonString(j, string.concat(hit, ".key"));
-            require(
-                bytes(dn).length == 0 || _bookEq(dn, key),
-                string.concat(
-                    "DEPLOY_NAME_MISMATCH: DEPLOY_NAME=", dn, ", but this chain is ", key, " in chain-uids.json"
-                )
-            );
-            return (
-                key,
-                vm.parseJsonString(j, string.concat(hit, ".name")),
-                vm.parseJsonString(j, string.concat(hit, ".network"))
-            );
+        if (hit != type(uint256).max) {
+            key = r[hit].key;
+            if (bytes(dn).length != 0 && !_bookEq(dn, key)) {
+                revert(
+                    string.concat(
+                        "DEPLOY_NAME_MISMATCH: DEPLOY_NAME=", dn, ", but this chain is ", key, " in chain-uids.json"
+                    )
+                );
+            }
+            return (key, r[hit].name, r[hit].network);
         }
         require(!taken, string.concat("DEPLOY_NAME_TAKEN: ", dn, " names another chain in chain-uids.json"));
         require(
@@ -106,53 +98,81 @@ abstract contract DeployBook is Script {
         return (dn, dn, network);
     }
 
-    /// @notice NET-ALL-25, the table as read, whole (review P3-2; `deploybook.py table()` is the twin): every row says
-    ///         `private` (`CHAIN_ROW_PRIVATE`), no two rows share the pair (chainId, chainUid) (`CHAIN_PAIR_TAKEN`), and a
-    ///         private chain's genesis is in no other row (`CHAIN_UID_PRIVATE`).
-    function _checkTable(string memory j) internal view {
-        uint256 n;
-        while (vm.keyExistsJson(j, string.concat(".chains[", vm.toString(n), "]"))) ++n;
-        string[] memory key = new string[](n);
-        uint256[] memory id = new uint256[](n);
-        bytes32[] memory gen = new bytes32[](n);
-        bool[] memory priv = new bool[](n);
-        for (uint256 i; i < n; ++i) {
-            string memory p = string.concat(".chains[", vm.toString(i), "]");
-            key[i] = vm.parseJsonString(j, string.concat(p, ".key"));
-            require(
-                vm.keyExistsJson(j, string.concat(p, ".private")),
-                string.concat("CHAIN_ROW_PRIVATE: ", key[i], " in chain-uids.json has no private (true | false)")
-            );
-            (id[i], gen[i]) =
-            (vm.parseJsonUint(j, string.concat(p, ".chainId")), vm.parseJsonBytes32(j, string.concat(p, ".chainUid")));
-            priv[i] = vm.parseJsonBool(j, string.concat(p, ".private"));
+    /// @dev A `chain-uids.json` row as the deploy scripts read it (`private` is `priv`: a Solidity keyword).
+    struct BookRow {
+        uint256 chainId;
+        bytes32 chainUid;
+        string key;
+        string name;
+        string network;
+        bool priv;
+    }
+
+    struct BookRowKey {
+        string key;
+    }
+
+    /// @notice NET-ALL-25, the table at `path` as read, whole (review P3-2; `deploybook.py table()` is the twin): every row
+    ///         says `private` (`CHAIN_ROW_PRIVATE`), no two rows share the pair (chainId, chainUid) (`CHAIN_PAIR_TAKEN`), and
+    ///         a private chain's genesis is in no other row (`CHAIN_UID_PRIVATE`); returns the rows. External and called
+    ///         through `this` (a static call, never broadcast): each cheatcode call copies the whole table into memory, so
+    ///         it runs in its own frame, whose memory ends with it, and reads the rows in one typed call, never per row and
+    ///         field (in the caller's frame those copies grew with every gate of a deploy).
+    function bookRows(string calldata path) external view returns (BookRow[] memory r) {
+        string memory j = vm.readFile(path);
+        BookRowKey[] memory ks =
+            abi.decode(vm.parseJsonTypeArray(j, ".chains", "ChainUidsKey(string key)"), (BookRowKey[]));
+        for (uint256 i; i < ks.length; ++i) {
+            if (!vm.keyExistsJson(j, string.concat(".chains[", vm.toString(i), "].private"))) {
+                revert(
+                    string.concat("CHAIN_ROW_PRIVATE: ", ks[i].key, " in chain-uids.json has no private (true | false)")
+                );
+            }
+        }
+        r = abi.decode(
+            vm.parseJsonTypeArray(
+                j,
+                ".chains",
+                "ChainUidsRow(uint256 chainId,bytes32 chainUid,string key,string name,string network,bool private)"
+            ),
+            (BookRow[])
+        );
+        for (uint256 i; i < r.length; ++i) {
             for (uint256 k; k < i; ++k) {
-                require(
-                    id[k] != id[i] || gen[k] != gen[i],
-                    string.concat(
-                        "CHAIN_PAIR_TAKEN: ",
-                        key[i],
-                        " repeats the (chainId, chainUid) pair of ",
-                        key[k],
-                        " (NET-ALL-25)"
-                    )
-                );
+                if (r[k].chainId == r[i].chainId && r[k].chainUid == r[i].chainUid) {
+                    revert(
+                        string.concat(
+                            "CHAIN_PAIR_TAKEN: ",
+                            r[i].key,
+                            " repeats the (chainId, chainUid) pair of ",
+                            r[k].key,
+                            " (NET-ALL-25)"
+                        )
+                    );
+                }
             }
         }
-        for (uint256 i; i < n; ++i) {
-            for (uint256 k; k < n && priv[i]; ++k) {
-                require(
-                    k == i || gen[k] != gen[i],
-                    string.concat(
-                        "CHAIN_UID_PRIVATE: the private chain ",
-                        key[i],
-                        "'s genesis is also ",
-                        key[k],
-                        "'s (NET-ALL-25)"
-                    )
-                );
+        for (uint256 i; i < r.length; ++i) {
+            for (uint256 k; k < r.length && r[i].priv; ++k) {
+                if (k != i && r[k].chainUid == r[i].chainUid) {
+                    revert(
+                        string.concat(
+                            "CHAIN_UID_PRIVATE: the private chain ",
+                            r[i].key,
+                            "'s genesis is also ",
+                            r[k].key,
+                            "'s (NET-ALL-25)"
+                        )
+                    );
+                }
             }
         }
+    }
+
+    /// @notice The table's two kind lists (`homeChainKinds`, `otherKinds`), in their own frame as `bookRows`.
+    function bookKinds(string calldata path) external view returns (string[] memory home, string[] memory other) {
+        string memory j = vm.readFile(path);
+        (home, other) = (vm.parseJsonStringArray(j, ".homeChainKinds"), vm.parseJsonStringArray(j, ".otherKinds"));
     }
 
     /// @notice NET-ALL-25 (C18), the deploy gate: a kind keeping or checking records bound to `chain_uid` without the chain
@@ -160,14 +180,12 @@ abstract contract DeployBook is Script {
     ///         the one list) is refused on a chain whose `chain_uid` another
     ///         row shares, `HOME_CHAIN_SHARED_GENESIS`; a kind of `otherKinds` passes; a name on neither list is `KIND_UNKNOWN`. `deploybook.py kind_check` is the twin.
     function _requireKindHere(string memory kind, bytes32 uid) internal view {
-        string memory j = vm.readFile(_bookTable());
-        string[] memory ks = vm.parseJsonStringArray(j, ".homeChainKinds");
+        (string[] memory ks, string[] memory os) = DeployBook(address(this)).bookKinds(_bookTable());
         bool home;
         for (uint256 i; i < ks.length; ++i) {
             if (_bookEq(ks[i], kind)) home = true;
         }
         if (!home) {
-            string[] memory os = vm.parseJsonStringArray(j, ".otherKinds");
             for (uint256 i; i < os.length; ++i) {
                 if (_bookEq(os[i], kind)) return;
             }
@@ -175,13 +193,9 @@ abstract contract DeployBook is Script {
                 string.concat("KIND_UNKNOWN: ", kind, " is on neither homeChainKinds nor otherKinds of chain-uids.json")
             );
         }
-        for (uint256 i;; ++i) {
-            string memory p = string.concat(".chains[", vm.toString(i), "]");
-            if (!vm.keyExistsJson(j, p)) break;
-            if (
-                vm.parseJsonBytes32(j, string.concat(p, ".chainUid")) == uid
-                    && vm.parseJsonUint(j, string.concat(p, ".chainId")) != block.chainid
-            ) {
+        BookRow[] memory r = DeployBook(address(this)).bookRows(_bookTable());
+        for (uint256 i; i < r.length; ++i) {
+            if (r[i].chainUid == uid && r[i].chainId != block.chainid) {
                 revert(
                     string.concat(
                         "HOME_CHAIN_SHARED_GENESIS: ",
@@ -189,7 +203,7 @@ abstract contract DeployBook is Script {
                         " keeps records bound to chain_uid without the chain id; chain ",
                         vm.toString(block.chainid),
                         " shares its chain_uid with ",
-                        vm.parseJsonString(j, string.concat(p, ".key")),
+                        r[i].key,
                         " (NET-ALL-25)"
                     )
                 );
@@ -284,13 +298,9 @@ abstract contract DeployBook is Script {
     function _networkOf(string memory key) internal view returns (string memory net) {
         net = _bookSuffix(key);
         if (bytes(net).length != 0) return net;
-        string memory j = vm.readFile(_bookTable());
-        for (uint256 i;; ++i) {
-            string memory p = string.concat(".chains[", vm.toString(i), "]");
-            if (!vm.keyExistsJson(j, p)) break;
-            if (_bookEq(vm.parseJsonString(j, string.concat(p, ".key")), key)) {
-                return vm.parseJsonString(j, string.concat(p, ".network"));
-            }
+        BookRow[] memory r = DeployBook(address(this)).bookRows(_bookTable());
+        for (uint256 i; i < r.length; ++i) {
+            if (_bookEq(r[i].key, key)) return r[i].network;
         }
         revert(
             string.concat(
