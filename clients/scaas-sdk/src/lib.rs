@@ -397,13 +397,11 @@ impl Sdk {
                         .ok()
                         .and_then(|v| v.try_into().ok())
                         .ok_or(SdkError::Argument)?;
-                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    let genesis =
+                        bs58::encode(op::unhex(&p.chain_uid.to_ascii_lowercase())?).into_string();
                     let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
                     Some((
-                        Arc::new(scaas_rpc::solana::Solana::new(
-                            client,
-                            &bs58::encode(uid).into_string(),
-                        )),
+                        Arc::new(scaas_rpc::solana::Solana::new(client, &genesis)),
                         program,
                     ))
                 }
