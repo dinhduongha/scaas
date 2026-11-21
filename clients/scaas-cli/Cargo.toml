@@ -36,6 +36,10 @@ scaas-sdk = { path = "../scaas-sdk", default-features = false, features = [
   "app-core",
   "pqchat-records",
   "native-networks",
+  "near",
+  "algorand",
+  "cosmos",
+  "aptos",
 ] }
 scaas-ua = { path = "../ua-rs", default-features = false, features = ["wallet"] }
 scaas-rpc = { path = "../scaas-rpc", default-features = false }

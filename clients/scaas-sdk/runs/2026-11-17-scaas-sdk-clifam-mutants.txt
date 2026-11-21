@@ -1,0 +1,6 @@
+# clifam mutants (name | outcome | commit | test | first failure line)
+the params dropped on the way to the SDK | killed | 60a6535ba dirty | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas family_params_are_read_by_name | panicked at src/config.rs:513:18:
+an unknown Cosmos field accepted | killed | 60a6535ba dirty | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas family_params_are_read_by_name | panicked at src/config.rs:527:13:
+the CLI's SDK without Aptos reads | killed | 60a6535ba dirty | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas family_profiles_open_and_read | panicked at src/config.rs:540:13:
+the rest policy ignored | killed | 60a6535ba dirty | ../../scripts/capped cargo test --locked --offline -j2 --bin scaas family_params_are_read_by_name | panicked at src/config.rs:511:17:
+4 mutants, 4 killed, 0 survived, 0 not loaded, 0 other failure

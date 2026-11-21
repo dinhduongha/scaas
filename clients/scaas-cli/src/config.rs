@@ -6,7 +6,7 @@
 use crate::{Fail, Globals};
 use scaas_rpc::{Class, EndpointAuth, Policy, Secret};
 use scaas_sdk::{
-    ChainProfile, EndpointConfig, Family, Finality, Limits, ListedDex, ListedToken, Sdk, SdkConfig,
+    ChainProfile, EndpointConfig, Family, FamilyParams, Finality, Limits, ListedDex, ListedToken, Sdk, SdkConfig,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -94,6 +94,50 @@ struct Profile {
     dexes: Vec<ListedDex>,
     #[serde(default)]
     wrappers: Vec<String>,
+    /// a non-EVM family's own data (spec §8.7 rule 2), by its family's name; its fields' forms checked at `Sdk::open`
+    family_params: Option<Fam>,
+}
+
+/// [`scaas_sdk::FamilyParams`] by name, one family per profile.
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+enum Fam {
+    Cosmos(CosmosFam),
+    Aptos(AptosFam),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CosmosFam {
+    chain_id: String,
+    rest: Vec<Ep>,
+    #[serde(default)]
+    rest_policy: Pol,
+    denom: String,
+    prefix: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AptosFam {
+    chain_id: u8,
+    package: String,
+}
+
+fn fam(f: Fam) -> FamilyParams {
+    match f {
+        Fam::Cosmos(c) => FamilyParams::Cosmos {
+            chain_id: c.chain_id,
+            rest: eps(c.rest),
+            rest_policy: pol(c.rest_policy),
+            denom: c.denom,
+            prefix: c.prefix,
+        },
+        Fam::Aptos(a) => FamilyParams::Aptos {
+            chain_id: a.chain_id,
+            package: a.package,
+        },
+    }
 }
 
 fn pol(p: Pol) -> Policy {
@@ -144,7 +188,7 @@ pub fn parse_profiles(text: &str) -> Result<Vec<ChainProfile>, Fail> {
             verifier_policy: pol(p.verifier_policy),
             dexes: p.dexes,
             wrappers: p.wrappers,
-            family_params: None,
+            family_params: p.family_params.map(fam),
         })
         .collect())
 }
@@ -366,7 +410,7 @@ pub async fn open(g: &Globals) -> Result<Arc<Sdk>, Fail> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
     use super::*;
 
     const P: &str = r#"{"profiles":[{"key":"local","family":"Evm","chain_id":31337,"chain_uid":"0x0000000000000000000000000000000000000000000000000000000000000001","rpc":[{"url":"http://127.0.0.1:1","label":"a"}],"finality":"Finalized","tx_gas_cap":null,"registry":null,"factory":null,"router":null,"max_valid_secs":null}]}"#;
@@ -440,6 +484,81 @@ mod tests {
         let both =
             r#"{"credentials":[{"profile":"local","list":"rpc","label":"a","kind":"bearer"}]}"#;
         assert_eq!(code(apply_overlay(both, &mut p, &mut l)), "OverlayRefused");
+    }
+
+    /// A Cosmos and an Aptos profile with their family params (the family data a non-EVM read needs, spec §8.7 rule 2).
+    fn fam(params: &str, family: &str) -> String {
+        format!(
+            r#"{{"profiles":[{{"key":"f","family":"{family}","chain_uid":"0x0000000000000000000000000000000000000000000000000000000000000002","rpc":[{{"url":"http://127.0.0.1:1","label":"a"}}],"finality":"Finalized","family_params":{params}}}]}}"#
+        )
+    }
+    const COSMOS: &str = r#"{"cosmos":{"chain_id":"scaas-local-1","rest":[{"url":"http://127.0.0.1:1","label":"r"},{"url":"http://127.0.0.1:2","label":"s"}],"rest_policy":"strict_majority","denom":"uscaas","prefix":"wasm"}}"#;
+    const APTOS: &str = r#"{"aptos":{"chain_id":4,"package":"0x00000000000000000000000000000000000000000000000000000000000000aa"}}"#;
+
+    #[test]
+    fn family_params_are_read_by_name() {
+        let p = parse_profiles(&fam(COSMOS, "Cosmos")).unwrap();
+        match &p[0].family_params {
+            Some(scaas_sdk::FamilyParams::Cosmos {
+                chain_id,
+                rest,
+                rest_policy,
+                denom,
+                prefix,
+            }) => {
+                assert_eq!((chain_id.as_str(), denom.as_str(), prefix.as_str()), ("scaas-local-1", "uscaas", "wasm"));
+                assert_eq!((rest.len(), rest[1].label.as_deref()), (2, Some("s")));
+                assert!(matches!(rest_policy, Policy::StrictMajority));
+            }
+            _ => panic!("no Cosmos params"),
+        }
+        let p = parse_profiles(&fam(APTOS, "Aptos")).unwrap();
+        assert!(matches!(
+            &p[0].family_params,
+            Some(scaas_sdk::FamilyParams::Aptos { chain_id: 4, package }) if package.ends_with("aa")
+        ));
+        // without the field: none (an EVM profile)
+        assert!(parse_profiles(P).unwrap()[0].family_params.is_none());
+        // an unknown field, an unknown family, two families at once: refused by name, each beside the controls above
+        for bad in [
+            COSMOS.replace("\"prefix\"", "\"prefix\":\"wasm\",\"extra\""),
+            r#"{"solana_x":{}}"#.to_string(),
+            format!("{{{},{}}}", &COSMOS[1..COSMOS.len() - 1], &APTOS[1..APTOS.len() - 1]),
+        ] {
+            assert_eq!(code(parse_profiles(&fam(&bad, "Cosmos"))), "ProfilesRefused", "{bad}");
+        }
+    }
+
+    /// The CLI's SDK reads the families (their features are on): a Cosmos and an Aptos profile reach their endpoints (none
+    /// answers here) instead of `FeatureMissing`; params out of their form are `Argument` at `Sdk::open`.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn family_profiles_open_and_read() {
+        for (params, family) in [(COSMOS, "Cosmos"), (APTOS, "Aptos")] {
+            let sdk = open_with(&fam(params, family)).await.unwrap();
+            let id = "0x0000000000000000000000000000000000000000000000000000000000000003".to_string();
+            let r = sdk.wallet().balances(id, "f".into()).await;
+            assert_ne!(code(r.map_err(Fail::Sdk)), "FeatureMissing", "{family}");
+        }
+        let zero = APTOS.replace("\"chain_id\":4", "\"chain_id\":0");
+        assert_eq!(code(open_with(&fam(&zero, "Aptos")).await), "Argument");
+        // the family named by the params is the profile's
+        assert_eq!(code(open_with(&fam(APTOS, "Cosmos")).await), "Argument");
+    }
+
+    async fn open_with(text: &str) -> Result<Arc<Sdk>, Fail> {
+        let d = std::env::temp_dir().join(format!("scaas-cli-fam-{}-{}", std::process::id(), text.len()));
+        let store = scaas_sdk::vault::FileStore::new(d.to_string_lossy().into_owned()).unwrap();
+        Ok(Sdk::open(SdkConfig {
+            profiles: parse_profiles(text)?,
+            store,
+            authenticator: None,
+            rp_id: None,
+            runtime: scaas_sdk::RuntimeChoice::Adopt(tokio::runtime::Handle::current()),
+            limits: Limits::default(),
+            clock: None,
+            gas_tables: vec![],
+        })
+        .await?)
     }
 
     #[cfg(unix)]
