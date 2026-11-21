@@ -1,0 +1,5 @@
+# nearnative mutants (name | outcome | commit | test | first failure line)
+the native read off | killed | 680ff531c dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_native_plain_account | panicked at tests/near.rs:313:5:
+the native read at the latest block, not the final one | killed | 680ff531c dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_native_plain_account | panicked at tests/near.rs:312:42:
+an unknown plain account refused, not 0 | killed | 680ff531c dirty | ../../scripts/capped cargo test --locked --offline -j2 --features near --test near -- --exact near_native_plain_account | panicked at tests/near.rs:335:52:
+3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure
