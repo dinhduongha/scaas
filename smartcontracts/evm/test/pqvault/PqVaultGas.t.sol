@@ -234,9 +234,9 @@ contract PqVaultGasTest is PqVaultBase {
         assertLt(regular * 105 / 100, 1 << 24, "regular gas x 1.05 under 2^24 (EIP-7825)");
         assertLe(asked, 60_000_000, "the release transaction asks at most 60 M");
         if (!vm.envOr("GAS_MEASURE", false)) {
-            assertEq(r.code.length, 30_449, "the PqVault runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, 2_064_798, SLACK, "deployImplementation regular");
-            assertEq(state, 47_162_250, "deployImplementation state");
+            assertEq(r.code.length, 30_423, "the PqVault runtime (size-baseline.json row)");
+            assertApproxEqAbs(regular, 2_062_717, SLACK, "deployImplementation regular");
+            assertEq(state, 47_122_470, "deployImplementation state");
         }
     }
 

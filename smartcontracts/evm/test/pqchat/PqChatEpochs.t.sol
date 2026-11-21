@@ -555,4 +555,23 @@ contract PqChatEpochsTest is PqChatBase {
         chat.rekey(e, w, sig);
         _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqChat.PqChatNotAdmin.selector, ids[0]));
     }
+
+    /// F3 (controller call 2026-11-21, one rule everywhere): an admin that is no member (an `msig`, which holds no KEM key) is
+    /// removable, and a child keeping it as an admin is then `PqChatRemovedKept`; the child without it lands.
+    function test_adminOnlyMsigRemovable() public {
+        (bytes32 ms,,) = _msig2();
+        (IPqChat.PqChatSession memory s, IPqChat.Wrap[] memory w) = _session(3, 6, address(chat));
+        s.admins = ms < ids[0] ? _list(ms, ids[0]) : _list(ids[0], ms);
+        bytes32 sid2 = _create(chat, s, w);
+        IPqChat.PqChatRemove memory r = IPqChat.PqChatRemove(sid2, sid2, 1, _list(ms), ids[0], 1);
+        chat.remove(r, _sig(r.admin, h.remove(r)));
+        assertTrue(chat.removedIn(sid2, ms));
+        (IPqChat.PqChatEpoch memory e, IPqChat.Wrap[] memory ew) =
+            _epoch(sid2, ids[0], 2, 1, sid2, s.admins, _members(3));
+        IUARegistry.UASig memory sig = _sig(e.author, h.epoch(e));
+        vm.expectRevert(abi.encodeWithSelector(IPqChat.PqChatRemovedKept.selector, sid2, ms));
+        chat.rekey(e, ew, sig);
+        (e, ew) = _epoch(sid2, ids[0], 3, 1, sid2, _admins(), _members(3));
+        _rekey(chat, e, ew); // the control
+    }
 }

@@ -45,3 +45,6 @@ F10-F11 | node cargo test --lib (pqvault, pqchat, instance rows) | node tree | 0
 F10-F11 | node cargo test --test e2e pqvault --ignored (mode 1 and mode 0 on anvil) | node tree | 0 | 2 passed 0 failed 0 ignored (cargo)
 F10 control | selector_audit.json's PqVault createItems row reclassified FACTORY (restored) | node tree | 101 | pqvault_rows_equal_the_contract_both_directions FAILED
 review | node cargo clippy --all-targets -D warnings (after F10, F11) | ec37cc39f | 0 | -
+F3-PqChat | forge test/pqchat (red first: test_adminOnlyMsigRemovable, PqChatNotMember) | F3c tree | 0 | 103 passed 0 failed 0 skipped (forge)
+F3-PqChat | forge test/pqvault | F3c tree | 0 | 92 passed 0 failed 0 skipped (forge)
+F3-PqChat mutant | remove-admin-only-removable re-pointed to PqGroupBase._removable (test/pqvault and test/pqchat) | F3c tree | - | killed

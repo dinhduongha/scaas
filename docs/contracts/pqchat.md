@@ -338,7 +338,8 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
 - `remove(PqChatRemove r, UASig sig)`, `PqChatRemove(bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,
   bytes32 admin,uint64 nonce)`: `epochId` stored for `sessionId` and complete (`PqChatUnknown`, `PqChatIncomplete`), at
   home with no complete child (`PqChatEpochTaken`); `nextEpoch == epoch(epochId) + 1` (`PqChatEpochNumber`); 1 to
-  `REMOVE_MAX` = 16 members, strictly sorted (`PqChatShape`), each a member of `epochId` (`PqChatNotMember`); `admin` an
+  `REMOVE_MAX` = 16 members, strictly sorted (`PqChatShape`), each a member or an admin of `epochId` (`PqChatNotMember`; an
+  admin that is no member, an `msig`, is removable: controller call 2026-11-21, the PqVault code review F3); `admin` an
   admin of `epochId` (`PqChatNotAdmin`) who signs it; the nonce in the epoch scope `(sessionId, admin)` (`PqChatNonceUsed`).
   Anyone submits it, relayable with a fee of 0. The record and its `sigHash` are kept in state.
 - After it: a child of `epochId` completes (in `rekey` or the last `addWraps`) only if its members and admins hold no

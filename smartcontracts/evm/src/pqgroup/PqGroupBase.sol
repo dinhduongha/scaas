@@ -184,6 +184,17 @@ abstract contract PqGroupBase {
         return _has(admins, ua) && !pe.removedOf[ua] && !pe.left[ua];
     }
 
+    /// @dev Fable code review of PqVault F3 (controller call 2026-11-21, one rule for PqChat and PqVault): a `remove` takes a UA
+    ///      that is a member or an admin of the epoch, so an admin that is no member (an `msig`, which holds no KEM key) is
+    ///      removable.
+    function _removable(IPqChat.MemberKey[] memory members, bytes32[] memory admins, bytes32 ua)
+        internal
+        pure
+        returns (bool)
+    {
+        return _memberAt(members, ua) != type(uint256).max || _has(admins, ua);
+    }
+
     /// @dev 3C-D7: `child` (sorted) is `parent` (sorted) minus entries that left the parent epoch.
     function _keeps(Epoch storage pe, bytes32[] memory parent, bytes32[] memory child) internal view returns (bool) {
         uint256 j;

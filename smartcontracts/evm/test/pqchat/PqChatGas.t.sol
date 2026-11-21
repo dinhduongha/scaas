@@ -44,9 +44,11 @@ contract PqChatGasTest is PqTopicsBase {
     // 29,152 -> 29,111 B; regular 1,998,222 -> 1,996,141; state 45,177,840 -> 45,115,110 (-41 x 1,530)
     // pqvault review F1 / F2 / F7 (controller call 2026-11-21, `PqGroupBase._liveAdmin` and the author check at completion; O2 (a)
     // precedent): 29,111 -> 29,383 B; regular 1,996,141 -> 2,012,785; state 45,115,110 -> 45,531,270 (+272 x 1,530)
-    uint256 internal constant RUNTIME = 29_383;
-    uint256 internal constant RELEASE_REGULAR = 2_012_785;
-    uint256 internal constant RELEASE_STATE = 45_531_270;
+    // pqvault review F3 in PqChat too (controller call 2026-11-21, `PqGroupBase._removable`: an admin that is no member is
+    // removable): 29,383 -> 29,412 B; regular 2,012,785 -> 2,014,866; state 45,531,270 -> 45,575,640 (+29 x 1,530)
+    uint256 internal constant RUNTIME = 29_412;
+    uint256 internal constant RELEASE_REGULAR = 2_014_866;
+    uint256 internal constant RELEASE_STATE = 45_575_640;
     // owner 2026-11-10 (group 3p): the topic `name` bound 128 -> 512 B, one PUSH2 for a PUSH1 twice: 16,396 -> 16,398 B, state
     // 25,269,480 -> 25,272,540 (+2 x 1,530), regular unchanged
     // pqvault R3 (CTR-PQV-12: the shared code from `PqGroupBase`, the env and nonce errors through `PqChatCore._fail`): 16,398 ->

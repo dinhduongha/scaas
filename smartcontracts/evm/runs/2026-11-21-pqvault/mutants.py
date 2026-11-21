@@ -87,8 +87,8 @@ M = [
      "test/pqvault,test/pqchat"),
     ("live-admin-left", B, "return _has(admins, ua) && !pe.removedOf[ua] && !pe.left[ua];", "return _has(admins, ua) && !pe.removedOf[ua];",
      "test/pqvault,test/pqchat"),
-    ("remove-admin-only-removable", V, "if (_memberAt(m, r.members[i]) == type(uint256).max && !_has(admins, r.members[i])) {",
-     "if (_memberAt(m, r.members[i]) == type(uint256).max) {"),
+    ("remove-admin-only-removable", B, "return _memberAt(members, ua) != type(uint256).max || _has(admins, ua);",
+     "return _memberAt(members, ua) != type(uint256).max;", "test/pqvault,test/pqchat"),
     # Fable code review F8, F15
     ("create-info-min", V, "|| v.sealedInfo.length < INFO_MIN\n", "\n"),
     ("epoch-info-max", V, "|| e.sealedInfo.length > INFO_MAX", ""),

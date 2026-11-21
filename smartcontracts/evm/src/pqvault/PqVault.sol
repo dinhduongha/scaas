@@ -274,10 +274,7 @@ contract PqVault is IPqVault, PqGroupBase {
         if (!_liveAdmin(ep, admins, r.admin)) revert PqVaultNotAdmin(r.admin); // F2, F7
         for (uint256 i; i < n; ++i) {
             if (i > 0 && r.members[i] <= r.members[i - 1]) revert PqVaultShape();
-            // F3: an admin that is no member (an `msig`) is removable too
-            if (_memberAt(m, r.members[i]) == type(uint256).max && !_has(admins, r.members[i])) {
-                revert PqVaultNotMember(r.members[i]);
-            }
+            if (!_removable(m, admins, r.members[i])) revert PqVaultNotMember(r.members[i]); // F3, in the base
         }
         _auth(reg, _v().modes[r.vaultId], r.admin, PqVaultTypes.hashRemove(r), sig);
         _useNonce(PqVaultTypes.scopeEpoch(r.vaultId, r.admin), r.nonce);
