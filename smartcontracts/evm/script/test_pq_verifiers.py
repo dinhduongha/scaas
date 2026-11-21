@@ -96,14 +96,25 @@ def vo_args_rows():
     # head: 5 words (three offsets, the form, CALL_GAS); the candidates array holds the chain's own address only by default
     assert int.from_bytes(args[96:128], "big") == 0 and int.from_bytes(args[128:160], "big") == 50_000
     off = int.from_bytes(args[0:32], "big")
-    assert int.from_bytes(args[off : off + 32], "big") == 1 and int.from_bytes(args[off + 32 : off + 64], "big") == 0x5CAA0013
+    assert (
+        int.from_bytes(args[off : off + 32], "big") == 1
+        and int.from_bytes(args[off + 32 : off + 64], "big") == 0x5CAA0013
+    )
     assert rows.startswith(bytes.fromhex(k["eip8355_probe_valid"][2:]))
     _, rows2 = P.vo_args(k, "mldsa65", 1, 0, 50_000, True)
     assert rows2 == rows, "the rows do not depend on the candidates"
 
 
-for t in (vo_args_rows, draft_not_probed_by_default, draft_probed_under_flag_and_book, diff_agree_precompile_and_cache, diff_lax_verify_only_refused, diff_nodes_disagree_refused,
-          diff_majority_outvotes_one, kat_rows_shape):
+for t in (
+    vo_args_rows,
+    draft_not_probed_by_default,
+    draft_probed_under_flag_and_book,
+    diff_agree_precompile_and_cache,
+    diff_lax_verify_only_refused,
+    diff_nodes_disagree_refused,
+    diff_majority_outvotes_one,
+    kat_rows_shape,
+):
     t()
     print("ok", t.__name__)
 print("test_pq_verifiers: ok")

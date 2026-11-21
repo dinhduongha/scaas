@@ -99,7 +99,9 @@ def rpc_node(url, rpc=None):
         msg = str(e.get("message", "")) + " " + str(e.get("data", "")) if isinstance(e, dict) else str(e)
         if CAP_REFUSAL.search(msg):
             return False
-        raise ProbeError(f"GEN_TX_CAP_RPC_ERROR: gas {gas}: the node answered an error that is no cap refusal: {msg.strip()[:200]}")
+        raise ProbeError(
+            f"GEN_TX_CAP_RPC_ERROR: gas {gas}: the node answered an error that is no cap refusal: {msg.strip()[:200]}"
+        )
 
     return accepts
 

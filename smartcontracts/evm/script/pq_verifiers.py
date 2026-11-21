@@ -189,7 +189,9 @@ def main(rpc):
             # a Draft address: the fuller probe, every mutation row too (CTR-UA-69)
             neg = [bad] + (edge_rows(k, name) if int(at, 16) < 0x100 else [])
             try:
-                return E.call(at, valid) == "0x" + "00" * 31 + "01" and all(E.call(at, x) == "0x" + "00" * 32 for x in neg)
+                return E.call(at, valid) == "0x" + "00" * 31 + "01" and all(
+                    E.call(at, x) == "0x" + "00" * 32 for x in neg
+                )
             except RuntimeError:
                 return False
 
@@ -288,11 +290,16 @@ def differential(nodes, home, vo, parts, rows):
     out, ek = [], {}
     for what, pk, msg, sig, valid in rows:
         if parts == 0:
-            h = verdict(majority(nodes, home, bytes.fromhex(SEL_VERIFY) + abi_args(("b", pk), ("w", msg), ("b", sig)), what))
+            h = verdict(
+                majority(nodes, home, bytes.fromhex(SEL_VERIFY) + abi_args(("b", pk), ("w", msg), ("b", sig)), what)
+            )
         else:
             if pk not in ek:
                 ek[pk] = b"".join(
-                    abi_bytes(majority(nodes, home, bytes.fromhex(SEL_PART) + abi_args(("b", pk), ("w", p)), f"part {p}") or b"")
+                    abi_bytes(
+                        majority(nodes, home, bytes.fromhex(SEL_PART) + abi_args(("b", pk), ("w", p)), f"part {p}")
+                        or b""
+                    )
                     for p in range(parts)
                 )
             data = bytes.fromhex(SEL_EXPANDED) + abi_args(("b", ek[pk]), ("w", msg), ("b", sig))
@@ -317,7 +324,12 @@ def rpc_call(url):
     import urllib.request
 
     def call(to, data):
-        body = {"jsonrpc": "2.0", "id": 1, "method": "eth_call", "params": [{"to": to, "data": "0x" + data.hex()}, "latest"]}
+        body = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_call",
+            "params": [{"to": to, "data": "0x" + data.hex()}, "latest"],
+        }
         req = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=120) as r:
             j = json.load(r)
@@ -358,7 +370,9 @@ def verify_only(urls, kind, form, call_gas, cap, home, parts):
     v = D.deploy2(contract, args, f"{name}_verify_only", src="MlDsaVerifyOnly")
     pc = "0x" + E.words(E.call(v, E.cd("PRECOMPILE()", [])))[0][12:].hex()
     if int(pc, 16) == 0:
-        raise SystemExit(f"[deploy] pq-verifiers FAIL GEN_VERIFY_ONLY_NO_PRECOMPILE {kind:#06x}: {v} found no precompile")
+        raise SystemExit(
+            f"[deploy] pq-verifiers FAIL GEN_VERIFY_ONLY_NO_PRECOMPILE {kind:#06x}: {v} found no precompile"
+        )
     differential([rpc_call(u) for u in urls], home, v, parts, kat_rows(name))
     entry = {
         "kind": kind,
@@ -382,7 +396,13 @@ if __name__ == "__main__" and sys.argv[1:2] == ["verify-only"]:
         say(f"FAIL {e}")
         sys.exit(1)
 elif __name__ == "__main__" and sys.argv[1:2] == ["differential"]:
-    urls, kind, home, vo, parts = sys.argv[2].split(","), int(sys.argv[3], 0), sys.argv[4], sys.argv[5], int(sys.argv[6])
+    urls, kind, home, vo, parts = (
+        sys.argv[2].split(","),
+        int(sys.argv[3], 0),
+        sys.argv[4],
+        sys.argv[5],
+        int(sys.argv[6]),
+    )
     name = {0x0130: "mldsa44", 0x0131: "mldsa65", 0x0134: "mldsa87"}[kind]
     try:
         for r in differential([rpc_call(u) for u in urls], home, vo, parts, kat_rows(name)):

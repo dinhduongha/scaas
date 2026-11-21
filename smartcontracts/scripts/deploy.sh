@@ -155,7 +155,7 @@ case "$FAMILY" in
         # forge's dry-run file), then DeploySend.s.sol sends that plan, each transaction with an explicit gas limit
         P="broadcast/$DSCRIPT/$C/dry-run/run-latest.json" B="broadcast/DeploySend.s.sol/$C/run-latest.json"
         Q="broadcast/$DSCRIPT/$C/dry-run/send-plan.json" # DeploySend.plan's arrays, written from $P
-        rm -f "$P" "$Q" "$B"                                 # never a stale plan, never a previous run's receipts
+        rm -f "$P" "$Q" "$B"                             # never a stale plan, never a previous run's receipts
         DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K${DS:+-$DS}.log}"
         mkdir -p "$(dirname "$DL")"
         : >"$DL"
@@ -279,9 +279,11 @@ json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 2
             echo "[local/verify] local, not verified (no explorer)"
         else VERIFY_RPC="$NET" sh script/onchain/verify.sh "${VERIFY_TARGET:-chain-$C}"; fi
         ;;
-    hedera) : "${TX_GAS_CAP:?TX_GAS_CAP: the per-transaction gas cap of the chain, from the deploy book (owner X1)}"
+    hedera)
+        : "${TX_GAS_CAP:?TX_GAS_CAP: the per-transaction gas cap of the chain, from the deploy book (owner X1)}"
         cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
-        --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
+            --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@"
+        ;;
     aptos) exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
     sui)
         out="$(sui client --client.env "$NET" publish --json "$@" "$SC/move/sui")" || {

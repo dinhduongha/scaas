@@ -241,7 +241,9 @@ def line_rows(inputs, m, src):
         for path in ("precompile", "fallback"):
             for i, g in enumerate(k[path]):
                 src_line = f"{INPUTS}#verify_line.kinds.{key}.{path}[{i}]-holder ({vl['forge']} {k['test']})"
-                out.append(row(signer, m[delta] + g - k["holder"], f"{src}#{delta} + {src_line}", path=path, depth=i + 1))
+                out.append(
+                    row(signer, m[delta] + g - k["holder"], f"{src}#{delta} + {src_line}", path=path, depth=i + 1)
+                )
     w = vl["write"]
     delta = f"verify_0x{w['signer']:04x}_delta"
     step = max(b - a for a, b in zip(w["accept"], w["accept"][1:]))
