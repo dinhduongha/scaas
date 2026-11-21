@@ -31,7 +31,7 @@ strict majority (ARCH-POS-15), else FORKCHECK_NODES. One rule on every chain: no
       [--args <hex>] [--gas-limit <gas>] [--release <release-data json>] [--out <dir>]   the five checks before a single
                                                        contract's deploy
 cases.json: {"contracts": [{"artifact": "<F>.sol/<C>.json", "args": "0x…"?, "cases": [{"name", "sig": "f(uint256)",
-"args": "0x…"?, "ok": true|false, "return": "0x…"?}]}]}; artifacts in forge's out directory (--out, default out), built with
+"args": "0x…"?, "ok": true|false, "return": "0x…"?, "revert": "0x…"?, "logs": [{"topics", "data"}]?, "from": <account index>?}]}]}; artifacts in forge's out directory (--out, default out), built with
 `--extra-output evm.legacyAssembly` so the scan places the compiler's data sections; other paths from smartcontracts/evm.
 UNAUDITED tooling."""
 
@@ -354,11 +354,23 @@ def _send(rpc, frm, tx, gas):
     return _receipt(rpc, a["result"])
 
 
-def run_contract(rpc, frm, gas, artifact, args, cases):
-    """Deploys the artifact's init bytes (+ args), runs each case (eth_call at the state before, then the same transaction
-    sent); returns [(case name, passed, gasUsed, why)]. A deploy that fails is one failed row."""
+def _logs(rec, at):
+    """A receipt's logs as compared: the contract's own as {topics, data}, another's by its address."""
+    return [
+        {"topics": [t.lower() for t in x["topics"]], "data": x["data"].lower()}
+        if x.get("address", "").lower() == at.lower()
+        else {"address": x.get("address")}
+        for x in rec.get("logs") or []
+    ]
+
+
+def run_contract(rpc, accts, gas, artifact, args, cases):
+    """Deploys the artifact's init bytes (+ args) from the first account, runs each case (eth_call at the state before, then
+    the same transaction sent, from the account `from` indexes, default the first); returns [(case name, passed, gasUsed,
+    why)]. A case's `return`, `revert` (the revert data) and `logs` (the receipt's logs, each the contract's own) are
+    compared exactly when given. A deploy that fails is one failed row."""
     init = artifact["bytecode"]["object"] + (args or "0x")[2:]
-    r = _send(rpc, frm, {"data": init}, gas)
+    r = _send(rpc, accts[0], {"data": init}, gas)
     if int(r["status"], 16) != 1 or not r.get("contractAddress"):
         return [("deploy", False, int(r["gasUsed"], 16), "the deploy reverted")]
     at, out = r["contractAddress"], [("deploy", True, int(r["gasUsed"], 16), "")]
@@ -369,7 +381,7 @@ def run_contract(rpc, frm, gas, artifact, args, cases):
     ):
         return out + [("code", False, 0, "the deployed code is not the artifact's runtime")]
     for c in cases:
-        tx = {"to": at, "data": _calldata(artifact, c)}
+        tx, frm = {"to": at, "data": _calldata(artifact, c)}, accts[c.get("from", 0)]
         call = rpc("eth_call", [dict(tx, **{"from": frm, "gas": hex(gas)}), "latest"])
         ok = "error" not in call
         rec = _send(rpc, frm, tx, gas)
@@ -379,6 +391,10 @@ def run_contract(rpc, frm, gas, artifact, args, cases):
             why = f"ok {ok} (call), {status} (receipt), expected {c['ok']}"
         elif c["ok"] and "return" in c and call["result"].lower() != c["return"].lower():
             why = f"returned {call['result'][:66]}, expected {c['return'][:66]}"
+        elif not c["ok"] and "revert" in c and str(call["error"].get("data", "")).lower() != c["revert"].lower():
+            why = f"reverted with {str(call['error'].get('data', ''))[:74]}, expected {c['revert'][:74]}"
+        elif "logs" in c and _logs(rec, at) != _logs({"logs": [dict(x, address=at) for x in c["logs"]]}, at):
+            why = f"logs {str(_logs(rec, at))[:200]}, expected {str(c['logs'])[:200]}"
         out.append((c["name"], not why, int(rec["gasUsed"], 16), why))
     return out
 
@@ -391,10 +407,9 @@ def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     accts = rpc("eth_accounts", []).get("result") or []
     if not accts:
         raise ForkError("FORKCHECK_EXEC: the node has no unlocked account")
-    frm = accts[0]
     gas = int(rpc("eth_getBlockByNumber", ["latest", False])["result"]["gasLimit"], 16)
     ctl = CONTROL[fork]
-    rows = run_contract(rpc, frm, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", ctl["cases"])
+    rows = run_contract(rpc, accts, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", ctl["cases"])
     red = [r for r in rows if not r[1]]
     for name, ok, g, why in rows:
         say(f"control {name}: {'green' if ok else 'red'} gas {g}{' (' + why + ')' if why else ''}")
@@ -403,7 +418,7 @@ def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     passed, failed = 1, []  # the control's red counts as one expectation met
     for c in contracts:
         a = load_artifact(os.path.join(out, c["artifact"]), root)
-        for name, ok, g, why in run_contract(rpc, frm, gas, a, c.get("args"), c["cases"]):
+        for name, ok, g, why in run_contract(rpc, accts, gas, a, c.get("args"), c["cases"]):
             say(f"gas {a['_name']} {name} {g} at {fork}" + ("" if ok else f" FAIL {why}"))
             if ok:
                 passed += 1
@@ -431,6 +446,7 @@ class Anvil:
         self.p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         url = f"http://127.0.0.1:{port}"
         self.rpc = lambda m, p: _post(url, m, p, timeout=60)
+        self.rpc.url = url
         for _ in range(300):  # up to 30 s for anvil to answer
             if "result" in self.rpc("eth_chainId", []):
                 return self.rpc
@@ -479,10 +495,11 @@ def deploy_gate(
     root=EVM,
     run4=None,
     out="out",
+    profiles=None,
 ):
     """The five checks before a single contract's deploy on profile `key`; amsterdam: nothing to check. `run4`: check (4)'s
-    runner (default exec_cases on a local anvil)."""
-    pr = profile(key, root)
+    runner (default exec_cases on a local anvil); `profiles`: the root of src/chains/<key>/profile.json (default `root`)."""
+    pr = profile(key, profiles or root)
     if pr["evmFork"] == TARGET:
         say(f"forkcheck {key}: {TARGET}, NET-EVM-06, nothing to check")
         return

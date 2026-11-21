@@ -29,6 +29,9 @@ STEPS=(
     "size|smartcontracts/evm|T=\$(mktemp -d) && trap 'rm -rf \"\$T\"' EXIT && $cap forge build src --sizes --json > \"\$T\"/sizes.json && python3 ../../scripts/size_gate.py \"\$T\"/sizes.json size-baseline.json"
     # forkcheck: NET-EVM-18 checks (3) and (4) on the fixtures of test/forkcheck at Cancun, the CLZ control red (T4)
     "forkcheck|smartcontracts/evm|T=\$(mktemp -d) && trap 'rm -rf \"\$T\"' EXIT && $cap forge build test/forkcheck --extra-output evm.legacyAssembly --out \"\$T\"/out --cache-path \"\$T\"/cache && $cap python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json --out \"\$T\"/out"
+    # chatstore-cancun: PqChatStore's deploy path on a fresh anvil at cancun (code-size limit 24,576): the five checks with
+    # the T5 cases at cancun on the amsterdam bytes, the CLZ control red; deploy, deploy again (no send), the probes (T6)
+    "chatstore-cancun|smartcontracts/evm|T=\$(mktemp -d) && trap 'rm -rf \"\$T\"' EXIT && $cap forge build src/pqchat/PqChatStore.sol test/forkcheck --extra-output evm.legacyAssembly --out \"\$T\"/out --cache-path \"\$T\"/cache && $cap python3 -I script/deploy_pqchatstore.py local --out \"\$T\"/out"
     "deploy-py|smartcontracts/evm|for t in script/test_*.py; do echo \"## \$t\"; python3 \"\$t\" || exit 1; done"
     "ck-test|clients/clientkeys|$cap npm test"
     "ua-test|clients/ua-rs|$cap cargo test $C --all-features"

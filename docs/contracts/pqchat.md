@@ -661,9 +661,11 @@ Status: **PLANNED**.
 ## 15. The standalone store on 24,576-B chains
 
 Status: **BUILT on branch `chains-arweave`** for the contract and its tests (`src/pqchat/{IPqChatStore,PqChatStore}.sol`,
-`test/pqchat/PqChatStore.t.sol`, the layout pin `test/v2/layout/PqChatStore.json`; plan T5); **SPECIFIED** for the deploy
-path (plan T6) and the gas pins (plan T8) (the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part B;
-UNAUDITED).
+`test/pqchat/PqChatStore.t.sol`, the layout pin `test/v2/layout/PqChatStore.json`; plan T5) and for the deploy path
+(`script/deploy_pqchatstore.py` and its test, the release data `release-data/PqChatStore.json`, the gate step `chatstore-cancun`:
+a local `anvil --hardfork cancun --code-size-limit 24576` deploy with NET-EVM-18's five checks, a second deploy taken as done, the
+probes; plan T6); **SPECIFIED** for the gas pins (plan T8); the deploys on public chains and their explorer verification are plan
+T10, on the owner's word (the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part B; UNAUDITED).
 
 <a id="CTR-CHAT-22"></a>**CTR-CHAT-22** — **`PqChatStore` is a standalone contract with exactly the store part of `PqChat`:
 it keeps each payload in state as one SSTORE2 blob of at most 24,576 B, and has no owner, admin, constructor argument or

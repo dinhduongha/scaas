@@ -354,6 +354,54 @@ def control_green_voids_the_run():
         refused("FORKCHECK_FORK_UNKNOWN", f.execute, fake_evm(False), "osaka", cs, lines.append, t)
 
 
+def case_from_revert_logs():
+    """A case's optional fields: `from` (an account index), `revert` (the revert data), `logs` (the receipt's logs, each the
+    contract's own), each compared exactly, each with its positive twin."""
+    at, top, one, two = "0x" + "cc" * 20, "0x" + "50" * 32, "0x" + "00" * 31 + "01", "0x" + "00" * 31 + "02"
+    accts = ["0x" + "aa" * 20, "0x" + "bb" * 20]
+    st = {"log_at": at}
+
+    def rpc(method, params):
+        tx = params[0] if params else {}
+        sel = (tx.get("data") or "")[:10] if isinstance(tx, dict) else ""
+        if method == "eth_getCode":
+            return {"result": art([STOP], 1)["deployedBytecode"]["object"]}
+        if method == "eth_call":
+            if sel == "0x26121ff0":  # f(): returns 1 for the second account, else 2
+                return {"result": one if tx["from"] == accts[1] else two}
+            return {"error": {"code": 3, "message": "execution reverted", "data": "0x0c92e8bd"}}
+        if method == "eth_sendTransaction":
+            st["last"] = tx
+            return {"result": "0x" + "11" * 32}
+        if method == "eth_getTransactionReceipt":
+            tx = st["last"]
+            if "to" not in tx:
+                return {"result": {"status": "0x1", "gasUsed": "0x1", "contractAddress": at, "logs": []}}
+            ok = tx["data"][:10] == "0x26121ff0"
+            logs = [{"address": st["log_at"], "topics": [top], "data": one}] if ok else []
+            return {"result": {"status": "0x1" if ok else "0x0", "gasUsed": "0x2", "logs": logs}}
+        return {"error": {"message": "unknown"}}
+
+    a = art([STOP], 1)
+    a["methodIdentifiers"]["g()"] = "e2179b8e"
+
+    def passed(c):
+        return [r[1] for r in f.run_contract(rpc, accts, 30_000_000, a, "0x", [c])] == [True, True]
+
+    f_ = {"name": "f", "sig": "f()", "ok": True}
+    assert passed(dict(f_, **{"from": 1, "return": one}))
+    assert not passed(dict(f_, **{"return": one}))  # the first account: 2
+    assert passed(dict(f_, **{"return": two}))
+    g = {"name": "g", "sig": "g()", "ok": False}
+    assert passed(dict(g, revert="0x0c92e8bd"))
+    assert not passed(dict(g, revert="0x4e487b71"))
+    assert passed(dict(f_, logs=[{"topics": [top], "data": one}]))
+    assert not passed(dict(f_, logs=[{"topics": [top], "data": two}]))
+    assert not passed(dict(f_, logs=[]))
+    st["log_at"] = "0x" + "dd" * 20  # a log of another contract
+    assert not passed(dict(f_, logs=[{"topics": [top], "data": one}]))
+
+
 TESTS = [
     scan_clz_refused_for_cancun,
     scan_clz_in_init_refused,
@@ -367,6 +415,7 @@ TESTS = [
     precompile_known_answer,
     deploy_gate_runs_every_check,
     control_green_voids_the_run,
+    case_from_revert_logs,
 ]
 
 
