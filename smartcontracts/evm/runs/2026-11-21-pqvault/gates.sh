@@ -14,13 +14,15 @@
 #   set-<set>-<dir>  the set-sensitive tests of test/<dir> at <set> (at-set.sh list), src/pqz/PqzSet.sol checked after
 #   setmod-<set>     test/modules at <set> (at-set.sh <set> modules, its own capped slots, no outer one), PqzSet.sol checked after
 #   node-guard       scaas-node cargo test guard (the allow-list and PqChat row tests)
-#   node, node-clippy, node-e2e   the whole node suite (6 GB, alone), its clippy, its e2e on anvil (--ignored)
+#   node, node-clippy, node-e2e   the whole node suite (6 GB, alone), its clippy, its e2e on anvil (--ignored; zether-cli built
+#                    first, the Zether e2e calls it)
 #   clientkeys, ua-rs-<cell>, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-dart, ua-dart-frb, ua-qt   the clients' own tests (the
 #                    CI header's commands; ua-rs per CI cell)
 #   deploy-py, forkcheck, chatstore-cancun   the chains-arweave steps (runs/2026-11-21-avax-dot-arweave-gates.sh, same commands):
 #                    script/test_*.py; NET-EVM-18's checks on test/forkcheck at Cancun, then the control's positive run (review
 #                    P2-6); PqChatStore's deploy path on anvil at Cancun
-#   testnet-build    FOUNDRY_PROFILE=scaas-testnet forge build (the CI header)
+#   testnet-build    FOUNDRY_PROFILE=scaas-testnet forge build over src/ and script/ (CI builds the whole tree on a 16 GB runner;
+#                    the whole tree was OOM-killed here at 4 GB): test/ is compiled per directory by the forge-* steps
 #   docs, docs-test, ci-guards, format (scripts/format.sh --check; FORMAT_PARTS limits the parts; the pinned tools of the main
 #                    checkout's git-ignored scratchpad/tools/bin first on PATH)
 set -u
@@ -91,7 +93,8 @@ step() {
         node-guard) (cd scaas-node && "$C" cargo test -j 2 --lib guard) ;;
         node) (cd scaas-node && CAPPED_MEM=${NODE_MEM:-6G} "$C" cargo test -j 2) ;;
         node-clippy) (cd scaas-node && "$C" cargo clippy -j 2 --all-targets -- -D warnings) ;;
-        node-e2e) (cd scaas-node && CAPPED_MEM=${NODE_MEM:-6G} "$C" cargo test -j 2 --test e2e -- --ignored --test-threads 1) ;;
+        node-e2e) (cd clients/zether-prover && "$C" cargo build -j 2 --release --bin zether-cli --features hazmat) && (cd scaas-node &&
+            CAPPED_MEM=${NODE_MEM:-6G} "$C" cargo test -j 2 --test e2e -- --ignored --test-threads 1) ;;
         ua-rs-pqvault) T="--test pqvault_pass" uars --no-default-features --features pqvault ;;
         ua-rs-pqvault-vectors) T="--test pqvault_keys --test pqvault_pass" uars --features vectors,pqvault ;;
         clientkeys) (cd clients/clientkeys && "$C" npm test) ;;
@@ -138,7 +141,8 @@ step() {
         chatstore-cancun) (cd $EVM && T=$(mktemp -d) && trap 'rm -rf "$T"' EXIT && "$C" forge build src/pqchat/PqChatStore.sol \
             test/forkcheck --extra-output evm.legacyAssembly --out "$T"/out --cache-path "$T"/cache &&
             "$C" python3 -I script/deploy_pqchatstore.py local --out "$T"/out) ;;
-        testnet-build) (cd $EVM && FOUNDRY_PROFILE=scaas-testnet "$C" forge build -j 1) ;;
+        testnet-build) (cd $EVM && rm -rf out/pv-testnet cache/pv-testnet && FOUNDRY_PROFILE=scaas-testnet FOUNDRY_OUT=out/pv-testnet \
+            FOUNDRY_CACHE_PATH=cache/pv-testnet "$C" forge build -j 1 src script) ;;
         docs) python3 scripts/docs_check.py check ;;
         docs-test) python3 scripts/test_docs_check.py ;;
         format) PATH="$(git rev-parse --path-format=absolute --git-common-dir)/../scratchpad/tools/bin:$PATH" scripts/format.sh --check ${FORMAT_PARTS:-} ;;
