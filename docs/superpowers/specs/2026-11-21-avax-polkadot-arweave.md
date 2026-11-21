@@ -641,6 +641,22 @@ refuse a duplicate pair; a private genesis hash repeated under a new chain id is
 whether it binds the chain id; and `chain-uids.json` gains the field that marks a chain as private (ours), since its rows carry only
 `network` and `testnet` today.
 
+<a id="t1-digest-audit"></a>**§8.1 T1's digest audit** (branch `chains-arweave`, EVM contracts under `src/`, `legacy/` out). The field
+is `private` (true for a chain SCaaS runs) on every `chain-uids.json` row; `homeChainKinds` there is the deploy gate's one list.
+
+| Digest or read | Binds `chain_uid` | Binds the chain id | On a shared genesis |
+|---|---|---|---|
+| `SaltedEIP712` domains (`EIP712Domain(name,version,chainId,verifyingContract,salt)`, salt = `chain_uid`): every `mtx*` envelope of `MetaTxBase` / `UAMetaTxBase` (tokens, `GovernanceRouter`, its `UA_SET_*` words), `UARegistry`, `UAStore`, `SCaaSDex`, `SCaaSDexLiquidityModule` | yes | yes, `block.chainid` live | told apart |
+| `LiquidityLib.separator` (the DEX order domain), `UAKinds`' chain-bound domain | yes | yes | told apart |
+| Typed words inside those domains that repeat `chain_uid` (`AuditorConsent`, PQZ `RollOver`, the governance `UA_SET_ALLOWED` / `UA_SET_DENIED` / `UA_SET_CHAIN_ENTRIES` words) | yes | yes, by the domain | told apart |
+| PQZ and Zether transcripts and tags (`PqzCore` entry and op tags, `PqzLayer`, `ZetherLayer`, `ZetherDisclosure`) | where named | yes, `block.chainid` in the hash | told apart |
+| PqChat's portable domain (`EIP712Domain(name,version)`, "SCaaS PqChat"): `PqChatSession`, `PqTopic` (`homeChain`), `EntryRef` (`chainUid`) | yes | **no** | refused: `PqChat` in `homeChainKinds` |
+| `UAKinds.pqzScopedKeyDigest` (portable domain; `chainUid`, `token`) | yes | **no** | refused with the tokens: `OpenFactory` in `homeChainKinds` |
+| `OpenFactory` release and DEX keys (`keccak256(tag, chainUid, factory, …)`): addresses, not signatures | yes | no | refused: `OpenFactory` |
+| PqVault records (`homeChain`; on branch `pqvault-v`, not in this tree) | yes | **no** | refused: `PqVault` |
+| `RescueVault` (`EIP712Domain(name,version,verifyingContract)`), the UA portable domain ("SCaaS UA Portable") | no | no | chain-neutral by design: replay on every chain is the rule |
+| `chainEnv()` reads (`IFactoryToken.ChainEnv.chainUid`) | a read | no field | a read, no digest |
+
 ## 9. Threat model
 
 | Threat | Effect | Answer |
