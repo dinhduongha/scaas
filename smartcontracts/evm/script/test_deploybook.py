@@ -257,6 +257,10 @@ def home_chain_kinds_refused():
         assert (
             d.kind_check(kind, 11155111, "0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9") == kind
         )
+    # a kind name on neither list (a typo) is refused, never passed (review P3-1); a kind of the other list passes
+    fails("KIND_UNKNOWN", d.kind_check, "PqChatt", *SCAAS)
+    fails("KIND_UNKNOWN", d.kind_check, "uaregistry", 43113, AVAX)
+    assert "PqChatStore" in d.table()["otherKinds"] and d.kind_check("RescueVault", 43113, AVAX) == "RescueVault"
     fails("HOME_CHAIN_SHARED_GENESIS", d.kind_check, "PqChat", 43112, AVAX)  # an unlisted chain on a listed genesis
     assert d.kind_check("PqChat", 43112, OTHER) == "PqChat"
 

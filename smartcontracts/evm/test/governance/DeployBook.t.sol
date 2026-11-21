@@ -262,6 +262,29 @@ contract DeployBookTest is Test {
         }
     }
 
+    /// Review P3-1: a kind name on neither list of the table (a typo) is refused by name; the gate sits where the factory and
+    /// PqChat are created (`_deployTokenFactory`, `_deployPqChat`), so no script that creates them skips it.
+    function test_kindGateWhereCreated() public {
+        vm.expectRevert(bytes("KIND_UNKNOWN: PqChatt is on neither homeChainKinds nor otherKinds of chain-uids.json"));
+        h.kind("PqChatt", SCAAS_UID);
+        h.kind("PqChatStore", AVAX_UID); // twin: a kind of the other list
+        DeployHarness d = new DeployHarness();
+        d.setTxGasCap(1 << 24);
+        vm.chainId(43113);
+        vm.expectRevert(
+            bytes(
+                "HOME_CHAIN_SHARED_GENESIS: OpenFactory keeps records bound to chain_uid without the chain id; chain 43113 shares its chain_uid with avalanche-mainnet (NET-ALL-25)"
+            )
+        );
+        d.deploy(AVAX_UID, false, address(0));
+        vm.expectRevert(
+            bytes(
+                "HOME_CHAIN_SHARED_GENESIS: PqChat keeps records bound to chain_uid without the chain id; chain 43113 shares its chain_uid with avalanche-mainnet (NET-ALL-25)"
+            )
+        );
+        d.deployPqChatOnly(AVAX_UID);
+    }
+
     /// NET-ALL-25 (review P1-2): the UA registry is refused where it is created, the gen-1 deploy (`_deployUARegistry`, under
     /// `Deploy.s.sol` and `DeployHedera.s.sol`) and a later generation (`_deployUARegistryGen`, `DeployUAGen.s.sol`), before
     /// anything else of that path.

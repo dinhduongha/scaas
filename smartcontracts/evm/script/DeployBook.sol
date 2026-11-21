@@ -114,7 +114,7 @@ abstract contract DeployBook is Script {
     /// @notice NET-ALL-25 (C18), the deploy gate: a kind keeping or checking records bound to `chain_uid` without the chain
     ///         id (`homeChain` records, the registry's portable `UAMsigUpdate` and scoped keys; the table's `homeChainKinds`,
     ///         the one list) is refused on a chain whose `chain_uid` another
-    ///         row shares, `HOME_CHAIN_SHARED_GENESIS`; any other kind passes. `deploybook.py kind_check` is the twin.
+    ///         row shares, `HOME_CHAIN_SHARED_GENESIS`; a kind of `otherKinds` passes; a name on neither list is `KIND_UNKNOWN`. `deploybook.py kind_check` is the twin.
     function _requireKindHere(string memory kind, bytes32 uid) internal view {
         string memory j = vm.readFile(_bookTable());
         string[] memory ks = vm.parseJsonStringArray(j, ".homeChainKinds");
@@ -122,7 +122,13 @@ abstract contract DeployBook is Script {
         for (uint256 i; i < ks.length; ++i) {
             if (_bookEq(ks[i], kind)) home = true;
         }
-        if (!home) return;
+        if (!home) {
+            string[] memory os = vm.parseJsonStringArray(j, ".otherKinds");
+            for (uint256 i; i < os.length; ++i) {
+                if (_bookEq(os[i], kind)) return;
+            }
+            revert(string.concat("KIND_UNKNOWN: ", kind, " is on neither homeChainKinds nor otherKinds of chain-uids.json"));
+        }
         for (uint256 i;; ++i) {
             string memory p = string.concat(".chains[", vm.toString(i), "]");
             if (!vm.keyExistsJson(j, p)) break;

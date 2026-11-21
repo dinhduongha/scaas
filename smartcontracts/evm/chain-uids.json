@@ -9,6 +9,17 @@
     "PqVault",
     "UARegistry"
   ],
+  "otherKinds": [
+    "PqChatStore",
+    "RescueVault",
+    "RelayFeeRouter",
+    "GovernanceRouter",
+    "ComplianceRegistry",
+    "SmartKeyAccountFactory",
+    "MandateWallet",
+    "ZetherStatements"
+  ],
+  "otherKindsNote": "The kinds the deploy gate passes on a shared genesis: each digest they check binds the chain id, or none binds a chain (RescueVault, by design); spec 2026-11-21-avax-polkadot-arweave section 8.1. A kind name on neither list is KIND_UNKNOWN (review P3-1).",
   "homeChainKindsNote": "NET-ALL-25 (C18): the kinds that keep or check records bound to chain_uid without the chain id (homeChain records; UARegistry's UAMsigUpdate and UAPqzScopedKey / UAPqzScopedKeyRecord under the portable domain, review P1-2; the audit: spec 2026-11-21-avax-polkadot-arweave section 8.1); the deploy gate refuses them on a chain whose chainUid another row shares (script/deploybook.py kind_check, script/DeployBook.sol _requireKindHere). A later kind with such a record joins this list.",
   "chains": [
     {

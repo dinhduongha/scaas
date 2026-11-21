@@ -167,6 +167,12 @@ contract DeployHarness is DeployBase {
         json = vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
+    /// `_deployPqChat` alone on the chain of `uid_` (no factory: the gate runs before any call to it).
+    function deployPqChatOnly(bytes32 uid_) external {
+        uid = uid_;
+        _deployPqChat(OpenFactory(address(0)), address(0));
+    }
+
     /// The gen-1 registry alone (`_deployUARegistry`, not Hedera, no account implementation) on the chain of `uid_`.
     function deployRegistry(bytes32 uid_) external returns (address) {
         (salt, uid) = (keccak256("scaas.deploy.v1"), uid_);

@@ -24,8 +24,7 @@ contract DeployHedera is DeployBase {
 
         _setup();
         string memory book = _bookPath(uid, ".json"); // DEPLOY_NAME_REQUIRED before anything is sent
-        _requireKindHere("OpenFactory", uid); // NET-ALL-25 (C18): no homeChain kind on a shared genesis, nothing sent
-        if (deployPqChat) _requireKindHere("PqChat", uid);
+        // NET-ALL-25 (C18): the kind gate sits where each kind is created (DeployBase), before the broadcast is sent
         vm.startBroadcast(pk);
         OpenFactory tokens = _deployTokenFactory(registrar, registrar == deployer, address(0), true);
         if (demoSupply != 0 && registrar == deployer) _demoTokens(tokens, demoSupply, deployer, demoHolder);

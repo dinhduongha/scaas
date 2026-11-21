@@ -130,6 +130,7 @@ contract PqChatOnchain is OnchainBase {
         f = OpenFactory(_dep("token_factory"));
         router = _dep("relay_fee_router");
         uid = vm.parseJsonBytes32(dj, ".chain_uid");
+        _requireKindHere("PqChat", bookUid); // NET-ALL-25 (C18): a PqChat release on an existing factory (review P3-1)
         h = new PqChatDigests(); // the script's EVM only
         _release();
         _book(address(f), "OpenFactory");

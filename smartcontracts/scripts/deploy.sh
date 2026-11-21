@@ -144,6 +144,12 @@ case "$FAMILY" in
         # script/forkcheck.py deploy (the five checks); a key without the file is refused (FORKCHECK_PROFILE) but the reset
         # chain and a local anvil (local-…-testnet)
         python3 -I script/forkcheck.py set-gate "$K" || exit 1
+        # NET-ALL-25 (C18; review P3-1): the kinds this deploy creates, refused by name on a shared genesis before anything is
+        # sent (deploybook.py kind-check; the forge scripts repeat it where each kind is created)
+        KINDS="UARegistry"
+        [ -n "${UA_GEN_BOOK:-}" ] || KINDS="$KINDS OpenFactory"
+        case "${DEPLOY_PQCHAT:-}" in 1 | true) KINDS="$KINDS PqChat" ;; esac
+        for KIND in $KINDS; do python3 -I script/deploybook.py kind-check "$KIND" "$C" "$G0" >/dev/null || exit 1; done
         # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET names this deploy's set
         # (mldsa-off with MLDSA_PRECOMPILE=off, mldsa-on with on), refused by name before anything is sent; the book then
         # keeps every set of this chain (deploybook.py set-merge)

@@ -18,6 +18,8 @@ B = "smartcontracts/evm/script/DeployBase.sol"
 TB = "python3 -I smartcontracts/evm/script/test_deploybook.py"
 FG = "cd smartcontracts/evm && ../../scripts/capped forge test --match-path "
 GOV = FG + "test/governance/DeployBook.t.sol --match-test "
+BK = "smartcontracts/evm/script/deploybook.py"
+BS = "smartcontracts/evm/script/DeployBook.sol"
 MUTANTS = [
     (
         "P1-1 a key without a profile defaults to amsterdam",
@@ -218,6 +220,30 @@ MUTANTS = [
         [(D, '        index = f.qty(logs[0]["data"])\n    except f.BAD_ANSWER:', '        index = f.qty(logs[0]["data"])\n    except KeyError:')],
         TD + "answers_of_another_type_named",
         "FAIL answers_of_another_type_named",
+    ),
+    (
+        "P3-1 an unknown kind name passes (Python)",
+        [(BK, '    if kind not in t["homeChainKinds"] and kind not in t["otherKinds"]:', "    if False:")],
+        TB,
+        "home_chain_kinds_refused",
+    ),
+    (
+        "P3-1 an unknown kind name passes (Solidity)",
+        [(BS, "        if (!home) {\n            string[] memory os", "        if (!home) {\n            return;\n            string[] memory os")],
+        GOV + "test_kindGateWhereCreated",
+        "test_kindGateWhereCreated",
+    ),
+    (
+        "P3-1 the factory not gated where created",
+        [(B, '        _requireKindHere("OpenFactory", uid); // NET-ALL-25 (C18), where', "        // NET-ALL-25 (C18), where")],
+        GOV + "test_kindGateWhereCreated",
+        "test_kindGateWhereCreated",
+    ),
+    (
+        "P3-1 PqChat not gated where created",
+        [(B, '        _requireKindHere("PqChat", uid); // NET-ALL-25 (C18), where', "        // NET-ALL-25 (C18), where")],
+        GOV + "test_kindGateWhereCreated",
+        "test_kindGateWhereCreated",
     ),
 ]
 

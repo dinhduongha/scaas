@@ -13,7 +13,7 @@ the form of json.dumps(…, indent=2), the header first. script/DeployBook.sol i
 NET-ALL-25: chain-uids.json as read refuses a second row of one (chainId, chainUid) pair (CHAIN_PAIR_TAKEN), a private
 chain's genesis in another row or under another chain id (CHAIN_UID_PRIVATE), a row without `private` (CHAIN_ROW_PRIVATE);
 a kind keeping or checking records bound to chain_uid without the chain id (`homeChainKinds`) on a genesis another row
-shares: HOME_CHAIN_SHARED_GENESIS.
+shares: HOME_CHAIN_SHARED_GENESIS; a kind on neither that list nor `otherKinds`: KIND_UNKNOWN.
   python3 -I script/deploybook.py kind-check <kind> <chainId> <chainUid>   the kind may deploy on this chain
 Deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; NET-EVM-11 Change): one chain may carry more
 than one deploy of the same build, each with its own DEPLOY_SALT, named by a set label (SETS: `mldsa-off`, the deploy with
@@ -146,6 +146,8 @@ def kind_check(kind, chain_id, chain_uid):
     `homeChainKinds`: homeChain records, the registry's portable UAMsigUpdate and scoped keys) is refused on a chain whose
     chain_uid another row shares, until those records carry the chain id; any other kind passes."""
     t, cid, uid = table(), int(chain_id), chain_uid.lower()
+    if kind not in t["homeChainKinds"] and kind not in t["otherKinds"]:
+        raise BookError(f"KIND_UNKNOWN: {kind} is on neither homeChainKinds nor otherKinds of chain-uids.json")
     if kind in t["homeChainKinds"]:
         other = [r["key"] for r in t["chains"] if r["chainUid"].lower() == uid and r["chainId"] != cid]
         if other:

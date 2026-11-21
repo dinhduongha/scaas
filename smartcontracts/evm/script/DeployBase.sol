@@ -545,6 +545,7 @@ abstract contract DeployBase is DeployBook {
         internal
         returns (OpenFactory f)
     {
+        _requireKindHere("OpenFactory", uid); // NET-ALL-25 (C18), where the factory is created (review P3-1)
         if (deployZether) {
             require(!isHedera, "DEPLOY_ZETHER: not on Hedera (ZetherLayer refuses a Hedera env)");
             (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
@@ -691,6 +692,7 @@ abstract contract DeployBase is DeployBook {
     ///         `pqchat_instance`; else created after the notice period by anyone, `createInstance`). JSON
     ///         `pqchat_implementation`, `pqchat_topics`. **UNAUDITED.**
     function _deployPqChat(OpenFactory f, address reg) internal {
+        _requireKindHere("PqChat", uid); // NET-ALL-25 (C18), where PqChat is created (review P3-1)
         address topics = _module("PqChatTopics.sol:PqChatTopics", abi.encode(address(f)), 3, 0);
         f.publishClassEnv(3, 0, 1, f.chainUid(), _pqchatEnv(reg, topics));
         address impl = _pqchatRelease(f, abi.encode(topics));
