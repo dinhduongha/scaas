@@ -296,6 +296,8 @@ const chainStep = (ck) => ({
 /** §6.3 (O6): a receiver keeps skipped message keys for at most 2,000 messages per chain, and no message moves a chain further
  *  than that in one go. `counter` comes from a peer: it costs one HMAC triple per step, so it is bounded before any work. */
 export const MAX_SKIP = 2000;
+/** CLI-PQC-14: a receiver that keeps no skipped key walks from the nearest position it holds (here `ck_0`) at most 2^20 steps. */
+export const WALK_MAX = 2 ** 20;
 
 /** A receiver's state for one sender chain `(session, epoch, sender, device)`: the next counter `i`, `ck_i`, and the skipped
  *  message keys by counter (at most `MAX_SKIP`, the oldest dropped first). Keep one per chain and pass it to `decryptMessage`. */
@@ -322,17 +324,19 @@ export function unpad(pt) {
   return c;
 }
 
-/** Canonical JSON: object keys sorted (code units), no whitespace, `JSON.stringify` escapes. */
+/** Canonical JSON: object keys sorted (UTF-16 code units), no whitespace, `JSON.stringify` escapes; a number other than an
+ *  integer within ±(2^53 − 1) is refused (`PqChatError('canonical')`), so every reader writes the same digits. */
 export const canonicalJson = (v) =>
-  JSON.stringify(v, (_, x) =>
-    x && typeof x === "object" && !Array.isArray(x)
+  JSON.stringify(v, (_, x) => {
+    if (typeof x === "number" && !Number.isSafeInteger(x)) throw new PqChatError("canonical");
+    return x && typeof x === "object" && !Array.isArray(x)
       ? Object.fromEntries(
           Object.keys(x)
             .sort()
             .map((k) => [k, x[k]]),
         )
-      : x,
-  );
+      : x;
+  });
 
 /** §6.4: `abi.encode(sessionId, epochId, sender, bytes16 device, uint64 counter, keccak256(abi.encode(bytes32[] parents)))`. */
 export const parentsHash = (parents) => keccak_256(abiEncode(["bytes32[]"], [parents]));
@@ -356,13 +360,13 @@ export function encryptMessage(K, m, pt) {
 }
 /** Opens `m`. With `chain` (`receiverChain` of `m`'s sender chain): from a skipped key, or by walking at most `MAX_SKIP` steps
  *  past the chain's next counter, keeping the keys skipped; the state changes only when the message opens; a counter already
- *  used or dropped is refused. Without `chain`, stateless from `ck_0`: `counter` at most `MAX_SKIP`. Refusals are
+ *  used or dropped is refused. Without `chain`, stateless from `ck_0`: `counter` at most `WALK_MAX`. Refusals are
  *  `PqChatError('counter')`. */
 export function decryptMessage(K, m, chain) {
   const c = counterOf(m);
   const open = ({ mk, n }) => gcmsiv(mk, n, messageAad(m)).decrypt(bytes(m.ciphertext));
   if (!chain) {
-    if (c > MAX_SKIP) throw new PqChatError("counter");
+    if (c > WALK_MAX) throw new PqChatError("counter");
     return open(messageKey(K, m));
   }
   if (chain.skipped.has(c)) {

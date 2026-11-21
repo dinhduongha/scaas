@@ -466,7 +466,7 @@ test("sender chains, padding, the message ciphertext", () => {
   assert.throws(() => pc.decryptMessage(M.message.K, { ...msg, device: other })); // the device is in the chain and the aad
 });
 
-test("a peer counter is bounded: a safe integer, at most MAX_SKIP steps, a receiver chain with skipped keys (review E C-4)", () => {
+test("a peer counter is bounded: a safe integer, at most WALK_MAX steps stateless, MAX_SKIP on a chain, a receiver chain with skipped keys (review E C-4)", () => {
   const msg = R.message.record;
   const K = M.message.K;
   const at = (counter, pt = M.message.pt) => {
@@ -476,11 +476,14 @@ test("a peer counter is bounded: a safe integer, at most MAX_SKIP steps, a recei
   const isCounter = (e) => e.code === "counter";
   for (const c of ["5", 1.5, -1, 2 ** 53, 10n])
     assert.throws(() => pc.decryptMessage(K, { ...msg, counter: c }), isCounter, String(c));
-  assert.equal(h(pc.decryptMessage(K, at(pc.MAX_SKIP))), M.message.pt, "stateless at the bound");
+  // the stateless path walks from ck_0 up to the walk bound of CLI-PQC-14 (2^20), past MAX_SKIP
+  assert.equal(pc.WALK_MAX, 2 ** 20);
+  assert.equal(h(pc.decryptMessage(K, at(pc.MAX_SKIP + 1))), M.message.pt, "stateless past MAX_SKIP");
+  assert.equal(h(pc.decryptMessage(K, at(pc.WALK_MAX))), M.message.pt, "stateless at the walk bound");
   assert.throws(
-    () => pc.decryptMessage(K, { ...msg, counter: pc.MAX_SKIP + 1 }),
+    () => pc.decryptMessage(K, { ...msg, counter: pc.WALK_MAX + 1 }),
     isCounter,
-    "stateless past the bound",
+    "stateless past the walk bound",
   );
   assert.throws(() => pc.decryptMessage(K, { ...msg, counter: 2 ** 40 }), isCounter, "no 2^40 walk");
   const chain = () => pc.receiverChain(K, msg.sessionId, msg.epochId, msg.sender, msg.device);
@@ -596,4 +599,44 @@ test("two devices of one UA: different message scopes and different chains", () 
   assert.equal(R.message.scope, h(pc.scopeMessage(a1.epochId, a1.sender, a1.device)));
   assert.notEqual(a1.ck0, a2.ck0);
   for (let i = 0; i < a1.steps.length; i++) assert.notEqual(a1.steps[i].mk, a2.steps[i].mk);
+});
+
+test("a chain read far from ck_0: counter 5,000 in one walk (CLI-PQC-14)", () => {
+  const f = M.chainFar;
+  assert.equal(f.counter, 5000);
+  const c = pc.chainKeys(f.K, f.sessionId, f.epochId, f.sender, f.device, f.counter + 1);
+  assert.equal(h(c.ck0), f.ck0);
+  const s = c.steps[f.counter];
+  assert.deepEqual({ mk: h(s.mk), n: h(s.n), ck: h(s.ck) }, { mk: f.mk, n: f.n, ck: f.ck });
+  assert.equal(f.ck0, M.chains[0].ck0, "the first chain's ck_0");
+});
+
+test("canonical JSON rows: UTF-16 key order, escapes, the safe-integer bound; refusals", () => {
+  assert.ok(M.canonicalJson.length >= 3);
+  for (const r of M.canonicalJson) assert.equal(pc.canonicalJson(JSON.parse(r.input)), r.canonical, r.name);
+  const utf16 = M.canonicalJson.find((r) => r.name.startsWith("utf-16"));
+  const keys = Object.keys(JSON.parse(utf16.canonical));
+  const utf8 = [...keys].sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  assert.notDeepEqual(keys, utf8, "the row's order differs between UTF-16 and UTF-8");
+  for (const r of M.canonicalRefused)
+    assert.throws(
+      () => pc.canonicalJson(JSON.parse(r.input)),
+      (e) => e.code === "canonical",
+      r.name,
+    );
+});
+
+test("unpad refusal rows: each refused, its positive twin opens", () => {
+  assert.deepEqual(
+    M.unpadRefused.map((r) => r.name),
+    ["non-zero fill", "wrong bucket", "length past the end"],
+  );
+  for (const r of M.unpadRefused) {
+    assert.throws(
+      () => pc.unpad(r.pt),
+      (e) => e.code === "padding",
+      r.name,
+    );
+    assert.equal(h(pc.unpad(r.twin)), r.content, `${r.name}: the twin`);
+  }
 });

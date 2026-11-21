@@ -358,6 +358,28 @@ const chainRow = (who, device) => {
   return { K: K1, sessionId: sid, epochId: eid, sender: who.ua, device, ck0: c.ck0, steps: c.steps };
 };
 const padContent = (n) => Uint8Array.from({ length: n }, (_, i) => i % 251);
+/** CLI-PQC-14: the step at `counter` of one chain, walked from ck_0. */
+const chainFar = (who, device, counter) => {
+  const c = pc.chainKeys(K1, sid, eid, who.ua, device, counter + 1);
+  const s = c.steps[counter];
+  return { K: K1, sessionId: sid, epochId: eid, sender: who.ua, device, counter, ck0: c.ck0, mk: s.mk, n: s.n, ck: s.ck };
+};
+/** unpad's refusals, each one change from a valid padded text (its twin). */
+const unpadRows = () => {
+  const content = padContent(10);
+  const twin = pc.pad(content);
+  const fill = twin.slice();
+  fill[200] = 1;
+  const bucket = new Uint8Array(1024);
+  bucket.set(twin.subarray(0, 14));
+  const past = twin.slice();
+  past.set([0, 0, 0x0f, 0xfd]); // 4,093 > 256 - 4
+  return [
+    { name: "non-zero fill", pt: fill },
+    { name: "wrong bucket", pt: bucket },
+    { name: "length past the end", pt: past },
+  ].map((r) => ({ ...r, content, twin }));
+};
 const call = (name, callSecret) => {
   const x = { K: K1, sessionId: sid, epochId: eid, callId: rnd("call/id"), callEpoch: 3 };
   if (callSecret) x.callSecret = callSecret;
@@ -387,7 +409,11 @@ write("messages.json", {
     'padding). sealedInfo: nonce ‖ AES-256-GCM-SIV(kInfo = HKDF(K, "scaas/pqchat/v1/info" ‖ sessionId ‖ epochId), nonce, pt = ' +
     "pad(UTF-8 json)), json = canonical JSON of info. callKeys: callBase = HKDF(K ‖ callSecret (group; K alone for 1:1), " +
     '"scaas/pqchat/v1/call" ‖ sessionId ‖ epochId ‖ callId (32 B) ‖ u32be callEpoch); baseKey = HKDF(callBase, ' +
-    '"scaas/pqchat/v1/sframe" ‖ sender ‖ device). No SFrame KID rows (RFC 9605 S not stated), no libp2p or Waku rows.',
+    '"scaas/pqchat/v1/sframe" ‖ sender ‖ device). No SFrame KID rows (RFC 9605 S not stated), no libp2p or Waku rows. ' +
+    "chainFar: the step at counter 5,000 of the first chain, walked from ck0 (CLI-PQC-14: a reader keeps no skipped key and " +
+    "walks at most 2^20 steps from a position it holds). canonicalJson: input (JSON text) and its canonical form, keys sorted by " +
+    "UTF-16 code units, JSON.stringify escapes, numbers only integers within +-(2^53 - 1); canonicalRefused: inputs refused. " +
+    "unpadRefused: padded texts unpad refuses, each one change from its twin (pad of content), which opens.",
   version: 1,
   devices: Object.entries(DEVICES).map(([name, device]) => ({
     name,
@@ -431,6 +457,19 @@ write("messages.json", {
   },
   sealedInfo: sealedRows,
   callKeys: [call("group", rnd("call/secret")), call("1:1")],
+  chainFar: chainFar(alice, DEVICE, 5000),
+  canonicalJson: [
+    // U+1F600 is D83D DE00 in UTF-16, below U+E000; in UTF-8 F0 9F 98 80 sorts after EE 80 80
+    ["utf-16 key order", '{"\\ue000":2,"\\ud83d\\ude00":1,"a":0}'],
+    ["control characters", '{"t":"\\u0001\\b\\f\\n\\r\\t\\u001f\\"\\\\/\\u007f","type":"text"}'],
+    ["the safe-integer bound", '{"max":9007199254740991,"min":-9007199254740991,"zero":0}'],
+    ["nested", '{"z":[{"b":1,"a":[true,false,null]}],"a":{}}'],
+  ].map(([name, input]) => ({ name, input, canonical: pc.canonicalJson(JSON.parse(input)) })),
+  canonicalRefused: [
+    ["a fraction", '{"n":1.5}'],
+    ["above 2^53 - 1", '{"n":9007199254740992}'],
+  ].map(([name, input]) => ({ name, input })),
+  unpadRefused: unpadRows(),
 });
 
 // ------------------------------------------------------------------ topics (public topics spec §2)
