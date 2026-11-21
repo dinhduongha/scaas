@@ -293,6 +293,53 @@ async fn near_unknown_account_is_zero() {
     assert_eq!(b.native.as_deref(), Some("9"), "control");
 }
 
+/// Native NEAR (chain-support row 24; owner 2026-11-22): a plain account on a profile with no SCaaS contract and no listed
+/// token reads its native `amount` alone: one `view_account` query at the final block, no `call_function`, no tokens. A named
+/// account and an implicit 64-hex one read alike; a plain account NEAR does not know holds "0".
+#[tokio::test(flavor = "multi_thread")]
+async fn near_native_plain_account() {
+    let f = node();
+    let implicit = "9f".repeat(32);
+    f.lock()
+        .unwrap()
+        .native
+        .insert(implicit.clone(), "42".into());
+    let (u, seen) = up(&f).await;
+    let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
+    p.key = "near-native".into();
+    p.tokens.clear();
+    let s = sdk(p).await;
+    let b = native_read(&s, ALICE).await.unwrap();
+    assert_eq!(
+        (b.block, b.native.as_deref(), b.tokens.len()),
+        (FIN, Some("1250000000000000000000000"), 0)
+    );
+    let queries: Vec<Value> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(_, _, body)| serde_json::from_str::<Value>(body).unwrap())
+        .filter(|r| r["method"] == "query")
+        .collect();
+    assert_eq!(queries.len(), 1, "{queries:?}");
+    assert_eq!(
+        (
+            queries[0]["params"]["request_type"].as_str(),
+            queries[0]["params"]["account_id"].as_str(),
+            queries[0]["params"]["block_id"].as_u64()
+        ),
+        (Some("view_account"), Some(ALICE), Some(FIN))
+    );
+    let b = native_read(&s, &implicit).await.unwrap();
+    assert_eq!(b.native.as_deref(), Some("42"), "an implicit account");
+    let b = native_read(&s, "carol.testnet").await.unwrap();
+    assert_eq!(b.native.as_deref(), Some("0"), "an unknown plain account");
+}
+
+async fn native_read(s: &Arc<Sdk>, id: &str) -> Result<Balances, SdkError> {
+    s.wallet().balances(id.into(), "near-native".into()).await
+}
+
 /// A holder or a listed token that is not a NEAR account id (nor a `0x` 32-byte id) is `Argument` before any read; the
 /// controls (an implicit 64-hex account, an `0x` + 40 hex one) are read.
 #[tokio::test(flavor = "multi_thread")]
