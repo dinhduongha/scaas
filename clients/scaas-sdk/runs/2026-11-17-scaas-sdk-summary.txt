@@ -130,7 +130,6 @@ ck-test | 6dded4e97 | 0 | node: 484 pass, 0 fail, 4 skipped
 # (Argument), then green; admin::tests + account::msig::tests 12/12; clippy --all-targets (full features) clean; docs 0
 # errors; mutant t20c 3/3 killed (the new one by the test's unwrap). Not run: sdk-test whole, sdk-e2e, bind-gen (no public
 # item changed).
-sdk-test | 58099349c | 0 | 265 passed, 0 failed, 12 ignored (21 binaries)
 sdk-clippy | f4c422ef6 | 0 | -
 sdk-raw | f4c422ef6 | 0 | 114 passed, 0 failed, 0 ignored (1 binaries)
 features | f4c422ef6 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
@@ -184,3 +183,5 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 #      request count through the fake
 # M18  the regular line extrapolated past its measured counts (measure at the largest count the cap admits, or refuse above)
 # M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt
+sdk-test | 7cc8be95f | 0 | 308 passed, 0 failed, 16 ignored (26 binaries)
+sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
