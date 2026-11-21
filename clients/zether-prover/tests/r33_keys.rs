@@ -8,7 +8,7 @@ use zether_prover::curve::Bn254;
 use zether_prover::curve::{decode_point, encode_scalar, keccak256, ua_of, Bls12381, ZCurve};
 #[cfg(feature = "bn254")]
 use zether_prover::keys::{derive_child_sk, derive_master_sk};
-use zether_prover::keys::{derive_path, seed_from_mnemonic, ZetherKey};
+use zether_prover::keys::{derive_path, seed_from_mnemonic, seed_from_mnemonic_warned, ZetherKey};
 
 const ABANDON_ART: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
@@ -33,15 +33,25 @@ fn seed() -> [u8; 64] {
 }
 
 #[test]
-fn bip39_seed_and_24_word_rule() {
+fn bip39_seed_and_word_counts() {
     assert_eq!(
         hex::encode(seed()),
         "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf705489c6fc77dbd4e3dc1dd8cc6bc9f043db8ada1e243c4a0eafb290d399480840"
     );
-    // 12 words: valid BIP-39 but R32 demands 24.
+    // 12 words (plan T23, Q-K15): accepted, flagged short; the seed is BIP-39's (PBKDF2-HMAC-SHA512 of the words, salt
+    // "mnemonic", 2048 rounds, computed independently)
     let twelve = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-    assert!(seed_from_mnemonic(twelve, "").is_err());
-    // bad checksum
+    let (s, short) = seed_from_mnemonic_warned(twelve, "").unwrap();
+    assert!(short);
+    assert_eq!(
+        hex::encode(&s[..]),
+        "5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4"
+    );
+    assert_eq!(&seed_from_mnemonic(twelve, "").unwrap()[..], &s[..]);
+    // 24 words: not short
+    assert!(!seed_from_mnemonic_warned(ABANDON_ART, "").unwrap().1);
+    // 11 words and a bad checksum: refused
+    assert!(seed_from_mnemonic(&twelve.replace(" about", ""), "").is_err());
     assert!(seed_from_mnemonic(&ABANDON_ART.replace(" art", " abandon"), "").is_err());
 }
 

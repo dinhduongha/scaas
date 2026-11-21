@@ -185,3 +185,4 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt
 sdk-test | 7cc8be95f | 0 | 308 passed, 0 failed, 16 ignored (26 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
+cli | 85ed4c591 | 0 | 35 passed, 0 failed, 0 ignored (4 binaries)
