@@ -175,7 +175,6 @@ bind-dart | 7104a069f | 0 | dart: +14:
 ffi | 7104a069f | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 rpc-clippy | cd3b6c03e | 0 | -
 rpc-wasm | cd3b6c03e | 0 | -
-docs | 6e7e71142 | 0 | -
 mutants-check | 6e7e71142 | 1 | -
 features | 6e7e71142 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-gen | 6e7e71142 | 0 | -
@@ -184,5 +183,6 @@ sdk-clippy | 6e7e71142 | 0 | -
 rpc-test | 6e7e71142 | 0 | 202 passed, 0 failed, 10 ignored (20 binaries)
 sdk-test | 6e7e71142 | 0 | 391 passed, 0 failed, 16 ignored (35 binaries)
 ua-test | 6e7e71142 | 0 | 604 passed, 0 failed, 3 ignored (60 binaries)
-cli | 6e7e71142 | 101 | 19 passed, 1 failed, 0 ignored (2 binaries)
 ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
+cli | 25e9b20a3 | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
+docs | 25e9b20a3 | 0 | -
