@@ -45,7 +45,23 @@ scaas-sdk = { path = "../scaas-sdk", default-features = false, features = [
   "sui",
   "ton",
 ] }
-scaas-ua = { path = "../ua-rs", default-features = false, features = ["wallet"] }
+# plan T42: every family, as the SDK features above
+scaas-ua = { path = "../ua-rs", default-features = false, features = [
+  "wallet",
+  "fam-evm",
+  "fam-hedera",
+  "fam-near",
+  "fam-algorand",
+  "fam-cosmos",
+  "fam-aptos",
+  "fam-solana",
+  "fam-soroban",
+  "fam-sui",
+  "fam-ton",
+  "fam-dot",
+  "fam-btc",
+  "fam-arweave",
+] }
 scaas-rpc = { path = "../scaas-rpc", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

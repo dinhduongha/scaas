@@ -4,9 +4,15 @@
 //! the junction path grammar and chain codes of `sp-core` / polkadot.js with the refusals of §7.3, SS58, and signing with context
 //! `substrate` over a one-shot RNG fed by `os_aux()`: an OS-RNG failure is `Error::Rng`, never a panic inside merlin, and every
 //! signature is verified before it leaves. UNAUDITED.
+//!
+//! Plan T42: sr25519 (schnorrkel, not a UA kind) and the `substrate-bip39` PBKDF2 are behind `fam-dot`; without it the calls
+//! below are `FeatureMissing` (`Network::Polkadot` is refused before any of them) and the arena's mini-secret is zero, never read.
+#![cfg_attr(not(feature = "fam-dot"), allow(dead_code, unused_imports))]
 use super::{Error, Result};
 use rand_core::{CryptoRng, RngCore};
+#[cfg(feature = "fam-dot")]
 use schnorrkel::derive::{ChainCode, Derivation};
+#[cfg(feature = "fam-dot")]
 use schnorrkel::{
     context::attach_rng, signing_context, ExpansionMode, MiniSecretKey, PublicKey, SecretKey,
     Signature,
@@ -20,6 +26,7 @@ pub const MAX_JUNCTION_BYTES: usize = 64;
 
 /// `substrate-bip39` `mini_secret_from_entropy`: `PBKDF2-HMAC-SHA512(entropy, "mnemonic" ‖ UTF-8(passphrase), 2048)[0..32]`; the
 /// passphrase as given, not NFKD (an NFC and an NFD spelling are two accounts).
+#[cfg(feature = "fam-dot")]
 pub(crate) fn mini_secret(entropy: &[u8], passphrase: &str) -> Zeroizing<[u8; 32]> {
     let salt = Zeroizing::new([&b"mnemonic"[..], passphrase.as_bytes()].concat());
     let mut dk = Zeroizing::new([0u8; 64]);
@@ -30,16 +37,19 @@ pub(crate) fn mini_secret(entropy: &[u8], passphrase: &str) -> Zeroizing<[u8; 32
 }
 
 /// The bare account (spec §7.2): `MiniSecretKey::expand(ExpansionMode::Ed25519)`, as its 64-byte `SecretKey::to_bytes`.
+#[cfg(feature = "fam-dot")]
 pub(crate) fn bare(mini: &[u8]) -> Result<Zeroizing<[u8; 64]>> {
     let m = MiniSecretKey::from_bytes(mini).map_err(|_| Error::Argument)?;
     Ok(Zeroizing::new(m.expand(ExpansionMode::Ed25519).to_bytes()))
 }
 
+#[cfg(feature = "fam-dot")]
 fn secret(sk: &[u8]) -> Result<SecretKey> {
     SecretKey::from_bytes(sk).map_err(|_| Error::Argument)
 }
 
 /// The 32-byte public key of a 64-byte secret.
+#[cfg(feature = "fam-dot")]
 pub(crate) fn public(sk: &[u8]) -> Result<Vec<u8>> {
     Ok(secret(sk)?.to_public().to_bytes().to_vec())
 }
@@ -186,6 +196,7 @@ impl CryptoRng for OneShot {}
 
 /// The key of `junctions` from the bare secret: hard steps `hard_derive_mini_secret_key` → Ed25519 expansion, soft steps
 /// `derived_key_simple_rng` over the one-shot RNG of `rand()` (a soft step draws a fresh nonce half).
+#[cfg(feature = "fam-dot")]
 pub(crate) fn derive(
     bare: &[u8],
     junctions: &[Junction],
@@ -209,6 +220,7 @@ pub(crate) fn derive(
 
 /// sr25519 over `msg` with context `substrate` and randomness `r` through the one-shot RNG, verified against `check` (the key's own
 /// public key in the release path) before it leaves; 64 bytes, schnorrkel's marker bit set.
+#[cfg(feature = "fam-dot")]
 pub(crate) fn sign(sk: &[u8], msg: &[u8], r: [u8; 32], check: &[u8]) -> Result<Vec<u8>> {
     let kp = secret(sk)?.to_keypair();
     let mut rng = OneShot::new(r);
@@ -221,6 +233,7 @@ pub(crate) fn sign(sk: &[u8], msg: &[u8], r: [u8; 32], check: &[u8]) -> Result<V
 }
 
 /// sr25519 Verify with context `substrate`.
+#[cfg(feature = "fam-dot")]
 pub(crate) fn verify(pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
     let (Ok(pk), Ok(sig)) = (PublicKey::from_bytes(pk), Signature::from_bytes(sig)) else {
         return false;
@@ -282,7 +295,38 @@ pub fn system_account_key(pk: &[u8; 32]) -> [u8; 80] {
     k
 }
 
-#[cfg(test)]
+/// Without `fam-dot`: the same calls, each `FeatureMissing` (verify: false); unreachable behind `Network::require`.
+#[cfg(not(feature = "fam-dot"))]
+mod off {
+    use super::{Error, Junction, Result};
+    use zeroize::Zeroizing;
+    pub(crate) fn mini_secret(_: &[u8], _: &str) -> Zeroizing<[u8; 32]> {
+        Zeroizing::new([0; 32])
+    }
+    pub(crate) fn bare(_: &[u8]) -> Result<Zeroizing<[u8; 64]>> {
+        Err(Error::FeatureMissing)
+    }
+    pub(crate) fn public(_: &[u8]) -> Result<Vec<u8>> {
+        Err(Error::FeatureMissing)
+    }
+    pub(crate) fn derive(
+        _: &[u8],
+        _: &[Junction],
+        _: impl FnMut() -> Result<[u8; 32]>,
+    ) -> Result<Zeroizing<[u8; 64]>> {
+        Err(Error::FeatureMissing)
+    }
+    pub(crate) fn sign(_: &[u8], _: &[u8], _: [u8; 32], _: &[u8]) -> Result<Vec<u8>> {
+        Err(Error::FeatureMissing)
+    }
+    pub(crate) fn verify(_: &[u8], _: &[u8], _: &[u8]) -> bool {
+        false
+    }
+}
+#[cfg(not(feature = "fam-dot"))]
+pub(crate) use off::*;
+
+#[cfg(all(test, feature = "fam-dot"))]
 mod tests {
     use super::*;
     /// The one-shot RNG yields its bytes once; a second read gets zeros and marks it misused (spec §7.5).

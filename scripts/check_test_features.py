@@ -24,6 +24,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 GUARDED = ("scaas-ua", "zether-prover", "pqz-ffi", "scaas-ct", "scaas-sdk")
 TEST = ("vectors", "hazmat")
+
+
+def is_test(f):
+    """A test feature: `vectors`, `hazmat`, or a `xcheck-<family>` (plan T42: a chain crate as a third cross-check, tests and
+    CI only, never default, never in a release build)."""
+    return f in TEST or f.startswith("xcheck-")
+
+
 # test-only crates: the fuzz harness of ua-rs (its targets reach the facades through `vectors`)
 TEST_ONLY = {"clients/ua-rs/fuzz/Cargo.toml"}
 # the production artifacts: (directory, extra cargo tree arguments); the bindings' cores and zether-read-balance
@@ -52,7 +60,7 @@ ARTIFACTS = [
 def shipped(cwd):
     """`--features` with every feature of the crate in `cwd` but its test features."""
     m = tomllib.loads((ROOT / cwd / "Cargo.toml").read_text(encoding="utf-8"))
-    return ["--features", ",".join(f for f in m.get("features", {}) if f not in TEST and f != "default")]
+    return ["--features", ",".join(f for f in m.get("features", {}) if not is_test(f) and f != "default")]
 DEP_TABLES = ("dependencies", "build-dependencies")
 
 
@@ -76,13 +84,13 @@ def check_manifest(rel, text):
             pkg = d.get("package", key) if isinstance(d, dict) else key
             names[key] = pkg
             feats = d.get("features", []) if isinstance(d, dict) else []
-            out += [f"{rel}: [{where}] {key} enables {pkg}/{f}" for f in feats if pkg in GUARDED and f in TEST]
+            out += [f"{rel}: [{where}] {key} enables {pkg}/{f}" for f in feats if pkg in GUARDED and is_test(f)]
     features = m.get("features", {})
     for f, enables in features.items():
         for e in enables:
             dep, _, feat = e.partition("/")
             dep = dep.rstrip("?")
-            if feat in TEST and names.get(dep, dep) in GUARDED and f not in TEST:
+            if is_test(feat) and names.get(dep, dep) in GUARDED and not is_test(f):
                 out.append(f"{rel}: [features] {f} = {e} (only a test feature may forward to one)")
     seen, todo = set(), ["default"]
     while todo:
@@ -91,7 +99,7 @@ def check_manifest(rel, text):
             continue
         seen.add(f)
         todo += [e for e in features.get(f, []) if "/" not in e and ":" not in e]
-    out += [f"{rel}: [features] default reaches the test feature {f}" for f in sorted(seen & set(TEST))]
+    out += [f"{rel}: [features] default reaches the test feature {f}" for f in sorted(x for x in seen if is_test(x))]
     return out
 
 
@@ -139,7 +147,7 @@ def check_graph(cwd, extra):
         lines = tree(cwd, pkg, extra)
         for i, (depth, node) in enumerate(lines or []):
             f = FEATURE.match(node)
-            if depth == 1 and f and f.group(1) == pkg and f.group(2) in TEST:
+            if depth == 1 and f and f.group(1) == pkg and is_test(f.group(2)):
                 chain, d = [node], depth  # the enablers below it, down to the root's feature
                 for dd, n in lines[i + 1 :]:
                     if dd <= depth:
@@ -173,9 +181,16 @@ def main():
         and check_manifest("scratch", head + '[dependencies]\nscaas-ct = { path = "x", features = ["vectors"] }\n')
         != []
     )
+    # plan T42: a chain crate's cross-check feature in [dependencies] and in a crate's `default` is found too
+    xdep = 'scaas-ua = { path = "x", features = ["xcheck-near"] }\n'
+    ok = (
+        ok
+        and check_manifest("scratch", head + "[dependencies]\n" + xdep) != []
+        and check_manifest("scratch", head + "[dev-dependencies]\n" + xdep) == []
+    )
     print(
-        f"positive control (manifests): vectors in [dependencies] (scaas-ua, scaas-ct) and a forwarded hazmat found, "
-        f"[dev-dependencies] not: {ok}"
+        f"positive control (manifests): vectors and xcheck-near in [dependencies] (scaas-ua, scaas-ct) and a forwarded hazmat "
+        f"found, [dev-dependencies] not: {ok}"
     )
     bad += [] if ok else ["positive control (manifests) failed"]
     for cwd, extra in ARTIFACTS:

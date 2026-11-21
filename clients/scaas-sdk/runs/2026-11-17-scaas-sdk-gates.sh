@@ -52,6 +52,10 @@ STEPS=(
     "ua-vectors|clients/ua-rs|$cap cargo clippy $C --all-targets --features vectors,roots -- -D warnings && $cap cargo test $C --features vectors,roots"
     "ua-appcore|clients/ua-rs|$cap cargo clippy $C --all-targets --features app-core,vectors -- -D warnings && $cap cargo test $C --features app-core,vectors --test app_core && python3 -I scripts/gen_app_refusals.py --check"
     "ua-verify-only|clients/ua-rs|$cap cargo test $C --no-default-features"
+    # plan T42: the core with no family (every UA kind, the seed standards, FeatureMissing) and its clippy; then none, each
+    # fam-<row> alone and all on, in release, the size probe's bytes (runs/fam-sizes.sh prints `RESULT` rows for the summary)
+    "ua-core|clients/ua-rs|$cap cargo clippy $C --all-targets --no-default-features --features wallet -- -D warnings && $cap cargo test $C --no-default-features --features wallet --lib --test core_only --test wallet_pairing --test bls_multi --test wallet_webauthn --test bip85 --test wallet_pq"
+    "ua-fam|clients/ua-rs|bash runs/fam-sizes.sh | sed 's/^/RESULT /'"
     "ua-wallet-rows|clients/ua-rs|$cap cargo test $C --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows && git diff --exit-code -- ../../smartcontracts/vectors"
     "rpc-clippy|clients/scaas-rpc|$cap cargo clippy $C --all-targets --all-features -- -D warnings"
     "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm,node-client"

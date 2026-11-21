@@ -92,6 +92,7 @@ pub use eip712::{
     Erc7739Wallet, RescueVaultOp, TypedData,
 };
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
+#[cfg(feature = "fam-dot")]
 pub use substrate::{ss58_public_key, system_account_key};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
@@ -229,6 +230,8 @@ pub enum Error {
     PqChatContent,
     /// A PqChat chain walk of more than 2^20 steps (CLI-PQC-14): refused before any step.
     PqChatTooFar,
+    /// A network of a family this build leaves out (plan T42: its `fam-<row>` feature is off); nothing derived or signed.
+    FeatureMissing,
     Ua(UAError),
 }
 
@@ -265,6 +268,7 @@ impl Error {
             Error::AppSaltMismatch => "AppSaltMismatch",
             Error::PqChatContent => "PqChatContent",
             Error::PqChatTooFar => "PqChatTooFar",
+            Error::FeatureMissing => "FeatureMissing",
             Error::Ua(e) => e.code(),
         }
     }
@@ -330,6 +334,49 @@ const NETWORK_NAMES: [(Network, &str); 13] = [
 ];
 
 impl Network {
+    /// The `fam-<row>` feature that holds this network (plan T42; Hedera's ECDSA side is its EVM side).
+    pub fn feature(self) -> &'static str {
+        match self {
+            Network::Evm | Network::HederaEcdsa => "fam-evm",
+            Network::HederaEd25519 => "fam-hedera",
+            Network::Cosmos => "fam-cosmos",
+            Network::Sui => "fam-sui",
+            Network::Stellar => "fam-soroban",
+            Network::Ton => "fam-ton",
+            Network::Aptos => "fam-aptos",
+            Network::Solana => "fam-solana",
+            Network::BitcoinP2wpkh | Network::BitcoinP2tr => "fam-btc",
+            Network::Near => "fam-near",
+            Network::Polkadot => "fam-dot",
+        }
+    }
+
+    /// Whether this build has the network's family (its [`Network::feature`]).
+    pub fn built(self) -> bool {
+        match self.feature() {
+            "fam-evm" => cfg!(feature = "fam-evm"),
+            "fam-hedera" => cfg!(feature = "fam-hedera"),
+            "fam-cosmos" => cfg!(feature = "fam-cosmos"),
+            "fam-sui" => cfg!(feature = "fam-sui"),
+            "fam-soroban" => cfg!(feature = "fam-soroban"),
+            "fam-ton" => cfg!(feature = "fam-ton"),
+            "fam-aptos" => cfg!(feature = "fam-aptos"),
+            "fam-solana" => cfg!(feature = "fam-solana"),
+            "fam-btc" => cfg!(feature = "fam-btc"),
+            "fam-near" => cfg!(feature = "fam-near"),
+            _ => cfg!(feature = "fam-dot"),
+        }
+    }
+
+    /// `FeatureMissing` for a network this build leaves out.
+    pub fn require(self) -> Result<()> {
+        if self.built() {
+            Ok(())
+        } else {
+            Err(Error::FeatureMissing)
+        }
+    }
+
     /// Every network, in the C ABI's order (`SCAAS_UA_NETWORK_*`: clientkeys `NETWORKS`, then `NATIVE_NETWORKS`).
     pub fn all() -> [Network; 13] {
         NETWORK_NAMES.map(|(n, _)| n)
@@ -921,6 +968,7 @@ impl Wallet {
         change: u32,
         index: u32,
     ) -> Result<NativeKey> {
+        network.require()?;
         network.coin_ok(coin_type)?;
         if network == Network::Polkadot {
             if index != 0 {
@@ -957,6 +1005,7 @@ impl Wallet {
     /// outside `u64` or with a leading zero, over 16 junctions or 512 bytes), or a 65th path; the path is noted in the manifest's
     /// `polkadotPaths` (public data).
     pub fn polkadot_key(&self, path: &str) -> Result<NativeKey> {
+        Network::Polkadot.require()?;
         let junctions = substrate::parse_path(path)?;
         if junctions.is_empty() {
             return self.polkadot_bare();

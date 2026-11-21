@@ -42,9 +42,12 @@
 #   clients/ua-rs:         one matrix cell per feature set (ua-rs-sign MD-5, T18), each: cargo clippy --locked --all-targets <features> -- -D warnings; cargo test --locked <features> [<tests>]:
 #                          default (wallet + zether + pqz at n2304-kmax4096, the release cell; no_oracle, pqz_wallet_rows; then pqz_read --bin pqz-read -- --include-ignored against anvil),
 #                          vectors (--features vectors: the test hooks, the vector rows both ways, no_oracle's positive control), verify-only (--no-default-features),
+#                          core (plan T42: wallet with no fam-*: --lib core_only wallet_pairing bls_multi wallet_webauthn bip85 wallet_pq),
 #                          signers (--test groups_verify; tests/groups.rs, the generator, runs in the vectors cell), json (--test json), pq (--test pq --test ua_portable), wallet-mlock (wallet,mlock), zether-only (wallet,zether,mlock: --lib --test facade_zether),
 #                          pqz-n2048 (wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock: --lib --bin pqz-read --test pqz_read facade_pqz_state facade_pqz pqz_backup no_oracle) and the same + vectors
 #                          (facade_pqz_state facade_pqz pqz_backup no_oracle); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
+#   ua-rs-features:        plan T42: in clients/ua-rs, bash runs/fam-sizes.sh: cargo build --locked --release --example fam_size with no family, each
+#                          fam-<row> alone and all on (wallet always), each probe's size printed
 #   ua-rs-targets:         compile only, no run (MD-5, plan T0 / T18), wasm32-unknown-unknown, aarch64-linux-android (NDK clang, API 24), aarch64-apple-ios (macOS): cargo build --locked --lib --target <t> <cell> in ua-rs
 #                          for the default, --no-default-features, signers, json, pq, wallet, zether, pqz at n2048-kmax1024; then cargo build --locked --lib --target <t> in ua-c
 #   ua-deps:               cargo tree --locked -e normal for ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node (no lockfile moves);
@@ -806,7 +809,11 @@ jobs:
             features: --no-default-features --features pq
             tests: --test pq --test ua_portable
           - cell: wallet-mlock
-            features: --no-default-features --features wallet,mlock
+            features: --no-default-features --features wallet,mlock,fam-evm,fam-hedera,fam-near,fam-algorand,fam-cosmos,fam-aptos,fam-solana,fam-soroban,fam-sui,fam-ton,fam-dot,fam-btc,fam-arweave
+          # plan T42: the core with no family (no fam-*): every UA kind, BIP-39 / BIP-32 / SLIP-10 / BIP-85, FeatureMissing
+          - cell: core
+            features: --no-default-features --features wallet
+            tests: --lib --test core_only --test wallet_pairing --test bls_multi --test wallet_webauthn --test bip85 --test wallet_pq
           - cell: zether-only
             features: --no-default-features --features wallet,zether,mlock
             tests: --lib --test facade_zether
@@ -853,6 +860,27 @@ jobs:
       - name: pqz-read against anvil
         if: matrix.cell == 'default'
         run: cargo test --locked --test pqz_read --bin pqz-read -- --include-ignored
+
+  # Plan T42 (CLI-SDK-33 (31)): ua-rs with no family, each fam-<row> alone and all on, built in release, the size of each
+  # build's size probe printed (clients/ua-rs/runs/fam-sizes.sh; the record is clients/scaas-sdk/runs/2026-11-17-scaas-sdk-t42-sizes.txt)
+  ua-rs-features:
+    needs: changes
+    if: needs.changes.outputs.ua_rs == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-rs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/ua-rs
+          key: fam
+      - name: none, each family alone, all on (release, sizes)
+        run: CAP= bash runs/fam-sizes.sh
 
   # Compile only (no run; plan T0 had no NDK or Xcode, so Android and iOS are built here first). Falcon's C is skipped on wasm32
   # (KIND_UNAVAILABLE there), compiled by the NDK's clang and by Xcode.

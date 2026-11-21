@@ -166,7 +166,11 @@ impl std::error::Error for SdkError {}
 
 impl From<scaas_ua::wallet::Error> for SdkError {
     fn from(e: scaas_ua::wallet::Error) -> Self {
-        SdkError::Ua(e)
+        match e {
+            // plan T42: a family this build leaves out is the SDK's own `FeatureMissing` (one list of names)
+            scaas_ua::wallet::Error::FeatureMissing => SdkError::FeatureMissing,
+            e => SdkError::Ua(e),
+        }
     }
 }
 
