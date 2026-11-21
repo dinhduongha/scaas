@@ -664,7 +664,8 @@ Status: **BUILT on branch `chains-arweave`** for the contract and its tests (`sr
 `test/pqchat/PqChatStore.t.sol`, the layout pin `test/v2/layout/PqChatStore.json`; plan T5) and for the deploy path
 (`script/deploy_pqchatstore.py` and its test, the release data `release-data/PqChatStore.json`, the gate step `chatstore-cancun`:
 a local `anvil --hardfork cancun --code-size-limit 24576` deploy with NET-EVM-18's five checks, a second deploy taken as done, the
-probes; plan T6) and for the gas pins (`test/pqchat/PqChatStoreGas.t.sol`; plan T8); the deploys on public chains and their explorer verification are plan
+probes; plan T6), for the gas pins (`test/pqchat/PqChatStoreGas.t.sol`; plan T8) and for the node's row
+(contract kind `pqchatstore`, the code-hash check, [job-api.md](../node/job-api.md#pqchatstore-calls); plan T9); the deploys on public chains and their explorer verification are plan
 T10, on the owner's word (the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part B; UNAUDITED).
 
 <a id="CTR-CHAT-22"></a>**CTR-CHAT-22** — **`PqChatStore` is a standalone contract with exactly the store part of `PqChat`:

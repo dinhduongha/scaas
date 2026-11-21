@@ -269,7 +269,7 @@ The client sends the same envelope it sends to every other listed store (UA-7 P2
 `postMessage`. `receipt` is off by default while a chain store is listed (CLI-PQC-06); `typing` never goes to a chain store.
 **Relay** (CTR-CHAT-19): the write is unsigned, so the node relays it only when paid through `RelayFeeRouter` or under the operator's
 lane policy, never for unsigned spam by default; the node's call-table row checks the target's runtime code hash against the release
-data, as it checks a `PqChat` instance by the factory (plan T9; the rule goes in `docs/node/job-api.md` when built). No SCaaS set
+data, as it checks a `PqChat` instance by the factory (plan T9; the rule: [job-api.md](../../node/job-api.md#pqchatstore-calls)). No SCaaS set
 is deployed on Avalanche, so no `RelayFeeRouter` is there: the paths today are the operator's lane policy, or the user's own
 account (AVAX), which shows the user's address beside the hint on chain (a stated residual, §9).
 

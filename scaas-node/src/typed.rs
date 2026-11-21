@@ -49,6 +49,9 @@ const FACT: &[&str] = &["factory"];
 /// `PqChat` (UA-7 P17 / P32, topics spec P45): a factory kind's thirteen writes, plain rows (each record is signed in the portable
 /// domain and checked by the contract); the target is an instance of the factory's class 3 (`guard::Rule::FactoryClass`).
 const PC: &[&str] = &["pqchat"];
+/// `PqChatStore` (CTR-CHAT-22): the store part of `PqChat` alone, its one write `storeMessage` (unsigned); the target's runtime code
+/// hash is the release data's (`guard::Rule::ChatStore`).
+const PCS: &[&str] = &["pqchatstore"];
 
 /// The EIP-712 domain name of a contract kind (the `domains.<kind>` of `typed_ops.json`); `None` for a kind that signs nothing.
 pub fn domain_name(contract: &str) -> Option<&'static str> {
@@ -378,6 +381,7 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("remove", PC, "PqChatRemove r,UASig sig"),
     ("postMessage", PC, "PqChatMessage m,UASig sig"),
     ("storeMessage", PC, "uint8 v,bytes8 hint,bytes env"),
+    ("storeMessage", PCS, "uint8 v,bytes8 hint,bytes env"),
     ("createTopic", PC, "PqTopic t,UASig sig"),
     ("updateTopic", PC, "PqTopicUpdate u,UASig sig"),
     ("setTopicWriter", PC, "PqTopicWriter w,UASig sig"),
@@ -1974,7 +1978,7 @@ impl Op {
         let (row, contract) = find(entry, text("contract")?, text("struct")?)?;
         // T93 (topics P45): a `PqChat` job is its records' named fields; `args`, a record, a list or `sig` as one hex string is the
         // old hex form
-        if contract == "pqchat" {
+        if contract == "pqchat" || contract == "pqchatstore" {
             let args = o.get("args");
             let hexed = |t: &str, n: &str| {
                 (t.ends_with("[]") || nested(t).is_some())
@@ -2873,10 +2877,11 @@ mod tests {
         // (CTR-DEX-30)
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
         // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`; NODE-JOB-29 (TODO 3zh MD-14): -> 36, the registry's `cacheExpandedKey`
-        // bls-multi Task 10: -> 37, the registry's `registerBlsMulti`
+        // bls-multi Task 10: -> 37, the registry's `registerBlsMulti`; chains-arweave T9: -> 38, `PqChatStore`'s `storeMessage`
+        // (contract kind `pqchatstore`)
         assert_eq!(
             rows().iter().filter(|r| !r.typed).count(),
-            37,
+            38,
             "the wallet's three flat builders are gone (MD-11 (a))"
         );
     }
