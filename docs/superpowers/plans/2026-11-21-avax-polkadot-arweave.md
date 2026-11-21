@@ -104,14 +104,15 @@ only `TODO.md`.
 | T19 | `scaas-rpc` module `arweave`: gateway reader (CLI-RPC-13), bundler uploader (CLI-RPC-14) | D | T16 | |
 | T20 | SDK `seal_for_arweave`, `upload_file`, `fetch_file`, `open_file`, settlement and re-posts (CLI-SDK-21) | D | T17, T18, T19; `seal_file` in the branch | |
 | T21 | Live round trip: one 2^16-B object through the free tier, read from two gateways | D | T20 | **[owner's word]**: a permanent public upload |
-| T22 | Docs and status; the round-end matrix | all | T1–T21 | |
+| T24 | Node: the Arweave credit payer service (NODE-SPN-05) | D | T19 (mock first); T18's approval answer for the live call | live approvals **[owner's word]** (credits spent) |
+| T22 | Docs and status; the round-end matrix | all | T1–T21, T24 | |
 | T23 | Closing review (Fable; Codex only on the owner's request) | all | T22 | |
 
 T2–T4, T5, T11 and T16 may run beside each other once their waits are met; T19 beside T17; T12's windows run beside everything. Every other task in order.
 **`pqchat-core` T10b (attachments) waits for part D**: T16, T17, T19, T20 and the T18 answer (its plan names "TODO 8i research + its
 `ua-rs` / `scaas-rpc` parts"); PqVault's `file` items ([spec](../specs/2026-11-21-avax-polkadot-arweave.md) §7.10) wait for the same.
-The operator payer service is not built here: O1 and O2 are settled and its rule is [NODE-SPN-05](../../node/sponsorship.md#NODE-SPN-05)
-(off by default, a gateway credential, per-IP budgets, no UA-signed fallback); it gets its own plan. `x-paid-by` is plumbed and
+The operator payer service is task T24 (owner 2026-11-22: added to this plan): O1 and O2 are settled and its rule is
+[NODE-SPN-05](../../node/sponsorship.md#NODE-SPN-05) (off by default, a gateway credential, per-IP budgets, no UA-signed fallback). `x-paid-by` is plumbed and
 `PayerUnavailable` stands until the service runs; until then objects above 2^16 B serve tests only. O3 gates T1 and T7; O4 gates
 nothing; O5 shapes T20's re-post. The software BLS12-381 path (Q3) belongs to the `bls12381-multi` plan.
 
@@ -428,6 +429,25 @@ Keys and data are throwaway and derived from no real root; no key in any committ
   free tier; `settled` sampled once per invocation until true (strict majority of two gateways of different operators, the depth,
   the bytes read back); fetched from two gateways of the default list, the check passing on both, `open_file` passing. Evidence: the
   id, the block, the depth and timings, no key.
+
+## T24 — Node: the Arweave credit payer service (NODE-SPN-05)
+
+Owner 2026-11-22: the payer service is part of this plan, on branch `chains-arweave` (the plan's node tasks stay there). Until it is
+built, an upload above the free tier is `PayerUnavailable` (T20); T20 does not wait for it.
+
+**Files:** `scaas-node/src/` (a gateway route, its policy and budgets, the payer key's config by env var, file or keystore name),
+`scaas-node/node.example.toml` (the route, off, commented), `scaas-node/tests/`, `docs/node/sponsorship.md` (NODE-SPN-05 to BUILT
+once tested), `docs/node/gateway.md` (the route).
+- [ ] Tests first: the route answers nothing while disabled; enabled, a request without a gateway credential refused by name, one
+  over the per-credential or per-IP budget (per hour, per day) refused by name, one carrying a UA, a UA signature, file bytes or a
+  message or session id refused (`deny_unknown_fields`); a request with the upload address, the signature type and the bucket
+  approves credits to that address for one object with a short expiry, against a mock Turbo payment API (the approval call as
+  T18 records it); the payer key never logged, never in an answer; the approval amount bounded by the bucket's price; the same
+  address and bucket approved once per expiry window.
+- [ ] Live approvals against Turbo only on the owner's word (credits spent), after T18.
+- Mutants: the credential check dropped; the per-IP budget dropped; the unknown-field refusal dropped; the amount bound dropped;
+  the route on by default.
+- Gates: `node-test`, `node-clippy`, `docs`. Commit `avax-dot-arweave T24: the Arweave credit payer service`.
 
 ## T22 — Docs and status; the round-end matrix
 
