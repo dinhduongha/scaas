@@ -173,7 +173,6 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-gen | 46eabe7f5 | 0 | -
-features | 46eabe7f5 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 ck-test | 46eabe7f5 | 0 | node: 537 pass, 0 fail, 4 skipped
 ua-clippy | 46eabe7f5 | 0 | -
 bind-dart | 46eabe7f5 | 0 | dart: +14:
@@ -181,8 +180,9 @@ ua-test | 69e936a2b | 0 | 599 passed, 0 failed, 3 ignored (59 binaries)
 rpc-test | 3100b200c | 0 | 188 passed, 0 failed, 10 ignored (18 binaries)
 rpc-clippy | 3100b200c | 0 | -
 rpc-wasm | 3100b200c | 0 | -
-docs | 3100b200c | 0 | -
-mutants-check | 3100b200c | 0 | -
 sdk-test | ddb52c33b | 0 | 369 passed, 0 failed, 16 ignored (34 binaries)
 sdk-clippy | ddb52c33b | 0 | -
 cli | ddb52c33b | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
+docs | 9698e5369 | 0 | -
+mutants-check | 9698e5369 | 0 | -
+features | 9698e5369 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
