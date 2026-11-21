@@ -386,6 +386,8 @@ Message and image storage may also use Arweave."; "scaas-rpc probably needs to a
 image files and data embedded in a message or in the vault may be encrypted and pushed to Arweave."; and, on attachments in the
 `pqchat-core` round, "Put it in." TODO 8i.
 
+Change (owner 2026-11-21, answers to the note's open questions; owner: yes; status: PLANNED): **Q1** wait, as recommended: a draft Avalanche profile and its `scaas-rpc` part are written now, contracts deploy when C-Chain has the Amsterdam fork (a contract within the chain's code size deploys earlier, per contract), and, the owner added, Avalanche may serve now as a store path for messages and text, as HCS does on Hedera (a store contract within the chain's limits in PqChat's store list). **Q2** Polkadot Hub first, Moonbeam second. **Q4** UA-7's `url` gains `ar://<id>`. **Q5** uploads paid by an operator payer (credit sharing), small items on the free tier; the client never holds operator credentials, and the payer link between uploads is a stated metadata cost. Controller calls (owner: no): **Q3** the software BLS12-381 path is built and measured, no kind disabled ([ARCH-POS-18](#ARCH-POS-18)); **Q6** size buckets in powers of two; **Q7** Turbo probed with both ed25519 signature types before one is chosen; **Q8** NET-ALL-25 reworded to the `(chainId, chain_uid)` pair.
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 

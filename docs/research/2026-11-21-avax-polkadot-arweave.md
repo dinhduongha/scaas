@@ -477,6 +477,8 @@ built and measured first. If a transfer does not fit, the numbers go to the owne
 
 ## 8. Open questions for the owner
 
+**Answered 2026-11-21** ([ARCH-POS-19](../decisions.md#ARCH-POS-19)): Q1 wait, with Avalanche also a message and text store path like HCS (owner); Q2 Hub first (owner); Q4 `ar://` (owner); Q5 operator payer plus the free tier (owner); Q3, Q6, Q7, Q8 as recommended (controller calls). The table below keeps the questions as asked.
+
 - **Q1 — Avalanche while the C-Chain stays at Cancun.** (a) Draft profile; deploy when the C-Chain adopts EIP-7954 and Amsterdam
   (may be years [I]). (b) A second build target, `cancun`, with every contract split under 24,576 B: against NET-EVM-06 and a
   module split the owner decides. (c) An own Avalanche L1 on a forked `subnet-evm` with a larger cap and PQ precompiles: a second
