@@ -320,11 +320,74 @@ contract PqVaultEpochsTest is PqVaultBase {
     }
 
     /// O4: the only admin left; nobody can rekey (membership and keys frozen).
-    function test_noAdminLeft_frozen() public {
-        _leave(vault, vid, ids[0], 1);
+    /// Fable code review F7 (controller call 2026-11-21, as O3 (b)): the only admin leaves; its own rekey and its own removal
+    /// are refused `PqVaultNotAdmin`, so membership and keys are frozen. The control runs the same calls before the leave.
+    function test_leftAdminNeitherRekeysNorRemoves() public {
         (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
-            _epoch(vid, ids[1], 1, 1, vid, new bytes32[](0), _without(_members(3), ids[0]));
-        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[1]));
+            _epoch(vid, ids[0], 1, 1, vid, _admins(), _without(_members(3), ids[2]));
+        IPqVault.PqVaultRemove memory r = _rm(vid, 1, _list(ids[2]), ids[0], 2);
+        uint256 snap = vm.snapshotState();
+        _rekey(vault, e, w, 0); // the control: before the leave
+        vm.revertToState(snap);
+        _remove(vault, r); // the control: before the leave
+        vm.revertToState(snap);
+        _leave(vault, vid, ids[0], 3);
+        _refusedRekey(e, w, abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[0]));
+        _refusedRemove(r, ids[0], abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[0]));
+    }
+
+    /// Fable code review F1 (P1): admin `ids[1]` stages a child of `e1` that leaves itself out (incomplete), then `ids[0]` removes
+    /// it; the staged child can no longer complete (`PqVaultRemovedKept(e1, ids[1])`: its author is removed from the parent),
+    /// and the slot stays free for `ids[0]`'s rekey. The control: the same staged child completes when nobody removed its author.
+    function test_removedAuthorsStagedChildCannotComplete() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _list(ids[0], ids[1]), _members(3));
+        bytes32 e1 = _rekey(vault, e, w, 0); // ids[1] made an admin
+        (IPqVault.PqVaultEpoch memory c, IPqChat.Wrap[] memory cw) =
+            _epoch(vid, ids[1], 2, 2, e1, _list(ids[3]), _without(_members(4), ids[1]));
+        bytes32 staged = vault.rekeyVault(c, _slice(cw, 0, 1), _sig(c.author, h.epoch(c, PqVaultTypes.DS_V)));
+        IPqChat.Wrap[] memory rest = _slice(cw, 1, 3);
+        uint256 snap = vm.snapshotState();
+        vault.addVaultWraps(staged, 1, rest); // the control: not removed, it completes
+        assertEq(vault.childOf(e1), staged);
+        vm.revertToState(snap);
+        _remove(vault, _rm(e1, 2, _list(ids[1]), ids[0], 3));
+        vm.expectRevert(abi.encodeWithSelector(IPqVault.PqVaultRemovedKept.selector, e1, ids[1]));
+        vault.addVaultWraps(staged, 1, rest);
+        assertEq(vault.childOf(e1), bytes32(0));
+        (e, w) = _epoch(vid, ids[0], 4, 2, e1, _admins(), _without(_members(3), ids[1]));
+        assertEq(vault.childOf(e1), bytes32(0));
+        _rekey(vault, e, w, 0);
+    }
+
+    /// Fable code review F2: once removed, an admin removes nobody (`PqVaultNotAdmin`); the remaining admin still does.
+    function test_removedAdminRemovesNobody() public {
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
+            _epoch(vid, ids[0], 1, 1, vid, _list(ids[0], ids[1]), _members(3));
+        bytes32 e1 = _rekey(vault, e, w, 0);
+        _remove(vault, _rm(e1, 2, _list(ids[1]), ids[0], 2));
+        _refusedRemove(
+            _rm(e1, 2, _list(ids[0]), ids[1], 3),
+            ids[1],
+            abi.encodeWithSelector(IPqVault.PqVaultNotAdmin.selector, ids[1])
+        );
+        _remove(vault, _rm(e1, 2, _list(ids[2]), ids[0], 4)); // the control
+    }
+
+    /// Fable code review F3: an admin that is no member (an `msig`, which holds no KEM key) is removable, and a child keeping it
+    /// as an admin is then `PqVaultRemovedKept`; the child without it lands.
+    function test_adminOnlyMsigRemovable() public {
+        bytes32 ms = _nativeMsig();
+        (IPqVault.PqVaultCreate memory v, IPqChat.Wrap[] memory w) = _vault(3, 7, 0, address(vault));
+        v.admins = _list(ms, ids[0]);
+        bytes32 v2 = _create(vault, v, w);
+        IPqVault.PqVaultRemove memory r = IPqVault.PqVaultRemove(v2, v2, 1, _list(ms), ids[0], 1);
+        vault.removeVaultMembers(r, _sig(ids[0], h.remove(r, PqVaultTypes.DS_V)));
+        assertTrue(vault.removedIn(v2, ms));
+        (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory ew) = _epoch(v2, ids[0], 2, 1, v2, v.admins, _members(3));
+        _refusedRekey(e, ew, abi.encodeWithSelector(IPqVault.PqVaultRemovedKept.selector, v2, ms));
+        (e, ew) = _epoch(v2, ids[0], 3, 1, v2, _admins(), _members(3));
+        _rekey(vault, e, ew, 0); // the control
     }
 
     function test_leave_rules() public {

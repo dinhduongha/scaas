@@ -172,9 +172,16 @@ abstract contract PqGroupBase {
         if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {
             // Fable P1-2 (a): a member who left the parent authors no plain rekey of it (it would keep itself in)
             if (_memberAt(pm, author) == type(uint256).max || pe.left[author]) _fail(F_NOT_MEMBER, uint256(author), 0);
-        } else if (!_has(pa, author)) {
+        } else if (!_liveAdmin(pe, pa, author)) {
             _fail(F_NOT_ADMIN, uint256(author), 0);
         }
+    }
+
+    /// @dev One rule for PqChat and PqVault (Fable code review of PqVault F2, F7; controller call 2026-11-21): an admin of `pe`
+    ///      acts on it (a membership change, a removal; every PqVault rekey) only while it is in `pe`'s admin list, not removed
+    ///      from `pe` and has not left it (as O3 (b) for item writes).
+    function _liveAdmin(Epoch storage pe, bytes32[] memory admins, bytes32 ua) internal view returns (bool) {
+        return _has(admins, ua) && !pe.removedOf[ua] && !pe.left[ua];
     }
 
     /// @dev 3C-D7: `child` (sorted) is `parent` (sorted) minus entries that left the parent epoch.
@@ -195,9 +202,14 @@ abstract contract PqGroupBase {
         }
     }
 
-    /// @dev P48: the completing child `ep` holds no UA a `remove` took out of its parent, in its members or its admins.
+    /// @dev P48: the completing child `ep` holds no UA a `remove` took out of its parent, in its members or its admins, and was
+    ///      not authored by one (Fable code review of PqVault F1, controller call 2026-11-21: a child staged before its author's
+    ///      removal must not complete after it). The author is the second word of the stored epoch record in both contracts
+    ///      (`abi.encode(record, …)`: the record's offset, then the trailer; the record's first field, then `author`).
     function _noneRemoved(Epoch storage ep) internal view {
         Epoch storage pe = _epochs()[ep.parent];
+        bytes32 author = _word(ep.record, 96);
+        if (pe.removedOf[author]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(author));
         (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(ep);
         for (uint256 i; i < m.length; ++i) {
             if (pe.removedOf[m[i].ua]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(m[i].ua));

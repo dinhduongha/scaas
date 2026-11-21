@@ -28,3 +28,7 @@ matrix | forge-pqchat | 4c3e84f10 | 0 | 99 passed 0 failed 0 skipped (forge)
 matrix | forge-governance | 4c3e84f10 | 0 | 930 passed 0 failed 0 skipped (forge)
 matrix | forge-ua | 4c3e84f10 | 0 | 910 passed 0 failed 0 skipped (forge)
 V9 | blocked | - | - | the scaas-sdk T21 app-core surface (feature app-core, clients/scaas-sdk/src/app_core/) is not on this branch: no test through it can be written here; no commit
+# Fable code review of V1-V8 (20261121-fable-code-review-v1-v8.md): the fixes, one commit per finding group
+F1-F3,F7 | forge test/pqvault (red first: 4 new tests failed) | F1 tree | 0 | 88 passed 0 failed 0 skipped (forge)
+F1-F3,F7 | forge test/pqchat (red first: 3 new tests failed) | F1 tree | 0 | 102 passed 0 failed 0 skipped (forge)
+F1-F3,F7 mutants | completion-author-removed, live-admin-removed, live-admin-left (each against test/pqvault and test/pqchat), remove-admin-only-removable; rekey-admin-to-member and rekey-removed-admin re-pointed | F1 tree | - | 6 of 6 killed

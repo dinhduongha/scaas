@@ -201,7 +201,7 @@ contract PqVault is IPqVault, PqGroupBase {
         _checkLists(reg, e.admins, members, e.wrapHashes.length, 1);
         if ((e.passKdf == 0) != (e.passSalt == 0)) revert PqVaultShape();
         (bytes32[] memory pa, IPqChat.MemberKey[] memory pm,) = _lists(pe);
-        if ((pe.removed != 0 && pe.removedOf[e.author]) || !_has(pa, e.author)) revert PqVaultNotAdmin(e.author);
+        if (!_liveAdmin(pe, pa, e.author)) revert PqVaultNotAdmin(e.author); // CTR-PQV-13; F7: not left either
         _indexAdded(e.vaultId, members, _uas(pm));
     }
 
@@ -265,10 +265,13 @@ contract PqVault is IPqVault, PqGroupBase {
         uint256 n = r.members.length;
         if (n == 0 || n > REMOVE_MAX) revert PqVaultShape();
         (bytes32[] memory admins, IPqChat.MemberKey[] memory m,) = _lists(ep);
-        if (!_has(admins, r.admin)) revert PqVaultNotAdmin(r.admin);
+        if (!_liveAdmin(ep, admins, r.admin)) revert PqVaultNotAdmin(r.admin); // F2, F7
         for (uint256 i; i < n; ++i) {
             if (i > 0 && r.members[i] <= r.members[i - 1]) revert PqVaultShape();
-            if (_memberAt(m, r.members[i]) == type(uint256).max) revert PqVaultNotMember(r.members[i]);
+            // F3: an admin that is no member (an `msig`) is removable too
+            if (_memberAt(m, r.members[i]) == type(uint256).max && !_has(admins, r.members[i])) {
+                revert PqVaultNotMember(r.members[i]);
+            }
         }
         _auth(reg, _v().modes[r.vaultId], r.admin, PqVaultTypes.hashRemove(r), sig);
         _useNonce(PqVaultTypes.scopeEpoch(r.vaultId, r.admin), r.nonce);

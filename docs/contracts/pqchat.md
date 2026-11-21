@@ -342,8 +342,10 @@ review's P1-2 fix (b); **BUILT** on `ua-mtx-merge`, plan 3c, UNAUDITED; UA-7 spe
   admin of `epochId` (`PqChatNotAdmin`) who signs it; the nonce in the epoch scope `(sessionId, admin)` (`PqChatNonceUsed`).
   Anyone submits it, relayable with a fee of 0. The record and its `sigHash` are kept in state.
 - After it: a child of `epochId` completes (in `rekey` or the last `addWraps`) only if its members and admins hold no
-  removed UA (`PqChatRemovedKept(epochId, ua)`), whoever authors it; a removed member's rekey of `epochId` is refused
-  `PqChatNotMember`; dropping a removed member is a plain rekey, as dropping a leaver is.
+  removed UA and its author is none (`PqChatRemovedKept(epochId, ua)`); a removed member's rekey of `epochId` is refused
+  `PqChatNotMember`; dropping a removed member is a plain rekey, as dropping a leaver is. An admin that was removed from
+  `epochId` or left it makes no membership change and removes nobody (`PqChatNotAdmin`) (controller call 2026-11-21, the
+  PqVault code review F1, F2, F7, one rule in `PqGroupBase`; BUILT on `pqvault-v`, UNAUDITED).
 - `leave` stays the member's own flag (a child may keep a leaver); both may hold for one UA.
 - Recovery: `removedIn(epochId, ua)`, `removalCount(epochId)`, `removalAt(epochId, i)`; `PqChatRemoved(sessionId, epochId,
   admin, members)` notifies. A 2-person chat is unchanged.

@@ -129,7 +129,11 @@ calls, owner may override).
   otherwise take the home slot with wraps or a `sealedInfo` the others cannot open. A change of `(passKdf, passSalt)` is
   therefore always an admin's signed record.
 - Dropping a member that left is an admin's rekey; with no admin left, membership and keys are frozen (items stay
-  writable under the last epoch).
+  writable under the last epoch). An admin that left an epoch or was removed from it rekeys and removes no more
+  (`PqVaultNotAdmin`), and a child whose author was removed from the parent no longer completes
+  (`PqVaultRemovedKept(parent, author)`), the same rule as PqChat's in the shared base (controller call 2026-11-21, the
+  Fable code review F1, F2, F7). An admin that is no member (an `msig`) is removable (F3). The admin model itself is the
+  owner's (2026-11-21: several admins, only admins rekey).
 - Views such as `versionAt(bytes32,uint32)` share PqChat's selectors; the node keeps rows for writes only.
 
 ## 6. Items and versions

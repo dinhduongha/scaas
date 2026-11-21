@@ -5768,6 +5768,8 @@ Change (owner 2026-11-10, before the SCaaS testnet reset 2; status: BUILT on bra
 **Cost if wrong.** One more typed record, entry and node row; an admin can remove a member at once, and the remaining members land the next epoch without it.
 **Source.** owner 2026-11-10 (relayed by the controller); Fable review of PqChat 2026-11-10 (P1-2); UA-7 spec P48; plan 3c. Status: BUILT on branch `ua-mtx-merge` (EVM, the node row), UNAUDITED; clients PLANNED (`ua-rs` in the ua-rs-sign round).
 
+Change (controller call, owner: no, 2026-11-21, the Fable code review of PqVault V1-V8 F1, F2, F7, in the shared `PqGroupBase`; status: BUILT on `pqvault-v`, UNAUDITED): a child completes only if its author was not removed from the parent (`PqChatRemovedKept(parent, author)`); an admin that was removed from the epoch or left it makes no membership change and removes nobody (`PqChatNotAdmin`). PqChat's runtime 29,111 -> 29,383 B (O2 (a) precedent); the same change is recorded under CTR-PQV-13.
+
 ### CTR-CHAT-21 — `PqChatSession` and `PqTopic` name their home instance by `homeChain` and `homeChatContract`
 - old: — · status: current · owner: yes · date: 2026-11-10 · normative: contracts/pqchat.md#CTR-CHAT-21 · superseded-by: —
 
@@ -5894,6 +5896,10 @@ base; the copy path was not needed). UNAUDITED.
 **Source.** controller, 2026-11-17, and the Fable review of the same day (F5); spec `superpowers/specs/2026-11-17-pqvault.md` §3, §5.5. Status: SPECIFIED.
 
 Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqvault spec §14; status: SPECIFIED): **O6 (a)**: the owner confirms class 4 (`CLASS_PQVAULT` beside `CLASS_PQCHAT` and the named creation config); the write names and the admin-only rekey stay controller calls.
+
+Change (owner ruling, owner: yes, 2026-11-21, relayed by the coordinator: "keep (b)"; status: BUILT on `pqvault-v`, UNAUDITED): **the admin model is confirmed**. A vault keeps several admins as this rule has it: only admins rekey; members read, write and leave. The alternative (a), a creator-only admin, is rejected. The admin-only rekey, until now a controller call, is the owner's.
+
+Change (controller call, owner: no, 2026-11-21, on the Fable code review of V1-V8 F1, F2, F3, F7; status: BUILT on `pqvault-v`, UNAUDITED): one rule in `PqGroupBase` for PqVault and PqChat. (F1) A child epoch completes (`rekeyVault` / `rekey` with every wrap, or the last `addVaultWraps` / `addWraps`) only if its author was not removed from the parent, else `PqVaultRemovedKept(parent, author)` / `PqChatRemovedKept(parent, author)`: a removed admin's child staged before the removal no longer takes the home slot. (F2, F7) An admin acts on an epoch (a PqVault rekey, a PqChat membership change, a removal) only while it is in the epoch's admin list, not removed from it and has not left it (`PqVaultNotAdmin` / `PqChatNotAdmin`), as O3 (b) is for item writes. (F3) `removeVaultMembers` takes a UA that is a member or an admin of the epoch, so an admin that is no member (an `msig`) is removable; PqChat's `remove` is unchanged here (the same class, an open point for its owner). **Why.** The removal precedence must hold for the UAs that hold the rekey right, at completion as at record time. **Cost if wrong.** A removed or leaving admin's staged child is lost; an admin that left must be re-added by another admin's rekey to act again.
 
 ### CTR-PQV-14 — `PqVault` item writes: no removed member, ciphertexts of 32 to 16,416 B, items read at home
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-14 · superseded-by: —

@@ -16,9 +16,10 @@ B = "src/pqgroup/PqGroupBase.sol"
 
 M = [
     # V3: the group part
-    ("rekey-admin-to-member", V, "|| !_has(pa, e.author)) revert PqVaultNotAdmin(e.author);",
-     "|| _memberAt(pm, e.author) == type(uint256).max) revert PqVaultNotAdmin(e.author);"),
-    ("rekey-removed-admin", V, "if ((pe.removed != 0 && pe.removedOf[e.author]) || !_has(pa, e.author))", "if (!_has(pa, e.author))"),
+    ("rekey-admin-to-member", V, "if (!_liveAdmin(pe, pa, e.author)) revert PqVaultNotAdmin(e.author);",
+     "if (_memberAt(pm, e.author) == type(uint256).max) revert PqVaultNotAdmin(e.author);"),
+    ("rekey-removed-admin", V, "if (!_liveAdmin(pe, pa, e.author)) revert PqVaultNotAdmin(e.author);",
+     "if (!_has(pa, e.author)) revert PqVaultNotAdmin(e.author);"),
     ("create-min-member-0", V, "_checkLists(reg, admins, members, v.wrapHashes.length, 1);", "_checkLists(reg, admins, members, v.wrapHashes.length, 0);"),
     ("rekey-min-member-0", V, "_checkLists(reg, e.admins, members, e.wrapHashes.length, 1);", "_checkLists(reg, e.admins, members, e.wrapHashes.length, 0);"),
     ("create-pass-shape-kdf-only", V, "|| (v.passKdf == 0) != (v.passSalt == 0)", "|| (v.passKdf == 0) != (v.passKdf == 0)"),
@@ -77,10 +78,19 @@ M = [
     ("latest-not-latest", V, "VersionView memory w = versionAt(iids[i], c);", "VersionView memory w = versionAt(iids[i], 1);"),
     ("page-end", V, "uint256 end = n - offset > limit ? offset + limit : n;\n        page = new bytes32[](end - offset);\n        for (uint256 i; i < page.length; ++i) {\n            page[i] = l[offset + i];",
      "uint256 end = offset + limit;\n        page = new bytes32[](end - offset);\n        for (uint256 i; i < page.length; ++i) {\n            page[i] = l[offset + i];"),
+    # Fable code review F1 / F2 / F3 / F7 (controller call 2026-11-21): PqGroupBase's run against test/pqvault and test/pqchat
+    ("completion-author-removed", B, "if (pe.removedOf[author]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(author));", "author;",
+     "test/pqvault,test/pqchat"),
+    ("live-admin-removed", B, "return _has(admins, ua) && !pe.removedOf[ua] && !pe.left[ua];", "return _has(admins, ua) && !pe.left[ua];",
+     "test/pqvault,test/pqchat"),
+    ("live-admin-left", B, "return _has(admins, ua) && !pe.removedOf[ua] && !pe.left[ua];", "return _has(admins, ua) && !pe.removedOf[ua];",
+     "test/pqvault,test/pqchat"),
+    ("remove-admin-only-removable", V, "if (_memberAt(m, r.members[i]) == type(uint256).max && !_has(admins, r.members[i])) {",
+     "if (_memberAt(m, r.members[i]) == type(uint256).max) {"),
 ]
 
 
-def run(name, path, old, new):
+def run(name, path, old, new, dirs="test/pqvault"):
     src = open(path).read()
     if src.count(old) != 1:
         return f"{name} | {path} | NOT APPLIED ({src.count(old)} matches)"
@@ -88,17 +98,21 @@ def run(name, path, old, new):
     log = f"runs/2026-11-21-pqvault/mutants/{name}.log"
     try:
         open(path, "w").write(src.replace(old, new))
-        env = dict(os.environ, FOUNDRY_TEST="test/pqvault", FOUNDRY_OUT="out/pv-mut", FOUNDRY_CACHE_PATH="cache/pv-mut")
+        rc = 0
         with open(log, "w") as f:
-            r = subprocess.run(["../../scripts/capped", "forge", "test", "-j", "1", "--no-match-path", "test/pqvault/PqVaultGas.t.sol"],
-                               env=env, stdout=f, stderr=subprocess.STDOUT)
+            for d in dirs.split(","):
+                env = dict(os.environ, FOUNDRY_TEST=d, FOUNDRY_OUT="out/pv-mut-" + d.split("/")[-1],
+                           FOUNDRY_CACHE_PATH="cache/pv-mut-" + d.split("/")[-1])
+                gas = d + "/" + ("PqVaultGas" if d.endswith("pqvault") else "PqChatGas") + ".t.sol"
+                rc |= subprocess.run(["../../scripts/capped", "forge", "test", "-j", "1", "--no-match-path", gas],
+                                     env=env, stdout=f, stderr=subprocess.STDOUT).returncode
     finally:
         open(path, "w").write(src)
     t = open(log, errors="replace").read()
     fails = sorted({l.split("] ")[1].split("(")[0] for l in t.splitlines() if l.startswith("[FAIL") and "] " in l})
-    if r.returncode != 0 and not fails:
+    if rc != 0 and not fails:
         fails = ["(build)"]
-    return f"{name} | {path} | {'KILLED' if r.returncode != 0 else 'SURVIVED'} | {', '.join(fails[:6])}"
+    return f"{name} | {path} | {'KILLED' if rc != 0 else 'SURVIVED'} | {', '.join(fails[:6])}"
 
 
 if __name__ == "__main__":

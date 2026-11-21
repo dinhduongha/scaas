@@ -100,7 +100,7 @@ contract PqVaultGasTest is PqVaultBase {
         _item(vid, vid, ids[0], 6, 16_416, 0);
         _row("createItem 16,416 B", 1_096_600, 25_939_620);
         _share(vid, vid, 7, 2, 0);
-        _row("rekeyVault 1 -> 2 members (share), both wraps", 386_927, 8_376_750);
+        _row("rekeyVault 1 -> 2 members (share), both wraps", 391_204, 8_376_750);
     }
 
     function test_gas_sharedVault() public {
@@ -111,7 +111,7 @@ contract PqVaultGasTest is PqVaultBase {
         IUARegistry.UASig memory sig = _sig(ids[0], h.remove(r, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.removeVaultMembers(r, sig);
-        _row("removeVaultMembers 1 of 3", 171_318, 1_410_660);
+        _row("removeVaultMembers 1 of 3", 175_798, 1_410_660);
         IPqVault.PqVaultLeave memory l = IPqVault.PqVaultLeave(vid, vid, ids[1], 2);
         sig = _sig(ids[1], h.leave(l, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
@@ -122,13 +122,13 @@ contract PqVaultGasTest is PqVaultBase {
         sig = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.rekeyVault(e, w, sig);
-        _row("rekeyVault 3 -> 1 after a removal and a leave", 308_091, 5_206_590);
+        _row("rekeyVault 3 -> 1 after a removal and a leave", 311_694, 5_206_590);
         (bytes32 v2,) = _createVault(2, 3, 0);
         (e, w) = _epoch(v2, ids[0], 1, 1, v2, _list(ids[0]), _members(1));
         sig = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.rekeyVault(e, w, sig);
-        _row("rekeyVault 2 -> 1", 298_155, 5_304_510);
+        _row("rekeyVault 2 -> 1", 302_432, 5_304_510);
     }
 
     function test_gas_chunks() public {
@@ -191,7 +191,7 @@ contract PqVaultGasTest is PqVaultBase {
         _edit(iid, vid, ids[0], 3, 2, 1);
         _row("mode 1: editItem 288 B, first", 147_984, 1_263_780);
         _share(vid, vid, 4, 2, 1);
-        _row("mode 1: rekeyVault 1 -> 2 members (share), both wraps", 372_186, 8_376_750);
+        _row("mode 1: rekeyVault 1 -> 2 members (share), both wraps", 376_463, 8_376_750);
     }
 
     // ----- the per-vault UA (spec §5.14: a personal vault's FN-DSA-512 UA with its KEM key, per hosting chain) -----
@@ -234,9 +234,9 @@ contract PqVaultGasTest is PqVaultBase {
         assertLt(regular * 105 / 100, 1 << 24, "regular gas x 1.05 under 2^24 (EIP-7825)");
         assertLe(asked, 60_000_000, "the release transaction asks at most 60 M");
         if (!vm.envOr("GAS_MEASURE", false)) {
-            assertEq(r.code.length, 30_152, "the PqVault runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, 2_043_993, SLACK, "deployImplementation regular");
-            assertEq(state, 46_707_840, "deployImplementation state");
+            assertEq(r.code.length, 30_291, "the PqVault runtime (size-baseline.json row)");
+            assertApproxEqAbs(regular, 2_054_395, SLACK, "deployImplementation regular");
+            assertEq(state, 46_920_510, "deployImplementation state");
         }
     }
 
