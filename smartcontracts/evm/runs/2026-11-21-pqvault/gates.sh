@@ -159,6 +159,12 @@ for st in "$@"; do
         echo "$(date +%H:%M:%S) $st: not started, ${free} GB available < ${MIN_FREE_GB:-8} GB" | tee -a $HERE/progress.log
         exit 4
     }
+    # MIN_DISK_GB (default 50): the same for free space on the worktree's file system
+    disk=$(df -P -k . | awk 'NR == 2 { print int($4 / 1048576) }')
+    [ "$disk" -ge "${MIN_DISK_GB:-50}" ] || {
+        echo "$(date +%H:%M:%S) $st: not started, ${disk} GB free on disk < ${MIN_DISK_GB:-50} GB" | tee -a $HERE/progress.log
+        exit 4
+    }
     [ ! -f "$log" ] || mv "$log" "$HERE/$st.red.log"
     echo "$(date +%H:%M:%S) $st: start" | tee -a $HERE/progress.log
     {
