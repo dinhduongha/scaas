@@ -183,6 +183,6 @@ ck-test | 46eabe7f5 | 0 | node: 537 pass, 0 fail, 4 skipped
 ua-clippy | 46eabe7f5 | 0 | -
 cli | 46eabe7f5 | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
 bind-dart | 46eabe7f5 | 0 | dart: +14:
-sdk-test | 46eabe7f5 | 0 | 362 passed, 0 failed, 16 ignored (33 binaries)
 rpc-test | 69e936a2b | 0 | 175 passed, 0 failed, 10 ignored (17 binaries)
 ua-test | 69e936a2b | 0 | 599 passed, 0 failed, 3 ignored (59 binaries)
+sdk-test | e9cb1e8fb | 0 | 362 passed, 0 failed, 16 ignored (33 binaries)

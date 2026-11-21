@@ -127,7 +127,8 @@ simulation and fee data, at a block the caller names, on the crate's bounded tra
 these generic reads from the node's adapter, after the EVM part; parsing of events and of `build`'s family reads stays in the node
 for now, reading through the family's pooled client so CLI-RPC-04 and §5 apply to every read (BUILT for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON
 adapters, plan T14–T22; Sui's reads over GraphQL too, `sui::SuiGraphql` on `Client::graphql_at`, BUILT, SDK plan rpc
-T24.sui-graphql). The indexer's event-set quorum
+T24.sui-graphql; TON's getters and account read at one masterchain seqno, `Ton::run_get_at` / `Ton::account_at` on TON
+Center's `/api/v2/` paths, the stack's cells through the bounded `boc` reader, BUILT, SDK plan rpc T24.ton-seqno). The indexer's event-set quorum
 ([NODE-IDX-01](../node/indexer-feeds.md#NODE-IDX-01)) is unchanged; its helper (`agreed`, NEAR and Aptos) is the crate's.
 
 ## 4. Writes and transaction state

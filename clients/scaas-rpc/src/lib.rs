@@ -9,6 +9,8 @@
 pub mod algorand;
 #[cfg(feature = "aptos")]
 pub mod aptos;
+#[cfg(feature = "ton")]
+pub mod boc;
 #[cfg(feature = "cosmos")]
 pub mod cosmos;
 pub mod endpoint;
