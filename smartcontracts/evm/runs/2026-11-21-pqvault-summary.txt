@@ -53,3 +53,7 @@ F8/F12 rev | clientkeys node --test test/pqvault.test.js (red first: the F12 tes
 F8/F12 rev | ua-rs --features vectors,pqvault --test pqvault_keys --test pqvault_pass | F12b tree | 0 | 9 passed 0 failed 0 ignored (cargo)
 F8/F12 rev | node cargo test --test e2e pqvault --ignored (both modes) | F12b tree | 0 | 2 passed 0 failed 0 ignored (cargo)
 F8/F12 rev mutants | create-info-min, epoch-info-max | F12b tree | - | 2 of 2 killed
+F12 1,024 B | clientkeys node --test test/pqvault.test.js (red first: the F12 test, 512 != 1024) | F12c tree | 0 | 16 passed 0 failed (node)
+F12 1,024 B | forge test/pqvault (red first: 4 gas rows; re-pinned from GAS_MEASURE) | F12c tree | 0 | 92 passed 0 failed 0 skipped (forge)
+F12 1,024 B | ua-rs --features vectors,pqvault --test pqvault_keys --test pqvault_pass | F12c tree | 0 | 9 passed 0 failed 0 ignored (cargo)
+F12 1,024 B | node cargo test --test e2e pqvault --ignored (both modes) | F12c tree | 0 | 2 passed 0 failed 0 ignored (cargo)

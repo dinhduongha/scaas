@@ -517,7 +517,7 @@ test("passphrase bytes (Fable code review F4): RFC 8265 OpaqueString: spaces to 
   assert.equal(h(pv.passphraseBytes("plain ascii")), h(utf8ToBytes("plain ascii")), "ASCII unchanged");
 });
 
-test("F12 (controller call 2026-11-21): sealedInfo padded to 512 B (the reference fits), then the next power of two", () => {
+test("F12 (owner 2026-11-21): sealedInfo padded to 1,024 B (the smallest bucket), then the next power of two", () => {
   // the reference: a prev, a 64-character (ASCII) name, a 32-character icon, settings
   const ref = {
     name: "N".repeat(64),
@@ -526,10 +526,11 @@ test("F12 (controller call 2026-11-21): sealedInfo padded to 512 B (the referenc
     settings: { autoLockSeconds: 300, clipboardSeconds: 30 },
     prev: { epochId: `0x${"a".repeat(64)}`, keyWrap: `0x${"b".repeat(120)}` },
   };
-  assert.equal(pv.padInfo(utf8ToBytes(pv.canonicalJson(ref))).length, 512, "the reference fits 512 B");
-  assert.equal(pv.padInfo(utf8ToBytes("{}")).length, 512);
-  assert.equal(pv.padInfo(new Uint8Array(509)).length, 1024, "past 512: the next power of two");
-  assert.equal(pv.padInfo(new Uint8Array(1021)).length, 2048);
+  assert.equal(pv.padInfo(utf8ToBytes(pv.canonicalJson(ref))).length, 1024, "the reference fits 1,024 B");
+  assert.equal(pv.padInfo(utf8ToBytes("{}")).length, 1024);
+  assert.equal(pv.padInfo(new Uint8Array(1020)).length, 1024, "1,020 B of content: still 1,024");
+  assert.equal(pv.padInfo(new Uint8Array(1021)).length, 2048, "past 1,024: the next power of two");
+  assert.equal(pv.padInfo(new Uint8Array(2045)).length, 4096);
   assert.equal(pv.padInfo(new Uint8Array(16380)).length, 16384);
   assert.equal(
     code(() => pv.padInfo(new Uint8Array(16381))),
@@ -537,7 +538,7 @@ test("F12 (controller call 2026-11-21): sealedInfo padded to 512 B (the referenc
   );
   const sizes = K.epochs.map((e) => fromHex(e.sealedInfo).length);
   assert.ok(K.epochs.some((e) => e.prev) && K.epochs.some((e) => !e.prev));
-  assert.deepEqual([...new Set(sizes)], [540], "one size with and without prev: nonce, 512 B, tag");
+  assert.deepEqual([...new Set(sizes)], [1052], "one size with and without prev: nonce, 1,024 B, tag");
   assert.equal(
     code(() => pv.unpadInfo(pv.pad(utf8ToBytes("{}")))),
     "Padding",

@@ -263,9 +263,9 @@ abstract contract PqVaultBase is UARegistryBase {
         v.sealedInfo = _info(0x5e);
     }
 
-    /// A stand-in `sealedInfo` of the size a client writes: nonce, the 512-B bucket, tag (540 B; F12, controller call 2026-11-21).
+    /// A stand-in `sealedInfo` of the size a client writes: nonce, the 1,024-B bucket, tag (1,052 B; F12, owner 2026-11-21).
     function _info(uint8 fill) internal pure returns (bytes memory b) {
-        b = new bytes(540);
+        b = new bytes(1052);
         for (uint256 i; i < b.length; i += 32) {
             b[i] = bytes1(fill);
         }

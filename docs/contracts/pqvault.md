@@ -165,7 +165,8 @@ complete epoch it holds, in its own order; it orders nothing. A member that left
 (owner 2026-11-17, the spec's O3 (b); `PqVaultNotMember`). A chain-bound vault has no replica
 ([CTR-PQV-17](#CTR-PQV-17)). A vault's or an epoch's `sealedInfo` is 28 to 16,412 bytes (at least a nonce and a tag, at
 most those around the 16,384-B bucket; `PqVaultShape`), so no write reads an unbounded record; the client's padding policy
-(512 B, CLI-PQV-09) is not the chain's (controller calls 2026-11-21, the Fable code review F8, F12). `removalAt` past the end is `PqVaultUnknown(epochId)` (F15).
+(1,024 B, owner 2026-11-21, CLI-PQV-09; about +1.18 M state gas per vault or epoch record against 256 B) is not the chain's
+(controller call 2026-11-21, the Fable code review F8). `removalAt` past the end is `PqVaultUnknown(epochId)` (F15).
 
 ## 7. Recovery from state alone
 

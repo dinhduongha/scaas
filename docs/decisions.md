@@ -5921,9 +5921,8 @@ moved the minimum back from 1,052 B: the chain does not force the client's paddi
 version, the 4,096 and 16,384 B buckets, `padItem`'s 16,380 B limit, a creation nonce above 2^63 as a decimal string, an
 `msig` `UASig` in a stored blob, a mode-1 epoch with the passphrase on; **F10** the node's PqVault and PqChat rows equal
 `selector_audit.json`'s `SIGNED` and unsigned-write rows; **F11** the node e2e runs mode 0 too; **F12** `sealedInfo` padded to
-512 B, the smallest bucket a `sealedInfo` with `prev`, a 64-character ASCII name, an icon and settings fits, else the next power
-of two (its size no longer shows a `prev`; 540 B sealed, about 0.39 M more state gas per vault or epoch record than a 256-B
-bucket; 1,024 B would have cost about 1.18 M; a second controller call the same day replaced the 1,024-B minimum);
+one bucket whatever its content, so its size no longer shows a `prev` (the bucket is the owner's ruling below, which replaced
+this round's 512-B controller call);
 **F15** `removalAt` past the end is `PqVaultUnknown`; **F16** the native-author test's comment, a line in `mutants.py`;
 **I8** the file key's wrap context in spec §6.8. Left, with the reason: **F13** (the `sealedInfo` open is not
 key-committing) is `pqvault-core`'s: it maps every failure of the open (tag, padding, JSON, `shared`) to one outcome with one
@@ -5931,6 +5930,13 @@ behaviour (V10; ARCH-POS-13 already says send nothing); no committing check valu
 recovery linear) is `pqvault-core`'s: the index vault's creation nonce derived from the seed so its id is computed (V10); no
 contract view is added. A mode-1 epoch with both a passphrase and `prev` has no row: `prev`'s bytes do not depend on the mode,
 and mode 0 has the row.
+
+Change (owner 2026-11-21, relayed by the coordinator: "pad sealedInfo to 1,024 B"; owner: yes; status: BUILT on `pqvault-v`,
+UNAUDITED): the client pads `sealedInfo`'s plaintext to **1,024 B** as its smallest bucket, then the next power of two, at most
+16,384 B (clientkeys `padInfo`, reproduced by `ua-rs`); sealed 1,052 B. It replaces the controller call of the same day that
+padded to 512 B (540 B sealed, about +0.39 M). The contract keeps the structural bounds, 28 to 16,412 B (`PqVaultShape`): the
+chain does not enforce the padding. Cost: about +1.18 M state gas per vault or epoch record against the 256-B bucket (768 B ×
+1,530); createVault with one member 6,675,390 state gas. Spec §6.4, CLI-PQV-09.
 ### CTR-PQV-15 — What proves PqChat's behaviour unchanged by the shared base
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-15 · superseded-by: —
 

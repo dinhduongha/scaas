@@ -7216,7 +7216,7 @@ async fn pqvault_flow(mode: u8, chain_id: u64) {
         wrapHashes: wraps.iter().map(|w| w.eip712_hash_struct()).collect(),
         passKdf: 1,
         passSalt: B256::repeat_byte(0x5a),
-        sealedInfo: vec![0x5e; 540].into(), // a nonce, the 512-B bucket, a tag (F12)
+        sealedInfo: vec![0x5e; 1052].into(), // a nonce, the 1,024-B bucket, a tag (F12)
     };
     let jm = |m: &MemberKey| json!({"ua": hb(m.ua), "keyId": "0", "via": hb(m.via)});
     let jw = |w: &Wrap| {

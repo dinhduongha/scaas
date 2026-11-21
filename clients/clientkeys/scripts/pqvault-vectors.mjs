@@ -872,7 +872,7 @@ write("keys.json", {
     '0^96, K_e, aad vaultId ‖ epochId ‖ member ‖ be64 keyId); epoch 0\'s epochId is the vaultId. epochs: K_e = rnd("K_e/<epoch>"); ' +
     'P_k = pass.json\'s row of the epoch (null when passKdf = 0); K_v = HKDF-SHA-256(K_e ‖ P_k, empty, "scaas/pqvault/v1/vkey" ‖ ' +
     'vaultId ‖ epochId ‖ be16 passKdf, 32); kInfo = HKDF(K_v, "scaas/pqvault/v1/info" ‖ vaultId ‖ epochId); sealedInfo = infoNonce ‖ ' +
-    "AES-256-GCM-SIV(kInfo, infoNonce, pt = padInfo(json): to 512 B, else the next power of two, F12), empty AAD, json the canonical JSON of info; prev: kPrev = HKDF(K_v, " +
+    "AES-256-GCM-SIV(kInfo, infoNonce, pt = padInfo(json): to 1,024 B, else the next power of two, F12), empty AAD, json the canonical JSON of info; prev: kPrev = HKDF(K_v, " +
     '"scaas/pqvault/v1/prev" ‖ vaultId ‖ epochId ‖ prevEpochId); keyWrap = nonce ‖ AES-256-GCM-SIV(kPrev, nonce, K_v(prev), aad ' +
     '"scaas/ua/v1/keywrap" ‖ u8 usage (Derive = 1) ‖ vaultId ‖ epochId ‖ prevEpochId), 60 B. usages: Derive 1, Data 2, KeyWrap 3 ' +
     "(handle metadata, never in a derivation's info); each row a call refused by its named error (AppKeyUsage: a handle of " +

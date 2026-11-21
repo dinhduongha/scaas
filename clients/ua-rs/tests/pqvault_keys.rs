@@ -161,7 +161,7 @@ fn epochs_kv_sealed_info_prev() {
         assert!(
             pt[4 + json.len()..].iter().all(|b| *b == 0)
                 && pt.len().is_power_of_two()
-                && (512..=16384).contains(&pt.len()), // F12: 512 B, else the next power of two
+                && (1024..=16384).contains(&pt.len()), // F12: 1,024 B, else the next power of two
         );
         let again = aead_seal(
             Alg::Aes256GcmSiv,
