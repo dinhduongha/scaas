@@ -182,7 +182,10 @@ async fn a_batch_answers_each_call_by_id() {
     let r = s.batch(0, &calls).await.unwrap();
     assert_eq!(r.len(), 3);
     assert_eq!(r[0].as_ref().unwrap()["value"], 5);
-    assert_eq!(r[1].as_ref().unwrap_err().rpc_error().unwrap()["code"], -32601);
+    assert_eq!(
+        r[1].as_ref().unwrap_err().rpc_error().unwrap()["code"],
+        -32601
+    );
     assert_eq!(r[2].as_ref().unwrap()["context"]["slot"], 9);
     for shape in ["missing", "twice", "foreign", "object"] {
         let s = solana(&[&batch(shape).await]);

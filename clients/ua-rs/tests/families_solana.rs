@@ -5,7 +5,10 @@ use scaas_ua::families::solana::{account_of, find_pda, on_curve};
 use serde_json::Value;
 
 fn rows() -> Value {
-    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/families/solana.json");
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../smartcontracts/vectors/families/solana.json"
+    );
     serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
 }
 fn hexb(v: &Value) -> Vec<u8> {
@@ -37,7 +40,10 @@ fn pda_rows() {
         let seeds: Vec<Vec<u8>> = r["seeds"].as_array().unwrap().iter().map(hexb).collect();
         let s: Vec<&[u8]> = seeds.iter().map(|x| x.as_slice()).collect();
         let (a, bump) = find_pda(&s, &b58(&r["program"])).unwrap();
-        assert_eq!((a, bump as u64), (b58(&r["address"]), r["bump"].as_u64().unwrap()));
+        assert_eq!(
+            (a, bump as u64),
+            (b58(&r["address"]), r["bump"].as_u64().unwrap())
+        );
         assert!(!on_curve(&a));
     }
 }
@@ -48,7 +54,10 @@ fn account_rows() {
     for r in v["account"].as_array().unwrap() {
         let (p, o) = (b58(&r["program"]), b58(&r["owner"]));
         assert_eq!(account_of(&p, &o).unwrap(), b58(&r["account"]));
-        assert_eq!(find_pda(&[b"acct", &o], &p).unwrap().1 as u64, r["bump"].as_u64().unwrap());
+        assert_eq!(
+            find_pda(&[b"acct", &o], &p).unwrap().1 as u64,
+            r["bump"].as_u64().unwrap()
+        );
     }
 }
 

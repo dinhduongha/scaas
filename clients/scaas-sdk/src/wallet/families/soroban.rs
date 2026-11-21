@@ -40,7 +40,11 @@ fn crc16(b: &[u8]) -> u16 {
     b.iter().fold(0u16, |mut c, &x| {
         c ^= u16::from(x) << 8;
         for _ in 0..8 {
-            c = if c & 0x8000 != 0 { (c << 1) ^ 0x1021 } else { c << 1 };
+            c = if c & 0x8000 != 0 {
+                (c << 1) ^ 0x1021
+            } else {
+                c << 1
+            };
         }
         c
     })
@@ -78,7 +82,11 @@ pub(crate) fn strkey(s: &str) -> Option<(u8, [u8; 32])> {
 /// The holder of a `G…`, a `C…` or a `0x` + 64 lowercase hex UA id.
 pub(crate) fn holder(s: &str) -> Option<Holder> {
     if let Some(h) = s.strip_prefix("0x") {
-        if h.len() != 64 || !h.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+        if h.len() != 64
+            || !h
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
             return None;
         }
         let mut id = [0u8; 32];
@@ -208,7 +216,9 @@ fn read_entry(x: &[u8], key: &[u8], form: Form) -> Option<String> {
                     sym(&mut c, "clawback");
                     u32be(&mut c, 0);
                     let claw = rest.strip_prefix(c.as_slice())?;
-                    let bools = [auth, claw].iter().all(|b| *b == [0, 0, 0, 0] || *b == [0, 0, 0, 1]);
+                    let bools = [auth, claw]
+                        .iter()
+                        .all(|b| *b == [0, 0, 0, 0] || *b == [0, 0, 0, 1]);
                     (bools && claw.len() == 4).then_some(())?;
                     i128_amount(amount)
                 }
@@ -265,8 +275,7 @@ async fn set_at(
         let Some(n) = slot.filter(|n| amounts.get(*n).is_some_and(Option::is_none)) else {
             return Err(malformed(i, "an entry not asked, or twice"));
         };
-        if e
-            .get("liveUntilLedgerSeq")
+        if e.get("liveUntilLedgerSeq")
             .and_then(Value::as_u64)
             .is_some_and(|l| l < ledger)
         {
@@ -277,8 +286,11 @@ async fn set_at(
             .and_then(Value::as_str)
             .and_then(|x| b64.decode(x).ok())
             .ok_or_else(|| malformed(i, "an entry without its xdr"))?;
-        let (key, form) = keys.get(n).ok_or_else(|| malformed(i, "an entry not asked"))?;
-        let a = read_entry(&x, key, *form).ok_or_else(|| malformed(i, "an entry out of its form"))?;
+        let (key, form) = keys
+            .get(n)
+            .ok_or_else(|| malformed(i, "an entry not asked"))?;
+        let a =
+            read_entry(&x, key, *form).ok_or_else(|| malformed(i, "an entry out of its form"))?;
         if let Some(s) = amounts.get_mut(n) {
             *s = Some(a);
         }

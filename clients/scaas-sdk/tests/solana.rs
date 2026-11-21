@@ -124,12 +124,19 @@ fn one(n: &mut Node, c: &Value, k: usize) -> Value {
     };
     let result = match c["method"].as_str().unwrap() {
         "getBalance" => {
-            let v = n.lamports.get(p[0].as_str().unwrap()).cloned().unwrap_or(json!(0));
+            let v = n
+                .lamports
+                .get(p[0].as_str().unwrap())
+                .cloned()
+                .unwrap_or(json!(0));
             json!({"context": {"slot": slot}, "value": v})
         }
         "getTokenAccountsByOwner" => {
             assert_eq!(cfg["encoding"], "jsonParsed");
-            let key = (p[0].as_str().unwrap().to_string(), p[1]["mint"].as_str().unwrap().to_string());
+            let key = (
+                p[0].as_str().unwrap().to_string(),
+                p[1]["mint"].as_str().unwrap().to_string(),
+            );
             json!({"context": {"slot": slot}, "value": n.tokens.get(&key).cloned().unwrap_or_default()})
         }
         m => panic!("{m}"),
@@ -145,14 +152,21 @@ fn answer(n: &mut Node, body: &[u8]) -> (u16, Vec<u8>) {
                 .iter()
                 .map(|c| {
                     let cfg = c["params"].as_array().unwrap().last().unwrap().clone();
-                    (c["method"].as_str().unwrap().to_string(), cfg["minContextSlot"].as_u64())
+                    (
+                        c["method"].as_str().unwrap().to_string(),
+                        cfg["minContextSlot"].as_u64(),
+                    )
                 })
                 .collect(),
         );
         if let Some(raw) = &n.raw {
             return (200, raw.clone());
         }
-        let out: Vec<Value> = calls.iter().enumerate().map(|(k, c)| one(n, c, k)).collect();
+        let out: Vec<Value> = calls
+            .iter()
+            .enumerate()
+            .map(|(k, c)| one(n, c, k))
+            .collect();
         if n.split.is_some() {
             // the set's next pass names one slot again
             n.slot = n.split.take().unwrap();
@@ -266,17 +280,28 @@ async fn solana_balances_at_one_slot() {
     assert_eq!(b.native.as_deref(), Some("2500000000"));
     assert_eq!(amounts(&b), ["5000000", "1000"]);
     assert_eq!(
-        (b.tokens[0].address.as_str(), b.tokens[0].display.as_str(), b.tokens[0].decimals),
+        (
+            b.tokens[0].address.as_str(),
+            b.tokens[0].display.as_str(),
+            b.tokens[0].decimals
+        ),
         (usdc().as_str(), "USDC", 6)
     );
     let seen = f.lock().unwrap().seen.clone();
     assert_eq!(seen.len(), 1, "one batch");
     assert_eq!(
         seen[0].iter().map(|(m, _)| m.as_str()).collect::<Vec<_>>(),
-        ["getBalance", "getTokenAccountsByOwner", "getTokenAccountsByOwner"]
+        [
+            "getBalance",
+            "getTokenAccountsByOwner",
+            "getTokenAccountsByOwner"
+        ]
     );
     let b = balances(&[&u], &bob()).await.unwrap();
-    assert_eq!((b.native.as_deref(), amounts(&b)), (Some("0"), vec!["0", "0"]));
+    assert_eq!(
+        (b.native.as_deref(), amounts(&b)),
+        (Some("0"), vec!["0", "0"])
+    );
 }
 
 /// A set whose answers name two slots is read again once at the later slot (`minContextSlot`); a set naming two slots twice
@@ -290,7 +315,10 @@ async fn solana_two_slots_read_again_once() {
     assert_eq!(b.block, SLOT + 3);
     let seen = f.lock().unwrap().seen.clone();
     assert_eq!(seen.len(), 2);
-    assert!(seen[1].iter().all(|(_, m)| *m == Some(SLOT + 3)), "{seen:?}");
+    assert!(
+        seen[1].iter().all(|(_, m)| *m == Some(SLOT + 3)),
+        "{seen:?}"
+    );
     // two passes at two slots each
     let f = node();
     let u = up(&f).await;
@@ -304,7 +332,10 @@ async fn solana_two_slots_read_again_once() {
     }))
     .await
     .0;
-    assert_eq!(code(balances(&[&split], &alice()).await), "EndpointAllFailed");
+    assert_eq!(
+        code(balances(&[&split], &alice()).await),
+        "EndpointAllFailed"
+    );
     assert_eq!(code(balances(&[&u], &alice()).await), "Ok", "control");
 }
 
@@ -327,23 +358,43 @@ async fn solana_malformed_answers_are_refused() {
     ];
     for bad in bad_rows {
         let f = node();
-        f.lock().unwrap().tokens.get_mut(&(pda(&al), usdc())).unwrap().push(bad.clone());
+        f.lock()
+            .unwrap()
+            .tokens
+            .get_mut(&(pda(&al), usdc()))
+            .unwrap()
+            .push(bad.clone());
         let u = up(&f).await;
-        assert_eq!(code(balances(&[&u], &al).await), "EndpointAllFailed", "{bad}");
+        assert_eq!(
+            code(balances(&[&u], &al).await),
+            "EndpointAllFailed",
+            "{bad}"
+        );
         let b = balances(&[&u, &g], &al).await.unwrap();
         assert_eq!(amounts(&b)[0], "5000000", "the second endpoint's ({bad})");
     }
     for lamports in [json!("5"), json!(1.5), json!(-1), json!(null)] {
         let f = node();
-        f.lock().unwrap().lamports.insert(al.clone(), lamports.clone());
+        f.lock()
+            .unwrap()
+            .lamports
+            .insert(al.clone(), lamports.clone());
         let u = up(&f).await;
-        assert_eq!(code(balances(&[&u], &al).await), "EndpointAllFailed", "{lamports}");
+        assert_eq!(
+            code(balances(&[&u], &al).await),
+            "EndpointAllFailed",
+            "{lamports}"
+        );
     }
     for raw in [&br#"[]"#[..], br#"{"jsonrpc":"2.0","id":0,"result":1}"#] {
         let f = node();
         f.lock().unwrap().raw = Some(raw.to_vec());
         let u = up(&f).await;
-        assert_eq!(code(balances(&[&u], &al).await), "EndpointAllFailed", "{raw:?}");
+        assert_eq!(
+            code(balances(&[&u], &al).await),
+            "EndpointAllFailed",
+            "{raw:?}"
+        );
     }
     // controls: one account of 2^256 - 1 alone is read; u64::MAX lamports are read
     let f = node();
@@ -351,7 +402,10 @@ async fn solana_malformed_answers_are_refused() {
         (pda(&al), usdc()),
         vec![acct(&usdc(), &pda(&al), json!(max), TOKEN)],
     );
-    f.lock().unwrap().lamports.insert(al.clone(), json!(u64::MAX));
+    f.lock()
+        .unwrap()
+        .lamports
+        .insert(al.clone(), json!(u64::MAX));
     let u = up(&f).await;
     let b = balances(&[&u], &al).await.unwrap();
     assert_eq!(
@@ -380,16 +434,26 @@ async fn solana_holder_token_and_program_forms() {
     assert!(f.lock().unwrap().seen.is_empty(), "nothing read");
     let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
     p.tokens.push(token("0xa", "X", 0));
-    assert_eq!(code(read(p, &al).await), "Argument", "a token not of the form");
+    assert_eq!(
+        code(read(p, &al).await),
+        "Argument",
+        "a token not of the form"
+    );
     let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
     p.family = Family::Sui;
     assert_eq!(code(open(p).await), "Argument", "params of another family");
     let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
     p.family_params = None;
     assert_eq!(code(read(p, &al).await), "Argument", "no params");
-    for program in [bs58::encode([5u8; 31]).into_string(), "0".repeat(32), String::new()] {
+    for program in [
+        bs58::encode([5u8; 31]).into_string(),
+        "0".repeat(32),
+        String::new(),
+    ] {
         let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
-        p.family_params = Some(FamilyParams::Solana { program: program.clone() });
+        p.family_params = Some(FamilyParams::Solana {
+            program: program.clone(),
+        });
         assert_eq!(code(open(p).await), "Argument", "{program}");
     }
     assert_eq!(code(balances(&[&u], &al).await), "Ok", "control");
@@ -437,11 +501,10 @@ async fn majority(urls: &[&str]) -> Result<Balances, SdkError> {
 async fn solana_strict_majority_agrees_on_the_set() {
     let (x, y, liar, liar2, other) = (node(), node(), node(), node(), node());
     liar.lock().unwrap().lamports.insert(alice(), json!(666));
-    liar2
-        .lock()
-        .unwrap()
-        .tokens
-        .insert((pda(&alice()), vnd()), vec![acct(&vnd(), &pda(&alice()), json!("1"), TOKEN)]);
+    liar2.lock().unwrap().tokens.insert(
+        (pda(&alice()), vnd()),
+        vec![acct(&vnd(), &pda(&alice()), json!("1"), TOKEN)],
+    );
     other.lock().unwrap().genesis = b58([0x22; 32]);
     y.lock().unwrap().slot = SLOT + 5;
     let (ux, uy, ul, ul2, uo) = (
@@ -454,10 +517,15 @@ async fn solana_strict_majority_agrees_on_the_set() {
     let r = majority(&[&ux, &ul, &uy]).await.unwrap();
     assert_eq!((r.block, r.native.as_deref()), (SLOT, Some("2500000000")));
     assert!(
-        y.lock().unwrap().seen[0].iter().all(|(_, m)| *m == Some(SLOT)),
+        y.lock().unwrap().seen[0]
+            .iter()
+            .all(|(_, m)| *m == Some(SLOT)),
         "endpoint 0's slot as the floor"
     );
-    assert_eq!(code(majority(&[&ux, &ul, &ul2]).await), "EndpointNoMajority");
+    assert_eq!(
+        code(majority(&[&ux, &ul, &ul2]).await),
+        "EndpointNoMajority"
+    );
     assert_eq!(code(majority(&[&ux, &uo, &ul]).await), "EndpointNoMajority");
     assert_eq!(code(majority(&[&ux, &uo, &uy]).await), "Ok", "control");
 }

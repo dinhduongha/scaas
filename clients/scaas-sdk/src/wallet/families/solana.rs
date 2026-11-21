@@ -108,7 +108,10 @@ async fn pass(
                 || field("/mint") != Some(m.as_str())
                 || field("/owner") != Some(pda)
             {
-                return Err(malformed(i, "a token account of another mint, owner or program"));
+                return Err(malformed(
+                    i,
+                    "a token account of another mint, owner or program",
+                ));
             }
             let s = field("/tokenAmount/amount")
                 .ok_or_else(|| malformed(i, "a token amount that is not a string"))?;

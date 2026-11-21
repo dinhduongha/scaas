@@ -172,17 +172,17 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 # M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-ua-clippy | 612e2c216 | 0 | -
-sdk-clippy | 71c6c0cf3 | 0 | -
-bind-gen | 71c6c0cf3 | 0 | -
-features | 71c6c0cf3 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-ck-test | 71c6c0cf3 | 0 | node: 533 pass, 0 fail, 4 skipped
-cli | 71c6c0cf3 | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
-ua-test | 71c6c0cf3 | 0 | 597 passed, 0 failed, 3 ignored (58 binaries)
-bind-dart | 71c6c0cf3 | 0 | dart: +14:
-sdk-test | 71c6c0cf3 | 0 | 355 passed, 0 failed, 16 ignored (32 binaries)
 rpc-test | 5975bdc2e | 0 | 175 passed, 0 failed, 10 ignored (17 binaries)
 rpc-clippy | 5975bdc2e | 0 | -
 rpc-wasm | 5975bdc2e | 0 | -
-docs | 5975bdc2e | 0 | -
-mutants-check | 5975bdc2e | 0 | -
+sdk-clippy | 46eabe7f5 | 0 | -
+bind-gen | 46eabe7f5 | 0 | -
+features | 46eabe7f5 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+docs | 46eabe7f5 | 0 | -
+mutants-check | 46eabe7f5 | 0 | -
+ck-test | 46eabe7f5 | 0 | node: 537 pass, 0 fail, 4 skipped
+ua-clippy | 46eabe7f5 | 0 | -
+ua-test | 46eabe7f5 | 0 | 599 passed, 0 failed, 3 ignored (59 binaries)
+cli | 46eabe7f5 | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
+bind-dart | 46eabe7f5 | 0 | dart: +14:
+sdk-test | 46eabe7f5 | 0 | 362 passed, 0 failed, 16 ignored (33 binaries)

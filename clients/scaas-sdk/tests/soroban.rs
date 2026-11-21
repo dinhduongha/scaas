@@ -28,7 +28,10 @@ const PASSPHRASE: &str = "Standalone Network ; February 2017";
 const L: u64 = 5_000;
 
 fn rows() -> Value {
-    let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/families/soroban.json");
+    let p = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../smartcontracts/vectors/families/soroban.json"
+    );
     serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
 }
 fn uid(passphrase: &str) -> String {
@@ -43,8 +46,17 @@ fn holder(kind: &str) -> String {
 /// the entry row of `what`
 fn entry(what: &str) -> (String, String) {
     let v = rows();
-    let e = v["entries"].as_array().unwrap().iter().find(|e| e["what"] == what).unwrap().clone();
-    (e["key"].as_str().unwrap().into(), e["xdr"].as_str().unwrap().into())
+    let e = v["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["what"] == what)
+        .unwrap()
+        .clone();
+    (
+        e["key"].as_str().unwrap().into(),
+        e["xdr"].as_str().unwrap().into(),
+    )
 }
 
 #[derive(Clone)]
@@ -93,7 +105,9 @@ fn answer(n: &mut Node, body: &[u8]) -> (u16, Vec<u8>) {
     let r: Value = serde_json::from_slice(body).unwrap();
     let result = match r["method"].as_str().unwrap() {
         "getNetwork" => json!({"passphrase": n.passphrase, "protocolVersion": 23}),
-        "getLatestLedger" => json!({"sequence": n.ledger, "id": "ab".repeat(32), "protocolVersion": 23}),
+        "getLatestLedger" => {
+            json!({"sequence": n.ledger, "id": "ab".repeat(32), "protocolVersion": 23})
+        }
         "getLedgerEntries" => {
             let keys: Vec<String> = r["params"]["keys"]
                 .as_array()
@@ -103,7 +117,10 @@ fn answer(n: &mut Node, body: &[u8]) -> (u16, Vec<u8>) {
                 .collect();
             n.seen.push(keys.clone());
             let list: Vec<(String, String, Option<u64>)> = match &n.raw {
-                Some(r) => r.iter().map(|(k, x)| (k.clone(), x.clone(), None)).collect(),
+                Some(r) => r
+                    .iter()
+                    .map(|(k, x)| (k.clone(), x.clone(), None))
+                    .collect(),
                 None => keys
                     .iter()
                     .filter_map(|k| n.entries.get(k).map(|(x, t)| (k.clone(), x.clone(), *t)))
@@ -193,7 +210,11 @@ async fn open(p: ChainProfile) -> Result<Arc<Sdk>, SdkError> {
 }
 
 async fn read(p: ChainProfile, id: &str) -> Result<Balances, SdkError> {
-    open(p).await?.wallet().balances(id.into(), "soroban-local".into()).await
+    open(p)
+        .await?
+        .wallet()
+        .balances(id.into(), "soroban-local".into())
+        .await
 }
 
 async fn balances(rpc: &[&str], id: &str) -> Result<Balances, SdkError> {
@@ -223,10 +244,24 @@ async fn soroban_balances_at_one_ledger() {
     let b = balances(&[&u], &holder("ua")).await.unwrap();
     assert_eq!(pair(&b), (None, "3000"));
     let seen = f.lock().unwrap().seen.clone();
-    assert_eq!(seen.iter().map(Vec::len).collect::<Vec<_>>(), [2, 2, 1], "one call per set");
+    assert_eq!(
+        seen.iter().map(Vec::len).collect::<Vec<_>>(),
+        [2, 2, 1],
+        "one call per set"
+    );
     let v = rows();
-    let row_keys: Vec<&str> = v["keys"].as_array().unwrap().iter().map(|k| k["key"].as_str().unwrap()).collect();
-    assert!(seen.iter().flatten().all(|k| row_keys.contains(&k.as_str())), "the rows' keys");
+    let row_keys: Vec<&str> = v["keys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k["key"].as_str().unwrap())
+        .collect();
+    assert!(
+        seen.iter()
+            .flatten()
+            .all(|k| row_keys.contains(&k.as_str())),
+        "the rows' keys"
+    );
     let nobody = format!("0x{}", "5".repeat(64));
     let b = balances(&[&u], &nobody).await.unwrap();
     assert_eq!(pair(&b), (None, "0"));
@@ -243,22 +278,50 @@ async fn soroban_entries_out_of_form_are_refused() {
     for r in v["refusedEntries"].as_array().unwrap() {
         let f = node();
         let k = r["key"].as_str().unwrap().to_string();
-        f.lock().unwrap().entries.insert(k, (r["xdr"].as_str().unwrap().into(), None));
+        f.lock()
+            .unwrap()
+            .entries
+            .insert(k, (r["xdr"].as_str().unwrap().into(), None));
         let u = up(&f).await;
-        let who = if r["form"] == "sac" { holder("contract") } else { holder("account") };
-        assert_eq!(code(balances(&[&u], &who).await), "EndpointAllFailed", "{}", r["why"]);
+        let who = if r["form"] == "sac" {
+            holder("contract")
+        } else {
+            holder("account")
+        };
+        assert_eq!(
+            code(balances(&[&u], &who).await),
+            "EndpointAllFailed",
+            "{}",
+            r["why"]
+        );
         assert_eq!(code(balances(&[&u, &g], &who).await), "Ok", "{}", r["why"]);
     }
     for (what, who, want) in [
-        ("an account entry at i64 max", "account", (Some("9223372036854775807"), "1000")),
-        ("a token balance at i128 max", "account", (Some("1234567"), "170141183460469231731687303715884105727")),
-        ("the SAC balance, deauthorized, clawback on", "contract", (Some("5"), "2000")),
+        (
+            "an account entry at i64 max",
+            "account",
+            (Some("9223372036854775807"), "1000"),
+        ),
+        (
+            "a token balance at i128 max",
+            "account",
+            (Some("1234567"), "170141183460469231731687303715884105727"),
+        ),
+        (
+            "the SAC balance, deauthorized, clawback on",
+            "contract",
+            (Some("5"), "2000"),
+        ),
     ] {
         let f = node();
         let (k, x) = entry(what);
         f.lock().unwrap().entries.insert(k, (x, None));
         let u = up(&f).await;
-        assert_eq!(pair(&balances(&[&u], &holder(who)).await.unwrap()), want, "{what}");
+        assert_eq!(
+            pair(&balances(&[&u], &holder(who)).await.unwrap()),
+            want,
+            "{what}"
+        );
     }
     // archived: live until the ledger before; control: live until this ledger
     let (k, _) = entry("a token balance of a account holder");
@@ -266,7 +329,11 @@ async fn soroban_entries_out_of_form_are_refused() {
         let f = node();
         f.lock().unwrap().entries.get_mut(&k).unwrap().1 = Some(until);
         let u = up(&f).await;
-        assert_eq!(code(balances(&[&u], &holder("account")).await), want, "{until}");
+        assert_eq!(
+            code(balances(&[&u], &holder("account")).await),
+            want,
+            "{until}"
+        );
     }
     // an entry not asked, one twice
     let (ka, xa) = entry("an account entry");
@@ -275,7 +342,10 @@ async fn soroban_entries_out_of_form_are_refused() {
         let f = node();
         f.lock().unwrap().raw = Some(raw);
         let u = up(&f).await;
-        assert_eq!(code(balances(&[&u], &holder("account")).await), "EndpointAllFailed");
+        assert_eq!(
+            code(balances(&[&u], &holder("account")).await),
+            "EndpointAllFailed"
+        );
     }
 }
 
@@ -301,26 +371,50 @@ async fn soroban_holder_token_and_params_forms() {
     assert!(f.lock().unwrap().seen.is_empty(), "nothing read");
     let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
     p.tokens[0].address = holder("account");
-    assert_eq!(code(read(p, &holder("account")).await), "Argument", "a token that is no contract");
+    assert_eq!(
+        code(read(p, &holder("account")).await),
+        "Argument",
+        "a token that is no contract"
+    );
     let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
     p.tokens.clear();
-    assert_eq!(code(read(p, &holder("ua")).await), "Argument", "nothing to read");
+    assert_eq!(
+        code(read(p, &holder("ua")).await),
+        "Argument",
+        "nothing to read"
+    );
     let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
     p.family = Family::Solana;
     assert_eq!(code(open(p).await), "Argument", "params of another family");
     let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
     p.family_params = None;
-    assert_eq!(code(read(p, &holder("account")).await), "Argument", "no params");
+    assert_eq!(
+        code(read(p, &holder("account")).await),
+        "Argument",
+        "no params"
+    );
     let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
     p.chain_uid = uid("Test SDF Network ; September 2015");
-    assert_eq!(code(open(p).await), "Argument", "a passphrase of another network");
+    assert_eq!(
+        code(open(p).await),
+        "Argument",
+        "a passphrase of another network"
+    );
     let mut p = profile(&[&u], scaas_rpc::Policy::Failover);
     p.family_params = Some(FamilyParams::Soroban {
         passphrase: PASSPHRASE.into(),
         xlm_sac: holder("account"),
     });
-    assert_eq!(code(open(p).await), "Argument", "an XLM SAC that is no contract");
-    assert_eq!(code(balances(&[&u], &holder("account")).await), "Ok", "control");
+    assert_eq!(
+        code(open(p).await),
+        "Argument",
+        "an XLM SAC that is no contract"
+    );
+    assert_eq!(
+        code(balances(&[&u], &holder("account")).await),
+        "Ok",
+        "control"
+    );
 }
 
 /// ARCH-POS-15 failover with two endpoints, one down; an endpoint of another passphrase is dropped.
@@ -334,16 +428,41 @@ async fn soroban_two_endpoints_one_down() {
     let (ux, uy, uo) = (up(&x).await, up(&y).await, up(&other).await);
     let a = holder("account");
     let max = Some("9223372036854775807");
-    assert_eq!(balances(&[DOWN, &uy], &a).await.unwrap().native.as_deref(), max, "the second");
-    assert_eq!(balances(&[&ux, DOWN], &a).await.unwrap().native.as_deref(), Some("1234567"));
-    assert_eq!(balances(&[&ux, &uy], &a).await.unwrap().native.as_deref(), Some("1234567"), "endpoint 0 first");
-    assert_eq!(code(balances(&[&uo], &a).await), "EndpointAllFailed", "another network");
-    assert_eq!(balances(&[&uo, &uy], &a).await.unwrap().native.as_deref(), max);
-    assert_eq!(code(balances(&[DOWN, "http://127.0.0.1:1"], &a).await), "EndpointAllFailed");
+    assert_eq!(
+        balances(&[DOWN, &uy], &a).await.unwrap().native.as_deref(),
+        max,
+        "the second"
+    );
+    assert_eq!(
+        balances(&[&ux, DOWN], &a).await.unwrap().native.as_deref(),
+        Some("1234567")
+    );
+    assert_eq!(
+        balances(&[&ux, &uy], &a).await.unwrap().native.as_deref(),
+        Some("1234567"),
+        "endpoint 0 first"
+    );
+    assert_eq!(
+        code(balances(&[&uo], &a).await),
+        "EndpointAllFailed",
+        "another network"
+    );
+    assert_eq!(
+        balances(&[&uo, &uy], &a).await.unwrap().native.as_deref(),
+        max
+    );
+    assert_eq!(
+        code(balances(&[DOWN, "http://127.0.0.1:1"], &a).await),
+        "EndpointAllFailed"
+    );
 }
 
 async fn majority(urls: &[&str]) -> Result<Balances, SdkError> {
-    read(profile(urls, scaas_rpc::Policy::StrictMajority), &holder("account")).await
+    read(
+        profile(urls, scaas_rpc::Policy::StrictMajority),
+        &holder("account"),
+    )
+    .await
 }
 
 /// `strict_majority`: another endpoint's set at its own `latestLedger`, not below the answering one's, is compared; one liar of
@@ -356,7 +475,12 @@ async fn soroban_strict_majority_agrees_on_the_set() {
     liar.lock().unwrap().entries.get_mut(&ka).unwrap().0 = x2;
     y.lock().unwrap().ledger = L + 5;
     behind.lock().unwrap().ledger = L - 1;
-    let (ux, uy, ul, ub) = (up(&x).await, up(&y).await, up(&liar).await, up(&behind).await);
+    let (ux, uy, ul, ub) = (
+        up(&x).await,
+        up(&y).await,
+        up(&liar).await,
+        up(&behind).await,
+    );
     let r = majority(&[&ux, &ul, &uy]).await.unwrap();
     assert_eq!((r.block, r.native.as_deref()), (L, Some("1234567")));
     assert_eq!(code(majority(&[&ux, &ul, &ub]).await), "EndpointNoMajority");
