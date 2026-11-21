@@ -121,6 +121,10 @@ name = "app_core"
 required-features = ["app-core"]
 
 [[test]]
+name = "app_core_vault_records"
+required-features = ["app-core"]
+
+[[test]]
 name = "pqchat_records"
 required-features = ["pqchat-records"]
 

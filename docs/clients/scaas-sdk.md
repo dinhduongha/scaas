@@ -322,7 +322,10 @@ every binding. It runs alone, in its own test (`--test pqchat_keys`): a `vectors
 a test unlocks them (no-decryption-oracle §4.8), so the whole suite runs without it and clippy builds it.
 `argon2id_passphrase` (PqVault V9, 2026-11-21; BUILT, UNAUDITED) is `argon2id` of a typed passphrase after RFC 8265's
 OpaqueString (every non-ASCII space to U+0020, then NFC; empty, a control character or bytes that are not UTF-8: `Argument`), so
-a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`.
+a composed and a decomposed form of one passphrase give one key; the normalisation runs in `ua-rs`. PqVault's V1 vectors
+(`smartcontracts/vectors/pqvault/`) run through this surface only (BUILT, UNAUDITED; `tests/app_core_vault_rows.rs` under
+`vectors`, `tests/app_core_vault_records.rs` in the main suite: typed digests in both domains, both signing paths,
+`verify_app_record`); what they leave out: the 2026-11-21 Changes of [CLI-PQV-12](ua-libraries.md#CLI-PQV-12) in decisions.md.
 
 ## 8. Runtime, events, errors
 
