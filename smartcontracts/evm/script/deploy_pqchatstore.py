@@ -13,12 +13,15 @@ build, through the deterministic deployer 0x4e59b448…956c with salt 0, so one 
   CHATSTORE_CODE_HASH    the code at the pinned address is not the pinned runtime: before the send (someone deployed other
                          code there), after it, or at the probe; the pinned code already there is done, with no send;
   CHATSTORE_FORKCHECK    NET-EVM-18's five checks (forkcheck.py) refuse, before any send, on a profile without amsterdam;
-  CHATSTORE_SEND         no node took the signed bytes, the nodes answered other hashes, the receipt failed or never came;
+  CHATSTORE_SEND         no strict majority on the chain id, nonce or fees; the signed bytes are not the transaction asked;
+                         no node took them, the nodes answered other hashes, the receipt failed or never came;
+  CHATSTORE_FEE          the majority's priority fee is above the max fee (FEE_FACTOR x the majority's gas price);
   CHATSTORE_PROBE        the SSTORE2 write and read of the probe gave other bytes;
   CHATSTORE_BOOK         the chain's key (deploybook.py: chain-uids.json by (chainId, chain_uid), else DEPLOY_NAME).
 The chain's key names both its profile (src/chains/<key>/profile.json) and its book (deployments/<key>.json, the deploybook
 header, the entry under `PqChatStore`). Reads take the strict majority of the node list; a write sends the same signed bytes
-to every node (ARCH-POS-15). Signing is cast's (`cast mktx`, its wallet options after `--`, e.g. `--account <name>`).
+to every node (ARCH-POS-15). Signing is cast's (`cast mktx`, its wallet options after `--`, e.g. `--account <name>`), the
+chain id, nonce and fees given explicitly from the majority's reads, the signed bytes decoded and compared before any send.
   python3 -I script/deploy_pqchatstore.py deploy <rpc>[,<rpc>…] --out <forge out> [-- <cast wallet options>]
   python3 -I script/deploy_pqchatstore.py probe <rpc>[,<rpc>…] --out <forge out> [-- <cast wallet options>]
       the probes before a profile lists the store: the deployer's code, eth_getCode equal to the pinned bytes, an SSTORE2
@@ -166,18 +169,56 @@ def code_hash(nodes, rel):
     return None if code == "0x" else keccak(code)
 
 
+FEE_FACTOR = 2  # the max fee per gas: this times the gas price a strict majority reports at least (review P2-1)
+SIGNED = ("chainId", "nonce", "gas", "maxFeePerGas", "maxPriorityFeePerGas")
+
+
+def _cast(args, url, what):
+    r = subprocess.run([CAST] + args, capture_output=True, text=True, env=dict(os.environ, ETH_RPC_URL=url))
+    if r.returncode:
+        raise StoreError(f"CHATSTORE_SEND: cast {what} failed (rc {r.returncode}): {r.stderr.replace(url, '<rpc>')[:200]}")
+    return r.stdout.strip()
+
+
+def decoded(raw):
+    """`cast decode-tx` of signed bytes (offline)."""
+    try:
+        return json.loads(_cast(["decode-tx", raw], "", "decode-tx"))
+    except json.JSONDecodeError:
+        raise StoreError("CHATSTORE_SEND: cast decode-tx gave no JSON") from None
+
+
 def cast_signer(url, wallet):
-    """Signs with cast (`cast mktx`, the wallet options `wallet`); the node URL goes through ETH_RPC_URL, never argv."""
+    """Signs with cast (`cast mktx`, the wallet options `wallet`) the transaction asked: its chain id, nonce, gas and fees
+    explicit, so cast consults no node for them (review P2-1); the signed bytes are decoded and compared with it, signer
+    included. The node URL goes through ETH_RPC_URL, never argv (`--ethsign` signs on that node). `sign.address()` is the
+    signer (`--from`, else `cast wallet address` of the wallet options, once)."""
+    who = {}
+
+    def address():
+        if "a" not in who:
+            who["a"] = (wallet[wallet.index("--from") + 1] if "--from" in wallet
+                        else _cast(["wallet", "address"] + wallet, url, "wallet address")).lower()  # fmt: skip
+        return who["a"]
 
     def sign(tx):
-        cmd = [CAST, "mktx", tx["to"], tx["data"], "--gas-limit", str(tx["gas"])] + wallet
-        r = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ, ETH_RPC_URL=url))
-        if r.returncode:
-            raise StoreError(
-                f"CHATSTORE_SEND: cast mktx failed (rc {r.returncode}): {r.stderr.replace(url, '<rpc>')[:200]}"
-            )
-        return r.stdout.strip()
+        args = ["mktx", tx["to"], tx["data"], "--gas-limit", str(tx["gas"]), "--chain", str(tx["chainId"])]
+        args += ["--nonce", str(tx["nonce"]), "--gas-price", str(tx["maxFeePerGas"])]
+        args += ["--priority-gas-price", str(tx["maxPriorityFeePerGas"])]
+        raw = _cast(args + wallet, url, "mktx")
+        got = decoded(raw)
+        try:
+            bad = [k for k in SIGNED if f.qty(got.get(k)) != tx[k]]
+            want = (("to", tx["to"]), ("input", tx["data"]), ("signer", address()))
+            bad += [k for k, v in want if f.data(got.get(k)) != v.lower()]
+            bad += [] if got.get("type") == "0x2" else ["type"]
+        except f.BAD_ANSWER:
+            bad = ["a field"]
+        if bad:
+            raise StoreError(f"CHATSTORE_SEND: the signed transaction is not the one asked ({', '.join(bad)})")
+        return raw
 
+    sign.address = address
     return sign
 
 
@@ -205,10 +246,24 @@ def receipt_fields(r):
     }
 
 
-def send(nodes, sign, to, data, gas=None, wait=600):
-    """Signs once (at `gas`, default the chain's estimate), sends the same bytes to every node; returns (hash, receipt)."""
+def send(nodes, sign, to, data, gas=None, chain_id=None, wait=600):
+    """Signs once (at `gas`, default the estimate a strict majority reaches) the transaction whose chain id and nonce a strict
+    majority gives (the chain id the one the key was resolved by), its max fee FEE_FACTOR times the gas price a strict
+    majority reports at least, its tip the priority fee a strict majority reports at least, refused above that max fee
+    (CHATSTORE_FEE); sends the same bytes to every node; returns (hash, receipt)."""
+    cid = _read(nodes, "eth_chainId", [], f.qty)
+    if chain_id is not None and cid != chain_id:
+        raise StoreError(f"CHATSTORE_SEND: the nodes now answer chain id {cid}, the chain resolved is {chain_id}")
+    nonce = _read(nodes, "eth_getTransactionCount", [sign.address(), "latest"], f.qty)
+    cap = FEE_FACTOR * _number(nodes, "eth_gasPrice", [])
+    tip = _number(nodes, "eth_maxPriorityFeePerGas", [])
+    if tip > cap:
+        raise StoreError(
+            f"CHATSTORE_FEE: the priority fee {tip} is above the max fee {cap} ({FEE_FACTOR} x the majority's gas price)"
+        )
     gas = gas or _number(nodes, "eth_estimateGas", [{"to": to, "data": data}])
-    raw = sign({"to": to, "data": data, "gas": gas})
+    tx = {"to": to, "data": data, "gas": gas, "chainId": cid, "nonce": nonce, "maxFeePerGas": cap}
+    raw = sign(dict(tx, maxPriorityFeePerGas=tip))
     answers = [n("eth_sendRawTransaction", [raw]) for n in nodes]
     hashes = {a["result"].lower() for a in answers if "result" in a}
     if len(hashes) != 1:
@@ -279,7 +334,7 @@ def deploy(
                 )
         except f.ForkError as e:
             raise StoreError(f"CHATSTORE_FORKCHECK: {e}") from None
-        tx, rec = send(nodes, sign, DEPLOYER, data, gas)
+        tx, rec = send(nodes, sign, DEPLOYER, data, gas, header["chainId"])
         say(f"{key}: sent {tx}, gas {rec['gasUsed']}")
         have = code_hash(nodes, rel)
     else:
@@ -310,7 +365,7 @@ def probe(nodes, sign, out, release=os.path.join(EVM, RELEASE), books=EVM, env=o
     if code_hash(nodes, rel) != rel["runtimeCodeHash"].lower():
         raise StoreError(f"CHATSTORE_CODE_HASH: eth_getCode at {addr} is not the pinned runtime")
     ids, want = a["methodIdentifiers"], payload(1, PROBE_HINT, PROBE_ENV)
-    h, rec = send(nodes, sign, addr, "0x" + ids["storeMessage(uint8,bytes8,bytes)"] + want.hex())
+    h, rec = send(nodes, sign, addr, "0x" + ids["storeMessage(uint8,bytes8,bytes)"] + want.hex(), None, header["chainId"])
     hint = "0x" + PROBE_HINT.hex() + "00" * 24
     logs = [x for x in rec["logs"] if x["address"] == addr and x["topics"] == [STORED_TOPIC, hint]]
     if len(logs) != 1:

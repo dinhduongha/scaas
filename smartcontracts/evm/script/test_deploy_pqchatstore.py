@@ -48,6 +48,7 @@ class Chain:
     def __init__(self, addr, place, at=None, deployer=d.DEPLOYER_CODE, read_back=None, chain_id=31337, uid=UID):
         self.addr, self.place, self.read_back = addr.lower(), place, read_back
         self.chain_id, self.uid = chain_id, uid
+        self.price, self.tip = 25 * GWEI, GWEI
         self.code = {d.DEPLOYER: deployer} if deployer else {}
         if at:
             self.code[self.addr] = at
@@ -65,6 +66,12 @@ class Chain:
             return {"result": self.code.get(params[0].lower(), "0x")}
         if method == "eth_estimateGas":
             return {"result": hex(500_000)}
+        if method == "eth_getTransactionCount":
+            return {"result": hex(len(self.sent))}
+        if method == "eth_gasPrice":
+            return {"result": hex(self.price)}
+        if method == "eth_maxPriorityFeePerGas":
+            return {"result": hex(self.tip)}
         if method == "eth_call":
             tx = params[0]
             if tx.get("to", "").lower() == self.addr and tx["data"].startswith("0x" + SEL["storedAt(bytes8,uint256)"]):
@@ -98,8 +105,15 @@ class Chain:
         return {"error": {"message": "unknown"}}
 
 
+GWEI = 10**9
+SENDER = "0x" + "5e" * 20
+
+
 def sign(tx):
     return "0x" + json.dumps(tx).encode().hex()
+
+
+sign.address = lambda: SENDER
 
 
 def refused(name, fn, *a, **k):
@@ -286,6 +300,60 @@ def three_honest_nodes_agree():
         assert len(ch.sent) == 2
 
 
+def liar(ch, **over):
+    """A node of the chain `ch` that answers `over` ({method: result}) instead."""
+    return lambda m, p: {"result": over[m]} if m in over else ch(m, p)
+
+
+def the_transaction_from_the_majority():
+    """The signed transaction's chain id, nonce and fees come from the strict majority, never the first node: a first node
+    that lies about them is outvoted; a split nonce, or a priority fee above the cap, is refused before signing (review
+    P2-1)."""
+    a = artifact()
+    with tempfile.TemporaryDirectory() as t:
+        o = setup(t, a)
+        ch = Chain(release_of(a)["address"], a["deployedBytecode"]["object"])
+        lie = liar(ch, eth_chainId=hex(1), eth_gasPrice=hex(10**15), eth_maxPriorityFeePerGas=hex(10**14),
+                   eth_getTransactionCount=hex(9))  # fmt: skip
+        d.deploy([lie, ch, ch], sign, **o)
+        tx = ch.sent[0]
+        assert (tx["chainId"], tx["nonce"], tx["maxFeePerGas"], tx["maxPriorityFeePerGas"]) == (31337, 0, 50 * GWEI, GWEI)
+        d.probe([ch, lie, ch], sign, **o)
+        assert ch.sent[1]["nonce"] == 1 and ch.sent[1]["chainId"] == 31337
+        ch = Chain(release_of(a)["address"], a["deployedBytecode"]["object"])
+        refused("CHATSTORE_SEND", d.deploy, [ch, liar(ch, eth_getTransactionCount=hex(9))], sign, **o)
+        ch.tip = 50 * GWEI + 1
+        refused("CHATSTORE_FEE", d.deploy, [ch], sign, **o)
+        assert not ch.sent
+        n = {"c": 0}
+
+        def turn(m, p):  # the chain id changes between the key's read and the send's
+            n["c"] += m == "eth_chainId"
+            return {"result": hex(1)} if m == "eth_chainId" and n["c"] > 1 else ch(m, p)
+
+        ch.tip = GWEI
+        e = refused("CHATSTORE_SEND", d.deploy, [turn], sign, **o)
+        assert "now answer chain id 1" in e and not ch.sent, e
+        ch.tip = 50 * GWEI  # twin: at the cap
+        d.deploy([ch], sign, **o)
+        assert ch.sent[0]["maxPriorityFeePerGas"] == 50 * GWEI
+
+
+ANVIL_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"  # anvil's first test account, public
+
+
+def cast_signs_what_was_asked():
+    """cast mktx gets the chain id, nonce and fees explicitly (no node consulted: the URL here answers nothing), and the
+    signed bytes are decoded and compared with what was asked; a wallet option that changes them is refused."""
+    sg = d.cast_signer("http://127.0.0.1:9", ["--private-key", ANVIL_KEY])
+    assert sg.address() == "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
+    tx = {"to": d.DEPLOYER, "data": "0x00", "gas": 100_000, "chainId": 43113, "nonce": 7, "maxFeePerGas": 50 * GWEI,
+          "maxPriorityFeePerGas": GWEI}  # fmt: skip
+    raw = sg(tx)
+    assert raw.startswith("0x02") and d.decoded(raw)["chainId"] == "0xa869"
+    refused("CHATSTORE_SEND", d.cast_signer("http://127.0.0.1:9", ["--private-key", ANVIL_KEY, "--legacy"]), tx)
+
+
 def book_entry_under_the_chain_key():
     a = artifact()
     rel = release_of(a)
@@ -351,6 +419,8 @@ TESTS = [
     forkcheck_runs_before_the_send,
     fuji_dry_run_needs_a_profile,
     three_honest_nodes_agree,
+    the_transaction_from_the_majority,
+    cast_signs_what_was_asked,
     book_entry_under_the_chain_key,
     probes_write_and_read,
     abi_encoding,
