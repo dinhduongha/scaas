@@ -62,16 +62,16 @@ Status: SPECIFIED.
 | # | Chain (testnet in the same row) | Contract | Relay | Index | Signing | rpc read | rpc write | SDK | Zether | PQ | PQZ | Self-relay | Native |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | scaas-testnet (7622) | B | B | B | B | B | B | B | B | B | B | M T41.evm | B |
-| 2 | Ethereum L1 (1; Sepolia, Hoodi; Holesky unreachable) | B‡ | B | B | B | B | B | M T40 | B‡ | B‡ | B‡ | M T41.evm | M T40 |
+| 2 | Ethereum L1 (1; Sepolia, Hoodi; Holesky unreachable) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
 | 3 | BNB Smart Chain (56; 97) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
 | 4 | Polygon PoS (137; Amoy 80002) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
 | 5 | Base (8453; Base Sepolia 84532) | B‡ | B | B | B | B | B | M T38 | B‡ | B‡ | B‡ | M T41.evm | M T38 |
 | 6 | Gnosis (100; Chiado 10200) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
 | 7 | Celo (42220; Celo Sepolia 11142220; Alfajores unreachable) | B‡ | B | B | B | B | B | M T38 | B‡ | B‡ | B‡ | M T41.evm | M T38 |
-| 8 | Ethereum Classic (61; Mordor 63) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
-| 9 | OP Mainnet (10; OP Sepolia 11155420) | B‡ | B | B | B | B | B | M T38, T40 | P T40 | P T40 | P T40 | M T41.evm | M T38, T40 |
-| 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
-| 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
+| 8 | Ethereum Classic (61; Mordor 63) | B‡ | B | B | B | B | B | M owner (depth) | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | M T41.evm | M owner (depth) |
+| 9 | OP Mainnet (10; OP Sepolia 11155420) | B‡ | B | B | B | B | B | M T38 | B‡ | B‡ (mldsa65, mldsa87: M ARCH-POS-18) | M ARCH-POS-18 | M T41.evm | M T38 |
+| 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | B | B‡ | B‡ (mldsa65, mldsa87: M ARCH-POS-18) | M ARCH-POS-18 | M T41.evm | B |
+| 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
 | 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | M T41.evm (EVM side; the native side's sends wait for Q-R5) | B (EVM side; native side: P T41.hedera read, ed25519 sends wait for Q-R5) |
 | 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | P CA-T3 | P CA-T3 | B | P CA-T2 | B | P CA-T2 | M ARCH-POS-18 | B‡ | B‡ | M T41.evm | P CA-T2 |
 | 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | M T41.evm | deferred (sends, owner 2026-11-22) (read B) |
@@ -87,16 +87,27 @@ Status: SPECIFIED.
 | 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (send; its reads B), T37 (SDK) |
 | 25 | Arweave (store) | n/a | n/a | n/a | P CA-T16, T17 | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a | n/a | P CA-T17, T19, T20 |
 
-Counts (25 rows): Contract B 23 (14 B‡), n/a 2. Relay B 20, P 3, n/a 2. Index B 20, P 3, n/a 2. Signing B 17, P 1, M 6, n/a 1. rpc read B 20, P 4, n/a 1. rpc write B 15, P 1, M 8, n/a 1. SDK B 5, P 4, M 15, n/a 1. Zether B 8 (7 B‡), P 6, M 9, n/a 2. PQ B 8 (7 B‡), P 8, M 7, n/a 2. PQZ B 8 (7 B‡), P 6, M 9, n/a 2. Self-relay M 23, n/a 2. Native B 5, P 3, deferred 1 (its read built), M 16 (8 of them with the read built).
+Counts (25 rows): Contract B 23 (14 B‡), n/a 2. Relay B 20, P 3, n/a 2. Index B 20, P 3, n/a 2. Signing B 17, P 1, M 6, n/a 1. rpc read B 20, P 4, n/a 1. rpc write B 15, P 1, M 8, n/a 1. SDK B 8, P 4, M 12, n/a 1. Zether B 11 (10 B‡), P 2, M 10, n/a 2. PQ B 11 (10 B‡), P 4, M 8, n/a 2. PQZ B 9 (8 B‡), P 2, M 12, n/a 2. Self-relay M 23, n/a 2. Native B 8, P 3, deferred 1 (its read built), M 13 (8 of them with the read built).
 
 ## 4. Notes on the cells
 
 Status: SPECIFIED.
 
 - **EVM rows 2–15.** The contracts, the node's EVM runner and indexer, `ua-rs`'s `EvmTx` and `scaas-rpc`'s EVM reader serve every
-  EVM chain by profile values. Rows 2 and 8–11 have no profile yet ("unsupported until configured", [evm.md](evm.md)): SDK plan T40
-  writes their profiles and runs probes H1–H8 on them. Base, Celo and OP need the OP Stack L1 data fee in the SDK's quote (SDK plan
-  T38; the node has it as `params.l1_fee = "op-stack"`).
+  EVM chain by profile values. Base, Celo and OP need the OP Stack L1 data fee in the SDK's quote (SDK plan T38; the node has it
+  as `params.l1_fee = "op-stack"`).
+- **Rows 2 and 8–11 (SDK plan T40).** `draft` profiles in `smartcontracts/evm/src/chains/<key>/profile.json` ([evm.md](evm.md));
+  `scaas-rpc` tests per profile (the chain pair check, a `finalized` read pinned by hash) and the SDK's (each profile loads, a
+  native send's type follows the base fee). The probes' first sample (2026-11-22, `clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt`)
+  decides Zether, PQ and PQZ: EIP-2537 is present on 2, 9, 10 and 11 (`B‡`, the precompile path) and absent on ETC (a software
+  BLS12-381 path to measure). PQ by accounts.md's MD-5 rule (regular × 1.05 < 2^24, (regular + state) × 1.05 within the chain's
+  transaction or block limit) on each kind's largest transaction: every kind fits Ethereum (60 M, Sepolia 200 M) and Linea
+  (2,000 M); on OP (block 40 M) and Arbitrum (a transaction at most 32 M) the ML-DSA cache's largest part does not (`mldsa65`
+  43.5 M, `mldsa87` 45.6 M with state gas), the other kinds fit; on ETC (block 8 M, no EIP-8037) only `fndsa1024` (5.25 M)
+  fits. PQZ: its operations (about 43 M, `storePqzPop` 49.1 M at `n2304-kmax4096`) fit 2 and 11, not OP's block or Arbitrum's
+  transaction. Each "does not fit" goes to the owner with these numbers (ARCH-POS-18); nothing is disabled. ETC serves no
+  `finalized` block (proof of work): its profile states no depth, which is the owner's, so its SDK and Native cells wait for it.
+  OP's SDK and Native cells wait for T38's L1 fee.
 - **Hedera (row 12), `B‡`.** The token kinds, the DEX, the registry pair and the factory do not fit Hedera until it raises its code
   size (owner 2026-11-09; the public Hedera testnet refused runtime above 24,576 B; each transaction within 15 M gas); a small
   contract that needs none of them can deploy. Classical Zether needs EIP-2537 ([CTR-ZTH-32](../contracts/zether.md#CTR-ZTH-32)),
@@ -111,7 +122,7 @@ Status: SPECIFIED.
   owner's rule of 2026-11-21). Its Native cell: `ua-rs` `BitcoinTx` (SDK plan T35), the `scaas-rpc` `bitcoin` module (T36: Esplora
   reads, Bitcoin Core sends and cross-checks), the SDK's balance, UTXOs, history and send (T37).
 - **Native (column 12).** EVM rows: the native coin through the EVM account, `balances`' `native` and `prepare_native_send`
-  (BUILT, SDK spec §8.5) wherever the row's profile and SDK are (rows 1, 3, 4, 6, 12; HBAR through the JSON-RPC Relay with an
+  (BUILT, SDK spec §8.5) wherever the row's profile and SDK are (rows 1, 2, 3, 4, 6, 10, 11, 12; HBAR through the JSON-RPC Relay with an
   `hedera_ecdsa` account; Hedera's native side, `0.0.x` accounts with ed25519 keys, HBAR and HTS under `fam-hedera`: mirror-node
   reads and the HAPI format PLANNED (SDK plan T41.hedera, HCS T43), its broadcast an open question for the owner, SDK spec Q-R5), else the row's profile task (T38, T40, chains-arweave CA-T2,
   CA-T11). Polkadot Hub (row 14): the Substrate side, plain sr25519 accounts (`ua-rs` sr25519, CLI-SGN-53), `System.Account`

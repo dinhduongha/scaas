@@ -152,6 +152,10 @@ name = "wallet"
 required-features = ["wallet"]
 
 [[test]]
+name = "evm_profiles"
+required-features = ["wallet"]
+
+[[test]]
 name = "wallet_ops"
 required-features = ["wallet"]
 

@@ -32,6 +32,8 @@ pub enum Gw {
 }
 
 pub struct Chain {
+    /// the chain id `eth_chainId` answers, [`CHAIN_ID`] by default (plan T40: a profile's own)
+    pub chain_id: u64,
     pub head: u64,
     pub finalized: u64,
     pub timestamp: u64,
@@ -101,6 +103,7 @@ pub struct Chain {
 impl Default for Chain {
     fn default() -> Self {
         Chain {
+            chain_id: CHAIN_ID,
             head: 0x20,
             finalized: 0x20,
             timestamp: 1_800_000_000,
@@ -304,7 +307,7 @@ fn rpc(c: &mut Chain, r: &Value) -> Value {
         "eth_call" | "eth_estimateGas" if c.value_reverts && sends_value => {
             err("execution reverted")
         }
-        "eth_chainId" => ok(json!(format!("{CHAIN_ID:#x}"))),
+        "eth_chainId" => ok(json!(format!("{:#x}", c.chain_id))),
         "eth_blockNumber" => ok(json!(format!("{:#x}", c.head))),
         "eth_getBlockByNumber" => {
             let n = named(c, &p[0]);

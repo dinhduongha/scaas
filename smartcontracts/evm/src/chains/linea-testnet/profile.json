@@ -1,0 +1,13 @@
+{
+  "evmFork": "osaka",
+  "codeSizeLimit": 24576,
+  "initCodeSizeLimit": 49152,
+  "txGasCap": null,
+  "blockGasLimit": 2000000000,
+  "finality": "tag",
+  "txType": 2,
+  "l1Fee": "linea",
+  "eip2537": true,
+  "status": "draft",
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (probes of 2026-11-22: fork, eip2537, caps, codesize, basefee, l1fee, H5, H7); finalized is L1 finality only on providers that serve it (rpc.sepolia.linea.build); one provider answered finalized = head (H5 FAIL); txGasCap none detected"
+}

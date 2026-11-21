@@ -28,6 +28,11 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
 | Avalanche C-Chain, Fuji | 43114, 43113 | `avalanche-mainnet`, `avalanche-testnet` (`amsterdam`; Cancun today, no Amsterdam; a single contract earlier under [NET-EVM-18](#NET-EVM-18)) | AVAX; a transaction pays at least half its gas limit | `tag finalized` (= `safe`, the settled block, ~5 s) | seeded `draft`, [NET-EVM-16](#NET-EVM-16) |
 | Polkadot Hub; Paseo; Westend | 420420419; 420420417; 420420421 | `polkadot-hub-mainnet`, `polkadot-hub-testnet`, `polkadot-hub-westend` (`amsterdam`; REVM, 24,576-B runtime cap) | DOT; gas folds weight and the storage deposit | `tag finalized` (GRANDPA) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes and the measurement, [NET-EVM-17](#NET-EVM-17) |
 | Moonbeam; Moonbase Alpha | 1284; 1287 | `moonbeam-mainnet`, `moonbeam-testnet` (second, after Polkadot Hub) | GLMR; storage-growth gas | `tag finalized` (relay-finalized) | seeded `draft`; `enabled` after [NET-EVM-19](#NET-EVM-19)'s probes, [NET-EVM-17](#NET-EVM-17) |
+| Ethereum; Sepolia | 1; 11155111 | `ethereum-mainnet`, `ethereum-testnet` (`amsterdam`; mainnet `osaka` today, Sepolia at Amsterdam since its fork, runtime 65,536 B and init 131,072 B there) | ETH, type 2 | `tag finalized` (gap 61–95 blocks, ~13–19 min, one sample) | seeded `draft` (SDK plan T40; probes H1–H8 first sample 2026-11-22) |
+| Ethereum Classic; Mordor | 61; 63 | `etc-mainnet`, `etc-testnet` (`amsterdam` for a set; `shanghai` today, no EIP-2537, block 8 M) | ETC, type 0 (no base fee) | **none**: no `finalized` block (proof of work); the depth is the owner's | seeded `draft`; H5 and H7 FAIL (no tag) |
+| OP Mainnet; OP Sepolia | 10; 11155420 | `op-mainnet`, `op-testnet` (`amsterdam`; `osaka` today, block 40 M) | ETH, type 2 + L1 data fee (`l1_fee = "op-stack"`) | `tag finalized` (gap 523–654 blocks, ~19–22 min) | seeded `draft` |
+| Arbitrum One; Arbitrum Sepolia | 42161; 421614 | `arbitrum-mainnet`, `arbitrum-testnet` (`amsterdam`; `osaka` today; a transaction at most 32,000,000 gas, ArbGasInfo; the header's 2^50 is no block cap) | ETH, type 2; the L1 component inside `eth_estimateGas` | `tag finalized` (gap ~3,200 blocks, ~15–18 min) | seeded `draft` |
+| Linea; Linea Sepolia | 59144; 59141 | `linea-mainnet`, `linea-testnet` (`amsterdam`; `osaka` today, block 2,000 M) | ETH, type 2; `linea_estimateGas` prices the L1 part | `tag finalized` from a provider that serves L1 finality (the chain's own RPC: gap ~400 blocks mainnet, ~5,700 Sepolia); other providers answered `finalized` = head (H5 FAIL) | seeded `draft` |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas
   costs are predictable in unit, though their size still follows the gas price (the often-quoted < $0.001/tx is not a
@@ -104,7 +109,9 @@ Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `d
   probe runs one foreground sample per invocation; the 24-h and 7-day windows are the operator's scheduler calling it, never a
   background loop.
 
-Other EVM chains (Ethereum L1, Arbitrum, Optimism, Linea) are **unsupported until
+Ethereum L1, Ethereum Classic, OP Mainnet, Arbitrum One and Linea have `draft` profiles since SDK plan T40 (the rows above,
+`smartcontracts/evm/src/chains/<key>/profile.json`, SPECIFIED until their 7-day probe windows and a deployment pass; one
+sample of each probe in `clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt`). Any other EVM chain is **unsupported until
 configured**: no profile, no finality gate, no tested deployment. A chain becomes supported only through a chain
 profile with a measured finality gate, an RPC quorum and a passing deployment. Reference values for such a profile,
 to be re-measured before use: Ethereum L1 12-s slots, finality = 2 epochs (~12.8 min); Arbitrum One / Base sequencer

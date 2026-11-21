@@ -1,0 +1,13 @@
+{
+  "evmFork": "osaka",
+  "codeSizeLimit": 24576,
+  "initCodeSizeLimit": 49152,
+  "txGasCap": 32000000,
+  "blockGasLimit": 1125899906842624,
+  "finality": "tag",
+  "txType": 2,
+  "l1Fee": "in-estimate",
+  "eip2537": true,
+  "status": "draft",
+  "source": "clients/scaas-rpc/runs/2026-11-22-evm-probes-summary.txt (probes of 2026-11-22: fork, eip2537, caps, codesize, basefee, l1fee, H5, H7); txGasCap: ArbGasInfo.getGasAccountingParams max tx gas limit; the header's gas limit is not a block cap"
+}
