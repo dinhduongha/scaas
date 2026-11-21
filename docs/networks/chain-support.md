@@ -1,7 +1,7 @@
 # Chain support: one row per chain
 
 What each chain has today, against the owner's rule for when the SDK work is done. One table, one place: other documents link
-here. State read on 2026-11-21. SPECIFIED (a status table; each cell says what is built).
+here. State read on 2026-11-22. SPECIFIED (a status table; each cell says what is built).
 
 ## 1. The rule (owner 2026-11-21)
 
@@ -93,7 +93,7 @@ Status: SPECIFIED.
 - **Avalanche, Polkadot Hub, Moonbeam (rows 13–15).** The chains-arweave plan's profile, probe and node lane tasks; Avalanche's
   Zether needs a software BLS12-381 path (no EIP-2537), measured first; Hub's precompiles are unknown until its probes.
 - **SCaaS families (rows 16–23).** The node relays and indexes all eight; the public gateway door for them (`POST /v1/ops`) is SDK
-  plan T28. `ua-rs` signs NEAR's and Algorand's operations; the other six families' envelopes are SDK plan T27. TON's paths other
+  plan T28. The SDK reads balances on all eight (plan T24; TON last, T24.ton); its cell stays `M` for the writes (T28, T29). `ua-rs` signs NEAR's and Algorand's operations; the other six families' envelopes are SDK plan T27. TON's paths other
   than the job API's pull path stay blocked until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)).
 - **Native NEAR, DOT, BTC (rows 24–26).** No SCaaS contract, so Contract, Zether, PQ and PQZ are n/a; Relay and Index are n/a by the
   owner's rule (§1).

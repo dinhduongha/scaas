@@ -14,7 +14,8 @@
         feature = "aptos",
         feature = "solana",
         feature = "soroban",
-        feature = "sui"
+        feature = "sui",
+        feature = "ton"
     )),
     allow(dead_code, unused_imports, unused_variables)
 )]
@@ -32,6 +33,8 @@ pub(crate) mod solana;
 pub(crate) mod soroban;
 #[cfg(feature = "sui")]
 pub(crate) mod sui;
+#[cfg(feature = "ton")]
+pub(crate) mod ton;
 
 use super::Balances;
 use crate::{Sdk, SdkError};
@@ -58,6 +61,8 @@ pub(crate) async fn balances(sdk: &Sdk, chain: &str, id: &str) -> Result<Balance
         crate::Family::Soroban => soroban::balances(c, id).await,
         #[cfg(feature = "sui")]
         crate::Family::Sui => sui::balances(c, id).await,
+        #[cfg(feature = "ton")]
+        crate::Family::Ton => ton::balances(c, id).await,
         _ => Err(SdkError::FeatureMissing),
     }
 }
@@ -73,7 +78,8 @@ pub(crate) fn malformed(i: usize, why: &str) -> ReadError {
     feature = "cosmos",
     feature = "aptos",
     feature = "solana",
-    feature = "sui"
+    feature = "sui",
+    feature = "ton"
 ))]
 pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
     if s.is_empty() || s.len() > 78 || !s.bytes().all(|b| b.is_ascii_digit()) {
@@ -95,7 +101,8 @@ pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
         feature = "cosmos",
         feature = "solana",
         feature = "soroban",
-        feature = "sui"
+        feature = "sui",
+        feature = "ton"
     )),
     allow(dead_code)
 )]

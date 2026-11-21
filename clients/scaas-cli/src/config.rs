@@ -623,6 +623,13 @@ mod tests {
             )
             .await;
         assert_ne!(code(r.map_err(Fail::Sdk)), "FeatureMissing", "Soroban");
+        // TON: no family params (the profile's rpc are its TON Center endpoints)
+        let sdk = open_with(&fam("null", "Ton")).await.unwrap();
+        let r = sdk
+            .wallet()
+            .balances(format!("0:{}", "0".repeat(64)), "f".into())
+            .await;
+        assert_ne!(code(r.map_err(Fail::Sdk)), "FeatureMissing", "Ton");
         let zero = APTOS.replace("\"chain_id\":4", "\"chain_id\":0");
         assert_eq!(code(open_with(&fam(&zero, "Aptos")).await), "Argument");
         // the family named by the params is the profile's
