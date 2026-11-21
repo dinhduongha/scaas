@@ -60,13 +60,19 @@ pub enum Rule {
     /// typed entries only; a router is no target of any other kind's row.
     GovRouter,
     /// An instance of a generic class of the chain's `OpenFactory` (`token_factory`, factory index spec §8.6): `infoOf(target)` lists
-    /// this `contractClass` with `version ≠ 0` (`pqchat`: class 3, UA-7 P32, topics spec P45). An instance answers no `chainUid()`
+    /// this `contractClass` with `version ≠ 0` (`pqchat`: class 3, UA-7 P32, topics spec P45; `pqvault`: class 4, CTR-PQV-13). An
+    /// instance answers no `chainUid()`
     /// (its records are portable): the listing binds it, and no other kind's rule takes it.
     FactoryClass(u16),
 }
 
 /// `PqChat`'s class on `OpenFactory`'s generic path (D22).
 pub const CLASS_PQCHAT: u16 = 3;
+/// `PqVault`'s class on `OpenFactory`'s generic path (CTR-PQV-13).
+pub const CLASS_PQVAULT: u16 = 4;
+
+/// The factory kinds whose writes run on an instance of their class (`Rule::FactoryClass`), with their contract names.
+const FACTORY_KINDS: [(&str, &str); 2] = [("pqchat", "PqChat"), ("pqvault", "PqVault")];
 
 /// The rule of a contract kind (`typed::Row::contracts`).
 pub fn rule_of(contract: &str) -> Option<Rule> {
@@ -78,6 +84,7 @@ pub fn rule_of(contract: &str) -> Option<Rule> {
         "factory" => Rule::AccountFactory,
         "gov_router" => Rule::GovRouter,
         "pqchat" => Rule::FactoryClass(CLASS_PQCHAT),
+        "pqvault" => Rule::FactoryClass(CLASS_PQVAULT),
         _ => return None,
     })
 }
@@ -1308,6 +1315,9 @@ pub struct Guard {
     listed: Mutex<HashMap<Address, (u16, u64)>>,
     /// `params.relay_unsigned_pqchat` (default false): the lane relays `PqChat`'s unsigned writes at its own gas (UA-7 P17).
     relay_unsigned_pqchat: bool,
+    /// `params.relay_unsigned_pqvault` (default false): the lane relays `PqVault`'s unsigned `addVaultWraps` at its own gas
+    /// (CTR-PQV-11).
+    relay_unsigned_pqvault: bool,
     /// Tokens whose UA ledger is on (`registry() ≠ 0`).
     ua_ledger: Mutex<HashSet<Address>>,
     /// A token's `eip712Domain().name` (an immutable of its kind), read once ([`Guard::require_kind`]).
@@ -1340,6 +1350,12 @@ impl Guard {
                 None => false,
                 Some(toml::Value::Boolean(b)) => *b,
                 Some(v) => anyhow::bail!("params.relay_unsigned_pqchat must be a bool (relay PqChat's unsigned storeMessage / addWraps \
+                    at the lane's gas), not {v}"),
+            },
+            relay_unsigned_pqvault: match cfg.params.get("relay_unsigned_pqvault") {
+                None => false,
+                Some(toml::Value::Boolean(b)) => *b,
+                Some(v) => anyhow::bail!("params.relay_unsigned_pqvault must be a bool (relay PqVault's unsigned addVaultWraps \
                     at the lane's gas), not {v}"),
             },
             ua_ledger: Default::default(),
@@ -1564,18 +1580,21 @@ impl Guard {
                 return self.check_service(chain, target, &c.call, None).await;
             }
             // UA-7 P32 / topics P45 on the inner call: a `PqChat` entry runs on an instance `token_factory` lists (no `chainUid()`);
-            // paid this way, an unsigned write needs no lane policy (P17)
-            if let Some(r) = relay_call(&w.data).and_then(|c| {
-                c.call
-                    .get(..4)
-                    .and_then(|s| self::row(s.try_into().ok()?, "pqchat"))
+            // paid this way, an unsigned write needs no lane policy (P17); a `PqVault` entry likewise on a class-4 instance
+            // (CTR-PQV-11, CTR-PQV-13): the kind is the one whose row the inner selector is (no write selector is shared)
+            if let Some((kind, name, r)) = relay_call(&w.data).and_then(|c| {
+                let s: [u8; 4] = c.call.get(..4)?.try_into().ok()?;
+                FACTORY_KINDS
+                    .iter()
+                    .find_map(|(k, n)| self::row(s, k).map(|r| (*k, *n, r)))
             }) {
-                let rule = Rule::FactoryClass(CLASS_PQCHAT);
+                let rule = rule_of(kind)
+                    .ok_or_else(|| refused(format!("unknown contract kind {kind:?}")))?;
                 if allowed(rule, &self.facts(chain, target, rule).await?) {
                     return Ok(());
                 }
                 return Err(refused(format!(
-                    "{} relayed to {target:#x}: no PqChat instance of token_factory",
+                    "{} relayed to {target:#x}: no {name} instance of token_factory",
                     r.entry
                 )));
             }
@@ -1593,13 +1612,18 @@ impl Guard {
         };
         // UA-7 P17 (owner 2026-11-05): a `PqChat` write with no `UASig` (`storeMessage`, `addWraps`) runs paid, as a relay fee's call
         // (the branch above), or under the operator's `params.relay_unsigned_pqchat`: by default the lane pays no gas for it
-        if contract == "pqchat"
-            && !self.relay_unsigned_pqchat
-            && !row.fields.iter().any(|f| f.0 == "UASig")
+        // CTR-PQV-11: `PqVault`'s unsigned `addVaultWraps` the same, under `params.relay_unsigned_pqvault`
+        let lane_pays = match contract {
+            "pqchat" => Some((self.relay_unsigned_pqchat, "relay_unsigned_pqchat")),
+            "pqvault" => Some((self.relay_unsigned_pqvault, "relay_unsigned_pqvault")),
+            _ => None,
+        };
+        if let (Some((false, param)), false) =
+            (lane_pays, row.fields.iter().any(|f| f.0 == "UASig"))
         {
             return Err(Refusal::Policy(format!(
                 "UNSIGNED_WRITE_NOT_PAID: {} carries no signature: send it as a relay fee's call \
-                (RelayFeeRouter.relay), or the operator sets params.relay_unsigned_pqchat",
+                (RelayFeeRouter.relay), or the operator sets params.{param}",
                 row.entry
             )));
         }
@@ -2603,10 +2627,11 @@ mod tests {
         // round 3zc (CTR-GOV-30): -> 143, the router's two cap setters; CTR-UA-44 (TODO 3ze): -> 144, the registry's `updateMsig`
         // NODE-JOB-29 (TODO 3zh MD-14): -> 145, the registry's `cacheExpandedKey`; set-auditor (CTR-GOV-31): -> 147, the router's
         // `mtxSetAuditorKey`, `mtxSetAuditorUA`; bls-multi Task 10: -> 148, the registry's `registerBlsMulti`
+        // PqVault plan V8 (CTR-PQV-11): -> 156, `PqVault`'s eight plain rows
         assert_eq!(
             typed::rows().iter().filter(|r| !r.entry.is_empty()).count(),
-            148,
-            "table rows: 111 typed with an entry, 37 plain"
+            156,
+            "table rows: 111 typed with an entry, 45 plain"
         );
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
@@ -2647,7 +2672,7 @@ mod tests {
             // round 3zb + 3zc: the direct entries with the chain word (governed, relayed through the router only) and the cap setters
             "mint(address,uint256,bytes32)", "setListedOnly(bool,bytes32)", "setMaxSupply(uint256,bytes32)",
             "setMaxWrapSupply(uint256,bytes32)"] {
-            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
+            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat", "pqvault"] {
                 let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) };
@@ -3405,6 +3430,27 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(rule_of("pqchat"), Some(chat));
+        // PqVault plan V8 (CTR-PQV-13): class 4, its own rule; a class-3 listing is no PqVault and the reverse
+        let vault = Rule::FactoryClass(CLASS_PQVAULT);
+        assert_eq!(rule_of("pqvault"), Some(vault));
+        assert!(allowed(
+            vault,
+            &Facts {
+                listed: Some((4, 1)),
+                ..Default::default()
+            }
+        ));
+        assert!(!allowed(vault, &listed), "class 3 is no PqVault");
+        assert!(
+            !allowed(
+                chat,
+                &Facts {
+                    listed: Some((4, 1)),
+                    ..Default::default()
+                }
+            ),
+            "class 4 is no PqChat"
+        );
         assert!(allowed(chat, &listed), "listed as class 3 with a release");
         assert!(!allowed(chat, &Facts::default()), "only a listed instance");
         assert!(!allowed(chat, &bound), "bound is not listed");
@@ -5330,6 +5376,12 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     /// The `PqChat` writes as `IPqChat.sol` declares them, read from the source (and `IUARegistry.sol` for `UASig`), not copied:
     /// every `external` function that is neither `view` nor `pure`, as its canonical signature.
     fn pqchat_writes() -> Vec<String> {
+        factory_writes("pqchat/IPqChat.sol")
+    }
+
+    /// The writes of a factory kind's interface (`IPqChat.sol`, `IPqVault.sol`), its structs and `IPqChat.`'s / `IUARegistry.`'s
+    /// resolved from their sources.
+    fn factory_writes(file: &str) -> Vec<String> {
         let src = |f: &str| {
             std::fs::read_to_string(format!(
                 "{}/../smartcontracts/evm/src/{f}",
@@ -5341,9 +5393,13 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             .collect::<Vec<_>>()
             .join(" ")
         };
-        let (chat, reg) = (src("pqchat/IPqChat.sol"), src("ua/IUARegistry.sol"));
+        let (chat, pc, reg) = (
+            src(file),
+            src("pqchat/IPqChat.sol"),
+            src("ua/IUARegistry.sol"),
+        );
         let mut structs: HashMap<String, Vec<String>> = HashMap::new();
-        for (scope, s) in [("", &chat), ("IUARegistry.", &reg)] {
+        for (scope, s) in [("", &chat), ("IPqChat.", &pc), ("IUARegistry.", &reg)] {
             for part in s.split(" struct ").skip(1) {
                 let (name, body) = part.split_once('{').unwrap();
                 let fields = body
@@ -5389,6 +5445,246 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                     .then(|| format!("{}({})", name.trim(), args.join(",")))
             })
             .collect()
+    }
+
+    /// PqVault plan V8 (CTR-PQV-11, CTR-PQV-13; AGENTS "Node"): the `pqvault` allow-list equals the contract's writes both
+    /// directions, the contract side derived from `IPqVault.sol` with `IPqChat`'s and `IUARegistry`'s types resolved (`initialize`
+    /// is the factory's alone, no row); the selectors are forge's `methodIdentifiers`; each write is a row of `pqvault` and of no
+    /// other kind; no write selector is `PqChat`'s; a view (one shares `PqChat`'s `versionAt` selector) and `initialize` are rows of
+    /// no kind.
+    #[test]
+    fn pqvault_rows_equal_the_contract_both_directions() {
+        let sel = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
+        let all = factory_writes("pqvault/IPqVault.sol");
+        let writes: Vec<&String> = all
+            .iter()
+            .filter(|s| !s.starts_with("initialize("))
+            .collect();
+        assert_eq!((all.len(), writes.len()), (9, 8), "{all:?}");
+        let theirs: HashSet<[u8; 4]> = writes.iter().map(|s| sel(s)).collect();
+        let ours: HashSet<[u8; 4]> = typed::rows()
+            .iter()
+            .filter(|r| r.contracts.contains(&"pqvault"))
+            .map(|r| r.sent)
+            .collect();
+        assert_eq!(ours, theirs, "the PqVault allow-list, both directions");
+        let forge: HashSet<[u8; 4]> = FORGE_PQVAULT_WRITES
+            .iter()
+            .map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap())
+            .collect();
+        assert_eq!(ours, forge, "forge's IPqVault methodIdentifiers");
+        let chat: HashSet<[u8; 4]> = pqchat_writes().iter().map(|s| sel(s)).collect();
+        assert!(
+            ours.is_disjoint(&chat),
+            "no write selector shared with PqChat"
+        );
+        let kinds = [
+            "token",
+            "zether",
+            "pqz",
+            "wallet",
+            "account",
+            "dex",
+            "registry",
+            "factory",
+            "gov_router",
+            "pqchat",
+            "pqvault",
+        ];
+        for s in &writes {
+            for k in kinds {
+                assert_eq!(row(sel(s), k).is_some(), k == "pqvault", "{s} on {k}");
+            }
+        }
+        for s in [
+            "initialize(bytes32)",
+            "owner()",
+            "versionAt(bytes32,uint32)",
+            "vaultOf(bytes32)",
+            "latestRange(bytes32,uint256,uint256)",
+        ] {
+            for k in kinds {
+                assert!(row(sel(s), k).is_none(), "{s} on {k}");
+            }
+        }
+    }
+
+    /// `forge inspect IPqVault methodIdentifiers`, its eight writes.
+    const FORGE_PQVAULT_WRITES: [&str; 8] = [
+        "0a25edc3", "87e8fed1", "c487e92a", "5270d5c2", "6b7f9e2e", "1b5d7365", "344e5e37",
+        "1d4c2131",
+    ];
+
+    /// PqVault plan V8 (CTR-PQV-13): a `PqVault` job runs only on an instance `token_factory` lists as class 4 with a release:
+    /// `CALL_TARGET_REFUSED` on class 3, version 0, an address the factory did not make; a `PqChat` job on a class-4 instance too.
+    /// Its unsigned `addVaultWraps` runs on the direct path only under `params.relay_unsigned_pqvault` (default off:
+    /// `UNSIGNED_WRITE_NOT_PAID`, before any read; `relay_unsigned_pqchat` does not open it), and as a relay fee's inner call on a
+    /// class-4 instance only. Each refusal beside its control.
+    #[tokio::test]
+    async fn a_pqvault_job_runs_only_on_a_class_4_instance() {
+        let uid = B256::repeat_byte(0x31);
+        let (factory, vault, chat, v0, other) = (
+            Address::repeat_byte(0xfa),
+            Address::repeat_byte(0xc4),
+            Address::repeat_byte(0xc3),
+            Address::repeat_byte(0xc0),
+            Address::repeat_byte(0xb0),
+        );
+        let (cfg, reads) =
+            factory_rpc(uid, factory, vec![(vault, 4, 1), (chat, 3, 1), (v0, 4, 0)]).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let work = |entry: &str, to: Address| {
+            crate::submit::work_of_op(Some(1), &typed::testkit::pqvault_op(entry, to), None)
+                .unwrap()
+                .0
+        };
+        let unpaid = |e: Result<(), Refusal>, what: &str| {
+            assert!(
+                matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("UNSIGNED_WRITE_NOT_PAID")),
+                "{what}: {e:?}"
+            )
+        };
+        let shut = Guard::new(&cfg, Default::default()).unwrap();
+        let chat_open = Guard::new(
+            &with_param(&cfg, "relay_unsigned_pqchat", toml::Value::Boolean(true)),
+            Default::default(),
+        )
+        .unwrap();
+        unpaid(
+            shut.check(&chain, &work("addVaultWraps", vault)).await,
+            "default",
+        );
+        unpaid(
+            chat_open.check(&chain, &work("addVaultWraps", vault)).await,
+            "PqChat's parameter",
+        );
+        assert_eq!(*reads.lock().unwrap(), 0, "refused before any read");
+        let open = Guard::new(
+            &with_param(&cfg, "relay_unsigned_pqvault", toml::Value::Boolean(true)),
+            Default::default(),
+        )
+        .unwrap();
+        let entries: Vec<&str> = typed::rows()
+            .iter()
+            .filter(|r| r.contracts.contains(&"pqvault"))
+            .map(|r| r.entry)
+            .collect();
+        assert_eq!(entries.len(), 8);
+        for e in &entries {
+            open.check(&chain, &work(e, vault))
+                .await
+                .unwrap_or_else(|x| panic!("{e}: {x:?}"));
+            if *e != "addVaultWraps" {
+                shut.check(&chain, &work(e, vault))
+                    .await
+                    .unwrap_or_else(|x| panic!("{e} signed: {x:?}"));
+            }
+        }
+        for (to, what) in [
+            (chat, "class 3"),
+            (v0, "version 0"),
+            (other, "not made by the factory"),
+        ] {
+            target_refused(open.check(&chain, &work("createItem", to)).await, what);
+        }
+        let pc = crate::submit::work_of_op(
+            Some(1),
+            &typed::testkit::pqchat_op("postMessage", vault),
+            None,
+        )
+        .unwrap()
+        .0;
+        target_refused(
+            open.check(&chain, &pc).await,
+            "a PqChat job on a class-4 instance",
+        );
+        for bad in [toml::Value::String("true".into()), toml::Value::Integer(1)] {
+            assert!(Guard::new(
+                &with_param(&cfg, "relay_unsigned_pqvault", bad),
+                Default::default()
+            )
+            .is_err());
+        }
+        // the relay path: paid, on a class-4 instance only, and a PqChat call relayed to it refused
+        let (rf, token) = (Address::repeat_byte(0xf4), Address::repeat_byte(0x11));
+        let router = [(
+            "router".to_string(),
+            toml::Value::String(format!("{rf:#x}")),
+        )]
+        .into_iter()
+        .collect();
+        let paid = Guard::new(
+            &with_param(&cfg, "relay_fee", toml::Value::Table(router)),
+            Arc::new(RwLock::new(vec![token])),
+        )
+        .unwrap();
+        let relayed = |target: Address, call: Bytes| {
+            let data = IRelayFeeRouter::relayCall {
+                target,
+                callData: call,
+                token,
+                from: B256::repeat_byte(2),
+                payee: rf.into_word(),
+                value: alloy::primitives::U256::from(1),
+                batch: alloy::primitives::U256::from(7),
+                nonce: alloy::primitives::U256::ZERO,
+                validUntil: alloy::primitives::U256::from(4_000_000_000u64),
+                auth: crate::abi::UASig {
+                    keyData: Bytes::new(),
+                    signature: Bytes::new(),
+                    members: vec![],
+                },
+            }
+            .abi_encode();
+            let t = typed::Typed {
+                pay_meta_len: 0,
+                pqz_parties: vec![],
+                pqz_auditor: false,
+                pqz_verdict: None,
+                pqz_fee: None,
+                contract: "token",
+                domain_of: token,
+                struct_hash: None,
+                lane_hash: None,
+                signer: None,
+                payee: None,
+                digest: None,
+                derived_signer: false,
+                derived_side: false,
+            };
+            Work {
+                job_id: Some(1),
+                to: rf,
+                data: data.into(),
+                valid_until: 0,
+                envelope_until: 0,
+                meta: None,
+                entry: true,
+                typed: Some(t),
+            }
+        };
+        for entry in ["addVaultWraps", "createItem"] {
+            paid.check(&chain, &relayed(vault, work(entry, vault).data))
+                .await
+                .unwrap_or_else(|e| panic!("{entry} as a relay fee's call: {e:?}"));
+            target_refused(
+                paid.check(&chain, &relayed(chat, work(entry, vault).data))
+                    .await,
+                &format!("{entry} relayed to a class-3 instance"),
+            );
+            target_refused(
+                paid.check(&chain, &relayed(other, work(entry, vault).data))
+                    .await,
+                &format!("{entry} relayed to no instance"),
+            );
+        }
+        target_refused(
+            paid.check(&chain, &relayed(vault, pc.data.clone())).await,
+            "a PqChat call relayed to a class-4 instance",
+        );
+        paid.check(&chain, &relayed(chat, pc.data))
+            .await
+            .expect("control: the PqChat call relayed to its class-3 instance");
     }
 
     /// T93 (UA-7 P17, topics P45; AGENTS "Node"): the `pqchat` allow-list equals the contract's writes both directions, the contract

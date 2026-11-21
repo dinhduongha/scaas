@@ -17,3 +17,8 @@ V6 | size (size_gate.py --self-test; forge build src --sizes; size_gate.py) | V6
 V6 mutants | mutants.py, all 45 on the V6 tree (the gas pins left out of a mutant's run) | V6 tree | - | 44 killed; create-min-member-0 survived: equivalent (see V3)
 V7 | forge test/governance GovDeploy, SelectorAudit, SingletonRescue (red first: setPqVault absent, compile error) | V7 tree | 0 | 33 passed 0 failed 0 skipped (forge)
 V7 mutants | the (4, 0) switch dropped from _deployPqVault; PqVault's createItems row dropped from selector_audit.json | V7 tree | - | 2 of 2 killed (test_deployPqVaultPath; test_everySelectorIsClassified)
+V8 | node cargo test --lib (the pqvault, pqchat and instance-row tests) | V8 tree | 0 | 34 passed 0 failed 0 ignored (cargo)
+V8 | node cargo clippy --all-targets -D warnings | V8 tree | 0 | -
+V8 | node cargo test --test e2e pqvault_vault_items_and_recovery --ignored (anvil) | V8 tree | 0 | 1 passed 0 failed 0 ignored (cargo)
+V8 | clientkeys npm test (typed-ops: class 4; red first: 1 failing with class 3 only) | V8 tree | 0 | 531 passed 0 failed 5 skipped (node)
+V8 mutants | node_mutants.py (7: class, relay branch, unsigned policy x2, HEX_ARGS, class-4 config, a row) | V8 tree | - | 7 of 7 killed
