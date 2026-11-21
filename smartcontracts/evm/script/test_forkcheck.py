@@ -432,6 +432,27 @@ def answers_bounded():
     refused("FORKCHECK_NODES", f.agree, [lambda m, p: {"result": 7}], "eth_call", [], f.data)
 
 
+def empty_precompile_list_with_calls_refused():
+    """Check (5) never trusts an empty list alone: a contract whose code holds CALL, CALLCODE, DELEGATECALL or STATICCALL
+    in code position and declares no precompile is refused; a call byte inside data is not code (review P3-4)."""
+    with tempfile.TemporaryDirectory() as t:
+        write(t, "src/chains/avalanche-testnet/profile.json", AVAX)
+        write(t, "cases.json", {"contracts": [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]})
+        good = node(pre={P256: {KAT["input"]: KAT["output"]}})
+
+        def gate(code, n, pre, **init):
+            write(t, "out/Fx.sol/Fx.json", art(code, n, **init))
+            write(t, "release-data/Fx.json", {"precompiles": pre})
+            f.deploy_gate("avalanche-testnet", "out/Fx.sol/Fx.json", [good], "cases.json", root=t, run4=lambda *a: 1,
+                          say=lambda s: None)  # fmt: skip
+
+        for op in (0xF1, 0xF2, 0xF4, 0xFA):
+            refused("FORKCHECK_RELEASE_DATA", gate, [op, STOP], 2, [])
+        refused("FORKCHECK_RELEASE_DATA", gate, [STOP], 1, [], init_code=[0xFA, *CTOR], n_init=4)  # in the init code
+        gate([0xFA, STOP], 2, [KAT])  # twin: the call listed
+        gate([PUSH1, 0xFA, STOP], 2, [])  # twin: 0xfa as a PUSH1 immediate is data
+
+
 # ---- check (4): the control must be red
 
 
@@ -580,6 +601,7 @@ TESTS = [
     answers_bounded,
     deploy_gate_runs_every_check,
     cases_bound_to_the_contract,
+    empty_precompile_list_with_calls_refused,
     control_green_voids_the_run,
     control_red_for_its_reason,
     case_from_revert_logs,

@@ -18,7 +18,8 @@ chain without the Amsterdam fork a contract deploys only when its `amsterdam` bu
                            Amsterdam pins;
   (5) FORKCHECK_PRECOMPILE every precompile the contract declares in its release data (release-data/<Contract>.json,
                            `precompiles`: [{address, name, input, output}]; a file without the list is FORKCHECK_RELEASE_DATA)
-                           answers its known answer to an eth_call on the chain.
+                           answers its known answer to an eth_call on the chain; an empty list with a CALL,
+                           CALLCODE, DELEGATECALL or STATICCALL in code position is FORKCHECK_RELEASE_DATA.
 The profile states the fork: src/chains/<key>/profile.json {"evmFork", "codeSizeLimit", "initCodeSizeLimit", "txGasCap"?
 (null: none), "blockGasLimit"? (a record; check (2) reads the live block)}; at `amsterdam` (NET-EVM-06) nothing here applies.
 A key without the file is refused (FORKCHECK_PROFILE), except the reset chain `scaas-testnet` and a local anvil
@@ -87,6 +88,7 @@ AMSTERDAM = CANCUN | {0x1E, 0x4B}
 FORKS = {"cancun": CANCUN, "amsterdam": AMSTERDAM}
 TARGET = "amsterdam"
 CLZ = 0x1E
+CALLS = {0xF1: "CALL", 0xF2: "CALLCODE", 0xF4: "DELEGATECALL", 0xFA: "STATICCALL"}
 
 
 def immediate(op):
@@ -94,7 +96,7 @@ def immediate(op):
     return op - 0x5F if 0x60 <= op <= 0x7F else 0
 
 
-def walk(code, count, fork, where):
+def walk(code, count, fork, where, seen=None):
     """The offset after `count` instructions of `code` (the compiler's source-map count), each byte in code position checked:
     placeable by the compile target's table, else FORKCHECK_UNPLACED; an opcode of `fork`, else FORKCHECK_OPCODE."""
     allowed, i = FORKS[fork], 0
@@ -108,6 +110,8 @@ def walk(code, count, fork, where):
             )
         if op not in allowed:
             raise ForkError(f"FORKCHECK_OPCODE: {where}: opcode 0x{op:02x} at {i} is not a {fork} opcode")
+        if seen is not None:
+            seen.add(op)
         i += 1 + immediate(op)
         if i > len(code):
             raise ForkError(f"FORKCHECK_UNPLACED: {where}: the immediate of 0x{op:02x} runs past the code")
@@ -178,7 +182,8 @@ def scan(artifact, fork, args=b""):
         raise ForkError(
             f"FORKCHECK_BOUNDARY: {name} runtime: {len(rt_subs)} sub-assemblies (code the walk does not reach)"
         )
-    end = walk(rt, g["runtime_n"], fork, f"{name} runtime")
+    g["ops"] = set()  # the opcodes in code position, runtime and init code
+    end = walk(rt, g["runtime_n"], fork, f"{name} runtime", g["ops"])
     if rt[end:] != b"\xfe" + rt_data + rt[g["meta_at"] :]:
         how = (
             "the compiler's assembly"
@@ -189,7 +194,7 @@ def scan(artifact, fork, args=b""):
             f"FORKCHECK_BOUNDARY: {name} runtime: the code ends at {end}, the metadata starts at {g['meta_at']}: the "
             f"{g['meta_at'] - end} bytes between them are not INVALID and the {len(rt_data)} data bytes of {how}"
         )
-    end = walk(init, g["init_n"], fork, f"{name} init")
+    end = walk(init, g["init_n"], fork, f"{name} init", g["ops"])
     if init[end:] != b"\xfe" + rt + init_data:
         raise ForkError(
             f"FORKCHECK_BOUNDARY: {name} init: the code ends at {end}; the {len(init) - end} bytes after it are not INVALID, "
@@ -653,6 +658,12 @@ def deploy_gate(
     if not os.path.exists(os.path.join(root, rel)):
         raise ForkError(f"FORKCHECK_RELEASE_DATA: {rel} missing (the contract's precompile list)")
     entries = precompiles(json.load(open(os.path.join(root, rel))))
+    calls = sorted(g["ops"] & CALLS.keys())
+    if not entries and calls:  # review P3-4: an empty list is checked against the code, never trusted alone
+        raise ForkError(
+            f"FORKCHECK_RELEASE_DATA: {rel} declares no precompile, but {a['_name']}'s code holds "
+            + ", ".join(CALLS[c] for c in calls)
+        )
     if not cases_path:
         raise ForkError(f"FORKCHECK_CASES: no cases for {a['_name']} at {fork}")
     n, m = bound_cases(a, cases_path, root, out)

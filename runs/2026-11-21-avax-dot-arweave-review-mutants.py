@@ -269,6 +269,18 @@ MUTANTS = [
         GOV + "test_homeChainKindsRefused",
         "test_homeChainKindsRefused",
     ),
+    (
+        "P3-4 an empty precompile list trusted",
+        [(F, "    if not entries and calls:", "    if False:")],
+        T + "empty_precompile_list_with_calls_refused",
+        "FAIL empty_precompile_list_with_calls_refused",
+    ),
+    (
+        "P3-4 the init code's opcodes not counted",
+        [(F, '    end = walk(init, g["init_n"], fork, f"{name} init", g["ops"])', '    end = walk(init, g["init_n"], fork, f"{name} init")')],
+        T + "empty_precompile_list_with_calls_refused",
+        "FAIL empty_precompile_list_with_calls_refused",
+    ),
 ]
 
 if __name__ == "__main__":
