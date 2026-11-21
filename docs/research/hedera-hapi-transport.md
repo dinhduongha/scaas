@@ -32,3 +32,9 @@ Broadcast HAPI by (a) gRPC-web over `reqwest` to a proxy list the profile names 
 must exist), (b) `tonic` gRPC to the consensus nodes (native only, a heavy dependency set), or (c) neither: Hedera's native sends
 stay off and its native side is read-only (the EVM side through the JSON-RPC Relay stays BUILT). Until the answer, the reads
 and the transaction format are built; no broadcast.
+
+**Answer (owner 2026-11-22, recorded in decisions CLI-SDK-32): (a) and (b), the second behind a feature.** gRPC-web over
+`reqwest` to the profile's proxy list is the default under `fam-hedera` (wasm32, no new crate); `tonic` gRPC to the consensus
+nodes (`service_endpoints`, TLS on 50212) is the native-only feature `fam-hedera-grpc`, off by default, crates pinned with their
+licenses and its size cost recorded. Both send the same signed bytes and merge outcomes (CLI-RPC-08); the transaction id is
+computed locally. Native sends and HCS writes go ahead in T41.hedera and T43, each transport tested first against a local mock.
