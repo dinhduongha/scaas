@@ -22,3 +22,9 @@ V8 | node cargo clippy --all-targets -D warnings | V8 tree | 0 | -
 V8 | node cargo test --test e2e pqvault_vault_items_and_recovery --ignored (anvil) | V8 tree | 0 | 1 passed 0 failed 0 ignored (cargo)
 V8 | clientkeys npm test (typed-ops: class 4; red first: 1 failing with class 3 only) | V8 tree | 0 | 531 passed 0 failed 5 skipped (node)
 V8 mutants | node_mutants.py (7: class, relay branch, unsigned policy x2, HEX_ARGS, class-4 config, a row) | V8 tree | - | 7 of 7 killed
+# Round matrix on the V8 tree (4c3e84f10), paused after forge-ua at the owner's priority (multi-gen-verify first); the rest waits for the go:
+matrix | forge-pqvault | 4c3e84f10 | 0 | 85 passed 0 failed 0 skipped (forge)
+matrix | forge-pqchat | 4c3e84f10 | 0 | 99 passed 0 failed 0 skipped (forge)
+matrix | forge-governance | 4c3e84f10 | 0 | 930 passed 0 failed 0 skipped (forge)
+matrix | forge-ua | 4c3e84f10 | 0 | 910 passed 0 failed 0 skipped (forge)
+V9 | blocked | - | - | the scaas-sdk T21 app-core surface (feature app-core, clients/scaas-sdk/src/app_core/) is not on this branch: no test through it can be written here; no commit
