@@ -179,3 +179,32 @@ pub fn sign(key: &dyn Signer, td: &TypedData) -> Result<UASig> {
         members: vec![],
     })
 }
+
+/// V1 (pqchat-core spec §5): whether `sig` is `ua`'s portable signature of the PqChat record `td` (one of [`RECORDS`] in
+/// `DS_C`), as the registry's `requirePortable(ua, PURPOSE_PQCHAT, typed, sig)` judges it on `state` (a single key, or an
+/// `msig` minimal over two levels, its native members over the typed digest). A native id, an unknown UA, another struct or
+/// domain: `false`. No detail: a reader counts a refusal, it never answers one.
+pub fn verify(ua: &[u8; 32], td: &TypedData, sig: &UASig, state: &super::AppRecordState) -> bool {
+    let v = td.to_value();
+    if !RECORDS.contains(&td.primary_type())
+        || v.get("domain") != Some(&json!({"name": "SCaaS PqChat", "version": "1"}))
+        || crate::in_native_space(ua)
+    {
+        return false;
+    }
+    let (Ok(digest), Some((kind, key_data))) = (td.digest(), (state.members)(*ua)) else {
+        return false;
+    };
+    crate::ua_portable::check_portable_current(
+        kind,
+        &key_data,
+        ua,
+        &purpose(),
+        &digest,
+        sig,
+        state.members,
+        state.current,
+        Some(state.accepted),
+    )
+    .is_ok()
+}

@@ -50,6 +50,8 @@ mod pairing;
 mod policy;
 #[cfg(feature = "app-core")]
 pub mod pqchat;
+#[cfg(feature = "app-core")]
+pub mod pqchat_keys;
 #[cfg(feature = "vectors")]
 pub mod pqsign;
 #[cfg(not(feature = "vectors"))]
@@ -221,6 +223,11 @@ pub enum Error {
     AppDomainRefused,
     /// An app portable record whose domain `salt` is not its `app_id` (scaas-sdk spec §12.4).
     AppSaltMismatch,
+    /// A PqChat content or `sealedInfo` whose padding or canonical JSON is not what a sealer writes (`pqchat_keys`; UA-7
+    /// §6.5, pqchat-core spec §5 K4, K5): nothing returned.
+    PqChatContent,
+    /// A PqChat chain walk of more than 2^20 steps (CLI-PQC-14): refused before any step.
+    PqChatTooFar,
     Ua(UAError),
 }
 
@@ -255,6 +262,8 @@ impl Error {
             Error::AppPurposeRefused => "AppPurposeRefused",
             Error::AppDomainRefused => "AppDomainRefused",
             Error::AppSaltMismatch => "AppSaltMismatch",
+            Error::PqChatContent => "PqChatContent",
+            Error::PqChatTooFar => "PqChatTooFar",
             Error::Ua(e) => e.code(),
         }
     }

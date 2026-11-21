@@ -50,10 +50,12 @@ pub enum KeyUsage {
 
 /// How a handle came to be: the public MAC runs only on a key the scope drew or unwrapped (review K4, pqchat-core §5.3).
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Origin {
+pub(super) enum Origin {
     Drawn,
     Unwrapped,
     Derived,
+    /// a PqChat sender-chain position (`pqchat_keys`): its chain and counter on the handle
+    Chain,
 }
 
 /// A key in the arena. No `Clone`, `Debug` or byte accessor; released by [`AppKeys::destroy`] or the wallet's `lock`.
@@ -61,9 +63,11 @@ pub struct KeyHandle {
     h: Handle,
     usage: KeyUsage,
     scope: u64,
-    origin: Origin,
+    pub(super) origin: Origin,
     /// the nonce an HKDF output of 44 bytes gave with the key (`okm[32:44]`), for [`Nonce::FromKey`]
     nonce: Option<[u8; 12]>,
+    /// a sender-chain position's chain (`keccak256` of its context) and counter (`pqchat_keys`)
+    pub(super) chain: Option<([u8; 32], u64)>,
 }
 
 /// A dropped handle's key is wiped and its slot freed, as by [`AppKeys::destroy`].
@@ -124,7 +128,7 @@ impl Wallet {
     }
 }
 
-fn rng(out: &mut [u8]) -> Result<()> {
+pub(super) fn rng(out: &mut [u8]) -> Result<()> {
     OsRng.try_fill_bytes(out).map_err(|_| Error::Rng)
 }
 
@@ -150,14 +154,14 @@ fn wrap_kek(ss: &[u8; 32], label: &[u8], aad: &[u8], kem_pk: &[u8]) -> Result<Ze
 }
 
 impl AppKeys {
-    fn check(&self, h: &KeyHandle) -> Result<()> {
+    pub(super) fn check(&self, h: &KeyHandle) -> Result<()> {
         if h.scope != self.scope || !h.h.same_store(&self.store) {
             return Err(Error::AppHandleForeign);
         }
         Ok(())
     }
 
-    fn check_usage(&self, h: &KeyHandle, usage: KeyUsage) -> Result<()> {
+    pub(super) fn check_usage(&self, h: &KeyHandle, usage: KeyUsage) -> Result<()> {
         self.check(h)?;
         if h.usage != usage {
             return Err(Error::AppKeyUsage);
@@ -165,7 +169,7 @@ impl AppKeys {
         Ok(())
     }
 
-    fn make(
+    pub(super) fn make(
         &self,
         key: &[u8],
         usage: KeyUsage,
@@ -178,10 +182,11 @@ impl AppKeys {
             scope: self.scope,
             origin,
             nonce,
+            chain: None,
         })
     }
 
-    fn bytes(&self, h: &KeyHandle) -> Result<Zeroizing<[u8; 32]>> {
+    pub(super) fn bytes(&self, h: &KeyHandle) -> Result<Zeroizing<[u8; 32]>> {
         h.h.with(key32)?
     }
 
@@ -244,7 +249,7 @@ impl AppKeys {
     /// One public MAC output of 1 to 8 bytes under a `Derive` key this scope drew or unwrapped (never a derived one).
     pub fn mac_public(&self, key: &KeyHandle, data: &[u8], len: usize) -> Result<Vec<u8>> {
         self.check_usage(key, KeyUsage::Derive)?;
-        if key.origin == Origin::Derived {
+        if !matches!(key.origin, Origin::Drawn | Origin::Unwrapped) {
             return Err(Error::AppKeyUsage);
         }
         if !(1..=8).contains(&len) {
@@ -387,7 +392,7 @@ impl AppKeys {
         self.make(&out[..], KeyUsage::Derive, Origin::Derived, None)
     }
 
-    fn wrap_with(
+    pub(super) fn wrap_with(
         &self,
         key: &KeyHandle,
         label: &[u8],
