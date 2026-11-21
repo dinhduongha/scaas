@@ -55,14 +55,15 @@ extension FamilyParamsPatterns on FamilyParams {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( FamilyParams_Cosmos value)?  cosmos,TResult Function( FamilyParams_Aptos value)?  aptos,TResult Function( FamilyParams_Solana value)?  solana,TResult Function( FamilyParams_Soroban value)?  soroban,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( FamilyParams_Cosmos value)?  cosmos,TResult Function( FamilyParams_Aptos value)?  aptos,TResult Function( FamilyParams_Solana value)?  solana,TResult Function( FamilyParams_Soroban value)?  soroban,TResult Function( FamilyParams_Sui value)?  sui,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that);case FamilyParams_Solana() when solana != null:
 return solana(_that);case FamilyParams_Soroban() when soroban != null:
-return soroban(_that);case _:
+return soroban(_that);case FamilyParams_Sui() when sui != null:
+return sui(_that);case _:
   return orElse();
 
 }
@@ -80,14 +81,15 @@ return soroban(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( FamilyParams_Cosmos value)  cosmos,required TResult Function( FamilyParams_Aptos value)  aptos,required TResult Function( FamilyParams_Solana value)  solana,required TResult Function( FamilyParams_Soroban value)  soroban,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( FamilyParams_Cosmos value)  cosmos,required TResult Function( FamilyParams_Aptos value)  aptos,required TResult Function( FamilyParams_Solana value)  solana,required TResult Function( FamilyParams_Soroban value)  soroban,required TResult Function( FamilyParams_Sui value)  sui,}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos():
 return cosmos(_that);case FamilyParams_Aptos():
 return aptos(_that);case FamilyParams_Solana():
 return solana(_that);case FamilyParams_Soroban():
-return soroban(_that);}
+return soroban(_that);case FamilyParams_Sui():
+return sui(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -101,14 +103,15 @@ return soroban(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( FamilyParams_Cosmos value)?  cosmos,TResult? Function( FamilyParams_Aptos value)?  aptos,TResult? Function( FamilyParams_Solana value)?  solana,TResult? Function( FamilyParams_Soroban value)?  soroban,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( FamilyParams_Cosmos value)?  cosmos,TResult? Function( FamilyParams_Aptos value)?  aptos,TResult? Function( FamilyParams_Solana value)?  solana,TResult? Function( FamilyParams_Soroban value)?  soroban,TResult? Function( FamilyParams_Sui value)?  sui,}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that);case FamilyParams_Solana() when solana != null:
 return solana(_that);case FamilyParams_Soroban() when soroban != null:
-return soroban(_that);case _:
+return soroban(_that);case FamilyParams_Sui() when sui != null:
+return sui(_that);case _:
   return null;
 
 }
@@ -125,13 +128,14 @@ return soroban(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult Function( int chainId,  String package)?  aptos,TResult Function( String program)?  solana,TResult Function( String passphrase,  String xlmSac)?  soroban,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult Function( int chainId,  String package)?  aptos,TResult Function( String program)?  solana,TResult Function( String passphrase,  String xlmSac)?  soroban,TResult Function( List<EndpointConfig> graphql,  Policy graphqlPolicy)?  sui,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that.chainId,_that.package);case FamilyParams_Solana() when solana != null:
 return solana(_that.program);case FamilyParams_Soroban() when soroban != null:
-return soroban(_that.passphrase,_that.xlmSac);case _:
+return soroban(_that.passphrase,_that.xlmSac);case FamilyParams_Sui() when sui != null:
+return sui(_that.graphql,_that.graphqlPolicy);case _:
   return orElse();
 
 }
@@ -149,13 +153,14 @@ return soroban(_that.passphrase,_that.xlmSac);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)  cosmos,required TResult Function( int chainId,  String package)  aptos,required TResult Function( String program)  solana,required TResult Function( String passphrase,  String xlmSac)  soroban,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)  cosmos,required TResult Function( int chainId,  String package)  aptos,required TResult Function( String program)  solana,required TResult Function( String passphrase,  String xlmSac)  soroban,required TResult Function( List<EndpointConfig> graphql,  Policy graphqlPolicy)  sui,}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos():
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos():
 return aptos(_that.chainId,_that.package);case FamilyParams_Solana():
 return solana(_that.program);case FamilyParams_Soroban():
-return soroban(_that.passphrase,_that.xlmSac);}
+return soroban(_that.passphrase,_that.xlmSac);case FamilyParams_Sui():
+return sui(_that.graphql,_that.graphqlPolicy);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -169,13 +174,14 @@ return soroban(_that.passphrase,_that.xlmSac);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult? Function( int chainId,  String package)?  aptos,TResult? Function( String program)?  solana,TResult? Function( String passphrase,  String xlmSac)?  soroban,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult? Function( int chainId,  String package)?  aptos,TResult? Function( String program)?  solana,TResult? Function( String passphrase,  String xlmSac)?  soroban,TResult? Function( List<EndpointConfig> graphql,  Policy graphqlPolicy)?  sui,}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that.chainId,_that.package);case FamilyParams_Solana() when solana != null:
 return solana(_that.program);case FamilyParams_Soroban() when soroban != null:
-return soroban(_that.passphrase,_that.xlmSac);case _:
+return soroban(_that.passphrase,_that.xlmSac);case FamilyParams_Sui() when sui != null:
+return sui(_that.graphql,_that.graphqlPolicy);case _:
   return null;
 
 }
@@ -459,6 +465,80 @@ class _$FamilyParams_SorobanCopyWithImpl<$Res>
 passphrase: null == passphrase ? _self.passphrase : passphrase // ignore: cast_nullable_to_non_nullable
 as String,xlmSac: null == xlmSac ? _self.xlmSac : xlmSac // ignore: cast_nullable_to_non_nullable
 as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class FamilyParams_Sui extends FamilyParams {
+  const FamilyParams_Sui({required final  List<EndpointConfig> graphql, required this.graphqlPolicy}): _graphql = graphql,super._();
+  
+
+ final  List<EndpointConfig> _graphql;
+ List<EndpointConfig> get graphql {
+  if (_graphql is EqualUnmodifiableListView) return _graphql;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_graphql);
+}
+
+ final  Policy graphqlPolicy;
+
+/// Create a copy of FamilyParams
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$FamilyParams_SuiCopyWith<FamilyParams_Sui> get copyWith => _$FamilyParams_SuiCopyWithImpl<FamilyParams_Sui>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is FamilyParams_Sui&&const DeepCollectionEquality().equals(other._graphql, _graphql)&&(identical(other.graphqlPolicy, graphqlPolicy) || other.graphqlPolicy == graphqlPolicy));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_graphql),graphqlPolicy);
+
+@override
+String toString() {
+  return 'FamilyParams.sui(graphql: $graphql, graphqlPolicy: $graphqlPolicy)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $FamilyParams_SuiCopyWith<$Res> implements $FamilyParamsCopyWith<$Res> {
+  factory $FamilyParams_SuiCopyWith(FamilyParams_Sui value, $Res Function(FamilyParams_Sui) _then) = _$FamilyParams_SuiCopyWithImpl;
+@useResult
+$Res call({
+ List<EndpointConfig> graphql, Policy graphqlPolicy
+});
+
+
+
+
+}
+/// @nodoc
+class _$FamilyParams_SuiCopyWithImpl<$Res>
+    implements $FamilyParams_SuiCopyWith<$Res> {
+  _$FamilyParams_SuiCopyWithImpl(this._self, this._then);
+
+  final FamilyParams_Sui _self;
+  final $Res Function(FamilyParams_Sui) _then;
+
+/// Create a copy of FamilyParams
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? graphql = null,Object? graphqlPolicy = null,}) {
+  return _then(FamilyParams_Sui(
+graphql: null == graphql ? _self._graphql : graphql // ignore: cast_nullable_to_non_nullable
+as List<EndpointConfig>,graphqlPolicy: null == graphqlPolicy ? _self.graphqlPolicy : graphqlPolicy // ignore: cast_nullable_to_non_nullable
+as Policy,
   ));
 }
 

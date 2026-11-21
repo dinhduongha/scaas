@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The families' rows of smartcontracts/vectors/families/ (written by clientkeys, read by ua-rs too) against this node's
-//! adapters: Solana's program addresses and the SCaaS Account of an owner (`adapters::solana::{find_pda, account_of}`).
+//! adapters: Solana's program addresses and the SCaaS Account of an owner (`adapters::solana::{find_pda, account_of}`), Sui's
+//! derived `Account<T>` id (`adapters::sui::derive_account`).
 use scaas_node::adapters::solana::{account_of, find_pda, key};
 use serde_json::Value;
 
@@ -32,7 +33,10 @@ fn solana_program_addresses_and_accounts() {
     for r in acct {
         let p = key(r["program"].as_str().unwrap()).unwrap();
         let o = key(r["owner"].as_str().unwrap()).unwrap();
-        assert_eq!(account_of(&p, &o), key(r["account"].as_str().unwrap()).unwrap());
+        assert_eq!(
+            account_of(&p, &o),
+            key(r["account"].as_str().unwrap()).unwrap()
+        );
     }
 }
 
@@ -54,12 +58,23 @@ fn soroban_keys_and_entries() {
         .collect();
     assert!(matches!(&keys[0], LedgerKey::Account(_)));
     for (k, row) in keys[1..].iter().zip(&v["keys"].as_array().unwrap()[1..]) {
-        let LedgerKey::ContractData(d) = k else { panic!("{row}") };
+        let LedgerKey::ContractData(d) = k else {
+            panic!("{row}")
+        };
         assert_eq!(d.durability, ContractDataDurability::Persistent);
         assert!(matches!(d.contract, ScAddress::Contract(_)));
-        let ScVal::Vec(Some(items)) = &d.key else { panic!("{row}") };
-        let want = if row["holder"].as_str().unwrap().starts_with("0x") { "UaBalance" } else { "Balance" };
-        assert!(matches!(&items[0], ScVal::Symbol(s) if s.to_string() == want), "{row}");
+        let ScVal::Vec(Some(items)) = &d.key else {
+            panic!("{row}")
+        };
+        let want = if row["holder"].as_str().unwrap().starts_with("0x") {
+            "UaBalance"
+        } else {
+            "Balance"
+        };
+        assert!(
+            matches!(&items[0], ScVal::Symbol(s) if s.to_string() == want),
+            "{row}"
+        );
         assert_eq!(items.len(), 2);
     }
     for e in v["entries"].as_array().unwrap() {
@@ -77,5 +92,21 @@ fn soroban_keys_and_entries() {
             x => panic!("{x:?}"),
         };
         assert_eq!(amount, e["amount"].as_str().unwrap(), "{}", e["what"]);
+    }
+}
+
+/// Sui's derived `Account<T>` ids (SDK plan T24.sui) by the node's `derive_account`: every row, the Move test's pair first.
+#[test]
+fn sui_derived_accounts() {
+    let v = rows("sui");
+    let acct = v["account"].as_array().unwrap();
+    assert!(acct.len() >= 4);
+    let a =
+        |r: &Value, k: &str| scaas_node::adapters::sui::parse_addr(r[k].as_str().unwrap()).unwrap();
+    for r in acct {
+        assert_eq!(
+            scaas_node::adapters::sui::derive_account(&a(r, "registry"), &a(r, "owner")),
+            a(r, "account")
+        );
     }
 }

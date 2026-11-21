@@ -63,7 +63,7 @@
 #   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; cargo test --locked --manifest-path rust/Cargo.toml
 #                          (the binding's own Rust tests: secrets never cross frb's codec; T15o); dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
-#   scaas-sdk:             in clients/scaas-sdk: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban;
+#   scaas-sdk:             in clients/scaas-sdk: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui;
 #                          cargo test --locked --no-default-features --features vault,file-store; cargo test --locked --lib --features <the same>,native-networks,raw-native;
 #                          cargo test --locked --features <the same>,vectors --test pqchat_keys --test app_core_vault_rows (the test feature alone: a vectors build refuses
 #                          scaas-ua key handles until a test unlocks them); cargo clippy --locked --all-targets --features <the same>,vectors,native-networks,raw-native -- -D warnings; per PQZ set
@@ -1155,15 +1155,15 @@ jobs:
         with:
           workspaces: clients/scaas-sdk
       - name: cargo test (full feature set)
-        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban
+        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui
       - name: the test feature vectors (pqchat-core T1 rows, PqVault V9 rows)
-        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,vectors --test pqchat_keys --test app_core_vault_rows
+        run: cargo test --locked --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,vectors --test pqchat_keys --test app_core_vault_rows
       - name: cargo test (vault and file store only)
         run: cargo test --locked --no-default-features --features vault,file-store
       - name: the raw native entry and native networks
-        run: cargo test --locked --lib --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,native-networks,raw-native
+        run: cargo test --locked --lib --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,native-networks,raw-native
       - name: cargo clippy
-        run: cargo clippy --locked --all-targets --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,vectors,native-networks,raw-native -- -D warnings
+        run: cargo clippy --locked --all-targets --features vault,account,wallet,zether,pqz,pqz-set-n2304-kmax4096,dex,admin,classical-roots,app-core,pqchat-records,near,algorand,cosmos,aptos,solana,soroban,sui,vectors,native-networks,raw-native -- -D warnings
       - name: each other PQZ set
         run: |
           for s in n2048-kmax1024 n2560-kmax16384 n2816-kmax65536; do

@@ -6,7 +6,8 @@
 use crate::{Fail, Globals};
 use scaas_rpc::{Class, EndpointAuth, Policy, Secret};
 use scaas_sdk::{
-    ChainProfile, EndpointConfig, Family, FamilyParams, Finality, Limits, ListedDex, ListedToken, Sdk, SdkConfig,
+    ChainProfile, EndpointConfig, Family, FamilyParams, Finality, Limits, ListedDex, ListedToken,
+    Sdk, SdkConfig,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -106,6 +107,15 @@ enum Fam {
     Aptos(AptosFam),
     Solana(SolanaFam),
     Soroban(SorobanFam),
+    Sui(SuiFam),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SuiFam {
+    graphql: Vec<Ep>,
+    #[serde(default)]
+    graphql_policy: Pol,
 }
 
 #[derive(Deserialize)]
@@ -156,6 +166,10 @@ fn fam(f: Fam) -> FamilyParams {
         Fam::Soroban(s) => FamilyParams::Soroban {
             passphrase: s.passphrase,
             xlm_sac: s.xlm_sac,
+        },
+        Fam::Sui(s) => FamilyParams::Sui {
+            graphql: eps(s.graphql),
+            graphql_policy: pol(s.graphql_policy),
         },
     }
 }
@@ -515,6 +529,7 @@ mod tests {
     const COSMOS: &str = r#"{"cosmos":{"chain_id":"scaas-local-1","rest":[{"url":"http://127.0.0.1:1","label":"r"},{"url":"http://127.0.0.1:2","label":"s"}],"rest_policy":"strict_majority","denom":"uscaas","prefix":"wasm"}}"#;
     const APTOS: &str = r#"{"aptos":{"chain_id":4,"package":"0x00000000000000000000000000000000000000000000000000000000000000aa"}}"#;
     const SOLANA: &str = r#"{"solana":{"program":"7DYCAhqwQSKqqL1h8V1XmY1BTcMWxrASQYKNMy87jeg3"}}"#;
+    const SUI: &str = r#"{"sui":{"graphql":[{"url":"http://127.0.0.1:1","label":"g"},{"url":"http://127.0.0.1:2","label":"h"}],"graphql_policy":"strict_majority"}}"#;
 
     #[test]
     fn family_params_are_read_by_name() {
@@ -527,7 +542,10 @@ mod tests {
                 denom,
                 prefix,
             }) => {
-                assert_eq!((chain_id.as_str(), denom.as_str(), prefix.as_str()), ("scaas-local-1", "uscaas", "wasm"));
+                assert_eq!(
+                    (chain_id.as_str(), denom.as_str(), prefix.as_str()),
+                    ("scaas-local-1", "uscaas", "wasm")
+                );
                 assert_eq!((rest.len(), rest[1].label.as_deref()), (2, Some("s")));
                 assert!(matches!(rest_policy, Policy::StrictMajority));
             }
@@ -538,15 +556,29 @@ mod tests {
             &p[0].family_params,
             Some(scaas_sdk::FamilyParams::Aptos { chain_id: 4, package }) if package.ends_with("aa")
         ));
+        let p = parse_profiles(&fam(SUI, "Sui")).unwrap();
+        assert!(matches!(
+            &p[0].family_params,
+            Some(scaas_sdk::FamilyParams::Sui { graphql, graphql_policy: Policy::StrictMajority })
+                if graphql.len() == 2 && graphql[1].label.as_deref() == Some("h")
+        ));
         // without the field: none (an EVM profile)
         assert!(parse_profiles(P).unwrap()[0].family_params.is_none());
         // an unknown field, an unknown family, two families at once: refused by name, each beside the controls above
         for bad in [
             COSMOS.replace("\"prefix\"", "\"prefix\":\"wasm\",\"extra\""),
             r#"{"solana_x":{}}"#.to_string(),
-            format!("{{{},{}}}", &COSMOS[1..COSMOS.len() - 1], &APTOS[1..APTOS.len() - 1]),
+            format!(
+                "{{{},{}}}",
+                &COSMOS[1..COSMOS.len() - 1],
+                &APTOS[1..APTOS.len() - 1]
+            ),
         ] {
-            assert_eq!(code(parse_profiles(&fam(&bad, "Cosmos"))), "ProfilesRefused", "{bad}");
+            assert_eq!(
+                code(parse_profiles(&fam(&bad, "Cosmos"))),
+                "ProfilesRefused",
+                "{bad}"
+            );
         }
     }
 
@@ -554,7 +586,12 @@ mod tests {
     /// answers here) instead of `FeatureMissing`; params out of their form are `Argument` at `Sdk::open`.
     #[tokio::test(flavor = "multi_thread")]
     async fn family_profiles_open_and_read() {
-        for (params, family) in [(COSMOS, "Cosmos"), (APTOS, "Aptos"), (SOLANA, "Solana")] {
+        for (params, family) in [
+            (COSMOS, "Cosmos"),
+            (APTOS, "Aptos"),
+            (SOLANA, "Solana"),
+            (SUI, "Sui"),
+        ] {
             let sdk = open_with(&fam(params, family)).await.unwrap();
             let id = match family {
                 "Solana" => "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx",
@@ -567,7 +604,10 @@ mod tests {
         // Soroban: the passphrase's SHA-256 is the profile's chain_uid
         use sha2::Digest;
         let pass = "Standalone Network ; February 2017";
-        let uid: String = sha2::Sha256::digest(pass).iter().map(|b| format!("{b:02x}")).collect();
+        let uid: String = sha2::Sha256::digest(pass)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
         let sor = fam(
             &format!(r#"{{"soroban":{{"passphrase":"{pass}","xlm_sac":"CCJSG6X7HADWBAWWDQVBUOJJYIMMCTSW7UMWKPJPTZ5GKOBLZ77E4WQA"}}}}"#),
             "Soroban",
@@ -577,7 +617,10 @@ mod tests {
         let sdk = open_with(&sor).await.unwrap();
         let r = sdk
             .wallet()
-            .balances("GCJU3TGRU2M7V3DQTULG3A5DPHFPMTQIPAVP22UQW5F55D4ABTF2W7HU".into(), "f".into())
+            .balances(
+                "GCJU3TGRU2M7V3DQTULG3A5DPHFPMTQIPAVP22UQW5F55D4ABTF2W7HU".into(),
+                "f".into(),
+            )
             .await;
         assert_ne!(code(r.map_err(Fail::Sdk)), "FeatureMissing", "Soroban");
         let zero = APTOS.replace("\"chain_id\":4", "\"chain_id\":0");
@@ -587,7 +630,11 @@ mod tests {
     }
 
     async fn open_with(text: &str) -> Result<Arc<Sdk>, Fail> {
-        let d = std::env::temp_dir().join(format!("scaas-cli-fam-{}-{}", std::process::id(), text.len()));
+        let d = std::env::temp_dir().join(format!(
+            "scaas-cli-fam-{}-{}",
+            std::process::id(),
+            text.len()
+        ));
         let store = scaas_sdk::vault::FileStore::new(d.to_string_lossy().into_owned()).unwrap();
         Ok(Sdk::open(SdkConfig {
             profiles: parse_profiles(text)?,

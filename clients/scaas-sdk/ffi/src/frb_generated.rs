@@ -16313,6 +16313,13 @@ const _: fn() = || {
             let _: String = passphrase;
             let _: String = xlm_sac;
         }
+        scaas_sdk::config::FamilyParams::Sui {
+            graphql,
+            graphql_policy,
+        } => {
+            let _: Vec<scaas_sdk::config::EndpointConfig> = graphql;
+            let _: crate::api::Policy = graphql_policy;
+        }
     }
     match None::<scaas_sdk::config::Finality>.unwrap() {
         scaas_sdk::config::Finality::Finalized => {}
@@ -19859,6 +19866,15 @@ impl SseDecode for scaas_sdk::config::FamilyParams {
                 return scaas_sdk::config::FamilyParams::Soroban {
                     passphrase: var_passphrase,
                     xlm_sac: var_xlmSac,
+                };
+            }
+            4 => {
+                let mut var_graphql =
+                    <Vec<scaas_sdk::config::EndpointConfig>>::sse_decode(deserializer);
+                let mut var_graphqlPolicy = <crate::api::Policy>::sse_decode(deserializer);
+                return scaas_sdk::config::FamilyParams::Sui {
+                    graphql: var_graphql,
+                    graphql_policy: var_graphqlPolicy,
                 };
             }
             _ => {
@@ -27475,6 +27491,15 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::FamilyParam
                 xlm_sac.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            scaas_sdk::config::FamilyParams::Sui {
+                graphql,
+                graphql_policy,
+            } => [
+                4.into_dart(),
+                graphql.into_into_dart().into_dart(),
+                graphql_policy.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -33584,6 +33609,14 @@ impl SseEncode for scaas_sdk::config::FamilyParams {
                 <i32>::sse_encode(3, serializer);
                 <String>::sse_encode(passphrase, serializer);
                 <String>::sse_encode(xlm_sac, serializer);
+            }
+            scaas_sdk::config::FamilyParams::Sui {
+                graphql,
+                graphql_policy,
+            } => {
+                <i32>::sse_encode(4, serializer);
+                <Vec<scaas_sdk::config::EndpointConfig>>::sse_encode(graphql, serializer);
+                <crate::api::Policy>::sse_encode(graphql_policy, serializer);
             }
             _ => {
                 unimplemented!("");

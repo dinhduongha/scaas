@@ -69,14 +69,14 @@ Status: SPECIFIED.
 | 19 | Aptos | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round |
 | 20 | Solana | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round |
 | 21 | Soroban (Stellar; Pi) | B | B | B | M T27 | B | M T30 | M T28, T29 | P `zether-soroban` | M family round | M family round |
-| 22 | Sui | B | B | B | M T27 | P rpc T24.sui-graphql | M T30 | M T28, T29 | M family round | M family round | M family round |
+| 22 | Sui | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round |
 | 23 | TON (GRAM) | B | B | B | M T27 | P rpc T24.ton-seqno | M T30 | M T28, T29 | M family round | M family round | M family round |
 | 24 | native NEAR | n/a | n/a | n/a | M T31 | B | M T30 | M T31 | n/a | n/a | n/a |
 | 25 | native DOT (relay chain and Asset Hub, by profile) | n/a | n/a | n/a | M T33 | M T32 | M T32 | M T34 | n/a | n/a | n/a |
 | 26 | native BTC | n/a | n/a | n/a | M T35 | M T36 | M T36 | M T37 | n/a | n/a | n/a |
 | 27 | Arweave (store) | n/a | n/a | n/a | P CA-T16, T17 | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a |
 
-Counts (27 rows): Contract B 23 (14 B‡), n/a 4. Relay B 20, P 3, n/a 4. Index B 20, P 3, n/a 4. Signing B 17, P 1, M 9. rpc read B 19, P 6, M 2. rpc write B 15, P 1, M 11. SDK B 5, P 4, M 18. Zether B 8 (7 B‡), P 6, M 9, n/a 4. PQ B 8 (7 B‡), P 8, M 7, n/a 4. PQZ B 8 (7 B‡), P 6, M 9, n/a 4.
+Counts (27 rows): Contract B 23 (14 B‡), n/a 4. Relay B 20, P 3, n/a 4. Index B 20, P 3, n/a 4. Signing B 17, P 1, M 9. rpc read B 20, P 5, M 2. rpc write B 15, P 1, M 11. SDK B 5, P 4, M 18. Zether B 8 (7 B‡), P 6, M 9, n/a 4. PQ B 8 (7 B‡), P 8, M 7, n/a 4. PQZ B 8 (7 B‡), P 6, M 9, n/a 4.
 ## 4. Notes on the cells
 
 Status: SPECIFIED.

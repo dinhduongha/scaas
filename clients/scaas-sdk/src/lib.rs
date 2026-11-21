@@ -199,6 +199,9 @@ pub(crate) struct Chain {
     /// a Soroban profile's family client (plan T24.soroban), named by its params' passphrase, and the XLM SAC's contract id
     #[cfg(all(feature = "wallet", feature = "soroban"))]
     pub(crate) soroban: Option<(Arc<scaas_rpc::soroban::Soroban>, [u8; 32])>,
+    /// a Sui profile's GraphQL client (plan T24.sui), named by `chain_uid` (the genesis checkpoint's digest) in base58
+    #[cfg(all(feature = "wallet", feature = "sui"))]
+    pub(crate) sui: Option<Arc<scaas_rpc::sui::SuiGraphql>>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -434,6 +437,22 @@ impl Sdk {
                 }
                 _ => None,
             };
+            // a Sui profile's GraphQL client (plan T24.sui): its params' endpoints, pinned to `chain_uid` in base58
+            #[cfg(all(feature = "wallet", feature = "sui"))]
+            let sui = match &p.family_params {
+                Some(FamilyParams::Sui {
+                    graphql,
+                    graphql_policy,
+                }) => {
+                    let uid =
+                        bs58::encode(op::unhex(&p.chain_uid.to_ascii_lowercase())?).into_string();
+                    Some(Arc::new(scaas_rpc::sui::SuiGraphql::pinned(
+                        scaas_rpc::family::Client::new(list(graphql, *graphql_policy)?)?,
+                        Some(&uid),
+                    )))
+                }
+                _ => None,
+            };
             #[cfg(any(feature = "account", feature = "wallet"))]
             let pool = match (p.family, p.chain_id) {
                 (Family::Evm, Some(id)) => {
@@ -477,6 +496,8 @@ impl Sdk {
                 solana,
                 #[cfg(all(feature = "wallet", feature = "soroban"))]
                 soroban,
+                #[cfg(all(feature = "wallet", feature = "sui"))]
+                sui,
             });
         }
         let rt = runtime(config.runtime)?;

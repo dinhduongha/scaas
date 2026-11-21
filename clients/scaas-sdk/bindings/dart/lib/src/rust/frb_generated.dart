@@ -15864,6 +15864,11 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           passphrase: dco_decode_String(raw[1]),
           xlmSac: dco_decode_String(raw[2]),
         );
+      case 4:
+        return FamilyParams_Sui(
+          graphql: dco_decode_list_endpoint_config(raw[1]),
+          graphqlPolicy: dco_decode_policy(raw[2]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -22290,6 +22295,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         return FamilyParams_Soroban(
           passphrase: var_passphrase,
           xlmSac: var_xlmSac,
+        );
+      case 4:
+        var var_graphql = sse_decode_list_endpoint_config(deserializer);
+        var var_graphqlPolicy = sse_decode_policy(deserializer);
+        return FamilyParams_Sui(
+          graphql: var_graphql,
+          graphqlPolicy: var_graphqlPolicy,
         );
       default:
         throw UnimplementedError('');
@@ -29976,6 +29988,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         sse_encode_i_32(3, serializer);
         sse_encode_String(passphrase, serializer);
         sse_encode_String(xlmSac, serializer);
+      case FamilyParams_Sui(
+        graphql: final graphql,
+        graphqlPolicy: final graphqlPolicy,
+      ):
+        sse_encode_i_32(4, serializer);
+        sse_encode_list_endpoint_config(graphql, serializer);
+        sse_encode_policy(graphqlPolicy, serializer);
     }
   }
 

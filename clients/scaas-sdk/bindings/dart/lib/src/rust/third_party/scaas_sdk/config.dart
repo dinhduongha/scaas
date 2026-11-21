@@ -217,6 +217,14 @@ sealed class FamilyParams with _$FamilyParams {
     required String passphrase,
     required String xlmSac,
   }) = FamilyParams_Soroban;
+
+  /// Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+  /// §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+  /// 32 bytes in base58 `chainIdentifier` must answer
+  const factory FamilyParams.sui({
+    required List<EndpointConfig> graphql,
+    required Policy graphqlPolicy,
+  }) = FamilyParams_Sui;
 }
 
 @freezed

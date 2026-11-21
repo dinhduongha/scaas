@@ -17,7 +17,6 @@ ua-go | 81a8cbcf2 | 0 | -
 ua-cs | 81a8cbcf2 | 0 | -
 ua-cxx | 81a8cbcf2 | 0 | ctest: 0 tests failed out of 43
 frb-dart | 81a8cbcf2 | 0 | dart: +46:
-rpc-wasm | 81a8cbcf2 | 0 | -
 sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
 # SDK round-end matrix (T0-T13b) at 81a8cbcf2: the 27 rows above, clean tree, every rc 0. The first full run at f1a93439a
 # started from `cargo clean` of scaas-sdk, its ffi, ua-rs, scaas-rpc, ua-c, ua-cxx and ua-dart-frb; it had two reds (sdk-min:
@@ -31,7 +30,6 @@ sdk-opaque | 81a8cbcf2 | 0 | 9 passed, 0 failed, 0 ignored (1 binaries)
 # T15 (confidential: the reading layer, part of Zether) replaced eight rows above, run on the T15 tree before its commit.
 # sdk-min's one red is the same pre-existing tests/config.rs open_checks_gas_tables_and_opt_ins (gas-table work on ua-rs-sign);
 # sdk-e2e is T12's pay (T15's anvil e2e is not built). bind-cpp not applicable (no bindings/cpp). T15 mutants: 9/9 killed.
-rpc-wasm | 9172eb6dd | 0 | -; tree dirty
 # Plan T13 part 1 (registration, split, records) 5721c48da, T13b (sponsored registration) 66e995ee2, the T15 e2e switch to
 # SDK registration 818595dbf: the rows above at 818595dbf. sdk-e2e 4 passed (the PQ-kind registration, the sponsored
 # registration then pay, the T12 pay, the T15 Zether e2e registering through the SDK). sdk-min's one red is the same
@@ -175,15 +173,16 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 ua-clippy | 612e2c216 | 0 | -
-rpc-clippy | 612e2c216 | 0 | -
 sdk-clippy | 71c6c0cf3 | 0 | -
 bind-gen | 71c6c0cf3 | 0 | -
 features | 71c6c0cf3 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-docs | 71c6c0cf3 | 0 | -
 ck-test | 71c6c0cf3 | 0 | node: 533 pass, 0 fail, 4 skipped
-mutants-check | 71c6c0cf3 | 0 | -
 cli | 71c6c0cf3 | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
-rpc-test | 71c6c0cf3 | 0 | 168 passed, 0 failed, 10 ignored (16 binaries)
 ua-test | 71c6c0cf3 | 0 | 597 passed, 0 failed, 3 ignored (58 binaries)
 bind-dart | 71c6c0cf3 | 0 | dart: +14:
 sdk-test | 71c6c0cf3 | 0 | 355 passed, 0 failed, 16 ignored (32 binaries)
+rpc-test | 5975bdc2e | 0 | 175 passed, 0 failed, 10 ignored (17 binaries)
+rpc-clippy | 5975bdc2e | 0 | -
+rpc-wasm | 5975bdc2e | 0 | -
+docs | 5975bdc2e | 0 | -
+mutants-check | 5975bdc2e | 0 | -

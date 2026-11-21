@@ -124,6 +124,13 @@ pub enum FamilyParams {
     /// Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
     /// and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
     Soroban { passphrase: String, xlm_sac: String },
+    /// Sui: the GraphQL endpoints the reads go to, with their policy (public fullnodes refuse JSON-RPC, docs/networks/sui.md
+    /// §14; the profile's `rpc` are the JSON-RPC endpoints), each named by `chain_uid`, the genesis checkpoint's digest, whose
+    /// 32 bytes in base58 `chainIdentifier` must answer
+    Sui {
+        graphql: Vec<EndpointConfig>,
+        graphql_policy: Policy,
+    },
 }
 
 /// Base58 (Bitcoin's alphabet) of 32 to 44 characters: a Solana key's form (its exact 32 bytes are checked where it is
@@ -182,6 +189,7 @@ impl FamilyParams {
                     && xlm_sac.len() == 56
                     && xlm_sac.starts_with('C')
             }
+            FamilyParams::Sui { .. } => family == Family::Sui,
         }
     }
 }

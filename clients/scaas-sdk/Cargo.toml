@@ -37,7 +37,8 @@ near = ["scaas-rpc/near", "dep:bs58", "dep:base64"]
 # T24: the boxes' names and values and the genesis hash in base64 (an encoding)
 algorand = ["scaas-rpc/algorand", "dep:base64"]
 aptos = ["scaas-rpc/aptos"]
-sui = ["scaas-rpc/sui"]
+# T24.sui: chain_uid in base58 (an encoding; the Account<T> id is ua-rs's)
+sui = ["scaas-rpc/sui", "dep:bs58"]
 # T24: a CW20 smart query is base64 JSON in the path (an encoding)
 cosmos = ["scaas-rpc/cosmos", "dep:base64"]
 ton = ["scaas-rpc/ton"]

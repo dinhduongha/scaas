@@ -13,7 +13,8 @@
         feature = "cosmos",
         feature = "aptos",
         feature = "solana",
-        feature = "soroban"
+        feature = "soroban",
+        feature = "sui"
     )),
     allow(dead_code, unused_imports, unused_variables)
 )]
@@ -29,6 +30,8 @@ pub(crate) mod near;
 pub(crate) mod solana;
 #[cfg(feature = "soroban")]
 pub(crate) mod soroban;
+#[cfg(feature = "sui")]
+pub(crate) mod sui;
 
 use super::Balances;
 use crate::{Sdk, SdkError};
@@ -53,6 +56,8 @@ pub(crate) async fn balances(sdk: &Sdk, chain: &str, id: &str) -> Result<Balance
         crate::Family::Solana => solana::balances(c, id).await,
         #[cfg(feature = "soroban")]
         crate::Family::Soroban => soroban::balances(c, id).await,
+        #[cfg(feature = "sui")]
+        crate::Family::Sui => sui::balances(c, id).await,
         _ => Err(SdkError::FeatureMissing),
     }
 }
@@ -63,7 +68,13 @@ pub(crate) fn malformed(i: usize, why: &str) -> ReadError {
 }
 
 /// A balance as a family sends it: a decimal string of 1 to 78 digits within a U256, written back without leading zeros.
-#[cfg(any(feature = "near", feature = "cosmos", feature = "aptos", feature = "solana"))]
+#[cfg(any(
+    feature = "near",
+    feature = "cosmos",
+    feature = "aptos",
+    feature = "solana",
+    feature = "sui"
+))]
 pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
     if s.is_empty() || s.len() > 78 || !s.bytes().all(|b| b.is_ascii_digit()) {
         return Err(malformed(i, "a balance that is not a decimal string"));
@@ -83,7 +94,8 @@ pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
         feature = "algorand",
         feature = "cosmos",
         feature = "solana",
-        feature = "soroban"
+        feature = "soroban",
+        feature = "sui"
     )),
     allow(dead_code)
 )]
