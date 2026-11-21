@@ -5916,11 +5916,14 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqva
 
 Change (controller calls, owner: no, 2026-11-21, the Fable code review of V1-V8, P2 F6 and P3 F8-F16 and I8; status: BUILT on
 `pqvault-v` unless stated, UNAUDITED). Fixed: **F6** the invariants' baselines are the handler's ghost state, with positive
-controls; **F8** `sealedInfo` is 1,052 to 16,412 B in both records (`PqVaultShape`); **F9** vector rows for a tombstone
+controls; **F8** `sealedInfo` is 28 to 16,412 B in both records (`PqVaultShape`), the structure only (a second controller call the same day
+moved the minimum back from 1,052 B: the chain does not force the client's padding policy); **F9** vector rows for a tombstone
 version, the 4,096 and 16,384 B buckets, `padItem`'s 16,380 B limit, a creation nonce above 2^63 as a decimal string, an
 `msig` `UASig` in a stored blob, a mode-1 epoch with the passphrase on; **F10** the node's PqVault and PqChat rows equal
 `selector_audit.json`'s `SIGNED` and unsigned-write rows; **F11** the node e2e runs mode 0 too; **F12** `sealedInfo` padded to
-at least the 1,024 B bucket (its size no longer shows a `prev`; about 1.2 M more state gas per vault or epoch record);
+512 B, the smallest bucket a `sealedInfo` with `prev`, a 64-character ASCII name, an icon and settings fits, else the next power
+of two (its size no longer shows a `prev`; 540 B sealed, about 0.39 M more state gas per vault or epoch record than a 256-B
+bucket; 1,024 B would have cost about 1.18 M; a second controller call the same day replaced the 1,024-B minimum);
 **F15** `removalAt` past the end is `PqVaultUnknown`; **F16** the native-author test's comment, a line in `mutants.py`;
 **I8** the file key's wrap context in spec §6.8. Left, with the reason: **F13** (the `sealedInfo` open is not
 key-committing) is `pqvault-core`'s: it maps every failure of the open (tag, padding, JSON, `shared`) to one outcome with one

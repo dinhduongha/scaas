@@ -163,9 +163,9 @@ PqChat's, [CTR-CHAT-14](pqchat.md#CTR-CHAT-14)). Refusals `PqVaultNotMember`, `P
 padding bucket plus salt and tag) makes `latestRange`'s page bound hold on every chain. A replica takes writes under any
 complete epoch it holds, in its own order; it orders nothing. A member that left an epoch writes no item under it either
 (owner 2026-11-17, the spec's O3 (b); `PqVaultNotMember`). A chain-bound vault has no replica
-([CTR-PQV-17](#CTR-PQV-17)). A vault's or an epoch's `sealedInfo` is 1,052 to 16,412 bytes (a nonce, a padded bucket of
-1,024 to 16,384 B, a tag; `PqVaultShape`), so no write reads an unbounded record (controller call 2026-11-21, the Fable code
-review F8, F12). `removalAt` past the end is `PqVaultUnknown(epochId)` (F15).
+([CTR-PQV-17](#CTR-PQV-17)). A vault's or an epoch's `sealedInfo` is 28 to 16,412 bytes (at least a nonce and a tag, at
+most those around the 16,384-B bucket; `PqVaultShape`), so no write reads an unbounded record; the client's padding policy
+(512 B, CLI-PQV-09) is not the chain's (controller calls 2026-11-21, the Fable code review F8, F12). `removalAt` past the end is `PqVaultUnknown(epochId)` (F15).
 
 ## 7. Recovery from state alone
 

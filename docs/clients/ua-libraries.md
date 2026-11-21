@@ -823,7 +823,10 @@ from `K_v` with the key-wrap constant and its usage in the AAD, and a `file` ite
 under `K_v`; every key handle has one usage, `Derive`, `Data` or `KeyWrap`; a personal vault held by `ua_secret(seed, FN-DSA-512 by
 default, PQV_ACCOUNT, i)`, index 0 the index vault listing the user's vaults** (controller call, owner may override).
 SPECIFIED. Exact bytes: [spec §6](../superpowers/specs/2026-11-17-pqvault.md#6-cryptography); every client reproduces
-`smartcontracts/vectors/pqvault/`.
+`smartcontracts/vectors/pqvault/`. **`sealedInfo`'s padding** (controller call 2026-11-21, the Fable
+code review F12): to 512 B, the smallest bucket a `sealedInfo` with `prev`, a 64-character ASCII name, a 32-character icon and
+settings fits, so its size does not show `prev`; past 512 B the next power of two; 540 B sealed, about 0.39 M state gas more than
+a 256-B bucket per vault or epoch record (1,024 B would be about 1.18 M). BUILT in clientkeys (`padInfo`), reproduced by `ua-rs`.
 
 <a id="CLI-PQV-10"></a>**CLI-PQV-10** — **The passphrase's mechanics: a change, or turning it on or off, is an admin's rekey
 of the same members with a fresh salt; the history is as strong as the weakest epoch that links to it, so before a rekey

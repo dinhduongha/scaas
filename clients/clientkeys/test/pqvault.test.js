@@ -517,19 +517,32 @@ test("passphrase bytes (Fable code review F4): RFC 8265 OpaqueString: spaces to 
   assert.equal(h(pv.passphraseBytes("plain ascii")), h(utf8ToBytes("plain ascii")), "ASCII unchanged");
 });
 
-test("F12: every sealedInfo is padded to at least the 1,024-B bucket, so its size does not show a prev; 1,052..16,412 B", () => {
+test("F12 (controller call 2026-11-21): sealedInfo padded to 512 B (the reference fits), then the next power of two", () => {
+  // the reference: a prev, a 64-character (ASCII) name, a 32-character icon, settings
+  const ref = {
+    name: "N".repeat(64),
+    shared: true,
+    icon: "I".repeat(32),
+    settings: { autoLockSeconds: 300, clipboardSeconds: 30 },
+    prev: { epochId: `0x${"a".repeat(64)}`, keyWrap: `0x${"b".repeat(120)}` },
+  };
+  assert.equal(pv.padInfo(utf8ToBytes(pv.canonicalJson(ref))).length, 512, "the reference fits 512 B");
+  assert.equal(pv.padInfo(utf8ToBytes("{}")).length, 512);
+  assert.equal(pv.padInfo(new Uint8Array(509)).length, 1024, "past 512: the next power of two");
+  assert.equal(pv.padInfo(new Uint8Array(1021)).length, 2048);
+  assert.equal(pv.padInfo(new Uint8Array(16380)).length, 16384);
+  assert.equal(
+    code(() => pv.padInfo(new Uint8Array(16381))),
+    "SealedInfoLength",
+  );
   const sizes = K.epochs.map((e) => fromHex(e.sealedInfo).length);
-  for (const n of sizes) assert.ok(n >= 1052 && n <= 16412, String(n));
-  const withPrev = K.epochs.filter((e) => e.prev).map((e) => fromHex(e.sealedInfo).length);
-  const without = K.epochs.filter((e) => !e.prev).map((e) => fromHex(e.sealedInfo).length);
-  assert.ok(withPrev.length && without.length);
-  assert.deepEqual([...new Set([...withPrev, ...without])], [1052], "one size with and without prev");
+  assert.ok(K.epochs.some((e) => e.prev) && K.epochs.some((e) => !e.prev));
+  assert.deepEqual([...new Set(sizes)], [540], "one size with and without prev: nonce, 512 B, tag");
   assert.equal(
     code(() => pv.unpadInfo(pv.pad(utf8ToBytes("{}")))),
     "Padding",
-    "a 256-B bucket is no sealedInfo any more",
+    "a 256-B bucket is no sealedInfo",
   );
-  assert.equal(pv.padInfo(utf8ToBytes("{}")).length, 1024);
 });
 
 test("F9: a tombstone version, the 4,096 and 16,384 B buckets, padItem's limit, a 64-bit nonce, an msig UASig in a blob", () => {

@@ -159,7 +159,9 @@ fn epochs_kv_sealed_info_prev() {
         assert_eq!(&pt[..4], &(json.len() as u32).to_be_bytes());
         assert_eq!(&pt[4..4 + json.len()], json);
         assert!(
-            pt[4 + json.len()..].iter().all(|b| *b == 0) && [1024, 4096, 16384].contains(&pt.len()), // F12: at least the 1,024-B bucket
+            pt[4 + json.len()..].iter().all(|b| *b == 0)
+                && pt.len().is_power_of_two()
+                && (512..=16384).contains(&pt.len()), // F12: 512 B, else the next power of two
         );
         let again = aead_seal(
             Alg::Aes256GcmSiv,

@@ -336,12 +336,15 @@ export const keyWrap = (Kv, vault, epoch, prevEpoch, KvPrev, nonce) =>
 export const openPrev = (Kv, vault, epoch, prevEpoch, kw) =>
   openKey(prevKey(Kv, vault, epoch, prevEpoch), kw, USAGE.Derive, prevCtx(vault, epoch, prevEpoch));
 
-/** `sealedInfo`'s plaintext: `pad` to at least the 1,024-B bucket (Fable code review F12: its size no longer shows whether the
- *  epoch links `prev`), at most 16,384 B (`PqVaultShape` on chain past 16,412 B sealed, F8). */
+/** `sealedInfo`'s plaintext (Fable code review F12, controller call 2026-11-21): `u32be(len) ‖ content ‖ zeros` to 512 B, the
+ *  smallest bucket a `sealedInfo` with `prev`, a 64-character name, an icon and settings fits (so the size does not show whether
+ *  the epoch links `prev`), else to the next power of two, at most 16,384 B. Each byte is state gas: 512 B sealed is 540 B. */
 export function padInfo(content) {
   const c = bytes(content);
   if (c.length + 4 > 16384) throw new PqVaultError("SealedInfoLength");
-  return c.length + 4 <= 1024 ? padTo(c, 1024) : pad(c);
+  let n = 512;
+  while (n < c.length + 4) n *= 2;
+  return padTo(c, n);
 }
 /** The content of a `padInfo` plaintext; anything `padInfo` would not write is `Padding`. */
 export function unpadInfo(pt) {

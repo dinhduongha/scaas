@@ -48,3 +48,8 @@ review | node cargo clippy --all-targets -D warnings (after F10, F11) | ec37cc39
 F3-PqChat | forge test/pqchat (red first: test_adminOnlyMsigRemovable, PqChatNotMember) | F3c tree | 0 | 103 passed 0 failed 0 skipped (forge)
 F3-PqChat | forge test/pqvault | F3c tree | 0 | 92 passed 0 failed 0 skipped (forge)
 F3-PqChat mutant | remove-admin-only-removable re-pointed to PqGroupBase._removable (test/pqvault and test/pqchat) | F3c tree | - | killed
+F8/F12 rev | forge test/pqvault (red first: test_sealedInfoBounds, PqVaultShape at 28 B) | F12b tree | 0 | 92 passed 0 failed 0 skipped (forge)
+F8/F12 rev | clientkeys node --test test/pqvault.test.js (red first: the F12 test) | F12b tree | 0 | 16 passed 0 failed (node)
+F8/F12 rev | ua-rs --features vectors,pqvault --test pqvault_keys --test pqvault_pass | F12b tree | 0 | 9 passed 0 failed 0 ignored (cargo)
+F8/F12 rev | node cargo test --test e2e pqvault --ignored (both modes) | F12b tree | 0 | 2 passed 0 failed 0 ignored (cargo)
+F8/F12 rev mutants | create-info-min, epoch-info-max | F12b tree | - | 2 of 2 killed

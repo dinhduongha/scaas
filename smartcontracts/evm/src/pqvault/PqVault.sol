@@ -31,8 +31,9 @@ contract PqVault is IPqVault, PqGroupBase {
     /// @notice A ciphertext is `r` (16) ‖ AES-256-GCM-SIV of a padded plaintext of at most 16,384 B ‖ its tag (16) (VC9).
     uint256 internal constant CT_MIN = 32;
     uint256 internal constant CT_MAX = 16_416;
-    /// @notice `sealedInfo` is a 12-B nonce, a padded bucket of 1,024 to 16,384 B and a 16-B tag (Fable code review F8, F12).
-    uint256 internal constant INFO_MIN = 1052;
+    /// @notice `sealedInfo` is at least a 12-B nonce and a 16-B tag, at most those around the 16,384-B bucket (Fable code review
+    ///         F8; the client's padding policy is the client's, controller call 2026-11-21).
+    uint256 internal constant INFO_MIN = 28;
     uint256 internal constant INFO_MAX = 16_412;
     /// @dev In a version-1 blob `abi.encode(item, sigHash, batchId)`: the item tuple's offset word, then `sigHash`, `batchId`
     ///      (+64), the tuple at +96 led by `vaultId`.
