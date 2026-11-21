@@ -1,0 +1,5 @@
+# test_deploy_debitBound_named (test/ua/UADeploy.t.sol) at n2048-kmax1024, after the matrix's red: mutant | outcome | first failure
+M1 the test's branch forced to "fits" | killed | a precompile-sized cap over the cached home, where the set leaves room
+M2 DeployBase's GEN_PQZ_DEBIT_BOUND check dropped (voDebitFits -> true) | killed | GEN_PQZ_DEBIT_BOUND
+M3 DeployBase's check always refuses (voDebitFits -> false) | killed | positive control: a precompile-sized cap over a home on its precompile
+3 mutants, 3 killed; unmutated: passed at n2048-kmax1024 and n2304-kmax4096

@@ -11,6 +11,7 @@ import {UAPrecompileProbe} from "../../script/UAPrecompileProbe.sol";
 import {Bls12381} from "../../src/common/Bls12381.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
+import {UARegistryRegLib} from "../../src/ua/UARegistryRegLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
@@ -717,15 +718,36 @@ contract UADeployTest is Test {
         );
     }
 
-    /// M10 d: with 0x0142 on the line, `mldsa87`'s single-key fallback (this cap, the home's cached 8.85 M, the set's debit) over
-    /// the cap is refused by name; a precompile-sized cap passes.
+    /// M10 d: with 0x0142 on the line, `mldsa87`'s single-key fallback (this cap, the home's cap, the set's debit) over the cap
+    /// is refused by name. Over the home's cached path (8.85 M) a 4 M cap is refused at every set, and a precompile-sized cap
+    /// fits only where the set's `PQZ_DEBIT_MIN_GAS` leaves room (n2304-kmax4096; not n2048, n2560, n2816: refused by name
+    /// there, as `voDebitFits` answers); over a home on its precompile (250,000) a precompile-sized cap fits at every set.
     function test_deploy_debitBound_named() public {
         DeployHarness h = _pqzHarness();
         string memory b = _book(h, "");
         address v = _vo(h, UAKinds.MLDSA87, 0, true);
-        (bool ok,) = _gen(h, _add(b, _voEntry(UAKinds.MLDSA87, v, 150_000, 0)));
-        assertTrue(ok, "positive control: a precompile-sized cap");
+        assertEq(
+            UARegistry(vm.parseJsonAddress(b, ".ua_registry")).verifyCap(UAKinds.MLDSA87), 8_850_000, "home cached"
+        );
         _named(h, _add(b, _voEntry(UAKinds.MLDSA87, v, 4_000_000, 0)), "GEN_PQZ_DEBIT_BOUND");
+        string memory small = _add(b, _voEntry(UAKinds.MLDSA87, v, 150_000, 0));
+        if (UARegistryRegLib.voDebitFits(UAKinds.MLDSA87, 150_000, 8_850_000, 1, 1 << 24)) {
+            (bool fits,) = _gen(h, small);
+            assertTrue(fits, "a precompile-sized cap over the cached home, where the set leaves room");
+        } else {
+            _named(h, small, "GEN_PQZ_DEBIT_BOUND");
+        }
+        // positive control at every set: the home's mldsa87 on its precompile (the stand-in `_vo` put at the chain's own
+        // address is there before this gen 1 is deployed)
+        DeployHarness hp = _pqzHarness();
+        string memory bp = _book(hp, "");
+        assertEq(
+            UARegistry(vm.parseJsonAddress(bp, ".ua_registry")).verifyCap(UAKinds.MLDSA87),
+            250_000,
+            "home on its precompile"
+        );
+        (bool ok,) = _gen(hp, _add(bp, _voEntry(UAKinds.MLDSA87, _vo(hp, UAKinds.MLDSA87, 0, true), 150_000, 0)));
+        assertTrue(ok, "positive control: a precompile-sized cap over a home on its precompile");
     }
 
     function test_deploy_txGasCap_fromProbe() public {
