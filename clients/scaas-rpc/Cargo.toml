@@ -23,6 +23,8 @@ cosmos = []
 ton = []
 # plan T32's read part (CLI-SDK-32's Change of 2026-11-22): Substrate JSON-RPC, Polkadot Hub's Substrate side and the relay chain
 substrate = []
+# SDK plan T36 (decisions CLI-SDK-33 (32)): Esplora REST and Bitcoin Core JSON-RPC reads, the cross-check
+bitcoin = []
 node-client = []
 # the node's raw reads (`raw_read`, `raw_read_at`, `connect_shared`); never enabled by the SDK (F15, F23)
 node-internal = ["evm"]

@@ -131,7 +131,9 @@ T24.sui-graphql; TON's getters and account read at one masterchain seqno, `Ton::
 Center's `/api/v2/` paths, the stack's cells through the bounded `boc` reader, BUILT, SDK plan rpc T24.ton-seqno; Substrate's reads, feature `substrate`,
 `substrate::Substrate`: identity `chain_getBlockHash(0)`, the finalized head and its number, `System.Account` at a block hash
 through a bounded `AccountInfo` reader (80 bytes exactly), one code path for Polkadot Hub's Substrate side and the relay chain,
-BUILT, SDK plan T32's read part). The indexer's event-set quorum
+BUILT, SDK plan T32's read part; Bitcoin's reads, feature `bitcoin`, `bitcoin::Esplora` (UTXOs, history pages, a transaction's height,
+fee estimates) and `bitcoin::Core` (`getblockhash`, `gettxout`), two lists with their own credentials, and `cross_check`
+(`BitcoinCrossCheck`: Esplora's tip and every UTXO to spend against Core), BUILT, SDK plan T36's read part). The indexer's event-set quorum
 ([NODE-IDX-01](../node/indexer-feeds.md#NODE-IDX-01)) is unchanged; its helper (`agreed`, NEAR and Aptos) is the crate's.
 
 ## 4. Writes and transaction state

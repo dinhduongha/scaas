@@ -84,7 +84,7 @@ Status: SPECIFIED.
 | 21 | Soroban (Stellar; Pi) | B | B | B | M T27 | B | M T30 | M T28, T29 | P `zether-soroban` | M family round | M family round | M T41.soroban | M T41.soroban (read B) |
 | 22 | Sui | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.sui | M T41.sui (read B) |
 | 23 | TON (GRAM) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.ton | M T41.ton (read B) |
-| 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (read, send), T37 (SDK) |
+| 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (send; its reads B), T37 (SDK) |
 | 25 | Arweave (store) | n/a | n/a | n/a | P CA-T16, T17 | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a | n/a | P CA-T17, T19, T20 |
 
 Counts (25 rows): Contract B 23 (14 B‡), n/a 2. Relay B 20, P 3, n/a 2. Index B 20, P 3, n/a 2. Signing B 17, P 1, M 6, n/a 1. rpc read B 20, P 4, n/a 1. rpc write B 15, P 1, M 8, n/a 1. SDK B 5, P 4, M 15, n/a 1. Zether B 8 (7 B‡), P 6, M 9, n/a 2. PQ B 8 (7 B‡), P 8, M 7, n/a 2. PQZ B 8 (7 B‡), P 6, M 9, n/a 2. Self-relay M 23, n/a 2. Native B 5, P 3, deferred 1 (its read built), M 16 (8 of them with the read built).
