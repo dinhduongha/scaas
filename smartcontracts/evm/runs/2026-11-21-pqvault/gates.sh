@@ -12,11 +12,13 @@
 #   uagas            forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (AGENTS.md, the CI header)
 #   size             size_gate.py --self-test; forge build src --sizes --json; size_gate.py against size-baseline.json
 #   set-<set>-<dir>  the set-sensitive tests of test/<dir> at <set> (at-set.sh list), src/pqz/PqzSet.sol checked after
+#   setmod-<set>     test/modules at <set> (at-set.sh <set> modules, its own capped slots, no outer one), PqzSet.sol checked after
 #   node-guard       scaas-node cargo test guard (the allow-list and PqChat row tests)
 #   node, node-clippy, node-e2e   the whole node suite (6 GB, alone), its clippy, its e2e on anvil (--ignored)
 #   clientkeys, ua-rs-<cell>, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-dart, ua-dart-frb, ua-qt   the clients' own tests (the
 #                    CI header's commands; ua-rs per CI cell)
-#   docs, docs-test, ci-guards
+#   docs, docs-test, ci-guards, format (scripts/format.sh --check; FORMAT_PARTS limits the parts; the pinned tools of the main
+#                    checkout's git-ignored scratchpad/tools/bin first on PATH)
 set -u
 ROOT=$(cd "$(dirname "$0")/../../../.." && pwd)
 cd "$ROOT"
@@ -76,11 +78,18 @@ step() {
             git diff --exit-code -- $EVM/src/pqz/PqzSet.sol || r=3
             return $r
             ;;
+        setmod-*)
+            sh $EVM/script/pqz/at-set.sh "${1#setmod-}" modules
+            r=$?
+            git diff --exit-code -- $EVM/src/pqz/PqzSet.sol || r=3
+            return $r
+            ;;
         node-guard) (cd scaas-node && "$C" cargo test -j 2 --lib guard) ;;
         node) (cd scaas-node && CAPPED_MEM=${NODE_MEM:-6G} "$C" cargo test -j 2) ;;
         node-clippy) (cd scaas-node && "$C" cargo clippy -j 2 --all-targets -- -D warnings) ;;
         node-e2e) (cd scaas-node && CAPPED_MEM=${NODE_MEM:-6G} "$C" cargo test -j 2 --test e2e -- --ignored --test-threads 1) ;;
         ua-rs-pqvault) T="--test pqvault_pass" uars --no-default-features --features pqvault ;;
+        ua-rs-pqvault-vectors) T="--test pqvault_keys --test pqvault_pass" uars --features vectors,pqvault ;;
         clientkeys) (cd clients/clientkeys && "$C" npm test) ;;
         ua-rs-default) T= uars ;;
         ua-rs-vectors) T= uars --features vectors ;;
@@ -117,6 +126,7 @@ step() {
             --manifest-path rust/Cargo.toml && "$C" dart test) ;;
         docs) python3 scripts/docs_check.py check ;;
         docs-test) python3 scripts/test_docs_check.py ;;
+        format) PATH="$(git rev-parse --path-format=absolute --git-common-dir)/../scratchpad/tools/bin:$PATH" scripts/format.sh --check ${FORMAT_PARTS:-} ;;
         ci-guards) ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' ;;
         *)
             echo "unknown step $1"
