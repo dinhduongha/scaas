@@ -53,7 +53,7 @@ scope is shown as unsupported and never acted on (UA-7 P49).
 
 Status: **SPECIFIED** (the SDK surface it needs: the SDK spec's App cores section, SPECIFIED on branch `scaas-sdk`).
 
-**Attachments are in this round** (owner 2026-11-21, "Đưa vào" after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; O9 (b)): the `file` content (UA-7 `file`, P28) is sent and read; the file is sealed under a fresh file key by an SDK call so no key byte leaves `ua-rs`, its ciphertext stored on Arweave (`url` = `ar://<id>`), `ctSha256` checked before it is opened, its size padded to buckets. SPECIFIED; the Arweave format, reader and upload path follow the research of TODO 8i, and the attachment task (plan T10b) waits for it.
+**Attachments are in this round** (owner 2026-11-21, "put it in" after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; O9 (b)): the `file` content (UA-7 `file`, P28) is sent and read; the file is sealed under a fresh file key by an SDK call so no key byte leaves `ua-rs`, its ciphertext stored on Arweave (`url` = `ar://<id>`), `ctSha256` checked before it is opened, its size padded to buckets. SPECIFIED; the Arweave format, reader and upload path follow the research of TODO 8i, and the attachment task (plan T10b) waits for it.
 
 <a id="CLI-PQC-03"></a>**CLI-PQC-03** — **Secrets stay below the SDK: `pqchat-core` holds key handles only, and only decrypted
 plaintext leaves** (coordinator condition 1, 2026-11-17; SPECIFIED). The epoch key `K` and the sender chains' positions are `ua-rs`

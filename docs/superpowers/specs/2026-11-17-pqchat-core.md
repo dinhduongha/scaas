@@ -496,7 +496,7 @@ controller proposal already in [ua-libraries.md](../../clients/ua-libraries.md#p
 **O9 — Attachments.** The `file` content carries its key inside the plaintext (P49), so sending one means a fresh key whose bytes
 enter the content. (a) Out of this round (as the app's contract §11.6: attachments not in its first version). (b) An SDK call that
 encrypts a file under a fresh key and returns the ciphertext and the key as `Plaintext` content. **Recommendation: (a) now, (b)**
-with the attachment task. **Owner 2026-11-21: (b), in this round** ("Đưa vào"): the file sealed under a fresh key by an SDK
+with the attachment task. **Owner 2026-11-21: (b), in this round** ("put it in"): the file sealed under a fresh key by an SDK
 call, the ciphertext on Arweave (`ar://<id>`), `ctSha256` checked before opening, size padded; plan T10b, after TODO 8i's research.
 
 **O10 — The e2e homeserver.** (a) Synapse in Docker (what matrix-rust-sdk's own integration tests use). (b) A lighter server
