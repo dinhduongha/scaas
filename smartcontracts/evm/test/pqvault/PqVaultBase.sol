@@ -260,7 +260,15 @@ abstract contract PqVaultBase is UARegistryBase {
         v.wrapHashes = _hashes(w);
         v.passKdf = 1;
         v.passSalt = keccak256(abi.encode("salt", nonce));
-        v.sealedInfo = hex"5ea1ed";
+        v.sealedInfo = _info(0x5e);
+    }
+
+    /// A stand-in `sealedInfo` of the smallest size a client writes: nonce, the 1,024-B bucket, tag (1,052 B; F8, F12).
+    function _info(uint8 fill) internal pure returns (bytes memory b) {
+        b = new bytes(1052);
+        for (uint256 i; i < b.length; i += 32) {
+            b[i] = bytes1(fill);
+        }
     }
 
     function _createSig(IPqVault.PqVaultCreate memory v, address c) internal view returns (IUARegistry.UASig memory) {
@@ -295,7 +303,7 @@ abstract contract PqVaultBase is UARegistryBase {
         e.wrapHashes = _hashes(w);
         e.passKdf = 1;
         e.passSalt = keccak256(abi.encode("salt e", nonce));
-        e.sealedInfo = hex"e90c";
+        e.sealedInfo = _info(0xe9);
     }
 
     function _rekey(PqVault c, IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w, uint8 mode)

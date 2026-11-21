@@ -31,6 +31,9 @@ contract PqVault is IPqVault, PqGroupBase {
     /// @notice A ciphertext is `r` (16) ‖ AES-256-GCM-SIV of a padded plaintext of at most 16,384 B ‖ its tag (16) (VC9).
     uint256 internal constant CT_MIN = 32;
     uint256 internal constant CT_MAX = 16_416;
+    /// @notice `sealedInfo` is a 12-B nonce, a padded bucket of 1,024 to 16,384 B and a 16-B tag (Fable code review F8, F12).
+    uint256 internal constant INFO_MIN = 1052;
+    uint256 internal constant INFO_MAX = 16_412;
     /// @dev In a version-1 blob `abi.encode(item, sigHash, batchId)`: the item tuple's offset word, then `sigHash`, `batchId`
     ///      (+64), the tuple at +96 led by `vaultId`.
     uint256 internal constant ITEM_BATCH = 64;
@@ -167,7 +170,8 @@ contract PqVault is IPqVault, PqGroupBase {
         if (
             !_has(admins, v.creator) || _memberAt(members, v.creator) == type(uint256).max || v.homeChain == 0
                 || v.homeVaultContract == address(0) || v.mode > 1 || (v.mode == 1 && !home)
-                || (v.passKdf == 0) != (v.passSalt == 0)
+                || (v.passKdf == 0) != (v.passSalt == 0) || v.sealedInfo.length < INFO_MIN
+                || v.sealedInfo.length > INFO_MAX
         ) revert PqVaultShape();
     }
 
@@ -199,7 +203,9 @@ contract PqVault is IPqVault, PqGroupBase {
         Epoch storage pe = _parentOf(e.parentEpochId, e.vaultId, e.epoch);
         members = e.members;
         _checkLists(reg, e.admins, members, e.wrapHashes.length, 1);
-        if ((e.passKdf == 0) != (e.passSalt == 0)) revert PqVaultShape();
+        if ((e.passKdf == 0) != (e.passSalt == 0) || e.sealedInfo.length < INFO_MIN || e.sealedInfo.length > INFO_MAX) {
+            revert PqVaultShape();
+        }
         (bytes32[] memory pa, IPqChat.MemberKey[] memory pm,) = _lists(pe);
         if (!_liveAdmin(pe, pa, e.author)) revert PqVaultNotAdmin(e.author); // CTR-PQV-13; F7: not left either
         _indexAdded(e.vaultId, members, _uas(pm));
@@ -449,7 +455,9 @@ contract PqVault is IPqVault, PqGroupBase {
         view
         returns (PqVaultRemove memory, IUARegistry.UASig memory)
     {
-        _returnBlob(_v().removals[epochId][index]);
+        address[] storage l = _v().removals[epochId];
+        if (index >= l.length) revert PqVaultUnknown(epochId); // F15: as every unknown read, never a panic
+        _returnBlob(l[index]);
     }
 
     /// @dev A group record's blob is `abi.encode(record, UASig)`, written by this contract: exactly the ABI encoding of the

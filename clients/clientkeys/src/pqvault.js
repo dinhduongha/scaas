@@ -336,10 +336,34 @@ export const keyWrap = (Kv, vault, epoch, prevEpoch, KvPrev, nonce) =>
 export const openPrev = (Kv, vault, epoch, prevEpoch, kw) =>
   openKey(prevKey(Kv, vault, epoch, prevEpoch), kw, USAGE.Derive, prevCtx(vault, epoch, prevEpoch));
 
-/** `sealedInfo = n ‖ AES-256-GCM-SIV(kInfo, n, pad(canonical JSON))`, empty AAD. */
+/** `sealedInfo`'s plaintext: `pad` to at least the 1,024-B bucket (Fable code review F12: its size no longer shows whether the
+ *  epoch links `prev`), at most 16,384 B (`PqVaultShape` on chain past 16,412 B sealed, F8). */
+export function padInfo(content) {
+  const c = bytes(content);
+  if (c.length + 4 > 16384) throw new PqVaultError("SealedInfoLength");
+  return c.length + 4 <= 1024 ? padTo(c, 1024) : pad(c);
+}
+/** The content of a `padInfo` plaintext; anything `padInfo` would not write is `Padding`. */
+export function unpadInfo(pt) {
+  const p = bytes(pt);
+  const n = p.length >= 4 ? new DataView(p.buffer, p.byteOffset).getUint32(0) : -1;
+  const c = n >= 0 && n <= p.length - 4 ? p.slice(4, 4 + n) : null;
+  if (!c || c.length + 4 > 16384) throw new PqVaultError("Padding");
+  const q = padInfo(c);
+  if (q.length !== p.length || !q.every((x, i) => x === p[i])) throw new PqVaultError("Padding");
+  return c;
+}
+const padTo = (c, n) => {
+  const out = new Uint8Array(n);
+  out.set(be(c.length, 4));
+  out.set(c, 4);
+  return out;
+};
+
+/** `sealedInfo = n ‖ AES-256-GCM-SIV(kInfo, n, padInfo(canonical JSON))`, empty AAD: 1,052 to 16,412 B. */
 export function sealInfo(Kv, vault, epoch, info, nonce) {
   const json = canonicalJson(info);
-  const pt = pad(utf8ToBytes(json));
+  const pt = padInfo(utf8ToBytes(json));
   const kInfo = infoKey(Kv, vault, epoch);
   return { json, pt, kInfo: kInfo.key, sealedInfo: seal(kInfo, nonce, pt) };
 }
@@ -351,7 +375,7 @@ export function openInfo(Kv, vault, epoch, sealed) {
   } catch {
     throw new PqVaultError("PassphraseWrong");
   }
-  return JSON.parse(new TextDecoder().decode(unpad(pt)));
+  return JSON.parse(new TextDecoder().decode(unpadInfo(pt)));
 }
 /** A reader's walk back (VC7): the key `prev` carries must open the `sealedInfo` of the epoch it names, else `PrevKeyWrong`. */
 export function checkPrev(KvPrev, vault, prevEpoch, prevSealedInfo) {

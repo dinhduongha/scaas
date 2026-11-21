@@ -224,8 +224,9 @@ contract PqVaultModesTest is PqVaultBase {
         vault.createItem(it, sig);
     }
 
-    /// Review r2 R14: a native id as author in mode 1 (it passes `requireAuthorized` by its key, but holds no KEM key, so it is no
-    /// member): `PqVaultNotMember`.
+    /// Review r2 R14: a native id as author in mode 1 is `PqVaultNotMember`: it holds no KEM key, so it is no member. The member
+    /// check runs before the signature (`_itemRights` before `_auth`), so this test does not reach the registry: what it shows is
+    /// the membership refusal, not that the native signature would pass `requireAuthorized` (Fable code review F16).
     function test_mode1_nativeAuthorNotMember() public {
         (bytes32 vid,) = _newVault(3, 1);
         bytes32 nat = _pad(vm.addr(EOA_SK));

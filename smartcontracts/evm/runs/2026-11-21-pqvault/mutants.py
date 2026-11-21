@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """PqVault plan V3-V6 (spec §11 "Negative tests that can fail"): each mutant replaces one literal line (exactly one match) in a
 source file, runs the PqVault suites (test/pqvault but the gas pins, which a mutant moves by its own bytes; the default set,
--j 1, through scripts/capped) and restores the file; a
+-j 1, through scripts/capped) and restores the file (Fable code review F16: the vector tests, PqVaultTypes.t.sol, stay in every run:
+the behaviour suites sign with PqVaultHasher, which calls PqVaultTypes itself, so a hashing mutant such as
+dsb-no-verifying-contract is killed by the vector tests alone); a
 mutant is killed when the run fails. One line per mutant on stdout and in runs/2026-11-21-pqvault/mutants/<name>.log
 (git-ignored). Usage, from smartcontracts/evm:
   python3 runs/2026-11-21-pqvault/mutants.py [name ...]      (no name: every mutant)
@@ -87,6 +89,10 @@ M = [
      "test/pqvault,test/pqchat"),
     ("remove-admin-only-removable", V, "if (_memberAt(m, r.members[i]) == type(uint256).max && !_has(admins, r.members[i])) {",
      "if (_memberAt(m, r.members[i]) == type(uint256).max) {"),
+    # Fable code review F8, F15
+    ("create-info-min", V, "|| v.sealedInfo.length < INFO_MIN\n", "\n"),
+    ("epoch-info-max", V, "|| e.sealedInfo.length > INFO_MAX", ""),
+    ("removal-at-bound", V, "if (index >= l.length) revert PqVaultUnknown(epochId); // F15: as every unknown read, never a panic", ""),
 ]
 
 

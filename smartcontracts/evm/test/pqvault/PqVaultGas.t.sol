@@ -86,49 +86,49 @@ contract PqVaultGasTest is PqVaultBase {
 
     function test_gas_personalVault() public {
         (bytes32 vid,) = _createVault(1, 1, 0);
-        _row("createVault 1 member, its wrap", 254_759, 5_108_670);
+        _row("createVault 1 member, its wrap", 267_160, 6_675_390);
         _item(vid, vid, ids[0], 1, 288, 0);
-        _row("createItem 288 B, new list", 168_562, 1_459_620);
+        _row("createItem 288 B, new list", 169_328, 1_459_620);
         bytes32 iid = _item(vid, vid, ids[0], 2, 288, 0);
-        _row("createItem 288 B, warm list", 168_574, 1_263_780);
+        _row("createItem 288 B, warm list", 169_340, 1_263_780);
         _edit(iid, vid, ids[0], 3, 2, 0);
-        _row("editItem 288 B, first", 162_733, 1_263_780);
+        _row("editItem 288 B, first", 163_499, 1_263_780);
         _edit(iid, vid, ids[0], 4, 3, 0);
-        _row("editItem 288 B, later", 162_733, 1_165_860);
+        _row("editItem 288 B, later", 163_499, 1_165_860);
         _item(vid, vid, ids[0], 5, 4128, 0);
         _row("createItem 4,128 B", 310_168, 7_138_980);
         _item(vid, vid, ids[0], 6, 16_416, 0);
         _row("createItem 16,416 B", 1_096_600, 25_939_620);
         _share(vid, vid, 7, 2, 0);
-        _row("rekeyVault 1 -> 2 members (share), both wraps", 391_204, 8_376_750);
+        _row("rekeyVault 1 -> 2 members (share), both wraps", 398_975, 9_943_470);
     }
 
     function test_gas_sharedVault() public {
         (bytes32 vid, IPqVault.PqVaultCreate memory v) = _createVault(2, 1, 0);
-        _row("createVault 2 members, both wraps", 344_628, 8_180_910);
+        _row("createVault 2 members, both wraps", 396_184, 9_747_630);
         (vid, v) = _createVault(3, 2, 0);
         IPqVault.PqVaultRemove memory r = IPqVault.PqVaultRemove(vid, vid, 1, _list(ids[2]), ids[0], 1);
         IUARegistry.UASig memory sig = _sig(ids[0], h.remove(r, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.removeVaultMembers(r, sig);
-        _row("removeVaultMembers 1 of 3", 175_798, 1_410_660);
+        _row("removeVaultMembers 1 of 3", 176_568, 1_410_660);
         IPqVault.PqVaultLeave memory l = IPqVault.PqVaultLeave(vid, vid, ids[1], 2);
         sig = _sig(ids[1], h.leave(l, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.leaveVault(l, sig);
-        _row("leaveVault", 110_682, 195_840);
+        _row("leaveVault", 111_431, 195_840);
         (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory w) =
             _epoch(vid, ids[0], 3, 1, vid, _list(ids[0]), _members(1));
         sig = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.rekeyVault(e, w, sig);
-        _row("rekeyVault 3 -> 1 after a removal and a leave", 311_694, 5_206_590);
+        _row("rekeyVault 3 -> 1 after a removal and a leave", 320_352, 6_773_310);
         (bytes32 v2,) = _createVault(2, 3, 0);
         (e, w) = _epoch(v2, ids[0], 1, 1, v2, _list(ids[0]), _members(1));
         sig = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
         vm.prank(STRANGER);
         vault.rekeyVault(e, w, sig);
-        _row("rekeyVault 2 -> 1", 302_432, 5_304_510);
+        _row("rekeyVault 2 -> 1", 310_007, 6_871_230);
     }
 
     function test_gas_chunks() public {
@@ -162,7 +162,7 @@ contract PqVaultGasTest is PqVaultBase {
         (bytes32 vid,) = _createVault(1, 1, 0);
         _item(vid, vid, ids[0], 1, 288, 0); // the list exists: the batches below are warm
         _createItems(_batch(vid, 100, 10));
-        _row("createItems 10 x 288 B", 699_036, 13_754_700);
+        _row("createItems 10 x 288 B", 700_076, 13_754_700);
         uint256 best;
         uint256 snap = vm.snapshotState();
         for (uint256 n = 20; n <= 50; ++n) {
@@ -176,7 +176,7 @@ contract PqVaultGasTest is PqVaultBase {
         }
         emit log_named_uint("BATCH largest createItems of 288 B items within 60 M (FN-DSA-512)", best);
         _createItems(_batch(vid, 1000, best));
-        _row(string.concat("createItems ", vm.toString(best), " x 288 B (the largest)"), 2_312_163, 52_020_000);
+        _row(string.concat("createItems ", vm.toString(best), " x 288 B (the largest)"), 2_314_024, 52_020_000);
         if (!vm.envOr("GAS_MEASURE", false)) assertEq(best, 39, "the largest batch");
     }
 
@@ -184,14 +184,14 @@ contract PqVaultGasTest is PqVaultBase {
 
     function test_gas_mode1() public {
         (bytes32 vid,) = _createVault(1, 1, 1);
-        _row("mode 1: createVault 1 member, its wrap", 252_292, 5_206_590);
+        _row("mode 1: createVault 1 member, its wrap", 267_160, 6_773_310);
         _item(vid, vid, ids[0], 1, 288, 1);
         bytes32 iid = _item(vid, vid, ids[0], 2, 288, 1);
-        _row("mode 1: createItem 288 B, warm list", 153_825, 1_263_780);
+        _row("mode 1: createItem 288 B, warm list", 154_593, 1_263_780);
         _edit(iid, vid, ids[0], 3, 2, 1);
-        _row("mode 1: editItem 288 B, first", 147_984, 1_263_780);
+        _row("mode 1: editItem 288 B, first", 148_752, 1_263_780);
         _share(vid, vid, 4, 2, 1);
-        _row("mode 1: rekeyVault 1 -> 2 members (share), both wraps", 376_463, 8_376_750);
+        _row("mode 1: rekeyVault 1 -> 2 members (share), both wraps", 396_184, 9_943_470);
     }
 
     // ----- the per-vault UA (spec §5.14: a personal vault's FN-DSA-512 UA with its KEM key, per hosting chain) -----
@@ -234,9 +234,9 @@ contract PqVaultGasTest is PqVaultBase {
         assertLt(regular * 105 / 100, 1 << 24, "regular gas x 1.05 under 2^24 (EIP-7825)");
         assertLe(asked, 60_000_000, "the release transaction asks at most 60 M");
         if (!vm.envOr("GAS_MEASURE", false)) {
-            assertEq(r.code.length, 30_291, "the PqVault runtime (size-baseline.json row)");
-            assertApproxEqAbs(regular, 2_054_395, SLACK, "deployImplementation regular");
-            assertEq(state, 46_920_510, "deployImplementation state");
+            assertEq(r.code.length, 30_449, "the PqVault runtime (size-baseline.json row)");
+            assertApproxEqAbs(regular, 2_064_798, SLACK, "deployImplementation regular");
+            assertEq(state, 47_162_250, "deployImplementation state");
         }
     }
 

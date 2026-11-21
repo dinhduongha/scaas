@@ -310,4 +310,46 @@ contract PqVaultTest is PqVaultBase {
         assertEq(vault.vaultsOf(ids[0], 5, 10).length, 0, "an offset past the end: empty");
         assertFalse(vault.epochComplete(x));
     }
+
+    /// Fable code review F15: `removalAt` past the end is `PqVaultUnknown(epochId)`, as every other unknown read; the control
+    /// reads the one removal.
+    function test_removalAt_pastTheEnd() public {
+        (bytes32 vid,) = _newVault(3, 0);
+        _rawRefused(
+            abi.encodeCall(IPqVault.removalAt, (vid, 0)), abi.encodeWithSelector(IPqVault.PqVaultUnknown.selector, vid)
+        );
+        IPqVault.PqVaultRemove memory r = IPqVault.PqVaultRemove(vid, vid, 1, _list(ids[2]), ids[0], 1);
+        vault.removeVaultMembers(r, _sig(ids[0], h.remove(r, PqVaultTypes.DS_V)));
+        _raw(address(vault), abi.encodeCall(IPqVault.removalAt, (vid, 0)));
+        _rawRefused(
+            abi.encodeCall(IPqVault.removalAt, (vid, 1)), abi.encodeWithSelector(IPqVault.PqVaultUnknown.selector, vid)
+        );
+    }
+
+    /// Fable code review F8: `sealedInfo` is a nonce, a padded bucket of 1,024 to 16,384 B and a tag: 1,052 to 16,412 B
+    /// (`PqVaultShape` outside), in the vault and the epoch record; each bound beside its control.
+    function test_sealedInfoBounds() public {
+        bytes memory shape = abi.encodeWithSelector(IPqVault.PqVaultShape.selector);
+        uint64 nonce = 40;
+        for (uint256 k; k < 4; ++k) {
+            uint256 len = [uint256(1051), 16_413, 1052, 16_412][k];
+            (IPqVault.PqVaultCreate memory v, IPqChat.Wrap[] memory w) = _vault(1, nonce++, 0, address(vault));
+            v.sealedInfo = new bytes(len);
+            IUARegistry.UASig memory sig = _createSig(v, address(vault));
+            if (k < 2) {
+                vm.expectRevert(shape);
+                vault.createVault(v, w, sig);
+            } else {
+                bytes32 vid = vault.createVault(v, w, sig);
+                (IPqVault.PqVaultEpoch memory e, IPqChat.Wrap[] memory ew) =
+                    _epoch(vid, ids[0], 1, 1, vid, _list(ids[0]), _members(1));
+                e.sealedInfo = new bytes(k == 2 ? 1051 : 16_413);
+                IUARegistry.UASig memory es = _sig(e.author, h.epoch(e, PqVaultTypes.DS_V));
+                vm.expectRevert(shape);
+                vault.rekeyVault(e, ew, es);
+                e.sealedInfo = new bytes(len);
+                _rekey(vault, e, ew, 0);
+            }
+        }
+    }
 }

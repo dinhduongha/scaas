@@ -274,7 +274,20 @@ contract PqVaultTypesTest is Test {
         for (uint256 i; i < 4; ++i) {
             n += _vault(i);
         }
-        assertEq(n, 19);
+        assertEq(n, 23); // 19, then F9: a tombstone edit in each shared vault, two longer notes in the index vault
+        // F9: a creation nonce above 2^63 (a decimal string in the vectors)
+        uint64 big = uint64(vm.parseJsonUint(rec, ".extra.bigNonce.nonce"));
+        assertGt(big, uint64(1) << 63);
+        assertEq(
+            PqVaultTypes.vaultId(
+                _b32(".extra.bigNonce.creator"),
+                big,
+                0,
+                _b32(".extra.bigNonce.homeChain"),
+                vm.parseJsonAddress(rec, ".extra.bigNonce.homeVaultContract")
+            ),
+            _b32(".extra.bigNonce.vaultId")
+        );
         // both modes present
         assertEq(_u(".vaults[0].mode"), 0);
         assertEq(_u(".vaults[1].mode"), 1);

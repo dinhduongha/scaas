@@ -5911,6 +5911,21 @@ Change (controller call, owner: no, 2026-11-21, on the Fable code review of V1-V
 
 Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqvault spec §14; status: SPECIFIED): **O3 (b)**: a member that left an epoch writes no item under it either (`PqVaultNotMember`; one cold `SLOAD` of the epoch's left flag, 2,100 gas on a write of at least 1.4 M). Spec §5.6; plan V4 tests the refusal in each of the three writes.
 
+
+Change (controller calls, owner: no, 2026-11-21, the Fable code review of V1-V8, P2 F6 and P3 F8-F16 and I8; status: BUILT on
+`pqvault-v` unless stated, UNAUDITED). Fixed: **F6** the invariants' baselines are the handler's ghost state, with positive
+controls; **F8** `sealedInfo` is 1,052 to 16,412 B in both records (`PqVaultShape`); **F9** vector rows for a tombstone
+version, the 4,096 and 16,384 B buckets, `padItem`'s 16,380 B limit, a creation nonce above 2^63 as a decimal string, an
+`msig` `UASig` in a stored blob, a mode-1 epoch with the passphrase on; **F10** the node's PqVault and PqChat rows equal
+`selector_audit.json`'s `SIGNED` and unsigned-write rows; **F11** the node e2e runs mode 0 too; **F12** `sealedInfo` padded to
+at least the 1,024 B bucket (its size no longer shows a `prev`; about 1.2 M more state gas per vault or epoch record);
+**F15** `removalAt` past the end is `PqVaultUnknown`; **F16** the native-author test's comment, a line in `mutants.py`;
+**I8** the file key's wrap context in spec §6.8. Left, with the reason: **F13** (the `sealedInfo` open is not
+key-committing) is `pqvault-core`'s: it maps every failure of the open (tag, padding, JSON, `shared`) to one outcome with one
+behaviour (V10; ARCH-POS-13 already says send nothing); no committing check value is added to the record. **F14** (spam makes
+recovery linear) is `pqvault-core`'s: the index vault's creation nonce derived from the seed so its id is computed (V10); no
+contract view is added. A mode-1 epoch with both a passphrase and `prev` has no row: `prev`'s bytes do not depend on the mode,
+and mode 0 has the row.
 ### CTR-PQV-15 — What proves PqChat's behaviour unchanged by the shared base
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-15 · superseded-by: —
 

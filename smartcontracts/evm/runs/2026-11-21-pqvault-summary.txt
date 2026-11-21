@@ -37,3 +37,10 @@ F4 | ua-rs --features pqvault clippy -D warnings + --test pqvault_pass (red firs
 F5 | ua-rs --features vectors --test pqvault_keys (a second implementation of keys.json, items.json, pqvAccount, nativeMember) | F5 tree | 0 | 5 passed 0 failed 0 ignored (cargo); clippy --all-targets --features vectors -D warnings rc 0
 F5 control | one byte of items.json's first ciphertext flipped (restored after) | F5 tree | 101 | items_keys_aad_ciphertexts FAILED: the reproducer can fail
 F6 | forge PqVaultInvariant.t.sol (red first: both positive controls failed, the old check() compared nothing between handler writes) | F6 tree | 0 | 4 passed 0 failed 0 skipped (forge), invariants 64 runs x depth 32
+P3 | forge test/pqvault (red first: test_removalAt_pastTheEnd, test_sealedInfoBounds) | P3 tree | 0 | 92 passed 0 failed 0 skipped (forge)
+P3 | clientkeys node --test test/pqvault.test.js (red first: the F12 and F9 tests) | P3 tree | 0 | 16 passed 0 failed (node)
+P3 | ua-rs --features vectors,pqvault --test pqvault_keys --test pqvault_pass (on the regenerated vectors) | P3 tree | 0 | 9 passed 0 failed 0 ignored (cargo)
+P3 mutants | create-info-min, epoch-info-max, removal-at-bound | P3 tree | - | 3 of 3 killed
+F10-F11 | node cargo test --lib (pqvault, pqchat, instance rows) | node tree | 0 | 10 passed 0 failed 0 ignored (cargo)
+F10-F11 | node cargo test --test e2e pqvault --ignored (mode 1 and mode 0 on anvil) | node tree | 0 | 2 passed 0 failed 0 ignored (cargo)
+F10 control | selector_audit.json's PqVault createItems row reclassified FACTORY (restored) | node tree | 101 | pqvault_rows_equal_the_contract_both_directions FAILED

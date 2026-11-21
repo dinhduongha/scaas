@@ -159,8 +159,7 @@ fn epochs_kv_sealed_info_prev() {
         assert_eq!(&pt[..4], &(json.len() as u32).to_be_bytes());
         assert_eq!(&pt[4..4 + json.len()], json);
         assert!(
-            pt[4 + json.len()..].iter().all(|b| *b == 0)
-                && [256, 1024, 4096, 16384].contains(&pt.len())
+            pt[4 + json.len()..].iter().all(|b| *b == 0) && [1024, 4096, 16384].contains(&pt.len()), // F12: at least the 1,024-B bucket
         );
         let again = aead_seal(
             Alg::Aes256GcmSiv,
@@ -230,7 +229,7 @@ fn item_aad(r: &Value) -> Vec<u8> {
 fn items_keys_aad_ciphertexts() {
     let v = load("items.json");
     let items = v["items"].as_array().unwrap();
-    assert_eq!(items.len(), 11);
+    assert_eq!(items.len(), 15); // F9: + a tombstone per shared vault, the 4,096-B and 16,384-B buckets
     for r in items {
         let (vid, eid, iid) = (
             unhex(&r["vaultId"]),

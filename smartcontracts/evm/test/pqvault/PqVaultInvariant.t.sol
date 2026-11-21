@@ -101,6 +101,7 @@ contract PqVaultHandler is Test {
         (w, c.wrapHashes) = _wraps(c.members, vid);
         c.passKdf = uint16(seed % 2);
         c.passSalt = c.passKdf == 0 ? bytes32(0) : keccak256(abi.encode(seed));
+        c.sealedInfo = new bytes(1052); // the smallest a client writes (F8, F12)
         try v.createVault(c, w, _sig(c.creator, h.create(c, PqVaultTypes.DS_V), seed % 11 == 0)) {
             if (seed % 11 == 0) _fail("a forged vault accepted");
             if (!v.nonceUsed(PqVaultTypes.scopeVault(c.creator), c.nonce)) _fail("vault nonce not marked");
@@ -129,6 +130,7 @@ contract PqVaultHandler is Test {
         e.members = _members(seed >> 8);
         e.admins = new bytes32[](1);
         e.admins[0] = ids[who % ids.length];
+        e.sealedInfo = new bytes(1052);
         (w, e.wrapHashes) = _wraps(e.members, PqVaultTypes.epochId(vid, e.author, e.nonce));
     }
 

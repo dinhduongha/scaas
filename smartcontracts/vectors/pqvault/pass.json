@@ -43,6 +43,15 @@
       "Pk": "0x24f6bdae35a0bbba4760453b4ae7a902cd5e3c2d447ab01b94c46f4222d463a8"
     },
     {
+      "name": "shared1/epoch-1",
+      "epoch": "shared1/epoch-1",
+      "passKdf": 1,
+      "passphrase": "copper willow ember kestrel dune",
+      "passphraseUtf8": "0x636f707065722077696c6c6f7720656d626572206b65737472656c2064756e65",
+      "passSalt": "0xd668750ac335d3d696bd449513c7506a291756c491c40191cac3b2c48ab2976c",
+      "Pk": "0xb01c3f87a0fc10e307ca916ba9fc4d961d4b3ed4da4db55cee3f062c4a70c67f"
+    },
+    {
       "name": "index0/epoch-0",
       "epoch": "index0/epoch-0",
       "passKdf": 1,

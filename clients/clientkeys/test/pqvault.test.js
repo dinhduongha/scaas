@@ -516,3 +516,45 @@ test("passphrase bytes (Fable code review F4): RFC 8265 OpaqueString: spaces to 
     );
   assert.equal(h(pv.passphraseBytes("plain ascii")), h(utf8ToBytes("plain ascii")), "ASCII unchanged");
 });
+
+test("F12: every sealedInfo is padded to at least the 1,024-B bucket, so its size does not show a prev; 1,052..16,412 B", () => {
+  const sizes = K.epochs.map((e) => fromHex(e.sealedInfo).length);
+  for (const n of sizes) assert.ok(n >= 1052 && n <= 16412, String(n));
+  const withPrev = K.epochs.filter((e) => e.prev).map((e) => fromHex(e.sealedInfo).length);
+  const without = K.epochs.filter((e) => !e.prev).map((e) => fromHex(e.sealedInfo).length);
+  assert.ok(withPrev.length && without.length);
+  assert.deepEqual([...new Set([...withPrev, ...without])], [1052], "one size with and without prev");
+  assert.equal(
+    code(() => pv.unpadInfo(pv.pad(utf8ToBytes("{}")))),
+    "Padding",
+    "a 256-B bucket is no sealedInfo any more",
+  );
+  assert.equal(pv.padInfo(utf8ToBytes("{}")).length, 1024);
+});
+
+test("F9: a tombstone version, the 4,096 and 16,384 B buckets, padItem's limit, a 64-bit nonce, an msig UASig in a blob", () => {
+  const tomb = I.items.find((i) => i.content.type === "deleted");
+  assert.ok(tomb && tomb.version >= 2, "a tombstone is a later version");
+  assert.deepEqual(Object.keys(tomb.content), ["type"]);
+  const buckets = new Set(I.items.map((i) => fromHex(i.pt).length));
+  for (const b of [256, 4096, 16384]) assert.ok(buckets.has(b), String(b));
+  assert.equal(pv.padItem(new Uint8Array(I.padItemLimit.maxContent)).length, 16384);
+  assert.equal(
+    code(() => pv.padItem(new Uint8Array(I.padItemLimit.refusedContent))),
+    "CiphertextLength",
+  );
+  const b = R.extra.bigNonce;
+  assert.equal(typeof b.nonce, "string");
+  assert.ok(BigInt(b.nonce) >= 1n << 63n);
+  assert.equal(b.vaultId, h(pv.vaultId(b.creator, BigInt(b.nonce), b.mode, b.homeChain, b.homeVaultContract)));
+  assert.notEqual(
+    b.vaultId,
+    h(pv.vaultId(b.creator, Number(BigInt(b.nonce)), b.mode, b.homeChain, b.homeVaultContract)),
+    "a double loses the low bits",
+  );
+  const m = R.extra.msigBlob;
+  const rm = allRecords().find(({ r }) => r.name === m.record).r;
+  assert.ok(m.uaSig.members.length >= 2 && m.uaSig.members.some((x) => x.members.length));
+  assert.equal(m.sigHash, h(pv.sigHash(m.uaSig)));
+  assert.equal(m.blob, h(pv.groupBlob(rm.struct, rm.record, m.uaSig)));
+});

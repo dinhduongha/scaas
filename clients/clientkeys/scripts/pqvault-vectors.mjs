@@ -325,10 +325,11 @@ function shared(mode) {
   // epoch 1 by alice: alice and bob; mode 0 changes the passphrase and links prev, mode 1 does not link
   const eid = hex(pv.epochId(vid, alice.ua, 6));
   const members1 = sortedBy([alice, bob]).map((p) => mk(p));
+  // F9: mode 1 turns the passphrase on at epoch 1 (no prev); mode 0 changes it and links prev
   const pass1 =
     mode === 0
       ? { passKdf: 1, passphrase: "harbor lantern quartz meadow signal", passSalt: hex(rnd(`${tag}/pass-salt/1`)) }
-      : pass0;
+      : { passKdf: 1, passphrase: "copper willow ember kestrel dune", passSalt: hex(rnd(`${tag}/pass-salt/1`)) };
   const e1 = `${tag}/epoch-1`;
   const k1 = epochKeys(e1, {
     vid,
@@ -420,6 +421,24 @@ function shared(mode) {
   br.header = hex(pv.batchHeader(batch, br.itemIds, br.sigHash));
   br.itemBlobs = batchItems.map((it) => hex(pv.itemBlob(it, br.sigHash, bid)));
   recs.push(br);
+  // F9: alice deletes the item: version 3, a tombstone (the contract cannot tell it apart)
+  const x2 = { ...x0, epochId: eid, version: 3, author: alice.ua };
+  const tomb = {
+    itemId: iid,
+    epochId: eid,
+    author: alice.ua,
+    nonce: 13,
+    version: 3,
+    ciphertext: itemCt(
+      `${tag}/tombstone`,
+      x2,
+      { type: "deleted" },
+      { epochName: e1, record: `${tag}.edit-tombstone`, creator: alice.ua, mode },
+    ),
+  };
+  recs.push(
+    recordRow(`${tag}.edit-tombstone`, "PqVaultEdit", tomb, alice, ds, { scope: hex(pv.scopeItem(vid, alice.ua)) }),
+  );
   // bob leaves epoch 1
   const leave = { vaultId: vid, epochId: eid, member: bob.ua, nonce: 12 };
   recs.push(recordRow(`${tag}.leave`, "PqVaultLeave", leave, bob, ds, { scope: hex(pv.scopeEpoch(vid, bob.ua)) }));
@@ -512,6 +531,9 @@ personalVault(
         state: "accepted",
       },
     ],
+    // F9: the 4,096-B and the 16,384-B buckets
+    [3, { type: "note", title: "A long note", mediaType: "text/plain", body: "lorem ipsum ".repeat(250) }],
+    [4, { type: "note", title: "The largest note", mediaType: "text/plain", body: "dolor sit amet ".repeat(900) }],
   ],
 );
 
@@ -728,6 +750,39 @@ const normRefusals = [
 ];
 for (const r of normRefusals) must(refused(() => pv.passphraseBytes(r.input)) === r.error, r.name);
 
+// ------------------------------------------------------------------ F9: a 64-bit nonce, an msig UASig in a stored blob
+const bigNonce = (1n << 63n) + 5n;
+const extra = {
+  bigNonce: {
+    creator: alice.ua,
+    nonce: bigNonce.toString(),
+    mode: 0,
+    ...HOME0,
+    vaultId: hex(pv.vaultId(alice.ua, bigNonce, 0, HOME0.homeChain, HOME0.homeVaultContract)),
+  },
+  msigBlob: (() => {
+    const r = rec("shared0.remove");
+    const uaSig = {
+      keyData: "0x",
+      signature: "0x",
+      members: [
+        { index: 0, members: [], sig: hex(rnd("msig/member-0-sig", 65)) },
+        { index: 2, members: [{ index: 1, sig: hex(rnd("msig/inner-1-sig", 666)) }], sig: "0x" },
+      ],
+    };
+    return {
+      record: r.name,
+      uaSig,
+      sigHash: hex(pv.sigHash(uaSig)),
+      blob: hex(pv.groupBlob(r.struct, r.record, uaSig)),
+    };
+  })(),
+};
+must(
+  extra.bigNonce.vaultId !== hex(pv.vaultId(alice.ua, Number(bigNonce), 0, HOME0.homeChain, HOME0.homeVaultContract)),
+  "a double loses the nonce's low bits",
+);
+
 // ------------------------------------------------------------------ files
 const write = (file, doc) =>
   writeFileSync(join(OUT, file), `${JSON.stringify(doc, (_, v) => (v instanceof Uint8Array ? hex(v) : v), 2)}\n`);
@@ -754,7 +809,9 @@ write("records.json", {
     "instance differs (its create refused PqVaultShape there by the home check). nativeMember: an EVM key holding a seat of the " +
     "msig `msig`; mode 0 it signs the typed digest itself (ECDSA, RFC 6979, low-s, r ‖ s ‖ v, v 27/28); mode 1 it signs " +
     "uaAuthDigest(registryDomain, its native id, purposeTag(member), memberDigest(msig, uaMessage(0x0120, P_V, typed))); each " +
-    "signature presented in the other mode recovers another address.",
+    "signature presented in the other mode recovers another address. extra (Fable code review F9): bigNonce, a creation nonce " +
+    "above 2^63 as a decimal string (a double would lose its low bits) and its vaultId; msigBlob, the shared0 remove record " +
+    "stored with an msig UASig (members, one nested) and its sigHash.",
   version: 1,
   domains: {
     V: {
@@ -804,6 +861,7 @@ write("records.json", {
   vaults,
   modes,
   nativeMember,
+  extra,
 });
 
 write("keys.json", {
@@ -814,7 +872,7 @@ write("keys.json", {
     '0^96, K_e, aad vaultId ‖ epochId ‖ member ‖ be64 keyId); epoch 0\'s epochId is the vaultId. epochs: K_e = rnd("K_e/<epoch>"); ' +
     'P_k = pass.json\'s row of the epoch (null when passKdf = 0); K_v = HKDF-SHA-256(K_e ‖ P_k, empty, "scaas/pqvault/v1/vkey" ‖ ' +
     'vaultId ‖ epochId ‖ be16 passKdf, 32); kInfo = HKDF(K_v, "scaas/pqvault/v1/info" ‖ vaultId ‖ epochId); sealedInfo = infoNonce ‖ ' +
-    "AES-256-GCM-SIV(kInfo, infoNonce, pt = pad(json)), empty AAD, json the canonical JSON of info; prev: kPrev = HKDF(K_v, " +
+    "AES-256-GCM-SIV(kInfo, infoNonce, pt = padInfo(json): pad to at least the 1,024-B bucket, F12), empty AAD, json the canonical JSON of info; prev: kPrev = HKDF(K_v, " +
     '"scaas/pqvault/v1/prev" ‖ vaultId ‖ epochId ‖ prevEpochId); keyWrap = nonce ‖ AES-256-GCM-SIV(kPrev, nonce, K_v(prev), aad ' +
     '"scaas/ua/v1/keywrap" ‖ u8 usage (Derive = 1) ‖ vaultId ‖ epochId ‖ prevEpochId), 60 B. usages: Derive 1, Data 2, KeyWrap 3 ' +
     "(handle metadata, never in a derivation's info); each row a call refused by its named error (AppKeyUsage: a handle of " +
@@ -845,10 +903,12 @@ write("items.json", {
     'this is (batchIndex: its index in the batch). file: kFile = HKDF(K_v, "scaas/pqvault/v1/file" ‖ vaultId ‖ epochId ‖ itemId ‖ ' +
     'be32 version), usage KeyWrap; content.keyWrap = nonce ‖ AES-256-GCM-SIV(kFile, nonce, file key, aad "scaas/ua/v1/keywrap" ‖ ' +
     "u8 Data (2) ‖ vaultId ‖ epochId ‖ itemId ‖ be32 version). refusals: rows against the base item, one change each (the " +
-    "ciphertext, an AAD field, the key): CiphertextLength, Padding, AeadOpen.",
+    "ciphertext, an AAD field, the key): CiphertextLength, Padding, AeadOpen. padItemLimit: padItem takes at most 16,380 B " +
+    'of content (the 16,384-B bucket). A tombstone is a later version {"type":"deleted"}.',
   version: 1,
   items: itemRows,
   refusals: itemRefusals,
+  padItemLimit: { maxContent: 16380, refusedContent: 16381, error: "CiphertextLength" },
 });
 
 write("pass.json", {
