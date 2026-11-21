@@ -67,6 +67,8 @@ STEPS=(
     "features|.|python3 scripts/check_test_features.py && cd clients/scaas-sdk && $cap cargo test $C --test feature_tree"
     "sdk-raw|clients/scaas-sdk|$cap cargo test $C --lib --features $F,native-networks,raw-native && $cap cargo clippy $C --all-targets --features $V,native-networks,raw-native -- -D warnings"
     "mutants-check|.|$MCHECK"
+    # plan T22: the CLI `scaas`, its release build and its dev-profiles build (the CI job scaas-cli)
+    "cli|clients/scaas-cli|$cap cargo test $C && $cap cargo test $C --features dev-profiles && $cap cargo clippy $C --all-targets --features dev-profiles -- -D warnings"
 )
 
 cmd_of() {
