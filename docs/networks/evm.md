@@ -311,7 +311,9 @@ state gas) exceeds 2^24, up to about 115.7 M simulated for the largest implement
 
 <a id="NET-EVM-18"></a>**NET-EVM-18** — **On a chain without the Amsterdam fork a contract deploys only when its `amsterdam`
 build fits that chain** (owner 2026-11-21, ARCH-POS-19 Q1 "per contract"; the five conditions a controller call of
-[ARCH-POS-20](../decisions.md#ARCH-POS-20) C5, revised after the review; SPECIFIED). NET-EVM-06 is unchanged: one compile
+[ARCH-POS-20](../decisions.md#ARCH-POS-20) C5, revised after the review; the five checks **BUILT** on branch `chains-arweave`
+(plan T4: `smartcontracts/evm/script/forkcheck.py`, its test `script/test_forkcheck.py`, the fixtures `test/forkcheck/`, the gate
+step `forkcheck`; their application to `PqChatStore` is SPECIFIED, plan T6). NET-EVM-06 is unchanged: one compile
 target, `amsterdam`. The deploy script checks before it sends: (1) the runtime and init code are within the chain's caps; (2)
 the deploy transaction is within the chain's live block or transaction cap at the chain's own pricing; (3) an **allow-list**
 scan: every byte in code position of the runtime and init code is an opcode the chain's fork defines, the code walked with each
@@ -327,6 +329,14 @@ deploy time. Before a mainnet deploy, the chain's testnet runs a real round trip
 client). A contract that fails (3) or (5) waits and goes to the owner: a build for an older fork changes NET-EVM-06, and a missing
 precompile means [ARCH-POS-18](../decisions.md#ARCH-POS-18)'s software path, never a disabled kind. A whole
 SCaaS set still waits for the chain's Amsterdam fork. Design: the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §4.5.
+How it is built (controller calls, ARCH-POS-20 Change of T4): a profile states its fork and caps in
+`smartcontracts/evm/src/chains/<key>/profile.json` (`evmFork`, `codeSizeLimit`, `initCodeSizeLimit`; a profile without the file is
+`amsterdam`), and `deploy.sh` refuses a whole set on any other fork (`FORKCHECK_SET_FORK`); a contract declares its precompiles in
+`smartcontracts/evm/release-data/<Contract>.json` (`precompiles`: address, input, known output; a file without the list is
+refused); the scan places code by the compiler's source-map instruction count, then solc's `INVALID`, then exactly the runtime (in
+the init code) or exactly the CBOR metadata (in the runtime), and refuses any other data section; `DUPN`, `SWAPN` and `EXCHANGE`
+(EIP-8024), which solc 0.8.37 does not emit, are bytes the walk cannot place; chain reads take the strict majority of the node
+list. Each refusal is named `FORKCHECK_*`.
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
 Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the

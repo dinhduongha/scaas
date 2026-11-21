@@ -27,6 +27,8 @@ STEPS=(
     "forge-all|smartcontracts/evm|$cap forge test && $cap forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'"
     "forge-sets|smartcontracts/evm|trap 'git checkout -- src/pqz/PqzSet.sol' EXIT; script/pqz/at-set.sh others sensitive && script/pqz/at-set.sh others modules"
     "size|smartcontracts/evm|T=\$(mktemp -d) && trap 'rm -rf \"\$T\"' EXIT && $cap forge build src --sizes --json > \"\$T\"/sizes.json && python3 ../../scripts/size_gate.py \"\$T\"/sizes.json size-baseline.json"
+    # forkcheck: NET-EVM-18 checks (3) and (4) on the fixtures of test/forkcheck at Cancun, the CLZ control red (T4)
+    "forkcheck|smartcontracts/evm|$cap forge build test/forkcheck && $cap python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json"
     "deploy-py|smartcontracts/evm|for t in script/test_*.py; do echo \"## \$t\"; python3 \"\$t\" || exit 1; done"
     "ck-test|clients/clientkeys|$cap npm test"
     "ua-test|clients/ua-rs|$cap cargo test $C --all-features"
