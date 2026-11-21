@@ -399,18 +399,20 @@ def cases_bound_to_the_contract():
 # ---- check (4): the control must be red
 
 
-def fake_evm(control_green):
+def fake_evm(control_green, mode=None):
     """A fake anvil: deploys succeed; a call to the control (deployed first) succeeds only when `control_green`; the other
-    contract's `f()` returns 1."""
+    contract's `f()` returns 1. `mode`: "nodeploy" the control's deploy reverts, "half" its call errors but its transaction
+    succeeds, "transport" its call gets no answer."""
     st = {"n": 0, "receipts": {}}
     one = "0x" + "00" * 31 + "01"
+    ctl = "0x" + f"{1:040x}"
 
-    def outcome(tx):
+    def outcome(tx, send=False):
         if "to" not in tx:
             st["n"] += 1
-            return True, "0x", "0x" + f"{st['n']:040x}"
-        if tx["to"] == "0x" + f"{1:040x}":
-            return control_green, "0x" + "00" * 31 + "ff", None
+            return mode != "nodeploy" or st["n"] > 1, "0x", "0x" + f"{st['n']:040x}"
+        if tx["to"] == ctl:
+            return control_green or (send and mode == "half"), "0x" + "00" * 31 + "ff", None
         return True, one, None
 
     def rpc(method, params):
@@ -421,10 +423,12 @@ def fake_evm(control_green):
         if method == "eth_getCode":
             return {"result": art([STOP], 1)["deployedBytecode"]["object"]}
         if method == "eth_call":
+            if mode == "transport" and params[0].get("to") == ctl:
+                return {"error": {"message": "no answer (URLError)", "transport": True}}
             ok, ret, _ = outcome(params[0]) if "to" in params[0] else (True, "0x", None)
             return {"result": ret} if ok else {"error": {"message": "invalid opcode"}}
         if method == "eth_sendTransaction":
-            ok, _, addr = outcome(params[0])
+            ok, _, addr = outcome(params[0], send=True)
             h = "0x%064x" % (len(st["receipts"]) + 1)
             st["receipts"][h] = {"status": "0x1" if ok else "0x0", "gasUsed": "0x5208", "contractAddress": addr}
             return {"result": h}
@@ -447,11 +451,31 @@ def control_green_voids_the_run():
         ]
         lines = []
         assert f.execute(fake_evm(False), "cancun", cs, lines.append, t) == 3  # control red, deploy and f() green
-        assert any(s.startswith("control clz(1) = 255: red") for s in lines), lines
+        assert any(s.startswith("control: red at cancun") for s in lines), lines
         refused("FORKCHECK_CONTROL", f.execute, fake_evm(True), "cancun", cs, lines.append, t)
         bad = [dict(cs[0], cases=[dict(cs[0]["cases"][0], **{"return": "0x" + "00" * 32})])]
         refused("FORKCHECK_EXEC", f.execute, fake_evm(False), "cancun", bad, lines.append, t)
         refused("FORKCHECK_FORK_UNKNOWN", f.execute, fake_evm(False), "osaka", cs, lines.append, t)
+
+
+def control_red_for_its_reason():
+    """The control is red only for the missing opcode: its deploy green, its call an execution error and its receipt status
+    0; a deploy that reverts, a call with no answer, or a call red with a transaction green is FORKCHECK_CONTROL, never a
+    red control (review P2-6). The positive run: at the fork with the opcode the control is green with its amsterdam
+    answer, and the same run under the cancun control's expectation is void."""
+    with tempfile.TemporaryDirectory() as t:
+        write(t, "out/" + f.CONTROL["cancun"]["artifact"], art([STOP], 1, name="ForkcheckClz"))
+        write(t, "out/Fx.sol/Fx.json", art([STOP], 1))
+        cs = [{"artifact": "Fx.sol/Fx.json", "cases": [{"name": "f", "sig": "f()", "ok": True}]}]
+        for mode, why in (("nodeploy", "did not run"), ("transport", "did not run"), ("half", "is green")):
+            e = refused("FORKCHECK_CONTROL", f.execute, fake_evm(False, mode), "cancun", cs, lambda s: None, t)
+            assert why in e, (mode, e)
+        assert f.execute(fake_evm(False), "cancun", cs, lambda s: None, t) == 3  # twin: red for its reason
+        lines = []
+        assert f.control_check(fake_evm(True), "cancun", lines.append, t) == 2
+        assert any("green" in s for s in lines), lines
+        e = refused("FORKCHECK_CONTROL", f.control_check, fake_evm(False), "cancun", lambda s: None, t)
+        assert "not green" in e, e
 
 
 def case_from_revert_logs():
@@ -518,6 +542,7 @@ TESTS = [
     deploy_gate_runs_every_check,
     cases_bound_to_the_contract,
     control_green_voids_the_run,
+    control_red_for_its_reason,
     case_from_revert_logs,
 ]
 

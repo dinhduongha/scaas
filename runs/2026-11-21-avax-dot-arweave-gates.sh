@@ -27,8 +27,9 @@ STEPS=(
     "forge-all|smartcontracts/evm|$cap forge test && $cap forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'"
     "forge-sets|smartcontracts/evm|trap 'git checkout -- src/pqz/PqzSet.sol' EXIT; script/pqz/at-set.sh others sensitive && script/pqz/at-set.sh others modules"
     "size|smartcontracts/evm|T=\$(mktemp -d) && trap 'rm -rf \"\$T\"' EXIT && $cap forge build src --sizes --json > \"\$T\"/sizes.json && python3 ../../scripts/size_gate.py \"\$T\"/sizes.json size-baseline.json"
-    # forkcheck: NET-EVM-18 checks (3) and (4) on the fixtures of test/forkcheck at Cancun, the CLZ control red (T4)
-    "forkcheck|smartcontracts/evm|T=\$(mktemp -d) && trap 'rm -rf \"\$T\"' EXIT && $cap forge build test/forkcheck --extra-output evm.legacyAssembly --out \"\$T\"/out --cache-path \"\$T\"/cache && $cap python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json --out \"\$T\"/out"
+    # forkcheck: NET-EVM-18 checks (3) and (4) on the fixtures of test/forkcheck at Cancun, the CLZ control red (T4); then
+    # the control's positive run (review P2-6): green at osaka, and that green run void under the cancun expectation
+    "forkcheck|smartcontracts/evm|T=\$(mktemp -d) && trap 'rm -rf \"\$T\"' EXIT && $cap forge build test/forkcheck --extra-output evm.legacyAssembly --out \"\$T\"/out --cache-path \"\$T\"/cache && $cap python3 -I script/forkcheck.py exec cancun test/forkcheck/cases.json --out \"\$T\"/out && $cap python3 -I script/forkcheck.py control cancun --out \"\$T\"/out"
     # chatstore-cancun: PqChatStore's deploy path on a fresh anvil at cancun (code-size limit 24,576): the five checks with
     # the T5 cases at cancun on the amsterdam bytes, the CLZ control red; deploy, deploy again (no send), the probes (T6)
     "chatstore-cancun|smartcontracts/evm|T=\$(mktemp -d) && trap 'rm -rf \"\$T\"' EXIT && $cap forge build src/pqchat/PqChatStore.sol test/forkcheck --extra-output evm.legacyAssembly --out \"\$T\"/out --cache-path \"\$T\"/cache && $cap python3 -I script/deploy_pqchatstore.py local --out \"\$T\"/out"

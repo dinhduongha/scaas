@@ -335,7 +335,9 @@ the recorded `blockGasLimit`; a key without the file is refused by name, `FORKCH
 and a local anvil `local-…-testnet`, which are `amsterdam`; `avalanche-mainnet` and `avalanche-testnet` are `cancun`, 24,576 B and
 49,152 B, no transaction cap), and `deploy.sh` refuses a whole set on any other fork (`FORKCHECK_SET_FORK`); a contract declares its precompiles in
 `smartcontracts/evm/release-data/<Contract>.json` (`precompiles`: address, input, known output; a file without the list is
-refused); check (4) runs only the cases of the contract under deploy (each entry's artifact its init code and runtime, at
+refused); the control is red only for its missing opcode (its deploy green, its call an execution error and its receipt status 0;
+else `FORKCHECK_CONTROL`), and the gate step `forkcheck` also runs it green at `osaka`, where that green run under the
+Cancun expectation is void; check (4) runs only the cases of the contract under deploy (each entry's artifact its init code and runtime, at
 least one case; else `FORKCHECK_CASES`); the scan places code by the compiler's source-map instruction count, then solc's `INVALID`, then the runtime (in the
 init code), then the data sections the compiler's legacy assembly lists (`forge build --extra-output evm.legacyAssembly`; none
 without it), then the CBOR metadata (in the runtime), and refuses anything else, a second sub-assembly (code the walk does not

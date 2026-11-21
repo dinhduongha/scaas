@@ -30,6 +30,8 @@ answer; a height, an estimate or a fee: the number a strict majority reaches), e
   python3 -I script/forkcheck.py scan <fork> <artifact> [<args hex>]   check (3)
   scripts/capped python3 -I script/forkcheck.py exec <fork> <cases.json> [--out <dir>]   check (3) and (4) on a local anvil
                                                        (started and stopped here); prints `gas <contract> <case> <gasUsed>`
+  scripts/capped python3 -I script/forkcheck.py control <fork> [--out <dir>]   the control's positive run: green on anvil
+                                                       at the first fork with its opcode, and void under <fork>'s expectation
   scripts/capped python3 -I script/forkcheck.py deploy <key> <artifact> <rpc>[,<rpc>…] --cases <cases.json>
       [--args <hex>] [--gas-limit <gas>] [--release <release-data json>] [--out <dir>]   the five checks before a single
                                                        contract's deploy
@@ -265,7 +267,7 @@ def _post(url, method, params, timeout=30):
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.load(r)
     except Exception as e:  # never the URL: it may hold a key
-        return {"error": {"message": f"no answer ({type(e).__name__})"}}
+        return {"error": {"message": f"no answer ({type(e).__name__})", "transport": True}}
 
 
 def http_node(url):
@@ -386,18 +388,13 @@ def check_gas(nodes, code, gas_limit=None, sender=None, tx_cap=None):
 # ---- check (4): real transactions at the chain's fork
 
 
-CONTROL = {  # per fork: a fixture whose amsterdam artifact uses an opcode the fork lacks, and its amsterdam answer
+CONTROL = {  # per fork: a fixture whose amsterdam artifact uses an opcode the fork lacks, its case (red at the fork: the call
+    # an execution error, the receipt status 0), its amsterdam answer (`green`) and the first anvil fork with the opcode
     "cancun": {
         "artifact": "ForkcheckClz.sol/ForkcheckClz.json",
-        "cases": [
-            {
-                "name": "clz(1) = 255",
-                "sig": "lz(uint256)",
-                "args": "0x" + "00" * 31 + "01",
-                "ok": True,
-                "return": "0x" + "00" * 31 + "ff",
-            }
-        ],
+        "cases": [{"name": "clz(1)", "sig": "lz(uint256)", "args": "0x" + "00" * 31 + "01", "ok": False}],
+        "green": "0x" + "00" * 31 + "ff",
+        "green_at": "osaka",
     }
 }
 
@@ -464,7 +461,9 @@ def run_contract(rpc, accts, gas, artifact, args, cases):
         rec = _send(rpc, frm, tx, gas)
         status = int(rec["status"], 16) == 1
         why = ""
-        if ok != c["ok"] or status != c["ok"]:
+        if isinstance(call.get("error"), dict) and call["error"].get("transport"):
+            why = "no answer to the call (transport)"  # never an execution error
+        elif ok != c["ok"] or status != c["ok"]:
             why = f"ok {ok} (call), {status} (receipt), expected {c['ok']}"
         elif c["ok"] and "return" in c and call["result"].lower() != c["return"].lower():
             why = f"returned {call['result'][:66]}, expected {c['return'][:66]}"
@@ -487,11 +486,15 @@ def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     gas = int(rpc("eth_getBlockByNumber", ["latest", False])["result"]["gasLimit"], 16)
     ctl = CONTROL[fork]
     rows = run_contract(rpc, accts, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", ctl["cases"])
-    red = [r for r in rows if not r[1]]
     for name, ok, g, why in rows:
-        say(f"control {name}: {'green' if ok else 'red'} gas {g}{' (' + why + ')' if why else ''}")
-    if not red:
-        raise ForkError(f"FORKCHECK_CONTROL: the {fork} control is green: the run is void (it is not at {fork})")
+        say(f"control {name}: {'as expected' if ok else 'NOT as expected'} gas {g}{' (' + why + ')' if why else ''}")
+    # red for the missing opcode alone (review P2-6): the deploy green, each case red by both signals; else no evidence
+    ran = rows[0][:2] == ("deploy", True) and [r[0] for r in rows[1:]] == [c["name"] for c in ctl["cases"]]
+    if not ran or any(r[3].startswith("no answer") for r in rows):
+        raise ForkError(f"FORKCHECK_CONTROL: the {fork} control did not run: {'; '.join(r[3] for r in rows if r[3])}")
+    if not all(r[1] for r in rows):
+        raise ForkError(f"FORKCHECK_CONTROL: the {fork} control is green (call or transaction): the run is void (it is not at {fork})")
+    say(f"control: red at {fork} (the call an execution error, the receipt status 0)")
     passed, failed = 1, []  # the control's red counts as one expectation met
     for c in contracts:
         a = load_artifact(os.path.join(out, c["artifact"]), root)
@@ -504,6 +507,31 @@ def execute(rpc, fork, contracts, say=print, root=EVM, out="out"):
     if failed:
         raise ForkError(f"FORKCHECK_EXEC: at {fork}: " + "; ".join(failed))
     return passed
+
+
+def control_check(rpc, fork, say=print, root=EVM, out="out"):
+    """The control's positive run on a node at the first fork with its opcode (review P2-6): green with its amsterdam answer,
+    and the same node under `fork`'s expectation is void (FORKCHECK_CONTROL): a control that should fail but passes fails the
+    step. Returns 2."""
+    ctl = CONTROL[fork]
+    accts = rpc("eth_accounts", []).get("result") or []
+    if not accts:
+        raise ForkError("FORKCHECK_EXEC: the node has no unlocked account")
+    gas = int(rpc("eth_getBlockByNumber", ["latest", False])["result"]["gasLimit"], 16)
+    green = [dict(c, ok=True, **{"return": ctl["green"]}) for c in ctl["cases"]]
+    rows = run_contract(rpc, accts, gas, load_artifact(os.path.join(out, ctl["artifact"]), root), "0x", green)
+    for name, ok, g, why in rows:
+        say(f"control {name} at {ctl['green_at']}: {'green' if ok else 'NOT green'} gas {g}{' (' + why + ')' if why else ''}")
+    if len(rows) != 1 + len(green) or not all(r[1] for r in rows):
+        raise ForkError(f"FORKCHECK_CONTROL: the {fork} control is not green at {ctl['green_at']}: the fixture is wrong")
+    try:
+        execute(rpc, fork, [], lambda s: None, root, out)
+    except ForkError as e:
+        if not str(e).startswith("FORKCHECK_CONTROL"):
+            raise
+        say(f"control at {ctl['green_at']} under the {fork} expectation: void ({str(e)[:60]})")
+        return 2
+    raise ForkError(f"FORKCHECK_CONTROL: a green control did not void the {fork} run")
 
 
 class Anvil:
@@ -641,6 +669,13 @@ def main(argv):
         elif argv[:1] == ["exec"] and len(argv) in (3, 5) and argv[3:4] in ([], ["--out"]):
             out = argv[4] if len(argv) == 5 else "out"
             n = exec_cases(argv[1], argv[2], say=lambda s: print(f"[forkcheck] {s}", flush=True), out=out)
+            print(f"ok {n}/{n}")
+        elif argv[:1] == ["control"] and len(argv) in (2, 4) and argv[2:3] in ([], ["--out"]):
+            if argv[1] not in CONTROL:
+                raise ForkError(f"FORKCHECK_FORK_UNKNOWN: no control fixture for {argv[1]}")
+            with Anvil(CONTROL[argv[1]]["green_at"]) as rpc:
+                say = lambda s: print(f"[forkcheck] {s}", flush=True)  # noqa: E731
+                n = control_check(rpc, argv[1], say, out=argv[3] if len(argv) == 4 else "out")
             print(f"ok {n}/{n}")
         elif argv[:1] == ["deploy"] and len(argv) >= 4:
             o = dict(zip(argv[4::2], argv[5::2]))

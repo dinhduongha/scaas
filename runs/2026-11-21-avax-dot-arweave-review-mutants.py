@@ -171,6 +171,30 @@ MUTANTS = [
         T + "cases_bound_to_the_contract",
         "FAIL cases_bound_to_the_contract",
     ),
+    (
+        "P2-6 a control that did not run counted as red",
+        [(F, '    if not ran or any(r[3].startswith("no answer") for r in rows):', "    if False:")],
+        T + "control_red_for_its_reason",
+        "FAIL control_red_for_its_reason",
+    ),
+    (
+        "P2-6 a transport error read as an execution error",
+        [(F, '        if isinstance(call.get("error"), dict) and call["error"].get("transport"):', "        if False:")],
+        T + "control_red_for_its_reason",
+        "FAIL control_red_for_its_reason",
+    ),
+    (
+        "P2-6 one signal enough for red",
+        [(F, '        elif ok != c["ok"] or status != c["ok"]:', '        elif ok != c["ok"]:')],
+        T + "control_red_for_its_reason",
+        "FAIL control_red_for_its_reason",
+    ),
+    (
+        "P2-6 the positive run not required green",
+        [(F, "    if len(rows) != 1 + len(green) or not all(r[1] for r in rows):", "    if False:")],
+        T + "control_red_for_its_reason",
+        "FAIL control_red_for_its_reason",
+    ),
 ]
 
 if __name__ == "__main__":
