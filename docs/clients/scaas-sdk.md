@@ -309,6 +309,25 @@ purpose constant (the guard on the chain-bound path) and every domain of a SCaaS
 address, by chain), each refusal tested with a positive control and a mutant. Reads of ciphertexts the app core decrypts are decryption reads under
 [CLI-SDK-10](#CLI-SDK-10); writes are operations under [CLI-SDK-08](#CLI-SDK-08). Design: spec §12.
 
+<a id="CLI-SDK-21"></a>**CLI-SDK-21** — **`upload_file` and `fetch_file` put an app core's sealed file on Arweave and read it
+back; the free tier carries the smallest bucket, the operator payer the rest, and the client never holds an operator
+credential** (owner 2026-11-21, [ARCH-POS-19](../decisions.md#ARCH-POS-19) Q4, Q5; the bucket split and the re-post rule controller
+calls of [ARCH-POS-20](../decisions.md#ARCH-POS-20); SPECIFIED, nothing built; design in the
+[spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part D). On top of the file seal calls of `pqchat-core`'s O9 (b) (`seal_file`, `open_file`):
+`upload_file(app, ct, ct_sha256) -> FileRef {url, size_bucket}` pads and signs in `ua-rs`
+([CLI-UAL-64](ua-libraries.md#CLI-UAL-64), [CLI-UAL-65](ua-libraries.md#CLI-UAL-65)) and posts through `scaas-rpc`
+([CLI-RPC-14](scaas-rpc.md#CLI-RPC-14)) to the release's bundler list, only on the user's send; an object in the 2^16-B bucket
+goes on the free tier, a larger one or a free-tier refusal carries `x-paid-by` with the operator payer's address, and until the
+payer's service and its authorisation are settled that is `PayerUnavailable`. The app core keeps the signed bytes until
+`status` shows them in a block; past 24 h without it, the SDK re-posts the same bytes, never re-signed and never under another key.
+`fetch_file(app, url, size, ct_sha256) -> Ciphertext` refuses a malformed `url` before any request, reads through
+[CLI-RPC-13](scaas-rpc.md#CLI-RPC-13) with the bound `bucket(size)`, marked as feeding a decryption, with the CLI-UAL-65 check as
+the gateway's acceptance check, and returns the `ct` prefix for `open_file`; a failure is `FileHashMismatch` (or the read's error),
+shown on the device only, and nothing the client sends depends on it ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). It runs on the
+user's action, or for the 2^16-B bucket automatically if the app allows it. The gateway and bundler lists are the release's pinned
+data, with `named` entries from the operator or holder. The metadata cost is stated: the payer's approvals and the receipt's
+`payer` link every funded upload key to the operator's payer address, and the bundler sees the uploader's IP.
+
 ## 8. Runtime, events, errors
 
 <a id="CLI-SDK-11"></a>**CLI-SDK-11** — **The SDK is async on tokio and reports by subscription** (SPECIFIED). The API is `async`;

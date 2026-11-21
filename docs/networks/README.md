@@ -362,14 +362,18 @@ node's `[[chains.services]]` today, [NODE-JOB-25](../node/job-api.md#NODE-JOB-25
 warns for a service off the list.
 
 <a id="chain-forks"></a><a id="NET-ALL-25"></a>**NET-ALL-25** — **A chain we run that forks becomes a new chain, and
-no two chain profiles share a genesis hash.** Owner ruling 2026-10-08. Two branches of a fork share their genesis
-block, so `chain_uid` cannot tell them apart and a signature made on one replays on the other. For chains SCaaS runs,
+no two chain profiles share the pair `(chainId, chain_uid)`.** Owner ruling 2026-10-08; the pair wording is a controller call
+of 2026-11-21 ([ARCH-POS-19](../decisions.md#ARCH-POS-19) Q8; the pair check SPECIFIED). Two branches of a fork share their
+genesis block, so `chain_uid` cannot tell them apart and a signature made on one replays on the other. For chains SCaaS runs,
 a fork is a new chain: a new chain id (EIP-155 practice) and a new `chain_key`, with its own profile; the deploy gate
 enforces it. A private chain re-created from the **same** genesis file would also repeat its genesis hash, so every
-private chain's genesis carries a unique `extraData` nonce, and the deploy gate and the node refuse a genesis hash
-that is already present in any chain profile. On public chains SCaaS relies on the fork's own chain-id change; a fork
-without one is a documented residual (signatures replay on both branches until the profile is withdrawn). Cost: a
-fork of our own chain needs fresh deployments and profiles.
+private chain's genesis carries a unique `extraData` nonce, and the deploy gate and the node refuse a private chain whose
+genesis hash is already present in any chain profile. Public chains may share a genesis (Avalanche C-Chain and Fuji,
+Ethereum and ETC): their profiles are told apart by the chain id, and the deploy gate and the node refuse a profile whose
+pair is already present. Every chain-bound SCaaS digest binds the chain id beside `chain_uid`; a portable record binds no
+chain by design. On public chains SCaaS relies on the fork's own chain-id change; a fork without one is a documented
+residual (signatures replay on both branches until the profile is withdrawn). Cost: a fork of our own chain needs fresh
+deployments and profiles.
 
 ## 5. Passkeys (WebAuthn P-256)
 

@@ -18,6 +18,7 @@ the EVM part by Fable in plan T13; the families' review is plan T24, pending). P
 6. [The scaas-node client](#6-the-scaas-node-client)
 7. [The verifier's agreement option](#7-the-verifiers-agreement-option)
 8. [Errors](#8-errors)
+9. [Arweave gateways and bundlers](#9-arweave-gateways-and-bundlers)
 
 ## 1. Scope
 
@@ -237,3 +238,33 @@ Named, stable codes; the names shared with the app's endpoint lists are the same
 `BroadcastRejected` is the code of a send's `Rejected` outcome ([CLI-RPC-08](#CLI-RPC-08)), not an error. The failure of one
 endpoint inside `EndpointAllFailed` or `EndpointNoMajority` is one of `Transport`, `Timeout`, `Http`, `AnswerTooLarge`,
 `AnswerTooDeep`, `AnswerMalformed`, `WrongChain`, `IdentityUnread`, `BehindHead`, `BlockChanged` or `FailoverRevert`.
+
+## 9. Arweave gateways and bundlers
+
+Status: **SPECIFIED**, nothing built (owner 2026-11-21, [ARCH-POS-19](../decisions.md#ARCH-POS-19) (3) and Q5; the rules below
+controller calls of [ARCH-POS-20](../decisions.md#ARCH-POS-20); the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part D). A module `arweave` behind the feature
+`arweave`, under CLI-RPC-01 to CLI-RPC-11: no key, no signing, no payment; compiles for wasm32. The Avalanche and Polkadot EVM
+profiles need no new rule here: they are configuration of the EVM reader ([NET-EVM-16](../networks/evm.md#NET-EVM-16),
+[NET-EVM-17](../networks/evm.md#NET-EVM-17)).
+
+<a id="CLI-RPC-13"></a>**CLI-RPC-13** — **Arweave reads go to a list of gateways; every attachment read feeds a decryption and is
+accepted only when the caller's check passes** (SPECIFIED). The list is [CLI-RPC-02](#CLI-RPC-02)'s: `default` the release's
+reviewed gateways, `named` the operator's or holder's, `discovered` only as the caller passes them (the crate discovers nothing and
+follows no redirect). A gateway answers `GET /info` with the configured `network` or is dropped for the process
+([CLI-RPC-03](#CLI-RPC-03)). `data(id, max_bytes, purpose, check)` reads `GET /raw/{id}`: `id` is checked as 43 canonical base64url
+characters before any request; an announced length above `max_bytes` is refused unread and reading stops at `max_bytes`; a body
+that fails `check` is that gateway's failure (`EndpointAnswerRefused`), so failover moves on. Failover by default; under strict
+majority ⌊n/2⌋ + 1 gateways return bytes with the same SHA-256 that also pass `check` (the id fixes the content; no block).
+Every attachment read is marked as feeding a decryption ([CLI-RPC-06](#CLI-RPC-06)). `status(id)` reads GraphQL
+`transactions(ids: [id])`, the answer capped at 64 KiB and depth 64; "settled" means a block height is shown. Logs carry ids and
+sizes only ([CLI-RPC-11](#CLI-RPC-11)).
+
+<a id="CLI-RPC-14"></a>**CLI-RPC-14** — **An upload posts the same signed data item to a list of bundlers; a receipt counts only
+when its id equals the id computed locally; never final** (SPECIFIED). `upload(item, paid_by)` parses the item's header within
+bounds (signature types 2, 3 and 4 only), computes its id (base64url of SHA-256 of the signature), and posts the same bytes
+(`POST /tx`, `application/octet-stream`) to the first or to every bundler of the list (`default` Turbo). Per bundler: `accepted`
+(the receipt kept, capped), `refused` (HTTP 402 as `PaymentRequired`) or `unreachable`; a receipt for another id is `refused`;
+merged `Sent` or `Rejected` as [CLI-RPC-08](#CLI-RPC-08). `paid_by` is the caller's, sent as `x-paid-by` to that bundler only.
+The body cap is the largest single-request bucket plus 1,024 B. Settlement is read later through [CLI-RPC-13](#CLI-RPC-13)'s
+`status`, never taken from a receipt.
+

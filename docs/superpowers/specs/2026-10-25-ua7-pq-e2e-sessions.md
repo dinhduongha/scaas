@@ -233,6 +233,12 @@ minimal form, CTR-UA-07). The contract verifies it through the registry's portab
   (the user ids) present only when a Matrix store is listed.
   **The store list, the room id, the HCS topic id and Matrix user ids never appear on chain in the clear** (D10, D14,
   D15).
+  Change (2026-11-21, owner ARCH-POS-19 Q1 and controller call C4 of ARCH-POS-20; SPECIFIED, the
+  [Avalanche, Polkadot and Arweave spec](2026-11-21-avax-polkadot-arweave.md) §5.5): a store entry may also be
+  `{"kind": "chainstore", "chainId": <decimal u64>, "chainUid": <chain_uid>, "contract": <PqChatStore address>}`, a message
+  store written through `storeMessage` on a standalone `PqChatStore` (CTR-CHAT-22) on a chain whose code cap no `PqChat`
+  fits; `chainstore` entries are distinct by `(chainId, chainUid, contract)`; the reader checks the chain pair and the
+  contract's pinned runtime code hash before it reads.
 - `parents` = the ids of the conversation heads the sender has seen, at most 8, sorted (P19).
 - `ciphertext` = §6.4.
 
@@ -543,6 +549,11 @@ its ciphertext.
   kind holds files: `matrix`, its media repository, `locator` the `mxc://` URI of `ct` (P28). HCS and Waku carry messages
   within their size bounds (P25, P31), not files; a later store kind that holds objects adds its locator here.
 - `url` (optional): 1–2,048 B, `https://` or `ipfs://` (a blob store, P28), naming `ct` itself.
+  Change (2026-11-21, owner ARCH-POS-19 Q4, controller calls Q6 and C10; SPECIFIED, CLI-UAL-65, the
+  [Avalanche, Polkadot and Arweave spec](2026-11-21-avax-polkadot-arweave.md) §7.4, §7.5): `url` may also be `ar://<id>`,
+  `<id>` exactly 43 characters of canonical base64url and nothing after it; it names `ct` padded with zeros to a power-of-two
+  bucket, and the reader checks the length, the zero tail and `ctSha256` before any decryption. `ctSha256` stays SHA-256 of
+  `ct`; no signed byte of this section changes.
 - At least one of `store` and `url`; when both are given the reader tries `store` first.
 - `name` is display only: a client never uses it as a path without making it safe.
 

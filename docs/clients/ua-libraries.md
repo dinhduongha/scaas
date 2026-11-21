@@ -754,6 +754,37 @@ T11–T14, T17–T20). Which device-id version a client defaults to is open (a c
 chain, since v7 puts its creation time on chain). The Rust client core that does all of this above `scaas-sdk`, with key handles only, is
 [`pqchat-core`](pqchat-core.md) (SPECIFIED).
 
+<a id="arweave-clients"></a>**Arweave data items and file objects** (SPECIFIED, nothing built; owner 2026-11-21,
+[ARCH-POS-19](../decisions.md#ARCH-POS-19) (2), Q4; the rules below controller calls of
+[ARCH-POS-20](../decisions.md#ARCH-POS-20); design in the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part D; UNAUDITED):
+
+<a id="CLI-UAL-64"></a>**CLI-UAL-64** — **`ua-rs` builds, signs and parses ANS-104 data items as `arbundles` builds them, with a
+per-file upload key that is never a UA, wallet or funded key; no RSA wallet.** Layout: signature type (2 B, little-endian),
+signature, owner, target and anchor (each a presence byte 0 or 1, then 32 B), tag count and tag bytes length (8 B each), the Avro
+tags, data; tags ≤ 128, name ≤ 1,024 B, value ≤ 3,072 B, ≤ 4,096 tag bytes; an item at least 80 B; a negative Avro block count and
+trailing tag bytes refused. The signed message is the 48-byte SHA-384 deep hash of `["dataitem", "1", <type as decimal text>,
+owner, target, anchor, <raw Avro tag bytes>, data]` (an absent target or anchor an empty blob, an empty tag list 0 bytes); the id
+is base64url, unpadded, of SHA-256 of the signature. Types: 2 or 4 (ed25519, raw signature over the 48 bytes; which one Turbo
+takes is set by a probe) by default, 3 (secp256k1, EIP-191 `personal_sign` over the 48 bytes, 65-byte uncompressed owner) for
+a bundler that takes only EVM signers; no type 1. Items carry no target, no anchor and no tags (one fixed
+`Content-Type: application/octet-stream` tag only if the probe shows one is needed). The upload key is
+`HKDF-SHA-256(ikm = the app root key, salt = empty, info = "scaas/arweave/v1/upload" ‖ type (1 B) ‖ ctSha256, L = 32)`: the
+ed25519 seed, or a big-endian secp256k1 scalar (0 or ≥ n: a counter byte `0x01`, `0x02`, … appended to `info`); it lives behind a
+handle of the single usage `UploadSign`, which signs only a deep hash `ua-rs` computed over an item it built, and the signature is
+verified before the item is returned. Vectors: `smartcontracts/vectors/arweave/`, written by clientkeys first (the deep hash
+cross-checked against a pinned `arbundles`), reproduced by `ua-rs`.
+
+<a id="CLI-UAL-65"></a>**CLI-UAL-65** — **A file on Arweave is `ct` padded with zeros to a power-of-two bucket, named by
+`ar://<id>` in the `file` content's `url`, and refused before any decryption unless its length, zero tail and `ctSha256`
+hold.** `bucket(size) = max(2^16, 2^⌈log2(size + 16)⌉)`, refused above 2^31 (`FileTooLarge`); `ct` is UA-7's
+`AES-256-GCM(key, 0^96, file)` and `ctSha256` stays SHA-256 of `ct`, so no signed UA-7 byte changes. `url` accepts `ar://<id>`
+beside `https://` and `ipfs://`: `<id>` exactly 43 characters of canonical base64url (no padding, the last character one of
+`AEIMQUYcgkosw048`), nothing after it, the scheme in lower case. A reader accepts the object only when its length equals
+`bucket(size)`, every byte after `size + 16` is zero, and SHA-256 of the first `size + 16` bytes equals `ctSha256`; a failure is
+shown on the device only. PqVault's `file` item takes the same `url` rule. Vectors: new rows in `smartcontracts/vectors/pqchat/`
+(an `ar://` `file` content and its refusals) and the buckets and padded objects in `smartcontracts/vectors/arweave/`, written by
+clientkeys first and read by every client that reads those directories.
+
 <a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
 the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
 first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):
