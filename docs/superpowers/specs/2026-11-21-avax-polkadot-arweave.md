@@ -202,18 +202,21 @@ rule names PQZ and Zether. PqChat's own rule is stricter and binds every PqChat 
 an event store would break; reads by `eth_call` on any node, while logs need an index that pruned and public RPCs bound or drop; one
 reader for `chain` and `chainstore`.
 
-**Cost of the choice** ([E], Cancun pricing, derived from opcode costs, to be measured in plan T8):
+**Cost of the choice** (measured in plan T8; envelopes of non-zero bytes; each row at a new hint, then at a warm one). Cancun:
+receipts' `gasUsed` on `anvil --hardfork cancun` (the gate step `chatstore-cancun`). Amsterdam: the pins of
+`test/pqchat/PqChatStoreGas.t.sol` (`isolate = true`), regular + EIP-8037 state gas. The two are never compared. The event-only
+column stays an estimate ([E]).
 
-| Envelope (signer) | State (SSTORE2) | Event only | Ratio |
-|---|---:|---:|---:|
-| 2,400 B (a 1,024-B bucket, FN-DSA-512) | ≈ 0.64 M gas | ≈ 0.08 M | ≈ 8 × |
-| 5,100 B (a 1,024-B bucket, ML-DSA-65) | ≈ 1.22 M gas | ≈ 0.15 M | ≈ 8 × |
-| 24,416 B (the largest) | ≈ 5.4 M gas | ≈ 0.6 M | ≈ 9 × |
+| Envelope (signer) | Cancun, state (SSTORE2) | Amsterdam, regular + state | Event only [E] | Ratio (Cancun) |
+|---|---:|---:|---:|---:|
+| 2,400 B (a 1,024-B bucket, FN-DSA-512) | 618,331 / 601,231 (was ≈ 0.64 M [E]) | 177,048 + 4,248,810 / 177,048 + 4,150,890 | ≈ 0.08 M | ≈ 8 × |
+| 5,100 B (a 1,024-B bucket, ML-DSA-65) | 1,175,119 / 1,158,019 (was ≈ 1.22 M [E]) | 351,128 + 8,410,410 / 351,128 + 8,312,490 | ≈ 0.15 M | ≈ 8 × |
+| 24,416 B (the largest) | 5,422,078 / 5,404,978 (was ≈ 5.4 M [E]) | 1,586,072 + 37,933,290 / 1,586,072 + 37,835,370 | ≈ 0.6 M | ≈ 9 × |
 
-The state figure is dominated by the code deposit (200 gas per byte, 32,000 per `CREATE`), then calldata (16 per byte); the
-list slot and the count add ≈ 27,000–44,000. At C-Chain's live `baseFeePerGas` of 7.5 gwei, an upper bound since Helicon, the
-5,100-B row costs at most ≈ 0.009 AVAX; the price actually paid is lower and is measured. For comparison, the same row on an
-Amsterdam chain is 0.35 M regular + 8.31 M state gas (pqchat.md §12).
+The state figure is dominated by the code deposit (200 gas per byte at Cancun, 32,000 per `CREATE`), then calldata (16 per byte);
+the new hint's list slot costs 17,100 more than a warm one at Cancun. At C-Chain's live `baseFeePerGas` of 7.5 gwei, an upper bound
+since Helicon, the 5,100-B row costs at most ≈ 0.009 AVAX; the price actually paid is lower and is measured. The Amsterdam rows
+equal `PqChat`'s own `storeMessage` rows (pqchat.md §12): the same SSTORE2 write of the same payload.
 
 ### 5.3 The contract (CTR-CHAT-22)
 

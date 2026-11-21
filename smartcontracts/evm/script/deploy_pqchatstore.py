@@ -408,18 +408,26 @@ def cases():
     two += [rng(H, max_, max_, []), rng(H2, 0, 16, []), rng(H, 0, 0, [])]
     shapes = [store(2, H, e1, ok=False), store(0, H, e1, ok=False), store(255, H, e1, ok=False), store(1, H, e1, 0)]
     big = [store(1, H, b"\x5a" * 24416, 0), store(1, H, b"\x5a" * 24417, ok=False), count(H, 1)]
+    big += [store(1, H, b"\x5a" * 24416, 1)]  # T8's warm 24,416-B row
+    # T8's Cancun rows beside the Amsterdam pins (test/pqchat/PqChatStoreGas.t.sol): 2,400 B and 5,100 B, new hint then warm
+    gas = [
+        store(1, H, bytes(2400), 0),
+        store(1, H, bytes(2400), 1),
+        store(1, H2, bytes(5100), 0),
+        store(1, H2, bytes(5100), 1),
+    ]
     ids = [iface("01ffc9a7", True), iface(f"{store_id:08x}", True), iface("ffffffff", False), iface(ipqchat_id, False)]
 
     def sender(frm):
         return [store(1, H, e1, 0, frm=frm), at(H, 0, payload(1, H, e1), frm=frm)]
 
-    groups = [one, lists, [store(1, H, e1, 0), at(H, 1)], eighteen, two, shapes, big, ids, sender(0), sender(1)]
+    groups = [one, lists, [store(1, H, e1, 0), at(H, 1)], eighteen, two, shapes, big, ids, sender(0), sender(1), gas]
     return {
         "note": "PqChatStore's T5 cases (plan T6), "
         "run by forkcheck.py at the chain's fork on the amsterdam artifact's bytes: (1) append, event, count, storedAt; "
         "(2) per-hint lists; (3) an index past the end reverts Panic 0x32; (4) storedRange clamped to 16; (5) an offset "
         "past the end an empty page; (6) v != 1 refused; (7) env 24,416 B kept, 24,417 B refused; (8) ERC-165; (9) two "
-        "senders, the same result; (10) each entry deploys from its creation code alone, its code the artifact's runtime.",
+        "senders, the same result; (10) T8's gas rows, 2,400 B and 5,100 B at a new hint, then warm; (11) each entry deploys from its creation code alone, its code the artifact's runtime.",
         "contracts": [{"artifact": ARTIFACT, "cases": g} for g in groups],
     }
 

@@ -664,7 +664,7 @@ Status: **BUILT on branch `chains-arweave`** for the contract and its tests (`sr
 `test/pqchat/PqChatStore.t.sol`, the layout pin `test/v2/layout/PqChatStore.json`; plan T5) and for the deploy path
 (`script/deploy_pqchatstore.py` and its test, the release data `release-data/PqChatStore.json`, the gate step `chatstore-cancun`:
 a local `anvil --hardfork cancun --code-size-limit 24576` deploy with NET-EVM-18's five checks, a second deploy taken as done, the
-probes; plan T6); **SPECIFIED** for the gas pins (plan T8); the deploys on public chains and their explorer verification are plan
+probes; plan T6) and for the gas pins (`test/pqchat/PqChatStoreGas.t.sol`; plan T8); the deploys on public chains and their explorer verification are plan
 T10, on the owner's word (the [spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) part B; UNAUDITED).
 
 <a id="CTR-CHAT-22"></a>**CTR-CHAT-22** — **`PqChatStore` is a standalone contract with exactly the store part of `PqChat`:
@@ -685,8 +685,9 @@ store path, as HCS does on Hedera; the contract, its state storage and its bound
   ERC-165 for `IPqChatStore`; storage in the ERC-7201 namespace `scaas.pqchatstore`, its layout pinned; runtime ≤ 24,576 B
   asserted by a test and the size gate.
 - **State, never events only** ([CTR-CHAT-05](#CTR-CHAT-05)): recovery from state ([CTR-CHAT-14](#CTR-CHAT-14)) and one reader
-  for every chain store. Cost, an estimate at Cancun pricing to be measured: about 8 times an event-only store (about 1.22 M gas
-  for a 5,100-B envelope).
+  for every chain store. Cost, measured (plan T8): at Cancun 1,175,119 gas for a 5,100-B envelope at a new hint (about 8 times
+  an event-only store's estimate); at Amsterdam 351,128 regular + 8,410,410 state gas, pinned in `test/pqchat/PqChatStoreGas.t.sol`
+  (the spec's §5.2 holds every row).
 - **Deployment.** Through the deterministic deployer with salt 0, the `amsterdam` build under
   [NET-EVM-18](../networks/evm.md#NET-EVM-18), so one address on every chain. The release data pins the init-code hash, the
   runtime code hash and the address: the script refuses a local build whose init-code hash differs, and treats the address
