@@ -339,6 +339,12 @@ calls! { cx;
     "registration-blob from-json" "RegistrationBlob::from_json" {text: String} => js(RegistrationBlob::from_json(&text)?);
     "registration-blob to-json" "RegistrationBlob::to_json" (b: RegistrationBlob) => named("json", b.to_json()?);
     "registry-write id" "RegistryWrite::id" {write: H<Arc<RegistryWrite>>} => named("id", write.0.id());
+    // the registry line of ua-rs-sign (merged 6e7e71142): the bound registry's walk and its targets
+    "account ua-line" "Account::ua_line" {chain: String, ua: String} => { let l = sdk(cx).account().ua_line(chain, ua).await?; let v = serde_json::json!({"holder": l.holder, "kind": l.kind, "pqz_home": l.pqz_home}); handle(l, v) };
+    "ua-line key-target" "UaLine::key_target" {line: H<scaas_sdk::UaLine>} => named("key_target", line.0.key_target());
+    "ua-line pqz-target" "UaLine::pqz_target" {line: H<scaas_sdk::UaLine>} => named("pqz_target", line.0.pqz_target()?);
+    "account register-target" "Account::register_target" {chain: String, kind: u16} => named("register_target", sdk(cx).account().register_target(chain, kind).await?);
+    "account pqz-decoy-candidates" "Account::pqz_decoy_candidates" {chain: String} => named("pqz_decoy_candidates", sdk(cx).account().pqz_decoy_candidates(chain).await?);
     "registry-write chain" "RegistryWrite::chain" {write: H<Arc<RegistryWrite>>} => named("chain", write.0.chain());
     "registry-write entry" "RegistryWrite::entry" {write: H<Arc<RegistryWrite>>} => named("entry", write.0.entry());
     "registry-write ua" "RegistryWrite::ua" {write: H<Arc<RegistryWrite>>} => named("ua", write.0.ua());
