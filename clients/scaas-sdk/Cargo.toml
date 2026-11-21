@@ -42,6 +42,9 @@ sui = ["scaas-rpc/sui", "dep:bs58"]
 # T24: a CW20 smart query is base64 JSON in the path (an encoding)
 cosmos = ["scaas-rpc/cosmos", "dep:base64"]
 ton = ["scaas-rpc/ton"]
+# T32's read part (decisions CLI-SDK-32's Change of 2026-11-22): native DOT on Polkadot Hub's Substrate side; the SS58 form
+# and the storage key are scaas-ua's
+substrate = ["scaas-rpc/substrate"]
 file-store = ["vault"]
 # roots (c) and (d) (spec §6.6; T6): scaas-ua's Argon2id roots
 classical-roots = ["vault", "scaas-ua/roots"]

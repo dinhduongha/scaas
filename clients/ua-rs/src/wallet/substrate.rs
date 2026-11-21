@@ -245,6 +245,43 @@ pub(crate) fn ss58(pk: &[u8], prefix: u16) -> Result<String> {
     Ok(bs58::encode([&pre[..], pk, sum.get(..2).ok_or(Error::Argument)?].concat()).into_string())
 }
 
+/// The 32-byte key an SS58 `address` names under `prefix` (spec §7.4, the inverse of [`ss58`]): base58 of 35 bytes (one prefix
+/// byte, below 64) or 36 (two), that prefix, the key and the first two bytes of `BLAKE2b-512("SS58PRE" ‖ pre ‖ pk)`. `Argument`:
+/// another prefix, another length, a bad checksum, not base58, a prefix [`ss58`] refuses.
+pub fn ss58_public_key(address: &str, prefix: u16) -> Result<[u8; 32]> {
+    let raw = bs58::decode(address)
+        .into_vec()
+        .map_err(|_| Error::Argument)?;
+    let pk: [u8; 32] = raw
+        .len()
+        .checked_sub(34)
+        .and_then(|at| raw.get(at..at + 32))
+        .and_then(|k| k.try_into().ok())
+        .ok_or(Error::Argument)?;
+    if ss58(&pk, prefix)? != address {
+        return Err(Error::Argument);
+    }
+    Ok(pk)
+}
+
+/// The `System.Account` storage key of an sr25519 account (`frame_system`'s map, hasher `Blake2_128Concat`):
+/// `twox128("System") ‖ twox128("Account") ‖ BLAKE2b-128(pk) ‖ pk`, 80 bytes.
+pub fn system_account_key(pk: &[u8; 32]) -> [u8; 80] {
+    use blake2::Digest as _;
+    // twox128("System") ‖ twox128("Account"): constants of every FRAME chain
+    const PREFIX: [u8; 32] = [
+        0x26, 0xaa, 0x39, 0x4e, 0xea, 0x56, 0x30, 0xe0, 0x7c, 0x48, 0xae, 0x0c, 0x95, 0x58, 0xce,
+        0xf7, 0xb9, 0x9d, 0x88, 0x0e, 0xc6, 0x81, 0x79, 0x9c, 0x0c, 0xf3, 0x0e, 0x88, 0x86, 0x37,
+        0x1d, 0xa9,
+    ];
+    let h = blake2::Blake2b::<blake2::digest::consts::U16>::digest(pk);
+    let mut k = [0u8; 80];
+    k[..32].copy_from_slice(&PREFIX);
+    k[32..48].copy_from_slice(&h);
+    k[48..].copy_from_slice(pk);
+    k
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

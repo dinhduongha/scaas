@@ -15869,6 +15869,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           graphql: dco_decode_list_endpoint_config(raw[1]),
           graphqlPolicy: dco_decode_policy(raw[2]),
         );
+      case 5:
+        return FamilyParams_Substrate(
+          rpc: dco_decode_list_endpoint_config(raw[1]),
+          rpcPolicy: dco_decode_policy(raw[2]),
+          genesis: dco_decode_String(raw[3]),
+          ss58Prefix: dco_decode_u_16(raw[4]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -22302,6 +22309,17 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         return FamilyParams_Sui(
           graphql: var_graphql,
           graphqlPolicy: var_graphqlPolicy,
+        );
+      case 5:
+        var var_rpc = sse_decode_list_endpoint_config(deserializer);
+        var var_rpcPolicy = sse_decode_policy(deserializer);
+        var var_genesis = sse_decode_String(deserializer);
+        var var_ss58Prefix = sse_decode_u_16(deserializer);
+        return FamilyParams_Substrate(
+          rpc: var_rpc,
+          rpcPolicy: var_rpcPolicy,
+          genesis: var_genesis,
+          ss58Prefix: var_ss58Prefix,
         );
       default:
         throw UnimplementedError('');
@@ -29995,6 +30013,17 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         sse_encode_i_32(4, serializer);
         sse_encode_list_endpoint_config(graphql, serializer);
         sse_encode_policy(graphqlPolicy, serializer);
+      case FamilyParams_Substrate(
+        rpc: final rpc,
+        rpcPolicy: final rpcPolicy,
+        genesis: final genesis,
+        ss58Prefix: final ss58Prefix,
+      ):
+        sse_encode_i_32(5, serializer);
+        sse_encode_list_endpoint_config(rpc, serializer);
+        sse_encode_policy(rpcPolicy, serializer);
+        sse_encode_String(genesis, serializer);
+        sse_encode_u_16(ss58Prefix, serializer);
     }
   }
 

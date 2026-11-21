@@ -131,6 +131,16 @@ pub enum FamilyParams {
         graphql: Vec<EndpointConfig>,
         graphql_policy: Policy,
     },
+    /// Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+    /// Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+    /// SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+    /// there. The same params serve the relay chain's Substrate side
+    Substrate {
+        rpc: Vec<EndpointConfig>,
+        rpc_policy: Policy,
+        genesis: String,
+        ss58_prefix: u16,
+    },
 }
 
 /// Base58 (Bitcoin's alphabet) of 32 to 44 characters: a Solana key's form (its exact 32 bytes are checked where it is
@@ -190,6 +200,16 @@ impl FamilyParams {
                     && xlm_sac.starts_with('C')
             }
             FamilyParams::Sui { .. } => family == Family::Sui,
+            FamilyParams::Substrate {
+                genesis,
+                ss58_prefix,
+                ..
+            } => {
+                family == Family::Evm
+                    && is_word_hex(genesis)
+                    && *ss58_prefix <= 16_383
+                    && !matches!(ss58_prefix, 46 | 47)
+            }
         }
     }
 }

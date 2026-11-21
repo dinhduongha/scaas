@@ -92,6 +92,7 @@ pub use eip712::{
     Erc7739Wallet, RescueVaultOp, TypedData,
 };
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
+pub use substrate::{ss58_public_key, system_account_key};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
 pub use manifest::{

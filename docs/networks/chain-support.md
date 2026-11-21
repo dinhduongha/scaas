@@ -16,7 +16,7 @@ Status: SPECIFIED.
 - **A native column on every row** (owner 2026-11-22): the chain's own native account model, its balance read, a plain native
   transfer signed with the user's key and sent, apart from the SCaaS operations. So there is no native NEAR row and no native DOT
   row: NEAR's native account is the NEAR row's Native cell, and DOT's is the Polkadot Hub row's (the Substrate side, plain sr25519
-  accounts; Hub's EVM side only maps onto them). Hub's Native read is PLANNED before BTC's, as NEAR's was done; its Substrate sends are **deferred** (owner 2026-11-22). Native and Self-relay share
+  accounts; Hub's EVM side only maps onto them). Hub's Native read is BUILT (SDK plan T32's read part, before BTC's, as NEAR's was done); its Substrate sends are **deferred** (owner 2026-11-22). Native and Self-relay share
   the native transaction builder, the native balance read and the broadcast on each chain; Self-relay adds the signed SCaaS
   operation it carries.
 - **Native BTC** keeps its row: no SCaaS contract exists there, so only its Native cell applies. Native accounts need no node
@@ -74,7 +74,7 @@ Status: SPECIFIED.
 | 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
 | 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | M T41.evm | B |
 | 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | P CA-T3 | P CA-T3 | B | P CA-T2 | B | P CA-T2 | M ARCH-POS-18 | B‡ | B‡ | M T41.evm | P CA-T2 |
-| 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | M T41.evm | P T32 (read; sends deferred) |
+| 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | M T41.evm | deferred (sends, owner 2026-11-22) (read B) |
 | 15 | Moonbeam (Moonbase Alpha) | B‡ | P CA-T3, T15 | P CA-T3 | B | P CA-T11 | B | P CA-T11 | B‡ | P CA-T15 | P CA-T15 | M T41.evm | P CA-T11 |
 | 16 | NEAR (SCaaS family) | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-near` | M family round | M T41.near | M T41.near (read B) |
 | 17 | Algorand | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-algorand` | M family round | M T41.algorand | M T41.algorand (read B) |
@@ -87,7 +87,7 @@ Status: SPECIFIED.
 | 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (read, send), T37 (SDK) |
 | 25 | Arweave (store) | n/a | n/a | n/a | P CA-T16, T17 | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a | n/a | P CA-T17, T19, T20 |
 
-Counts (25 rows): Contract B 23 (14 B‡), n/a 2. Relay B 20, P 3, n/a 2. Index B 20, P 3, n/a 2. Signing B 17, P 1, M 6, n/a 1. rpc read B 20, P 4, n/a 1. rpc write B 15, P 1, M 8, n/a 1. SDK B 5, P 4, M 15, n/a 1. Zether B 8 (7 B‡), P 6, M 9, n/a 2. PQ B 8 (7 B‡), P 8, M 7, n/a 2. PQZ B 8 (7 B‡), P 6, M 9, n/a 2. Self-relay M 23, n/a 2. Native B 5, P 4, M 16 (8 of them with the read built).
+Counts (25 rows): Contract B 23 (14 B‡), n/a 2. Relay B 20, P 3, n/a 2. Index B 20, P 3, n/a 2. Signing B 17, P 1, M 6, n/a 1. rpc read B 20, P 4, n/a 1. rpc write B 15, P 1, M 8, n/a 1. SDK B 5, P 4, M 15, n/a 1. Zether B 8 (7 B‡), P 6, M 9, n/a 2. PQ B 8 (7 B‡), P 8, M 7, n/a 2. PQZ B 8 (7 B‡), P 6, M 9, n/a 2. Self-relay M 23, n/a 2. Native B 5, P 3, deferred 1 (its read built), M 16 (8 of them with the read built).
 
 ## 4. Notes on the cells
 
@@ -114,7 +114,9 @@ Status: SPECIFIED.
   (BUILT, SDK spec §8.5) wherever the row's profile and SDK are (rows 1, 3, 4, 6, 12; HBAR through the JSON-RPC Relay with an
   `hedera_ecdsa` account; Hedera's native HAPI is not offered), else the row's profile task (T38, T40, chains-arweave CA-T2,
   CA-T11). Polkadot Hub (row 14): the Substrate side, plain sr25519 accounts (`ua-rs` sr25519, CLI-SGN-53), `System.Account`
-  reads (SDK plan T32's read part, before T36, owner 2026-11-22) and a Substrate transfer extrinsic (T33, T34: deferred, owner
+  reads (BUILT: SDK plan T32's read part, before T36, owner 2026-11-22; `scaas-rpc` `substrate`, the profile's
+  `FamilyParams::Substrate`, `balances` of an SS58 id; tested on answers recorded from Westend Asset Hub, the public Paseo Hub
+  endpoints answering no plain HTTP JSON-RPC that day) and a Substrate transfer extrinsic (T33, T34: deferred, owner
   2026-11-22); this is DOT's native account, and the former native DOT row now lives here. NEAR (row 16): the former native NEAR row, `view_account`'s `amount` (BUILT, T24.near) and
   the native transfer (the former T31, now in T41.near). The other seven families: the fee-token account (ALGO, the Cosmos
   chain's denom, APT, SOL, XLM, SUI, GRAM), its balance BUILT by T24, its send MISSING, in T41.<family> on the builder that

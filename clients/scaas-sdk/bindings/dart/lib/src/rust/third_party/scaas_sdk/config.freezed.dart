@@ -55,7 +55,7 @@ extension FamilyParamsPatterns on FamilyParams {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( FamilyParams_Cosmos value)?  cosmos,TResult Function( FamilyParams_Aptos value)?  aptos,TResult Function( FamilyParams_Solana value)?  solana,TResult Function( FamilyParams_Soroban value)?  soroban,TResult Function( FamilyParams_Sui value)?  sui,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( FamilyParams_Cosmos value)?  cosmos,TResult Function( FamilyParams_Aptos value)?  aptos,TResult Function( FamilyParams_Solana value)?  solana,TResult Function( FamilyParams_Soroban value)?  soroban,TResult Function( FamilyParams_Sui value)?  sui,TResult Function( FamilyParams_Substrate value)?  substrate,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
@@ -63,7 +63,8 @@ return cosmos(_that);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that);case FamilyParams_Solana() when solana != null:
 return solana(_that);case FamilyParams_Soroban() when soroban != null:
 return soroban(_that);case FamilyParams_Sui() when sui != null:
-return sui(_that);case _:
+return sui(_that);case FamilyParams_Substrate() when substrate != null:
+return substrate(_that);case _:
   return orElse();
 
 }
@@ -81,7 +82,7 @@ return sui(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( FamilyParams_Cosmos value)  cosmos,required TResult Function( FamilyParams_Aptos value)  aptos,required TResult Function( FamilyParams_Solana value)  solana,required TResult Function( FamilyParams_Soroban value)  soroban,required TResult Function( FamilyParams_Sui value)  sui,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( FamilyParams_Cosmos value)  cosmos,required TResult Function( FamilyParams_Aptos value)  aptos,required TResult Function( FamilyParams_Solana value)  solana,required TResult Function( FamilyParams_Soroban value)  soroban,required TResult Function( FamilyParams_Sui value)  sui,required TResult Function( FamilyParams_Substrate value)  substrate,}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos():
@@ -89,7 +90,8 @@ return cosmos(_that);case FamilyParams_Aptos():
 return aptos(_that);case FamilyParams_Solana():
 return solana(_that);case FamilyParams_Soroban():
 return soroban(_that);case FamilyParams_Sui():
-return sui(_that);}
+return sui(_that);case FamilyParams_Substrate():
+return substrate(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -103,7 +105,7 @@ return sui(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( FamilyParams_Cosmos value)?  cosmos,TResult? Function( FamilyParams_Aptos value)?  aptos,TResult? Function( FamilyParams_Solana value)?  solana,TResult? Function( FamilyParams_Soroban value)?  soroban,TResult? Function( FamilyParams_Sui value)?  sui,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( FamilyParams_Cosmos value)?  cosmos,TResult? Function( FamilyParams_Aptos value)?  aptos,TResult? Function( FamilyParams_Solana value)?  solana,TResult? Function( FamilyParams_Soroban value)?  soroban,TResult? Function( FamilyParams_Sui value)?  sui,TResult? Function( FamilyParams_Substrate value)?  substrate,}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
@@ -111,7 +113,8 @@ return cosmos(_that);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that);case FamilyParams_Solana() when solana != null:
 return solana(_that);case FamilyParams_Soroban() when soroban != null:
 return soroban(_that);case FamilyParams_Sui() when sui != null:
-return sui(_that);case _:
+return sui(_that);case FamilyParams_Substrate() when substrate != null:
+return substrate(_that);case _:
   return null;
 
 }
@@ -128,14 +131,15 @@ return sui(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult Function( int chainId,  String package)?  aptos,TResult Function( String program)?  solana,TResult Function( String passphrase,  String xlmSac)?  soroban,TResult Function( List<EndpointConfig> graphql,  Policy graphqlPolicy)?  sui,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult Function( int chainId,  String package)?  aptos,TResult Function( String program)?  solana,TResult Function( String passphrase,  String xlmSac)?  soroban,TResult Function( List<EndpointConfig> graphql,  Policy graphqlPolicy)?  sui,TResult Function( List<EndpointConfig> rpc,  Policy rpcPolicy,  String genesis,  int ss58Prefix)?  substrate,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that.chainId,_that.package);case FamilyParams_Solana() when solana != null:
 return solana(_that.program);case FamilyParams_Soroban() when soroban != null:
 return soroban(_that.passphrase,_that.xlmSac);case FamilyParams_Sui() when sui != null:
-return sui(_that.graphql,_that.graphqlPolicy);case _:
+return sui(_that.graphql,_that.graphqlPolicy);case FamilyParams_Substrate() when substrate != null:
+return substrate(_that.rpc,_that.rpcPolicy,_that.genesis,_that.ss58Prefix);case _:
   return orElse();
 
 }
@@ -153,14 +157,15 @@ return sui(_that.graphql,_that.graphqlPolicy);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)  cosmos,required TResult Function( int chainId,  String package)  aptos,required TResult Function( String program)  solana,required TResult Function( String passphrase,  String xlmSac)  soroban,required TResult Function( List<EndpointConfig> graphql,  Policy graphqlPolicy)  sui,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)  cosmos,required TResult Function( int chainId,  String package)  aptos,required TResult Function( String program)  solana,required TResult Function( String passphrase,  String xlmSac)  soroban,required TResult Function( List<EndpointConfig> graphql,  Policy graphqlPolicy)  sui,required TResult Function( List<EndpointConfig> rpc,  Policy rpcPolicy,  String genesis,  int ss58Prefix)  substrate,}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos():
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos():
 return aptos(_that.chainId,_that.package);case FamilyParams_Solana():
 return solana(_that.program);case FamilyParams_Soroban():
 return soroban(_that.passphrase,_that.xlmSac);case FamilyParams_Sui():
-return sui(_that.graphql,_that.graphqlPolicy);}
+return sui(_that.graphql,_that.graphqlPolicy);case FamilyParams_Substrate():
+return substrate(_that.rpc,_that.rpcPolicy,_that.genesis,_that.ss58Prefix);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -174,14 +179,15 @@ return sui(_that.graphql,_that.graphqlPolicy);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult? Function( int chainId,  String package)?  aptos,TResult? Function( String program)?  solana,TResult? Function( String passphrase,  String xlmSac)?  soroban,TResult? Function( List<EndpointConfig> graphql,  Policy graphqlPolicy)?  sui,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult? Function( int chainId,  String package)?  aptos,TResult? Function( String program)?  solana,TResult? Function( String passphrase,  String xlmSac)?  soroban,TResult? Function( List<EndpointConfig> graphql,  Policy graphqlPolicy)?  sui,TResult? Function( List<EndpointConfig> rpc,  Policy rpcPolicy,  String genesis,  int ss58Prefix)?  substrate,}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that.chainId,_that.package);case FamilyParams_Solana() when solana != null:
 return solana(_that.program);case FamilyParams_Soroban() when soroban != null:
 return soroban(_that.passphrase,_that.xlmSac);case FamilyParams_Sui() when sui != null:
-return sui(_that.graphql,_that.graphqlPolicy);case _:
+return sui(_that.graphql,_that.graphqlPolicy);case FamilyParams_Substrate() when substrate != null:
+return substrate(_that.rpc,_that.rpcPolicy,_that.genesis,_that.ss58Prefix);case _:
   return null;
 
 }
@@ -539,6 +545,84 @@ class _$FamilyParams_SuiCopyWithImpl<$Res>
 graphql: null == graphql ? _self._graphql : graphql // ignore: cast_nullable_to_non_nullable
 as List<EndpointConfig>,graphqlPolicy: null == graphqlPolicy ? _self.graphqlPolicy : graphqlPolicy // ignore: cast_nullable_to_non_nullable
 as Policy,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class FamilyParams_Substrate extends FamilyParams {
+  const FamilyParams_Substrate({required final  List<EndpointConfig> rpc, required this.rpcPolicy, required this.genesis, required this.ss58Prefix}): _rpc = rpc,super._();
+  
+
+ final  List<EndpointConfig> _rpc;
+ List<EndpointConfig> get rpc {
+  if (_rpc is EqualUnmodifiableListView) return _rpc;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_rpc);
+}
+
+ final  Policy rpcPolicy;
+ final  String genesis;
+ final  int ss58Prefix;
+
+/// Create a copy of FamilyParams
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$FamilyParams_SubstrateCopyWith<FamilyParams_Substrate> get copyWith => _$FamilyParams_SubstrateCopyWithImpl<FamilyParams_Substrate>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is FamilyParams_Substrate&&const DeepCollectionEquality().equals(other._rpc, _rpc)&&(identical(other.rpcPolicy, rpcPolicy) || other.rpcPolicy == rpcPolicy)&&(identical(other.genesis, genesis) || other.genesis == genesis)&&(identical(other.ss58Prefix, ss58Prefix) || other.ss58Prefix == ss58Prefix));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_rpc),rpcPolicy,genesis,ss58Prefix);
+
+@override
+String toString() {
+  return 'FamilyParams.substrate(rpc: $rpc, rpcPolicy: $rpcPolicy, genesis: $genesis, ss58Prefix: $ss58Prefix)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $FamilyParams_SubstrateCopyWith<$Res> implements $FamilyParamsCopyWith<$Res> {
+  factory $FamilyParams_SubstrateCopyWith(FamilyParams_Substrate value, $Res Function(FamilyParams_Substrate) _then) = _$FamilyParams_SubstrateCopyWithImpl;
+@useResult
+$Res call({
+ List<EndpointConfig> rpc, Policy rpcPolicy, String genesis, int ss58Prefix
+});
+
+
+
+
+}
+/// @nodoc
+class _$FamilyParams_SubstrateCopyWithImpl<$Res>
+    implements $FamilyParams_SubstrateCopyWith<$Res> {
+  _$FamilyParams_SubstrateCopyWithImpl(this._self, this._then);
+
+  final FamilyParams_Substrate _self;
+  final $Res Function(FamilyParams_Substrate) _then;
+
+/// Create a copy of FamilyParams
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? rpc = null,Object? rpcPolicy = null,Object? genesis = null,Object? ss58Prefix = null,}) {
+  return _then(FamilyParams_Substrate(
+rpc: null == rpc ? _self._rpc : rpc // ignore: cast_nullable_to_non_nullable
+as List<EndpointConfig>,rpcPolicy: null == rpcPolicy ? _self.rpcPolicy : rpcPolicy // ignore: cast_nullable_to_non_nullable
+as Policy,genesis: null == genesis ? _self.genesis : genesis // ignore: cast_nullable_to_non_nullable
+as String,ss58Prefix: null == ss58Prefix ? _self.ss58Prefix : ss58Prefix // ignore: cast_nullable_to_non_nullable
+as int,
   ));
 }
 

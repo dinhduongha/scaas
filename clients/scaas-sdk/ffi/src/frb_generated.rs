@@ -16320,6 +16320,17 @@ const _: fn() = || {
             let _: Vec<scaas_sdk::config::EndpointConfig> = graphql;
             let _: crate::api::Policy = graphql_policy;
         }
+        scaas_sdk::config::FamilyParams::Substrate {
+            rpc,
+            rpc_policy,
+            genesis,
+            ss58_prefix,
+        } => {
+            let _: Vec<scaas_sdk::config::EndpointConfig> = rpc;
+            let _: crate::api::Policy = rpc_policy;
+            let _: String = genesis;
+            let _: u16 = ss58_prefix;
+        }
     }
     match None::<scaas_sdk::config::Finality>.unwrap() {
         scaas_sdk::config::Finality::Finalized => {}
@@ -19875,6 +19886,19 @@ impl SseDecode for scaas_sdk::config::FamilyParams {
                 return scaas_sdk::config::FamilyParams::Sui {
                     graphql: var_graphql,
                     graphql_policy: var_graphqlPolicy,
+                };
+            }
+            5 => {
+                let mut var_rpc =
+                    <Vec<scaas_sdk::config::EndpointConfig>>::sse_decode(deserializer);
+                let mut var_rpcPolicy = <crate::api::Policy>::sse_decode(deserializer);
+                let mut var_genesis = <String>::sse_decode(deserializer);
+                let mut var_ss58Prefix = <u16>::sse_decode(deserializer);
+                return scaas_sdk::config::FamilyParams::Substrate {
+                    rpc: var_rpc,
+                    rpc_policy: var_rpcPolicy,
+                    genesis: var_genesis,
+                    ss58_prefix: var_ss58Prefix,
                 };
             }
             _ => {
@@ -27500,6 +27524,19 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::FamilyParam
                 graphql_policy.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            scaas_sdk::config::FamilyParams::Substrate {
+                rpc,
+                rpc_policy,
+                genesis,
+                ss58_prefix,
+            } => [
+                5.into_dart(),
+                rpc.into_into_dart().into_dart(),
+                rpc_policy.into_into_dart().into_dart(),
+                genesis.into_into_dart().into_dart(),
+                ss58_prefix.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -33617,6 +33654,18 @@ impl SseEncode for scaas_sdk::config::FamilyParams {
                 <i32>::sse_encode(4, serializer);
                 <Vec<scaas_sdk::config::EndpointConfig>>::sse_encode(graphql, serializer);
                 <crate::api::Policy>::sse_encode(graphql_policy, serializer);
+            }
+            scaas_sdk::config::FamilyParams::Substrate {
+                rpc,
+                rpc_policy,
+                genesis,
+                ss58_prefix,
+            } => {
+                <i32>::sse_encode(5, serializer);
+                <Vec<scaas_sdk::config::EndpointConfig>>::sse_encode(rpc, serializer);
+                <crate::api::Policy>::sse_encode(rpc_policy, serializer);
+                <String>::sse_encode(genesis, serializer);
+                <u16>::sse_encode(ss58_prefix, serializer);
             }
             _ => {
                 unimplemented!("");

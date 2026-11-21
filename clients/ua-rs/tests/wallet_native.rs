@@ -1301,3 +1301,77 @@ fn manifest_refuses_change_off_bitcoin_and_refused_coin_types() {
         );
     }
 }
+
+/// Plan T32's read part (CLI-SDK-32's Change of 2026-11-22): every SS58 form of every Polkadot row decodes to its key at its own
+/// prefix (the positive control), and each change alone is refused: another prefix, one character changed (the checksum), one
+/// byte short or long, a character outside base58, a prefix `ss58` refuses.
+#[test]
+fn ss58_public_key_reads_every_row_and_refuses_each_change() {
+    use scaas_ua::wallet::ss58_public_key;
+    let v = native();
+    let mut n = 0;
+    for r in arr(&v, "addresses")
+        .iter()
+        .filter(|r| r["network"] == "polkadot")
+    {
+        let pk = r["publicKey"].as_str().unwrap();
+        for (p, a) in r["ss58"].as_object().unwrap() {
+            let (p, a): (u16, &str) = (p.parse().unwrap(), a.as_str().unwrap());
+            assert_eq!(hex::encode(ss58_public_key(a, p).unwrap()), pk, "{a}");
+            assert_eq!(
+                ss58_public_key(a, if p == 0 { 2 } else { 0 }),
+                Err(Error::Argument),
+                "{a}"
+            );
+            n += 1;
+        }
+    }
+    assert_eq!(n, 30);
+    let a = "5EPCUjPxiHAcNooYipQFWr9NmmXJKpNG5RhcntXwbtUySrgH";
+    assert!(ss58_public_key(a, 42).is_ok(), "control");
+    let last = if a.ends_with('H') { 'J' } else { 'H' };
+    let bad = format!("{}{last}", &a[..a.len() - 1]);
+    assert_eq!(ss58_public_key(&bad, 42), Err(Error::Argument), "checksum");
+    let raw = bs58::decode(a).into_vec().unwrap();
+    for b in [&raw[..raw.len() - 1], &[&raw[..], &[0u8][..]].concat()[..]] {
+        assert_eq!(
+            ss58_public_key(&bs58::encode(b).into_string(), 42),
+            Err(Error::Argument),
+            "length"
+        );
+    }
+    assert_eq!(
+        ss58_public_key(&format!("{}0", &a[..a.len() - 1]), 42),
+        Err(Error::Argument),
+        "base58"
+    );
+    assert_eq!(
+        ss58_public_key(a, 46),
+        Err(Error::Argument),
+        "a reserved prefix"
+    );
+}
+
+/// `System.Account`'s storage key: Alice's (`//Alice` of the dev phrase, the published key of the Substrate docs and
+/// polkadot.js) and the funded Westend Hub account of scaas-rpc's fixtures (the `bip39_abandon` bare account).
+#[test]
+fn system_account_key_known_answers() {
+    use scaas_ua::wallet::system_account_key;
+    let prefix = "26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9";
+    for (pk, h) in [
+        (
+            "d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
+            "de1e86a9a8c739864cf3cc5ec2bea59f",
+        ),
+        (
+            "66933bd1f37070ef87bd1198af3dacceb095237f803f3d32b173e6b425ed7972",
+            "85eed350b03894f4ee3db867915c8395",
+        ),
+    ] {
+        let k: [u8; 32] = hex::decode(pk).unwrap().try_into().unwrap();
+        assert_eq!(
+            hex::encode(system_account_key(&k)),
+            format!("{prefix}{h}{pk}")
+        );
+    }
+}

@@ -115,6 +115,8 @@ pub mod bits {
     pub const PQCHAT_RECORDS: u64 = 1 << 27;
     /// test-only entry points (pqchat-core T1): never in a release build nor a binding
     pub const VECTORS: u64 = 1 << 28;
+    /// T32's read part: native DOT on Polkadot Hub's Substrate side
+    pub const SUBSTRATE: u64 = 1 << 29;
 }
 
 /// The bits of this build's features.
@@ -162,6 +164,7 @@ pub fn features() -> u64 {
         (cfg!(feature = "app-core"), APP_CORE),
         (cfg!(feature = "pqchat-records"), PQCHAT_RECORDS),
         (cfg!(feature = "vectors"), VECTORS),
+        (cfg!(feature = "substrate"), SUBSTRATE),
     ];
     on.iter()
         .filter(|(enabled, _)| *enabled)
@@ -206,6 +209,9 @@ pub(crate) struct Chain {
     /// profile constant, the later ones by its masterchain block's root hash (scaas-rpc T24.6)
     #[cfg(all(feature = "wallet", feature = "ton"))]
     pub(crate) ton: Option<Arc<scaas_rpc::ton::Ton>>,
+    /// a profile's Substrate side (T32's read part: Polkadot Hub), named by its params' genesis, and its SS58 prefix
+    #[cfg(all(feature = "wallet", feature = "substrate"))]
+    pub(crate) substrate: Option<(Arc<scaas_rpc::substrate::Substrate>, u16)>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -465,6 +471,23 @@ impl Sdk {
                 ))),
                 _ => None,
             };
+            // a profile's Substrate side (T32's read part): its params' endpoints, named by the params' genesis
+            #[cfg(all(feature = "wallet", feature = "substrate"))]
+            let substrate = match &p.family_params {
+                Some(FamilyParams::Substrate {
+                    rpc,
+                    rpc_policy,
+                    genesis,
+                    ss58_prefix,
+                }) => Some((
+                    Arc::new(scaas_rpc::substrate::Substrate::new(
+                        scaas_rpc::family::Client::new(list(rpc, *rpc_policy)?)?,
+                        genesis,
+                    )),
+                    *ss58_prefix,
+                )),
+                _ => None,
+            };
             #[cfg(any(feature = "account", feature = "wallet"))]
             let pool = match (p.family, p.chain_id) {
                 (Family::Evm, Some(id)) => {
@@ -512,6 +535,8 @@ impl Sdk {
                 sui,
                 #[cfg(all(feature = "wallet", feature = "ton"))]
                 ton,
+                #[cfg(all(feature = "wallet", feature = "substrate"))]
+                substrate,
             });
         }
         let rt = runtime(config.runtime)?;

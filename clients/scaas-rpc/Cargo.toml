@@ -21,6 +21,8 @@ aptos = []
 sui = []
 cosmos = []
 ton = []
+# plan T32's read part (CLI-SDK-32's Change of 2026-11-22): Substrate JSON-RPC, Polkadot Hub's Substrate side and the relay chain
+substrate = []
 node-client = []
 # the node's raw reads (`raw_read`, `raw_read_at`, `connect_shared`); never enabled by the SDK (F15, F23)
 node-internal = ["evm"]

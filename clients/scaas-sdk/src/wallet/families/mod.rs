@@ -15,7 +15,8 @@
         feature = "solana",
         feature = "soroban",
         feature = "sui",
-        feature = "ton"
+        feature = "ton",
+        feature = "substrate"
     )),
     allow(dead_code, unused_imports, unused_variables)
 )]
@@ -31,6 +32,8 @@ pub(crate) mod near;
 pub(crate) mod solana;
 #[cfg(feature = "soroban")]
 pub(crate) mod soroban;
+#[cfg(all(feature = "wallet", feature = "substrate"))]
+pub(crate) mod substrate;
 #[cfg(feature = "sui")]
 pub(crate) mod sui;
 #[cfg(feature = "ton")]
@@ -64,6 +67,17 @@ pub(crate) async fn balances(sdk: &Sdk, chain: &str, id: &str) -> Result<Balance
         #[cfg(feature = "ton")]
         crate::Family::Ton => ton::balances(c, id).await,
         _ => Err(SdkError::FeatureMissing),
+    }
+}
+
+/// `balances` of an SS58 id on a profile with a Substrate side; `FeatureMissing` in a build without `substrate`.
+pub(crate) async fn substrate_balances(c: &crate::Chain, id: &str) -> Result<Balances, SdkError> {
+    #[cfg(all(feature = "wallet", feature = "substrate"))]
+    return substrate::balances(c, id).await;
+    #[cfg(not(all(feature = "wallet", feature = "substrate")))]
+    {
+        let _ = (c, id);
+        Err(SdkError::FeatureMissing)
     }
 }
 
@@ -102,7 +116,8 @@ pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
         feature = "solana",
         feature = "soroban",
         feature = "sui",
-        feature = "ton"
+        feature = "ton",
+        feature = "substrate"
     )),
     allow(dead_code)
 )]

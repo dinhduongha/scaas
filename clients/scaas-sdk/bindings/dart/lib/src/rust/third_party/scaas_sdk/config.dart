@@ -225,6 +225,17 @@ sealed class FamilyParams with _$FamilyParams {
     required List<EndpointConfig> graphql,
     required Policy graphqlPolicy,
   }) = FamilyParams_Sui;
+
+  /// Polkadot Hub's Substrate side on its EVM profile (decisions CLI-SDK-32's Change of 2026-11-22, plan T32's read part): the
+  /// Substrate JSON-RPC endpoints with their policy, each named by `genesis` (`0x` + 64 hex, `chain_getBlockHash(0)`), and the
+  /// SS58 prefix of the chain's addresses (0 to 16,383, not 46 or 47); `balances` of an SS58 id reads its `System.Account`
+  /// there. The same params serve the relay chain's Substrate side
+  const factory FamilyParams.substrate({
+    required List<EndpointConfig> rpc,
+    required Policy rpcPolicy,
+    required String genesis,
+    required int ss58Prefix,
+  }) = FamilyParams_Substrate;
 }
 
 @freezed

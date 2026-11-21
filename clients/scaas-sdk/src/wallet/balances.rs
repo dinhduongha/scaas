@@ -62,8 +62,18 @@ impl Wallet {
         let sdk = self.sdk.clone();
         self.sdk
             .spawn(async move {
-                if sdk.chain(&chain)?.profile.family != crate::Family::Evm {
+                let c = sdk.chain(&chain)?;
+                if c.profile.family != crate::Family::Evm {
                     return super::families::balances(&sdk, &chain, &id).await;
+                }
+                // an SS58 id on a profile with a Substrate side (Polkadot Hub): its native DOT (T32's read part)
+                if !id.starts_with("0x")
+                    && matches!(
+                        c.profile.family_params,
+                        Some(crate::FamilyParams::Substrate { .. })
+                    )
+                {
+                    return super::families::substrate_balances(c, &id).await;
                 }
                 let (word, native) = id_word(&id)?;
                 let (profile, _, pool) = evm(&sdk, &chain)?;

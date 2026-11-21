@@ -30,6 +30,8 @@ pub mod pool;
 pub mod solana;
 #[cfg(feature = "soroban")]
 pub mod soroban;
+#[cfg(feature = "substrate")]
+pub mod substrate;
 #[cfg(feature = "sui")]
 pub mod sui;
 #[cfg(feature = "ton")]
