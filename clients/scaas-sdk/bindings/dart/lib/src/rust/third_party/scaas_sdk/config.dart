@@ -210,6 +210,13 @@ sealed class FamilyParams with _$FamilyParams {
   /// program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
   const factory FamilyParams.solana({required String program}) =
       FamilyParams_Solana;
+
+  /// Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+  /// and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+  const factory FamilyParams.soroban({
+    required String passphrase,
+    required String xlmSac,
+  }) = FamilyParams_Soroban;
 }
 
 @freezed

@@ -27,7 +27,8 @@ pqz-set-n2816-kmax65536 = ["scaas-ua/pqz-set-n2816-kmax65536"]
 dex = ["wallet"]
 admin = ["wallet"]
 mlock = ["vault", "scaas-ua/mlock"]
-soroban = ["scaas-rpc/soroban"]
+# T24.soroban: the ledger keys and entries in base64 (an encoding; the XDR read by fixed templates in the SDK)
+soroban = ["scaas-rpc/soroban", "dep:base64"]
 # T24.solana: the genesis hash, the program, the holder and the mints in base58 (an encoding; the PDA is ua-rs's)
 solana = ["scaas-rpc/solana", "dep:bs58"]
 # T24 (spec §8.7): the family's balance reads; base58 (the genesis hash the endpoint names) and base64 (a view's arguments) are
@@ -193,6 +194,10 @@ required-features = ["wallet", "aptos"]
 [[test]]
 name = "solana"
 required-features = ["wallet", "solana"]
+
+[[test]]
+name = "soroban"
+required-features = ["wallet", "soroban"]
 
 [[test]]
 name = "governance_delay"

@@ -15859,6 +15859,11 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         );
       case 2:
         return FamilyParams_Solana(program: dco_decode_String(raw[1]));
+      case 3:
+        return FamilyParams_Soroban(
+          passphrase: dco_decode_String(raw[1]),
+          xlmSac: dco_decode_String(raw[2]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -22279,6 +22284,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       case 2:
         var var_program = sse_decode_String(deserializer);
         return FamilyParams_Solana(program: var_program);
+      case 3:
+        var var_passphrase = sse_decode_String(deserializer);
+        var var_xlmSac = sse_decode_String(deserializer);
+        return FamilyParams_Soroban(
+          passphrase: var_passphrase,
+          xlmSac: var_xlmSac,
+        );
       default:
         throw UnimplementedError('');
     }
@@ -29957,6 +29969,13 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       case FamilyParams_Solana(program: final program):
         sse_encode_i_32(2, serializer);
         sse_encode_String(program, serializer);
+      case FamilyParams_Soroban(
+        passphrase: final passphrase,
+        xlmSac: final xlmSac,
+      ):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(passphrase, serializer);
+        sse_encode_String(xlmSac, serializer);
     }
   }
 

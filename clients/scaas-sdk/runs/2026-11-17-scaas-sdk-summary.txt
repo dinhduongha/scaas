@@ -179,11 +179,11 @@ sdk-test | 7cc8be95f | 0 | 308 passed, 0 failed, 16 ignored (26 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 cli | fdd4caa6d | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
-sdk-clippy | 612e2c216 | 0 | -
 ua-clippy | 612e2c216 | 0 | -
 rpc-clippy | 612e2c216 | 0 | -
 bind-gen | 612e2c216 | 0 | -
 features | 612e2c216 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 docs | 612e2c216 | 0 | -
 ck-test | 612e2c216 | 0 | node: 530 pass, 0 fail, 4 skipped
-mutants-check | 612e2c216 | 1 | -
+mutants-check | 1b7391d3b | 0 | -
+sdk-clippy | 1b7391d3b | 0 | -

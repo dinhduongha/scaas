@@ -121,6 +121,9 @@ pub enum FamilyParams {
     /// Solana: the `scaas` program's id (base58 of 32 bytes), under which an owner's SCaaS Account is the `["acct", owner]`
     /// program address (`ua-rs` `families::solana`); the cluster's identity is its genesis hash, `chain_uid`'s 32 bytes
     Solana { program: String },
+    /// Soroban: the network passphrase its RPC endpoints name (`getNetwork`; its SHA-256 is `chain_uid`, checked at `Sdk::open`)
+    /// and the XLM SAC contract (`C…`), pinned, whose balance entry is a `C…` holder's native XLM (never derived here)
+    Soroban { passphrase: String, xlm_sac: String },
 }
 
 /// Base58 (Bitcoin's alphabet) of 32 to 44 characters: a Solana key's form (its exact 32 bytes are checked where it is
@@ -143,7 +146,7 @@ pub(crate) fn is_aptos_address(s: &str) -> bool {
 impl FamilyParams {
     /// Its family, and each field in its form: Cosmos, a chain id of 1 to 50 printable ASCII bytes (CometBFT's bound), a denom
     /// as the Cosmos SDK's rule (`[a-zA-Z][a-zA-Z0-9/:._-]{2,127}`), a prefix of 1 to 83 lowercase letters and digits; Aptos,
-    /// a chain id other than 0 and the package in the long form; Solana, the program in base58's form.
+    /// a chain id other than 0 and the package in the long form; Solana, the program in base58's form; Soroban, a passphrase of 1 to 256 printable ASCII bytes and a `C…` SAC.
     pub(crate) fn fits(&self, family: Family) -> bool {
         match self {
             FamilyParams::Cosmos {
@@ -169,6 +172,16 @@ impl FamilyParams {
                 family == Family::Aptos && *chain_id != 0 && is_aptos_address(package)
             }
             FamilyParams::Solana { program } => family == Family::Solana && is_base58_key(program),
+            FamilyParams::Soroban {
+                passphrase,
+                xlm_sac,
+            } => {
+                family == Family::Soroban
+                    && (1..=256).contains(&passphrase.len())
+                    && passphrase.bytes().all(|b| (0x20..0x7f).contains(&b))
+                    && xlm_sac.len() == 56
+                    && xlm_sac.starts_with('C')
+            }
         }
     }
 }

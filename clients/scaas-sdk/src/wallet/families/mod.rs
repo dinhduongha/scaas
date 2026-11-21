@@ -12,7 +12,8 @@
         feature = "algorand",
         feature = "cosmos",
         feature = "aptos",
-        feature = "solana"
+        feature = "solana",
+        feature = "soroban"
     )),
     allow(dead_code, unused_imports, unused_variables)
 )]
@@ -26,6 +27,8 @@ pub(crate) mod cosmos;
 pub(crate) mod near;
 #[cfg(feature = "solana")]
 pub(crate) mod solana;
+#[cfg(feature = "soroban")]
+pub(crate) mod soroban;
 
 use super::Balances;
 use crate::{Sdk, SdkError};
@@ -48,6 +51,8 @@ pub(crate) async fn balances(sdk: &Sdk, chain: &str, id: &str) -> Result<Balance
         crate::Family::Aptos => aptos::balances(c, id).await,
         #[cfg(feature = "solana")]
         crate::Family::Solana => solana::balances(c, id).await,
+        #[cfg(feature = "soroban")]
+        crate::Family::Soroban => soroban::balances(c, id).await,
         _ => Err(SdkError::FeatureMissing),
     }
 }
@@ -77,7 +82,8 @@ pub(crate) fn amount(i: usize, s: &str) -> Result<String, ReadError> {
         feature = "near",
         feature = "algorand",
         feature = "cosmos",
-        feature = "solana"
+        feature = "solana",
+        feature = "soroban"
     )),
     allow(dead_code)
 )]

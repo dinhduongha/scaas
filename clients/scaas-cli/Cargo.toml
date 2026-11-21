@@ -41,6 +41,7 @@ scaas-sdk = { path = "../scaas-sdk", default-features = false, features = [
   "cosmos",
   "aptos",
   "solana",
+  "soroban",
 ] }
 scaas-ua = { path = "../ua-rs", default-features = false, features = ["wallet"] }
 scaas-rpc = { path = "../scaas-rpc", default-features = false }

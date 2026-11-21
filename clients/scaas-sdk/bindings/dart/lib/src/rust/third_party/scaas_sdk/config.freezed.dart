@@ -55,13 +55,14 @@ extension FamilyParamsPatterns on FamilyParams {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( FamilyParams_Cosmos value)?  cosmos,TResult Function( FamilyParams_Aptos value)?  aptos,TResult Function( FamilyParams_Solana value)?  solana,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( FamilyParams_Cosmos value)?  cosmos,TResult Function( FamilyParams_Aptos value)?  aptos,TResult Function( FamilyParams_Solana value)?  solana,TResult Function( FamilyParams_Soroban value)?  soroban,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that);case FamilyParams_Solana() when solana != null:
-return solana(_that);case _:
+return solana(_that);case FamilyParams_Soroban() when soroban != null:
+return soroban(_that);case _:
   return orElse();
 
 }
@@ -79,13 +80,14 @@ return solana(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( FamilyParams_Cosmos value)  cosmos,required TResult Function( FamilyParams_Aptos value)  aptos,required TResult Function( FamilyParams_Solana value)  solana,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( FamilyParams_Cosmos value)  cosmos,required TResult Function( FamilyParams_Aptos value)  aptos,required TResult Function( FamilyParams_Solana value)  solana,required TResult Function( FamilyParams_Soroban value)  soroban,}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos():
 return cosmos(_that);case FamilyParams_Aptos():
 return aptos(_that);case FamilyParams_Solana():
-return solana(_that);}
+return solana(_that);case FamilyParams_Soroban():
+return soroban(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -99,13 +101,14 @@ return solana(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( FamilyParams_Cosmos value)?  cosmos,TResult? Function( FamilyParams_Aptos value)?  aptos,TResult? Function( FamilyParams_Solana value)?  solana,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( FamilyParams_Cosmos value)?  cosmos,TResult? Function( FamilyParams_Aptos value)?  aptos,TResult? Function( FamilyParams_Solana value)?  solana,TResult? Function( FamilyParams_Soroban value)?  soroban,}){
 final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that);case FamilyParams_Solana() when solana != null:
-return solana(_that);case _:
+return solana(_that);case FamilyParams_Soroban() when soroban != null:
+return soroban(_that);case _:
   return null;
 
 }
@@ -122,12 +125,13 @@ return solana(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult Function( int chainId,  String package)?  aptos,TResult Function( String program)?  solana,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult Function( int chainId,  String package)?  aptos,TResult Function( String program)?  solana,TResult Function( String passphrase,  String xlmSac)?  soroban,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that.chainId,_that.package);case FamilyParams_Solana() when solana != null:
-return solana(_that.program);case _:
+return solana(_that.program);case FamilyParams_Soroban() when soroban != null:
+return soroban(_that.passphrase,_that.xlmSac);case _:
   return orElse();
 
 }
@@ -145,12 +149,13 @@ return solana(_that.program);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)  cosmos,required TResult Function( int chainId,  String package)  aptos,required TResult Function( String program)  solana,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)  cosmos,required TResult Function( int chainId,  String package)  aptos,required TResult Function( String program)  solana,required TResult Function( String passphrase,  String xlmSac)  soroban,}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos():
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos():
 return aptos(_that.chainId,_that.package);case FamilyParams_Solana():
-return solana(_that.program);}
+return solana(_that.program);case FamilyParams_Soroban():
+return soroban(_that.passphrase,_that.xlmSac);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -164,12 +169,13 @@ return solana(_that.program);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult? Function( int chainId,  String package)?  aptos,TResult? Function( String program)?  solana,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String chainId,  List<EndpointConfig> rest,  Policy restPolicy,  String denom,  String prefix)?  cosmos,TResult? Function( int chainId,  String package)?  aptos,TResult? Function( String program)?  solana,TResult? Function( String passphrase,  String xlmSac)?  soroban,}) {final _that = this;
 switch (_that) {
 case FamilyParams_Cosmos() when cosmos != null:
 return cosmos(_that.chainId,_that.rest,_that.restPolicy,_that.denom,_that.prefix);case FamilyParams_Aptos() when aptos != null:
 return aptos(_that.chainId,_that.package);case FamilyParams_Solana() when solana != null:
-return solana(_that.program);case _:
+return solana(_that.program);case FamilyParams_Soroban() when soroban != null:
+return soroban(_that.passphrase,_that.xlmSac);case _:
   return null;
 
 }
@@ -384,6 +390,74 @@ class _$FamilyParams_SolanaCopyWithImpl<$Res>
 @pragma('vm:prefer-inline') $Res call({Object? program = null,}) {
   return _then(FamilyParams_Solana(
 program: null == program ? _self.program : program // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class FamilyParams_Soroban extends FamilyParams {
+  const FamilyParams_Soroban({required this.passphrase, required this.xlmSac}): super._();
+  
+
+ final  String passphrase;
+ final  String xlmSac;
+
+/// Create a copy of FamilyParams
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$FamilyParams_SorobanCopyWith<FamilyParams_Soroban> get copyWith => _$FamilyParams_SorobanCopyWithImpl<FamilyParams_Soroban>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is FamilyParams_Soroban&&(identical(other.passphrase, passphrase) || other.passphrase == passphrase)&&(identical(other.xlmSac, xlmSac) || other.xlmSac == xlmSac));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,passphrase,xlmSac);
+
+@override
+String toString() {
+  return 'FamilyParams.soroban(passphrase: $passphrase, xlmSac: $xlmSac)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $FamilyParams_SorobanCopyWith<$Res> implements $FamilyParamsCopyWith<$Res> {
+  factory $FamilyParams_SorobanCopyWith(FamilyParams_Soroban value, $Res Function(FamilyParams_Soroban) _then) = _$FamilyParams_SorobanCopyWithImpl;
+@useResult
+$Res call({
+ String passphrase, String xlmSac
+});
+
+
+
+
+}
+/// @nodoc
+class _$FamilyParams_SorobanCopyWithImpl<$Res>
+    implements $FamilyParams_SorobanCopyWith<$Res> {
+  _$FamilyParams_SorobanCopyWithImpl(this._self, this._then);
+
+  final FamilyParams_Soroban _self;
+  final $Res Function(FamilyParams_Soroban) _then;
+
+/// Create a copy of FamilyParams
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? passphrase = null,Object? xlmSac = null,}) {
+  return _then(FamilyParams_Soroban(
+passphrase: null == passphrase ? _self.passphrase : passphrase // ignore: cast_nullable_to_non_nullable
+as String,xlmSac: null == xlmSac ? _self.xlmSac : xlmSac // ignore: cast_nullable_to_non_nullable
 as String,
   ));
 }

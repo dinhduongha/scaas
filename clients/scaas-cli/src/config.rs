@@ -105,6 +105,14 @@ enum Fam {
     Cosmos(CosmosFam),
     Aptos(AptosFam),
     Solana(SolanaFam),
+    Soroban(SorobanFam),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SorobanFam {
+    passphrase: String,
+    xlm_sac: String,
 }
 
 #[derive(Deserialize)]
@@ -145,6 +153,10 @@ fn fam(f: Fam) -> FamilyParams {
             package: a.package,
         },
         Fam::Solana(s) => FamilyParams::Solana { program: s.program },
+        Fam::Soroban(s) => FamilyParams::Soroban {
+            passphrase: s.passphrase,
+            xlm_sac: s.xlm_sac,
+        },
     }
 }
 
@@ -552,6 +564,22 @@ mod tests {
             let r = sdk.wallet().balances(id, "f".into()).await;
             assert_ne!(code(r.map_err(Fail::Sdk)), "FeatureMissing", "{family}");
         }
+        // Soroban: the passphrase's SHA-256 is the profile's chain_uid
+        use sha2::Digest;
+        let pass = "Standalone Network ; February 2017";
+        let uid: String = sha2::Sha256::digest(pass).iter().map(|b| format!("{b:02x}")).collect();
+        let sor = fam(
+            &format!(r#"{{"soroban":{{"passphrase":"{pass}","xlm_sac":"CCJSG6X7HADWBAWWDQVBUOJJYIMMCTSW7UMWKPJPTZ5GKOBLZ77E4WQA"}}}}"#),
+            "Soroban",
+        )
+        .replace(&"0".repeat(63), "")
+        .replace("0x2", &format!("0x{uid}"));
+        let sdk = open_with(&sor).await.unwrap();
+        let r = sdk
+            .wallet()
+            .balances("GCJU3TGRU2M7V3DQTULG3A5DPHFPMTQIPAVP22UQW5F55D4ABTF2W7HU".into(), "f".into())
+            .await;
+        assert_ne!(code(r.map_err(Fail::Sdk)), "FeatureMissing", "Soroban");
         let zero = APTOS.replace("\"chain_id\":4", "\"chain_id\":0");
         assert_eq!(code(open_with(&fam(&zero, "Aptos")).await), "Argument");
         // the family named by the params is the profile's

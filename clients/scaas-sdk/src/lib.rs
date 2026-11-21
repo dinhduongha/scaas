@@ -196,6 +196,9 @@ pub(crate) struct Chain {
     /// its params' program
     #[cfg(all(feature = "wallet", feature = "solana"))]
     pub(crate) solana: Option<(Arc<scaas_rpc::solana::Solana>, [u8; 32])>,
+    /// a Soroban profile's family client (plan T24.soroban), named by its params' passphrase, and the XLM SAC's contract id
+    #[cfg(all(feature = "wallet", feature = "soroban"))]
+    pub(crate) soroban: Option<(Arc<scaas_rpc::soroban::Soroban>, [u8; 32])>,
 }
 
 /// The runtime every exported async call is spawned on (§14). An owned one shuts down in the background when the SDK goes, so
@@ -407,6 +410,30 @@ impl Sdk {
                 }
                 _ => None,
             };
+            // a Soroban profile's family client (plan T24.soroban): its RPC endpoints (`rpc`), named by the params' passphrase,
+            // whose SHA-256 (`ua-rs`'s) must be `chain_uid`; the XLM SAC decoded from its strkey, else `Argument`
+            #[cfg(all(feature = "wallet", feature = "soroban"))]
+            let soroban = match &p.family_params {
+                Some(FamilyParams::Soroban {
+                    passphrase,
+                    xlm_sac,
+                }) => {
+                    let uid = op::unhex(&p.chain_uid.to_ascii_lowercase())?;
+                    if scaas_ua::sha256(passphrase.as_bytes()).as_slice() != uid.as_slice() {
+                        return Err(SdkError::Argument);
+                    }
+                    let sac = match wallet::families::soroban::holder(xlm_sac) {
+                        Some(wallet::families::soroban::Holder::Contract(k)) => k,
+                        _ => return Err(SdkError::Argument),
+                    };
+                    let client = scaas_rpc::family::Client::new(list(&p.rpc, p.rpc_policy)?)?;
+                    Some((
+                        Arc::new(scaas_rpc::soroban::Soroban::new(client, passphrase)),
+                        sac,
+                    ))
+                }
+                _ => None,
+            };
             #[cfg(any(feature = "account", feature = "wallet"))]
             let pool = match (p.family, p.chain_id) {
                 (Family::Evm, Some(id)) => {
@@ -448,6 +475,8 @@ impl Sdk {
                 aptos,
                 #[cfg(all(feature = "wallet", feature = "solana"))]
                 solana,
+                #[cfg(all(feature = "wallet", feature = "soroban"))]
+                soroban,
             });
         }
         let rt = runtime(config.runtime)?;

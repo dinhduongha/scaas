@@ -16306,6 +16306,13 @@ const _: fn() = || {
         scaas_sdk::config::FamilyParams::Solana { program } => {
             let _: String = program;
         }
+        scaas_sdk::config::FamilyParams::Soroban {
+            passphrase,
+            xlm_sac,
+        } => {
+            let _: String = passphrase;
+            let _: String = xlm_sac;
+        }
     }
     match None::<scaas_sdk::config::Finality>.unwrap() {
         scaas_sdk::config::Finality::Finalized => {}
@@ -19844,6 +19851,14 @@ impl SseDecode for scaas_sdk::config::FamilyParams {
                 let mut var_program = <String>::sse_decode(deserializer);
                 return scaas_sdk::config::FamilyParams::Solana {
                     program: var_program,
+                };
+            }
+            3 => {
+                let mut var_passphrase = <String>::sse_decode(deserializer);
+                let mut var_xlmSac = <String>::sse_decode(deserializer);
+                return scaas_sdk::config::FamilyParams::Soroban {
+                    passphrase: var_passphrase,
+                    xlm_sac: var_xlmSac,
                 };
             }
             _ => {
@@ -27451,6 +27466,15 @@ impl flutter_rust_bridge::IntoDart for FrbWrapper<scaas_sdk::config::FamilyParam
             scaas_sdk::config::FamilyParams::Solana { program } => {
                 [2.into_dart(), program.into_into_dart().into_dart()].into_dart()
             }
+            scaas_sdk::config::FamilyParams::Soroban {
+                passphrase,
+                xlm_sac,
+            } => [
+                3.into_dart(),
+                passphrase.into_into_dart().into_dart(),
+                xlm_sac.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -33552,6 +33576,14 @@ impl SseEncode for scaas_sdk::config::FamilyParams {
             scaas_sdk::config::FamilyParams::Solana { program } => {
                 <i32>::sse_encode(2, serializer);
                 <String>::sse_encode(program, serializer);
+            }
+            scaas_sdk::config::FamilyParams::Soroban {
+                passphrase,
+                xlm_sac,
+            } => {
+                <i32>::sse_encode(3, serializer);
+                <String>::sse_encode(passphrase, serializer);
+                <String>::sse_encode(xlm_sac, serializer);
             }
             _ => {
                 unimplemented!("");
