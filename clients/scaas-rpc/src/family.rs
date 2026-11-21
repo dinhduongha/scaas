@@ -25,11 +25,13 @@ pub enum AgreedError {
 }
 
 /// A family request's failure: the endpoint's (transport, HTTP, timeout, too large, too deep, malformed), its own JSON-RPC
-/// error object kept whole, or a REST answer's status other than 2xx with its message (capped), for the family to classify.
+/// error object kept whole, a GraphQL answer's `errors` list kept whole, or a REST answer's status other than 2xx with its
+/// message (capped), for the family to classify.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FamilyError {
     Failure(EndpointFailure),
     Rpc { method: String, error: Value },
+    Graphql { errors: Value },
     Status { status: u16, message: String },
 }
 
@@ -53,6 +55,13 @@ impl std::fmt::Display for FamilyError {
                     f,
                     "{method}: {}",
                     crate::error::endpoint_text(&error.to_string())
+                )
+            }
+            FamilyError::Graphql { errors } => {
+                write!(
+                    f,
+                    "graphql: {}",
+                    crate::error::endpoint_text(&errors.to_string())
                 )
             }
             FamilyError::Status { status, message } => write!(f, "HTTP {status}: {message}"),
@@ -176,6 +185,52 @@ impl Client {
                 i,
                 FailureKind::AnswerMalformed,
                 &format!("{method}: no result"),
+            ))),
+        }
+    }
+
+    /// One GraphQL request to endpoint `i` (Sui's public fullnodes, SDK plan rpc T24.sui-graphql): a POST of `{query,
+    /// variables}` to the endpoint's URL, its answer's `data`. An `errors` member other than null or an empty list is
+    /// `FamilyError::Graphql`, kept whole, beside `data` too (a partial answer is never read); a 4xx without one is
+    /// `FamilyError::Status`; a 2xx whose `data` is absent or null is `AnswerMalformed`; a 3xx, a 5xx and the bounds' refusals
+    /// are the endpoint's failure.
+    pub async fn graphql_at(
+        &self,
+        i: usize,
+        query: &str,
+        variables: Value,
+    ) -> Result<Value, FamilyError> {
+        let body = serde_json::json!({"query": query, "variables": variables});
+        let (status, mut v) = self
+            .http
+            .request(
+                &self.list,
+                i,
+                reqwest::Method::POST,
+                "",
+                Some(serde_json::to_vec(&body).expect("a Value serialises")),
+                ANSWER_MAX,
+                None,
+            )
+            .await?;
+        if let Some(e) = v
+            .get_mut("errors")
+            .filter(|e| !e.is_null() && e.as_array().is_none_or(|a| !a.is_empty()))
+        {
+            return Err(FamilyError::Graphql { errors: e.take() });
+        }
+        if !(200..300).contains(&status) {
+            return Err(FamilyError::Status {
+                status,
+                message: crate::error::endpoint_text(&v.to_string()),
+            });
+        }
+        match v.get_mut("data").filter(|d| !d.is_null()) {
+            Some(d) => Ok(d.take()),
+            None => Err(FamilyError::Failure(EndpointFailure::new(
+                i,
+                FailureKind::AnswerMalformed,
+                "graphql: no data",
             ))),
         }
     }

@@ -126,7 +126,8 @@ and a landed transaction's fee. The EVM reader adds calls, storage, code, transa
 simulation and fee data, at a block the caller names, on the crate's bounded transport. Each other family lifts its transport and
 these generic reads from the node's adapter, after the EVM part; parsing of events and of `build`'s family reads stays in the node
 for now, reading through the family's pooled client so CLI-RPC-04 and §5 apply to every read (BUILT for the Hedera, Soroban, Solana, NEAR, Algorand, Aptos, Sui, Cosmos and TON
-adapters, plan T14–T22). The indexer's event-set quorum
+adapters, plan T14–T22; Sui's reads over GraphQL too, `sui::SuiGraphql` on `Client::graphql_at`, BUILT, SDK plan rpc
+T24.sui-graphql). The indexer's event-set quorum
 ([NODE-IDX-01](../node/indexer-feeds.md#NODE-IDX-01)) is unchanged; its helper (`agreed`, NEAR and Aptos) is the crate's.
 
 ## 4. Writes and transaction state

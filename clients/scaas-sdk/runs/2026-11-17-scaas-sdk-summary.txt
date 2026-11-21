@@ -86,7 +86,6 @@ gas-gen | cd3cc4c93 | 0 | -
 # sdk-test 84 passed, 1 failed (gas_verify_margin read a filler key "x" as "no margin"; finding 1 refuses it), fixed at
 # cd3cc4c93 (the control reads a row without `margin`, the filler asserted GasFieldUnknown). Also at cd3cc4c93: docs_check
 # paths 0; format.sh --check (every part but tact) ok; mutants gasR 21/21 killed (gasR-mutants.txt). ffi has no own tests.
-rpc-test | 9f3e640dd | 0 | 166 passed, 0 failed, 10 ignored (16 binaries)
 # The ua-rs-sign merge (6b6d9002e), the width-100 format (ba0590065), P-T16-8 / NODE-GW-08 (9f3e640dd) and the e2e
 # compile fix (96d4c5363): the rows above at those commits, every rc 0. On the merge before its commit: ua-test (whole
 # suite) and ua-clippy rc 0; ck-test 484 pass, 0 fail, 4 skipped. At 96d4c5363: scaas-node `cargo test` (6G, alone) 861
@@ -101,13 +100,11 @@ rpc-test | 9f3e640dd | 0 | 166 passed, 0 failed, 10 ignored (16 binaries)
 # tests), clippy --all-targets -D warnings clean. format.sh --check rust clean. Mutants t17 7/7, t18 5/5, t18b 3/3, t19 6/6
 # killed, each by its intended assertion (t17/t18/t18b/t19-mutants.txt).
 # T20 first part (at 5d206063c + the uncommitted T20 files): bind-gen (gen.sh --check, no drift) ok; ci_changes.py self-tests ok; actionlint 1.7.12 with shellcheck 0.11.0 clean; format.sh --check yaml sh py clean; docs check 0 errors, test_docs_check ok. Mutants t20 2/2 killed (the drift check on a source change without regeneration; the Dart load_check test).
-bind-dart | 7f5e03caf | 0 | dart: +14:; tree dirty
 ffi | 7f5e03caf | 0 | 0 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 sdk-min | 7f5e03caf | 0 | 70 passed, 0 failed, 0 ignored (8 binaries); tree dirty
 sdk-wasm | 7f5e03caf | 0 | -; tree dirty
 sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
-ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 ua-vectors | c1a17c82f | 0 | 665 passed, 0 failed, 6 ignored (62 binaries)
 # T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
 # tree that became those two commits (the SDK, ffi, Dart and ua-rs files); ua-test ran before a clippy-only rewrite of one
@@ -175,15 +172,18 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 #      request count through the fake
 # M18  the regular line extrapolated past its measured counts (measure at the largest count the cap admits, or refuse above)
 # M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt
-sdk-test | 7cc8be95f | 0 | 308 passed, 0 failed, 16 ignored (26 binaries)
 sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-cli | fdd4caa6d | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
 ua-clippy | 612e2c216 | 0 | -
 rpc-clippy | 612e2c216 | 0 | -
-bind-gen | 612e2c216 | 0 | -
-features | 612e2c216 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
-docs | 612e2c216 | 0 | -
-ck-test | 612e2c216 | 0 | node: 530 pass, 0 fail, 4 skipped
-mutants-check | 1b7391d3b | 0 | -
-sdk-clippy | 1b7391d3b | 0 | -
+sdk-clippy | 71c6c0cf3 | 0 | -
+bind-gen | 71c6c0cf3 | 0 | -
+features | 71c6c0cf3 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
+docs | 71c6c0cf3 | 0 | -
+ck-test | 71c6c0cf3 | 0 | node: 533 pass, 0 fail, 4 skipped
+mutants-check | 71c6c0cf3 | 0 | -
+cli | 71c6c0cf3 | 0 | 42 passed, 0 failed, 1 ignored (6 binaries)
+rpc-test | 71c6c0cf3 | 0 | 168 passed, 0 failed, 10 ignored (16 binaries)
+ua-test | 71c6c0cf3 | 0 | 597 passed, 0 failed, 3 ignored (58 binaries)
+bind-dart | 71c6c0cf3 | 0 | dart: +14:
+sdk-test | 71c6c0cf3 | 0 | 355 passed, 0 failed, 16 ignored (32 binaries)
