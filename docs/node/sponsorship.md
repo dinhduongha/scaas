@@ -2,7 +2,8 @@
 
 The node already pays gas for every job it lands. A **sponsorship policy** decides which account that gas is booked
 to, how much of it is allowed, and whether a door's fee floor is waived. Status: policies, budgets, rate counts, feed
-cost fields, admin routes and metrics **SPECIFIED**; `SponsorshipPool` **PLANNED**.
+cost fields, admin routes and metrics **SPECIFIED**; `SponsorshipPool` **PLANNED**; the Arweave credit payer **SPECIFIED**,
+nothing built.
 
 **Contents**
 
@@ -16,6 +17,7 @@ cost fields, admin routes and metrics **SPECIFIED**; `SponsorshipPool` **PLANNED
 7. [Security](#7-security)
 8. [Payee fee](#payee-fee)
 9. [Pool](#pool)
+10. [Arweave credit payer](#arweave-payer)
 
 ## 1. Scope
 
@@ -276,3 +278,35 @@ registered token, optional receiver, selector and minimum value; `settle(program
 withdrawal and each sponsored intent; transient reentrancy guard (EIP-1153). Open points: the Hedera formula (HSCS
 charges ≥ 80 % of the gas limit), the block-producer caveat, and node routing (a `call` job to `settle` on a
 registered `sponsorship_pool` contract, not carried by the mesh).
+
+## <a id="arweave-payer"></a>10. Arweave credit payer
+
+<a id="NODE-SPN-05"></a>**NODE-SPN-05** (SPECIFIED, nothing built) — **The Arweave credit payer is a node service, off by
+default: it approves Turbo credits to one upload address for one object, only for a request behind a gateway credential and
+within per-credential and per-IP budgets; no request carries a UA or its signature** (owner 2026-11-21: the payer as a node
+service and anonymous requests, O1 (a) and O2 (a) of the
+[Avalanche, Polkadot and Arweave spec](../superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §12, recorded in
+[ARCH-POS-20](../decisions.md#ARCH-POS-20)'s Change line; the conditions below controller calls, ARCH-POS-20 C21, owner: no).
+The guarantee is the node's, so every consumer gets the same service ([CLI-SDK-21](../clients/scaas-sdk.md#CLI-SDK-21) is one).
+
+- **Off by default.** The route answers only when the operator enables it in configuration; disabled, a client's upload above
+  the free tier stays `PayerUnavailable`.
+- **The payer key holds Turbo credits only**, never a chain key, a lane key or a contract role ([NODE-GEN-01](README.md#NODE-GEN-01)
+  applied to credits); the configuration names the env var, file or keystore that holds it, never the key.
+- **The request** carries named fields only: the upload address, the signature type and the bucket. It carries no UA, no
+  signature by a UA key, no file bytes and no id of a message or session. It is served only behind a gateway credential the
+  operator issues to an app, within budgets per credential and per IP (counts per hour and per day). There is no UA-signed
+  fallback: it would link each UA to its upload keys at the operator. If credentials and per-IP budgets cannot hold abuse, the
+  options go to the owner.
+- **The approval** (`shareCredits`) names that upload address and exactly the price of one object of that bucket with its item
+  header, with a short expiry (1 hour by default); a second approval for the same address is given only after the first expired
+  unused. The node builds the approval from named fields as an ANS-104 item with tags, pinned by vectors in
+  `smartcontracts/vectors/arweave/`.
+- **Logs and store** keep the upload address, the bucket and the counts; an IP is kept only for its budget window and never
+  logged with the address.
+- **Metadata**, stated: the approvals publicly link every funded upload address to the payer's address; the operator learns
+  which IP asked for which upload address, which the bundler learns anyway.
+
+Tests (when built): the route refused while disabled; a request without a credential refused; the per-credential and per-IP
+caps at their boundary; an approval of exactly one bucket's price with its expiry; a second approval for a live one refused; a
+request carrying a UA field refused by name; logs without IPs beside addresses.

@@ -141,6 +141,10 @@ case "$FAMILY" in
         # NET-EVM-13: the book by the chain's key (DEPLOY_NAME for a chain not in chain-uids.json), a named fail first
         G0="$(cast block 0 --field hash --rpc-url "$NET")"
         K="$(python3 -I script/deploybook.py key "$C" "$G0")"
+        # NET-EVM-06 / NET-EVM-18: a profile whose fork is not amsterdam (src/chains/<key>/profile.json evmFork) takes no
+        # whole SCaaS set, refused by name before anything is sent; a single contract deploys there through
+        # script/forkcheck.py deploy (the five checks)
+        python3 -I script/forkcheck.py set-gate "$K" || exit 1
         # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET names this deploy's set
         # (mldsa-off with MLDSA_PRECOMPILE=off, mldsa-on with on), refused by name before anything is sent; the book then
         # keeps every set of this chain (deploybook.py set-merge)

@@ -52,6 +52,9 @@ const PC: &[&str] = &["pqchat"];
 /// `PqVault` (CTR-PQV-11, CTR-PQV-13): a factory kind's eight writes, plain rows (each record is signed in its vault's domain and
 /// checked by the contract); the target is an instance of the factory's class 4 (`guard::Rule::FactoryClass`).
 const PV: &[&str] = &["pqvault"];
+/// `PqChatStore` (CTR-CHAT-22): the store part of `PqChat` alone, its one write `storeMessage` (unsigned); the target's runtime code
+/// hash is the release data's (`guard::Rule::ChatStore`).
+const PCS: &[&str] = &["pqchatstore"];
 
 /// The EIP-712 domain name of a contract kind (the `domains.<kind>` of `typed_ops.json`); `None` for a kind that signs nothing.
 pub fn domain_name(contract: &str) -> Option<&'static str> {
@@ -389,6 +392,7 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("remove", PC, "PqChatRemove r,UASig sig"),
     ("postMessage", PC, "PqChatMessage m,UASig sig"),
     ("storeMessage", PC, "uint8 v,bytes8 hint,bytes env"),
+    ("storeMessage", PCS, "uint8 v,bytes8 hint,bytes env"),
     ("createTopic", PC, "PqTopic t,UASig sig"),
     ("updateTopic", PC, "PqTopicUpdate u,UASig sig"),
     ("setTopicWriter", PC, "PqTopicWriter w,UASig sig"),
@@ -2003,8 +2007,8 @@ impl Op {
         }
         let (row, contract) = find(entry, text("contract")?, text("struct")?)?;
         // T93 (topics P45): a `PqChat` job is its records' named fields; `args`, a record, a list or `sig` as one hex string is the
-        // old hex form; a `PqVault` job the same (CTR-PQV-11, no old form: a hex form is refused alike)
-        if contract == "pqchat" || contract == "pqvault" {
+        // old hex form; a `PqVault` job the same (CTR-PQV-11, no old form: a hex form is refused alike), and a `PqChatStore` job
+        if contract == "pqchat" || contract == "pqvault" || contract == "pqchatstore" {
             let args = o.get("args");
             let hexed = |t: &str, n: &str| {
                 (t.ends_with("[]") || nested(t).is_some())
@@ -2913,10 +2917,11 @@ mod tests {
         // (CTR-DEX-30)
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
         // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`; NODE-JOB-29 (TODO 3zh MD-14): -> 36, the registry's `cacheExpandedKey`
-        // bls-multi Task 10: -> 37, the registry's `registerBlsMulti`; PqVault plan V8 (CTR-PQV-11): -> 45, `PqVault`'s eight writes
+        // bls-multi Task 10: -> 37, the registry's `registerBlsMulti`; PqVault plan V8 (CTR-PQV-11): -> 45, `PqVault`'s eight writes;
+        // chains-arweave T9: -> 46, `PqChatStore`'s `storeMessage` (contract kind `pqchatstore`)
         assert_eq!(
             rows().iter().filter(|r| !r.typed).count(),
-            45,
+            46,
             "the wallet's three flat builders are gone (MD-11 (a))"
         );
     }

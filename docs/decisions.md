@@ -363,6 +363,72 @@ Change (2026-11-12, branch `ua-mtx-fix2-node`, Fable recheck R-6 and recheck 2 P
 **Cost if wrong.** A software path is far more expensive in gas than a precompile and may not fit a transaction on some chains; that case comes back to the owner with numbers.
 **Source.** Owner 2026-11-19 (chat): "Lưu ý thêm chút là evm support tối đa, đến cả pqz dù chain chưa hỗ trợ native PQ. Các chain khác cũng phải hỗ trợ được như vậy." (EVM supports the maximum, PQZ included, even where the chain has no native PQ support; other chains must support it the same way), then "Duyệt, ghi vào tài liệu" (approved; write it into the docs); then "Trường hợp gas cao quá, phải tắt thì phải được xác nhận." (where gas is too high and the kind must be disabled, that needs confirmation).
 
+<a id="ARCH-POS-19"></a>
+### ARCH-POS-19 — Avalanche and Polkadot EVMs join; Arweave stores encrypted files
+- old: — · status: current · owner: yes · date: 2026-11-21 · normative: decisions.md#ARCH-POS-19 · superseded-by: —
+
+**Rule.** (1) Avalanche's EVM (C-Chain and Fuji; Avalanche L1s studied) and Polkadot's EVM (Polkadot Hub's pallet-revive and the
+parachain EVMs) become chain profiles under the EVM family's rules: one rule on every chain, the deploy condition per contract
+(owner 2026-11-09), Glamsterdam before a public chain is deployed ([NET-EVM-06](networks/evm.md#NET-EVM-06)), maximal support
+([ARCH-POS-18](#ARCH-POS-18)). (2) Arweave joins as a store of ciphertext only: PqChat messages and images, and the files embedded
+in a message or a vault item, encrypted on the client and pushed to Arweave. (3) `scaas-rpc` gains the Avalanche and Polkadot
+profiles and an Arweave reader and uploader under CLI-RPC-01..11. (4) Attachments join the `pqchat-core` round (O9 (b),
+[CLI-PQC-02](clients/pqchat-core.md#CLI-PQC-02) on branch `pqchat-core-build`).
+**Status.** PLANNED. Research first (the note on the Source line: facts per chain, the ANS-104 format, bundlers, gateways, the `ua-rs` and `scaas-rpc` changes, open questions Q1–Q8); then specs
+and plans. Its main finding: no SCaaS contract set deploys on Avalanche C-Chain, Polkadot Hub or Moonbeam today, because each
+caps runtime code at 24,576 B and none has the Amsterdam fork.
+**Why.** More EVM chains for customers on those ecosystems; a permanent store for encrypted files, which never go on chain
+(UA-7 P28: 1 MiB is about 1.6 G state gas).
+**Cost if wrong.** Profiles and a store module that wait for chain forks; Arweave uploads are public forever with their size, time
+and upload key, so the metadata rules of the research note (rotating upload keys, padding, the payer path) must hold.
+**Source.** Research [research/2026-11-21-avax-polkadot-arweave.md](research/2026-11-21-avax-polkadot-arweave.md). Owner 2026-11-21 (chat, translated from Vietnamese): "I have decided to also support the EVMs of AVAX and Polkadot.
+Message and image storage may also use Arweave."; "scaas-rpc probably needs to add EVM AVAX and Polkadot, and Arweave."; "Note that
+image files and data embedded in a message or in the vault may be encrypted and pushed to Arweave."; and, on attachments in the
+`pqchat-core` round, "Put it in." TODO 8i.
+
+Change (owner 2026-11-21, answers to the note's open questions; owner: yes; status: PLANNED): **Q1** wait, as recommended: a draft Avalanche profile and its `scaas-rpc` part are written now, contracts deploy when C-Chain has the Amsterdam fork (a contract within the chain's code size deploys earlier, per contract), and, the owner added, Avalanche may serve now as a store path for messages and text, as HCS does on Hedera (a store contract within the chain's limits in PqChat's store list). **Q2** Polkadot Hub first, Moonbeam second. **Q4** UA-7's `url` gains `ar://<id>`. **Q5** uploads paid by an operator payer (credit sharing), small items on the free tier; the client never holds operator credentials, and the payer link between uploads is a stated metadata cost. Controller calls (owner: no): **Q3** the software BLS12-381 path is built and measured, no kind disabled ([ARCH-POS-18](#ARCH-POS-18)); **Q6** size buckets in powers of two; **Q7** Turbo probed with both ed25519 signature types before one is chosen; **Q8** NET-ALL-25 reworded to the `(chainId, chain_uid)` pair.
+
+<a id="ARCH-POS-20"></a>
+### ARCH-POS-20 — Controller calls of the Avalanche, Polkadot and Arweave spec
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: decisions.md#ARCH-POS-20 · superseded-by: —
+
+**Rule.** The owner may override any. Each is applied where named; the spec's section in brackets.
+- **C1** A new standalone contract `PqChatStore` serves the Avalanche store path; `PqChat` is not reused, since `PqChat` (29,111 B) and `OpenFactory` (34,999 B) exceed 24,576 B and no split store exists ([CTR-CHAT-22](contracts/pqchat.md#CTR-CHAT-22); §5.1).
+- **C2** Its payloads stay in contract state (SSTORE2), never only in events (CTR-CHAT-05; cost about 8 times an event-only store) (§5.2).
+- **C3** Its blob bound is the constant 24,576 B (EIP-170), not a chain value: one bytecode and one address on every chain; `env` at most 24,416 B (§5.3).
+- **C4** The store-list entry `{"kind": "chainstore", "chainId", "chainUid", "contract"}`; a client trusts the contract by its runtime code hash pinned in release data, after the chain pair check (§5.5; UA-7 spec §4.2 Change).
+- **C5** (revised, review F7, F8) Before a chain's Amsterdam fork a contract deploys only when its `amsterdam` build fits the chain's caps, passes an allow-list opcode scan that walks immediates by the compile target's table with code and data boundaries from the compiler, passes its tests executed at the chain's fork on the artifact's bytes with a control that must fail, and finds every precompile it calls on the chain; a testnet round trip before a mainnet deploy ([NET-EVM-18](networks/evm.md#NET-EVM-18); §4.5).
+- **C6** Avalanche lanes and readers: `tag finalized`; logs at or below `finalized`; no receipt yet is `Pending`; the gas limit is the estimate with the lane's margin; at most 16 in flight per key ([NET-EVM-16](networks/evm.md#NET-EVM-16); §4.3, §4.4).
+- **C7** (revised, review F10) Polkadot Hub is `enabled` only after the probes of every profile (C19) and the weight measurement; its gas cap is a profile value from that measurement; the storage deposit is part of the fee ([NET-EVM-17](networks/evm.md#NET-EVM-17); §6).
+- **C8** (revised, review F2, F13) The Arweave upload key is derived per file inside the one `ua-rs` call that seals the file, `HKDF-SHA-256(ikm = app root key ‖ file key, info = "scaas/arweave/v1/upload" ‖ type ‖ ctSha256)` with `ctSha256` computed there, never passed by a caller; its `UploadSign` handle signs only the item `ua-rs` built over that object, so one key signs one byte string; for ed25519 (default) or secp256k1; never a UA or wallet key ([CLI-UAL-64](clients/ua-libraries.md#CLI-UAL-64); §7.3).
+- **C9** A data item has no target, no anchor and no tags (one fixed `Content-Type` tag only if the Turbo probe needs one) (CLI-UAL-64; §7.2).
+- **C10** (revised, review F1, F20) The padding is inside the AEAD: the plaintext `size (8 B) ‖ file ‖ zero pad` up to the bucket, the object exactly bucket + 16 B, `ctSha256` its SHA-256; buckets from 2^16 B to the platform's cap, computed in integers; the reader checks the frame and the zero pad after decryption ([CLI-UAL-65](clients/ua-libraries.md#CLI-UAL-65); §7.4; UA-7 §6.4.1 Change).
+- **C11** An upload posts the same signed bytes to the bundler list; the client keeps them until settled (C16) and re-posts the same bytes on the schedule of C20, never re-signed and never under a new key ([CLI-RPC-14](clients/scaas-rpc.md#CLI-RPC-14), [CLI-SDK-21](clients/scaas-sdk.md#CLI-SDK-21); §7.8, §7.11).
+- **C12** Every Arweave read of an attachment feeds a decryption (CLI-RPC-06); its exact length is the bucket + 16 (C17); a gateway whose bytes fail the caller's check is that gateway's failure ([CLI-RPC-13](clients/scaas-rpc.md#CLI-RPC-13); §7.7).
+- **C13** (revised, review F16) The free tier carries only objects in the 2^16-B bucket, best effort (10 MiB per IP for life); anything larger, or a free-tier refusal, goes to the operator payer; until the payer runs, larger objects serve tests only (CLI-SDK-21; §7.9).
+- **C14** PqVault `file` items use the same calls, with PqVault's app root key; an item naming an `ar://` object is written only after one gateway read of it passed (§7.10).
+- **C15** (review F3) `open_file` checks the tag, the frame, the zero pad, `size` and the plaintext `sha256` inside `ua-rs` before any plaintext leaves it; a cache is keyed by the plaintext `sha256`, never by the id or `ctSha256` alone; no separate key commitment, since the file key is random and arrives in a signed message (CLI-UAL-65, CLI-SDK-21; §7.6, §9).
+- **C16** (review F4) "Settled" = a strict majority of at least two gateways of different operators (never discovered ones) report the item's block, that block is at least `depth` blocks below the tip (default 50), and one data read returns the kept object's bytes; until then the client keeps its copy (CLI-RPC-13; §7.7, §7.11).
+- **C17** (review F5) Reads are bounded to the exact length bucket + 16, read incrementally: an announced other length refused unread, no `Range` request; an in-memory cap of 2^30 B on 64-bit targets and 2^27 B on wasm32, a signed `size` above it refused before any request (CLI-RPC-13, CLI-UAL-65; §7.4, §7.7).
+- **C18** (review F9) NET-ALL-25 reworded so it holds for `homeChain` records; the deploy gate refuses a kind that keeps such records (`PqChat`, `OpenFactory`, `PqVault`) on a profile whose `chain_uid` another profile shares, beside the clients' refusal of O3 ([NET-ALL-25](networks/README.md#NET-ALL-25); §8).
+- **C19** (review F10) One probe set H1–H8 for every EVM profile before `enabled`, never a rule for one chain kind ([NET-EVM-19](networks/evm.md#NET-EVM-19); §6.2).
+- **C20** (review F14) An unsettled item is re-posted, the same bytes, at 24 h, 72 h and 7 days, with a new payer approval of the same upload address on a payment refusal; then `UploadUnsettled` is shown and the user may re-post by hand; the one exception to [CLI-RPC-08](clients/scaas-rpc.md#CLI-RPC-08)'s "no automatic re-send" (CLI-SDK-21; §7.11).
+- **C21** (O1, O2 conditions) The payer is a node service, off by default, written in the node docs; requests anonymous behind a gateway credential with per-credential and per-IP budgets; each approval for one upload address and one object's price with a short expiry; no UA-signed fallback ([NODE-SPN-05](node/sponsorship.md#NODE-SPN-05); §7.9).
+- **C22** (review F11) NET-EVM-16, NET-EVM-17, CLI-UAL-65 and CLI-SDK-21 are `owner: no`: they hold controller calls; their owner parts are ARCH-POS-19 Q1, Q2, Q4 and Q5.
+- **C23** (review F18) `PqChatStore`'s release data pins the init-code hash, the runtime code hash and the address; a local build with another init-code hash is refused; the deployer, SSTORE2 and `eth_getCode` are probed on each chain before a profile lists the store ([CTR-CHAT-22](contracts/pqchat.md#CTR-CHAT-22); §5.3).
+**Status.** SPECIFIED, nothing built. UNAUDITED. Open points O1–O5 settled by the owner (the Change line below).
+**Why.** Each is the smallest choice that applies the owner's answers of ARCH-POS-19 (Q1, Q2, Q4, Q5) and the earlier controller calls (Q3, Q6, Q7, Q8) without a second compile target, a contract change to `PqChat` or a new signed format.
+**Cost if wrong.** A standalone store or a key derivation the owner would have shaped otherwise; nothing is deployed or built, so a change costs a spec edit.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §2; [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md).
+
+Change (owner 2026-11-21, "ok" on the spec's recommendations; owner: yes; status: SPECIFIED): the open points O1–O5 of `superpowers/specs/2026-11-21-avax-polkadot-arweave.md` §12 settled as recommended: **O1** the operator payer is a node service (a gateway route under the node's sponsorship policy, off by default, its payer key holding Turbo credits only, never a chain key or contract role); **O2** payer requests are anonymous, budgets per IP and per gateway credential, no UA signature (it would link a UA to its upload keys); **O3** `chainId` joins the `chain` store entry now and clients refuse a session homed on a chain whose `chain_uid` another profile shares, until a typed-record change carries the chain id; **O4** no Arweave message store kind now (large messages reach Arweave as `file` attachments), revisited after attachments run; **O5** Turbo alone, the single-vendor risk stated, the signed bytes kept for re-posting.
+
+Change (2026-11-21, the spec's revision 2 after Fable's review (P0 0, P1 1, P2 11, P3 9, info 5); controller calls; owner: no; status: SPECIFIED): C5, C7, C8, C10, C11, C12, C13 and C14 revised and C15–C23 added, as listed above; old → new: C8 `ikm` the app root key with a caller's `ctSha256` → the app root key and the file key, `ctSha256` computed in `ua-rs`; C10 zero padding outside the AEAD (`ct ‖ 0x00…`, a public reader learned the exact size) → padding inside it, the object bucket + 16 B; buckets up to 2^31 B → up to 2^30 B (2^27 B on wasm32); C5 a deny-list scan and `anvil` tests → an allow-list scan, execution at the chain's fork with a failing control, a precompile check; settlement "a block height shown" → C16. The spec §14 maps each finding to its fix.
+
+Change (2026-11-21, controller call; owner: no; status: SPECIFIED): the plan `superpowers/plans/2026-11-21-avax-polkadot-arweave.md` is delivered in two parts. **Part 1** (to `main` first): T0–T9, T11, T12, T16 and T19, the tasks that need neither the SDK branch nor the owner's word. **Part 2** (after): T17, T20 and the owner's-word tasks T10, T13, T15, T18 and T21. Each part ends with its own round-end matrix and a Fable code review before its pull request; T22 and T23 apply per part. Part 1 is self-contained: no rule text claims BUILT for a Part 2 piece; a Part 1 piece with no caller yet (the clientkeys ANS-104 rows, the `scaas-rpc` `arweave` module) stays, and its status names what uses it later.
+
+Change (2026-11-21, plan T4, controller call; owner: no; status: BUILT on branch `chains-arweave`): how NET-EVM-18's five checks are built (`smartcontracts/evm/script/forkcheck.py`). **Where a profile states its fork:** `smartcontracts/evm/src/chains/<key>/profile.json` (`evmFork`, `codeSizeLimit`, `initCodeSizeLimit`), keyed by the chain's key, never a chain id; a profile without the file is `amsterdam` (NET-EVM-06), and `deploy.sh` refuses a whole SCaaS set on any other fork by name (`FORKCHECK_SET_FORK`). **Where release data declares precompiles:** `smartcontracts/evm/release-data/<Contract>.json`, a `precompiles` list of `{address, name, input, output}` (the known answer); a file without the list is refused, so check (5) is never skipped by omission; T6 adds `PqChatStore`'s hashes and address to the same file. **The scan's boundaries:** the code ends after the compiler's source-map instruction count (walked with the `amsterdam` immediates), followed by solc's `INVALID`, then the runtime (init code), then the data sections the compiler's legacy assembly lists, in solc's order (`forge build --extra-output evm.legacyAssembly`, byte-identical bytecode; none without it), then the CBOR metadata (runtime); anything else is refused, a second sub-assembly included (a contract its constructor or code creates: code the walk does not reach; 2 of 100 linked artifacts of a `GovRouter.t.sol` build); the constant optimiser's data is common (66 of 252 linked artifacts of a full local build, `PqChatStore` among them: one 32-byte section); `DUPN`, `SWAPN`, `EXCHANGE` (EIP-8024, in Amsterdam; solc 0.8.37 emits none) are bytes the walk cannot place. **Check (4):** real transactions on `anvil --hardfork cancun`, each case an `eth_call` at the state before and the same transaction sent, with the control `test/forkcheck/ForkcheckClz.sol` (`clz`) whose case must be red and whose scan must refuse; the gate step `forkcheck`. **Chain reads** (checks (2) and (5)) ask every node of the list and take the strict majority (ARCH-POS-15's option). Cost if wrong: a refusal the owner lifts by naming the data section or the fork; nothing is deployed.
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
@@ -1274,6 +1340,15 @@ It said: jWS verification on ring.
 **Why.** An on-chain pool lets sponsors fund relays without trusting one node; on the mesh only the fee path applies.
 **Cost if wrong.** Planned.
 **Source.** [history/specs/2026-10-06-tender-sponsorship-shredding.md](history/specs/2026-10-06-tender-sponsorship-shredding.md) line 199.
+
+### NODE-SPN-05 — The Arweave credit payer: a node service, off by default, anonymous requests behind a gateway credential
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: node/sponsorship.md#NODE-SPN-05 · superseded-by: —
+
+**Rule.** (Summary; normative [sponsorship.md](node/sponsorship.md#NODE-SPN-05).) Off unless the operator enables it; the payer key holds Turbo credits only (NODE-GEN-01 applied to credits); a request names the upload address, the signature type and the bucket, nothing that names a UA, and is served only behind a gateway credential within per-credential and per-IP budgets; an approval covers one object of that bucket for that address, with a short expiry; no UA-signed fallback.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner O1 (a) and O2 (a) of the Avalanche, Polkadot and Arweave spec (ARCH-POS-20's Change line, owner: yes); the conditions (off by default, the credential, one object per approval, no UA fallback) are controller call C21, after Fable's review: a per-IP budget alone makes the operator a free publisher of permanent data, and a UA signature links each UA to its upload keys.
+**Cost if wrong.** An operator paying for anyone's permanent uploads, or a log that links users to their files.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) §7.9, §12; [ARCH-POS-20](#ARCH-POS-20).
 
 ## 10. Node — DEX venue
 
@@ -6069,6 +6144,16 @@ Change (controller call, owner: no, 2026-11-21, the Fable code review of PqVault
 **Cost if wrong.** A signer on the old type string signs a digest no instance accepts; every chain is test-only, so nothing deployed needs a migration.
 **Source.** owner 2026-11-10 (relayed by the controller). Status: BUILT on branch `ua-mtx-merge` (EVM, the node's type strings, clientkeys and the vectors), UNAUDITED; `ua-rs` PLANNED (the ua-rs-sign round).
 
+### CTR-CHAT-22 — `PqChatStore`: the standalone store, state only, within 24,576 B
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: contracts/pqchat.md#CTR-CHAT-22 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat.md](contracts/pqchat.md#CTR-CHAT-22).) A new contract with exactly `PqChat`'s store part (selectors, topic, error, behaviour of CTR-CHAT-13), each payload one SSTORE2 blob of at most 24,576 B (a constant), no owner, admin, constructor argument, fee or `chainUid`; deployed by the deterministic deployer with salt 0 under NET-EVM-18, the init-code hash, runtime code hash and address pinned in release data; listed by clients as `{"kind": "chainstore", "chainId", "chainUid", "contract"}` and trusted by its pinned runtime code hash; a session's envelope bounded by its smallest listed store.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q1: Avalanche as a message and text store path like HCS; `PqChat` and `OpenFactory` exceed 24,576 B and no split store exists; CTR-CHAT-05 keeps stored payloads in state (controller calls C1-C4).
+**Cost if wrong.** About 8 times the gas of an event-only store; or a store whose payloads a pruned log index loses.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C23; owner: no): the init-code hash and the address pinned beside the runtime code hash, an existing deployment with the pinned code taken as done, deployer and SSTORE2 probes per chain (review F18); the smallest-store bound and the relay paths without `RelayFeeRouter` stated (review F19).
+
 ### CTR-PQV-01 — PqVault: PqChat's group rules with at least one member plus a topics-style item model
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-01 · superseded-by: —
 
@@ -7176,12 +7261,14 @@ Change (2026-11-02, typed-signing CD; owner 2026-10-31, one rule (owner 2026-10-
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §3 MG-4, MG-6; §4; §13 N-H1.
 Change (2026-11-09, group 3i, owner Q1 B): a chain profile also lists its services, the `chain_contract` rows of kind `service` (the node's `[[chains.services]]` today, [NODE-JOB-25](node/job-api.md#NODE-JOB-25)), advisory as the DEX list is: a client warns for a service off the list. Status: the node's config BUILT (T79 `711f4f35`); the profile's published list SPECIFIED.
 
-### NET-ALL-25 — A chain we run that forks becomes a new chain; no shared genesis hash
+### NET-ALL-25 — A chain we run that forks becomes a new chain; no two profiles share `(chainId, chain_uid)`
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-25 · superseded-by: —
 
 **Why.** Two branches of a fork share genesis, so `chain_uid` cannot separate them; a PoA chain re-created from the same genesis file repeats its hash. Owner ruling (2026-10-08): a fork of a chain we run gets a new chain id and `chain_key`; every private genesis carries a unique `extraData` nonce and a known genesis hash is refused.
 **Cost if wrong.** Signatures made on one branch or one incarnation of a chain replay on the other.
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §3 MG-4 (limits), §10 OQ3.
+Change (controller call of 2026-11-21, [ARCH-POS-19](#ARCH-POS-19) Q8; owner: no; status: the text current, the pair check SPECIFIED, plan [`2026-11-21-avax-polkadot-arweave.md`](superpowers/plans/2026-11-21-avax-polkadot-arweave.md) T1): old, "no two chain profiles share a genesis hash"; new, "no two chain profiles share the pair `(chainId, chain_uid)`": a private chain's genesis hash stays unique (its `extraData` nonce) and a known private genesis hash is still refused; public chains may share a genesis (Avalanche C-Chain and Fuji, Ethereum and ETC) and are told apart by the chain id, a profile whose pair is already present refused; every chain-bound SCaaS digest binds the chain id beside `chain_uid`. Why: the old text was false for public chains already in `chain-uids.json`, while NET-ALL-22, NET-EVM-13 and the deploy gate already key on the pair.
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C18; owner: no; status: SPECIFIED, plan T1): old, "every chain-bound SCaaS digest binds the chain id beside `chain_uid`"; new: a digest that binds the chain id is told apart on a shared genesis, a record that names its home by `homeChain` (`chain_uid`) alone is not (`PqChatSession`, `PqTopic`, PqVault's records), so the deploy gate refuses a kind that keeps such records on a profile whose `chain_uid` another profile shares, until the records carry the chain id; clients refuse such a home as well (O3); T1 audits every digest that binds `chain_uid` and defines the `chain-uids.json` field that marks a chain as private. Why: review F9, the old sentence was false for `homeChain` records, and a client refusal alone is an off-chain guard. The owner may override the rewording.
 
 Under "Networks — EVM":
 
@@ -7457,6 +7544,45 @@ Change (2026-11-16, owner ruling relayed by the controller: "ok, option 2, one c
 **Why.** A Draft's address can be assigned to another function later; the same address with a different function on our chain would make a contract written for Ethereum call the wrong code. Verifiers take the address by probe at deploy, so matching a Draft gains nothing today.
 **Cost if wrong.** A third-party contract written for a Draft EIP-8355 address does not find the precompile on our chains until the EIP is Final and the fork adds it.
 **Source.** Owner 2026-11-19, in chat: "OK, không đổi địa chỉ." (OK, do not change the address), on the controller's proposal to keep the `0x…5caa` range and add the Final address alongside once an EIP is Final.
+
+### NET-EVM-16 — Avalanche C-Chain and Fuji: draft profiles; lanes and readers follow the chain after Helicon
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: networks/evm.md#NET-EVM-16 · superseded-by: —
+
+**Rule.** (Summary; normative [evm.md](networks/evm.md#NET-EVM-16).) Seeded `draft` (`avalanche-mainnet` 43114, `avalanche-testnet` 43113, one shared genesis told apart by the chain id); `tag finalized`; logs at or below the final block; accepted without a receipt is `Pending`; gas limit = the estimate with the lane margin; at most 16 in flight per lane key; the per-transaction ceiling read live; no SCaaS set before Amsterdam, a single contract earlier under NET-EVM-18; `enabled` after the probes of NET-EVM-19.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q1 (wait for Amsterdam, a draft profile now); the lane facts are the chain's after Helicon (ACP-194).
+**Cost if wrong.** A fixed high gas limit pays half of it; a log read above the final block taken as absence; a Fuji endpoint answering for C-Chain.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C19, C22; owner: no): the header's `owner: yes` corrected to `owner: no` (review F11: the entry holds controller calls; the owner's part is ARCH-POS-19 Q1); `enabled` also needs NET-EVM-19's probes (review F10).
+
+### NET-EVM-17 — Polkadot Hub first, Moonbeam second: draft profiles, probes and measurement before `enabled`
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: networks/evm.md#NET-EVM-17 · superseded-by: —
+
+**Rule.** (Summary; normative [evm.md](networks/evm.md#NET-EVM-17).) Hub (`polkadot-hub-mainnet` 420420419, `polkadot-hub-testnet` 420420417, `polkadot-hub-westend` 420420421) is `enabled` only after the probes of every EVM profile (NET-EVM-19) and the weight-to-gas measurement on Paseo, whose `max_tx_gas` is the profile's gas cap; the storage deposit is a fee; Moonbeam (1284, 1287) follows with the same probes.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q2; CLI-RPC-03 and CLI-RPC-05 pin `chain_uid` and blocks by hash, and Hub's gas has no Ethereum figure.
+**Cost if wrong.** A pinned read answered from another block; an op priced in Ethereum gas that does not fit Hub.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C19, C22; owner: no): the header's `owner: yes` corrected to `owner: no` (review F11; the owner's part is ARCH-POS-19 Q2, the order); the Hub-only probe list moved to NET-EVM-19, which every EVM profile passes (review F10).
+
+### NET-EVM-18 — A contract deploys before a chain's Amsterdam fork only when its `amsterdam` build fits that chain
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: networks/evm.md#NET-EVM-18 · superseded-by: —
+
+**Rule.** (Summary; normative [evm.md](networks/evm.md#NET-EVM-18).) Five checks before the send: code within the chain's caps; the deploy transaction within its live cap at its pricing; an allow-list opcode scan (immediates walked by the compile target's table, boundaries from the compiler); the tests executed at the chain's fork on the artifact's bytes, with a control that must fail; every precompile called present on the chain. A testnet round trip before a mainnet deploy. One compile target stays (NET-EVM-06); a contract failing the opcode or precompile check waits for the owner.
+**Status.** SPECIFIED, nothing built. UNAUDITED. Today only `PqChatStore` qualifies.
+**Why.** Owner Q1 "per contract", made concrete without a second compile target (controller call C5 of ARCH-POS-20).
+**Cost if wrong.** A contract that uses an opcode the chain lacks deploys and fails at run time.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C5; owner: no): old, a linear disassembly against a list of new opcodes and the tests "against `anvil --hardfork`" (forge runs its own EVM at its `evm_version`, so that could pass under Amsterdam rules); new, the allow-list scan, execution at the chain's fork with a control that must fail, check (5) for precompiles, and a testnet round trip (review F7, F8).
+
+### NET-EVM-19 — Every EVM profile passes one probe set before `enabled`
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: networks/evm.md#NET-EVM-19 · superseded-by: —
+
+**Rule.** (Summary; normative [evm.md](networks/evm.md#NET-EVM-19).) Before `enabled`, from two independent RPC providers: H1 block 0 hash equal and stable 7 days; H2 EIP-1898 reads by a canonical hash, a made-up hash refused; H3 `latest` reorgs over 24 h; H4 a block asked by hash is that block or an error; H5 `latest` − `finalized` p99 over 7 days; H6 `eth_getLogs` limits; H7 `finalized` served and never moving back; H8 a read pinned by the newest head's hash answered from that block's state or refused. One foreground sample per invocation; the windows are the operator's scheduler. A failed probe stops `enabled` and goes to the owner.
+**Status.** SPECIFIED, nothing run. UNAUDITED.
+**Why.** CLI-RPC-03 and CLI-RPC-05 pin `chain_uid` and every agreed read by block hash, verified so far on `anvil` and Nethermind only; a check required on one chain kind and not another splits a rule by chain (review F10; controller call C19).
+**Cost if wrong.** A pinned read answered from another state on a chain already `enabled`.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
 ### NET-EVM-80 — First chain Gnosis, then Celo
 - old: UD:§1:first-chain · status: superseded · owner: yes · date: 2026-08-30 · normative: — · superseded-by: NET-EVM-03
 
@@ -11340,6 +11466,26 @@ The controller's calls of the round are a separate record, CLI-UAL-63.
 
 **Change (coordinator 2026-11-17, T13 C6 of Fable's code review, the range ruling; BUILT, UNAUDITED).** (13) gains a refusal. Old: `sign_near_transaction` / `signNearTransaction` signed `sha256` of any bytes. New: `Argument` when the first four bytes, read as a little-endian `u32`, are at or above 2^30: the two ranges NEP-461 reserves, 2^30 to 2^31 − 1 for on-chain actions (a NEP-366 delegate action) and 2^31 to 2^32 − 1 for off-chain messages (NEP-413). Reason: the call named for transactions also signed those payloads, which a verifier or relayer accepts; a Borsh `Transaction` starts with its `signer_id`'s length (at most 64), so no transaction is refused. `native.json`: a second one-time exception to (15), granted by the coordinator on C1's grounds (rows of this round, never merged or consumed) and named by the generator: the accepted 131,072-byte neighbour of `sign_near_transaction 131,073 bytes` is `0x00` bytes, not `0xa5` (it keeps testing the size bound), and the exact-tag row `… the NEP-413 tag, the next value accepted`, whose neighbour the range refuses, leaves; refusal rows for the two tags in use and for 2^30, 2^31 and 2^32 − 1. [Native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §8.1 item 3.
 
+### CLI-UAL-64 — ANS-104 data items as `arbundles` builds them, and a per-file upload key, in `ua-rs`
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/ua-libraries.md#CLI-UAL-64 · superseded-by: —
+
+**Rule.** (Summary; normative [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-64).) Layout, deep hash and id as `arbundles`; types 2 or 4 (ed25519, by the Turbo probe) and 3 (secp256k1, EIP-191); no type 1; no target, anchor or tags; type 3 with `v ∈ {27, 28}` and low `s`; the upload key `HKDF-SHA-256(ikm = app root key ‖ file key, info = "scaas/arweave/v1/upload" ‖ type ‖ ctSha256)`, derived in the one `ua-rs` call that seals the file, `ctSha256` computed there; a handle of usage `UploadSign` bound to that hash, which signs only the item `ua-rs` built after re-checking its data hash: one key, one byte string; clientkeys vectors first, cross-checked both ways against `arbundles` with tag, target and anchor rows.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner rulings ARCH-POS-19 (2) and Q5; a per-file key links no two uploads, and a key bound to the object `ua-rs` sealed signs one item only (controller calls C8, C9).
+**Cost if wrong.** Uploads linked by their owner key, or a handle that signs a caller's digest.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C8; owner: no): old, the key derived from the app root key and a `ctSha256` the caller passed (one key could sign many items; review F2); new, the app root key and the file key as `ikm`, `ctSha256` computed inside `ua-rs` over the object it sealed, signing only an item `ua-rs` built; a seed holder alone can no longer link uploads without the file keys (review F13); type 3's `v` and low `s` pinned and the cross-check run both ways (review F6).
+
+### CLI-UAL-65 — The file object on Arweave: `ar://<id>`, power-of-two buckets, the read check
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/ua-libraries.md#CLI-UAL-65 · superseded-by: —
+
+**Rule.** (Summary; normative [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-65).) `url` accepts `ar://<id>` (43 canonical base64url characters); the plaintext is framed `size (8 B) ‖ file ‖ zero pad` up to the bucket, the smallest power of two at least `max(2^16, size + 8)` in integers, at most 2^30 B (2^27 B on wasm32), and encrypted, so the object is exactly bucket + 16 B and `ctSha256` is its SHA-256; a reader checks the exact length and `ctSha256` before decryption, then the frame, the zero pad, `size` and `sha256` before any plaintext leaves `ua-rs`; a cache keyed by the plaintext `sha256`; new vector rows in every client.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q4 (`ar://`); controller calls Q6, C10, C15, C17 (buckets, padding inside the AEAD, the plaintext check, the read cap).
+**Cost if wrong.** Anyone learns the exact size from the public object, or a client shows a file other than the one the message signed.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C10, C15, C17, C22; owner: no): the header's `owner: yes` corrected to `owner: no` (review F11; the owner's part is ARCH-POS-19 Q4, `ar://`). Old, `ct ‖ 0x00…` up to the bucket with `ctSha256` of `ct` (the GCM tag ends in a non-zero byte, so stripping the zeros gave the exact size, review F1, P1); new, the padding inside the AEAD as above, which changes UA-7's `ct` for `ar://` files (UA-7 §6.4.1 Change). The plaintext `size` and `sha256` checked in `open_file` (review F3); buckets in integers with edge rows (review F20); the in-memory cap and the exact-length read (review F5).
+
 ## 40. Clients — network crate (`scaas-rpc`)
 
 The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the [scaas-rpc spec](superpowers/specs/2026-11-17-scaas-rpc.md), reviewed by Fable on 2026-11-17 (findings F1–F28, I1–I3, all applied before any code).
@@ -11435,6 +11581,9 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", the rpc spe
 **Why.** ARCH-POS-15 (owner 2026-11-08): the same signed bytes to one or more nodes, never re-signed per node. A refusing endpoint may lie or may have relayed the bytes anyway. Fable F24: a blob transaction's network form is not hashed as its id.
 **Cost if wrong.** A re-signed copy lands twice; a refusal read as final makes a user sign again while the first transaction lands.
 **Source.** ARCH-POS-15; Fable review 2026-11-17 F23, F24, F27; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.7.
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C20; owner: no; status: SPECIFIED): one exception to "no automatic re-send": the SDK re-posts the same bytes of an unsettled Arweave item (same id) at 24 h, 72 h and 7 days ([CLI-SDK-21](clients/scaas-sdk.md#CLI-SDK-21)); the crate itself re-sends nothing. Why: the bytes and the id are the same, so nothing lands twice, and the sender's device holds the only copy until settlement (review F14). The owner may override.
+
+Change (owner 2026-11-21, "agreed, the CLI-RPC-08 exception"; owner: yes; status: SPECIFIED): one exception to CLI-RPC-08's "no automatic re-send": an Arweave upload not yet settled ([CLI-SDK-21](clients/scaas-sdk.md#CLI-SDK-21), [CLI-RPC-13](clients/scaas-rpc.md#CLI-RPC-13)) is re-posted with the same signed bytes at 24 h, 72 h and 7 days, asking the payer again if a re-post is refused for payment; after that it shows as `UploadUnsettled`. No other send is re-sent automatically. Spec `superpowers/specs/2026-11-21-avax-polkadot-arweave.md` revision 2, F14.
 
 ### CLI-RPC-09 — A transaction ends only on facts from a decisive read at a final block
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-09 · superseded-by: —
@@ -11473,6 +11622,26 @@ Change (2026-11-17, owner: yes (the owner took the review's proposal, Fable code
 **Why.** Owner 2026-11-11: the verifier's strict-majority option is built in `scaas-rpc`; until then its `rpc_urls` point only at nodes its operator trusts. Fable F9: reading first changes the cost before the proof check, so it is limited to the option and its refusal order pinned; F10: the verifier's agreed path must be the crate's EIP-1898 code, for `probe` too. Owner 2026-11-17 (CLI-RPC-50): one classifier.
 **Cost if wrong.** A lying RPC passes an off-chain key check that `OFFCHAIN` tokens trust the verifier for (CTR-PQZ-30); or a garbage proof costs every key read on every endpoint unannounced.
 **Source.** CTR-PQZ-29 Change of 2026-11-11; owner 2026-11-11 "hoãn, ghi rõ chỉ chạy với node của mình", corrected to "node do họ tin cậy"; Fable review 2026-11-17 F9, F10; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §11.2.
+
+### CLI-RPC-13 — Arweave reads: a gateway list, the caller's check, every attachment read feeds a decryption
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/scaas-rpc.md#CLI-RPC-13 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-13).) Gateways as CLI-RPC-02 lists, identity by `GET /info`; `data(id, len, purpose, check)` streamed within the exact length, an announced other length refused unread, no `Range`, a per-platform cap, a body failing the check is that gateway's failure; failover or strict majority by SHA-256; discovered gateways never alone (CLI-RPC-06); `status` by GraphQL, bounded; `settled` = a strict majority of at least two gateways of different operators, a block at least `depth` below the tip, and the bytes read back.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** ARCH-POS-15 applied to gateways; the check is cheap (controller call C12).
+**Cost if wrong.** A gateway serving chosen bytes to a decryption, or an unbounded body.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C16, C17; owner: no): old, `data(id, max_bytes, …)` read to the bound and "settled" when one gateway shows a block height under the list's policy (failover by default); new, the exact length streamed and the platform cap (review F5), and settlement by agreement, depth and the bytes, so the threat table and this rule agree (review F4).
+
+### CLI-RPC-14 — Arweave uploads: the same signed item to a bundler list, no keys, never final
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/scaas-rpc.md#CLI-RPC-14 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-14).) `upload(item, paid_by)` parses the header within bounds (types 2, 3, 4), computes the id locally, posts the same bytes; a receipt for another id is a refusal; HTTP 402 is `PaymentRequired`; merged as CLI-RPC-08; `paid_by` sent as `x-paid-by` to that bundler only.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** CLI-RPC-08's send rule; a Turbo receipt is acceptance, not retrieval (controller call C11).
+**Cost if wrong.** A bundler receipt for other bytes taken as an upload.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C20; owner: no): settlement read through CLI-RPC-13's `settled`; the crate re-sends nothing, the SDK's bounded re-post being the one exception to CLI-RPC-08 (review F4, F14).
 
 <a id="CLI-RPC-50"></a>
 ### CLI-RPC-50 — Owner rulings on the `scaas-rpc` questions, 2026-11-17
@@ -11740,6 +11909,16 @@ Change (owner 2026-11-17, "OK, all four points as proposed", relayed by the coor
 Change (coordinator, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md` in the pqvault worktree, kept outside the tracked files), findings R2, R3, R4, R6, R7, R9, R14; status: SPECIFIED, nothing built): (R2) every key handle carries one usage (`Derive`, `Data`, `KeyWrap`) fixed when made, refused for any other use (`AppKeyUsage`); `seal_key` authenticates `"scaas/ua/v1/keywrap" ‖ usage ‖ aad`, so neither an `open` of a key wrap nor an `open_key` of a data seal succeeds. (R3) the ratchet calls `pqchat-core` needs (`mac_derive`, the nonce source `FromHandle`, `destroy`, `app_root_key`, `kem_wrap_to_key`) and an arena limit (`AppArenaFull`). (R4) scoping is collision avoidance among the cores an app links, not isolation; label prefixes may not overlap; the review shows the domain name and `app_id` from the typed data; only reviewed cores are linked. (R6) the portable domain is exactly `name, version, salt`; its typehash differs from every SCaaS portable domain's. (R7) `verify_app_record`, `random_bytes`, `kem_unwrap` by `keyId` (`KemKeyGone`), the KEM wrap's KDF info `label ‖ aad ‖ scheme ‖ keccak256(kemPk)`. (R9) old, "the app core stays inside the SDK"; new, "the task stops and the owner decides". (R14) on the chain-bound path the purpose list is the guard and the contract list depth; the purpose drift test asserts the `scaas.ua.purpose.*` string form.
 
 Change (coordinator, 2026-11-17, findings K4 and K5 of Fable's `pqchat-core` spec review (`scratchpad/pqchat-core-review/20261117-19-fable-fable-high-spec.md` in the pqchat-core worktree, kept outside the tracked files); status: SPECIFIED): (K4) old, "the usage is an input of the derivation's info"; new, the usage is handle metadata enforced at use and never enters any derivation's info, HMAC message or other byte, so UA-7's, clientkeys `pqchat.js`'s and the pqvault spec's pinned bytes stay as they are; `seal_key`'s key-wrap AAD (`"scaas/ua/v1/keywrap" ‖ u8(usage) ‖ aad`) is a new format of the SDK's own, and `seal` / `open` refuse an AAD starting with that constant; a public MAC output of at most 8 bytes (`mac_public`) and `derive` with a binary context are added. (K5) `kem_wrap` builds the scheme byte and `kemPkHash` from the recipient's KEM key record at `kem_version` itself; the app core never passes them; the wrapped key is sealed by AES-256-GCM with nonce `0^96` as UA-7 pins it.
+
+### CLI-SDK-21 — `upload_file` / `fetch_file`: the free tier for the smallest bucket, the operator payer for the rest
+- old: — · status: current · owner: no · date: 2026-11-21 · normative: clients/scaas-sdk.md#CLI-SDK-21 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-21).) `seal_for_arweave` seals, frames, derives the upload key and signs in one `ua-rs` call; `upload_file` takes only that item and posts it through CLI-RPC-14 on the user's send; the 2^16-B bucket on the free tier (best effort), larger ones `x-paid-by` the node's payer (NODE-SPN-05; `PayerUnavailable` while none is configured); the signed bytes kept until CLI-RPC-13 reports them settled, re-posted unchanged at 24 h, 72 h and 7 days, then `UploadUnsettled`; `fetch_file` reads the exact length with the `ctSha256` check; `open_file` checks the frame, `size` and `sha256` in `ua-rs`; PqVault writes an `ar://` item after one gateway read passed; the user told the object is public and permanent; no operator credential in the client; the payer link is a stated metadata cost.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Owner Q4 and Q5 (`ar://`; operator payer, free tier, no credential in the client); controller calls C8, C11, C13–C17, C20.
+**Cost if wrong.** A client holding an operator credential, or a per-user payer linking all of a user's uploads.
+**Source.** [spec](superpowers/specs/2026-11-21-avax-polkadot-arweave.md) and its [plan](superpowers/plans/2026-11-21-avax-polkadot-arweave.md); owner rulings and controller calls in [ARCH-POS-19](#ARCH-POS-19) and [ARCH-POS-20](#ARCH-POS-20).
+Change (2026-11-21, the spec's revision 2 after Fable's review; controller call, ARCH-POS-20 C8, C15, C16, C20, C22; owner: no): the header's `owner: yes` corrected to `owner: no` (review F11; the owner's parts are ARCH-POS-19 Q4 and Q5). Old, `upload_file(app, ct, ct_sha256)` with the caller's hash (review F2), `open_file` without the plaintext check (review F3), a re-post every 24 h with no end (review F14); new, `seal_for_arweave` and `upload_file(app, item)`, `open_file(app, object, key, size, sha256)`, the bounded re-post schedule and its terminal state, the free tier best effort (review F16), the user notice of permanence (review F17).
 
 ### CLI-SDK-30 — Owner rulings of the SDK spec, 2026-11-11 to 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-SDK-30 · superseded-by: —

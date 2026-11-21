@@ -45,6 +45,8 @@ contract Deploy is DeployBase {
         );
         _setup();
         string memory book = _bookPath(uid, ".json"); // the key now: DEPLOY_NAME_REQUIRED before anything is sent
+        _requireKindHere("OpenFactory", uid); // NET-ALL-25 (C18): no homeChain kind on a shared genesis, nothing sent
+        if (deployPqChat) _requireKindHere("PqChat", uid);
         vm.startBroadcast(pk);
         SmartKeyAccountFactory accounts = new SmartKeyAccountFactory{salt: salt}(uid);
         _gate(address(accounts));

@@ -26,6 +26,20 @@ contract BookHarness is DeployBook {
     function check(string calldata j) external view returns (string memory) {
         return _checkBook(j, "book");
     }
+
+    string internal tablePath;
+
+    function setTable(string calldata p) external {
+        tablePath = p;
+    }
+
+    function _bookTable() internal view override returns (string memory) {
+        return bytes(tablePath).length != 0 ? tablePath : super._bookTable();
+    }
+
+    function kind(string calldata k, bytes32 uid) external view {
+        _requireKindHere(k, uid);
+    }
 }
 
 /// NET-EVM-13: a book's key from `chain-uids.json` by (chainId, chain_uid), else `DEPLOY_NAME`, else a named fail; the
@@ -34,6 +48,7 @@ contract BookHarness is DeployBook {
 contract DeployBookTest is Test {
     bytes32 constant SCAAS_UID = 0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13;
     bytes32 constant HOODI_UID = 0xbbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b;
+    bytes32 constant AVAX_UID = 0x31ced5b9beb7f8782b014660da0cb18cc409f121f408186886e1ca3e8eeca96b; // 43114 and 43113
     BookHarness h;
 
     function setUp() public {
@@ -146,5 +161,103 @@ contract DeployBookTest is Test {
             )
         );
         h.check('{"chain_uid":"0x01","token_factory":"0x0000000000000000000000000000000000000001"}');
+    }
+
+    /// NET-ALL-25: the two Avalanche rows (one genesis, chain ids 43114 and 43113) both resolve.
+    function test_avalancheRowsResolve() public {
+        vm.chainId(43114);
+        (string memory k, string memory n, string memory net) = h.key(AVAX_UID);
+        _eq3(k, n, net, "avalanche-mainnet", "Avalanche C-Chain", "mainnet");
+        vm.chainId(43113);
+        (k, n, net) = h.key(AVAX_UID);
+        _eq3(k, n, net, "avalanche-testnet", "Avalanche Fuji", "testnet");
+    }
+
+    /// NET-ALL-25: a second row of one (chainId, chainUid) pair is refused by name; the same genesis under its own chain id
+    /// (public chains sharing one) resolves.
+    function test_pairTakenRefused() public {
+        string memory p = "./deployments/deploybook-table-test.json";
+        vm.createDir("./deployments", true);
+        string memory r = string.concat('"chainUid":"', vm.toString(AVAX_UID), '","private":false}');
+        vm.writeFile(
+            p,
+            string.concat(
+                '{"chains":[{"key":"avalanche-mainnet","name":"a","chainId":43114,"network":"mainnet",',
+                r,
+                ',{"key":"copy-testnet","name":"c","chainId":43113,"network":"testnet",',
+                r,
+                ',{"key":"avalanche-testnet","name":"b","chainId":43113,"network":"testnet",',
+                r,
+                "]}"
+            )
+        );
+        h.setTable(p);
+        vm.chainId(43114);
+        (string memory k,,) = h.key(AVAX_UID); // twin: the pair held once
+        assertEq(k, "avalanche-mainnet");
+        vm.chainId(43113);
+        vm.expectRevert(
+            bytes(
+                "CHAIN_PAIR_TAKEN: avalanche-testnet repeats the (chainId, chainUid) pair of another row (NET-ALL-25)"
+            )
+        );
+        h.key(AVAX_UID);
+        vm.removeFile(p);
+    }
+
+    /// NET-ALL-25: a private chain's genesis repeated under a new chain id is refused, DEPLOY_NAME or not; its own pair, and
+    /// a public chain's genesis under a new chain id, are not.
+    function test_privateGenesisRefused() public {
+        vm.chainId(7623);
+        bytes memory e = bytes(
+            "CHAIN_UID_PRIVATE: chain 7623 has the genesis of the private chain scaas-testnet; a chain we run that forks is a new chain with its own genesis (NET-ALL-25)"
+        );
+        vm.expectRevert(e);
+        h.key(SCAAS_UID);
+        h.setName("fork-testnet");
+        vm.expectRevert(e);
+        h.key(SCAAS_UID);
+        (string memory k,,) = h.key(bytes32(uint256(1))); // twin: its own genesis
+        assertEq(k, "fork-testnet");
+        vm.chainId(43112); // twin: a public chain's genesis under a new chain id
+        h.setName("avax-copy-testnet");
+        (k,,) = h.key(AVAX_UID);
+        assertEq(k, "avax-copy-testnet");
+        vm.chainId(7622); // twin: the private chain itself
+        h.setName("");
+        (k,,) = h.key(SCAAS_UID);
+        assertEq(k, "scaas-testnet");
+    }
+
+    /// NET-ALL-25 (C18): the deploy gate refuses `PqChat`, `OpenFactory` and `PqVault` on a genesis another row shares, and
+    /// passes `PqChatStore` there; on a genesis no other row shares, every kind passes.
+    function test_homeChainKindsRefused() public {
+        string[3] memory ks = ["PqChat", "OpenFactory", "PqVault"];
+        uint256[2] memory ids = [uint256(43114), 43113];
+        for (uint256 c; c < 2; ++c) {
+            vm.chainId(ids[c]);
+            string memory other = c == 0 ? "avalanche-testnet" : "avalanche-mainnet";
+            for (uint256 i; i < 3; ++i) {
+                vm.expectRevert(
+                    bytes(
+                        string.concat(
+                            "HOME_CHAIN_SHARED_GENESIS: ",
+                            ks[i],
+                            " keeps homeChain records; chain ",
+                            vm.toString(ids[c]),
+                            " shares its chain_uid with ",
+                            other,
+                            " (NET-ALL-25)"
+                        )
+                    )
+                );
+                h.kind(ks[i], AVAX_UID);
+            }
+            h.kind("PqChatStore", AVAX_UID); // twin: the store keeps no homeChain record
+        }
+        vm.chainId(7622);
+        for (uint256 i; i < 3; ++i) {
+            h.kind(ks[i], SCAAS_UID); // twin: a genesis no other row shares
+        }
     }
 }

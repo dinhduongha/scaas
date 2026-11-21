@@ -64,6 +64,9 @@ pub enum Rule {
     /// instance answers no `chainUid()`
     /// (its records are portable): the listing binds it, and no other kind's rule takes it.
     FactoryClass(u16),
+    /// `PqChatStore` (`pqchatstore`, CTR-CHAT-22): a target whose runtime code hash is the release data's
+    /// ([`PQCHATSTORE_RUNTIME_HASH`]), read once and cached; it answers no `chainUid()` and is made by no factory.
+    ChatStore,
 }
 
 /// `PqChat`'s class on `OpenFactory`'s generic path (D22).
@@ -73,6 +76,18 @@ pub const CLASS_PQVAULT: u16 = 4;
 
 /// The factory kinds whose writes run on an instance of their class (`Rule::FactoryClass`), with their contract names.
 const FACTORY_KINDS: [(&str, &str); 2] = [("pqchat", "PqChat"), ("pqvault", "PqVault")];
+
+/// CTR-CHAT-22: `PqChatStore`'s runtime code hash, `release-data/PqChatStore.json`'s `runtimeCodeHash` (plan T6).
+pub static PQCHATSTORE_RUNTIME_HASH: std::sync::LazyLock<B256> = std::sync::LazyLock::new(|| {
+    let r: serde_json::Value = serde_json::from_str(include_str!(
+        "../../smartcontracts/evm/release-data/PqChatStore.json"
+    ))
+    .expect("release data");
+    r["runtimeCodeHash"]
+        .as_str()
+        .and_then(|h| h.parse().ok())
+        .expect("release data: runtimeCodeHash")
+});
 
 /// The rule of a contract kind (`typed::Row::contracts`).
 pub fn rule_of(contract: &str) -> Option<Rule> {
@@ -85,6 +100,7 @@ pub fn rule_of(contract: &str) -> Option<Rule> {
         "gov_router" => Rule::GovRouter,
         "pqchat" => Rule::FactoryClass(CLASS_PQCHAT),
         "pqvault" => Rule::FactoryClass(CLASS_PQVAULT),
+        "pqchatstore" => Rule::ChatStore,
         _ => return None,
     })
 }
@@ -786,7 +802,7 @@ pub fn allowed(rule: Rule, f: &Facts) -> bool {
             Rule::Dex => f.dex,
             Rule::UaRegistry => f.ua_registry,
             Rule::GovRouter => true,
-            Rule::FactoryClass(_) => false,
+            Rule::FactoryClass(_) | Rule::ChatStore => false, // their own checks
         }
 }
 
@@ -1381,6 +1397,10 @@ pub struct Guard {
     /// `params.relay_unsigned_pqvault` (default false): the lane relays `PqVault`'s unsigned `addVaultWraps` at its own gas
     /// (CTR-PQV-11).
     relay_unsigned_pqvault: bool,
+    /// The runtime code hash a `pqchatstore` target must have ([`PQCHATSTORE_RUNTIME_HASH`]).
+    chatstore_code_hash: B256,
+    /// Targets whose code had that hash ([`Guard::require_chatstore`]): deployed code never changes.
+    chatstores: Mutex<HashSet<Address>>,
     /// Tokens whose UA ledger is on (`registry() ≠ 0`).
     ua_ledger: Mutex<HashSet<Address>>,
     /// A token's `eip712Domain().name` (an immutable of its kind), read once ([`Guard::require_kind`]).
@@ -1421,6 +1441,8 @@ impl Guard {
                 Some(v) => anyhow::bail!("params.relay_unsigned_pqvault must be a bool (relay PqVault's unsigned addVaultWraps \
                     at the lane's gas), not {v}"),
             },
+            chatstore_code_hash: *PQCHATSTORE_RUNTIME_HASH,
+            chatstores: Default::default(),
             ua_ledger: Default::default(),
             domain_names: Default::default(),
             op_stack: match cfg.params.get("l1_fee") {
@@ -1675,9 +1697,10 @@ impl Guard {
         };
         // UA-7 P17 (owner 2026-11-05): a `PqChat` write with no `UASig` (`storeMessage`, `addWraps`) runs paid, as a relay fee's call
         // (the branch above), or under the operator's `params.relay_unsigned_pqchat`: by default the lane pays no gas for it
-        // CTR-PQV-11: `PqVault`'s unsigned `addVaultWraps` the same, under `params.relay_unsigned_pqvault`
+        // CTR-PQV-11: `PqVault`'s unsigned `addVaultWraps` the same, under `params.relay_unsigned_pqvault`; CTR-CHAT-22:
+        // `PqChatStore`'s `storeMessage` under `params.relay_unsigned_pqchat`
         let lane_pays = match contract {
-            "pqchat" => Some((self.relay_unsigned_pqchat, "relay_unsigned_pqchat")),
+            "pqchat" | "pqchatstore" => Some((self.relay_unsigned_pqchat, "relay_unsigned_pqchat")),
             "pqvault" => Some((self.relay_unsigned_pqvault, "relay_unsigned_pqvault")),
             _ => None,
         };
@@ -1689,6 +1712,9 @@ impl Guard {
                 (RelayFeeRouter.relay), or the operator sets params.{param}",
                 row.entry
             )));
+        }
+        if rule == Rule::ChatStore {
+            return self.require_chatstore(chain, w.to).await;
         }
         self.check_payee(w.typed.as_ref().and_then(|t| t.payee))?;
         // pay-meta-tax spec §7.1: the `body` of a pay entry's `PayMeta` (plan T83: `payNo` a fixed word), before any read or
@@ -1939,6 +1965,29 @@ impl Guard {
     /// `infoOf(to)` on `token_factory`: `(contractClass, version)` of a contract it made, cached (a record never changes once
     /// made); `None` with no factory configured, for a contract it did not make (class 0, asked again next time), or a factory
     /// that does not answer.
+    /// T9 (CTR-CHAT-22): a `pqchatstore` target's runtime code hash is the release data's, else `CHATSTORE_CODE_HASH` by name; a
+    /// match is kept.
+    async fn require_chatstore(&self, chain: &Chain, to: Address) -> Result<(), Refusal> {
+        if self.chatstores.lock().is_ok_and(|s| s.contains(&to)) {
+            return Ok(());
+        }
+        let code = chain
+            .code_at(to)
+            .await
+            .map_err(|e| Refusal::Transport(format!("eth_getCode: {e}")))?;
+        let h = alloy::primitives::keccak256(&code);
+        if h != self.chatstore_code_hash {
+            return Err(Refusal::Policy(format!(
+                "CHATSTORE_CODE_HASH: the runtime code hash at {to:#x} is {h:#x}, not PqChatStore's release {:#x}",
+                self.chatstore_code_hash
+            )));
+        }
+        if let Ok(mut s) = self.chatstores.lock() {
+            s.insert(to);
+        }
+        Ok(())
+    }
+
     async fn listed(&self, chain: &Chain, to: Address) -> Result<Option<(u16, u64)>, Refusal> {
         if let Some(l) = self.listed.lock().ok().and_then(|m| m.get(&to).copied()) {
             return Ok(Some(l));
@@ -2767,11 +2816,12 @@ mod tests {
         // round 3zc (CTR-GOV-30): -> 143, the router's two cap setters; CTR-UA-44 (TODO 3ze): -> 144, the registry's `updateMsig`
         // NODE-JOB-29 (TODO 3zh MD-14): -> 145, the registry's `cacheExpandedKey`; set-auditor (CTR-GOV-31): -> 147, the router's
         // `mtxSetAuditorKey`, `mtxSetAuditorUA`; bls-multi Task 10: -> 148, the registry's `registerBlsMulti`
-        // PqVault plan V8 (CTR-PQV-11): -> 156, `PqVault`'s eight plain rows
+        // PqVault plan V8 (CTR-PQV-11): -> 156, `PqVault`'s eight plain rows; chains-arweave T9: -> 157, `PqChatStore`'s
+        // `storeMessage` (contract kind `pqchatstore`)
         assert_eq!(
             typed::rows().iter().filter(|r| !r.entry.is_empty()).count(),
-            156,
-            "table rows: 111 typed with an entry, 45 plain"
+            157,
+            "table rows: 111 typed with an entry, 46 plain"
         );
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
@@ -2812,7 +2862,7 @@ mod tests {
             // round 3zb + 3zc: the direct entries with the chain word (governed, relayed through the router only) and the cap setters
             "mint(address,uint256,bytes32)", "setListedOnly(bool,bytes32)", "setMaxSupply(uint256,bytes32)",
             "setMaxWrapSupply(uint256,bytes32)"] {
-            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat", "pqvault"] {
+            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat", "pqvault", "pqchatstore"] {
                 let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) };
@@ -6799,5 +6849,138 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 r.entry
             );
         }
+    }
+
+    /// T9 (CTR-CHAT-22, CTR-CHAT-19): a `storeMessage` job of contract kind `pqchatstore` runs on a target whose runtime code hash is
+    /// `PqChatStore`'s release (`release-data/PqChatStore.json`), read once and cached, under the operator's lane policy
+    /// `params.relay_unsigned_pqchat`; other code at the target (another hash, none) is
+    /// `CHATSTORE_CODE_HASH` by name; by default the unsigned write is `UNSIGNED_WRITE_NOT_PAID`, before any read. The pinned hash
+    /// is the release data's.
+    #[tokio::test]
+    async fn a_pqchatstore_job_runs_on_the_pinned_code_under_the_lane_policy() {
+        assert_eq!(
+            format!("{:#x}", *PQCHATSTORE_RUNTIME_HASH),
+            "0xb7c149f0bd0016966b2ddb38eac3da410aca45ab4f24bfb966a4747eb2d23a58",
+            "the release data's runtime code hash"
+        );
+        let uid = B256::repeat_byte(0x31);
+        let (store, other, empty) = (
+            Address::repeat_byte(0x5c),
+            Address::repeat_byte(0x5d),
+            Address::repeat_byte(0x5e),
+        );
+        let (code, wrong) = (vec![0x60u8, 0x01, 0x00], vec![0x60u8, 0x02, 0x00]);
+        let reads: Arc<Mutex<usize>> = Default::default();
+        let r2 = reads.clone();
+        let codes: HashMap<Address, Vec<u8>> = [(store, code.clone()), (other, wrong)].into();
+        let app = axum::Router::new().route(
+            "/",
+            axum::routing::post(move |axum::Json(q): axum::Json<serde_json::Value>| {
+                let (codes, r2) = (codes.clone(), r2.clone());
+                async move {
+                    if let Some(b) = block0_of(&q, uid, 31337) {
+                        return axum::Json(
+                            serde_json::json!({"jsonrpc": "2.0", "id": q["id"], "result": b}),
+                        );
+                    }
+                    let result = match q["method"].as_str().unwrap() {
+                        "eth_getCode" => {
+                            *r2.lock().unwrap() += 1;
+                            let at: Address = q["params"][0].as_str().unwrap().parse().unwrap();
+                            serde_json::json!(format!(
+                                "0x{}",
+                                alloy::hex::encode(codes.get(&at).cloned().unwrap_or_default())
+                            ))
+                        }
+                        "eth_call" => serde_json::json!(format!("0x{}", alloy::hex::encode(uid))),
+                        _ => serde_json::Value::Null,
+                    };
+                    axum::Json(
+                        serde_json::json!({"jsonrpc": "2.0", "id": q["id"], "result": result}),
+                    )
+                }
+            }),
+        );
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let cfg = ChainCfg {
+            evm_chain_number: 31337,
+            rpc_urls: vec![url],
+            chain_uid: Some(uid),
+            ..Default::default()
+        };
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let work = |to: Address| {
+            let op = serde_json::json!({"entry": "storeMessage", "contract": "pqchatstore", "token": format!("{to:#x}"),
+                "validUntil": "4000000000", "args": {"v": "1", "hint": "0x0102030405060708", "env": "0xabcdef"}});
+            crate::submit::work_of_op(Some(1), &op, None).unwrap().0
+        };
+        let with_code = |c: &ChainCfg| {
+            let mut g = Guard::new(c, Default::default()).unwrap();
+            g.chatstore_code_hash = alloy::primitives::keccak256(&code);
+            g
+        };
+        // the default policy: an unsigned write, unpaid, is not relayed; nothing read
+        for g in [
+            with_code(&cfg),
+            with_code(&with_param(
+                &cfg,
+                "relay_unsigned_pqchat",
+                toml::Value::Boolean(false),
+            )),
+        ] {
+            let e = g.check(&chain, &work(store)).await;
+            assert!(
+                matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("UNSIGNED_WRITE_NOT_PAID")),
+                "{e:?}"
+            );
+        }
+        assert_eq!(*reads.lock().unwrap(), 0, "refused before any read");
+        // the operator's lane policy: the pinned code runs, read once and cached; other code is refused by name
+        let open = with_code(&with_param(
+            &cfg,
+            "relay_unsigned_pqchat",
+            toml::Value::Boolean(true),
+        ));
+        for _ in 0..2 {
+            open.check(&chain, &work(store))
+                .await
+                .unwrap_or_else(|e| panic!("the pinned code: {e:?}"));
+        }
+        assert_eq!(*reads.lock().unwrap(), 1, "the code read once, then cached");
+        for (to, what) in [(other, "another code hash"), (empty, "no code")] {
+            let e = open.check(&chain, &work(to)).await;
+            assert!(
+                matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("CHATSTORE_CODE_HASH")),
+                "{what}: {e:?}"
+            );
+        }
+        // the release's own hash: the stand-in code is not PqChatStore's
+        let real = Guard::new(
+            &with_param(&cfg, "relay_unsigned_pqchat", toml::Value::Boolean(true)),
+            Default::default(),
+        )
+        .unwrap();
+        let e = real.check(&chain, &work(store)).await;
+        assert!(
+            matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("CHATSTORE_CODE_HASH")),
+            "{e:?}"
+        );
+        // `PqChat`'s rows are no `pqchatstore` row, and the reverse: one entry, one kind each
+        let sel = store_message_selector();
+        assert!(row(sel, "pqchatstore").is_some() && row(sel, "pqchat").is_some());
+        let theirs: Vec<&str> = typed::rows()
+            .iter()
+            .filter(|r| r.contracts.contains(&"pqchatstore"))
+            .map(|r| r.entry)
+            .collect();
+        assert_eq!(theirs, ["storeMessage"], "the store's one write");
+    }
+
+    fn store_message_selector() -> [u8; 4] {
+        alloy::primitives::keccak256("storeMessage(uint8,bytes8,bytes)")[..4]
+            .try_into()
+            .unwrap()
     }
 }
