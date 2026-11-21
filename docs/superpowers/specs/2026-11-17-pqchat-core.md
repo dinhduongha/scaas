@@ -81,8 +81,7 @@ node lists.
 
 - No cryptography, no signed or encrypted byte format, no Matrix client, no RPC client of its own (CLI-PQC-01).
 - No change to the `PqChat` contract, its records, `DS_C`, `PURPOSE_PQCHAT` or UA-7; no new vector format (new rows only).
-- Out of this round (CLI-PQC-02), each PLANNED in the UA-7 plan's later tasks: calls (UA-7 §10, P21–P23, P30), attachments
-  (`file`, P28), HCS (§7.3), Waku (§7.6), libp2p (§7.5), device linking (P6), the epoch-key export (§14 O5), records authored by an
+- Out of this round (CLI-PQC-02), each PLANNED in the UA-7 plan's later tasks: calls (UA-7 §10, P21–P23, P30), HCS (§7.3), Waku (§7.6), libp2p (§7.5), device linking (P6), the epoch-key export (§14 O5), records authored by an
   `msig`, the unlinkable mode (§13), MLS. Other families: each `pqchat-<family>` round.
 - No UI, no view model: the app's. No push (UA-7 P28).
 
@@ -497,7 +496,8 @@ controller proposal already in [ua-libraries.md](../../clients/ua-libraries.md#p
 **O9 — Attachments.** The `file` content carries its key inside the plaintext (P49), so sending one means a fresh key whose bytes
 enter the content. (a) Out of this round (as the app's contract §11.6: attachments not in its first version). (b) An SDK call that
 encrypts a file under a fresh key and returns the ciphertext and the key as `Plaintext` content. **Recommendation: (a) now, (b)**
-with the attachment task.
+with the attachment task. **Owner 2026-11-21: (b), in this round** ("Đưa vào"): the file sealed under a fresh key by an SDK
+call, the ciphertext on Arweave (`ar://<id>`), `ctSha256` checked before opening, size padded; plan T10b, after TODO 8i's research.
 
 **O10 — The e2e homeserver.** (a) Synapse in Docker (what matrix-rust-sdk's own integration tests use). (b) A lighter server
 (Conduit family). **Recommendation: (a)**, capped with `--memory 1g`, one container, removed after the run.

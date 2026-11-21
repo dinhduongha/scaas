@@ -107,6 +107,7 @@ only `TODO.md`.
 | T8 | The Matrix transport trait, binding and conformance | T6 |
 | T9 | Recovery from state, pending until accepted, locked seed, device binding | T7, T8 |
 | T10 | Public topics | T4 |
+| T10b | Attachments (owner 2026-11-21, O9 (b)): the SDK's file-seal call, `file` content sent and read, ciphertext on Arweave, `ctSha256` checked, size padded | T6, TODO 8i research + its `ua-rs` / `scaas-rpc` parts |
 | T11 | **Real-crypto end-to-end run, local** | T1–T10 |
 | T12 | Bindings check over the one library | T11, SDK T20 |
 | T13 | The same end-to-end run on the SCaaS testnet | T11; the next testnet reset; the owner's word |

@@ -11709,6 +11709,8 @@ Change (2026-11-17, Fable's review of `3a5ece097` applied; status: SPECIFIED): t
 
 Change (2026-11-17, Fable's review of `3a5ece097` applied, with the coordinator's calls; status: SPECIFIED): `msig` authors (an `msig` admin's epoch or removal, an `msig` topic owner) move out of this round, PLANNED (`MsigAuthorPlanned`), since co-signers need the full record on other devices (K28).
 
+Change (owner 2026-11-21, "Đưa vào", after "images, files and data embedded in a message or a vault item may be encrypted and pushed to Arweave"; owner: yes; status: SPECIFIED, nothing built): **attachments join this round**, O9 (b). Old: `file` attachments out of the round, O9 (a). New: the `file` content (UA-7 P28) is sent and read; an SDK call seals the file under a fresh key with no key byte leaving `ua-rs`; the ciphertext goes to Arweave (`url` = `ar://<id>`), the reader checks `ctSha256` before opening, the size is padded to buckets. Why: the owner wants images and files in messages and vault items, stored on Arweave. Cost: the attachment task waits for the Arweave research (TODO 8i) and a store reader in `scaas-rpc`. Normative: [CLI-PQC-02](clients/pqchat-core.md#CLI-PQC-02).
+
 ### CLI-PQC-03 — Secrets stay below the SDK: key handles only, only decrypted plaintext leaves
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-03 · superseded-by: —
 
