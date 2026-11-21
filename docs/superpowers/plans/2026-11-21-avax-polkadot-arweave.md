@@ -435,6 +435,11 @@ Keys and data are throwaway and derived from no real root; no key in any committ
 Owner 2026-11-22: the payer service is part of this plan, on branch `chains-arweave` (the plan's node tasks stay there). Until it is
 built, an upload above the free tier is `PayerUnavailable` (T20); T20 does not wait for it.
 
+**Optional since 2026-11-22 (owner):** the user may pay for an upload themselves (self-pay: Turbo credits topped up from
+the user's own wallet, or a per-upload payment), as self-relay on every chain; T20 builds that path, so Arweave never depends on
+the node. The payer service stays an operator convenience. Self-pay links the user's upload keys at Turbo through the paying
+wallet: stated in the spec's threat notes, and the client warns.
+
 **Files:** `scaas-node/src/` (a gateway route, its policy and budgets, the payer key's config by env var, file or keystore name),
 `scaas-node/node.example.toml` (the route, off, commented), `scaas-node/tests/`, `docs/node/sponsorship.md` (NODE-SPN-05 to BUILT
 once tested), `docs/node/gateway.md` (the route).
