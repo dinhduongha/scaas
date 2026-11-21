@@ -982,6 +982,8 @@ fn deploy_evm(id: u64, rpc: &str) -> Address {
         ])
         .env("PRIVATE_KEY", DEPLOYER_KEY)
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        // owner X1: the registry's txGasCap, the deploy book's value; a local anvil applies EIP-7825's 2^24
+        .env("TX_GAS_CAP", "16777216")
         .env("DEPLOY_NAME", format!("local-{id}-testnet")) // NET-EVM-13: an anvil is not in chain-uids.json
         .status()
         .expect("forge in PATH");
