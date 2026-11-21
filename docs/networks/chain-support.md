@@ -3,16 +3,25 @@
 What each chain has today, against the owner's rule for when the SDK work is done. One table, one place: other documents link
 here. State read on 2026-11-22. SPECIFIED (a status table; each cell says what is built).
 
-## 1. The rule (owner 2026-11-21)
+## 1. The rule (owner 2026-11-21, 2026-11-22)
 
 Status: SPECIFIED.
 
 - The SDK work is done only when **every row** has: node relay and node index, signing in `ua-rs`, `scaas-rpc` reads, `scaas-rpc`
   writes where they can be done, and SDK support.
-- **Native NEAR, native DOT and native BTC need no node relay or index.** For them the rule is signing, `scaas-rpc` reads and direct
-  broadcast where feasible, and the SDK. DOT on Substrate and NEAR native are account-based; BTC is read through RPC. Native DOT is
-  read from the relay chain and from Asset Hub's Substrate side by one code path; the profile chooses. BTC reads go to Esplora
-  (address balances and history) and to Bitcoin Core JSON-RPC (sends and cross-checks).
+- **Self-relay on every chain with a SCaaS contract** (owner 2026-11-22): a user's own native key submits a signed SCaaS
+  operation, its own or one someone else signed and handed over (a payment to that user, for example), and pays the chain's
+  fee and storage. It includes, on every such chain, reading the native fee-token balance and signing and broadcasting a
+  native transaction with the user's key.
+- **A native column on every row** (owner 2026-11-22): the chain's own native account model, its balance read, a plain native
+  transfer signed with the user's key and sent, apart from the SCaaS operations. So there is no native NEAR row and no native DOT
+  row: NEAR's native account is the NEAR row's Native cell, and DOT's is the Polkadot Hub row's (the Substrate side, plain sr25519
+  accounts; Hub's EVM side only maps onto them). Hub's Native read is PLANNED before BTC's, as NEAR's was done; its Substrate sends are **deferred** (owner 2026-11-22). Native and Self-relay share
+  the native transaction builder, the native balance read and the broadcast on each chain; Self-relay adds the signed SCaaS
+  operation it carries.
+- **Native BTC** keeps its row: no SCaaS contract exists there, so only its Native cell applies. Native accounts need no node
+  relay or index. BTC is read through RPC: Esplora (address balances and history) and Bitcoin Core JSON-RPC (sends and
+  cross-checks).
 - **Zether, PQ and PQZ are status columns**, not part of the rule: their missing cells belong to each family's own rounds
   (`zether-<family>`, `ua-<family>`, a `pqz-<family>` round). The SDK's `confidential` module is required wherever the contract
   exists.
@@ -32,51 +41,54 @@ Status: SPECIFIED.
 | `P` | PLANNED: the named task covers it |
 | `M` | MISSING: the named task or round is to build it |
 | `n/a` | not applicable, for the reason in §4 |
+| `deferred` | deferred by the owner (Polkadot Hub's Substrate sends, 2026-11-22) |
 | `T<n>` | task T<n> of the SDK plan (`docs/superpowers/plans/2026-11-17-scaas-sdk.md`); `rpc T24.<x>` its `scaas-rpc` tasks |
 | `CA-T<n>` | task T<n> of the chains-arweave plan (`docs/superpowers/plans/2026-11-21-avax-polkadot-arweave.md`) |
 | `ARCH-POS-18` | a software path to measure, or a disablement for the owner to confirm ([ARCH-POS-18](../decisions.md#ARCH-POS-18)) |
 | `family round` | the family's own Zether, UA or PQZ round, outside this rule |
 
 Columns: **Contract** the SCaaS contracts for the chain; **Relay** and **Index** the node's submit lanes and indexer; **Signing**
-`ua-rs` signs what the chain verifies (a SCaaS operation, or a native transfer on rows 24–26); **rpc read** and **rpc write**
+`ua-rs` signs what the chain verifies (a SCaaS operation; a native transfer is the Native column); **rpc read** and **rpc write**
 `scaas-rpc` reads and direct broadcast; **SDK** the SDK's reads and writes on the chain; **Zether** classical Zether; **PQ** the PQ
-UA kinds (ML-DSA, FN-DSA, SLH-DSA registration and verification, precompile or software); **PQZ** the PQ confidential token.
+UA kinds (ML-DSA, FN-DSA, SLH-DSA registration and verification, precompile or software); **PQZ** the PQ confidential token; **Self-relay** the user's own native key submits a signed SCaaS operation (its own, or one
+handed to it) and pays the fee and storage, with the native fee-token balance read and the native transaction signed and broadcast
+by the SDK (§4); **Native** the chain's own native account: its balance read, a plain native transfer signed with the user's key
+and sent (`(read B)`: the read is built, the send is not).
 
 ## 3. The matrix
 
 Status: SPECIFIED.
 
-| # | Chain (testnet in the same row) | Contract | Relay | Index | Signing | rpc read | rpc write | SDK | Zether | PQ | PQZ |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | scaas-testnet (7622) | B | B | B | B | B | B | B | B | B | B |
-| 2 | Ethereum L1 (1; Sepolia, Hoodi; Holesky unreachable) | B‡ | B | B | B | B | B | M T40 | B‡ | B‡ | B‡ |
-| 3 | BNB Smart Chain (56; 97) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ |
-| 4 | Polygon PoS (137; Amoy 80002) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ |
-| 5 | Base (8453; Base Sepolia 84532) | B‡ | B | B | B | B | B | M T38 | B‡ | B‡ | B‡ |
-| 6 | Gnosis (100; Chiado 10200) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ |
-| 7 | Celo (42220; Celo Sepolia 11142220; Alfajores unreachable) | B‡ | B | B | B | B | B | M T38 | B‡ | B‡ | B‡ |
-| 8 | Ethereum Classic (61; Mordor 63) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 |
-| 9 | OP Mainnet (10; OP Sepolia 11155420) | B‡ | B | B | B | B | B | M T38, T40 | P T40 | P T40 | P T40 |
-| 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 |
-| 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 |
-| 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 |
-| 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | P CA-T3 | P CA-T3 | B | P CA-T2 | B | P CA-T2 | M ARCH-POS-18 | B‡ | B‡ |
-| 14 | Polkadot Hub (EVM; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 |
-| 15 | Moonbeam (Moonbase Alpha) | B‡ | P CA-T3, T15 | P CA-T3 | B | P CA-T11 | B | P CA-T11 | B‡ | P CA-T15 | P CA-T15 |
-| 16 | NEAR (SCaaS family) | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-near` | M family round |
-| 17 | Algorand | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-algorand` | M family round |
-| 18 | Cosmos (CosmWasm) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round |
-| 19 | Aptos | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round |
-| 20 | Solana | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round |
-| 21 | Soroban (Stellar; Pi) | B | B | B | M T27 | B | M T30 | M T28, T29 | P `zether-soroban` | M family round | M family round |
-| 22 | Sui | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round |
-| 23 | TON (GRAM) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round |
-| 24 | native NEAR | n/a | n/a | n/a | M T31 | B | M T30 | M T31 | n/a | n/a | n/a |
-| 25 | native DOT (relay chain and Asset Hub, by profile) | n/a | n/a | n/a | M T33 | M T32 | M T32 | M T34 | n/a | n/a | n/a |
-| 26 | native BTC | n/a | n/a | n/a | M T35 | M T36 | M T36 | M T37 | n/a | n/a | n/a |
-| 27 | Arweave (store) | n/a | n/a | n/a | P CA-T16, T17 | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a |
+| # | Chain (testnet in the same row) | Contract | Relay | Index | Signing | rpc read | rpc write | SDK | Zether | PQ | PQZ | Self-relay | Native |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | scaas-testnet (7622) | B | B | B | B | B | B | B | B | B | B | M T41.evm | B |
+| 2 | Ethereum L1 (1; Sepolia, Hoodi; Holesky unreachable) | B‡ | B | B | B | B | B | M T40 | B‡ | B‡ | B‡ | M T41.evm | M T40 |
+| 3 | BNB Smart Chain (56; 97) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
+| 4 | Polygon PoS (137; Amoy 80002) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
+| 5 | Base (8453; Base Sepolia 84532) | B‡ | B | B | B | B | B | M T38 | B‡ | B‡ | B‡ | M T41.evm | M T38 |
+| 6 | Gnosis (100; Chiado 10200) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | M T41.evm | B |
+| 7 | Celo (42220; Celo Sepolia 11142220; Alfajores unreachable) | B‡ | B | B | B | B | B | M T38 | B‡ | B‡ | B‡ | M T41.evm | M T38 |
+| 8 | Ethereum Classic (61; Mordor 63) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
+| 9 | OP Mainnet (10; OP Sepolia 11155420) | B‡ | B | B | B | B | B | M T38, T40 | P T40 | P T40 | P T40 | M T41.evm | M T38, T40 |
+| 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
+| 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | M T40 | P T40 | P T40 | P T40 | M T41.evm | M T40 |
+| 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | M T41.evm | B |
+| 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | P CA-T3 | P CA-T3 | B | P CA-T2 | B | P CA-T2 | M ARCH-POS-18 | B‡ | B‡ | M T41.evm | P CA-T2 |
+| 14 | Polkadot Hub (EVM and Substrate sides; Paseo) | B‡ | P CA-T3, T14 | P CA-T3 | B | P CA-T11, T14 | B | P CA-T14 | P CA-T12 | P CA-T13 | P CA-T14 | M T41.evm | P T32 (read; sends deferred) |
+| 15 | Moonbeam (Moonbase Alpha) | B‡ | P CA-T3, T15 | P CA-T3 | B | P CA-T11 | B | P CA-T11 | B‡ | P CA-T15 | P CA-T15 | M T41.evm | P CA-T11 |
+| 16 | NEAR (SCaaS family) | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-near` | M family round | M T41.near | M T41.near (read B) |
+| 17 | Algorand | B | B | B | B | B | M T30 | M T28, T29 | M family round | P `ua-algorand` | M family round | M T41.algorand | M T41.algorand (read B) |
+| 18 | Cosmos (CosmWasm) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.cosmos | M T41.cosmos (read B) |
+| 19 | Aptos | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.aptos | M T41.aptos (read B) |
+| 20 | Solana | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.solana | M T41.solana (read B) |
+| 21 | Soroban (Stellar; Pi) | B | B | B | M T27 | B | M T30 | M T28, T29 | P `zether-soroban` | M family round | M family round | M T41.soroban | M T41.soroban (read B) |
+| 22 | Sui | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.sui | M T41.sui (read B) |
+| 23 | TON (GRAM) | B | B | B | M T27 | B | M T30 | M T28, T29 | M family round | M family round | M family round | M T41.ton | M T41.ton (read B) |
+| 24 | native BTC (no SCaaS contract) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | M T35 (sign), T36 (read, send), T37 (SDK) |
+| 25 | Arweave (store) | n/a | n/a | n/a | P CA-T16, T17 | P CA-T19 | P CA-T19 | P CA-T20 | n/a | n/a | n/a | n/a | P CA-T17, T19, T20 |
 
-Counts (27 rows): Contract B 23 (14 B‡), n/a 4. Relay B 20, P 3, n/a 4. Index B 20, P 3, n/a 4. Signing B 17, P 1, M 9. rpc read B 21, P 4, M 2. rpc write B 15, P 1, M 11. SDK B 5, P 4, M 18. Zether B 8 (7 B‡), P 6, M 9, n/a 4. PQ B 8 (7 B‡), P 8, M 7, n/a 4. PQZ B 8 (7 B‡), P 6, M 9, n/a 4.
+Counts (25 rows): Contract B 23 (14 B‡), n/a 2. Relay B 20, P 3, n/a 2. Index B 20, P 3, n/a 2. Signing B 17, P 1, M 6, n/a 1. rpc read B 20, P 4, n/a 1. rpc write B 15, P 1, M 8, n/a 1. SDK B 5, P 4, M 15, n/a 1. Zether B 8 (7 B‡), P 6, M 9, n/a 2. PQ B 8 (7 B‡), P 8, M 7, n/a 2. PQZ B 8 (7 B‡), P 6, M 9, n/a 2. Self-relay M 23, n/a 2. Native B 5, P 4, M 16 (8 of them with the read built).
+
 ## 4. Notes on the cells
 
 Status: SPECIFIED.
@@ -95,10 +107,34 @@ Status: SPECIFIED.
 - **SCaaS families (rows 16–23).** The node relays and indexes all eight; the public gateway door for them (`POST /v1/ops`) is SDK
   plan T28. The SDK reads balances on all eight (plan T24; TON last, T24.ton); its cell stays `M` for the writes (T28, T29). `ua-rs` signs NEAR's and Algorand's operations; the other six families' envelopes are SDK plan T27. TON's paths other
   than the job API's pull path stay blocked until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)).
-- **Native NEAR, DOT, BTC (rows 24–26).** No SCaaS contract, so Contract, Zether, PQ and PQZ are n/a; Relay and Index are n/a by the
-  owner's rule (§1).
-- **Arweave (row 27).** A store: no SCaaS contract, and a client posts its signed item to a bundler and reads from gateways itself,
-  so the node has nothing to relay or index.
+- **Native BTC (row 24).** No SCaaS contract, so every column but Native is n/a (owner 2026-11-22; Relay and Index were n/a by the
+  owner's rule of 2026-11-21). Its Native cell: `ua-rs` `BitcoinTx` (SDK plan T35), the `scaas-rpc` `bitcoin` module (T36: Esplora
+  reads, Bitcoin Core sends and cross-checks), the SDK's balance, UTXOs, history and send (T37).
+- **Native (column 12).** EVM rows: the native coin through the EVM account, `balances`' `native` and `prepare_native_send`
+  (BUILT, SDK spec §8.5) wherever the row's profile and SDK are (rows 1, 3, 4, 6, 12; HBAR through the JSON-RPC Relay with an
+  `hedera_ecdsa` account; Hedera's native HAPI is not offered), else the row's profile task (T38, T40, chains-arweave CA-T2,
+  CA-T11). Polkadot Hub (row 14): the Substrate side, plain sr25519 accounts (`ua-rs` sr25519, CLI-SGN-53), `System.Account`
+  reads (SDK plan T32's read part, before T36, owner 2026-11-22) and a Substrate transfer extrinsic (T33, T34: deferred, owner
+  2026-11-22); this is DOT's native account, and the former native DOT row now lives here. NEAR (row 16): the former native NEAR row, `view_account`'s `amount` (BUILT, T24.near) and
+  the native transfer (the former T31, now in T41.near). The other seven families: the fee-token account (ALGO, the Cosmos
+  chain's denom, APT, SOL, XLM, SUI, GRAM), its balance BUILT by T24, its send MISSING, in T41.<family> on the builder that
+  Self-relay uses (Algorand also needs its key network in `ua-rs`).
+- **Self-relay (column 11).** Contracts: every family lets any account submit an operation whose `relayer` is unbound, and an
+  operation bound to an account lets that account submit: EVM `MetaTxLib.canon` zeroes an unbound relayer and fee recipient,
+  and the payee may self-relay with fee 0 ([CTR-MTX-08](../contracts/metatx.md#CTR-MTX-08), "payee self-relay",
+  [metatx §12](../contracts/metatx.md#payers)); NEAR `relayer: Option<AccountId>` against the predecessor, storage from the
+  submitter's attached deposit ([NET-NEAR-09](near.md#NET-NEAR-09)); Algorand `relayer` zero = any, the MBR paid by a payment
+  in the submitter's group ([NET-ALG-02](algorand.md#NET-ALG-02)); Cosmos `relayer` empty = any, else `info.sender`; Aptos and
+  Sui `@0x0` = any, else the sender; Solana `relayer` 0 = any, else exactly the fee payer, who pays the lane PDA's rent
+  (refunded to it at `prune`) and any missing ATA; Soroban's `pay` is unbound (the host does not bind the transaction
+  source); TON `relayer` = `addr_none` or the sending wallet. So no contract change is needed; the SDK is MISSING everywhere.
+  On EVM the SDK self-relays the holder's **own** operations today (`SubmitPath::SelfRelay`, BUILT on rows 1, 3, 4, 6, 12);
+  what is missing is the hand-off: a signed operation exported by its signer and imported, checked and relayed by its payee
+  (SDK plan T41.evm). On the eight families the SDK has the native balance read (T24) and no native transaction and no
+  self-relay path (T41.<family>, which also builds the Native column's send on the same builder). Design: SDK spec §27.5.
+- **Arweave (row 25).** A store: no SCaaS contract, and a client posts its signed item to a bundler and reads from gateways itself,
+  so the node has nothing to relay or index; Self-relay is n/a (no SCaaS operation; the client pays for its own item); Native is
+  the user's Arweave key signing and posting its own items (chains-arweave CA-T17, CA-T19, CA-T20).
 
 The evidence for every cell (file and line) and the designs for the missing ones are in the SDK spec, §27
 (`docs/superpowers/specs/2026-11-17-scaas-sdk.md`).
