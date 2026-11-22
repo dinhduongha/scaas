@@ -57,6 +57,7 @@ macro_rules! binding_list {
                 #[cfg(feature = "evm")] async register_target / register_target_blocking (chain: String, kind: u16) -> String;
                 #[cfg(feature = "evm")] async pqz_decoy_candidates / pqz_decoy_candidates_blocking (chain: String) -> Vec<String>;
                 #[cfg(feature = "evm")] async prepare_kem_repair / prepare_kem_repair_blocking (key: KeyRef, chain: String, payer: KeyRef) -> Option<Arc<RegistryWrite>>;
+                #[cfg(feature = "evm")] async prepare_set_kem_key / prepare_set_kem_key_blocking (key: KeyRef, chain: String, version: u64, payer: KeyRef) -> Option<Arc<RegistryWrite>>;
                 #[cfg(feature = "evm")] async marks / marks_blocking (seed: String, chain: String) -> Vec<AccountInfo>;
                 #[cfg(feature = "evm")] async restore / restore_blocking (req: Restore) -> Vec<AccountInfo>;
                 #[cfg(feature = "evm")] async prepare_smart_add_key / prepare_smart_add_key_blocking (op: SmartOp, key: SubjectKeyArgs) -> Arc<Prepared>;

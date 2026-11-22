@@ -339,6 +339,25 @@ fn native_of<'a>(
     }
 }
 
+/// An app record's `msig` `UASig` on the chain-bound path (PqVault's dedicated path, owner 2026-11-22): as [`msig_sig_current`]
+/// signs, under the app's `purpose` (which `check_purpose` does not list: the caller's path refusals stand for it), a native
+/// member over `UAAuth(id, member, md)` in `domain` (`Argument` without it).
+#[cfg(feature = "app-core")]
+#[allow(clippy::too_many_arguments)]
+pub(super) fn msig_sig_app_chain(
+    first: &[u8],
+    current: &Current,
+    inner: &Inner,
+    purpose: &[u8; 32],
+    digest: &[u8; 32],
+    domain: Option<&Domain>,
+    slots: &[Slot],
+) -> Result<UASig> {
+    msig_build(first, current, inner, purpose, digest, slots, || {
+        Ok(Native::Auth(domain.ok_or(Error::Argument)?))
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn msig_members_current(
     first: &[u8],

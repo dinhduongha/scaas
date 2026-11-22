@@ -1494,3 +1494,170 @@ fn scaas_app_ids_match_the_contracts() {
         pqvault::app_id()
     );
 }
+
+/// Owner 2026-11-22 (CLI-PQV-15 (1) (b)): PqVault's dedicated path signs as an `msig` the way the generic `msig` paths do,
+/// with their bounds: an `msig` of a derived key and a native EVM key (threshold 2) over a vault item, path A (`DS_V`, the
+/// native member over the record itself) and path B (`DS_B`, the members over `memberDigest` under `member`, the native one
+/// over `UAAuth` in the registry generation's domain), each verified by `pqvault::verify` beside its twin; the refusals
+/// before anything is signed: a record that is no PqVault record, a record on the other path, a set below the threshold,
+/// path B's native member without the registry's domain.
+#[test]
+fn pqvault_msig_signs_both_paths() {
+    let d = pqv();
+    let w = Wallet::from_mnemonic(MNEMONIC, "").unwrap();
+    let k1 = w.ua_key(0x0108, 0, 0).unwrap();
+    let nat = w.native_key(Network::Evm, 0, None).unwrap();
+    let (id1, kind1, kd1) = id_of(&k1);
+    let nid = native_id(&w);
+    let mut om = vec![(kind1, id1, 1u16), (1, nid, 1)];
+    om.sort_by_key(|x| x.1);
+    let kd = scaas_ua::encode_msig(2, &om);
+    let ua = scaas_ua::derive_ua(MSIG, &kd, false).unwrap();
+    let at = |id: [u8; 32]| om.iter().position(|x| x.1 == id).unwrap() as u16;
+    let slots = by_index(vec![
+        (
+            at(id1),
+            Slot::Member {
+                index: at(id1),
+                key: &k1,
+            },
+        ),
+        (
+            at(nid),
+            Slot::Member {
+                index: at(nid),
+                key: &nat,
+            },
+        ),
+    ]);
+    let item = d["vaults"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|v| v["records"].as_array().unwrap().iter())
+        .find(|r| r["struct"] == "PqVaultItem")
+        .unwrap()["record"]
+        .clone();
+    let enc = d["typehashes"]["PqVaultItem"]["type"].as_str().unwrap();
+    let (pa, dv, venc) = pqv_mode(&d, 0);
+    let (pb, db, benc) = pqv_mode(&d, 1);
+    let tv = pqv_typed(enc, "PqVaultItem", &item, &venc, &dv);
+    let tb = pqv_typed(enc, "PqVaultItem", &item, &benc, &db);
+    let recs: HashMap<[u8; 32], (u16, Vec<u8>)> =
+        HashMap::from([(id1, (kind1, kd1)), (ua, (MSIG, kd.clone()))]);
+    let members = |id: [u8; 32]| recs.get(&id).cloned();
+    let check = |p: &AppPath, t: &TypedData, s: &UASig, dom: Option<&scaas_ua::Domain>| {
+        pqvault::verify(
+            &ua,
+            p,
+            t,
+            s,
+            &AppRecordState {
+                members: &members,
+                current: &|_| None,
+                accepted: &|_, _| true,
+                domain: dom,
+            },
+        )
+    };
+    let none = |_: [u8; 32]| None;
+    let d1 = dom(1);
+    let flip = |s: &UASig| {
+        let mut s = s.clone();
+        s.members[0].sig[3] ^= 1;
+        s
+    };
+    // path A
+    let sa = pqvault::sign_msig(&kd, &none_cur, &none, None, &pa, &tv, &slots).unwrap();
+    assert!(sa.key_data.is_empty() && sa.signature.is_empty() && sa.members.len() == 2);
+    assert!(check(&pa, &tv, &sa, None));
+    assert!(!check(&pa, &tv, &flip(&sa), None), "the twin");
+    // path B
+    let sb = pqvault::sign_msig(&kd, &none_cur, &none, Some(&d1), &pb, &tb, &slots).unwrap();
+    assert!(check(&pb, &tb, &sb, Some(&d1)));
+    assert!(
+        !check(&pb, &tb, &sb, Some(&dom(2))),
+        "the native member in another generation's domain"
+    );
+    assert!(!check(&pb, &tb, &flip(&sb), Some(&d1)), "the twin");
+    assert!(!check(&pa, &tv, &sb, None), "a path-B signature on path A");
+    // a disabled slot (CTR-UA-44: its `enabled` bit clear in the current structure) signs nothing, beside its twin (every
+    // slot enabled)
+    let enabled = |on: &[u16]| {
+        let mut e = [0u8; 32];
+        for i in on {
+            e[31 - usize::from(*i) / 8] |= 1 << (i % 8);
+        }
+        e
+    };
+    let (kd2, all, one_off) = (
+        kd.clone(),
+        enabled(&[at(id1), at(nid)]),
+        enabled(&[at(id1)]),
+    );
+    let cur_all = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), all));
+    let cur_off = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), one_off));
+    assert!(
+        pqvault::sign_msig(&kd, &cur_all, &none, None, &pa, &tv, &slots).is_ok(),
+        "every slot enabled"
+    );
+    assert_eq!(
+        pqvault::sign_msig(&kd, &cur_off, &none, None, &pa, &tv, &slots).err(),
+        Some(Error::Argument),
+        "the native slot disabled"
+    );
+    assert_eq!(
+        pqvault::sign_msig(&kd, &cur_off, &none, Some(&d1), &pb, &tb, &slots).err(),
+        Some(Error::Argument),
+        "the native slot disabled, path B"
+    );
+    // refusals before anything is signed
+    let other = portable(&APP, "My App", None);
+    assert_eq!(
+        pqvault::sign_msig(&kd, &none_cur, &none, None, &pa, &other, &slots).err(),
+        Some(Error::Argument)
+    );
+    assert_eq!(
+        pqvault::sign_msig(&kd, &none_cur, &none, None, &pa, &tb, &slots).err(),
+        Some(Error::AppDomainRefused)
+    );
+    let one = by_index(vec![(
+        at(id1),
+        Slot::Member {
+            index: at(id1),
+            key: &k1,
+        },
+    )]);
+    assert!(
+        pqvault::sign_msig(&kd, &none_cur, &none, None, &pa, &tv, &one).is_err(),
+        "below the threshold"
+    );
+    assert!(
+        pqvault::sign_msig(&kd, &none_cur, &none, None, &pb, &tb, &slots).is_err(),
+        "no domain for the native member"
+    );
+}
+
+fn none_cur(_: [u8; 32]) -> Option<(Vec<u8>, [u8; 32])> {
+    None
+}
+
+/// Owner 2026-11-22 (CLI-PQV-15 (2)): a generated vault passphrase is 6 BIP-39 English words, one space apart, drawn from
+/// the whole list (over 600 draws far more than 256 distinct words: 11 bits each, not a byte).
+#[test]
+fn generated_passphrase_six_bip39_words() {
+    let (_w, k) = keys();
+    let text =
+        |s: &scaas_ua::wallet::SecretBytes| s.with(|x| std::str::from_utf8(x).unwrap().to_string());
+    let a = text(&k.generated_passphrase().unwrap());
+    assert_eq!(a.split(' ').count(), 6, "{}", a.len());
+    assert!(a.split(' ').all(scaas_ua::wallet::bip39_word_in_list));
+    assert!(!a.contains("  ") && a.trim() == a);
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..600 {
+        let p = text(&k.generated_passphrase().unwrap());
+        assert_ne!(p, a);
+        seen.extend(p.split(' ').map(str::to_string));
+    }
+    assert!(seen.len() > 1500, "{} distinct words", seen.len());
+}

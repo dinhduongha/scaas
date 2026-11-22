@@ -485,7 +485,7 @@ impl AppCore {
         let v = scaas_ua::wallet::bounded::json(record_json.as_bytes(), 1 << 20, pk::JSON_DEPTH)?;
         let td = pqchat::typed(&name, v)?;
         let sig = UASig::from(&sig);
-        self.with_records(&chain, id, false, |state| {
+        self.with_records(&chain, id, false, false, |state| {
             pqchat::verify(&id, &td, &sig, state)
         })
         .await

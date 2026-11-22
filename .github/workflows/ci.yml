@@ -29,7 +29,7 @@
 #                  ffi pqz-vectors --check, smartcontracts/vectors/pqz/pqz_kat.py --check, ffi/vectors/tamper.py; cargo test --release (stmt, pqzh/ligero, ffi);
 #                  fuzz smoke (fuzz/run.sh precompile, mutate, codec: 60 s each on the committed corpora)
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths; ... consumer;
-#                  ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security)
+#                  ! git grep -nE '(^|[^[:alnum:]_.-])/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security; a URL segment such as npm's package `tmp` is not a path)
 #                  python3 -I smartcontracts/evm/script/pqz/gas-inputs.py --check (the PQZ gas table's inputs = the calibrated or
 #                  provisional precompile rows and each set's proofs; T21 L67)
 #   format:        scripts/format.sh --check (check only, at the pinned versions: rustfmt of rust-toolchain.toml, forge 1.8.5, clientkeys'
@@ -123,6 +123,9 @@
 #                          Go store and authenticator, the PRF by the copy call, a panic as Internal, Go errors as the SDK's)
 #   scaas-cli:             in clients/scaas-cli: cargo test --locked; cargo test --locked --features dev-profiles (the review and the quote
 #                          before a submit, against the SDK tests' fake chain); cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
+#   pqvault-core:          in clients/pqvault-core (PqVault plan V10): cargo test --locked; cargo test --locked --features vectors --test vectors;
+#                          cargo clippy --locked --all-targets -- -D warnings, default and --features vectors; the real-crypto e2e on anvil
+#                          (cargo test --test e2e -- --ignored, V10e) stays local (runs/2026-11-22-pqvault-e2e.sh)
 #   keystore-vectors:      smartcontracts/vectors/keystore/ read by both sides: in clients/clientkeys npm ci --ignore-scripts;
 #                          node --test test/keystore.test.js test/keystore-index.test.js test/vault.test.js; in clients/scaas-sdk cargo test --locked --test keystore_vectors
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
@@ -253,6 +256,7 @@ jobs:
       scaas_sdk_java: ${{ steps.f.outputs.scaas_sdk_java }}
       scaas_sdk_go: ${{ steps.f.outputs.scaas_sdk_go }}
       scaas_cli: ${{ steps.f.outputs.scaas_cli }}
+      pqvault_core: ${{ steps.f.outputs.pqvault_core }}
       keystore_vectors: ${{ steps.f.outputs.keystore_vectors }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -601,7 +605,7 @@ jobs:
       # AGENTS.md Security: no temp path in a committed file ([t]: the step does not match itself)
       - name: no temp paths in tracked files
         run: |
-          ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*'
+          ! git grep -nE '(^|[^[:alnum:]_.-])/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*'
       # T21 L67: test/vectors/pqz-gas/<set>.json is what the gas table reads; it must equal what the script makes of the
       # precompile rows (pqz-core/nethermind/chain/engine-pqz.json or the provisional ones) and each set's proofs
       - name: PQZ gas table inputs (gas-inputs.py --check)
@@ -1327,6 +1331,32 @@ jobs:
         run: cargo test --locked --features dev-profiles
       - name: cargo clippy
         run: cargo clippy --locked --all-targets --features dev-profiles -- -D warnings
+
+  # PqVault's app core above the SDK (plan V10, CLI-PQV-01): its tests and the vectors through it
+  pqvault-core:
+    needs: changes
+    if: needs.changes.outputs.pqvault_core == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/pqvault-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/pqvault-core
+      - name: cargo test
+        run: cargo test --locked
+      - name: the vectors through pqvault-core
+        run: cargo test --locked --features vectors --test vectors
+      - name: cargo clippy
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --all-targets --features vectors -- -D warnings
 
   # the generated bindings (spec §16): the FRB Dart surface regenerated equals the committed one; the reference library and
   # the Dart tests over it

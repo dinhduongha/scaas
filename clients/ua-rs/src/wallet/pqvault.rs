@@ -122,6 +122,31 @@ pub fn sign(
     sign_app_digest(key, registry, path, &digest(path, typed)?)
 }
 
+/// The `UASig` of the `msig` whose first structure is `first` over the PqVault record `typed` on `path` (owner 2026-11-22):
+/// [`digest`]'s refusals first, then as the generic `msig` paths sign: path A [`super::msig_sig_app`] (a native member over
+/// the record itself), path B the members over `memberDigest(ua, uaMessage(msig, P_V, digest))` under `member`, a native
+/// member over `UAAuth(id, member, md)` in `registry` (the registry generation's domain). The same bounds and checks: a
+/// disabled slot or a set not minimal at either level refused before anything is signed.
+pub fn sign_msig(
+    first: &[u8],
+    current: &crate::ua_portable::Current,
+    inner: &crate::ua_portable::Inner,
+    registry: Option<&Domain>,
+    path: &AppPath,
+    typed: &TypedData,
+    slots: &[super::Slot],
+) -> Result<UASig> {
+    let d = digest(path, typed)?;
+    match path {
+        AppPath::Portable { app_id } => {
+            super::msig_sig_app(first, current, inner, app_id, typed, slots)
+        }
+        AppPath::ChainBound { purpose } => {
+            super::uasig::msig_sig_app_chain(first, current, inner, purpose, &d, registry, slots)
+        }
+    }
+}
+
 /// Whether `sig` is `ua`'s signature of the PqVault record `typed` on `path`, as the registry judges it on `state`
 /// ([`super::verify_app_record`]'s checks after [`digest`]'s refusals). A refused record: `false`, no detail.
 pub fn verify(
