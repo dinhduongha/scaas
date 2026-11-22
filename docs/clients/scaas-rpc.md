@@ -197,8 +197,9 @@ counters (failover answers, refusals per endpoint) carry no URL.
 (BUILT for the routes the node serves, plan T10, T11, T13 S14: `bodies_are_sent_byte_for_byte`, `a_body_above_64_kib_is_refused_unsent`,
 `an_error_is_read_by_code_else_by_error_string`, `hmac_headers_follow_node_gw_02`, `a_second_gateway_receives_no_credential_of_the_first`;
 the job API client PLANNED). The client covers the gateway routes the node serves ([gateway.md](../node/gateway.md#NODE-GW-05)): `POST /v1/op`,
-`POST /v1/ua-metatx` and the DEX routes, BUILT in the node; `GET /v1/gateway`, `POST /v1/ops`, `POST /v1/ua/register` and
-`GET /v1/intents/{intent_id}` follow when the node serves them. Bodies are the named-field objects `ua-rs` builds; the client never
+`POST /v1/ua-metatx`, the DEX routes and `POST /v1/ops` (`submit_ops` / `submit_ops_at`, `{chain, op}` with the family's chain
+key, merged as `submit_op`'s; plan T28, test `submit_ops_sends_the_same_bytes_and_merges`), BUILT in the node; `GET /v1/gateway`,
+`POST /v1/ua/register` and the client of `GET /v1/intents/{intent_id}` follow. Bodies are the named-field objects `ua-rs` builds; the client never
 packs fields into hex and never rewrites an operation. A request above the route's body cap is refused before it is sent. An error
 answer is read by its `code` (else the legacy `error` string) with its `detail` and `revert_data`
 ([NODE-GW-06](../node/gateway.md#NODE-GW-06)); no logic keys on free text. `api` of `GET /v1/gateway` other than `1` is

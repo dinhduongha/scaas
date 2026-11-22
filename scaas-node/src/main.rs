@@ -195,6 +195,7 @@ async fn main() -> Result<()> {
         Err(seq) => error!(seq, "audit chain broken (R110)"),
     }
     let mut gw_chains = HashMap::new();
+    let mut gw_families = HashMap::new();
     let mut probes = Vec::new();
     let mut set: JoinSet<Result<()>> = JoinSet::new();
     // ≤ 10 y each (validated), so the casts are exact.
@@ -225,8 +226,27 @@ async fn main() -> Result<()> {
         let digests = submit::InflightSet::default();
         if cc.uses_adapter() {
             let adapter = adapters::build(&cfg.adapter_cfg(cc), &signers)?;
+            // plan T28: `POST /v1/ops` serves the families (not Hedera, an EVM-side chain); its `~gateway` jobs reach these
+            // lanes through the pull path's own calls (`OwnQueue`)
+            let ops = cc.family != "hedera";
             if cfg.modules.submit {
-                let relay = legacy(&cfg, true)?;
+                let mut relay = legacy(&cfg, true)?;
+                if ops {
+                    let labels = (0..signers.len())
+                        .map(|l| {
+                            (
+                                format!("{node_id}#{}", cc.lanes[l]),
+                                lane_label(cc, &signers[l]),
+                            )
+                        })
+                        .collect();
+                    relay = relay.with_queue(external_pull::OwnQueue {
+                        store: st.clone(),
+                        chain_key: cc.chain_key(),
+                        labels,
+                    });
+                }
+                let mut first_breaker = None;
                 for lane in 0..signers.len() {
                     let (a, o, w) = (
                         adapter.clone(),
@@ -235,6 +255,9 @@ async fn main() -> Result<()> {
                     );
                     let d = digests.clone();
                     let k = Arc::new(Mutex::new(Breaker::new(cc.breaker.clone())));
+                    if first_breaker.is_none() {
+                        first_breaker = Some(k.clone());
+                    }
                     probe_lanes.push(LaneProbe {
                         lane: adapter.lanes()[lane].address.clone(),
                         breaker: k.clone(),
@@ -243,6 +266,45 @@ async fn main() -> Result<()> {
                         lane_runner(a, o, lane, w, poll, k, d).await;
                         Err(anyhow!("lane loop ended"))
                     });
+                }
+                if ops && cfg.modules.gateway {
+                    // the registered tokens loaded before the gateway opens (review P15), then every 30 s
+                    let key = cc.chain_key();
+                    let served = |nc: &external_pull::NodeConfig| match nc
+                        .state
+                        .as_deref()
+                        .unwrap_or("active")
+                    {
+                        "active" => nc.tokens.iter().map(|t| t.address.clone()).collect(),
+                        _ => Vec::new(),
+                    };
+                    let nc = relay
+                        .node_config_ref(key.clone().into(), None, None)
+                        .await?;
+                    let tokens = Arc::new(RwLock::new(served(&nc)));
+                    let (t, n, k) = (tokens.clone(), relay, key.clone());
+                    set.spawn(async move {
+                        loop {
+                            tokio::time::sleep(Duration::from_secs(30)).await;
+                            match n.node_config_ref(k.clone().into(), None, None).await {
+                                Ok(nc) => {
+                                    if let Ok(mut w) = t.write() {
+                                        *w = served(&nc);
+                                    }
+                                }
+                                Err(e) => warn!(chain = %k, "token refresh: {e:#}"),
+                            }
+                        }
+                    });
+                    gw_families.insert(
+                        key,
+                        gateway::GwFamily {
+                            adapter: adapter.clone(),
+                            store: st.clone(),
+                            tokens,
+                            breaker: first_breaker,
+                        },
+                    );
                 }
             }
             probes.push(ChainProbe {
@@ -406,6 +468,7 @@ async fn main() -> Result<()> {
         let app = gwauth::wrap(
             gateway::router(gateway::AppState {
                 chains: Arc::new(gw_chains),
+                families: Arc::new(gw_families),
             }),
             auth,
         );
