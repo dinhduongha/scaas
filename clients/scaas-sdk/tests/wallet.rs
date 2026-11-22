@@ -312,6 +312,7 @@ async fn sent_type(c: &Fake, n: usize) -> u8 {
 async fn native_send_types() {
     // owner 2026-11-18, ruling 3: 0, 1, 2 sent as asked; 3 (blob) and 4 (EIP-7702) refused before any read
     let (s, seed, c) = one(0).await;
+    let reads = c.lock().unwrap().requests.len();
     for t in [4u8, 3, 5] {
         assert_eq!(
             code(
@@ -321,6 +322,11 @@ async fn native_send_types() {
             ),
             "TxTypeRefused",
             "type {t}"
+        );
+        assert_eq!(
+            c.lock().unwrap().requests.len(),
+            reads,
+            "type {t} refused before any read"
         );
     }
     assert!(c.lock().unwrap().sent.is_empty());

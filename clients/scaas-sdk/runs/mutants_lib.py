@@ -86,7 +86,8 @@ def intended(cmd, expect=None):
     if expect:
         return expect
     words = cmd.split()
-    last = words[-1].strip("'\"").rstrip("$") if words else ""
+    # a forge filter is a regex over the signature: `^name\(` names `name` (as `name$` would, which forge never matches)
+    last = re.sub(r"^\^|\\\($|\$$", "", words[-1].strip("'\"")) if words else ""
     if (len(words) >= 2 and words[-2] == "--test") or not re.search(r"[A-Za-z]", last) \
             or last.startswith("-") or last.endswith((".sh", ".py", ".js", ".mjs")):
         return None
@@ -103,9 +104,17 @@ def killed_by(text, want):
     return want is None or any(want in ln for ln in fails)
 
 
+def ran_nothing(text):
+    """Whether a green run ran no test (a filter that matches none): forge's warning, or cargo's result lines all 0 / 0."""
+    if "no tests match the provided pattern" in text:
+        return True
+    res = re.findall(r"^test result: \w+\. (\d+) passed; (\d+) failed", text, re.M)
+    return bool(res) and all(p == "0" and f == "0" for p, f in res)
+
+
 def failure_line(text):
     """The first line that says why the test failed (a panic, a failed test, an error), shortened."""
-    for pat in (r"panicked at [^\n]*", r"assertion[^\n]*failed[^\n]*", r"^test \S+ \.\.\. FAILED", r"^not ok [^\n]*",
+    for pat in (r"panicked at [^\n]*", r"assertion[^\n]*failed[^\n]*", r"^test \S+ \.\.\. FAILED", r"^\[FAIL[^\n]*", r"^not ok [^\n]*",
                 r"(?i)^\S*error[^\n]*"):
         m = re.search(pat, text, re.M)
         if m:
@@ -139,6 +148,10 @@ def run(task, mutants, only=None):
             lg.write(f"\n## baseline\n$ {cmd}\nrc={p.returncode}\n{text[-6000:]}\n")
             if p.returncode != 0:
                 print(f"[mutants] {task}: FAIL baseline red (rc={p.returncode}): {cmd}\n  {failure_line(text)}")
+                return 2
+            if ran_nothing(text):
+                # a green baseline that ran no test would make every mutant of it survive for nothing (plan T39)
+                print(f"[mutants] {task}: FAIL baseline ran no test: {cmd}")
                 return 2
         kept = {}
         if only and out.exists():

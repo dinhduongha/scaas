@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
-from mutants_lib import COMPILE_ERRORS, failure_line, intended, killed_by
+from mutants_lib import COMPILE_ERRORS, failure_line, intended, killed_by, ran_nothing
 
 CARGO = "cd x && ../../scripts/capped cargo test --locked --features F --lib account::msig::tests::msig_members_apart"
 assert intended(CARGO) == "account::msig::tests::msig_members_apart"
@@ -17,5 +17,13 @@ assert not killed_by(red.replace("msig_members_apart", "other_test"), intended(C
 assert not killed_by("error: could not find something\n", None), "no failing test"
 assert killed_by("[FAIL: measured at the bound: 64 != 80] test_sdkGas_pqzConfRoll() (gas: 1)\n", "test_sdkGas_pqzConfRoll")
 assert failure_line("all good\n") == "-"
+# plan T39: forge's failure line is a kill's line; a forge filter as a signature regex names its test; a run of no test
+assert failure_line("x\n[FAIL: pinned: false != true] test_a() (gas: 1)\n").startswith("[FAIL: pinned")
+assert intended("forge test --match-test '^test_sdkGas_verify\\('") == "test_sdkGas_verify"
+assert intended("forge test --match-test 'test_sdkGas_pqzConfRoll\\('") == "test_sdkGas_pqzConfRoll"
+assert ran_nothing("Warning: no tests match the provided pattern:\n")
+assert ran_nothing("test result: ok. 0 passed; 0 failed; 0 ignored\ntest result: ok. 0 passed; 0 failed; 3 ignored\n")
+assert not ran_nothing("test result: ok. 0 passed; 0 failed; 0 ignored\ntest result: ok. 1 passed; 0 failed; 0 ignored\n")
+assert not ran_nothing("ℹ pass 3\n"), "control: another runner's output"
 assert any(e in "Error (2314): Compiler run failed" for e in COMPILE_ERRORS), "solc"
 print("mutants_lib kill rule ok")
