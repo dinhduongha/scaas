@@ -634,6 +634,14 @@ impl AppCore {
             .first()
             .map(|k| k.seed.clone())
             .ok_or(SdkError::Argument)?;
+        // one handle twice would wait on its own lock (controller call 2026-11-22, CLI-SDK-33): refused before any lock
+        if ks
+            .iter()
+            .enumerate()
+            .any(|(i, a)| ks.iter().take(i).any(|b| std::ptr::eq(*a, *b)))
+        {
+            return Err(SdkError::Argument);
+        }
         for k in ks {
             self.mine(k)?;
             if k.seed != seed {
@@ -1075,16 +1083,29 @@ impl AppCore {
     /// (owner 2026-11-22, CLI-PQV-12; `scaas-ua` `wallet::pqvault`): a scope of PqVault's `app_id`, a primary type and
     /// `encodeType` of PqVault's records (`Argument`), the domain `DS_V` on the portable path or `DS_B` on the chain-bound one
     /// under `P_V` (`purpose` none or `P_V`; `AppDomainRefused`), the profile's checks of a chain-bound domain as
-    /// [`Self::sign_app_record`]'s. The generic call refuses every PqVault record.
+    /// [`Self::sign_app_record`]'s. The generic call refuses every PqVault record. `records`: the profile whose registry holds
+    /// an `msig` signer's records on the portable path (controller call 2026-11-22, explicit parameters: required there,
+    /// `Argument` without); on the chain-bound path the path's chain (`records` none or that chain); for a single key on the
+    /// portable path none (`Argument` when given: nothing reads it).
     pub async fn sign_pqvault_record(
         self: &Arc<Self>,
         account: KeyRef,
         path: AppPath,
+        records: Option<String>,
         typed_json: String,
     ) -> Result<AppSigned, SdkError> {
-        if let KeyRef::Msig { ua, slots } = &account {
+        let chain = match (&path, &account, records) {
+            (AppPath::ChainBound { chain, .. }, _, r) if r.as_ref().is_none_or(|r| r == chain) => {
+                Some(chain.clone())
+            }
+            (AppPath::Portable, KeyRef::Msig { .. }, Some(r)) => Some(r),
+            (AppPath::Portable, KeyRef::Msig { .. }, None) => return Err(SdkError::Argument),
+            (AppPath::Portable, _, None) => None,
+            _ => return Err(SdkError::Argument),
+        };
+        if let (KeyRef::Msig { ua, slots }, Some(chain)) = (&account, chain) {
             return self
-                .sign_pqvault_msig(ua.clone(), slots.clone(), path, typed_json)
+                .sign_pqvault_msig(chain, ua.clone(), slots.clone(), path, typed_json)
                 .await;
         }
         self.sign_with(
@@ -1101,10 +1122,10 @@ impl AppCore {
     /// the `msig`'s records read as the generic `msig` path reads them (its structures, its `msig` members', their enabled and
     /// accepted bits: `MsigSlotInactive`), the slots' keys opened (local keys only: a slot signed elsewhere or a stored key row
     /// `Argument`), the registry generation's domain for a native member, then `scaas-ua`'s `pqvault::sign_msig` (its refusals:
-    /// the record, the path, a set not minimal, a disabled slot). The records are read on the path's chain; on the portable
-    /// path on the one profile that names a registry (several, or none: `Argument`).
+    /// the record, the path, a set not minimal, a disabled slot). The records are read on `chain`'s registry.
     async fn sign_pqvault_msig(
         self: &Arc<Self>,
+        chain: String,
         ua_hex: String,
         slots: Vec<crate::op::MsigSlot>,
         path: AppPath,
@@ -1121,18 +1142,6 @@ impl AppCore {
                 };
                 let (ua_path, _) = me.ua_path(&path, &typed, &account).await?;
                 let digest = scaas_ua::wallet::pqvault::digest(&ua_path, &typed).map_err(ua)?;
-                let chain = match &path {
-                    AppPath::ChainBound { chain, .. } => chain.clone(),
-                    AppPath::Portable => {
-                        let mut with = sdk.chains.iter().filter(|c| {
-                            c.profile.registry.is_some() && c.profile.family == crate::Family::Evm
-                        });
-                        match (with.next(), with.next()) {
-                            (Some(c), None) => c.profile.key.clone(),
-                            _ => return Err(SdkError::Argument),
-                        }
-                    }
-                };
                 let sig = crate::account::msig::app_msig(
                     &sdk,
                     &chain,

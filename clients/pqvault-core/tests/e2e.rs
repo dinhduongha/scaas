@@ -66,6 +66,11 @@ fn cast(args: &[&str]) -> String {
 }
 
 async fn anvil() -> (Anvil, String) {
+    anvil_on(31337).await
+}
+
+async fn anvil_on(chain_id: u64) -> (Anvil, String) {
+    let want = chain_id.to_string();
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
         .local_addr()
@@ -76,7 +81,7 @@ async fn anvil() -> (Anvil, String) {
         Command::new("anvil")
             .args([
                 "--chain-id",
-                "31337",
+                &want,
                 "--hardfork",
                 "amsterdam",
                 "--gas-limit",
@@ -97,9 +102,8 @@ async fn anvil() -> (Anvil, String) {
         let id = Command::new("cast")
             .args(["chain-id", "--rpc-url", &rpc])
             .output();
-        if id.is_ok_and(|o| {
-            o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "31337"
-        }) {
+        if id.is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == want)
+        {
             return (a, rpc);
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -185,21 +189,25 @@ async fn chain() -> Chain {
 }
 
 fn profile(c: &Chain) -> ChainProfile {
+    profile_of(&c.rpc, 31337, &c.registry, &c.factory)
+}
+
+fn profile_of(rpc: &str, chain_id: u64, registry: &str, factory: &str) -> ChainProfile {
     ChainProfile {
         key: "anvil".into(),
         family: Family::Evm,
-        chain_id: Some(31337),
-        chain_uid: cast(&["block", "0", "--field", "hash", "--rpc-url", &c.rpc]),
+        chain_id: Some(chain_id),
+        chain_uid: cast(&["block", "0", "--field", "hash", "--rpc-url", rpc]),
         rpc: vec![EndpointConfig {
-            url: c.rpc.clone(),
+            url: rpc.to_string(),
             class: scaas_rpc::Class::Named,
             label: None,
             auth: None,
         }],
         rpc_policy: scaas_rpc::Policy::Failover,
         gateways: vec![],
-        registry: Some(c.registry.clone()),
-        factory: Some(c.factory.clone()),
+        registry: Some(registry.to_string()),
+        factory: Some(factory.to_string()),
         router: None,
         finality: Finality::Depth(0),
         tx_gas_cap: Some(1 << 24),
@@ -231,8 +239,12 @@ struct Device {
 }
 
 async fn device(c: &Chain, words: &str) -> Device {
+    device_with(&c.rpc, vec![profile(c)], words).await
+}
+
+async fn device_with(rpc: &str, profiles: Vec<ChainProfile>, words: &str) -> Device {
     let sdk = Sdk::open(SdkConfig {
-        profiles: vec![profile(c)],
+        profiles,
         store: MemoryStore::new(),
         authenticator: None,
         rp_id: None,
@@ -266,7 +278,7 @@ async fn device(c: &Chain, words: &str) -> Device {
     cast(&[
         "rpc",
         "--rpc-url",
-        &c.rpc,
+        rpc,
         "anvil_setBalance",
         &row.id_text,
         "0x8ac7230489e80000",
@@ -295,11 +307,15 @@ async fn follow(sdk: &Arc<Sdk>, op: String) -> OpState {
 
 /// `key`'s UA registered with its KEM key (version 0) through the SDK, each write followed to `Landed`.
 async fn register(d: &Device, key: &KeyRef) {
+    register_on(d, key, "anvil").await
+}
+
+async fn register_on(d: &Device, key: &KeyRef, chain: &str) {
     let acc = d.sdk.account();
     let writes = acc
         .prepare_register(Register {
             key: key.clone(),
-            chain: "anvil".into(),
+            chain: chain.into(),
             attrs: RegisterAttrs {
                 pqz_key: false,
                 kem: true,
@@ -439,9 +455,15 @@ impl Net for Seam {
         }
         Ok(v)
     }
-    async fn sign(&self, a: &KeyRef, p: AppPath, t: String) -> Result<AppSigned, SdkError> {
+    async fn sign(
+        &self,
+        c: &str,
+        a: &KeyRef,
+        p: AppPath,
+        t: String,
+    ) -> Result<AppSigned, SdkError> {
         self.calls.lock().unwrap().push("sign".into());
-        self.inner.sign(a, p, t).await
+        self.inner.sign(c, a, p, t).await
     }
     async fn verify(
         &self,
@@ -835,6 +857,7 @@ async fn personal_vault_recovery_conflict_passphrase() {
     let sg = pv
         .net
         .sign(
+            "anvil",
             &k1b,
             AppPath::Portable,
             typed_json(&rec, Domain::Portable).unwrap(),
@@ -1217,7 +1240,7 @@ async fn a_second_app_core_is_kept_apart() {
     let typed = typed_json(&item, Domain::Portable).unwrap();
     let ps = pv
         .net
-        .sign(&key, AppPath::Portable, typed.clone())
+        .sign("anvil", &key, AppPath::Portable, typed.clone())
         .await
         .unwrap();
     assert!(pv
@@ -1491,6 +1514,118 @@ async fn kem_rotation_and_msig_admin() {
         "both slots accepted"
     );
     say("msig admin registered");
+    // CLI-PQV-15 controller call 3: a slot not accepted signs nothing on this path (`MsigSlotInactive`), beside its twins: the
+    // accepted slot signs, and the same slot signs once it accepts
+    {
+        use scaas_sdk::account::AcceptMembership;
+        let st2 = msig_structure(
+            vec![
+                MsigMemberArgs {
+                    kind: FNDSA512,
+                    id: hex(&ua.0),
+                    weight: 1,
+                },
+                MsigMemberArgs {
+                    kind: 1,
+                    id: nid.clone(),
+                    weight: 1,
+                },
+            ],
+            1,
+        )
+        .unwrap();
+        let m2 = st2.ua().unwrap();
+        let i2 =
+            |id: &str| u16::try_from(st2.members.iter().position(|x| x.id == id).unwrap()).unwrap();
+        let slot_a = MsigSlot::Member {
+            index: i2(&hex(&ua.0)),
+            key: ka.clone(),
+        };
+        let slot_n = MsigSlot::Member {
+            index: i2(&nid),
+            key: native.clone(),
+        };
+        for w in acc
+            .prepare_msig_register(MsigRegister {
+                chain: "anvil".into(),
+                structure: st2.clone(),
+                slots: vec![],
+                payer: da.payer.clone(),
+            })
+            .await
+            .unwrap()
+        {
+            let q = acc.quote_registry_write(w.clone()).await.unwrap();
+            let op = acc.submit_registry_write(w, q).await.unwrap();
+            assert!(matches!(follow(&da.sdk, op).await, OpState::Landed { .. }));
+        }
+        // A's slot accepts; the native one does not yet
+        let w = acc
+            .prepare_accept_membership(AcceptMembership {
+                chain: "anvil".into(),
+                ua: m2.clone(),
+                slot: slot_a.clone(),
+                payer: da.payer.clone(),
+            })
+            .await
+            .unwrap()
+            .expect("not accepted yet");
+        let q = acc.quote_registry_write(w.clone()).await.unwrap();
+        let op = acc.submit_registry_write(w, q).await.unwrap();
+        assert!(matches!(follow(&da.sdk, op).await, OpState::Landed { .. }));
+        let pa = PqVault::new(da.sdk.clone()).unwrap();
+        let item = ItemRecord {
+            vault_id: B32([3; 32]),
+            epoch_id: B32([3; 32]),
+            author: B32(unhex(&m2, 32).unwrap().try_into().unwrap()),
+            nonce: Num(9),
+            ciphertext: Bytes(vec![5; 288]),
+        };
+        let t = typed_json(&item, Domain::Portable).unwrap();
+        let by = |slot: MsigSlot| KeyRef::Msig {
+            ua: m2.clone(),
+            slots: vec![slot],
+        };
+        let e = pa
+            .net
+            .sign("anvil", &by(slot_n.clone()), AppPath::Portable, t.clone())
+            .await
+            .err();
+        assert_eq!(
+            e.map(|e| e.code()),
+            Some("MsigSlotInactive"),
+            "a slot not accepted"
+        );
+        assert!(
+            pa.net
+                .sign("anvil", &by(slot_a.clone()), AppPath::Portable, t.clone())
+                .await
+                .is_ok(),
+            "the accepted slot"
+        );
+        let w = acc
+            .prepare_accept_membership(AcceptMembership {
+                chain: "anvil".into(),
+                ua: m2.clone(),
+                slot: slot_n.clone(),
+                payer: da.payer.clone(),
+            })
+            .await
+            .unwrap()
+            .expect("not accepted yet");
+        let q = acc.quote_registry_write(w.clone()).await.unwrap();
+        let op = acc.submit_registry_write(w, q).await.unwrap();
+        assert!(matches!(follow(&da.sdk, op).await, OpState::Landed { .. }));
+        assert!(
+            pa.net
+                .sign("anvil", &by(slot_n), AppPath::Portable, t)
+                .await
+                .is_ok(),
+            "the slot once accepted"
+        );
+        drop(pa);
+        say("an msig slot not accepted signs nothing");
+    }
     let pa = PqVault::new(da.sdk.clone()).unwrap();
     assert!(
         matches!(pa.member_key(&at, m).await, Err(Error::NotMember)),
@@ -1581,4 +1716,350 @@ async fn kem_rotation_and_msig_admin() {
         drop((u, pa));
         say(&format!("{mode:?}: the msig admin's epoch verified"));
     }
+}
+
+/// Generation 1's book and generation 2 over it (`script/DeployUAGen.s.sol`, as scaas-node's `ua_line_two_generations_on_anvil`):
+/// `(book of generation 1, generation 2's registry)`; both books removed after reading.
+fn deploy_line(rpc: &str, chain_id: u64) -> (Value, String) {
+    let name = format!(
+        "local-{chain_id}-{}-testnet",
+        rpc.rsplit(':').next().unwrap()
+    );
+    let run = |script: &str, extra: &[(&str, String)]| {
+        let status = Command::new("forge")
+            .current_dir(sc())
+            .args([
+                "script",
+                script,
+                "--rpc-url",
+                rpc,
+                "--broadcast",
+                "--slow",
+                "--silent",
+                "--disable-code-size-limit",
+                "--sender",
+                DEPLOYER_ADDRESS,
+            ])
+            .env("PRIVATE_KEY", DEPLOYER)
+            .env("FOUNDRY_PROFILE", "scaas-testnet")
+            .env("TX_GAS_CAP", "16777216")
+            .env("MLDSA_PRECOMPILE", "off")
+            .env("DEPLOY_NAME", &name)
+            .envs(extra.iter().map(|(k, v)| (*k, v.as_str())))
+            .status()
+            .expect("forge in PATH");
+        assert!(status.success(), "{script} failed");
+    };
+    run(
+        "script/Deploy.s.sol",
+        &[
+            ("DEPLOY_PQVAULT", "true".into()),
+            ("NOTICE_PERIOD", "0".into()),
+        ],
+    );
+    let book = format!("{}/deployments/{name}.json", sc());
+    let dep: Value = serde_json::from_str(&std::fs::read_to_string(&book).unwrap()).unwrap();
+    run(
+        "script/DeployUAGen.s.sol",
+        &[
+            ("UA_GEN_BOOK", format!("deployments/{name}.json")),
+            (
+                "SMART_KEY_ACCOUNT_IMPL",
+                dep["smart_key_account_implementation"]
+                    .as_str()
+                    .unwrap()
+                    .to_string(),
+            ),
+        ],
+    );
+    let book2 = format!("{}/deployments/{name}-ua-gen2.json", sc());
+    let g2: Value = serde_json::from_str(&std::fs::read_to_string(&book2).unwrap()).unwrap();
+    let _ = std::fs::remove_file(&book);
+    let _ = std::fs::remove_file(&book2);
+    (
+        dep,
+        g2["ua_registry"].as_str().unwrap().to_ascii_lowercase(),
+    )
+}
+
+/// Controller call 2026-11-22 (CLI-PQV-15, F2): PqVault's dedicated path on a registry line of two generations (chain 31930,
+/// its own). The profile `g2` binds generation 2, `g1` generation 1, where the FN-DSA-512 UA and the `msig` M of it and a
+/// native EVM key are registered (generation 2 holds neither). Through `g2`: M's chain-bound record is signed with its native
+/// member over `UAAuth` in generation 1's domain (M's holder), generation 2's `requireAuthorized` forwards it there and
+/// accepts it, and `verify_pqvault_record` agrees; the native key signing alone is generation 2's (its own check); the same
+/// native signature made through `g1` (generation 1's domain) is refused by generation 2; M's portable record through
+/// `requirePortableApp`; each beside a twin with one byte changed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs anvil, forge, cast and smartcontracts/evm/lib"]
+async fn pqvault_records_on_a_two_generation_line() {
+    use scaas_sdk::account::{msig_structure, MsigMemberArgs, MsigRegister};
+    use scaas_sdk::app_core::AppUaSig;
+    use scaas_sdk::op::MsigSlot;
+    const CHAIN: u64 = 31930;
+    let (_a, rpc) = anvil_on(CHAIN).await;
+    say("anvil up (31930); deploying generations 1 and 2");
+    let (dep, gen2) = deploy_line(&rpc, CHAIN);
+    let gen1 = dep["ua_registry"].as_str().unwrap().to_ascii_lowercase();
+    let inst = dep["pqvault_instance"]
+        .as_str()
+        .unwrap()
+        .to_ascii_lowercase();
+    let factory = dep["token_factory"].as_str().unwrap().to_ascii_lowercase();
+    assert_eq!(
+        cast(&["call", "--rpc-url", &rpc, &gen2, "generation()(uint8)"]),
+        "2"
+    );
+    say(&format!("generation 2 {gen2} over generation 1 {gen1}"));
+    let mut p1 = profile_of(&rpc, CHAIN, &gen1, &factory);
+    p1.key = "g1".into();
+    let mut p2 = profile_of(&rpc, CHAIN, &gen2, &factory);
+    p2.key = "g2".into();
+    let d = device_with(&rpc, vec![p1, p2], REPO).await;
+    let ka = KeyRef::Ua {
+        seed: d.seed.clone(),
+        kind: FNDSA512,
+        account: 0,
+        index: 0,
+    };
+    register_on(&d, &ka, "g1").await;
+    let native = KeyRef::Native {
+        seed: d.seed.clone(),
+        network: "evm".into(),
+        index: 0,
+    };
+    let core = PqVault::scope(&d.sdk).unwrap();
+    let ua = B32(core.account_ua(&ka).unwrap());
+    let addr = d
+        .sdk
+        .account()
+        .accounts(d.seed.clone())
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|r| r.shape == "native")
+        .unwrap()
+        .id_text
+        .to_ascii_lowercase();
+    let nid = format!("0x{}{}", "00".repeat(12), addr.trim_start_matches("0x"));
+    let st = msig_structure(
+        vec![
+            MsigMemberArgs {
+                kind: FNDSA512,
+                id: hex(&ua.0),
+                weight: 1,
+            },
+            MsigMemberArgs {
+                kind: 1,
+                id: nid.clone(),
+                weight: 1,
+            },
+        ],
+        2,
+    )
+    .unwrap();
+    let m = st.ua().unwrap();
+    let idx =
+        |id: &str| u16::try_from(st.members.iter().position(|x| x.id == id).unwrap()).unwrap();
+    let mut slots = vec![
+        MsigSlot::Member {
+            index: idx(&hex(&ua.0)),
+            key: ka.clone(),
+        },
+        MsigSlot::Member {
+            index: idx(&nid),
+            key: native.clone(),
+        },
+    ];
+    slots.sort_by_key(|s| match s {
+        MsigSlot::Member { index, .. } => *index,
+        _ => 0,
+    });
+    let acc = d.sdk.account();
+    for w in acc
+        .prepare_msig_register(MsigRegister {
+            chain: "g1".into(),
+            structure: st.clone(),
+            slots: slots.clone(),
+            payer: d.payer.clone(),
+        })
+        .await
+        .unwrap()
+    {
+        let q = acc.quote_registry_write(w.clone()).await.unwrap();
+        let op = acc.submit_registry_write(w, q).await.unwrap();
+        assert!(matches!(follow(&d.sdk, op).await, OpState::Landed { .. }));
+    }
+    let holder = cast(&[
+        "call",
+        "--rpc-url",
+        &rpc,
+        &gen2,
+        "holderOf(bytes32)(address,uint16,address)",
+        &m,
+    ]);
+    assert!(
+        holder.to_ascii_lowercase().starts_with(&gen1),
+        "generation 1 holds M: {holder}"
+    );
+    say("M registered on generation 1");
+
+    let app_id = alloy::primitives::keccak256(APP_ID_STRING);
+    let p_v = alloy::primitives::keccak256(
+        [
+            alloy::primitives::keccak256("scaas.ua.purpose.app.v1").0,
+            app_id.0,
+        ]
+        .concat(),
+    );
+    let item = ItemRecord {
+        vault_id: B32([4; 32]),
+        epoch_id: B32([4; 32]),
+        author: B32(unhex(&m, 32).unwrap().try_into().unwrap()),
+        nonce: Num(1),
+        ciphertext: Bytes(vec![6; 288]),
+    };
+    let instance = Addr(unhex(&inst, 20).unwrap().try_into().unwrap());
+    let tb = typed_json(
+        &item,
+        Domain::ChainBound {
+            chain_id: CHAIN,
+            instance,
+        },
+    )
+    .unwrap();
+    let tv = typed_json(&item, Domain::Portable).unwrap();
+    let uasig = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
+    let lit = |s: &AppSigned| {
+        let ms: Vec<String> = s
+            .members
+            .iter()
+            .map(|x| {
+                let inner: Vec<String> = x
+                    .members
+                    .iter()
+                    .map(|i| format!("({},{})", i.index, hex(&i.sig)))
+                    .collect();
+                format!("({},[{}],{})", x.index, inner.join(","), hex(&x.sig))
+            })
+            .collect();
+        format!(
+            "({},{},[{}])",
+            hex(&s.key_data),
+            hex(&s.signature),
+            ms.join(",")
+        )
+    };
+    let accepts = |reg: &str, entry: &str, who: &str, tag: &str, s: &AppSigned| {
+        Command::new("cast")
+            .args([
+                "call",
+                "--rpc-url",
+                &rpc,
+                reg,
+                &format!("{entry}(bytes32,bytes32,bytes32,{uasig})"),
+                who,
+                tag,
+                &s.digest,
+                &lit(s),
+            ])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    };
+    let twin = |s: &AppSigned| {
+        let mut t = s.clone();
+        match t.members.iter_mut().find(|x| !x.sig.is_empty()) {
+            Some(x) => x.sig[3] ^= 1,
+            None => t.signature[3] ^= 1,
+        }
+        t
+    };
+    let app_sig = |s: &AppSigned| AppUaSig {
+        key_data: s.key_data.clone(),
+        signature: s.signature.clone(),
+        members: s.members.clone(),
+    };
+    let cb = |chain: &str| AppPath::ChainBound {
+        chain: chain.into(),
+        purpose: None,
+    };
+    let ms = KeyRef::Msig {
+        ua: m.clone(),
+        slots: slots.clone(),
+    };
+    // M, chain-bound through generation 2: its native member in generation 1's domain
+    let sm = core
+        .sign_pqvault_record(ms.clone(), cb("g2"), None, tb.clone())
+        .await
+        .unwrap();
+    assert!(
+        accepts(&gen2, "requireAuthorized", &m, &hex(&p_v.0), &sm),
+        "generation 2 forwards M to generation 1"
+    );
+    assert!(
+        !accepts(&gen2, "requireAuthorized", &m, &hex(&p_v.0), &twin(&sm)),
+        "the twin"
+    );
+    assert!(core
+        .verify_pqvault_record("g2".into(), m.clone(), cb("g2"), tb.clone(), app_sig(&sm))
+        .await
+        .unwrap());
+    assert!(!core
+        .verify_pqvault_record(
+            "g2".into(),
+            m.clone(),
+            cb("g2"),
+            tb.clone(),
+            app_sig(&twin(&sm))
+        )
+        .await
+        .unwrap());
+    // the native key alone, chain-bound: generation 2's own domain; through g1 generation 1's, which generation 2 refuses
+    let sn = core
+        .sign_pqvault_record(native.clone(), cb("g2"), None, tb.clone())
+        .await
+        .unwrap();
+    assert!(
+        accepts(&gen2, "requireAuthorized", &nid, &hex(&p_v.0), &sn),
+        "a native id in generation 2's domain"
+    );
+    assert!(core
+        .verify_pqvault_record("g2".into(), nid.clone(), cb("g2"), tb.clone(), app_sig(&sn))
+        .await
+        .unwrap());
+    let s1 = core
+        .sign_pqvault_record(native.clone(), cb("g1"), None, tb.clone())
+        .await
+        .unwrap();
+    assert_ne!(s1.signature, sn.signature);
+    assert!(
+        accepts(&gen1, "requireAuthorized", &nid, &hex(&p_v.0), &s1),
+        "generation 1's own"
+    );
+    assert!(
+        !accepts(&gen2, "requireAuthorized", &nid, &hex(&p_v.0), &s1),
+        "generation 1's domain refused by generation 2"
+    );
+    // M's portable record, its records named on g2: requirePortableApp forwards it to the holder
+    let sp = core
+        .sign_pqvault_record(ms, AppPath::Portable, Some("g2".into()), tv.clone())
+        .await
+        .unwrap();
+    assert!(accepts(
+        &gen2,
+        "requirePortableApp",
+        &m,
+        &hex(&app_id.0),
+        &sp
+    ));
+    assert!(
+        !accepts(&gen2, "requirePortableApp", &m, &hex(&app_id.0), &twin(&sp)),
+        "the twin"
+    );
+    assert!(core
+        .verify_pqvault_record("g2".into(), m, AppPath::Portable, tv, app_sig(&sp))
+        .await
+        .unwrap());
+    say("generation 2's line: M by generation 1's domain, the native key by generation 2's");
 }

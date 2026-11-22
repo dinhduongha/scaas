@@ -132,7 +132,7 @@ async fn digest<R: Record>(a: &Arc<AppCore>, seed: &str, r: &R, d: Domain) -> St
             purpose: None,
         },
     };
-    a.sign_pqvault_record(key, path, typed_json(r, d).unwrap())
+    a.sign_pqvault_record(key, path, None, typed_json(r, d).unwrap())
         .await
         .unwrap()
         .digest

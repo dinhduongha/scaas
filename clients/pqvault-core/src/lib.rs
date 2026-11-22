@@ -106,9 +106,11 @@ pub trait Net: Send + Sync {
         sig: &str,
         args: Value,
     ) -> Result<Value, SdkError>;
-    /// `AppCore::sign_pqvault_record`.
+    /// `AppCore::sign_pqvault_record`; `chain` the instance's profile (where an `msig` signer's records are read on the
+    /// portable path: the SDK's explicit `records`).
     async fn sign(
         &self,
+        chain: &str,
         account: &KeyRef,
         path: AppPath,
         typed: String,
@@ -265,12 +267,15 @@ impl Net for SdkNet {
     }
     async fn sign(
         &self,
+        chain: &str,
         account: &KeyRef,
         path: AppPath,
         typed: String,
     ) -> Result<AppSigned, SdkError> {
+        let records = (matches!(account, KeyRef::Msig { .. }) && matches!(path, AppPath::Portable))
+            .then(|| chain.to_string());
         self.0
-            .sign_pqvault_record(account.clone(), path, typed)
+            .sign_pqvault_record(account.clone(), path, records, typed)
             .await
     }
     async fn verify(

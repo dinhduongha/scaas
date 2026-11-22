@@ -1581,6 +1581,36 @@ fn pqvault_msig_signs_both_paths() {
     );
     assert!(!check(&pb, &tb, &flip(&sb), Some(&d1)), "the twin");
     assert!(!check(&pa, &tv, &sb, None), "a path-B signature on path A");
+    // a disabled slot (CTR-UA-44: its `enabled` bit clear in the current structure) signs nothing, beside its twin (every
+    // slot enabled)
+    let enabled = |on: &[u16]| {
+        let mut e = [0u8; 32];
+        for i in on {
+            e[31 - usize::from(*i) / 8] |= 1 << (i % 8);
+        }
+        e
+    };
+    let (kd2, all, one_off) = (
+        kd.clone(),
+        enabled(&[at(id1), at(nid)]),
+        enabled(&[at(id1)]),
+    );
+    let cur_all = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), all));
+    let cur_off = |id: [u8; 32]| (id == ua).then(|| (kd2.clone(), one_off));
+    assert!(
+        pqvault::sign_msig(&kd, &cur_all, &none, None, &pa, &tv, &slots).is_ok(),
+        "every slot enabled"
+    );
+    assert_eq!(
+        pqvault::sign_msig(&kd, &cur_off, &none, None, &pa, &tv, &slots).err(),
+        Some(Error::Argument),
+        "the native slot disabled"
+    );
+    assert_eq!(
+        pqvault::sign_msig(&kd, &cur_off, &none, Some(&d1), &pb, &tb, &slots).err(),
+        Some(Error::Argument),
+        "the native slot disabled, path B"
+    );
     // refusals before anything is signed
     let other = portable(&APP, "My App", None);
     assert_eq!(

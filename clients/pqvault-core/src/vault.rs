@@ -927,7 +927,10 @@ impl PqVault {
         r: R,
     ) -> Result<Signed<R>> {
         let typed = typed_json(&r, domain_of(mode, at, home)).map_err(|_| Error::Shape)?;
-        let s = self.net.sign(account, path_of(mode, at), typed).await?;
+        let s = self
+            .net
+            .sign(&at.chain, account, path_of(mode, at), typed)
+            .await?;
         Ok(Signed {
             record: r,
             sig: sig_of_signed(s),

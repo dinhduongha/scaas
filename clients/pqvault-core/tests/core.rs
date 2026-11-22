@@ -35,7 +35,13 @@ impl Net for Recorder {
         self.0.lock().unwrap().push(format!("read {sig}"));
         Err(SdkError::Argument)
     }
-    async fn sign(&self, _: &KeyRef, _: AppPath, _: String) -> Result<AppSigned, SdkError> {
+    async fn sign(
+        &self,
+        _: &str,
+        _: &KeyRef,
+        _: AppPath,
+        _: String,
+    ) -> Result<AppSigned, SdkError> {
         self.0.lock().unwrap().push("sign".into());
         Err(SdkError::Argument)
     }
