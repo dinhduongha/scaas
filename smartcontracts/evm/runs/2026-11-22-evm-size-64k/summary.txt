@@ -1,0 +1,29 @@
+# evm-size-64k study (owner 2026-11-22, Sepolia code size). Full output in git-ignored logs, not committed.
+# Base 3f4effb60 (origin/main). Nothing in src/ changed; the per-set and lever builds ran on a scratch copy of src/.
+step | commit | rc | counts
+libs | 3f4effb60 | 0 | scripts/evm_libs.sh check: openzeppelin-contracts OK, forge-std OK
+build-default | 3f4effb60 | 0 | capped forge build src --sizes --json: 134 contracts; + 60 libraries from artifacts = 180 (sizes.txt)
+size-gate | 3f4effb60 | 0 | size_gate.py: 0 errors, 180 contracts; notes (T-2): NormalPqzTokenQ 34,895 > 33,780, OpenFactory 35,238 > 33,516, UARegistry 35,166 > 33,516
+over-sepolia | 3f4effb60 | 0 | runtime > 65,536: none (largest OpenFactory 35,238); init > 131,072: none (largest UARegistry 46,180)
+build-n2048-kmax1024 | 3f4effb60 + scratch PqzSet.sol | 0 | 134 contracts; differs from default only PqzStateLib -1 B; largest unchanged
+build-n2560-kmax16384 | 3f4effb60 + scratch PqzSet.sol | 0 | PqzKeyVerifier +1, PqzStateLib +3, PqzViewLib +4; largest unchanged
+build-n2816-kmax65536 | 3f4effb60 + scratch PqzSet.sol | 0 | PqzStateLib -91, PqzViewLib -92, PqzTransferLib -92, PqzBurnLib -28, PqzKeyVerifier +1 (init -65); largest unchanged
+lever-runs50 | 3f4effb60 + scratch FOUNDRY_OPTIMIZER_RUNS=50 | 0 | OpenFactory -455, UARegistry -278, NormalPqzTokenQ -546, SCaaSDex -540, WrappedPqzRegulatedToken -904
+lever-runs1 | 3f4effb60 + scratch FOUNDRY_OPTIMIZER_RUNS=1 | 0 | OpenFactory -635, UARegistry -375, NormalPqzTokenQ -778, SCaaSDex -616, WrappedPqzRegulatedToken -1,322
+lever-via-ir | 3f4effb60 + scratch --via-ir, one file each | 0 | OpenFactory 35,008 (-230), UARegistry 33,304 (-1,862; init 43,664), NormalPqzTokenQ 38,362 (+3,467), NormalPqzTokenP/A/T 22,945 / 23,619 / 14,038
+sepolia-probe | sepolia_limits.py, 2026-11-22 ~00:45 UTC, 3 runs | 0 | see below
+#
+# sepolia_limits.py (public reads; endpoints of chain-uids.json `ethereum-testnet`, named by host; 1rpc.io rotates backends)
+publicnode | head | gasLimit 199,609,569 .. 200,000,000 (blocks 12,185,359 .. 12,185,372)
+publicnode | eth_call runtime 65,535 / 65,536 | out of gas: gas required exceeds: 16777216 (its eth_call gas is clamped to 2^24)
+publicnode | eth_call runtime 65,537 | EVM error: CreateContractSizeLimit
+publicnode | eth_call init 131,071 / 131,072 | ok
+publicnode | eth_call init 131,073 | max initcode size exceeded
+publicnode | eth_estimateGas runtime 4,096 / 8,192 | 6,528,310 / 12,846,185 gas (slope 1,542.4 gas/B)
+publicnode | eth_estimateGas runtime 65,536 | out of gas: gas required exceeds: 50000000 (its estimate cap)
+publicnode | eth_estimateGas init 131,072 | 8,480,542 gas
+1rpc | eth_call runtime 65,535 / 65,536 | ok 65,535 B / 65,536 B returned (run 3); 65,536 ok (run 2)
+1rpc | eth_call runtime 65,537 | max code size exceeded: code size 65537 limit 65536 (run 2)
+1rpc | eth_call init 131,071 / 131,072 | ok (runs 2, 3)
+1rpc | eth_estimateGas runtime 4,096 / 8,192 / 65,536 | 6,528,310 / 12,846,185 / 101,303,209 gas (slope 4,096 -> 65,536: 1,542.6 gas/B)
+1rpc | other rows | backend refusals (rate limit, unregistered account, free plan): no answer on the chain
