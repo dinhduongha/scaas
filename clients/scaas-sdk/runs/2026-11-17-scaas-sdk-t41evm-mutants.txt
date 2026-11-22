@@ -2,7 +2,7 @@
 the payee check dropped | killed | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test handoff import_refusals_in_order | panicked at tests/handoff.rs:394:5:
 the relayer check dropped | killed | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test handoff a_bound_relayer_must_be_the_payer | panicked at tests/handoff.rs:448:5:
 the consumed check dropped | killed | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test handoff import_refusals_in_order | panicked at tests/handoff.rs:409:5:
-the quote signing | survived | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test wallet_ops every_wallet_pair_is_its_vector | -
+the quote signing | killed | f700772e8 | ../../scripts/capped cargo test --locked --offline -j2 --lib op::tests::quote_makes_no_signature | panicked at src/op/tests.rs:1200:5:
 an imported operation signed again | killed | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test handoff hand_off_import_quote_submit | panicked at tests/handoff.rs:341:49:
 the payer's nonce not advanced | killed | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test handoff payers_and_their_nonces | panicked at tests/handoff.rs:580:5:
 the canonical zeroing of an unbound feeRecipient skipped | killed | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test handoff an_unbound_fee_recipient_in_the_blob_is_zeroed | panicked at tests/handoff.rs:489:5:
@@ -12,4 +12,4 @@ a confidential kind imported | killed | 3aee59025 | ../../scripts/capped cargo t
 the import's simulation dropped | killed | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test handoff import_refusals_in_order | panicked at tests/handoff.rs:413:5:
 a hand-off with a fee | killed | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test handoff hand_off_refusals | panicked at tests/handoff.rs:469:5:
 Hedera's ECDSA payer refused | killed | 3aee59025 | ../../scripts/capped cargo test --locked --offline -j2 --test handoff payers_and_their_nonces | panicked at tests/handoff.rs:541:14:
-13 mutants, 12 killed, 1 survived, 0 not loaded, 0 other failure
+13 mutants, 13 killed, 0 survived, 0 not loaded, 0 other failure
