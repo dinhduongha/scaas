@@ -2,7 +2,7 @@
 //! Plan T13 `pq_registration_split`: a PQ registration carrying its PQZ key's `pqzPop` (the `ua/portable.json` row
 //! `mldsa65/n2304-kmax4096`, a real one) on the fake chain whose estimate grows with the calldata, driven here as both entries
 //! drive it (`tests/account_ops.rs` `sponsored_pq_blob_split` drives it through a blob).
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::expect_used, clippy::panic)]
 // the fake chain of the integration tests, as `op::tests` takes it too (a test-only copy per module)
 #[allow(clippy::duplicate_mod)]
 #[path = "../../tests/common/fake_chain.rs"]
