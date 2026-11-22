@@ -41,3 +41,7 @@ T8 | pqc-test | 520dc7be1 | 0 | 81 passed, 0 failed, 3 ignored (15 binaries)
 T8 | pqc-clippy | 520dc7be1 | 0 | -
 T8 | pqc-reads | 520dc7be1 | 0 | reads 33 (23 trusted), writes 13, R2 23; 0 refused
 T8 | pqc-wasm | 520dc7be1 | 0 | -
+T9 | pqc-test | 5462652f3 | 0 | 90 passed, 0 failed, 4 ignored (17 binaries)
+T9 | pqc-clippy | 5462652f3 | 0 | -
+T9 | pqc-reads | 5462652f3 | 0 | reads 33 (23 trusted), writes 13, R2 23; 0 refused
+T9 | pqc-chain | 5462652f3 | 0 | 4 passed, 0 failed, 0 ignored (17 binaries)
