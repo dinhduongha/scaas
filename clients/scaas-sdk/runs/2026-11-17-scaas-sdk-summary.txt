@@ -95,7 +95,6 @@ frb-dart | b0c917a2c | 0 | dart: +46:; tree dirty
 sdk-wasm | 7f5e03caf | 0 | -; tree dirty
 sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
-ua-vectors | c1a17c82f | 0 | 665 passed, 0 failed, 6 ignored (62 binaries)
 # T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
 # tree that became those two commits (the SDK, ffi, Dart and ua-rs files); ua-test ran before a clippy-only rewrite of one
 # lookup in policy.rs (ua-clippy at 1233ed00d + it), the touched ua-rs tests (wallet_uasig, sign_scaas, wallet_typed) rerun
@@ -167,11 +166,7 @@ cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-dart | 7104a069f | 0 | dart: +14:
 rpc-clippy | cd3b6c03e | 0 | -
 gas-gen | 6e7e71142 | 0 | -
-ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
-ua-clippy | 7765d3e64 | 0 | -
-ua-test | 95badea99 | 0 | 608 passed, 0 failed, 3 ignored (61 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
@@ -195,19 +190,32 @@ ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
 # cli: the rc=101 note above is closed by baf175492 (git cherry-pick -x of sdk-complete's b7a34aff6): cli rc=0 at baf175492
 # node build at 129380772 (the merged tree, CAPPED_MEM=6G, cargo build --locked --offline -j2): rc=0, Finished in 3m 19s; log runs/2026-11-22-sdk-evm-profiles-node-build.log (git-ignored)
 # sdk-evm-profiles: docs | 1cba8f84a | 0 | -
-sdk-test | 4175c2d43 | 0 | 402 passed, 0 failed, 16 ignored (37 binaries)
-rpc-test | 4175c2d43 | 0 | 205 passed, 0 failed, 10 ignored (21 binaries)
 rpc-wasm | 4175c2d43 | 0 | -
-bind-gen | 4175c2d43 | 0 | -
-cli | 4175c2d43 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
 node-test | 4175c2d43 | 0 | 897 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
-docs | 54ddfcb33 | 0 | -
-features | 54ddfcb33 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
-sdk-noevm | 54ddfcb33 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
-sdk-clippy-noevm | 54ddfcb33 | 0 | -
-sdk-clippy | 54ddfcb33 | 0 | -
 mutants-check | 54ddfcb33 | 1 | -
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
+ck-test | 17d674c71 | 0 | node: 563 pass, 0 fail, 4 skipped
+rpc-test | 17d674c71 | 0 | 212 passed, 0 failed, 10 ignored (22 binaries)
+sdk-noevm | 17d674c71 | 0 | 157 passed, 0 failed, 0 ignored (21 binaries)
+sdk-clippy-noevm | 17d674c71 | 0 | -
+ua-test | 17d674c71 | 0 | 614 passed, 0 failed, 3 ignored (62 binaries)
+ua-clippy | 17d674c71 | 0 | -
+ua-verify-only | 17d674c71 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
+ua-vectors | 17d674c71 | 0 | 724 passed, 0 failed, 6 ignored (70 binaries)
+sdk-clippy | 17d674c71 | 0 | -
+sdk-test | 17d674c71 | 0 | 416 passed, 0 failed, 16 ignored (39 binaries)
+bind-gen | 17d674c71 | 0 | -
+features | b73877866 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+cli | a9d971b95 | 0 | 44 passed, 0 failed, 1 ignored (6 binaries)
+docs | a9d971b95 | 0 | -
+# T41.soroban (branch sdk-soroban; with T27, T29, T30.soroban): the rows above from ck-test to docs are this branch's, at
+# 17d674c71 (code), b73877866 and a9d971b95 (the CLI's Soroban commands; docs unchanged after 17d674c71 but for the (80)-(89)
+# renumbering, 92c2bd274); CARGO_INCREMENTAL=0. Beside them, not runner steps: scaas-node `cargo test --test families_vectors`
+# 5 passed at a9d971b95 (soroban_op_envelopes_through_the_adapter, soroban_native_transactions_through_the_official_xdr;
+# no node code changed, so no node-test or node clippy); ua-rs clippy -D warnings at 17d674c71 on the CI cells default,
+# --features vectors, --no-default-features: clean; scaas-rpc clippy --all-features clean; format.sh --check rust js py clean.
+# Mutants t41sor 22/22 killed (2026-11-17-scaas-sdk-t41sor-mutants.txt). The Soroban local-network e2e was not run (no
+# recorded fixtures either: the SDK tests' fake RPC answers with clientkeys' rows).
