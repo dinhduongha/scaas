@@ -154,6 +154,8 @@ pub const SHARED_CODES: &[&str] = &[
     "AppHandleForeign",
     "AppKeyUsage",
     "AppArenaFull",
+    // plan T42 (CLI-SDK-33 (37) (a)): a family this build leaves out, `scaas-ua`'s refusal mapped one to one
+    "FeatureMissing",
 ];
 
 impl std::fmt::Display for SdkError {
