@@ -1,0 +1,13 @@
+# t4 mutants (name | outcome | commit | test | first failure line)
+skip the envelope check | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check envelope_a_flipped_byte | panicked at tests/check.rs:70:5:
+skip V1 | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check signature_of_another_key | panicked at tests/check.rs:89:5:
+skip the membership check | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check member_a_sender_outside_the_epoch | panicked at tests/check.rs:111:5:
+read membership from the replica | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check member_read_at_home_not_at_the_replica | panicked at tests/check.rs:238:5:
+drop the counter check | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check counter_two_records_one_counter | panicked at tests/check.rs:149:5:
+drop the messageId dedupe | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check duplicate_one_record_twice | panicked at tests/check.rs:184:5:
+skip the replica equality | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check replica_differs_from_home | panicked at tests/check.rs:207:5:
+skip the factory listing | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check unlisted_instance | panicked at tests/check.rs:255:9:
+skip the wrap-hash check | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test check wrap_hash_before_any_decapsulation | panicked at tests/check.rs:281:5:
+mark kemKeyOf as an ordinary read | killed | 14765e1d6 | ../../scripts/capped cargo test --locked --offline -j2 --test reads kem_key_of_is_trusted | panicked at tests/reads.rs:50:5:
+drop the highest-version check | killed | b947598f4 | ../../scripts/capped cargo test --locked --offline -j2 --test reads kem_version_lowered | panicked at tests/reads.rs:117:50:
+11 mutants, 11 killed, 0 survived, 0 not loaded, 0 other failure

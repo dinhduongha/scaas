@@ -160,7 +160,6 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 #      request count through the fake
 # M18  the regular line extrapolated past its measured counts (measure at the largest count the cap admits, or refuse above)
 # M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt
-sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-dart | 7104a069f | 0 | dart: +14:
 ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
@@ -210,6 +209,8 @@ ua-core | 0736ad763 | 0 | 75 passed, 0 failed, 0 ignored (8 binaries)
 # T41.arweave fam-arweave size (clients/ua-rs/runs/fam-sizes.sh, release, the probe now reaching DataItem::parse) at 0736ad763: none 2212040 B; fam-arweave 2205712 → 2265656 B (delta −72 → +53616 B, old the empty feature at 61c5bb014); all 2342744 → 2379296 B (delta +136960 → +167256 B)
 rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
 rpc-wasm | 6f2eb3dbd | 0 | -
+sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
+sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
 bind-gen | 7daa8b2bc | 0 | -
 ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
 # T41.arweave's scaas-rpc and SDK parts (CA-T19, CA-T20): code 6f2eb3dbd, the shared ArweaveItem code 7daa8b2bc (error_codes_are_names was red at 6f2eb3dbd in sdk-test, sdk-noevm, sdk-min: fixed, rows above at 7daa8b2bc), the notC9 rows 291a864b2 (the survivor of t41arw2 killed); the rpc rows at 6f2eb3dbd are unchanged by the two later code commits (scaas-rpc untouched)
@@ -285,3 +286,10 @@ sdk-soroban-e2e | 9f8c4570e | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 # soroban_ops 9, scaas-node families_vectors 5; clippy -D warnings of ua-rs (default), scaas-rpc (--all-features), scaas-sdk
 # (the full set with vectors, the non-EVM set); docs; format.sh --check rust js py sh after git add -N. Mutants t41sor 23 of
 # 23 killed at 9f8c4570e (the new one: a SourceAccount entry taken from another payer).
+sdk-arweave | 028da021c | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+sdk-clippy-noevm | 028da021c | 0 | -
+cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+# pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
+sdk-test | e5573b3d6 | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
+sdk-vectors | e5573b3d6 | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+sdk-clippy | f238113b8 | 0 | -

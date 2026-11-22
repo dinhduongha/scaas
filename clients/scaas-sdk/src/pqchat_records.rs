@@ -347,6 +347,40 @@ impl AppCore {
             .await
     }
 
+    /// V2: `hashStruct(Wrap)` of a wrap read from state, for pqchat-core's check against the signed record's `wrapHashes[i]`
+    /// before the wrap enters a decapsulation (CLI-PQC-07). No key; a wrap that does not build: `Argument`.
+    pub fn pqchat_wrap_hash(&self, wrap: PqWrap) -> Result<String, SdkError> {
+        wrap_hashes(std::slice::from_ref(&wrap))?
+            .pop()
+            .ok_or(SdkError::Internal)
+    }
+
+    /// The `messageId` of a received `PqChatMessage` (UA-7 §4.3, `typed(PqChatMessage)`): the one id a message has on every
+    /// store (P19), for pqchat-core's dedupe. No key; a record that does not build: `Argument`.
+    pub fn pqchat_message_id(&self, r: PqChatMessage) -> Result<String, SdkError> {
+        let m = json!({"sessionId": r.session_id, "epochId": r.epoch_id, "sender": r.sender, "device": r.device,
+            "counter": r.counter, "parents": r.parents, "ciphertext": hex(&r.ciphertext)});
+        Ok(hex(&pqchat::typed("PqChatMessage", m)?.digest()?))
+    }
+
+    /// S4: `sessionId(creator, nonce)` (UA-7 §4.3), before signing: the wraps' AAD and the KEK bind it. No key.
+    pub fn pqchat_session_id(&self, creator: String, nonce: u64) -> Result<String, SdkError> {
+        Ok(hex(&pqchat::id("session", &[w32(&creator)?, w64(nonce)])))
+    }
+
+    /// S4: `epochId(sessionId, author, nonce)` (UA-7 §4.3), before signing. No key.
+    pub fn pqchat_epoch_id(
+        &self,
+        session_id: String,
+        author: String,
+        nonce: u64,
+    ) -> Result<String, SdkError> {
+        Ok(hex(&pqchat::id(
+            "epoch",
+            &[w32(&session_id)?, w32(&author)?, w64(nonce)],
+        )))
+    }
+
     /// `PqTopic`.
     pub async fn sign_pqchat_topic(
         self: &Arc<Self>,

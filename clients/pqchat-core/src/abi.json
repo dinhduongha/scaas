@@ -1,0 +1,2891 @@
+{
+ "IOpenFactory.contractsPage": {
+  "inputs": [
+   {
+    "internalType": "uint16",
+    "name": "contractClass",
+    "type": "uint16"
+   },
+   {
+    "internalType": "uint256",
+    "name": "from",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "n",
+    "type": "uint256"
+   }
+  ],
+  "name": "contractsPage",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "address",
+      "name": "addr",
+      "type": "address"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "creatorId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint16",
+      "name": "contractClass",
+      "type": "uint16"
+     },
+     {
+      "internalType": "uint16",
+      "name": "kind",
+      "type": "uint16"
+     },
+     {
+      "internalType": "uint64",
+      "name": "version",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "createdBlock",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "createdAt",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IOpenFactory.Created[]",
+    "name": "page",
+    "type": "tuple[]"
+   },
+   {
+    "internalType": "uint256",
+    "name": "total",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IOpenFactory.infoOf": {
+  "inputs": [
+   {
+    "internalType": "address",
+    "name": "c",
+    "type": "address"
+   }
+  ],
+  "name": "infoOf",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "address",
+      "name": "addr",
+      "type": "address"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "creatorId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint16",
+      "name": "contractClass",
+      "type": "uint16"
+     },
+     {
+      "internalType": "uint16",
+      "name": "kind",
+      "type": "uint16"
+     },
+     {
+      "internalType": "uint64",
+      "name": "version",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "createdBlock",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "createdAt",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IOpenFactory.Created",
+    "name": "",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.EPOCHS_RANGE_MAX": {
+  "inputs": [],
+  "name": "EPOCHS_RANGE_MAX",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.REMOVE_MAX": {
+  "inputs": [],
+  "name": "REMOVE_MAX",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.SESSIONS_RANGE_MAX": {
+  "inputs": [],
+  "name": "SESSIONS_RANGE_MAX",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.STORED_RANGE_MAX": {
+  "inputs": [],
+  "name": "STORED_RANGE_MAX",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.addWraps": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint32",
+    "name": "first",
+    "type": "uint32"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "member",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "keyId",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes",
+      "name": "mlkemCt",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519Eph",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedKey",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.Wrap[]",
+    "name": "wraps",
+    "type": "tuple[]"
+   }
+  ],
+  "name": "addWraps",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.byAuthor": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "author",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "start",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "byAuthor",
+  "outputs": [
+   {
+    "internalType": "bytes32[]",
+    "name": "ids",
+    "type": "bytes32[]"
+   },
+   {
+    "internalType": "uint256",
+    "name": "total",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.childOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "parentEpochId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "childOf",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.createSession": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "creator",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "homeChain",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "address",
+      "name": "homeChatContract",
+      "type": "address"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "admins",
+      "type": "bytes32[]"
+     },
+     {
+      "components": [
+       {
+        "internalType": "bytes32",
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint64",
+        "name": "keyId",
+        "type": "uint64"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "via",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IPqChat.MemberKey[]",
+      "name": "members",
+      "type": "tuple[]"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "wrapHashes",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedInfo",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatSession",
+    "name": "s",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "member",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "keyId",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes",
+      "name": "mlkemCt",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519Eph",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedKey",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.Wrap[]",
+    "name": "wraps",
+    "type": "tuple[]"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "createSession",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.createTopic": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "admin",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "homeChain",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "address",
+      "name": "homeChatContract",
+      "type": "address"
+     },
+     {
+      "internalType": "string",
+      "name": "name",
+      "type": "string"
+     },
+     {
+      "internalType": "bytes",
+      "name": "about",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bool",
+      "name": "openReplies",
+      "type": "bool"
+     }
+    ],
+    "internalType": "struct IPqChat.PqTopic",
+    "name": "t",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "createTopic",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "topicId",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.editEntry": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "entryId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "author",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint32",
+      "name": "version",
+      "type": "uint32"
+     },
+     {
+      "internalType": "string",
+      "name": "mediaType",
+      "type": "string"
+     },
+     {
+      "internalType": "bytes",
+      "name": "body",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqTopicEdit",
+    "name": "e",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "editEntry",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.entryNonceUsed": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "topicId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "author",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint64",
+    "name": "nonce",
+    "type": "uint64"
+   }
+  ],
+  "name": "entryNonceUsed",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.entryOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "entryId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "entryOf",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "topicId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "author",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "parentId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint32",
+      "name": "depth",
+      "type": "uint32"
+     },
+     {
+      "components": [
+       {
+        "internalType": "bytes32",
+        "name": "chainUid",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "address",
+        "name": "pqchat",
+        "type": "address"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "entryId",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "contentHash",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IPqChat.EntryRef",
+      "name": "ref",
+      "type": "tuple"
+     },
+     {
+      "internalType": "string",
+      "name": "mediaType",
+      "type": "string"
+     },
+     {
+      "internalType": "bytes",
+      "name": "body",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "sigHash",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint32",
+      "name": "versionCount",
+      "type": "uint32"
+     }
+    ],
+    "internalType": "struct IPqChat.EntryView",
+    "name": "",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.epochComplete": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "epochComplete",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.epochCount": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "epochCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.epochOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "epochOf",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "author",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "epoch",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "parentEpochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "admins",
+      "type": "bytes32[]"
+     },
+     {
+      "components": [
+       {
+        "internalType": "bytes32",
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint64",
+        "name": "keyId",
+        "type": "uint64"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "via",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IPqChat.MemberKey[]",
+      "name": "members",
+      "type": "tuple[]"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "wrapHashes",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedInfo",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatEpoch",
+    "name": "e",
+    "type": "tuple"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "sigHash",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.epochsOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "offset",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "limit",
+    "type": "uint256"
+   }
+  ],
+  "name": "epochsOf",
+  "outputs": [
+   {
+    "internalType": "bytes32[]",
+    "name": "",
+    "type": "bytes32[]"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.initialize": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ownerUA",
+    "type": "bytes32"
+   }
+  ],
+  "name": "initialize",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.latestEpoch": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "latestEpoch",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.leave": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "epochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "member",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatLeave",
+    "name": "l",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "leave",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.leftIn": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "member",
+    "type": "bytes32"
+   }
+  ],
+  "name": "leftIn",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.messageAt": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "name": "messageAt",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "epochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "sender",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes16",
+      "name": "device",
+      "type": "bytes16"
+     },
+     {
+      "internalType": "uint64",
+      "name": "counter",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "parents",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes",
+      "name": "ciphertext",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatMessage",
+    "name": "m",
+    "type": "tuple"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "sigHash",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.messageCount": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "messageCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.nonceUsed": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "scope",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint64",
+    "name": "nonce",
+    "type": "uint64"
+   }
+  ],
+  "name": "nonceUsed",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.owner": {
+  "inputs": [],
+  "name": "owner",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.postEntry": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "topicId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "author",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "parentId",
+      "type": "bytes32"
+     },
+     {
+      "components": [
+       {
+        "internalType": "bytes32",
+        "name": "chainUid",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "address",
+        "name": "pqchat",
+        "type": "address"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "entryId",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "contentHash",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IPqChat.EntryRef",
+      "name": "ref",
+      "type": "tuple"
+     },
+     {
+      "internalType": "string",
+      "name": "mediaType",
+      "type": "string"
+     },
+     {
+      "internalType": "bytes",
+      "name": "body",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqTopicEntry",
+    "name": "e",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "postEntry",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "entryId",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.postMessage": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "epochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "sender",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes16",
+      "name": "device",
+      "type": "bytes16"
+     },
+     {
+      "internalType": "uint64",
+      "name": "counter",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "parents",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes",
+      "name": "ciphertext",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatMessage",
+    "name": "m",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "postMessage",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.posts": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "topicId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "start",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "posts",
+  "outputs": [
+   {
+    "internalType": "bytes32[]",
+    "name": "ids",
+    "type": "bytes32[]"
+   },
+   {
+    "internalType": "uint256",
+    "name": "total",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.rekey": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "author",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "uint64",
+      "name": "epoch",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "parentEpochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "admins",
+      "type": "bytes32[]"
+     },
+     {
+      "components": [
+       {
+        "internalType": "bytes32",
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint64",
+        "name": "keyId",
+        "type": "uint64"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "via",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IPqChat.MemberKey[]",
+      "name": "members",
+      "type": "tuple[]"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "wrapHashes",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedInfo",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatEpoch",
+    "name": "e",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "member",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "keyId",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes",
+      "name": "mlkemCt",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519Eph",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedKey",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.Wrap[]",
+    "name": "wraps",
+    "type": "tuple[]"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "rekey",
+  "outputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.removalAt": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "name": "removalAt",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "epochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nextEpoch",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "members",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "admin",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatRemove",
+    "name": "r",
+    "type": "tuple"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "sigHash",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.removalCount": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "removalCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.remove": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "sessionId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "epochId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nextEpoch",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "members",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "admin",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatRemove",
+    "name": "r",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "remove",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.removedIn": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "member",
+    "type": "bytes32"
+   }
+  ],
+  "name": "removedIn",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.replies": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "parentId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "start",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "replies",
+  "outputs": [
+   {
+    "internalType": "bytes32[]",
+    "name": "ids",
+    "type": "bytes32[]"
+   },
+   {
+    "internalType": "uint256",
+    "name": "total",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.scoreOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "entryId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "scoreOf",
+  "outputs": [
+   {
+    "internalType": "uint128",
+    "name": "up",
+    "type": "uint128"
+   },
+   {
+    "internalType": "uint128",
+    "name": "down",
+    "type": "uint128"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.sessionCount": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "sessionCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.sessionOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "sessionId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "sessionOf",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "creator",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "homeChain",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "address",
+      "name": "homeChatContract",
+      "type": "address"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "admins",
+      "type": "bytes32[]"
+     },
+     {
+      "components": [
+       {
+        "internalType": "bytes32",
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint64",
+        "name": "keyId",
+        "type": "uint64"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "via",
+        "type": "bytes32"
+       }
+      ],
+      "internalType": "struct IPqChat.MemberKey[]",
+      "name": "members",
+      "type": "tuple[]"
+     },
+     {
+      "internalType": "bytes32[]",
+      "name": "wrapHashes",
+      "type": "bytes32[]"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedInfo",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.PqChatSession",
+    "name": "s",
+    "type": "tuple"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "sigHash",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.sessionsOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "offset",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "limit",
+    "type": "uint256"
+   }
+  ],
+  "name": "sessionsOf",
+  "outputs": [
+   {
+    "internalType": "bytes32[]",
+    "name": "",
+    "type": "bytes32[]"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.setTopicWriter": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "topicId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "writer",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bool",
+      "name": "granted",
+      "type": "bool"
+     },
+     {
+      "internalType": "uint64",
+      "name": "seq",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IPqChat.PqTopicWriter",
+    "name": "w",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "setTopicWriter",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.storeMessage": {
+  "inputs": [
+   {
+    "internalType": "uint8",
+    "name": "v",
+    "type": "uint8"
+   },
+   {
+    "internalType": "bytes8",
+    "name": "hint",
+    "type": "bytes8"
+   },
+   {
+    "internalType": "bytes",
+    "name": "env",
+    "type": "bytes"
+   }
+  ],
+  "name": "storeMessage",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.storedAt": {
+  "inputs": [
+   {
+    "internalType": "bytes8",
+    "name": "hint",
+    "type": "bytes8"
+   },
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "name": "storedAt",
+  "outputs": [
+   {
+    "internalType": "bytes",
+    "name": "",
+    "type": "bytes"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.storedCount": {
+  "inputs": [
+   {
+    "internalType": "bytes8",
+    "name": "hint",
+    "type": "bytes8"
+   }
+  ],
+  "name": "storedCount",
+  "outputs": [
+   {
+    "internalType": "uint256",
+    "name": "",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.storedRange": {
+  "inputs": [
+   {
+    "internalType": "bytes8",
+    "name": "hint",
+    "type": "bytes8"
+   },
+   {
+    "internalType": "uint256",
+    "name": "offset",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "limit",
+    "type": "uint256"
+   }
+  ],
+  "name": "storedRange",
+  "outputs": [
+   {
+    "internalType": "bytes[]",
+    "name": "",
+    "type": "bytes[]"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.topicNonceUsed": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "admin_",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint64",
+    "name": "nonce",
+    "type": "uint64"
+   }
+  ],
+  "name": "topicNonceUsed",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.topicOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "topicId",
+    "type": "bytes32"
+   }
+  ],
+  "name": "topicOf",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "admin",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "nonce",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "homeChain",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "address",
+      "name": "homeChatContract",
+      "type": "address"
+     },
+     {
+      "internalType": "string",
+      "name": "name",
+      "type": "string"
+     },
+     {
+      "internalType": "bytes",
+      "name": "about",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bool",
+      "name": "openReplies",
+      "type": "bool"
+     }
+    ],
+    "internalType": "struct IPqChat.PqTopic",
+    "name": "t",
+    "type": "tuple"
+   },
+   {
+    "internalType": "uint64",
+    "name": "seq",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.topics": {
+  "inputs": [
+   {
+    "internalType": "uint256",
+    "name": "start",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "topics",
+  "outputs": [
+   {
+    "internalType": "bytes32[]",
+    "name": "ids",
+    "type": "bytes32[]"
+   },
+   {
+    "internalType": "uint256",
+    "name": "total",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.topicsByAdmin": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "admin_",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "start",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "topicsByAdmin",
+  "outputs": [
+   {
+    "internalType": "bytes32[]",
+    "name": "ids",
+    "type": "bytes32[]"
+   },
+   {
+    "internalType": "uint256",
+    "name": "total",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.updateTopic": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "topicId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "seq",
+      "type": "uint64"
+     },
+     {
+      "internalType": "string",
+      "name": "name",
+      "type": "string"
+     },
+     {
+      "internalType": "bytes",
+      "name": "about",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bool",
+      "name": "openReplies",
+      "type": "bool"
+     }
+    ],
+    "internalType": "struct IPqChat.PqTopicUpdate",
+    "name": "u",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "updateTopic",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.versionAt": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "entryId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint32",
+    "name": "version",
+    "type": "uint32"
+   }
+  ],
+  "name": "versionAt",
+  "outputs": [
+   {
+    "internalType": "string",
+    "name": "mediaType",
+    "type": "string"
+   },
+   {
+    "internalType": "bytes",
+    "name": "body",
+    "type": "bytes"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "sigHash",
+    "type": "bytes32"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.voteEntry": {
+  "inputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "entryId",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "voter",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "int8",
+      "name": "value",
+      "type": "int8"
+     },
+     {
+      "internalType": "uint64",
+      "name": "seq",
+      "type": "uint64"
+     }
+    ],
+    "internalType": "struct IPqChat.PqTopicVote",
+    "name": "v",
+    "type": "tuple"
+   },
+   {
+    "components": [
+     {
+      "internalType": "bytes",
+      "name": "keyData",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes",
+      "name": "signature",
+      "type": "bytes"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "index",
+        "type": "uint16"
+       },
+       {
+        "components": [
+         {
+          "internalType": "uint16",
+          "name": "index",
+          "type": "uint16"
+         },
+         {
+          "internalType": "bytes",
+          "name": "sig",
+          "type": "bytes"
+         }
+        ],
+        "internalType": "struct IUARegistry.InnerSig[]",
+        "name": "members",
+        "type": "tuple[]"
+       },
+       {
+        "internalType": "bytes",
+        "name": "sig",
+        "type": "bytes"
+       }
+      ],
+      "internalType": "struct IUARegistry.MemberSig[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.UASig",
+    "name": "sig",
+    "type": "tuple"
+   }
+  ],
+  "name": "voteEntry",
+  "outputs": [],
+  "stateMutability": "nonpayable",
+  "type": "function"
+ },
+ "IPqChat.voteOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "entryId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "voteOf",
+  "outputs": [
+   {
+    "internalType": "int8",
+    "name": "value",
+    "type": "int8"
+   },
+   {
+    "internalType": "uint64",
+    "name": "seq",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.wrapAt": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "epochId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "i",
+    "type": "uint256"
+   }
+  ],
+  "name": "wrapAt",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "bytes32",
+      "name": "member",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "uint64",
+      "name": "keyId",
+      "type": "uint64"
+     },
+     {
+      "internalType": "bytes",
+      "name": "mlkemCt",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519Eph",
+      "type": "bytes32"
+     },
+     {
+      "internalType": "bytes",
+      "name": "sealedKey",
+      "type": "bytes"
+     }
+    ],
+    "internalType": "struct IPqChat.Wrap",
+    "name": "",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.writerOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "topicId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "writerOf",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "granted",
+    "type": "bool"
+   },
+   {
+    "internalType": "uint64",
+    "name": "seq",
+    "type": "uint64"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IPqChat.writersOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "topicId",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "start",
+    "type": "uint256"
+   },
+   {
+    "internalType": "uint256",
+    "name": "count",
+    "type": "uint256"
+   }
+  ],
+  "name": "writersOf",
+  "outputs": [
+   {
+    "internalType": "bytes32[]",
+    "name": "ids",
+    "type": "bytes32[]"
+   },
+   {
+    "internalType": "uint256",
+    "name": "total",
+    "type": "uint256"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IUARegistry.checkedOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "checkedOf",
+  "outputs": [
+   {
+    "internalType": "uint8",
+    "name": "pop",
+    "type": "uint8"
+   },
+   {
+    "internalType": "uint8",
+    "name": "pqzPop",
+    "type": "uint8"
+   },
+   {
+    "internalType": "uint8",
+    "name": "kem",
+    "type": "uint8"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IUARegistry.kemKeyAt": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint64",
+    "name": "version",
+    "type": "uint64"
+   }
+  ],
+  "name": "kemKeyAt",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "uint8",
+      "name": "scheme",
+      "type": "uint8"
+     },
+     {
+      "internalType": "bytes",
+      "name": "mlkemEk",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519",
+      "type": "bytes32"
+     }
+    ],
+    "internalType": "struct IUARegistry.KemKey",
+    "name": "kem",
+    "type": "tuple"
+   },
+   {
+    "internalType": "bytes",
+    "name": "sig",
+    "type": "bytes"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IUARegistry.kemKeyOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "kemKeyOf",
+  "outputs": [
+   {
+    "internalType": "uint64",
+    "name": "version",
+    "type": "uint64"
+   },
+   {
+    "components": [
+     {
+      "internalType": "uint8",
+      "name": "scheme",
+      "type": "uint8"
+     },
+     {
+      "internalType": "bytes",
+      "name": "mlkemEk",
+      "type": "bytes"
+     },
+     {
+      "internalType": "bytes32",
+      "name": "x25519",
+      "type": "bytes32"
+     }
+    ],
+    "internalType": "struct IUARegistry.KemKey",
+    "name": "kem",
+    "type": "tuple"
+   },
+   {
+    "internalType": "bytes",
+    "name": "sig",
+    "type": "bytes"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IUARegistry.memberAccepted": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   },
+   {
+    "internalType": "uint256",
+    "name": "index",
+    "type": "uint256"
+   }
+  ],
+  "name": "memberAccepted",
+  "outputs": [
+   {
+    "internalType": "bool",
+    "name": "",
+    "type": "bool"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ },
+ "IUARegistry.msigOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "msigOf",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "uint16",
+      "name": "threshold",
+      "type": "uint16"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "kind",
+        "type": "uint16"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint16",
+        "name": "weight",
+        "type": "uint16"
+       }
+      ],
+      "internalType": "struct IUARegistry.MsigMember[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.MsigStructure",
+    "name": "",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
+ }
+}

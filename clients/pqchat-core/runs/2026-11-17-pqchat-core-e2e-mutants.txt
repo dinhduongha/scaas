@@ -1,0 +1,8 @@
+# e2e mutants (name | outcome | commit | test | first failure line)
+6 the counter check dropped | killed | c515730db | ../../scripts/capped cargo test --locked --offline -j2 --test e2e -- --ignored --test-threads 1 e2e_run | panicked at tests/e2e.rs:603:5:
+7 the messageId dedupe dropped | killed | c515730db | ../../scripts/capped cargo test --locked --offline -j2 --test e2e -- --ignored --test-threads 1 e2e_run | panicked at tests/e2e.rs:245:5:
+8 the replica equality skipped | killed | c515730db | ../../scripts/capped cargo test --locked --offline -j2 --test e2e -- --ignored --test-threads 1 e2e_run | panicked at tests/e2e.rs:485:5:
+9 the factory listing skipped | killed | c515730db | ../../scripts/capped cargo test --locked --offline -j2 --test e2e -- --ignored --test-threads 1 e2e_run | panicked at tests/e2e.rs:619:5:
+10 the wrap-hash check skipped | killed | c515730db | ../../scripts/capped cargo test --locked --offline -j2 --test e2e -- --ignored --test-threads 1 e2e_run | panicked at tests/e2e.rs:643:5:
+14 the pending gate removed (join) | killed | c515730db | ../../scripts/capped cargo test --locked --offline -j2 --test e2e -- --ignored --test-threads 1 e2e_run | panicked at tests/e2e.rs:670:5:
+6 mutants, 6 killed, 0 survived, 0 not loaded, 0 other failure

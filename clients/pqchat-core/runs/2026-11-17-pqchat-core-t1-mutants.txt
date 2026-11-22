@@ -1,5 +1,5 @@
 # t1 mutants (name | outcome | commit | test | first failure line)
-K2's info without kemPkHash | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys wraps_and_p14 | panicked at tests/pqchat_keys.rs:115:9:
+K2's info without kemPkHash | killed | 3da595648 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys wraps_and_p14 | panicked at tests/pqchat_keys.rs:115:9:
 K2's AAD without keyId | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys wraps_and_p14 | panicked at tests/pqchat_keys.rs:115:9:
 K3 with a salt | killed | 376af4a1a | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys chains_and_the_far_read | panicked at tests/pqchat_keys.rs:157:9:
 advance swapping the 0x01 and 0x02 messages | killed | bb6ac9451 | ../../scripts/capped cargo test --locked --offline -j2 --features app-core,vectors --test pqchat_keys chains_and_the_far_read | panicked at tests/pqchat_keys.rs:161:13:
