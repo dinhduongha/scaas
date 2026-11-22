@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // PqChat (UA-7 spec v2 §4, §6, §7, §10, P48; public topics spec §2; plan group 3c, 3C-D3 / 3C-D5 / 3C-D9): the typed records, ids,
 // nonce scopes, signed-record blobs, the hybrid KEM wrap, the sender chains, padding, the message, envelope and payload bytes,
-// sealedInfo, the call keys and the signed contact card (§14 O7). The byte formats of smartcontracts/vectors/pqchat/. UNAUDITED.
+// sealedInfo, the call keys, the signed contact card (§14 O7) and the `file` content (§6.4.1). The byte formats of smartcontracts/vectors/pqchat/. UNAUDITED.
 import { ml_kem1024 } from "@noble/post-quantum/ml-kem.js";
 import { x25519 } from "@noble/curves/ed25519.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
@@ -12,6 +12,7 @@ import { keccak_256, sha256, concatBytes, utf8ToBytes, fromHex, abiEncode } from
 import { encodeType, hashStruct, intWord } from "./evm.js";
 import { uaMessage } from "./ua.js";
 import { verifyUA } from "./pq.js";
+import { checkObject, openFile, parseArUrl } from "./arweave.js";
 
 const bytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
 const tag = (s) => keccak_256(utf8ToBytes(s));
@@ -471,4 +472,66 @@ export function verifyCard(ua, card, sig, publicKey, name = "mldsa65") {
     return false;
   }
   return verifyUA(name, bytes(publicKey), PURPOSE_PQCHAT, typed("PqChatCard", card), bytes(sig.signature));
+}
+
+// ------------------------------------------------------------------ the `file` content (§6.4.1, its 2026-11-21 Change; T10b)
+
+/** PqChat's app id in the registry's open app namespace (pqchat-core T10b, owner 2026-11-22): its scope's per-account storage
+ *  root, so the shared `seal_for_arweave` derives its upload keys; PqChat signs no app record under it. */
+export const APP_ID_TAG = "scaas.pqchat.v1";
+export const APP_ID = tag(APP_ID_TAG);
+/** A `file`'s largest `size` (§6.4.1). */
+export const FILE_SIZE_MAX = 2 ** 36 - 32;
+const HEX32 = /^0x[0-9a-f]{64}$/;
+const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const str = (v, lo, hi) => typeof v === "string" && utf8ToBytes(v).length >= lo && utf8ToBytes(v).length <= hi;
+const badFile = () => {
+  throw new PqChatError("file");
+};
+
+/** A `file` content's fields (§6.4.1 with its Change of 2026-11-21, controller calls of T10b): `type` "file"; `mediaType`
+ *  1–64 B; `name` 1–255 B; `size` an integer in [1, 2^36 − 32]; `sha256`, `ctSha256` and `key` lower-case `0x` hex of 32 B;
+ *  `url` an `ar://<id>` (the framed object, padding inside the AEAD); `store`, optional, `{kind 1–32 B, locator 1–2,048 B}`.
+ *  Another field is ignored. Anything else: `PqChatError('file')`. Returns the content. */
+export function checkFileContent(c) {
+  if (!isObj(c) || c.type !== "file") badFile();
+  if (!str(c.mediaType, 1, 64) || !str(c.name, 1, 255)) badFile();
+  if (!Number.isSafeInteger(c.size) || c.size < 1 || c.size > FILE_SIZE_MAX) badFile();
+  for (const k of ["sha256", "ctSha256", "key"]) if (typeof c[k] !== "string" || !HEX32.test(c[k])) badFile();
+  try {
+    parseArUrl(c.url);
+  } catch {
+    badFile();
+  }
+  if (c.store !== undefined && (!isObj(c.store) || !str(c.store.kind, 1, 32) || !str(c.store.locator, 1, 2048)))
+    badFile();
+  return c;
+}
+
+/** The sealer (S5 with a file key, pqchat-core T10b (a)): `fields`, a `file` content without `key`, gets the 32-byte file
+ *  key `fileKey` and is checked; its canonical JSON is what S5 pads and seals. A `key` already given, or another type:
+ *  `PqChatError('file')`. */
+export function sealFileContent(fields, fileKey) {
+  if (!isObj(fields) || fields.type !== "file" || "key" in fields) badFile();
+  const k = bytes(fileKey);
+  if (k.length !== 32) badFile();
+  return canonicalJson(
+    checkFileContent({ ...fields, key: `0x${[...k].map((x) => x.toString(16).padStart(2, "0")).join("")}` }),
+  );
+}
+
+/** The reader (pqchat-core T10b (b)): the file of `object` named by the opened content `content` (its canonical JSON text):
+ *  the content checked (`PqChatError('file')`), then before any decryption the object's exact length (`FileLength`) and
+ *  SHA-256 equal to `ctSha256` (`FileHashMismatch`), then the tag, the frame and `sha256` (`openFile`). */
+export function openFileContent(content, object) {
+  let c;
+  try {
+    c = JSON.parse(content);
+  } catch {
+    badFile();
+  }
+  checkFileContent(c);
+  const ct = fromHex(c.ctSha256);
+  checkObject(object, c.size, ct);
+  return openFile(fromHex(c.key), object, c.size, fromHex(c.sha256), ct);
 }

@@ -122,7 +122,7 @@ test("sealed objects: exactly bucket + 16 bytes, pinned by SHA-256", () => {
     assert.equal(hex(s.object.slice(0, 32)), r.head);
     assert.equal(hex(s.object.slice(-16)), r.tail);
     assert.equal(hex(s.sha256), r.sha256);
-    assert.equal(hex(ar.openFile(key, s.object, r.size, s.sha256)), hex(rnd(r.fileSeed, r.size)), r.name);
+    assert.equal(hex(ar.openFile(key, s.object, r.size, s.sha256, s.ctSha256)), hex(rnd(r.fileSeed, r.size)), r.name);
   }
 });
 
@@ -135,12 +135,13 @@ test("open_file's checks after the tag: len, the zero pad, sha256; each beside i
     if (r.frame.padAt !== undefined) fr[r.frame.padAt] = r.frame.padValue;
     const object = ar.encryptFrame(key, fr);
     assert.equal(hex(sha256(object)), r.ctSha256, r.name);
-    if (r.code) assert.throws(() => ar.openFile(key, object, r.size, b(r.sha256)), { code: r.code }, r.name);
-    else assert.equal(hex(ar.openFile(key, object, r.size, b(r.sha256))), hex(file), r.name);
+    if (r.code)
+      assert.throws(() => ar.openFile(key, object, r.size, b(r.sha256), sha256(object)), { code: r.code }, r.name);
+    else assert.equal(hex(ar.openFile(key, object, r.size, b(r.sha256), sha256(object))), hex(file), r.name);
   }
   // another key fails the tag
   const s = ar.sealFile(key, file);
-  assert.throws(() => ar.openFile(new Uint8Array(32), s.object, 5, s.sha256), { code: "Aead" });
+  assert.throws(() => ar.openFile(new Uint8Array(32), s.object, 5, s.sha256, s.ctSha256), { code: "Aead" });
 });
 
 test("the reader's check before decryption: the exact length and ctSha256", () => {
@@ -206,4 +207,19 @@ test("a file key (usage 4) wraps and unwraps by its usage only", () => {
   assert.equal(hex(ac.openKey(under, wire, ac.USAGE.File, utf8ToBytes("file"))), O.fileKey);
   assert.throws(() => ac.openKey(under, wire, ac.USAGE.Data, utf8ToBytes("file")));
   assert.throws(() => ac.sealKey(under, nonce, b(O.fileKey), 5, utf8ToBytes("file")), { code: "Argument" });
+});
+
+// pqchat-core T10b (the class fix): open_file checks the exact length and ctSha256 before any decryption, on every path.
+test("open_file checks the length and ctSha256 before decryption; each beside its control", () => {
+  const key = b(O.fileKey);
+  const file = rnd("file/5 bytes", 5);
+  const s = ar.sealFile(key, file);
+  assert.equal(hex(ar.openFile(key, s.object, 5, s.sha256, s.ctSha256)), hex(file), "control");
+  const flip = s.object.slice();
+  flip[1000] ^= 1;
+  assert.throws(() => ar.openFile(key, flip, 5, s.sha256, s.ctSha256), { code: "FileHashMismatch" });
+  assert.throws(() => ar.openFile(key, s.object, 5, s.sha256, new Uint8Array(32)), { code: "FileHashMismatch" });
+  assert.throws(() => ar.openFile(key, s.object.slice(0, -1), 5, s.sha256, s.ctSha256), { code: "FileLength" });
+  // another key, the right object: past the check, the tag refuses
+  assert.throws(() => ar.openFile(new Uint8Array(32), s.object, 5, s.sha256, s.ctSha256), { code: "Aead" });
 });

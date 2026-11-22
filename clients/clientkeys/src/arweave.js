@@ -309,10 +309,11 @@ export function checkObject(object, size, ctSha256, cap = CAP_64) {
   if (h.length !== ctSha256.length || h.some((b, i) => b !== ctSha256[i])) fail("FileHashMismatch");
 }
 
-/** `open_file`: the tag (`Aead`), the frame's `len` equal to `size` (`FileFrame`), every pad byte zero (`FileFrame`), SHA-256
- *  of the file equal to `sha256` (`FileHashMismatch`); only then the file. */
-export function openFile(fileKey, object, size, sha, cap = CAP_64) {
-  if (object.length !== bucket(size, cap) + 16) fail("FileLength");
+/** `open_file`: first the reader's check before decryption (`checkObject`: the exact length, `FileLength`; SHA-256 of the
+ *  object equal to `ctSha256`, `FileHashMismatch`), then the tag (`Aead`), the frame's `len` equal to `size` (`FileFrame`),
+ *  every pad byte zero (`FileFrame`), SHA-256 of the file equal to `sha256` (`FileHashMismatch`); only then the file. */
+export function openFile(fileKey, object, size, sha, ctSha256, cap = CAP_64) {
+  checkObject(object, size, ctSha256, cap);
   let fr;
   try {
     fr = gcm(fileKey, new Uint8Array(12)).decrypt(object);

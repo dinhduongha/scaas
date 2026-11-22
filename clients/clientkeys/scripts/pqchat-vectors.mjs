@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as pc from "../src/pqchat.js";
+import * as ar from "../src/arweave.js";
 import { pqKeygen, signUA } from "../src/pq.js";
 import { hex, keccak_256, utf8ToBytes, concatBytes } from "../src/bytes.js";
 
@@ -251,6 +252,7 @@ write("records.json", {
   version: 1,
   domain,
   purpose,
+  appId: { tag: pc.APP_ID_TAG, hash: pc.APP_ID },
   typehashes: typehashes(pc.SESSION_STRUCTS),
   tags: tags(["session", "epoch", "message"]),
   signers: people.map((p) => ({
@@ -403,6 +405,94 @@ const call = (name, callSecret) => {
   const k = pc.callKeys(x, senders);
   return { name, ...x, callBase: k.callBase, senders: senders.map((s, i) => ({ ...s, baseKey: k.baseKeys[i] })) };
 };
+// ------------------------------------------------------------------ the `file` content (§6.4.1, its 2026-11-21 Change; T10b)
+const FILE_KEY = rnd("file/key");
+const APP_ROOT = rnd("file/app-root");
+const FILE = rnd("file/body", 1000);
+const sealedFile = ar.sealForArweave(APP_ROOT, FILE_KEY, FILE, 2);
+const fileFields = {
+  type: "file",
+  mediaType: "application/octet-stream",
+  name: "vectors.bin",
+  size: FILE.length,
+  sha256: hex(sealedFile.sha256),
+  ctSha256: hex(sealedFile.ctSha256),
+  url: sealedFile.url,
+};
+const fileContent = pc.sealFileContent(fileFields, FILE_KEY);
+const fileHeader = { ...header, counter: 3, parents: [hex(pc.messageId(message))] };
+const fileRecord = {
+  ...fileHeader,
+  ciphertext: hex(pc.encryptMessage(K1, fileHeader, pc.pad(utf8ToBytes(fileContent)))),
+};
+const fileSig = sign(alice, "PqChatMessage", fileRecord);
+const fileEnvNonce = rnd("nonce/file-envelope", 12);
+const fileEnv = pc.envelope(K1, fileRecord, fileSig, fileEnvNonce);
+const withKey = { ...fileFields, key: hex(FILE_KEY) };
+/** Each a content one change from the row's, refused by checkFileContent; the twin is the row's content. */
+const fileRefused = [
+  ["no key", (c) => delete c.key],
+  ["a key of 31 bytes", (c) => (c.key = c.key.slice(0, -2))],
+  ["a key in upper-case hex", (c) => (c.key = `0x${c.key.slice(2).toUpperCase()}`)],
+  ["no ctSha256", (c) => delete c.ctSha256],
+  ["a sha256 of 33 bytes", (c) => (c.sha256 += "00")],
+  ["no url", (c) => delete c.url],
+  ["an https url (not the framed ar:// form)", (c) => (c.url = "https://example.org/vectors.bin")],
+  ["an ar:// id of 42 characters", (c) => (c.url = c.url.slice(0, -1))],
+  ["size 0", (c) => (c.size = 0)],
+  ["size 2^36 - 31", (c) => (c.size = pc.FILE_SIZE_MAX + 1)],
+  ["size as a string", (c) => (c.size = String(c.size))],
+  ["an empty name", (c) => (c.name = "")],
+  ["a name of 256 bytes", (c) => (c.name = "n".repeat(256))],
+  ["a mediaType of 65 bytes", (c) => (c.mediaType = "m".repeat(65))],
+  ["a store with an empty locator", (c) => (c.store = { kind: "matrix", locator: "" })],
+  ["another type", (c) => (c.type = "text")],
+].map(([name, f]) => {
+  const content = structuredClone(withKey);
+  f(content);
+  return { name, content, twin: withKey };
+});
+/** The sealer's refusals: the content it is given already holds a key, or is of another type. */
+const fileSealRefused = [
+  { name: "a key given to the sealer", content: { ...fileFields, key: hex(FILE_KEY) }, twin: fileFields },
+  { name: "another type", content: { ...fileFields, type: "text" }, twin: fileFields },
+];
+/** The reader's refusals of the row's object and content, each one change from the control. */
+const fileOpenRefused = [
+  { name: "control", change: null, code: null },
+  { name: "one byte short (refused before decryption)", change: "drop-last", code: "FileLength" },
+  { name: "one byte long (refused before decryption)", change: "append-zero", code: "FileLength" },
+  { name: "byte 1,000 flipped (ctSha256, before decryption)", change: "flip-1000", code: "FileHashMismatch" },
+  {
+    name: "the content's ctSha256 of another object",
+    content: { ...withKey, ctSha256: hex(new Uint8Array(32)) },
+    code: "FileHashMismatch",
+  },
+  {
+    name: "the content's size one more (the frame's len)",
+    content: { ...withKey, size: FILE.length + 1 },
+    code: "FileFrame",
+  },
+  {
+    name: "the content's sha256 of another file (after decryption)",
+    content: { ...withKey, sha256: Z32 },
+    code: "FileHashMismatch",
+  },
+  { name: "another key (the tag)", content: { ...withKey, key: Z32 }, code: "Aead" },
+].map((r) => {
+  let o = sealedFile.object;
+  if (r.change === "drop-last") o = o.slice(0, -1);
+  if (r.change === "append-zero") o = concatBytes(o, Uint8Array.of(0));
+  if (r.change === "flip-1000") (o = o.slice()), (o[1000] ^= 1);
+  let got = null;
+  try {
+    pc.openFileContent(pc.canonicalJson(r.content ?? withKey), o);
+  } catch (e) {
+    got = e.code;
+  }
+  if (got !== r.code) throw new Error(`${r.name}: ${got}, expected ${r.code}`);
+  return r;
+});
 write("messages.json", {
   _comment:
     `${COMMON} Messages and transports (spec §6.3–§6.5, P15, P25, P29, §4.2, P22). HKDF = HKDF-SHA-256, empty salt, 32 B; ` +
@@ -426,7 +516,19 @@ write("messages.json", {
     "chainFar: the step at counter 5,000 of the first chain, walked from ck0 (CLI-PQC-14: a reader keeps no skipped key and " +
     "walks at most 2^20 steps from a position it holds). canonicalJson: input (JSON text) and its canonical form, keys sorted by " +
     "UTF-16 code units, JSON.stringify escapes, numbers only integers within +-(2^53 - 1); canonicalRefused: inputs refused. " +
-    "unpadRefused: padded texts unpad refuses, each one change from its twin (pad of content), which opens.",
+    "unpadRefused: padded texts unpad refuses, each one change from its twin (pad of content), which opens. fileMessage " +
+    "(UA-7 §6.4.1 with its 2026-11-21 Change, pqchat-core T10b): file = rnd(fileSeed, size); the object = arweave.js " +
+    "sealForArweave(appRoot, fileKey, file, signatureType) (objects.json's frame, bucket(size) + 16 B, ctSha256 its SHA-256; url " +
+    "ar://<id> of the item); sealed = the canonical JSON the sealer is given (every field but key); content = the sealer's " +
+    "result, sealed plus key = fileKey (lower-case 0x hex), canonical; record = a PqChatMessage of alice's device alice-1 at " +
+    "counter 3 in epoch 1 (its one parent the message row's id), ciphertext = AES-256-GCM-SIV(mk_3, n_3, pad(UTF-8 content), " +
+    "aad); id = typed(record); env = nonce envNonce ‖ AES-256-GCM-SIV(kEnv, envNonce, inner). The reader: the content checked " +
+    "(type file, mediaType 1-64 B, name 1-255 B, size an integer 1 to 2^36 - 32, sha256, ctSha256 and key 0x hex of 32 B, url " +
+    'ar:// only, store optional {kind 1-32 B, locator 1-2,048 B}; else "file"), then before any decryption the object\'s exact ' +
+    "length (FileLength) and SHA-256 = ctSha256 (FileHashMismatch), then the tag (Aead), the frame (FileFrame) and sha256 " +
+    '(FileHashMismatch). fileContentRefused: contents the check refuses ("file"), each one change from twin; fileSealRefused: ' +
+    "what the sealer refuses to be given (a key, another type); fileOpenRefused: the row's object or content changed once, " +
+    "each with its error (null: opens).",
   version: 1,
   devices: Object.entries(DEVICES).map(([name, device]) => ({
     name,
@@ -483,6 +585,30 @@ write("messages.json", {
     ["above 2^53 - 1", '{"n":9007199254740992}'],
   ].map(([name, input]) => ({ name, input })),
   unpadRefused: unpadRows(),
+  fileMessage: {
+    K: K1,
+    appRoot: APP_ROOT,
+    fileKey: FILE_KEY,
+    signatureType: 2,
+    fileSeed: "file/body",
+    file: FILE,
+    size: FILE.length,
+    sha256: sealedFile.sha256,
+    ctSha256: sealedFile.ctSha256,
+    objectLength: sealedFile.object.length,
+    url: sealedFile.url,
+    sealed: pc.canonicalJson(fileFields),
+    content: fileContent,
+    record: fileRecord,
+    id: pc.messageId(fileRecord),
+    uaSig: fileSig,
+    envNonce: fileEnvNonce,
+    inner: fileEnv.inner,
+    env: fileEnv.env,
+  },
+  fileContentRefused: fileRefused,
+  fileSealRefused,
+  fileOpenRefused,
 });
 
 // ------------------------------------------------------------------ topics (public topics spec §2)

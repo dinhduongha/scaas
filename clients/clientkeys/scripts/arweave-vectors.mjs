@@ -235,7 +235,7 @@ const frameRows = [
   const sha = r.sha256 ? fromHex(r.sha256) : sha256(small);
   let got = null;
   try {
-    ar.openFile(FILE_KEY, object, 5, sha);
+    ar.openFile(FILE_KEY, object, 5, sha, sha256(object));
   } catch (e) {
     got = e.code;
   }
