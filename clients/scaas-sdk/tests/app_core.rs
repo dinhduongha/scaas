@@ -1125,6 +1125,7 @@ async fn a_handle_twice_in_one_call_is_refused() {
         "Ok",
         "a nonce handle beside its key"
     );
+}
 
 /// A scope's calls after the seed's lock and the next unlock: served again from the new arena (the scope over the old one
 /// is not kept), the old handles revoked; between the two `WalletLocked`.
