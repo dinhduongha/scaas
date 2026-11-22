@@ -7113,7 +7113,9 @@ impl VaultMember {
 #[tokio::test]
 #[ignore]
 async fn pqvault_vault_items_and_recovery() {
-    pqvault_flow(1, 31920).await;
+    // a chain id of its own: 31920 is `ua_line_two_generations_on_anvil`'s, and two tests on one id share its anvil port,
+    // its deploy book and forge's broadcast cache (the parallel run's red of 2026-11-22)
+    pqvault_flow(1, 31900).await;
 }
 
 #[tokio::test]

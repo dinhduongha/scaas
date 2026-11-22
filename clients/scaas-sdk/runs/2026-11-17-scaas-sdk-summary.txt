@@ -188,19 +188,25 @@ ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
 # cli: the rc=101 note above is closed by baf175492 (git cherry-pick -x of sdk-complete's b7a34aff6): cli rc=0 at baf175492
 # node build at 129380772 (the merged tree, CAPPED_MEM=6G, cargo build --locked --offline -j2): rc=0, Finished in 3m 19s; log runs/2026-11-22-sdk-evm-profiles-node-build.log (git-ignored)
 # sdk-evm-profiles: docs | 1cba8f84a | 0 | -
-node-test | 4175c2d43 | 0 | 897 passed, 0 failed, 75 ignored (19 binaries)
-node-e2e | 4175c2d43 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 4175c2d43 (origin/ua-rs-sign cc45679e8 into sdk-complete): node-e2e at --test-threads=10, wall 84 s, the capped scope's memory.peak 3.75 GB read at 60 s (cap 6 GiB); two reds before it were the runner's inputs, not the tree: a forge recovery snapshot of chain 31918 left by an interrupted earlier run (moved aside), and zether-cli built without `--features hazmat` (CI's e2e builds it with hazmat)
 sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
 ua-c | e90f26685 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | e90f26685 | 0 | ctest: 0 tests failed out of 45
+features | 0011b40e4 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+mutants-check | 0011b40e4 | 0 | -
 sdk-noevm | 0011b40e4 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
 sdk-wasm | 0011b40e4 | 0 | -
 bind-dart | 0011b40e4 | 0 | dart: +14:
 rpc-wasm | 0011b40e4 | 0 | -
+
 # faecafcd2 (T41.evm): sdk-e2e's e2e_hand_off_on_anvil alone (CAPPED_MEM=6G, --ignored): 1 passed (A hands off, B lands it, the same blob ImportConsumed, a blob bound to C ImportRelayerBound, A's own self-relay lands); the whole sdk-e2e is the round's matrix (T39). Mutants: t41evm0 9 of 9, t41evm 13 of 13 killed
 ck-xcheck | 0736ad763 | 0 | -
+# T28 digest fix (b312a2e8e): node-test and its clippy at 48514e797 (the next commit, e71d44d42, changes one ignored e2e test's chain id only); node-e2e red twice at 10 threads before e71d44d42 (ua_line_two_generations_on_anvil's DeployUAGen reverted: chain 31920 shared with pqvault_vault_items_and_recovery; it passed alone), green after; zether-cli built with --features hazmat
+# merged from origin/ua-rs-sign a97cce414 (sdk-arweave's rows, kept as they were):
+ck-test | 0736ad763 | 0 | node: 567 pass, 0 fail, 4 skipped
+ck-xcheck | 0736ad763 | 0 | -
+features | 0736ad763 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 ua-arweave | 0736ad763 | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 ua-core | 0736ad763 | 0 | 75 passed, 0 failed, 0 ignored (8 binaries)
 # T41.arweave's ua-rs part at 0736ad763 (CA-T16, CA-T17): the rows above; mutants t41arw1 20/20 killed (the ua-rs rows at 0736ad763, the clientkeys rows at 9764de7c0, their command through capped with the TAP reporter); every mutant script loads (mutants-check's commands, run by hand at 9764de7c0: rc 0)
@@ -229,3 +235,12 @@ ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # hand, not a runner step). format.sh --check: rust, js, py, sol clean at 4f64cf766 (tact not run: no ton node_modules in the
 # worktree; untouched). Mutants pqvsign 14/14 killed at 7992a33e7. No pin moved: no vector row, typehash, gas or size pin
 # changes (records.json is read, not regenerated; the purpose P_V enters no new digest).
+docs | 76bdb5865 | 0 | -
+sdk-clippy | 76bdb5865 | 0 | -
+sdk-clippy-noevm | 76bdb5865 | 0 | -
+cli | 76bdb5865 | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+rpc-test | 76bdb5865 | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
+sdk-test | 76bdb5865 | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)
+node-test | 76bdb5865 | 0 | 902 passed, 0 failed, 75 ignored (19 binaries)
+node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
+# merged tree 76bdb5865 (origin/ua-rs-sign a97cce414): sdk-test's 4 reds are app_core_vault_records' (AppDomainRefused: ua-rs-sign's PqVault domain refusal of 7da6fbb32; branch pqvault-sign fixes them, inherited, not touched); the same set with --no-fail-fast: 412 passed, those 4 failed, 17 ignored in 39 binaries; scripts/format.sh --check: every part ok but tact (tact-fmt not installed in this worktree)

@@ -11,7 +11,9 @@ use scaas_sdk::app_core::*;
 use scaas_sdk::confidential::*;
 use scaas_sdk::dex::*;
 use scaas_sdk::events::Subscription;
-use scaas_sdk::op::{BlsMultiPart, KeyRef, OpState, Prepared, SubmitPath, SubmitQuote};
+use scaas_sdk::op::{
+    BlsMultiPart, ImportExpect, KeyRef, OpState, Prepared, SignedOpBlob, SubmitPath, SubmitQuote,
+};
 use scaas_sdk::pqchat_keys::*;
 use scaas_sdk::pqchat_records::*;
 use scaas_sdk::vault::{
@@ -360,6 +362,15 @@ calls! { cx;
     "op submit" "Op::submit" {prepared: H<Arc<Prepared>>, quote: H<SubmitQuote>} @sign => { cx.confirm_op(&prepared.0, &quote.0)?; { let op = sdk(cx).op().submit(prepared.0, quote.0).await?; cx.sent(op).await } };
     "op resume" "Op::resume" {} => named("resumed", sdk(cx).op().resume().await?);
     "op resend" "Op::resend" {op: String, quote: H<SubmitQuote>} @sign => { cx.confirm(json!({"resend": op, "quote": quote.0}))?; sdk(cx).op().resend(op.clone(), quote.0).await?; cx.sent(op).await };
+    // T41.evm (spec §27.5 (c)): the signer's hand-off signs once and sends nothing; the payee's import is an operation object,
+    // quoted and submitted as any (`op quote`, `op submit`)
+    "op hand-off" "Op::hand_off" {prepared: H<Arc<Prepared>>} @sign => {
+        cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "a hand-off: signed once, sent by its payee"}))?;
+        js(sdk(cx).op().hand_off(prepared.0).await?)
+    };
+    "op import-signed" "Op::import_signed" {blob: SignedOpBlob, expect: ImportExpect} @op => sdk(cx).op().import_signed(blob, expect).await?;
+    "signed-op-blob from-json" "SignedOpBlob::from_json" {text: String} => js(SignedOpBlob::from_json(&text)?);
+    "signed-op-blob to-json" "SignedOpBlob::to_json" (b: SignedOpBlob) => named("json", b.to_json()?);
     "op member-sign" "Op::member_sign" {prepared: H<Arc<Prepared>>} @sign => {
         cx.confirm(json!({"review": review(&prepared.0.review()), "op": prepared.0.id(), "sign": "as an msig member"}))?;
         named("signature", sdk(cx).op().member_sign(prepared.0).await?)

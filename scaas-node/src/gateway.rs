@@ -421,16 +421,22 @@ async fn post_ops(State(s): State<AppState>, Json(r): Json<OpsReq>) -> Reply {
     if Family::parse(r.op["family"].as_str().unwrap_or_default()) != Some(family) {
         return payload_refused("op.family is not the chain's family");
     }
-    // 3. the payload decodes as the lanes read it; the node's digest, a client digest that differs refused
+    // 3. the payload decodes as the lanes read it; the digest is the node's, rebuilt from the named fields, and a family that
+    // computes none is refused by name (fail closed: the client's `op.digest` is never the key); a client digest that differs
+    // from the node's is refused
     let job: crate::external_pull::Job =
         match serde_json::from_value(json!({"id": 0, "kind": "signed_op", "op": r.op})) {
             Ok(j) => j,
             Err(e) => return payload_refused(e),
         };
-    let digest = match c.adapter.digest(&job).await {
+    let digest = match c.adapter.ops_digest(&job).await {
         Ok(Some(d)) => d,
         Ok(None) => {
-            return payload_refused("no digest: the op names none and the family computes none")
+            return refuse(
+                StatusCode::BAD_REQUEST,
+                "FAMILY_NOT_SUPPORTED",
+                "this family's node computes no op digest yet: `/v1/ops` takes none of its ops (its T41 slice, after the freeze)",
+            )
         }
         Err(SimError::Revert(e)) => return payload_refused(e),
         Err(SimError::Transport(e)) => {
@@ -484,7 +490,12 @@ async fn post_ops(State(s): State<AppState>, Json(r): Json<OpsReq>) -> Reply {
     }
     // 9. the job, durable (G2: one live job per digest)
     let intent = format!("{digest:#x}");
-    let payload = serde_json::to_vec(&job.op).expect("a Value serialises");
+    // the client's `op.digest` is not stored: the row carries the node's, so one op is one row with or without the field
+    let mut stored = job.op.clone().unwrap_or_default();
+    if let Some(o) = stored.as_object_mut() {
+        o.remove("digest");
+    }
+    let payload = serde_json::to_vec(&stored).expect("a Value serialises");
     let new = crate::store::NewJob {
         namespace: crate::external_pull::GATEWAY_NAMESPACE.into(),
         origin: gateway_origin(&intent),
@@ -1600,7 +1611,8 @@ mod ops_tests {
 
     const TOKEN: &str = "wasm1token";
 
-    /// A family chain whose build answers `build` (`None`: built), whose node digest is `digest` (`None`: the op's own field).
+    /// A family chain whose build answers `build` (`None`: built), whose node digest is `digest` (`None`: the family computes
+    /// none, so `/v1/ops` refuses it); its G2 key is the job's field (the pull path's).
     struct Fam {
         family: Family,
         digest: Option<B256>,
@@ -1613,13 +1625,16 @@ mod ops_tests {
             self.family
         }
         fn chain_key(&self) -> &str {
-            "cosmos:t"
+            "soroban:t"
         }
         fn lanes(&self) -> &[Lane] {
             &[]
         }
         async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
-            Ok(self.digest.or_else(|| crate::submit::job_digest(job)))
+            Ok(crate::submit::job_digest(job))
+        }
+        async fn ops_digest(&self, _: &Job) -> std::result::Result<Option<B256>, SimError> {
+            Ok(self.digest)
         }
         async fn build(&self, job: &Job, _: usize) -> std::result::Result<Built, SimError> {
             match &self.build {
@@ -1662,12 +1677,12 @@ mod ops_tests {
 
     /// The passing op: every check below changes one field of it.
     fn op() -> Value {
-        json!({"family": "cosmos", "contract": TOKEN, "from": "wasm1from", "op_kind": "pay", "payload": "0x01",
+        json!({"family": "soroban", "contract": TOKEN, "from": "wasm1from", "op_kind": "pay", "payload": "0x01",
             "signature": "0x02", "public_key": null, "auth_kind": "seed", "digest": digest(), "valid_until": now() + 600})
     }
 
     async fn app_with(fams: Vec<(&str, Fam)>) -> (Router, crate::store::Store) {
-        let st = crate::external_pull::tests::own_store("cosmos:t", "cosmos", "pk:aa").await;
+        let st = crate::external_pull::tests::own_store("soroban:t", "soroban", "pk:aa").await;
         let families = fams
             .into_iter()
             .map(|(k, a)| {
@@ -1689,10 +1704,11 @@ mod ops_tests {
         (router(s), st)
     }
 
+    /// A family whose node computes the op digest (the passing op's, `digest()`).
     fn fam(family: Family) -> Fam {
         Fam {
             family,
-            digest: None,
+            digest: Some(B256::repeat_byte(0x77)),
             build: None,
         }
     }
@@ -1728,36 +1744,30 @@ mod ops_tests {
     /// {status, intent_id}`, the duplicate `200` with the stored state, and the intent read; nothing is stored on a refusal.
     #[tokio::test]
     async fn ops_accept_checks_in_order_each_by_its_code() {
-        let (app, st) = app_with(vec![("cosmos:t", fam(Family::Cosmos))]).await;
+        let (app, st) = app_with(vec![("soroban:t", fam(Family::Soroban))]).await;
         let with = |f: &str, v: Value| {
             let mut o = op();
             o[f] = v;
             o
         };
         assert_eq!(
-            code(&ops(&app, "cosmos:none", &op()).await),
+            code(&ops(&app, "soroban:none", &op()).await),
             "UNKNOWN_CHAIN"
         );
         assert_eq!(
-            code(&ops(&app, "cosmos:t", &with("family", json!("sui"))).await),
-            "BAD_PAYLOAD"
-        );
-        let mut no_digest = op();
-        no_digest.as_object_mut().unwrap().remove("digest");
-        assert_eq!(
-            code(&ops(&app, "cosmos:t", &no_digest).await),
+            code(&ops(&app, "soroban:t", &with("family", json!("sui"))).await),
             "BAD_PAYLOAD"
         );
         assert_eq!(
-            code(&ops(&app, "cosmos:t", &with("contract", json!("wasm1other"))).await),
+            code(&ops(&app, "soroban:t", &with("contract", json!("wasm1other"))).await),
             "TOKEN_NOT_SERVED"
         );
         assert_eq!(
-            code(&ops(&app, "cosmos:t", &with("valid_until", json!(now() - 1))).await),
+            code(&ops(&app, "soroban:t", &with("valid_until", json!(now() - 1))).await),
             "EXPIRED"
         );
         assert_eq!(
-            code(&ops(&app, "cosmos:t", &with("valid_until", json!(now() + 7200))).await),
+            code(&ops(&app, "soroban:t", &with("valid_until", json!(now() + 7200))).await),
             "EXPIRED",
             "too long"
         );
@@ -1765,22 +1775,22 @@ mod ops_tests {
         let two = with("contract", json!("wasm1other"));
         let mut first = two.clone();
         first["family"] = json!("sui");
-        assert_eq!(code(&ops(&app, "cosmos:t", &first).await), "BAD_PAYLOAD");
+        assert_eq!(code(&ops(&app, "soroban:t", &first).await), "BAD_PAYLOAD");
         let mut late = two.clone();
         late["valid_until"] = json!(now() - 1);
         assert_eq!(
-            code(&ops(&app, "cosmos:t", &late).await),
+            code(&ops(&app, "soroban:t", &late).await),
             "TOKEN_NOT_SERVED"
         );
         assert!(
-            st.queued_jobs("~gateway", "cosmos:t", 10)
+            st.queued_jobs("~gateway", "soroban:t", 10)
                 .await
                 .unwrap()
                 .is_empty(),
             "no refusal stores a job"
         );
         // accepted, then the duplicate, then the intent
-        let r = ops(&app, "cosmos:t", &op()).await;
+        let r = ops(&app, "soroban:t", &op()).await;
         assert_eq!(
             (r.0, r.1["status"].as_str(), r.1["intent_id"].as_str()),
             (
@@ -1789,12 +1799,12 @@ mod ops_tests {
                 Some(digest().as_str())
             )
         );
-        let rows = st.queued_jobs("~gateway", "cosmos:t", 10).await.unwrap();
+        let rows = st.queued_jobs("~gateway", "soroban:t", 10).await.unwrap();
         assert_eq!(
             (rows.len(), rows[0].kind.as_str(), rows[0].digest.as_deref()),
             (1, "signed_op", Some(&[0x77; 32][..]))
         );
-        let again = ops(&app, "cosmos:t", &op()).await;
+        let again = ops(&app, "soroban:t", &op()).await;
         assert_eq!(
             (again.0, again.1["status"].as_str()),
             (StatusCode::OK, Some("queued"))
@@ -1814,25 +1824,72 @@ mod ops_tests {
         assert_eq!(none.0, StatusCode::NOT_FOUND);
     }
 
-    /// Check 3: the node's digest is the key; a client digest that differs is refused, the same one and none are taken.
+    /// Check 3: the node's digest is the key; a client digest that differs is refused, the same one and none are taken, and
+    /// the duplicate check keys on the node's digest: the same op with and without the client's field is one intent, one row.
     #[tokio::test]
     async fn a_client_digest_other_than_the_nodes_is_bad_payload() {
         let node = B256::repeat_byte(0x55);
-        let (app, _) = app_with(vec![(
-            "cosmos:t",
+        let (app, st) = app_with(vec![(
+            "soroban:t",
             Fam {
                 digest: Some(node),
-                ..fam(Family::Cosmos)
+                ..fam(Family::Soroban)
             },
         )])
         .await;
-        assert_eq!(code(&ops(&app, "cosmos:t", &op()).await), "BAD_PAYLOAD");
+        assert_eq!(code(&ops(&app, "soroban:t", &op()).await), "BAD_PAYLOAD");
         let mut same = op();
         same["digest"] = json!(format!("{node:#x}"));
-        let r = ops(&app, "cosmos:t", &same).await;
+        let r = ops(&app, "soroban:t", &same).await;
         assert_eq!(
             (r.0, r.1["intent_id"].as_str()),
             (StatusCode::ACCEPTED, Some(format!("{node:#x}").as_str()))
+        );
+        let mut none = op();
+        none.as_object_mut().unwrap().remove("digest");
+        let again = ops(&app, "soroban:t", &none).await;
+        assert_eq!(
+            (again.0, again.1["intent_id"].as_str()),
+            (StatusCode::OK, Some(format!("{node:#x}").as_str())),
+            "the duplicate of the node's digest"
+        );
+        let rows = st.queued_jobs("~gateway", "soroban:t", 10).await.unwrap();
+        assert_eq!(
+            (rows.len(), rows[0].digest.as_deref()),
+            (1, Some(&[0x55; 32][..]))
+        );
+    }
+
+    /// Fail closed: a family whose node computes no op digest (every family but Soroban today) is refused by name, before
+    /// anything is stored, whatever digest the client names; the Soroban twin is taken.
+    #[tokio::test]
+    async fn a_family_without_a_node_digest_is_refused() {
+        let (app, st) = app_with(vec![
+            (
+                "cosmos:t",
+                Fam {
+                    digest: None,
+                    ..fam(Family::Cosmos)
+                },
+            ),
+            ("soroban:t", fam(Family::Soroban)),
+        ])
+        .await;
+        let mut c = op();
+        c["family"] = json!("cosmos");
+        assert_eq!(
+            code(&ops(&app, "cosmos:t", &c).await),
+            "FAMILY_NOT_SUPPORTED"
+        );
+        assert!(st
+            .queued_jobs("~gateway", "cosmos:t", 10)
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            ops(&app, "soroban:t", &op()).await.0,
+            StatusCode::ACCEPTED,
+            "the Soroban twin"
         );
     }
 
@@ -1852,16 +1909,16 @@ mod ops_tests {
             (SimError::Transport("timeout".into()), "RPC_UNAVAILABLE"),
         ] {
             let (app, st) = app_with(vec![(
-                "cosmos:t",
+                "soroban:t",
                 Fam {
                     build: Some(build),
-                    ..fam(Family::Cosmos)
+                    ..fam(Family::Soroban)
                 },
             )])
             .await;
-            assert_eq!(code(&ops(&app, "cosmos:t", &op()).await), want);
+            assert_eq!(code(&ops(&app, "soroban:t", &op()).await), want);
             assert!(st
-                .queued_jobs("~gateway", "cosmos:t", 10)
+                .queued_jobs("~gateway", "soroban:t", 10)
                 .await
                 .unwrap()
                 .is_empty());
@@ -1874,14 +1931,14 @@ mod ops_tests {
     async fn ton_is_refused_by_name() {
         let (app, _) = app_with(vec![
             ("ton:t", fam(Family::Ton)),
-            ("cosmos:t", fam(Family::Cosmos)),
+            ("soroban:t", fam(Family::Soroban)),
         ])
         .await;
         let mut t = op();
         t["family"] = json!("ton");
         assert_eq!(code(&ops(&app, "ton:t", &t).await), "FAMILY_NOT_SUPPORTED");
         assert_eq!(
-            ops(&app, "cosmos:t", &op()).await.0,
+            ops(&app, "soroban:t", &op()).await.0,
             StatusCode::ACCEPTED,
             "control"
         );
@@ -1890,9 +1947,9 @@ mod ops_tests {
     /// The body cap (64 KiB, read past it never) and a body nested past serde_json's depth limit: 4xx, never a crash.
     #[tokio::test]
     async fn ops_body_cap_and_depth() {
-        let (app, _) = app_with(vec![("cosmos:t", fam(Family::Cosmos))]).await;
+        let (app, _) = app_with(vec![("soroban:t", fam(Family::Soroban))]).await;
         let sized = |len: usize| {
-            let head = br#"{"chain":"cosmos:none","op":{"pad":""#.to_vec();
+            let head = br#"{"chain":"soroban:none","op":{"pad":""#.to_vec();
             let tail = br#""}}"#;
             let mut b = head;
             b.resize(len - tail.len(), b'x');
@@ -1909,7 +1966,7 @@ mod ops_tests {
             StatusCode::PAYLOAD_TOO_LARGE
         );
         let deep = [
-            &br#"{"chain":"cosmos:t","op":"#[..],
+            &br#"{"chain":"soroban:t","op":"#[..],
             &[b'['; 4096],
             &[b']'; 4096],
             b"}",

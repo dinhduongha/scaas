@@ -1,0 +1,9 @@
+# t28digest mutants (name | outcome | commit | test | first failure line)
+the default ops digest takes the client's | killed | b312a2e8e | CARGO_INCREMENTAL=0 CAPPED_SLOTS=4 ../scripts/capped cargo test --locked --offline -j2 --lib the_default_ops_digest_refuses | panicked at src/adapter.rs:1104:9:
+a family without a node digest keyed on the client's | killed | b312a2e8e | CARGO_INCREMENTAL=0 CAPPED_SLOTS=4 ../scripts/capped cargo test --locked --offline -j2 --lib a_family_without_a_node_digest_is_refused | panicked at src/gateway.rs:1881:9:
+a client digest other than the node's taken | killed | b312a2e8e | CARGO_INCREMENTAL=0 CAPPED_SLOTS=4 ../scripts/capped cargo test --locked --offline -j2 --lib a_client_digest_other_than_the_nodes_is_bad_payload | panicked at src/gateway.rs:1840:9:
+the client's digest stored | killed | b312a2e8e | CARGO_INCREMENTAL=0 CAPPED_SLOTS=4 ../scripts/capped cargo test --locked --offline -j2 --lib a_client_digest_other_than_the_nodes_is_bad_payload | panicked at src/gateway.rs:1851:9:
+Soroban's ops digest the client's | killed | b312a2e8e | CARGO_INCREMENTAL=0 CAPPED_SLOTS=4 ../scripts/capped cargo test --locked --offline -j2 --lib a_signed_ops_digest_is_the_nodes | panicked at src/adapters/soroban.rs:3842:9:
+Soroban's G2 key the client's | killed | b312a2e8e | CARGO_INCREMENTAL=0 CAPPED_SLOTS=4 ../scripts/capped cargo test --locked --offline -j2 --lib a_signed_ops_digest_is_the_nodes | panicked at src/adapters/soroban.rs:3843:9:
+the preimage on another network | killed | b312a2e8e | CARGO_INCREMENTAL=0 CAPPED_SLOTS=4 ../scripts/capped cargo test --locked --offline -j2 --lib a_signed_ops_digest_is_the_nodes | panicked at src/adapters/soroban.rs:3831:9:
+7 mutants, 7 killed, 0 survived, 0 not loaded, 0 other failure

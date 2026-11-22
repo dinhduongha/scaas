@@ -131,8 +131,9 @@ Status: SPECIFIED.
   before any deploy; Fuji disables `mldsa44`, `mldsa65`, `mldsa87` and PQZ (above its 32 M block), C-Chain keeps every kind.
   Avalanche and Hub have no EIP-2537: Zether needs the software BLS12-381 path (ARCH-POS-18). Hub's gas is no Ethereum gas:
   its relay cap, PQ and PQZ cells wait for the Paseo measurement (T13, a deploy, on the owner's word) and T14.
-- **SCaaS families (rows 16–23).** The node relays and indexes all eight; the public gateway door for them (`POST /v1/ops`) is SDK
-  plan T28. The SDK reads balances on all eight (plan T24; TON last, T24.ton); its cell stays `M` for the writes (T28, T29). `ua-rs` signs NEAR's and Algorand's operations; the other six families' envelopes are SDK plan T27. TON's paths other
+- **SCaaS families (rows 16–23).** The node relays and indexes all eight (the job API's pull path); the public gateway door
+  (`POST /v1/ops`, SDK plan T28) takes Soroban only, keyed on the digest the node rebuilds; the other seven are
+  `FAMILY_NOT_SUPPORTED` there until their slice builds the node-side digest (after the freeze). The SDK reads balances on all eight (plan T24; TON last, T24.ton); its cell stays `M` for the writes (T28, T29). `ua-rs` signs NEAR's and Algorand's operations; the other six families' envelopes are SDK plan T27. TON's paths other
   than the job API's pull path stay blocked until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)).
 - **Native BTC (row 24).** No SCaaS contract, so every column but Native is n/a (owner 2026-11-22; Relay and Index were n/a by the
   owner's rule of 2026-11-21). Its Native cell: `ua-rs` `BitcoinTx` (SDK plan T35), the `scaas-rpc` `bitcoin` module (T36: Esplora
