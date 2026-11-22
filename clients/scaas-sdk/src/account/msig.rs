@@ -646,6 +646,45 @@ async fn uasig(
     Ok(msig_combine(&v.first, &current, &members)?)
 }
 
+/// F2 (controller call 2026-11-22, CLI-PQV-15; PqVault's dedicated path): the `UAAuth` domain a signature of `of` is checked in
+/// on the line ending at `registry`, of any generation. A record a predecessor holds (`holderOf`, when `registry` has a
+/// predecessor) is checked by its holder, in the holder's domain (`requireAuthorized` hands it there, CTR-UA-60 §4); `of`
+/// none (a native signer), a native id, or a record `registry` holds, in `registry`'s own. The generation is the registry's `generation()`: its domain's
+/// version.
+#[cfg(feature = "app-core")]
+pub(crate) async fn line_domain(
+    sdk: &Sdk,
+    chain: &str,
+    pool: &EvmPool,
+    registry: Address,
+    of: Option<[u8; 32]>,
+) -> Result<scaas_ua::Domain, SdkError> {
+    let (profile, chain_id, _) = evm(sdk, chain)?;
+    let mut at = registry;
+    if let Some(of) = of.filter(|x| !scaas_ua::in_native_space(x)) {
+        let pred = call(pool, registry, "predecessor()", &[]).await?;
+        if word(&pred, 0).ok_or(SdkError::Argument)? != U256::ZERO {
+            let h = call(pool, registry, "holderOf(bytes32)", &[of]).await?;
+            let w = word(&h, 0).ok_or(SdkError::Argument)?;
+            let holder = Address::from_word(alloy::primitives::B256::from(w));
+            if holder != Address::ZERO {
+                at = holder;
+            }
+        }
+    }
+    let g = call(pool, at, "generation()", &[]).await?;
+    let generation = small(&g, 0, 16)
+        .and_then(|n| u32::try_from(n).ok())
+        .filter(|n| *n >= 1)
+        .ok_or(SdkError::Argument)?;
+    Ok(scaas_ua::Domain {
+        generation,
+        chain_id,
+        registry: at.into_array(),
+        chain_uid: id32(&profile.chain_uid)?,
+    })
+}
+
 /// An app record's `UASig` by the `msig` `ua` (PqVault's dedicated path, owner 2026-11-22): the records read as [`uasig`]
 /// reads them, the slots checked enabled and accepted, their keys opened (local keys only: a slot signed elsewhere or a
 /// stored key row `Argument`), the registry generation's domain when a member is native; `sign` builds the `UASig`.
@@ -675,8 +714,9 @@ pub(crate) async fn app_msig(
     if keys.iter().any(|k| matches!(k, Key::External(..))) {
         return Err(SdkError::Argument);
     }
+    // F2: the domain of the generation that holds the `msig` (its native members sign there)
     let d = match keys.iter().any(|k| matches!(k, Key::Native(..))) {
-        true => Some(domain(sdk, chain, &pool, registry).await?),
+        true => Some(line_domain(sdk, chain, &pool, registry, Some(*ua)).await?),
         false => None,
     };
     let current = |id: [u8; 32]| views.get(&id).map(|v| (v.current.clone(), v.enabled));

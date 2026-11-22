@@ -1075,6 +1075,7 @@ impl AppCore {
             typed_json,
             scaas_ua::wallet::app_record_digest,
             scaas_ua::wallet::sign_app_record,
+            false,
         )
         .await
     }
@@ -1114,6 +1115,7 @@ impl AppCore {
             typed_json,
             scaas_ua::wallet::pqvault::digest,
             scaas_ua::wallet::pqvault::sign,
+            true,
         )
         .await
     }
@@ -1140,7 +1142,7 @@ impl AppCore {
                     ua: ua_hex.clone(),
                     slots: slots.clone(),
                 };
-                let (ua_path, _) = me.ua_path(&path, &typed, &account).await?;
+                let (ua_path, _) = me.ua_path(&path, &typed, &account, true).await?;
                 let digest = scaas_ua::wallet::pqvault::digest(&ua_path, &typed).map_err(ua)?;
                 let sig = crate::account::msig::app_msig(
                     &sdk,
@@ -1178,13 +1180,14 @@ impl AppCore {
             &UaPath,
             &TypedData,
         ) -> scaas_ua::wallet::Result<UASig>,
+        line: bool,
     ) -> Result<AppSigned, SdkError> {
         let me = self.clone();
         let sdk = self.sdk.clone();
         sdk.clone()
             .spawn(async move {
                 let typed = TypedData::from_json(typed_json.as_bytes()).map_err(ua)?;
-                let (ua_path, registry) = me.ua_path(&path, &typed, &account).await?;
+                let (ua_path, registry) = me.ua_path(&path, &typed, &account, line).await?;
                 let digest = digest(&ua_path, &typed).map_err(ua)?;
                 let review = Self::review(&path, &typed);
                 let key = crate::op::key(&sdk, &account)?;
@@ -1213,6 +1216,7 @@ impl AppCore {
         path: &AppPath,
         typed: &TypedData,
         account: &KeyRef,
+        line: bool,
     ) -> Result<(UaPath, Option<scaas_ua::Domain>), SdkError> {
         let app_id = self.app_id.ok_or(SdkError::Argument)?;
         let (chain, purpose) = match path {
@@ -1248,7 +1252,14 @@ impl AppCore {
             KeyRef::Native { .. } => {
                 let r = profile.registry.as_deref().ok_or(SdkError::Argument)?;
                 let addr = r.parse().map_err(|_| SdkError::Argument)?;
-                Some(crate::account::msig::domain(&self.sdk, chain, &pool, addr).await?)
+                // F2 (PqVault's dedicated path, `line`): the registry's own domain at its generation
+                Some(match line {
+                    true => {
+                        crate::account::msig::line_domain(&self.sdk, chain, &pool, addr, None)
+                            .await?
+                    }
+                    false => crate::account::msig::domain(&self.sdk, chain, &pool, addr).await?,
+                })
             }
             _ => None,
         };
@@ -1384,6 +1395,7 @@ impl AppCore {
             typed_json,
             sig,
             scaas_ua::wallet::verify_app_record,
+            false,
         )
         .await
     }
@@ -1406,6 +1418,7 @@ impl AppCore {
             typed_json,
             sig,
             scaas_ua::wallet::pqvault::verify,
+            true,
         )
         .await
     }
@@ -1419,6 +1432,7 @@ impl AppCore {
         typed_json: String,
         sig: AppUaSig,
         f: fn(&[u8; 32], &UaPath, &TypedData, &UASig, &AppRecordState) -> bool,
+        line: bool,
     ) -> Result<bool, SdkError> {
         let id = hex32(&ua)?;
         let typed = TypedData::from_json(typed_json.as_bytes()).map_err(SdkError::Ua)?;
@@ -1442,7 +1456,7 @@ impl AppCore {
             }
         };
         let chain_bound = matches!(p, UaPath::ChainBound { .. });
-        self.with_records(&chain, id, chain_bound, |state| {
+        self.with_records(&chain, id, chain_bound, line, |state| {
             f(&id, &p, &typed, &UASig::from(&sig), state)
         })
         .await
@@ -1456,6 +1470,7 @@ impl AppCore {
         chain: &str,
         id: [u8; 32],
         chain_bound: bool,
+        line: bool,
         f: impl FnOnce(&AppRecordState) -> R,
     ) -> Result<R, SdkError> {
         let (profile, _, pool) = crate::op::evm(&self.sdk, chain)?;
@@ -1473,7 +1488,14 @@ impl AppCore {
         let needs_domain = chain_bound
             && (scaas_ua::in_native_space(&id) || recs.get(&id).is_some_and(|r| r.kind == MSIG));
         let domain = if needs_domain {
-            Some(crate::account::msig::domain(&self.sdk, chain, &pool, registry).await?)
+            // F2 (`line`, PqVault's dedicated path): the domain of the generation that holds `id`, at its generation
+            Some(match line {
+                true => {
+                    crate::account::msig::line_domain(&self.sdk, chain, &pool, registry, Some(id))
+                        .await?
+                }
+                false => crate::account::msig::domain(&self.sdk, chain, &pool, registry).await?,
+            })
         } else {
             None
         };
