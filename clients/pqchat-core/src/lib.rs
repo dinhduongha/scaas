@@ -20,6 +20,7 @@ pub mod model;
 pub mod net;
 pub mod order;
 pub mod reads;
+pub mod session;
 pub mod store;
 
 pub use drops::{Drop, DropCounts};
@@ -75,6 +76,28 @@ pub struct PqChat {
     pub(crate) drops: DropCounts,
     pub(crate) chains: Mutex<message::Chains>,
     pub(crate) unwraps: AtomicU64,
+    pub(crate) events: Mutex<Events>,
+    /// complete children seen before their finality, by parent (CLI-PQC-07: sends held)
+    pub(crate) unfinal: Mutex<std::collections::HashMap<String, String>>,
+}
+
+/// What the crate tells the app (spec §8); ids and UAs only, never a secret, handle, ciphertext, room id or Matrix id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Event {
+    /// `member` holds a KEM version above the highest seen: a rekey is the user's choice, never started by the crate
+    KemVersionRaised { session: String, member: String },
+    /// `missed` events dropped, the queue full
+    Lagged { missed: u64 },
+}
+
+/// Events kept until the app pulls them.
+pub const EVENTS_MAX: usize = 256;
+
+/// The bounded event queue: the oldest dropped and counted when full.
+#[derive(Default)]
+pub(crate) struct Events {
+    q: std::collections::VecDeque<Event>,
+    missed: u64,
 }
 
 impl PqChat {
@@ -107,6 +130,8 @@ impl PqChat {
             drops: DropCounts::default(),
             chains: Mutex::new(message::Chains::default()),
             unwraps: AtomicU64::new(0),
+            events: Mutex::new(Events::default()),
+            unfinal: Mutex::new(Default::default()),
         })
     }
 
@@ -118,6 +143,33 @@ impl PqChat {
     /// How many own wraps reached the KEM (a test's recording of K2's unwrap).
     pub fn unwrap_calls(&self) -> u64 {
         self.unwraps.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// The events since the last pull, oldest first; `Lagged` first when some were dropped.
+    pub fn events(&self) -> Vec<Event> {
+        let mut e = self
+            .events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut out = Vec::with_capacity(e.q.len() + 1);
+        if e.missed > 0 {
+            out.push(Event::Lagged { missed: e.missed });
+            e.missed = 0;
+        }
+        out.extend(e.q.drain(..));
+        out
+    }
+
+    pub(crate) fn event(&self, ev: Event) {
+        let mut e = self
+            .events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        e.q.push_back(ev);
+        if e.q.len() > EVENTS_MAX {
+            e.q.pop_front();
+            e.missed += 1;
+        }
     }
 
     pub(crate) fn conf(&self, chain: &str) -> Result<&ChainConf, PqChatError> {

@@ -15,6 +15,7 @@ use scaas_sdk::app_core::AppCall;
 use scaas_sdk::op::KeyRef;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 #[derive(Default)]
@@ -23,6 +24,44 @@ pub struct FakeNet {
     answers: Mutex<HashMap<(String, String, String), Value>>,
     pub reads: Mutex<Vec<(String, String, Value)>>,
     pub writes: Mutex<Vec<(String, String, Value)>>,
+    /// a prepare answers a quote (the SDK's operation, never sent) instead of refusing
+    pub accept: AtomicBool,
+    /// a prepare carrying more wraps than this is refused as the SDK refuses a quote that does not fit (`GasAboveTxCap`)
+    pub wrap_cap: Mutex<Option<usize>>,
+}
+
+/// A prepared write as the fake answers it: nothing in it is sent.
+pub fn call(chain: &str, contract: &str, payer: &KeyRef) -> AppCall {
+    use scaas_sdk::op::{SubmitPath, SubmitQuote};
+    AppCall {
+        review: vec![],
+        quote: scaas_sdk::wallet::NativeQuote {
+            key: payer.clone(),
+            chain: chain.into(),
+            from: String::new(),
+            to: contract.into(),
+            value: "0".into(),
+            data: "0x".into(),
+            quote: SubmitQuote {
+                path: SubmitPath::SelfRelay {
+                    payer: payer.clone(),
+                },
+                payer: None,
+                gas_limit: 0,
+                regular_gas: 0,
+                gas: None,
+                gas_from: None,
+                max_fee_per_gas: "0".into(),
+                max_priority_fee_per_gas: "0".into(),
+                max_cost: "0".into(),
+                fee_to_relayer: "0".into(),
+                gateways: vec![],
+                tx_nonce: 0,
+                tx_type: 2,
+            },
+            delegated: false,
+        },
+    }
 }
 
 impl FakeNet {
@@ -45,6 +84,16 @@ impl FakeNet {
     }
     pub fn writes(&self) -> usize {
         self.writes.lock().unwrap().len()
+    }
+    /// The writes prepared of `item`, their arguments.
+    pub fn writes_of(&self, item: &str) -> Vec<Value> {
+        self.writes
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|w| w.1 == item)
+            .map(|w| w.2.clone())
+            .collect()
     }
 }
 
@@ -77,17 +126,24 @@ impl Net for FakeNet {
     }
     async fn prepare(
         &self,
-        _chain: &str,
+        chain: &str,
         contract: &str,
         item: &'static str,
         args: Value,
-        _payer: &KeyRef,
+        payer: &KeyRef,
     ) -> Result<AppCall, PqChatError> {
+        let n = args["wraps"].as_array().map_or(0, Vec::len);
         self.writes
             .lock()
             .unwrap()
             .push((contract.to_ascii_lowercase(), item.into(), args));
-        Err(PqChatError::Internal)
+        if self.wrap_cap.lock().unwrap().is_some_and(|c| n > c) {
+            return Err(PqChatError::Sdk(scaas_sdk::SdkError::GasAboveTxCap));
+        }
+        if !self.accept.load(Ordering::SeqCst) {
+            return Err(PqChatError::Internal);
+        }
+        Ok(call(chain, contract, payer))
     }
     async fn submit(&self, _call: AppCall) -> Result<String, PqChatError> {
         self.writes

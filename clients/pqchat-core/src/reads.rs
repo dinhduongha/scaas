@@ -116,14 +116,14 @@ impl PqChat {
         }
         let key = format!("kem/{chain}/{}", ua.to_ascii_lowercase());
         let mut raised = false;
-        Items(&*self.store).update::<u64, _>(&key, |high| {
+        let kept = Items(&*self.store).update::<u64, _>(&key, |high| {
             raised = high.is_some_and(|h| version > h);
             if high.is_some_and(|h| version < h) {
                 return Err(PqChatError::KemVersionLowered);
             }
             Ok(version)
         })?;
-        Ok((version, raised))
+        Ok((kept, raised))
     }
 
     /// The account's own wrap of `e` at `contract`, read from state (trusted), checked against the signed record's

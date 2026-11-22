@@ -2839,5 +2839,53 @@
   ],
   "stateMutability": "view",
   "type": "function"
+ },
+ "IUARegistry.msigOf": {
+  "inputs": [
+   {
+    "internalType": "bytes32",
+    "name": "ua",
+    "type": "bytes32"
+   }
+  ],
+  "name": "msigOf",
+  "outputs": [
+   {
+    "components": [
+     {
+      "internalType": "uint16",
+      "name": "threshold",
+      "type": "uint16"
+     },
+     {
+      "components": [
+       {
+        "internalType": "uint16",
+        "name": "kind",
+        "type": "uint16"
+       },
+       {
+        "internalType": "bytes32",
+        "name": "id",
+        "type": "bytes32"
+       },
+       {
+        "internalType": "uint16",
+        "name": "weight",
+        "type": "uint16"
+       }
+      ],
+      "internalType": "struct IUARegistry.MsigMember[]",
+      "name": "members",
+      "type": "tuple[]"
+     }
+    ],
+    "internalType": "struct IUARegistry.MsigStructure",
+    "name": "",
+    "type": "tuple"
+   }
+  ],
+  "stateMutability": "view",
+  "type": "function"
  }
 }

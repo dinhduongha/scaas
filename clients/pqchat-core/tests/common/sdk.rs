@@ -272,6 +272,7 @@ pub async fn world() -> World {
     let (alice, bob, carol) = (acc(&seed, 0), acc(&seed, 1), acc(&seed, 2));
     for a in [&alice, &bob, &carol] {
         register(&chain, a, a);
+        not_msig(&net, &a.ua);
     }
     World {
         sdk,
@@ -478,4 +479,91 @@ pub async fn opened(w: &World, members: &[&Acc]) -> Opened {
         session_id: e.session_id.clone(),
     };
     Opened { e, k, wrap, s }
+}
+
+/// `ua` is no `msig` (`msigOf`: threshold 0, no members).
+pub fn not_msig(net: &FakeNet, ua: &str) {
+    net.answer(
+        REGISTRY,
+        "IUARegistry.msigOf",
+        json!({ "ua": ua }),
+        json!({"0": {"threshold": "0", "members": []}}),
+    );
+}
+
+/// `seat` an `msig` of `slots` (`(kind, id, accepted)` each).
+pub fn msig(net: &FakeNet, seat: &str, slots: &[(u16, &str, bool)]) {
+    let m: Vec<Value> = slots
+        .iter()
+        .map(|(k, id, _)| json!({"kind": k.to_string(), "id": id, "weight": "1"}))
+        .collect();
+    net.answer(
+        REGISTRY,
+        "IUARegistry.msigOf",
+        json!({ "ua": seat }),
+        json!({"0": {"threshold": "1", "members": m}}),
+    );
+    for (i, (_, _, a)) in slots.iter().enumerate() {
+        net.answer(
+            REGISTRY,
+            "IUARegistry.memberAccepted",
+            json!({"ua": seat, "index": i.to_string()}),
+            json!({ "0": a }),
+        );
+    }
+}
+
+/// `a`'s KEM key at version `v` (its seed's `kem_key(v)`).
+pub fn kem_pk(a: &Acc, v: u64) -> Vec<u8> {
+    let KeyRef::Ua { account, .. } = a.key else {
+        panic!()
+    };
+    Wallet::from_mnemonic(REPO, "")
+        .unwrap()
+        .ua_key(KIND, account, 0)
+        .unwrap()
+        .kem_key(v)
+        .unwrap()
+        .kem_pk()
+}
+
+/// `a` holds KEM version `v` (`kem_pk`): the crate's trusted reads (`checkedOf.kem` 1, `kemKeyOf`) and the SDK's `kemKeyAt`.
+pub fn kem_with(w: &World, a: &Acc, v: u64, kem_pk: &[u8]) {
+    kem_at(&w.chain, &a.id, v, kem_pk);
+    w.net.answer(
+        REGISTRY,
+        "IUARegistry.checkedOf",
+        json!({"ua": a.ua}),
+        json!({"pop": "1", "pqzPop": "0", "kem": "1"}),
+    );
+    w.net.answer(
+        REGISTRY,
+        "IUARegistry.kemKeyOf",
+        json!({"ua": a.ua}),
+        json!({"version": v.to_string(), "kem": {"scheme": "1", "mlkemEk": "0x", "x25519": ZERO32}, "sig": "0x"}),
+    );
+}
+
+pub fn kem(w: &World, a: &Acc, v: u64) {
+    kem_with(w, a, v, &kem_pk(a, v));
+}
+
+/// `a` holds no usable KEM key (`checkedOf.kem` `NONE`).
+pub fn no_kem(w: &World, a: &Acc) {
+    w.net.answer(
+        REGISTRY,
+        "IUARegistry.checkedOf",
+        json!({"ua": a.ua}),
+        json!({"pop": "1", "pqzPop": "0", "kem": "0"}),
+    );
+}
+
+/// `childOf(parent)` at `contract` answers `child` (zero: the slot free).
+pub fn child(net: &FakeNet, contract: &str, parent: &str, child: &str) {
+    net.answer(
+        contract,
+        "IPqChat.childOf",
+        json!({ "parentEpochId": parent }),
+        json!({ "0": child }),
+    );
 }

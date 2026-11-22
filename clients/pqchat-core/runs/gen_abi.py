@@ -11,7 +11,7 @@ OUT = ROOT / "smartcontracts/evm/out"
 DEST = ROOT / "clients/pqchat-core/src/abi.json"
 PICK = {
     "IPqChat.sol/IPqChat.json": None,
-    "IUARegistry.sol/IUARegistry.json": ["kemKeyOf", "kemKeyAt", "checkedOf", "memberAccepted"],
+    "IUARegistry.sol/IUARegistry.json": ["kemKeyOf", "kemKeyAt", "checkedOf", "memberAccepted", "msigOf"],
     "IOpenFactory.sol/IOpenFactory.json": ["infoOf", "contractsPage"],
 }
 

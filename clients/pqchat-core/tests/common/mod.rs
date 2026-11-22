@@ -107,5 +107,6 @@ impl PqChatStore for Faulty {
     }
 }
 
+pub mod chain;
 pub mod net;
 pub mod sdk;

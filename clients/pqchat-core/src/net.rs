@@ -59,6 +59,7 @@ pub const READS: &[(&str, Trust)] = &[
     ("IUARegistry.kemKeyAt", Trusted),
     ("IUARegistry.kemKeyOf", Trusted),
     ("IUARegistry.memberAccepted", Trusted),
+    ("IUARegistry.msigOf", Trusted),
 ];
 
 /// Every write of the crate, by ABI item.
