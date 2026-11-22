@@ -1,5 +1,5 @@
 # t20e2 mutants (name | outcome | commit | test | first failure line)
-the PRF output names another secret | killed | dbf7112e1 dirty | JAVA_HOME="$(git rev-parse --git-common-dir)/../scratchpad/tools/jdk-25" bash run.sh | FAIL: unexpected exception: uniffi.scaas_sdk.SdkException$AuthenticatorRefused: AuthenticatorRefused
-the store's write drops the expected revision | killed | dbf7112e1 dirty | JAVA_HOME="$(git rev-parse --git-common-dir)/../scratchpad/tools/jdk-25" bash run.sh | FAIL: unexpected exception: uniffi.scaas_sdk.SdkException$StoreConflict: StoreConflict
-the fixup leaves a bound value over the converter's own | killed | dbf7112e1 dirty | python3 -I test_fix_generated.py | FAIL: test_value_bound_in_case (__main__.Fix.test_value_bound_in_case)
+the PRF output names another secret | killed | eff2aa3e5 | JAVA_HOME="$(git rev-parse --git-common-dir)/../scratchpad/tools/jdk-25" bash run.sh | FAIL: unexpected exception: uniffi.scaas_sdk.SdkException$AuthenticatorRefused: AuthenticatorRefused
+the store's write drops the expected revision | killed | eff2aa3e5 | JAVA_HOME="$(git rev-parse --git-common-dir)/../scratchpad/tools/jdk-25" bash run.sh | FAIL: unexpected exception: uniffi.scaas_sdk.SdkException$StoreConflict: StoreConflict
+the fixup leaves a bound value over the converter's own | killed | eff2aa3e5 | python3 -I test_fix_generated.py | FAIL: test_value_bound_in_case (__main__.Fix.test_value_bound_in_case)
 3 mutants, 3 killed, 0 survived, 0 not loaded, 0 other failure

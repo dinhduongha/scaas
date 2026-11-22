@@ -1,4 +1,4 @@
-# t20d mutants at commit 8d5e6765f (name | outcome | test)
-the PRF output names another secret | killed | ../../../../scripts/capped python3 -I test_smoke.py
-the store's write drops the expected revision | killed | ../../../../scripts/capped python3 -I test_smoke.py
-2 mutants, 2 killed, 0 survived, 0 not loaded
+# t20d mutants (name | outcome | commit | test | first failure line)
+the PRF output names another secret | killed | eff2aa3e5 | ../../../../scripts/capped python3 -I test_smoke.py | ERROR: test_store_authenticator_panic_and_exceptions (__main__.Smoke.test_store_authenticator_panic_and_exceptions)
+the store's write drops the expected revision | killed | eff2aa3e5 | ../../../../scripts/capped python3 -I test_smoke.py | ERROR: test_store_authenticator_panic_and_exceptions (__main__.Smoke.test_store_authenticator_panic_and_exceptions)
+2 mutants, 2 killed, 0 survived, 0 not loaded, 0 other failure

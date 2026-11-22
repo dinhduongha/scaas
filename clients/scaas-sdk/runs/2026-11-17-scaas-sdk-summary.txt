@@ -97,7 +97,6 @@ ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree di
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 ua-test | 7f5e03caf | 0 | 560 passed, 0 failed, 3 ignored (55 binaries); tree dirty
 ua-clippy | 1233ed00d | 0 | -; tree dirty
-sdk-deny | 7f5e03caf | 0 | -; tree dirty
 sdk-sets | 7f5e03caf | 0 | 9 passed, 0 failed, 0 ignored (3 binaries); tree dirty
 # T20 rest and the native auditor's PQZ consent (1233ed00d, c1a17c82f): the rows at 7f5e03caf "tree dirty" ran on the working
 # tree that became those two commits (the SDK, ffi, Dart and ua-rs files); ua-test ran before a clippy-only rewrite of one
@@ -179,9 +178,7 @@ ck-test | 6e7e71142 | 0 | node: 540 pass, 0 fail, 4 skipped
 ua-verify-only | 7765d3e64 | 0 | 88 passed, 0 failed, 0 ignored (19 binaries)
 ua-clippy | 7765d3e64 | 0 | -
 ua-test | 95badea99 | 0 | 608 passed, 0 failed, 3 ignored (61 binaries)
-bind-dart | 7104a069f | 0 | dart: +14:
 gas-gen | 6e7e71142 | 0 | -
-ffi | 8897d3999 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
 ua-core | 61c5bb014 | 0 | 71 passed, 0 failed, 0 ignored (7 binaries)
 ua-c | 95badea99 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | 95badea99 | 0 | ctest: 0 tests failed out of 45
@@ -215,25 +212,6 @@ sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
 sdk-noevm | 54ddfcb33 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
 sdk-clippy-noevm | 54ddfcb33 | 0 | -
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
-docs | 5c189e9f1 | 0 | -
-mutants-check | 5c189e9f1 | 0 | -
-bind-gen | 5c189e9f1 | 0 | -
-sdk-uniffi | 5c189e9f1 | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
-ffi | 5c189e9f1 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
-sdk-wasm | 5c189e9f1 | 0 | -
-sdk-clippy | 5c189e9f1 | 0 | -
-bind-cpp | 5c189e9f1 | 0 | ctest: 0 tests failed out of 1
-bind-cs | 5c189e9f1 | 0 | dotnet: 4 passed, 0 failed
-bind-python | 5c189e9f1 | 0 | unittest: 7 ran, OK
-bind-kotlin | 5c189e9f1 | 0 | kotlin: PASS (0 failures)
-bind-swift | 5c189e9f1 | 0 | swift: PASS (0 failures)
-bind-js | 5c189e9f1 | 0 | node: 5 pass, 0 fail, 0 skipped
-bind-java | 5c189e9f1 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
-bind-go | 5c189e9f1 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
-bind-dart | 5c189e9f1 | 0 | dart: +14:
-features | 5c189e9f1 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
-sdk-deny | 5c189e9f1 | 0 | -
-sdk-test | 5c189e9f1 | 0 | 408 passed, 0 failed, 16 ignored (38 binaries)
 # the rows above at 5c189e9f1 (the merge of sdk-complete e90f26685, a625341ae, and its regenerated bindings): every bind-* step,
 # bind-gen, sdk-uniffi, ffi, sdk-wasm, sdk-clippy, sdk-test, sdk-deny, features, docs, mutants-check green. Mutants at 5c189e9f1:
 # bind49 (now bind100) 2/2, review-b 7/7 killed (B3 now killed, was other failure), t20b-sync 3 killed + 1 other failure: "the cancel token
@@ -250,10 +228,7 @@ sdk-min | 54ddfcb33 | 0 | 74 passed, 0 failed, 0 ignored (13 binaries)
 # 54ddfcb33 (T41.evm step 0): mutants-check rc 1 was seven mutant texts the code had moved from (three by step 0: the Solana sum, the genesis hex, the Substrate 0x id; four older, gasQ Q5, gasR F2, m8 M17, t13e 5); their texts follow the code in the next commit, their records stay at their own commits (stale, printed)
 ua-c | e90f26685 | 0 | 9 passed, 0 failed, 0 ignored (2 binaries)
 ua-cxx | e90f26685 | 0 | ctest: 0 tests failed out of 45
-mutants-check | 0011b40e4 | 0 | -
 sdk-noevm | 0011b40e4 | 0 | 149 passed, 0 failed, 0 ignored (20 binaries)
-sdk-wasm | 0011b40e4 | 0 | -
-bind-dart | 0011b40e4 | 0 | dart: +14:
 rpc-wasm | 0011b40e4 | 0 | -
 
 # faecafcd2 (T41.evm): sdk-e2e's e2e_hand_off_on_anvil alone (CAPPED_MEM=6G, --ignored): 1 passed (A hands off, B lands it, the same blob ImportConsumed, a blob bound to C ImportRelayerBound, A's own self-relay lands); the whole sdk-e2e is the round's matrix (T39). Mutants: t41evm0 9 of 9, t41evm 13 of 13 killed
@@ -269,19 +244,13 @@ rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
 rpc-wasm | 6f2eb3dbd | 0 | -
 sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
 sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
-sdk-test | 7daa8b2bc | 0 | 420 passed, 0 failed, 16 ignored (39 binaries)
-bind-gen | 7daa8b2bc | 0 | -
 ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
-mutants-check | 898fa1ebc | 0 | -
 # T41.arweave's scaas-rpc and SDK parts (CA-T19, CA-T20): code 6f2eb3dbd, the shared ArweaveItem code 7daa8b2bc (error_codes_are_names was red at 6f2eb3dbd in sdk-test, sdk-noevm, sdk-min: fixed, rows above at 7daa8b2bc), the notC9 rows 291a864b2 (the survivor of t41arw2 killed); the rpc rows at 6f2eb3dbd are unchanged by the two later code commits (scaas-rpc untouched)
 rpc-test | 1eeb8561c | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
-mutants-check | 7992a33e7 | 0 | -
 ua-appcore | 7992a33e7 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
 ua-test | 7992a33e7 | 0 | 622 passed, 0 failed, 3 ignored (63 binaries)
 ua-vectors | 7992a33e7 | 0 | 732 passed, 0 failed, 6 ignored (71 binaries)
 ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
-sdk-test | 7992a33e7 | 0 | 417 passed, 0 failed, 17 ignored (39 binaries)
-bind-gen | 7992a33e7 | 0 | -
 ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-13) 4f64cf766, merged with origin/ua-rs-sign a97cce414 at
 # caecc3ade, mutant text fix 7992a33e7: the 14 rows above at 7992a33e7, clean tree. sdk-test's four reds of 8c869f3c5
@@ -293,7 +262,6 @@ ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # worktree; untouched). Mutants pqvsign 14/14 killed at 7992a33e7. No pin moved: no vector row, typehash, gas or size pin
 # changes (records.json is read, not regenerated; the purpose P_V enters no new digest).
 rpc-test | 76bdb5865 | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
-sdk-test | 76bdb5865 | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)
 node-test | 76bdb5865 | 0 | 902 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 76bdb5865 (origin/ua-rs-sign a97cce414): sdk-test's 4 reds are app_core_vault_records' (AppDomainRefused: ua-rs-sign's PqVault domain refusal of 7da6fbb32; branch pqvault-sign fixes them, inherited, not touched); the same set with --no-fail-fast: 412 passed, those 4 failed, 17 ignored in 39 binaries; scripts/format.sh --check: every part ok but tact (tact-fmt not installed in this worktree)
@@ -316,12 +284,28 @@ node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # vectors, and the non-EVM set), its tests handoff 8 and soroban_ops 8; scaas-cli clippy --all-targets --features dev-profiles
 # and tests/cli.rs 13 passed (one_command_per_sdk_call_both_ways, every_signing_command_asks_first: its missing run of
 # pqvault-sign's `app-core sign-pqvault-record` added); docs; format.sh --check rust js py after git add -N.
-docs | 028da021c | 0 | -
-features | 028da021c | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
 rpc-clippy | 028da021c | 0 | -
 ua-clippy | 028da021c | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 sdk-arweave | 028da021c | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-clippy-noevm | 028da021c | 0 | -
-sdk-clippy | 028da021c | 0 | -
 cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+docs | eff2aa3e5 | 0 | -
+mutants-check | eff2aa3e5 | 0 | -
+bind-gen | eff2aa3e5 | 0 | -
+sdk-uniffi | eff2aa3e5 | 0 | 18 passed, 0 failed, 0 ignored (2 binaries)
+ffi | eff2aa3e5 | 0 | 0 passed, 0 failed, 0 ignored (1 binaries)
+sdk-wasm | eff2aa3e5 | 0 | -
+sdk-clippy | eff2aa3e5 | 0 | -
+bind-cpp | eff2aa3e5 | 0 | ctest: 0 tests failed out of 1
+bind-cs | eff2aa3e5 | 0 | dotnet: 4 passed, 0 failed
+bind-python | eff2aa3e5 | 0 | unittest: 7 ran, OK
+bind-kotlin | eff2aa3e5 | 0 | kotlin: PASS (0 failures)
+bind-swift | eff2aa3e5 | 0 | swift: PASS (0 failures)
+bind-js | eff2aa3e5 | 0 | node: 5 pass, 0 fail, 0 skipped
+bind-java | eff2aa3e5 | 0 | java: PASS (0 failures); unittest: 4 ran, OK
+bind-go | eff2aa3e5 | 0 | unittest: 2 ran, OK; go test: 1 ok, 0 FAIL
+bind-dart | eff2aa3e5 | 0 | dart: +14:
+features | eff2aa3e5 | 0 | 5 passed, 0 failed, 0 ignored (1 binaries)
+sdk-deny | eff2aa3e5 | 1 | -
+sdk-test | eff2aa3e5 | 0 | 437 passed, 0 failed, 17 ignored (41 binaries)

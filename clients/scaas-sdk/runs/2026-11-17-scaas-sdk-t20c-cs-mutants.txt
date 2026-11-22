@@ -1,4 +1,4 @@
-# t20c-cs mutants at commit f422daf21 (name | outcome | test)
-the PRF output names another secret | killed | ../../../../scripts/capped dotnet test --filter StoreAuthenticatorPanicAndExceptions; rc=$?; dotnet build-server shutdown >/dev/null 2>&1; exit $rc
-the store's write drops the expected revision | killed | ../../../../scripts/capped dotnet test --filter StoreAuthenticatorPanicAndExceptions; rc=$?; dotnet build-server shutdown >/dev/null 2>&1; exit $rc
-2 mutants, 2 killed, 0 survived, 0 not loaded
+# t20c-cs mutants (name | outcome | commit | test | first failure line)
+the PRF output names another secret | killed | eff2aa3e5 | ../../../../scripts/capped dotnet test --filter StoreAuthenticatorPanicAndExceptions; rc=$?; dotnet build-server shutdown >/dev/null 2>&1; exit $rc | Scaas.Sdk.Smoke.SmokeTests.StoreAuthenticatorPanicAndExceptions [FAIL]
+the store's write drops the expected revision | killed | eff2aa3e5 | ../../../../scripts/capped dotnet test --filter StoreAuthenticatorPanicAndExceptions; rc=$?; dotnet build-server shutdown >/dev/null 2>&1; exit $rc | Scaas.Sdk.Smoke.SmokeTests.StoreAuthenticatorPanicAndExceptions [FAIL]
+2 mutants, 2 killed, 0 survived, 0 not loaded, 0 other failure
