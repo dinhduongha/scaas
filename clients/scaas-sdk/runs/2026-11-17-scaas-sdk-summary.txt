@@ -160,7 +160,6 @@ sdk-e2e | f4c422ef6 | 0 | 11 passed, 0 failed, 0 ignored (1 binaries)
 #      request count through the fake
 # M18  the regular line extrapolated past its measured counts (measure at the largest count the cap admits, or refuse above)
 # M20  closed: both parts run on a local Nethermind copy, runs/2026-11-20-m20-nethermind-summary.txt
-sdk-vectors | 7cc8be95f | 0 | 15 passed, 0 failed, 0 ignored (2 binaries)
 cli-e2e | 122651cbd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
 bind-dart | 7104a069f | 0 | dart: +14:
 gas-gen | 6e7e71142 | 0 | -
@@ -217,7 +216,6 @@ rpc-test | 6f2eb3dbd | 0 | 219 passed, 0 failed, 10 ignored (22 binaries)
 rpc-wasm | 6f2eb3dbd | 0 | -
 sdk-min | 7daa8b2bc | 0 | 74 passed, 0 failed, 0 ignored (14 binaries)
 sdk-noevm | 7daa8b2bc | 0 | 149 passed, 0 failed, 0 ignored (21 binaries)
-sdk-test | 7daa8b2bc | 0 | 420 passed, 0 failed, 16 ignored (39 binaries)
 bind-gen | 7daa8b2bc | 0 | -
 ck-test | 898fa1ebc | 0 | node: 568 pass, 0 fail, 4 skipped
 mutants-check | 898fa1ebc | 0 | -
@@ -228,7 +226,6 @@ ua-appcore | 7992a33e7 | 0 | 14 passed, 0 failed, 0 ignored (1 binaries)
 ua-test | 7992a33e7 | 0 | 622 passed, 0 failed, 3 ignored (63 binaries)
 ua-vectors | 7992a33e7 | 0 | 732 passed, 0 failed, 6 ignored (71 binaries)
 ua-verify-only | 7992a33e7 | 0 | 89 passed, 0 failed, 0 ignored (19 binaries)
-sdk-test | 7992a33e7 | 0 | 417 passed, 0 failed, 17 ignored (39 binaries)
 bind-gen | 7992a33e7 | 0 | -
 ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # PqVault's dedicated signing path (owner 2026-11-22, CLI-PQV-13) 4f64cf766, merged with origin/ua-rs-sign a97cce414 at
@@ -241,7 +238,6 @@ ck-test | 7992a33e7 | 0 | node: 574 pass, 0 fail, 4 skipped
 # worktree; untouched). Mutants pqvsign 14/14 killed at 7992a33e7. No pin moved: no vector row, typehash, gas or size pin
 # changes (records.json is read, not regenerated; the purpose P_V enters no new digest).
 rpc-test | 76bdb5865 | 0 | 207 passed, 0 failed, 10 ignored (21 binaries)
-sdk-test | 76bdb5865 | 101 | 181 passed, 4 failed, 0 ignored (6 binaries)
 node-test | 76bdb5865 | 0 | 902 passed, 0 failed, 75 ignored (19 binaries)
 node-e2e | 76bdb5865 | 0 | 27 passed, 0 failed, 0 ignored (1 binaries)
 # merged tree 76bdb5865 (origin/ua-rs-sign a97cce414): sdk-test's 4 reds are app_core_vault_records' (AppDomainRefused: ua-rs-sign's PqVault domain refusal of 7da6fbb32; branch pqvault-sign fixes them, inherited, not touched); the same set with --no-fail-fast: 412 passed, those 4 failed, 17 ignored in 39 binaries; scripts/format.sh --check: every part ok but tact (tact-fmt not installed in this worktree)
@@ -271,5 +267,8 @@ ua-clippy | 028da021c | 0 | -
 ua-arweave | 028da021c | 0 | 30 passed, 0 failed, 0 ignored (6 binaries)
 sdk-arweave | 028da021c | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
 sdk-clippy-noevm | 028da021c | 0 | -
-sdk-clippy | 028da021c | 0 | -
 cli | 028da021c | 0 | 46 passed, 0 failed, 1 ignored (6 binaries)
+# pqchat-core T8 (on pqchat-core-impl): the app core scope made again after an unlock (d6abf1f97, test app_core::scope_after_lock_and_unlock); sdk-clippy red at e5573b3d6 (type_complexity on that cache), its type named at f238113b8 (no behaviour change), sdk-clippy green there; sdk-test and sdk-vectors at e5573b3d6.
+sdk-test | e5573b3d6 | 0 | 438 passed, 0 failed, 17 ignored (41 binaries)
+sdk-vectors | e5573b3d6 | 0 | 16 passed, 0 failed, 0 ignored (2 binaries)
+sdk-clippy | f238113b8 | 0 | -
