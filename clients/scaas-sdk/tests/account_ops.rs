@@ -92,6 +92,7 @@ async fn setup_with(registry: Option<&str>) -> T {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };

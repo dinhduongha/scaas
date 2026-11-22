@@ -479,7 +479,7 @@ virtual authenticator per family.
 <a id="vault"></a>
 
 Several seeds on one device, each a set of v2 vaults below, are kept in the `scaas.keystore` container of
-[CLI-SDK-03](scaas-sdk.md#CLI-SDK-03) (SPECIFIED): the same bytes in clientkeys, `ua-rs`, `scaas-sdk` and scaas-app, each seed's public
+[CLI-SDK-03](scaas-sdk.md#CLI-SDK-03) (BUILT in clientkeys, `ua-rs` and `scaas-sdk`; SDK plan T2a–T2c, T13b): the same bytes in clientkeys, `ua-rs`, `scaas-sdk` and scaas-app, each seed's public
 fields and vault texts authenticated by an index MAC computed in clientkeys and `ua-rs`; each vault's AAD binds its seed's id
 (vault v2, owner 2026-11-19, scaas-sdk T13b ruling 3).
 

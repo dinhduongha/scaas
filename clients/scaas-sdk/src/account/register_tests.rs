@@ -93,6 +93,7 @@ async fn pq_registration_split() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -234,6 +235,13 @@ fn record_offsets_added_checked() {
     assert_eq!(record_holds(Landed::Kem(0), &kem), Some(true));
     let kem_near = [w(u64::MAX - 8), w(1)].concat();
     assert_eq!(record_holds(Landed::Kem(0), &kem_near), None);
+    // F24: a word index whose byte offset overflows is no word (the multiplication checked), beside its control
+    assert!(super::word(&ok, 1).is_some(), "control: word 1");
+    assert_eq!(
+        super::word(&ok, usize::MAX / 16),
+        None,
+        "an index whose offset overflows"
+    );
 }
 
 // ------------------------------------------------------------------ the registry writes' gas rows (owner 2026-11-20)
@@ -355,6 +363,7 @@ async fn reg_setup(name: &str, block: u64, rows: Vec<crate::GasBase>) -> Reg {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -843,6 +852,7 @@ async fn write_targets_follow_the_line() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };

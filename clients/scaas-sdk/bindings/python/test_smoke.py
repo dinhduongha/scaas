@@ -283,6 +283,8 @@ class Smoke(unittest.IsolatedAsyncioTestCase):
         # the merge's fields reach the SDK: the OP Stack L1 fee and a disabled kind open; an unknown kind is refused by name
         self.assertEqual(await failure(open_with(profile(l1_fee=s.L1Fee.OP_STACK, disabled_kinds=["pqz"]))), "Ok")
         self.assertEqual(await failure(open_with(profile(disabled_kinds=["no-such-kind"]))), "Argument")
+        # Moonbeam's pinnedReads false (owner 2026-11-22, ARCH-POS-20 (2)): the profile opens, its pinned reads refused by name
+        self.assertEqual(await failure(open_with(profile(pinned_reads=False))), "Ok")
 
 
 if __name__ == "__main__":

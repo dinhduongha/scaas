@@ -197,6 +197,7 @@ fn profile(rpc: &[&str], policy: scaas_rpc::Policy) -> ChainProfile {
         wrappers: vec![],
         tokens: vec![token(&usdc(), "USDC", 6), token(&vnd(), "VND", 0)],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: Some(FamilyParams::Aptos {
             chain_id: CHAIN,

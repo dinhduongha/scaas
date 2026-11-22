@@ -67,6 +67,7 @@ fn profile() -> ChainProfile {
             decimals: 6,
         }],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }

@@ -1,3 +1,6 @@
 # ci22 mutants (name | outcome | commit | test | first failure line)
 Soroban's kind_name without 0x0121 | killed | d9efa0d68 | ../../scripts/capped cargo test -p scaas-ua-registry --lib test_ua_portable::ua_portable_kind_name_table | panicked at ~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/soroban-env-host-30.0.0/src/host.rs:892:9:
-1 mutants, 1 killed, 0 survived, 0 not loaded
+the table set's ROLL_MAX expected wrong | killed | 56dc7e864 | PATH=$HOME/.foundry/bin:$PATH ../../scripts/capped forge test --match-path test/gas/SdkGasConfPqz.t.sol --match-test 'test_sdkGas_pqzConfRoll\(' | [FAIL: the table's set: its rows n1 .. n64: 64 != 32] test_sdkGas_pqzConfRoll() (gas: 13941454)
+the roll rows stop below ROLL_MAX | killed | 56dc7e864 | PATH=$HOME/.foundry/bin:$PATH ../../scripts/capped forge test --match-path test/gas/SdkGasConfPqz.t.sol --match-test 'test_sdkGas_pqzConfRoll\(' | [FAIL: vm.parseJsonUint: path ".pqz_mtxRollOver_n63_fresh_normal_regular" must return exactly one JSON value] test_sdkGas_pqzConfRoll() (gas: 301310784)
+nothing pinned at the committed set | killed | 56dc7e864 | PATH=$HOME/.foundry/bin:$PATH ../../scripts/capped forge test --match-path test/gas/SdkGasConfPqz.t.sol --match-test test_sdkGas_pqzPinnedAtTheCommittedSet | [FAIL: pinned at the committed set only: false != true] test_sdkGas_pqzPinnedAtTheCommittedSet() (gas: 49799)
+4 mutants, 4 killed, 0 survived, 0 not loaded, 0 other failure

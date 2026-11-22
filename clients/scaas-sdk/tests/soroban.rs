@@ -189,6 +189,7 @@ fn profile(rpc: &[&str], policy: scaas_rpc::Policy) -> ChainProfile {
             decimals: 7,
         }],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: Some(FamilyParams::Soroban {
             passphrase: PASSPHRASE.into(),

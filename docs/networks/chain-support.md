@@ -74,9 +74,9 @@ Status: SPECIFIED.
 | 10 | Arbitrum One (42161; Arbitrum Sepolia 421614) | B‡ | B | B | B | B | B | B | B‡ | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled) | disabled | B T41.evm | B |
 | 11 | Linea (59144; Linea Sepolia 59141) | B‡ | B | B | B | B | B | B | B‡ | B‡ | B‡ | B T41.evm | B |
 | 12 | Hedera (295; 296) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | M ARCH-POS-18 | M ARCH-POS-18 | B T41.evm (EVM side, a `hedera_ecdsa` payer; the native side's: after the freeze (owner 2026-11-22)) | B (EVM side; native side: after the freeze (owner 2026-11-22), T41.hedera read and ed25519 sends, gRPC-web by default, `tonic` under `fam-hedera-grpc`, owner Q-R5) |
-| 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled on Fuji) | B‡ (disabled on Fuji) | P T41.evm (after CA-T2's profile) | B |
-| 14 | Polkadot Hub (EVM and Substrate sides; Paseo; Westend dropped, owner 2026-11-22) | B‡ | P CA-T14 | B | B | B (`max_tx_gas`: P CA-T14) | B | B (`max_tx_gas`: P CA-T14) | M ARCH-POS-18 (no EIP-2537, CA-T12) | P CA-T13 | P CA-T14 | P T41.evm (after CA-T14's profile) | P T41.dot (read B; the sends, owner 2026-11-22) |
-| 15 | Moonbeam (Moonbase Alpha) | B‡ | B | B | B | B (pinned reads refused: `pinnedReads` false) | B | P T41 (the SDK's `pinnedReads` wiring) | B‡ | B‡ (T15 checks its storage gas) | B‡ (T15) | P T41.evm (after CA-T11's profile) | B |
+| 13 | Avalanche C-Chain (43114; Fuji 43113) | B‡ | B | B | B | B | B | B | M ARCH-POS-18 | B‡ (`mldsa44`, `mldsa65`, `mldsa87` disabled on Fuji) | B‡ (disabled on Fuji) | B T41.evm | B |
+| 14 | Polkadot Hub (EVM and Substrate sides; Paseo; Westend dropped, owner 2026-11-22) | B‡ | P CA-T14 | B | B | B (`max_tx_gas`: P CA-T14) | B | B (`max_tx_gas`: P CA-T14) | M ARCH-POS-18 (no EIP-2537, CA-T12) | P CA-T13 | P CA-T14 | P CA-T14 (its `max_tx_gas` from T13's Paseo measurement, on the owner's word) | after the freeze (owner 2026-11-22) (read B; T41.dot's sends) |
+| 15 | Moonbeam (Moonbase Alpha) | B‡ | B | B | B | B (pinned reads refused: `pinnedReads` false) | B | B (pinned reads refused: the profile's `pinned_reads` false, owner 2026-11-22) | B‡ | B‡ (T15 checks its storage gas) | B‡ (T15) | B T41.evm (pinned reads refused, plain reads) | B |
 | 16 | NEAR (SCaaS family) | B | B | B | B | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | P `ua-near` | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
 | 17 | Algorand | B | B | B | B | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | P `ua-algorand` | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
 | 18 | Cosmos (CosmWasm) | B | B | B | after the freeze (owner 2026-11-22) | B | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) | M family round | M family round | M family round | after the freeze (owner 2026-11-22) | after the freeze (owner 2026-11-22) (read B) |
@@ -92,7 +92,24 @@ Status: SPECIFIED.
 Row 8 (Ethereum Classic, 61; Mordor 63) is removed: the owner dropped ETC on 2026-11-22 (decisions CLI-SDK-32, "ETC has no
 finalized block"); its profiles are in `smartcontracts/evm/legacy/chains/`. The other rows keep their numbers.
 
-Counts (24 rows): Contract B 22 (13 B‡), n/a 2. Relay B 19, P 3, n/a 2. Index B 19, P 3, n/a 2. Signing B 17, P 1, after the freeze 5, n/a 1. rpc read B 19, P 4, n/a 1. rpc write B 15, P 1, after the freeze 7, n/a 1. SDK B 12, P 4, after the freeze 7, n/a 1. Zether B 11 (10 B‡), P 2, M 9, n/a 2. PQ B 11 (10 B‡; on 4 of them kinds disabled), P 4, M 7, n/a 2. PQZ B 8 (7 B‡; on 1 of them disabled on mainnet), P 2, M 9, disabled 3, n/a 2. Self-relay B 12, P 3, after the freeze 7, n/a 2. Native B 12, P 3, after the freeze 9 (8 of them with the read built).
+Counts (24 rows): Contract B 22 (13 B‡), n/a 2. Relay B 21, P 1, n/a 2. Index B 22, n/a 2. Signing B 18, after the freeze 5, n/a 1. rpc read B 23, n/a 1. rpc write B 16, after the freeze 7, n/a 1. SDK B 16, after the freeze 7, n/a 1. Zether B 11 (10 B‡), P 1, M 10, n/a 2. PQ B 12 (11 B‡; on 5 of them kinds disabled), P 3, M 7, n/a 2. PQZ B 9 (8 B‡; on 2 of them disabled on one network), P 1, M 9, disabled 3, n/a 2. Self-relay B 14, P 1, after the freeze 7, n/a 2. Native B 15, after the freeze 9 (8 of them with the read built).
+
+**SDK plan T39's re-read (2026-11-22, at `origin/ua-rs-sign` fe435934b).** This round's T41 is `evm`, `soroban` and `arweave` only
+(owner 2026-11-22, in English: this round's T41 is only the current slices, the rest after the freeze; decisions CLI-SDK-32); the other families' cells read "after the freeze", counted as neither BUILT nor failed.
+chains-arweave's node tasks: CA-T3 BUILT and merged (`[[chains]] max_inflight`, `Breaker::below_cost`, their tests); CA-T9 BUILT
+and merged (`guard.rs` `Rule::ChatStore` for `pqchatstore`, the code hash at the final block, tests
+`a_pqchatstore_job_runs_on_the_pinned_code_under_the_lane_policy` and `a_pqchatstore_pass_is_read_at_the_final_block_and_not_kept_for_ever`);
+CA-T14 not built: it takes T13's Paseo measurement, a deploy on the owner's word. The rule's cells still `P` in this round's
+scope, each with what it waits for: Polkadot Hub's Relay, the `max_tx_gas` parts of rpc read and SDK, and Self-relay (CA-T14).
+Moonbeam's SDK and Self-relay waited for the SDK's `pinnedReads` wiring: BUILT on 2026-11-22 (owner, "Làm ngay, cùng sdk-binding": do it
+now, with sdk-binding), a `ChainProfile` field `pinned_reads` through every binding.
+Soroban's Self-relay and Native cells ran on a local Protocol 30 network too (plan T39: a hand-off landed by the payee, the blob
+then `ImportConsumed`, an own op self-relayed from another key of the same seed, a native XLM send); a self-relay paid by the
+op's own subject key is open for the Soroban round (the simulation's `SourceAccount` auth entry, refused by `scaas-rpc`).
+`pqvault-core` (merged at b0ee76349; [CLI-PQV-14](../decisions.md#CLI-PQV-14), [CLI-PQV-15](../decisions.md#CLI-PQV-15)) is
+an app core above the SDK, not a column: it reaches chains only through the SDK's EVM calls (`read_app`, the PqVault signing
+calls, the KEM wrap, the generic KEM key rotation `Account::prepare_set_kem_key`), tested on anvil with a two-generation
+registry line, so it adds no cell and moves none; on the other families it waits for their SDK writes (after the freeze).
 
 ## 4. Notes on the cells
 
@@ -133,7 +150,7 @@ Status: SPECIFIED.
   its relay cap, PQ and PQZ cells wait for the Paseo measurement (T13, a deploy, on the owner's word) and T14.
 - **SCaaS families (rows 16–23).** The node relays and indexes all eight (the job API's pull path); the public gateway door
   (`POST /v1/ops`, SDK plan T28) takes Soroban only, keyed on the digest the node rebuilds; the other seven are
-  `FAMILY_NOT_SUPPORTED` there until their slice builds the node-side digest (after the freeze). The SDK reads balances on all eight (plan T24; TON last, T24.ton); its cell stays `M` for the writes (T28, T29). `ua-rs` signs NEAR's and Algorand's operations; the other six families' envelopes are SDK plan T27. TON's paths other
+  `FAMILY_NOT_SUPPORTED` there until their slice builds the node-side digest (after the freeze). The SDK reads balances on all eight (plan T24; TON last, T24.ton); its writes are BUILT on Soroban (T28, T29.soroban) and after the freeze on the other seven (owner 2026-11-22). `ua-rs` signs NEAR's, Algorand's and Soroban's operations (T27.soroban); the other five families' envelopes are after the freeze. TON's paths other
   than the job API's pull path stay blocked until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)).
 - **Native BTC (row 24).** No SCaaS contract, so every column but Native is n/a (owner 2026-11-22; Relay and Index were n/a by the
   owner's rule of 2026-11-21). Its Native cell: `ua-rs` `BitcoinTx` (SDK plan T35), the `scaas-rpc` `bitcoin` module (T36: Esplora
@@ -148,8 +165,8 @@ Status: SPECIFIED.
   endpoints answering no plain HTTP JSON-RPC that day) and a Substrate transfer extrinsic (T33, T34: deferred, owner
   2026-11-22); this is DOT's native account, and the former native DOT row now lives here. NEAR (row 16): the former native NEAR row, `view_account`'s `amount` (BUILT, T24.near) and
   the native transfer (the former T31, now in T41.near). The other seven families: the fee-token account (ALGO, the Cosmos
-  chain's denom, APT, SOL, XLM, SUI, GRAM), its balance BUILT by T24, its send MISSING, in T41.<family> on the builder that
-  Self-relay uses (Algorand also needs its key network in `ua-rs`).
+  chain's denom, APT, SOL, XLM, SUI, GRAM), its balance BUILT by T24; XLM's send BUILT (T41.soroban), the other six sends after
+  the freeze (owner 2026-11-22), in T41.<family> on the builder that Self-relay uses (Algorand also needs its key network in `ua-rs`).
 - **Self-relay (column 11).** Contracts: every family lets any account submit an operation whose `relayer` is unbound, and an
   operation bound to an account lets that account submit: EVM `MetaTxLib.canon` zeroes an unbound relayer and fee recipient,
   and the payee may self-relay with fee 0 ([CTR-MTX-08](../contracts/metatx.md#CTR-MTX-08), "payee self-relay",
@@ -161,8 +178,9 @@ Status: SPECIFIED.
   source); TON `relayer` = `addr_none` or the sending wallet. So no contract change is needed. On EVM the SDK self-relays the
   holder's **own** operations (`SubmitPath::SelfRelay`) and, since T41.evm, the hand-off: `Op::hand_off` signs and writes the
   row, `Op::import_signed` checks the blob in order and relays it by the payee's key, an `evm` or `hedera_ecdsa` payer
-  (decisions CLI-SDK-33 (49)); BUILT on every EVM row whose profile and SDK are. On the eight families the SDK has the native balance read (T24) and no native transaction and no
-  self-relay path (T41.<family>, which also builds the Native column's send on the same builder). Design: SDK spec §27.5.
+  (decisions CLI-SDK-33 (49)); BUILT on every EVM row whose profile and SDK are. On Soroban the self-relay, the hand-off and the native XLM send are BUILT (T41.soroban); on the other seven families the SDK has
+  the native balance read (T24) and no native transaction and no self-relay path: after the freeze (owner 2026-11-22;
+  T41.<family>, which also builds the Native column's send on the same builder). Design: SDK spec §27.5.
 - **Arweave (row 25).** A store: no SCaaS contract, and a client posts its signed item to a bundler and reads from gateways itself,
   so the node has nothing to relay or index; Self-relay is n/a (no SCaaS operation; the client pays for its own item); Native is
   the user's Arweave key signing and posting its own items (chains-arweave CA-T17, CA-T19, CA-T20).

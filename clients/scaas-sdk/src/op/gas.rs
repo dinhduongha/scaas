@@ -486,6 +486,7 @@ pub(crate) fn lookup(
 
 /// The verify row of `signer` alone, in the lookup order (chain → module → reference), else the app's figure `app` (owner
 /// 2026-11-19, P1: the Zether UA's verify gas a multi-recipient proof adds; the table row wins when present).
+#[cfg(feature = "zether")]
 pub(crate) fn verify_or(
     chain: &GasRows,
     opt_in: &[String],

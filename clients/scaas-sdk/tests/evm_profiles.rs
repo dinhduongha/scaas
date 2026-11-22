@@ -103,6 +103,7 @@ fn profile(key: &str, rpc: &str) -> (ChainProfile, Finality, u8) {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: (p["l1Fee"] == "op-stack").then_some(L1Fee::OpStack),
+        pinned_reads: p["pinnedReads"].as_bool().unwrap_or(true),
         disabled_kinds: p["disabledKinds"]
             .as_array()
             .map(|a| a.iter().map(|k| k.as_str().unwrap().to_string()).collect())
@@ -242,6 +243,57 @@ async fn a_native_send_type_follows_the_base_fee() {
             }
         }
     }
+}
+
+/// Owner 2026-11-22 (decisions ARCH-POS-20 (2), wired into the SDK the same day): Moonbeam's and Moonbase's `pinnedReads` false
+/// reaches the pool, so a pinned read (a balance at one block) is `PinnedReadsUntrusted` by name while a plain read (a native
+/// send's quote) works; the twin with `pinned_reads` true on the same profile reads the balance; every other profile states
+/// none and is trusted.
+#[tokio::test(flavor = "multi_thread")]
+async fn pinned_reads_follow_the_profile() {
+    let mut untrusted = 0;
+    for key in KEYS {
+        let (p, _, _) = profile(key, "http://127.0.0.1:9");
+        assert_eq!(
+            !p.pinned_reads,
+            key.starts_with("moonbeam-"),
+            "{key}: pinnedReads"
+        );
+        for trusted in [p.pinned_reads, true] {
+            let c = fake();
+            {
+                let mut f = c.lock().unwrap();
+                f.chain_id = p.chain_id.unwrap();
+                f.genesis = p.chain_uid.clone();
+                f.native_balance = 10u64.pow(18);
+                f.answers
+                    .push((ORACLE.into(), "0x49948e0e".into(), format!("0x{:064x}", 7)));
+            }
+            let url = serve(c.clone()).await;
+            let mut q = profile(key, &url).0;
+            q.pinned_reads = trusted;
+            let (s, seed) = open(q).await;
+            let who = "0x00000000000000000000000000000000000000aa".to_string();
+            let b = s.wallet().balances(who, key.into()).await;
+            let plain = s.wallet().prepare_native_send(send(&seed, key, None)).await;
+            assert!(
+                plain.is_ok(),
+                "{key}: a plain read works ({:?})",
+                plain.err()
+            );
+            if trusted {
+                assert!(b.is_ok(), "{key}: trusted: the pinned read ({:?})", b.err());
+            } else {
+                assert_eq!(
+                    b.err().map(|e| e.code()),
+                    Some("PinnedReadsUntrusted"),
+                    "{key}"
+                );
+                untrusted += 1;
+            }
+        }
+    }
+    assert_eq!(untrusted, 2, "control: Moonbeam and Moonbase were read");
 }
 
 /// The owner's ruling of 2026-11-22 (decisions CLI-SDK-32): on OP and Arbitrum the kinds whose largest transaction is above the

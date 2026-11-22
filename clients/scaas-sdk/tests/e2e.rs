@@ -14,6 +14,7 @@ use scaas_sdk::{
     ListedToken, RuntimeChoice, Sdk, SdkConfig,
 };
 use scaas_ua::wallet::{Network, SecretBytes, Wallet};
+#[cfg(feature = "app-core")]
 use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
@@ -148,6 +149,7 @@ async fn e2e_pay_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -326,6 +328,7 @@ async fn e2e_zether_shield_transfer_balance_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     })
@@ -500,6 +503,7 @@ fn registry_profile(rpc: &str, registry: &str, cap: Option<u64>) -> ChainProfile
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }
@@ -644,6 +648,7 @@ async fn e2e_sponsored_registration_then_pay_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -777,6 +782,7 @@ fn account_profile(rpc: &str) -> ChainProfile {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }
@@ -1638,6 +1644,7 @@ async fn e2e_dex_cancel_order_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -1795,6 +1802,7 @@ async fn e2e_bls_multi_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -1985,6 +1993,7 @@ async fn e2e_bls_multi_64_on_a_node() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };
@@ -2305,6 +2314,7 @@ async fn e2e_pqz_debit_on_a_node() {
 
 /// An operation's end with its transaction's receipt (status, `gasUsed`) when it landed (the M20 record), and that
 /// `gasUsed`: a `Landed` names the block of the operation's fact (its hash), so the payer's transaction is found in that block.
+#[cfg(feature = "pqz")]
 fn receipt_line(rpc: &str, payer: &str, s: &OpState) -> (String, Option<u64>) {
     match s {
         OpState::Landed { block, .. } => {
@@ -2636,6 +2646,7 @@ async fn e2e_hand_off_on_anvil() {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };

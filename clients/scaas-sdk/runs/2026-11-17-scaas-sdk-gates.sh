@@ -46,8 +46,13 @@ STEPS=(
     "sdk-arweave|clients/scaas-sdk|$cap cargo test $C --no-default-features --features $AR --test arweave --test feature_tree && $cap cargo clippy $C --all-targets --no-default-features --features $AR -- -D warnings"
     "sdk-sets|clients/scaas-sdk|$SETS_CMD"
     "sdk-clippy|clients/scaas-sdk|$cap cargo clippy $C --all-targets --features $V -- -D warnings"
+    # plan T39: the two feature sets no other step builds, the default set and the smallest (vault, file-store)
+    "sdk-clippy-default|clients/scaas-sdk|$cap cargo clippy $C --all-targets -- -D warnings"
+    "sdk-clippy-min|clients/scaas-sdk|$cap cargo clippy $C --all-targets --no-default-features --features vault,file-store -- -D warnings"
     "sdk-vectors|clients/scaas-sdk|$cap cargo test $C --features $V --test pqchat_keys --test app_core_vault_rows"
     "sdk-e2e|clients/scaas-sdk|CAPPED_MEM=6G $cap cargo test $C --features $F --test e2e -- --ignored"
+    # plan T39: the Soroban local-network e2e on the pinned Protocol 30 quickstart (its own container, removed after)
+    "sdk-soroban-e2e|.|bash clients/scaas-sdk/runs/2026-11-22-soroban-e2e.sh"
     "sdk-wasm|clients/scaas-sdk|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features vault,account,wallet,evm && $cap cargo clippy $C --target wasm32-unknown-unknown --no-default-features --features $F,wasm -- -D warnings && $cap cargo clippy $C --all-targets --features $F,wasm -- -D warnings"
     "sdk-deny|clients/scaas-sdk|$cap cargo deny --all-features check && $cap cargo audit"
     "ua-test|clients/ua-rs|$cap cargo test $C"

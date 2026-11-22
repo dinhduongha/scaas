@@ -220,6 +220,7 @@ fn profile_of(rpc: &str, chain_id: u64, registry: &str, factory: &str) -> ChainP
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     }

@@ -1,6 +1,6 @@
-# t2b mutants at commit 9726da43c (name | outcome | test)
-drop the duplicate-label check | killed | ../../scripts/capped node --test test/keystore.test.js
+# t2b mutants (name | outcome | commit | test | first failure line)
+drop the duplicate-label check | killed | 5eeed4adf | ../../scripts/capped node --test test/keystore.test.js | Error: keystore vectors: refused a duplicate label: null
 accept words: 13 | killed | ../../scripts/capped node --test test/keystore.test.js
 skip the inner-label comparison | killed | ../../scripts/capped node --test test/keystore.test.js
-accept a missing indexMac | killed | ../../scripts/capped node --test test/keystore.test.js
-4 mutants, 4 killed, 0 survived, 0 not loaded
+accept a missing indexMac | killed | 5eeed4adf | ../../scripts/capped node --test test/keystore.test.js | Error: keystore vectors: refused no indexMac: null
+4 mutants, 4 killed, 0 survived, 0 not loaded, 0 other failure

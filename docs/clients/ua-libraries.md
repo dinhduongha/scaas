@@ -222,11 +222,12 @@ Stated gaps: no binding wraps the C calls of the PQZ seed backup ([CLI-SGN-47](s
 `scaas_ua_pqz_seed_backup_warning`, `scaas_ua_wallet_pqz_held_key`), and none marshals an external signer's callback (each passes NULL
 and expects `KindUnavailable`). The wasm-bindgen browser binding is PLANNED (next, after the size and device numbers).
 Apps do not wrap these: they reach SCaaS through `scaas-sdk` and the bindings generated from it
-([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12); SPECIFIED); the wrappers above stay for clients that use the signer without the SDK.
-PLANNED in `ua-rs` for the SDK, each with clientkeys rows first: `SecretBytes` lifted from `ua-dart-frb` (one implementation), the
-master fingerprint, the keystore's index MAC ([CLI-SDK-03](scaas-sdk.md#CLI-SDK-03)), a re-seal of a vault's data under its same data
-key, BIP-85 children with a sealed high-water mark ([CLI-SDK-04](scaas-sdk.md#CLI-SDK-04)), and the named-entry JSON and calldata of
-every typed operation.
+([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12); BUILT for the Dart binding, the others PLANNED); the wrappers above stay for clients
+that use the signer without the SDK. BUILT in `ua-rs` for the SDK (SDK plan T2a, T4, T5, T8; each with clientkeys rows first;
+UNAUDITED): `SecretBytes` (one implementation), the master fingerprint, the keystore's index MAC
+([CLI-SDK-03](scaas-sdk.md#CLI-SDK-03)), a re-seal of a vault's data under its same data key, BIP-85 children with a sealed
+high-water mark ([CLI-SDK-04](scaas-sdk.md#CLI-SDK-04)), and the named-entry JSON and calldata of every typed operation
+(`wallet/entries/`).
 
 **Targets.** CI (`.github/workflows/ci.yml`; its header lists the commands): `ua-rs` runs ten cells, each with clippy and tests;
 `ua-rs-targets` compiles for the other targets; `ua-deps` runs `cargo tree --locked`, `cargo deny`, `cargo audit`;

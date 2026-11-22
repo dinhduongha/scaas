@@ -265,4 +265,6 @@ test("an EVM profile opens: the bindings build the SDK's `evm` (decisions CLI-SD
   // the merge's fields reach the SDK: the OP Stack L1 fee and a disabled kind open; an unknown kind is refused by name
   assert.equal(await failure(open(profile({ l1_fee: "OpStack", disabled_kinds: ["pqz"] }))), "Ok");
   assert.equal(await failure(open(profile({ disabled_kinds: ["no-such-kind"] }))), "Argument");
+  // Moonbeam's pinnedReads false (owner 2026-11-22, ARCH-POS-20 (2)): the profile opens; absent, the field is true
+  assert.equal(await failure(open(profile({ pinned_reads: false }))), "Ok");
 });

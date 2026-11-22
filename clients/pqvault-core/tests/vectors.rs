@@ -80,6 +80,7 @@ async fn setup() -> (Arc<Sdk>, Arc<AppCore>, String) {
         dexes: vec![],
         wrappers: vec![],
         l1_fee: None,
+        pinned_reads: true,
         disabled_kinds: vec![],
         family_params: None,
     };

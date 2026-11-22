@@ -117,6 +117,22 @@ pub struct ChainProfile {
     /// attachment as `pqz`; an operation signed by such a kind, a registration of it, a PQZ operation or attachment is
     /// `KindDisabled` before anything is signed. A name the SDK does not know is `Argument` at `Sdk::open`
     pub disabled_kinds: Vec<String>,
+    /// Whether the chain's RPC is trusted on a read pinned by block hash (owner 2026-11-22, decisions ARCH-POS-20 (2); the
+    /// profile's `pinnedReads`, default true): false on Moonbeam and Moonbase, whose RPC answers a read pinned by a made-up
+    /// hash. With false, every pinned read (CLI-RPC-05: a decisive read, a read feeding a decryption) is refused by name,
+    /// `PinnedReadsUntrusted`; plain reads work. EVM profiles only (`Argument` at `Sdk::open` on another family)
+    #[cfg_attr(feature = "uniffi", uniffi(default = true))]
+    #[cfg_attr(
+        feature = "wasm",
+        serde(default = "crate::config::pinned_reads_default")
+    )]
+    pub pinned_reads: bool,
+}
+
+/// `ChainProfile::pinned_reads`'s default (a JS profile without the field): trusted.
+#[cfg(feature = "wasm")]
+pub(crate) fn pinned_reads_default() -> bool {
+    true
 }
 
 /// An L1 data fee model (plan T38).

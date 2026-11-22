@@ -20,7 +20,9 @@ pub use crate::events::{InFlight, OpState};
 pub use bls_multi::BlsMultiPart;
 pub use gas::{GasFrom, GasSources};
 pub use handoff::{ImportExpect, SignedOpBlob, HANDOFF_MAX};
-pub(crate) use prepared::{domain_name, field, flatten, Draft, ExpectFn};
+#[cfg(feature = "dex")]
+pub(crate) use prepared::flatten;
+pub(crate) use prepared::{domain_name, field, Draft, ExpectFn};
 pub use prepared::{Prepared, ReviewField, Source};
 pub use quote::{SubmitPath, SubmitQuote};
 
