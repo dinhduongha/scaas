@@ -239,6 +239,39 @@ Future<SecretBytes> walletExportPqzLeafRawVersion({
   required BigInt version,
 }) => _loaded(() => g.walletExportPqzLeafRawVersion(w: w, account: account, index: index, version: _u64(version)));
 
+/// P6h (3), CLI-SGN-55 (clientkeys `sealPqKey`): the PQZ leaf of [account] / [index] / [version] sealed as a vault v2 JSON of
+/// label `pqz:registry:<account>:<index>:<version>` (a version outside u64: `UAArgument`).
+Future<String> walletSealPqKey({
+  required g.UaWallet w,
+  required int account,
+  required int index,
+  required BigInt version,
+  required SecretBytes vaultPassphrase,
+}) => _loaded(
+  () =>
+      g.walletSealPqKey(w: w, account: account, index: index, version: _u64(version), vaultPassphrase: vaultPassphrase),
+);
+
+/// P6h (3), CLI-SGN-55 (clientkeys `openPqKey`): the PQZ key of a leaf vault, with no wallet; every refusal of the vault is
+/// `UAVaultOpen`.
+Future<g.UaPqzKey> pqzOpenLeaf({
+  required String vaultJson,
+  SecretBytes? vaultPassphrase,
+  SecretBytes? prf32,
+  required int account,
+  required int index,
+  required BigInt version,
+}) => _loaded(
+  () => g.pqzOpenLeaf(
+    vaultJson: vaultJson,
+    vaultPassphrase: vaultPassphrase,
+    prf32: prf32,
+    account: account,
+    index: index,
+    version: _u64(version),
+  ),
+);
+
 /// The answers, in the challenged order; the call consumes them (each disposed).
 Future<bool> seedBackupVerify({required g.UaSeedBackup b, required List<SecretBytes> answers}) =>
     _loaded(() => g.seedBackupVerify(b: b, answers: answers));

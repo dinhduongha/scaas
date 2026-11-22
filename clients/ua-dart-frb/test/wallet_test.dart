@@ -1019,6 +1019,62 @@ void main() {
     expect(pks, contains(hx((await w.pqzKey(account: 0, index: 0)).pk())), reason: 'version 0 is pqzKey');
   });
 
+  // P6h (3), CLI-SGN-55: pqz_leaf.json's leaves open to the wallet's key at their path; every refusal is UAVaultOpen beside its
+  // control; walletSealPqKey's vault carries the path's label and opens.
+  test('pqz_leaf_json', () async {
+    final w = await walletOf('pq_kat');
+    final f = load_('pqz_leaf.json');
+    Future<UaPqzKey> open(dynamic vault, Map at, Map u) => pqzOpenLeaf(
+      vaultJson: jsonEncode(vault),
+      vaultPassphrase: u.containsKey('pin') ? secs(u['pin'] as String) : null,
+      prf32: u.containsKey('prfOutput') ? sec(bytes(u['prfOutput'] as String)) : null,
+      account: at['account'] as int,
+      index: at['index'] as int,
+      version: BigInt.from(at['version'] as int),
+    );
+    for (final r in f['leaves']) {
+      final want = (await walletPqzKeyVersion(
+        w: w,
+        account: r['account'],
+        index: r['index'],
+        version: BigInt.from(r['version']),
+      )).pk();
+      expect(hx((await open(r['vault'], r, r['unlock'])).pk()), hx(want), reason: r['id']);
+    }
+    expect((f['refusals'] as List).length, 17);
+    for (final x in f['refusals']) {
+      expect(await code(() => open(x['vault'], x['open'], x['unlock'])), 'UAVaultOpen', reason: x['id']);
+      final c = x['control'];
+      expect(await code(() => open(c['vault'], c['open'], c['unlock'])), null, reason: 'control ${x['id']}');
+    }
+    final v = jsonDecode(
+      await walletSealPqKey(
+        w: w,
+        account: 1,
+        index: 2,
+        version: BigInt.from(3),
+        vaultPassphrase: secs('river-otter-7 ünï'),
+      ),
+    );
+    expect(v['label'], 'pqz:registry:1:2:3');
+    final u = {'pin': 'river-otter-7 ünï'};
+    final want = (await walletPqzKeyVersion(w: w, account: 1, index: 2, version: BigInt.from(3))).pk();
+    expect(hx((await open(v, {'account': 1, 'index': 2, 'version': 3}, u)).pk()), hx(want));
+    expect(await code(() => open(v, {'account': 1, 'index': 2, 'version': 2}, u)), 'UAVaultOpen');
+    expect(
+      await code(
+        () => walletSealPqKey(
+          w: w,
+          account: 0,
+          index: 0,
+          version: BigInt.one << 64,
+          vaultPassphrase: secs('river-otter-7 ünï'),
+        ),
+      ),
+      'UAArgument',
+    );
+  });
+
   // T21 L54: a key version outside 0 ... 2^64 - 1 is refused, never wrapped by frb's toSigned(64) to another version
   test('pqz_key_version_range', () async {
     final w = await walletOf('pq_kat');

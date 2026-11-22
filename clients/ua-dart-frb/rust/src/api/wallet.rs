@@ -813,6 +813,47 @@ pub fn wallet_pqz_key_version(w: &UaWallet, account: i64, index: i64, version: u
         Live::new(),
     ))
 }
+/// P6h (3), CLI-SGN-55 (clientkeys `sealPqKey`): the PQZ leaf of `account` / `index` / `version` sealed as a vault v2 JSON of
+/// label `pqz:registry:<account>:<index>:<version>`; a free function for the same reason.
+pub fn wallet_seal_pq_key(
+    w: &UaWallet,
+    account: i64,
+    index: i64,
+    version: u64,
+    vault_passphrase: &SecretBytes,
+) -> R<String> {
+    Ok(w.0
+        .seal_pq_key(
+            int(account)?,
+            int(index)?,
+            version,
+            text(vault_passphrase.get())?,
+            None,
+        )?
+        .to_json())
+}
+/// P6h (3), CLI-SGN-55 (clientkeys `openPqKey`): the PQZ key of a leaf vault, with no wallet; every refusal of the vault is
+/// `UAVaultOpen`.
+pub fn pqz_open_leaf(
+    vault_json: String,
+    vault_passphrase: Option<Secret>,
+    prf32: Option<Secret>,
+    account: i64,
+    index: i64,
+    version: u64,
+) -> R<UaPqzKey> {
+    let (vp, prf) = (read(&vault_passphrase), read(&prf32));
+    Ok(UaPqzKey(
+        fpqz::PqzKey::open_leaf(
+            vault_json.as_bytes(),
+            unlock(vp.as_deref(), prf.as_deref())?,
+            int(account)?,
+            int(index)?,
+            version,
+        )?,
+        Live::new(),
+    ))
+}
 /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4); a free function for the same reason.
 pub fn wallet_export_pqz_leaf_raw_version(
     w: &UaWallet,

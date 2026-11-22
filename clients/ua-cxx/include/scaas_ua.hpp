@@ -391,6 +391,8 @@ class Wallet : public Handle<ffi::Wallet> {
     PqzKey pqzKey(uint32_t account, uint32_t index, uint64_t version = 0) const;
     Secret exportPqzLeafRaw(uint32_t account, uint32_t index,
                             uint64_t version = 0) const; // the explicit export (spec §8.4)
+    // P6h (3), CLI-SGN-55: the leaf of account / index / version sealed as vault v2 (label pqz:registry:<a>:<i>:<v>)
+    std::string sealPqKey(uint32_t account, uint32_t index, uint64_t version, Secret &vaultPassphrase) const;
 };
 
 class SeedBackup : public Handle<ffi::SeedBackup> {
@@ -499,6 +501,9 @@ class PqzKey : public Handle<ffi::PqzKey> {
     std::string sealBalanceCache(const Bytes &entries) const;
     Secret openBalanceCache(const std::string &boxJson) const;
 };
+// P6h (3), CLI-SGN-55: the PQZ key of a leaf vault, no wallet (openPqKey); every refusal of the vault is UAVaultOpen
+PqzKey pqzOpenLeaf(const std::string &vaultJson, Secret &vaultPassphrase, Secret &prf32, uint32_t account,
+                   uint32_t index, uint64_t version = 0);
 std::string pqzSet();                              // {set, pkLen, pqzlId, pqzhId} of this build
 void pqzCheckSet(const std::string &deployedJson); // UAPqzSetMismatch for another set
 // checkProven (no-oracle spec §4.14.8): an MPC quorum member's keyless check before a partial, no handle; {parts, sum}

@@ -720,10 +720,10 @@ with the kind tag in `info` instead of a `kindNo'` level, because PQ seeds are n
 
 **Seed custody.** The BIP-39 seed lives only in the key worker, so `seed32` is derived there and nowhere else:
 
-- `sealPqKey({account, index})` (key worker): derives `seed32` once and seals it as a 32-byte PQZ leaf in vault v2,
-  key `vault:pqz:<account>:<index>` (AES-256-GCM with the device key and an AAD label of its own, the `sealConfKey`
-  pattern).
-- `openPqKey({account, index})` (Zether worker): opens that leaf only, never the seed.
+- `sealPqKey({account, index, version})` (key worker): derives `seed32` once and seals it as a 32-byte PQZ leaf in vault
+  v2, label `pqz:registry:<account>:<index>:<version>` (AES-256-GCM with the device key and an AAD label of its own, the
+  `sealConfKey` pattern; [CLI-SGN-55](../clients/signers-clientkeys.md#CLI-SGN-55)).
+- `openPqKey({account, index, version})` (Zether worker): opens that leaf only, never the seed; every refusal is one class.
 - `pqz-cli` (and `pqz-cli serve`) reads the 32-byte leaf from stdin, exported on the user's own machine, never the
   BIP-39 seed.
 - Organizations keep the leaf in the key oracle (`conf_custody`) and the ML-DSA key in an HSM with FIPS 204 firmware
