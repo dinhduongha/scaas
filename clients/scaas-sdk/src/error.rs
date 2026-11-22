@@ -142,6 +142,22 @@ own_codes! {
     /// registration carrying its PQZ key's proof above it goes in two steps, and a step above it alone is refused, nothing
     /// sent.
     GasAboveBlockShare,
+    /// T41.evm (spec §27.5 (c)): an imported operation of a kind the importer cannot check before sending, or that is
+    /// confidential (Zether, PQZ), or a struct the token rows do not hold.
+    ImportKindRefused,
+    /// An imported pay or transfer whose `to` is none of the importer's ids.
+    ImportNotPayee,
+    /// An imported operation whose signed `relayer` is bound to another address than the importer's payer.
+    ImportRelayerBound,
+    /// An imported operation with a fee to anyone: a hand-off is fee 0.
+    ImportFeeRefused,
+    /// An imported operation with less than the node's 120 s before its `validUntil` on the chain's clock.
+    ImportExpired,
+    /// An imported operation whose lane nonce is spent: it landed, or another operation took the nonce.
+    ImportConsumed,
+    /// An imported operation whose signed calldata reverts in the simulation from the payer (the chain's judgement of the
+    /// signature and the effect).
+    ImportedOpRefused,
 }
 
 /// Own codes that are also a lower layer's code, with the same meaning (the test holds every other own code apart from theirs).

@@ -113,6 +113,10 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   get rust_arc_decrement_strong_count_SdkHandlePtr => wire
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle;
 
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_SignedOpBlobPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob;
+
   CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_VaultPtr => wire
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault;
 
@@ -232,6 +236,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  SignedOpBlob
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    dynamic raw,
+  );
+
+  @protected
   Vault
   dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     dynamic raw,
@@ -258,6 +268,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   PqzVerdictRequest
   dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    dynamic raw,
+  );
+
+  @protected
+  SignedOpBlob
+  dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
     dynamic raw,
   );
 
@@ -360,6 +376,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   SdkHandle
   dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle(
+    dynamic raw,
+  );
+
+  @protected
+  SignedOpBlob
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
     dynamic raw,
   );
 
@@ -545,6 +567,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  SignedOpBlob
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    dynamic raw,
+  );
+
+  @protected
   Vault
   dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     dynamic raw,
@@ -713,6 +741,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   HolderKind dco_decode_box_autoadd_holder_kind(dynamic raw);
+
+  @protected
+  ImportExpect dco_decode_box_autoadd_import_expect(dynamic raw);
 
   @protected
   ImportKey dco_decode_box_autoadd_import_key(dynamic raw);
@@ -1260,6 +1291,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  ImportExpect dco_decode_import_expect(dynamic raw);
 
   @protected
   ImportKey dco_decode_import_key(dynamic raw);
@@ -2146,6 +2180,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   );
 
   @protected
+  SignedOpBlob
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Vault
   sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     SseDeserializer deserializer,
@@ -2172,6 +2212,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   PqzVerdictRequest
   sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SignedOpBlob
+  sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
     SseDeserializer deserializer,
   );
 
@@ -2274,6 +2320,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   SdkHandle
   sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SignedOpBlob
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
     SseDeserializer deserializer,
   );
 
@@ -2403,6 +2455,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   SdkHandle
   sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SignedOpBlob
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
     SseDeserializer deserializer,
   );
 
@@ -2591,6 +2649,11 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   HolderKind sse_decode_box_autoadd_holder_kind(SseDeserializer deserializer);
+
+  @protected
+  ImportExpect sse_decode_box_autoadd_import_expect(
+    SseDeserializer deserializer,
+  );
 
   @protected
   ImportKey sse_decode_box_autoadd_import_key(SseDeserializer deserializer);
@@ -3284,6 +3347,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  ImportExpect sse_decode_import_expect(SseDeserializer deserializer);
 
   @protected
   ImportKey sse_decode_import_key(SseDeserializer deserializer);
@@ -4286,6 +4352,13 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SignedOpBlob self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
   sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     Vault self,
     SseSerializer serializer,
@@ -4316,6 +4389,13 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void
   sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerPqzVerdictRequest(
     PqzVerdictRequest self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SignedOpBlob self,
     SseSerializer serializer,
   );
 
@@ -4435,6 +4515,13 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void
   sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle(
     SdkHandle self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SignedOpBlob self,
     SseSerializer serializer,
   );
 
@@ -4647,6 +4734,13 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   void
   sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle(
     SdkHandle self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SignedOpBlob self,
     SseSerializer serializer,
   );
 
@@ -4898,6 +4992,12 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
   @protected
   void sse_encode_box_autoadd_holder_kind(
     HolderKind self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_import_expect(
+    ImportExpect self,
     SseSerializer serializer,
   );
 
@@ -5788,6 +5888,9 @@ abstract class ScaasSdkApiImplPlatform extends BaseApiImpl<ScaasSdkWire> {
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_import_expect(ImportExpect self, SseSerializer serializer);
 
   @protected
   void sse_encode_import_key(ImportKey self, SseSerializer serializer);
@@ -7205,6 +7308,22 @@ class ScaasSdkWire implements BaseWire {
       );
 
   void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+        ptr,
+      );
+
+  void
   rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     int ptr,
   ) => wasmModule
@@ -7430,6 +7549,16 @@ extension type ScaasSdkWasmModule._(JSObject _) implements JSObject {
 
   external void
   rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
     int ptr,
   );
 

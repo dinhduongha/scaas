@@ -85,7 +85,7 @@ class ScaasSdk
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -464983045;
+  int get rustContentHash => -686132998;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -1004,6 +1004,17 @@ abstract class ScaasSdkApi extends BaseApi {
     required BlsMultiPart part_,
   });
 
+  Future<SignedOpBlob> scaasSdkOpOpHandOff({
+    required Op that,
+    required ArcPrepared prepared,
+  });
+
+  Future<ArcPrepared> scaasSdkOpOpImportSigned({
+    required Op that,
+    required SignedOpBlob blob,
+    required ImportExpect expect,
+  });
+
   Future<String> scaasSdkOpOpMemberSign({
     required Op that,
     required ArcPrepared prepared,
@@ -1131,6 +1142,123 @@ abstract class ScaasSdkApi extends BaseApi {
     required String account,
     required List<String> chains,
   });
+
+  String scaasSdkOpSignedOpBlobAutoAccessorGetChainUid({
+    required SignedOpBlob that,
+  });
+
+  String scaasSdkOpSignedOpBlobAutoAccessorGetContract({
+    required SignedOpBlob that,
+  });
+
+  String scaasSdkOpSignedOpBlobAutoAccessorGetEntry({
+    required SignedOpBlob that,
+  });
+
+  Object? scaasSdkOpSignedOpBlobAutoAccessorGetExtra({
+    required SignedOpBlob that,
+  });
+
+  String scaasSdkOpSignedOpBlobAutoAccessorGetFamily({
+    required SignedOpBlob that,
+  });
+
+  bool scaasSdkOpSignedOpBlobAutoAccessorGetIds({required SignedOpBlob that});
+
+  String scaasSdkOpSignedOpBlobAutoAccessorGetKind({
+    required SignedOpBlob that,
+  });
+
+  Object? scaasSdkOpSignedOpBlobAutoAccessorGetMessage({
+    required SignedOpBlob that,
+  });
+
+  String scaasSdkOpSignedOpBlobAutoAccessorGetName({
+    required SignedOpBlob that,
+  });
+
+  Object? scaasSdkOpSignedOpBlobAutoAccessorGetSignature({
+    required SignedOpBlob that,
+  });
+
+  String scaasSdkOpSignedOpBlobAutoAccessorGetSigner({
+    required SignedOpBlob that,
+  });
+
+  int scaasSdkOpSignedOpBlobAutoAccessorGetSignerKind({
+    required SignedOpBlob that,
+  });
+
+  int scaasSdkOpSignedOpBlobAutoAccessorGetV({required SignedOpBlob that});
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetChainUid({
+    required SignedOpBlob that,
+    required String chainUid,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetContract({
+    required SignedOpBlob that,
+    required String contract,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetEntry({
+    required SignedOpBlob that,
+    required String entry,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetExtra({
+    required SignedOpBlob that,
+    required Object? extra,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetFamily({
+    required SignedOpBlob that,
+    required String family,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetIds({
+    required SignedOpBlob that,
+    required bool ids,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetKind({
+    required SignedOpBlob that,
+    required String kind,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetMessage({
+    required SignedOpBlob that,
+    required Object? message,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetName({
+    required SignedOpBlob that,
+    required String name,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetSignature({
+    required SignedOpBlob that,
+    required Object? signature,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetSigner({
+    required SignedOpBlob that,
+    required String signer,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetSignerKind({
+    required SignedOpBlob that,
+    required int signerKind,
+  });
+
+  void scaasSdkOpSignedOpBlobAutoAccessorSetV({
+    required SignedOpBlob that,
+    required int v,
+  });
+
+  Future<SignedOpBlob> scaasSdkOpSignedOpBlobFromJson({required String text});
+
+  Future<String> scaasSdkOpSignedOpBlobToJson({required SignedOpBlob that});
 
   Future<void> scaasSdkVaultSeedsVaultChangePassphrase({
     required Vault that,
@@ -1693,6 +1821,14 @@ abstract class ScaasSdkApi extends BaseApi {
   get rust_arc_decrement_strong_count_SdkHandle;
 
   CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_SdkHandlePtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_SignedOpBlob;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_SignedOpBlob;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_SignedOpBlobPtr;
 
   RustArcIncrementStrongCountFnType get rust_arc_increment_strong_count_Vault;
 
@@ -8679,7 +8815,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       );
 
   @override
-  Future<String> scaasSdkOpOpMemberSign({
+  Future<SignedOpBlob> scaasSdkOpOpHandOff({
     required Op that,
     required ArcPrepared prepared,
   }) {
@@ -8699,6 +8835,92 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
             generalizedFrbRustBinding,
             serializer,
             funcId: 173,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob,
+          decodeErrorData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError,
+        ),
+        constMeta: kScaasSdkOpOpHandOffConstMeta,
+        argValues: [that, prepared],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpOpHandOffConstMeta => const TaskConstMeta(
+    debugName: "Op_hand_off",
+    argNames: ["that", "prepared"],
+  );
+
+  @override
+  Future<ArcPrepared> scaasSdkOpOpImportSigned({
+    required Op that,
+    required SignedOpBlob blob,
+    required ImportExpect expect,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            blob,
+            serializer,
+          );
+          sse_encode_box_autoadd_import_expect(expect, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 174,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared,
+          decodeErrorData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError,
+        ),
+        constMeta: kScaasSdkOpOpImportSignedConstMeta,
+        argValues: [that, blob, expect],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpOpImportSignedConstMeta => const TaskConstMeta(
+    debugName: "Op_import_signed",
+    argNames: ["that", "blob", "expect"],
+  );
+
+  @override
+  Future<String> scaasSdkOpOpMemberSign({
+    required Op that,
+    required ArcPrepared prepared,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerOp(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerArcPrepared(
+            prepared,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 175,
             port: port_,
           );
         },
@@ -8741,7 +8963,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 174,
+            funcId: 176,
             port: port_,
           );
         },
@@ -8783,7 +9005,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 175,
+            funcId: 177,
             port: port_,
           );
         },
@@ -8829,7 +9051,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 176,
+            funcId: 178,
             port: port_,
           );
         },
@@ -8873,7 +9095,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 177,
+            funcId: 179,
             port: port_,
           );
         },
@@ -8914,7 +9136,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 178,
+            funcId: 180,
             port: port_,
           );
         },
@@ -8948,7 +9170,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 179,
+            funcId: 181,
             port: port_,
           );
         },
@@ -8981,7 +9203,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 180,
+            funcId: 182,
             port: port_,
           );
         },
@@ -9022,7 +9244,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 181,
+            funcId: 183,
             port: port_,
           );
         },
@@ -9069,7 +9291,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 182,
+            funcId: 184,
             port: port_,
           );
         },
@@ -9105,7 +9327,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 183,
+            funcId: 185,
           )!;
         },
         codec: SseCodec(
@@ -9142,7 +9364,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 184,
+            funcId: 186,
           )!;
         },
         codec: SseCodec(
@@ -9179,7 +9401,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 185,
+            funcId: 187,
           )!;
         },
         codec: SseCodec(
@@ -9216,7 +9438,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 186,
+            funcId: 188,
           )!;
         },
         codec: SseCodec(
@@ -9253,7 +9475,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 187,
+            funcId: 189,
           )!;
         },
         codec: SseCodec(
@@ -9292,7 +9514,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 188,
+            funcId: 190,
           )!;
         },
         codec: SseCodec(
@@ -9331,7 +9553,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 189,
+            funcId: 191,
           )!;
         },
         codec: SseCodec(
@@ -9370,7 +9592,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 190,
+            funcId: 192,
           )!;
         },
         codec: SseCodec(
@@ -9409,7 +9631,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 191,
+            funcId: 193,
           )!;
         },
         codec: SseCodec(
@@ -9448,7 +9670,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 192,
+            funcId: 194,
           )!;
         },
         codec: SseCodec(
@@ -9483,7 +9705,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 193,
+            funcId: 195,
           )!;
         },
         codec: SseCodec(
@@ -9514,7 +9736,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 194,
+            funcId: 196,
           )!;
         },
         codec: SseCodec(
@@ -9545,7 +9767,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 195,
+            funcId: 197,
           )!;
         },
         codec: SseCodec(
@@ -9579,7 +9801,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 196,
+            funcId: 198,
           )!;
         },
         codec: SseCodec(
@@ -9610,7 +9832,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 197,
+            funcId: 199,
           )!;
         },
         codec: SseCodec(
@@ -9640,7 +9862,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 198,
+            funcId: 200,
           )!;
         },
         codec: SseCodec(
@@ -9671,7 +9893,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 199,
+            funcId: 201,
             port: port_,
           );
         },
@@ -9703,7 +9925,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 200,
+            funcId: 202,
           )!;
         },
         codec: SseCodec(
@@ -9734,7 +9956,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 201,
+            funcId: 203,
           )!;
         },
         codec: SseCodec(
@@ -9765,7 +9987,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 202,
+            funcId: 204,
           )!;
         },
         codec: SseCodec(
@@ -9802,7 +10024,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 203,
+            funcId: 205,
             port: port_,
           );
         },
@@ -9822,6 +10044,1006 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     debugName: "SdkHandle_watch",
     argNames: ["that", "account", "chains"],
   );
+
+  @override
+  String scaasSdkOpSignedOpBlobAutoAccessorGetChainUid({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 206,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetChainUidConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetChainUidConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_chain_uid",
+        argNames: ["that"],
+      );
+
+  @override
+  String scaasSdkOpSignedOpBlobAutoAccessorGetContract({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 207,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetContractConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetContractConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_contract",
+        argNames: ["that"],
+      );
+
+  @override
+  String scaasSdkOpSignedOpBlobAutoAccessorGetEntry({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 208,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetEntryConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetEntryConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_entry",
+        argNames: ["that"],
+      );
+
+  @override
+  Object? scaasSdkOpSignedOpBlobAutoAccessorGetExtra({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 209,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_SerdeJsonValue,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetExtraConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetExtraConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_extra",
+        argNames: ["that"],
+      );
+
+  @override
+  String scaasSdkOpSignedOpBlobAutoAccessorGetFamily({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 210,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetFamilyConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetFamilyConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_family",
+        argNames: ["that"],
+      );
+
+  @override
+  bool scaasSdkOpSignedOpBlobAutoAccessorGetIds({required SignedOpBlob that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 211,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetIdsConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetIdsConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_ids",
+        argNames: ["that"],
+      );
+
+  @override
+  String scaasSdkOpSignedOpBlobAutoAccessorGetKind({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 212,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetKindConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetKindConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_kind",
+        argNames: ["that"],
+      );
+
+  @override
+  Object? scaasSdkOpSignedOpBlobAutoAccessorGetMessage({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 213,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_SerdeJsonValue,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetMessageConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_message",
+        argNames: ["that"],
+      );
+
+  @override
+  String scaasSdkOpSignedOpBlobAutoAccessorGetName({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 214,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetNameConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetNameConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_name",
+        argNames: ["that"],
+      );
+
+  @override
+  Object? scaasSdkOpSignedOpBlobAutoAccessorGetSignature({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 215,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_SerdeJsonValue,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetSignatureConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetSignatureConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_signature",
+        argNames: ["that"],
+      );
+
+  @override
+  String scaasSdkOpSignedOpBlobAutoAccessorGetSigner({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 216,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetSignerConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetSignerConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_signer",
+        argNames: ["that"],
+      );
+
+  @override
+  int scaasSdkOpSignedOpBlobAutoAccessorGetSignerKind({
+    required SignedOpBlob that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 217,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_16,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetSignerKindConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetSignerKindConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_signer_kind",
+        argNames: ["that"],
+      );
+
+  @override
+  int scaasSdkOpSignedOpBlobAutoAccessorGetV({required SignedOpBlob that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 218,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorGetVConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorGetVConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_get_v",
+        argNames: ["that"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetChainUid({
+    required SignedOpBlob that,
+    required String chainUid,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_String(chainUid, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 219,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetChainUidConstMeta,
+        argValues: [that, chainUid],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetChainUidConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_chain_uid",
+        argNames: ["that", "chainUid"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetContract({
+    required SignedOpBlob that,
+    required String contract,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_String(contract, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 220,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetContractConstMeta,
+        argValues: [that, contract],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetContractConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_contract",
+        argNames: ["that", "contract"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetEntry({
+    required SignedOpBlob that,
+    required String entry,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_String(entry, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 221,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetEntryConstMeta,
+        argValues: [that, entry],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetEntryConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_entry",
+        argNames: ["that", "entry"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetExtra({
+    required SignedOpBlob that,
+    required Object? extra,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_SerdeJsonValue(extra, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 222,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetExtraConstMeta,
+        argValues: [that, extra],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetExtraConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_extra",
+        argNames: ["that", "extra"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetFamily({
+    required SignedOpBlob that,
+    required String family,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_String(family, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 223,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetFamilyConstMeta,
+        argValues: [that, family],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetFamilyConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_family",
+        argNames: ["that", "family"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetIds({
+    required SignedOpBlob that,
+    required bool ids,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_bool(ids, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 224,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetIdsConstMeta,
+        argValues: [that, ids],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetIdsConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_ids",
+        argNames: ["that", "ids"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetKind({
+    required SignedOpBlob that,
+    required String kind,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_String(kind, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 225,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetKindConstMeta,
+        argValues: [that, kind],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetKindConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_kind",
+        argNames: ["that", "kind"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetMessage({
+    required SignedOpBlob that,
+    required Object? message,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_SerdeJsonValue(message, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 226,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetMessageConstMeta,
+        argValues: [that, message],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_message",
+        argNames: ["that", "message"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetName({
+    required SignedOpBlob that,
+    required String name,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 227,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetNameConstMeta,
+        argValues: [that, name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetNameConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_name",
+        argNames: ["that", "name"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetSignature({
+    required SignedOpBlob that,
+    required Object? signature,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_SerdeJsonValue(signature, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 228,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetSignatureConstMeta,
+        argValues: [that, signature],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetSignatureConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_signature",
+        argNames: ["that", "signature"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetSigner({
+    required SignedOpBlob that,
+    required String signer,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_String(signer, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 229,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetSignerConstMeta,
+        argValues: [that, signer],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetSignerConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_signer",
+        argNames: ["that", "signer"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetSignerKind({
+    required SignedOpBlob that,
+    required int signerKind,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_u_16(signerKind, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 230,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetSignerKindConstMeta,
+        argValues: [that, signerKind],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetSignerKindConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_signer_kind",
+        argNames: ["that", "signerKind"],
+      );
+
+  @override
+  void scaasSdkOpSignedOpBlobAutoAccessorSetV({
+    required SignedOpBlob that,
+    required int v,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          sse_encode_u_32(v, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 231,
+          )!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobAutoAccessorSetVConstMeta,
+        argValues: [that, v],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobAutoAccessorSetVConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_auto_accessor_set_v",
+        argNames: ["that", "v"],
+      );
+
+  @override
+  Future<SignedOpBlob> scaasSdkOpSignedOpBlobFromJson({required String text}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(text, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 232,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob,
+          decodeErrorData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobFromJsonConstMeta,
+        argValues: [text],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobFromJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_from_json",
+        argNames: ["text"],
+      );
+
+  @override
+  Future<String> scaasSdkOpSignedOpBlobToJson({required SignedOpBlob that}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 233,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkError,
+        ),
+        constMeta: kScaasSdkOpSignedOpBlobToJsonConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kScaasSdkOpSignedOpBlobToJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "SignedOpBlob_to_json",
+        argNames: ["that"],
+      );
 
   @override
   Future<void> scaasSdkVaultSeedsVaultChangePassphrase({
@@ -9850,7 +11072,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 204,
+            funcId: 234,
             port: port_,
           );
         },
@@ -9889,7 +11111,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 205,
+            funcId: 235,
             port: port_,
           );
         },
@@ -9928,7 +11150,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 206,
+            funcId: 236,
             port: port_,
           );
         },
@@ -9970,7 +11192,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 207,
+            funcId: 237,
             port: port_,
           );
         },
@@ -10012,7 +11234,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 208,
+            funcId: 238,
             port: port_,
           );
         },
@@ -10051,7 +11273,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 209,
+            funcId: 239,
             port: port_,
           );
         },
@@ -10095,7 +11317,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 210,
+            funcId: 240,
             port: port_,
           );
         },
@@ -10141,7 +11363,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 211,
+            funcId: 241,
             port: port_,
           );
         },
@@ -10180,7 +11402,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 212,
+            funcId: 242,
             port: port_,
           );
         },
@@ -10219,7 +11441,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 213,
+            funcId: 243,
             port: port_,
           );
         },
@@ -10258,7 +11480,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 214,
+            funcId: 244,
             port: port_,
           );
         },
@@ -10299,7 +11521,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 215,
+            funcId: 245,
             port: port_,
           );
         },
@@ -10334,7 +11556,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 216,
+            funcId: 246,
             port: port_,
           );
         },
@@ -10373,7 +11595,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 217,
+            funcId: 247,
             port: port_,
           );
         },
@@ -10404,7 +11626,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 218,
+            funcId: 248,
             port: port_,
           );
         },
@@ -10439,7 +11661,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 219,
+            funcId: 249,
             port: port_,
           );
         },
@@ -10485,7 +11707,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 220,
+            funcId: 250,
             port: port_,
           );
         },
@@ -10524,7 +11746,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 221,
+            funcId: 251,
             port: port_,
           );
         },
@@ -10562,7 +11784,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 222,
+            funcId: 252,
             port: port_,
           );
         },
@@ -10601,7 +11823,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 223,
+            funcId: 253,
             port: port_,
           );
         },
@@ -10633,7 +11855,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 224,
+            funcId: 254,
             port: port_,
           );
         },
@@ -10672,7 +11894,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 225,
+            funcId: 255,
             port: port_,
           );
         },
@@ -10714,7 +11936,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 226,
+            funcId: 256,
             port: port_,
           );
         },
@@ -10756,7 +11978,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 227,
+            funcId: 257,
             port: port_,
           );
         },
@@ -10796,7 +12018,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 228,
+            funcId: 258,
             port: port_,
           );
         },
@@ -10841,7 +12063,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 229,
+            funcId: 259,
             port: port_,
           );
         },
@@ -10882,7 +12104,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 230,
+            funcId: 260,
             port: port_,
           );
         },
@@ -10921,7 +12143,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 231,
+            funcId: 261,
             port: port_,
           );
         },
@@ -10961,7 +12183,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 232,
+            funcId: 262,
             port: port_,
           );
         },
@@ -11001,7 +12223,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 233,
+            funcId: 263,
             port: port_,
           );
         },
@@ -11041,7 +12263,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 234,
+            funcId: 264,
             port: port_,
           );
         },
@@ -11081,7 +12303,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 235,
+            funcId: 265,
             port: port_,
           );
         },
@@ -11121,7 +12343,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 236,
+            funcId: 266,
             port: port_,
           );
         },
@@ -11160,7 +12382,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 237,
+            funcId: 267,
             port: port_,
           );
         },
@@ -11200,7 +12422,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 238,
+            funcId: 268,
             port: port_,
           );
         },
@@ -11240,7 +12462,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 239,
+            funcId: 269,
             port: port_,
           );
         },
@@ -11280,7 +12502,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 240,
+            funcId: 270,
             port: port_,
           );
         },
@@ -11320,7 +12542,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 241,
+            funcId: 271,
             port: port_,
           );
         },
@@ -11360,7 +12582,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 242,
+            funcId: 272,
             port: port_,
           );
         },
@@ -11400,7 +12622,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 243,
+            funcId: 273,
             port: port_,
           );
         },
@@ -11440,7 +12662,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 244,
+            funcId: 274,
             port: port_,
           );
         },
@@ -11480,7 +12702,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 245,
+            funcId: 275,
             port: port_,
           );
         },
@@ -11520,7 +12742,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 246,
+            funcId: 276,
             port: port_,
           );
         },
@@ -11560,7 +12782,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 247,
+            funcId: 277,
             port: port_,
           );
         },
@@ -11600,7 +12822,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 248,
+            funcId: 278,
             port: port_,
           );
         },
@@ -11640,7 +12862,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 249,
+            funcId: 279,
             port: port_,
           );
         },
@@ -11680,7 +12902,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 250,
+            funcId: 280,
             port: port_,
           );
         },
@@ -11720,7 +12942,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 251,
+            funcId: 281,
             port: port_,
           );
         },
@@ -11760,7 +12982,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 252,
+            funcId: 282,
             port: port_,
           );
         },
@@ -11801,7 +13023,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 253,
+            funcId: 283,
             port: port_,
           );
         },
@@ -11834,7 +13056,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 254,
+            funcId: 284,
             port: port_,
           );
         },
@@ -11861,7 +13083,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 255,
+            funcId: 285,
           )!;
         },
         codec: SseCodec(
@@ -11891,7 +13113,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 256,
+            funcId: 286,
           )!;
         },
         codec: SseCodec(
@@ -11922,7 +13144,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 257,
+            funcId: 287,
           )!;
         },
         codec: SseCodec(
@@ -11961,7 +13183,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 258,
+            funcId: 288,
           )!;
         },
         codec: SseCodec(
@@ -11991,7 +13213,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 259,
+            funcId: 289,
           )!;
         },
         codec: SseCodec(
@@ -12025,7 +13247,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 260,
+            funcId: 290,
           )!;
         },
         codec: SseCodec(
@@ -12055,7 +13277,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 261,
+            funcId: 291,
           )!;
         },
         codec: SseCodec(
@@ -12088,7 +13310,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 262,
+            funcId: 292,
           )!;
         },
         codec: SseCodec(
@@ -12122,7 +13344,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 263,
+            funcId: 293,
             port: port_,
           );
         },
@@ -12151,7 +13373,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 264,
+            funcId: 294,
           )!;
         },
         codec: SseCodec(
@@ -12177,7 +13399,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 265,
+            funcId: 295,
             port: port_,
           );
         },
@@ -12204,7 +13426,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 266,
+            funcId: 296,
             port: port_,
           );
         },
@@ -12232,7 +13454,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 267,
+            funcId: 297,
             port: port_,
           );
         },
@@ -12261,7 +13483,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 268,
+            funcId: 298,
             port: port_,
           );
         },
@@ -12289,7 +13511,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 269,
+            funcId: 299,
           )!;
         },
         codec: SseCodec(
@@ -12317,7 +13539,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 270,
+            funcId: 300,
           )!;
         },
         codec: SseCodec(
@@ -12344,7 +13566,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 271,
+            funcId: 301,
             port: port_,
           );
         },
@@ -12371,7 +13593,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 272,
+            funcId: 302,
             port: port_,
           );
         },
@@ -12398,7 +13620,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 273,
+            funcId: 303,
           )!;
         },
         codec: SseCodec(
@@ -12429,7 +13651,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 274,
+            funcId: 304,
             port: port_,
           );
         },
@@ -12460,7 +13682,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 275,
+            funcId: 305,
             port: port_,
           );
         },
@@ -12493,7 +13715,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 276,
+            funcId: 306,
             port: port_,
           );
         },
@@ -12525,7 +13747,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 277,
+            funcId: 307,
             port: port_,
           );
         },
@@ -12553,7 +13775,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 278,
+            funcId: 308,
             port: port_,
           );
         },
@@ -12594,7 +13816,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 279,
+            funcId: 309,
           )!;
         },
         codec: SseCodec(
@@ -12627,7 +13849,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 280,
+            funcId: 310,
           )!;
         },
         codec: SseCodec(
@@ -12657,7 +13879,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 281,
+            funcId: 311,
           )!;
         },
         codec: SseCodec(
@@ -12683,7 +13905,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 282,
+            funcId: 312,
             port: port_,
           );
         },
@@ -12710,7 +13932,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 283,
+            funcId: 313,
             port: port_,
           );
         },
@@ -12740,7 +13962,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 284,
+            funcId: 314,
             port: port_,
           );
         },
@@ -12774,7 +13996,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 285,
+            funcId: 315,
             port: port_,
           );
         },
@@ -12805,7 +14027,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 286,
+            funcId: 316,
             port: port_,
           );
         },
@@ -12839,7 +14061,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 287,
+            funcId: 317,
           )!;
         },
         codec: SseCodec(
@@ -12866,7 +14088,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 288,
+            funcId: 318,
             port: port_,
           );
         },
@@ -12968,7 +14190,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 289,
+            funcId: 319,
             port: port_,
           );
         },
@@ -13033,7 +14255,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 290,
+            funcId: 320,
           )!;
         },
         codec: SseCodec(
@@ -13063,7 +14285,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 291,
+            funcId: 321,
           )!;
         },
         codec: SseCodec(
@@ -13090,7 +14312,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 292,
+            funcId: 322,
           )!;
         },
         codec: SseCodec(
@@ -13127,7 +14349,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 293,
+            funcId: 323,
             port: port_,
           );
         },
@@ -13158,7 +14380,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 294,
+            funcId: 324,
             port: port_,
           );
         },
@@ -13188,7 +14410,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 295,
+            funcId: 325,
             port: port_,
           );
         },
@@ -13220,7 +14442,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 296,
+            funcId: 326,
             port: port_,
           );
         },
@@ -13248,7 +14470,7 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 297,
+            funcId: 327,
             port: port_,
           );
         },
@@ -13749,6 +14971,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSdkHandle;
 
   RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_SignedOpBlob => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_SignedOpBlob => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob;
+
+  RustArcIncrementStrongCountFnType
   get rust_arc_increment_strong_count_Vault => wire
       .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault;
 
@@ -13933,6 +15163,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  SignedOpBlob
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SignedOpBlobImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
   Vault
   dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     dynamic raw,
@@ -13975,6 +15214,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return PqzVerdictRequestImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  SignedOpBlob
+  dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SignedOpBlobImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
@@ -14128,6 +15376,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return SdkHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  SignedOpBlob
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SignedOpBlobImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
@@ -14402,6 +15659,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return SdkHandleImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  SignedOpBlob
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SignedOpBlobImpl.frbInternalDcoDecode(raw as List<dynamic>);
   }
 
   @protected
@@ -14881,6 +16147,12 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   HolderKind dco_decode_box_autoadd_holder_kind(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_holder_kind(raw);
+  }
+
+  @protected
+  ImportExpect dco_decode_box_autoadd_import_expect(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_import_expect(raw);
   }
 
   @protected
@@ -16333,6 +17605,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  ImportExpect dco_decode_import_expect(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ImportExpect(
+      chain: dco_decode_String(arr[0]),
+      payee: dco_decode_list_String(arr[1]),
+      payer: dco_decode_key_ref(arr[2]),
+    );
+  }
+
+  @protected
   ImportKey dco_decode_import_key(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -16472,6 +17757,8 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           index: dco_decode_u_32(raw[3]),
           keyData: dco_decode_String(raw[4]),
         );
+      case 6:
+        return KeyRef_Signed(signer: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -20104,6 +21391,18 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  SignedOpBlob
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return SignedOpBlobImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
   Vault
   sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     SseDeserializer deserializer,
@@ -20158,6 +21457,18 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return PqzVerdictRequestImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  SignedOpBlob
+  sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return SignedOpBlobImpl.frbInternalSseDecode(
       sse_decode_usize(deserializer),
       sse_decode_i_32(deserializer),
     );
@@ -20362,6 +21673,18 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return SdkHandleImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  SignedOpBlob
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return SignedOpBlobImpl.frbInternalSseDecode(
       sse_decode_usize(deserializer),
       sse_decode_i_32(deserializer),
     );
@@ -20621,6 +21944,18 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return SdkHandleImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  SignedOpBlob
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return SignedOpBlobImpl.frbInternalSseDecode(
       sse_decode_usize(deserializer),
       sse_decode_i_32(deserializer),
     );
@@ -21162,6 +22497,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   HolderKind sse_decode_box_autoadd_holder_kind(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_holder_kind(deserializer));
+  }
+
+  @protected
+  ImportExpect sse_decode_box_autoadd_import_expect(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_import_expect(deserializer));
   }
 
   @protected
@@ -22833,6 +24176,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  ImportExpect sse_decode_import_expect(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_chain = sse_decode_String(deserializer);
+    var var_payee = sse_decode_list_String(deserializer);
+    var var_payer = sse_decode_key_ref(deserializer);
+    return ImportExpect(chain: var_chain, payee: var_payee, payer: var_payer);
+  }
+
+  @protected
   ImportKey sse_decode_import_key(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_seed = sse_decode_String(deserializer);
@@ -22979,6 +24331,9 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
           index: var_index,
           keyData: var_keyData,
         );
+      case 6:
+        var var_signer = sse_decode_String(deserializer);
+        return KeyRef_Signed(signer: var_signer);
       default:
         throw UnimplementedError('');
     }
@@ -27630,6 +28985,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
 
   @protected
   void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SignedOpBlob self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as SignedOpBlobImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
   sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVault(
     Vault self,
     SseSerializer serializer,
@@ -27689,6 +29057,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
       (self as PqzVerdictRequestImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SignedOpBlob self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as SignedOpBlobImpl).frbInternalSseEncode(move: false),
       serializer,
     );
   }
@@ -27910,6 +29291,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
       (self as SdkHandleImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SignedOpBlob self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as SignedOpBlobImpl).frbInternalSseEncode(move: false),
       serializer,
     );
   }
@@ -28328,6 +29722,19 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(
       (self as SdkHandleImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSignedOpBlob(
+    SignedOpBlob self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as SignedOpBlobImpl).frbInternalSseEncode(move: null),
       serializer,
     );
   }
@@ -28856,6 +30263,15 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_holder_kind(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_import_expect(
+    ImportExpect self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_import_expect(self, serializer);
   }
 
   @protected
@@ -30536,6 +31952,14 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
   }
 
   @protected
+  void sse_encode_import_expect(ImportExpect self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.chain, serializer);
+    sse_encode_list_String(self.payee, serializer);
+    sse_encode_key_ref(self.payer, serializer);
+  }
+
+  @protected
   void sse_encode_import_key(ImportKey self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.seed, serializer);
@@ -30657,6 +32081,9 @@ class ScaasSdkApiImpl extends ScaasSdkApiImplPlatform implements ScaasSdkApi {
         sse_encode_u_32(account, serializer);
         sse_encode_u_32(index, serializer);
         sse_encode_String(keyData, serializer);
+      case KeyRef_Signed(signer: final signer):
+        sse_encode_i_32(6, serializer);
+        sse_encode_String(signer, serializer);
     }
   }
 
@@ -35489,6 +36916,31 @@ class OpImpl extends RustOpaque implements Op {
     part_: part_,
   );
 
+  /// The signer's side (spec §27.5 (c)): signs `prepared` once under its check, writes its row ahead (state `handed_off`,
+  /// path `handoff`, its id `prepared.id()` for `Op::state`), sends nothing, and returns the blob for its payee. `PreparedUnknown`, `PreparedStale`; `Argument` for an
+  /// operation with a fee (a hand-off is fee 0, (b)), a relay fee's paid call, an order's other contract or a
+  /// `bls12381-multi` group (its aggregate is `submit_bls_multi`'s). The row ends on chain facts only.
+  Future<SignedOpBlob> handOff({required ArcPrepared prepared}) =>
+      ScaasSdk.instance.api.scaasSdkOpOpHandOff(that: this, prepared: prepared);
+
+  /// The payee's side (spec §27.5 (c)): the blob's checks in order, each its refusal, then an ordinary [`Prepared`] whose
+  /// signature is made, for `quote` and `submit` on `SubmitPath::SelfRelay` by `expect.payer`: the profile's `chain_uid` and
+  /// family (`ProfileMismatch`); the contract a listed token of the profile (`ProfileMismatch`); a confidential kind or a
+  /// struct the token rows do not hold (`ImportKindRefused`); a pay or transfer to none of `expect.payee` (`ImportNotPayee`);
+  /// a `relayer` bound to another address than the payer's (`ImportRelayerBound`); a fee (`ImportFeeRefused`); fewer than
+  /// 120 s left on the chain's clock (`ImportExpired`); its lane nonce spent (`ImportConsumed`); then `scaas-ua` rebuilds
+  /// the typed data and the calldata from the named fields, and the calldata simulated from the payer must not revert
+  /// (`ImportedOpRefused`); a signer kind the profile disables is `KindDisabled`. The review lists the signed fields, `handed_off` and the simulation's gas. `ChainUnknown`;
+  /// `Argument` for a payer that is not an EVM native key.
+  Future<ArcPrepared> importSigned({
+    required SignedOpBlob blob,
+    required ImportExpect expect,
+  }) => ScaasSdk.instance.api.scaasSdkOpOpImportSigned(
+    that: this,
+    blob: blob,
+    expect: expect,
+  );
+
   /// One member's signature of a prepared operation signed by an `msig` (M1, owner 2026-11-19: members on different
   /// devices): `prepared`'s signer is `KeyRef::Msig` with exactly one local slot; the entry's check runs first, then that slot
   /// signs (its keys enabled and accepted, `MsigSlotInactive` otherwise). The `MemberSig` JSON the submitting device names as
@@ -35792,6 +37244,125 @@ class SdkHandleImpl extends RustOpaque implements SdkHandle {
         account: account,
         chains: chains,
       );
+}
+
+@sealed
+class SignedOpBlobImpl extends RustOpaque implements SignedOpBlob {
+  // Not to be used by end users
+  SignedOpBlobImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  SignedOpBlobImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        ScaasSdk.instance.api.rust_arc_increment_strong_count_SignedOpBlob,
+    rustArcDecrementStrongCount:
+        ScaasSdk.instance.api.rust_arc_decrement_strong_count_SignedOpBlob,
+    rustArcDecrementStrongCountPtr:
+        ScaasSdk.instance.api.rust_arc_decrement_strong_count_SignedOpBlobPtr,
+  );
+
+  String get chainUid => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetChainUid(that: this);
+
+  String get contract => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetContract(that: this);
+
+  String get entry => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetEntry(that: this);
+
+  Object? get extra => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetExtra(that: this);
+
+  String get family => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetFamily(that: this);
+
+  bool get ids => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetIds(that: this);
+
+  String get kind => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetKind(that: this);
+
+  Object? get message => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetMessage(that: this);
+
+  String get name => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetName(that: this);
+
+  Object? get signature => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetSignature(that: this);
+
+  String get signer => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetSigner(that: this);
+
+  int get signerKind => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorGetSignerKind(that: this);
+
+  int get v =>
+      ScaasSdk.instance.api.scaasSdkOpSignedOpBlobAutoAccessorGetV(that: this);
+
+  set chainUid(String chainUid) =>
+      ScaasSdk.instance.api.scaasSdkOpSignedOpBlobAutoAccessorSetChainUid(
+        that: this,
+        chainUid: chainUid,
+      );
+
+  set contract(String contract) =>
+      ScaasSdk.instance.api.scaasSdkOpSignedOpBlobAutoAccessorSetContract(
+        that: this,
+        contract: contract,
+      );
+
+  set entry(String entry) => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorSetEntry(that: this, entry: entry);
+
+  set extra(Object? extra) => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorSetExtra(that: this, extra: extra);
+
+  set family(String family) => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorSetFamily(that: this, family: family);
+
+  set ids(bool ids) => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorSetIds(that: this, ids: ids);
+
+  set kind(String kind) => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorSetKind(that: this, kind: kind);
+
+  set message(Object? message) =>
+      ScaasSdk.instance.api.scaasSdkOpSignedOpBlobAutoAccessorSetMessage(
+        that: this,
+        message: message,
+      );
+
+  set name(String name) => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorSetName(that: this, name: name);
+
+  set signature(Object? signature) =>
+      ScaasSdk.instance.api.scaasSdkOpSignedOpBlobAutoAccessorSetSignature(
+        that: this,
+        signature: signature,
+      );
+
+  set signer(String signer) => ScaasSdk.instance.api
+      .scaasSdkOpSignedOpBlobAutoAccessorSetSigner(that: this, signer: signer);
+
+  set signerKind(int signerKind) =>
+      ScaasSdk.instance.api.scaasSdkOpSignedOpBlobAutoAccessorSetSignerKind(
+        that: this,
+        signerKind: signerKind,
+      );
+
+  set v(int v) => ScaasSdk.instance.api.scaasSdkOpSignedOpBlobAutoAccessorSetV(
+    that: this,
+    v: v,
+  );
+
+  /// Its JSON text.
+  Future<String> toJson() =>
+      ScaasSdk.instance.api.scaasSdkOpSignedOpBlobToJson(that: this);
 }
 
 @sealed
