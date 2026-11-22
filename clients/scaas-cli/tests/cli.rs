@@ -1216,6 +1216,7 @@ fn every_signing_command_asks_first() {
                 "admin sign-zether-auditor-consent" => zf(&["admin", "sign-zether-auditor-consent"], zero::<scaas_sdk::admin::AuditorConsent>()),
                 "app-core sign-app-record" => Run::One(s(&["app-core", "sign-app-record", "--account", &sg, "--path", "Portable", "--typed-json", "{}"])),
                 "app-core sign-pqvault-record" => Run::One(s(&["app-core", "sign-pqvault-record", "--account", &sg, "--path", "Portable", "--typed-json", "{}"])),
+                "app-core sign-pqchat-card" => Run::One(s(&["app-core", "sign-pqchat-card", "--account", &sg, "--kem-version", "1", "--matrix-id", ""])),
                 "app-core prepare-app-call" => {
                     let entry = json!({"type": "function", "name": "ping", "stateMutability": "nonpayable", "outputs": [],
                         "inputs": [{"name": "x", "type": "uint64"}]});
