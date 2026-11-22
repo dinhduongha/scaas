@@ -13,7 +13,9 @@ const require = createRequire(import.meta.url);
 const ab = require("@dha-team/arbundles");
 const ed = require("@noble/ed25519");
 const bs58 = require("bs58");
-const V = JSON.parse(readFileSync(new URL("../../../../smartcontracts/vectors/arweave/items.json", import.meta.url), "utf8"));
+const V = JSON.parse(
+  readFileSync(new URL("../../../../smartcontracts/vectors/arweave/items.json", import.meta.url), "utf8"),
+);
 
 /** arbundles' type-2 key (Curve25519 leaves the key and the public key to a subclass). */
 class Ed25519Signer extends ab.Curve25519 {

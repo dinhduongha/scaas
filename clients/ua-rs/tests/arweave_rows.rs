@@ -14,7 +14,10 @@ use sha2::{Digest, Sha256};
 const MNEMONIC: &str = "bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author capable act festival slice deposit sauce coconut afford frown better";
 
 fn vec(p: &str) -> Value {
-    let f = format!("{}/../../smartcontracts/vectors/{p}", env!("CARGO_MANIFEST_DIR"));
+    let f = format!(
+        "{}/../../smartcontracts/vectors/{p}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     serde_json::from_str(&std::fs::read_to_string(f).unwrap()).unwrap()
 }
 fn unhex(v: &Value) -> Vec<u8> {
@@ -34,7 +37,9 @@ fn rnd(name: &str, n: usize) -> Vec<u8> {
     let mut out = vec![];
     let mut i = 0;
     while out.len() < n {
-        out.extend(scaas_ua::keccak256(format!("scaas/arweave/vectors/{name}/{i}").as_bytes()));
+        out.extend(scaas_ua::keccak256(
+            format!("scaas/arweave/vectors/{name}/{i}").as_bytes(),
+        ));
         i += 1;
     }
     out.truncate(n);
@@ -53,7 +58,10 @@ fn every_item_row_built_byte_for_byte() {
             .as_array()
             .unwrap()
             .iter()
-            .map(|t| Tag { name: unhex(&t["name"]), value: unhex(&t["value"]) })
+            .map(|t| Tag {
+                name: unhex(&t["name"]),
+                value: unhex(&t["value"]),
+            })
             .collect();
         let it = vectors_build(
             ty(&r["type"]),
@@ -75,14 +83,27 @@ fn sealed_objects_frames_and_checks() {
     let v = vec("arweave/objects.json");
     let key = a32(&v["fileKey"]);
     for r in v["sealed"].as_array().unwrap() {
-        let file = rnd(r["fileSeed"].as_str().unwrap(), r["size"].as_u64().unwrap() as usize);
-        let s = k.vectors_seal_file(k.vectors_import(&key, KeyUsage::File).unwrap(), &file).unwrap();
-        assert_eq!(s.object.len() as u64, r["objectLength"].as_u64().unwrap(), "{}", r["name"]);
+        let file = rnd(
+            r["fileSeed"].as_str().unwrap(),
+            r["size"].as_u64().unwrap() as usize,
+        );
+        let s = k
+            .vectors_seal_file(k.vectors_import(&key, KeyUsage::File).unwrap(), &file)
+            .unwrap();
+        assert_eq!(
+            s.object.len() as u64,
+            r["objectLength"].as_u64().unwrap(),
+            "{}",
+            r["name"]
+        );
         assert_eq!(s.ct_sha256.to_vec(), unhex(&r["ctSha256"]), "{}", r["name"]);
         assert_eq!(s.object[..32].to_vec(), unhex(&r["head"]));
         assert_eq!(s.object[s.object.len() - 16..].to_vec(), unhex(&r["tail"]));
         assert_eq!(s.sha256.to_vec(), unhex(&r["sha256"]));
-        assert_eq!(&k.open_file(&s.key, &s.object, s.size, &s.sha256).unwrap()[..], &file[..]);
+        assert_eq!(
+            &k.open_file(&s.key, &s.object, s.size, &s.sha256).unwrap()[..],
+            &file[..]
+        );
     }
     // the frames a lying sender builds, each encrypted under the file key; the control opens
     let file = rnd("file/5 bytes", 5);
@@ -98,7 +119,12 @@ fn sealed_objects_frames_and_checks() {
             fr[at as usize] = r["frame"]["padValue"].as_u64().unwrap() as u8;
         }
         let object = aead_seal(Alg::Aes256Gcm, &key, &[0; 12], &[], &fr).unwrap();
-        assert_eq!(Sha256::digest(&object).to_vec(), unhex(&r["ctSha256"]), "{}", r["name"]);
+        assert_eq!(
+            Sha256::digest(&object).to_vec(),
+            unhex(&r["ctSha256"]),
+            "{}",
+            r["name"]
+        );
         let got = k.open_file(&h, &object, 5, &a32(&r["sha256"]));
         match r["code"].as_str() {
             None => assert_eq!(&got.unwrap()[..], &file[..], "{}", r["name"]),
@@ -106,7 +132,10 @@ fn sealed_objects_frames_and_checks() {
         }
     }
     // the reader's check before decryption, each beside its control
-    let good = k.vectors_seal_file(k.vectors_import(&key, KeyUsage::File).unwrap(), &file).unwrap().object;
+    let good = k
+        .vectors_seal_file(k.vectors_import(&key, KeyUsage::File).unwrap(), &file)
+        .unwrap()
+        .object;
     let ct: [u8; 32] = Sha256::digest(&good).into();
     for r in v["checks"]["rows"].as_array().unwrap() {
         let mut o = good.clone();
@@ -141,16 +170,25 @@ fn upload_keys_and_seal_for_arweave_rows() {
         .unwrap();
         assert_eq!(seed.to_vec(), unhex(&r["secret"]), "{}", r["name"]);
         assert_eq!(owner, unhex(&r["owner"]), "{}", r["name"]);
-        assert_eq!(u64::from(counter), r["counter"].as_u64().unwrap(), "{}", r["name"]);
+        assert_eq!(
+            u64::from(counter),
+            r["counter"].as_u64().unwrap(),
+            "{}",
+            r["name"]
+        );
     }
     let root_h = k.vectors_import(&root, KeyUsage::Derive).unwrap();
     for r in v["sealForArweave"].as_array().unwrap() {
-        let file = rnd(r["fileSeed"].as_str().unwrap(), r["size"].as_u64().unwrap() as usize);
+        let file = rnd(
+            r["fileSeed"].as_str().unwrap(),
+            r["size"].as_u64().unwrap() as usize,
+        );
         let before = vectors_sign_count();
         let a = k
             .vectors_seal_for_arweave(
                 &root_h,
-                k.vectors_import(&a32(&r["fileKey"]), KeyUsage::File).unwrap(),
+                k.vectors_import(&a32(&r["fileKey"]), KeyUsage::File)
+                    .unwrap(),
                 &file,
                 ty(&r["type"]),
             )
@@ -161,14 +199,19 @@ fn upload_keys_and_seal_for_arweave_rows() {
         assert_eq!(a.url, r["url"].as_str().unwrap());
         let header = &a.item.bytes()[..a.item.bytes().len() - a.item.data().len()];
         assert_eq!(header.to_vec(), unhex(&r["header"]), "{}", r["name"]);
-        assert_eq!(Sha256::digest(a.item.bytes()).to_vec(), unhex(&r["itemSha256"]));
+        assert_eq!(
+            Sha256::digest(a.item.bytes()).to_vec(),
+            unhex(&r["itemSha256"])
+        );
         assert_eq!(a.sha256.to_vec(), unhex(&r["sha256"]));
     }
     // a root that is not a Derive handle is refused
     let data = k.vectors_import(&root, KeyUsage::Data).unwrap();
     let fk = k.vectors_import(&[9; 32], KeyUsage::File).unwrap();
     assert_eq!(
-        k.vectors_seal_for_arweave(&data, fk, b"x", SigType::Ed25519).err().unwrap(),
+        k.vectors_seal_for_arweave(&data, fk, b"x", SigType::Ed25519)
+            .err()
+            .unwrap(),
         Error::AppKeyUsage
     );
 }

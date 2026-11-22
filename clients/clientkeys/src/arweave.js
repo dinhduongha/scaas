@@ -53,7 +53,7 @@ export function deepHash(chunk) {
 // ---------------------------------------------------------------- Avro tags
 
 function writeLong(out, n) {
-  let m = BigInt(n) >= 0n ? BigInt(n) << 1n : ((-BigInt(n)) << 1n) - 1n;
+  let m = BigInt(n) >= 0n ? BigInt(n) << 1n : (-BigInt(n) << 1n) - 1n;
   do {
     let b = Number(m & 0x7fn);
     m >>= 7n;
@@ -175,9 +175,13 @@ export function verifyMessage(type, owner, msg, sig) {
     const s = BigInt("0x" + bytesToHex(sig.subarray(32, 64)));
     if (s > N / 2n) return false;
     try {
-      const rec = secp256k1.recoverPublicKey(concatBytes(Uint8Array.of(sig[64] - 27), sig.subarray(0, 64)), eip191(msg), {
-        prehash: false,
-      });
+      const rec = secp256k1.recoverPublicKey(
+        concatBytes(Uint8Array.of(sig[64] - 27), sig.subarray(0, 64)),
+        eip191(msg),
+        {
+          prehash: false,
+        },
+      );
       const pub = secp256k1.Point.fromBytes(rec).toBytes(false);
       return pub.length === owner.length && pub.every((b, i) => b === owner[i]);
     } catch {
